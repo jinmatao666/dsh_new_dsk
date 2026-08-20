@@ -1,0 +1,419 @@
+body {
+    margin: 0;
+    overflow: hidden;
+    font-family: Lato, 'Helvetica Neue', Arial, Helvetica, "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scrollbar-width: none;
+    color: var(--semi-color-text-0) !important;
+    background-color: var( --semi-color-bg-0) !important;
+    height: 100%;
+}
+
+#root {
+    height: 100%;
+}
+
+@media only screen and (max-width: 767px) {
+    .semi-table-tbody, .semi-table-row, .semi-table-row-cell {
+        display: block!important;
+        width: auto!important;
+        padding: 2px!important;
+    }
+    .semi-table-row-cell {
+        border-bottom: 0!important;
+    }
+    .semi-table-tbody>.semi-table-row {
+        border-bottom: 1px solid rgba(0,0,0,.1);
+    }
+    .semi-space {
+        /*display: block!important;*/
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        row-gap: 3px;
+        column-gap: 10px;
+    }
+}
+
+.semi-table-tbody > .semi-table-row > .semi-table-row-cell {
+    padding: 16px 14px;
+}
+
+.channel-table {
+    .semi-table-tbody > .semi-table-row > .semi-table-row-cell {
+        padding: 16px 8px;
+    }
+}
+
+.semi-layout {
+    height: 100%;
+}
+
+.tableShow {
+    display: revert;
+}
+
+.tableHiddle {
+    display: none !important;
+}
+
+body::-webkit-scrollbar {
+    display: none;
+}
+
+code {
+    font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+.semi-navigation-vertical {
+    /*display: flex;*/
+    /*flex-direction: column;*/
+}
+
+.semi-navigation-item {
+    margin-bottom: 0;
+}
+
+/* SubNav 子项缩进 + 左侧细线，强化层级 */
+.nav-subitem.semi-navigation-item {
+    padding-left: 32px !important;
+    position: relative;
+}
+
+.nav-subitem.semi-navigation-item::before {
+    content: '';
+    position: absolute;
+    left: 20px;
+    top: 8px;
+    bottom: 8px;
+    width: 1px;
+    background: rgba(0, 0, 0, 0.08);
+    border-radius: 1px;
+}
+
+.nav-subitem.semi-navigation-item-selected::before {
+    background: rgba(0, 122, 255, 0.45);
+}
+
+/* 后台页内部 Tab 通用规则:Tab 栏吸顶 + 穿透内容区 24px 顶部内边距，紧贴
+   固定顶部栏，消除两者间露出灰色背景的空隙。所有后台内部 Tab 统一用此样式。
+   sticky 的 top 基准是内容区 padding box 顶部(已含 24px)，故用 top/margin-top
+   -24px 把吸顶位置和静止位置都上提到顶部栏正下方(与底部操作栏 -24px 出血对称)。 */
+.parvis-tabs > .semi-tabs-bar,
+.config-page-tabs-sticky > .semi-tabs-bar {
+    position: sticky;
+    top: calc(-1 * var(--parvis-tabs-bleed-y, 24px));
+    margin: calc(-1 * var(--parvis-tabs-bleed-y, 24px)) calc(-1 * var(--parvis-tabs-bleed-x, 24px)) 0;
+    padding: 0 var(--parvis-tabs-bleed-x, 24px);
+    z-index: 30;
+    background: var(--semi-color-bg-0, #ffffff);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+/* Tab 标签上下留白统一 12px:Semi 默认顶距 16px 与内容区 24px 内边距叠加过空，
+   收紧后紧贴顶部栏也不显局促，且上下对称。后台所有内部 Tab 统一适用。 */
+.parvis-tabs > .semi-tabs-bar .semi-tabs-tab,
+.skill-tabs > .semi-tabs-bar .semi-tabs-tab {
+    padding-top: 12px;
+    padding-bottom: 12px;
+}
+
+/* 配置/编辑页顶部返回栏:与通用 Tab 栏保持同样的出血、吸顶和高度节奏 */
+.config-page-topbar {
+    position: sticky;
+    top: calc(-1 * var(--parvis-tabs-bleed-y, 24px));
+    margin: calc(-1 * var(--parvis-tabs-bleed-y, 24px)) calc(-1 * var(--parvis-tabs-bleed-x, 24px)) 16px;
+    padding: 6px var(--parvis-tabs-bleed-x, 24px);
+    min-height: 45px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 30;
+    background: var(--semi-color-bg-0, #ffffff);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+/* 配置页通用布局:为底部固定操作栏预留布局，让内容区可滚动 */
+.config-page-layout,
+.model-config-wrap {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 100%;
+}
+
+/* Tabs 撑满 wrap 剩余高度:内容短时把底部栏顶到底部，内容长时正常增高、
+   由外层内容区滚动。flex: 1 0 auto = 可增长、不收缩(避免长内容被裁剪)。 */
+.config-page-tabs,
+.model-config-tabs {
+    flex: 1 0 auto;
+}
+
+/* 固定底部操作栏:跟随内容区滚动容器贴底，左右铺满（抵消父级 24px 内边距） */
+.config-page-footer,
+.config-footer-bar {
+    position: sticky;
+    bottom: -24px;
+    z-index: 40;
+    margin: auto -24px -24px;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: var(--semi-color-bg-1, #fafafa);
+    border-top: 1px solid var(--semi-color-border, rgba(0, 0, 0, 0.08));
+    box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.04);
+    backdrop-filter: saturate(180%) blur(8px);
+    transition: background 160ms ease, border-color 160ms ease;
+}
+
+/* 有未保存改动时高亮:左侧蓝色提示条 + 提示文字变蓝 */
+.config-page-footer.is-dirty,
+.config-footer-bar.is-dirty {
+    border-top-color: #007AFF;
+    box-shadow: inset 0 2px 0 -1px #007AFF, 0 -1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.config-page-footer-hint,
+.config-footer-hint {
+    font-size: 13px;
+    color: var(--semi-color-text-2, #86868b);
+}
+
+.config-page-footer.is-dirty .config-page-footer-hint,
+.config-footer-bar.is-dirty .config-footer-hint {
+    color: #007AFF;
+    font-weight: 500;
+}
+
+.config-page-footer-actions,
+.config-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 深色模式:贴底栏背景与边框跟随 macOS 深灰惯例 */
+body[theme-mode='dark'] .config-page-footer,
+body[theme-mode='dark'] .config-footer-bar {
+    background: rgba(28, 28, 30, 0.85);
+    border-top-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.3);
+}
+
+body[theme-mode='dark'] .config-page-footer.is-dirty,
+body[theme-mode='dark'] .config-footer-bar.is-dirty {
+    border-top-color: #0A84FF;
+    box-shadow: inset 0 2px 0 -1px #0A84FF, 0 -1px 3px rgba(0, 0, 0, 0.35);
+}
+
+body[theme-mode='dark'] .config-page-footer.is-dirty .config-page-footer-hint,
+body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
+    color: #0A84FF;
+}
+
+/* 侧边栏 header：撑满 200px 宽度，自定义 header 内容能水平居中 */
+.semi-navigation-vertical .semi-navigation-header {
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+}
+
+/* 侧边栏标题 */
+.sider-header {
+    width: 100%;
+    padding: 12px 12px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.sider-header-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--semi-color-text-0);
+    letter-spacing: 1px;
+    padding: 0 4px;
+}
+
+/* 顶部栏产品切换器：在不同产品后台之间横向切换 */
+.product-switcher {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+}
+
+.product-switcher-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--semi-color-text-2);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+    text-align: left;
+}
+
+.product-switcher-tab:hover {
+    background: var(--semi-color-fill-0);
+    color: var(--semi-color-text-0);
+}
+
+.product-switcher-tab-active {
+    background: rgba(0, 122, 255, 0.1);
+    color: #007AFF;
+}
+
+.product-switcher-tab-active:hover {
+    background: rgba(0, 122, 255, 0.14);
+    color: #007AFF;
+}
+
+.product-switcher-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 占位产品空状态提示 */
+.product-empty-hint {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 48px 16px;
+    color: var(--semi-color-text-2);
+    text-align: center;
+}
+
+.product-empty-hint-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--semi-color-text-1);
+}
+
+.product-empty-hint-desc {
+    font-size: 12px;
+    color: var(--semi-color-text-2);
+}
+
+.semi-navigation-vertical {
+    /*flex: 0 0 auto;*/
+    /*display: flex;*/
+    /*flex-direction: column;*/
+    /*width: 100%;*/
+    height: 100%;
+    overflow: hidden;
+}
+
+/* 菜单超出视口高度时，标题与折叠按钮固定，仅菜单区内部滚动。
+   关键在于打通 flex 高度链（min-height: 0），否则列表会撑高被裁切而非滚动。 */
+.semi-navigation-vertical .semi-navigation-inner {
+    min-height: 0;
+}
+
+.semi-navigation-vertical .semi-navigation-header-list-outer {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+}
+
+.semi-navigation-vertical .semi-navigation-header-list-outer .semi-navigation-header {
+    flex: 0 0 auto;
+}
+
+.semi-navigation-vertical .semi-navigation-list-wrapper {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    box-sizing: border-box;
+    /* 浅灰半透明滚动条，停止滚动后由系统淡出，符合 macOS 规范 */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+body[theme-mode='dark'] .semi-navigation-vertical .semi-navigation-list-wrapper {
+    scrollbar-color: rgba(203, 213, 225, 0.25) transparent;
+}
+
+.main-content {
+    padding: 4px;
+    height: 100%;
+}
+
+.small-icon .icon {
+    font-size: 1em !important;
+}
+
+.custom-footer {
+    font-size: 1.1em;
+}
+
+/* Skill 页 Tabs：让 TabPane 撑满内容区，子组件用 height:100% 才能拿到剩余高度 */
+.skill-tabs > .semi-tabs-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.skill-tabs > .semi-tabs-content > .semi-tabs-pane-active {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+@media only screen and (max-width: 600px) {
+    .hide-on-mobile {
+        display: none !important;
+    }
+}
+
+
+/* 隐藏浏览器默认的滚动条 */
+body {
+    overflow: hidden;
+}
+
+/* 自定义滚动条样式 */
+body::-webkit-scrollbar {
+    width: 0;  /* 隐藏滚动条的宽度 */
+}
+
+/* 确保表格展开图标列和内容列水平排列 */
+.semi-table-row-expand-icon-cell {
+    display: table-cell !important;
+    vertical-align: middle !important;
+}
+
+.semi-table-row-cell {
+    display: table-cell !important;
+}
+
+.semi-table-row {
+    display: table-row !important;
+}
+
+/* 修复页面加载时出现的黑色遮罩层问题 */
+/* 防止 Semi Modal 遮罩层在没有 Modal 时仍然显示 */
+.semi-portal > .semi-modal-mask:only-child {
+    display: none !important;
+}
+
+/* 确保 Toast 不会产生全屏遮罩 */
+.Toastify__toast-container {
+    z-index: 9999 !important;
+}

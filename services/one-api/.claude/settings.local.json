@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(winget search:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(go version:*)",
+      "Bash(ssh parvis:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(go mod:*)"
+      "Bash(echo $PATH)",
+      "Bash(source ~/.bashrc)",
+      "Bash(go version)",
+      "Bash(go build -o one-api.exe)",
+      "Bash(npm run build)"
+    ]
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "@deepseek-ai/dsh-desktop-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "prepare:runtime": "tsx scripts/prepare-runtime.ts",
+    "build": "pnpm run prepare:runtime && tauri build",
+    "build:windows": "pnpm run build",
+    "build:macos": "pnpm run build"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh": "workspace:^",
+    "@deepseek-ai/dsh-atomic-write": "workspace:^",
+    "@deepseek-ai/dsh-base": "workspace:^",
+    "@deepseek-ai/dsh-desktop": "workspace:^",
+    "@deepseek-ai/dsh-session-telemetry": "workspace:^",
+    "@deepseek-ai/dsh-session-title-llm": "workspace:^",
+    "@deepseek-ai/dsh-spill": "workspace:^",
+    "@deepseek-ai/dsh-web-app": "workspace:^",
+    "dsh-jsonrpc-agent-pkg": "workspace:^"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.8.4",
+    "tsx": "^4.22.4"
+  }
+}

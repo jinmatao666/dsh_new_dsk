@@ -1,0 +1,23 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
+  },
+  "files": [
+    "src/contract.ts",
+    "src/index.ts",
+    "src/invariant.ts"
+  ],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../../vendor/schemastery" },
+    { "path": "../connection/tsconfig.host.json" },
+    { "path": "../../core/agent-default-model" },
+    { "path": "../../credentials/credentials" },
+    { "path": "../../llm/llm-pi-ai" },
+    { "path": "../../runtime-diagnostics/invariants" },
+    { "path": "../../settings/settings" }
+  ]
+}

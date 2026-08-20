@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>微信扫码支付</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f5; display: flex; justify-content: center; padding: 40px 16px; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.08); padding: 32px; width: 100%; max-width: 420px; }
+    h1 { font-size: 20px; color: #333; margin-bottom: 24px; text-align: center; }
+    label { display: block; font-size: 13px; color: #666; margin-bottom: 6px; }
+    input { width: 100%; border: 1px solid #ddd; border-radius: 8px; padding: 10px 12px; font-size: 15px; outline: none; transition: border .2s; }
+    input:focus { border-color: #07c160; }
+    .field { margin-bottom: 16px; }
+    button { width: 100%; background: #07c160; color: #fff; border: none; border-radius: 8px; padding: 12px; font-size: 16px; cursor: pointer; margin-top: 8px; transition: background .2s; }
+    button:hover { background: #06ad56; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    #qr-section { display: none; text-align: center; margin-top: 28px; border-top: 1px solid #f0f0f0; padding-top: 24px; }
+    #qrcode { display: inline-block; padding: 12px; border: 1px solid #eee; border-radius: 8px; }
+    #qrcode canvas, #qrcode img { display: block; }
+    .tip { font-size: 13px; color: #999; margin-top: 12px; }
+    #status { margin-top: 14px; font-size: 15px; font-weight: 500; color: #333; min-height: 22px; }
+    .success { color: #07c160 !important; }
+    .error   { color: #fa5151 !important; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>微信扫码支付</h1>
+  <form id="payForm">
+    <div class="field">
+      <label>商品描述</label>
+      <input id="desc" type="text" placeholder="例：会员充值" required>
+    </div>
+    <div class="field">
+      <label>金额（元）</label>
+      <input id="amount" type="number" placeholder="0.01" min="0.01" step="0.01" required>
+    </div>
+    <button type="submit" id="btn">生成支付二维码</button>
+  </form>
+
+  <div id="qr-section">
+    <div id="qrcode"></div>
+    <p class="tip">请使用微信扫描二维码完成支付</p>
+    <p id="status">等待扫码...</p>
+  </div>
+</div>
+
+<script>
+  let pollTimer = null;
+  let currentOrderNo = '';
+
+  document.getElementById('payForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearInterval(pollTimer);
+
+    const desc   = document.getElementById('desc').value.trim();
+    const amount = Math.round(parseFloat(document.getElementById('amount').value) * 100);
+    const btn    = document.getElementById('btn');
+
+    if (!desc || amount <= 0) return;
+
+    btn.disabled = true;
+    btn.textContent = '生成中...';
+    document.getElementById('status').textContent = '';
+    document.getElementById('status').className = '';
+
+    currentOrderNo = 'parvis' + Date.now();
+
+    try {
+      const res = await fetch('/pay/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ out_trade_no: currentOrderNo, description: desc, amount })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.code_url) throw new Error(data || '创建订单失败');
+
+      showQR(data.code_url);
+      startPolling(currentOrderNo);
+    } catch (err) {
+      alert('创建订单失败：' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '生成支付二维码';
+    }
+  });
+
+  function showQR(url) {
+    const section = document.getElementById('qr-section');
+    const container = document.getElementById('qrcode');
+    container.innerHTML = '';
+    section.style.display = 'block';
+    new QRCode(container, { text: url, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
+    document.getElementById('status').textContent = '等待扫码...';
+  }
+
+  function startPolling(orderNo) {
+    pollTimer = setInterval(async () => {
+      try {
+        const res  = await fetch('/pay/query?out_trade_no=' + orderNo);
+        const data = await res.json();
+        const state = data.trade_state;
+        const el = document.getElementById('status');
+
+        if (state === 'SUCCESS') {
+          clearInterval(pollTimer);
+          el.textContent = '✓ 支付成功！';
+          el.className = 'success';
+        } else if (state === 'CLOSED' || state === 'REVOKED' || state === 'PAYERROR') {
+          clearInterval(pollTimer);
+          el.textContent = '✗ 支付失败（' + state + '）';
+          el.className = 'error';
+        } else {
+          el.textContent = '等待支付中...（' + (state || '-') + '）';
+        }
+      } catch (_) {}
+    }, 2000);
+  }
+</script>
+</body>
+</html>
