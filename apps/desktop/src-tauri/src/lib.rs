@@ -22,6 +22,17 @@ struct ServerConfig {
 
 struct Sidecar(Arc<Mutex<Option<Child>>>);
 
+fn append_log(path: &Path, message: impl AsRef<str>) {
+    use std::io::Write;
+
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{}", message.as_ref());
+    }
+}
+
 impl Drop for Sidecar {
     fn drop(&mut self) {
         if let Ok(mut guard) = self.0.lock() {
@@ -80,7 +91,7 @@ fn development_command() -> (PathBuf, PathBuf, Vec<String>) {
     )
 }
 
-fn spawn_sidecar(resource_dir: &Path, config: &ServerConfig) -> Result<(Child, Url), String> {
+fn spawn_sidecar(resource_dir: &Path, config: &ServerConfig, log_path: &Path) -> Result<(Child, Url), String> {
     let (program, cwd, mut args) = if cfg!(debug_assertions) {
         development_command()
     } else {
@@ -94,6 +105,7 @@ fn spawn_sidecar(resource_dir: &Path, config: &ServerConfig) -> Result<(Child, U
         "--port".into(),
         "0".into(),
     ]);
+    let rendered_args = args.join(" ");
     let mut command = Command::new(&program);
     command
         .args(args)
@@ -104,6 +116,7 @@ fn spawn_sidecar(resource_dir: &Path, config: &ServerConfig) -> Result<(Child, U
     if !config.default_model.is_empty() {
         command.env("DSH_DEFAULT_MODEL", &config.default_model);
     }
+    append_log(log_path, format!("starting sidecar: {} {rendered_args}", program.display()));
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -116,8 +129,10 @@ fn spawn_sidecar(resource_dir: &Path, config: &ServerConfig) -> Result<(Child, U
     let stdout = child.stdout.take().ok_or("无法读取 DSH Sidecar 输出")?;
     let stderr = child.stderr.take().ok_or("无法读取 DSH Sidecar 错误输出")?;
     let (sender, receiver) = mpsc::channel();
+    let stdout_log = log_path.to_path_buf();
     std::thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            append_log(&stdout_log, format!("[stdout] {line}"));
             eprintln!("[dsh] {line}");
             if let Some(raw) = line.strip_prefix("dsh web: ") {
                 let candidate = raw.split_whitespace().next().unwrap_or(raw);
@@ -128,8 +143,10 @@ fn spawn_sidecar(resource_dir: &Path, config: &ServerConfig) -> Result<(Child, U
             }
         }
     });
+    let stderr_log = log_path.to_path_buf();
     std::thread::spawn(move || {
         for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+            append_log(&stderr_log, format!("[stderr] {line}"));
             eprintln!("[dsh:error] {line}");
         }
     });
@@ -143,10 +160,17 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let resource_dir = app.path().resource_dir()?;
-            let config = server_config(&resource_dir)
-                .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
-            let (child, url) =
-                spawn_sidecar(&resource_dir, &config).map_err(std::io::Error::other)?;
+            let log_path = app.path().app_local_data_dir()?.join("logs").join("startup.log");
+            let _ = fs::remove_file(&log_path);
+            append_log(&log_path, "Wanwei Harness startup");
+            let config = server_config(&resource_dir).map_err(|message| {
+                append_log(&log_path, format!("[fatal] {message}"));
+                std::io::Error::new(std::io::ErrorKind::InvalidData, message)
+            })?;
+            let (child, url) = spawn_sidecar(&resource_dir, &config, &log_path).map_err(|message| {
+                append_log(&log_path, format!("[fatal] {message}"));
+                std::io::Error::other(message)
+            })?;
             app.manage(Sidecar(Arc::new(Mutex::new(Some(child)))));
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
                 .title("Wanwei Harness")
