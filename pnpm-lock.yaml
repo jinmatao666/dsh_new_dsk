@@ -132,6 +132,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:^
         version: link:../../vendor/cordis
+      '@deepseek-ai/cordis-plugin-group':
+        specifier: workspace:^
+        version: link:../../vendor/group
       '@deepseek-ai/cordis-plugin-hmr':
         specifier: workspace:^
         version: link:../../vendor/hmr
@@ -198,6 +201,9 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: workspace:^
         version: link:../../packages/util/home-paths
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-jobs-local':
         specifier: workspace:^
         version: link:../../packages/jobs/jobs-local
@@ -240,6 +246,9 @@ importers:
       '@deepseek-ai/dsh-terminal-bash':
         specifier: workspace:^
         version: link:../../packages/terminal/terminal-bash
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../../packages/core/system-prompt
       '@deepseek-ai/dsh-time-context':
         specifier: workspace:^
         version: link:../../packages/context/time-context
@@ -349,9 +358,6 @@ importers:
       '@deepseek-ai/dsh-subagent':
         specifier: workspace:^
         version: link:../../packages/subagent/subagent
-      '@deepseek-ai/dsh-system-prompt':
-        specifier: workspace:^
-        version: link:../../packages/core/system-prompt
       '@deepseek-ai/dsh-tools':
         specifier: workspace:^
         version: link:../../packages/core/tools
