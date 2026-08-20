@@ -1,182 +1,65 @@
-# Pack and publish the dsh release sequence: every package under packages/ plus
-# the apps/ entries, all on one version. The vendored framework and the native
-# packages are separate sequences with their own workflows and version lines.
-#
-# Pack runs without credentials on every pull request and master push, so a
-# pull request proves the whole publish set still packs. Publication is a
-# manual dispatch from a dsh-v* tag and consumes exactly the packed bytes.
-name: Release (dsh)
+name: Release DSH Desktop
 
 on:
-  pull_request:
-  push:
-    branches: [main, master]
   workflow_dispatch:
     inputs:
-      publish:
-        description: Publish the packed tarballs to npm. Must run from a dsh-v* tag.
+      version:
+        description: Version without the v prefix (for example 1.0.2-private.1)
         required: true
-        type: boolean
+        type: string
+      platform_scope:
+        description: Platforms to build
+        required: true
+        default: windows-only
+        type: choice
+        options:
+          - windows-only
+          - all-platforms
+      publish_github_release:
+        description: Publish installers as a GitHub Release after successful builds
+        required: true
         default: false
+        type: boolean
 
 permissions:
-  contents: read
-
-concurrency:
-  # Pack runs per ref so concurrent pull requests never displace each
-  # other; the publish job below serializes the shared dist-tag state.
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
-
-env:
-  PRIMARY_NODE_VERSION: '24'
-  DSH_TELEMETRY_DISABLED: '1'
+  contents: write
 
 jobs:
-  pack:
-    name: Pack npm tarballs
-    runs-on: ubuntu-24.04
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
-      # Complete history: the release scripts read tags.
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - uses: pnpm/action-setup@v4
-        with:
-          dest: ${{ runner.temp }}/setup-pnpm
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.PRIMARY_NODE_VERSION }}
-
-      - name: Configure pnpm store path
-        id: pnpm-store
-        run: |
-          store_root="$HOME/.local/share/pnpm/store"
-          echo "PNPM_CONFIG_STORE_DIR=$store_root" >> "$GITHUB_ENV"
-          store_path=$(PNPM_CONFIG_STORE_DIR="$store_root" pnpm store path --silent)
-          echo "path=$store_path" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache/restore@v4
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-
-
-      - name: Install (immutable)
-        run: pnpm install --frozen-lockfile
-
-      - name: Verify release version
+      - id: matrix
         env:
-          RELEASE_PUBLISH: ${{ inputs.publish }}
-        run: pnpm run release:verify --family dsh
-
-      - name: Build
-        run: pnpm run build:official
-
-      - name: Pack release tarballs
-        run: pnpm run release:pack --family dsh --out dist/npm
-
-      # The harness packages declare the vendored framework as a peer, and this
-      # verification must not depend on the registry already carrying matching
-      # versions — one pull request may bump both families before either
-      # publishes — so it installs that family's pack output too. Only dist/npm
-      # is published.
-      - name: Pack the vendored framework for verification
-        run: pnpm run release:pack --family vendor --out dist/npm-vendor
-
-      # dsh-sandbox-local declares the Landlock entry as a runtime dependency, so
-      # the verification needs its tarball. Its platform packages stay out: they
-      # are optional, and building them needs a musl toolchain per architecture.
-      - name: Pack the Landlock entry for verification
+          PLATFORM_SCOPE: ${{ inputs.platform_scope }}
         run: |
-          pnpm --dir native/landlock-run run build:ts
-          pnpm --dir native/landlock-run/packages/entry pack --pack-destination "$PWD/dist/npm-landlock"
+          python3 - <<'PY'
+          import json
+          import os
+          platforms = [
+              {"platform": "windows-x64", "os": "windows-latest", "target": "x86_64-pc-windows-msvc", "bundles": "nsis", "node_archive": "", "node_dir": ""},
+              {"platform": "macos-arm64", "os": "macos-latest", "target": "aarch64-apple-darwin", "bundles": "app,dmg", "node_archive": "node-v22.19.0-darwin-arm64.tar.gz", "node_dir": "node-v22.19.0-darwin-arm64"},
+              {"platform": "macos-x64", "os": "macos-latest", "target": "x86_64-apple-darwin", "bundles": "app,dmg", "node_archive": "node-v22.19.0-darwin-x64.tar.gz", "node_dir": "node-v22.19.0-darwin-x64"},
+          ]
+          if os.environ["PLATFORM_SCOPE"] == "windows-only":
+              platforms = platforms[:1]
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("matrix=" + json.dumps({"include": platforms}, separators=(",", ":")) + "\n")
+          PY
 
-      - name: Verify packed install
-        run: pnpm run release:verify-packed-install --family dsh --from dist/npm --from dist/npm-vendor --from dist/npm-landlock
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dsh-npm-tarballs
-          path: dist/npm/*
-          if-no-files-found: error
-          retention-days: 7
-
-  publish:
-    name: Publish to npm
-    if: inputs.publish
-    needs: pack
-    runs-on: ubuntu-24.04
-    # Required reviewers and the allowed tags live on the environment; this is
-    # the only step in the sequence that can write to the registry.
-    environment: npm-publish
-    concurrency:
-      group: Release-publish
-      cancel-in-progress: false
-    permissions:
-      contents: read
-    steps:
-      # Checkout and install carry the release scripts only. There is no build
-      # step: publication uploads the bytes the pack job produced.
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - uses: pnpm/action-setup@v4
-        with:
-          dest: ${{ runner.temp }}/setup-pnpm
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.PRIMARY_NODE_VERSION }}
-          registry-url: https://registry.npmjs.org
-
-      - name: Install (immutable, no package scripts)
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: dsh-npm-tarballs
-          path: dist/npm
-
-      - name: Publish tarballs
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: pnpm run release:publish --family dsh --from dist/npm
-
-  desktop:
-    name: Build ${{ matrix.platform }} desktop installer
-    needs: pack
+  build:
+    needs: prepare
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - platform: windows-x64
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
-            bundles: nsis
-            node_archive: ''
-            node_dir: ''
-          - platform: macos-arm64
-            os: macos-latest
-            target: aarch64-apple-darwin
-            bundles: app,dmg
-            node_archive: node-v22.19.0-darwin-arm64.tar.gz
-            node_dir: node-v22.19.0-darwin-arm64
-          - platform: macos-x64
-            os: macos-latest
-            target: x86_64-apple-darwin
-            bundles: app,dmg
-            node_archive: node-v22.19.0-darwin-x64.tar.gz
-            node_dir: node-v22.19.0-darwin-x64
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     env:
       CARGO_INCREMENTAL: '0'
-      DSH_DESKTOP_SERVER_URL: ${{ vars.DSH_DESKTOP_SERVER_URL || 'https://models.example.com/dsh-api' }}
+      DSH_RELEASE_VERSION: ${{ inputs.version }}
+      # One repository corresponds to one deployment region. Set DSH_ONEAPI_URL
+      # as a repository variable before releasing for another region.
+      DSH_ONEAPI_URL: ${{ vars.DSH_ONEAPI_URL || 'https://ai.zrzyt.zj.gov.cn:10086/dsh-api' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -193,20 +76,28 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - name: Validate regional server URL
+      - name: Validate release inputs
         shell: bash
-        run: test -n "$DSH_DESKTOP_SERVER_URL"
-      - name: Install (immutable)
+        run: |
+          [[ "$DSH_RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]] || {
+            echo "Invalid version: $DSH_RELEASE_VERSION" >&2
+            exit 1
+          }
+          test -n "$DSH_ONEAPI_URL"
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Prepare production server config
+      - name: Prepare production server config and app version
         shell: bash
         run: |
           node - <<'NODE'
           const fs = require('node:fs')
           const path = require('node:path')
-          const output = path.join(process.env.RUNNER_TEMP, 'dsh-server.json')
-          fs.writeFileSync(output, JSON.stringify({ oneApiUrl: process.env.DSH_DESKTOP_SERVER_URL, defaultModel: '' }, null, 2) + '\n')
-          fs.appendFileSync(process.env.GITHUB_ENV, `DSH_DESKTOP_SERVER_CONFIG=${output}\n`)
+          const server = path.join(process.env.RUNNER_TEMP, 'dsh-server.json')
+          const config = path.join(process.env.RUNNER_TEMP, 'dsh-version.json')
+          fs.writeFileSync(server, JSON.stringify({ oneApiUrl: process.env.DSH_ONEAPI_URL, defaultModel: '' }, null, 2) + '\n')
+          fs.writeFileSync(config, JSON.stringify({ version: process.env.DSH_RELEASE_VERSION }))
+          fs.appendFileSync(process.env.GITHUB_ENV, `DSH_DESKTOP_SERVER_CONFIG=${server}\n`)
+          fs.appendFileSync(process.env.GITHUB_ENV, `DSH_TAURI_VERSION_CONFIG=${config}\n`)
           NODE
       - name: Prepare target Node runtime (macOS)
         if: runner.os == 'macOS'
@@ -226,14 +117,15 @@ jobs:
         run: Add-Content -Path $env:GITHUB_ENV -Value "DSH_NODE_BINARY=$((Get-Command node).Source)"
       - name: Stage desktop runtime
         run: pnpm --filter @deepseek-ai/dsh-desktop-app run prepare:runtime
-      - name: Restore packaging install
+      - name: Restore packaging tools
         run: pnpm install --frozen-lockfile
-      - name: Build desktop bundles
+      - name: Build desktop installers
         shell: bash
         run: |
           pnpm --filter @deepseek-ai/dsh-desktop-app exec tauri build \
             --target "${{ matrix.target }}" \
-            --bundles "${{ matrix.bundles }}"
+            --bundles "${{ matrix.bundles }}" \
+            --config "$DSH_TAURI_VERSION_CONFIG"
       - name: Collect installers
         shell: bash
         run: |
@@ -244,7 +136,22 @@ jobs:
           test -n "$(find artifacts -type f -print -quit)"
       - uses: actions/upload-artifact@v4
         with:
-          name: dsh-desktop-${{ matrix.platform }}
+          name: dsh-desktop-${{ inputs.version }}-${{ matrix.platform }}
           path: artifacts/*
           if-no-files-found: error
-          retention-days: 7
+
+  release:
+    if: ${{ inputs.publish_github_release }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dsh-desktop-${{ inputs.version }}-*
+          path: release-assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: Wanwei Harness v${{ inputs.version }}
+          files: release-assets/*
