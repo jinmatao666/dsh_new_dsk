@@ -29,6 +29,9 @@ image="dsh-one-api:$version"
 image_archive="$output_directory/dsh-server-images-$version.tar"
 deployment_archive="$output_directory/dsh-deployment-files-$version.tar.gz"
 alpine_mirror="${ALPINE_MIRROR:-mirrors.tuna.tsinghua.edu.cn/alpine}"
+docker_mirror="${DOCKER_MIRROR:-docker.m.daocloud.io}"
+go_proxy="${GO_PROXY:-https://goproxy.cn,direct}"
+npm_registry="${NPM_REGISTRY:-https://registry.npmmirror.com}"
 
 for artifact in \
   "$image_archive" \
@@ -45,6 +48,9 @@ docker build \
   --platform linux/amd64 \
   --build-arg "PARVIS_VERSION=$version" \
   --build-arg "ALPINE_MIRROR=$alpine_mirror" \
+  --build-arg "DOCKER_MIRROR=$docker_mirror" \
+  --build-arg "GO_PROXY=$go_proxy" \
+  --build-arg "NPM_REGISTRY=$npm_registry" \
   --build-arg "DSH_ADMIN_PUBLIC_URL=/dsh-admin" \
   --build-arg "DSH_API_PUBLIC_URL=/dsh-api" \
   --file "$repo_root/services/one-api/Dockerfile" \

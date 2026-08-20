@@ -1,7 +1,8 @@
 ARG PARVIS_VERSION=dev
 ARG ALPINE_MIRROR=mirrors.tuna.tsinghua.edu.cn/alpine
+ARG DOCKER_MIRROR=docker.m.daocloud.io
 
-FROM --platform=$BUILDPLATFORM node:20 AS web-builder
+FROM --platform=$BUILDPLATFORM ${DOCKER_MIRROR}/library/node:20 AS web-builder
 ARG PARVIS_VERSION
 ARG NPM_REGISTRY=https://registry.npmmirror.com
 ARG DSH_ADMIN_PUBLIC_URL=/dsh-admin
@@ -34,7 +35,7 @@ RUN DISABLE_ESLINT_PLUGIN=true \
     REACT_APP_VERSION="$PARVIS_VERSION" \
     npm run build:unix --prefix /web/org-admin
 
-FROM golang:alpine AS go-builder
+FROM ${DOCKER_MIRROR}/library/golang:alpine AS go-builder
 ARG PARVIS_VERSION
 ARG GO_PROXY=https://goproxy.cn,direct
 ARG ALPINE_MIRROR
@@ -64,7 +65,7 @@ RUN go build -trimpath \
     -ldflags "-s -w -X 'github.com/songquanpeng/one-api/common.Version=${PARVIS_VERSION}' -linkmode external -extldflags '-static'" \
     -o one-api
 
-FROM alpine:latest
+FROM ${DOCKER_MIRROR}/library/alpine:latest
 ARG ALPINE_MIRROR
 
 RUN sed -i "s#dl-cdn.alpinelinux.org/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories && \
