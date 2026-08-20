@@ -1,6 +1,6 @@
 /** Stage a self-contained Node + built DSH runtime for Tauri resources. */
 
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import process from 'node:process'
@@ -26,23 +26,30 @@ const run = (command: string, args: string[]) => {
 run('pnpm', ['run', 'build:official'])
 if (existsSync(appDir)) rmSync(appDir, { recursive: true, force: true })
 mkdirSync(dirname(appDir), { recursive: true })
-// Tauri recursively walks bundled resources. pnpm's isolated linker creates
-// directory junctions (including peer-dependency cycles) that make that walk
-// recurse indefinitely on Windows. The desktop package directly declares the
-// CLI and SDK runtime closure; modern deploy injects their built workspace
-// packages, while the hoisted linker keeps the staged runtime self-contained
-// and link-free.
-// Lifecycle scripts stay disabled inside the production copy.
+// The CLI is intentionally thin and its profiles load plugin packages through
+// peer dependencies. Deploying the CLI alone drops those peers, which only
+// fails after an installed desktop app tries to boot. The reviewed SDK runtime
+// manifest is DSH's canonical, closed production dependency graph; extend it
+// with the desktop bundle and deploy that graph instead.
+//
+// `--legacy` is required for a flat, link-free tree that Tauri can package on
+// Windows. Lifecycle scripts stay disabled inside the production copy.
 run('pnpm', [
   '--ignore-scripts',
-  '--config.inject-workspace-packages=true',
+  '--config.ignore-scripts=true',
+  '--config.auto-install-peers=false',
+  '--config.confirmModulesPurge=false',
   '--config.node-linker=hoisted',
   '--filter',
-  '@deepseek-ai/dsh',
+  'dsh-jsonrpc-agent-pkg',
   'deploy',
+  '--legacy',
   '--prod',
   appDir,
 ])
+
+restoreLegacyHoists()
+materializeStagedLinks()
 
 // Deploy the complete CLI closure. The CLI explicitly depends on the desktop
 // bundle, so the staged app contains every executable and plugin dependency.
@@ -81,3 +88,61 @@ if (configuredUrl !== undefined && configuredUrl.trim() !== '') {
 }
 
 console.log(`DSH Desktop runtime staged at ${resources}`)
+
+/** Restore direct dependencies that pnpm's legacy deploy hoists beside the staging directory. */
+function restoreLegacyHoists(): void {
+  const manifest = JSON.parse(readFileSync(join(appDir, 'package.json'), 'utf8')) as {
+    dependencies?: Record<string, string>
+  }
+  // Legacy deploy hoists peer-specialized workspace packages next to the
+  // deploy manifest, not at the monorepo root.
+  const sourceNodeModules = join(root, 'python', 'sdk-runtime', 'node_modules')
+  for (const dependency of Object.keys(manifest.dependencies ?? {}).sort()) {
+    const destination = join(appDir, 'node_modules', dependency)
+    if (existsSync(destination)) continue
+    const source = join(sourceNodeModules, dependency)
+    if (!existsSync(source)) {
+      throw new Error(`Desktop runtime dependency is missing from deploy and source: ${dependency}`)
+    }
+    copyPackage(source, destination)
+  }
+}
+
+/** Replace every workspace link with ordinary files before Tauri walks its resources. */
+function materializeStagedLinks(): void {
+  const nodeModules = join(appDir, 'node_modules')
+  for (;;) {
+    const linked = findFirstLink(nodeModules)
+    if (linked === undefined) return
+    const relative = linked.slice(nodeModules.length + 1).split(/[/\\\\]/)
+    const binIndex = relative.lastIndexOf('.bin')
+    if (binIndex >= 0) {
+      rmSync(join(nodeModules, ...relative.slice(0, binIndex + 1)), { recursive: true, force: true })
+      continue
+    }
+    copyPackage(realpathSync(linked), linked)
+  }
+}
+
+function findFirstLink(directory: string): string | undefined {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name)
+    if (lstatSync(path).isSymbolicLink()) return path
+    if (entry.isDirectory()) {
+      const nested = findFirstLink(path)
+      if (nested !== undefined) return nested
+    }
+  }
+  return undefined
+}
+
+function copyPackage(source: string, destination: string): void {
+  const nestedNodeModules = join(source, 'node_modules')
+  rmSync(destination, { recursive: true, force: true })
+  mkdirSync(dirname(destination), { recursive: true })
+  cpSync(source, destination, {
+    recursive: true,
+    dereference: true,
+    filter: (path: string) => path !== nestedNodeModules && !path.startsWith(`${nestedNodeModules}\\`),
+  })
+}
