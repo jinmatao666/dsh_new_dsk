@@ -62,6 +62,11 @@ cpSync(join(cliDir, 'config'), join(appDir, 'config'), { recursive: true })
 // third-party packages ship very deep declaration/source-map trees which can
 // exceed Windows NSIS path limits even though Node never reads them.
 pruneRuntimeTypeArtifacts(appDir)
+// Pruning can remove a package-local tree that legacy deploy used as the
+// source of a direct workspace dependency. Restore the declared CLI runtime
+// dependencies once more after pruning so every direct package is guaranteed
+// to exist in the final installer payload.
+restoreLegacyHoists()
 
 // The reviewed subprocess postinstall only restores executable mode on
 // node-pty's prebuilt spawn helpers. Deploy skips lifecycle scripts, so apply
