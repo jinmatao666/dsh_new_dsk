@@ -156,6 +156,13 @@ function pruneRuntimeTypeArtifacts(directory: string): void {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name)
     if (entry.isDirectory()) {
+      // The deployed runtime is hoisted. Nested package-local node_modules
+      // trees only duplicate dependencies and create extremely long NSIS
+      // source paths on Windows.
+      if (entry.name === 'node_modules' && directory !== join(appDir, 'node_modules')) {
+        rmSync(path, { recursive: true, force: true })
+        continue
+      }
       pruneRuntimeTypeArtifacts(path)
       continue
     }
