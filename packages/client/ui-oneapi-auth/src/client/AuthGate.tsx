@@ -4,17 +4,18 @@ import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AuthState } from '../contract.ts'
 import css from './AuthGate.module.css'
 
-interface AuthInjected {
+export interface AuthInjected {
   status: (signal?: AbortSignal) => Promise<AuthState>
   login: (username: string, password: string, signal?: AbortSignal) => Promise<AuthState>
   logout: () => Promise<AuthState>
+  subscribe: (listener: (state: AuthState) => void) => () => void
 }
 
 /** Props supplied by the slot framework and this plugin's injection face. */
 export type AuthGateProps = PropsRuntime<'shell.overlay'> & AuthInjected
 
 /** Full-window desktop sign-in gate. */
-export function AuthGate({ status, login, logout }: AuthGateProps) {
+export function AuthGate({ status, login, subscribe }: AuthGateProps) {
   const [auth, setAuth] = useState<AuthState | { state: 'checking' }>({ state: 'checking' })
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -33,16 +34,10 @@ export function AuthGate({ status, login, logout }: AuthGateProps) {
     return () => { controller.abort() }
   }, [status])
 
+  useEffect(() => subscribe(setAuth), [subscribe])
+
   if (auth.state === 'authenticated') {
-    return <div className={css.account}>
-      <span>{auth.username ?? '已登录'}</span>
-      <button type="button" onClick={() => { void (async () => {
-        setBusy(true)
-        setError(undefined)
-        try { setAuth(await logout()) } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) } finally { setBusy(false) }
-      })() }} disabled={busy}>退出登录</button>
-      {error !== undefined && <span className={css.accountError} role="alert">{error}</span>}
-    </div>
+    return null
   }
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {

@@ -67,32 +67,3 @@
 }
 .card button:disabled { cursor: default; opacity: 0.55; }
 .error { margin: -3px 0 0; color: #b42336; font-size: 13px; line-height: 1.45; }
-
-.account {
-  position: fixed;
-  top: 14px;
-  right: 18px;
-  z-index: 10001;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 9px 7px 13px;
-  border: 1px solid rgb(17 25 54 / 10%);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 92%);
-  box-shadow: 0 6px 22px rgb(13 29 72 / 12%);
-  color: #39445d;
-  font-size: 12px;
-}
-.account button {
-  margin: 0;
-  padding: 6px 10px;
-  border: 0;
-  border-radius: 999px;
-  background: #111936;
-  color: #fff;
-  font: inherit;
-  cursor: pointer;
-}
-.account button:disabled { cursor: default; opacity: .55; }
-.accountError { color: #b42336; }

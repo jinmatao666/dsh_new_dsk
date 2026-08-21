@@ -6,6 +6,7 @@
     "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
   },
   "files": [
+    "src/client/AccountSection.tsx",
     "src/client/AuthGate.tsx",
     "src/client/index.ts",
     "src/contract.ts",
@@ -16,6 +17,7 @@
     { "path": "../connection/tsconfig.client.json" },
     { "path": "../runtime" },
     { "path": "../ui-layout" },
+    { "path": "../ui-settings" },
     { "path": "../ui-slots" }
   ]
 }

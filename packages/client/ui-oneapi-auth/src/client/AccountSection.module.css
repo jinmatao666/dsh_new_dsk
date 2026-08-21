@@ -1,0 +1,9 @@
+.section { padding: 12px 0 28px; }
+.section h1 { margin: 0; color: var(--dsw-alias-label-primary); font-size: 22px; font-weight: 500; }
+.hint { margin: 8px 0 24px; color: var(--dsw-alias-label-secondary); font-size: 14px; line-height: 1.6; }
+.card { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px; border: 1px solid var(--dsw-alias-line-light); border-radius: 14px; background: var(--dsw-alias-bg-layer-1); }
+.label { color: var(--dsw-alias-label-secondary); font-size: 13px; }
+.value { margin-top: 6px; color: var(--dsw-alias-label-primary); font-size: 16px; }
+.logout { flex: none; padding: 9px 16px; border: 0; border-radius: 999px; background: var(--dsw-alias-interactive-bg-danger, #d92d20); color: #fff; cursor: pointer; font: inherit; }
+.logout:disabled { cursor: default; opacity: .55; }
+.error { color: #b42336; font-size: 13px; }
