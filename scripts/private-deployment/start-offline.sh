@@ -65,6 +65,7 @@ docker volume inspect dsh-oneapi-data >/dev/null 2>&1 || docker volume create ds
 docker volume inspect dsh-oneapi-logs >/dev/null 2>&1 || docker volume create dsh-oneapi-logs >/dev/null
 
 one_api_port="$(env_default DSH_ONEAPI_PORT 3300)"
+cors_allow_origins="$(env_default DSH_CORS_ALLOW_ORIGINS 'http://tauri.localhost,tauri://localhost')"
 
 docker run -d \
   --name "$container" \
@@ -88,7 +89,7 @@ docker run -d \
   -e "PARVIS_CHANNEL_KEY_ENCRYPTION_KEY=$(env_required DSH_CHANNEL_KEY_ENCRYPTION_KEY)" \
   -e PARVIS_PROVINCE_SSO_ENABLED=false \
   -e PARVIS_RELEASE_DETECTION_ENABLED=false \
-  -e CORS_ALLOW_ORIGINS=http://tauri.localhost,tauri://localhost \
+  -e "CORS_ALLOW_ORIGINS=$cors_allow_origins" \
   --health-cmd "wget --quiet --spider http://127.0.0.1:3000/api/status || exit 1" \
   --health-interval 10s \
   --health-timeout 5s \

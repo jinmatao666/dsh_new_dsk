@@ -8,5 +8,10 @@
         provider: dsh-server
         credentialRef: DSH_ONEAPI_TOKEN
         tokenName: DSH Desktop Auto Token
+        # OneAPI's model list has ids but no modality metadata.  The current
+        # regional Qwen gateway is vision-capable; declare that once here so
+        # DSH's image admission pipeline does not reject every model before
+        # the request reaches OneAPI.  Remove `image` for a text-only region.
+        defaultInput: [text, image]
         defaultModel: !!js process.env.DSH_DEFAULT_MODEL
         installId: !!js process.env.DSH_INSTALL_ID

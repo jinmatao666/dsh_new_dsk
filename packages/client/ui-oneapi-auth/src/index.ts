@@ -31,6 +31,17 @@ export interface Config {
   tokenName: string
   /** Optional preferred default model id. */
   defaultModel?: string
+  /**
+   * Input modalities advertised for models returned by OneAPI.
+   *
+   * OneAPI's `/v1/models` response only contains model ids, so the DSH
+   * runtime cannot discover vision support from that endpoint.  The newer DSH
+   * image pipeline deliberately refuses images for hand-declared models until
+   * this capability is declared.  Keep the deployment choice here (rather
+   * than making every desktop user edit settings); a text-only upstream must
+   * leave `image` out.
+   */
+  defaultInput?: Array<'text' | 'image'>
   /** Build-specific marker used to require login once after a new install. */
   installId?: string
 }
@@ -42,6 +53,7 @@ export const Config: z<Config> = z.object({
   credentialRef: z.string().default('DSH_ONEAPI_TOKEN'),
   tokenName: z.string().default('DSH Desktop Auto Token'),
   defaultModel: z.string(),
+  defaultInput: z.array(z.union(['text', 'image'] as const)).default(['text']),
   installId: z.string(),
 })
 
@@ -56,6 +68,7 @@ interface ManagedProvider {
   apiKeyEnv: string
   api: string
   baseURL: string
+  defaultInput?: Array<'text' | 'image'>
   models: Array<{ id: string }>
   /** Explicit compatibility for the regional OpenAI-compatible gateway. */
   compat?: {
@@ -156,6 +169,10 @@ export function apply(ctx: Context, config: Config): void {
       api: 'openai-completions',
       baseURL: `${baseURL}/v1`,
       models: models.map(id => ({ id })),
+      // `/v1/models` from OneAPI exposes ids only.  Carry the deployment's
+      // explicit image capability into the DSH provider profile so the new
+      // attachment/image admission pipeline can route images correctly.
+      defaultInput: config.defaultInput ?? ['text'],
       // The DSH OneAPI route fronts Qwen-compatible OpenAI endpoints. Keep
       // the wire contract explicit instead of letting pi-ai infer it from a
       // private URL: avoid unsupported reasoning/developer fields and send
