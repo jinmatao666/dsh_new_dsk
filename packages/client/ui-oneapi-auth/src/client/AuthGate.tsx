@@ -94,19 +94,6 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
             </div>
           </div>
 
-          <div className={css.flowCard}>
-            <h2><span className={css.sectionDot} />智能体工作流程</h2>
-            <p>从理解任务到交付结果，持续协作与改进</p>
-            <div className={css.flowSteps} aria-label="工作流程">
-              <FlowStep number="1" label="任务理解" />
-              <span className={css.flowArrow} aria-hidden="true">›</span>
-              <FlowStep number="2" label="信息检索" />
-              <span className={css.flowArrow} aria-hidden="true">›</span>
-              <FlowStep number="3" label="智能编排" />
-              <span className={css.flowArrow} aria-hidden="true">›</span>
-              <FlowStep number="4" label="结果交付" />
-            </div>
-          </div>
           <p className={css.pageFooter}>© 2026 Wanwei · 智能体工作平台</p>
         </section>
 
@@ -152,10 +139,6 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
 
 function Capability({ icon, title, detail }: { icon: ReactNode; title: string; detail: string }) {
   return <div className={css.capabilityItem}><span className={css.capabilityIcon}>{icon}</span><span><strong>{title}</strong><small>{detail}</small></span></div>
-}
-
-function FlowStep({ number, label }: { number: string; label: string }) {
-  return <div className={css.flowStep}><span>{number}</span><strong>{label}</strong></div>
 }
 
 function FileIcon() {
