@@ -63,7 +63,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          # The release version is supplied explicitly; no build step needs
+          # the complete repository history.
+          fetch-depth: 1
           persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
@@ -76,6 +78,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      - name: Cache Rust and Tauri build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/desktop/src-tauri/target
+          key: ${{ runner.os }}-${{ matrix.target }}-tauri-${{ hashFiles('apps/desktop/src-tauri/Cargo.lock', 'apps/desktop/src-tauri/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-tauri-
       - name: Validate release inputs
         shell: bash
         run: |
@@ -118,10 +130,7 @@ jobs:
       - name: Stage desktop runtime
         run: pnpm --filter @deepseek-ai/dsh-desktop-app run prepare:runtime
       - name: Generate Wanwei desktop icons
-        shell: pwsh
-        run: '& node_modules/.bin/tauri.cmd icon apps/desktop/src-tauri/icons/wanwei-source.png'
-      - name: Restore packaging tools
-        run: pnpm install --frozen-lockfile
+        run: pnpm --filter @deepseek-ai/dsh-desktop-app exec tauri icon apps/desktop/src-tauri/icons/wanwei-source.png
       - name: Build desktop installers
         shell: bash
         run: |
