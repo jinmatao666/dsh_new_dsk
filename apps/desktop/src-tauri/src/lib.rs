@@ -7,7 +7,11 @@ use std::{
     sync::{mpsc, Arc, Mutex},
     time::Duration,
 };
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{TrayIconBuilder, TrayIconEvent},
+    Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+};
 use url::Url;
 
 #[derive(Debug, Deserialize)]
@@ -89,7 +93,11 @@ fn development_command() -> (PathBuf, PathBuf, Vec<String>) {
     )
 }
 
-fn spawn_sidecar(resource_dir: &Path, config: &ServerConfig, log_path: &Path) -> Result<(Child, Url), String> {
+fn spawn_sidecar(
+    resource_dir: &Path,
+    config: &ServerConfig,
+    log_path: &Path,
+) -> Result<(Child, Url), String> {
     let (program, cwd, mut args) = if cfg!(debug_assertions) {
         development_command()
     } else {
@@ -102,6 +110,10 @@ fn spawn_sidecar(resource_dir: &Path, config: &ServerConfig, log_path: &Path) ->
         "127.0.0.1".into(),
         "--port".into(),
         "0".into(),
+        // Tauri owns the visible WebView. The DSH web launcher otherwise
+        // hands the loopback URL to the system browser as well, which creates
+        // a duplicate browser tab/window for every desktop launch.
+        "--no-open".into(),
     ]);
     let rendered_args = args.join(" ");
     let mut command = Command::new(&program);
@@ -114,7 +126,10 @@ fn spawn_sidecar(resource_dir: &Path, config: &ServerConfig, log_path: &Path) ->
     if !config.default_model.is_empty() {
         command.env("DSH_DEFAULT_MODEL", &config.default_model);
     }
-    append_log(log_path, format!("starting sidecar: {} {rendered_args}", program.display()));
+    append_log(
+        log_path,
+        format!("starting sidecar: {} {rendered_args}", program.display()),
+    );
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -158,23 +173,73 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let resource_dir = app.path().resource_dir()?;
-            let log_path = app.path().app_local_data_dir()?.join("logs").join("startup.log");
+            let log_path = app
+                .path()
+                .app_local_data_dir()?
+                .join("logs")
+                .join("startup.log");
             let _ = fs::remove_file(&log_path);
             append_log(&log_path, "Wanwei Harness startup");
             let config = server_config(&resource_dir).map_err(|message| {
                 append_log(&log_path, format!("[fatal] {message}"));
                 std::io::Error::new(std::io::ErrorKind::InvalidData, message)
             })?;
-            let (child, url) = spawn_sidecar(&resource_dir, &config, &log_path).map_err(|message| {
-                append_log(&log_path, format!("[fatal] {message}"));
-                std::io::Error::other(message)
-            })?;
+            let (child, url) =
+                spawn_sidecar(&resource_dir, &config, &log_path).map_err(|message| {
+                    append_log(&log_path, format!("[fatal] {message}"));
+                    std::io::Error::other(message)
+                })?;
             app.manage(Sidecar(Arc::new(Mutex::new(Some(child)))));
+
+            // Keep the sidecar alive when the user closes the window. The
+            // application is controlled from the system tray and only exits
+            // through the tray's explicit quit action.
+            let show_item = MenuItem::with_id(app, "show", "显示 Wanwei Harness", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "退出 Wanwei Harness", true, None::<&str>)?;
+            let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+            TrayIconBuilder::new()
+                .icon(app.default_window_icon().ok_or("缺少应用图标")?.clone())
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::DoubleClick { .. } = event {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
                 .title("Wanwei Harness")
-                .inner_size(1280.0, 820.0)
-                .min_inner_size(960.0, 640.0)
+                .inner_size(1120.0, 720.0)
+                .min_inner_size(900.0, 580.0)
                 .center()
+                .on_window_event(|window, event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                    // Windows reports a native minimize as a zero-sized
+                    // resize before it is removed from the taskbar. Treat it
+                    // like closing the window so both controls go to tray.
+                    if let WindowEvent::Resized { size, .. } = event {
+                        if size.width == 0 || size.height == 0 {
+                            let _ = window.hide();
+                        }
+                    }
+                })
                 .build()?;
             Ok(())
         })

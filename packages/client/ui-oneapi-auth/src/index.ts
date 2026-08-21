@@ -54,6 +54,17 @@ interface ManagedProvider {
   api: string
   baseURL: string
   models: Array<{ id: string }>
+  /** Explicit compatibility for the regional OpenAI-compatible gateway. */
+  compat?: {
+    supportsStore: boolean
+    supportsDeveloperRole: boolean
+    supportsReasoningEffort: boolean
+    supportsUsageInStreaming: boolean
+    maxTokensField: 'max_tokens' | 'max_completion_tokens'
+    supportsStrictMode: boolean
+    thinkingFormat: 'qwen-chat-template'
+    chatTemplateKwargs: { enable_thinking: boolean }
+  }
 }
 interface ProviderSettings { providers?: Record<string, ManagedProvider | Record<string, unknown>> }
 interface DefaultModelService {
@@ -140,6 +151,20 @@ export function apply(ctx: Context, config: Config): void {
       api: 'openai-completions',
       baseURL: `${baseURL}/v1`,
       models: models.map(id => ({ id })),
+      // The DSH OneAPI route fronts Qwen-compatible OpenAI endpoints. Keep
+      // the wire contract explicit instead of letting pi-ai infer it from a
+      // private URL: avoid unsupported reasoning/developer fields and send
+      // the model's documented thinking switch.
+      compat: {
+        supportsStore: false,
+        supportsDeveloperRole: false,
+        supportsReasoningEffort: false,
+        supportsUsageInStreaming: true,
+        maxTokensField: 'max_tokens',
+        supportsStrictMode: false,
+        thinkingFormat: 'qwen-chat-template',
+        chatTemplateKwargs: { enable_thinking: false },
+      },
     }
     await ctx.settings.replace(LLM_SETTINGS, {
       providers: { ...(current.providers ?? {}), [config.provider]: managed },
