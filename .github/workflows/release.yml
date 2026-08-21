@@ -117,6 +117,9 @@ jobs:
         run: Add-Content -Path $env:GITHUB_ENV -Value "DSH_NODE_BINARY=$((Get-Command node).Source)"
       - name: Stage desktop runtime
         run: pnpm --filter @deepseek-ai/dsh-desktop-app run prepare:runtime
+      - name: Generate Wanwei desktop icons
+        shell: pwsh
+        run: '& node_modules/.bin/tauri.cmd icon apps/desktop/src-tauri/icons/wanwei-source.png'
       - name: Restore packaging tools
         run: pnpm install --frozen-lockfile
       - name: Build desktop installers
