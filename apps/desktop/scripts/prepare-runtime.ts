@@ -114,13 +114,23 @@ function dependencyNames(manifestPath: string): string[] {
     dependencies?: Record<string, string>
     peerDependencies?: Record<string, string>
     peerDependenciesMeta?: Record<string, { optional?: boolean }>
+    optionalDependencies?: Record<string, string>
   }
   const peers = Object.keys(manifest.peerDependencies ?? {})
     .filter(name => manifest.peerDependenciesMeta?.[name]?.optional !== true)
   return [...new Set([
     ...Object.keys(manifest.dependencies ?? {}),
     ...peers,
+    ...Object.keys(manifest.optionalDependencies ?? {}),
   ])].sort()
+}
+
+/** Read optional dependency names so unsupported platform packages can be skipped. */
+function optionalDependencyNames(manifestPath: string): string[] {
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+    optionalDependencies?: Record<string, string>
+  }
+  return Object.keys(manifest.optionalDependencies ?? {})
 }
 
 /** Resolve the complete dependency closure of the shipped profile bundles. */
@@ -129,11 +139,16 @@ function dependencyClosure(manifests: readonly string[]): string[] {
   const queue = [...manifests]
   for (let index = 0; index < queue.length; index++) {
     const manifestPath = queue[index]
+    const optional = new Set(optionalDependencyNames(manifestPath))
     for (const dependency of dependencyNames(manifestPath)) {
       if (dependencies.has(dependency)) continue
       dependencies.add(dependency)
       const source = sourcePackageDirectory(dependency)
       if (source === undefined) {
+        if (optional.has(dependency)) {
+          dependencies.delete(dependency)
+          continue
+        }
         throw new Error(`Desktop runtime dependency is missing from source workspace: ${dependency}`)
       }
       queue.push(join(source, 'package.json'))
@@ -218,11 +233,33 @@ function verifySidecarRuntime(): void {
     cwd: appDir,
     encoding: 'utf8',
   })
-  if (result.status === 0) return
+  if (result.status !== 0) {
+    const detail = [result.stdout, result.stderr]
+      .filter((part): part is string => typeof part === 'string' && part.trim() !== '')
+      .join('\n')
+    throw new Error(`Desktop runtime preflight failed: ${detail || `exit status ${String(result.status)}`}`)
+  }
+
+  // The desktop profile loads plugins with native optional dependencies. A
+  // production deploy can pass the CLI config check while still omitting the
+  // platform package selected by sharp/koffi, which makes the installed app
+  // exit before opening its window. Import the native entry points explicitly
+  // while the staged tree is still in CI so that missing platform binaries are
+  // reported as a build failure instead of a broken installer.
+  const nativeResult = spawnSync(nodeBinary, [
+    '--input-type=module',
+    '--eval',
+    "await import('sharp'); await import('koffi')",
+  ], {
+    cwd: appDir,
+    encoding: 'utf8',
+  })
+  if (nativeResult.status === 0) return
   const detail = [result.stdout, result.stderr]
+    .concat([nativeResult.stdout, nativeResult.stderr])
     .filter((part): part is string => typeof part === 'string' && part.trim() !== '')
     .join('\n')
-  throw new Error(`Desktop runtime preflight failed: ${detail || `exit status ${String(result.status)}`}`)
+  throw new Error(`Desktop native runtime preflight failed: ${detail || `exit status ${String(nativeResult.status)}`}`)
 }
 
 /** Replace every workspace link with ordinary files before Tauri walks its resources. */
