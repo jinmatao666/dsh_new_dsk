@@ -9,6 +9,7 @@ const desktopDir = resolve(import.meta.dirname, '..')
 const root = resolve(desktopDir, '..', '..')
 const resources = join(desktopDir, 'src-tauri', 'resources', 'runtime')
 const appDir = join(resources, 'app')
+const runtimeDependencies = dependencyNames(join(root, 'python', 'sdk-runtime', 'package.json'))
 const configuredNode = process.env.DSH_NODE_BINARY
 const nodeBinary = configuredNode === undefined ? process.execPath : resolve(configuredNode)
 const stagedNode = join(resources, process.platform === 'win32' ? 'node.exe' : 'node')
@@ -48,7 +49,7 @@ run('pnpm', [
   appDir,
 ])
 
-restoreLegacyHoists()
+restoreLegacyHoists(runtimeDependencies)
 materializeStagedLinks()
 
 // Deploy the complete CLI closure. The CLI explicitly depends on the desktop
@@ -63,10 +64,15 @@ cpSync(join(cliDir, 'config'), join(appDir, 'config'), { recursive: true })
 // exceed Windows NSIS path limits even though Node never reads them.
 pruneRuntimeTypeArtifacts(appDir)
 // Pruning can remove a package-local tree that legacy deploy used as the
-// source of a direct workspace dependency. Restore the declared CLI runtime
-// dependencies once more after pruning so every direct package is guaranteed
-// to exist in the final installer payload.
-restoreLegacyHoists()
+// source of a direct workspace dependency. The SDK runtime manifest is the
+// reviewed complete closure, while the CLI manifest contributes its entrypoint
+// dependencies. Restore both sets after pruning and refuse to ship a partial
+// sidecar.
+const cliDependencies = dependencyNames(join(cliDir, 'package.json'))
+const requiredDependencies = [...new Set([...runtimeDependencies, ...cliDependencies])]
+restoreLegacyHoists(requiredDependencies)
+assertRuntimeDependencies(requiredDependencies)
+verifySidecarRuntime()
 
 // The reviewed subprocess postinstall only restores executable mode on
 // node-pty's prebuilt spawn helpers. Deploy skips lifecycle scripts, so apply
@@ -99,15 +105,20 @@ if (configuredUrl !== undefined && configuredUrl.trim() !== '') {
 
 console.log(`DSH Desktop runtime staged at ${resources}`)
 
-/** Restore direct dependencies that pnpm's legacy deploy hoists beside the staging directory. */
-function restoreLegacyHoists(): void {
-  const manifest = JSON.parse(readFileSync(join(appDir, 'package.json'), 'utf8')) as {
+/** Read the direct runtime dependencies declared by a package manifest. */
+function dependencyNames(manifestPath: string): string[] {
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
     dependencies?: Record<string, string>
   }
+  return Object.keys(manifest.dependencies ?? {}).sort()
+}
+
+/** Restore dependencies that pnpm's legacy deploy hoists beside the staging directory. */
+function restoreLegacyHoists(dependencies: readonly string[]): void {
   // Legacy deploy hoists peer-specialized workspace packages next to the
   // deploy manifest, not at the monorepo root.
   const sourceNodeModules = join(root, 'python', 'sdk-runtime', 'node_modules')
-  for (const dependency of Object.keys(manifest.dependencies ?? {}).sort()) {
+  for (const dependency of dependencies) {
     const destination = join(appDir, 'node_modules', dependency)
     if (existsSync(destination)) continue
     const source = join(sourceNodeModules, dependency)
@@ -116,6 +127,27 @@ function restoreLegacyHoists(): void {
     }
     copyPackage(source, destination)
   }
+}
+
+/** Fail the release build rather than shipping a sidecar missing a declared runtime package. */
+function assertRuntimeDependencies(dependencies: readonly string[]): void {
+  const missing = dependencies.filter(dependency => !existsSync(join(appDir, 'node_modules', dependency)))
+  if (missing.length > 0) {
+    throw new Error(`Desktop runtime is missing required dependencies: ${missing.join(', ')}`)
+  }
+}
+
+/** Load the staged desktop profile once so a broken import fails during CI, not after installation. */
+function verifySidecarRuntime(): void {
+  const result = spawnSync(nodeBinary, [join(appDir, 'lib', 'bin.js'), '--profile', 'desktop', '--dump-default-config'], {
+    cwd: appDir,
+    encoding: 'utf8',
+  })
+  if (result.status === 0) return
+  const detail = [result.stdout, result.stderr]
+    .filter((part): part is string => typeof part === 'string' && part.trim() !== '')
+    .join('\n')
+  throw new Error(`Desktop runtime preflight failed: ${detail || `exit status ${String(result.status)}`}`)
 }
 
 /** Replace every workspace link with ordinary files before Tauri walks its resources. */
