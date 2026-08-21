@@ -58,6 +58,11 @@ copyFileSync(join(cliDir, 'package.json'), join(appDir, 'package.json'))
 cpSync(join(cliDir, 'lib'), join(appDir, 'lib'), { recursive: true })
 cpSync(join(cliDir, 'config'), join(appDir, 'config'), { recursive: true })
 
+// Tauri/NSIS only needs executable JavaScript and package metadata. Some
+// third-party packages ship very deep declaration/source-map trees which can
+// exceed Windows NSIS path limits even though Node never reads them.
+pruneRuntimeTypeArtifacts(appDir)
+
 // The reviewed subprocess postinstall only restores executable mode on
 // node-pty's prebuilt spawn helpers. Deploy skips lifecycle scripts, so apply
 // that mode to both macOS architectures explicitly for cross-target builds.
@@ -145,4 +150,15 @@ function copyPackage(source: string, destination: string): void {
     dereference: true,
     filter: (path: string) => path !== nestedNodeModules && !path.startsWith(`${nestedNodeModules}\\`),
   })
+}
+
+function pruneRuntimeTypeArtifacts(directory: string): void {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name)
+    if (entry.isDirectory()) {
+      pruneRuntimeTypeArtifacts(path)
+      continue
+    }
+    if (/\.(?:d\.(?:ts|mts|cts)|map)$/i.test(entry.name)) rmSync(path, { force: true })
+  }
 }
