@@ -139,6 +139,10 @@ jobs:
       - name: Build desktop installers
         shell: bash
         run: |
+          # The target directory is cached for Rust/Tauri compilation speed.
+          # Bundle artifacts are versioned outputs, however, and stale files
+          # from a restored cache must never be published with this release.
+          rm -rf "apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
           pnpm --filter @deepseek-ai/dsh-desktop-app exec tauri build \
             --target "${{ matrix.target }}" \
             --bundles "${{ matrix.bundles }}" \
@@ -148,6 +152,7 @@ jobs:
         run: |
           mkdir -p artifacts
           find "apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle" -type f \
+            -name "*_${DSH_RELEASE_VERSION}_*" \
             \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.app.tar.gz' \) \
             -exec cp {} artifacts/ \;
           test -n "$(find artifacts -type f -print -quit)"
