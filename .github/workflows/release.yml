@@ -135,7 +135,7 @@ jobs:
       - name: Restore packaging tools
         run: pnpm install --frozen-lockfile --prod=false
       - name: Generate Wanwei desktop icons
-        run: pnpm --filter @deepseek-ai/dsh-desktop-app exec tauri icon apps/desktop/src-tauri/icons/wanwei-source.png
+        run: pnpm --filter @deepseek-ai/dsh-desktop-app exec tauri icon src-tauri/icons/wanwei-source.png
       - name: Build desktop installers
         shell: bash
         run: |
