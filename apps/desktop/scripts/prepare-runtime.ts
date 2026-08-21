@@ -4,6 +4,7 @@ import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, read
 import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import process from 'node:process'
+import { randomUUID } from 'node:crypto'
 
 const desktopDir = resolve(import.meta.dirname, '..')
 const root = resolve(desktopDir, '..', '..')
@@ -96,14 +97,16 @@ if (existsSync(webDist) && !existsSync(stagedDist)) cpSync(webDist, stagedDist, 
 
 const configSource = process.env.DSH_DESKTOP_SERVER_CONFIG
 const configuredUrl = process.env.DSH_DESKTOP_SERVER_URL
+const installId = process.env.DSH_DESKTOP_INSTALL_ID?.trim() || randomUUID()
 if (configuredUrl !== undefined && configuredUrl.trim() !== '') {
-  const config = { oneApiUrl: configuredUrl.trim(), defaultModel: process.env.DSH_DEFAULT_MODEL ?? '' }
+  const config = { oneApiUrl: configuredUrl.trim(), defaultModel: process.env.DSH_DEFAULT_MODEL ?? '', installId }
   JSON.parse(JSON.stringify(config))
   const target = join(desktopDir, 'src-tauri', 'resources', 'server.json')
   writeFileSync(target, `${JSON.stringify(config, null, 2)}\n`)
 } else if (configSource !== undefined) {
-  JSON.parse(readFileSync(configSource, 'utf8')) as unknown
-  copyFileSync(resolve(configSource), join(desktopDir, 'src-tauri', 'resources', 'server.json'))
+  const config = JSON.parse(readFileSync(configSource, 'utf8')) as Record<string, unknown>
+  config.installId = installId
+  writeFileSync(join(desktopDir, 'src-tauri', 'resources', 'server.json'), `${JSON.stringify(config, null, 2)}\n`)
 }
 
 console.log(`DSH Desktop runtime staged at ${resources}`)

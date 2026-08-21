@@ -1,4 +1,5 @@
 {
   "oneApiUrl": "https://models.example.com/dsh-api",
-  "defaultModel": ""
+  "defaultModel": "",
+  "installId": "generated-during-build"
 }

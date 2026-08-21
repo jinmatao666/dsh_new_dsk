@@ -9,3 +9,4 @@
         credentialRef: DSH_ONEAPI_TOKEN
         tokenName: DSH Desktop Auto Token
         defaultModel: !!js process.env.DSH_DEFAULT_MODEL
+        installId: !!js process.env.DSH_INSTALL_ID

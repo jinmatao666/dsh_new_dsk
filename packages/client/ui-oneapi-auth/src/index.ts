@@ -31,6 +31,8 @@ export interface Config {
   tokenName: string
   /** Optional preferred default model id. */
   defaultModel?: string
+  /** Build-specific marker used to require login once after a new install. */
+  installId?: string
 }
 
 /** Runtime schema for {@link Config}. */
@@ -40,6 +42,7 @@ export const Config: z<Config> = z.object({
   credentialRef: z.string().default('DSH_ONEAPI_TOKEN'),
   tokenName: z.string().default('DSH Desktop Auto Token'),
   defaultModel: z.string(),
+  installId: z.string(),
 })
 
 interface LoginPayload { username: string; password: string }
@@ -142,6 +145,8 @@ export const inject = ['connection', 'credentials', 'settings', 'agentDefaultMod
 export function apply(ctx: Context, config: Config): void {
   const baseURL = normalizedOrigin(config.baseURL)
   const ref = credentialRef(config.credentialRef)
+  const usernameRef = credentialRef('DSH_LOGIN_USERNAME')
+  const installMarkerRef = credentialRef('DSH_DESKTOP_INSTALL_MARKER')
 
   const syncProvider = async (models: string[]): Promise<void> => {
     const current = ctx.settings.get(LLM_SETTINGS) as ProviderSettings
@@ -186,13 +191,27 @@ export function apply(ctx: Context, config: Config): void {
     await ctx.settings.replace(LLM_SETTINGS, { providers })
   }
 
+  // Credentials intentionally survive normal restarts, but a newly built
+  // installer carries a new marker and must show the login screen once.
+  const installReady = (async (): Promise<void> => {
+    const installId = config.installId?.trim()
+    if (installId === undefined || installId === '') return
+    const marker = await ctx.credentials.resolve(installMarkerRef)
+    if (marker?.value !== installId) {
+      await clearLocalAuth()
+      await ctx.credentials.set(installMarkerRef, installId)
+    }
+  })()
+
   const status = async (signal?: AbortSignal): Promise<AuthState> => {
+    await installReady
     const resolved = await ctx.credentials.resolve(ref)
-    if (resolved === undefined) return { state: 'logged-out' }
+    const username = (await ctx.credentials.resolve(usernameRef))?.value
+    if (resolved === undefined) return username === undefined ? { state: 'logged-out' } : { state: 'logged-out', username }
     try {
       const models = await fetchModels(baseURL, resolved.value, signal)
       await syncProvider(models)
-      return { state: 'authenticated', models }
+      return username === undefined ? { state: 'authenticated', models } : { state: 'authenticated', models, username }
     } catch (error) {
       if ((error as { authInvalid?: unknown }).authInvalid === true) {
         await clearLocalAuth()
@@ -229,13 +248,14 @@ export function apply(ctx: Context, config: Config): void {
       }
       const models = await fetchModels(baseURL, token, signal)
       await ctx.credentials.set(ref, token)
+      await ctx.credentials.set(usernameRef, input.username)
       try {
         await syncProvider(models)
       } catch (error) {
         await ctx.credentials.unset(ref)
         throw error
       }
-      return { ok: true as const, value: { state: 'authenticated' as const, models } }
+      return { ok: true as const, value: { state: 'authenticated' as const, models, username: input.username } }
     } catch (error) {
       return internal(error instanceof Error ? error.message : String(error))
     }
@@ -255,7 +275,8 @@ export function apply(ctx: Context, config: Config): void {
     if (endpoint === 'logout') {
       try {
         await clearLocalAuth()
-        return { ok: true as const, value: { state: 'logged-out' } satisfies AuthState }
+        const username = (await ctx.credentials.resolve(usernameRef))?.value
+        return { ok: true as const, value: username === undefined ? { state: 'logged-out' } : { state: 'logged-out', username } satisfies AuthState }
       } catch (error) {
         return internal(error instanceof Error ? error.message : String(error))
       }

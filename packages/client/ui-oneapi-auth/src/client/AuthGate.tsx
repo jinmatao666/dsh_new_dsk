@@ -14,12 +14,16 @@ interface AuthInjected {
 export type AuthGateProps = PropsRuntime<'shell.overlay'> & AuthInjected
 
 /** Full-window desktop sign-in gate. */
-export function AuthGate({ status, login }: AuthGateProps) {
+export function AuthGate({ status, login, logout }: AuthGateProps) {
   const [auth, setAuth] = useState<AuthState | { state: 'checking' }>({ state: 'checking' })
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+
+  useEffect(() => {
+    if ('username' in auth && typeof auth.username === 'string') setUsername(auth.username)
+  }, [auth])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -29,7 +33,17 @@ export function AuthGate({ status, login }: AuthGateProps) {
     return () => { controller.abort() }
   }, [status])
 
-  if (auth.state === 'authenticated') return null
+  if (auth.state === 'authenticated') {
+    return <div className={css.account}>
+      <span>{auth.username ?? '已登录'}</span>
+      <button type="button" onClick={() => { void (async () => {
+        setBusy(true)
+        setError(undefined)
+        try { setAuth(await logout()) } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) } finally { setBusy(false) }
+      })() }} disabled={busy}>退出登录</button>
+      {error !== undefined && <span className={css.accountError} role="alert">{error}</span>}
+    </div>
+  }
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()

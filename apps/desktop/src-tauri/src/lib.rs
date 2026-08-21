@@ -20,6 +20,8 @@ struct ServerConfig {
     one_api_url: String,
     #[serde(default)]
     default_model: String,
+    #[serde(default)]
+    install_id: String,
 }
 
 struct Sidecar(Arc<Mutex<Option<Child>>>);
@@ -125,6 +127,9 @@ fn spawn_sidecar(
         .stderr(Stdio::piped());
     if !config.default_model.is_empty() {
         command.env("DSH_DEFAULT_MODEL", &config.default_model);
+    }
+    if !config.install_id.is_empty() {
+        command.env("DSH_INSTALL_ID", &config.install_id);
     }
     append_log(
         log_path,
