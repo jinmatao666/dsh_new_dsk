@@ -227,17 +227,18 @@ pub fn run() {
                 .min_inner_size(900.0, 580.0)
                 .center()
                 .build()?;
-            window.on_window_event(|window, event| {
+            let window_for_events = window.clone();
+            window.on_window_event(move |event| {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    let _ = window.hide();
+                    let _ = window_for_events.hide();
                 }
                 // Windows reports a native minimize as a zero-sized resize
                 // before it is removed from the taskbar. Treat it like
                 // closing the window so both controls go to tray.
                 if let WindowEvent::Resized(size) = event {
                     if size.width == 0 || size.height == 0 {
-                        let _ = window.hide();
+                        let _ = window_for_events.hide();
                     }
                 }
             });
