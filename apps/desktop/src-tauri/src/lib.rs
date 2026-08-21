@@ -221,26 +221,26 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
                 .title("Wanwei Harness")
                 .inner_size(1120.0, 720.0)
                 .min_inner_size(900.0, 580.0)
                 .center()
-                .on_window_event(|window, event| {
-                    if let WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
+                .build()?;
+            window.on_window_event(|window, event| {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                // Windows reports a native minimize as a zero-sized resize
+                // before it is removed from the taskbar. Treat it like
+                // closing the window so both controls go to tray.
+                if let WindowEvent::Resized(size) = event {
+                    if size.width == 0 || size.height == 0 {
                         let _ = window.hide();
                     }
-                    // Windows reports a native minimize as a zero-sized
-                    // resize before it is removed from the taskbar. Treat it
-                    // like closing the window so both controls go to tray.
-                    if let WindowEvent::Resized { size, .. } = event {
-                        if size.width == 0 || size.height == 0 {
-                            let _ = window.hide();
-                        }
-                    }
-                })
-                .build()?;
+                }
+            });
             Ok(())
         })
         .run(tauri::generate_context!())
