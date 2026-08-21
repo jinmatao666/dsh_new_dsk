@@ -9,7 +9,14 @@ const desktopDir = resolve(import.meta.dirname, '..')
 const root = resolve(desktopDir, '..', '..')
 const resources = join(desktopDir, 'src-tauri', 'resources', 'runtime')
 const appDir = join(resources, 'app')
-const runtimeDependencies = dependencyNames(join(root, 'python', 'sdk-runtime', 'package.json'))
+let workspacePackageMap: Map<string, string> | undefined
+const runtimeDependencies = dependencyClosure([
+  join(root, 'python', 'sdk-runtime', 'package.json'),
+  join(root, 'apps', 'cli', 'package.json'),
+  join(root, 'packages', 'bundle', 'base', 'package.json'),
+  join(root, 'packages', 'bundle', 'web-app', 'package.json'),
+  join(root, 'packages', 'bundle', 'desktop', 'package.json'),
+])
 const configuredNode = process.env.DSH_NODE_BINARY
 const nodeBinary = configuredNode === undefined ? process.execPath : resolve(configuredNode)
 const stagedNode = join(resources, process.platform === 'win32' ? 'node.exe' : 'node')
@@ -64,14 +71,10 @@ cpSync(join(cliDir, 'config'), join(appDir, 'config'), { recursive: true })
 // exceed Windows NSIS path limits even though Node never reads them.
 pruneRuntimeTypeArtifacts(appDir)
 // Pruning can remove a package-local tree that legacy deploy used as the
-// source of a direct workspace dependency. The SDK runtime manifest is the
-// reviewed complete closure, while the CLI manifest contributes its entrypoint
-// dependencies. Restore both sets after pruning and refuse to ship a partial
-// sidecar.
-const cliDependencies = dependencyNames(join(cliDir, 'package.json'))
-const requiredDependencies = [...new Set([...runtimeDependencies, ...cliDependencies])]
-restoreLegacyHoists(requiredDependencies)
-assertRuntimeDependencies(requiredDependencies)
+// source of a direct workspace dependency. Restore the complete dependency
+// closure of the shipped profile bundles and refuse to ship a partial sidecar.
+restoreLegacyHoists(runtimeDependencies)
+assertRuntimeDependencies(runtimeDependencies)
 verifySidecarRuntime()
 
 // The reviewed subprocess postinstall only restores executable mode on
@@ -105,28 +108,100 @@ if (configuredUrl !== undefined && configuredUrl.trim() !== '') {
 
 console.log(`DSH Desktop runtime staged at ${resources}`)
 
-/** Read the direct runtime dependencies declared by a package manifest. */
+/** Read the runtime and peer dependencies declared by a package manifest. */
 function dependencyNames(manifestPath: string): string[] {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
     dependencies?: Record<string, string>
+    peerDependencies?: Record<string, string>
+    peerDependenciesMeta?: Record<string, { optional?: boolean }>
   }
-  return Object.keys(manifest.dependencies ?? {}).sort()
+  const peers = Object.keys(manifest.peerDependencies ?? {})
+    .filter(name => manifest.peerDependenciesMeta?.[name]?.optional !== true)
+  return [...new Set([
+    ...Object.keys(manifest.dependencies ?? {}),
+    ...peers,
+  ])].sort()
+}
+
+/** Resolve the complete dependency closure of the shipped profile bundles. */
+function dependencyClosure(manifests: readonly string[]): string[] {
+  const dependencies = new Set<string>()
+  const queue = [...manifests]
+  for (let index = 0; index < queue.length; index++) {
+    const manifestPath = queue[index]
+    for (const dependency of dependencyNames(manifestPath)) {
+      if (dependencies.has(dependency)) continue
+      dependencies.add(dependency)
+      const source = sourcePackageDirectory(dependency)
+      if (source === undefined) {
+        throw new Error(`Desktop runtime dependency is missing from source workspace: ${dependency}`)
+      }
+      queue.push(join(source, 'package.json'))
+    }
+  }
+  return [...dependencies].sort()
 }
 
 /** Restore dependencies that pnpm's legacy deploy hoists beside the staging directory. */
 function restoreLegacyHoists(dependencies: readonly string[]): void {
-  // Legacy deploy hoists peer-specialized workspace packages next to the
-  // deploy manifest, not at the monorepo root.
-  const sourceNodeModules = join(root, 'python', 'sdk-runtime', 'node_modules')
   for (const dependency of dependencies) {
     const destination = join(appDir, 'node_modules', dependency)
     if (existsSync(destination)) continue
-    const source = join(sourceNodeModules, dependency)
-    if (!existsSync(source)) {
+    const source = sourcePackageDirectory(dependency)
+    if (source === undefined) {
       throw new Error(`Desktop runtime dependency is missing from deploy and source: ${dependency}`)
     }
     copyPackage(source, destination)
   }
+}
+
+/** Locate a package from the deployed dependency tree or the workspace source. */
+function sourcePackageDirectory(packageName: string): string | undefined {
+  const candidates = [
+    join(root, 'python', 'sdk-runtime', 'node_modules', packageName),
+    join(root, 'node_modules', packageName),
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(join(candidate, 'package.json'))) return candidate
+  }
+  const pnpmStore = join(root, 'node_modules', '.pnpm')
+  if (existsSync(pnpmStore)) {
+    for (const entry of readdirSync(pnpmStore, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      const candidate = join(pnpmStore, entry.name, 'node_modules', packageName)
+      if (existsSync(join(candidate, 'package.json'))) return candidate
+    }
+  }
+  workspacePackageMap ??= discoverWorkspacePackages()
+  return workspacePackageMap.get(packageName)
+}
+
+/** Build a package-name index without traversing generated or dependency trees. */
+function discoverWorkspacePackages(): Map<string, string> {
+  const packages = new Map<string, string>()
+  const roots = [
+    join(root, 'packages'),
+    join(root, 'apps'),
+    join(root, 'native'),
+    join(root, 'vendor'),
+    join(root, 'python'),
+  ]
+  const visit = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'target'
+        || entry.name === 'dist' || entry.name === 'lib' || entry.name === 'runtime') continue
+      const path = join(directory, entry.name)
+      if (entry.isDirectory()) {
+        visit(path)
+        continue
+      }
+      if (entry.name !== 'package.json') continue
+      const manifest = JSON.parse(readFileSync(path, 'utf8')) as { name?: unknown }
+      if (typeof manifest.name === 'string') packages.set(manifest.name, dirname(path))
+    }
+  }
+  for (const directory of roots) if (existsSync(directory)) visit(directory)
+  return packages
 }
 
 /** Fail the release build rather than shipping a sidecar missing a declared runtime package. */
