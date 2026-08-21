@@ -209,6 +209,11 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {
+                            // A native minimize leaves the window minimized even
+                            // after `show()`, which makes the first tray double
+                            // click only reveal a taskbar button. Restore the
+                            // native state before showing and focusing it.
+                            let _ = window.unminimize();
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
@@ -219,6 +224,7 @@ pub fn run() {
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::DoubleClick { .. } = event {
                         if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            let _ = window.unminimize();
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
