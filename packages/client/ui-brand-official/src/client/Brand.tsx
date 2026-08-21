@@ -15,6 +15,7 @@ export function OfficialBrandMark({ size, className }: OfficialBrandMarkProps) {
       width={size}
       height={size}
       className={className}
+      style={{ display: 'block', objectFit: 'contain' }}
       alt=""
       aria-hidden="true"
     />
@@ -26,5 +27,20 @@ export function OfficialBrandMark({ size, className }: OfficialBrandMarkProps) {
  * @returns the official name wordmark.
  */
 export function OfficialBrandName() {
-  return <img src="/wanwei-wordmark.png" height={24} alt="" aria-hidden="true" />
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: '100%' }} aria-hidden="true">
+      <img
+        src="/wanwei-wordmark.png"
+        height={22}
+        style={{ display: 'block', width: 'auto', maxWidth: '100%', objectFit: 'contain' }}
+        alt=""
+      />
+      <img
+        src="/wanwei-harness.png"
+        height={14}
+        style={{ display: 'block', width: 'auto', maxWidth: '40%', objectFit: 'contain' }}
+        alt=""
+      />
+    </span>
+  )
 }
