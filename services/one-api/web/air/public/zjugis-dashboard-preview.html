@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZJUGIS Harness · 分析看板预览</title>
+  <style>
+    :root {
+      --ink: #14213d;
+      --muted: #8b99ad;
+      --line: #e8eef6;
+      --blue: #3479ee;
+      --blue-soft: #e9f1ff;
+      --page: #eef3f8;
+      --surface: rgba(255,255,255,.86);
+      --shadow: 0 18px 50px rgba(62,91,132,.10);
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; margin: 0; }
+    body {
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 80% 0%, rgba(196,222,255,.7), transparent 34rem),
+        radial-gradient(circle at 8% 100%, rgba(214,231,255,.7), transparent 32rem),
+        var(--page);
+      font-family: Inter, "SF Pro Display", "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    button, select { font: inherit; }
+    button { cursor: pointer; }
+    .shell { display: grid; grid-template-columns: 226px minmax(0, 1fr); min-height: 100vh; transition: grid-template-columns .2s ease; }
+    .shell.is-collapsed { grid-template-columns: 78px minmax(0, 1fr); }
+    .sidebar {
+      position: sticky; top: 0; z-index: 2; display: flex; flex-direction: column; gap: 28px;
+      height: 100vh; min-height: 100vh; padding: 22px 14px 18px; overflow: hidden;
+      border-right: 1px solid rgba(214,225,239,.85); background: rgba(250,252,255,.75); backdrop-filter: blur(24px);
+    }
+    .brand { display: flex; align-items: center; justify-content: center; height: 70px; padding: 0; overflow: hidden; }
+    .brand img { display: block; width: 100%; max-width: 240px; height: 70px; object-fit: contain; mix-blend-mode: multiply; }
+    .brand > img:first-child { transform: none; }
+    .brand img.brand-mini { display: none; width: 40px; height: 40px; object-fit: contain; margin: auto; }
+    .section-title { padding: 0 13px; color: #94a2b5; font-size: 11px; font-weight: 700; letter-spacing: .12em; }
+    .nav { display: grid; gap: 7px; }
+    .nav a { display: flex; align-items: center; gap: 12px; min-height: 42px; padding: 0 14px; border-radius: 13px; color: #71819a; text-decoration: none; font-size: 13px; transition: .18s ease; }
+    .nav a:hover { color: var(--blue); background: var(--blue-soft); transform: translateX(2px); }
+    .nav a.active { color: var(--blue); background: linear-gradient(100deg,#e1ecff,#f5f9ff); box-shadow: 0 8px 20px rgba(65,112,194,.12); font-weight: 700; }
+    .nav svg { flex: 0 0 auto; width: 22px; height: 22px; stroke-width: 1.8; }
+    .shell.is-collapsed .nav svg { width: 24px; height: 24px; }
+    .sidebar-foot { display: flex; align-items: center; gap: 9px; margin-top: auto; padding: 12px 14px; color: #91a0b4; font-size: 11px; cursor: pointer; }
+    .sidebar-foot button { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 9px; color: #6681a7; background: var(--blue-soft); }
+    .sidebar-foot button svg { width: 18px; height: 18px; }
+    .main { min-width: 0; padding: 24px clamp(20px,4vw,54px) 32px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 46px; margin-bottom: 32px; }
+    .topbar-left { display: flex; align-items: center; gap: 12px; }
+    .menu-btn { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 11px; color: #6a7d99; background: rgba(255,255,255,.72); }
+    .menu-btn svg { width: 19px; height: 19px; }
+    .top-label { display: inline-flex; align-items: center; gap: 8px; padding: 9px 13px; border-radius: 12px; color: var(--blue); background: rgba(230,239,255,.85); font-size: 13px; font-weight: 750; }
+    .top-label img { width: 18px; height: 18px; object-fit: contain; }
+    .topbar-right { display: flex; align-items: center; gap: 10px; color: #7d8da5; font-size: 12px; }
+    .topbar-right button { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; color: #6380aa; background: rgba(255,255,255,.78); }
+    .user-menu { position: relative; }
+    .user-trigger { display:inline-flex!important; align-items:center; gap:9px; width:auto!important; min-width:150px; height:40px!important; padding:4px 10px 4px 5px; border-radius:14px!important; text-align:left; }
+    .user-avatar { display:grid; place-items:center; width:30px; height:30px; border-radius:10px; color:#fff; background:linear-gradient(145deg,#4d92f3,#245bd2); font-weight:800; font-size:12px; }
+    .user-meta { display:grid; gap:2px; min-width:0; }
+    .user-meta strong { color:#273b5d; font-size:11px; line-height:1.1; }
+    .user-meta small { color:#8a9ab0; font-size:9px; line-height:1.1; }
+    .user-chevron { width:14px; height:14px; margin-left:auto; }
+    .user-popover { position:absolute; top:calc(100% + 9px); right:0; z-index:12; display:none; width:190px; padding:9px; border:1px solid rgba(226,234,246,.95); border-radius:15px; background:rgba(255,255,255,.97); box-shadow:0 18px 42px rgba(56,81,122,.18); }
+    .user-popover.is-open { display:grid; gap:4px; }
+    .user-popover-head { display:grid; gap:2px; padding:9px 10px 11px; border-bottom:1px solid var(--line); }
+    .user-popover-head strong { color:#273b5d; font-size:12px; }
+    .user-popover-head span { color:#93a2b5; font-size:10px; }
+    .user-popover button { display:flex; align-items:center; gap:8px; width:100%; height:34px; padding:0 10px; border:0; border-radius:9px; color:#526986; background:transparent; font-size:11px; text-align:left; }
+    .user-popover button svg { width:15px; height:15px; flex:0 0 15px; stroke-width:1.8; }
+    .user-popover button:hover { color:var(--blue); background:var(--blue-soft); }
+    .dashboard-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+    .kicker { display: flex; align-items: center; gap: 7px; color: var(--blue); font-size: 10px; font-weight: 800; letter-spacing: .19em; }
+    h1 { margin: 8px 0 5px; font-size: clamp(27px,3vw,38px); line-height: 1.08; letter-spacing: -.04em; }
+    .subtitle { margin: 0; color: var(--muted); font-size: 13px; }
+    .controls { display: flex; align-items: center; gap: 9px; }
+    .control { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 11px; border: 1px solid rgba(142,166,202,.25); border-radius: 11px; color: #71829d; background: rgba(255,255,255,.68); font-size: 11px; }
+    .control select { border: 0; outline: 0; color: #334969; background: transparent; font-size: 11px; }
+    .grid { display: grid; grid-template-columns: minmax(0,1fr) 286px; gap: 18px; }
+    .card { min-width: 0; border: 1px solid rgba(255,255,255,.9); border-radius: 22px; background: var(--surface); box-shadow: var(--shadow); backdrop-filter: blur(20px); }
+    .chart-card { padding: 26px 28px 21px; }
+    .card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .card-head h2 { margin: 7px 0 0; font-size: 18px; letter-spacing: -.02em; }
+    .card-link { display: inline-flex; align-items: center; gap: 5px; color: var(--blue); text-decoration: none; font-size: 11px; }
+    .metrics { display: grid; grid-template-columns: repeat(4,1fr); margin-top: 28px; }
+    .metric { padding: 0 17px; border-right: 1px solid var(--line); }
+    .metric:first-child { padding-left: 0; }
+    .metric:last-child { border-right: 0; }
+    .metric strong { display: block; font-size: 24px; letter-spacing: -.04em; }
+    .metric span { display: block; margin-top: 7px; color: var(--muted); font-size: 10px; }
+    .chart { position: relative; height: 206px; margin-top: 22px; overflow: hidden; border-radius: 13px; background: repeating-linear-gradient(90deg, transparent 0, transparent calc(25% - 1px), rgba(137,168,211,.13) 25%), repeating-linear-gradient(0deg, transparent 0, transparent 50px, rgba(137,168,211,.10) 51px); }
+    .chart svg { width: 100%; height: 100%; }
+    .axis { position: absolute; right: 14px; bottom: 8px; left: 14px; display: flex; justify-content: space-between; color: #96a5b9; font-size: 10px; }
+    .strip { display: grid; grid-template-columns: repeat(3,1fr); margin-top: 14px; padding-top: 15px; border-top: 1px solid var(--line); }
+    .strip div { padding-left: 16px; border-left: 1px solid var(--line); }
+    .strip div:first-child { padding-left: 0; border-left: 0; }
+    .strip strong { display: block; font-size: 17px; }
+    .strip span { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; }
+    .copilot { position: relative; min-height: 400px; padding: 25px; overflow: hidden; background: linear-gradient(148deg,#fff 0%,#edf4ff 54%,#c5e3ff 100%); }
+    .copilot:after { content: ''; position: absolute; width: 240px; height: 240px; right: -100px; bottom: -100px; border: 1px solid rgba(79,133,212,.2); border-radius: 50%; box-shadow: 0 0 0 30px rgba(255,255,255,.28),0 0 0 60px rgba(255,255,255,.18); }
+    .copilot-brand { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; color: #3377e8; font-size: 12px; font-weight: 800; letter-spacing: .13em; }
+    .copilot-brand img { width: 28px; height: 28px; object-fit: contain; }
+    .copilot h2 { position: relative; z-index: 1; margin: 25px 0 0; font-size: 24px; line-height: 1.13; }
+    .copilot h2 em { color: #c96ea9; font-style: normal; }
+    .orb { position: relative; z-index: 1; width: 164px; height: 164px; margin: 23px auto; border-radius: 48% 52% 58% 42%; transform: rotate(-14deg); background: conic-gradient(from 20deg,#f4b5dd,#a8d8ff,#9a91ed,#f9c2d7,#b8e6ff); box-shadow: inset 15px 15px 28px rgba(255,255,255,.75),0 20px 35px rgba(92,132,220,.22); }
+    .orb:before,.orb:after { content:''; position:absolute; inset: 22px 30px 28px; border: 12px solid rgba(255,255,255,.48); border-left-color:transparent; border-radius:50%; transform:rotate(34deg); }
+    .orb:after { inset: 40px 22px 23px 42px; border-color:rgba(229,126,198,.4); border-top-color:transparent; }
+    .copilot-foot { position: absolute; right: 25px; bottom: 24px; left: 25px; z-index: 1; display: flex; align-items: end; justify-content: space-between; padding-top: 14px; border-top: 1px solid rgba(96,125,176,.18); }
+    .copilot-foot strong,.copilot-foot small { display:block; }
+    .copilot-foot strong { font-size: 12px; }
+    .copilot-foot small { margin-top: 4px; color: #8293ad; font-size: 10px; }
+    .copilot-foot a { display:grid; place-items:center; width:34px; height:34px; border-radius:11px; color:#fff; background:#1d3156; }
+    .lower { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(270px,.75fr); gap: 18px; margin-top: 18px; }
+    .usage,.health { padding: 24px 28px; }
+    .live { display: inline-flex; align-items: center; gap: 7px; color: #45ad86; font-size: 11px; }
+    .live i { width:7px; height:7px; border-radius:50%; background:#4cc795; box-shadow:0 0 0 4px rgba(76,199,149,.13); }
+    .model-row { display:grid; grid-template-columns: 34px minmax(110px,1fr) auto auto 18px; align-items:center; gap:10px; padding:13px 0; border-bottom:1px solid var(--line); color:#7486a0; font-size:11px; }
+    .model-row:last-child { border-bottom:0; }
+    .model-icon { display:grid; place-items:center; width:30px; height:30px; border-radius:10px; color:#3e83e7; background:#e6f0ff; }
+    .model-icon svg,.health-row svg,.row-action-icon { width:15px; height:15px; flex:0 0 auto; }
+    .model-row strong { overflow:hidden; color:#273b5d; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+    .model-row a { color:#9aabc0; }
+    .health-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:15px 0; border-bottom:1px solid var(--line); color:#7185a1; font-size:12px; }
+    .health-row span { display:inline-flex; align-items:center; gap:8px; }
+    .health-row b { color:#43a980; font-size:12px; }
+    .setting-link { display:flex; align-items:center; justify-content:center; gap:7px; margin-top:17px; color:var(--blue); font-size:12px; text-decoration:none; }
+    .footer { display:flex; justify-content:space-between; gap:12px; margin:18px 4px 0; color:#8d9bb0; font-size:10px; }
+    .footer span { display:inline-flex; align-items:center; gap:6px; }
+    .shell.is-collapsed .brand { justify-content:center; padding:0; background:transparent; box-shadow:none; }
+    .shell.is-collapsed .brand > img:first-child { display:none; }
+    .shell.is-collapsed .brand img.brand-mini { display:block; width:40px; height:40px; }
+    .shell.is-collapsed .section-title,
+    .shell.is-collapsed .nav a span,
+    .shell.is-collapsed .sidebar-foot span { display:none; }
+    .shell.is-collapsed .nav a { justify-content:center; padding-inline:0; }
+    .shell.is-collapsed .sidebar-foot { justify-content:center; padding-inline:0; }
+    .preview-page { display: none; }
+    .preview-page.is-active { display: block; }
+    .preview-page-head { display:flex; align-items:end; justify-content:space-between; gap:18px; margin-bottom:20px; }
+    .preview-page-head h1 { margin-bottom:0; }
+    .preview-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .preview-table th { padding:13px 12px; color:#8b99ad; font-size:10px; font-weight:700; text-align:left; border-bottom:1px solid var(--line); }
+    .preview-table td { padding:15px 12px; color:#5f718d; border-bottom:1px solid var(--line); }
+    .preview-table td strong { color:#273b5d; }
+    .preview-table tr:last-child td { border-bottom:0; }
+    .preview-badge { display:inline-flex; padding:4px 8px; border-radius:7px; color:#32936e; background:#e6f7ef; font-size:10px; }
+    .preview-badge.blue { color:#397dde; background:#eaf2ff; }
+    .preview-toolbar { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:16px; }
+    .preview-inline-input { height:34px; width:min(240px,36vw); padding:0 11px; border:1px solid var(--line); border-radius:10px; outline:0; color:var(--ink); background:rgba(255,255,255,.76); font:inherit; font-size:11px; }
+    .preview-inline-input:focus { border-color:#78a3f2; box-shadow:0 0 0 3px rgba(47,112,237,.1); background:#fff; }
+    .preview-button { height:34px; padding:0 13px; border:0; border-radius:10px; color:#fff; background:var(--blue); font-size:11px; }
+    .preview-button .button-icon { width:14px; height:14px; margin-right:6px; vertical-align:-3px; }
+    .preview-button.secondary { color:#6680a5; background:#edf3fb; }
+    .preview-stat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:18px; }
+    .preview-stat { padding:18px; border:1px solid var(--line); border-radius:15px; background:rgba(249,252,255,.75); }
+    .preview-stat span { display:block; color:var(--muted); font-size:10px; }
+    .preview-stat strong { display:block; margin-top:7px; font-size:23px; }
+    .preview-toast { position:fixed; top:22px; right:24px; z-index:20; max-width:320px; padding:11px 15px; border:1px solid rgba(126,157,208,.25); border-radius:12px; color:#45658f; background:rgba(255,255,255,.94); box-shadow:0 12px 30px rgba(55,84,126,.16); font-size:12px; opacity:0; transform:translateY(-8px); pointer-events:none; transition:.2s ease; }
+    .preview-toast.is-visible { opacity:1; transform:translateY(0); }
+    .modal-backdrop { position:fixed; inset:0; z-index:10; display:none; place-items:center; padding:20px; background:rgba(30,53,87,.22); backdrop-filter:blur(5px); }
+    .modal-backdrop.is-open { display:grid; }
+    .modal { width:min(620px,100%); max-height:min(760px,92vh); overflow:auto; padding:25px 28px 22px; border:1px solid rgba(255,255,255,.94); border-radius:22px; background:rgba(255,255,255,.97); box-shadow:0 26px 80px rgba(45,72,113,.24); }
+    .modal-head { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:20px; }
+    .modal-head h2 { margin:0; font-size:20px; }
+    .modal-close { display:grid; place-items:center; width:30px; height:30px; border:0; border-radius:9px; color:#71829b; background:#eff4fb; font-size:18px; }
+    .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:15px; }
+    .form-field { display:grid; gap:7px; }
+    .form-field.full { grid-column:1 / -1; }
+    .form-field label { color:#3b506f; font-size:11px; font-weight:700; }
+    .form-field input,.form-field select,.form-field textarea { width:100%; padding:10px 11px; border:1px solid var(--line); border-radius:10px; outline:0; color:var(--ink); background:#f8fbff; font:inherit; font-size:12px; }
+    .form-field textarea { min-height:76px; resize:vertical; }
+    .form-field input:focus,.form-field select:focus,.form-field textarea:focus { border-color:#78a3f2; box-shadow:0 0 0 3px rgba(47,112,237,.1); background:#fff; }
+    .form-hint { color:#97a5b8; font-size:10px; line-height:1.5; }
+    .modal-foot { display:flex; justify-content:flex-end; gap:9px; margin-top:21px; padding-top:17px; border-top:1px solid var(--line); }
+    .icon-inline { display:inline-flex; align-items:center; gap:6px; }
+    @media (max-width:600px) { .form-grid { grid-template-columns:1fr; } .form-field.full { grid-column:auto; } .modal { padding:21px 18px; } }
+    @media (max-width:760px) { .preview-stat-grid { grid-template-columns:1fr; } .preview-table { min-width:600px; } .preview-table-wrap { overflow:auto; } }
+    @media (max-width: 1080px) { .grid,.lower { grid-template-columns: 1fr; } .copilot { min-height: 280px; } .orb { position:absolute; top:45px; right:100px; margin:0; } }
+    @media (max-width: 760px) { .shell,.shell.is-collapsed { grid-template-columns: 1fr; } .sidebar { position: fixed; width: 78px; min-height:100%; padding-inline:8px; } .brand { background:transparent; box-shadow:none; padding:0; } .brand img { display:none; } .brand-mini { display:block; } .section-title,.nav a span,.sidebar-foot span { display:none; } .nav a { justify-content:center; padding:0; } .main { padding:18px 14px 24px 96px; } .topbar { margin-bottom:25px; } .dashboard-head { align-items:flex-start; flex-direction:column; } .controls { width:100%; } .metrics { grid-template-columns:repeat(2,1fr); row-gap:18px; } .metric:nth-child(2) { border-right:0; } .metric:nth-child(3) { padding-left:0; } .model-row { grid-template-columns:34px minmax(100px,1fr) auto 18px; } .model-row > span:nth-last-of-type(1) { display:none; } .footer { flex-direction:column; } }
+    @media (max-width: 470px) { .topbar-right { display:none; } .chart-card,.usage,.health { padding:20px 18px; } .card-head h2 { font-size:16px; } .orb { position:relative; top:auto; right:auto; width:130px; height:130px; margin:22px auto 32px; } .copilot { min-height:340px; } }
+    /* Readability scale: one step larger across the preview without changing layout geometry. */
+    body { font-size:14px; }
+    .section-title,.sidebar-foot { font-size:12px; }
+    .nav a { font-size:14px; }
+    .top-label { font-size:14px; }
+    .topbar-right { font-size:13px; }
+    .user-meta strong { font-size:12px; }
+    .user-meta small,.user-popover-head span { font-size:10px; }
+    .user-popover-head strong { font-size:13px; }
+    .user-popover button { font-size:12px; }
+    .kicker { font-size:12px; }
+    .subtitle { font-size:14px; }
+    .control,.control select { font-size:12px; }
+    .card-head h2 { font-size:19px; }
+    .card-link { font-size:12px; }
+    .metric strong { font-size:25px; }
+    .metric span,.axis,.strip span { font-size:11px; }
+    .strip strong { font-size:18px; }
+    .copilot-brand { font-size:13px; }
+    .copilot h2 { font-size:25px; }
+    .copilot-foot strong { font-size:13px; }
+    .copilot-foot small { font-size:11px; }
+    .model-row { font-size:12px; }
+    .model-row strong { font-size:13px; }
+    .health-row,.health-row b,.setting-link { font-size:13px; }
+    .footer { font-size:11px; }
+    h1 { font-size:clamp(23px,3vw,34px); margin-bottom:9px; }
+    .preview-page-head h1 { font-size:clamp(25px,3vw,36px); margin-bottom:9px; }
+    .preview-table { font-size:13px; }
+    .preview-table th,.preview-badge { font-size:11px; }
+    .preview-button { font-size:12px; }
+    .preview-stat span { font-size:11px; }
+    .preview-stat strong { font-size:24px; }
+    .preview-toast { font-size:13px; }
+    .form-field label { font-size:12px; }
+    .form-field input,.form-field select,.form-field textarea { font-size:13px; }
+    .form-hint { font-size:11px; }
+    .modal-head h2 { font-size:21px; }
+    .preview-toolbar > strong { font-size:15px; }
+    .preview-table { font-size:14px; }
+    .preview-table th { font-size:12px; }
+    .preview-table td,.preview-table td strong { font-size:14px; }
+    .preview-badge { font-size:12px; }
+    .preview-inline-input,.preview-button { font-size:13px; }
+    .preview-stat span { font-size:12px; }
+    .preview-stat strong { font-size:26px; }
+    @media (max-width:760px) { .brand img.brand-mini { display:block; width:40px; height:40px; } }
+  </style>
+</head>
+<body>
+  <div class="shell" id="shell">
+    <aside class="sidebar">
+      <div class="brand"><img src="/zjugis-logo.png" alt="ZJUGIS Harness" /><img class="brand-mini" src="/zjugis-mark.png" alt="ZJUGIS" /></div>
+      <div class="section-title">管理工作台</div>
+      <nav class="nav" aria-label="主导航">
+        <a class="active" data-page="dashboard" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12 12 4l9 8"/><path d="M5 10v10h14V10M9 20v-6h6v6"/></svg><span>分析看板</span></a>
+        <a data-page="model" href="#model"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h5M8 17h3"/></svg><span>模型配置</span></a>
+        <a data-page="users" href="#users"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 20v-1.5a4.5 4.5 0 0 0-4.5-4.5h-3A4.5 4.5 0 0 0 4 18.5V20M10 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM15 4.5a3 3 0 0 1 0 5.8M17 14.5a4.5 4.5 0 0 1 3 4.2V20"/></svg><span>用户管理</span></a>
+        <a data-page="logs" href="#logs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19V5M4 19h16"/><path d="m7 15 3-4 3 2 5-6"/></svg><span>模型日志</span></a>
+        <a data-page="account" href="#account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="8" r="3"/><path d="M5 20a7 7 0 0 1 14 0"/></svg><span>账户设置</span></a>
+      </nav>
+      <div class="sidebar-foot"><button type="button" id="collapse"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"><path d="M5 5h14v14H5zM9 5v14"/></svg></button><span>收起侧边栏</span></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar"><div class="topbar-left"><button class="menu-btn" type="button" id="collapseTop" aria-label="收起侧边栏"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><div class="top-label"><img src="/zjugis-mark.png" alt="" /> ZJUGIS Harness</div></div><div class="topbar-right"><span>预览模式</span><button type="button" aria-label="帮助"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M9.8 9a2.3 2.3 0 1 1 3.7 1.8c-.9.7-1.5 1-1.5 2.2M12 16.5h.01"/></svg></button><div class="user-menu"><button class="user-trigger" type="button" aria-label="账户菜单" aria-expanded="false"><span class="user-avatar">Z</span><span class="user-meta"><strong>管理员</strong><small>超级管理员</small></span><svg class="user-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m7 10 5 5 5-5"/></svg></button><div class="user-popover" id="userPopover"><div class="user-popover-head"><strong>管理员</strong><span>超级管理员 · 当前已登录</span></div><button type="button" data-account-nav><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="8" r="3"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>账户设置</button><button type="button" data-logout><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10 5H5v14h5M14 8l4 4-4 4M18 12H9"/></svg>退出登录</button></div></div></div></header>
+      <div id="dashboardPage">
+      <section class="dashboard-head"><div><div class="kicker"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"><path d="M4 19V5M4 19h16"/><path d="m7 15 3-4 3 2 5-6"/></svg> ANALYTICAL BOARD</div><h1>服务分析看板</h1><p class="subtitle">模型调用、用户用量与平台健康状态的实时概览。</p></div><div class="controls"><label class="control">统计周期 <select><option>近 7 天</option><option>近 30 天</option><option>今天</option></select><span>⌄</span></label><button class="control" type="button">刷新</button></div></section>
+      <section class="grid">
+        <article class="card chart-card"><div class="card-head"><div><div class="kicker">MODEL OPERATIONS</div><h2>模型服务概览</h2></div><a class="card-link" href="#logs">查看日志 <span>↗</span></a></div><div class="metrics"><div class="metric"><strong>—</strong><span>请求总量</span></div><div class="metric"><strong>—</strong><span>Token 消耗</span></div><div class="metric"><strong>—</strong><span>额度消耗</span></div><div class="metric"><strong>—</strong><span>成功率</span></div></div><div class="chart"><svg viewBox="0 0 760 190" preserveAspectRatio="none"><defs><linearGradient id="fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#77b9ff" stop-opacity=".62"/><stop offset="1" stop-color="#d8ecff" stop-opacity=".08"/></linearGradient></defs><path d="M12 38 C92 44 120 112 220 120 S355 140 450 124 S595 80 748 92 L748 178 L12 178 Z" fill="url(#fill)"/><path d="M12 38 C92 44 120 112 220 120 S355 140 450 124 S595 80 748 92" fill="none" stroke="#3d89ef" stroke-width="3"/></svg><div class="axis"><span>预览</span><span>统计数据将在接入后显示</span><span>当前周期</span></div></div><div class="strip"><div><strong>—</strong><span>活跃模型</span></div><div><strong>—</strong><span>活跃用户</span></div><div><strong>—</strong><span>失败请求</span></div></div></article>
+        <aside class="card copilot"><div class="copilot-brand"><img src="/zjugis-mark.png" alt=""/> ZJUGIS</div><h2>Harness<br/><em>Co-Pilot</em></h2><div class="orb"></div><div class="copilot-foot"><div><strong>ZJUGIS Harness</strong><small>智能工作流控制台</small></div><a href="#model" aria-label="打开模型配置">↗</a></div></aside>
+      </section>
+      <section class="lower"><article class="card usage"><div class="card-head"><div><div class="kicker">MODEL USAGE</div><h2>模型使用情况</h2></div><span class="live"><i></i>界面预览</span></div><div class="model-row"><span class="model-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 17h3M5 12h7M5 7h10"/><path d="m15 14 2 2 4-5"/></svg></span><strong>模型调用完成后显示</strong><span>请求次数</span><span>Token</span><a href="#logs" aria-label="查看日志"><svg class="row-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h13M13 6l6 6-6 6"/></svg></a></div><div class="model-row"><span class="model-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 18V6M4 18h16"/><path d="m7 14 3-4 3 2 5-6"/></svg></span><strong>真实统计数据</strong><span>服务端接口</span><span>自动汇总</span><a href="#model" aria-label="管理模型"><svg class="row-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h13M13 6l6 6-6 6"/></svg></a></div><a class="card-link" href="#model" style="justify-content:flex-end;margin-top:12px">管理模型服务 <svg class="row-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h13M13 6l6 6-6 6"/></svg></a></article><article class="card health"><div class="card-head"><div><div class="kicker">SYSTEM HEALTH</div><h2>运行状态</h2></div><span style="color:#4cbd92"><svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg></span></div><div class="health-row"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg>API 服务</span><b>预览</b></div><div class="health-row"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 4 20 8v5c0 4-3 6.5-8 7-5-.5-8-3-8-7V8l8-4Z"/><path d="m9 12 2 2 4-4"/></svg>访问控制</span><b>已启用</b></div><div class="health-row"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 18V6M4 18h16"/><path d="m7 14 3-4 3 2 5-6"/></svg>日志记录</span><b>待接入</b></div><a class="setting-link" href="#account">账户设置 <svg class="row-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h13M13 6l6 6-6 6"/></svg></a></article></section>
+      <footer class="footer"><span>◈ ZJUGIS Harness 管理工作台</span><span>独立 UI 预览页 · 不请求服务器数据</span></footer>
+      </div>
+      <section class="preview-page" data-page="model"><div class="preview-page-head"><div><div class="kicker">MODEL CENTER</div><h1>模型配置</h1><p class="subtitle">管理渠道、模型和默认调用参数。</p></div><button class="preview-button">添加模型渠道</button></div><div class="preview-stat-grid"><div class="preview-stat"><span>已配置渠道</span><strong>—</strong></div><div class="preview-stat"><span>可用模型</span><strong>—</strong></div><div class="preview-stat"><span>当前默认模型</span><strong>—</strong></div></div><article class="card usage"><div class="preview-toolbar"><strong>模型渠道</strong><button class="preview-button secondary">刷新</button></div><div class="preview-table-wrap"><table class="preview-table"><thead><tr><th>名称</th><th>模型</th><th>状态</th><th>响应时间</th><th>操作</th></tr></thead><tbody><tr><td colspan="5" style="text-align:center;color:#9aa8ba;padding:40px">配置完成后将在这里显示渠道</td></tr></tbody></table></div></article></section>
+      <section class="preview-page" data-page="users"><div class="preview-page-head"><div><div class="kicker">USER CENTER</div><h1>用户管理</h1><p class="subtitle">管理登录账号、权限和额度使用情况。</p></div><button class="preview-button">新增用户</button></div><div class="preview-stat-grid"><div class="preview-stat"><span>用户总数</span><strong>—</strong></div><div class="preview-stat"><span>本周期活跃用户</span><strong>—</strong></div><div class="preview-stat"><span>累计使用额度</span><strong>—</strong></div></div><article class="card usage"><div class="preview-toolbar"><strong>用户列表</strong><button class="preview-button secondary">筛选</button></div><div class="preview-table-wrap"><table class="preview-table"><thead><tr><th>用户名</th><th>角色</th><th>剩余额度</th><th>已用额度</th><th>状态</th><th>操作</th></tr></thead><tbody><tr><td><strong>服务接入后显示</strong></td><td>—</td><td>—</td><td>—</td><td><span class="preview-badge blue">待接入</span></td><td>查看</td></tr></tbody></table></div></article></section>
+      <section class="preview-page" data-page="logs"><div class="preview-page-head"><div><div class="kicker">MODEL LOGS</div><h1>模型日志</h1><p class="subtitle">查看模型请求、Token、耗时和调用结果。</p></div><button class="preview-button secondary">导出日志</button></div><article class="card usage"><div class="preview-toolbar"><strong>调用记录</strong><div class="controls"><label class="control">时间范围 <select><option>近 7 天</option><option>近 30 天</option></select></label><button class="preview-button secondary">筛选</button></div></div><div class="preview-table-wrap"><table class="preview-table"><thead><tr><th>时间</th><th>用户</th><th>模型</th><th>Token</th><th>耗时</th><th>状态</th></tr></thead><tbody><tr><td colspan="6" style="text-align:center;color:#9aa8ba;padding:40px">模型产生调用后将在这里显示日志</td></tr></tbody></table></div></article></section>
+      <section class="preview-page" data-page="account"><div class="preview-page-head"><div><div class="kicker">ACCOUNT SETTINGS</div><h1>账户设置</h1><p class="subtitle">管理当前管理员账户和登录安全设置。</p></div></div><div class="lower"><article class="card usage"><div class="card-head"><div><div class="kicker">PROFILE</div><h2>账户信息</h2></div></div><div class="health-row"><span>登录账号</span><b style="color:#273b5d">管理员</b></div><div class="health-row"><span>账户角色</span><b>超级管理员</b></div><div class="health-row"><span>登录状态</span><b>已登录</b></div><button class="preview-button" style="margin-top:18px">修改密码</button></article><article class="card health"><div class="card-head"><div><div class="kicker">SECURITY</div><h2>安全设置</h2></div></div><div class="health-row"><span>会话有效期</span><b style="color:#273b5d">默认</b></div><div class="health-row"><span>登录保护</span><b>已启用</b></div><a class="setting-link" href="#">退出登录</a></article></div></section>
+    </main>
+  </div>
+  <div class="modal-backdrop" id="channelModal" role="dialog" aria-modal="true" aria-labelledby="channelModalTitle"><form class="modal" id="channelForm"><div class="modal-head"><h2 id="channelModalTitle">创建新的渠道</h2><button class="modal-close" type="button" data-close-modal="channelModal">×</button></div><div class="form-grid"><div class="form-field"><label for="channelType">渠道类型</label><select id="channelType"><option>OpenAI 兼容</option><option>阿里云 DashScope</option><option>DeepSeek</option><option>自定义</option></select></div><div class="form-field"><label for="channelName">渠道名称</label><input id="channelName" required placeholder="请为渠道命名" /></div><div class="form-field full"><label for="channelBaseUrl">Base URL</label><input id="channelBaseUrl" placeholder="例如：https://api.example.com/v1" required /><span class="form-hint">对应旧版渠道的自定义 Base URL / Azure Endpoint。</span></div><div class="form-field full"><label for="channelKey">鉴权密钥</label><input id="channelKey" type="password" placeholder="请输入渠道对应的 API Key" /></div><div class="form-field full"><label for="channelModels">模型</label><textarea id="channelModels" placeholder="每行填写一个模型名称，例如：qwen3.6-plus"></textarea><span class="form-hint">对应旧版模型多选框，也支持手动添加自定义模型。</span></div><div class="form-field"><label for="channelOrganization">组织（可选）</label><input id="channelOrganization" placeholder="OpenAI Organization" /></div><div class="form-field"><label for="channelProxy">代理（可选）</label><input id="channelProxy" placeholder="http://127.0.0.1:7890" /></div><div class="form-field"><label for="channelOther">其他参数</label><input id="channelOther" placeholder="模型版本 / 知识库 ID" /></div><div class="form-field"><label for="channelGroups">分组</label><input id="channelGroups" value="default" placeholder="default, vip" /></div><div class="form-field full"><label for="channelMapping">模型映射</label><textarea id="channelMapping" placeholder="例如：qwen3.6-plus=qwen-plus"></textarea></div><div class="form-field full"><label for="channelSystemPrompt">系统提示词（可选）</label><textarea id="channelSystemPrompt" placeholder="留空表示使用模型默认系统提示词"></textarea></div><div class="form-field full"><label class="icon-inline"><input id="channelAutoBan" type="checkbox" checked /> 自动禁用异常渠道</label></div></div><div class="modal-foot"><button class="preview-button secondary" type="button" data-close-modal="channelModal">取消</button><button class="preview-button" type="submit">保存渠道</button></div></form></div>
+  <div class="modal-backdrop" id="userModal" role="dialog" aria-modal="true" aria-labelledby="userModalTitle"><form class="modal" id="userForm"><div class="modal-head"><h2 id="userModalTitle">添加用户</h2><button class="modal-close" type="button" data-close-modal="userModal">×</button></div><div class="form-grid"><div class="form-field full"><label for="userName">用户名</label><input id="userName" required autocomplete="off" placeholder="请输入用户名" /></div><div class="form-field full"><label for="userDisplayName">显示名称</label><input id="userDisplayName" autocomplete="off" placeholder="请输入显示名称" /></div><div class="form-field full"><label for="userPassword">密码</label><input id="userPassword" required type="password" autocomplete="new-password" placeholder="请输入密码" /></div></div><div class="modal-foot"><button class="preview-button secondary" type="button" data-close-modal="userModal">取消</button><button class="preview-button" type="submit">提交</button></div></form></div>
+  <div class="modal-backdrop" id="userFilterModal" role="dialog" aria-modal="true" aria-labelledby="userFilterModalTitle"><form class="modal" id="userFilterForm"><div class="modal-head"><h2 id="userFilterModalTitle">筛选用户</h2><button class="modal-close" type="button" data-close-modal="userFilterModal">×</button></div><div class="form-grid"><div class="form-field full"><label for="userFilterKeyword">搜索关键词</label><input id="userFilterKeyword" placeholder="用户名、邮箱、显示名称或用户 ID 前缀" /></div><div class="form-field"><label for="userFilterRole">角色</label><select id="userFilterRole"><option value="">全部角色</option><option value="普通用户">普通用户</option><option value="管理员">管理员</option><option value="超级管理员">超级管理员</option></select></div><div class="form-field"><label for="userFilterStatus">状态</label><select id="userFilterStatus"><option value="">全部状态</option><option value="已启用">已启用</option><option value="已禁用">已禁用</option><option value="待接入">待接入</option></select></div></div><div class="modal-foot"><button class="preview-button secondary" type="button" data-close-modal="userFilterModal">取消</button><button class="preview-button" type="submit">应用筛选</button></div></form></div>
+  <script>
+    const shell = document.getElementById('shell');
+    const dashboard = document.getElementById('dashboardPage');
+    const pages = [...document.querySelectorAll('.preview-page')];
+    const navItems = [...document.querySelectorAll('.nav a')];
+    const showPage = (page) => {
+      const target = page || 'dashboard';
+      dashboard.style.display = target === 'dashboard' ? 'block' : 'none';
+      pages.forEach((item) => item.classList.toggle('is-active', item.dataset.page === target));
+      navItems.forEach((item) => item.classList.toggle('active', (item.dataset.page || 'dashboard') === target));
+    };
+    navItems.forEach((item) => item.addEventListener('click', (event) => {
+      event.preventDefault();
+      showPage(item.dataset.page || 'dashboard');
+    }));
+    window.addEventListener('hashchange', () => showPage(window.location.hash.slice(1) || 'dashboard'));
+    showPage(window.location.hash.slice(1) || 'dashboard');
+    const buttonIconPaths = {
+      '添加模型渠道': '<path d="M12 5v14M5 12h14"/>',
+      '新增用户': '<path d="M12 5v14M5 12h14"/>',
+      '刷新': '<path d="M20 11a8 8 0 1 0 1 4"/><path d="M20 5v6h-6"/>',
+      '筛选': '<path d="M4 6h16M7 12h10M10 18h4"/>',
+      '导出日志': '<path d="M12 4v11M8 11l4 4 4-4M5 19h14"/>',
+      '测试': '<path d="m13 3-9 11h7l-1 7 9-11h-7l1-7Z"/>',
+      '详情': '<circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8h.01"/>',
+      '修改密码': '<path d="m14 6 4 4M5 19l3.5-.8L18 8.7a2.1 2.1 0 0 0-3-3L5.5 15.2 5 19Z"/>'
+    };
+    document.querySelectorAll('.preview-button').forEach((button) => { const path = buttonIconPaths[button.textContent.trim()]; if (path) button.innerHTML = `<svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${path}</svg>${button.textContent.trim()}`; });
+    const toggle = () => shell.classList.toggle('is-collapsed');
+    document.querySelector('.sidebar-foot').addEventListener('click', toggle);
+    document.getElementById('collapseTop').addEventListener('click', toggle);
+    document.querySelectorAll('a[href^="#"]').forEach((item) => item.addEventListener('click', (event) => {
+      const page = item.getAttribute('href').slice(1);
+      if (['model', 'users', 'logs', 'account'].includes(page)) { event.preventDefault(); showPage(page); }
+    }));
+    const toast = document.createElement('div');
+    toast.className = 'preview-toast';
+    document.body.appendChild(toast);
+    let toastTimer;
+    const notify = (message) => {
+      toast.textContent = message;
+      toast.classList.add('is-visible');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('is-visible'), 2200);
+    };
+    const dashboardPeriod = document.querySelector('#dashboardPage select');
+    dashboardPeriod.addEventListener('change', () => notify(`已切换统计周期：${dashboardPeriod.value}`));
+    document.querySelector('#dashboardPage .controls button').addEventListener('click', (event) => {
+      event.currentTarget.textContent = '已刷新';
+      notify('预览数据已刷新');
+      setTimeout(() => { event.currentTarget.textContent = '刷新'; }, 1200);
+    });
+    document.querySelector('.topbar-right button[aria-label="帮助"]').addEventListener('click', () => notify('这是 ZJUGIS Harness 界面预览'));
+    const userTrigger = document.querySelector('.user-trigger');
+    const userPopover = document.getElementById('userPopover');
+    const closeUserPopover = () => { userPopover.classList.remove('is-open'); userTrigger.setAttribute('aria-expanded', 'false'); };
+    userTrigger.addEventListener('click', (event) => { event.stopPropagation(); const open = userPopover.classList.toggle('is-open'); userTrigger.setAttribute('aria-expanded', String(open)); });
+    userPopover.querySelector('[data-account-nav]').addEventListener('click', () => { closeUserPopover(); showPage('account'); });
+    userPopover.querySelector('[data-logout]').addEventListener('click', () => { closeUserPopover(); notify('预览模式：退出登录入口已触发'); });
+    document.addEventListener('click', closeUserPopover);
+    const openModal = (id) => { const modal = document.getElementById(id); modal.classList.add('is-open'); modal.querySelector('input,select,textarea')?.focus(); };
+    const closeModal = (id) => document.getElementById(id).classList.remove('is-open');
+    document.querySelectorAll('[data-close-modal]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.closeModal)));
+    document.querySelectorAll('.modal-backdrop').forEach((backdrop) => backdrop.addEventListener('click', (event) => { if (event.target === backdrop) closeModal(backdrop.id); }));
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { document.querySelectorAll('.modal-backdrop.is-open').forEach((modal) => closeModal(modal.id)); closeUserPopover(); } });
+    const modelPage = document.querySelector('[data-page="model"].preview-page');
+    const channelForm = document.getElementById('channelForm');
+    modelPage.querySelector('.preview-page-head .preview-button').addEventListener('click', () => openModal('channelModal'));
+    channelForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const name = document.getElementById('channelName').value.trim();
+      const baseUrl = document.getElementById('channelBaseUrl').value.trim();
+      const models = document.getElementById('channelModels').value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+      if (!name) { notify('请填写渠道名称'); document.getElementById('channelName').focus(); return; }
+      if (!baseUrl) { notify('请填写 Base URL'); document.getElementById('channelBaseUrl').focus(); return; }
+      const model = models[0] || '未配置模型';
+      const tbody = modelPage.querySelector('tbody');
+      if (tbody.querySelector('td[colspan]')) tbody.innerHTML = '';
+      const row = document.createElement('tr');
+      row.innerHTML = `<td><strong>${name}</strong><div class="form-hint">${document.getElementById('channelType').value}</div></td><td>${model}${models.length > 1 ? ` <span class="form-hint">+${models.length - 1}</span>` : ''}</td><td><span class="preview-badge">已启用</span></td><td>待测试</td><td><button class="preview-button secondary preview-row-action">测试</button></td>`;
+      tbody.appendChild(row);
+      modelPage.querySelectorAll('.preview-stat strong')[0].textContent = tbody.rows.length;
+      modelPage.querySelectorAll('.preview-stat strong')[1].textContent = tbody.rows.length;
+      row.querySelector('button').addEventListener('click', () => notify(`${name} 测试请求已提交（预览）`));
+      channelForm.reset(); closeModal('channelModal'); notify('预览渠道已添加');
+    });
+    modelPage.querySelector('.preview-toolbar button').addEventListener('click', () => notify('预览渠道列表已刷新'));
+    const usersPage = document.querySelector('[data-page="users"].preview-page');
+    const userForm = document.getElementById('userForm');
+    usersPage.querySelector('.preview-page-head .preview-button').addEventListener('click', () => openModal('userModal'));
+    userForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const username = document.getElementById('userName').value.trim();
+      const displayName = document.getElementById('userDisplayName').value.trim() || username;
+      const password = document.getElementById('userPassword').value;
+      if (!username) { notify('请填写用户名'); document.getElementById('userName').focus(); return; }
+      if (!password) { notify('请填写密码'); document.getElementById('userPassword').focus(); return; }
+      const tbody = usersPage.querySelector('tbody');
+      if (tbody.rows.length === 1 && tbody.rows[0].textContent.includes('服务接入后显示')) tbody.innerHTML = '';
+      const row = document.createElement('tr');
+      row.innerHTML = `<td><strong>${username}</strong><div class="form-hint">${displayName}</div></td><td>普通用户</td><td>—</td><td>—</td><td><span class="preview-badge">已启用</span></td><td><button class="preview-button secondary preview-row-action">详情</button></td>`;
+      tbody.appendChild(row);
+      usersPage.querySelectorAll('.preview-stat strong')[0].textContent = tbody.rows.length;
+      row.querySelector('button').addEventListener('click', () => notify(`正在查看 ${username} 的详情`));
+      userForm.reset(); closeModal('userModal'); notify('预览用户已添加');
+    });
+    const userFilterForm = document.getElementById('userFilterForm');
+    usersPage.querySelector('.preview-toolbar button').addEventListener('click', () => openModal('userFilterModal'));
+    userFilterForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const keyword = document.getElementById('userFilterKeyword').value.trim().toLowerCase();
+      const role = document.getElementById('userFilterRole').value;
+      const status = document.getElementById('userFilterStatus').value;
+      [...usersPage.querySelectorAll('tbody tr')].forEach((row) => {
+        const text = row.textContent.toLowerCase();
+        row.hidden = Boolean((keyword && !text.includes(keyword)) || (role && !text.includes(role)) || (status && !text.includes(status)));
+      });
+      closeModal('userFilterModal');
+      notify(keyword || role || status ? '用户筛选已应用' : '已清除用户筛选');
+    });
+    const logsPage = document.querySelector('[data-page="logs"].preview-page');
+    logsPage.querySelector('.preview-page-head .preview-button').addEventListener('click', () => {
+      const csv = '\ufeff时间,用户,模型,Token,耗时,状态\n';
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob); link.download = 'zjugis-model-logs-preview.csv'; link.click(); URL.revokeObjectURL(link.href);
+      notify('日志预览文件已导出');
+    });
+    logsPage.querySelector('.preview-toolbar button').addEventListener('click', () => notify(`已按 ${logsPage.querySelector('select').value} 筛选`));
+    const accountPage = document.querySelector('[data-page="account"].preview-page');
+    accountPage.querySelector('.preview-button').addEventListener('click', () => notify('修改密码入口已打开（预览）'));
+    accountPage.querySelector('.setting-link').addEventListener('click', (event) => { event.preventDefault(); notify('退出登录入口已触发（预览）'); });
+  </script>
+</body>
+</html>

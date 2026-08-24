@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZJUGIS Harness · 登录</title>
+  <style>
+    :root { --blue:#2f70ed; --ink:#17233d; --muted:#71819a; --line:#dfe8f4; }
+    * { box-sizing:border-box; }
+    html,body { min-height:100%; margin:0; }
+    body { min-height:100vh; color:var(--ink); background:#eef3f9; font-family:Inter,"SF Pro Display","Segoe UI","Microsoft YaHei",sans-serif; }
+    .login-shell { display:grid; grid-template-columns:minmax(420px,1fr) minmax(470px,1fr); min-height:100vh; }
+    .visual { position:relative; display:flex; flex-direction:column; justify-content:center; overflow:hidden; padding:clamp(42px,8vw,128px); background:linear-gradient(145deg,#dfeafa 0%,#c8daf0 56%,#b9cde6 100%); }
+    .visual:before,.visual:after { content:""; position:absolute; border:1px solid rgba(87,125,171,.2); border-radius:50%; }
+    .visual:before { width:min(62vw,760px); aspect-ratio:1; right:-22%; top:12%; box-shadow:0 0 0 42px rgba(255,255,255,.18),0 0 0 86px rgba(255,255,255,.13); }
+    .visual:after { width:min(38vw,470px); aspect-ratio:1; left:-20%; bottom:-24%; box-shadow:0 0 0 36px rgba(255,255,255,.17); }
+    .visual > * { position:relative; z-index:1; }
+    .visual-brand { width:min(430px,100%); mix-blend-mode:multiply; }
+    .visual-copy { max-width:470px; margin-top:66px; }
+    .visual-copy h1 { margin:0; font-size:clamp(28px,3vw,42px); letter-spacing:-.05em; }
+    .visual-copy p { max-width:450px; margin:20px 0 0; color:#3b5579; font-size:18px; line-height:1.8; }
+    .visual-copy small { display:block; margin-top:34px; color:#4c6c9d; font-size:11px; font-weight:800; letter-spacing:.27em; }
+    .form-side { display:grid; place-items:center; padding:clamp(24px,6vw,88px); background:rgba(247,250,254,.72); }
+    .login-card { width:min(470px,100%); padding:clamp(30px,5vw,58px); border:1px solid rgba(255,255,255,.94); border-radius:28px; background:rgba(255,255,255,.87); box-shadow:0 24px 68px rgba(64,91,132,.14); backdrop-filter:blur(20px); }
+    .card-brand { display:flex; align-items:center; gap:10px; color:var(--blue); font-size:12px; font-weight:800; letter-spacing:.17em; }
+    .card-brand img { width:28px; height:28px; object-fit:contain; }
+    .login-card h2 { margin:37px 0 7px; font-size:31px; letter-spacing:-.04em; }
+    .login-card .hint { margin:0 0 34px; color:#8b99ad; font-size:13px; }
+    .field { display:grid; gap:9px; margin-top:22px; }
+    .field label { color:#334969; font-size:12px; font-weight:700; }
+    .field input { width:100%; height:48px; padding:0 14px; border:1px solid var(--line); border-radius:12px; outline:0; color:var(--ink); background:#f8fbff; font-size:14px; transition:.18s ease; }
+    .field input:focus { border-color:#6e9df2; box-shadow:0 0 0 4px rgba(47,112,237,.12); background:#fff; }
+    .submit { width:100%; height:50px; margin-top:30px; border:0; border-radius:13px; color:#fff; background:linear-gradient(100deg,#2f70ed,#4d8df4); box-shadow:0 12px 24px rgba(47,112,237,.22); font-size:15px; font-weight:750; }
+    .links { display:flex; justify-content:space-between; gap:12px; margin-top:20px; color:#8493a9; font-size:12px; }
+    .links a { color:var(--blue); text-decoration:none; }
+    .preview-note { margin-top:30px; color:#a0adbd; font-size:10px; text-align:center; }
+    .feedback { min-height:18px; margin-top:12px; color:#d47b4f; font-size:12px; text-align:center; }
+    @media (max-width:850px) { .login-shell { grid-template-columns:1fr; } .visual { min-height:300px; padding:42px 8vw; } .visual-copy { margin-top:30px; } .visual-copy p { margin-top:12px; font-size:15px; } .visual-copy small { margin-top:18px; } .form-side { min-height:calc(100vh - 300px); padding:32px 7vw; } }
+    @media (max-width:480px) { .visual { min-height:245px; padding:30px 24px; } .visual-brand { width:270px; } .visual-copy { display:none; } .form-side { padding:20px 16px; } .login-card { padding:28px 22px; border-radius:22px; } .login-card h2 { margin-top:27px; font-size:27px; } }
+  </style>
+</head>
+<body>
+  <div class="login-shell">
+    <section class="visual">
+      <img class="visual-brand" src="/zjugis-logo.png" alt="ZJUGIS Harness" />
+      <div class="visual-copy"><h1>模型服务与智能工作流的统一管理平台</h1><p>集中管理模型渠道、用户权限和运行记录，让每一次调用都清晰可控。</p><small>SECURE MODEL OPERATIONS</small></div>
+    </section>
+    <section class="form-side">
+      <form class="login-card" onsubmit="return false">
+        <div class="card-brand"><img src="/zjugis-mark.png" alt="" /> ZJUGIS HARNESS</div>
+        <h2>登录管理后台</h2><p class="hint">使用管理员账号继续</p>
+        <div class="field"><label for="username">用户名</label><input id="username" placeholder="请输入用户名" /></div>
+        <div class="field"><label for="password">密码</label><input id="password" type="password" placeholder="请输入密码" /></div>
+        <button class="submit" type="submit">登录</button><div class="feedback" aria-live="polite"></div>
+        <div class="links"><span>没有账号？<a href="#">注册账号</a></span><a href="#">忘记密码</a></div>
+        <div class="preview-note">独立 UI 预览页 · 暂不提交登录请求</div>
+      </form>
+    </section>
+  </div>
+  <script>
+    const form = document.querySelector('.login-card');
+    const feedback = document.querySelector('.feedback');
+    form.addEventListener('submit', () => {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      if (!username || !password) { feedback.textContent = '请输入用户名和密码'; return; }
+      feedback.style.color = '#3b9a76';
+      feedback.textContent = '预览模式：登录请求尚未连接服务器';
+    });
+    document.querySelectorAll('.links a').forEach((link) => link.addEventListener('click', (event) => {
+      event.preventDefault();
+      feedback.style.color = '#397dde';
+      feedback.textContent = link.textContent === '忘记密码' ? '密码重置入口（预览）' : '注册入口（预览）';
+    }));
+  </script>
+</body>
+</html>

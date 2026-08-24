@@ -4,7 +4,7 @@ import { UserContext } from '../context/User';
 import { API, getLogo, showError, showInfo, showSuccess } from '../helpers';
 import { onGitHubOAuthClicked } from './utils';
 import Turnstile from 'react-turnstile';
-import { Button, Card, Divider, Form, Icon, Layout, Modal } from '@douyinfe/semi-ui';
+import { Button, Card, Divider, Form, Icon, Modal } from '@douyinfe/semi-ui';
 import Title from '@douyinfe/semi-ui/lib/es/typography/title';
 import Text from '@douyinfe/semi-ui/lib/es/typography/text';
 import TelegramLoginButton from 'react-telegram-login';
@@ -128,17 +128,28 @@ const LoginForm = () => {
   };
 
   return (
-    <div>
-      <Layout>
-        <Layout.Header>
-        </Layout.Header>
-        <Layout.Content>
-          <div style={{ justifyContent: 'center', display: 'flex', marginTop: 120 }}>
-            <div style={{ width: 500 }}>
-              <Card>
-                <Title heading={2} style={{ textAlign: 'center' }}>
-                  用户登录
-                </Title>
+    <div className="wanwei-auth-page">
+      <section className="wanwei-auth-visual">
+        <div className="wanwei-auth-visual-glow" />
+        <div className="wanwei-auth-brand-lockup">
+          <img className="zjugis-auth-brand-logo" src="/zjugis-login-brand.svg" alt="ZJUGIS Harness" />
+        </div>
+        <p>面向模型服务与智能工作流的统一管理平台</p>
+        <span>SECURE MODEL OPERATIONS</span>
+      </section>
+      <section className="wanwei-auth-main">
+        <div className="wanwei-auth-card-wrap">
+          <Card className="wanwei-auth-card">
+            <div className="wanwei-auth-card-brand">
+              <img src="/zjugis-mark.png" alt="ZJUGIS" />
+              <span>ZJUGIS HARNESS</span>
+            </div>
+            <Title heading={2} style={{ textAlign: 'left', marginBottom: 6 }}>
+              登录管理后台
+            </Title>
+            <Text type="tertiary" className="wanwei-auth-subtitle">
+              使用管理员账号继续
+            </Text>
                 <Form>
                   <Form.Input
                     field={'username'}
@@ -161,7 +172,7 @@ const LoginForm = () => {
                     登录
                   </Button>
                 </Form>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
+                <div className="wanwei-auth-links">
                   <Text>
                     没有账号请先 <Link to="/register">注册账号</Link>
                   </Text>
@@ -233,7 +244,7 @@ const LoginForm = () => {
                     />
                   </Form>
                 </Modal>
-              </Card>
+          </Card>
               {turnstileEnabled ? (
                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: 20 }}>
                   <Turnstile
@@ -246,11 +257,8 @@ const LoginForm = () => {
               ) : (
                 <></>
               )}
-            </div>
-          </div>
-
-        </Layout.Content>
-      </Layout>
+        </div>
+      </section>
     </div>
   );
 };

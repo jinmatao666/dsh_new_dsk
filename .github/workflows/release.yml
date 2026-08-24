@@ -134,8 +134,8 @@ jobs:
       # CLI before generating icons and invoking Tauri packaging.
       - name: Restore packaging tools
         run: pnpm install --frozen-lockfile --prod=false
-      - name: Generate Wanwei desktop icons
-        run: pnpm --filter @deepseek-ai/dsh-desktop-app exec tauri icon src-tauri/icons/wanwei-source.png
+      - name: Generate ZJUGIS desktop icons
+        run: pnpm --filter @deepseek-ai/dsh-desktop-app exec tauri icon src-tauri/icons/zjugis-mark-source.png
       - name: Build desktop installers
         shell: bash
         run: |
@@ -175,5 +175,5 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ inputs.version }}
-          name: Wanwei Harness v${{ inputs.version }}
+          name: ZJUGIS Harness v${{ inputs.version }}
           files: release-assets/*

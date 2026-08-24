@@ -781,6 +781,13 @@ func migrateAccountDB() error {
 	if err := ACCOUNT_DB.AutoMigrate(&AccountProfile{}); err != nil {
 		return err
 	}
+	// AutoMigrate does not reliably restore missing primary/unique constraints
+	// on an already-existing PostgreSQL database (notably databases restored
+	// from a data-only or incomplete schema dump). The account sync path uses
+	// ON CONFLICT for these keys, so repair the indexes explicitly at startup.
+	if err := ensurePostgresAccountConstraints(); err != nil {
+		return err
+	}
 	// 添加表注释（仅 MySQL 支持）。注意：判定必须用 ACCOUNT_DB 自身的方言，
 	// 而非全局 common.UsingMySQL——后者反映的是主库方言。主库 MySQL、账号中心 PG 时，
 	// 用全局开关会把 MySQL 的 ALTER TABLE COMMENT 发到 PG，触发语法错误。
@@ -790,6 +797,35 @@ func migrateAccountDB() error {
 		ACCOUNT_DB.Exec("ALTER TABLE `account_credentials` COMMENT '账号密码凭据(bcrypt)'")
 		ACCOUNT_DB.Exec("ALTER TABLE `account_products` COMMENT '账号↔各产品本地用户映射'")
 		ACCOUNT_DB.Exec("ALTER TABLE `account_profiles` COMMENT '账号全局档案(昵称/头像)'")
+	}
+	return nil
+}
+
+// ensurePostgresAccountConstraints repairs the constraints required by the
+// account-center upsert paths. It is intentionally PostgreSQL-only: MySQL's
+// AutoMigrate already creates these indexes and its CREATE INDEX syntax does
+// not support PostgreSQL's IF NOT EXISTS form on all supported versions.
+//
+// A duplicate-key error is returned to the caller instead of being ignored;
+// this makes a corrupt/restored database fail at startup with an actionable
+// error rather than accepting users that cannot subsequently log in.
+func ensurePostgresAccountConstraints() error {
+	if ACCOUNT_DB == nil || ACCOUNT_DB.Dialector.Name() != "postgres" {
+		return nil
+	}
+
+	statements := []string{
+		`CREATE UNIQUE INDEX IF NOT EXISTS accounts_id_unique ON accounts (id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS account_identifiers_type_identifier_unique ON account_identifiers (type, identifier)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS account_credentials_account_id_unique ON account_credentials (account_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS account_products_account_product_unique ON account_products (account_id, product_code)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS account_products_product_local_unique ON account_products (product_code, local_user_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS account_profiles_account_id_unique ON account_profiles (account_id)`,
+	}
+	for _, statement := range statements {
+		if err := ACCOUNT_DB.Exec(statement).Error; err != nil {
+			return fmt.Errorf("repair account-center constraint with %q: %w", statement, err)
+		}
 	}
 	return nil
 }

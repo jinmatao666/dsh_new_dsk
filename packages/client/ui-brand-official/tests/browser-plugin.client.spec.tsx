@@ -67,7 +67,7 @@ describe('official browser-brand plugin', () => {
 
   it('renders the official name independently from both requested mark sizes', () => {
     const name = render(<OfficialBrandName />)
-    expect(name.container.querySelector('img')?.getAttribute('src')).toBe('/wanwei-wordmark.png')
+    expect(name.container.querySelector('img')?.getAttribute('src')).toBe('/zjugis-harness.png')
     name.unmount()
 
     const mark = render(<OfficialBrandMark size={34} className="hero-mark" />)

@@ -9,10 +9,10 @@ type OfficialBrandMarkProps = HeroBrandMarkOwnerProps & SidebarBrandMarkOwnerPro
  * @returns the official whale mark.
  */
 export function OfficialBrandMark({ size, className }: OfficialBrandMarkProps) {
-  const sidebarSize = size <= 24 ? 40 : size
+  const sidebarSize = size <= 24 ? 30 : size
   return (
     <img
-      src="/wanwei-mark.png"
+      src="/zjugis-mark.png"
       width={size}
       height={size}
       className={className}
@@ -29,25 +29,11 @@ export function OfficialBrandMark({ size, className }: OfficialBrandMarkProps) {
  */
 export function OfficialBrandName() {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, maxWidth: '100%' }} aria-hidden="true">
+    <span style={{ display: 'inline-flex', alignItems: 'center', maxWidth: '100%' }} aria-hidden="true">
       <img
-        src="/wanwei-wordmark.png"
-        height={38}
-        style={{ display: 'block', width: 'auto', height: 38, maxWidth: '100%', margin: 0, objectFit: 'contain' }}
-        alt=""
-      />
-      <img
-        src="/wanwei-harness.png"
-        height={58}
-        style={{
-          display: 'block',
-          width: 'auto',
-          height: 58,
-          maxWidth: '40%',
-          margin: 0,
-          objectFit: 'contain',
-          transform: 'translateX(-16px)',
-        }}
+        src="/zjugis-harness.png"
+        height={30}
+        style={{ display: 'block', width: 'auto', height: 30, maxWidth: '100%', margin: 0, objectFit: 'contain' }}
         alt=""
       />
     </span>

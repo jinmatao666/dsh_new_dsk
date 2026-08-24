@@ -1,7 +1,8 @@
 use serde::Deserialize;
 use std::{
     fs,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read, Write},
+    net::TcpStream,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{mpsc, Arc, Mutex},
@@ -25,6 +26,30 @@ struct ServerConfig {
 }
 
 struct Sidecar(Arc<Mutex<Option<Child>>>);
+
+#[tauri::command]
+fn set_auth_window_state(app: tauri::AppHandle, authenticated: bool) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "主窗口尚未创建".to_string())?;
+
+    window
+        .set_resizable(authenticated)
+        .map_err(|error| format!("设置窗口大小调整权限失败: {error}"))?;
+    window
+        .set_maximizable(authenticated)
+        .map_err(|error| format!("设置窗口最大化权限失败: {error}"))?;
+
+    if !authenticated {
+        let _ = window.unmaximize();
+        window
+            .set_size(tauri::Size::Logical(tauri::LogicalSize::new(1120.0, 720.0)))
+            .map_err(|error| format!("恢复登录窗口尺寸失败: {error}"))?;
+        let _ = window.center();
+    }
+
+    Ok(())
+}
 
 fn append_log(path: &Path, message: impl AsRef<str>) {
     use std::io::Write;
@@ -84,8 +109,14 @@ fn production_command(resource_dir: &Path) -> (PathBuf, PathBuf, Vec<String>) {
 
 fn development_command() -> (PathBuf, PathBuf, Vec<String>) {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    // Keep local Tauri development on the same Node runtime as the staged
+    // production sidecar. This avoids silently resolving an older system
+    // `node.exe` that cannot load the current TypeScript/ESM runtime.
+    let node = std::env::var_os("DSH_NODE_BINARY")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("node"));
     (
-        PathBuf::from("node"),
+        node,
         root.clone(),
         vec![
             "--import".into(),
@@ -105,13 +136,14 @@ fn spawn_sidecar(
     } else {
         production_command(resource_dir)
     };
+    let dev_port = if cfg!(debug_assertions) { Some(53916u16) } else { None };
     args.extend([
         "--profile".into(),
         "desktop".into(),
         "--host".into(),
         "127.0.0.1".into(),
         "--port".into(),
-        "0".into(),
+        dev_port.map_or_else(|| "0".to_string(), |port| port.to_string()),
         // Tauri owns the visible WebView. The DSH web launcher otherwise
         // hands the loopback URL to the system browser as well, which creates
         // a duplicate browser tab/window for every desktop launch.
@@ -125,6 +157,11 @@ fn spawn_sidecar(
         .env("DSH_ONEAPI_URL", &config.one_api_url)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if cfg!(debug_assertions)
+        && std::env::var("DSH_DESKTOP_DEV_BYPASS_AUTH").ok().as_deref() == Some("1")
+    {
+        command.env("DSH_DESKTOP_DEV_BYPASS_AUTH", "1");
+    }
     if !config.default_model.is_empty() {
         command.env("DSH_DEFAULT_MODEL", &config.default_model);
     }
@@ -135,7 +172,10 @@ fn spawn_sidecar(
         log_path,
         format!("starting sidecar: {} {rendered_args}", program.display()),
     );
-    #[cfg(windows)]
+    // The release desktop app hides the sidecar console. During `tauri dev`,
+    // keep the child attached so its readiness line can be captured reliably
+    // by the development shell on Windows.
+    #[cfg(all(windows, not(debug_assertions)))]
     {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000);
@@ -168,9 +208,42 @@ fn spawn_sidecar(
             eprintln!("[dsh:error] {line}");
         }
     });
-    let url = receiver
-        .recv_timeout(Duration::from_secs(45))
-        .map_err(|_| "DSH Sidecar 在 45 秒内未就绪，请检查日志和 server.json".to_string())?;
+    let url = if let Some(port) = dev_port {
+        // In local Windows development stdout can be delayed while the
+        // Node/tsx loader is warming up. Probe the fixed loopback port as a
+        // reliable readiness signal, then use the normal printed URL if it
+        // arrives first.
+        let deadline = std::time::Instant::now() + Duration::from_secs(45);
+        loop {
+            if let Ok(url) = receiver.try_recv() {
+                break url;
+            }
+            if let Ok(mut stream) = TcpStream::connect_timeout(
+                &format!("127.0.0.1:{port}").parse().map_err(|_| "本地端口无效")?,
+                Duration::from_millis(250),
+            ) {
+                let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+                let ready_request = format!(
+                    "GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+                );
+                let mut response = [0u8; 256];
+                if stream.write_all(ready_request.as_bytes()).is_ok()
+                    && stream.read(&mut response).is_ok()
+                    && response.starts_with(b"HTTP/1.1 200")
+                {
+                    break Url::parse(&format!("http://127.0.0.1:{port}")).map_err(|e| e.to_string())?;
+                }
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err("DSH Sidecar 在 45 秒内未就绪，请检查日志和 server.json".to_string());
+            }
+            std::thread::sleep(Duration::from_millis(150));
+        }
+    } else {
+        receiver
+            .recv_timeout(Duration::from_secs(45))
+            .map_err(|_| "DSH Sidecar 在 45 秒内未就绪，请检查日志和 server.json".to_string())?
+    };
     Ok((child, url))
 }
 
@@ -184,7 +257,7 @@ pub fn run() {
                 .join("logs")
                 .join("startup.log");
             let _ = fs::remove_file(&log_path);
-            append_log(&log_path, "Wanwei Harness startup");
+            append_log(&log_path, "ZJUGIS Harness startup");
             let config = server_config(&resource_dir).map_err(|message| {
                 append_log(&log_path, format!("[fatal] {message}"));
                 std::io::Error::new(std::io::ErrorKind::InvalidData, message)
@@ -199,8 +272,8 @@ pub fn run() {
             // Keep the sidecar alive when the user closes the window. The
             // application is controlled from the system tray and only exits
             // through the tray's explicit quit action.
-            let show_item = MenuItem::with_id(app, "show", "显示 Wanwei Harness", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "退出 Wanwei Harness", true, None::<&str>)?;
+            let show_item = MenuItem::with_id(app, "show", "显示 ZJUGIS Harness", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "退出 ZJUGIS Harness", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().ok_or("缺少应用图标")?.clone())
@@ -233,9 +306,11 @@ pub fn run() {
                 .build(app)?;
 
             let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
-                .title("Wanwei Harness")
+                .title("ZJUGIS Harness")
                 .inner_size(1120.0, 720.0)
                 .min_inner_size(900.0, 580.0)
+                .resizable(false)
+                .maximizable(false)
                 .center()
                 .build()?;
             let window_for_events = window.clone();
@@ -255,6 +330,7 @@ pub fn run() {
             });
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![set_auth_window_state])
         .run(tauri::generate_context!())
         .expect("error while running DSH Desktop");
 }

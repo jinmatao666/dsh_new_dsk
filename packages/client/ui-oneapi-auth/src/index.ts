@@ -86,6 +86,14 @@ interface ProviderSettings { providers?: Record<string, ManagedProvider | Record
 interface DefaultModelService {
   saveSelection(next: { provider: string; model: string }): Promise<void>
 }
+interface QuestionReport {
+  question?: unknown
+  sessionId?: unknown
+  requestId?: unknown
+  model?: unknown
+  status?: unknown
+  error?: unknown
+}
 
 function internal(message: string): { ok: false; error: { code: 'internal'; message: string; details: Record<string, never> } } {
   return { ok: false, error: { code: 'internal', message, details: {} } }
@@ -151,6 +159,12 @@ async function fetchModels(baseURL: string, token: string, signal?: AbortSignal)
   return models
 }
 
+function boundedText(value: unknown, max: number): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const text = value.trim()
+  return text === '' ? undefined : text.slice(0, max)
+}
+
 /** Services required by the Host half. */
 export const inject = ['connection', 'credentials', 'settings', 'agentDefaultModel']
 
@@ -208,6 +222,29 @@ export function apply(ctx: Context, config: Config): void {
     await ctx.settings.replace(LLM_SETTINGS, { providers })
   }
 
+  const reportQuestion = async (payload: unknown): Promise<{ ok: true; value: unknown } | { ok: false; error: { code: 'internal'; message: string; details: Record<string, never> } }> => {
+    try {
+      const input = (typeof payload === 'object' && payload !== null ? payload : {}) as QuestionReport
+      const token = (await ctx.credentials.resolve(ref))?.value
+      const question = boundedText(input.question, 32_000)
+      if (token === undefined || question === undefined) return { ok: true, value: { reported: false } }
+      const data: Record<string, string> = { question, status: boundedText(input.status, 32) ?? 'submitted' }
+      for (const [key, value] of [['session_id', input.sessionId], ['request_id', input.requestId], ['model', input.model], ['error', input.error]] as const) {
+        const text = boundedText(value, key === 'error' ? 8_000 : 256)
+        if (text !== undefined) data[key] = text
+      }
+      await fetch(`${baseURL}/api/client-event`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ events: [{ event: 'dsh_question', data, ts: Date.now() }], platform: 'desktop' }),
+      })
+      return { ok: true, value: { reported: true } }
+    } catch {
+      // Telemetry must never block a model request or make the desktop unusable.
+      return { ok: true, value: { reported: false } }
+    }
+  }
+
   // Credentials intentionally survive normal restarts, but a newly built
   // installer carries a new marker and must show the login screen once.
   const installReady = (async (): Promise<void> => {
@@ -222,6 +259,18 @@ export function apply(ctx: Context, config: Config): void {
 
   const status = async (signal?: AbortSignal): Promise<AuthState> => {
     await installReady
+    // Local desktop preview only. The Tauri development command opts into
+    // this explicitly; packaged customers always use the real OneAPI login.
+    // Keep the normal runtime invariants intact: the app shell requires a
+    // provider, a credential reference and a selected model even when no
+    // preview request is ever sent.
+    if (process.env.DSH_DESKTOP_DEV_BYPASS_AUTH === '1') {
+      const models = [config.defaultModel?.trim() || 'local-preview-model']
+      await ctx.credentials.set(ref, 'local-preview-token')
+      await ctx.credentials.set(usernameRef, 'local-preview')
+      await syncProvider(models)
+      return { state: 'authenticated', models, username: 'local-preview' }
+    }
     const resolved = await ctx.credentials.resolve(ref)
     const username = (await ctx.credentials.resolve(usernameRef))?.value
     if (resolved === undefined) return username === undefined ? { state: 'logged-out' } : { state: 'logged-out', username }
@@ -298,6 +347,7 @@ export function apply(ctx: Context, config: Config): void {
         return internal(error instanceof Error ? error.message : String(error))
       }
     }
+    if (endpoint === 'report-question') return reportQuestion(payload)
     return internal(`未知认证操作：${endpoint}`)
   }, { authority: 'loopback' })
   ctx.effect(() => () => { void remove() }, 'ui-oneapi-auth: loopback RPC')

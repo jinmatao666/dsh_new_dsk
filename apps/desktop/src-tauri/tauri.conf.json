@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Wanwei Harness",
+  "productName": "ZJUGIS Harness",
   "version": "0.1.0",
   "identifier": "com.wanwei.harness",
   "build": {
@@ -8,6 +8,7 @@
   },
   "app": {
     "windows": [],
+    "withGlobalTauri": true,
     "security": {
       "csp": null
     }

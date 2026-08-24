@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "lib/types" },
+  "include": ["src/**/*.ts", "src/client/index.tsx", "src/**/*.d.ts", "tests"],
+  "references": [
+    { "path": "../runtime" },
+    { "path": "../ui-layout" },
+    { "path": "../ui-sidebar" }
+  ]
+}

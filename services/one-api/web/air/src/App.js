@@ -18,7 +18,6 @@ import EditChannel from './pages/Channel/EditChannel';
 import Log from './pages/Log';
 import Chat from './pages/Chat';
 import AddUser from './pages/User/AddUser';
-import { Layout } from '@douyinfe/semi-ui';
 import Midjourney from './pages/Midjourney';
 import Detail from './pages/Detail';
 import Dashboard from './pages/Dashboard';
@@ -50,6 +49,7 @@ import SystemSettingPage from './pages/SystemSetting';
 import AdminPermissions from './pages/AdminPermissions';
 import Toolbox from './pages/Toolbox';
 import PermissionGuard from './components/PermissionGuard';
+import { ModelConfigPage as ZjugisModelConfigPage, UsersPage as ZjugisUsersPage, LogsPage as ZjugisLogsPage, AccountPage as ZjugisAccountPage } from './pages/Zjugis';
 
 const LarkOAuth = lazy(() => import('./components/LarkOAuth'));
 
@@ -77,13 +77,11 @@ function App() {
 
   useEffect(() => {
     loadUser();
-    document.title = '点石后台';
+    document.title = 'ZJUGIS Harness';
   }, []);
 
   return (
-    <Layout>
-      <Layout.Content>
-        <Routes>
+    <Routes>
           <Route
             path="/"
             element={
@@ -96,7 +94,7 @@ function App() {
             path="/channel"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="channel"><Channel /></PermissionGuard>
+                <PermissionGuard permKey="channel"><ZjugisModelConfigPage /></PermissionGuard>
               </PrivateRoute>
             }
           />
@@ -120,7 +118,7 @@ function App() {
             path="/user"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="user"><User /></PermissionGuard>
+                <PermissionGuard permKey="user"><ZjugisUsersPage /></PermissionGuard>
               </PrivateRoute>
             }
           />
@@ -204,7 +202,7 @@ function App() {
             path="/setting/personal"
             element={
               <PrivateRoute>
-                <PersonalSettingPage />
+                <ZjugisAccountPage />
               </PrivateRoute>
             }
           />
@@ -236,7 +234,7 @@ function App() {
             path="/log"
             element={
               <PrivateRoute>
-                <Log />
+                <ZjugisLogsPage />
               </PrivateRoute>
             }
           />
@@ -384,7 +382,7 @@ function App() {
             path="/config/model"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="model_config"><ModelConfigPage /></PermissionGuard>
+                <PermissionGuard permKey="model_config"><ZjugisModelConfigPage /></PermissionGuard>
               </PrivateRoute>
             }
           />
@@ -511,9 +509,7 @@ function App() {
           <Route path="*" element={
             <NotFound />
           } />
-        </Routes>
-      </Layout.Content>
-    </Layout>
+    </Routes>
   );
 }
 

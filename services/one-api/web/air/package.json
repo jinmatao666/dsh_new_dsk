@@ -30,7 +30,7 @@
   "scripts": {
     "start": "react-scripts start",
     "dev": "vite",
-    "build": "react-scripts build && rm -rf ../build/air && mv build ../build/air",
+    "build": "react-scripts build && node scripts/finalize-build.mjs",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
@@ -62,6 +62,5 @@
   "prettier": {
     "singleQuote": true,
     "jsxSingleQuote": true
-  },
-  "proxy": "http://localhost:3000"
+  }
 }

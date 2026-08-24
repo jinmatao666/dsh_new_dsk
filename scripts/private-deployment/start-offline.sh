@@ -65,13 +65,14 @@ docker volume inspect dsh-oneapi-data >/dev/null 2>&1 || docker volume create ds
 docker volume inspect dsh-oneapi-logs >/dev/null 2>&1 || docker volume create dsh-oneapi-logs >/dev/null
 
 one_api_port="$(env_default DSH_ONEAPI_PORT 3300)"
+one_api_bind="$(env_default DSH_ONEAPI_BIND 127.0.0.1)"
 cors_allow_origins="$(env_default DSH_CORS_ALLOW_ORIGINS 'http://tauri.localhost,tauri://localhost')"
 
 docker run -d \
   --name "$container" \
   --restart unless-stopped \
   --network "$network" \
-  -p "127.0.0.1:${one_api_port}:3000" \
+  -p "${one_api_bind}:${one_api_port}:3000" \
   -v dsh-oneapi-data:/data \
   -v dsh-oneapi-logs:/data/logs \
   -v "$tiktoken_cache:/opt/tiktoken-cache:ro" \

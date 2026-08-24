@@ -16,7 +16,8 @@
   "files": ["lib/index.js", "lib/invariant.js", "cordis.patch.yml", "lib/types/**/*.d.ts"],
   "license": "MIT",
   "dependencies": {
-    "@deepseek-ai/dsh-client-ui-oneapi-auth": "workspace:^"
+    "@deepseek-ai/dsh-client-ui-oneapi-auth": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-skill-marketplace": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",

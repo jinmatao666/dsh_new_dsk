@@ -5,7 +5,9 @@ import { Boxes, Hourglass } from 'lucide-react';
 // 默认 parvis（当前后台全部内容）；后续新增产品在此追加即可。
 // home：该产品的默认落地页（首次进入或无历史记录时跳转的页面）。
 export const PRODUCTS = [
-  { key: 'parvis', label: 'Parvis', icon: Boxes, home: '/' },
+  // Keep the historical key for route compatibility; expose the ZJUGIS brand
+  // in the admin UI without changing stored product paths or API behavior.
+  { key: 'parvis', label: 'ZJUGIS Harness', icon: Boxes, home: '/' },
   { key: 'coming-soon', label: '敬请期待', icon: Hourglass, placeholder: true, home: '/coming-soon' }
 ];
 

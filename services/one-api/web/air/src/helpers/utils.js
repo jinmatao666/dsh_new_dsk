@@ -43,7 +43,7 @@ export function getSystemName() {
 
 export function getLogo() {
   let logo = localStorage.getItem('logo');
-  if (!logo) return '/logo.png';
+  if (!logo) return '/zjugis-harness.png';
   return logo
 }
 
@@ -88,9 +88,18 @@ if (isMobile()) {
 
 export function showError(error) {
   console.error(error);
-  if (error.message) {
-    if (error.name === 'AxiosError') {
-      switch (error.response.status) {
+  const message = error?.message || String(error || '');
+  // 后台并行加载时，网络失败、服务端 5xx 和前端响应解析错误不再遮挡页面；
+  // 详细信息仍保留在 DevTools Console，用户操作类校验错误仍正常提示。
+  const technicalError = error?.name === 'AxiosError'
+    || /Cannot read properties of undefined|Network Error|服务器内部错误|请求失败|Failed to fetch/i.test(message);
+  if (technicalError && error?.response?.status !== 401 && error?.response?.status !== 429) {
+    return;
+  }
+  if (message) {
+    if (error?.name === 'AxiosError') {
+      const status = error.response?.status;
+      switch (status) {
         case 401:
           // toast.error('错误：未登录或登录已过期，请重新登录！', showErrorOptions);
           window.location.href = `${process.env.PUBLIC_URL || ''}/login?expired=true`;
@@ -105,11 +114,11 @@ export function showError(error) {
           Toast.info('本站仅作演示之用，无服务端！');
           break;
         default:
-          Toast.error('错误：' + error.message);
+          Toast.error('错误：' + message);
       }
       return;
     }
-    Toast.error('错误：' + error.message);
+    Toast.error('错误：' + message);
   } else {
     Toast.error('错误：' + error);
   }

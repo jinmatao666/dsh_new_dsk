@@ -1,4 +1,3 @@
-import { showError } from './utils';
 import axios from 'axios';
 
 export const API = axios.create({
@@ -7,7 +6,7 @@ export const API = axios.create({
 
 API.interceptors.response.use(
   (response) => response,
-  (error) => {
-    showError(error);
-  }
+  // 由具体页面决定是否提示错误。这里再次弹 Toast 会和页面 catch
+  // 中的提示叠加，导致后台加载时出现多层重复错误。
+  (error) => Promise.reject(error)
 );

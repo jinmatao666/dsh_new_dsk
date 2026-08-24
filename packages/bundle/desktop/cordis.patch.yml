@@ -15,3 +15,5 @@
         defaultInput: [text, image]
         defaultModel: !!js process.env.DSH_DEFAULT_MODEL
         installId: !!js process.env.DSH_INSTALL_ID
+    - id: ui-skill-marketplace
+      name: '@deepseek-ai/dsh-client-ui-skill-marketplace'

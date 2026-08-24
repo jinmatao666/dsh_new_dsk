@@ -3,6 +3,7 @@ import ModelManagement from '../../components/ModelManagement';
 import BasicSettings from '../../components/BasicSettings';
 import ChannelsTable from '../../components/ChannelsTable';
 import { ConfigPageLayout, ConfigPageTabs, ConfigPageTabPane } from '../../components/ConfigPageLayout';
+import AdminPageFrame from '../../components/AdminPageFrame';
 
 // 渠道与模型配置页。三个 tab:
 //   - 渠道配置:渠道本体(连通性测试、启停、复制、优先级),复用 ChannelsTable
@@ -13,19 +14,26 @@ import { ConfigPageLayout, ConfigPageTabs, ConfigPageTabPane } from '../../compo
 const ModelConfigPage = () => {
   const [activeKey, setActiveKey] = useState('channels');
   return (
-    <ConfigPageLayout>
-      <ConfigPageTabs activeKey={activeKey} onChange={setActiveKey}>
-        <ConfigPageTabPane tab="渠道配置" itemKey="channels">
-          <ChannelsTable />
-        </ConfigPageTabPane>
-        <ConfigPageTabPane tab="模型配置" itemKey="models">
-          <ModelManagement />
-        </ConfigPageTabPane>
-        <ConfigPageTabPane tab="基础设置" itemKey="basic">
-          <BasicSettings />
-        </ConfigPageTabPane>
-      </ConfigPageTabs>
-    </ConfigPageLayout>
+    <AdminPageFrame
+      kicker="MODEL CENTER"
+      title="模型配置"
+      description="管理渠道、模型和默认调用参数。"
+      className="zjugis-model-config-page"
+    >
+      <ConfigPageLayout>
+        <ConfigPageTabs activeKey={activeKey} onChange={setActiveKey}>
+          <ConfigPageTabPane tab="渠道配置" itemKey="channels">
+            <ChannelsTable />
+          </ConfigPageTabPane>
+          <ConfigPageTabPane tab="模型配置" itemKey="models">
+            <ModelManagement />
+          </ConfigPageTabPane>
+          <ConfigPageTabPane tab="基础设置" itemKey="basic">
+            <BasicSettings />
+          </ConfigPageTabPane>
+        </ConfigPageTabs>
+      </ConfigPageLayout>
+    </AdminPageFrame>
   );
 };
 

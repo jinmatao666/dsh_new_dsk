@@ -1,18 +1,15 @@
 import React from 'react';
 import ChannelsTable from '../../components/ChannelsTable';
-import {Layout} from "@douyinfe/semi-ui";
+import AdminPageFrame from '../../components/AdminPageFrame';
 
 const File = () => (
-    <>
-        <Layout>
-            <Layout.Header>
-                <h3>管理渠道</h3>
-            </Layout.Header>
-            <Layout.Content>
-                <ChannelsTable/>
-            </Layout.Content>
-        </Layout>
-    </>
+    <AdminPageFrame
+        kicker="MODEL CENTER"
+        title="模型配置"
+        description="管理渠道、模型和默认调用参数。"
+    >
+        <ChannelsTable />
+    </AdminPageFrame>
 );
 
 export default File;

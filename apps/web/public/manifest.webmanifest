@@ -1,13 +1,13 @@
 {
   "id": "/",
-  "name": "Wanwei Harness",
-  "short_name": "Wanwei",
+  "name": "ZJUGIS Harness",
+  "short_name": "ZJUGIS",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",
   "icons": [
     {
-      "src": "/wanwei-mark.png",
+      "src": "/zjugis-mark.png",
       "sizes": "any",
       "type": "image/png",
       "purpose": "any"

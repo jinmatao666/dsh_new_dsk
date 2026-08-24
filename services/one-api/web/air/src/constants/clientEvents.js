@@ -22,6 +22,7 @@ export const EXCEPTION_EVENTS = [
 ];
 
 export const FEATURE_EVENTS = [
+  'dsh_question',
   '进入应用',
   '用户登录',
   '对话',

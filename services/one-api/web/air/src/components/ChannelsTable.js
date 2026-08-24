@@ -638,7 +638,7 @@ const ChannelsTable = () => {
   return (
     <>
       <EditChannel refresh={refresh} visible={showEdit} handleClose={closeEdit} editingChannel={editingChannel} />
-      <div style={{ display: "flex", placeItems: "center", justifyContent: "space-between" }}>
+      <div className="channel-toolbar">
         <Form onSubmit={() => {
           searchChannels(searchKeyword, searchGroup, searchModel);
         }} labelPosition="left">
@@ -673,14 +673,8 @@ const ChannelsTable = () => {
             </Space>
           </div>
         </Form>
-        <div style={{
-          display: isMobile() ? '' : 'flex',
-          marginTop: isMobile() ? 0 : -45,
-          zIndex: 999,
-          position: 'relative',
-          pointerEvents: 'none'
-        }}>
-          <Space style={{ pointerEvents: 'auto', marginTop: isMobile() ? 0 : 45 }}>
+        <div className="channel-toolbar-actions">
+          <Space>
             <Button theme="light" type="primary" style={{ marginRight: 8 }} onClick={
               () => {
                 setEditingChannel({
