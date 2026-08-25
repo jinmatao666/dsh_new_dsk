@@ -259,18 +259,6 @@ export function apply(ctx: Context, config: Config): void {
 
   const status = async (signal?: AbortSignal): Promise<AuthState> => {
     await installReady
-    // Local desktop preview only. The Tauri development command opts into
-    // this explicitly; packaged customers always use the real OneAPI login.
-    // Keep the normal runtime invariants intact: the app shell requires a
-    // provider, a credential reference and a selected model even when no
-    // preview request is ever sent.
-    if (process.env.DSH_DESKTOP_DEV_BYPASS_AUTH === '1') {
-      const models = [config.defaultModel?.trim() || 'local-preview-model']
-      await ctx.credentials.set(ref, 'local-preview-token')
-      await ctx.credentials.set(usernameRef, 'local-preview')
-      await syncProvider(models)
-      return { state: 'authenticated', models, username: 'local-preview' }
-    }
     const resolved = await ctx.credentials.resolve(ref)
     const username = (await ctx.credentials.resolve(usernameRef))?.value
     if (resolved === undefined) return username === undefined ? { state: 'logged-out' } : { state: 'logged-out', username }

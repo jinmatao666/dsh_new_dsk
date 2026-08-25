@@ -113,6 +113,7 @@ func SetApiRouter(router *gin.Engine) {
 		adminMiscRoute.Use(middleware.AdminAuth())
 		{
 			adminMiscRoute.GET("/account-type-changes", controller.ListAccountTypeChanges)
+			adminMiscRoute.GET("/user-prompts", controller.GetUserPromptAudits)
 		}
 		// 充值套餐管理(平台管理员)
 		rechargePackageRoute := apiRouter.Group("/recharge-package")

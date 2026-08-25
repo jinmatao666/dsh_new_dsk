@@ -1,4 +1,4 @@
-import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+﻿import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SidebarBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 
 type OfficialBrandMarkProps = HeroBrandMarkOwnerProps & SidebarBrandMarkOwnerProps
@@ -35,8 +35,8 @@ export function OfficialBrandName() {
     <span style={{ display: 'inline-flex', alignItems: 'center', maxWidth: '100%' }} aria-hidden="true">
       <img
         src="/zjugis-harness.png"
-        height={30}
-        style={{ display: 'block', width: 'auto', height: 30, maxWidth: '100%', margin: 0, objectFit: 'contain' }}
+        height={65}
+        style={{ display: 'block', width: 'auto', height: 65, maxWidth: '100%', margin: 0, objectFit: 'contain' }}
         alt=""
       />
     </span>

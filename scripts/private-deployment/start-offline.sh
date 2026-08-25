@@ -68,6 +68,9 @@ one_api_port="$(env_default DSH_ONEAPI_PORT 3300)"
 one_api_bind="$(env_default DSH_ONEAPI_BIND 127.0.0.1)"
 cors_allow_origins="$(env_default DSH_CORS_ALLOW_ORIGINS 'http://tauri.localhost,tauri://localhost')"
 
+# Keep this mount writable: a connected deployment may need to download a
+# tokenizer encoding on its first start. Offline deployments can still use
+# a pre-populated cache from the same directory.
 docker run -d \
   --name "$container" \
   --restart unless-stopped \
@@ -75,9 +78,6 @@ docker run -d \
   -p "${one_api_bind}:${one_api_port}:3000" \
   -v dsh-oneapi-data:/data \
   -v dsh-oneapi-logs:/data/logs \
-  # Keep this mount writable: a connected deployment may need to download a
-  # tokenizer encoding on its first start. Offline deployments can still use
-  # a pre-populated cache from the same directory.
   -v "$tiktoken_cache:/opt/tiktoken-cache" \
   -e TIKTOKEN_CACHE_DIR=/opt/tiktoken-cache \
   -e TZ=Asia/Shanghai \

@@ -9,6 +9,30 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.ts"></script>
+
+  <script>
+    // DEV-ONLY: Mock boot globals so the app can run without dsh web
+    window.__DSH_BOOT__ = window.__DSH_BOOT__ || {};
+    window.__ModuleLoader__ = window.__ModuleLoader__ || {
+      create: function(opts) {
+        console.log('[DEV] Mock ModuleLoader.create', opts);
+        return {
+          manifest: { plugins: [] },
+          prefetch: function() { return Promise.resolve(); },
+          load: function(id) {
+            console.log('[DEV] Mock load:', id);
+            return { then: function(cb) { return cb({ exports: {} }); } };
+          },
+          require: function(id) {
+            console.log('[DEV] Mock require:', id);
+            return {};
+          },
+          entries: function() { return []; },
+          await: function() { return Promise.resolve(); },
+        };
+      },
+    };
+  </script>
+  <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

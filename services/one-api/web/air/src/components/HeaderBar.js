@@ -142,8 +142,8 @@ const HeaderBar = () => {
     <ProductSwitcher />
     <div className="zjugis-topbar-actions">
       <button className="zjugis-topbar-icon" title="帮助"><IconHelpCircle /></button>
-      <Switch checkedText="🌞" size="large" checked={dark} uncheckedText="🌙" onChange={switchMode} />
-      {userState.user ? <div className="zjugis-user-menu"><button className="zjugis-user-chip" onClick={() => setUserMenuOpen((open) => !open)}><span className="zjugis-user-avatar">{userState.user.username[0].toUpperCase()}</span><span>{userState.user.username}</span><span className="zjugis-user-chevron">⌄</span></button>{userMenuOpen && <div className="zjugis-user-popover"><div className="zjugis-user-popover-name">{userState.user.username}</div><button onClick={logout}>退出登录</button></div>}</div> : <><Link className="zjugis-topbar-link" to="/login"><IconKey /> 登录</Link><Link className="zjugis-topbar-link" to="/register"><IconUser /> 注册</Link></>}
+      {/* Dark mode toggle hidden for now — re-enable when dark palette is ready */}
+      {userState.user ? <div className="zjugis-user-menu"><button className="zjugis-user-chip" onClick={() => setUserMenuOpen((open) => !open)}><span className="zjugis-user-avatar">{userState.user.username[0].toUpperCase()}</span><span>{userState.user.username}</span><span className="zjugis-user-chevron" aria-hidden="true"></span></button>{userMenuOpen && <div className="zjugis-user-popover"><div className="zjugis-user-popover-name">{userState.user.username}</div><button onClick={logout}>退出登录</button></div>}</div> : <><Link className="zjugis-topbar-link" to="/login"><IconKey /> 登录</Link><Link className="zjugis-topbar-link" to="/register"><IconUser /> 注册</Link></>}
     </div>
   </div>;
 };

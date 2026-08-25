@@ -44,6 +44,13 @@ func canAutoFetchModels(channelType int) bool {
 // {baseURL}/compatible-mode/v1/models（base 仍为 https://dashscope.aliyuncs.com）。
 func modelsEndpoint(channelType int, baseURL string) string {
 	base := strings.TrimRight(baseURL, "/")
+	// The channel form accepts a complete OpenAI-compatible base URL. Most
+	// providers document it with a trailing `/v1` (including DashScope's
+	// `/compatible-mode/v1`), so appending another `/v1` produces a guaranteed
+	// 404. In that form only append the resource name.
+	if strings.HasSuffix(base, "/v1") {
+		return base + "/models"
+	}
 	switch channelType {
 	case channeltype.AliBailian:
 		// 若用户已自行填到 /compatible-mode 结尾，避免重复拼接。

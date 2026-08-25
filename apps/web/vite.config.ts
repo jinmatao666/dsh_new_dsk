@@ -108,7 +108,7 @@ function npmPackageOf(id: string): string | undefined {
 }
 
 export default defineConfig({
-  plugins: [rejectStandaloneServe(), clientDocumentTitle(), react()],
+  plugins: [/* rejectStandaloneServe(), */ clientDocumentTitle(), react()],
   build: {
     sourcemap: true,
     rollupOptions: {

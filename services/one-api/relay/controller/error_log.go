@@ -45,6 +45,7 @@ func recordRelayErrorLog(c *gin.Context, m *meta.Meta, req *relaymodel.GeneralOp
 	}
 	billing.FillLogTimingFromGin(c, log)
 	model.RecordErrorLog(c.Request.Context(), log)
+	model.FinishUserPromptAudit(c.Request.Context(), "error", errMsg, 0, 0, 0, log.ElapsedTime)
 }
 
 // recordImageRelayErrorLog 是 image.go 错误路径的简化版本：

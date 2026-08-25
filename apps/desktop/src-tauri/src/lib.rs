@@ -157,11 +157,6 @@ fn spawn_sidecar(
         .env("DSH_ONEAPI_URL", &config.one_api_url)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    if cfg!(debug_assertions)
-        && std::env::var("DSH_DESKTOP_DEV_BYPASS_AUTH").ok().as_deref() == Some("1")
-    {
-        command.env("DSH_DESKTOP_DEV_BYPASS_AUTH", "1");
-    }
     if !config.default_model.is_empty() {
         command.env("DSH_DEFAULT_MODEL", &config.default_model);
     }

@@ -205,6 +205,7 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 	}
 	billing.FillLogTimingFromContext(ctx, log)
 	model.RecordConsumeLog(ctx, log)
+	model.FinishUserPromptAudit(ctx, "success", "", int(quota), promptTokens, completionTokens, log.ElapsedTime)
 	model.UpdateUserUsedQuotaAndRequestCount(meta.UserId, quota)
 	model.UpdateChannelUsedQuota(meta.ChannelId, quota)
 
@@ -220,6 +221,21 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 			}
 		}()
 	}
+}
+
+// latestUserQuestion 仅提取本次请求最后一条用户文本，不记录图片附件、工具返回或
+// 系统提示，避免把完整会话上下文复制进审计库。
+func latestUserQuestion(request *relaymodel.GeneralOpenAIRequest) string {
+	if request == nil {
+		return ""
+	}
+	for i := len(request.Messages) - 1; i >= 0; i-- {
+		message := request.Messages[i]
+		if message.Role == "user" {
+			return message.StringContent()
+		}
+	}
+	return ""
 }
 
 func getMappedModelName(modelName string, mapping map[string]string) (string, bool) {
