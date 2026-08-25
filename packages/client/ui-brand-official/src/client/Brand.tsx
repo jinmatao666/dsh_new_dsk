@@ -9,14 +9,17 @@ type OfficialBrandMarkProps = HeroBrandMarkOwnerProps & SidebarBrandMarkOwnerPro
  * @returns the official whale mark.
  */
 export function OfficialBrandMark({ size, className }: OfficialBrandMarkProps) {
-  const sidebarSize = size <= 24 ? 30 : size
+  // The sidebar wordmark is already the complete ZJUGIS Harness logo.  Keep
+  // this slot empty there so the standalone mark is not rendered twice.
+  if (size <= 24) return null
+
   return (
     <img
       src="/zjugis-mark.png"
       width={size}
       height={size}
       className={className}
-      style={{ display: 'block', width: `${sidebarSize}px`, height: 'auto', margin: 0, objectFit: 'contain' }}
+      style={{ display: 'block', width: `${size}px`, height: 'auto', margin: 0, objectFit: 'contain' }}
       alt=""
       aria-hidden="true"
     />

@@ -59,7 +59,7 @@ jobs:
       DSH_RELEASE_VERSION: ${{ inputs.version }}
       # One repository corresponds to one deployment region. Set DSH_ONEAPI_URL
       # as a repository variable before releasing for another region.
-      DSH_ONEAPI_URL: ${{ vars.DSH_ONEAPI_URL || 'https://ai.zrzyt.zj.gov.cn:10086/dsh-api' }}
+      DSH_ONEAPI_URL: ${{ vars.DSH_ONEAPI_URL || 'http://ac.zjugis.com:3300' }}
     steps:
       - uses: actions/checkout@v6
         with:

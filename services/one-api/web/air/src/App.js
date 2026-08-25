@@ -68,6 +68,22 @@ function App() {
   // const [statusState, statusDispatch] = useContext(StatusContext);
 
   const loadUser = () => {
+    // DEV bypass: inject a role=100 root mock user when no login state exists,
+    // so private routes and PermissionGuard render during local UI debugging.
+    // Remove or gate by env var before production builds.
+    if (import.meta.env.DEV && !localStorage.getItem('user')) {
+      const mockUser = {
+        id: 1,
+        username: 'root',
+        role: 100,
+        admin_permissions: '[]',
+        status: 1,
+        quota: 1000000,
+        used_quota: 0,
+        request_count: 0,
+      };
+      localStorage.setItem('user', JSON.stringify(mockUser));
+    }
     let user = localStorage.getItem('user');
     if (user) {
       let data = JSON.parse(user);

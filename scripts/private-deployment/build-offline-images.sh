@@ -32,8 +32,11 @@ alpine_mirror="${ALPINE_MIRROR:-mirrors.tuna.tsinghua.edu.cn/alpine}"
 docker_mirror="${DOCKER_MIRROR:-docker.m.daocloud.io}"
 go_proxy="${GO_PROXY:-https://goproxy.cn,direct}"
 npm_registry="${NPM_REGISTRY:-https://registry.npmmirror.com}"
-dsh_admin_public_url="${DSH_ADMIN_PUBLIC_URL:-/dsh-admin}"
-dsh_api_public_url="${DSH_API_PUBLIC_URL:-/dsh-api}"
+# Direct-port deployments are the default: the embedded console and API are
+# served by OneAPI at the origin root. Nginx deployments may opt into path
+# prefixes explicitly through DSH_ADMIN_PUBLIC_URL and DSH_API_PUBLIC_URL.
+dsh_admin_public_url="${DSH_ADMIN_PUBLIC_URL-}"
+dsh_api_public_url="${DSH_API_PUBLIC_URL-}"
 
 for artifact in \
   "$image_archive" \

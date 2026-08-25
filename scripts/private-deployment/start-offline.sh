@@ -75,7 +75,10 @@ docker run -d \
   -p "${one_api_bind}:${one_api_port}:3000" \
   -v dsh-oneapi-data:/data \
   -v dsh-oneapi-logs:/data/logs \
-  -v "$tiktoken_cache:/opt/tiktoken-cache:ro" \
+  # Keep this mount writable: a connected deployment may need to download a
+  # tokenizer encoding on its first start. Offline deployments can still use
+  # a pre-populated cache from the same directory.
+  -v "$tiktoken_cache:/opt/tiktoken-cache" \
   -e TIKTOKEN_CACHE_DIR=/opt/tiktoken-cache \
   -e TZ=Asia/Shanghai \
   -e GIN_MODE=release \

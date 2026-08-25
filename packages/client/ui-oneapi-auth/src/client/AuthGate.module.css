@@ -22,7 +22,7 @@
 .brandSide { position: relative; display: flex; flex: 1 1 auto; flex-direction: column; gap: clamp(14px, 2.4vh, 24px); min-width: 0; max-width: clamp(520px, 38vw, 680px); padding-top: 110px; }
 .brandHeader { position: absolute; top: 20px; left: 20px; display: flex; align-items: center; gap: 0; }
 .logoText { display: flex; align-items: center; max-width: min(100%, 460px); }
-.fullLogo { display: block; width: 250px; height: auto; object-fit: contain; }
+.fullLogo { display: block; width: 250px; height: auto; aspect-ratio: 2172 / 724; object-fit: contain; }
 .brandHero h1 { margin: 0 0 10px; font-size: clamp(28px, 3.2vw, 38px); font-weight: 700; line-height: 1.1; letter-spacing: -0.8px; }
 .brandHero h1 span { color: transparent; background: linear-gradient(90deg, #2563eb 0%, #3b82f6 34%, #93c5fd 50%, #3b82f6 66%, #2563eb 100%); background-size: 240% 100%; background-clip: text; animation: headlineShimmer 5s linear infinite; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 @keyframes headlineShimmer { 0% { background-position: 120% 50%; } 100% { background-position: -120% 50%; } }

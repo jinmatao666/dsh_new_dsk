@@ -211,7 +211,14 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
         <section ref={brandSideRef} className={css.brandSide} aria-label="产品介绍">
           <div className={css.brandHeader}>
             <span className={css.logoText}>
-              <img className={css.fullLogo} src="/zjugis-harness.png" alt="ZJUGIS Harness" />
+              <img
+                className={css.fullLogo}
+                src="/zjugis-harness.png"
+                width={250}
+                height={83}
+                alt="ZJUGIS Harness"
+                onLoad={() => { window.dispatchEvent(new Event('resize')) }}
+              />
             </span>
           </div>
 
@@ -270,8 +277,8 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
                     <label className={css.remember}><input type="checkbox" /> <span>记住我</span></label>
                     <a href="#password-reset">忘记密码?</a>
                   </div>
-                  {(error ?? (auth.state === 'offline' ? auth.message : undefined)) !== undefined
-                    && <p className={css.error} role="alert">{error ?? (auth.state === 'offline' ? auth.message : '')}</p>}
+                  {(error ?? (auth.state === 'offline' ? '暂时无法连接服务，请检查网络后重试。' : undefined)) !== undefined
+                    && <p className={css.error} role="alert">{error ?? '暂时无法连接服务，请检查网络后重试。'}</p>}
                   <button type="submit" disabled={busy || username.trim() === '' || password === ''}>
                     {busy ? '正在登录…' : '登录'}
                   </button>
