@@ -417,6 +417,10 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .detail-grid strong { color:#243958; overflow-wrap:anywhere; }
 .preview-section-note { margin:5px 0 0; color:#7a90ae; font-size:13px; }
 .zjugis-question-preview { max-width:330px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.zjugis-log-tabs { display:flex; gap:8px; width:max-content; margin:0 0 18px; padding:5px; border:1px solid #dce8f7; border-radius:14px; background:rgba(255,255,255,.62); box-shadow:0 8px 24px rgba(48,85,137,.08); }
+.zjugis-log-tabs button { min-width:128px; padding:9px 16px; border:0; border-radius:10px; background:transparent; color:#6d84a4; cursor:pointer; font:700 14px/20px inherit; transition:background .18s ease,color .18s ease,box-shadow .18s ease; }
+.zjugis-log-tabs button:hover { color:#2563eb; background:#eef5ff; }
+.zjugis-log-tabs button.active { color:#fff; background:linear-gradient(135deg,#2563eb,#4786f5); box-shadow:0 6px 14px rgba(37,99,235,.25); }
 .zjugis-prompt-detail > div + div { margin-top:16px; }
 .zjugis-prompt-detail > div > span { display:block; color:#6f84a2; font-size:13px; font-weight:700; margin-bottom:7px; }
 .zjugis-prompt-detail pre { margin:0; padding:14px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; border:1px solid #e3ebf5; border-radius:12px; background:#f8fbff; color:#243958; font:13px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }

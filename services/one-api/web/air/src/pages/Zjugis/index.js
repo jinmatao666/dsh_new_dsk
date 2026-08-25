@@ -1627,6 +1627,7 @@ export function LogsPage() {
   const [keyword, setKeyword] = useState('');
   const [detail, setDetail] = useState(null);
   const [promptDetail, setPromptDetail] = useState(null);
+  const [logTab, setLogTab] = useState('prompts');
   const rows = list.rows.filter(
     (r) =>
       !keyword ||
@@ -1645,7 +1646,27 @@ export function LogsPage() {
           </button>
         }
       />
-      <section className='preview-surface'>
+      <div className='zjugis-log-tabs' role='tablist' aria-label='模型日志分类'>
+        <button
+          type='button'
+          role='tab'
+          aria-selected={logTab === 'prompts'}
+          className={logTab === 'prompts' ? 'active' : ''}
+          onClick={() => setLogTab('prompts')}
+        >
+          用户提问审计
+        </button>
+        <button
+          type='button'
+          role='tab'
+          aria-selected={logTab === 'calls'}
+          className={logTab === 'calls' ? 'active' : ''}
+          onClick={() => setLogTab('calls')}
+        >
+          调用记录
+        </button>
+      </div>
+      {logTab === 'prompts' && <section className='preview-surface'>
         <div className='preview-section-head'>
           <div>
             <h2>用户提问审计</h2>
@@ -1672,8 +1693,8 @@ export function LogsPage() {
           </table>
           {!prompts.loading && prompts.rows.length === 0 && <div className='preview-empty'>暂无用户提问记录；升级后产生的新请求会自动记录在这里。</div>}
         </div>
-      </section>
-      <section className='preview-surface'>
+      </section>}
+      {logTab === 'calls' && <section className='preview-surface'>
         <div className='preview-section-head'>
           <h2>调用记录</h2>
           <input
@@ -1745,7 +1766,7 @@ export function LogsPage() {
             <div className='preview-empty'>暂无调用日志</div>
           )}
         </div>
-      </section>
+      </section>}
       {detail && (
         <Modal
           wide

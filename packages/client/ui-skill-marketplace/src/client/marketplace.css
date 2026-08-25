@@ -7,7 +7,9 @@
   gap: 8px;
   width: calc(100% + 4px);
   height: 42px;
-  margin: 4px -2px;
+  /* Settings keeps its 4px top margin; remove this button's lower margin so
+     the visual gap between the two footer actions is exactly 4px (half of 8px). */
+  margin: 4px -2px 0;
   padding: 0 10px 0 8px;
   box-sizing: border-box;
   border: 0;

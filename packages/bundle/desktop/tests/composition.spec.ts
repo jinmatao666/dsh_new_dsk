@@ -20,7 +20,7 @@ describe('desktop profile composition', () => {
       patch('packages/bundle/desktop/cordis.patch.yml'),
     ])
     const ids = entries.map(entry => entry.id)
-    expect(ids).toContain('ui-settings-models')
+    expect(entries.find(entry => entry.id === 'ui-settings-models')).toMatchObject({ disabled: true })
     expect(ids).toContain('ui-settings-plugins')
     expect(ids).toContain('tool-fs')
     expect(ids.filter(id => id === 'ui-oneapi-auth')).toHaveLength(1)
