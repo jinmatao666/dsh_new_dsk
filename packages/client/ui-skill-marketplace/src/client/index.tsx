@@ -144,10 +144,10 @@ declare global {
 
 function createController(): Controller {
   const listeners = new Set<(open: boolean) => void>()
-  const controller = {
+  const controller: Controller = {
     open: () => listeners.forEach(listener => listener(true)),
     close: () => listeners.forEach(listener => listener(false)),
-    subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener) },
+    subscribe: (listener: (open: boolean) => void) => { listeners.add(listener); return () => listeners.delete(listener) },
   }
   if (typeof window !== 'undefined') {
     window.__skillMarketplaceController = controller
@@ -257,7 +257,9 @@ function SkillMarketplace({ marketplaceUrl }: OverlayProps) {
   const featuredSkills = useMemo(() => {
     if (featuredPool.length <= 3) return featuredPool
     const start = featuredOffset % featuredPool.length
-    return [0, 1, 2].map(i => featuredPool[(start + i) % featuredPool.length])
+    return [0, 1, 2]
+      .map(i => featuredPool[(start + i) % featuredPool.length])
+      .filter((skill): skill is Skill => skill !== undefined)
   }, [featuredPool, featuredOffset])
 
   const visible = useMemo(() => {
