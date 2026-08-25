@@ -132,6 +132,7 @@ export function ModelConfigPage() {
     DefaultContextLimit: '',
   });
   const [testResult, setTestResult] = useState(null);
+  const [modelTest, setModelTest] = useState(null);
   const rows = list.rows;
   const models = useMemo(
     () => [...new Set(rows.flatMap((r) => splitModels(r.models)))],
@@ -422,17 +423,33 @@ export function ModelConfigPage() {
     else window.alert(res.data?.message || '切换状态失败');
   };
   const testModel = async (m) => {
+    setModelTest({ model: m.name, status: 'running', results: [] });
     try {
       const res = await API.get(
         `/api/model_definition/test?model=${encodeURIComponent(m.name)}`
       );
-      window.alert(
-        res.data?.success
-          ? `模型测试完成：${JSON.stringify(res.data.data || [])}`
-          : res.data?.message || '模型测试失败'
-      );
+      if (!res.data?.success)
+        throw new Error(res.data?.message || '模型测试失败');
+      const results = Array.isArray(res.data.data) ? res.data.data : [];
+      setModelTest({
+        model: m.name,
+        status:
+          results.length > 0 && results.every((result) => result.success)
+            ? 'success'
+            : 'failed',
+        results,
+        message:
+          results.length > 0
+            ? ''
+            : '当前模型没有可测试的来源渠道，请先在模型定义中绑定渠道。',
+      });
     } catch (e) {
-      window.alert(e.message || '模型测试失败');
+      setModelTest({
+        model: m.name,
+        status: 'failed',
+        results: [],
+        message: e.message || '模型测试失败',
+      });
     }
   };
   const saveOptions = async (e) => {
@@ -727,6 +744,67 @@ export function ModelConfigPage() {
           </div>
         </Modal>
       )}
+      {modelTest && (
+        <Modal title='模型连通性测试' onClose={() => setModelTest(null)}>
+          {modelTest.status === 'running' ? (
+            <div className='zjugis-test-progress' aria-live='polite'>
+              <div className='zjugis-test-spinner' aria-hidden='true' />
+              <div>
+                <h3>正在测试 {modelTest.model}</h3>
+                <p>正在依次连接已绑定的模型渠道，请稍候…</p>
+              </div>
+              <div className='zjugis-test-progress-track'>
+                <span />
+              </div>
+            </div>
+          ) : (
+            <div className='zjugis-test-result'>
+              <div
+                className={`zjugis-test-result-icon ${
+                  modelTest.status === 'success' ? 'success' : 'failed'
+                }`}
+              >
+                {modelTest.status === 'success' ? '✓' : '!'}
+              </div>
+              <div>
+                <h3>
+                  {modelTest.status === 'success' ? '模型测试成功' : '模型测试未通过'}
+                </h3>
+                <p>模型：{modelTest.model}</p>
+              </div>
+              {modelTest.message && (
+                <p className='zjugis-test-message'>{modelTest.message}</p>
+              )}
+              {modelTest.results.length > 0 && (
+                <div className='zjugis-test-result-list'>
+                  {modelTest.results.map((result) => (
+                    <div key={result.channel_id}>
+                      <span className={result.success ? 'tag success' : 'tag failed'}>
+                        {result.success ? '成功' : '失败'}
+                      </span>
+                      <strong>{result.channel_name || `渠道 #${result.channel_id}`}</strong>
+                      <small>
+                        {result.success
+                          ? `耗时 ${Number(result.time || 0).toFixed(2)} 秒`
+                          : result.message || '连接失败'}
+                      </small>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <div className='zjugis-modal-actions'>
+            <button
+              className='preview-button primary'
+              disabled={modelTest.status === 'running'}
+              onClick={() => setModelTest(null)}
+            >
+              {modelTest.status === 'running' ? '测试中…' : '完成'}
+            </button>
+          </div>
+        </Modal>
+      )}
       {editing !== null && (
         <Modal
           wide
@@ -911,7 +989,7 @@ export function ModelConfigPage() {
           onClose={() => setModelEdit(null)}
         >
           <form className='zjugis-form' onSubmit={saveModel}>
-            <div className='form-grid'>
+            <div className='form-grid zjugis-model-identity-grid'>
               <label className='zjugis-field'>
                 <span>模型 ID</span>
                 <input
@@ -944,6 +1022,8 @@ export function ModelConfigPage() {
                   setModelEdit({ ...modelEdit, display_name: e.target.value })
                 }
               />
+            </div>
+            <div className='form-grid'>
               <SelectField
                 label='模型类型'
                 value={modelEdit.model_type || 'chat'}
@@ -1003,23 +1083,22 @@ export function ModelConfigPage() {
             <label className='zjugis-field full'>
               <span>来源渠道</span>
               <select
-                multiple
-                value={(modelEdit.sourceChannelIds || []).map(String)}
+                value={String((modelEdit.sourceChannelIds || [])[0] || '')}
                 onChange={(e) =>
                   setModelEdit({
                     ...modelEdit,
-                    sourceChannelIds: [...e.target.selectedOptions].map((x) =>
-                      Number(x.value)
-                    ),
+                    sourceChannelIds: e.target.value ? [Number(e.target.value)] : [],
                   })
                 }
               >
+                <option value=''>暂不绑定渠道</option>
                 {rows.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}（{r.id}）
                   </option>
                 ))}
               </select>
+              <small className='preview-muted'>选择该模型实际调用的来源渠道；需要备用渠道时可在后续编辑中调整。</small>
             </label>
             <div className='form-inline-actions'>
               <label className='zjugis-check'>

@@ -232,7 +232,45 @@ func latestUserQuestion(request *relaymodel.GeneralOpenAIRequest) string {
 	for i := len(request.Messages) - 1; i >= 0; i-- {
 		message := request.Messages[i]
 		if message.Role == "user" {
-			return message.StringContent()
+			if text := strings.TrimSpace(message.StringContent()); text != "" {
+				return text
+			}
+			// DSH 新会话首条消息会使用 OpenAI Responses 风格的
+			// input_text 分段；旧的 StringContent 只识别 type=text，
+			// 导致这类首问被审计层误判为空。这里仅为审计补齐文本
+			// 提取，不改变转发给上游的原始请求。
+			return strings.TrimSpace(extractAuditMessageText(message.Content))
+		}
+	}
+	return ""
+}
+
+// extractAuditMessageText 兼容 OpenAI Chat/Responses 两种文本分段格式。
+// 只从用户消息中调用，且只取 text/input_text，绝不记录图片或工具结果。
+func extractAuditMessageText(value any) string {
+	switch content := value.(type) {
+	case string:
+		return content
+	case []any:
+		parts := make([]string, 0, len(content))
+		for _, item := range content {
+			if text := strings.TrimSpace(extractAuditMessageText(item)); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	case map[string]any:
+		kind, _ := content["type"].(string)
+		switch kind {
+		case "text", "input_text":
+			text, _ := content["text"].(string)
+			return text
+		case "":
+			// 部分兼容客户端不带 type，直接传 { text: "..." }。
+			if text, ok := content["text"].(string); ok {
+				return text
+			}
+			return extractAuditMessageText(content["content"])
 		}
 	}
 	return ""

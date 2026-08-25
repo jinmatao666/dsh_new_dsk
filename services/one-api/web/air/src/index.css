@@ -375,6 +375,7 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .preview-empty { padding:65px 10px; color:#98a8bd; text-align:center; font-size:15px; }
 .tag { display:inline-flex; padding:5px 9px; border-radius:8px; color:#8797ab; background:#eef2f6; font-size:12px; }
 .tag.success { color:#34a67c; background:#e6f8f0; }
+.tag.failed { color:#c34d5f; background:#ffeaee; }
 .link-button { margin-right:12px; padding:3px 0; border:0; color:#327be7; background:transparent; cursor:pointer; font-size:14px; }
 .link-button.danger { color:#d76b77; }
 .preview-chip-list { display:flex; flex-wrap:wrap; gap:10px; }
@@ -392,6 +393,8 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .zjugis-field.full { grid-column:1/-1; }
 .zjugis-field input,.zjugis-field select,.zjugis-field textarea { width:100%; box-sizing:border-box; padding:11px 13px; border:1px solid #dbe5f1; border-radius:11px; outline:0; color:#243958; background:#f8fbff; font:inherit; }
 .zjugis-field input:focus,.zjugis-field select:focus,.zjugis-field textarea:focus { border-color:#5b96ec; box-shadow:0 0 0 3px rgba(91,150,236,.14); }
+.zjugis-model-identity-grid { align-items:start; }
+.zjugis-model-identity-grid .zjugis-field > input { min-height:46px; }
 .zjugis-modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:8px; }
 .zjugis-danger-copy { margin:0 0 18px; color:#5d6f8b; line-height:1.7; }
 .zjugis-danger-copy strong { color:#d44761; }
@@ -408,6 +411,23 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .zjugis-manual-models { margin-top:10px; color:#67809f; font-size:13px; }
 .zjugis-manual-models summary { cursor:pointer; user-select:none; }
 .zjugis-manual-models textarea { margin-top:8px; }
+.zjugis-test-progress,.zjugis-test-result { display:grid; grid-template-columns:auto minmax(0,1fr); gap:14px; align-items:center; padding:8px 2px 16px; }
+.zjugis-test-progress h3,.zjugis-test-result h3 { margin:0 0 5px; color:#243958; font-size:18px; }
+.zjugis-test-progress p,.zjugis-test-result p { margin:0; color:#7186a3; font-size:14px; line-height:1.55; }
+.zjugis-test-spinner { width:30px; height:30px; border:3px solid #d9e7ff; border-top-color:#3478ed; border-radius:50%; animation:zjugis-spin .75s linear infinite; }
+.zjugis-test-progress-track { grid-column:1/-1; height:7px; overflow:hidden; border-radius:99px; background:#e7effb; }
+.zjugis-test-progress-track span { display:block; width:42%; height:100%; border-radius:inherit; background:linear-gradient(90deg,#5a91f2,#b9d3ff,#5a91f2); animation:zjugis-progress 1.2s ease-in-out infinite; }
+.zjugis-test-result-icon { display:grid; place-items:center; width:38px; height:38px; border-radius:50%; font-size:20px; font-weight:800; }
+.zjugis-test-result-icon.success { color:#249a70; background:#e5f8ef; }
+.zjugis-test-result-icon.failed { color:#c34d5f; background:#ffeaee; }
+.zjugis-test-message,.zjugis-test-result-list { grid-column:1/-1; }
+.zjugis-test-message { padding:10px 12px; border-radius:10px; color:#a94b5a !important; background:#fff4f5; }
+.zjugis-test-result-list { display:grid; gap:8px; }
+.zjugis-test-result-list > div { display:grid; grid-template-columns:auto minmax(120px,1fr) minmax(0,1.4fr); align-items:center; gap:10px; padding:10px 12px; border:1px solid #e4edf7; border-radius:10px; background:#f9fbff; }
+.zjugis-test-result-list strong { color:#334c70; font-size:14px; }
+.zjugis-test-result-list small { overflow:hidden; color:#7489a4; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
+@keyframes zjugis-spin { to { transform:rotate(360deg); } }
+@keyframes zjugis-progress { 0% { transform:translateX(-110%); } 100% { transform:translateX(270%); } }
 @media (max-width:900px) { .zjugis-model-options { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 .preview-search { min-width:260px; padding:10px 12px; border:1px solid #dbe5f1; border-radius:11px; color:#243958; background:#f8fbff; font:inherit; }
 .detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
@@ -441,7 +461,7 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .account-row strong { color:#263d61; font-size:15px; }
 .account-row strong.green { color:#35aa7e; }
 .logout-link { display:block; margin:24px auto 0; font-size:15px; }
-@media (max-width:800px) { .preview-page-head { align-items:flex-start; flex-direction:column; } .preview-stat-grid,.account-grid,.form-grid { grid-template-columns:1fr; } .preview-surface { padding:20px 16px; } }
+@media (max-width:800px) { .preview-page-head { align-items:flex-start; flex-direction:column; } .preview-stat-grid,.account-grid,.form-grid { grid-template-columns:1fr; } .preview-surface { padding:20px 16px; } .zjugis-test-result-list > div { grid-template-columns:auto minmax(0,1fr); } .zjugis-test-result-list small { grid-column:2; } }
 .zjugis-dashboard-footer span { display: inline-flex; align-items: center; gap: 6px; }
 
 @media (max-width: 1050px) {
