@@ -269,9 +269,9 @@ func auditSessionID(c *gin.Context) string {
 // disappear from the administrator audit merely because it resembles a prompt.
 func isInternalAuditPrompt(text string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(text))
-	return strings.HasPrefix(normalized, "<system-reminder>")
-		|| strings.HasPrefix(normalized, "generate the session title from this json array")
-		|| strings.Contains(normalized, "a skill is a reusable set of task-specific")
+	return strings.HasPrefix(normalized, "<system-reminder>") ||
+		strings.HasPrefix(normalized, "generate the session title from this json array") ||
+		strings.Contains(normalized, "a skill is a reusable set of task-specific")
 }
 
 // extractAuditMessageText 兼容 OpenAI Chat/Responses 两种文本分段格式。
