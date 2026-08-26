@@ -549,12 +549,19 @@ export function ModelConfigPage() {
       });
     }
   };
-  const testAllModels = async () => {
-    const enabled = definitions.filter((m) => m.enabled);
+  const isVisionModel = (model) =>
+    String(model.modalities || '')
+      .split(',')
+      .map((value) => value.trim())
+      .includes('image');
+  const testAllModels = async (visionOnly = false) => {
+    const enabled = definitions.filter(
+      (m) => m.enabled && (!visionOnly || isVisionModel(m))
+    );
     if (enabled.length === 0)
-      return dialog.notice('没有已启用的模型可测试');
+      return dialog.notice(visionOnly ? '没有已启用且支持图片输入的模型可测试' : '没有已启用的模型可测试');
     setModelTest({
-      model: '全部已启用模型',
+      model: visionOnly ? '全部视觉模型' : '全部已启用模型',
       status: 'running',
       results: [],
       batch: { current: 0, total: enabled.length },
@@ -595,7 +602,7 @@ export function ModelConfigPage() {
       setModelTest((previous) => ({ ...previous, results: [...allResults] }));
     }
     setModelTest({
-      model: '全部已启用模型',
+      model: visionOnly ? '全部视觉模型' : '全部已启用模型',
       status: allResults.every((result) => result.success) ? 'success' : 'failed',
       results: allResults,
       batch: { current: enabled.length, total: enabled.length },
@@ -768,6 +775,14 @@ export function ModelConfigPage() {
                 {modelTest?.status === 'running' ? '测试中…' : '全部测试模型'}
               </button>
               <button
+                className='preview-button'
+                disabled={modelTest?.status === 'running' || !definitions.some((m) => m.enabled && isVisionModel(m))}
+                onClick={() => testAllModels(true)}
+                title='仅测试已启用且标记为支持图片输入的模型'
+              >
+                测试视觉模型
+              </button>
+              <button
                 className='preview-button primary'
                 onClick={() => openModel()}
               >
@@ -795,6 +810,9 @@ export function ModelConfigPage() {
                   <tr key={m.name}>
                     <td>
                       <strong>{m.name}</strong>
+                      {isVisionModel(m) ? (
+                        <span className='tag zjugis-vision-tag'>视觉</span>
+                      ) : null}
                       {m.remark ? <small>{m.remark}</small> : null}
                     </td>
                     <td>{m.display_name || m.name || ''}</td>
@@ -969,6 +987,32 @@ export function ModelConfigPage() {
               <div className='zjugis-test-progress-track'>
                 <span />
               </div>
+              {modelTest.batch ? (
+                <p className='zjugis-test-live-count'>
+                  已完成 {modelTest.results.length} 条结果，正在测试第 {modelTest.batch.current || 1}/{modelTest.batch.total} 个模型
+                  {modelTest.batch.name ? `：${modelTest.batch.name}` : ''}
+                </p>
+              ) : null}
+              {modelTest.results.length > 0 ? (
+                <div className='zjugis-test-result-list zjugis-test-live-results'>
+                  {modelTest.results.map((result) => (
+                    <div key={`${result.model || modelTest.model}-${result.channel_id}`}>
+                      <span className={result.success ? 'tag success' : 'tag failed'}>
+                        {result.success ? '成功' : '失败'}
+                      </span>
+                      <strong>
+                        {result.model ? `${result.model} · ` : ''}
+                        {result.channel_name || `渠道 #${result.channel_id}`}
+                      </strong>
+                      <small>
+                        {result.success
+                          ? `耗时 ${Number(result.time || 0).toFixed(2)} 秒`
+                          : result.message || '连接失败'}
+                      </small>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className='zjugis-test-result'>

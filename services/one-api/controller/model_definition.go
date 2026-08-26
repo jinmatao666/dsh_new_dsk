@@ -149,19 +149,21 @@ func respondError(c *gin.Context, message string) {
 // AggregatedModel 模型配置页一行所需的聚合数据(T1.6):
 // ModelDefinition 主表元数据 + ability 渠道来源 + options 倍率/上下文。
 type AggregatedModel struct {
-	Id          int                        `json:"id"` // ModelDefinition.Id;仅来自 ability 的历史模型为 0
-	Name        string                     `json:"name"`
-	DisplayName string                     `json:"display_name"`
-	Enabled     bool                       `json:"enabled"`
-	ModelType   string                     `json:"model_type"`
-	RedirectTo  string                     `json:"redirect_to"`
-	Remark      string                     `json:"remark"`
-	InModelDef  bool                       `json:"in_model_def"` // 是否已登记到主表
-	Sources     []model.ModelChannelSource `json:"sources"`
-	ModelRatio      float64 `json:"model_ratio"`
-	CompletionRatio float64 `json:"completion_ratio"`
-	ContextLimit    int     `json:"context_limit"`
-	SupportExplicitCache bool `json:"support_explicit_cache"` // 是否勾选显式缓存
+	Id                   int                        `json:"id"` // ModelDefinition.Id;仅来自 ability 的历史模型为 0
+	Name                 string                     `json:"name"`
+	DisplayName          string                     `json:"display_name"`
+	Enabled              bool                       `json:"enabled"`
+	ModelType            string                     `json:"model_type"`
+	RedirectTo           string                     `json:"redirect_to"`
+	Remark               string                     `json:"remark"`
+	InModelDef           bool                       `json:"in_model_def"` // 是否已登记到主表
+	Sources              []model.ModelChannelSource `json:"sources"`
+	ModelRatio           float64                    `json:"model_ratio"`
+	CompletionRatio      float64                    `json:"completion_ratio"`
+	ContextLimit         int                        `json:"context_limit"`
+	Modalities           string                     `json:"modalities"`
+	Attachment           bool                       `json:"attachment"`
+	SupportExplicitCache bool                       `json:"support_explicit_cache"` // 是否勾选显式缓存
 }
 
 // ListAggregatedModels 模型配置页聚合列表(T1.6)。
@@ -196,7 +198,9 @@ func ListAggregatedModels(c *gin.Context) {
 		m := &AggregatedModel{
 			Id: d.Id, Name: d.Name, DisplayName: d.DisplayName,
 			Enabled: d.Enabled, ModelType: d.ModelType, RedirectTo: d.RedirectTo, Remark: d.Remark, InModelDef: true,
-			ContextLimit: d.ContextLimit,
+			ContextLimit:         d.ContextLimit,
+			Modalities:           d.Modalities,
+			Attachment:           d.Attachment,
 			SupportExplicitCache: d.SupportExplicitCache,
 		}
 		byName[d.Name] = m

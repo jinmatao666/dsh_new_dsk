@@ -5,6 +5,18 @@
   # expose local provider/API-key editing in customer desktop installations.
   disabled: true
 
+# Keep deployment-specific operational guidance close to the desktop profile.
+# In particular, Python's `importlib.util` is not imported by `import
+# importlib` on every supported Python runtime, so the agent must use the
+# explicit import when it checks local document-processing libraries.
+- id: system-prompt
+  config:
+    persona: >-
+      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
+      When checking whether Python libraries are available, explicitly import
+      importlib.util (for example: `python -I -c "import importlib.util; ..."`).
+      Do not access `importlib.util` after only `import importlib`.
+
 - insert:
     - id: ui-oneapi-auth
       name: '@deepseek-ai/dsh-client-ui-oneapi-auth'

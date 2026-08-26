@@ -379,6 +379,7 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .tag { display:inline-flex; padding:5px 9px; border-radius:8px; color:#8797ab; background:#eef2f6; font-size:12px; }
 .tag.success { color:#34a67c; background:#e6f8f0; }
 .tag.failed { color:#c34d5f; background:#ffeaee; }
+.zjugis-vision-tag { margin-left:8px; color:#2563d8; background:#e7f0ff; border:1px solid #c8dbff; vertical-align:middle; }
 .link-button { margin-right:12px; padding:3px 0; border:0; color:#327be7; background:transparent; cursor:pointer; font-size:14px; }
 .link-button.danger { color:#d76b77; }
 .preview-chip-list { display:flex; flex-wrap:wrap; gap:10px; }
@@ -430,6 +431,8 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .zjugis-test-result-list > div { display:grid; grid-template-columns:auto minmax(120px,1fr) minmax(0,1.4fr); align-items:center; gap:10px; padding:10px 12px; border:1px solid #e4edf7; border-radius:10px; background:#f9fbff; }
 .zjugis-test-result-list strong { color:#334c70; font-size:14px; }
 .zjugis-test-result-list small { overflow:hidden; color:#7489a4; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
+.zjugis-test-live-count { grid-column:1/-1; margin:0 !important; color:#53739d !important; }
+.zjugis-test-live-results { max-height:280px; overflow:auto; padding-right:2px; }
 @keyframes zjugis-spin { to { transform:rotate(360deg); } }
 @keyframes zjugis-progress { 0% { transform:translateX(-110%); } 100% { transform:translateX(270%); } }
 @media (max-width:900px) { .zjugis-model-options { grid-template-columns:repeat(2,minmax(0,1fr)); } }

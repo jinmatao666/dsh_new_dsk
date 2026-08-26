@@ -40,6 +40,7 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
   const [qrNonce, setQrNonce] = useState(0)
   const pageRef = useRef<HTMLElement | null>(null)
   const brandSideRef = useRef<HTMLElement | null>(null)
+  const brandHeaderRef = useRef<HTMLDivElement | null>(null)
   const brandHeroRef = useRef<HTMLDivElement | null>(null)
   const featureListRef = useRef<HTMLDivElement | null>(null)
   const capabilityRef = useRef<HTMLDivElement | null>(null)
@@ -77,11 +78,12 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
     const side = brandSideRef.current
     const hero = brandHeroRef.current
     const featureList = featureListRef.current
+    const header = brandHeaderRef.current
     const logo = side?.querySelector<HTMLElement>('[class*="fullLogo"]')
     const capability = capabilityRef.current
     const footer = footerRef.current
     const card = formCardRef.current
-    if (!page || !side || !hero || !featureList || !logo || !capability || !footer || !card) return
+    if (!page || !side || !header || !hero || !featureList || !logo || !capability || !footer || !card) return
 
     const desktop = () => window.matchMedia('(min-width: 961px)').matches
     const updateScale = () => {
@@ -106,6 +108,10 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
       page.style.removeProperty('--login-layout-height')
       side.style.removeProperty('position')
       side.style.removeProperty('align-self')
+      header.style.removeProperty('position')
+      header.style.removeProperty('left')
+      header.style.removeProperty('top')
+      header.style.removeProperty('z-index')
       hero.style.removeProperty('position')
       hero.style.removeProperty('left')
       hero.style.removeProperty('top')
@@ -139,7 +145,12 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
       side.style.alignSelf = 'stretch'
 
       logo.style.width = '250px'
+      logo.style.height = '83px'
       logo.style.margin = '0'
+      header.style.position = 'absolute'
+      header.style.left = '20px'
+      header.style.top = '20px'
+      header.style.zIndex = '1'
 
       const heroTop = logo.getBoundingClientRect().bottom - side.getBoundingClientRect().top + 28
       hero.style.position = 'absolute'
@@ -209,7 +220,7 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
 
       <main ref={pageRef} className={css.page} aria-label="登录 ZJUGIS Harness">
         <section ref={brandSideRef} className={css.brandSide} aria-label="产品介绍">
-          <div className={css.brandHeader}>
+          <div ref={brandHeaderRef} className={css.brandHeader}>
             <span className={css.logoText}>
               <img
                 className={css.fullLogo}
@@ -217,7 +228,6 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
                 width={250}
                 height={83}
                 alt="ZJUGIS Harness"
-                onLoad={() => { window.dispatchEvent(new Event('resize')) }}
               />
             </span>
           </div>
@@ -300,8 +310,12 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
                     {Array.from({ length: 169 }, (_, index) => {
                       const x = index % 13
                       const y = Math.floor(index / 13)
-                      const finder = (ox: number, oy: number) => x >= ox && x < ox + 5 && y >= oy && y < oy + 5
-                        && (x === ox || x === ox + 4 || y === oy || y === oy + 4 || (x >= ox + 1 && x <= ox + 3 && y >= oy + 1 && y <= oy + 3))
+                      const finder = (ox: number, oy: number) => {
+                        const inSquare = x >= ox && x < ox + 5 && y >= oy && y < oy + 5
+                        const border = x === ox || x === ox + 4 || y === oy || y === oy + 4
+                        const center = x >= ox + 1 && x <= ox + 3 && y >= oy + 1 && y <= oy + 3
+                        return inSquare && (border || center)
+                      }
                       const dark = finder(0, 0) || finder(8, 0) || finder(0, 8) || ((x * 17 + y * 11 + qrNonce * 7) % 7 < 3)
                       return <span key={`${qrNonce}-${index}`} className={dark ? css.qrDark : undefined} />
                     })}
@@ -324,7 +338,12 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
 }
 
 function Capability({ icon, title, detail }: { icon: ReactNode; title: string; detail: string }) {
-  return <div className={css.capabilityItem}><span className={css.capabilityIcon}>{icon}</span><span><strong>{title}</strong><small>{detail}</small></span></div>
+  return (
+    <div className={css.capabilityItem}>
+      <span className={css.capabilityIcon}>{icon}</span>
+      <span><strong>{title}</strong><small>{detail}</small></span>
+    </div>
+  )
 }
 
 function FileIcon() {

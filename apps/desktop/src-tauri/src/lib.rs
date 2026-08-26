@@ -62,6 +62,60 @@ fn append_log(path: &Path, message: impl AsRef<str>) {
     }
 }
 
+/// Early desktop builds used a third-party agent-plane vision tool. It shares
+/// the `recognize_image` name with the bundled ZJUGIS implementation but
+/// expects a different host service (`vision`), so an old user-level preset
+/// can shadow the bundled tool after an installer upgrade. Disable only that
+/// exact obsolete entry and retain a one-time backup of the user's preset.
+fn disable_legacy_vision_tool(log_path: &Path) {
+    let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) else {
+        return;
+    };
+    let path = PathBuf::from(home)
+        .join(".dsh")
+        .join(".agent-presets")
+        .join("vision")
+        .join("agent.cordis.yml");
+    let Ok(raw) = fs::read_to_string(&path) else {
+        return;
+    };
+    if !raw.contains("@linenxi-ctrl/dsh-vision/lib/tool.js") {
+        return;
+    }
+
+    let mut changed = false;
+    let mut lines = raw.lines().peekable();
+    let mut updated = String::new();
+    while let Some(line) = lines.next() {
+        if line.trim() == "- id: tool-vision"
+            && lines
+                .peek()
+                .is_some_and(|next| next.contains("@linenxi-ctrl/dsh-vision/lib/tool.js"))
+        {
+            let _ = lines.next();
+            changed = true;
+            continue;
+        }
+        updated.push_str(line);
+        updated.push('\n');
+    }
+    if !changed {
+        return;
+    }
+
+    let backup = path.with_extension("yml.zjugis-vision-backup");
+    if !backup.exists() {
+        let _ = fs::write(&backup, &raw);
+    }
+    match fs::write(&path, updated) {
+        Ok(()) => append_log(
+            log_path,
+            "disabled obsolete @linenxi-ctrl/dsh-vision tool; bundled dsh-vision is now authoritative",
+        ),
+        Err(error) => append_log(log_path, format!("could not disable obsolete vision tool: {error}")),
+    }
+}
+
 impl Drop for Sidecar {
     fn drop(&mut self) {
         if let Ok(mut guard) = self.0.lock() {
@@ -253,6 +307,7 @@ pub fn run() {
                 .join("startup.log");
             let _ = fs::remove_file(&log_path);
             append_log(&log_path, "ZJUGIS Harness startup");
+            disable_legacy_vision_tool(&log_path);
             let config = server_config(&resource_dir).map_err(|message| {
                 append_log(&log_path, format!("[fatal] {message}"));
                 std::io::Error::new(std::io::ErrorKind::InvalidData, message)
@@ -313,14 +368,6 @@ pub fn run() {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _ = window_for_events.hide();
-                }
-                // Windows reports a native minimize as a zero-sized resize
-                // before it is removed from the taskbar. Treat it like
-                // closing the window so both controls go to tray.
-                if let WindowEvent::Resized(size) = event {
-                    if size.width == 0 || size.height == 0 {
-                        let _ = window_for_events.hide();
-                    }
                 }
             });
             Ok(())
