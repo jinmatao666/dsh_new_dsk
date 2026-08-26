@@ -70,7 +70,7 @@ async function selectedVisionModel(baseURL: string, token: string, signal: Abort
   })
   if (!modelsResponse.ok) throw new Error(`无法校验视觉模型权限（HTTP ${String(modelsResponse.status)}）`)
   const models = await jsonBody<DetailEnvelope>(modelsResponse)
-  const allowed = models.success === true && (models.data ?? []).some((entry) =>
+  const allowed = models.success === true && (models.data ?? []).some(entry =>
     entry.id === model && Array.isArray(entry.modalities?.input) && entry.modalities.input.includes('image'))
   if (!allowed) throw new Error(`默认视觉模型“${model}”未启用、未授权给当前用户，或未勾选“支持图片输入”`)
   return model
