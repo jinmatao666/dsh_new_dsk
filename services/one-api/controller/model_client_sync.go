@@ -28,14 +28,49 @@ type clientModelModalities struct {
 
 // clientModelDetail 对齐 opencode ModelsDev.Model 的关键字段(packages/opencode/src/provider/models.ts)
 type clientModelDetail struct {
-	Id          string                `json:"id"`           // 真实模型名(渠道可识别)
-	Name        string                `json:"name"`         // 展示名
+	Id          string                `json:"id"`   // 真实模型名(渠道可识别)
+	Name        string                `json:"name"` // 展示名
 	Reasoning   bool                  `json:"reasoning"`
 	Attachment  bool                  `json:"attachment"`
 	ToolCall    bool                  `json:"tool_call"`
 	Temperature bool                  `json:"temperature"`
 	Modalities  clientModelModalities `json:"modalities"`
 	Limit       clientModelLimit      `json:"limit"`
+}
+
+func clientModelInputs(def *model.ModelDefinition) []string {
+	inputs := make([]string, 0, 2)
+	seen := make(map[string]struct{}, 2)
+	appendInput := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		if _, ok := seen[value]; ok {
+			return
+		}
+		seen[value] = struct{}{}
+		inputs = append(inputs, value)
+	}
+	appendInput("text")
+	for _, value := range strings.Split(def.Modalities, ",") {
+		appendInput(value)
+	}
+	// Older rows might have been saved before modalities was introduced. Their
+	// attachment flag is still authoritative and must reach desktop clients.
+	if def.Attachment {
+		appendInput("image")
+	}
+	return inputs
+}
+
+func clientModelHasInput(inputs []string, expected string) bool {
+	for _, input := range inputs {
+		if input == expected {
+			return true
+		}
+	}
+	return false
 }
 
 // GetUserAvailableModelsDetail 返回当前用户分组可用模型的完整元数据(T5.1)。
@@ -130,7 +165,6 @@ func buildClientModelDetails(names []string, defs map[string]*model.ModelDefinit
 			d.Name = def.DisplayName
 		}
 		d.Reasoning = def.Reasoning
-		d.Attachment = def.Attachment
 		d.ToolCall = def.ToolCall
 		if def.ContextLimit > 0 {
 			d.Limit.Context = def.ContextLimit
@@ -138,10 +172,8 @@ func buildClientModelDetails(names []string, defs map[string]*model.ModelDefinit
 		if def.OutputLimit > 0 {
 			d.Limit.Output = def.OutputLimit
 		}
-		if def.Modalities != "" {
-			inputs := strings.Split(def.Modalities, ",")
-			d.Modalities.Input = inputs
-		}
+		d.Modalities.Input = clientModelInputs(def)
+		d.Attachment = def.Attachment || clientModelHasInput(d.Modalities.Input, "image")
 		result = append(result, d)
 	}
 	return result

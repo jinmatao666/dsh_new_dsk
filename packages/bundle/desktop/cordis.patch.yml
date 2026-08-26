@@ -16,6 +16,13 @@
       When checking whether Python libraries are available, explicitly import
       importlib.util (for example: `python -I -c "import importlib.util; ..."`).
       Do not access `importlib.util` after only `import importlib`.
+      On Windows, commands run in PowerShell. Never use Bash here-documents such
+      as `python - <<'PY'`. For multiline Python, use a PowerShell here-string
+      piped to Python (`@' ... '@ | python`) or use `python -c` for short checks.
+      When a user attaches an image to the conversation and the active model
+      supports image input, inspect that attachment directly instead of asking
+      the user to select the same image from the workspace. `recognize_image`
+      is reserved for local filesystem paths.
 
 - insert:
     - id: ui-oneapi-auth

@@ -34,7 +34,10 @@ export const name = 'dsh-vision'
 export const inject = ['tools', 'fs', 'credentials']
 
 interface StatusEnvelope { data?: { vision_model?: unknown } }
-interface DetailEnvelope { success?: unknown; data?: Array<{ id?: unknown; modalities?: { input?: unknown } }> }
+interface DetailEnvelope {
+  success?: unknown
+  data?: Array<{ id?: unknown; attachment?: unknown; modalities?: { input?: unknown } }>
+}
 interface CompletionEnvelope { choices?: Array<{ message?: { content?: unknown } }> }
 
 function normalizedOrigin(raw: string): string {
@@ -70,9 +73,16 @@ async function selectedVisionModel(baseURL: string, token: string, signal: Abort
   })
   if (!modelsResponse.ok) throw new Error(`无法校验视觉模型权限（HTTP ${String(modelsResponse.status)}）`)
   const models = await jsonBody<DetailEnvelope>(modelsResponse)
-  const allowed = models.success === true && (models.data ?? []).some(entry =>
-    entry.id === model && Array.isArray(entry.modalities?.input) && entry.modalities.input.includes('image'))
-  if (!allowed) throw new Error(`默认视觉模型“${model}”未启用、未授权给当前用户，或未勾选“支持图片输入”`)
+  if (models.success !== true) throw new Error('无法读取当前用户可用模型列表')
+  const selected = (models.data ?? []).find(entry => entry.id === model)
+  if (selected === undefined) {
+    throw new Error(`默认视觉模型“${model}”未授权给当前用户；请将该模型的来源渠道分组授权给此用户`)
+  }
+  const imageInput = selected.attachment === true
+    || (Array.isArray(selected.modalities?.input) && selected.modalities.input.includes('image'))
+  if (!imageInput) {
+    throw new Error(`默认视觉模型“${model}”未启用图片输入；请在后台模型定义中启用模型并勾选“支持图片输入”`)
+  }
   return model
 }
 

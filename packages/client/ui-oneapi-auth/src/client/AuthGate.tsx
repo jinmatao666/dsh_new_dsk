@@ -26,6 +26,14 @@ export type AuthGateProps = PropsRuntime<'shell.overlay'> & AuthInjected
 
 type LoginMode = 'account' | 'sms' | 'qr'
 
+function syncNativeWindowState(authenticated: boolean): void {
+  const invoke = window.__TAURI__?.core?.invoke
+  if (typeof invoke !== 'function') return
+  void invoke('set_auth_window_state', { authenticated }).catch((cause: unknown) => {
+    console.warn('Unable to update the native window state.', cause)
+  })
+}
+
 /** Full-window desktop sign-in gate. */
 export function AuthGate({ status, login, subscribe }: AuthGateProps) {
   const [auth, setAuth] = useState<AuthState | { state: 'checking' }>({ state: 'checking' })
@@ -53,20 +61,31 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
 
   useEffect(() => {
     const controller = new AbortController()
-    void status(controller.signal).then(setAuth, (cause: unknown) => {
-      if (!controller.signal.aborted) setAuth({ state: 'offline', message: cause instanceof Error ? cause.message : String(cause) })
+    void status(controller.signal).then((next) => {
+      setAuth(next)
+      syncNativeWindowState(next.state === 'authenticated')
+    }, (cause: unknown) => {
+      if (!controller.signal.aborted) {
+        const next = { state: 'offline' as const, message: cause instanceof Error ? cause.message : String(cause) }
+        setAuth(next)
+        syncNativeWindowState(false)
+      }
     })
     return () => { controller.abort() }
   }, [status])
 
-  useEffect(() => subscribe(setAuth), [subscribe])
+  useEffect(() => subscribe((next) => {
+    setAuth(next)
+    syncNativeWindowState(next.state === 'authenticated')
+  }), [subscribe])
 
   // The login gate starts with a fixed native window. Once authentication is
   // complete, the Tauri shell enables resizing/maximizing for the main app.
   useEffect(() => {
-    const invoke = window.__TAURI__?.core?.invoke
-    if (!invoke) return
-    void invoke('set_auth_window_state', { authenticated: auth.state === 'authenticated' }).catch(() => {})
+    const authenticated = auth.state === 'authenticated'
+    syncNativeWindowState(authenticated)
+    const retry = window.setTimeout(() => { syncNativeWindowState(authenticated) }, 180)
+    return () => { window.clearTimeout(retry) }
   }, [auth.state])
 
   // Keep the capability panel aligned with the login card on desktop sizes.
@@ -203,7 +222,9 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
     setBusy(true)
     setError(undefined)
     try {
-      setAuth(await login(username, password))
+      const next = await login(username, password)
+      setAuth(next)
+      syncNativeWindowState(next.state === 'authenticated')
       setPassword('')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
