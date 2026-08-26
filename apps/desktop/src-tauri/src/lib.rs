@@ -27,28 +27,38 @@ struct ServerConfig {
 
 struct Sidecar(Arc<Mutex<Option<Child>>>);
 
-#[tauri::command]
-fn set_auth_window_state(app: tauri::AppHandle, authenticated: bool) -> Result<(), String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "主窗口尚未创建".to_string())?;
+const NATIVE_AUTH_TITLE_PREFIX: &str = "__zjugis_native_auth:";
 
+/// The application is rendered by a sidecar on an external URL. Its
+/// JavaScript Tauri bridge is therefore optional; this native helper remains
+/// the source of truth for the two shell window modes.
+fn apply_auth_window_state(
+    window: &tauri::WebviewWindow,
+    authenticated: bool,
+) -> Result<(), String> {
     window
         .set_resizable(authenticated)
-        .map_err(|error| format!("设置窗口大小调整权限失败: {error}"))?;
+        .map_err(|error| format!("Unable to set resize permission: {error}"))?;
     window
         .set_maximizable(authenticated)
-        .map_err(|error| format!("设置窗口最大化权限失败: {error}"))?;
+        .map_err(|error| format!("Unable to set maximize permission: {error}"))?;
 
     if !authenticated {
         let _ = window.unmaximize();
         window
             .set_size(tauri::Size::Logical(tauri::LogicalSize::new(1120.0, 720.0)))
-            .map_err(|error| format!("恢复登录窗口尺寸失败: {error}"))?;
+            .map_err(|error| format!("Unable to restore login window size: {error}"))?;
         let _ = window.center();
     }
-
     Ok(())
+}
+
+#[tauri::command]
+fn set_auth_window_state(app: tauri::AppHandle, authenticated: bool) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window has not been created yet".to_string())?;
+    apply_auth_window_state(&window, authenticated)
 }
 
 fn append_log(path: &Path, message: impl AsRef<str>) {
@@ -362,6 +372,18 @@ pub fn run() {
                 .resizable(false)
                 .maximizable(false)
                 .center()
+                // The external sidecar can lose window.__TAURI__ after a
+                // navigation. AuthGate emits this marker through
+                // document.title, which this native callback always sees.
+                .on_document_title_changed(|window, title| {
+                    let authenticated = match title.strip_prefix(NATIVE_AUTH_TITLE_PREFIX) {
+                        Some("authenticated") => true,
+                        Some("login") => false,
+                        _ => return,
+                    };
+                    let _ = apply_auth_window_state(&window, authenticated);
+                    let _ = window.set_title("ZJUGIS Harness");
+                })
                 .build()?;
             let window_for_events = window.clone();
             window.on_window_event(move |event| {

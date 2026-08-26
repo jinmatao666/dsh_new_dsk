@@ -26,7 +26,16 @@ export type AuthGateProps = PropsRuntime<'shell.overlay'> & AuthInjected
 
 type LoginMode = 'account' | 'sms' | 'qr'
 
+const nativeAuthTitle = (authenticated: boolean): string =>
+  `__zjugis_native_auth:${authenticated ? 'authenticated' : 'login'}`
+
 function syncNativeWindowState(authenticated: boolean): void {
+  // The desktop page is served from an external sidecar origin, where the
+  // JavaScript Tauri bridge may disappear after navigation. The native shell
+  // also observes this title marker, so this is the reliable path.
+  document.title = nativeAuthTitle(authenticated)
+
+  // Keep the normal Tauri invoke as a fast path when the bridge is present.
   const invoke = window.__TAURI__?.core?.invoke
   if (typeof invoke !== 'function') return
   void invoke('set_auth_window_state', { authenticated }).catch((cause: unknown) => {
@@ -84,7 +93,7 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
   useEffect(() => {
     const authenticated = auth.state === 'authenticated'
     syncNativeWindowState(authenticated)
-    const retry = window.setTimeout(() => { syncNativeWindowState(authenticated) }, 180)
+    const retry = window.setTimeout(() => { syncNativeWindowState(authenticated) }, 80)
     return () => { window.clearTimeout(retry) }
   }, [auth.state])
 

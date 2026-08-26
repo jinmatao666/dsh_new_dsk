@@ -146,10 +146,22 @@ jobs:
           # Bundle artifacts are versioned outputs, however, and stale files
           # from a restored cache must never be published with this release.
           rm -rf "apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
+          set +e
           pnpm --filter @deepseek-ai/dsh-desktop-app exec tauri build \
             --target "${{ matrix.target }}" \
             --bundles "${{ matrix.bundles }}" \
             --config "$DSH_TAURI_VERSION_CONFIG"
+          build_status=$?
+          set -e
+          if [ "$build_status" -ne 0 ] && [ "${{ matrix.platform }}" != "windows-x64" ]; then
+            script="apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/bundle_dmg.sh"
+            if [ -f "$script" ]; then
+              echo "::group::DMG bundler diagnostic"
+              bash -x "$script" || true
+              echo "::endgroup::"
+            fi
+          fi
+          exit "$build_status"
       - name: Collect installers
         shell: bash
         run: |

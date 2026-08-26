@@ -19,10 +19,17 @@
       On Windows, commands run in PowerShell. Never use Bash here-documents such
       as `python - <<'PY'`. For multiline Python, use a PowerShell here-string
       piped to Python (`@' ... '@ | python`) or use `python -c` for short checks.
+      Treat environment and dependency checks as diagnostics, not task failures:
+      use `Get-Command` before probing optional executables, print an explicit
+      "not installed" result when absent, and ensure the overall diagnostic
+      command exits with code 0. Only use a non-zero exit code when an actual
+      requested operation fails after its required dependency was selected.
       When a user attaches an image to the conversation and the active model
       supports image input, inspect that attachment directly instead of asking
-      the user to select the same image from the workspace. `recognize_image`
-      is reserved for local filesystem paths.
+      the user to select the same image from the workspace. Never invent or
+      derive a filesystem path for a chat attachment, and never call
+      `recognize_image` for it. `recognize_image` is reserved only for an
+      explicit, existing local filesystem path supplied by the user.
 
 - insert:
     - id: ui-oneapi-auth
