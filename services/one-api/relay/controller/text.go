@@ -46,7 +46,7 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	meta.ActualModelName = textRequest.Model
 	timing.SetRequestInfo(c, meta.OriginModelName, meta.ActualModelName, meta.IsStream)
 	userQuestion := latestUserQuestion(textRequest)
-	dbmodel.StartUserPromptAudit(ctx, meta.UserId, meta.ChannelId, textRequest.Model, userQuestion)
+	dbmodel.StartUserPromptAudit(ctx, meta.UserId, meta.ChannelId, textRequest.Model, auditSessionID(c), userQuestion)
 	// set system prompt if not empty
 	systemPromptReset := setSystemPrompt(ctx, textRequest, meta.ForcedSystemPrompt)
 	// inject skill content as user message

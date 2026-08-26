@@ -13,12 +13,15 @@
         provider: dsh-server
         credentialRef: DSH_ONEAPI_TOKEN
         tokenName: DSH Desktop Auto Token
-        # OneAPI's model list has ids but no modality metadata.  The current
-        # regional Qwen gateway is vision-capable; declare that once here so
-        # DSH's image admission pipeline does not reject every model before
-        # the request reaches OneAPI.  Remove `image` for a text-only region.
-        defaultInput: [text, image]
+        # The desktop synchronizes each model's input modalities from OneAPI
+        # after login.  This is only a safe text fallback for older servers.
+        defaultInput: [text]
         defaultModel: !!js process.env.DSH_DEFAULT_MODEL
         installId: !!js process.env.DSH_INSTALL_ID
+    - id: dsh-vision
+      name: '@deepseek-ai/dsh-vision'
+      config:
+        baseURL: !!js process.env.DSH_ONEAPI_URL ?? 'http://127.0.0.1:3000'
+        credentialRef: DSH_ONEAPI_TOKEN
     - id: ui-skill-marketplace
       name: '@deepseek-ai/dsh-client-ui-skill-marketplace'

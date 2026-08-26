@@ -93,6 +93,13 @@ func InitOptionMap() {
 	config.OptionMap["Theme"] = config.Theme
 	config.OptionMap["ModelContextLimits"] = config.ModelContextLimits2JSONString()
 	config.OptionMap["DefaultContextLimit"] = strconv.Itoa(config.DefaultContextLimit)
+	// The desktop client reads this public, non-sensitive option from
+	// `/api/status` after sign-in. It deliberately stays separate from the
+	// channel ordering, which is a routing concern rather than a UI default.
+	config.OptionMap["DefaultModel"] = ""
+	// Server-selected image recognition model. The value is a model id only;
+	// all upstream credentials continue to live in OneAPI channels.
+	config.OptionMap["VisionModel"] = ""
 	config.OptionMap["RelayTimingDetailEnabled"] = strconv.FormatBool(config.RelayTimingDetailEnabled)
 	config.OptionMap["RelayTimingSampleRate"] = strconv.Itoa(config.RelayTimingSampleRate)
 	config.OptionMapRWMutex.Unlock()

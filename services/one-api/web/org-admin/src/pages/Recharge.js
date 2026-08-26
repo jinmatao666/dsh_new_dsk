@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import QRCode from 'qrcode';
 import api from '../api';
+import { NoticeDialog } from '../components/ActionDialog';
 
 // 分 → 元
 const yuan = (fen) => (fen / 100).toFixed(2);
@@ -40,6 +41,7 @@ export default function Recharge() {
     buyer_phone: '',
     email: '',
   });
+  const [notice, setNotice] = useState('');
   const pollRef = React.useRef(null);
 
   const loadPackages = useCallback(() => {
@@ -143,14 +145,14 @@ export default function Recharge() {
         order_no: invoiceOrder.order_no,
       });
       if (res.data.success) {
-        window.alert(res.data.message || '发票申请已提交');
+        setNotice(res.data.message || '发票申请已提交');
         setInvoiceOrder(null);
         loadRecords();
       } else {
-        window.alert(res.data.message || '发票申请失败');
+        setNotice(res.data.message || '发票申请失败');
       }
     } catch (e) {
-      window.alert('发票申请失败');
+      setNotice('发票申请失败');
     }
   };
 
@@ -360,6 +362,7 @@ export default function Recharge() {
           </Box>
         </DialogContent>
       </Dialog>
+      <NoticeDialog open={!!notice} message={notice} onClose={() => setNotice('')} />
     </Box>
   );
 }

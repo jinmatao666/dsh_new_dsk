@@ -98,6 +98,59 @@ function Modal({ title, children, onClose, wide = false }) {
     </div>
   );
 }
+function DialogLayer({ notice, confirm, onCloseNotice, onCloseConfirm }) {
+  return (
+    <>
+      {notice && (
+        <Modal title={notice.title || '提示'} onClose={onCloseNotice}>
+          <div className='zjugis-dialog-copy'>{notice.message}</div>
+          <div className='zjugis-modal-actions'>
+            <button type='button' className='preview-button primary' onClick={onCloseNotice}>
+              确定
+            </button>
+          </div>
+        </Modal>
+      )}
+      {confirm && (
+        <Modal title={confirm.title || '请确认'} onClose={onCloseConfirm}>
+          <div className='zjugis-dialog-copy'>{confirm.message}</div>
+          <div className='zjugis-modal-actions'>
+            <button type='button' className='preview-button' onClick={onCloseConfirm}>
+              取消
+            </button>
+            <button
+              type='button'
+              className={`preview-button ${confirm.danger ? 'danger-button' : 'primary'}`}
+              onClick={() => {
+                const onConfirm = confirm.onConfirm;
+                onCloseConfirm();
+                onConfirm?.();
+              }}
+            >
+              {confirm.confirmText || '确定'}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+function useDialog() {
+  const [notice, setNotice] = useState(null);
+  const [confirm, setConfirm] = useState(null);
+  return {
+    notice: (message, title = '提示') => setNotice({ message, title }),
+    confirm: (config) => setConfirm(config),
+    node: (
+      <DialogLayer
+        notice={notice}
+        confirm={confirm}
+        onCloseNotice={() => setNotice(null)}
+        onCloseConfirm={() => setConfirm(null)}
+      />
+    ),
+  };
+}
 function Field({ label, ...props }) {
   return (
     <label className='zjugis-field'>
@@ -118,6 +171,7 @@ function SelectField({ label, value, onChange, children }) {
 }
 
 export function ModelConfigPage() {
+  const dialog = useDialog();
   const list = useList('/api/channel/', 'p=0&page_size=100&id_sort=false');
   const [editing, setEditing] = useState(null);
   const [tab, setTab] = useState('channels');
@@ -130,6 +184,8 @@ export function ModelConfigPage() {
   const [options, setOptions] = useState({
     PreConsumedQuota: '',
     DefaultContextLimit: '',
+    DefaultModel: '',
+    VisionModel: '',
   });
   const [testResult, setTestResult] = useState(null);
   const [modelTest, setModelTest] = useState(null);
@@ -161,7 +217,7 @@ export function ModelConfigPage() {
       try {
         mapping = JSON.stringify(JSON.parse(mapping));
       } catch {
-        window.alert('模型映射必须是合法 JSON');
+        dialog.notice('模型映射必须是合法 JSON');
         return;
       }
     }
@@ -182,11 +238,19 @@ export function ModelConfigPage() {
     if (res.data?.success) {
       setEditing(null);
       list.refresh();
-    } else window.alert(res.data?.message || '保存失败');
+    } else dialog.notice(res.data?.message || '保存失败');
   };
-  const action = async (row, name, value = '') => {
-    if (name === 'delete' && !window.confirm(`确定删除渠道 ${row.name}？`))
+  const action = async (row, name, value = '', confirmed = false) => {
+    if (name === 'delete' && !confirmed) {
+      dialog.confirm({
+        title: '删除模型渠道',
+        message: `确定删除渠道「${row.name}」吗？此操作不可恢复。`,
+        confirmText: '确认删除',
+        danger: true,
+        onConfirm: () => action(row, name, value, true),
+      });
       return;
+    }
     setBusy(`${name}-${row.id}`);
     try {
       let res;
@@ -211,13 +275,13 @@ export function ModelConfigPage() {
         setTestResult({ channel: row.name, model, time: res.data.time });
       list.refresh();
     } catch (e) {
-      window.alert(e.message || '操作失败');
+      dialog.notice(e.message || '操作失败');
     } finally {
       setBusy('');
     }
   };
   const fetchModels = async () => {
-    if (!form.key && !form.id) return window.alert('请先填写 API 密钥');
+    if (!form.key && !form.id) return dialog.notice('请先填写 API 密钥');
     setBusy('fetch-models');
     try {
       const res =
@@ -243,7 +307,7 @@ export function ModelConfigPage() {
       if (next.length === 0) throw new Error('上游未返回可选择的模型');
       setFetchedModels(next);
     } catch (e) {
-      window.alert(e.message || '获取模型失败');
+      dialog.notice(e.message || '获取模型失败');
     } finally {
       setBusy('');
     }
@@ -266,7 +330,7 @@ export function ModelConfigPage() {
             .join(',')
     );
   const probeModels = async () => {
-    if (!form.id) return window.alert('请先保存渠道');
+    if (!form.id) return dialog.notice('请先保存渠道');
     setBusy('probe');
     try {
       const res = await API.post(`/api/channel/${form.id}/probe_models`, {
@@ -275,7 +339,7 @@ export function ModelConfigPage() {
       if (!res.data?.success) throw new Error(res.data?.message || '验证失败');
       setProbe(res.data.data);
     } catch (e) {
-      window.alert(e.message || '验证失败');
+      dialog.notice(e.message || '验证失败');
     } finally {
       setBusy('');
     }
@@ -284,9 +348,9 @@ export function ModelConfigPage() {
     try {
       const res = await API.get('/api/model_definition/aggregated');
       if (res.data?.success) setDefinitions(res.data.data || []);
-      else window.alert(res.data?.message || '读取模型配置失败');
+      else dialog.notice(res.data?.message || '读取模型配置失败');
     } catch (e) {
-      window.alert(e.message || '读取模型配置失败');
+      dialog.notice(e.message || '读取模型配置失败');
     }
   };
   const loadOptions = async () => {
@@ -295,7 +359,12 @@ export function ModelConfigPage() {
       if (res.data?.success) {
         const next = {};
         (res.data.data || []).forEach((x) => {
-          if (x.key === 'PreConsumedQuota' || x.key === 'DefaultContextLimit')
+          if (
+            x.key === 'PreConsumedQuota' ||
+            x.key === 'DefaultContextLimit' ||
+            x.key === 'DefaultModel' ||
+            x.key === 'VisionModel'
+          )
             next[x.key] = x.value;
         });
         setOptions(next);
@@ -303,7 +372,10 @@ export function ModelConfigPage() {
     } catch {}
   };
   useEffect(() => {
-    if (tab === 'models') loadDefinitions();
+    // The basic-settings selector uses the same enabled model definitions.
+    // Load them when either management view opens instead of rendering an
+    // empty dropdown on a direct visit to “基础设置”.
+    if (tab === 'models' || tab === 'basic') loadDefinitions();
     if (tab === 'basic' || tab === 'models') loadOptions();
   }, [tab]);
   const openModel = (row) =>
@@ -323,6 +395,8 @@ export function ModelConfigPage() {
             model_type: 'chat',
             context_limit: 0,
             support_explicit_cache: false,
+            modalities: 'text',
+            attachment: false,
             sourceChannelIds: [],
             model_ratio: 0,
             completion_ratio: 0,
@@ -351,6 +425,10 @@ export function ModelConfigPage() {
   const saveModel = async (e) => {
     e.preventDefault();
     const m = modelEdit;
+    const supportsImage =
+      m.image_input !== undefined
+        ? !!m.image_input
+        : String(m.modalities || '').split(',').includes('image');
     const body = {
       name: m.name,
       display_name: m.display_name || '',
@@ -359,12 +437,17 @@ export function ModelConfigPage() {
       model_type: m.model_type || 'chat',
       context_limit: Number(m.context_limit) || 0,
       support_explicit_cache: !!m.support_explicit_cache,
+      // Desktop reads this server-owned capability during login.  Do not
+      // advertise image support just because a provider happens to have some
+      // visual models — the administrator enables it per model.
+      modalities: supportsImage ? 'text,image' : 'text',
+      attachment: supportsImage,
     };
     const res = m.id
       ? await API.put('/api/model_definition/', { ...body, id: m.id })
       : await API.post('/api/model_definition/', body);
     if (!res.data?.success)
-      return window.alert(res.data?.message || '保存模型失败');
+      return dialog.notice(res.data?.message || '保存模型失败');
     const oldSources = new Set((m.sources || []).map((x) => x.channel_id));
     const sources = new Set((m.sourceChannelIds || []).map(Number));
     for (const channelId of [...sources].filter((x) => !oldSources.has(x)))
@@ -399,11 +482,19 @@ export function ModelConfigPage() {
     loadDefinitions();
   };
   const removeModel = async (m) => {
-    if (m.enabled) return window.alert('请先禁用模型再删除');
-    if (!window.confirm(`确定删除模型 ${m.name}？`)) return;
+    if (m.enabled) return dialog.notice('请先禁用模型再删除');
+    dialog.confirm({
+      title: '删除模型定义',
+      message: `确定删除模型「${m.name}」吗？此操作不可恢复。`,
+      confirmText: '确认删除',
+      danger: true,
+      onConfirm: () => removeModelConfirmed(m),
+    });
+  };
+  const removeModelConfirmed = async (m) => {
     const res = await API.delete(`/api/model_definition/${m.id}`);
     if (res.data?.success) loadDefinitions();
-    else window.alert(res.data?.message || '删除失败');
+    else dialog.notice(res.data?.message || '删除失败');
   };
   const toggleModel = async (m) => {
     const body = {
@@ -415,12 +506,18 @@ export function ModelConfigPage() {
       model_type: m.model_type || 'chat',
       redirect_to: m.redirect_to || '',
       context_limit: Number(m.context_limit) || 0,
+      output_limit: Number(m.output_limit) || 0,
+      modalities: m.modalities || 'text',
+      reasoning: !!m.reasoning,
+      tool_call: m.tool_call !== false,
+      attachment: !!m.attachment,
+      support_explicit_cache: !!m.support_explicit_cache,
     };
     const res = m.in_model_def
       ? await API.put('/api/model_definition/', body)
       : await API.post('/api/model_definition/', body);
     if (res.data?.success) loadDefinitions();
-    else window.alert(res.data?.message || '切换状态失败');
+    else dialog.notice(res.data?.message || '切换状态失败');
   };
   const testModel = async (m) => {
     setModelTest({ model: m.name, status: 'running', results: [] });
@@ -452,6 +549,68 @@ export function ModelConfigPage() {
       });
     }
   };
+  const testAllModels = async () => {
+    const enabled = definitions.filter((m) => m.enabled);
+    if (enabled.length === 0)
+      return dialog.notice('没有已启用的模型可测试');
+    setModelTest({
+      model: '全部已启用模型',
+      status: 'running',
+      results: [],
+      batch: { current: 0, total: enabled.length },
+    });
+    const allResults = [];
+    for (let index = 0; index < enabled.length; index += 1) {
+      const model = enabled[index];
+      setModelTest((previous) => ({
+        ...previous,
+        batch: { current: index + 1, total: enabled.length, name: model.name },
+      }));
+      try {
+        const res = await API.get(
+          `/api/model_definition/test?model=${encodeURIComponent(model.name)}`
+        );
+        if (!res.data?.success) throw new Error(res.data?.message || '模型测试失败');
+        const results = Array.isArray(res.data.data) ? res.data.data : [];
+        if (results.length === 0) {
+          allResults.push({
+            model: model.name,
+            channel_id: `none-${model.name}`,
+            channel_name: '未绑定可测试渠道',
+            success: false,
+            message: '请先为模型绑定来源渠道。',
+          });
+        } else {
+          allResults.push(...results.map((result) => ({ ...result, model: model.name })));
+        }
+      } catch (e) {
+        allResults.push({
+          model: model.name,
+          channel_id: `error-${model.name}`,
+          channel_name: '请求失败',
+          success: false,
+          message: e.message || '模型测试失败',
+        });
+      }
+      setModelTest((previous) => ({ ...previous, results: [...allResults] }));
+    }
+    setModelTest({
+      model: '全部已启用模型',
+      status: allResults.every((result) => result.success) ? 'success' : 'failed',
+      results: allResults,
+      batch: { current: enabled.length, total: enabled.length },
+    });
+  };
+  const setDefaultModel = async (model) => {
+    if (!model.enabled) return dialog.notice('请先启用模型，再设为默认模型');
+    try {
+      const res = await API.put('/api/option/', { key: 'DefaultModel', value: model.name });
+      if (!res.data?.success) throw new Error(res.data?.message || '设置默认模型失败');
+      setOptions((current) => ({ ...current, DefaultModel: model.name }));
+    } catch (e) {
+      dialog.notice(e.message || '设置默认模型失败');
+    }
+  };
   const saveOptions = async (e) => {
     e.preventDefault();
     const results = await Promise.all(
@@ -459,8 +618,8 @@ export function ModelConfigPage() {
         API.put('/api/option/', { key, value: String(value) })
       )
     );
-    if (results.every((r) => r.data?.success)) window.alert('基础设置已保存');
-    else window.alert('部分设置保存失败');
+    if (results.every((r) => r.data?.success)) dialog.notice('基础设置已保存');
+    else dialog.notice('部分设置保存失败');
   };
   return (
     <div className='zjugis-new-page'>
@@ -502,7 +661,7 @@ export function ModelConfigPage() {
             </div>
             <div>
               <span>当前默认模型</span>
-              <strong>{models[0] || '—'}</strong>
+              <strong title={options.DefaultModel || ''}>{options.DefaultModel || '—'}</strong>
             </div>
           </div>
           <section className='preview-surface'>
@@ -602,6 +761,13 @@ export function ModelConfigPage() {
                 ↻ 刷新
               </button>
               <button
+                className='preview-button'
+                disabled={modelTest?.status === 'running' || definitions.length === 0}
+                onClick={testAllModels}
+              >
+                {modelTest?.status === 'running' ? '测试中…' : '全部测试模型'}
+              </button>
+              <button
                 className='preview-button primary'
                 onClick={() => openModel()}
               >
@@ -620,6 +786,7 @@ export function ModelConfigPage() {
                   <th>倍率</th>
                   <th>上下文</th>
                   <th>状态</th>
+                  <th>默认</th>
                   <th>操作</th>
                 </tr>
               </thead>
@@ -645,6 +812,18 @@ export function ModelConfigPage() {
                       <span className={m.enabled ? 'tag success' : 'tag'}>
                         {m.enabled ? '已启用' : '已禁用'}
                       </span>
+                    </td>
+                    <td>
+                      <label className='zjugis-default-model' title={m.enabled ? '设为桌面端默认模型' : '启用后才可设为默认模型'}>
+                        <input
+                          type='radio'
+                          name='default-model'
+                          checked={options.DefaultModel === m.name}
+                          disabled={!m.enabled}
+                          onChange={() => setDefaultModel(m)}
+                        />
+                        <span>{options.DefaultModel === m.name ? '默认' : '设为默认'}</span>
+                      </label>
                     </td>
                     <td>
                       <button
@@ -710,9 +889,43 @@ export function ModelConfigPage() {
                   })
                 }
               />
+              <SelectField
+                label='桌面端默认模型'
+                value={options.DefaultModel || ''}
+                onChange={(e) =>
+                  setOptions({ ...options, DefaultModel: e.target.value })
+                }
+              >
+                <option value=''>不指定（按服务端模型列表顺序）</option>
+                {definitions
+                  .filter((model) => model.enabled)
+                  .map((model) => (
+                    <option key={model.name} value={model.name}>
+                      {model.display_name || model.name}（{model.name}）
+                    </option>
+                  ))}
+              </SelectField>
+              <SelectField
+                label='默认视觉模型'
+                value={options.VisionModel || ''}
+                onChange={(e) =>
+                  setOptions({ ...options, VisionModel: e.target.value })
+                }
+              >
+                <option value=''>不指定</option>
+                {definitions
+                  .filter((model) =>
+                    model.enabled && String(model.modalities || '').split(',').includes('image')
+                  )
+                  .map((model) => (
+                    <option key={model.name} value={model.name}>
+                      {model.display_name || model.name}（{model.name}）
+                    </option>
+                  ))}
+              </SelectField>
             </div>
             <p className='preview-muted'>
-              未匹配到具体模型时使用默认上下文限制；预扣额度会在请求完成后按实际用量多退少补。
+              未匹配到具体模型时使用默认上下文限制；默认视觉模型只列出已启用且勾选“支持图片输入”的模型，供桌面端识图工具独立调用；预扣额度会在请求完成后按实际用量多退少补。
             </p>
             <div className='zjugis-modal-actions'>
               <button className='preview-button primary'>保存设置</button>
@@ -770,7 +983,12 @@ export function ModelConfigPage() {
                 <h3>
                   {modelTest.status === 'success' ? '模型测试成功' : '模型测试未通过'}
                 </h3>
-                <p>模型：{modelTest.model}</p>
+                <p>
+                  模型：{modelTest.model}
+                  {modelTest.batch
+                    ? ` · 已完成 ${modelTest.batch.current || 0}/${modelTest.batch.total}`
+                    : ''}
+                </p>
               </div>
               {modelTest.message && (
                 <p className='zjugis-test-message'>{modelTest.message}</p>
@@ -778,11 +996,14 @@ export function ModelConfigPage() {
               {modelTest.results.length > 0 && (
                 <div className='zjugis-test-result-list'>
                   {modelTest.results.map((result) => (
-                    <div key={result.channel_id}>
+                    <div key={`${result.model || modelTest.model}-${result.channel_id}`}>
                       <span className={result.success ? 'tag success' : 'tag failed'}>
                         {result.success ? '成功' : '失败'}
                       </span>
-                      <strong>{result.channel_name || `渠道 #${result.channel_id}`}</strong>
+                      <strong>
+                        {result.model ? `${result.model} · ` : ''}
+                        {result.channel_name || `渠道 #${result.channel_id}`}
+                      </strong>
                       <small>
                         {result.success
                           ? `耗时 ${Number(result.time || 0).toFixed(2)} 秒`
@@ -1124,7 +1345,27 @@ export function ModelConfigPage() {
                 />
                 支持显式缓存
               </label>
+              <label className='zjugis-check'>
+                <input
+                  type='checkbox'
+                  checked={
+                    modelEdit.image_input !== undefined
+                      ? !!modelEdit.image_input
+                      : String(modelEdit.modalities || '').split(',').includes('image')
+                  }
+                  onChange={(e) =>
+                    setModelEdit({
+                      ...modelEdit,
+                      image_input: e.target.checked,
+                      modalities: e.target.checked ? 'text,image' : 'text',
+                      attachment: e.target.checked,
+                    })
+                  }
+                />
+                支持图片输入
+              </label>
             </div>
+            <small className='preview-muted'>勾选后桌面端可使用识图与图片附件；请仅为上游实际支持视觉的模型启用。</small>
             <div className='zjugis-modal-actions'>
               <button
                 type='button'
@@ -1138,11 +1379,13 @@ export function ModelConfigPage() {
           </form>
         </Modal>
       )}
+      {dialog.node}
     </div>
   );
 }
 
 export function UsersPage() {
+  const dialog = useDialog();
   const [keyword, setKeyword] = useState('');
   const list = useList('/api/user/', 'p=0&size=100&order=');
   const [modal, setModal] = useState(null);
@@ -1181,7 +1424,7 @@ export function UsersPage() {
       setModal(null);
       setForm({ username: '', display_name: '', password: '' });
       list.refresh();
-    } else window.alert(res.data?.message || '保存失败');
+    } else dialog.notice(res.data?.message || '保存失败');
   };
   const manage = async (u, action, adminPassword = '') => {
     const res = await API.post('/api/user/manage', {
@@ -1190,7 +1433,7 @@ export function UsersPage() {
       admin_password: adminPassword,
     });
     if (res.data?.success) list.refresh();
-    else window.alert(res.data?.message || '操作失败');
+    else dialog.notice(res.data?.message || '操作失败');
   };
   const submitDelete = async (event) => {
     event.preventDefault();
@@ -1205,7 +1448,7 @@ export function UsersPage() {
       setDeletePassword('');
       list.refresh();
     } else {
-      window.alert(res.data?.message || '删除失败，请检查管理员密码');
+      dialog.notice(res.data?.message || '删除失败，请检查管理员密码');
     }
   };
   const openEdit = async (u) => {
@@ -1214,7 +1457,7 @@ export function UsersPage() {
       if (!res.data?.success) throw new Error(res.data?.message);
       setEdit({ ...res.data.data, password: '', admin_password: '' });
     } catch (e) {
-      window.alert(e.message || '读取用户信息失败');
+      dialog.notice(e.message || '读取用户信息失败');
     }
   };
   const saveEdit = async (e) => {
@@ -1232,7 +1475,7 @@ export function UsersPage() {
       setEdit(null);
       list.refresh();
     } else
-      window.alert(
+      dialog.notice(
         res.data?.message || '更新失败；如修改敏感信息，请填写管理员密码'
       );
   };
@@ -1253,7 +1496,7 @@ export function UsersPage() {
             status: action === 'enable' ? 1 : 2,
           });
     if (res.data?.success) openDetail(detail);
-    else window.alert(res.data?.message || '令牌操作失败');
+    else dialog.notice(res.data?.message || '令牌操作失败');
   };
   const createToken = async (e) => {
     e.preventDefault();
@@ -1271,7 +1514,7 @@ export function UsersPage() {
         expired_time: -1,
       });
       openDetail(detail);
-    } else window.alert(res.data?.message || '创建令牌失败');
+    } else dialog.notice(res.data?.message || '创建令牌失败');
   };
   const grant = async (e) => {
     e.preventDefault();
@@ -1292,7 +1535,7 @@ export function UsersPage() {
       });
       openEdit(edit);
       list.refresh();
-    } else window.alert(res.data?.message || '积分发放失败');
+    } else dialog.notice(res.data?.message || '积分发放失败');
   };
   return (
     <div className='zjugis-new-page'>
@@ -1696,6 +1939,7 @@ export function UsersPage() {
           </div>
         </Modal>
       )}
+      {dialog.node}
     </div>
   );
 }
@@ -1755,15 +1999,16 @@ export function LogsPage() {
         </div>
         <div className='preview-table-wrap'>
           <table className='preview-table'>
-            <thead><tr><th>时间</th><th>用户</th><th>模型</th><th>问题</th><th>额度</th><th>状态</th><th>详情</th></tr></thead>
+            <thead><tr><th>时间</th><th>用户</th><th>会话 ID</th><th>模型</th><th>问题</th><th>消耗额度</th><th>状态</th><th>详情</th></tr></thead>
             <tbody>
               {prompts.rows.map((record) => (
                 <tr key={record.id}>
                   <td>{record.created_at ? new Date(record.created_at * 1000).toLocaleString() : '—'}</td>
                   <td>{record.username || record.user_id || '—'}</td>
+                  <td className='zjugis-question-preview'>{record.session_id || '—'}</td>
                   <td>{record.model_name || '—'}</td>
                   <td className='zjugis-question-preview'>{record.question || '—'}</td>
-                  <td>{record.quota ?? 0}</td>
+                  <td title='按输入/输出 Token 与模型、渠道倍率计算的 OneAPI 内部消耗单位，不是人民币'>{record.quota ?? 0}</td>
                   <td><span className={record.status === 'success' ? 'tag success' : 'tag'}>{record.status === 'success' ? '成功' : record.status === 'error' ? '失败' : '处理中'}</span></td>
                   <td><button className='link-button' onClick={() => setPromptDetail(record)}>查看</button></td>
                 </tr>
@@ -1870,7 +2115,7 @@ export function LogsPage() {
             <div><span>问题文本</span><pre>{promptDetail.question || '—'}</pre></div>
             <div><span>失败原因</span><pre>{promptDetail.error_message || '—'}</pre></div>
             <div className='detail-grid'>
-              {['model_name', 'request_id', 'channel_id', 'quota', 'prompt_tokens', 'completion_tokens', 'elapsed_time', 'status'].map((key) => (
+              {['session_id', 'model_name', 'request_id', 'channel_id', 'quota', 'prompt_tokens', 'completion_tokens', 'elapsed_time', 'status'].map((key) => (
                 <div key={key}><span>{key}</span><strong>{String(promptDetail[key] ?? '—')}</strong></div>
               ))}
             </div>

@@ -326,7 +326,15 @@ export class PiAiAdapter extends LlmAdapter {
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.
-        headers: requestHeaders(profile.headers),
+        // The gateway stores desktop prompt audits.  Keep the opaque Harness
+        // session id on the request so the server can group real user turns
+        // by conversation; this is not an upstream credential.
+        headers: requestHeaders({
+          ...(profile.headers ?? {}),
+          ...options.sessionId === undefined
+            ? {}
+            : { 'x-dsh-session-id': String(options.sessionId) },
+        }),
       })
       const iterator = toStreamChunks(events, model.contextWindow)[Symbol.asyncIterator]()
       let exhausted = false

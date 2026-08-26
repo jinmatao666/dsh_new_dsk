@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import api from '../api';
+import { NoticeDialog, ConfirmDialog } from '../components/ActionDialog';
 
 const budgetLabels = { shared: '共享(不拦)', capped: '封顶(强约束)' };
 const budgetColors = { shared: '#8E8E93', capped: '#FF9F0A' };
@@ -33,6 +34,8 @@ export default function Departments() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null); // null=新建, 否则编辑
   const [form, setForm] = useState({ parent_id: 0, name: '', budget_mode: 'shared', quota_cap: '', sort: 0, status: 1, default_daily: '', default_monthly: '' });
+  const [notice, setNotice] = useState('');
+  const [confirm, setConfirm] = useState(null);
 
   const load = useCallback(() => {
     api.get('/departments').then((res) => {
@@ -78,7 +81,7 @@ export default function Departments() {
     const res = editing
       ? await api.put(`/departments/${editing.id}`, payload)
       : await api.post('/departments', payload);
-    if (!res.data.success) { window.alert(res.data.message || '保存失败'); return; }
+    if (!res.data.success) { setNotice(res.data.message || '保存失败'); return; }
     // 默认限额走独立接口(留空=不限 -1)
     const deptId = editing ? editing.id : (res.data.data && res.data.data.id);
     if (deptId) {
@@ -92,10 +95,11 @@ export default function Departments() {
   };
 
   const handleDelete = async (d) => {
-    if (!window.confirm(`确定删除部门「${d.name}」？有子部门或成员时无法删除。`)) return;
-    const res = await api.delete(`/departments/${d.id}`);
-    if (res.data.success) load();
-    else window.alert(res.data.message || '删除失败');
+    setConfirm({ message: `确定删除部门「${d.name}」？有子部门或成员时无法删除。`, action: async () => {
+      setConfirm(null);
+      const res = await api.delete(`/departments/${d.id}`);
+      if (res.data.success) load(); else setNotice(res.data.message || '删除失败');
+    }});
   };
 
   return (
@@ -216,6 +220,8 @@ export default function Departments() {
           <Button variant="contained" onClick={handleSave}>保存</Button>
         </DialogActions>
       </Dialog>
+      <NoticeDialog open={!!notice} message={notice} onClose={() => setNotice('')} />
+      <ConfirmDialog open={!!confirm} message={confirm?.message} onCancel={() => setConfirm(null)} onConfirm={confirm?.action} />
     </Box>
   );
 }

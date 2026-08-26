@@ -20,6 +20,10 @@ type UserPromptAudit struct {
 	Username         string `json:"username" gorm:"index;default:''"`
 	ChannelId        int    `json:"channel_id" gorm:"index"`
 	ModelName        string `json:"model_name" gorm:"index;default:''"`
+	// SessionId is the opaque DSH desktop conversation id. It is only used to
+	// group the administrator's prompt audit; the conversation itself remains
+	// on the user's local desktop and is never uploaded here.
+	SessionId        string `json:"session_id" gorm:"type:varchar(256);index;default:''"`
 	RequestId        string `json:"request_id" gorm:"uniqueIndex;default:''"`
 	Question         string `json:"question" gorm:"type:text"`
 	Status           string `json:"status" gorm:"index;default:'processing'"`
@@ -44,8 +48,9 @@ func trimAuditText(value string, limit int) string {
 
 // StartUserPromptAudit 在请求真正发送给上游前记录本次用户问题，保证上游异常时
 // 仍然保留可追溯的问题文本。
-func StartUserPromptAudit(ctx context.Context, userId, channelId int, modelName, question string) {
+func StartUserPromptAudit(ctx context.Context, userId, channelId int, modelName, sessionId, question string) {
 	question = trimAuditText(question, 20000)
+	sessionId = trimAuditText(sessionId, 256)
 	if question == "" || userId == 0 {
 		return
 	}
@@ -57,6 +62,7 @@ func StartUserPromptAudit(ctx context.Context, userId, channelId int, modelName,
 		Username:  GetUsernameById(userId),
 		ChannelId: channelId,
 		ModelName: modelName,
+		SessionId: sessionId,
 		RequestId: helper.GetRequestID(ctx),
 		Question:  question,
 		Status:    "processing",

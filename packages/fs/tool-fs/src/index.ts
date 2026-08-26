@@ -18,6 +18,12 @@ import { FsSandboxController } from './sandbox.ts'
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'tool-fs'
 
+// Kept public for the desktop vision compatibility plugin.  It deliberately
+// reuses the canonical read-image path instead of implementing a second,
+// key-bearing vision client on every customer machine.
+export { applyImageReadTool, imageMediaTypeForPath } from './read-image.ts'
+export { resolveRegularReadTarget } from './read-target.ts'
+
 /** Services required by the filesystem tool suite. */
 export const inject = ['tools', 'fs', 'systemPrompt']
 

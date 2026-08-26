@@ -63,13 +63,24 @@ interface LoginData { username?: string }
 interface TokenData { key?: string }
 interface ModelEntry { id?: string }
 interface ModelsBody { data?: ModelEntry[] }
+interface StatusBody { data?: { default_model?: unknown } }
+interface ClientModelDetail {
+  id?: unknown
+  name?: unknown
+  modalities?: { input?: unknown }
+}
+interface ManagedModel {
+  id: string
+  name?: string
+  input?: Array<'text' | 'image'>
+}
 interface ManagedProvider {
   displayName: string
   apiKeyEnv: string
   api: string
   baseURL: string
   defaultInput?: Array<'text' | 'image'>
-  models: Array<{ id: string }>
+  models: ManagedModel[]
   /** Explicit compatibility for the regional OpenAI-compatible gateway. */
   compat?: {
     supportsStore: boolean
@@ -159,6 +170,66 @@ async function fetchModels(baseURL: string, token: string, signal?: AbortSignal)
   return models
 }
 
+/**
+ * Fetch server-governed per-model capabilities.  New OneAPI deployments expose
+ * this authenticated endpoint; old deployments retain the `/v1/models`
+ * fallback below, so a desktop upgrade does not make a region unavailable.
+ */
+async function fetchManagedModels(baseURL: string, token: string, fallbackInput: Array<'text' | 'image'>, signal?: AbortSignal): Promise<ManagedModel[]> {
+  try {
+    const response = await fetch(`${baseURL}/api/user/available_models/detail`, {
+      headers: { authorization: `Bearer ${token}` },
+      ...(signal === undefined ? {} : { signal }),
+    })
+    if (response.status === 401 || response.status === 403) throw Object.assign(new Error('登录已失效'), { authInvalid: true })
+    if (!response.ok) throw new Error(`模型详情暂时不可用（HTTP ${String(response.status)}）`)
+    const body = await jsonBody<OneApiEnvelope<ClientModelDetail[]>>(response)
+    if (!body.success) throw new Error(body.message ?? '模型详情暂时不可用')
+    const models = (body.data ?? []).flatMap((entry): ManagedModel[] => {
+      const id = typeof entry.id === 'string' ? entry.id.trim() : ''
+      if (id === '') return []
+      const input = Array.isArray(entry.modalities?.input)
+        ? [...new Set(entry.modalities.input.filter((value): value is 'text' | 'image' => value === 'text' || value === 'image'))]
+        : []
+      return [{
+        id,
+        ...(typeof entry.name === 'string' && entry.name.trim() !== '' ? { name: entry.name.trim() } : {}),
+        // A registered server model should always declare text.  Keep the
+        // build fallback only for an old/malformed server response.
+        input: input.length > 0 ? input : fallbackInput,
+      }]
+    })
+    const unique = [...new Map(models.map(model => [model.id, model])).values()]
+    if (unique.length === 0) throw new Error('服务器没有返回可用模型')
+    return unique
+  } catch (error) {
+    if ((error as { authInvalid?: unknown }).authInvalid === true) throw error
+    // Compatibility fallback for deployments that have not upgraded their
+    // OneAPI image yet.  Those models retain the explicit desktop fallback.
+    const models = await fetchModels(baseURL, token, signal)
+    return models.map(id => ({ id, input: fallbackInput }))
+  }
+}
+
+/**
+ * The server-owned default is optional. A temporarily unavailable status
+ * endpoint must not prevent an already authenticated desktop user from using
+ * their assigned models, so callers deliberately fall back to build config.
+ */
+async function fetchServerDefaultModel(baseURL: string, signal?: AbortSignal): Promise<string | undefined> {
+  try {
+    const response = await fetch(`${baseURL}/api/status`, {
+      ...(signal === undefined ? {} : { signal }),
+    })
+    if (!response.ok) return undefined
+    const body = await jsonBody<StatusBody>(response)
+    const model = body.data?.default_model
+    return typeof model === 'string' && model.trim() !== '' ? model.trim() : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function boundedText(value: unknown, max: number): string | undefined {
   if (typeof value !== 'string') return undefined
   const text = value.trim()
@@ -175,17 +246,16 @@ export function apply(ctx: Context, config: Config): void {
   const usernameRef = credentialRef('DSH_LOGIN_USERNAME')
   const installMarkerRef = credentialRef('DSH_DESKTOP_INSTALL_MARKER')
 
-  const syncProvider = async (models: string[]): Promise<void> => {
+  const syncProvider = async (models: ManagedModel[], serverDefaultModel?: string): Promise<void> => {
     const current = ctx.settings.get(LLM_SETTINGS) as ProviderSettings
     const managed: ManagedProvider = {
       displayName: 'DSH Server',
       apiKeyEnv: config.credentialRef,
       api: 'openai-completions',
       baseURL: `${baseURL}/v1`,
-      models: models.map(id => ({ id })),
-      // `/v1/models` from OneAPI exposes ids only.  Carry the deployment's
-      // explicit image capability into the DSH provider profile so the new
-      // attachment/image admission pipeline can route images correctly.
+      models,
+      // This only applies to malformed / legacy model-detail responses.  On a
+      // current server every model carries its own `input` array above.
       defaultInput: config.defaultInput ?? ['text'],
       // The DSH OneAPI route fronts Qwen-compatible OpenAI endpoints. Keep
       // the wire contract explicit instead of letting pi-ai infer it from a
@@ -205,10 +275,11 @@ export function apply(ctx: Context, config: Config): void {
     await ctx.settings.replace(LLM_SETTINGS, {
       providers: { ...(current.providers ?? {}), [config.provider]: managed },
     })
-    const firstModel = models[0]
+    const firstModel = models[0]?.id
     if (firstModel === undefined) throw new Error('服务器没有返回可用模型')
-    const model = config.defaultModel !== undefined && models.includes(config.defaultModel)
-      ? config.defaultModel
+    const configuredDefault = serverDefaultModel ?? config.defaultModel
+    const model = configuredDefault !== undefined && models.some(entry => entry.id === configuredDefault)
+      ? configuredDefault
       : firstModel
     const defaultModel = ctx.get('agentDefaultModel') as DefaultModelService | undefined
     if (defaultModel === undefined) throw new Error('默认模型服务不可用')
@@ -263,9 +334,13 @@ export function apply(ctx: Context, config: Config): void {
     const username = (await ctx.credentials.resolve(usernameRef))?.value
     if (resolved === undefined) return username === undefined ? { state: 'logged-out' } : { state: 'logged-out', username }
     try {
-      const models = await fetchModels(baseURL, resolved.value, signal)
-      await syncProvider(models)
-      return username === undefined ? { state: 'authenticated', models } : { state: 'authenticated', models, username }
+      const [models, serverDefaultModel] = await Promise.all([
+        fetchManagedModels(baseURL, resolved.value, config.defaultInput ?? ['text'], signal),
+        fetchServerDefaultModel(baseURL, signal),
+      ])
+      await syncProvider(models, serverDefaultModel)
+      const ids = models.map(model => model.id)
+      return username === undefined ? { state: 'authenticated', models: ids } : { state: 'authenticated', models: ids, username }
     } catch (error) {
       if ((error as { authInvalid?: unknown }).authInvalid === true) {
         await clearLocalAuth()
@@ -300,16 +375,19 @@ export function apply(ctx: Context, config: Config): void {
       if (!tokenResponse.ok || !tokenResult.success || token === undefined || token === '') {
         return internal(tokenResult.message ?? '无法创建模型访问令牌')
       }
-      const models = await fetchModels(baseURL, token, signal)
+      const [models, serverDefaultModel] = await Promise.all([
+        fetchManagedModels(baseURL, token, config.defaultInput ?? ['text'], signal),
+        fetchServerDefaultModel(baseURL, signal),
+      ])
       await ctx.credentials.set(ref, token)
       await ctx.credentials.set(usernameRef, input.username)
       try {
-        await syncProvider(models)
+        await syncProvider(models, serverDefaultModel)
       } catch (error) {
         await ctx.credentials.unset(ref)
         throw error
       }
-      return { ok: true as const, value: { state: 'authenticated' as const, models, username: input.username } }
+      return { ok: true as const, value: { state: 'authenticated' as const, models: models.map(model => model.id), username: input.username } }
     } catch (error) {
       return internal(error instanceof Error ? error.message : String(error))
     }

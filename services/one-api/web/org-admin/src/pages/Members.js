@@ -7,6 +7,7 @@ import {
 import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import * as XLSX from 'xlsx';
 import api from '../api';
+import { NoticeDialog, ConfirmDialog } from '../components/ActionDialog';
 import { useAuth } from '../contexts/AuthContext';
 
 const roleLabels = { owner: '所有者', admin: '管理员', member: '成员' };
@@ -103,6 +104,8 @@ export default function Members() {
   const [importFileName, setImportFileName] = useState('');
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [notice, setNotice] = useState('');
+  const [confirm, setConfirm] = useState(null);
   // 排序:默认按使用量降序
   const [sortBy, setSortBy] = useState('used_quota');
   const [order, setOrder] = useState('desc');
@@ -229,9 +232,11 @@ export default function Members() {
   };
 
   const handleRemove = async (userId) => {
-    if (!window.confirm('确定移除该成员？')) return;
-    await api.delete(`/members/${userId}`);
-    load();
+    setConfirm({ message: '确定移除该成员？', action: async () => {
+      setConfirm(null);
+      await api.delete(`/members/${userId}`);
+      load();
+    }});
   };
 
   // 解析上传的 Excel/CSV
@@ -245,21 +250,21 @@ export default function Members() {
         const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false });
         const rows = parseSheetRows(aoa);
         if (rows.length === 0) {
-          window.alert('未解析到有效数据，请检查表头(工号/姓名/部门)与内容');
+          setNotice('未解析到有效数据，请检查表头(工号/姓名/部门)与内容');
           return;
         }
         setImportRows(rows);
         setImportFileName(file.name);
       } catch (e) {
-        window.alert('文件解析失败: ' + e.message);
+        setNotice('文件解析失败: ' + e.message);
       }
     };
     reader.readAsArrayBuffer(file);
   };
 
   const handleSubmitImport = async () => {
-    if (!importPrefix) { window.alert('请输入账号前缀'); return; }
-    if (importRows.length === 0) { window.alert('请先上传并解析文件'); return; }
+    if (!importPrefix) { setNotice('请输入账号前缀'); return; }
+    if (importRows.length === 0) { setNotice('请先上传并解析文件'); return; }
     setImporting(true);
     try {
       const res = await api.post('/members/import', {
@@ -272,10 +277,10 @@ export default function Members() {
         setImportResult(res.data.data);
         load();
       } else {
-        window.alert(res.data.message);
+        setNotice(res.data.message);
       }
     } catch (e) {
-      window.alert('请求失败');
+      setNotice('请求失败');
     }
     setImporting(false);
   };
@@ -622,6 +627,8 @@ export default function Members() {
           <Button variant="contained" onClick={handleSubmitImport} disabled={importing}>开始导入</Button>
         </DialogActions>
       </Dialog>
+      <NoticeDialog open={!!notice} message={notice} onClose={() => setNotice('')} />
+      <ConfirmDialog open={!!confirm} message={confirm?.message} onCancel={() => setConfirm(null)} onConfirm={confirm?.action} />
     </Box>
   );
 }

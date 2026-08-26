@@ -6,11 +6,13 @@ import {
 } from '@mui/material';
 import { Delete as DeleteIcon, ContentCopy as CopyIcon } from '@mui/icons-material';
 import api from '../api';
+import { ConfirmDialog } from '../components/ActionDialog';
 
 export default function Invitations() {
   const [invitations, setInvitations] = useState([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ role: 'member', max_uses: 0, expire_days: 7 });
+  const [confirm, setConfirm] = useState(null);
 
   const load = () => {
     api.get('/invitations').then((res) => {
@@ -26,9 +28,11 @@ export default function Invitations() {
   };
 
   const handleDelete = async (code) => {
-    if (!window.confirm('确定删除该邀请码？')) return;
-    await api.delete(`/invitation/${code}`);
-    load();
+    setConfirm({ message: '确定删除该邀请码？', action: async () => {
+      setConfirm(null);
+      await api.delete(`/invitation/${code}`);
+      load();
+    }});
   };
 
   const copyCode = (code) => {
@@ -118,6 +122,7 @@ export default function Invitations() {
           <Button variant="contained" onClick={handleCreate}>生成</Button>
         </DialogActions>
       </Dialog>
+      <ConfirmDialog open={!!confirm} message={confirm?.message} onCancel={() => setConfirm(null)} onConfirm={confirm?.action} />
     </Box>
   );
 }

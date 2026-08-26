@@ -16,6 +16,13 @@ import (
 )
 
 func GetStatus(c *gin.Context) {
+	// DefaultModel is an administrator-selected desktop preference, not a
+	// credential. Read it under the option-map lock because it can be changed
+	// at runtime from the management console.
+	config.OptionMapRWMutex.RLock()
+	defaultModel := config.OptionMap["DefaultModel"]
+	visionModel := config.OptionMap["VisionModel"]
+	config.OptionMapRWMutex.RUnlock()
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -35,6 +42,8 @@ func GetStatus(c *gin.Context) {
 			"wechat_qrcode":               config.WeChatAccountQRCodeImageURL,
 			"wechat_login":                config.WeChatAuthEnabled,
 			"server_address":              config.ServerAddress,
+			"default_model":               defaultModel,
+			"vision_model":                visionModel,
 			"turnstile_check":             config.TurnstileCheckEnabled,
 			"turnstile_site_key":          config.TurnstileSiteKey,
 			"captcha_enabled":             config.CaptchaEnabled,

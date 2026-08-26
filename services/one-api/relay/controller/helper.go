@@ -232,17 +232,46 @@ func latestUserQuestion(request *relaymodel.GeneralOpenAIRequest) string {
 	for i := len(request.Messages) - 1; i >= 0; i-- {
 		message := request.Messages[i]
 		if message.Role == "user" {
-			if text := strings.TrimSpace(message.StringContent()); text != "" {
-				return text
-			}
+			text := strings.TrimSpace(message.StringContent())
 			// DSH 新会话首条消息会使用 OpenAI Responses 风格的
 			// input_text 分段；旧的 StringContent 只识别 type=text，
 			// 导致这类首问被审计层误判为空。这里仅为审计补齐文本
 			// 提取，不改变转发给上游的原始请求。
-			return strings.TrimSpace(extractAuditMessageText(message.Content))
+			if text == "" {
+				text = strings.TrimSpace(extractAuditMessageText(message.Content))
+			}
+			// DSH 会在真实用户请求前后发出会话标题、技能注入等内部
+			// LLM 调用。这些调用在 OpenAI 协议里也会呈现为 user
+			// message，不能作为用户问题写进长期审计。跳过后继续向前
+			// 查找本次请求中的真实用户文本。
+			if text != "" && !isInternalAuditPrompt(text) {
+				return text
+			}
 		}
 	}
 	return ""
+}
+
+// auditSessionID reads the per-request desktop session marker. The header is
+// emitted by the local DSH sidecar and is deliberately independent from the
+// OneAPI request id, which changes for every model call within one session.
+func auditSessionID(c *gin.Context) string {
+	for _, header := range []string{"X-DSH-Session-Id", "X-Session-Id", "Session-Id"} {
+		if value := strings.TrimSpace(c.GetHeader(header)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+// isInternalAuditPrompt identifies DSH framework calls that are not initiated
+// by an end user. Keep this intentionally narrow: regular user text must never
+// disappear from the administrator audit merely because it resembles a prompt.
+func isInternalAuditPrompt(text string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	return strings.HasPrefix(normalized, "<system-reminder>")
+		|| strings.HasPrefix(normalized, "generate the session title from this json array")
+		|| strings.Contains(normalized, "a skill is a reusable set of task-specific")
 }
 
 // extractAuditMessageText 兼容 OpenAI Chat/Responses 两种文本分段格式。

@@ -126,10 +126,24 @@ function imageReadContent(value: ImageReadValue): ContentBlock[] {
  * @param ctx - the registration scope; execution uses its `fs` service plus
  *   the optional `attachments`/`llm` services.
  */
-export function applyReadImageTool(ctx: Context): void {
+/** Options for an image-reading tool alias that shares the durable attachment path. */
+export interface ImageReadToolOptions {
+  /** Public tool identifier exposed to the model. */
+  name: string
+  /** Model-facing instruction for when to invoke this alias. */
+  description: string
+}
+
+/**
+ * Register an image-reading tool under a caller-owned name.  The canonical
+ * filesystem tool and the desktop `recognize_image` compatibility entry both
+ * use this exact implementation, so neither can bypass the route capability
+ * gate or attachment lifecycle.
+ */
+export function applyImageReadTool(ctx: Context, options: ImageReadToolOptions): void {
   ctx.tools.register(defineTool({
-    name: 'read_image',
-    description: 'Read a PNG/JPEG/WebP/GIF file and return the image itself. Requires the current model to accept image input.',
+    name: options.name,
+    description: options.description,
     parameters: {
       file_path: { type: 'string', required: true, description: 'Path to the image file, resolved by the filesystem backend.' },
     },
@@ -237,4 +251,12 @@ export function applyReadImageTool(ctx: Context): void {
       }
     },
   }))
+}
+
+/** Register the canonical filesystem image reader. */
+export function applyReadImageTool(ctx: Context): void {
+  applyImageReadTool(ctx, {
+    name: 'read_image',
+    description: 'Read a PNG/JPEG/WebP/GIF file and return the image itself. Requires the current model to accept image input.',
+  })
 }
