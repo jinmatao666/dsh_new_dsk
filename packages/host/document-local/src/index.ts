@@ -76,7 +76,13 @@ function runHelper(
     child.once('error', reject)
     child.once('close', (code) => {
       try {
-        const parsed = JSON.parse(stdout) as HelperResult
+        // Some document libraries (notably PDF.js) may write harmless warnings
+        // before the JSON payload. Parse the JSON object instead of requiring
+        // stdout to contain JSON and nothing else.
+        const start = stdout.indexOf('{')
+        const end = stdout.lastIndexOf('}')
+        const payload = start >= 0 && end >= start ? stdout.slice(start, end + 1) : stdout
+        const parsed = JSON.parse(payload) as HelperResult
         if (code === 0 || parsed.ok === false) return resolveResult(parsed)
       } catch {
         // Report the process failure below with the captured diagnostic.
