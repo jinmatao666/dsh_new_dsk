@@ -19,7 +19,10 @@
     "@deepseek-ai/dsh-session-title-llm": "workspace:^",
     "@deepseek-ai/dsh-spill": "workspace:^",
     "@deepseek-ai/dsh-web-app": "workspace:^",
-    "dsh-jsonrpc-agent-pkg": "workspace:^"
+    "dsh-jsonrpc-agent-pkg": "workspace:^",
+    "mammoth": "^1.10.0",
+    "pdfjs-dist": "^4.10.38",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.8.4",

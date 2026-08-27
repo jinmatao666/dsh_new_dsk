@@ -200,6 +200,14 @@ fn spawn_sidecar(
     } else {
         production_command(resource_dir)
     };
+    let document_tool = if cfg!(debug_assertions) {
+        cwd.join("apps").join("desktop").join("scripts").join("document-tool.mjs")
+    } else {
+        bundled_resource(resource_dir, "runtime").join("app").join("document-tool.mjs")
+    };
+    if !document_tool.exists() {
+        return Err(format!("Bundled document helper is missing: {}", document_tool.display()));
+    }
     let dev_port = if cfg!(debug_assertions) { Some(53916u16) } else { None };
     args.extend([
         "--profile".into(),
@@ -219,6 +227,8 @@ fn spawn_sidecar(
         .args(args)
         .current_dir(cwd)
         .env("DSH_ONEAPI_URL", &config.one_api_url)
+        .env("DSH_NODE_BINARY", &program)
+        .env("DSH_DOCUMENT_TOOL", &document_tool)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if !config.default_model.is_empty() {

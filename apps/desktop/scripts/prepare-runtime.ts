@@ -12,6 +12,7 @@ const resources = join(desktopDir, 'src-tauri', 'resources', 'runtime')
 const appDir = join(resources, 'app')
 let workspacePackageMap: Map<string, string> | undefined
 const runtimeDependencies = dependencyClosure([
+  join(desktopDir, 'package.json'),
   join(root, 'python', 'sdk-runtime', 'package.json'),
   join(root, 'apps', 'cli', 'package.json'),
   join(root, 'packages', 'bundle', 'base', 'package.json'),
@@ -66,6 +67,7 @@ const cliDir = join(root, 'apps', 'cli')
 copyFileSync(join(cliDir, 'package.json'), join(appDir, 'package.json'))
 cpSync(join(cliDir, 'lib'), join(appDir, 'lib'), { recursive: true })
 cpSync(join(cliDir, 'config'), join(appDir, 'config'), { recursive: true })
+copyFileSync(join(desktopDir, 'scripts', 'document-tool.mjs'), join(appDir, 'document-tool.mjs'))
 
 // Tauri/NSIS only needs executable JavaScript and package metadata. Some
 // third-party packages ship very deep declaration/source-map trees which can
@@ -243,6 +245,17 @@ function verifySidecarRuntime(): void {
     throw new Error(`Desktop runtime preflight failed: ${detail || `exit status ${String(result.status)}`}`)
   }
 
+  const documentResult = spawnSync(nodeBinary, [join(appDir, 'document-tool.mjs'), 'doctor'], {
+    cwd: appDir,
+    encoding: 'utf8',
+  })
+  if (documentResult.status !== 0) {
+    const detail = [documentResult.stdout, documentResult.stderr]
+      .filter((part): part is string => typeof part === 'string' && part.trim() !== '')
+      .join('\n')
+    throw new Error(`Desktop document helper preflight failed: ${detail || `exit status ${String(documentResult.status)}`}`)
+  }
+
   // The desktop profile loads plugins with native optional dependencies. A
   // production deploy can pass the CLI config check while still omitting the
   // platform package selected by sharp/koffi, which makes the installed app
@@ -271,7 +284,7 @@ function materializeStagedLinks(): void {
   for (;;) {
     const linked = findFirstLink(nodeModules)
     if (linked === undefined) return
-    const relative = linked.slice(nodeModules.length + 1).split(/[/\\\\]/)
+    const relative = linked.slice(nodeModules.length + 1).replaceAll('\\', '/').split('/')
     const binIndex = relative.lastIndexOf('.bin')
     if (binIndex >= 0) {
       rmSync(join(nodeModules, ...relative.slice(0, binIndex + 1)), { recursive: true, force: true })
