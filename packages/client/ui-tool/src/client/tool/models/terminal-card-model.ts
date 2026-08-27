@@ -71,7 +71,12 @@ export interface TerminalCardModel {
  */
 export function terminalFailed(model: TerminalCardModel): boolean {
   const { exitCode, signal, running } = model.card
-  return running !== true && ((exitCode !== undefined && exitCode !== 0) || signal !== undefined)
+  if (running === true || (exitCode === undefined || exitCode === 0) && signal === undefined) return false
+  // Capability checks and installation probes legitimately use a non-zero
+  // exit to report that a feature is absent. They are evidence for the next
+  // action, not a failure of the user task, so their collapsed trajectory row
+  // stays neutral. Actual run/write/task failures still carry the red state.
+  return !/\b(check|try|probe|detect|inspect|verify|install)\b|检查|尝试|探测|诊断|验证|安装/i.test(model.description ?? '')
 }
 
 /**

@@ -1296,6 +1296,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-skill-marketplace':
         specifier: workspace:^
         version: link:../../client/ui-skill-marketplace
+      '@deepseek-ai/dsh-document-local':
+        specifier: workspace:^
+        version: link:../../host/document-local
       '@deepseek-ai/dsh-vision':
         specifier: workspace:^
         version: link:../../host/vision
@@ -5287,6 +5290,19 @@ importers:
       tsx:
         specifier: ^4.19.2
         version: 4.22.4
+
+  packages/host/document-local:
+    dependencies:
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
 
   packages/host/frontend-static:
     dependencies:

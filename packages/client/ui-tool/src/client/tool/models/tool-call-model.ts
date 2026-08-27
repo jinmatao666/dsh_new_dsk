@@ -131,6 +131,24 @@ function firstLine(text: string): string {
   return nl === -1 ? text : text.slice(0, nl)
 }
 
+/**
+ * A failed call is not always a task failure. Some calls only discover that a
+ * binary file needs a different reader, or that an exploratory capability is
+ * unavailable. Keep those results visible to the agent, but do not paint the
+ * conversation trajectory red as if the user's task had failed.
+ */
+function isExpectedProbeResult(toolName: string, argsRaw: string, output: string): boolean {
+  if (toolName === 'read' && /binary file/i.test(output)) return true
+  if (toolName === 'recognize_image' && /only accepts PNG\/JPEG\/WebP\/GIF paths/i.test(output)) return true
+  if (toolName !== 'bash' && toolName !== 'pwsh') return false
+  const args = parseArgs(argsRaw)
+  const description = typeof args === 'object' && args !== null
+    ? (args as Record<string, unknown>).description
+    : undefined
+  if (typeof description !== 'string') return false
+  return /\b(check|try|probe|detect|inspect|verify|install)\b|检查|尝试|探测|诊断|验证|安装/i.test(description)
+}
+
 function pickString(args: Record<string, unknown>, keys: readonly string[]): string | undefined {
   for (const key of keys) {
     const v = args[key]
@@ -218,9 +236,10 @@ export function toolRowModel(toolName: string, block: ToolCallBlock, cwd?: strin
   const variant = classifyTool(toolName)
   const done = 'kind' in block
   const argsRaw = (done ? block.call?.argsRaw : block.argsRaw) ?? ''
+  const output = done ? (resultText(block) || null) : null
   const state: ToolRowState = !done ? 'running'
     : block.error?.code === 'interrupted' ? 'stopped'
-      : block.isError ? 'error' : 'ok'
+      : block.isError && !isExpectedProbeResult(toolName, argsRaw, output ?? '') ? 'error' : 'ok'
   const base = argsRaw === ''
     ? block.callId
     : abbreviateHomePath(relativizeToCwd(deriveSummary(variant, argsRaw), cwd), home)
@@ -233,7 +252,6 @@ export function toolRowModel(toolName: string, block: ToolCallBlock, cwd?: strin
   // The empty string is "no text" for both derived result fields: a settled
   // call with blank content has nothing to expand, and a blank first line
   // would erase the collapsed error row's summary slot.
-  const output = done ? (resultText(block) || null) : null
   const errorSummary = state === 'error' && output !== null ? firstLine(output) : null
   return {
     variant,

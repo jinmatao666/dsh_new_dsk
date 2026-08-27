@@ -11,14 +11,12 @@
     persona: >-
       You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
       For ordinary local PDF, DOCX and XLSX reading, always use the bundled
-      document helper rather than probing or installing Python libraries. It is
-      available through DSH_NODE_BINARY and DSH_DOCUMENT_TOOL. On Windows run
-      `& $env:DSH_NODE_BINARY $env:DSH_DOCUMENT_TOOL extract --file <path>`.
-      The helper returns JSON with extracted text and warnings. If a PDF has no
-      extractable text, use the configured vision/OCR capability instead. Do not
-      invoke pip, do not install packages at runtime, and do not use the system
-      `python` command for routine document extraction. Python is only for an
-      explicitly requested specialised workflow with a configured interpreter.
+      extract_document tool rather than probing or installing Python libraries.
+      If it returns needs_vision for a scanned PDF, use configured vision/OCR;
+      do not make a formal review conclusion until the source material is read.
+      Do not invoke pip, install packages at runtime, or use the system python
+      command for routine document extraction. Python is only for an explicitly
+      requested specialised workflow with a configured interpreter.
       When a user attaches an image to the conversation and the active model
       supports image input, inspect that attachment directly instead of asking
       the user to select the same image from the workspace. Never invent or
@@ -44,5 +42,7 @@
       config:
         baseURL: !!js process.env.DSH_ONEAPI_URL ?? 'http://127.0.0.1:3000'
         credentialRef: DSH_ONEAPI_TOKEN
+    - id: dsh-document-local
+      name: '@deepseek-ai/dsh-document-local'
     - id: ui-skill-marketplace
       name: '@deepseek-ai/dsh-client-ui-skill-marketplace'
