@@ -239,6 +239,8 @@ type SessionTreeProps = Pick<
   onRenameRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
   /** Open the browser-owned delete-confirmation dialog for a real Workspace group. */
   onDeleteRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
+  /** Reveal a real Workspace root in the host file explorer. */
+  onOpenWorkspace: (path: string) => void
   /** Open the browser-owned session rename dialog. */
   onSessionRename: (sessionId: SessionNode['id'], currentTitle: string) => void
   /** Archive a session (row menu action; the row disappears on the state echo). */
@@ -250,7 +252,7 @@ type SessionTreeProps = Pick<
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
 function SessionTree({
   useSessions, startSession, open, forkSession, workspaces, archivedSessionIds,
-  onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive,
+  onRenameRequest, onDeleteRequest, onOpenWorkspace, onSessionRename, onSessionArchive,
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
@@ -470,6 +472,9 @@ function SessionTree({
                 actions={group.workspaceId === undefined
                   ? undefined
                   : {
+                    open: () => {
+                      if (group.cwd !== undefined) onOpenWorkspace(group.cwd)
+                    },
                     rename: () => {
                     /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                       if (group.workspaceId !== undefined) onRenameRequest(group.workspaceId, group.label)
@@ -754,6 +759,7 @@ export function WorkspaceBrowser({
   forkSession,
   renameWorkspace,
   deleteWorkspace,
+  openWorkspace,
   insertWorkspaceBefore,
   archiveSession,
   insertSessionBefore,
@@ -1172,6 +1178,11 @@ export function WorkspaceBrowser({
                 onDeleteRequest={(workspaceId, title) => {
                   setDeleteTarget({ workspaceId, title })
                   setDeleteError(null)
+                }}
+                onOpenWorkspace={(path) => {
+                  void openWorkspace(path).catch((reason: unknown) => {
+                    console.warn('workspace open rejected:', reason)
+                  })
                 }}
               />
             ))}

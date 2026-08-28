@@ -8,7 +8,7 @@ import css from './AccountSection.module.css'
 export type AccountSectionProps = PropsRuntime<'settings.section'> & InjectFace<AuthInjected>
 
 /** Account information and the server-session logout action. */
-export function AccountSection({ status, logout, subscribe }: AccountSectionProps) {
+export function AccountSection({ status, logout, subscribe, close }: AccountSectionProps) {
   const [auth, setAuth] = useState<AuthState | { state: 'checking' }>({ state: 'checking' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
@@ -25,7 +25,15 @@ export function AccountSection({ status, logout, subscribe }: AccountSectionProp
   const onLogout = () => { void (async () => {
     setBusy(true)
     setError(undefined)
-    try { setAuth(await logout()) } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) } finally { setBusy(false) }
+    try {
+      const next = await logout()
+      setAuth(next)
+      if (next.state === 'logged-out') close()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(false)
+    }
   })() }
 
   return (
@@ -38,8 +46,8 @@ export function AccountSection({ status, logout, subscribe }: AccountSectionProp
           <div className={css.value}>
             {auth.state === 'checking' ? '正在检查登录状态…'
               : auth.state === 'authenticated' ? (auth.username ?? '已登录')
-              : auth.state === 'logged-out' ? '未登录'
-              : `暂时无法连接：${auth.message}`}
+                : auth.state === 'logged-out' ? '未登录'
+                  : `暂时无法连接：${auth.message}`}
           </div>
         </div>
         {auth.state === 'authenticated' && (

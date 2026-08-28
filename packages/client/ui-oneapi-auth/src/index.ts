@@ -93,7 +93,6 @@ interface ManagedProvider {
     chatTemplateKwargs: { enable_thinking: boolean }
   }
 }
-interface ProviderSettings { providers?: Record<string, ManagedProvider | Record<string, unknown>> }
 interface DefaultModelService {
   saveSelection(next: { provider: string; model: string }): Promise<void>
 }
@@ -247,9 +246,8 @@ export function apply(ctx: Context, config: Config): void {
   const installMarkerRef = credentialRef('DSH_DESKTOP_INSTALL_MARKER')
 
   const syncProvider = async (models: ManagedModel[], serverDefaultModel?: string): Promise<void> => {
-    const current = ctx.settings.get(LLM_SETTINGS) as ProviderSettings
     const managed: ManagedProvider = {
-      displayName: 'DSH Server',
+      displayName: 'Model Server',
       apiKeyEnv: config.credentialRef,
       api: 'openai-completions',
       baseURL: `${baseURL}/v1`,
@@ -272,8 +270,11 @@ export function apply(ctx: Context, config: Config): void {
         chatTemplateKwargs: { enable_thinking: false },
       },
     }
+    // The desktop distribution is intentionally server-managed: models come
+    // exclusively from OneAPI rather than from any legacy local/provider
+    // configuration that may have been left by an older installation.
     await ctx.settings.replace(LLM_SETTINGS, {
-      providers: { ...(current.providers ?? {}), [config.provider]: managed },
+      providers: { [config.provider]: managed },
     })
     const firstModel = models[0]?.id
     if (firstModel === undefined) throw new Error('服务器没有返回可用模型')
@@ -288,9 +289,7 @@ export function apply(ctx: Context, config: Config): void {
 
   const clearLocalAuth = async (): Promise<void> => {
     await ctx.credentials.unset(ref)
-    const current = ctx.settings.get(LLM_SETTINGS) as ProviderSettings
-    const { [config.provider]: _managed, ...providers } = current.providers ?? {}
-    await ctx.settings.replace(LLM_SETTINGS, { providers })
+    await ctx.settings.replace(LLM_SETTINGS, { providers: {} })
   }
 
   const reportQuestion = async (payload: unknown): Promise<{ ok: true; value: unknown } | { ok: false; error: { code: 'internal'; message: string; details: Record<string, never> } }> => {

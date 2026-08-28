@@ -50,6 +50,29 @@ function producedPaths(view: ToolResultNode['callView']): readonly string[] {
 }
 
 /**
+ * PPTX files reported by a successful terminal command.
+ *
+ * Script-driven PowerPoint generation is intentionally kept as a terminal
+ * workflow: it may use PowerPoint COM or a project-specific generator rather
+ * than the mutation tools.  Those tools have no `locations` fact for the
+ * generated presentation, so recognise an explicit PPTX path from the command
+ * output and publish it beside normal mutation-tool deliverables.
+ */
+function pptxPaths(text: string): readonly string[] {
+  const pptxPattern =
+    /(?:[a-z]:[^\r\n"'`<>|]*?\.pptx|[^\s"'`<>|]+\.pptx)/gi
+  const matches = text.matchAll(pptxPattern)
+  return [...matches]
+    .map(match => match[0].replace(/[),.;:]+$/, '').trim())
+    .filter(path => path !== '')
+}
+
+function terminalPptxPaths(view: ToolResultNode['resultView']): readonly string[] {
+  if (view?.card !== 'terminal' || view.output === undefined) return []
+  return pptxPaths(view.output)
+}
+
+/**
  * Files produced by one Turn data value.
  *
  * The source is the mutation tools' own follow-along `locations`, not the
@@ -103,6 +126,9 @@ export const deliverablesDefinition: ConversationNodeDefinition<DeliverablesStat
     if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
       return { id: String(event.data.turn), role: 'update' }
     }
+    if (event.type === 'assistant/message' && isAppendSurfaceEvent(event)) {
+      return { id: String(event.data.turn), role: 'update' }
+    }
     return null
   },
   start: (_context, match) => {
@@ -118,11 +144,29 @@ export const deliverablesDefinition: ConversationNodeDefinition<DeliverablesStat
       )
       return { ...context.state, calls }
     }
+    if (match.event.type === 'assistant/message') {
+      // A terminal generator may keep its successful file path in its final
+      // hand-off message rather than stdout. The desktop prompt requires an
+      // existence check before that message names a deliverable, so it is
+      // safe to treat a final PPTX reference as another artifact fact.
+      const paths = match.event.data.message.content.flatMap(block =>
+        block.type === 'text' ? pptxPaths(block.text) : [],
+      )
+      const additions = paths
+        .map(path => ({ seq: match.event.seq, path }))
+      return additions.length === 0
+        ? context.state
+        : { ...context.state, produced: [...context.state.produced, ...additions] }
+    }
     if (match.event.type !== 'tool/result') return context.state
     const result = match.event.data.message.content[0]
     if (result.isError === true) return context.state
     const callId = String(match.event.data.message.source.callId)
-    const additions = producedPaths(context.state.calls.get(callId) ?? null)
+    const mutationPaths = producedPaths(context.state.calls.get(callId) ?? null)
+    const terminalPaths = match.view?.for === 'result'
+      ? terminalPptxPaths(match.view.view)
+      : []
+    const additions = [...mutationPaths, ...terminalPaths]
       .map(path => ({ seq: match.event.seq, path }))
     return additions.length === 0
       ? context.state

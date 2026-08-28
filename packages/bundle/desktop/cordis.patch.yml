@@ -5,6 +5,11 @@
   # expose local provider/API-key editing in customer desktop installations.
   disabled: true
 
+# Customer desktop installations use the server-governed Model Server only.
+# Do not expose legacy direct-DeepSeek credentials or provider rows.
+- id: llm-deepseek
+  disabled: true
+
 # Keep deployment-specific operational guidance close to the desktop profile.
 - id: system-prompt
   config:
@@ -16,13 +21,23 @@
       do not make a formal review conclusion until the source material is read.
       Do not invoke pip, install packages at runtime, or use the system python
       command for routine document extraction. Python is only for an explicitly
-      requested specialised workflow with a configured interpreter.
+      requested specialised workflow with a configured interpreter. When such
+      a specialised workflow genuinely requires a missing package, use
+      `python -m pip install --user <package>` only; never use `--target`
+      and never install packages inside a workspace. The desktop provides a
+      shared per-user Python package and cache location for this purpose.
+      On Windows, use PowerShell `Get-Command` to check executables; do not
+      invoke `where.exe`.
       When a user attaches an image to the conversation and the active model
       supports image input, inspect that attachment directly instead of asking
       the user to select the same image from the workspace. Never invent or
       derive a filesystem path for a chat attachment, and never call
       `recognize_image` for it. `recognize_image` is reserved only for an
       explicit, existing local filesystem path supplied by the user.
+      When creating a requested deliverable such as a PPTX, DOCX, XLSX or PDF,
+      verify the final deliverable file exists and mention its exact filename
+      in the final response. Do not present only a helper source script as the
+      result when the requested deliverable was created successfully.
 
 - insert:
     - id: ui-oneapi-auth

@@ -114,7 +114,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   onToggle: () => void
   onCreate: () => void
   /** Real-Workspace actions; absent for the ungrouped bucket (no menu shown). */
-  actions?: { rename: () => void; delete: () => void } | undefined
+  actions?: { open: () => void; rename: () => void; delete: () => void } | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
@@ -127,6 +127,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   const active = group.expanded && group.containsCurrent
   const [menuOpen, setMenuOpen] = useState(false)
   const workspaceMenuItems = [
+    { id: 'open', label: t('open.workspace'), icon: <IconFolderOpen16 /> },
     { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
     { id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutline16 />, danger: true },
   ]
@@ -163,12 +164,9 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
             items={workspaceMenuItems}
             onSelect={(id) => {
               setMenuOpen(false)
-              // Unknown ids leave before the dispatch: a future menu row must
-              // not inherit the destructive branch as an else fallback.
-              /* v8 ignore next -- workspaceMenuItems carries exactly these two rows today. */
-              if (id !== 'rename' && id !== 'delete') return
-              if (id === 'rename') actions.rename()
-              else actions.delete()
+              if (id === 'open') actions.open()
+              else if (id === 'rename') actions.rename()
+              else if (id === 'delete') actions.delete()
             }}
             portal
             closeOnPointerLeave

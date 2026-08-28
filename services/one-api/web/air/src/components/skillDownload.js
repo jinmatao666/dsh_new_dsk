@@ -119,7 +119,7 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function sanitizeName(name) {
+export function sanitizeName(name) {
   return (name || 'skill').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-').slice(0, 120) || 'skill';
 }
 
@@ -135,7 +135,7 @@ function ensureTrailingNewline(text) {
   return text.endsWith('\n') ? text : `${text}\n`;
 }
 
-function buildSkillMd(skill, body) {
+export function buildSkillMd(skill, body) {
   const content = body || skill.body || skill.content || '';
   if (/^---\r?\n/.test(content)) return ensureTrailingNewline(content);
 
@@ -150,7 +150,7 @@ function buildSkillMd(skill, body) {
   return ensureTrailingNewline(lines.join('\n'));
 }
 
-function safeRelPath(relPath) {
+export function safeRelPath(relPath) {
   const safe = String(relPath || '').replace(/\\/g, '/').replace(/^\/+/, '');
   if (!safe || safe.split('/').some((part) => part === '..' || part === '.')) return '';
   if (safe.toLowerCase() === 'skill.md') return '';
@@ -164,7 +164,7 @@ function base64ToBytes(text) {
   return out;
 }
 
-function splitContent(content) {
+export function splitContent(content) {
   if (!content) return { body: '', assets: '' };
   const markers = [];
   const scriptMarkerRe = /^#{1,6}[ \t]*Script:[ \t]*(\S+)[ \t]*\r?\n/gm;
@@ -214,7 +214,7 @@ function splitContent(content) {
   };
 }
 
-function parseAssets(assets) {
+export function parseAssets(assets) {
   if (!assets) return [];
   const markers = [];
   const scriptMarkerRe = /^#{1,6}[ \t]*Script:[ \t]*(\S+)[ \t]*\r?\n/gm;
@@ -262,11 +262,15 @@ function parseAssets(assets) {
   return files;
 }
 
-export async function downloadSkillZip(kind, id) {
+export async function fetchSkillFull(kind, id) {
   const url = kind === 'public' ? `/api/skill/admin/${id}` : `/api/personal-skill/admin/${id}`;
   const res = await API.get(url);
   if (res.data?.success === false) throw new Error(res.data.message || '加载 skill 失败');
-  const skill = res.data?.data || res.data;
+  return res.data?.data || res.data;
+}
+
+export async function downloadSkillZip(kind, id) {
+  const skill = await fetchSkillFull(kind, id);
   if (!skill?.name) throw new Error('skill 数据缺少 name');
 
   let body = skill.body || '';

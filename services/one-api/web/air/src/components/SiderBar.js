@@ -1,11 +1,12 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ClipboardList, Cpu, Home, PanelLeftClose, PanelLeftOpen, Settings, Users } from 'lucide-react';
+import { ClipboardList, Cpu, Home, PanelLeftClose, PanelLeftOpen, Settings, Sparkles, Users } from 'lucide-react';
 import '../index.css';
 
 const items = [
   { label: '分析看板', path: '/', Icon: Home },
   { label: '模型配置', path: '/config/model', Icon: Cpu },
+  { label: '技能管理', path: '/skill', Icon: Sparkles },
   { label: '用户管理', path: '/user', Icon: Users },
   { label: '模型日志', path: '/log', Icon: ClipboardList },
   { label: '账户设置', path: '/setting/personal', Icon: Settings }

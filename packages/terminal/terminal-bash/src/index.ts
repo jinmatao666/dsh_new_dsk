@@ -87,7 +87,12 @@ function childEnvironment(spec: TerminalBackendSpawnSpec, dialect: ShellDialect)
  * input are unreliable under PSReadLine.
  */
 export const PWSH_PROMPT_SETUP =
-  "function prompt { [Console]::Write([char]27 + ']133;D;' + [int]$LASTEXITCODE + [char]7); '" + CONTROLLED_PROMPT + "' }"
+  'function global:where.exe { '
+  + 'param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Name) '
+  + 'Get-Command @Name -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source '
+  + "}; function prompt { [Console]::Write([char]27 + ']133;D;' + [int]$LASTEXITCODE + [char]7); '"
+  + CONTROLLED_PROMPT
+  + "' }"
 
 function spawnArgv(ctx: Context, config: ResolvedConfig, policy: SandboxExecutionPolicy): string[] {
   const argv = [config.shellPath, ...config.shellArgs]

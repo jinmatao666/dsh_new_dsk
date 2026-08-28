@@ -252,6 +252,22 @@ function SkillMarketplace({ marketplaceUrl }: OverlayProps) {
     }
   }), [])
 
+  // The marketplace deliberately leaves the sidebar usable.  Selecting any
+  // sidebar command should therefore also leave this overlay immediately;
+  // operators should not have to find the return arrow first.
+  useEffect(() => {
+    if (!open) return
+    const closeForSidebarAction = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+      if (target.closest('.dsh-skill-market-panel') === null) {
+        skillMarketplaceController.close()
+      }
+    }
+    document.addEventListener('pointerdown', closeForSidebarAction, true)
+    return () => { document.removeEventListener('pointerdown', closeForSidebarAction, true) }
+  }, [open])
+
   const featuredPool = useMemo(() => MOCK_SKILLS.filter(s => s.featured), [])
   const [featuredOffset, setFeaturedOffset] = useState(0)
   const featuredSkills = useMemo(() => {

@@ -43,7 +43,7 @@ jobs:
               # Use an Intel runner for x64. Native dependencies such as sharp
               # are selected while pnpm stages the sidecar runtime, so an ARM
               # host cannot reliably package an x64-native dependency tree.
-              {"platform": "macos-x64", "os": "macos-13", "target": "x86_64-apple-darwin", "bundles": "app,dmg", "node_archive": "node-v22.19.0-darwin-x64.tar.gz", "node_dir": "node-v22.19.0-darwin-x64"},
+              {"platform": "macos-x64", "os": "macos-15-intel", "target": "x86_64-apple-darwin", "bundles": "app,dmg", "node_archive": "node-v22.19.0-darwin-x64.tar.gz", "node_dir": "node-v22.19.0-darwin-x64"},
           ]
           if os.environ["PLATFORM_SCOPE"] == "windows-only":
               platforms = platforms[:1]

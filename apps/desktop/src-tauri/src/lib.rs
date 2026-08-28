@@ -194,6 +194,7 @@ fn spawn_sidecar(
     resource_dir: &Path,
     config: &ServerConfig,
     log_path: &Path,
+    app_data_dir: &Path,
 ) -> Result<(Child, Url), String> {
     let (program, cwd, mut args) = if cfg!(debug_assertions) {
         development_command()
@@ -207,6 +208,19 @@ fn spawn_sidecar(
     };
     if !document_tool.exists() {
         return Err(format!("Bundled document helper is missing: {}", document_tool.display()));
+    }
+    // Keep optional Python packages and pip's download cache outside the active
+    // workspace.  This makes one desktop user's specialised dependencies
+    // reusable across all Workspaces and prevents temporary pip files from
+    // polluting customer project folders.
+    let python_root = app_data_dir.join("python");
+    let python_userbase = python_root.join("userbase");
+    let pip_cache = python_root.join("pip-cache");
+    let python_temp = python_root.join("tmp");
+    for directory in [&python_userbase, &pip_cache, &python_temp] {
+        fs::create_dir_all(directory).map_err(|error| {
+            format!("Unable to create shared Python directory {}: {error}", directory.display())
+        })?;
     }
     let dev_port = if cfg!(debug_assertions) { Some(53916u16) } else { None };
     args.extend([
@@ -229,6 +243,14 @@ fn spawn_sidecar(
         .env("DSH_ONEAPI_URL", &config.one_api_url)
         .env("DSH_NODE_BINARY", &program)
         .env("DSH_DOCUMENT_TOOL", &document_tool)
+        .env("PYTHONUSERBASE", &python_userbase)
+        .env("PIP_CACHE_DIR", &pip_cache)
+        .env("TEMP", &python_temp)
+        .env("TMP", &python_temp)
+        .env("TMPDIR", &python_temp)
+        .env("PYTHONUTF8", "1")
+        .env("PYTHONIOENCODING", "utf-8")
+        .env("PIP_DISABLE_PIP_VERSION_CHECK", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if !config.default_model.is_empty() {
@@ -320,11 +342,8 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let resource_dir = app.path().resource_dir()?;
-            let log_path = app
-                .path()
-                .app_local_data_dir()?
-                .join("logs")
-                .join("startup.log");
+            let app_data_dir = app.path().app_local_data_dir()?;
+            let log_path = app_data_dir.join("logs").join("startup.log");
             let _ = fs::remove_file(&log_path);
             append_log(&log_path, "ZJUGIS Harness startup");
             disable_legacy_vision_tool(&log_path);
@@ -333,7 +352,7 @@ pub fn run() {
                 std::io::Error::new(std::io::ErrorKind::InvalidData, message)
             })?;
             let (child, url) =
-                spawn_sidecar(&resource_dir, &config, &log_path).map_err(|message| {
+                spawn_sidecar(&resource_dir, &config, &log_path, &app_data_dir).map_err(|message| {
                     append_log(&log_path, format!("[fatal] {message}"));
                     std::io::Error::other(message)
                 })?;

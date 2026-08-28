@@ -9,6 +9,7 @@ import React, {
 import { Button, Form, Modal, Space, Table, Tag } from '@douyinfe/semi-ui';
 import { API, showError, showSuccess, timestamp2string } from '../helpers';
 import SkillEditor from './SkillEditor';
+import SkillBrowseDrawer from './SkillBrowseDrawer';
 import BatchImportModal from './BatchImportModal';
 import {
   categorySelectOptions,
@@ -35,6 +36,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   const [keyword, setKeyword] = useState(keywordProp);
   const [loading, setLoading] = useState(false);
   const [editor, setEditor] = useState({ visible: false, mode: 'view', id: null });
+  const [browse, setBrowse] = useState({ visible: false, id: null });
 
   const [category, setCategory] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -260,6 +262,23 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       render: (v) => v || '-'
     },
     {
+      title: '上传人',
+      dataIndex: 'submitter',
+      width: 120,
+      render: (v) => v || '-'
+    },
+    {
+      title: '上传时间',
+      dataIndex: 'created_at',
+      width: 180,
+      sorter: true,
+      render: (v) => (
+        <span style={{ whiteSpace: 'nowrap' }}>
+          {v ? timestamp2string(v) : '-'}
+        </span>
+      )
+    },
+    {
       title: '分类',
       dataIndex: 'categories',
       width: 240,
@@ -312,11 +331,17 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     },
     {
       title: '操作',
-      width: 320,
+      width: 390,
       fixed: 'right',
       render: (_, record) =>
         record.is_deleted ? (
           <Space>
+            <Button
+              size='small'
+              onClick={() => setBrowse({ visible: true, id: record.id })}
+            >
+              浏览
+            </Button>
             <Button
               size='small'
               onClick={() => setEditor({ visible: true, mode: 'view', id: record.id })}
@@ -350,6 +375,12 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
           </Space>
         ) : (
           <Space>
+            <Button
+              size='small'
+              onClick={() => setBrowse({ visible: true, id: record.id })}
+            >
+              浏览
+            </Button>
             <Button
               size='small'
               onClick={() => setEditor({ visible: true, mode: 'view', id: record.id })}
@@ -468,6 +499,13 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
           }}
         />
       </div>
+
+      <SkillBrowseDrawer
+        visible={browse.visible}
+        kind='public'
+        id={browse.id}
+        onClose={() => setBrowse({ visible: false, id: null })}
+      />
 
       <SkillEditor
         visible={editor.visible}
