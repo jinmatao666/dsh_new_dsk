@@ -1,11 +1,12 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { Button, Form, Input, Modal, SideSheet, Space, Table, Tag } from '@douyinfe/semi-ui';
 import { IconPlus, IconSearch } from '@douyinfe/semi-icons';
-import { API, showError, showSuccess, timestamp2string } from '../../helpers';
+import { showError, showSuccess, timestamp2string } from '../../helpers';
 import {
   SKILL_CATEGORY_TYPE_LABELS,
   SKILL_CATEGORY_TYPES
 } from '../../components/skillCategoryUtils';
+import { MOCK_CATEGORY_TYPES, SKILL_CATEGORIES_MOCK, nextCategoryId } from '../../components/skillCategoryMock';
 import useColumnConfig from '../../hooks/useColumnConfig';
 
 const EMPTY = {
@@ -18,16 +19,28 @@ const EMPTY = {
   sort_order: 0
 };
 
+// 演示阶段：分类数据与编辑结果只保存在本浏览器。
+// 数据结构调整时递增版本号，避免读到旧版缓存。
+const STORAGE_KEY = 'dsh-admin-mock-skill-categories-v2';
+
+function readMockCategories() {
+  if (typeof window === 'undefined') return SKILL_CATEGORIES_MOCK;
+  try { const value = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || 'null'); return Array.isArray(value) ? value : SKILL_CATEGORIES_MOCK; } catch (_) { return SKILL_CATEGORIES_MOCK; }
+}
+function saveMockCategories(items) { if (typeof window !== 'undefined') window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
+
 const getEditorFormKey = (data) => (data.id ? `edit-${data.id}` : `create-${data.type_id || 'none'}`);
 
 const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
-  const [types, setTypes] = useState([]);
-  const [items, setItems] = useState([]);
+  const [types, setTypes] = useState(MOCK_CATEGORY_TYPES);
+  const [items, setItems] = useState(readMockCategories);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [localKeyword, setLocalKeyword] = useState('');
   const [editor, setEditor] = useState({ visible: false, data: EMPTY });
   const searchKeyword = embedded ? keyword : localKeyword;
+
+  useEffect(() => saveMockCategories(items), [items]);
 
   const typeOptions = useMemo(
     () =>
@@ -38,28 +51,9 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
     [types]
   );
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [typeRes, categoryRes] = await Promise.all([
-        API.get('/api/skill-category/types', { params: { includeDisabled: 1 } }),
-        API.get('/api/skill-category/', { params: { includeDisabled: 1 } })
-      ]);
-      if (typeRes.data?.success === false) {
-        showError(typeRes.data.message || '加载分类类型失败');
-        return;
-      }
-      if (categoryRes.data?.success === false) {
-        showError(categoryRes.data.message || '加载分类失败');
-        return;
-      }
-      setTypes(typeRes.data?.data || []);
-      setItems(categoryRes.data?.data || []);
-    } catch (err) {
-      showError(err.message || '加载失败');
-    } finally {
-      setLoading(false);
-    }
+  const load = () => {
+    setTypes(MOCK_CATEGORY_TYPES);
+    setItems(readMockCategories());
   };
 
   useEffect(() => {
@@ -101,18 +95,6 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
     }));
   };
 
-  const buildPayload = () => {
-    const payload = {
-      type_id: editor.data.type_id,
-      code: editor.data.code,
-      name: editor.data.name,
-      description: editor.data.description,
-      status: Number(editor.data.status),
-      sort_order: Number(editor.data.sort_order || 0)
-    };
-    return payload;
-  };
-
   const save = async () => {
     if (!editor.data.type_id || !editor.data.code || !editor.data.name) {
       showError('类型、code、名称必填');
@@ -120,19 +102,29 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
     }
     setSaving(true);
     try {
-      const payload = buildPayload();
-      const res = editor.data.id
-        ? await API.put(`/api/skill-category/${editor.data.id}`, payload)
-        : await API.post('/api/skill-category/', payload);
-      if (res.data?.success === false) {
-        showError(res.data.message || '保存失败');
-        return;
-      }
+      const existing = editor.data.id ? items.find((item) => item.id === editor.data.id) : null;
+      const typeInfo = types.find((type) => type.id === Number(editor.data.type_id));
+      const record = {
+        ...(existing || {}),
+        id: editor.data.id || nextCategoryId(items),
+        type_id: Number(editor.data.type_id),
+        type_code: typeInfo?.code || '',
+        type_name: typeInfo?.name || '',
+        code: editor.data.code,
+        name: editor.data.name,
+        description: editor.data.description,
+        status: Number(editor.data.status),
+        sort_order: Number(editor.data.sort_order || 0),
+        skill_count: existing?.skill_count ?? 0,
+        updated_at: Math.floor(Date.now() / 1000)
+      };
+      setItems((current) =>
+        editor.data.id
+          ? current.map((item) => (item.id === record.id ? record : item))
+          : [...current, record]
+      );
       showSuccess('保存成功');
       closeEditor();
-      load();
-    } catch (err) {
-      showError(err.message || '保存失败');
     } finally {
       setSaving(false);
     }
@@ -146,28 +138,19 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
     }
     Modal.confirm({
       title: `删除分类: ${row.name || row.code}?`,
-      content: '分类会被软删除。',
+      content: '删除后不可恢复。',
       okType: 'danger',
-      onOk: async () => {
-        try {
-          const res = await API.delete(`/api/skill-category/${row.id}`);
-          if (res.data?.success === false) {
-            showError(res.data.message || '删除失败');
-            return;
-          }
-          showSuccess('已删除');
-          load();
-        } catch (err) {
-          showError(err.message || '删除失败');
-        }
+      onOk: () => {
+        setItems((current) => current.filter((item) => item.id !== row.id));
+        showSuccess('已删除');
       }
     });
   };
 
   const columns = [
-    { title: 'ID', dataIndex: 'id', width: 80 },
-    { title: '名称', dataIndex: 'name', width: 180 },
-    { title: 'Code', dataIndex: 'code', width: 180 },
+    { title: 'ID', dataIndex: 'id', width: 72 },
+    { title: '名称', dataIndex: 'name', width: 140 },
+    { title: 'Code', dataIndex: 'code', width: 160 },
     {
       title: '类型',
       dataIndex: 'type_code',
@@ -199,7 +182,7 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
       width: 150,
       render: (_, row) => (
         <Space>
-          <Button size='small' onClick={() => openEdit(row)}>编辑</Button>
+          <Button size='small' type='tertiary' theme='light' onClick={() => openEdit(row)}>编辑</Button>
           <Button size='small' type='danger' theme='light' onClick={() => remove(row)}>删除</Button>
         </Space>
       )
@@ -271,8 +254,6 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
           dataSource={filteredItems}
           rowKey='id'
           loading={loading}
-          scroll={{ y: 'calc(100vh - 245px)' }}
-          sticky={{ top: 0 }}
           pagination={{ pageSize: 20 }}
         />
       </div>

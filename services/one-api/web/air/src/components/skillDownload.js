@@ -269,10 +269,8 @@ export async function fetchSkillFull(kind, id) {
   return res.data?.data || res.data;
 }
 
-export async function downloadSkillZip(kind, id) {
-  const skill = await fetchSkillFull(kind, id);
-  if (!skill?.name) throw new Error('skill 数据缺少 name');
-
+/** 由一条完整技能记录（含 body/assets 或 content）现场组装技能包 ZIP。 */
+export function buildSkillZipBlob(skill) {
   let body = skill.body || '';
   let assets = skill.assets || '';
   if (!assets && skill.content) {
@@ -290,6 +288,16 @@ export async function downloadSkillZip(kind, id) {
       path: `${root}${file.path}`
     }))
   ];
-  const zip = createZip(files);
-  downloadBlob(zip, `${sanitizeName(skill.name)}.zip`);
+  return createZip(files);
+}
+
+/** 打包并触发浏览器下载。 */
+export function downloadSkillBlob(skill) {
+  if (!skill?.name) throw new Error('skill 数据缺少 name');
+  downloadBlob(buildSkillZipBlob(skill), `${sanitizeName(skill.name)}.zip`);
+}
+
+export async function downloadSkillZip(kind, id) {
+  const skill = await fetchSkillFull(kind, id);
+  downloadSkillBlob(skill);
 }

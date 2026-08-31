@@ -1,0 +1,272 @@
+/* 技能管理（公库）页面样式，全部挂在 .skill-admin 下，避免污染全局。
+   页面骨架（页头/页签/统计格/卡片）复用 Zjugis 预览页的 preview-* 样式。 */
+
+.skill-admin {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.skill-admin-meta {
+  color: #7b90ad;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* surface 卡片内的 Semi 表格透明化，避免白卡套白卡 */
+.skill-admin-surface .semi-table-container,
+.skill-admin-surface .semi-table {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.skill-admin-surface .semi-table-thead > .semi-table-row > .semi-table-row-head {
+  background: transparent;
+  color: #7a90ae;
+  font-size: 13px;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(130, 155, 196, .2);
+}
+
+.skill-admin-surface .semi-table-tbody > .semi-table-row > .semi-table-row-cell {
+  border-bottom: 1px solid rgba(130, 155, 196, .12);
+}
+
+.skill-admin-surface .semi-table-tbody > .semi-table-row:hover > .semi-table-row-cell {
+  background: rgba(244, 248, 253, .8);
+}
+
+/* 固定列（状态/操作）在横向滚动时不能透出行内容 */
+.skill-admin-surface .semi-table-row-head[style*='sticky'],
+.skill-admin-surface .semi-table-row-cell[style*='sticky'] {
+  background: #fff;
+}
+
+/* ── 行内元素 ───────────────────────────── */
+
+.skill-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.skill-name-main {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d2e4c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-name-sub {
+  font-size: 12px;
+  color: #7b90ad;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 能力标签单行排布，超长省略，保证行高一致 */
+.skill-cap-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.skill-cap-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 132px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.skill-cap-more {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #7b90ad;
+  line-height: 20px;
+}
+
+/* 主要能力悬停提示：深色浮层内纵向列出全部能力 */
+.skill-cap-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 2px;
+  max-width: 320px;
+}
+
+.skill-cap-tip-item {
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 操作列按钮：避免命中全局 .semi-button-primary 的实心蓝覆盖 */
+.skill-row-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.skill-row-actions .semi-button {
+  font-size: 12px;
+}
+
+/* ── 新增/编辑弹窗（复用 zjugis-modal 骨架，见 index.css） ── */
+
+.skill-required {
+  margin-left: 4px;
+  color: #e3554f;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.skill-import-ok {
+  color: #2f9e63;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ── 浏览抽屉 ───────────────────────────── */
+
+.skill-browse {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.skill-browse-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(239, 246, 255, .9), rgba(255, 255, 255, .6));
+  border: 1px solid rgba(130, 155, 196, .16);
+}
+
+.skill-browse-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.skill-browse-title {
+  color: #122344;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -.2px;
+}
+
+.skill-browse-sub {
+  margin-top: 6px;
+  color: #7b90ad;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+}
+
+.skill-browse-stats {
+  display: flex;
+  gap: 22px;
+  flex-shrink: 0;
+  padding-right: 4px;
+}
+
+.skill-browse-stats span {
+  display: block;
+  color: #7b90ad;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.skill-browse-stats strong {
+  display: block;
+  margin-top: 4px;
+  color: #1d2e4c;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.skill-browse-section h4 {
+  margin: 0 0 8px;
+  color: #1d2e4c;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.skill-browse-caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.skill-browse-caps .skill-cap-tag {
+  max-width: none;
+}
+
+.skill-browse-section p {
+  margin: 8px 0 0;
+  color: #43597c;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.skill-browse-files {
+  display: flex;
+  gap: 12px;
+  min-height: 380px;
+}
+
+.skill-browse-filetree {
+  width: 260px;
+  flex-shrink: 0;
+  border: 1px solid rgba(130, 155, 196, .2);
+  border-radius: 12px;
+  background: #f7f9fc;
+  overflow: auto;
+  padding: 10px 8px;
+}
+
+.skill-browse-preview {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid rgba(130, 155, 196, .2);
+  border-radius: 12px;
+  background: #fff;
+  overflow: auto;
+  padding: 16px 18px;
+}
+
+.skill-browse-preview pre {
+  margin: 0;
+  color: #33455f;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.skill-browse-preview img {
+  max-width: 100%;
+}

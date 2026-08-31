@@ -1,562 +1,289 @@
-import React, {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState
-} from 'react';
-import { Button, Form, Modal, Space, Table, Tag } from '@douyinfe/semi-ui';
-import { API, showError, showSuccess, timestamp2string } from '../helpers';
-import SkillEditor from './SkillEditor';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { Button, Modal, Table, Tag, Tooltip } from '@douyinfe/semi-ui';
 import SkillBrowseDrawer from './SkillBrowseDrawer';
-import BatchImportModal from './BatchImportModal';
-import {
-  categorySelectOptions,
-  renderCategorySelectOption,
-  renderCategorySelectedItem,
-  renderSkillCategoryTags
-} from './skillCategoryUtils';
-import { downloadSkillZip } from './skillDownload';
+import { MARKETPLACE_MOCK_SKILLS, MOCK_SKILL_CATEGORIES, normalizeMockSkill } from './skillMarketplaceMock';
+import { importSkillFolder } from './skillFolderImport';
+import { showError, showSuccess } from '../helpers';
+import './SkillsTable.css';
 
-const BATCH_ACTIONS = {
-  soft_delete: '批量软删',
-  restore: '批量恢复',
-  append_categories: '批量追加分类'
+// 当前为演示阶段：数据与安装包的技能广场对齐，编辑结果只保存在本浏览器。
+// 数据结构调整时递增版本号，避免读到旧版缓存。
+const STORAGE_KEY = 'dsh-admin-mock-skills-v4';
+
+const STATUS_LABELS = { published: '已上架', draft: '草稿', disabled: '已下架' };
+const STATUS_COLORS = { published: 'green', draft: 'orange', disabled: 'grey' };
+
+function readMockSkills() {
+  if (typeof window === 'undefined') return MARKETPLACE_MOCK_SKILLS;
+  try { const value = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || 'null'); return Array.isArray(value) ? value : MARKETPLACE_MOCK_SKILLS; } catch (_) { return MARKETPLACE_MOCK_SKILLS; }
+}
+function saveMockSkills(items) { if (typeof window !== 'undefined') window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
+
+const nowString = () => new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
+const splitLines = text => String(text || '').split('\n').map(line => line.trim()).filter(Boolean);
+
+const EMPTY_FORM = {
+  name: '',
+  display_name: '',
+  category: '办公文档',
+  version: '1.0.0',
+  status: 'draft',
+  summary: '',
+  description: '',
+  capabilities: '',
+  body: ''
 };
 
-const apiSortOrder = (direction) =>
-  direction === 'ascend' ? 'asc' : direction === 'descend' ? 'desc' : '';
-
 const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
-  const [items, setItems] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [items, setItems] = useState(readMockSkills);
   const [keyword, setKeyword] = useState(keywordProp);
-  const [loading, setLoading] = useState(false);
-  const [editor, setEditor] = useState({ visible: false, mode: 'view', id: null });
-  const [browse, setBrowse] = useState({ visible: false, id: null });
+  const [browse, setBrowse] = useState({ visible: false, skill: null });
+  // editor.base 为被编辑的技能；null 表示新增
+  const [editor, setEditor] = useState(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  // 从文件夹导入的产物；null 表示本次编辑未导入
+  const [imported, setImported] = useState(null);
+  const folderInputRef = useRef(null);
+  useEffect(() => saveMockSkills(items), [items]);
 
-  const [category, setCategory] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [skillCategories, setSkillCategories] = useState([]);
-  const [deletedFilter, setDeletedFilter] = useState('');
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [batchCatModal, setBatchCatModal] = useState({ visible: false, categoryIds: [] });
-  const [batchImportVisible, setBatchImportVisible] = useState(false);
-  const [sorter, setSorter] = useState({ field: '', direction: '' });
-  const [downloadingId, setDownloadingId] = useState(null);
+  const onKeywordChange = useCallback(value => setKeyword(value || ''), []);
+  useImperativeHandle(ref, () => ({ onKeywordChange, openCreate: () => openEditor(null) }));
 
-  const debounceRef = useRef(null);
+  const openEditor = (skill) => {
+    setImported(null);
+    setForm(skill ? {
+      name: skill.name || '',
+      display_name: skill.display_name || '',
+      category: skill.category || '办公文档',
+      version: skill.version || '1.0.0',
+      status: skill.status || 'draft',
+      summary: skill.summary || '',
+      description: skill.description || '',
+      capabilities: (skill.capabilities || []).join('\n'),
+      body: skill.body || ''
+    } : { ...EMPTY_FORM });
+    setEditor({ base: skill || null });
+  };
+  const closeEditor = () => setEditor(null);
+  const setField = field => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
 
-  const load = useCallback(async (kw, pg, cat, deleted, ps, catId = '', sort = {}) => {
-    setLoading(true);
+  const handleFolderImport = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (folderInputRef.current) folderInputRef.current.value = '';
+    if (!files.length) return;
     try {
-      const res = await API.get('/api/skill/admin/list', {
-        params: {
-          keyword: kw,
-          page: pg,
-          perPage: ps,
-          category: cat || '',
-          category_id: catId || '',
-          deleted: deleted || 'normal',
-          sort_field: sort.field || '',
-          sort_order: apiSortOrder(sort.direction)
-        }
-      });
-      const data = res.data || {};
-      setItems(data.items || []);
-      setTotal(data.totalItems || 0);
+      const result = await importSkillFolder(files);
+      setForm(prev => ({
+        ...prev,
+        name: prev.name || result.name,
+        display_name: prev.display_name || result.displayName,
+        description: prev.description || result.description,
+        body: result.body
+      }));
+      setImported({ fileCount: result.fileCount, paths: result.paths, assets: result.assets });
+      showSuccess(`已导入 ${result.fileCount} 个文件`);
     } catch (err) {
-      showError(err.message || '加载失败');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const loadCategories = useCallback(async () => {
-    try {
-      const categoryRes = await API.get('/api/skill-category/', {
-        params: { includeDisabled: 1 }
-      });
-      if (categoryRes.data?.success !== false) {
-        setSkillCategories(categoryRes.data?.data || []);
-      }
-    } catch (err) {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    load(keyword, page, category, deletedFilter, pageSize, categoryId, sorter);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, category, categoryId, deletedFilter, sorter, load]);
-
-  useEffect(() => {
-    loadCategories();
-  }, [loadCategories]);
-
-  const onKeywordChange = useCallback(
-    (v) => {
-      setKeyword(v);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-        setPage(1);
-        load(v, 1, category, deletedFilter, pageSize, categoryId, sorter);
-      }, 250);
-    },
-    [load, category, deletedFilter, pageSize, categoryId, sorter]
-  );
-
-  useImperativeHandle(ref, () => ({
-    onKeywordChange,
-    openCreate: () => setEditor({ visible: true, mode: 'create', id: null }),
-    openBatchImport: () => setBatchImportVisible(true)
-  }));
-
-  const handleSoftDelete = (row) => {
-    Modal.confirm({
-      title: `软删除 skill: ${row.name}?`,
-      content: '软删后不会在默认列表显示，可通过状态筛选恢复。',
-      onOk: async () => {
-        try {
-          const res = await API.delete(`/api/skill/${row.id}`);
-          if (res.data?.success === false) {
-            showError(res.data.message || '删除失败');
-            return;
-          }
-          showSuccess('已软删');
-          load(keyword, page, category, deletedFilter, pageSize, categoryId, sorter);
-        } catch (err) {
-          showError(err.message || '删除失败');
-        }
-      }
-    });
-  };
-
-  const handleHardDelete = (row) => {
-    Modal.confirm({
-      title: `彻底删除 skill: ${row.name}?`,
-      content: '此操作不可恢复，将从数据库物理删除。',
-      okType: 'danger',
-      onOk: async () => {
-        try {
-          const res = await API.delete(`/api/skill/${row.id}?force=1`);
-          if (res.data?.success === false) {
-            showError(res.data.message || '删除失败');
-            return;
-          }
-          showSuccess('已彻底删除');
-          load(keyword, page, category, deletedFilter, pageSize, categoryId, sorter);
-          loadCategories();
-        } catch (err) {
-          showError(err.message || '删除失败');
-        }
-      }
-    });
-  };
-
-  const handleRestore = async (row) => {
-    try {
-      const res = await API.post(`/api/skill/${row.id}/restore`);
-      if (res.data?.success === false) {
-        showError(res.data.message || '恢复失败');
-        return;
-      }
-      showSuccess('已恢复');
-      load(keyword, page, category, deletedFilter, pageSize, categoryId, sorter);
-    } catch (err) {
-      showError(err.message || '恢复失败');
+      showError(err.message || '导入失败');
     }
   };
 
-  const handleDownload = async (row) => {
-    setDownloadingId(row.id);
-    try {
-      await downloadSkillZip('public', row.id);
-      showSuccess('已开始下载');
-    } catch (err) {
-      showError(err.message || '下载失败');
-    } finally {
-      setDownloadingId(null);
-    }
-  };
+  const filteredItems = useMemo(() => {
+    const query = keyword.trim().toLowerCase();
+    if (!query) return items;
+    return items.filter(item => [item.name, item.display_name, item.summary, item.description, item.category, item.submitter, ...(item.capabilities || [])].join(' ').toLowerCase().includes(query));
+  }, [items, keyword]);
 
-  const runBatch = async (action, value) => {
-    try {
-      const res =
-        action === 'append_categories'
-          ? await API.post('/api/skill/admin/batch-categories', {
-              skill_ids: selectedIds,
-              action: 'append',
-              category_ids: value || []
-            })
-          : await API.post('/api/skill/admin/batch', {
-              ids: selectedIds,
-              action,
-              value: value || ''
-            });
-      if (res.data?.success === false) {
-        showError(res.data.message || '批量操作失败');
-        return;
-      }
-      const affected = res.data?.data?.affected;
-      showSuccess(affected == null ? '批量操作完成' : `已处理 ${affected} 条`);
-      setSelectedIds([]);
-      load(keyword, page, category, deletedFilter, pageSize, categoryId, sorter);
-      loadCategories();
-    } catch (err) {
-      showError(err.message || '批量操作失败');
-    }
-  };
-
-  const handleBatch = (action) => {
-    if (selectedIds.length === 0) {
-      showError('请先选择至少一行');
-      return;
-    }
-    if (action === 'append_categories') {
-      setBatchCatModal({ visible: true, categoryIds: [] });
-      return;
-    }
-    Modal.confirm({
-      title: `${BATCH_ACTIONS[action]}（共 ${selectedIds.length} 项)?`,
-      onOk: () => runBatch(action, '')
-    });
-  };
-
-  const handleBatchCatSubmit = () => {
-    const ids = batchCatModal.categoryIds || [];
-    if (!ids.length) {
-      showError('请选择分类');
-      return;
-    }
-    runBatch('append_categories', ids);
-    setBatchCatModal({ visible: false, categoryIds: [] });
-  };
-
-  const categoryFilterOptions = skillCategories.map((c) => ({
-    text: `${c.type_name || c.type_code} / ${c.name || c.code}`,
-    value: String(c.id)
-  }));
+  const removeSkill = skill => Modal.confirm({ title: `删除技能「${skill.display_name || skill.name}」？`, content: '删除后不可恢复。', okType: 'danger', onOk: () => setItems(current => current.filter(item => item.id !== skill.id)) });
 
   const columns = [
     {
-      title: 'ID',
-      dataIndex: 'id',
-      width: 80,
-      sorter: true
-    },
-    {
-      title: 'Name',
-      dataIndex: 'name',
-      width: 200,
-      sorter: true
-    },
-    {
-      title: '中文名称',
-      dataIndex: 'display_name',
-      width: 180,
-      sorter: true,
-      render: (v) => v || '-'
-    },
-    {
-      title: '上传人',
-      dataIndex: 'submitter',
-      width: 120,
-      render: (v) => v || '-'
-    },
-    {
-      title: '上传时间',
-      dataIndex: 'created_at',
-      width: 180,
-      sorter: true,
-      render: (v) => (
-        <span style={{ whiteSpace: 'nowrap' }}>
-          {v ? timestamp2string(v) : '-'}
-        </span>
+      title: '技能', width: 200, render: (_, record) => (
+        <div className='skill-name'>
+          <span className='skill-name-main'>{record.display_name}</span>
+          <span className='skill-name-sub'>{record.name} · {record.team || '-'}</span>
+        </div>
       )
     },
+    { title: '分类', dataIndex: 'category', width: 96, render: value => <Tag color='blue' size='small'>{value}</Tag> },
     {
-      title: '分类',
-      dataIndex: 'categories',
-      width: 240,
-      filters: categoryFilterOptions,
-      filterMultiple: false,
-      render: (_, record) => renderSkillCategoryTags(record.categories || [])
-    },
-    {
-      title: '描述',
-      dataIndex: 'description',
-      width: 160,
-      render: (v) => {
-        const text = v || '';
-        const short = text.length > 10 ? text.slice(0, 10) + '...' : text;
+      title: '主要能力', width: 200, render: (_, record) => {
+        const capabilities = record.capabilities || [];
+        if (capabilities.length === 0) return null;
         return (
-          <span title={text} style={{ whiteSpace: 'nowrap' }}>
-            {short || '-'}
-          </span>
+          <Tooltip
+            content={(
+              <div className='skill-cap-tip'>
+                {capabilities.map(item => <div key={item} className='skill-cap-tip-item'>{item}</div>)}
+              </div>
+            )}
+          >
+            <div className='skill-cap-row'>
+              <span className='skill-cap-tag'>{capabilities[0]}</span>
+              {capabilities.length > 1 && <span className='skill-cap-more'>+{capabilities.length - 1}</span>}
+            </div>
+          </Tooltip>
         );
       }
     },
+    { title: '版本', dataIndex: 'version', width: 76, render: value => <span style={{ color: '#607a9e' }}>v{value}</span> },
+    { title: '上传人', dataIndex: 'submitter', width: 84 },
+    { title: '上传时间', dataIndex: 'created_at', width: 168, render: value => <span style={{ color: '#607a9e' }}>{value}</span> },
+    { title: '安装量', dataIndex: 'downloads', width: 76 },
+    { title: '状态', width: 80, fixed: 'right', render: (_, record) => <Tag color={STATUS_COLORS[record.status] || 'grey'} size='small'>{STATUS_LABELS[record.status] || record.status}</Tag> },
     {
-      title: '状态',
-      dataIndex: 'is_deleted',
-      width: 110,
-      filters: [
-        { text: '正常', value: 'normal' },
-        { text: '已删除', value: 'deleted' }
-      ],
-      filterMultiple: false,
-      render: (v) =>
-        v ? <Tag color='red'>已删除</Tag> : <Tag color='green'>正常</Tag>
-    },
-    {
-      title: '下载',
-      dataIndex: 'downloads',
-      width: 90,
-      sorter: true
-    },
-    {
-      title: '更新时间',
-      dataIndex: 'updated_at',
-      width: 180,
-      sorter: true,
-      render: (v) => (
-        <span style={{ whiteSpace: 'nowrap' }}>
-          {v ? timestamp2string(v) : '-'}
-        </span>
+      title: '操作', width: 190, fixed: 'right', render: (_, record) => (
+        <div className='skill-row-actions'>
+          <Button size='small' type='tertiary' theme='light' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</Button>
+          <Button size='small' type='tertiary' theme='light' onClick={() => openEditor(record)}>编辑</Button>
+          <Button size='small' type='danger' theme='light' onClick={() => removeSkill(record)}>删除</Button>
+        </div>
       )
-    },
-    {
-      title: '操作',
-      width: 390,
-      fixed: 'right',
-      render: (_, record) =>
-        record.is_deleted ? (
-          <Space>
-            <Button
-              size='small'
-              onClick={() => setBrowse({ visible: true, id: record.id })}
-            >
-              浏览
-            </Button>
-            <Button
-              size='small'
-              onClick={() => setEditor({ visible: true, mode: 'view', id: record.id })}
-            >
-              查看
-            </Button>
-            <Button
-              size='small'
-              theme='light'
-              loading={downloadingId === record.id}
-              onClick={() => handleDownload(record)}
-            >
-              下载
-            </Button>
-            <Button
-              size='small'
-              theme='light'
-              type='primary'
-              onClick={() => handleRestore(record)}
-            >
-              恢复
-            </Button>
-            <Button
-              size='small'
-              theme='light'
-              type='danger'
-              onClick={() => handleHardDelete(record)}
-            >
-              彻底删除
-            </Button>
-          </Space>
-        ) : (
-          <Space>
-            <Button
-              size='small'
-              onClick={() => setBrowse({ visible: true, id: record.id })}
-            >
-              浏览
-            </Button>
-            <Button
-              size='small'
-              onClick={() => setEditor({ visible: true, mode: 'view', id: record.id })}
-            >
-              查看
-            </Button>
-            <Button
-              size='small'
-              theme='light'
-              loading={downloadingId === record.id}
-              onClick={() => handleDownload(record)}
-            >
-              下载
-            </Button>
-            <Button
-              size='small'
-              theme='light'
-              type='primary'
-              onClick={() => setEditor({ visible: true, mode: 'edit', id: record.id })}
-            >
-              编辑
-            </Button>
-            <Button
-              size='small'
-              theme='light'
-              type='danger'
-              onClick={() => handleSoftDelete(record)}
-            >
-              删除
-            </Button>
-          </Space>
-        )
     }
   ];
 
-  const onTableChange = ({ filters: newFilters, sorter: newSorter }) => {
-    if (newFilters) {
-      const catFilter = newFilters.find((f) => f.dataIndex === 'category');
-      const categoryRelFilter = newFilters.find((f) => f.dataIndex === 'categories');
-      const stateFilter = newFilters.find((f) => f.dataIndex === 'is_deleted');
-      const newCat = catFilter?.filteredValue?.[0] || '';
-      const newCategoryId = categoryRelFilter?.filteredValue?.[0] || '';
-      const stateVal = stateFilter?.filteredValue?.[0] || '';
-      if (newCat !== category) {
-        setCategory(newCat);
-        setPage(1);
-      }
-      if (newCategoryId !== categoryId) {
-        setCategoryId(newCategoryId);
-        setCategory('');
-        setPage(1);
-      }
-      const newDeletedFilter = stateVal === 'deleted' ? 'deleted' : '';
-      if (newDeletedFilter !== deletedFilter) {
-        setDeletedFilter(newDeletedFilter);
-        setPage(1);
-      }
-    }
-    if (newSorter) {
-      const nextSorter = {
-        field: newSorter.dataIndex || '',
-        direction: newSorter.sortOrder || ''
-      };
-      if (nextSorter.field !== sorter.field || nextSorter.direction !== sorter.direction) {
-        setPage(1);
-        setSorter(nextSorter);
-      }
-    }
+  const saveSkill = (e) => {
+    e.preventDefault();
+    const name = form.name.trim();
+    const displayName = form.display_name.trim();
+    if (!name) { showError('请输入技能标识'); return; }
+    if (!displayName) { showError('请输入显示名称'); return; }
+    const base = editor.base || {};
+    const folderImported = imported !== null;
+    const skill = normalizeMockSkill({
+      ...base,
+      id: base.id || `custom-${Date.now()}`,
+      name,
+      display_name: displayName,
+      category: form.category,
+      summary: form.summary,
+      description: form.description,
+      capabilities: splitLines(form.capabilities),
+      submitter: base.submitter || 'root',
+      created_at: base.created_at || nowString(),
+      updated_at: nowString(),
+      version: form.version || '1.0.0',
+      downloads: base.downloads || 0,
+      status: form.status || 'draft',
+      body: form.body || undefined,
+      // 文件夹导入：以导入产物为准；否则非导入技能按 package_files 重新生成占位内容
+      package_files: folderImported
+        ? imported.paths
+        : (base.source === 'folder' ? base.package_files || [] : (base.package_files || ['references/能力清单.md'])),
+      assets: folderImported
+        ? imported.assets
+        : (base.source === 'folder' ? base.assets || '' : undefined),
+      source: folderImported || base.source === 'folder' ? 'folder' : base.source
+    });
+    setItems(current => (editor.base ? current.map(item => (item.id === skill.id ? skill : item)) : [skill, ...current]));
+    setEditor(null);
+    showSuccess('保存成功');
   };
 
-  return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      {selectedIds.length > 0 && (
-        <Space style={{ marginBottom: 12, flexShrink: 0 }}>
-          <span style={{ fontSize: 12, color: '#666' }}>已选 {selectedIds.length} 项</span>
-          <Button size='small' type='danger' onClick={() => handleBatch('soft_delete')}>
-            批量软删
-          </Button>
-          <Button size='small' type='primary' onClick={() => handleBatch('restore')}>
-            批量恢复
-          </Button>
-          <Button size='small' onClick={() => handleBatch('append_categories')}>
-            批量追加分类
-          </Button>
-          <Button size='small' onClick={() => setSelectedIds([])}>
-            取消选择
-          </Button>
-        </Space>
-      )}
-
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <Table
-          columns={columns}
-          dataSource={items}
-          rowKey='id'
-          loading={loading}
-          scroll={{ y: 'calc(100vh - 245px)', x: 'max-content' }}
-          sticky={{ top: 0 }}
-          rowSelection={{
-            selectedRowKeys: selectedIds,
-            onChange: (keys) => setSelectedIds(keys)
-          }}
-          onChange={onTableChange}
-          pagination={{
-            currentPage: page,
-            pageSize,
-            total,
-            showSizeChanger: true,
-            pageSizeOpts: [20, 50, 100],
-            formatPageText: (p) => `第 ${p.currentStart} - ${p.currentEnd} 条，共 ${total} 条`,
-            onPageSizeChange: (size) => {
-              setPageSize(size);
-              setPage(1);
-            },
-            onPageChange: setPage
-          }}
-        />
+  return <div className='skill-admin'>
+    <div className='preview-stat-grid'>
+      <div>
+        <span>技能总数</span>
+        <strong>{items.length}</strong>
       </div>
-
-      <SkillBrowseDrawer
-        visible={browse.visible}
-        kind='public'
-        id={browse.id}
-        onClose={() => setBrowse({ visible: false, id: null })}
-      />
-
-      <SkillEditor
-        visible={editor.visible}
-        kind='public'
-        mode={editor.mode}
-        id={editor.id}
-        onClose={() => setEditor({ ...editor, visible: false })}
-        onSaved={() => {
-          load(keyword, page, category, deletedFilter, pageSize, categoryId, sorter);
-          loadCategories();
-        }}
-        skillCategories={skillCategories}
-      />
-
-      <Modal
-        title='批量追加分类'
-        visible={batchCatModal.visible}
-        onOk={handleBatchCatSubmit}
-        onCancel={() => setBatchCatModal({ visible: false, categoryIds: [] })}
-        okText='确定'
-        cancelText='取消'
-      >
-        <Form>
-          <Form.Select
-            field='category_ids'
-            label='分类'
-            placeholder='选择要追加的分类'
-            multiple
-            optionList={categorySelectOptions(skillCategories)}
-            renderOptionItem={renderCategorySelectOption}
-            renderSelectedItem={renderCategorySelectedItem}
-            initValue={batchCatModal.categoryIds}
-            onChange={(v) => setBatchCatModal((s) => ({ ...s, categoryIds: v || [] }))}
-          />
-        </Form>
-      </Modal>
-
-      <BatchImportModal
-        visible={batchImportVisible}
-        onClose={() => setBatchImportVisible(false)}
-        onDone={() => {
-          setPage(1);
-          load(keyword, 1, category, deletedFilter, pageSize, categoryId, sorter);
-          loadCategories();
-        }}
-        skillCategories={skillCategories}
-      />
+      <div>
+        <span>已上架</span>
+        <strong>{items.filter(item => item.status === 'published').length}</strong>
+      </div>
+      <div>
+        <span>当前分类</span>
+        <strong>{new Set(items.map(item => item.category)).size}</strong>
+      </div>
     </div>
-  );
+    <section className='preview-surface skill-admin-surface'>
+      <div className='preview-section-head'>
+        <h2>技能列表</h2>
+        <span className='skill-admin-meta'>共 {filteredItems.length} 条{keyword.trim() ? ` · 搜索“${keyword.trim()}”` : ''}</span>
+      </div>
+      <Table columns={columns} dataSource={filteredItems} rowKey='id' pagination={{ pageSize: 20 }} scroll={{ x: 1170 }} empty='暂无技能' />
+    </section>
+    <SkillBrowseDrawer visible={browse.visible} kind='mock' id={browse.skill?.id} skill={browse.skill} onClose={() => setBrowse({ visible: false, skill: null })} />
+    {editor && (
+      <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) closeEditor(); }}>
+        <div className='zjugis-modal wide'>
+          <div className='zjugis-modal-head'>
+            <h2>{editor.base ? '编辑技能' : '新增技能'}</h2>
+            <button type='button' onClick={closeEditor} aria-label='关闭'>×</button>
+          </div>
+          <form className='zjugis-form' onSubmit={saveSkill}>
+            <div className='form-grid'>
+              <label className='zjugis-field'>
+                <span>技能标识（英文 slug）<i className='skill-required'>*</i></span>
+                <input value={form.name} onChange={setField('name')} placeholder='例如 land-evaluation' />
+              </label>
+              <label className='zjugis-field'>
+                <span>显示名称<i className='skill-required'>*</i></span>
+                <input value={form.display_name} onChange={setField('display_name')} placeholder='例如 土地评估报告' />
+              </label>
+              <label className='zjugis-field'>
+                <span>分类</span>
+                <select value={form.category} onChange={setField('category')}>
+                  {[...MOCK_SKILL_CATEGORIES, '其他'].map(value => <option key={value} value={value}>{value}</option>)}
+                </select>
+              </label>
+              <label className='zjugis-field'>
+                <span>版本</span>
+                <input value={form.version} onChange={setField('version')} placeholder='1.0.0' />
+              </label>
+              <label className='zjugis-field'>
+                <span>上架状态</span>
+                <select value={form.status} onChange={setField('status')}>
+                  <option value='draft'>草稿</option>
+                  <option value='published'>已上架</option>
+                  <option value='disabled'>已下架</option>
+                </select>
+              </label>
+            </div>
+            {!editor.base && (
+              <label className='zjugis-field full'>
+                <span>从文件夹导入技能（可选）</span>
+                <div className='form-inline-actions'>
+                  <button type='button' className='preview-button' onClick={() => folderInputRef.current?.click()}>
+                    选择 SKILL 文件夹
+                  </button>
+                  {imported && <span className='skill-import-ok'>已导入 {imported.fileCount} 个文件，保存后可在详情中查看</span>}
+                </div>
+                <small className='preview-muted'>文件夹需包含 SKILL.md；标识、描述与正文将自动填充，其余文件随技能包一起保存。</small>
+                <input
+                  ref={folderInputRef}
+                  type='file'
+                  multiple
+                  hidden
+                  onChange={handleFolderImport}
+                  {...{ webkitdirectory: '', directory: '' }}
+                />
+              </label>
+            )}
+            <label className='zjugis-field full'>
+              <span>一句话简介</span>
+              <input value={form.summary} onChange={setField('summary')} placeholder='一句话说明技能用途' />
+            </label>
+            <label className='zjugis-field full'>
+              <span>详细描述</span>
+              <textarea rows='3' value={form.description} onChange={setField('description')} placeholder='技能的完整功能说明' />
+            </label>
+            <label className='zjugis-field full'>
+              <span>主要能力（每行一条）</span>
+              <textarea rows='3' value={form.capabilities} onChange={setField('capabilities')} />
+            </label>
+            <label className='zjugis-field full'>
+              <span>SKILL.md 内容（留空则按上面的信息生成）</span>
+              <textarea rows='5' value={form.body} onChange={setField('body')} />
+            </label>
+            <div className='zjugis-modal-actions'>
+              <button type='button' className='preview-button' onClick={closeEditor}>取消</button>
+              <button type='submit' className='preview-button primary'>保存技能</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
+  </div>;
 });
 
 SkillsTable.displayName = 'SkillsTable';
-
 export default SkillsTable;
