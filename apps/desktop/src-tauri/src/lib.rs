@@ -27,6 +27,20 @@ struct ServerConfig {
 
 struct Sidecar(Arc<Mutex<Option<Child>>>);
 
+impl Sidecar {
+    /// Stop the Node runtime before terminating the native shell. This makes
+    /// upgrades deterministic: `sharp` keeps libvips loaded while Node lives.
+    fn stop(&self) {
+        if let Ok(mut guard) = self.0.lock() {
+            if let Some(child) = guard.as_mut() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            *guard = None;
+        }
+    }
+}
+
 const NATIVE_AUTH_TITLE_PREFIX: &str = "__zjugis_native_auth:";
 
 /// The application is rendered by a sidecar on an external URL. Its
@@ -128,12 +142,7 @@ fn disable_legacy_vision_tool(log_path: &Path) {
 
 impl Drop for Sidecar {
     fn drop(&mut self) {
-        if let Ok(mut guard) = self.0.lock() {
-            if let Some(child) = guard.as_mut() {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-        }
+        self.stop();
     }
 }
 
@@ -340,6 +349,16 @@ fn spawn_sidecar(
 
 pub fn run() {
     tauri::Builder::default()
+        // A second launch only restores the existing window. Most
+        // importantly, it never starts another Node sidecar that could keep
+        // bundled runtime DLLs locked during the next installer upgrade.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .setup(|app| {
             let resource_dir = app.path().resource_dir()?;
             let app_data_dir = app.path().app_local_data_dir()?;
@@ -380,7 +399,12 @@ pub fn run() {
                             let _ = window.set_focus();
                         }
                     }
-                    "quit" => app.exit(0),
+                    "quit" => {
+                        if let Some(sidecar) = app.try_state::<Sidecar>() {
+                            sidecar.stop();
+                        }
+                        app.exit(0);
+                    }
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
