@@ -182,6 +182,11 @@ export interface Config {
    * prompting (the deterministic CI/unattended stance).
    */
   readonly policy?: ApprovalPolicy
+  /**
+   * After the user approves one dependency-install escalation in a session,
+   * allow later package-manager install escalations in that same session.
+   */
+  readonly autoApproveDependencyInstalls?: boolean
 }
 
 /**
@@ -192,7 +197,10 @@ export interface Config {
 export class ApprovalService extends Service {
   static Config: z<Config> = z.object({
     policy: z.union(['ask', 'never'] as const).default('ask'),
+    autoApproveDependencyInstalls: z.boolean().default(false),
   })
+
+  private readonly approvedDependencySessions = new WeakSet<Session>()
 
   constructor(ctx: Context, public config: Config) {
     super(ctx, 'approval')
@@ -270,9 +278,34 @@ export class ApprovalService extends Service {
       ...req.callId !== undefined ? { callId: req.callId } : {},
       ...req.reason !== undefined ? { reason: req.reason } : {},
     })
-    const outcome = await this.decide(req, session)
+    const dependencyInstall = this.isDependencyInstall(req)
+    const outcome = this.config.autoApproveDependencyInstalls === true
+      && dependencyInstall
+      && this.approvedDependencySessions.has(session)
+      ? 'allowed-once'
+      : await this.decide(req, session)
     session.append('approval/decided', { id, outcome })
+    if (dependencyInstall && outcome === 'allowed-once') {
+      this.approvedDependencySessions.add(session)
+    }
     return outcome
+  }
+
+  /** Whether this approval belongs to a package-manager dependency installation. */
+  private isDependencyInstall(req: ApprovalRequest): boolean {
+    if (req.callId === undefined || !['bash', 'pwsh'].includes(req.toolName)) return false
+    for (let index = req.agent.session.events.length - 1; index >= 0; index -= 1) {
+      const event = req.agent.session.events[index]
+      if (event?.type !== 'tool/call' || event.data.callId !== req.callId) continue
+      try {
+        const argumentsValue = JSON.parse(event.data.arguments) as { command?: unknown }
+        const command = typeof argumentsValue.command === 'string' ? argumentsValue.command : ''
+        return /(?:python(?:3)?\s+-m\s+pip|pip(?:3)?|npm|pnpm|yarn)\s+(?:install|add)\b/iu.test(command)
+      } catch {
+        return false
+      }
+    }
+    return false
   }
 
   /**

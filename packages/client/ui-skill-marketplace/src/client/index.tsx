@@ -22,10 +22,58 @@ type Skill = {
   params?: SkillParam[]
 }
 
+type MarketplaceSection = 'skills' | 'experts' | 'connectors' | 'automations'
+
+type ExpertTeam = {
+  id: string
+  name: string
+  summary: string
+  members: readonly string[]
+  skills: readonly string[]
+  accent: string
+}
+
+type Connector = {
+  id: string
+  name: string
+  summary: string
+  scope: string
+  icon: string
+  accent: string
+}
+
+type Automation = {
+  id: string
+  name: string
+  summary: string
+  trigger: string
+  steps: readonly string[]
+  accent: string
+}
+
+type DesktopBridge = { core?: { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> } }
+
+function skillSlug(skill: Skill): string {
+  const value = skill.id.toLocaleLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  return `market-${value || 'custom-skill'}`
+}
+
+function skillContent(skill: Skill): string {
+  return `# ${skill.name}\n\n${skill.description}\n\n## 主要能力\n\n- ${skill.summary}\n`
+}
+
+function desktopInvoke(command: string, argumentsValue: unknown): Promise<unknown> {
+  const bridge = (window as Window & { __TAURI__?: DesktopBridge }).__TAURI__
+  const invoke = bridge?.core?.invoke
+  if (typeof invoke !== 'function') {
+    return Promise.reject(new Error('本地安装仅支持已安装的 ZJUGIS Harness 桌面端'))
+  }
+  return invoke(command, argumentsValue)
+}
+
 const L = {
   title: '技能广场',
   close: '关闭技能广场',
-  moreSkills: '更多skills前往市场',
   subtitle: '发现可复用的工作流和智能助手',
   search: '搜索技能',
   myInstalled: '我安装的',
@@ -47,6 +95,13 @@ const L = {
   author: '作者',
   params: '参数配置',
   noParams: '该技能无需配置参数',
+  preview: '预览',
+  uninstall: '卸载',
+  createSkill: '添加本地技能',
+  skills: '技能',
+  experts: '专家团',
+  connectors: '连接器',
+  automations: '自动化',
 }
 
 const CATEGORIES = [
@@ -85,6 +140,25 @@ const MOCK_SKILLS: readonly Skill[] = [
   { id: 'research-report', name: '咨询报告生成器', category: '专业写作', tags: ['推荐'], summary: '生成研究、规划、政府服务和项目汇报中的结构化咨询报告。', description: '面向一类完整的项目任务：研究一个行业、分析一项政策、准备一次汇报，输出逻辑清楚、结构完整的咨询报告。', installs: '261', accent: '#6366f1', icon: '报', version: '1.7.0', author: '专业写作室' },
   { id: 'text-extract', name: '文本结构化提取', category: '专业写作', tags: ['SkillHub'], summary: '从非结构化文本中提取结构化数据的通用工作流，由用户定义字段。', description: '调用 extract_structured_data 工具完成提取，内置字段定义、抽样校验与结果导出流程。', installs: '36', accent: '#3b82f6', icon: '提', version: '1.0.2', author: '专业写作室' },
   { id: 'template-imitation', name: '模板仿写生成', category: '专业写作', tags: ['SkillHub'], summary: '按用户提供的模板文件和参考资料，仿写生成 Word 格式文档。', description: '触发场景：用户提供“模板”+“参考资料/素材”，要求“按此模板”生成文档；保持模板版式与章节结构，填充新内容。', installs: '36', accent: '#3b82f6', icon: '仿', version: '1.0.0', author: '专业写作室' },
+]
+
+const EXPERT_TEAMS: readonly ExpertTeam[] = [
+  { id: 'planning-review', name: '国土空间规划审查专家团', summary: '由政策解读、GIS 制图、文本审查与报告交付技能协同完成规划材料审查。', members: ['规划主理人', '政策分析师', 'GIS 工程师', '报告审核员'], skills: ['政策文件解析', 'GIS 制图导出', '咨询报告生成器'], accent: '#2563eb' },
+  { id: 'tender-delivery', name: '投标文件交付专家团', summary: '围绕招标要求提取、资格核验、技术方案和最终文档交付组织多技能工作流。', members: ['投标主理人', '文档分析师', '方案顾问', '交付校验员'], skills: ['文本结构化提取', '公文写作助手', 'Word 文档编辑'], accent: '#7c3aed' },
+  { id: 'data-research', name: '数据研判专家团', summary: '从数据清洗、统计分析到图表和结论报告的一体化研判流程。', members: ['研究主理人', '数据分析师', '图表设计师'], skills: ['数据清洗诊断', '数据分析洞察家', 'Excel 表格处理'], accent: '#059669' },
+]
+
+const CONNECTORS: readonly Connector[] = [
+  { id: 'zj-dingtalk', name: '浙政钉', summary: '接入组织通讯录、待办与消息通知，用于将任务结果送达政务协同入口。', scope: '需管理员授权', icon: '政', accent: '#1677ff' },
+  { id: 'office-mail', name: '办公邮箱', summary: '读取和起草授权范围内的办公邮件，支持将审阅结果作为邮件草稿交付。', scope: 'OAuth 授权', icon: '邮', accent: '#0f766e' },
+  { id: 'internal-mail', name: '内部邮箱', summary: '适配内网 SMTP / Exchange 环境，专用于不出网的邮件通知与归档。', scope: '需管理员配置', icon: '内', accent: '#7c3aed' },
+  { id: 'doc-center', name: '政务文档中心', summary: '连接受控文档库，在授予的目录范围内检索、读取和提交交付物。', scope: '按目录授权', icon: '文', accent: '#b45309' },
+]
+
+const AUTOMATIONS: readonly Automation[] = [
+  { id: 'daily-brief', name: '每日待办与政策简报', summary: '工作日早晨汇总待办、已接入来源的通知和政策要点，生成一份简报。', trigger: '工作日 08:30', steps: ['读取待办', '汇总政策', '生成简报'], accent: '#2563eb' },
+  { id: 'tender-watch', name: '投标文件变更提醒', summary: '监测指定工作区的招标文件变动，提取变更项并通知项目负责人。', trigger: '文件变更时', steps: ['检测变更', '解析差异', '发送提醒'], accent: '#dc2626' },
+  { id: 'weekly-report', name: '周报自动汇总', summary: '每周收集本工作区的成果与进展，整理为可编辑的 Word 周报草稿。', trigger: '每周五 16:30', steps: ['汇总成果', '提炼进展', '输出周报'], accent: '#059669' },
 ]
 
 const SUB_TABS = [
@@ -145,8 +219,8 @@ declare global {
 function createController(): Controller {
   const listeners = new Set<(open: boolean) => void>()
   const controller: Controller = {
-    open: () => listeners.forEach(listener => listener(true)),
-    close: () => listeners.forEach(listener => listener(false)),
+    open: () => { listeners.forEach((listener) => { listener(true) }) },
+    close: () => { listeners.forEach((listener) => { listener(false) }) },
     subscribe: (listener: (open: boolean) => void) => { listeners.add(listener); return () => listeners.delete(listener) },
   }
   if (typeof window !== 'undefined') {
@@ -190,7 +264,7 @@ function SkillDetail({ skill, onBack, installed, onToggleInstall }: {
           className={`dsh-skill-detail-install${installed ? ' installed' : ''}`}
           onClick={onToggleInstall}
         >
-          {installed ? L.installed : L.detailInstall}
+          {installed ? L.uninstall : L.detailInstall}
         </button>
       </div>
       <div className="dsh-skill-detail-body">
@@ -227,14 +301,67 @@ function SkillDetail({ skill, onBack, installed, onToggleInstall }: {
   )
 }
 
-function SkillMarketplace({ marketplaceUrl }: OverlayProps) {
+function ExpertTeams() {
+  return <div className="dsh-skill-special-grid">
+    {EXPERT_TEAMS.map(team => <article className="dsh-skill-special-card" key={team.id}>
+      <div className="dsh-skill-special-icon" style={{ background: team.accent }}>团</div>
+      <div className="dsh-skill-special-head"><h2>{team.name}</h2><span>多技能工作流</span></div>
+      <p>{team.summary}</p>
+      <div className="dsh-skill-special-label">协作角色</div>
+      <div className="dsh-skill-chip-row">{team.members.map(member => <span key={member}>{member}</span>)}</div>
+      <div className="dsh-skill-special-label">已编排技能</div>
+      <div className="dsh-skill-chip-row muted">{team.skills.map(skill => <span key={skill}>{skill}</span>)}</div>
+      <button type="button" className="dsh-skill-outline-button" onClick={() => { window.alert(`“${team.name}”的正式编排与执行能力将在下一阶段接入。`) }}>查看工作流</button>
+    </article>)}
+  </div>
+}
+
+function Connectors() {
+  const [connected, setConnected] = useState<Set<string>>(() => new Set())
+  return <div className="dsh-skill-special-grid">
+    {CONNECTORS.map(connector => <article className="dsh-skill-special-card connector" key={connector.id}>
+      <div className="dsh-skill-special-icon" style={{ background: connector.accent }}>{connector.icon}</div>
+      <div className="dsh-skill-special-head"><h2>{connector.name}</h2><span>{connector.scope}</span></div>
+      <p>{connector.summary}</p>
+      <div className="dsh-skill-connector-foot">
+        <small>{connected.has(connector.id) ? '已保存接入申请，等待授权' : '连接后仅在授权范围内访问数据'}</small>
+        <button type="button" className={connected.has(connector.id) ? 'installed' : ''} onClick={() => { setConnected(current => new Set(current).add(connector.id)) }}>{connected.has(connector.id) ? '已申请' : '申请接入'}</button>
+      </div>
+    </article>)}
+  </div>
+}
+
+function Automations() {
+  return <div className="dsh-skill-special-grid">
+    {AUTOMATIONS.map(item => <article className="dsh-skill-special-card automation" key={item.id}>
+      <div className="dsh-skill-special-icon" style={{ background: item.accent }}>自</div>
+      <div className="dsh-skill-special-head"><h2>{item.name}</h2><span>{item.trigger}</span></div>
+      <p>{item.summary}</p>
+      <ol className="dsh-automation-steps">{item.steps.map((step, index) => <li key={step}><b>{index + 1}</b>{step}</li>)}</ol>
+      <button type="button" className="dsh-skill-outline-button" onClick={() => { window.alert(`“${item.name}”当前为预览模板；正式定时执行将在连接器授权后开放。`) }}>查看流程</button>
+    </article>)}
+  </div>
+}
+
+function SkillMarketplace(_props: OverlayProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState(L.all)
   const [activeSubTab, setActiveSubTab] = useState('recommend')
+  const [section, setSection] = useState<MarketplaceSection>('skills')
   const [view, setView] = useState<'list' | 'detail'>('list')
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
   const [showInstalledOnly, setShowInstalledOnly] = useState(false)
+  const [installMessage, setInstallMessage] = useState<string | null>(null)
+  const [customSkills, setCustomSkills] = useState<Skill[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('dsh.marketplace.custom-skills') ?? '[]') as Skill[]
+    } catch {
+      return []
+    }
+  })
+  const [adding, setAdding] = useState(false)
+  const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '办公文档' })
 
   const [installed, setInstalled] = useState<Set<string>>(() => {
     try {
@@ -268,7 +395,8 @@ function SkillMarketplace({ marketplaceUrl }: OverlayProps) {
     return () => { document.removeEventListener('pointerdown', closeForSidebarAction, true) }
   }, [open])
 
-  const featuredPool = useMemo(() => MOCK_SKILLS.filter(s => s.featured), [])
+  const allSkills = useMemo(() => [...customSkills, ...MOCK_SKILLS], [customSkills])
+  const featuredPool = useMemo(() => allSkills.filter(s => s.featured), [allSkills])
   const [featuredOffset, setFeaturedOffset] = useState(0)
   const featuredSkills = useMemo(() => {
     if (featuredPool.length <= 3) return featuredPool
@@ -279,7 +407,7 @@ function SkillMarketplace({ marketplaceUrl }: OverlayProps) {
   }, [featuredPool, featuredOffset])
 
   const visible = useMemo(() => {
-    let skills = [...MOCK_SKILLS]
+    let skills = [...allSkills]
     if (activeSubTab === 'skillHub') {
       skills = skills.filter(s => s.tags.includes('SkillHub'))
     } else if (activeSubTab === 'suite') {
@@ -296,18 +424,60 @@ function SkillMarketplace({ marketplaceUrl }: OverlayProps) {
       skills = skills.filter(s => installed.has(s.id))
     }
     return skills
-  }, [activeSubTab, category, query, showInstalledOnly, installed])
+  }, [activeSubTab, allSkills, category, query, showInstalledOnly, installed])
 
   if (!open) return null
 
   const closeMarket = () => { setOpen(false); skillMarketplaceController.close() }
 
-  const toggleInstall = (id: string) => {
+  const toggleInstall = async (skill: Skill) => {
+    const slug = skillSlug(skill)
+    try {
+      if (installed.has(skill.id)) {
+        await desktopInvoke('uninstall_marketplace_skill', { slug })
+      } else {
+        await desktopInvoke('install_marketplace_skill', {
+          skill: { slug, description: skill.summary, content: skillContent(skill) },
+        })
+      }
+    } catch (error) {
+      setInstallMessage(error instanceof Error ? error.message : '技能安装失败')
+      return
+    }
     const next = new Set(installed)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
+    if (next.has(skill.id)) next.delete(skill.id)
+    else next.add(skill.id)
     setInstalled(next)
     localStorage.setItem('dsh.mock.skills', JSON.stringify([...next]))
+    setInstallMessage(next.has(skill.id)
+      ? `已安装。新建对话后可输入 /${slug} 调用该技能。`
+      : '技能已从本机移除。')
+  }
+
+  const createSkill = () => {
+    const name = newSkill.name.trim()
+    if (name === '') return
+    const id = `local-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || Date.now()}`
+    const skill: Skill = {
+      id,
+      name,
+      category: newSkill.category,
+      tags: ['本地'],
+      summary: newSkill.summary.trim() || '本地添加的自定义技能。',
+      description: newSkill.summary.trim() || '此技能保存在当前客户端，可预览、安装和在“我安装的”中管理。',
+      installs: '0',
+      accent: '#2563eb',
+      icon: '自',
+      version: '1.0.0',
+      author: '当前用户',
+    }
+    const next = [skill, ...customSkills.filter(item => item.id !== id)]
+    setCustomSkills(next)
+    localStorage.setItem('dsh.marketplace.custom-skills', JSON.stringify(next))
+    setAdding(false)
+    setNewSkill({ name: '', summary: '', category: '办公文档' })
+    setSelectedSkill(skill)
+    setView('detail')
   }
 
   const openDetail = (skill: Skill) => {
@@ -334,120 +504,155 @@ function SkillMarketplace({ marketplaceUrl }: OverlayProps) {
         {view === 'detail' && selectedSkill ? (
           <SkillDetail
             skill={selectedSkill}
-            onBack={() => setView('list')}
+            onBack={() => { setView('list') }}
             installed={installed.has(selectedSkill.id)}
-            onToggleInstall={() => toggleInstall(selectedSkill.id)}
+            onToggleInstall={() => void toggleInstall(selectedSkill)}
           />
         ) : (
           <>
-            <div className="dsh-skill-toolbar">
-              <div className="dsh-skill-search-row">
-                <input
-                  value={query}
-                  onChange={event => setQuery(event.target.value)}
-                  placeholder={L.search}
-                />
-                <div className="dsh-skill-search-actions">
-                  <button
-                    type="button"
-                    className={showInstalledOnly ? 'active' : ''}
-                    onClick={() => setShowInstalledOnly(v => !v)}
-                  >
-                    {L.myInstalled}
-                  </button>
-                  <button type="button" className="primary">{L.addSkill}</button>
-                </div>
-              </div>
+            <div className="dsh-skill-product-tabs" role="tablist" aria-label="技能广场功能">
+              {([
+                ['skills', L.skills], ['experts', L.experts], ['connectors', L.connectors], ['automations', L.automations],
+              ] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={section === id} className={section === id ? 'active' : ''} onClick={() => { setSection(id); setView('list') }}>{label}</button>)}
             </div>
-
-            {featuredSkills.length > 0 && (
-              <div className="dsh-skill-featured-section">
-                <div className="dsh-skill-section-header">
-                  <h2>{L.featured}</h2>
-                  <button type="button" className="dsh-skill-refresh" onClick={() => setFeaturedOffset(o => o + 3)}>
-                    <RefreshIcon /> {L.refresh}
-                  </button>
-                </div>
-                <div className="dsh-skill-featured-grid">
-                  {featuredSkills.map(skill => (
-                    <article
-                      key={skill.id}
-                      className="dsh-skill-featured-card"
-                      onClick={() => openDetail(skill)}
+            {section === 'experts' && <ExpertTeams />}
+            {section === 'connectors' && <Connectors />}
+            {section === 'automations' && <Automations />}
+            {section === 'skills' && <>
+              <div className="dsh-skill-toolbar">
+                <div className="dsh-skill-search-row">
+                  <input
+                    value={query}
+                    onChange={(event) => { setQuery(event.target.value) }}
+                    placeholder={L.search}
+                  />
+                  <div className="dsh-skill-search-actions">
+                    <button
+                      type="button"
+                      className={showInstalledOnly ? 'active' : ''}
+                      onClick={() => { setShowInstalledOnly(value => !value) }}
                     >
-                      <div className="dsh-skill-featured-icon" style={{ background: skill.accent }}>
-                        {skill.icon}
-                      </div>
-                      <div className="dsh-skill-featured-body">
-                        <h3>{skill.name}</h3>
-                        <p>{skill.summary}</p>
-                      </div>
-                      <button
-                        type="button"
-                        className={installed.has(skill.id) ? 'installed' : ''}
-                        onClick={(e) => { e.stopPropagation(); toggleInstall(skill.id) }}
-                      >
-                        {installed.has(skill.id) ? <CheckIcon /> : <PlusIcon />}
-                      </button>
-                    </article>
-                  ))}
-                </div>
-                <div className="dsh-skill-featured-more">
-                  <a href={marketplaceUrl} target="_blank" rel="noreferrer">{L.moreSkills} &rarr;</a>
+                      {L.myInstalled}
+                    </button>
+                    <button type="button" className="primary" onClick={() => { setAdding(true) }}>{L.addSkill}</button>
+                  </div>
                 </div>
               </div>
-            )}
 
-            <div className="dsh-skill-sub-tabs">
-              {SUB_TABS.map(tab => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  className={activeSubTab === tab.id ? 'active' : ''}
-                  onClick={() => setActiveSubTab(tab.id)}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="dsh-skill-categories">
-              {CATEGORIES.map(item => (
-                <button
-                  key={item}
-                  type="button"
-                  className={item === category ? 'active' : ''}
-                  onClick={() => setCategory(item)}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-
-            <div className="dsh-skill-grid">
-              {visible.map(skill => (
-                <article
-                  key={skill.id}
-                  className="dsh-skill-card"
-                  onClick={() => openDetail(skill)}
-                >
-                  <div className="dsh-skill-card-icon" style={{ background: skill.accent }}>
-                    {skill.icon}
+              {featuredSkills.length > 0 && (
+                <div className="dsh-skill-featured-section">
+                  <div className="dsh-skill-section-header">
+                    <h2>{L.featured}</h2>
+                    <button type="button" className="dsh-skill-refresh" onClick={() => { setFeaturedOffset(offset => offset + 3) }}>
+                      <RefreshIcon /> {L.refresh}
+                    </button>
                   </div>
-                  <div className="dsh-skill-card-body">
-                    <div className="dsh-skill-card-meta">
-                      <span>{skill.category}</span>
-                      <small>{skill.installs} {L.count}</small>
+                  <div className="dsh-skill-featured-grid">
+                    {featuredSkills.map(skill => (
+                      <article
+                        key={skill.id}
+                        className="dsh-skill-featured-card"
+                        onClick={() => { openDetail(skill) }}
+                      >
+                        <div className="dsh-skill-featured-icon" style={{ background: skill.accent }}>
+                          {skill.icon}
+                        </div>
+                        <div className="dsh-skill-featured-body">
+                          <h3>{skill.name}</h3>
+                          <p>{skill.summary}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className={installed.has(skill.id) ? 'installed' : ''}
+                          onClick={(e) => { e.stopPropagation(); void toggleInstall(skill) }}
+                        >
+                          {installed.has(skill.id) ? <CheckIcon /> : <PlusIcon />}
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="dsh-skill-sub-tabs">
+                {SUB_TABS.map(tab => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={activeSubTab === tab.id ? 'active' : ''}
+                    onClick={() => { setActiveSubTab(tab.id) }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="dsh-skill-categories">
+                {CATEGORIES.map(item => (
+                  <button
+                    key={item}
+                    type="button"
+                    className={item === category ? 'active' : ''}
+                    onClick={() => { setCategory(item) }}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+
+              <div className="dsh-skill-grid">
+                {visible.map(skill => (
+                  <article
+                    key={skill.id}
+                    className="dsh-skill-card"
+                    onClick={() => { openDetail(skill) }}
+                  >
+                    <div className="dsh-skill-card-icon" style={{ background: skill.accent }}>
+                      {skill.icon}
                     </div>
-                    <h2>{skill.name}</h2>
-                    <p>{skill.summary}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
+                    <div className="dsh-skill-card-body">
+                      <div className="dsh-skill-card-meta">
+                        <span>{skill.category}</span>
+                        <small>{skill.installs} {L.count}</small>
+                      </div>
+                      <h2>{skill.name}</h2>
+                      <p>{skill.summary}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
 
-            {visible.length === 0 && <div className="dsh-skill-empty">{L.empty}</div>}
+              {visible.length === 0 && <div className="dsh-skill-empty">{L.empty}</div>}
+              {installMessage !== null && (
+                <div className="dsh-skill-install-message" role="status">
+                  {installMessage}
+                  <button type="button" onClick={() => { setInstallMessage(null) }}>×</button>
+                </div>
+              )}
+            </>}
           </>
+        )}
+        {adding && (
+          <div className="dsh-skill-add-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setAdding(false) }}>
+            <form className="dsh-skill-add-dialog" onSubmit={(event) => { event.preventDefault(); createSkill() }}>
+              <div>
+                <h2>{L.createSkill}</h2>
+                <button type="button" onClick={() => { setAdding(false) }} aria-label="关闭">×</button>
+              </div>
+              <label>技能名称<input autoFocus value={newSkill.name} onChange={(event) => { setNewSkill({ ...newSkill, name: event.target.value }) }} placeholder="例如：会议纪要整理" /></label>
+              <label>
+                分类
+                <select
+                  value={newSkill.category}
+                  onChange={(event) => { setNewSkill({ ...newSkill, category: event.target.value }) }}
+                >
+                  {CATEGORIES.slice(1).map(item => <option key={item}>{item}</option>)}
+                </select>
+              </label>
+              <label>用途说明<textarea value={newSkill.summary} onChange={(event) => { setNewSkill({ ...newSkill, summary: event.target.value }) }} placeholder="说明这个技能何时使用、能完成什么任务" /></label>
+              <footer><button type="button" onClick={() => { setAdding(false) }}>取消</button><button type="submit" disabled={newSkill.name.trim() === ''}>添加并预览</button></footer>
+            </form>
+          </div>
         )}
       </div>
     </div>
@@ -460,7 +665,7 @@ function SkillMarketplaceAction({ wide }: ActionProps) {
       type="button"
       className={`dsh-skill-market-action${wide ? '' : ' rail'}`}
       aria-label={L.action}
-      onClick={() => skillMarketplaceController.open()}
+      onClick={() => { skillMarketplaceController.open() }}
     >
       <SparkleIcon />
       {wide && <span>{L.action}</span>}

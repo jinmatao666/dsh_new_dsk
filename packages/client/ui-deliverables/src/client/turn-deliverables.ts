@@ -15,6 +15,17 @@ interface ProducedPath {
   readonly path: string
 }
 
+const PROCESS_FILE_EXTENSIONS = new Set([
+  'py', 'pyw', 'ps1', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'sh', 'bat', 'cmd',
+])
+
+/** Whether a written path is a helper source file rather than a user deliverable. */
+function isUserDeliverable(path: string): boolean {
+  const name = basename(path)
+  const extension = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLocaleLowerCase() : ''
+  return !PROCESS_FILE_EXTENSIONS.has(extension)
+}
+
 /** Immutable produced-file facts published against one Turn. */
 export interface DeliverablesTurnData {
   readonly produced: readonly ProducedPath[]
@@ -63,7 +74,14 @@ function producedPaths(view: ToolResultNode['callView']): readonly string[] {
 function deliverablePaths(text: string): readonly string[] {
   const deliverablePattern =
     /(?:[A-Za-z]:[^\r\n"'`<>|]*?\.(?:docx|xlsx|pptx|pdf)|[^\s"'`<>|]+\.(?:docx|xlsx|pptx|pdf))/g
-  const matches = text.matchAll(deliverablePattern)
+  // Terminal output frequently repeats an input file path while reading it.
+  // Treat a path as a deliverable only when the same output line explicitly
+  // says it was written/generated/saved. This keeps source PDFs out of the
+  // produced-files row while retaining script-driven PPTX generation.
+  const outputLines = text.split(/\r?\n/)
+    .filter(line => /(?:created|generated|saved|written|output|deliverable|生成|已生成|保存|写入|输出|交付)/iu.test(line))
+    .join('\n')
+  const matches = outputLines.matchAll(deliverablePattern)
   return [...matches]
     .map(match => match[0].replace(/[),.;:]+$/, '').trim())
     .filter(path => path !== '')
@@ -100,11 +118,21 @@ export function producedForClosing(
 ): readonly string[] {
   if (data === undefined) return []
   const paths: string[] = []
-  const seen = new Set<string>()
+  const indexByFile = new Map<string, number>()
   for (const produced of data.produced) {
-    if (produced.seq > seq || seen.has(produced.path)) continue
-    seen.add(produced.path)
-    paths.push(produced.path)
+    if (produced.seq > seq || !isUserDeliverable(produced.path)) continue
+    // The mutation tools report absolute paths, while terminal/final handoff
+    // prose may name only the basename. They are one deliverable in the UI.
+    const key = basename(produced.path).toLocaleLowerCase()
+    const existing = indexByFile.get(key)
+    if (existing === undefined) {
+      indexByFile.set(key, paths.length)
+      paths.push(produced.path)
+      continue
+    }
+    // Keep the fuller path so opening a de-duplicated file remains reliable.
+    const existingPath = paths[existing]
+    if (existingPath !== undefined && produced.path.length > existingPath.length) paths[existing] = produced.path
   }
   return paths
 }
@@ -146,20 +174,11 @@ export const deliverablesDefinition: ConversationNodeDefinition<DeliverablesStat
       )
       return { ...context.state, calls }
     }
-    if (match.event.type === 'assistant/message') {
-      // A terminal generator may keep its successful file path in its final
-      // hand-off message rather than stdout. The desktop prompt requires an
-      // existence check before that message names a deliverable, so it is
-      // safe to treat a final deliverable reference as another artifact fact.
-      const paths = match.event.data.message.content.flatMap(block =>
-        block.type === 'text' ? deliverablePaths(block.text) : [],
-      )
-      const additions = paths
-        .map(path => ({ seq: match.event.seq, path }))
-      return additions.length === 0
-        ? context.state
-        : { ...context.state, produced: [...context.state.produced, ...additions] }
-    }
+    // Assistant prose is intentionally not parsed for paths: it includes
+    // source files mentioned in the request and repeats hand-off filenames.
+    // Mutation locations and successful terminal output are the authoritative
+    // artifact facts.
+    if (match.event.type === 'assistant/message') return context.state
     if (match.event.type !== 'tool/result') return context.state
     const result = match.event.data.message.content[0]
     if (result.isError === true) return context.state

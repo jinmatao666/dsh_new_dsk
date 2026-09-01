@@ -12,6 +12,8 @@
 
 工具流水线通过此 seam 路由 `ask` 决定，并在该 seam 缺失时以拒绝方式关闭；沙箱 bash 工具也会将它用于升权重试。ACP 自动化桥接层根据客户端的机器策略，回答其自有 agent 的调用。审计事件仍只写入日志，因此模型只会看到发起请求的消费方所返回的结果。详见[审批 seam Agent Note](../../../.agents/notes/implemented/feature/2026-07-06-approval-seam.md)和[沙箱 Agent Note](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.md)。
 
+启用 `autoApproveDependencyInstalls` 后，用户在一个会话中首次批准 `pip`、`npm`、`pnpm` 或 `yarn` 的安装依赖升权，后续依赖安装升权会自动允许。授权只保存在内存中，并会在会话运行时结束后失效；非安装命令以及首次被拒绝的安装仍按普通规则请求决定。
+
 ## 模型体验
 
 ### 当前审批策略上下文

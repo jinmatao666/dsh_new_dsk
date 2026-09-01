@@ -12,6 +12,8 @@ Answerers are `approval/request` waterfall listeners. Return an outcome to answe
 
 The tools pipeline routes `ask` decisions through this seam and fails closed when it is absent; the sandboxed bash tool also uses it for escalated retries. The ACP automation bridge answers calls for its own agents through the client's machine policy. Audit events remain log-only, so the model sees only the asking consumer's result. See the [approval-seam Agent Note](../../../.agents/notes/implemented/feature/2026-07-06-approval-seam.md) and [sandbox Agent Note](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.md).
 
+When `autoApproveDependencyInstalls` is enabled, the first approved `pip`, `npm`, `pnpm`, or `yarn` install escalation grants later dependency-install escalations in the same live session. The grant is in memory only and ends when the session runtime ends; non-install commands and rejected first requests still require their normal decision.
+
 ## Model Experience
 
 ### Current approval policy context

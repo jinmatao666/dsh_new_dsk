@@ -25,6 +25,14 @@ struct ServerConfig {
     install_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MarketplaceSkill {
+    slug: String,
+    description: String,
+    content: String,
+}
+
 struct Sidecar(Arc<Mutex<Option<Child>>>);
 
 impl Sidecar {
@@ -73,6 +81,53 @@ fn set_auth_window_state(app: tauri::AppHandle, authenticated: bool) -> Result<(
         .get_webview_window("main")
         .ok_or_else(|| "Main window has not been created yet".to_string())?;
     apply_auth_window_state(&window, authenticated)
+}
+
+#[tauri::command]
+fn install_marketplace_skill(skill: MarketplaceSkill) -> Result<String, String> {
+    if skill.slug.is_empty()
+        || !skill.slug.chars().all(|character| character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-')
+    {
+        return Err("技能标识必须是小写字母、数字和连字符".to_string());
+    }
+    let home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .ok_or_else(|| "无法定位当前用户目录".to_string())?;
+    let directory = PathBuf::from(home).join(".dsh").join("skills").join(&skill.slug);
+    if fs::symlink_metadata(&directory).map(|metadata| metadata.file_type().is_symlink()).unwrap_or(false) {
+        return Err(format!("拒绝写入符号链接技能目录 {}", directory.display()));
+    }
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("无法创建技能目录 {}：{error}", directory.display()))?;
+    let source = format!(
+        "---\nname: {}\ndescription: {}\n---\n\n{}\n",
+        skill.slug, serde_json::to_string(&skill.description).map_err(|error| error.to_string())?, skill.content,
+    );
+    let target = directory.join("SKILL.md");
+    fs::write(&target, source)
+        .map_err(|error| format!("无法写入技能文件 {}：{error}", target.display()))?;
+    Ok(target.display().to_string())
+}
+
+#[tauri::command]
+fn uninstall_marketplace_skill(slug: String) -> Result<(), String> {
+    if slug.is_empty()
+        || !slug.chars().all(|character| character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-')
+    {
+        return Err("技能标识必须是小写字母、数字和连字符".to_string());
+    }
+    let home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .ok_or_else(|| "无法定位当前用户目录".to_string())?;
+    let directory = PathBuf::from(home).join(".dsh").join("skills").join(slug);
+    if fs::symlink_metadata(&directory).map(|metadata| metadata.file_type().is_symlink()).unwrap_or(false) {
+        return Err(format!("拒绝移除符号链接技能目录 {}", directory.display()));
+    }
+    if directory.exists() {
+        fs::remove_dir_all(&directory)
+            .map_err(|error| format!("无法移除技能目录 {}：{error}", directory.display()))?;
+    }
+    Ok(())
 }
 
 fn append_log(path: &Path, message: impl AsRef<str>) {
@@ -260,6 +315,9 @@ fn spawn_sidecar(
         .env("PYTHONUTF8", "1")
         .env("PYTHONIOENCODING", "utf-8")
         .env("PIP_DISABLE_PIP_VERSION_CHECK", "1")
+        // Workspace Write users approve the first package-manager download in
+        // a session. Later dependency installs reuse that explicit session grant.
+        .env("DSH_DEPENDENCY_INSTALL_APPROVALS", "session-once")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if !config.default_model.is_empty() {
@@ -447,7 +505,11 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![set_auth_window_state])
+        .invoke_handler(tauri::generate_handler![
+            set_auth_window_state,
+            install_marketplace_skill,
+            uninstall_marketplace_skill,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running DSH Desktop");
 }

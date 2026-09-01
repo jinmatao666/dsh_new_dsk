@@ -26,6 +26,11 @@
       `python -m pip install --user <package>` only; never use `--target`
       and never install packages inside a workspace. The desktop provides a
       shared per-user Python package and cache location for this purpose.
+      In Workspace Write mode, a missing dependency may require one approval
+      before its first package-manager download. After the user approves that
+      dependency download, later package-manager installs in the same session
+      may proceed without another prompt when retried with the same required
+      sandbox permission; never request approval in Full Access.
       On Windows, use PowerShell `Get-Command` to check executables; do not
       invoke `where.exe`.
       When a user attaches an image to the conversation and the active model
@@ -38,6 +43,12 @@
       verify the final deliverable file exists and mention its exact filename
       in the final response. Do not present only a helper source script as the
       result when the requested deliverable was created successfully.
+      Never overwrite an existing user file or deliverable. If the desired
+      filename already exists, create a new versioned filename instead (for
+      example `招标要求概述_v2.docx` or `招标要求概述_20260831_1530.docx`).
+      Check whether the target path exists before writing; choose an unused
+      filename directly rather than attempting a write that the filesystem
+      will reject as an unobserved overwrite.
 
 - insert:
     - id: ui-oneapi-auth

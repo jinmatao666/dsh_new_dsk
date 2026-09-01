@@ -189,6 +189,7 @@
       name: '@deepseek-ai/dsh-user-approval'
       config:
         policy: !!js "(process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'never' : 'ask'"
+        autoApproveDependencyInstalls: !!js process.env.DSH_DEPENDENCY_INSTALL_APPROVALS === 'session-once'
 
     - id: permission
       name: '@deepseek-ai/dsh-permission-presets'

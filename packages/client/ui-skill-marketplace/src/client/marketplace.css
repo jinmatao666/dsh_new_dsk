@@ -323,6 +323,106 @@
   margin-bottom: 14px;
 }
 
+.dsh-skill-product-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e6edf8;
+}
+
+.dsh-skill-product-tabs button {
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #62748f;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 650;
+  padding: 9px 14px;
+}
+
+.dsh-skill-product-tabs button.active {
+  background: #eaf2ff;
+  color: #2563eb;
+}
+
+.dsh-skill-special-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dsh-skill-special-card {
+  position: relative;
+  min-height: 290px;
+  padding: 22px;
+  border: 1px solid #e2eaf5;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #fff, #f8fbff);
+  box-shadow: 0 10px 24px rgb(42 75 122 / 6%);
+}
+
+.dsh-skill-special-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  place-items: center;
+  color: #fff;
+  font-weight: 800;
+}
+
+.dsh-skill-special-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dsh-skill-special-head h2 { margin: 0; color: #172b4d; font-size: 16px; }
+.dsh-skill-special-head span { color: #58739c; font-size: 12px; white-space: nowrap; }
+.dsh-skill-special-card > p { min-height: 64px; color: #60718d; font-size: 13px; line-height: 1.7; }
+.dsh-skill-special-label { margin: 13px 0 6px; color: #8090aa; font-size: 12px; }
+.dsh-skill-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.dsh-skill-chip-row span { padding: 4px 7px; border-radius: 999px; background: #eaf2ff; color: #2861c7; font-size: 12px; }
+.dsh-skill-chip-row.muted span { background: #f2f5f9; color: #667993; }
+.dsh-skill-outline-button {
+  position: absolute;
+  bottom: 18px;
+  left: 22px;
+  border: 1px solid #cfe0f8;
+  border-radius: 9px;
+  background: #fff;
+  color: #2861c7;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 7px 11px;
+}
+.dsh-skill-connector-foot { position: absolute; right: 22px; bottom: 18px; left: 22px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dsh-skill-connector-foot small { color: #7c8da6; font-size: 12px; }
+.dsh-skill-connector-foot button { border: 0; border-radius: 8px; background: #2563eb; color: #fff; cursor: pointer; padding: 7px 10px; white-space: nowrap; }
+.dsh-skill-connector-foot button.installed { background: #e8f7ef; color: #16804b; }
+.dsh-automation-steps { display: flex; margin: 16px 0 0; padding: 0; gap: 8px; list-style: none; }
+.dsh-automation-steps li { display: flex; align-items: center; gap: 5px; color: #5d718e; font-size: 12px; }
+.dsh-automation-steps b { display: grid; width: 18px; height: 18px; border-radius: 50%; place-items: center; background: #eaf2ff; color: #2563eb; font-size: 10px; }
+
+.dsh-skill-add-backdrop { position: fixed; z-index: 3; inset: 0; display: grid; place-items: center; background: rgb(15 32 59 / 26%); }
+.dsh-skill-add-dialog { width: min(480px, calc(100vw - 40px)); padding: 24px; border-radius: 18px; background: #fff; box-shadow: 0 22px 70px rgb(16 37 68 / 24%); }
+.dsh-skill-add-dialog > div { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.dsh-skill-add-dialog h2 { margin: 0; color: #172b4d; font-size: 19px; }
+.dsh-skill-add-dialog > div button { border: 0; background: transparent; color: #6c7d94; cursor: pointer; font-size: 22px; }
+.dsh-skill-add-dialog label { display: flex; flex-direction: column; gap: 7px; margin: 13px 0; color: #49617f; font-size: 13px; font-weight: 600; }
+.dsh-skill-add-dialog input, .dsh-skill-add-dialog select, .dsh-skill-add-dialog textarea { box-sizing: border-box; width: 100%; padding: 10px 11px; border: 1px solid #d6e2f2; border-radius: 9px; color: #1f3351; font: inherit; }
+.dsh-skill-add-dialog textarea { min-height: 88px; resize: vertical; }
+.dsh-skill-add-dialog footer { display: flex; justify-content: end; gap: 10px; margin-top: 20px; }
+.dsh-skill-add-dialog footer button { border: 0; border-radius: 9px; background: #edf2f8; color: #50647e; cursor: pointer; padding: 9px 14px; }
+.dsh-skill-add-dialog footer button[type='submit'] { background: #2563eb; color: #fff; }
+.dsh-skill-add-dialog footer button:disabled { cursor: not-allowed; opacity: .5; }
+.dsh-skill-install-message { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; padding: 11px 13px; border-radius: 10px; background: #ecfdf3; color: #166534; font-size: 13px; }
+.dsh-skill-install-message button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 18px; }
+
 .dsh-skill-sub-tabs button {
   border: 0;
   border-radius: 8px;
@@ -604,6 +704,7 @@
   .dsh-skill-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .dsh-skill-special-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 640px) {

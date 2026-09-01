@@ -40,6 +40,22 @@ function requestOf(agent: Agent, overrides: Partial<ApprovalRequest> = {}): Appr
 }
 
 describe('ApprovalService.request', () => {
+  it('reuses an approved dependency-install grant within one session when enabled', async () => {
+    const ctx = new Context()
+    await ctx.plugin(ApprovalService, { autoApproveDependencyInstalls: true })
+    const { agent } = fakeAgent([
+      { type: 'turn/start' },
+      { type: 'tool/call', data: { callId: CallId('pip-1'), arguments: '{"command":"python -m pip install python-pptx"}' } },
+    ] as Array<{ type: string }>)
+    const prompted = vi.fn(() => Promise.resolve<ApprovalOutcome>('allowed-once'))
+    ctx.on('approval/request', prompted)
+
+    await expect(ctx.approval.request(requestOf(agent, { toolName: 'pwsh', callId: CallId('pip-1') }))).resolves.toBe('allowed-once')
+    await expect(ctx.approval.request(requestOf(agent, { toolName: 'pwsh', callId: CallId('pip-1') }))).resolves.toBe('allowed-once')
+
+    expect(prompted).toHaveBeenCalledTimes(1)
+  })
+
   it('throws before appending anything when no turn has ever opened (idle ask)', async () => {
     const ctx = await mounted()
     const { agent, appended } = fakeAgent([])

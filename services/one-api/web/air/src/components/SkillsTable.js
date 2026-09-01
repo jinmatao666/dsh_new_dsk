@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Button, Modal, Table, Tag, Tooltip } from '@douyinfe/semi-ui';
+import { Modal, Table, Tag, Tooltip } from '@douyinfe/semi-ui';
 import SkillBrowseDrawer from './SkillBrowseDrawer';
 import { MARKETPLACE_MOCK_SKILLS, MOCK_SKILL_CATEGORIES, normalizeMockSkill } from './skillMarketplaceMock';
 import { importSkillFolder } from './skillFolderImport';
@@ -21,6 +21,7 @@ function saveMockSkills(items) { if (typeof window !== 'undefined') window.local
 
 const nowString = () => new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
 const splitLines = text => String(text || '').split('\n').map(line => line.trim()).filter(Boolean);
+const compactTime = value => String(value || '').replace(/:\d{2}$/, '');
 
 const EMPTY_FORM = {
   name: '',
@@ -94,19 +95,24 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   }, [items, keyword]);
 
   const removeSkill = skill => Modal.confirm({ title: `删除技能「${skill.display_name || skill.name}」？`, content: '删除后不可恢复。', okType: 'danger', onOk: () => setItems(current => current.filter(item => item.id !== skill.id)) });
+  const togglePublish = skill => {
+    const nextStatus = skill.status === 'published' ? 'disabled' : 'published';
+    setItems(current => current.map(item => item.id === skill.id ? { ...item, status: nextStatus, updated_at: nowString() } : item));
+    showSuccess(nextStatus === 'published' ? '技能已上架' : '技能已下架');
+  };
 
   const columns = [
     {
-      title: '技能', width: 200, render: (_, record) => (
+      title: '技能', width: 190, render: (_, record) => (
         <div className='skill-name'>
           <span className='skill-name-main'>{record.display_name}</span>
           <span className='skill-name-sub'>{record.name} · {record.team || '-'}</span>
         </div>
       )
     },
-    { title: '分类', dataIndex: 'category', width: 96, render: value => <Tag color='blue' size='small'>{value}</Tag> },
+    { title: '分类', dataIndex: 'category', width: 90, render: value => <Tag color='blue' size='small'>{value}</Tag> },
     {
-      title: '主要能力', width: 200, render: (_, record) => {
+      title: '主要能力', width: 180, render: (_, record) => {
         const capabilities = record.capabilities || [];
         if (capabilities.length === 0) return null;
         return (
@@ -125,17 +131,18 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
         );
       }
     },
-    { title: '版本', dataIndex: 'version', width: 76, render: value => <span style={{ color: '#607a9e' }}>v{value}</span> },
-    { title: '上传人', dataIndex: 'submitter', width: 84 },
-    { title: '上传时间', dataIndex: 'created_at', width: 168, render: value => <span style={{ color: '#607a9e' }}>{value}</span> },
-    { title: '安装量', dataIndex: 'downloads', width: 76 },
-    { title: '状态', width: 80, fixed: 'right', render: (_, record) => <Tag color={STATUS_COLORS[record.status] || 'grey'} size='small'>{STATUS_LABELS[record.status] || record.status}</Tag> },
+    { title: '版本', dataIndex: 'version', width: 70, render: value => <span style={{ color: '#607a9e' }}>v{value}</span> },
+    { title: '上传人', dataIndex: 'submitter', width: 74 },
+    { title: '上传时间', dataIndex: 'created_at', width: 136, render: value => <span style={{ color: '#607a9e' }}>{compactTime(value)}</span> },
+    { title: '安装量', dataIndex: 'downloads', width: 66 },
+    { title: '状态', width: 76, render: (_, record) => <Tag color={STATUS_COLORS[record.status] || 'grey'} size='small'>{STATUS_LABELS[record.status] || record.status}</Tag> },
     {
-      title: '操作', width: 190, fixed: 'right', render: (_, record) => (
+      title: '操作', width: 180, render: (_, record) => (
         <div className='skill-row-actions'>
-          <Button size='small' type='tertiary' theme='light' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</Button>
-          <Button size='small' type='tertiary' theme='light' onClick={() => openEditor(record)}>编辑</Button>
-          <Button size='small' type='danger' theme='light' onClick={() => removeSkill(record)}>删除</Button>
+          <button type='button' className='skill-text-action' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</button>
+          <button type='button' className='skill-text-action' onClick={() => togglePublish(record)}>{record.status === 'published' ? '下架' : '上架'}</button>
+          <button type='button' className='skill-text-action' onClick={() => openEditor(record)}>编辑</button>
+          <button type='button' className='skill-text-action danger' onClick={() => removeSkill(record)}>删除</button>
         </div>
       )
     }
@@ -199,7 +206,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
         <h2>技能列表</h2>
         <span className='skill-admin-meta'>共 {filteredItems.length} 条{keyword.trim() ? ` · 搜索“${keyword.trim()}”` : ''}</span>
       </div>
-      <Table columns={columns} dataSource={filteredItems} rowKey='id' pagination={{ pageSize: 20 }} scroll={{ x: 1170 }} empty='暂无技能' />
+      <Table columns={columns} dataSource={filteredItems} rowKey='id' pagination={{ pageSize: 20 }} scroll={{ x: 1062 }} empty='暂无技能' />
     </section>
     <SkillBrowseDrawer visible={browse.visible} kind='mock' id={browse.skill?.id} skill={browse.skill} onClose={() => setBrowse({ visible: false, skill: null })} />
     {editor && (

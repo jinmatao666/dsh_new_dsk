@@ -186,6 +186,27 @@ describe('produced-file Turn data', () => {
     expect(selectProducedFiles(tailOwner(undefined, 9, () => {}, 2))).toBeNull()
   })
 
+  it('merges a hand-off basename into the written absolute deliverable path', () => {
+    const data = produced(
+      [3, 'C:\\workspace\\招标要求概述.docx'],
+      [4, '招标要求概述.docx'],
+      [5, 'C:\\workspace\\01_招标文件.pdf'],
+    )
+    expect(producedForClosing(data)).toEqual([
+      'C:\\workspace\\招标要求概述.docx',
+      'C:\\workspace\\01_招标文件.pdf',
+    ])
+  })
+
+  it('hides generator source files while retaining the final deliverable', () => {
+    const data = produced(
+      [3, 'C:\\workspace\\generate_report.py'],
+      [4, 'C:\\workspace\\招标要求概述.docx'],
+      [5, 'C:\\workspace\\cleanup.ps1'],
+    )
+    expect(producedForClosing(data)).toEqual(['C:\\workspace\\招标要求概述.docx'])
+  })
+
   it('folds successful diff and generic-edit calls while ignoring reads, failures, and missing locations', () => {
     const value = assembler([
       at(1, 'turn/start', { turn: 1 }),

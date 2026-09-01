@@ -8,6 +8,49 @@
   gap: 18px;
 }
 
+.skill-page-search {
+  width: min(350px, 32vw) !important;
+}
+
+.skill-page-search.semi-input-wrapper,
+.skill-page-search .semi-input-wrapper {
+  min-height: 44px;
+  padding-inline: 13px;
+  border: 1px solid #d9e4f2;
+  border-radius: 12px !important;
+  background: #fff;
+  box-shadow: 0 8px 22px rgb(43 82 134 / 6%);
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.skill-page-search.semi-input-wrapper-focus,
+.skill-page-search .semi-input-wrapper-focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 12%), 0 8px 22px rgb(43 82 134 / 7%);
+}
+
+.skill-page-search .semi-input {
+  color: #243a5d;
+  font-size: 14px;
+}
+
+.skill-page-search .semi-input::placeholder {
+  color: #93a4bb;
+}
+
+.skill-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.skill-page-actions .preview-button.primary {
+  min-height: 44px;
+  padding-inline: 19px;
+  border-radius: 12px;
+}
+
 .skill-admin-meta {
   color: #7b90ad;
   font-size: 13px;
@@ -36,12 +79,6 @@
 
 .skill-admin-surface .semi-table-tbody > .semi-table-row:hover > .semi-table-row-cell {
   background: rgba(244, 248, 253, .8);
-}
-
-/* 固定列（状态/操作）在横向滚动时不能透出行内容 */
-.skill-admin-surface .semi-table-row-head[style*='sticky'],
-.skill-admin-surface .semi-table-row-cell[style*='sticky'] {
-  background: #fff;
 }
 
 /* ── 行内元素 ───────────────────────────── */
@@ -119,15 +156,45 @@
   text-overflow: ellipsis;
 }
 
-/* 操作列按钮：避免命中全局 .semi-button-primary 的实心蓝覆盖 */
+/* 操作列保持与模型配置一致的轻量文字操作，危险动作单独使用红色。 */
 .skill-row-actions {
   display: flex;
-  gap: 4px;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+  justify-content: flex-start;
+  white-space: nowrap;
 }
 
-.skill-row-actions .semi-button {
+.skill-text-action {
+  min-height: 28px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #347ce8;
+  cursor: pointer;
   font-size: 12px;
+  line-height: 28px;
+  transition: background-color .16s ease, color .16s ease;
+}
+
+.skill-text-action:hover {
+  background: #edf5ff;
+  color: #1766cf;
+}
+
+.skill-text-action:focus-visible {
+  outline: 2px solid rgb(52 124 232 / 35%);
+  outline-offset: 1px;
+}
+
+.skill-text-action.danger {
+  color: #e75a61;
+}
+
+.skill-text-action.danger:hover {
+  background: #fff1f1;
+  color: #d8424b;
 }
 
 /* ── 新增/编辑弹窗（复用 zjugis-modal 骨架，见 index.css） ── */

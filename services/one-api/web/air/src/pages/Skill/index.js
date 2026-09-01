@@ -40,6 +40,7 @@ const Skill = () => {
           ＋ 新建分类
         </button>
         <Input
+          className='skill-page-search'
           prefix={<IconSearch />}
           placeholder='搜索 code / 名称 / 描述 / 类型'
           value={categoryKeyword}
@@ -54,6 +55,7 @@ const Skill = () => {
           ＋ 新建
         </button>
         <Input
+          className='skill-page-search'
           prefix={<IconSearch />}
           placeholder='搜索名称 / 描述 / 上传人'
           value={libraryKeyword}
@@ -75,7 +77,7 @@ const Skill = () => {
           <h1>技能管理</h1>
           <p>管理技能库技能和技能分类。</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{toolbar}</div>
+        <div className='skill-page-actions'>{toolbar}</div>
       </div>
       <div className='preview-tabs'>
         {TABS.map(([key, label]) => (
