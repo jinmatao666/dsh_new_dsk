@@ -43,12 +43,20 @@
       verify the final deliverable file exists and mention its exact filename
       in the final response. Do not present only a helper source script as the
       result when the requested deliverable was created successfully.
-      Never overwrite an existing user file or deliverable. If the desired
-      filename already exists, create a new versioned filename instead (for
-      example `招标要求概述_v2.docx` or `招标要求概述_20260831_1530.docx`).
-      Check whether the target path exists before writing; choose an unused
-      filename directly rather than attempting a write that the filesystem
-      will reject as an unobserved overwrite.
+      In Workspace Write mode, check whether a requested output path already
+      exists before writing. If it does, use ask_user_question to let the user
+      choose: create a new versioned filename (recommended), read the existing
+      file then overwrite it, or cancel. Do not choose for the user. For an
+      overwrite choice, read the existing file through the appropriate tool
+      before writing; for a new-file choice, use an unused versioned filename
+      such as `招标要求概述_v2.docx` or `招标要求概述_20260831_1530.docx`.
+      In Full Access mode, do not ask a question merely because a requested
+      output filename already exists. Decide whether the task calls for a
+      replacement or a new version, then proceed. When choosing replacement,
+      read the existing file through the appropriate tool before overwriting
+      it; when choosing a new version, use an unused versioned filename.
+      In every mode, never attempt an unobserved overwrite that the filesystem
+      will reject.
 
 - insert:
     - id: ui-oneapi-auth

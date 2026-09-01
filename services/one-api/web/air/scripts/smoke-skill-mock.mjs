@@ -80,7 +80,7 @@ for (const skill of MARKETPLACE_MOCK_SKILLS) {
   }
 }
 
-if (MARKETPLACE_MOCK_SKILLS.length !== 26) errors.push(`技能数量 ${MARKETPLACE_MOCK_SKILLS.length}，应为 26（与技能广场对齐）`);
+if (MARKETPLACE_MOCK_SKILLS.length !== 29) errors.push(`技能数量 ${MARKETPLACE_MOCK_SKILLS.length}，应为 29（与技能广场对齐）`);
 
 if (errors.length > 0) {
   console.error('SMOKE FAILED');

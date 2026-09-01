@@ -20,6 +20,8 @@ type Skill = {
   author: string
   featured?: boolean
   params?: SkillParam[]
+  /** Complete installed SKILL.md body for officially maintained skills. */
+  content?: string
 }
 
 type MarketplaceSection = 'skills' | 'experts' | 'connectors' | 'automations'
@@ -59,7 +61,7 @@ function skillSlug(skill: Skill): string {
 }
 
 function skillContent(skill: Skill): string {
-  return `# ${skill.name}\n\n${skill.description}\n\n## 主要能力\n\n- ${skill.summary}\n`
+  return skill.content ?? `# ${skill.name}\n\n${skill.description}\n\n## 主要能力\n\n- ${skill.summary}\n`
 }
 
 function desktopInvoke(command: string, argumentsValue: unknown): Promise<unknown> {
@@ -136,6 +138,9 @@ const MOCK_SKILLS: readonly Skill[] = [
   { id: 'spatial-econometrics', name: '空间计量经济学', category: '数据分析', tags: ['SkillHub'], summary: '空间计量经济学工具，支持空间权重矩阵构建、Moran I / Geary C 检验。', description: '适用于地理/网络数据的研究分析，提供空间自相关检验、空间滞后与误差模型估计的完整流程。', installs: '36', accent: '#8b5cf6', icon: '空', version: '1.0.1', author: '数据工坊' },
   { id: 'arcpy-script', name: 'ArcPy脚本生成', category: '空间制图', tags: ['SkillHub'], summary: 'ArcPy 脚本生成，当用户需要编写 ArcGIS/ArcPy 自动化脚本时使用。', description: '生成或调试 GIS 自动化脚本，覆盖要素分析、裁剪、投影转换、批量制图等常见 ArcPy 场景。', installs: '251', accent: '#0ea5e9', icon: 'Py', version: '1.4.0', author: 'GIS 工具链' },
   { id: 'map-coloring', name: '规划标准配色', category: '空间制图', tags: ['推荐'], summary: '规划标准配色方案，图纸与报告的标准配色，使用国土空间规划用地分类色标。', description: '按《国土空间规划用地用海分类》提供三调标准色标，支持图纸、图例与报告配色的统一输出。', installs: '271', accent: '#22c55e', icon: '色', version: '1.2.0', author: '规划测绘院' },
+  { id: 'gis-geology-analysis', name: '地质条件分析', category: '空间制图', tags: ['官方', '推荐'], summary: '调用 GIS_Service 分析指定面范围的地质灾害隐患分区与地质环境条件。', description: '读取当前工作区的 GeoJSON 面范围，调用地质条件分析服务并交付不可覆盖的原始分析结果。使用前必须确认输入坐标系与服务数据一致。', installs: '0', accent: '#a855f7', icon: '地', version: '1.0.0', author: 'ZJUGIS GIS 服务', featured: true, params: [{ name: 'geoJsonFile', type: 'file', required: true, description: '包含 Polygon 或 MultiPolygon 的 GeoJSON 文件' }, { name: 'YfxFieldName', type: 'string', required: false, description: '分区名称字段', defaultValue: '分区名称' }], content: '# 地质条件分析\n\n## 用途\n\n对当前工作区的 GeoJSON 面范围调用 GIS_Service 地质条件分析接口，分析地质灾害隐患分区和地质环境条件。\n\n## 必填输入\n\n- 一个 Polygon 或 MultiPolygon GeoJSON 文件。\n- 输入数据的坐标系必须与 GIS_Service 服务数据一致；坐标系未知时先向用户确认，不能把经纬度和投影坐标混用。\n\n## 执行步骤\n\n1. 读取并校验 GeoJSON，提取一个面范围并转换为服务要求的 `{ hasZ, hasM, rings }` 对象；`GeoJson` 参数必须是该对象序列化后的字符串。\n2. 用 PowerShell 向 `http://60.191.110.206:38010/Analysis.svc/OneKeyAnalysis` 发起 `POST` 请求，`Content-Type` 使用 `text/plain; charset=utf-8`。请求体为：\n\n```json\n{\n  "GeoJson": "<序列化后的 rings JSON>",\n  "IsAnaXzCoverBp": false,\n  "IsAnaDzzhyfqk": true,\n  "IsAnaDzhjtj": true,\n  "YfxFieldName": "分区名称"\n}\n```\n\n3. 将服务原始响应保存为工作区内唯一的新文件 `地质条件分析结果_<时间戳>.json`。不得覆盖已有文件。\n4. 只根据接口实际返回的字段概述结果；字段含义不明确时保留原字段名并说明“待 GIS 服务字段字典确认”，不得虚构地质结论。\n\n## 交付\n\n- 原始分析结果 JSON；\n- 一份简要说明，包含输入范围文件、服务地址、分析开关与输出路径。\n' },
+  { id: 'gis-land-use-plan-review', name: '土地利用规划审查', category: '空间制图', tags: ['官方', '推荐'], summary: '调用 GIS_Service 对项目范围开展土地利用规划符合性审查。', description: '读取当前工作区的 GeoJSON 面范围，调用规划审查接口并交付不可覆盖的原始审查结果。当前服务示例审查类别 Blxsw 默认为 4。', installs: '0', accent: '#2563eb', icon: '审', version: '1.0.0', author: 'ZJUGIS GIS 服务', featured: true, params: [{ name: 'geoJsonFile', type: 'file', required: true, description: '包含 Polygon 或 MultiPolygon 的 GeoJSON 文件' }, { name: 'Blxsw', type: 'number', required: false, description: '服务审查类别编码', defaultValue: '4' }], content: '# 土地利用规划审查\n\n## 用途\n\n对当前工作区的 GeoJSON 面范围调用 GIS_Service 土地利用规划审查接口。\n\n## 必填输入\n\n- 一个 Polygon 或 MultiPolygon GeoJSON 文件；\n- 坐标系说明。坐标系未知时先向用户确认。\n\n## 执行步骤\n\n1. 读取并校验 GeoJSON，提取一个面范围并转换为服务要求的 `{ hasZ, hasM, rings }` 对象；`GeoJson` 参数必须是该对象序列化后的字符串。\n2. 用 PowerShell 向 `http://60.191.110.206:38010/Analysis.svc/OneKeyAnalysis` 发起 `POST` 请求，`Content-Type` 使用 `text/plain; charset=utf-8`。请求体为：\n\n```json\n{\n  "GeoJson": "<序列化后的 rings JSON>",\n  "IsAnaXzCoverBp": false,\n  "Blxsw": 4,\n  "IsAnaGh": true,\n  "IsAnaGhWithCZJSKZQ": false\n}\n```\n\n3. 将服务原始响应保存为工作区内唯一的新文件 `土地利用规划审查结果_<时间戳>.json`。不得覆盖已有文件。\n4. `Blxsw` 与 `IsAnaGhWithCZJSKZQ` 的业务字典尚未提供。除非用户给出明确取值，不要修改示例默认值，也不得臆造审查结论。\n\n## 交付\n\n- 原始规划审查结果 JSON；\n- 一份简要说明，包含输入范围文件、请求参数与输出路径。\n' },
+  { id: 'gis-third-survey-analysis', name: '三调土地利用现状分析', category: '空间制图', tags: ['官方', '推荐'], summary: '调用 GIS_Service 对指定面范围开展三调土地利用现状与图斑专项分析。', description: '读取当前工作区的 GeoJSON 面范围与三调年度，调用 SanDXzAnalysis 并交付不可覆盖的原始分析结果。', installs: '0', accent: '#059669', icon: '三', version: '1.0.0', author: 'ZJUGIS GIS 服务', featured: true, params: [{ name: 'geoJsonFile', type: 'file', required: true, description: '包含 Polygon 或 MultiPolygon 的 GeoJSON 文件' }, { name: 'Xznf', type: 'number', required: false, description: '三调现状年度', defaultValue: '2024' }], content: '# 三调土地利用现状分析\n\n## 用途\n\n对当前工作区的 GeoJSON 面范围调用 GIS_Service 三调土地利用现状分析接口。\n\n## 必填输入\n\n- 一个 Polygon 或 MultiPolygon GeoJSON 文件；\n- 三调年度，默认 2024；\n- 坐标系说明。坐标系未知时先向用户确认。\n\n## 执行步骤\n\n1. 读取并校验 GeoJSON，提取一个面范围并转换为服务要求的 `{ hasZ, hasM, rings }` 对象；`GeoJson` 参数必须是该对象序列化后的字符串。\n2. 用 PowerShell 向 `http://60.191.110.206:38010/Analysis.svc/SanDXzAnalysis` 发起 `POST` 请求，`Content-Type` 使用 `text/plain; charset=utf-8`。请求体为：\n\n```json\n{\n  "GeoJson": "<序列化后的 rings JSON>",\n  "IsAnaXzCoverBp": false,\n  "IsAnalysisXzDetail": true,\n  "Xznf": 2024,\n  "Blxsw": 4,\n  "IsAnaGh": false,\n  "IsAnaXz": true,\n  "IsSD_GD": false,\n  "IsAnalysisSyqxx": false,\n  "IsQueryGeometry": false,\n  "IsAnalysisTfh": true,\n  "IsAnalysisFGNYD": true,\n  "IsAnalysisJSYD09DL": true\n}\n```\n\n3. 将服务原始响应保存为工作区内唯一的新文件 `三调土地利用现状分析结果_<时间戳>.json`。不得覆盖已有文件。\n4. 只有在服务真实返回字段可以确认时才生成分类统计；接口字段含义未知时保留原始结果，不能猜测地类或面积含义。\n\n## 交付\n\n- 原始三调分析结果 JSON；\n- 一份简要说明，包含输入范围文件、年度、请求参数与输出路径。\n' },
   { id: 'contract-draft', name: '规划合同起草', category: '专业写作', tags: ['SkillHub'], summary: '起草规划编制合同（规划编制/咨询/测绘/技术服务），支持“写一份合同”等场景。', description: '按规划行业惯例生成合同草案，覆盖工作范围、成果交付、付款节点与违约责任条款，并提示风险点。', installs: '255', accent: '#f59e0b', icon: '合', version: '1.1.0', author: '专业写作室' },
   { id: 'research-report', name: '咨询报告生成器', category: '专业写作', tags: ['推荐'], summary: '生成研究、规划、政府服务和项目汇报中的结构化咨询报告。', description: '面向一类完整的项目任务：研究一个行业、分析一项政策、准备一次汇报，输出逻辑清楚、结构完整的咨询报告。', installs: '261', accent: '#6366f1', icon: '报', version: '1.7.0', author: '专业写作室' },
   { id: 'text-extract', name: '文本结构化提取', category: '专业写作', tags: ['SkillHub'], summary: '从非结构化文本中提取结构化数据的通用工作流，由用户定义字段。', description: '调用 extract_structured_data 工具完成提取，内置字段定义、抽样校验与结果导出流程。', installs: '36', accent: '#3b82f6', icon: '提', version: '1.0.2', author: '专业写作室' },
@@ -200,6 +205,32 @@ function SparkleIcon() {
   )
 }
 
+/** Visual identity for each marketplace capability in the sidebar and cards. */
+function MarketplaceSectionIcon({ section, size = 18 }: { section: MarketplaceSection; size?: number }) {
+  const shared = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  }
+
+  if (section === 'experts') {
+    return <svg {...shared}><circle cx="12" cy="7" r="3" /><path d="M6.5 20c.4-3.4 2.2-5.2 5.5-5.2s5.1 1.8 5.5 5.2" /><circle cx="5" cy="10" r="2" /><path d="M2 18c.2-2.1 1.1-3.4 3-3.9" /><circle cx="19" cy="10" r="2" /><path d="M22 18c-.2-2.1-1.1-3.4-3-3.9" /></svg>
+  }
+  if (section === 'connectors') {
+    return <svg {...shared}><path d="M8 7V4M12 7V4M6 7h8v4a4 4 0 0 1-8 0V7Z" /><path d="M10 15v2a3 3 0 0 0 3 3h3" /><path d="m16 17 3 3-3 3" /></svg>
+  }
+  if (section === 'automations') {
+    return <svg {...shared}><circle cx="12" cy="12" r="8" /><path d="M12 8v4l2.8 2" /><path d="m17.5 4 .7 1.8L20 6.5l-1.8.7-.7 1.8-.7-1.8L15.5 6.5l1.8-.7Z" /></svg>
+  }
+  return <SparkleIcon />
+}
+
 function ArrowLeftIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -209,7 +240,11 @@ function ArrowLeftIcon() {
   )
 }
 
-type Controller = { open(): void; close(): void; subscribe(listener: (open: boolean) => void): () => void }
+type Controller = {
+  open(section?: MarketplaceSection): void
+  close(): void
+  subscribe(listener: (state: { open: boolean; section?: MarketplaceSection }) => void): () => void
+}
 declare global {
   interface Window {
     __skillMarketplaceController?: Controller
@@ -217,11 +252,14 @@ declare global {
 }
 
 function createController(): Controller {
-  const listeners = new Set<(open: boolean) => void>()
+  const listeners = new Set<(state: { open: boolean; section?: MarketplaceSection }) => void>()
   const controller: Controller = {
-    open: () => { listeners.forEach((listener) => { listener(true) }) },
-    close: () => { listeners.forEach((listener) => { listener(false) }) },
-    subscribe: (listener: (open: boolean) => void) => { listeners.add(listener); return () => listeners.delete(listener) },
+    open: (section) => {
+      const state = section === undefined ? { open: true } : { open: true, section }
+      listeners.forEach((listener) => { listener(state) })
+    },
+    close: () => { listeners.forEach((listener) => { listener({ open: false }) }) },
+    subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener) },
   }
   if (typeof window !== 'undefined') {
     window.__skillMarketplaceController = controller
@@ -304,7 +342,7 @@ function SkillDetail({ skill, onBack, installed, onToggleInstall }: {
 function ExpertTeams() {
   return <div className="dsh-skill-special-grid">
     {EXPERT_TEAMS.map(team => <article className="dsh-skill-special-card" key={team.id}>
-      <div className="dsh-skill-special-icon" style={{ background: team.accent }}>团</div>
+      <div className="dsh-skill-special-icon" style={{ background: team.accent }}><MarketplaceSectionIcon section="experts" size={21} /></div>
       <div className="dsh-skill-special-head"><h2>{team.name}</h2><span>多技能工作流</span></div>
       <p>{team.summary}</p>
       <div className="dsh-skill-special-label">协作角色</div>
@@ -320,7 +358,7 @@ function Connectors() {
   const [connected, setConnected] = useState<Set<string>>(() => new Set())
   return <div className="dsh-skill-special-grid">
     {CONNECTORS.map(connector => <article className="dsh-skill-special-card connector" key={connector.id}>
-      <div className="dsh-skill-special-icon" style={{ background: connector.accent }}>{connector.icon}</div>
+      <div className="dsh-skill-special-icon" style={{ background: connector.accent }}><MarketplaceSectionIcon section="connectors" size={21} /></div>
       <div className="dsh-skill-special-head"><h2>{connector.name}</h2><span>{connector.scope}</span></div>
       <p>{connector.summary}</p>
       <div className="dsh-skill-connector-foot">
@@ -334,7 +372,7 @@ function Connectors() {
 function Automations() {
   return <div className="dsh-skill-special-grid">
     {AUTOMATIONS.map(item => <article className="dsh-skill-special-card automation" key={item.id}>
-      <div className="dsh-skill-special-icon" style={{ background: item.accent }}>自</div>
+      <div className="dsh-skill-special-icon" style={{ background: item.accent }}><MarketplaceSectionIcon section="automations" size={21} /></div>
       <div className="dsh-skill-special-head"><h2>{item.name}</h2><span>{item.trigger}</span></div>
       <p>{item.summary}</p>
       <ol className="dsh-automation-steps">{item.steps.map((step, index) => <li key={step}><b>{index + 1}</b>{step}</li>)}</ol>
@@ -372,8 +410,9 @@ function SkillMarketplace(_props: OverlayProps) {
   })
 
   useEffect(() => skillMarketplaceController.subscribe((next) => {
-    setOpen(next)
-    if (!next) {
+    setOpen(next.open)
+    if (next.section !== undefined) setSection(next.section)
+    if (!next.open) {
       setView('list')
       setSelectedSkill(null)
     }
@@ -659,16 +698,22 @@ function SkillMarketplace(_props: OverlayProps) {
   )
 }
 
-function SkillMarketplaceAction({ wide }: ActionProps) {
+function SkillMarketplaceAction({ wide, section = 'skills' }: ActionProps & { section?: MarketplaceSection }) {
+  const labels: Record<MarketplaceSection, string> = {
+    skills: L.action,
+    experts: L.experts,
+    connectors: L.connectors,
+    automations: L.automations,
+  }
   return (
     <button
       type="button"
       className={`dsh-skill-market-action${wide ? '' : ' rail'}`}
-      aria-label={L.action}
-      onClick={() => { skillMarketplaceController.open() }}
+      aria-label={labels[section]}
+      onClick={() => { skillMarketplaceController.open(section) }}
     >
-      <SparkleIcon />
-      {wide && <span>{L.action}</span>}
+      <MarketplaceSectionIcon section={section} />
+      {wide && <span>{labels[section]}</span>}
     </button>
   )
 }
@@ -678,7 +723,25 @@ export function apply(ctx: ClientContext): void {
   const marketplaceUrl = (process.env.DSH_CLIENT_SKILL_MARKETPLACE_URL ?? 'https://skills.zjugis.com/').trim()
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(
-      { name: 'sidebar.footer.action', id: 'skill-marketplace', order: 10 },
+      { name: 'sidebar.footer.action', id: 'skill-experts', order: 10, inject: () => ({ section: 'experts' as const }) },
+      SkillMarketplaceAction,
+    ),
+  )
+  ctx.slots.inject('sidebar.footer.action', () =>
+    ctx.slots.register(
+      { name: 'sidebar.footer.action', id: 'skill-connectors', order: 20, inject: () => ({ section: 'connectors' as const }) },
+      SkillMarketplaceAction,
+    ),
+  )
+  ctx.slots.inject('sidebar.footer.action', () =>
+    ctx.slots.register(
+      { name: 'sidebar.footer.action', id: 'skill-automations', order: 30, inject: () => ({ section: 'automations' as const }) },
+      SkillMarketplaceAction,
+    ),
+  )
+  ctx.slots.inject('sidebar.footer.action', () =>
+    ctx.slots.register(
+      { name: 'sidebar.footer.action', id: 'skill-marketplace', order: 40 },
       SkillMarketplaceAction,
     ),
   )

@@ -218,6 +218,36 @@ const RAW_SKILLS = [
     package_files: ['references/色标对照表.md', 'scripts/apply_palette.py']
   },
   {
+    id: 'gis-geology-analysis', display_name: '地质条件分析', category: '空间制图', tags: ['官方', '推荐'],
+    summary: '调用 GIS_Service 分析指定面范围的地质灾害隐患分区与地质环境条件。',
+    description: '读取当前工作区的 GeoJSON 面范围，调用地质条件分析服务并交付不可覆盖的原始分析结果。使用前必须确认输入坐标系与服务数据一致。',
+    capabilities: ['GeoJSON 面范围校验与 rings 转换', '地质灾害隐患分区分析', '地质环境条件分析', '原始响应 JSON 交付'],
+    version: '1.0.0', team: 'ZJUGIS GIS 服务', submitter: 'GIS 服务管理员',
+    created_at: '2026-09-01 18:00:00', downloads: 0, status: 'published',
+    params: [{ name: 'geoJsonFile', type: 'file', required: true, description: '包含 Polygon 或 MultiPolygon 的 GeoJSON 文件' }, { name: 'YfxFieldName', type: 'string', required: false, description: '分区名称字段', default: '分区名称' }],
+    package_files: ['references/GIS_Service地质条件分析接口.md', 'templates/地质条件分析交付说明.md']
+  },
+  {
+    id: 'gis-land-use-plan-review', display_name: '土地利用规划审查', category: '空间制图', tags: ['官方', '推荐'],
+    summary: '调用 GIS_Service 对项目范围开展土地利用规划符合性审查。',
+    description: '读取当前工作区的 GeoJSON 面范围，调用规划审查接口并交付不可覆盖的原始审查结果。当前服务示例审查类别 Blxsw 默认为 4。',
+    capabilities: ['GeoJSON 面范围校验与 rings 转换', '规划审查接口调用', '请求参数留痕', '原始响应 JSON 交付'],
+    version: '1.0.0', team: 'ZJUGIS GIS 服务', submitter: 'GIS 服务管理员',
+    created_at: '2026-09-01 18:05:00', downloads: 0, status: 'published',
+    params: [{ name: 'geoJsonFile', type: 'file', required: true, description: '包含 Polygon 或 MultiPolygon 的 GeoJSON 文件' }, { name: 'Blxsw', type: 'number', required: false, description: '服务审查类别编码', default: 4 }],
+    package_files: ['references/GIS_Service规划审查接口.md', 'templates/土地利用规划审查交付说明.md']
+  },
+  {
+    id: 'gis-third-survey-analysis', display_name: '三调土地利用现状分析', category: '空间制图', tags: ['官方', '推荐'],
+    summary: '调用 GIS_Service 对指定面范围开展三调土地利用现状与图斑专项分析。',
+    description: '读取当前工作区的 GeoJSON 面范围与三调年度，调用 SanDXzAnalysis 并交付不可覆盖的原始分析结果。',
+    capabilities: ['GeoJSON 面范围校验与 rings 转换', '三调年度参数控制', '图斑专项分析开关', '原始响应 JSON 交付'],
+    version: '1.0.0', team: 'ZJUGIS GIS 服务', submitter: 'GIS 服务管理员',
+    created_at: '2026-09-01 18:10:00', downloads: 0, status: 'published',
+    params: [{ name: 'geoJsonFile', type: 'file', required: true, description: '包含 Polygon 或 MultiPolygon 的 GeoJSON 文件' }, { name: 'Xznf', type: 'number', required: false, description: '三调现状年度', default: 2024 }],
+    package_files: ['references/GIS_Service三调现状分析接口.md', 'templates/三调土地利用现状分析交付说明.md']
+  },
+  {
     id: 'contract-draft', display_name: '规划合同起草', category: '专业写作', tags: ['SkillHub'],
     summary: '起草规划编制合同（规划编制/咨询/测绘/技术服务），支持“写一份合同”等场景。',
     description: '按规划行业惯例生成合同草案，覆盖工作范围、成果交付、付款节点与违约责任条款，并提示风险点。',
