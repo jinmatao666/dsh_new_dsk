@@ -125,6 +125,7 @@ function imageReadContent(value: ImageReadValue): ContentBlock[] {
  * direct callers and gates on the calling route's declared image input.
  * @param ctx - the registration scope; execution uses its `fs` service plus
  *   the optional `attachments`/`llm` services.
+ * @param options - public name and model-facing instruction for this alias.
  */
 /** Options for an image-reading tool alias that shares the durable attachment path. */
 export interface ImageReadToolOptions {
@@ -139,6 +140,9 @@ export interface ImageReadToolOptions {
  * filesystem tool and the desktop `recognize_image` compatibility entry both
  * use this exact implementation, so neither can bypass the route capability
  * gate or attachment lifecycle.
+ * @param ctx - The registration scope; execution uses filesystem, attachment,
+ *   and model-route services from it.
+ * @param options - Public name and model-facing instruction for this alias.
  */
 export function applyImageReadTool(ctx: Context, options: ImageReadToolOptions): void {
   ctx.tools.register(defineTool({
@@ -253,7 +257,10 @@ export function applyImageReadTool(ctx: Context, options: ImageReadToolOptions):
   }))
 }
 
-/** Register the canonical filesystem image reader. */
+/**
+ * Register the canonical filesystem image reader.
+ * @param ctx - The registration scope for the canonical `read_image` tool.
+ */
 export function applyReadImageTool(ctx: Context): void {
   applyImageReadTool(ctx, {
     name: 'read_image',

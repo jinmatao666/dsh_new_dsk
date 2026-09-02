@@ -18,6 +18,7 @@ import type { GenericCallView } from '@deepseek-ai/dsh-tools'
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 const MAX_RESPONSE_BYTES = 1024 * 1024
 
+/** Configuration for the server-governed image-recognition service. */
 export interface Config {
   /** OneAPI origin without `/v1`; same endpoint used by desktop sign-in. */
   baseURL: string

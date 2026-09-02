@@ -6,8 +6,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool, type GenericCallView } from '@deepseek-ai/dsh-tools'
 
+/** Configuration for the packaged document-extraction helper. */
 export interface Config {
+  /** Absolute path to the packaged Node executable that runs the document helper. */
   nodeBinary?: string
+  /** Absolute path to the document extraction helper module. */
   helperPath?: string
 }
 
