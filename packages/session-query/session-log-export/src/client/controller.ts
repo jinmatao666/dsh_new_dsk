@@ -18,7 +18,7 @@ export interface SessionLogDownloadState {
 }
 
 type Fetch = (input: string | URL, init?: RequestInit) => Promise<Response>
-type Save = (url: string, filename: string) => void
+type Save = (archive: Blob, filename: string) => void
 
 const INITIAL: SessionLogDownloadState = { bySession: {} }
 
@@ -32,15 +32,20 @@ export function sessionLogZipFilename(sessionId: SessionId): string {
 }
 
 /**
- * Hand a Host download URL to the browser download manager.
- * @param url - same-origin Host download URL.
+ * Hand downloaded archive bytes to the browser download manager.
+ * @param archive - complete ZIP archive returned by the Host.
  * @param filename - browser download filename.
  */
-export function downloadUrl(url: string, filename: string): void {
+export function downloadArchive(archive: Blob, filename: string): void {
+  const url = URL.createObjectURL(archive)
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = filename
+  anchor.style.display = 'none'
+  document.body.append(anchor)
   anchor.click()
+  anchor.remove()
+  setTimeout(() => { URL.revokeObjectURL(url) }, 0)
 }
 
 /** Resolve the browser's Host base with the connection carrier's null-origin fallback. */
@@ -63,17 +68,17 @@ export class SessionLogDownloadController {
 
   /**
    * @param fetcher - HTTP carrier used to read the host-streamed ZIP.
-   * @param save - browser save operation.
+   * @param save - browser save operation for downloaded ZIP bytes.
    */
   constructor(
     private readonly fetcher: Fetch = (input, init) => fetch(input, init),
-    private readonly save: Save = downloadUrl,
+    private readonly save: Save = downloadArchive,
   ) {}
 
   /**
    * Download one Session tree; concurrent gestures for the same Session share one operation.
    * @param sessionId - root Session whose ZIP includes descendants and attachments.
-   * @returns after the browser save starts, an error state is published, or a late post-disposal request is ignored.
+   * @returns After ZIP fetch and browser save start, an error state is published, or a late post-disposal request is ignored.
    */
   download(sessionId: SessionId): Promise<void> {
     const existing = this.active.get(sessionId)
@@ -114,12 +119,12 @@ export class SessionLogDownloadController {
       const url = new URL('/api/session.export', hostBase())
       url.searchParams.set('sessionId', sessionId)
       url.searchParams.set('includeDescendants', 'true')
-      const response = await this.fetcher(url, { method: 'HEAD', signal })
+      const response = await this.fetcher(url, { method: 'GET', signal })
       if (!response.ok) {
         const detail = await response.text().catch(() => '')
         throw new Error(`Export failed: HTTP ${response.status}${detail === '' ? '' : ` ${detail}`}`)
       }
-      this.save(url.toString(), sessionLogZipFilename(sessionId))
+      this.save(await response.blob(), sessionLogZipFilename(sessionId))
       const open = this.store.getSnapshot().bySession[String(sessionId)]?.open ?? true
       this.publish(sessionId, { open, status: 'success', error: null })
     } catch (error: unknown) {

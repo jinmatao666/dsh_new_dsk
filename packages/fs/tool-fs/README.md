@@ -33,7 +33,7 @@ All keys are optional; the defaults are the shipped read caps.
 |---|---|---|
 | `read` | `file_path`, `offset?`, `limit?` | Line-numbered UTF-8 content with a pagination footer. `offset` is 1-based; `limit` defaults to and caps at the configured `readLimit` (2000). |
 | `read_image` | `file_path` | Reads a PNG/JPEG/WebP/GIF file through the bounded byte seam, persists it through `ctx.attachments.saveImage`, and returns an image block beside a small metadata envelope. It succeeds only when the exact routed model declares image input. |
-| `write` | `file_path`, `content` | Create or fully replace a file. With the policy plugin: overwriting an existing file requires a prior `read` at the unchanged version; creating a new file does not. Without it: unconditional. |
+| `write` | `file_path`, `content` | Create or fully replace a file. It preflights the target: Workspace Write asks whether to create a versioned file, overwrite, or cancel; full access reads an existing regular file then overwrites it. The policy plugin turns that observation into a guarded create or replacement. |
 | `edit` | `file_path`, non-empty `old_string`, `new_string`, `replace_all?` | Literal replacement; unique match required unless `replace_all` is true. With the policy plugin: requires a prior `read` (any window) and the file unchanged since. Without it: unconditional. |
 
 Field names are snake_case to match Claude Code and existing harness tool schemas.
@@ -46,7 +46,7 @@ The tools do **not** inject a policy service or inspect any cache. Each tool res
 
 - **read** — one `ctx.fs.stat` (type + size routing + version), then `readText`/`streamText`, then builds the line window, then emits `fs/observed` with a plain `ctx.emit`. (1 stat.)
 - **read_image** — validates the argument, extension, attachment availability, deployment media types, and the image-capable route before any I/O; then one `ctx.fs.stat` (recording an `absent` observation for a missing target, like `read`), a bounded `ctx.fs.readBytes` capped at the smaller of `imageLimits.maxImageBytes` and `imageLimits.maxMessageImageBytes` (the result is one message carrying one image), `attachments.saveImage` (content-addressed, so the image block references a durably committed object by the time `tool/result` is appended), and finally `fs/observed`. (1 stat.)
-- **write** — `ctx.waterfall('fs/write-intent', target, exec, () => undefined)` for the optional guard, then `ctx.fs.writeText(target, content, intent)`, then `fs/observed`. (0 stat.)
+- **write** — `ctx.fs.stat` preflights the target. An existing regular file asks through `ctx.userQuestions` in Workspace Write mode; creating a new version records an absent observation, while overwriting reads and records the current version. Other modes read and record an existing regular file without asking. It then calls `ctx.waterfall('fs/write-intent', target, exec, () => undefined)`, `ctx.fs.writeText(target, content, intent)`, and `fs/observed`. (1 stat; one read only for an existing regular file.)
 - **edit** — `ctx.waterfall('fs/edit-intent', target, exec, () => undefined)` for the optional guard, then `ctx.fs.editText(target, edit, intent)`, then `fs/observed`. (0 stat.)
 
 The tool passes `exec` (the tool-execution context) as the opaque `actor` on every dispatch. The default thunks return `undefined` (the unconstrained bare provider). When `@deepseek-ai/dsh-fs-observation-policy` is loaded it occupies the single decision slot — returning `createIfAbsent`/`replaceIfVersion`/`{ version }` or throwing `FS_NOT_OBSERVED` — and records on `fs/observed`. Backend errors (`FsError`) and a thrown `FS_NOT_OBSERVED` flow through `ToolRuntime.execute()` and become `isError` tool results with their `{ name, code }` attached.
@@ -78,7 +78,7 @@ Use the read tool — not shell commands like cat — to inspect text files. Res
 ##### Write guidance
 
 ```markdown
-Use the write tool to create files or completely replace file contents. Existing files are overwritten, so read an existing file first (the default fs-observation-policy requires it) and prefer edit for targeted changes.
+Use the write tool to create files or completely replace file contents. The tool handles an existing output path before writing: workspace-write mode asks the user whether to create a new version, overwrite, or cancel; full access reads then overwrites. Prefer edit for targeted changes.
 ```
 
 ##### Edit guidance

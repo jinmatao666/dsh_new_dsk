@@ -422,6 +422,7 @@
 .dsh-skill-add-dialog footer button[type='submit'] { background: #2563eb; color: #fff; }
 .dsh-skill-add-dialog footer button:disabled { cursor: not-allowed; opacity: .5; }
 .dsh-skill-install-message { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; padding: 11px 13px; border-radius: 10px; background: #ecfdf3; color: #166534; font-size: 13px; }
+.dsh-skill-install-message.error { background: #fff1f2; color: #be123c; }
 .dsh-skill-install-message button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 18px; }
 
 .dsh-skill-sub-tabs button {
@@ -621,6 +622,12 @@
 .dsh-skill-detail-install.installed {
   background: #16a34a;
   border-color: #16a34a;
+}
+
+.dsh-skill-detail-install:disabled,
+.dsh-skill-featured-card button:disabled {
+  cursor: wait;
+  opacity: .7;
 }
 
 .dsh-skill-detail-body {

@@ -30,6 +30,10 @@ The deliverable row excludes helper source extensions and uses successful mutati
 
 Installed marketplace skills are local to the desktop user and become available after the next conversation catalog fetch. The Marketplace UI can still render in a non-desktop browser, but its install action reports that native installation is unavailable.
 
+The desktop sidebar exposes Automations, Connectors, Expert Teams, and the Marketplace as separate actions stacked above Settings. Each action owns its own overlay and navigation state; the Marketplace no longer uses top-level product tabs to switch among those surfaces.
+
+Marketplace installation uses the public Tauri bridge when available and falls back to the persistent Tauri internals bridge for external-sidecar pages. Installation and failure feedback remains visible from both the skill list and a skill detail page.
+
 The GIS_Service skills require a GeoJSON polygon with a coordinate reference compatible with the service. Until the service supplies response examples and a field dictionary, their deliverable is the raw response plus input and request metadata rather than an invented statistics workbook or conclusion report.
 
 The dependency convenience applies only after an existing escalation path and does not change Full Access behavior. It reduces repeated prompts without widening the session's general sandbox policy.

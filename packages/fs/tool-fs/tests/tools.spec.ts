@@ -29,6 +29,7 @@ import { formatReadOutput } from '../src/read-render.ts'
 import type { FileReadOutcome } from '../src/read-render.ts'
 import { sessionCwd } from '../src/session-cwd.ts'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
+import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 
@@ -800,6 +801,15 @@ describe('sandbox escalation API (write/edit)', () => {
     return { ctx, fs: ctx.fs as SandboxingFakeFs }
   }
 
+  async function setupConfiningWithOutputChoice(choice: string) {
+    const result = await setupConfining()
+    await result.ctx.plugin(UserQuestionService)
+    result.ctx.userQuestions.registerProvider({
+      ask: () => Promise.resolve({ answers: [{ id: 'existing-output', selected: [choice] }] }),
+    })
+    return result
+  }
+
   /** A fake agent whose session records appends (the approval audit trail), mid-turn, carrying the given events for the fold. */
   function escalationAgent(events: Array<{ type: string; data?: Record<string, unknown> }> = []): object {
     return {
@@ -849,6 +859,33 @@ describe('sandbox escalation API (write/edit)', () => {
     const { ctx, fs } = await setupConfining()
     await call(ctx, 'write', { file_path: 'a.txt', content: 'x' }, escalationAgent())
     expect(fs.stamped).toEqual([{ mode: 'workspace-write', workspaceRoot: resolve('/session-project') }])
+  })
+
+  it('asks before a workspace-write overwrite and creates a versioned output when selected', async () => {
+    const { ctx, fs } = await setupConfiningWithOutputChoice('创建新版本')
+    fs.files.set('key:report.docx', 'original')
+    fs.files.set('key:report (2).docx', 'older version')
+
+    const result = await call(ctx, 'write', { file_path: 'report.docx', content: 'new content' })
+
+    expect(result.isError).toBe(false)
+    if (result.isError) throw new Error('expected write success')
+    expect(result.value).toMatchObject({ path: '/abs/report (3).docx', operation: 'create' })
+    expect(fs.files.get('key:report.docx')).toBe('original')
+    expect(fs.files.get('key:report (3).docx')).toBe('new content')
+    expect(fs.writeIntents).toEqual([{ kind: 'createIfAbsent' }])
+  })
+
+  it('reads an existing output before a non-interrupting overwrite', async () => {
+    const { ctx, fs } = await setup()
+    fs.files.set('key:report.docx', 'original')
+    const read = vi.spyOn(fs, 'readText')
+
+    const result = await call(ctx, 'write', { file_path: 'report.docx', content: 'replacement' }, { session: { header: {} } })
+
+    expect(result.isError).toBe(false)
+    expect(read).toHaveBeenCalledOnce()
+    expect(fs.writeIntents).toEqual([{ kind: 'replaceIfVersion', version: FsVersion('v1') }])
   })
 
   it('a standing session override folds onto the stamp', async () => {

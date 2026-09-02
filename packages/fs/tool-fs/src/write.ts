@@ -1,7 +1,7 @@
 /**
- * Model-facing full-file write. It obtains an optional intent from the single policy slot, calls
- * `ctx.fs.writeText` without a stat, then records the resulting version; no policy means an
- * unconditional atomic create-or-overwrite.
+ * Model-facing full-file write. It preflights the target for a safe existing-file decision,
+ * obtains an optional intent from the single policy slot, then records the resulting version;
+ * no policy means an unconditional atomic create-or-overwrite.
  * @module @deepseek-ai/dsh-tool-fs/src/write
  */
 
@@ -11,6 +11,7 @@ import type { DiffCallView, DiffResultView, ToolResult } from '@deepseek-ai/dsh-
 import type { FsWriteOutcome } from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-system-prompt'
+import type {} from '@deepseek-ai/dsh-user-questions'
 import { computeHunkDiffs, diffsFromMeta } from './diff.ts'
 import { remediateFsError } from './error.ts'
 import { sessionResolveOptions } from './session-cwd.ts'
@@ -42,6 +43,27 @@ ${verb} file
 </content>`
 }
 
+const CREATE_VERSION_LABEL = '创建新版本'
+const OVERWRITE_LABEL = '覆盖已有文件'
+const CANCEL_LABEL = '取消'
+
+/**
+ * Produce a sibling name that preserves the requested extension.
+ * @param requestedPath - The model-requested output path.
+ * @param sequence - The new-file sequence, beginning at two.
+ * @returns A path such as `report (2).docx`.
+ */
+function versionedPath(requestedPath: string, sequence: number): string {
+  const separator = Math.max(requestedPath.lastIndexOf('/'), requestedPath.lastIndexOf('\\'))
+  const directory = requestedPath.slice(0, separator + 1)
+  const basename = requestedPath.slice(separator + 1)
+  const extensionAt = basename.lastIndexOf('.')
+  const hasExtension = extensionAt > 0
+  const stem = hasExtension ? basename.slice(0, extensionAt) : basename
+  const extension = hasExtension ? basename.slice(extensionAt) : ''
+  return `${directory}${stem} (${sequence})${extension}`
+}
+
 /**
  * The `write` tool's validated arguments: the base parameters plus the
  * two escalation fields, advertised only under a confining `ctx.fs` (absent
@@ -63,7 +85,7 @@ export function applyWriteTool(ctx: Context, sandbox: FsSandboxController): void
   ctx.systemPrompt.section({
     name: 'tool:write',
     order: 101,
-    text: 'Use the write tool to create files or completely replace file contents. Existing files are overwritten, so read an existing file first (the default fs-observation-policy requires it) and prefer edit for targeted changes.',
+    text: 'Use the write tool to create files or completely replace file contents. The tool handles an existing output path before writing: workspace-write mode asks the user whether to create a new version, overwrite, or cancel; full access reads then overwrites. Prefer edit for targeted changes.',
   })
 
   ctx.tools.register(defineTool({
@@ -105,9 +127,68 @@ export function applyWriteTool(ctx: Context, sandbox: FsSandboxController): void
       // > backend default, plus the session cwd root) BEFORE anything executes;
       // an escalating call throws its distinct text on any non-grant.
       const sandboxPolicy = await sandbox.resolvePolicy('write', args, exec)
-      const target = await ctx.fs.resolve(input.filePath, sessionResolveOptions(exec, input.filePath, sandboxPolicy?.workspaceRoot))
+      let requestedPath = input.filePath
+      let target = await ctx.fs.resolve(requestedPath, sessionResolveOptions(exec, requestedPath, sandboxPolicy?.workspaceRoot))
+      let existing
+      try {
+        existing = await ctx.fs.stat(target, exec.signal)
+      } catch (error: unknown) {
+        throw remediateFsError(sandbox.mapError(error, sandboxPolicy))
+      }
+
+      if (existing === undefined) {
+        ctx.emit('fs/observed', target, { kind: 'absent' }, exec)
+      } else if (existing.type === 'file') {
+        if (sandboxPolicy?.mode === 'workspace-write') {
+          const userQuestions = ctx.get('userQuestions')
+          if (userQuestions === undefined) {
+            throw new Error('该文件已存在，但当前环境无法询问用户应创建新版本、覆盖还是取消写入。')
+          }
+          const answer = await userQuestions.ask({
+            signal: exec.signal,
+            ...exec.agent !== undefined ? { agent: exec.agent } : {},
+            questions: [{
+              id: 'existing-output',
+              header: '文件已存在',
+              question: `“${target.displayPath}”已存在。请选择处理方式。`,
+              detail: '创建新版本会保留原文件；覆盖会先读取现有文件后再替换内容。',
+              options: [
+                { label: CREATE_VERSION_LABEL, description: '保留原文件，并以新的序号创建输出文件。' },
+                { label: OVERWRITE_LABEL, description: '读取并替换已有文件的完整内容。' },
+                { label: CANCEL_LABEL, description: '不写入任何文件。' },
+              ],
+            }],
+          })
+          const choice = answer.answers.find(item => item.id === 'existing-output')?.selected[0]
+          if (choice === CANCEL_LABEL || choice === undefined) {
+            throw new Error('用户取消了对现有文件的写入。')
+          }
+          if (choice === CREATE_VERSION_LABEL) {
+            let sequence = 2
+            do {
+              requestedPath = versionedPath(input.filePath, sequence++)
+              target = await ctx.fs.resolve(requestedPath, sessionResolveOptions(exec, requestedPath, sandboxPolicy.workspaceRoot))
+              existing = await ctx.fs.stat(target, exec.signal)
+            } while (existing !== undefined)
+            ctx.emit('fs/observed', target, { kind: 'absent' }, exec)
+          } else if (choice === OVERWRITE_LABEL) {
+            await ctx.fs.readText(target, exec.signal)
+            ctx.emit('fs/observed', target, { kind: 'present', version: existing.version }, exec)
+          } else {
+            throw new Error('用户给出了无法识别的文件写入选择。')
+          }
+        } else {
+          // Full access does not interrupt the task just because an output name
+          // exists. Read first so the observation policy can safely authorize
+          // the replacement.
+          await ctx.fs.readText(target, exec.signal)
+          ctx.emit('fs/observed', target, { kind: 'present', version: existing.version }, exec)
+        }
+      }
+
       // Single-slot decision: the policy plugin produces createIfAbsent/
-      // replaceIfVersion; the bare default is undefined (unconditional). No stat.
+      // replaceIfVersion from the authoritative preflight observation; the
+      // bare default is undefined (unconditional).
       const intent = await ctx.waterfall('fs/write-intent', target, exec, () => undefined)
       let outcome: FsWriteOutcome
       try {

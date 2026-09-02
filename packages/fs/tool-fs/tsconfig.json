@@ -43,6 +43,9 @@
       "path": "../../interaction/user-approval"
     },
     {
+      "path": "../../interaction/user-questions"
+    },
+    {
       "path": "../../attachment/attachment"
     }
   ]

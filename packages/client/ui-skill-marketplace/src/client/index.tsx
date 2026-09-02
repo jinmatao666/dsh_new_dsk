@@ -54,6 +54,7 @@ type Automation = {
 }
 
 type DesktopBridge = { core?: { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> } }
+type DesktopInternals = { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> }
 
 function skillSlug(skill: Skill): string {
   const value = skill.id.toLocaleLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -65,10 +66,10 @@ function skillContent(skill: Skill): string {
 }
 
 function desktopInvoke(command: string, argumentsValue: unknown): Promise<unknown> {
-  const bridge = (window as Window & { __TAURI__?: DesktopBridge }).__TAURI__
-  const invoke = bridge?.core?.invoke
+  const desktopWindow = window as Window & { __TAURI__?: DesktopBridge; __TAURI_INTERNALS__?: DesktopInternals }
+  const invoke = desktopWindow.__TAURI__?.core?.invoke ?? desktopWindow.__TAURI_INTERNALS__?.invoke
   if (typeof invoke !== 'function') {
-    return Promise.reject(new Error('本地安装仅支持已安装的 ZJUGIS Harness 桌面端'))
+    return Promise.reject(new Error('未连接到桌面端原生安装服务。请重新打开 ZJUGIS Harness 后重试。'))
   }
   return invoke(command, argumentsValue)
 }
@@ -104,6 +105,13 @@ const L = {
   experts: '专家团',
   connectors: '连接器',
   automations: '自动化',
+}
+
+const SECTION_COPY: Record<MarketplaceSection, { title: string; subtitle: string }> = {
+  skills: { title: L.title, subtitle: L.subtitle },
+  experts: { title: L.experts, subtitle: '面向政务场景的多技能协同工作流' },
+  connectors: { title: L.connectors, subtitle: '管理已授权的政务协同与数据服务连接' },
+  automations: { title: L.automations, subtitle: '配置定时执行、事件触发和自动交付流程' },
 }
 
 const CATEGORIES = [
@@ -241,44 +249,38 @@ function ArrowLeftIcon() {
 }
 
 type Controller = {
-  open(section?: MarketplaceSection): void
+  open(): void
   close(): void
-  subscribe(listener: (state: { open: boolean; section?: MarketplaceSection }) => void): () => void
-}
-declare global {
-  interface Window {
-    __skillMarketplaceController?: Controller
-  }
+  subscribe(listener: (state: { open: boolean }) => void): () => void
 }
 
 function createController(): Controller {
-  const listeners = new Set<(state: { open: boolean; section?: MarketplaceSection }) => void>()
+  const listeners = new Set<(state: { open: boolean }) => void>()
   const controller: Controller = {
-    open: (section) => {
-      const state = section === undefined ? { open: true } : { open: true, section }
-      listeners.forEach((listener) => { listener(state) })
-    },
+    open: () => { listeners.forEach((listener) => { listener({ open: true }) }) },
     close: () => { listeners.forEach((listener) => { listener({ open: false }) }) },
     subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener) },
-  }
-  if (typeof window !== 'undefined') {
-    window.__skillMarketplaceController = controller
   }
   return controller
 }
 
-// Slot props are assembled separately for each rendered seat. The action and
-// overlay therefore share this module-level state owner instead of relying on
-// a mutable controller being carried through two independent slot payloads.
-const skillMarketplaceController = createController()
+// Each sidebar capability owns its own controller and overlay. This keeps
+// navigation separate rather than treating the entries as product tabs.
+const marketplaceControllers: Record<MarketplaceSection, Controller> = {
+  skills: createController(),
+  experts: createController(),
+  connectors: createController(),
+  automations: createController(),
+}
 
 type OverlayProps = PropsRuntime<'shell.overlay'> & { marketplaceUrl: string }
 type ActionProps = PropsRuntime<'sidebar.footer.action'> & SidebarFooterActionOwnerProps
 
-function SkillDetail({ skill, onBack, installed, onToggleInstall }: {
+function SkillDetail({ skill, onBack, installed, installing, onToggleInstall }: {
   skill: Skill
   onBack: () => void
   installed: boolean
+  installing: boolean
   onToggleInstall: () => void
 }) {
   return (
@@ -301,8 +303,9 @@ function SkillDetail({ skill, onBack, installed, onToggleInstall }: {
           type="button"
           className={`dsh-skill-detail-install${installed ? ' installed' : ''}`}
           onClick={onToggleInstall}
+          disabled={installing}
         >
-          {installed ? L.uninstall : L.detailInstall}
+          {installing ? '处理中…' : installed ? L.uninstall : L.detailInstall}
         </button>
       </div>
       <div className="dsh-skill-detail-body">
@@ -381,16 +384,16 @@ function Automations() {
   </div>
 }
 
-function SkillMarketplace(_props: OverlayProps) {
+function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSection }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState(L.all)
   const [activeSubTab, setActiveSubTab] = useState('recommend')
-  const [section, setSection] = useState<MarketplaceSection>('skills')
   const [view, setView] = useState<'list' | 'detail'>('list')
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
   const [showInstalledOnly, setShowInstalledOnly] = useState(false)
-  const [installMessage, setInstallMessage] = useState<string | null>(null)
+  const [installing, setInstalling] = useState<string | null>(null)
+  const [installMessage, setInstallMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [customSkills, setCustomSkills] = useState<Skill[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('dsh.marketplace.custom-skills') ?? '[]') as Skill[]
@@ -409,9 +412,8 @@ function SkillMarketplace(_props: OverlayProps) {
     }
   })
 
-  useEffect(() => skillMarketplaceController.subscribe((next) => {
+  useEffect(() => marketplaceControllers[section].subscribe((next) => {
     setOpen(next.open)
-    if (next.section !== undefined) setSection(next.section)
     if (!next.open) {
       setView('list')
       setSelectedSkill(null)
@@ -427,7 +429,7 @@ function SkillMarketplace(_props: OverlayProps) {
       const target = event.target
       if (!(target instanceof Element)) return
       if (target.closest('.dsh-skill-market-panel') === null) {
-        skillMarketplaceController.close()
+        marketplaceControllers[section].close()
       }
     }
     document.addEventListener('pointerdown', closeForSidebarAction, true)
@@ -435,7 +437,9 @@ function SkillMarketplace(_props: OverlayProps) {
   }, [open])
 
   const allSkills = useMemo(() => [...customSkills, ...MOCK_SKILLS], [customSkills])
-  const featuredPool = useMemo(() => allSkills.filter(s => s.featured), [allSkills])
+  const featuredPool = useMemo(() => allSkills
+    .filter(skill => skill.featured)
+    .sort((left, right) => Number(right.tags.includes('官方')) - Number(left.tags.includes('官方'))), [allSkills])
   const [featuredOffset, setFeaturedOffset] = useState(0)
   const featuredSkills = useMemo(() => {
     if (featuredPool.length <= 3) return featuredPool
@@ -467,21 +471,28 @@ function SkillMarketplace(_props: OverlayProps) {
 
   if (!open) return null
 
-  const closeMarket = () => { setOpen(false); skillMarketplaceController.close() }
+  const closeMarket = () => { setOpen(false); marketplaceControllers[section].close() }
 
   const toggleInstall = async (skill: Skill) => {
+    if (installing !== null) return
     const slug = skillSlug(skill)
+    const wasInstalled = installed.has(skill.id)
+    setInstallMessage(null)
+    setInstalling(skill.id)
+    let installedPath: unknown
     try {
-      if (installed.has(skill.id)) {
+      if (wasInstalled) {
         await desktopInvoke('uninstall_marketplace_skill', { slug })
       } else {
-        await desktopInvoke('install_marketplace_skill', {
+        installedPath = await desktopInvoke('install_marketplace_skill', {
           skill: { slug, description: skill.summary, content: skillContent(skill) },
         })
       }
     } catch (error) {
-      setInstallMessage(error instanceof Error ? error.message : '技能安装失败')
+      setInstallMessage({ kind: 'error', text: error instanceof Error ? error.message : '技能安装失败' })
       return
+    } finally {
+      setInstalling(null)
     }
     const next = new Set(installed)
     if (next.has(skill.id)) next.delete(skill.id)
@@ -489,8 +500,8 @@ function SkillMarketplace(_props: OverlayProps) {
     setInstalled(next)
     localStorage.setItem('dsh.mock.skills', JSON.stringify([...next]))
     setInstallMessage(next.has(skill.id)
-      ? `已安装。新建对话后可输入 /${slug} 调用该技能。`
-      : '技能已从本机移除。')
+      ? { kind: 'success', text: `已安装到 ${typeof installedPath === 'string' ? installedPath : `~/.dsh/skills/${slug}/SKILL.md`}。新建对话后可输入 /${slug} 调用。` }
+      : { kind: 'success', text: '技能已从本机移除。' })
   }
 
   const createSkill = () => {
@@ -531,8 +542,8 @@ function SkillMarketplace(_props: OverlayProps) {
           <header className="dsh-skill-market-header">
             <div className="dsh-skill-market-heading">
               <span className="dsh-skill-kicker">ZJUGIS HARNESS</span>
-              <h1>{L.title}</h1>
-              <p>{L.subtitle}</p>
+              <h1>{SECTION_COPY[section].title}</h1>
+              <p>{SECTION_COPY[section].subtitle}</p>
             </div>
             <button type="button" className="dsh-skill-close" aria-label={L.close} onClick={closeMarket}>
               <ArrowLeftIcon />
@@ -545,15 +556,11 @@ function SkillMarketplace(_props: OverlayProps) {
             skill={selectedSkill}
             onBack={() => { setView('list') }}
             installed={installed.has(selectedSkill.id)}
+            installing={installing === selectedSkill.id}
             onToggleInstall={() => void toggleInstall(selectedSkill)}
           />
         ) : (
           <>
-            <div className="dsh-skill-product-tabs" role="tablist" aria-label="技能广场功能">
-              {([
-                ['skills', L.skills], ['experts', L.experts], ['connectors', L.connectors], ['automations', L.automations],
-              ] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={section === id} className={section === id ? 'active' : ''} onClick={() => { setSection(id); setView('list') }}>{label}</button>)}
-            </div>
             {section === 'experts' && <ExpertTeams />}
             {section === 'connectors' && <Connectors />}
             {section === 'automations' && <Automations />}
@@ -604,6 +611,7 @@ function SkillMarketplace(_props: OverlayProps) {
                           type="button"
                           className={installed.has(skill.id) ? 'installed' : ''}
                           onClick={(e) => { e.stopPropagation(); void toggleInstall(skill) }}
+                          disabled={installing === skill.id}
                         >
                           {installed.has(skill.id) ? <CheckIcon /> : <PlusIcon />}
                         </button>
@@ -662,14 +670,14 @@ function SkillMarketplace(_props: OverlayProps) {
               </div>
 
               {visible.length === 0 && <div className="dsh-skill-empty">{L.empty}</div>}
-              {installMessage !== null && (
-                <div className="dsh-skill-install-message" role="status">
-                  {installMessage}
-                  <button type="button" onClick={() => { setInstallMessage(null) }}>×</button>
-                </div>
-              )}
             </>}
           </>
+        )}
+        {installMessage !== null && (
+          <div className={`dsh-skill-install-message ${installMessage.kind}`} role="status">
+            {installMessage.text}
+            <button type="button" onClick={() => { setInstallMessage(null) }}>×</button>
+          </div>
         )}
         {adding && (
           <div className="dsh-skill-add-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setAdding(false) }}>
@@ -710,7 +718,7 @@ function SkillMarketplaceAction({ wide, section = 'skills' }: ActionProps & { se
       type="button"
       className={`dsh-skill-market-action${wide ? '' : ' rail'}`}
       aria-label={labels[section]}
-      onClick={() => { skillMarketplaceController.open(section) }}
+      onClick={() => { marketplaceControllers[section].open() }}
     >
       <MarketplaceSectionIcon section={section} />
       {wide && <span>{labels[section]}</span>}
@@ -723,7 +731,7 @@ export function apply(ctx: ClientContext): void {
   const marketplaceUrl = (process.env.DSH_CLIENT_SKILL_MARKETPLACE_URL ?? 'https://skills.zjugis.com/').trim()
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(
-      { name: 'sidebar.footer.action', id: 'skill-experts', order: 10, inject: () => ({ section: 'experts' as const }) },
+      { name: 'sidebar.footer.action', id: 'skill-automations', order: 10, inject: () => ({ section: 'automations' as const }) },
       SkillMarketplaceAction,
     ),
   )
@@ -735,7 +743,7 @@ export function apply(ctx: ClientContext): void {
   )
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(
-      { name: 'sidebar.footer.action', id: 'skill-automations', order: 30, inject: () => ({ section: 'automations' as const }) },
+      { name: 'sidebar.footer.action', id: 'skill-experts', order: 30, inject: () => ({ section: 'experts' as const }) },
       SkillMarketplaceAction,
     ),
   )
@@ -745,10 +753,12 @@ export function apply(ctx: ClientContext): void {
       SkillMarketplaceAction,
     ),
   )
-  ctx.slots.inject('shell.overlay', () =>
-    ctx.slots.register(
-      { name: 'shell.overlay', id: 'skill-marketplace', order: 100, inject: () => ({ marketplaceUrl }) },
-      SkillMarketplace,
-    ),
-  )
+  for (const [index, section] of (['skills', 'experts', 'connectors', 'automations'] as const).entries()) {
+    ctx.slots.inject('shell.overlay', () =>
+      ctx.slots.register(
+        { name: 'shell.overlay', id: `skill-marketplace-${section}`, order: 100 + index, inject: () => ({ marketplaceUrl, section }) },
+        SkillMarketplace,
+      ),
+    )
+  }
 }
