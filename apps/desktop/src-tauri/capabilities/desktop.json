@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "desktop-loopback-ui",
+  "description": "Allows the loopback DSH UI in the main desktop window to use the desktop shell commands.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://127.0.0.1:*"]
+  },
+  "permissions": [
+    "core:default",
+    "allow-set-auth-window-state",
+    "allow-save-session-log-archive",
+    "allow-list-marketplace-skills",
+    "allow-install-marketplace-skill",
+    "allow-uninstall-marketplace-skill"
+  ]
+}

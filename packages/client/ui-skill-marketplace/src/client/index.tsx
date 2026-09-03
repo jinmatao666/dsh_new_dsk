@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -63,12 +63,11 @@ type Connector = {
   summary: string
   scope: string
   accent: string
-  brand: ConnectorBrand
+  icon: string
   capabilities: readonly string[]
   access: string
 }
 
-type ConnectorBrand = 'zjDingtalk' | 'qqMail' | 'feishu' | 'tencentDocs' | 'tencentMeeting' | 'wecom' | 'officeMail' | 'internalMail' | 'documentCenter' | 'custom'
 
 type Automation = {
   id: string
@@ -98,6 +97,12 @@ function desktopInvoke(command: string, argumentsValue: unknown): Promise<unknow
     return Promise.reject(new Error('未连接到桌面端原生安装服务。请重新打开 ZJUGIS Harness 后重试。'))
   }
   return invoke(command, argumentsValue)
+}
+
+function marketplaceInstallErrorMessage(error: unknown): string {
+  if (typeof error === 'string' && error.trim() !== '') return error
+  if (error instanceof Error && error.message.trim() !== '') return error.message
+  return '技能安装失败'
 }
 
 const L = {
@@ -184,6 +189,10 @@ const EXPERT_TEAMS: readonly ExpertTeam[] = [
   { id: 'land-approval', name: '建设项目用地报批专家团', summary: '围绕选址、用地合规、报批材料与风险核验组织分工，帮助完善项目用地报批材料。', members: ['用地顾问', '政策专员', '材料审核员'], skills: ['政策文件解析', '文本结构化提取', '公文写作助手'], accent: '#7c3aed' },
   { id: 'survey-quality', name: '国土调查成果质检专家团', summary: '由空间分析、数据质检和成果编制角色协同核查调查成果，形成问题清单和交付说明。', members: ['调查工程师', 'GIS 分析师', '成果质检员'], skills: ['GIS 图层合并', '数据清洗诊断', 'GIS 制图导出'], accent: '#059669' },
   { id: 'ecology-review', name: '生态保护修复论证专家团', summary: '将生态底图分析、政策约束识别与论证材料整理串联为项目论证工作流。', members: ['生态规划师', '空间分析师', '论证撰稿人'], skills: ['政策文件解析', '空间计量经济学', '咨询报告生成器'], accent: '#0ea5e9' },
+  { id: 'farmland-review', name: '耕地保护合规审查专家团', summary: '围绕耕地保有量、永久基本农田占用与补划平衡，组织底图核对、政策比对与审查意见输出。', members: ['耕地保护专员', 'GIS 工程师', '执法督察员'], skills: ['GIS图层合并', '政策文件解析', 'GIS制图导出'], accent: '#65a30d' },
+  { id: 'geohazard-assess', name: '地质灾害风险评估专家团', summary: '串联地质底图分析、隐患点叠加与风险评估报告编制，服务选址与防灾审查场景。', members: ['地质工程师', '空间分析师', '报告撰稿人'], skills: ['空间计量经济学', 'GIS制图导出', '咨询报告生成器'], accent: '#d97706' },
+  { id: 'land-supply', name: '土地供应与利用协同专家团', summary: '覆盖储备整理、供地方案、批后监管与闲置处置，帮助形成供地全链条材料。', members: ['储备整理专员', '用地顾问', '政务撰稿人'], skills: ['公文写作助手', '政策文件解析', '文本结构化提取'], accent: '#0891b2' },
+  { id: 'urban-renewal', name: '城市更新项目推进专家团', summary: '从更新单元划定、政策适用到实施方案与汇报材料，组织多角色协同推进。', members: ['更新规划师', '政策分析师', '政企协调员'], skills: ['咨询报告生成器', '政策文件解析', '规划案例比较分析'], accent: '#0d9488' },
 ]
 
 const EXPERTS: readonly Expert[] = [
@@ -195,18 +204,33 @@ const EXPERTS: readonly Expert[] = [
   { id: 'ecological-restoration', name: '生态修复论证专家', role: '生态保护与修复方案顾问', category: '生态保护', summary: '梳理生态保护红线、修复目标、工程措施与论证要点，辅助形成项目说明。', tags: ['生态修复', '保护约束', '方案论证'], examples: ['基于项目资料编制生态修复论证提纲', '提炼生态保护要求并列出需核实事项'], accent: '#16a34a', icon: 'ecology' },
   { id: 'property-registration', name: '不动产登记研判专家', role: '权属资料与登记流程顾问', category: '不动产登记', summary: '帮助整理权属资料、登记事项和疑点清单，便于与项目资料交叉核验。', tags: ['权属核验', '登记资料', '疑点清单'], examples: ['从这些权属资料中整理登记核验重点', '生成不动产登记资料的缺失项清单'], accent: '#b45309', icon: 'property' },
   { id: 'gov-writing', name: '政务材料与汇报专家', role: '政企沟通与成果表达顾问', category: '政务协同', summary: '将复杂项目资料整理为适用于汇报、请示、纪要和项目推进的规范化文字材料。', tags: ['政务写作', '项目汇报', '会议纪要'], examples: ['把项目进展整理为领导汇报提纲', '根据会议记录起草一份待办明确的纪要'], accent: '#e87922', icon: 'writing' },
+  { id: 'farmland-protection', name: '耕地保护与永久基本农田专家', role: '耕地保有量与占补平衡顾问', category: '耕地地质', summary: '协助核对耕地保有量、永久基本农田占用与补划方案，梳理占补平衡与进出平衡要求。', tags: ['永久基本农田', '占补平衡', '进出平衡'], examples: ['核对这个项目是否涉及永久基本农田', '整理占补平衡方案需要说明的要点'], accent: '#65a30d', icon: 'ecology' },
+  { id: 'geohazard', name: '地质灾害防治专家', role: '地灾评估与隐患核查顾问', category: '耕地地质', summary: '面向地质灾害危险性评估、隐患点核查与防治要求，辅助选址与审查意见整理。', tags: ['地灾评估', '隐患核查', '防灾审查'], examples: ['根据资料列出地灾评估需要收集的内容', '核查选址说明中的地质灾害风险表述'], accent: '#d97706', icon: 'survey' },
+  { id: 'mineral-resource', name: '矿产资源管理专家', role: '矿政审批与压覆核查顾问', category: '耕地地质', summary: '协助梳理矿业权设置、压覆重要矿产资源核查与矿山生态修复要求。', tags: ['压覆核查', '矿业权', '矿山修复'], examples: ['整理建设项目压覆矿产资源核查清单', '说明矿山生态修复方案的主要章节'], accent: '#ca8a04', icon: 'gis' },
+  { id: 'land-supply', name: '土地储备与供应专家', role: '储备整理与供地方案顾问', category: '供地与利用', summary: '覆盖土地储备计划、整理成本核算、供地方式选择与出让方案要点梳理。', tags: ['储备计划', '供地方案', '出让要点'], examples: ['梳理这块储备土地的供地方式选项', '整理出让方案需要明确的控制条件'], accent: '#0891b2', icon: 'property' },
+  { id: 'idle-land', name: '闲置土地处置专家', role: '批后监管与闲置处置顾问', category: '供地与利用', summary: '协助认定闲置原因、梳理处置路径（延期、收回、置换等）与批后监管台账。', tags: ['闲置认定', '处置路径', '批后监管'], examples: ['根据项目时间线判断闲置认定节点', '比较这宗闲置土地可选的处置方式'], accent: '#4f46e5', icon: 'planning' },
+  { id: 'enforcement', name: '自然资源执法督察专家', role: '违法线索研判与督察整改顾问', category: '执法督察', summary: '协助研判卫片执法线索、违法用地情形与督察整改销号材料要求。', tags: ['卫片执法', '线索研判', '整改销号'], examples: ['研判这个卫片图斑可能的违法情形', '整理督察整改销号需要的佐证材料'], accent: '#e11d48', icon: 'policy' },
+  { id: 'urban-renewal', name: '城市更新规划专家', role: '更新单元与实施方案顾问', category: '规划编制', summary: '协助划定更新单元、梳理更新方式与实施方案框架，衔接国土空间规划管控要求。', tags: ['更新单元', '实施方案', '存量盘活'], examples: ['梳理这个片区的更新方式与实施路径', '对照总规核查更新单元的管控要求'], accent: '#0d9488', icon: 'planning' },
+  { id: 'asset-accounting', name: '自然资源资产核算专家', role: '确权登记与资产清查顾问', category: '调查监测', summary: '协助全民所有自然资源资产清查、所有权委托代理与资产报告编制要点梳理。', tags: ['资产清查', '委托代理', '资产报告'], examples: ['整理资产清查需要归集的数据清单', '梳理所有权委托代理事项清单框架'], accent: '#9333ea', icon: 'survey' },
 ]
 
 const CONNECTORS: readonly Connector[] = [
-  { id: 'zj-dingtalk', name: '浙政钉', summary: '接入组织通讯录、待办与消息通知，将任务结果送达政务协同入口。', scope: '政务协同', accent: '#1677ff', brand: 'zjDingtalk', capabilities: ['待办推送', '组织通讯录', '消息通知'], access: '需由单位管理员完成组织授权' },
-  { id: 'qq-mail', name: 'QQ 邮箱', summary: '在授权邮箱内检索邮件、形成摘要，并将结果保存为待发送草稿。', scope: '邮箱协作', accent: '#f5a700', brand: 'qqMail', capabilities: ['邮件检索', '摘要提炼', '草稿交付'], access: '按邮箱账号授权，可随时取消' },
-  { id: 'feishu', name: '飞书', summary: '协助整理飞书文档、群消息和待办信息，支持将成果回写到协作空间。', scope: '团队协作', accent: '#00aeef', brand: 'feishu', capabilities: ['云文档', '群消息', '待办同步'], access: '仅访问你选择的工作空间内容' },
-  { id: 'tencent-docs', name: '腾讯文档', summary: '读取和整理在线文档、表格与收集表，适合多人协作的材料汇编。', scope: '在线文档', accent: '#00a6ff', brand: 'tencentDocs', capabilities: ['文档读取', '表格整理', '协作交付'], access: '通过个人授权访问指定文档' },
-  { id: 'tencent-meeting', name: '腾讯会议', summary: '汇总会议日程与会议纪要，帮助将任务提醒推送给参会相关人员。', scope: '会议协同', accent: '#2f7cf6', brand: 'tencentMeeting', capabilities: ['会议日程', '纪要整理', '提醒推送'], access: '需要会议组织者或个人账号授权' },
-  { id: 'wecom', name: '企业微信', summary: '连接企业微信的消息、日程和审批通知，为内部协同提供统一入口。', scope: '内部协同', accent: '#2d8cf0', brand: 'wecom', capabilities: ['消息提醒', '审批通知', '日程同步'], access: '由企业管理员配置可用范围' },
-  { id: 'office-mail', name: '办公邮箱', summary: '读取和起草授权范围内的办公邮件，支持将审阅结果作为邮件草稿交付。', scope: '办公邮件', accent: '#0f766e', brand: 'officeMail', capabilities: ['邮件读取', '草稿起草', '附件摘要'], access: 'OAuth 授权，不保存账号密码' },
-  { id: 'internal-mail', name: '内部邮箱', summary: '适配内网 SMTP 或 Exchange 环境，专用于不出网的邮件通知与归档。', scope: '内网邮件', accent: '#7c3aed', brand: 'internalMail', capabilities: ['内网投递', '通知归档', '审批抄送'], access: '需管理员配置内网服务地址' },
-  { id: 'doc-center', name: '政务文档中心', summary: '连接受控文档库，在授予的目录范围内检索、读取和提交交付物。', scope: '政务资料', accent: '#b45309', brand: 'documentCenter', capabilities: ['目录检索', '受控下载', '成果提交'], access: '按目录及文档权限控制访问' },
+  { id: 'zj-dingtalk', name: '浙政钉', summary: '接入组织通讯录、待办与消息通知，将任务结果送达政务协同入口。', scope: '政务协同', accent: '#1677ff', icon: '/connector-icons/zj-dingtalk.svg', capabilities: ['待办推送', '组织通讯录', '消息通知'], access: '需由单位管理员完成组织授权' },
+  { id: 'dingtalk', name: '钉钉', summary: '连接钉钉消息、日程、审批与待办，在任务完成后推送结果通知。', scope: '政务协同', accent: '#1677ff', icon: '/connector-icons/dingtalk.png', capabilities: ['消息推送', '审批同步', '日程提醒'], access: '按组织维度授权，支持随时取消' },
+  { id: 'qq-mail', name: 'QQ 邮箱', summary: '在授权邮箱内检索邮件、形成摘要，并将结果保存为待发送草稿。', scope: '邮箱协作', accent: '#f5a700', icon: '/connector-icons/qq-mail.png', capabilities: ['邮件检索', '摘要提炼', '草稿交付'], access: '按邮箱账号授权，可随时取消' },
+  { id: 'office-mail', name: '办公邮箱', summary: '读取和起草授权范围内的办公邮件，支持将审阅结果作为邮件草稿交付。', scope: '办公邮件', accent: '#0f766e', icon: '/connector-icons/office-mail.svg', capabilities: ['邮件读取', '草稿起草', '附件摘要'], access: 'OAuth 授权，不保存账号密码' },
+  { id: 'internal-mail', name: '内部邮箱', summary: '适配内网 SMTP 或 Exchange 环境，专用于不出网的邮件通知与归档。', scope: '内网邮件', accent: '#7c3aed', icon: '/connector-icons/internal-mail.svg', capabilities: ['内网投递', '通知归档', '审批抄送'], access: '需管理员配置内网服务地址' },
+  { id: 'feishu', name: '飞书', summary: '协助整理飞书文档、群消息和待办信息，支持将成果回写到协作空间。', scope: '团队协作', accent: '#00aeef', icon: '/connector-icons/feishu.png', capabilities: ['云文档', '群消息', '待办同步'], access: '仅访问你选择的工作空间内容' },
+  { id: 'wecom', name: '企业微信', summary: '连接企业微信的消息、日程和审批通知，为内部协同提供统一入口。', scope: '内部协同', accent: '#2d8cf0', icon: '/connector-icons/wecom.png', capabilities: ['消息提醒', '审批通知', '日程同步'], access: '由企业管理员配置可用范围' },
+  { id: 'tencent-docs', name: '腾讯文档', summary: '读取和整理在线文档、表格与收集表，适合多人协作的材料汇编。', scope: '在线文档', accent: '#00a6ff', icon: '/connector-icons/tencent-docs.png', capabilities: ['文档读取', '表格整理', '协作交付'], access: '通过个人授权访问指定文档' },
+  { id: 'tencent-meeting', name: '腾讯会议', summary: '汇总会议日程与会议纪要，帮助将任务提醒推送给参会相关人员。', scope: '会议协同', accent: '#2f7cf6', icon: '/connector-icons/tencent-meeting.png', capabilities: ['会议日程', '纪要整理', '提醒推送'], access: '需要会议组织者或个人账号授权' },
+  { id: 'aliyun-drive', name: '阿里云盘', summary: '在授权范围内读取与归档项目资料，支持大文件交付与版本管理。', scope: '云存储', accent: '#ff6a00', icon: '/connector-icons/aliyun-drive.png', capabilities: ['文件读取', '大文件交付', '版本归档'], access: '仅访问授权文件夹内容' },
+  { id: 'baidu-map', name: '百度地图', summary: '调用地图服务能力进行地址解析、POI 检索与空间定位辅助。', scope: '地图服务', accent: '#4b85ef', icon: '/connector-icons/baidu-map.png', capabilities: ['地址解析', 'POI 检索', '坐标定位'], access: '按 Key 授权，不记录查询轨迹' },
+  { id: 'amap', name: '高德地图', summary: '提供地理编码、路径规划和行政区划查询，辅助空间分析与选址论证。', scope: '地图服务', accent: '#2f8cee', icon: '/connector-icons/amap.png', capabilities: ['地理编码', '路径规划', '区划查询'], access: '按 Key 授权，不记录查询轨迹' },
+  { id: 'doc-center', name: '政务文档中心', summary: '连接受控文档库，在授予的目录范围内检索、读取和提交交付物。', scope: '政务资料', accent: '#b45309', icon: '/connector-icons/doc-center.svg', capabilities: ['目录检索', '受控下载', '成果提交'], access: '按目录及文档权限控制访问' },
+  { id: 'spatial-db', name: '空间数据库', summary: '连接 PostGIS / SDE 等空间数据库，读取要素类与属性表用于分析。', scope: '空间数据', accent: '#06b6d4', icon: '/connector-icons/spatial-db.svg', capabilities: ['要素读取', '空间查询', '属性关联'], access: '只读连接，不保存数据库凭据' },
+  { id: 'pm-system', name: '项目管理系统', summary: '读取项目进度、任务分工与里程碑信息，生成项目跟踪与汇报材料。', scope: '项目管理', accent: '#8b5cf6', icon: '/connector-icons/pm-system.svg', capabilities: ['进度读取', '任务汇总', '里程碑跟踪'], access: '按项目授权访问可见范围' },
+  { id: 'archive-system', name: '档案管理系统', summary: '按授权范围检索历史项目档案，支持资料调阅与成果归档。', scope: '档案管理', accent: '#6366f1', icon: '/connector-icons/archive-system.svg', capabilities: ['档案检索', '资料调阅', '成果归档'], access: '按档案密级与目录权限控制' },
 ]
 
 const AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
@@ -255,10 +279,49 @@ function RefreshIcon() {
   )
 }
 
-function SparkleIcon() {
+function SparkleIcon({ size = 18 }: { size?: number }) {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M12 2.5 14.4 9.6 21.5 12 14.4 14.4 12 21.5 9.6 14.4 2.5 12 9.6 9.6 Z" />
+    </svg>
+  )
+}
+
+/** Soft line glyph per skill category, tinted with the skill accent colour. */
+function CategoryGlyph({ category, size = 20 }: { category: string; size?: number }) {
+  const shared = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.9,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  }
+  switch (category) {
+    case '空间制图':
+      return <svg {...shared}><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z" /><path d="M9 4v14M15 6v14" /></svg>
+    case '专业写作':
+      return <svg {...shared}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+    case '研究咨询':
+      return <svg {...shared}><circle cx="11" cy="11" r="7" /><path d="m21 21-4.35-4.35" /><path d="M8.5 11h5" /></svg>
+    case '办公文档':
+      return <svg {...shared}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6M16 13H8M16 17H8" /></svg>
+    case '数据分析':
+      return <svg {...shared}><path d="M3 3v18h18" /><path d="M8 17v-5M13 17V8M18 17v-3" /></svg>
+    default:
+      return <SparkleIcon size={size} />
+  }
+}
+
+function DownloadIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M12 15V3" />
     </svg>
   )
 }
@@ -286,7 +349,7 @@ function MarketplaceSectionIcon({ section, size = 18 }: { section: MarketplaceSe
   if (section === 'automations') {
     return <svg {...shared}><circle cx="12" cy="12" r="8" /><path d="M12 8v4l2.8 2" /><path d="m17.5 4 .7 1.8L20 6.5l-1.8.7-.7 1.8-.7-1.8L15.5 6.5l1.8-.7Z" /></svg>
   }
-  return <SparkleIcon />
+  return <SparkleIcon size={size} />
 }
 
 function ArrowLeftIcon() {
@@ -301,14 +364,20 @@ function ArrowLeftIcon() {
 type Controller = {
   open(): void
   close(): void
+  toggle(): void
+  isOpen(): boolean
   subscribe(listener: (state: { open: boolean }) => void): () => void
 }
 
 function createController(): Controller {
   const listeners = new Set<(state: { open: boolean }) => void>()
+  let open = false
+  const emit = (): void => { listeners.forEach((listener) => { listener({ open }) }) }
   const controller: Controller = {
-    open: () => { listeners.forEach((listener) => { listener({ open: true }) }) },
-    close: () => { listeners.forEach((listener) => { listener({ open: false }) }) },
+    open: () => { open = true; emit() },
+    close: () => { open = false; emit() },
+    toggle: () => { open = !open; emit() },
+    isOpen: () => open,
     subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener) },
   }
   return controller
@@ -347,7 +416,9 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall 
         <ArrowLeftIcon /> {L.back}
       </button>
       <div className="dsh-skill-detail-header">
-        <div className="dsh-skill-detail-icon" style={{ background: skill.accent }}>{skill.icon}</div>
+        <div className="dsh-skill-detail-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
+          <CategoryGlyph category={skill.category} size={28} />
+        </div>
         <div className="dsh-skill-detail-info">
           <h1>{skill.name}</h1>
           <p>{skill.summary}</p>
@@ -418,7 +489,7 @@ function ExpertMarket() {
   const [tab, setTab] = useState<'experts' | 'teams'>('experts')
   const [category, setCategory] = useState('全部')
   const [selected, setSelected] = useState<ExpertMarketDetail | null>(null)
-  const categories = ['全部', '规划编制', '用地报批', '政策法规', '空间分析', '调查监测', '生态保护', '政务协同']
+  const categories = ['全部', '规划编制', '用地报批', '政策法规', '空间分析', '调查监测', '生态保护', '耕地地质', '供地与利用', '执法督察', '不动产登记', '政务协同']
   const visibleExperts = category === '全部' ? EXPERTS : EXPERTS.filter(expert => expert.category === category)
   const openExpert = (expert: Expert) => setSelected({ name: expert.name, role: expert.role, summary: expert.summary, tags: expert.tags, examples: expert.examples, accent: expert.accent })
   const openTeam = (team: ExpertTeam) => setSelected({ name: team.name, role: '多角色协同工作流', summary: team.summary, tags: team.members, examples: ['根据当前工作区资料启动该专家团审查', '为该专家团补充本项目的交付要求'], accent: team.accent, members: team.members, skills: team.skills })
@@ -430,19 +501,47 @@ function ExpertMarket() {
   </section>
 }
 
-/** Brand-styled, bundled marks keep the connector directory recognisable when offline. */
-function ConnectorBrandIcon({ brand, accent }: { brand: ConnectorBrand; accent: string }) {
-  const common = { width: 38, height: 38, viewBox: '0 0 40 40', fill: 'none', 'aria-hidden': true }
-  if (brand === 'qqMail') return <svg {...common}><circle cx="20" cy="20" r="18" fill="#ffb400" /><path d="M10 13h20v15H10z" fill="#fff" /><path d="m11 14 9 7 9-7" stroke="#e89600" strokeWidth="2.4" strokeLinejoin="round" /></svg>
-  if (brand === 'feishu') return <svg {...common}><path d="M7 14c6-7 12-9 18-6l7 6-6 17-15-1-4-9Z" fill="#25c3ff" /><path d="M7 14c5 0 9 2 12 6l-8 10-4-9Z" fill="#00b96b" /><path d="M19 20c4-1 8 0 13 3l-6 8-15-1 8-10Z" fill="#6c55ff" /><circle cx="22" cy="15" r="2" fill="#fff" /></svg>
-  if (brand === 'tencentDocs') return <svg {...common}><rect x="5" y="4" width="30" height="32" rx="8" fill="#0aa6f7" /><path d="M13 10h13v4H13zm0 8h13v4H13zm0 8h8v4h-8z" fill="#fff" /><path d="M29 23h4v7h-4z" fill="#56d9cd" /></svg>
-  if (brand === 'tencentMeeting') return <svg {...common}><rect x="4" y="4" width="32" height="32" rx="10" fill="#2f7cf6" /><path d="m11 15 5 5 4-4 4 4 5-5v11H11V15Z" fill="#fff" /><path d="M20 16v10" stroke="#c8ddff" strokeWidth="2" /></svg>
-  if (brand === 'wecom') return <svg {...common}><path d="M7 15c0-5 5-9 11-9s11 4 11 9-5 9-11 9c-1 0-2 0-3-.3L9 28l1.7-5C8.4 21.3 7 18.4 7 15Z" fill="#2b8bed" /><path d="M21 20c0-4.5 4.2-8 9-8 3.4 0 6.2 1.7 7.6 4.3-1 4.2-4.8 7.2-9.6 7.2-1.1 0-2.1-.2-3-.5L21 25l.8-3.2c-.5-.6-.8-1.2-.8-1.8Z" fill="#32c48d" transform="translate(-3 2)" /><circle cx="15" cy="15" r="1.6" fill="#fff" /><circle cx="21" cy="15" r="1.6" fill="#fff" /></svg>
-  if (brand === 'zjDingtalk') return <svg {...common}><defs><linearGradient id="zj-ding" x1="7" y1="5" x2="33" y2="35" gradientUnits="userSpaceOnUse"><stop stopColor="#176cff" /><stop offset="1" stopColor="#4ba6ff" /></linearGradient></defs><rect x="4" y="4" width="32" height="32" rx="10" fill="url(#zj-ding)" /><path d="M10 16c4-5 10-7 19-6-4 1-6 3-8 5 3 0 5 1 7 3-6 5-13 7-20 5 2-2 3-4 4-6-2 0-4 0-6-1Z" fill="#fff" /><circle cx="28" cy="10" r="2" fill="#ffcf47" /></svg>
-  if (brand === 'officeMail') return <svg {...common}><rect x="4" y="6" width="32" height="28" rx="8" fill="#0f766e" /><path d="M10 13h20v15H10z" fill="#fff" /><path d="m11 14 9 7 9-7" stroke="#0f766e" strokeWidth="2.4" strokeLinejoin="round" /></svg>
-  if (brand === 'internalMail') return <svg {...common}><rect x="4" y="6" width="32" height="28" rx="8" fill="#7c3aed" /><path d="M10 13h20v15H10z" fill="#fff" /><path d="m11 14 9 7 9-7" stroke="#7c3aed" strokeWidth="2.4" strokeLinejoin="round" /><path d="M27 23v5h-7v-5a3.5 3.5 0 1 1 7 0Z" fill="#e7dcff" /></svg>
-  if (brand === 'documentCenter') return <svg {...common}><path d="M7 9h10l3 3h13v19H7z" fill="#b45309" /><path d="M13 17h14M13 22h14M13 27h9" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" /></svg>
-  return <svg {...common}><rect x="5" y="5" width="30" height="30" rx="9" fill={accent} /><path d="M13 20h14M20 13v14" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" /></svg>
+function ConnectorBrandIcon({ icon, accent }: { icon: string; accent: string }) {
+  // Bundled official brand artwork renders on a white tile; emoji values
+  // keep the accent placeholder.  浙政钉 is a registered government mark and
+  // intentionally stays on a neutral placeholder until official artwork is
+  // licensed for redistribution.
+  if (icon.startsWith('/connector-icons/')) {
+    return (
+      <span
+        aria-hidden="true"
+        style={{
+          display: 'grid',
+          placeItems: 'center',
+          width: 38,
+          height: 38,
+          borderRadius: 10,
+          background: '#fff',
+          boxShadow: 'inset 0 0 0 1px rgba(38, 49, 72, 0.1)',
+        }}
+      >
+        <img src={icon} alt="" width={24} height={24} style={{ display: 'block', objectFit: 'contain' }} />
+      </span>
+    )
+  }
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'grid',
+        placeItems: 'center',
+        width: 38,
+        height: 38,
+        borderRadius: 10,
+        background: accent,
+        color: '#fff',
+        fontSize: 20,
+        lineHeight: 1,
+      }}
+    >
+      {icon}
+    </span>
+  )
 }
 
 function Connectors() {
@@ -458,7 +557,7 @@ function Connectors() {
   const saveCustomConnector = () => {
     const name = customName.trim()
     if (name === '') return
-    const connector = { id: `custom-${Date.now()}`, name, summary: customDescription.trim() || '这是一个保存在本机演示列表中的自定义连接器。', scope: customCategory, accent: '#4969d8', brand: 'custom' as const, capabilities: ['连接说明', '访问范围', '使用提醒'], access: '演示阶段不会发起网络连接或保存凭据' }
+    const connector = { id: `custom-${Date.now()}`, name, summary: customDescription.trim() || '这是一个保存在本机演示列表中的自定义连接器。', scope: customCategory, accent: '#4969d8', icon: '/connector-icons/plug.svg', capabilities: ['连接说明', '访问范围', '使用提醒'], access: '演示阶段不会发起网络连接或保存凭据' }
     setCustomConnectors(items => [connector, ...items])
     setCustomName('')
     setCustomDescription('')
@@ -466,15 +565,15 @@ function Connectors() {
     setSelected(connector)
   }
   return <section className="dsh-connectors-page">
-    <div className="dsh-connectors-toolbar"><span>选择服务后查看可访问的数据范围与使用方式。</span><button type="button" onClick={() => setShowCustom(true)}><PlusIcon /> 自定义连接器</button></div>
+    <div className="dsh-connectors-toolbar"><button type="button" onClick={() => setShowCustom(true)}><PlusIcon /> 自定义连接器</button></div>
     <div className="dsh-connectors-grid">
       {connectors.map(connector => <button type="button" className="dsh-connector-card" key={connector.id} onClick={() => setSelected(connector)}>
-        <div className="dsh-connector-card-top"><ConnectorBrandIcon brand={connector.brand} accent={connector.accent} /><span>{connector.scope}</span></div>
+        <div className="dsh-connector-card-top"><ConnectorBrandIcon icon={connector.icon} accent={connector.accent} /><span>{connector.scope}</span></div>
         <strong>{connector.name}</strong><p>{connector.summary}</p>
         <small>{requested.has(connector.id) ? '已保存申请' : '点击查看接入详情'}</small><i aria-hidden="true">›</i>
       </button>)}
     </div>
-    {selected !== null && <div className="dsh-connector-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}><section className="dsh-connector-detail" aria-label={`${selected.name}连接器详情`}><header><div><ConnectorBrandIcon brand={selected.brand} accent={selected.accent} /><div><h2>{selected.name}</h2><p>{selected.scope} · 本地演示目录</p></div></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header><p className="dsh-connector-detail-summary">{selected.summary}</p><div className="dsh-connector-detail-block"><span>可协助完成</span><div>{selected.capabilities.map(item => <b key={item}>{item}</b>)}</div></div><div className="dsh-connector-detail-block"><span>接入说明</span><p>{selected.access}</p></div><footer><small>接入后仅在授权范围内访问数据。</small><button type="button" className={requested.has(selected.id) ? 'requested' : ''} onClick={() => requestAccess(selected)}>{requested.has(selected.id) ? '已提交申请' : '申请接入'}</button></footer></section></div>}
+    {selected !== null && <div className="dsh-connector-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}><section className="dsh-connector-detail" aria-label={`${selected.name}连接器详情`}><header><div><ConnectorBrandIcon icon={selected.icon} accent={selected.accent} /><div><h2>{selected.name}</h2><p>{selected.scope} · 本地演示目录</p></div></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header><p className="dsh-connector-detail-summary">{selected.summary}</p><div className="dsh-connector-detail-block"><span>可协助完成</span><div>{selected.capabilities.map(item => <b key={item}>{item}</b>)}</div></div><div className="dsh-connector-detail-block"><span>接入说明</span><p>{selected.access}</p></div><footer><small>接入后仅在授权范围内访问数据。</small><button type="button" className={requested.has(selected.id) ? 'requested' : ''} onClick={() => requestAccess(selected)}>{requested.has(selected.id) ? '已提交申请' : '申请接入'}</button></footer></section></div>}
     {showCustom && <div className="dsh-connector-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setShowCustom(false) }}><form className="dsh-connector-custom" onSubmit={event => { event.preventDefault(); saveCustomConnector() }}><header><div><h2>自定义连接器</h2><p>添加团队内部服务说明，当前仅保存在本机演示列表。</p></div><button type="button" onClick={() => setShowCustom(false)} aria-label="关闭">×</button></header><label>连接器名称<input autoFocus value={customName} onChange={event => setCustomName(event.target.value)} placeholder="例如：项目资料共享库" /></label><label>服务类型<select value={customCategory} onChange={event => setCustomCategory(event.target.value)}><option>协同办公</option><option>文档服务</option><option>邮箱服务</option><option>内部数据</option></select></label><label>用途说明<textarea value={customDescription} onChange={event => setCustomDescription(event.target.value)} placeholder="说明它能帮助处理哪些资料或协作事项" /></label><div className="dsh-connector-custom-tip">暂不要求填写地址、密钥或账户信息；正式接入时将由管理员统一配置。</div><footer><button type="button" onClick={() => setShowCustom(false)}>取消</button><button type="submit" disabled={customName.trim() === ''}>添加到演示列表</button></footer></form></div>}
   </section>
 }
@@ -561,24 +660,34 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
 
   useEffect(() => marketplaceControllers[section].subscribe((next) => {
     setOpen(next.open)
-    if (next.open && section === 'skills') void refreshInstallStates()
+    if (next.open) {
+      if (section === 'skills') void refreshInstallStates()
+      // Only one capability panel may be expanded: opening this section
+      // collapses the others, otherwise stacked overlays block each other
+      // and switching between entries reads as unresponsive.
+      for (const [name, controller] of Object.entries(marketplaceControllers)) {
+        if (name !== section) controller.close()
+      }
+    }
     if (!next.open) {
       setView('list')
       setSelectedSkill(null)
     }
   }), [])
 
-  // The marketplace deliberately leaves the sidebar usable.  Selecting any
-  // sidebar command should therefore also leave this overlay immediately;
-  // operators should not have to find the return arrow first.
+  // The marketplace deliberately leaves the sidebar usable.  Selecting a
+  // sidebar command other than this section's own toggle should therefore
+  // also leave this overlay immediately; operators should not have to find
+  // the return arrow first.  The own entry toggles the panel instead, so its
+  // pointerdown must not force a close here.
   useEffect(() => {
     if (!open) return
     const closeForSidebarAction = (event: PointerEvent) => {
       const target = event.target
       if (!(target instanceof Element)) return
-      if (target.closest('.dsh-skill-market-panel') === null) {
-        marketplaceControllers[section].close()
-      }
+      if (target.closest('.dsh-skill-market-panel') !== null) return
+      if (target.closest('.dsh-skill-market-action') !== null) return
+      marketplaceControllers[section].close()
     }
     document.addEventListener('pointerdown', closeForSidebarAction, true)
     return () => { document.removeEventListener('pointerdown', closeForSidebarAction, true) }
@@ -639,7 +748,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
         installedPath = await desktopInvoke('install_marketplace_skill', { slug })
       }
     } catch (error) {
-      setInstallMessage({ kind: 'error', text: error instanceof Error ? error.message : '技能安装失败' })
+      setInstallMessage({ kind: 'error', text: marketplaceInstallErrorMessage(error) })
       return
     } finally {
       setInstalling(null)
@@ -747,8 +856,8 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                         className="dsh-skill-featured-card"
                         onClick={() => { openDetail(skill) }}
                       >
-                        <div className="dsh-skill-featured-icon" style={{ background: skill.accent }}>
-                          {skill.icon}
+                        <div className="dsh-skill-featured-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
+                          <CategoryGlyph category={skill.category} />
                         </div>
                         <div className="dsh-skill-featured-body">
                           <h3>{skill.name}</h3>
@@ -802,13 +911,13 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                     className="dsh-skill-card"
                     onClick={() => { openDetail(skill) }}
                   >
-                    <div className="dsh-skill-card-icon" style={{ background: skill.accent }}>
-                      {skill.icon}
+                    <div className="dsh-skill-card-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
+                      <CategoryGlyph category={skill.category} />
                     </div>
                     <div className="dsh-skill-card-body">
                       <div className="dsh-skill-card-meta">
-                        <span>{skill.category}</span>
-                        <small>{skill.installs} {L.count}</small>
+                        <span className="dsh-skill-card-category" style={{ background: skill.accent + '14', color: skill.accent }}>{skill.category}</span>
+                        <small><DownloadIcon />{skill.installs}</small>
                       </div>
                       <h2>{skill.name}</h2>
                       <p>{skill.summary}</p>
@@ -817,7 +926,12 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                 ))}
               </div>
 
-              {visible.length === 0 && <div className="dsh-skill-empty">{L.empty}</div>}
+              {visible.length === 0 && (
+                <div className="dsh-skill-empty">
+                  <div className="dsh-skill-empty-icon"><CategoryGlyph category={category} size={24} /></div>
+                  <span>{L.empty}</span>
+                </div>
+              )}
             </>}
           </>
         )}
@@ -861,12 +975,19 @@ function SkillMarketplaceAction({ wide, section = 'skills' }: ActionProps & { se
     connectors: L.connectors,
     automations: L.automations,
   }
+  // Clicking the entry again collapses its panel: the button reflects the
+  // controller's open state so the toggle reads as selected while expanded.
+  const open = useSyncExternalStore(
+    marketplaceControllers[section].subscribe,
+    () => marketplaceControllers[section].isOpen(),
+  )
   return (
     <button
       type="button"
-      className={`dsh-skill-market-action${wide ? '' : ' rail'}`}
+      className={`dsh-skill-market-action${wide ? '' : ' rail'}${open ? ' active' : ''}`}
       aria-label={labels[section]}
-      onClick={() => { marketplaceControllers[section].open() }}
+      aria-expanded={open}
+      onClick={() => { marketplaceControllers[section].toggle() }}
     >
       <MarketplaceSectionIcon section={section} size={wide ? 16 : 18} />
       {wide && <span>{labels[section]}</span>}

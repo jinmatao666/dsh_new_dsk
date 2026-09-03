@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs,
     io::{BufRead, BufReader, Read, Write},
-    net::TcpStream,
+    net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{mpsc, Arc, Mutex},
@@ -115,7 +115,26 @@ fn validate_marketplace_slug(slug: &str) -> Result<(), String> {
     }
 }
 
-fn user_skills_root() -> Result<PathBuf, String> {
+fn development_harness_home(app_data_dir: &Path) -> Option<PathBuf> {
+    #[cfg(debug_assertions)]
+    {
+        Some(app_data_dir.join("development").join("dsh-home"))
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let _ = app_data_dir;
+        None
+    }
+}
+
+fn user_skills_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let app_data_dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("无法定位桌面应用数据目录：{error}"))?;
+    if let Some(home) = development_harness_home(&app_data_dir) {
+        return Ok(home.join("skills"));
+    }
     let home = std::env::var_os("USERPROFILE")
         .or_else(|| std::env::var_os("HOME"))
         .ok_or_else(|| "无法定位当前用户目录".to_string())?;
@@ -409,7 +428,7 @@ fn install_marketplace_skill_at(
 #[tauri::command]
 fn list_marketplace_skills(app: tauri::AppHandle) -> Result<Vec<MarketplaceSkillState>, String> {
     let resource_root = marketplace_resource_root(&app)?;
-    let skills_root = user_skills_root()?;
+    let skills_root = user_skills_root(&app)?;
     let catalog = read_marketplace_catalog(&resource_root)?;
     catalog
         .skills
@@ -447,7 +466,7 @@ fn list_marketplace_skills(app: tauri::AppHandle) -> Result<Vec<MarketplaceSkill
 #[tauri::command]
 fn install_marketplace_skill(app: tauri::AppHandle, slug: String) -> Result<String, String> {
     let resource_root = marketplace_resource_root(&app)?;
-    let skills_root = user_skills_root()?;
+    let skills_root = user_skills_root(&app)?;
     install_marketplace_skill_at(&resource_root, &skills_root, &slug)
 }
 
@@ -471,7 +490,7 @@ fn uninstall_marketplace_skill_at(skills_root: &Path, slug: &str) -> Result<(), 
 #[tauri::command]
 fn uninstall_marketplace_skill(app: tauri::AppHandle, slug: String) -> Result<(), String> {
     manifest_for_slug(&marketplace_resource_root(&app)?, &slug)?;
-    uninstall_marketplace_skill_at(&user_skills_root()?, &slug)
+    uninstall_marketplace_skill_at(&user_skills_root(&app)?, &slug)
 }
 
 fn append_log(path: &Path, message: impl AsRef<str>) {
@@ -598,6 +617,13 @@ fn development_command() -> (PathBuf, PathBuf, Vec<String>) {
     )
 }
 
+fn development_port() -> Result<u16, String> {
+    TcpListener::bind("127.0.0.1:0")
+        .and_then(|listener| listener.local_addr())
+        .map(|address| address.port())
+        .map_err(|error| format!("无法分配本地开发端口：{error}"))
+}
+
 fn spawn_sidecar(
     resource_dir: &Path,
     config: &ServerConfig,
@@ -642,16 +668,32 @@ fn spawn_sidecar(
         })?;
     }
     let dev_port = if cfg!(debug_assertions) {
-        Some(53916u16)
+        Some(development_port()?)
     } else {
         None
     };
+    args.extend(["--profile".into(), "desktop".into()]);
+    if cfg!(debug_assertions) {
+        let development_patch = cwd
+            .join("apps")
+            .join("desktop")
+            .join("dev")
+            .join("cordis.patch.yml");
+        if !development_patch.is_file() {
+            return Err(format!(
+                "Desktop development patch is missing: {}",
+                development_patch.display()
+            ));
+        }
+        args.extend(["--patch".into(), development_patch.display().to_string()]);
+    }
     args.extend([
-        "--profile".into(),
-        "desktop".into(),
         "--host".into(),
         "127.0.0.1".into(),
         "--port".into(),
+        // A development shell can be closed from the debugger before its
+        // Sidecar observes shutdown. Choose a free loopback port on every
+        // launch instead of failing against that stale process.
         dev_port.map_or_else(|| "0".to_string(), |port| port.to_string()),
         // Tauri owns the visible WebView. The DSH web launcher otherwise
         // hands the loopback URL to the system browser as well, which creates
@@ -679,6 +721,20 @@ fn spawn_sidecar(
         .env("DSH_DEPENDENCY_INSTALL_APPROVALS", "session-once")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if let Some(home) = development_harness_home(app_data_dir) {
+        fs::create_dir_all(&home).map_err(|error| {
+            format!(
+                "Unable to create desktop development home {}: {error}",
+                home.display()
+            )
+        })?;
+        command.env("DSH_HOME", &home);
+        command.env("DSH_DESKTOP_DEVELOPMENT", "1");
+        append_log(
+            log_path,
+            format!("development Harness home: {}", home.display()),
+        );
+    }
     if !config.default_model.is_empty() {
         command.env("DSH_DEFAULT_MODEL", &config.default_model);
     }

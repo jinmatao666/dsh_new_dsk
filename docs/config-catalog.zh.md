@@ -432,6 +432,45 @@ export interface Config {
 
 来源：[`packages/client/hmr/src/index.ts:31`](../packages/client/hmr/src/index.ts)
 
+<a id="deepseek-aidsh-client-ui-oneapi-auth"></a>
+
+## `@deepseek-ai/dsh-client-ui-oneapi-auth`
+
+依赖：`connection` · `credentials` · `settings` · `agentDefaultModel`
+
+```ts config-catalog
+/** Desktop OneAPI authentication configuration. */
+export interface Config {
+  /** OneAPI origin, without the OpenAI-compatible `/v1` suffix. */
+  baseURL: string
+  /** DSH provider route managed by this login plugin. */
+  provider: string
+  /** Credential reference containing the generated OneAPI token. */
+  credentialRef: string
+  /** Name assigned to automatically created OneAPI tokens. */
+  tokenName: string
+  /** Optional preferred default model id. */
+  defaultModel?: string
+  /**
+   * Input modalities advertised for models returned by OneAPI.
+   *
+   * OneAPI's `/v1/models` response only contains model ids, so the DSH
+   * runtime cannot discover vision support from that endpoint.  The newer DSH
+   * image pipeline deliberately refuses images for hand-declared models until
+   * this capability is declared.  Keep the deployment choice here (rather
+   * than making every desktop user edit settings); a text-only upstream must
+   * leave `image` out.
+   */
+  defaultInput?: Array<'text' | 'image'>
+  /** Build-specific marker used to require login once after a new install. */
+  installId?: string
+  /** Skip the login overlay inside the source-only Tauri development shell. */
+  developmentBypass?: boolean
+}
+```
+
+来源：[`packages/client/ui-oneapi-auth/src/index.ts:23`](../packages/client/ui-oneapi-auth/src/index.ts)
+
 <a id="deepseek-aidsh-code-runtime-worker-thread"></a>
 
 ## `@deepseek-ai/dsh-code-runtime-worker-thread`
@@ -570,6 +609,24 @@ export interface Config {
 ```
 
 来源：[`packages/credentials/credentials-local/src/index.ts:55`](../packages/credentials/credentials-local/src/index.ts)
+
+<a id="deepseek-aidsh-document-local"></a>
+
+## `@deepseek-ai/dsh-document-local`
+
+需要：`tools`
+
+```ts config-catalog
+/** Configuration for the packaged document-extraction helper. */
+export interface Config {
+  /** Absolute path to the packaged Node executable that runs the document helper. */
+  nodeBinary?: string
+  /** Absolute path to the document extraction helper module. */
+  helperPath?: string
+}
+```
+
+来源：[`packages/host/document-local/src/index.ts:10`](../packages/host/document-local/src/index.ts)
 
 <a id="deepseek-aidsh-e2b"></a>
 
@@ -2989,6 +3046,11 @@ export interface Config {
    * prompting (the deterministic CI/unattended stance).
    */
   readonly policy?: ApprovalPolicy
+  /**
+   * After the user approves one dependency-install escalation in a session,
+   * allow later package-manager install escalations in that same session.
+   */
+  readonly autoApproveDependencyInstalls?: boolean
 }
 
 /**
@@ -3005,6 +3067,24 @@ export type ApprovalPolicy = 'ask' | 'never'
 ```
 
 来源：[`packages/interaction/user-approval/src/index.ts:177`](../packages/interaction/user-approval/src/index.ts)
+
+<a id="deepseek-aidsh-vision"></a>
+
+## `@deepseek-ai/dsh-vision`
+
+需要：`tools` · `fs` · `credentials`
+
+```ts config-catalog
+/** Configuration for the server-governed image-recognition service. */
+export interface Config {
+  /** OneAPI origin without `/v1`; same endpoint used by desktop sign-in. */
+  baseURL: string
+  /** Per-user OneAPI token held by the local credentials service. */
+  credentialRef: string
+}
+```
+
+来源：[`packages/host/vision/src/index.ts:22`](../packages/host/vision/src/index.ts)
 
 <a id="deepseek-aidsh-web"></a>
 
@@ -3222,6 +3302,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-settings-plugins`（[`packages/client/ui-settings-plugins/src/index.ts`](../packages/client/ui-settings-plugins/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-sidebar`（[`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-skill`（[`packages/client/ui-skill/src/index.ts`](../packages/client/ui-skill/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-skill-marketplace`（[`packages/client/ui-skill-marketplace/src/index.ts`](../packages/client/ui-skill-marketplace/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-subagent`（[`packages/client/ui-subagent/src/index.ts`](../packages/client/ui-subagent/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-theme`（[`packages/client/ui-theme/src/index.ts`](../packages/client/ui-theme/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-tool`（[`packages/client/ui-tool/src/index.ts`](../packages/client/ui-tool/src/index.ts)）
@@ -3234,6 +3315,7 @@ export interface Config {
 - `@deepseek-ai/dsh-command-goal` — 需要 `commands` · `goals`（[`packages/goal/command-goal/src/index.ts`](../packages/goal/command-goal/src/index.ts)）
 - `@deepseek-ai/dsh-commands`（[`packages/interaction/commands/src/index.ts`](../packages/interaction/commands/src/index.ts)）
 - `@deepseek-ai/dsh-cordis-client-runner`（[`packages/extensions/cordis-client-runner/src/index.ts`](../packages/extensions/cordis-client-runner/src/index.ts)）
+- `@deepseek-ai/dsh-desktop`（[`packages/bundle/desktop/src/index.ts`](../packages/bundle/desktop/src/index.ts)）
 - `@deepseek-ai/dsh-fs-e2b` — 需要 `e2b`（[`packages/e2b/fs-e2b/src/index.ts`](../packages/e2b/fs-e2b/src/index.ts)）
 - `@deepseek-ai/dsh-fs-observation-policy`（[`packages/fs/fs-observation-policy/src/index.ts`](../packages/fs/fs-observation-policy/src/index.ts)）
 - `@deepseek-ai/dsh-goal-round-driver` — 需要 `agents` · `goals` · `sessions`（[`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts)）

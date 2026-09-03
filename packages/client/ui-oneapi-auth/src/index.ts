@@ -44,6 +44,8 @@ export interface Config {
   defaultInput?: Array<'text' | 'image'>
   /** Build-specific marker used to require login once after a new install. */
   installId?: string
+  /** Skip the login overlay inside the source-only Tauri development shell. */
+  developmentBypass?: boolean
 }
 
 /** Runtime schema for {@link Config}. */
@@ -55,6 +57,7 @@ export const Config: z<Config> = z.object({
   defaultModel: z.string(),
   defaultInput: z.array(z.union(['text', 'image'] as const)).default(['text']),
   installId: z.string(),
+  developmentBypass: z.boolean().default(false),
 })
 
 interface LoginPayload { username: string; password: string }
@@ -240,6 +243,9 @@ export const inject = ['connection', 'credentials', 'settings', 'agentDefaultMod
 
 /** Mount loopback-only authentication RPC and managed-provider synchronization. */
 export function apply(ctx: Context, config: Config): void {
+  if (config.developmentBypass === true && process.env.DSH_DESKTOP_DEVELOPMENT !== '1') {
+    throw new Error('桌面开发认证旁路只能由 Tauri debug shell 启用')
+  }
   const baseURL = normalizedOrigin(config.baseURL)
   const ref = credentialRef(config.credentialRef)
   const usernameRef = credentialRef('DSH_LOGIN_USERNAME')
@@ -395,6 +401,13 @@ export function apply(ctx: Context, config: Config): void {
   const connection = ctx.get('connection') as HostConnectionHandle | undefined
   if (connection === undefined) throw new Error('桌面认证需要 Connection 服务')
   const remove = connection.rpc.handle('/desktop-auth', async (endpoint, payload, signal) => {
+    if (config.developmentBypass === true) {
+      if (endpoint === 'report-question') return { ok: true as const, value: { reported: false } }
+      if (endpoint === 'status' || endpoint === 'login' || endpoint === 'logout') {
+        return { ok: true as const, value: { state: 'authenticated' as const, models: [], username: '本地开发' } }
+      }
+      return internal(`未知认证操作：${endpoint}`)
+    }
     if (endpoint === 'status') {
       try {
         return { ok: true as const, value: await status(signal) }

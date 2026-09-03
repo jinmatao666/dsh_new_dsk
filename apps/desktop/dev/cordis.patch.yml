@@ -1,0 +1,11 @@
+# The debug Tauri shell keeps the production authentication plugin mounted,
+# but its Host endpoint reports a local development identity. Every client
+# plugin therefore matches the installer composition.
+- id: ui-oneapi-auth
+  config:
+    baseURL: http://127.0.0.1:3000
+    provider: dsh-server
+    credentialRef: DSH_ONEAPI_TOKEN
+    tokenName: DSH Desktop Auto Token
+    defaultInput: [text]
+    developmentBypass: true

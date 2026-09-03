@@ -28,7 +28,7 @@
  * `watch` through API-level inline config (tsdown workspace mode fills inline
  * keys under each package's file config, and no package config defines it).
  */
-import { globSync, readFileSync } from 'node:fs'
+import { globSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { execa } from 'execa'
@@ -112,6 +112,10 @@ export async function watchClientPlugins(
   const readiness: { expectedBuilds?: number; initializedBuilds: number } = { initializedBuilds: 0 }
   const bundles = await build({
     cwd: root,
+    // Node 22's native no-cache loader can return an invalid source while
+    // tsdown reloads TypeScript configs on Windows; unrun provides the same
+    // config semantics without that loader hook.
+    configLoader: 'unrun',
     workspace: [...pluginDirs],
     watch: true,
     hooks: {
@@ -172,6 +176,74 @@ interface StageHandle {
   readonly kill: () => void
 }
 
+/** Source files whose changed client artifacts must reach the desktop webview. */
+const WINDOWS_WATCH_PATTERNS = [
+  'apps/web/src/**/*.{ts,tsx,css}',
+  'packages/*/*/src/**/*.{ts,tsx,css}',
+  'packages/*/*/tsdown.config.ts',
+  'packages/client/tsdown.client.ts',
+  CLIENT_TYPE_PROGRAM,
+]
+
+/**
+ * Return a content-independent fingerprint for client build inputs.
+ * @returns sorted file metadata that changes whenever a watched input changes.
+ */
+function windowsClientFingerprint(): string {
+  return globSync(WINDOWS_WATCH_PATTERNS, { cwd: repoRoot })
+    .sort()
+    .map((path) => {
+      const stat = statSync(join(repoRoot, path))
+      return `${path}:${String(stat.mtimeMs)}:${String(stat.size)}`
+    })
+    .join('\n')
+}
+
+/**
+ * Watch client sources on Windows without tsdown's workspace watch mode.
+ *
+ * tsdown's Windows workspace watcher currently re-enters its own config reload
+ * path indefinitely under Node 22. The fallback rebuilds the same client
+ * artifacts that a release build uses, while the existing Vite watcher reloads
+ * `apps/web/dist` after those artifacts change.
+ */
+async function watchWindowsClientArtifacts(): Promise<void> {
+  let fingerprint = windowsClientFingerprint()
+  let rebuilding = false
+  let rebuildAgain = false
+
+  const rebuild = async (): Promise<void> => {
+    if (rebuilding) {
+      rebuildAgain = true
+      return
+    }
+    rebuilding = true
+    do {
+      rebuildAgain = false
+      console.log('dev-web: client source changed; rebuilding release client artifacts')
+      const result = await execa('pnpm', ['run', 'build:lib:client'], {
+        cwd: repoRoot,
+        stdio: 'inherit',
+        reject: false,
+      })
+      if (result.exitCode !== 0) {
+        console.error(`dev-web: client artifact rebuild exited (code ${String(result.exitCode)})`)
+        process.exit(1)
+      }
+      fingerprint = windowsClientFingerprint()
+    } while (rebuildAgain)
+    rebuilding = false
+  }
+
+  setInterval(() => {
+    const nextFingerprint = windowsClientFingerprint()
+    if (nextFingerprint === fingerprint) return
+    void rebuild()
+  }, 750).unref()
+  spawnStage('vite build --watch', 'pnpm', ['--filter', SHELL_PACKAGE, 'run', 'watch'], false)
+  console.log('dev-web: watching client sources with the Windows release-artifact rebuild loop')
+}
+
 const invokedPath = process.argv[1]
 const isMain = invokedPath !== undefined && import.meta.url === pathToFileURL(resolve(invokedPath)).href
 if (isMain) {
@@ -204,35 +276,39 @@ if (isMain) {
   process.once('SIGINT', stop)
   process.once('SIGTERM', stop)
 
+  if (process.platform === 'win32') {
+    await watchWindowsClientArtifacts()
+  } else {
   // tsc has no polling interval flag, so `--poll` selects its fixed-interval
   // watchers rather than an interval. Dropping that translation leaves tsc
   // natively watching on a network mount where inotify never fires: it stops
   // re-emitting lib/types, and the two later stages then rebuild forever from
   // stale input without printing anything.
-  spawnStage(`tsc -b ${CLIENT_TYPE_PROGRAM} --watch`, 'tsc', [
-    '-b', CLIENT_TYPE_PROGRAM, '--watch', '--preserveWatchOutput',
-    ...pollInterval !== undefined
-      ? ['--watchFile', 'fixedPollingInterval', '--watchDirectory', 'fixedPollingInterval']
-      : [],
-  ], true)
+    spawnStage(`tsc -b ${CLIENT_TYPE_PROGRAM} --watch`, 'tsc', [
+      '-b', CLIENT_TYPE_PROGRAM, '--watch', '--preserveWatchOutput',
+      ...pollInterval !== undefined
+        ? ['--watchFile', 'fixedPollingInterval', '--watchDirectory', 'fixedPollingInterval']
+        : [],
+    ], true)
 
-  // tsdown's initial builds are awaited before the dist watcher starts so vite's
-  // first build reads current lib bundles rather than whatever the last full
-  // build left. Its own watch then covers later lib rewrites — those files are
-  // in its module graph.
-  await watchClientPlugins(repoRoot, [...pluginDirs, ...libraryDirs], pollInterval)
-  // Through the shell's own `watch` script rather than vite's API: vite is not a
-  // repository-root dependency, and more importantly the vite root is its
-  // working directory — `resolve.dedupe` resolves react from that root, so
-  // running vite from anywhere but apps/web silently switches which react copy
-  // the bundle gets.
-  spawnStage('vite build --watch', 'pnpm', ['--filter', SHELL_PACKAGE, 'run', 'watch'], false)
+    // tsdown's initial builds are awaited before the dist watcher starts so vite's
+    // first build reads current lib bundles rather than whatever the last full
+    // build left. Its own watch then covers later lib rewrites — those files are
+    // in its module graph.
+    await watchClientPlugins(repoRoot, [...pluginDirs, ...libraryDirs], pollInterval)
+    // Through the shell's own `watch` script rather than vite's API: vite is not a
+    // repository-root dependency, and more importantly the vite root is its
+    // working directory — `resolve.dedupe` resolves react from that root, so
+    // running vite from anywhere but apps/web silently switches which react copy
+    // the bundle gets.
+    spawnStage('vite build --watch', 'pnpm', ['--filter', SHELL_PACKAGE, 'run', 'watch'], false)
 
-  console.log(
-    `dev-web: watching ${String(pluginDirs.length)} dsh.client plugin packages`
+    console.log(
+      `dev-web: watching ${String(pluginDirs.length)} dsh.client plugin packages`
     + ` and ${String(libraryDirs.length)} statically linked library packages`
     + (pollInterval !== undefined ? ` (polling ${String(pollInterval)}ms)` : '')
     + `, plus tsc -b ${CLIENT_TYPE_PROGRAM} and the ${SHELL_PACKAGE} dist build:\n  `
     + [...pluginDirs, ...libraryDirs].join('\n  '),
-  )
+    )
+  }
 }

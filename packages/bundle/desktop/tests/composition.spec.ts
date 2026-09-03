@@ -28,4 +28,24 @@ describe('desktop profile composition', () => {
       name: '@deepseek-ai/dsh-client-ui-oneapi-auth',
     })
   })
+
+  it('keeps the production plugin tree in local Tauri development', () => {
+    const layers = [
+      patch('packages/bundle/base/cordis.patch.yml'),
+      patch('packages/bundle/web-app/cordis.patch.yml'),
+      patch('packages/bundle/desktop/cordis.patch.yml'),
+    ]
+    const production = composeEntries(layers)
+    const development = composeEntries([
+      ...layers,
+      patch('apps/desktop/dev/cordis.patch.yml'),
+    ])
+    expect(development.map(entry => entry.id)).toEqual(production.map(entry => entry.id))
+    expect(development.filter(entry => entry.id !== 'ui-oneapi-auth'))
+      .toEqual(production.filter(entry => entry.id !== 'ui-oneapi-auth'))
+    expect(development.find(entry => entry.id === 'ui-oneapi-auth')).toMatchObject({
+      name: '@deepseek-ai/dsh-client-ui-oneapi-auth',
+      config: { developmentBypass: true },
+    })
+  })
 })

@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tauri dev",
+    "dev": "pnpm run dev:prepare && tauri dev --config src-tauri/tauri.dev.conf.json",
+    "dev:prepare": "pnpm --dir ../.. run build",
+    "dev:watch": "pnpm --dir ../.. run dev:web",
     "prepare:runtime": "tsx scripts/prepare-runtime.ts",
     "build": "pnpm run prepare:runtime && tauri build",
     "build:windows": "pnpm run build",

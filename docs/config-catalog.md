@@ -462,6 +462,8 @@ export interface Config {
   defaultInput?: Array<'text' | 'image'>
   /** Build-specific marker used to require login once after a new install. */
   installId?: string
+  /** Skip the login overlay inside the source-only Tauri development shell. */
+  developmentBypass?: boolean
 }
 ```
 
