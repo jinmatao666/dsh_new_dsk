@@ -54,7 +54,7 @@ const desktopSkills = manifests.map(manifest => ({
   params: manifest.params,
   installable: true,
 }));
-const desktopProjection = `/** Generated from the checked-in official skill manifests. */\nexport const OFFICIAL_SKILLS = ${JSON.stringify(desktopSkills, null, 2)} as const\n`;
+const desktopProjection = `/** Generated from the checked-in official skill manifests. */\nexport const OFFICIAL_SKILLS = ${formatTypeScriptValue(desktopSkills)} as const\n`;
 const adminSkills = manifests.map(manifest => ({
   id: manifest.id,
   name: manifest.slug,
@@ -121,4 +121,23 @@ async function emit(path, content) {
     return;
   }
   await writeFile(path, content, 'utf8');
+}
+
+/** Format manifest data as the repository's checked-in TypeScript literal style. */
+function formatTypeScriptValue(value, depth = 0) {
+  const indentation = '  '.repeat(depth);
+  const nestedIndentation = '  '.repeat(depth + 1);
+  if (typeof value === 'string') return `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'").replaceAll('\n', '\\n').replaceAll('\r', '\\r').replaceAll('\t', '\\t')}'`;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value === null) return 'null';
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]';
+    return `[\n${value.map(entry => `${nestedIndentation}${formatTypeScriptValue(entry, depth + 1)},`).join('\n')}\n${indentation}]`;
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value);
+    if (entries.length === 0) return '{}';
+    return `{\n${entries.map(([key, entry]) => `${nestedIndentation}'${key.replaceAll("'", "\\'")}': ${formatTypeScriptValue(entry, depth + 1)},`).join('\n')}\n${indentation}}`;
+  }
+  throw new Error(`Cannot format official skill value of type ${typeof value}`);
 }

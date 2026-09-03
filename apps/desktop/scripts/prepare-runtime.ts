@@ -38,6 +38,7 @@ const run = (command: string, args: string[]) => {
 run(process.execPath, [join(root, 'services', 'one-api', 'web', 'air', 'scripts', 'generate-official-skills.mjs'), '--check'])
 if (existsSync(marketplaceSkillsTarget)) rmSync(marketplaceSkillsTarget, { recursive: true, force: true })
 cpSync(marketplaceSkillsSource, marketplaceSkillsTarget, { recursive: true, dereference: false })
+writeFileSync(join(marketplaceSkillsTarget, '.gitignore'), '*\n!.gitignore\n!.gitkeep\n')
 writeFileSync(join(marketplaceSkillsTarget, '.gitkeep'), '')
 
 run('corepack', ['pnpm', 'run', 'build:official'])
