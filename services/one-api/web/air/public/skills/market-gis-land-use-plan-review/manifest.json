@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "gis-land-use-plan-review",
+  "slug": "market-gis-land-use-plan-review",
+  "displayName": "土地利用规划审查",
+  "summary": "调用 GIS_Service 对项目范围开展土地利用规划符合性审查。",
+  "description": "读取当前工作区的 GeoJSON 面范围，调用规划审查接口并交付不可覆盖的原始审查结果。当前服务示例审查类别 Blxsw 默认为 4。",
+  "category": "空间制图",
+  "tags": ["官方", "推荐"],
+  "capabilities": ["GeoJSON 面范围校验", "土地利用规划符合性审查", "原始审查结果留档"],
+  "version": "1.0.0",
+  "author": "ZJUGIS GIS 服务",
+  "submitter": "root",
+  "createdAt": "2026-08-29 09:35:00",
+  "featured": true,
+  "status": "published",
+  "accent": "#2563eb",
+  "icon": "审",
+  "params": [
+    { "name": "geoJsonFile", "type": "file", "required": true, "description": "包含 Polygon 或 MultiPolygon 的 GeoJSON 文件" },
+    { "name": "Blxsw", "type": "number", "required": false, "description": "服务审查类别编码", "defaultValue": "4" }
+  ],
+  "files": ["manifest.json", "SKILL.md", "scripts/invoke.ps1", "references/api.md"]
+}

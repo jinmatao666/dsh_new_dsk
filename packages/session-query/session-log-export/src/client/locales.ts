@@ -5,8 +5,8 @@ export const NS = 'session-log-download'
 export const zh = {
   'dialog.preparingTitle': '正在导出 Session',
   'dialog.preparingDescription': '正在准备包含当前 Session、子 Session 和附件的 ZIP 文件。',
-  'dialog.successTitle': 'Session 导出已开始下载',
-  'dialog.successDescription': '浏览器正在下载 Session ZIP 文件。',
+  'dialog.successTitle': 'Session 导出已保存',
+  'dialog.successDescription': 'Session ZIP 已保存到本机“下载”文件夹。',
   'dialog.errorTitle': 'Session 导出失败',
   'dialog.close': '关闭',
   'dialog.commandFailed': '无法启动 Session 导出。',
@@ -16,8 +16,8 @@ export const zh = {
 export const en: Record<keyof typeof zh, string> = {
   'dialog.preparingTitle': 'Exporting Session',
   'dialog.preparingDescription': 'Preparing a ZIP containing this Session, its sub-Sessions, and attachments.',
-  'dialog.successTitle': 'Session download started',
-  'dialog.successDescription': 'The browser is downloading the Session ZIP.',
+  'dialog.successTitle': 'Session export saved',
+  'dialog.successDescription': 'The Session ZIP was saved to your local Downloads folder.',
   'dialog.errorTitle': 'Session export failed',
   'dialog.close': 'Close',
   'dialog.commandFailed': 'Could not start the Session export.',

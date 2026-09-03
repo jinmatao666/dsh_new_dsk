@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Empty, SideSheet, Spin, Tag, Tree } from '@douyinfe/semi-ui';
 import { IconDownload, IconFile, IconFolder } from '@douyinfe/semi-icons';
 import { showError, timestamp2string } from '../helpers';
-import { buildSkillMd, downloadSkillBlob, downloadSkillZip, fetchSkillFull, parseAssets, sanitizeName, splitContent } from './skillDownload';
+import { buildSkillMd, downloadOfficialSkillFiles, downloadSkillBlob, downloadSkillZip, fetchOfficialSkillFiles, fetchSkillFull, parseAssets, sanitizeName, splitContent } from './skillDownload';
 import './SkillsTable.css';
 
 const textExt = new Set(['md', 'txt', 'json', 'js', 'jsx', 'ts', 'tsx', 'py', 'go', 'sh', 'yaml', 'yml', 'toml', 'css', 'html', 'csv', 'xml', 'sql', 'vue', 'rs', 'java', 'c', 'cpp', 'h', 'rb', 'php', 'lua', 'r', 'mjs', 'cjs']);
@@ -39,11 +39,23 @@ function treeData(name, files) {
 
 export default function SkillBrowseDrawer({ visible, kind, id, skill: skillProp, onClose }) {
   const [loading, setLoading] = useState(false); const [skill, setSkill] = useState(null);
+  const [officialFiles, setOfficialFiles] = useState(null);
   const [selected, setSelected] = useState('SKILL.md'); const [downloading, setDownloading] = useState(false);
   useEffect(() => {
     if (!visible || id == null) return undefined;
-    let cancelled = false; setLoading(true); setSkill(null); setSelected('SKILL.md');
-    if (skillProp) { setSkill(skillProp); setLoading(false); return () => { cancelled = true; }; }
+    let cancelled = false; setLoading(true); setSkill(null); setOfficialFiles(null); setSelected('SKILL.md');
+    if (skillProp) {
+      setSkill(skillProp);
+      if (skillProp.source === 'official-package') {
+        fetchOfficialSkillFiles(skillProp)
+          .then(files => { if (!cancelled) setOfficialFiles(files); })
+          .catch(error => { if (!cancelled) showError(error.message || '加载正式技能文件失败'); })
+          .finally(() => { if (!cancelled) setLoading(false); });
+      } else {
+        setLoading(false);
+      }
+      return () => { cancelled = true; };
+    }
     fetchSkillFull(kind, id).then(value => { if (!cancelled) setSkill(value); })
       .catch(error => showError(error.message || '加载技能失败'))
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -54,7 +66,9 @@ export default function SkillBrowseDrawer({ visible, kind, id, skill: skillProp,
     if (skill.assets || !skill.content) return { body: skill.body || skill.content || '', assets: skill.assets || '' };
     const split = splitContent(skill.content); return { body: skill.body || split.body, assets: split.assets };
   }, [skill]);
-  const files = useMemo(() => skill ? [{ path: 'SKILL.md', data: new TextEncoder().encode(buildSkillMd(skill, content.body)) }, ...parseAssets(content.assets)] : [], [skill, content]);
+  const files = useMemo(() => skill?.source === 'official-package'
+    ? (officialFiles || [])
+    : (skill ? [{ path: 'SKILL.md', data: new TextEncoder().encode(buildSkillMd(skill, content.body)) }, ...parseAssets(content.assets)] : []), [skill, content, officialFiles]);
   const selectedFile = files.find(file => file.path === selected);
   const preview = useMemo(() => {
     if (!selectedFile) return null; const ext = extOf(selectedFile.path);
@@ -67,7 +81,10 @@ export default function SkillBrowseDrawer({ visible, kind, id, skill: skillProp,
     setDownloading(true);
     try {
       // 列表内已有的完整记录直接本地打包；其余按 kind 走接口取详情后打包。
-      if (skillProp) { downloadSkillBlob(skillProp); } else { await downloadSkillZip(kind, id); }
+      if (skillProp?.source === 'official-package') {
+        const loaded = officialFiles || await fetchOfficialSkillFiles(skillProp);
+        downloadOfficialSkillFiles(skillProp, loaded);
+      } else if (skillProp) { downloadSkillBlob(skillProp); } else { await downloadSkillZip(kind, id); }
     } catch (error) { showError(error.message || '下载技能失败'); } finally { setDownloading(false); }
   };
   const categories = (skill?.categories || []).map(category => <Tag key={category.id} size='small'>{category.type_name || category.type_code} / {category.name || category.code}</Tag>);

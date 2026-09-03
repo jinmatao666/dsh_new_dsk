@@ -8,7 +8,7 @@ import './SkillsTable.css';
 
 // 当前为演示阶段：数据与安装包的技能广场对齐，编辑结果只保存在本浏览器。
 // 数据结构调整时递增版本号，避免读到旧版缓存。
-const STORAGE_KEY = 'dsh-admin-mock-skills-v4';
+const STORAGE_KEY = 'dsh-admin-mock-skills-v5';
 
 const STATUS_LABELS = { published: '已上架', draft: '草稿', disabled: '已下架' };
 const STATUS_COLORS = { published: 'green', draft: 'orange', disabled: 'grey' };
@@ -220,7 +220,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
             <div className='form-grid'>
               <label className='zjugis-field'>
                 <span>技能标识（英文 slug）<i className='skill-required'>*</i></span>
-                <input value={form.name} onChange={setField('name')} placeholder='例如 land-evaluation' />
+                <input value={form.name} onChange={setField('name')} placeholder='例如 land-evaluation' disabled={editor.base?.source === 'official-package'} />
               </label>
               <label className='zjugis-field'>
                 <span>显示名称<i className='skill-required'>*</i></span>

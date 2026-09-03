@@ -18,6 +18,7 @@
     "targets": "all",
     "resources": [
       "resources/server.json",
+      "resources/skills/**/*",
       "resources/runtime/**/*"
     ],
     "icon": [

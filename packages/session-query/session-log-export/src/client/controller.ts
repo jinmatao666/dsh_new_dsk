@@ -18,7 +18,10 @@ export interface SessionLogDownloadState {
 }
 
 type Fetch = (input: string | URL, init?: RequestInit) => Promise<Response>
-type Save = (archive: Blob, filename: string) => void
+type Save = (archive: Blob, filename: string) => void | Promise<void>
+
+type DesktopBridge = { core?: { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> } }
+type DesktopInternals = { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> }
 
 const INITIAL: SessionLogDownloadState = { bySession: {} }
 
@@ -36,7 +39,14 @@ export function sessionLogZipFilename(sessionId: SessionId): string {
  * @param archive - complete ZIP archive returned by the Host.
  * @param filename - browser download filename.
  */
-export function downloadArchive(archive: Blob, filename: string): void {
+export async function downloadArchive(archive: Blob, filename: string): Promise<void> {
+  const desktopWindow = window as Window & { __TAURI__?: DesktopBridge; __TAURI_INTERNALS__?: DesktopInternals }
+  const invoke = desktopWindow.__TAURI__?.core?.invoke ?? desktopWindow.__TAURI_INTERNALS__?.invoke
+  if (typeof invoke === 'function') {
+    const bytes = Array.from(new Uint8Array(await archive.arrayBuffer()))
+    await invoke('save_session_log_archive', { fileName: filename, bytes })
+    return
+  }
   const url = URL.createObjectURL(archive)
   const anchor = document.createElement('a')
   anchor.href = url
@@ -124,7 +134,7 @@ export class SessionLogDownloadController {
         const detail = await response.text().catch(() => '')
         throw new Error(`Export failed: HTTP ${response.status}${detail === '' ? '' : ` ${detail}`}`)
       }
-      this.save(await response.blob(), sessionLogZipFilename(sessionId))
+      await this.save(await response.blob(), sessionLogZipFilename(sessionId))
       const open = this.store.getSnapshot().bySession[String(sessionId)]?.open ?? true
       this.publish(sessionId, { open, status: 'success', error: null })
     } catch (error: unknown) {

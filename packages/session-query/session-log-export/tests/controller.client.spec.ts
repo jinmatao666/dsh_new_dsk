@@ -10,6 +10,7 @@ const SID = 'session-export-controller' as SessionId
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  Reflect.deleteProperty(window, '__TAURI_INTERNALS__')
 })
 
 describe('SessionLogDownloadController', () => {
@@ -132,14 +133,27 @@ describe('SessionLogDownloadController', () => {
 })
 
 describe('browser download helpers', () => {
-  it('sanitizes the archive filename and hands downloaded bytes to a download anchor', () => {
+  it('hands archive bytes to the desktop shell when the Tauri bridge is present', async () => {
+    const invoke = vi.fn(async () => 'C:\\Users\\example\\Downloads\\archive.zip')
+    Object.defineProperty(window, '__TAURI_INTERNALS__', {
+      value: { invoke }, configurable: true,
+    })
+
+    await downloadArchive(new Blob(['zip']), 'archive.zip')
+
+    expect(invoke).toHaveBeenCalledWith('save_session_log_archive', {
+      fileName: 'archive.zip', bytes: [122, 105, 112],
+    })
+  })
+
+  it('sanitizes the archive filename and hands downloaded bytes to a download anchor', async () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     const createObjectURL = vi.fn(() => 'blob:session-archive')
     const revokeObjectURL = vi.fn()
     vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
 
     expect(sessionLogZipFilename('a/b' as SessionId)).toBe('dsh-session-a_b.zip')
-    downloadArchive(new Blob(['zip']), 'archive.zip')
+    await downloadArchive(new Blob(['zip']), 'archive.zip')
     expect(click).toHaveBeenCalledOnce()
     const anchor = click.mock.instances[0] as HTMLAnchorElement
     expect(anchor.href).toBe('blob:session-archive')

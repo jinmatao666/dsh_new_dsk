@@ -30,6 +30,9 @@
   "scripts": {
     "start": "react-scripts start",
     "dev": "vite",
+    "skills:generate": "node scripts/generate-official-skills.mjs",
+    "skills:check": "node scripts/generate-official-skills.mjs --check",
+    "prebuild": "npm run skills:check",
     "build": "react-scripts build && node scripts/finalize-build.mjs",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

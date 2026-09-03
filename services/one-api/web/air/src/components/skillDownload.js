@@ -157,6 +157,12 @@ export function safeRelPath(relPath) {
   return safe;
 }
 
+function safePackagePath(relPath) {
+  const safe = String(relPath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!safe || safe.split('/').some((part) => part === '..' || part === '.')) return '';
+  return safe;
+}
+
 function base64ToBytes(text) {
   const binary = atob(String(text || '').replace(/\s+/g, ''));
   const out = new Uint8Array(binary.length);
@@ -295,6 +301,27 @@ export function buildSkillZipBlob(skill) {
 export function downloadSkillBlob(skill) {
   if (!skill?.name) throw new Error('skill 数据缺少 name');
   downloadBlob(buildSkillZipBlob(skill), `${sanitizeName(skill.name)}.zip`);
+}
+
+/** Load the checked-in files belonging to an official static skill package. */
+export async function fetchOfficialSkillFiles(skill) {
+  if (!skill?.package_base || !Array.isArray(skill.package_files)) throw new Error('正式技能缺少文件清单');
+  const base = String(skill.package_base).replace(/\/$/, '');
+  return Promise.all(skill.package_files.map(async (declaredPath) => {
+    const path = safePackagePath(declaredPath);
+    if (!path) throw new Error(`技能文件路径无效：${String(declaredPath)}`);
+    const url = `${base}/${path.split('/').map(encodeURIComponent).join('/')}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`加载技能文件失败：${path}（${response.status}）`);
+    return { path, data: new Uint8Array(await response.arrayBuffer()) };
+  }));
+}
+
+/** Download an already loaded official package without synthesizing placeholder files. */
+export function downloadOfficialSkillFiles(skill, files) {
+  if (!skill?.name || !Array.isArray(files) || files.length === 0) throw new Error('正式技能文件不完整');
+  const root = `${sanitizeName(skill.name)}/`;
+  downloadBlob(createZip(files.map(file => ({ ...file, path: `${root}${file.path}` }))), `${sanitizeName(skill.name)}.zip`);
 }
 
 export async function downloadSkillZip(kind, id) {

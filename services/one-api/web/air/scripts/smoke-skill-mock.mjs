@@ -7,6 +7,7 @@
  */
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
+import { lstat, readFile } from 'node:fs/promises';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const mockModulePath = pathToFileURL(join(here, '../src/components/skillMarketplaceMock.js')).href;
@@ -66,6 +67,25 @@ for (const skill of MARKETPLACE_MOCK_SKILLS) {
     if (!skill[field]) errors.push(`${skill.id}: 缺少字段 ${field}`);
   }
   if (!Array.isArray(skill.capabilities) || skill.capabilities.length === 0) errors.push(`${skill.id}: capabilities 为空`);
+  if (skill.source === 'official-package') {
+    if (skill.body || skill.assets) errors.push(`${skill.id}: 正式技能不应包含合成内容`);
+    for (const path of skill.package_files) {
+      const safe = String(path).replace(/\\/g, '/');
+      if (!safe || safe.startsWith('/') || safe.split('/').some(part => part === '.' || part === '..' || part === '')) {
+        errors.push(`${skill.id}: 文件路径不安全 ${path}`);
+        continue;
+      }
+      const target = join(here, '../public/skills', skill.slug, ...safe.split('/'));
+      try {
+        const metadata = await lstat(target);
+        if (!metadata.isFile() || metadata.isSymbolicLink()) errors.push(`${skill.id}: ${path} 不是普通文件`);
+        if ((await readFile(target)).length === 0) errors.push(`${skill.id}: 文件 ${path} 内容为空`);
+      } catch (error) {
+        errors.push(`${skill.id}: 无法读取 ${path}: ${error.message}`);
+      }
+    }
+    continue;
+  }
   if (!skill.body) errors.push(`${skill.id}: body 为空`);
   const parsed = parseAssets(skill.assets);
   const parsedPaths = new Set(parsed.map(file => file.path));
