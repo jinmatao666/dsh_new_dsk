@@ -128,34 +128,69 @@ function Resolve-Input([string]$path) {
     return Get-ShapeSource $source
 }
 
+function Localized([string]$value) { return [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($value)) }
+
+function FieldValue($record, [string]$field) {
+    $property = $record.psobject.Properties[$field]
+    if ($null -eq $property -or $null -eq $property.Value) { return '-' }
+    return [string]$property.Value
+}
+
+function ResponseRecords($data, [string[]]$fields) {
+    foreach ($field in $fields) {
+        $property = $data.psobject.Properties[$field]
+        if ($null -ne $property -and $null -ne $property.Value) { return @($property.Value) }
+    }
+    return @()
+}
+
 function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath, $response, [string]$responseParseError) {
     $lines = [System.Collections.Generic.List[string]]::new()
-    [void]$lines.Add('# Third-survey land-use analysis result')
+    [void]$lines.Add('# ' + (Localized '5LiJ6LCD5Zyf5Zyw5Yip55So546w54q25YiG5p6Q5oql5ZGK'))
     [void]$lines.Add('')
-    [void]$lines.Add('## Input inspection')
-    [void]$lines.Add("- Source type: $($sourceInfo.SourceKind)")
-    [void]$lines.Add(("- Source path: {0}" -f $sourceInfo.SourcePath))
-    [void]$lines.Add("- Polygon features: $($sourceInfo.FeatureCount)")
-    [void]$lines.Add("- Coordinate rings: $($sourceInfo.Rings.Count)")
-    [void]$lines.Add("- Coordinate reference: $($sourceInfo.CoordinateSystem)")
-    if ($sourceInfo.AttributeFields.Count -gt 0) { [void]$lines.Add("- Attribute fields: $($sourceInfo.AttributeFields -join ', ')") }
+    [void]$lines.Add('## ' + (Localized '6L6T5YWl5pWw5o2u5qC46aqM'))
+    [void]$lines.Add(('- {0}: {1}' -f (Localized '5pWw5o2u57G75Z6L'), $sourceInfo.SourceKind))
+    [void]$lines.Add(('- {0}: {1}' -f (Localized '5pWw5o2u6Lev5b6E'), $sourceInfo.SourcePath))
+    [void]$lines.Add(('- {0}: {1}' -f (Localized '6Z2i6KaB57Sg5pWw6YeP'), $sourceInfo.FeatureCount))
+    [void]$lines.Add(('- {0}: {1}' -f (Localized '6L6555WM546v5pWw6YeP'), $sourceInfo.Rings.Count))
+    [void]$lines.Add(('- {0}: {1}' -f (Localized '5Z2Q5qCH5Y+C6ICD'), $sourceInfo.CoordinateSystem))
+    if ($sourceInfo.AttributeFields.Count -gt 0) { [void]$lines.Add(('- {0}: {1}' -f (Localized '5bGe5oCn5a2X5q61'), ($sourceInfo.AttributeFields -join ', '))) }
     [void]$lines.Add('')
-    [void]$lines.Add('## GIS service response summary')
+    [void]$lines.Add('## ' + (Localized '5Y+v6Kej6YeK55qE5YiG5p6Q57uT5p6c'))
     if ($null -eq $response) {
-        [void]$lines.Add('- Response JSON parsing failed. The raw service response was retained unchanged for inspection.')
-        [void]$lines.Add("- Parser message: $responseParseError")
+        [void]$lines.Add('- ' + (Localized '5pyN5Yqh6L+U5Zue5YaF5a655LiN5piv5pyJ5pWIIEpTT07vvIzlt7Lljp/moLfkv53nlZnlnKggSlNPTiDmlofku7bkuK3vvIzml6Dms5XlronlhajnlJ/miJDmlbDlgLzliIbmnpDjgII='))
+        [void]$lines.Add(('- {0}: {1}' -f (Localized '6Kej5p6Q6ZSZ6K+v'), $responseParseError))
     } else {
-        foreach ($property in $response.psobject.Properties) {
-            $value = $property.Value
-            if ($value -is [System.Collections.IEnumerable] -and $value -isnot [string]) { [void]$lines.Add(("- {0}: array, records {1}" -f $property.Name, @($value).Count)) }
-            elseif ($value -is [pscustomobject]) { [void]$lines.Add(("- {0}: object, fields {1}" -f $property.Name, ($value.psobject.Properties.Name -join ', '))) }
-            else { [void]$lines.Add(("- {0}: {1}" -f $property.Name, $value)) }
+        $summary = @(ResponseRecords -data $response -fields @('YZT_TDFLMJB_HZB'))
+        $landTypes = @(ResponseRecords -data $response -fields @('YZT_DKDLMJB'))
+        $ownership = @(ResponseRecords -data $response -fields @('YZT_TDQSDLMJ'))
+        if ($summary.Count -gt 0) {
+            [void]$lines.Add('### ' + (Localized '5Zyf5Zyw5YiG57G76Z2i56ev5rGH5oC7'))
+            foreach ($row in $summary) {
+                [void]$lines.Add(('- {0}: {1}; {2}: {3}; {4}: {5}; {6}: {7}' -f (Localized '5ZCI6K6h6Z2i56ev'), (FieldValue $row 'HJMJ'), (Localized '5Yac55So5Zyw6Z2i56ev'), (FieldValue $row 'NYDMJ'), (Localized '6ICV5Zyw6Z2i56ev'), (FieldValue $row 'GDMJ'), (Localized '5bu66K6+55So5Zyw6Z2i56ev'), (FieldValue $row 'JSYDMJ')))
+                [void]$lines.Add(('  - {0}: {1}; {2}: {3}; {4}: {5}; {6}: {7}' -f (Localized '5Zu95pyJ5bu66K6+55So5Zyw6Z2i56ev'), (FieldValue $row 'GYJSYDMJ'), (Localized '6ZuG5L2T5bu66K6+55So5Zyw6Z2i56ev'), (FieldValue $row 'JTJSYDMJ'), (Localized '5pyq5Yip55So5Zyw6Z2i56ev'), (FieldValue $row 'WLYDMJ'), (Localized '5Z+65pys5Yac55Sw6Z2i56ev'), (FieldValue $row 'JBNTMJ')))
+            }
         }
+        if ($landTypes.Count -gt 0) {
+            [void]$lines.Add(('### {0} ({1})' -f (Localized '6K+m57uG5Zyw57G76K6w5b2V'), $landTypes.Count))
+            foreach ($row in $landTypes) {
+                [void]$lines.Add(('- {0}: {1}; {2}: {3}; {4}: {5}; {6}: {7}; {8}: {9}' -f (Localized '5Zyw57G757yW56CB'), (FieldValue $row 'DLBM'), (Localized '5Zyw57G75ZCN56ew'), (FieldValue $row 'DLMC'), (Localized '5Zu+5paR6Z2i56ev'), (FieldValue $row 'TBMJ'), (Localized '5p2D5bGe5Y2V5L2N'), (FieldValue $row 'QSDWMC'), 'QSDWDM', (FieldValue $row 'QSDWDM')))
+            }
+        }
+        if ($ownership.Count -gt 0) {
+            [void]$lines.Add(('### {0} ({1})' -f (Localized '5p2D5bGe6Z2i56ev5rGH5oC7'), $ownership.Count))
+            foreach ($row in $ownership) {
+                [void]$lines.Add(('- {0}: {1}; HZMJ: {2}; {3}: {4}; {5}: {6}; {7}: {8}; {9}: {10}' -f (Localized '5p2D5bGe5Y2V5L2N'), (FieldValue $row 'QSDWMC'), (FieldValue $row 'HZMJ'), (Localized '5Yac55So5Zyw'), (FieldValue $row 'NYD'), (Localized '5p6X5Zyw'), (FieldValue $row 'LD'), (Localized '5bu66K6+55So5Zyw'), (FieldValue $row 'JSYD'), (Localized '5Z+65pys5Yac55Sw'), (FieldValue $row 'JBNT')))
+            }
+        }
+        if ($summary.Count -eq 0 -and $landTypes.Count -eq 0 -and $ownership.Count -eq 0) { [void]$lines.Add('- ' + (Localized '5pyq6L+U5Zue5bey56Gu6K6k55qE5LiJ6LCD5YiG5p6Q5a2X5q6144CC')) }
     }
     [void]$lines.Add('')
-    [void]$lines.Add('## Deliverables')
-    [void]$lines.Add("- Raw interface response: [JSON]($([System.IO.Path]::GetFileName($resultPath)))")
-    [void]$lines.Add('- This report lists only actual response fields and record counts. Confirm business meanings against the GIS service field dictionary.')
+    [void]$lines.Add('## ' + (Localized '5pWw5o2u6ZmQ5Yi2'))
+    [void]$lines.Add('- ' + (Localized '5Lul5LiL57uT6K665LuF5L6d5o2uIEdJUyDmnI3liqHov5Tlm57lgLzlkozlt7Lnoa7orqTlrZfmrrXlrZflhbjvvJvpnaLnp6/ljZXkvY3ku6UgR0lTIOacjeWKoeWtl+auteWumuS5ieS4uuWHhuOAgg=='))
+    [void]$lines.Add('')
+    [void]$lines.Add('## ' + (Localized '5Y6f5aeL5o6l5Y+j6L+U5Zue'))
+    [void]$lines.Add(('- [JSON]({0})' -f [System.IO.Path]::GetFileName($resultPath)))
     [System.IO.File]::WriteAllLines($path, $lines, [System.Text.UTF8Encoding]::new($false))
 }
 

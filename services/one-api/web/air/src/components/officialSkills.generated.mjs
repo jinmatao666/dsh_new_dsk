@@ -17,7 +17,7 @@ export const OFFICIAL_SKILLS = [
       "地质灾害隐患分区分析",
       "原始 JSON 与 Markdown 结果交付"
     ],
-    "version": "1.0.2",
+    "version": "1.0.3",
     "team": "ZJUGIS GIS 服务",
     "submitter": "root",
     "created_at": "2026-08-29 09:30:00",
@@ -65,7 +65,7 @@ export const OFFICIAL_SKILLS = [
       "土地利用规划符合性审查",
       "原始 JSON 与 Markdown 结果交付"
     ],
-    "version": "1.0.2",
+    "version": "1.0.3",
     "team": "ZJUGIS GIS 服务",
     "submitter": "root",
     "created_at": "2026-08-29 09:35:00",
@@ -114,7 +114,7 @@ export const OFFICIAL_SKILLS = [
       "三调现状与图斑分析",
       "原始 JSON 与 Markdown 结果交付"
     ],
-    "version": "1.0.2",
+    "version": "1.0.3",
     "team": "ZJUGIS GIS 服务",
     "submitter": "root",
     "created_at": "2026-08-29 09:40:00",

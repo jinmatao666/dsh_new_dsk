@@ -18,6 +18,8 @@ The marketplace ships three independent GIS_Service bundles—geological conditi
 
 The deliverable row excludes helper source extensions and uses successful mutation locations or an explicit generated, saved, written, output, or deliverable terminal line as its evidence. Terminal-delivered JSON and Markdown analysis files appear alongside office documents. It does not infer artifacts from assistant prose.
 
+The NSIS preinstall and preuninstall hooks stop `ZJUGIS Harness.exe` and its process tree before replacing the bundled Node runtime. They also recognize the former `dsh-desktop.exe` name during upgrades, then terminate an orphan only when its executable path is the installation's bundled `resources/runtime/node.exe`. This releases native modules such as Sharp's `libvips-42.dll` without terminating unrelated Node processes.
+
 ## Alternatives considered
 
 **Keep marketplace installation in browser storage** — rejected. A browser-only installed marker cannot place a skill in the host catalog or make it callable by a new conversation.
@@ -46,7 +48,7 @@ The Expert Marketplace separates individual specialist roles from specialist tea
 
 Marketplace installation uses the public Tauri bridge when available and falls back to the persistent Tauri internals bridge for external-sidecar pages. Installation and failure feedback remains visible from both the skill list and a skill detail page.
 
-The GIS_Service skills require polygon geometry with a coordinate reference compatible with the service. A Shape ZIP is extracted only to a temporary directory and removed after the request. Each invocation leaves only a timestamped raw response JSON and Markdown report that records the inspected input, coordinate reference metadata, response fields, and record counts. The chat summary may explain fields listed in the skill's API reference and does not invent meanings for unlisted fields.
+The GIS_Service skills require polygon geometry with a coordinate reference compatible with the service. A Shape ZIP is extracted only to a temporary directory and removed after the request. Each invocation leaves only a timestamped raw response JSON and a Chinese Markdown report that records the inspected input, coordinate reference metadata, confirmed response fields, record counts, and applicable area or zone results. The chat summary uses Chinese except for endpoint names, filenames, and field codes; it may explain fields listed in the skill's API reference and does not invent meanings for unlisted fields.
 
 The dependency convenience applies only after an existing escalation path and does not change Full Access behavior. It reduces repeated prompts without widening the session's general sandbox policy.
 

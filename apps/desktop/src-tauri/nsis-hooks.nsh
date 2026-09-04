@@ -1,9 +1,13 @@
-; Stop the desktop shell before NSIS replaces its bundled Node runtime. The
-; sidecar is a child of dsh-desktop, so /T also releases sharp/libvips.dll.
-; Node can take longer than the original short delay to unload native modules.
-; This applies to both an in-place upgrade and an uninstall/reinstall cycle.
+; Stop the installed product before NSIS replaces its bundled Node runtime.
+; The product name determines the executable name, not the Rust crate name.
+; /T also terminates its runtime Node children and releases sharp/libvips.dll.
+; Keep the former executable name for upgrades from early packages. A prior
+; abnormal exit can leave the bundled Node process orphaned, so the final
+; command targets only node.exe launched from this installation's runtime.
 !macro ZJUGIS_STOP_RUNNING_APP
+  nsExec::ExecToLog 'taskkill.exe /F /T /IM "ZJUGIS Harness.exe"'
   nsExec::ExecToLog 'taskkill.exe /F /T /IM dsh-desktop.exe'
+  nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $$_.ExecutablePath -eq ''$INSTDIR\resources\runtime\node.exe'' } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force }"'
   Sleep 3000
 !macroend
 
