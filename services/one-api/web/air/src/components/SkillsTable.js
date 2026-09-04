@@ -1,34 +1,22 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Modal, Table, Tag, Tooltip } from '@douyinfe/semi-ui';
 import SkillBrowseDrawer from './SkillBrowseDrawer';
-import { MARKETPLACE_MOCK_SKILLS, MOCK_SKILL_CATEGORIES, normalizeMockSkill } from './skillMarketplaceMock';
 import { importSkillFolder } from './skillFolderImport';
-import { showError, showSuccess } from '../helpers';
+import { API, showError, showSuccess } from '../helpers';
 import './SkillsTable.css';
 
-// 当前为演示阶段：数据与安装包的技能广场对齐，编辑结果只保存在本浏览器。
-// 数据结构调整时递增版本号，避免读到旧版缓存。
-const STORAGE_KEY = 'dsh-admin-mock-skills-v5';
+const STATUS_LABELS = { 1: '已上架', 0: '已下架' };
+const STATUS_COLORS = { 1: 'green', 0: 'grey' };
 
-const STATUS_LABELS = { published: '已上架', draft: '草稿', disabled: '已下架' };
-const STATUS_COLORS = { published: 'green', draft: 'orange', disabled: 'grey' };
-
-function readMockSkills() {
-  if (typeof window === 'undefined') return MARKETPLACE_MOCK_SKILLS;
-  try { const value = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || 'null'); return Array.isArray(value) ? value : MARKETPLACE_MOCK_SKILLS; } catch (_) { return MARKETPLACE_MOCK_SKILLS; }
-}
-function saveMockSkills(items) { if (typeof window !== 'undefined') window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
-
-const nowString = () => new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
 const splitLines = text => String(text || '').split('\n').map(line => line.trim()).filter(Boolean);
-const compactTime = value => String(value || '').replace(/:\d{2}$/, '');
+const compactTime = value => value ? new Date(Number(value) * 1000).toLocaleString('zh-CN', { hour12: false }) : '-';
 
 const EMPTY_FORM = {
   name: '',
   display_name: '',
   category: '办公文档',
   version: '1.0.0',
-  status: 'draft',
+  status: '0',
   summary: '',
   description: '',
   capabilities: '',
@@ -36,7 +24,7 @@ const EMPTY_FORM = {
 };
 
 const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
-  const [items, setItems] = useState(readMockSkills);
+  const [items, setItems] = useState([]);
   const [keyword, setKeyword] = useState(keywordProp);
   const [browse, setBrowse] = useState({ visible: false, skill: null });
   // editor.base 为被编辑的技能；null 表示新增
@@ -45,7 +33,15 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   // 从文件夹导入的产物；null 表示本次编辑未导入
   const [imported, setImported] = useState(null);
   const folderInputRef = useRef(null);
-  useEffect(() => saveMockSkills(items), [items]);
+  const loadSkills = useCallback(async () => {
+    try {
+      const response = await API.get('/api/skill/admin/list', { params: { page: 1, perPage: 100 } });
+      setItems(Array.isArray(response.data?.items) ? response.data.items : []);
+    } catch (error) {
+      showError(error.message || '加载技能失败');
+    }
+  }, []);
+  useEffect(() => { void loadSkills(); }, [loadSkills]);
 
   const onKeywordChange = useCallback(value => setKeyword(value || ''), []);
   useImperativeHandle(ref, () => ({ onKeywordChange, openCreate: () => openEditor(null) }));
@@ -57,10 +53,10 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       display_name: skill.display_name || '',
       category: skill.category || '办公文档',
       version: skill.version || '1.0.0',
-      status: skill.status || 'draft',
+      status: String(skill.status ?? 0),
       summary: skill.summary || '',
       description: skill.description || '',
-      capabilities: (skill.capabilities || []).join('\n'),
+      capabilities: '',
       body: skill.body || ''
     } : { ...EMPTY_FORM });
     setEditor({ base: skill || null });
@@ -91,14 +87,17 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   const filteredItems = useMemo(() => {
     const query = keyword.trim().toLowerCase();
     if (!query) return items;
-    return items.filter(item => [item.name, item.display_name, item.summary, item.description, item.category, item.submitter, ...(item.capabilities || [])].join(' ').toLowerCase().includes(query));
+    return items.filter(item => [item.name, item.display_name, item.description, item.category, item.submitter].join(' ').toLowerCase().includes(query));
   }, [items, keyword]);
 
-  const removeSkill = skill => Modal.confirm({ title: `删除技能「${skill.display_name || skill.name}」？`, content: '删除后不可恢复。', okType: 'danger', onOk: () => setItems(current => current.filter(item => item.id !== skill.id)) });
-  const togglePublish = skill => {
-    const nextStatus = skill.status === 'published' ? 'disabled' : 'published';
-    setItems(current => current.map(item => item.id === skill.id ? { ...item, status: nextStatus, updated_at: nowString() } : item));
-    showSuccess(nextStatus === 'published' ? '技能已上架' : '技能已下架');
+  const removeSkill = skill => Modal.confirm({ title: `删除技能「${skill.display_name || skill.name}」？`, content: '删除后将不再出现在桌面技能广场。', okType: 'danger', onOk: async () => { await API.delete(`/api/skill/${skill.id}`); await loadSkills(); showSuccess('技能已删除'); } });
+  const togglePublish = async skill => {
+    const nextStatus = skill.status === 1 ? 0 : 1;
+    try {
+      await API.put(`/api/skill/${skill.id}`, { status: nextStatus });
+      await loadSkills();
+      showSuccess(nextStatus === 1 ? '技能已上架，桌面端刷新后可见' : '技能已下架，桌面端刷新后将隐藏');
+    } catch (error) { showError(error.message || '更新状态失败'); }
   };
 
   const columns = [
@@ -113,7 +112,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     { title: '分类', dataIndex: 'category', width: 90, render: value => <Tag color='blue' size='small'>{value}</Tag> },
     {
       title: '主要能力', width: 180, render: (_, record) => {
-        const capabilities = record.capabilities || [];
+        const capabilities = Array.isArray(record.tags) ? record.tags : [];
         if (capabilities.length === 0) return null;
         return (
           <Tooltip
@@ -140,7 +139,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       title: '操作', width: 180, render: (_, record) => (
         <div className='skill-row-actions'>
           <button type='button' className='skill-text-action' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</button>
-          <button type='button' className='skill-text-action' onClick={() => togglePublish(record)}>{record.status === 'published' ? '下架' : '上架'}</button>
+          <button type='button' className='skill-text-action' onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '上架'}</button>
           <button type='button' className='skill-text-action' onClick={() => openEditor(record)}>编辑</button>
           <button type='button' className='skill-text-action danger' onClick={() => removeSkill(record)}>删除</button>
         </div>
@@ -148,42 +147,34 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     }
   ];
 
-  const saveSkill = (e) => {
+  const saveSkill = async (e) => {
     e.preventDefault();
     const name = form.name.trim();
     const displayName = form.display_name.trim();
     if (!name) { showError('请输入技能标识'); return; }
     if (!displayName) { showError('请输入显示名称'); return; }
     const base = editor.base || {};
-    const folderImported = imported !== null;
-    const skill = normalizeMockSkill({
-      ...base,
-      id: base.id || `custom-${Date.now()}`,
+    const payload = {
       name,
       display_name: displayName,
       category: form.category,
-      summary: form.summary,
-      description: form.description,
-      capabilities: splitLines(form.capabilities),
+      description: form.description || form.summary,
+      scenario: form.summary,
+      tags: splitLines(form.capabilities),
       submitter: base.submitter || 'root',
-      created_at: base.created_at || nowString(),
-      updated_at: nowString(),
       version: form.version || '1.0.0',
-      downloads: base.downloads || 0,
-      status: form.status || 'draft',
-      body: form.body || undefined,
-      // 文件夹导入：以导入产物为准；否则非导入技能按 package_files 重新生成占位内容
-      package_files: folderImported
-        ? imported.paths
-        : (base.source === 'folder' ? base.package_files || [] : (base.package_files || ['references/能力清单.md'])),
-      assets: folderImported
-        ? imported.assets
-        : (base.source === 'folder' ? base.assets || '' : undefined),
-      source: folderImported || base.source === 'folder' ? 'folder' : base.source
-    });
-    setItems(current => (editor.base ? current.map(item => (item.id === skill.id ? skill : item)) : [skill, ...current]));
-    setEditor(null);
-    showSuccess('保存成功');
+      status: Number(form.status),
+      body: form.body || base.body || '',
+      assets: imported?.assets ?? base.assets ?? ''
+    };
+    if (!editor.base && !payload.body) { showError('请输入 SKILL.md 内容或导入技能文件夹'); return; }
+    try {
+      if (editor.base) await API.put(`/api/skill/${editor.base.id}`, payload);
+      else await API.post('/api/skill/', payload);
+      await loadSkills();
+      setEditor(null);
+      showSuccess(payload.status === 1 ? '保存并上架成功' : '保存成功');
+    } catch (error) { showError(error.response?.data?.message || error.message || '保存失败'); }
   };
 
   return <div className='skill-admin'>
@@ -194,7 +185,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       </div>
       <div>
         <span>已上架</span>
-        <strong>{items.filter(item => item.status === 'published').length}</strong>
+        <strong>{items.filter(item => item.status === 1).length}</strong>
       </div>
       <div>
         <span>当前分类</span>
@@ -208,7 +199,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       </div>
       <Table columns={columns} dataSource={filteredItems} rowKey='id' pagination={{ pageSize: 20 }} scroll={{ x: 1062 }} empty='暂无技能' />
     </section>
-    <SkillBrowseDrawer visible={browse.visible} kind='mock' id={browse.skill?.id} skill={browse.skill} onClose={() => setBrowse({ visible: false, skill: null })} />
+    <SkillBrowseDrawer visible={browse.visible} kind='public' id={browse.skill?.id} skill={browse.skill} onClose={() => setBrowse({ visible: false, skill: null })} />
     {editor && (
       <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) closeEditor(); }}>
         <div className='zjugis-modal wide'>
@@ -220,7 +211,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
             <div className='form-grid'>
               <label className='zjugis-field'>
                 <span>技能标识（英文 slug）<i className='skill-required'>*</i></span>
-                <input value={form.name} onChange={setField('name')} placeholder='例如 land-evaluation' disabled={editor.base?.source === 'official-package'} />
+                <input value={form.name} onChange={setField('name')} placeholder='例如 land-evaluation' disabled={Boolean(editor.base)} />
               </label>
               <label className='zjugis-field'>
                 <span>显示名称<i className='skill-required'>*</i></span>
@@ -229,7 +220,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
               <label className='zjugis-field'>
                 <span>分类</span>
                 <select value={form.category} onChange={setField('category')}>
-                  {[...MOCK_SKILL_CATEGORIES, '其他'].map(value => <option key={value} value={value}>{value}</option>)}
+                  {[...new Set(['办公文档', '空间制图', '研究咨询', '数据分析', ...items.map(item => item.category).filter(Boolean), '其他'])].map(value => <option key={value} value={value}>{value}</option>)}
                 </select>
               </label>
               <label className='zjugis-field'>
@@ -239,9 +230,8 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
               <label className='zjugis-field'>
                 <span>上架状态</span>
                 <select value={form.status} onChange={setField('status')}>
-                  <option value='draft'>草稿</option>
-                  <option value='published'>已上架</option>
-                  <option value='disabled'>已下架</option>
+                  <option value='0'>已下架</option>
+                  <option value='1'>已上架</option>
                 </select>
               </label>
             </div>

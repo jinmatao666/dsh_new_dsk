@@ -4,11 +4,11 @@
   "slug": "market-gis-geology-analysis",
   "displayName": "地质条件分析",
   "summary": "识别 GeoJSON、Shape 文件夹或 Shape ZIP 的项目范围，调用 GIS_Service 分析地质环境与地质灾害隐患分区。",
-  "description": "读取工作区中的 GeoJSON、完整 Shape 文件夹、.shp 文件或 Shape ZIP，自动提取面范围和坐标系信息，调用地质条件分析服务并交付原始结果 JSON 与 Markdown 分析文档。",
+  "description": "读取工作区中的 GeoJSON、完整 Shape 文件夹、.shp 文件或 Shape ZIP，自动提取面范围和坐标系信息，调用地质条件分析服务并交付原始 JSON、Excel 明细表和详尽 Word 分析报告。",
   "category": "空间制图",
   "tags": ["官方", "推荐"],
-  "capabilities": ["GeoJSON 与 Shape 面范围识别", "地质灾害隐患分区分析", "原始 JSON 与 Markdown 结果交付"],
-  "version": "1.0.3",
+  "capabilities": ["GeoJSON 与 Shape 面范围识别", "地质灾害隐患分区分析", "Excel 明细与 Word 专业报告交付"],
+  "version": "1.1.0",
   "author": "ZJUGIS GIS 服务",
   "submitter": "root",
   "createdAt": "2026-08-29 09:30:00",
@@ -20,5 +20,5 @@
     { "name": "inputPath", "type": "file", "required": true, "description": "Polygon/MultiPolygon GeoJSON、.shp、包含完整 Shape 文件的 ZIP 或文件夹" },
     { "name": "YfxFieldName", "type": "string", "required": false, "description": "分区名称字段", "defaultValue": "分区名称" }
   ],
-  "files": ["manifest.json", "SKILL.md", "scripts/invoke.ps1", "references/api.md"]
+  "files": ["manifest.json", "SKILL.md", "scripts/invoke.ps1", "scripts/export-office.ps1", "references/api.md"]
 }

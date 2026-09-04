@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-custom-skills"
+description = "Enables the list_custom_skills command without any pre-configured scope."
+commands.allow = ["list_custom_skills"]
+
+[[permission]]
+identifier = "deny-list-custom-skills"
+description = "Denies the list_custom_skills command without any pre-configured scope."
+commands.deny = ["list_custom_skills"]

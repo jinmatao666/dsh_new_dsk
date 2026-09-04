@@ -50,6 +50,169 @@ struct MarketplaceSkillState {
     state: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomSkillFile {
+    path: String,
+    content: Vec<u8>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomSkillState {
+    slug: String,
+    name: String,
+    description: String,
+}
+
+fn custom_skill_front_matter_value(text: &str, key: &str) -> Option<String> {
+    text.lines()
+        .take(32)
+        .find_map(|line| line.trim().strip_prefix(&format!("{key}:")))
+        .map(|value| value.trim().trim_matches(['\'', '"']).to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn validate_skill_relative_path(value: &str) -> Result<PathBuf, String> {
+    let normalized = value.replace('\\', "/");
+    if normalized.is_empty()
+        || normalized.starts_with('/')
+        || normalized.contains(':')
+        || normalized
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err(format!("技能文件路径无效：{value}"));
+    }
+    Ok(normalized
+        .split('/')
+        .fold(PathBuf::new(), |parent, part| parent.join(part)))
+}
+
+fn install_custom_skill_at(
+    skills_root: &Path,
+    slug: &str,
+    files: Vec<CustomSkillFile>,
+) -> Result<String, String> {
+    validate_marketplace_slug(slug)?;
+    if files.is_empty() || files.len() > 128 {
+        return Err("自定义技能必须包含 1 至 128 个文件".to_string());
+    }
+    let mut total = 0usize;
+    let mut normalized = Vec::with_capacity(files.len());
+    for file in files {
+        total = total
+            .checked_add(file.content.len())
+            .ok_or_else(|| "自定义技能文件总大小无效".to_string())?;
+        if total > 16 * 1024 * 1024 {
+            return Err("自定义技能文件总大小不能超过 16 MB".to_string());
+        }
+        normalized.push((validate_skill_relative_path(&file.path)?, file.content));
+    }
+    let skill_source = normalized
+        .iter()
+        .find(|(path, _)| path == Path::new("SKILL.md"))
+        .ok_or_else(|| "所选目录根部缺少 SKILL.md".to_string())?;
+    let skill_text = std::str::from_utf8(&skill_source.1)
+        .map_err(|_| "SKILL.md 必须使用 UTF-8 编码".to_string())?;
+    if !skill_text
+        .lines()
+        .take(20)
+        .any(|line| line.trim() == format!("name: {slug}"))
+    {
+        return Err(format!("SKILL.md 的 name 必须为 {slug}"));
+    }
+
+    fs::create_dir_all(skills_root)
+        .map_err(|error| format!("无法创建用户技能目录 {}：{error}", skills_root.display()))?;
+    let target = skills_root.join(slug);
+    if target.exists() {
+        return Err(format!("技能 {slug} 已存在，请先卸载后再添加"));
+    }
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("系统时间无效：{error}"))?
+        .as_nanos();
+    let staging = skills_root.join(format!(".{slug}.custom-{}-{nonce}", std::process::id()));
+    let result = (|| {
+        for (relative, content) in normalized {
+            let destination = staging.join(relative);
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent).map_err(|error| {
+                    format!("无法创建技能子目录 {}：{error}", parent.display())
+                })?;
+            }
+            fs::write(&destination, content)
+                .map_err(|error| format!("无法写入技能文件 {}：{error}", destination.display()))?;
+        }
+        fs::write(
+            staging.join(".dsh-custom-skill"),
+            format!("slug={slug}\n"),
+        )
+        .map_err(|error| format!("无法写入自定义技能标记：{error}"))?;
+        fs::rename(&staging, &target)
+            .map_err(|error| format!("无法启用自定义技能 {}：{error}", target.display()))?;
+        Ok(target.join("SKILL.md").display().to_string())
+    })();
+    if result.is_err() && staging.exists() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    result
+}
+
+#[tauri::command]
+fn install_custom_skill(
+    app: tauri::AppHandle,
+    slug: String,
+    files: Vec<CustomSkillFile>,
+) -> Result<String, String> {
+    install_custom_skill_at(&user_skills_root(&app)?, &slug, files)
+}
+
+#[tauri::command]
+fn list_custom_skills(app: tauri::AppHandle) -> Result<Vec<CustomSkillState>, String> {
+    let root = user_skills_root(&app)?;
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+    let mut skills = Vec::new();
+    for entry in fs::read_dir(&root)
+        .map_err(|error| format!("无法读取用户技能目录 {}：{error}", root.display()))?
+    {
+        let entry = entry.map_err(|error| format!("无法读取用户技能：{error}"))?;
+        if entry.path().join(".dsh-custom-skill").is_file() {
+            if let Some(slug) = entry.file_name().to_str() {
+                let skill_md = fs::read_to_string(entry.path().join("SKILL.md"))
+                    .map_err(|error| format!("无法读取自定义技能 {slug} 的 SKILL.md：{error}"))?;
+                skills.push(CustomSkillState {
+                    slug: slug.to_string(),
+                    name: custom_skill_front_matter_value(&skill_md, "name")
+                        .unwrap_or_else(|| slug.to_string()),
+                    description: custom_skill_front_matter_value(&skill_md, "description")
+                        .unwrap_or_else(|| "本地添加的自定义技能。".to_string()),
+                });
+            }
+        }
+    }
+    skills.sort_by(|left, right| left.slug.cmp(&right.slug));
+    Ok(skills)
+}
+
+#[tauri::command]
+fn uninstall_custom_skill(app: tauri::AppHandle, slug: String) -> Result<(), String> {
+    validate_marketplace_slug(&slug)?;
+    let directory = user_skills_root(&app)?.join(&slug);
+    if !directory.exists() {
+        return Ok(());
+    }
+    let marker = directory.join(".dsh-custom-skill");
+    if !marker.is_file() {
+        return Err(format!("技能 {slug} 不是通过“添加技能”安装的，拒绝删除"));
+    }
+    fs::remove_dir_all(&directory)
+        .map_err(|error| format!("无法移除自定义技能 {}：{error}", directory.display()))
+}
+
 struct Sidecar(Arc<Mutex<Option<Child>>>);
 
 impl Sidecar {
@@ -931,6 +1094,9 @@ pub fn run() {
             list_marketplace_skills,
             install_marketplace_skill,
             uninstall_marketplace_skill,
+            install_custom_skill,
+            uninstall_custom_skill,
+            list_custom_skills,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DSH Desktop");

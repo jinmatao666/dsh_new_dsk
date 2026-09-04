@@ -7,6 +7,9 @@ fn main() {
                 "list_marketplace_skills",
                 "install_marketplace_skill",
                 "uninstall_marketplace_skill",
+                "install_custom_skill",
+                "uninstall_custom_skill",
+                "list_custom_skills",
             ]),
         ),
     )

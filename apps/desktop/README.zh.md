@@ -18,6 +18,6 @@ release 构建中的认证层保持正常的正式行为。仅存在于源码中
 
 ## 安装包
 
-把 `DSH_NODE_BINARY` 设置为目标平台的 Node 可执行文件，并可选地通过 `DSH_DESKTOP_SERVER_CONFIG` 指定正式 JSON 配置文件，然后在 Windows 或 macOS 上运行应用的 `build` 脚本。打包必须在目标平台原生执行：Windows 生成 Windows 安装包，macOS 生成 `.app`/DMG 产物。
+把 `DSH_NODE_BINARY` 设置为目标平台的 Node 可执行文件，并可选地通过 `DSH_DESKTOP_SERVER_CONFIG` 指定正式 JSON 配置文件，然后在 Windows、macOS 或 Linux 上运行应用的 `build` 脚本。打包必须在目标平台原生执行：Windows 生成 NSIS 安装包，macOS 生成 `.app`/DMG 产物，Linux 生成 x64 `.AppImage` 和 Debian `.deb` 产物。发布工作流的 `all-platforms` 选项会在各目标对应的托管 runner 上构建。
 
 暂存 runtime 不提交到仓库。`prepare:runtime` 会构建 DSH、部署 CLI 的正式依赖闭包，并在生成安装包前把 Node 复制到 Tauri 资源目录。

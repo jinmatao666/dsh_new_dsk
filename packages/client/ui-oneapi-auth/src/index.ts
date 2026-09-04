@@ -321,6 +321,14 @@ export function apply(ctx: Context, config: Config): void {
     }
   }
 
+  const listPublishedSkills = async (signal?: AbortSignal): Promise<unknown> => {
+    const response = await fetch(`${baseURL}/api/skill/?page=1&perPage=100`, {
+      ...(signal === undefined ? {} : { signal }),
+    })
+    if (!response.ok) throw new Error(`技能目录暂时不可用（HTTP ${String(response.status)}）`)
+    return jsonBody<unknown>(response)
+  }
+
   // Credentials intentionally survive normal restarts, but a newly built
   // installer carries a new marker and must show the login screen once.
   const installReady = (async (): Promise<void> => {
@@ -401,6 +409,13 @@ export function apply(ctx: Context, config: Config): void {
   const connection = ctx.get('connection') as HostConnectionHandle | undefined
   if (connection === undefined) throw new Error('桌面认证需要 Connection 服务')
   const remove = connection.rpc.handle('/desktop-auth', async (endpoint, payload, signal) => {
+    if (endpoint === 'skill-list') {
+      try {
+        return { ok: true as const, value: await listPublishedSkills(signal) }
+      } catch (error) {
+        return internal(error instanceof Error ? error.message : String(error))
+      }
+    }
     if (config.developmentBypass === true) {
       if (endpoint === 'report-question') return { ok: true as const, value: { reported: false } }
       if (endpoint === 'status' || endpoint === 'login' || endpoint === 'logout') {

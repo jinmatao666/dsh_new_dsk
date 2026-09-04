@@ -637,6 +637,7 @@
 .dsh-skill-add-dialog input, .dsh-skill-add-dialog select, .dsh-skill-add-dialog textarea { box-sizing: border-box; width: 100%; padding: 10px 11px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 9px; color: inherit; font: inherit; outline: none; background: var(--dsw-alias-bg-base); transition: border-color 0.2s ease, box-shadow 0.2s ease; }
 .dsh-skill-add-dialog input:focus, .dsh-skill-add-dialog select:focus, .dsh-skill-add-dialog textarea:focus { border-color: var(--dsw-alias-primary, #2563eb); box-shadow: 0 0 0 3px rgb(37 99 235 / 12%); }
 .dsh-skill-add-dialog textarea { min-height: 88px; resize: vertical; }
+.dsh-skill-add-hint { display: block; margin-top: -4px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.55; }
 .dsh-skill-add-dialog footer { display: flex; justify-content: end; gap: 10px; margin-top: 20px; }
 .dsh-skill-add-dialog footer button { border: 0; border-radius: 9px; background: var(--dsw-alias-bg-elevated); color: var(--dsw-alias-label-secondary); cursor: pointer; padding: 9px 14px; transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease; }
 .dsh-skill-add-dialog footer button:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }

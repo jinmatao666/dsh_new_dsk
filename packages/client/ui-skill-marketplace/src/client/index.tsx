@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connection/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
@@ -83,6 +84,26 @@ type AutomationDraft = { id: string; name: string; cadence: string; time: string
 
 type DesktopBridge = { core?: { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> } }
 type DesktopInternals = { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> }
+type RemoteSkill = {
+  id?: unknown
+  name?: unknown
+  display_name?: unknown
+  category?: unknown
+  description?: unknown
+  scenario?: unknown
+  downloads?: unknown
+  version?: unknown
+  submitter?: unknown
+  tags?: unknown
+}
+
+let loadRemoteSkills: (() => Promise<RemoteSkill[]>) | undefined
+
+function rpcValue(result: RpcResult<unknown>): unknown {
+  if (!result.ok) throw new Error(result.error.message)
+  return result.value
+}
+type CustomSkillState = { slug: string; name: string; description: string }
 
 function skillSlug(skill: Skill): string {
   if (skill.slug !== undefined) return skill.slug
@@ -133,7 +154,7 @@ const L = {
   uninstall: '卸载',
   createSkill: '添加本地技能',
   skills: '技能',
-  experts: '专家市场',
+  experts: '专家库',
   connectors: '连接器',
   automations: '自动化',
 }
@@ -471,7 +492,7 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall 
   )
 }
 
-/* oxlint-disable @stylistic/arrow-parens, @stylistic/max-len, typescript/no-confusing-void-expression -- compact local-only interaction trees keep cards and dialogs together. */
+/* oxlint-disable @stylistic/arrow-parens, @stylistic/max-len -- compact local-only interaction trees keep cards and dialogs together. */
 function ExpertAvatar({ expert }: { expert: Expert }) {
   const shared = { width: 28, height: 28, viewBox: '0 0 28 28', fill: 'none', 'aria-hidden': true }
   if (expert.icon === 'planning') return <svg {...shared}><path d="M5 22V9l9-4 9 4v13" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><path d="M9 22v-6h10v6M10 10h.1M14 10h.1M18 10h.1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
@@ -494,10 +515,10 @@ function ExpertMarket() {
   const openExpert = (expert: Expert) => setSelected({ name: expert.name, role: expert.role, summary: expert.summary, tags: expert.tags, examples: expert.examples, accent: expert.accent })
   const openTeam = (team: ExpertTeam) => setSelected({ name: team.name, role: '多角色协同工作流', summary: team.summary, tags: team.members, examples: ['根据当前工作区资料启动该专家团审查', '为该专家团补充本项目的交付要求'], accent: team.accent, members: team.members, skills: team.skills })
   return <section className="dsh-expert-market">
-    <nav className="dsh-expert-tabs" aria-label="专家市场内容"><button type="button" className={tab === 'experts' ? 'active' : ''} onClick={() => setTab('experts')}>专家</button><button type="button" className={tab === 'teams' ? 'active' : ''} onClick={() => setTab('teams')}>专家团</button></nav>
+    <nav className="dsh-expert-tabs" aria-label="专家库内容"><button type="button" className={tab === 'experts' ? 'active' : ''} onClick={() => setTab('experts')}>专家</button><button type="button" className={tab === 'teams' ? 'active' : ''} onClick={() => setTab('teams')}>专家团</button></nav>
     {tab === 'experts' && <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div><div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} onClick={() => openExpert(expert)}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>}
     {tab === 'teams' && <div className="dsh-expert-grid teams">{EXPERT_TEAMS.map(team => <button type="button" className="dsh-expert-card" key={team.id} onClick={() => openTeam(team)}><span className="dsh-expert-avatar" style={{ background: `${team.accent}18`, color: team.accent }}><MarketplaceSectionIcon section="experts" size={25} /></span><div><strong>{team.name}</strong><small>多角色协同工作流</small></div><p>{team.summary}</p><footer>{team.members.slice(0, 3).map(member => <b key={member}>{member}</b>)}<b>+{team.members.length}</b></footer></button>)}</div>}
-    {selected !== null && <div className="dsh-expert-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}><section className="dsh-expert-detail" aria-label={`${selected.name}详情`}><header><div><span style={{ background: `${selected.accent}18`, color: selected.accent }}><MarketplaceSectionIcon section="experts" size={24} /></span><div><h2>{selected.name}</h2><p>{selected.role}</p></div></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header><p className="dsh-expert-detail-summary">{selected.summary}</p><div className="dsh-expert-detail-block"><span>{selected.members === undefined ? '专业方向' : '协作角色'}</span><div>{selected.tags.map(tag => <b key={tag}>{tag}</b>)}</div></div>{selected.skills !== undefined && <div className="dsh-expert-detail-block"><span>编排技能</span><div>{selected.skills.map(skill => <b key={skill}>{skill}</b>)}</div></div>}<div className="dsh-expert-detail-block examples"><span>可以这样开始</span>{selected.examples.map(example => <p key={example}>“{example}”</p>)}</div><footer><small>当前为专家市场演示，不会启动实际多 Agent 协作。</small><button type="button" onClick={() => window.alert(`已为“${selected.name}”准备演示任务草稿。`)}>创建演示任务</button></footer></section></div>}
+    {selected !== null && <div className="dsh-expert-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}><section className="dsh-expert-detail" aria-label={`${selected.name}详情`}><header><div><span style={{ background: `${selected.accent}18`, color: selected.accent }}><MarketplaceSectionIcon section="experts" size={24} /></span><div><h2>{selected.name}</h2><p>{selected.role}</p></div></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header><p className="dsh-expert-detail-summary">{selected.summary}</p><div className="dsh-expert-detail-block"><span>{selected.members === undefined ? '专业方向' : '协作角色'}</span><div>{selected.tags.map(tag => <b key={tag}>{tag}</b>)}</div></div>{selected.skills !== undefined && <div className="dsh-expert-detail-block"><span>编排技能</span><div>{selected.skills.map(skill => <b key={skill}>{skill}</b>)}</div></div>}<div className="dsh-expert-detail-block examples"><span>可以这样开始</span>{selected.examples.map(example => <p key={example}>“{example}”</p>)}</div><footer><small>当前为专家库演示，不会启动实际多 Agent 协作。</small><button type="button" onClick={() => window.alert(`已为“${selected.name}”准备演示任务草稿。`)}>创建演示任务</button></footer></section></div>}
   </section>
 }
 
@@ -615,7 +636,7 @@ function Automations() {
     {draft !== null && <div className="dsh-automation-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) { setDraft(null); setSelected(null) } }}><form className="dsh-automation-modal" onSubmit={event => { event.preventDefault(); saveDraft() }}><header><div><span>{selected === null ? '新建自动化任务' : '从任务模板创建'}</span><small>{selected === null ? '配置一个仅保存在本机演示列表中的任务。' : selected.summary}</small></div><button type="button" onClick={() => { setDraft(null); setSelected(null) }} aria-label="关闭">×</button></header><label>任务名称<input autoFocus value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} placeholder="例如：项目周报汇总" /></label><div className="dsh-automation-schedule"><label>触发频率<select value={draft.cadence} onChange={event => setDraft({ ...draft, cadence: event.target.value })}><option>每个工作日</option><option>每天</option><option>每周</option><option>文件变更时</option></select></label><label>执行时间<input type="time" value={draft.time} onChange={event => setDraft({ ...draft, time: event.target.value })} disabled={draft.cadence === '文件变更时'} /></label></div><label>任务说明<textarea value={draft.prompt} onChange={event => setDraft({ ...draft, prompt: event.target.value })} placeholder="描述希望智能体按计划完成的工作" /></label><div className="dsh-automation-modal-tip">演示阶段仅展示配置流程，不会创建定时任务或调用外部连接器。</div><footer><button type="button" onClick={() => { setDraft(null); setSelected(null) }}>取消</button><button type="submit" disabled={draft.name.trim() === '' || draft.prompt.trim() === ''}>保存任务</button></footer></form></div>}
   </section>
 }
-/* oxlint-enable @stylistic/arrow-parens, @stylistic/max-len, typescript/no-confusing-void-expression */
+/* oxlint-enable @stylistic/arrow-parens, @stylistic/max-len */
 
 function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSection }) {
   const [open, setOpen] = useState(false)
@@ -634,8 +655,11 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
       return []
     }
   })
+  const [discoveredCustomSkills, setDiscoveredCustomSkills] = useState<Skill[]>([])
   const [adding, setAdding] = useState(false)
   const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '办公文档' })
+  const [customSkillFiles, setCustomSkillFiles] = useState<File[]>([])
+  const [remoteSkills, setRemoteSkills] = useState<RemoteSkill[] | null>(null)
 
   const [installStates, setInstallStates] = useState<Map<string, MarketplaceSkillState>>(new Map())
   const installed = useMemo(() => new Set([...installStates.values()]
@@ -644,7 +668,10 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
 
   const refreshInstallStates = async () => {
     try {
-      const value = await desktopInvoke('list_marketplace_skills', {})
+      const [value, customValue] = await Promise.all([
+        desktopInvoke('list_marketplace_skills', {}),
+        desktopInvoke('list_custom_skills', {}),
+      ])
       if (!Array.isArray(value)) return
       const states = value.filter((item): item is MarketplaceSkillState => {
         if (typeof item !== 'object' || item === null) return false
@@ -652,7 +679,35 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
         return typeof candidate.id === 'string' && typeof candidate.slug === 'string'
           && typeof candidate.version === 'string' && typeof candidate.state === 'string'
       })
-      setInstallStates(new Map(states.map(state => [state.id, state])))
+      const customEntries = Array.isArray(customValue)
+        ? customValue.filter((item): item is CustomSkillState => typeof item === 'object' && item !== null
+          && typeof (item as Partial<CustomSkillState>).slug === 'string'
+          && typeof (item as Partial<CustomSkillState>).name === 'string'
+          && typeof (item as Partial<CustomSkillState>).description === 'string')
+        : []
+      const knownCustomSkills = new Map(customSkills.map(skill => [skillSlug(skill), skill]))
+      const discovered = customEntries.map((item): Skill => knownCustomSkills.get(item.slug) ?? {
+        id: `local-${item.slug}`,
+        slug: item.slug,
+        name: item.name,
+        category: '本地技能',
+        tags: ['本地'],
+        summary: item.description,
+        description: item.description,
+        installs: '0',
+        accent: '#2563eb',
+        icon: '自',
+        version: '1.0.0',
+        author: '当前用户',
+        installable: true,
+      })
+      setDiscoveredCustomSkills(discovered)
+      const customStates = discovered
+        .map(skill => [skill.id, { id: skill.id, slug: skillSlug(skill), version: skill.version, installedVersion: skill.version, state: 'installed' as const }] as const)
+      setInstallStates(new Map([
+        ...customStates,
+        ...states.map(state => [state.id, state] as const),
+      ]))
     } catch {
       // Browser previews have no native bridge; installation remains unavailable there.
     }
@@ -661,7 +716,10 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
   useEffect(() => marketplaceControllers[section].subscribe((next) => {
     setOpen(next.open)
     if (next.open) {
-      if (section === 'skills') void refreshInstallStates()
+      if (section === 'skills') {
+        void refreshInstallStates()
+        if (loadRemoteSkills !== undefined) void loadRemoteSkills().then(setRemoteSkills).catch(() => setRemoteSkills(null))
+      }
       // Only one capability panel may be expanded: opening this section
       // collapses the others, otherwise stacked overlays block each other
       // and switching between entries reads as unresponsive.
@@ -693,7 +751,38 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
     return () => { document.removeEventListener('pointerdown', closeForSidebarAction, true) }
   }, [open])
 
-  const allSkills = useMemo(() => [...customSkills, ...MOCK_SKILLS], [customSkills])
+  const allSkills = useMemo(() => {
+    if (remoteSkills === null) return [...discoveredCustomSkills, ...MOCK_SKILLS]
+    const bySlug = new Map(OFFICIAL_SKILLS.map(skill => [skillSlug(skill), skill]))
+    const published = remoteSkills.flatMap((remote): Skill[] => {
+      const slug = typeof remote.name === 'string' ? remote.name : ''
+      if (slug === '') return []
+      const remoteId = typeof remote.id === 'number' || typeof remote.id === 'string' ? String(remote.id) : slug
+      const official = bySlug.get(slug)
+      if (official !== undefined) return [{
+        ...official,
+        name: typeof remote.display_name === 'string' && remote.display_name !== '' ? remote.display_name : official.name,
+        summary: typeof remote.description === 'string' && remote.description !== '' ? remote.description : official.summary,
+        installs: String(typeof remote.downloads === 'number' ? remote.downloads : official.installs),
+        version: typeof remote.version === 'string' ? remote.version : official.version,
+      }]
+      return [{
+        id: `remote-${remoteId}`,
+        slug,
+        name: typeof remote.display_name === 'string' && remote.display_name !== '' ? remote.display_name : slug,
+        category: typeof remote.category === 'string' && remote.category !== '' ? remote.category : '其他',
+        tags: Array.isArray(remote.tags) ? remote.tags.filter((tag): tag is string => typeof tag === 'string') : ['服务端'],
+        summary: typeof remote.description === 'string' ? remote.description : '',
+        description: typeof remote.scenario === 'string' && remote.scenario !== '' ? remote.scenario : (typeof remote.description === 'string' ? remote.description : ''),
+        installs: String(typeof remote.downloads === 'number' ? remote.downloads : 0),
+        accent: '#2563eb', icon: '技', version: typeof remote.version === 'string' ? remote.version : '1.0.0',
+        author: typeof remote.submitter === 'string' ? remote.submitter : '平台管理员',
+        installable: false,
+      }]
+    })
+    const demonstrations = MOCK_SKILLS.filter(skill => !skill.tags.includes('官方'))
+    return [...discoveredCustomSkills, ...published, ...demonstrations]
+  }, [discoveredCustomSkills, remoteSkills])
   const featuredPool = useMemo(() => allSkills
     .filter(skill => skill.featured)
     .sort((left, right) => Number(right.tags.includes('官方')) - Number(left.tags.includes('官方'))), [allSkills])
@@ -742,7 +831,15 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
     setInstalling(skill.id)
     let installedPath: unknown
     try {
-      if (currentState === 'installed') {
+      if (skill.tags.includes('本地') && currentState === 'installed') {
+        await desktopInvoke('uninstall_custom_skill', { slug })
+        const next = customSkills.filter(item => item.id !== skill.id)
+        setCustomSkills(next)
+        setDiscoveredCustomSkills(previous => previous.filter(item => item.id !== skill.id))
+        localStorage.setItem('dsh.marketplace.custom-skills', JSON.stringify(next))
+        setView('list')
+        setSelectedSkill(null)
+      } else if (currentState === 'installed') {
         await desktopInvoke('uninstall_marketplace_skill', { slug })
       } else {
         installedPath = await desktopInvoke('install_marketplace_skill', { slug })
@@ -760,30 +857,64 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
       : { kind: 'success', text: '技能已从本机移除。' })
   }
 
-  const createSkill = () => {
+  const createSkill = async () => {
     const name = newSkill.name.trim()
-    if (name === '') return
-    const id = `local-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || Date.now()}`
+    if (name === '' || customSkillFiles.length === 0) return
+    const skillMd = customSkillFiles.find(file => (file.webkitRelativePath || file.name).replace(/\\/g, '/').split('/').at(-1) === 'SKILL.md')
+    if (skillMd === undefined) {
+      setInstallMessage({ kind: 'error', text: '所选技能目录中缺少 SKILL.md。' })
+      return
+    }
+    const skillText = await skillMd.text()
+    const declaredName = /^name:\s*([a-z0-9]+(?:-[a-z0-9]+)*)\s*$/mu.exec(skillText)?.[1]
+    if (declaredName === undefined) {
+      setInstallMessage({ kind: 'error', text: 'SKILL.md 必须在 YAML 头部声明合法的 kebab-case name。' })
+      return
+    }
+    const slug = declaredName
+    const firstPath = customSkillFiles[0]?.webkitRelativePath.replace(/\\/g, '/') ?? ''
+    const rootPrefix = firstPath.includes('/') ? firstPath.slice(0, firstPath.indexOf('/') + 1) : ''
+    const files = await Promise.all(customSkillFiles.map(async file => ({
+      path: (file.webkitRelativePath.replace(/\\/g, '/') || file.name).replace(rootPrefix, ''),
+      content: [...new Uint8Array(await file.arrayBuffer())],
+    })))
+    setInstalling(slug)
+    let installedPath: unknown
+    try {
+      installedPath = await desktopInvoke('install_custom_skill', { slug, files })
+    } catch (error) {
+      setInstallMessage({ kind: 'error', text: marketplaceInstallErrorMessage(error) })
+      setInstalling(null)
+      return
+    }
+    setInstalling(null)
+    const id = `local-${slug}`
     const skill: Skill = {
       id,
+      slug,
       name,
       category: newSkill.category,
       tags: ['本地'],
       summary: newSkill.summary.trim() || '本地添加的自定义技能。',
-      description: newSkill.summary.trim() || '此技能保存在当前客户端，可预览并在本地列表中管理。正式安装包功能暂未开放。',
+      description: newSkill.summary.trim() || '此技能已安装到当前用户技能目录，新建对话后即可被智能体发现。',
       installs: '0',
       accent: '#2563eb',
       icon: '自',
       version: '1.0.0',
       author: '当前用户',
+      installable: true,
     }
     const next = [skill, ...customSkills.filter(item => item.id !== id)]
     setCustomSkills(next)
+    setDiscoveredCustomSkills(previous => [skill, ...previous.filter(item => item.id !== id)])
     localStorage.setItem('dsh.marketplace.custom-skills', JSON.stringify(next))
+    setInstallStates(previous => new Map(previous).set(id, { id, slug, version: '1.0.0', installedVersion: '1.0.0', state: 'installed' }))
     setAdding(false)
     setNewSkill({ name: '', summary: '', category: '办公文档' })
+    setCustomSkillFiles([])
     setSelectedSkill(skill)
     setView('detail')
+    setInstallMessage({ kind: 'success', text: `技能已安装到 ${String(installedPath)}，新建对话后即可使用。` })
   }
 
   const openDetail = (skill: Skill) => {
@@ -943,7 +1074,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
         )}
         {adding && (
           <div className="dsh-skill-add-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setAdding(false) }}>
-            <form className="dsh-skill-add-dialog" onSubmit={(event) => { event.preventDefault(); createSkill() }}>
+            <form className="dsh-skill-add-dialog" onSubmit={(event) => { event.preventDefault(); void createSkill() }}>
               <div>
                 <h2>{L.createSkill}</h2>
                 <button type="button" onClick={() => { setAdding(false) }} aria-label="关闭">×</button>
@@ -959,7 +1090,9 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                 </select>
               </label>
               <label>用途说明<textarea value={newSkill.summary} onChange={(event) => { setNewSkill({ ...newSkill, summary: event.target.value }) }} placeholder="说明这个技能何时使用、能完成什么任务" /></label>
-              <footer><button type="button" onClick={() => { setAdding(false) }}>取消</button><button type="submit" disabled={newSkill.name.trim() === ''}>添加并预览</button></footer>
+              <label>技能目录<input type="file" multiple {...{ webkitdirectory: '' }} onChange={(event) => { setCustomSkillFiles([...event.currentTarget.files ?? []]) }} /></label>
+              <small className="dsh-skill-add-hint">请选择包含 SKILL.md 的完整目录。安装后会复制到当前用户的技能目录，并在新对话中生效。</small>
+              <footer><button type="button" onClick={() => { setAdding(false) }}>取消</button><button type="submit" disabled={newSkill.name.trim() === '' || customSkillFiles.length === 0 || installing !== null}>添加并安装</button></footer>
             </form>
           </div>
         )}
@@ -995,8 +1128,13 @@ function SkillMarketplaceAction({ wide, section = 'skills' }: ActionProps & { se
   )
 }
 
-export const inject = ['slots']
+export const inject = ['slots', 'connection']
 export function apply(ctx: ClientContext): void {
+  const connection = ctx.get('connection') as unknown as ConnectionHandle
+  loadRemoteSkills = async () => {
+    const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'skill-list', {})) as { items?: unknown }
+    return Array.isArray(raw?.items) ? raw.items.filter((item): item is RemoteSkill => typeof item === 'object' && item !== null) : []
+  }
   const marketplaceUrl = (process.env.DSH_CLIENT_SKILL_MARKETPLACE_URL ?? 'https://skills.zjugis.com/').trim()
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(

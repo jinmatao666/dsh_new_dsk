@@ -24,8 +24,10 @@ The authentication overlay uses the normal production behavior in release builds
 
 Set `DSH_NODE_BINARY` to the Node executable for the target platform and
 optionally set `DSH_DESKTOP_SERVER_CONFIG` to a production JSON file, then run
-the app's `build` script on Windows or macOS. Packaging is native: Windows
-builds Windows installers and macOS builds `.app`/DMG artifacts.
+the app's `build` script on Windows, macOS, or Linux. Packaging is native:
+Windows builds NSIS installers, macOS builds `.app`/DMG artifacts, and Linux
+builds x64 `.AppImage` and Debian `.deb` artifacts. The release workflow's
+`all-platforms` option runs each target on its matching hosted runner.
 
 The staged runtime is intentionally not committed. `prepare:runtime` builds
 DSH, deploys the CLI's production dependency closure, and copies Node into the

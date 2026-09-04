@@ -39,6 +39,7 @@ jobs:
           import os
           platforms = [
               {"platform": "windows-x64", "os": "windows-latest", "target": "x86_64-pc-windows-msvc", "bundles": "nsis", "node_archive": "", "node_dir": ""},
+              {"platform": "linux-x64", "os": "ubuntu-22.04", "target": "x86_64-unknown-linux-gnu", "bundles": "appimage,deb", "node_archive": "", "node_dir": ""},
               {"platform": "macos-arm64", "os": "macos-latest", "target": "aarch64-apple-darwin", "bundles": "app,dmg", "node_archive": "node-v22.19.0-darwin-arm64.tar.gz", "node_dir": "node-v22.19.0-darwin-arm64"},
               # Use an Intel runner for x64. Native dependencies such as sharp
               # are selected while pnpm stages the sidecar runtime, so an ARM
@@ -102,6 +103,23 @@ jobs:
             exit 1
           }
           test -n "$DSH_ONEAPI_URL"
+      - name: Install Linux desktop bundle dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libgtk-3-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            librsvg2-dev \
+            patchelf \
+            wget
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Prepare production server config and app version
@@ -178,7 +196,7 @@ jobs:
           mkdir -p artifacts
           find "apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle" -type f \
             -name "*_${DSH_RELEASE_VERSION}_*" \
-            \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.app.tar.gz' \) \
+            \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.AppImage' -o -name '*.deb' \) \
             -exec cp {} artifacts/ \;
           test -n "$(find artifacts -type f -print -quit)"
       - uses: actions/upload-artifact@v4

@@ -215,8 +215,11 @@ $responseParseError = ''
 try { $responseJson = $content | ConvertFrom-Json } catch { $responseParseError = $_.Exception.Message }
 $report = Join-Path $outputPath "geology-analysis-report_$stamp.md"
 Write-AnalysisMarkdown $report $resolved $target $responseJson $responseParseError
-Write-Output "Generated result: $target"
-Write-Output "Generated report: $report"
+$workbook = Join-Path $outputPath "geology-analysis-table_$stamp.xlsx"
+$wordReport = Join-Path $outputPath "geology-analysis-report_$stamp.docx"
+& (Join-Path $PSScriptRoot 'export-office.ps1') -Title '地质条件分析' -JsonPath $target -MarkdownPath $report -ExcelPath $workbook -WordPath $wordReport -OpenWorkbook
+Write-Output "已生成接口原始结果：$target"
+Write-Output "已生成 Markdown 分析底稿：$report"
 } finally {
     if ($null -ne $resolved -and $null -ne $resolved.TemporaryDirectory -and [System.IO.Directory]::Exists($resolved.TemporaryDirectory)) { Remove-Item -LiteralPath $resolved.TemporaryDirectory -Recurse -Force }
 }
