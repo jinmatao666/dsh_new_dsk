@@ -138,18 +138,14 @@ fn install_custom_skill_at(
         for (relative, content) in normalized {
             let destination = staging.join(relative);
             if let Some(parent) = destination.parent() {
-                fs::create_dir_all(parent).map_err(|error| {
-                    format!("无法创建技能子目录 {}：{error}", parent.display())
-                })?;
+                fs::create_dir_all(parent)
+                    .map_err(|error| format!("无法创建技能子目录 {}：{error}", parent.display()))?;
             }
             fs::write(&destination, content)
                 .map_err(|error| format!("无法写入技能文件 {}：{error}", destination.display()))?;
         }
-        fs::write(
-            staging.join(".dsh-custom-skill"),
-            format!("slug={slug}\n"),
-        )
-        .map_err(|error| format!("无法写入自定义技能标记：{error}"))?;
+        fs::write(staging.join(".dsh-custom-skill"), format!("slug={slug}\n"))
+            .map_err(|error| format!("无法写入自定义技能标记：{error}"))?;
         fs::rename(&staging, &target)
             .map_err(|error| format!("无法启用自定义技能 {}：{error}", target.display()))?;
         Ok(target.join("SKILL.md").display().to_string())
@@ -505,12 +501,55 @@ fn copy_marketplace_directory(source: &Path, target: &Path) -> Result<(), String
     Ok(())
 }
 
+fn write_marketplace_files(target: &Path, files: Vec<CustomSkillFile>) -> Result<(), String> {
+    if files.is_empty() || files.len() > 128 {
+        return Err("服务器技能包必须包含 1 至 128 个文件".to_string());
+    }
+    let mut total_size = 0_usize;
+    let mut written = std::collections::HashSet::with_capacity(files.len());
+    for file in files {
+        total_size = total_size
+            .checked_add(file.content.len())
+            .ok_or_else(|| "服务器技能包文件大小无效".to_string())?;
+        if total_size > 16 * 1024 * 1024 {
+            return Err("服务器技能包总大小不能超过 16 MB".to_string());
+        }
+        let relative = validate_skill_relative_path(&file.path)?;
+        if !written.insert(relative.clone()) {
+            return Err(format!(
+                "服务器技能包包含重复文件路径 {}",
+                relative.display()
+            ));
+        }
+        let destination = target.join(relative);
+        let parent = destination
+            .parent()
+            .ok_or_else(|| "服务器技能包文件路径无效".to_string())?;
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("无法创建技能文件目录 {}：{error}", parent.display()))?;
+        fs::write(&destination, file.content)
+            .map_err(|error| format!("无法写入技能文件 {}：{error}", destination.display()))?;
+    }
+    Ok(())
+}
+
 fn install_marketplace_skill_at(
     resource_root: &Path,
     skills_root: &Path,
     slug: &str,
 ) -> Result<String, String> {
     validate_marketplace_slug(slug)?;
+    if skills_root.exists()
+        && fs::symlink_metadata(skills_root)
+            .map_err(|error| format!("无法读取用户技能目录 {}：{error}", skills_root.display()))?
+            .file_type()
+            .is_symlink()
+    {
+        return Err(format!(
+            "拒绝使用符号链接技能根目录 {}",
+            skills_root.display()
+        ));
+    }
     let manifest = manifest_for_slug(resource_root, slug)?;
     let source = resource_root.join(slug);
     validate_marketplace_tree(&source, &manifest)?;
@@ -588,13 +627,102 @@ fn install_marketplace_skill_at(
     Ok(directory.join("SKILL.md").display().to_string())
 }
 
+fn install_marketplace_skill_files_at(
+    skills_root: &Path,
+    slug: &str,
+    files: Vec<CustomSkillFile>,
+) -> Result<String, String> {
+    validate_marketplace_slug(slug)?;
+    fs::create_dir_all(skills_root)
+        .map_err(|error| format!("无法创建用户技能目录 {}：{error}", skills_root.display()))?;
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("系统时间无效：{error}"))?
+        .as_nanos();
+    let directory = skills_root.join(slug);
+    let staging = skills_root.join(format!(".{slug}.download-{}-{nonce}", std::process::id()));
+    let backup = skills_root.join(format!(".{slug}.backup-{}-{nonce}", std::process::id()));
+    fs::create_dir_all(&staging)
+        .map_err(|error| format!("无法创建技能暂存目录 {}：{error}", staging.display()))?;
+    if let Err(error) = write_marketplace_files(&staging, files) {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+    let manifest = match read_marketplace_manifest(&staging) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(error);
+        }
+    };
+    if manifest.slug != slug {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(format!("下载的技能包标识与请求不一致：{slug}"));
+    }
+    if let Err(error) = validate_marketplace_tree(&staging, &manifest) {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+    if directory.exists() {
+        let metadata = fs::symlink_metadata(&directory)
+            .map_err(|error| format!("无法读取技能目录 {}：{error}", directory.display()))?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(format!("拒绝覆盖非普通技能目录 {}", directory.display()));
+        }
+        let installed = installed_manifest(&directory, slug)?;
+        if installed
+            .as_ref()
+            .is_some_and(|value| value.version == manifest.version)
+        {
+            let _ = fs::remove_dir_all(&staging);
+            return Ok(directory.join("SKILL.md").display().to_string());
+        }
+        fs::rename(&directory, &backup)
+            .map_err(|error| format!("无法暂存旧技能目录 {}：{error}", directory.display()))?;
+    }
+    if let Err(error) = fs::rename(&staging, &directory) {
+        if backup.exists() {
+            let _ = fs::rename(&backup, &directory);
+        }
+        let _ = fs::remove_dir_all(&staging);
+        return Err(format!("无法启用下载的技能 {}：{error}", slug));
+    }
+    if backup.exists() {
+        fs::remove_dir_all(&backup).map_err(|error| {
+            format!("技能已更新，但无法移除旧版本 {}：{error}", backup.display())
+        })?;
+    }
+    Ok(directory.join("SKILL.md").display().to_string())
+}
+
 #[tauri::command]
 fn list_marketplace_skills(app: tauri::AppHandle) -> Result<Vec<MarketplaceSkillState>, String> {
     let resource_root = marketplace_resource_root(&app)?;
     let skills_root = user_skills_root(&app)?;
     let catalog = read_marketplace_catalog(&resource_root)?;
-    catalog
-        .skills
+    let mut manifests = catalog.skills;
+    if skills_root.exists() {
+        for entry in fs::read_dir(&skills_root)
+            .map_err(|error| format!("无法枚举用户技能目录 {}：{error}", skills_root.display()))?
+        {
+            let entry = entry.map_err(|error| format!("无法读取用户技能目录项：{error}"))?;
+            let metadata = entry.file_type().map_err(|error| {
+                format!("无法读取技能目录类型 {}：{error}", entry.path().display())
+            })?;
+            if metadata.is_symlink() || !metadata.is_dir() {
+                continue;
+            }
+            let Ok(manifest) = read_marketplace_manifest(&entry.path()) else {
+                continue;
+            };
+            if manifest.slug.is_empty() || manifests.iter().any(|item| item.slug == manifest.slug) {
+                continue;
+            }
+            manifests.push(manifest);
+        }
+    }
+    manifests
         .into_iter()
         .map(|manifest| {
             let directory = skills_root.join(&manifest.slug);
@@ -627,7 +755,14 @@ fn list_marketplace_skills(app: tauri::AppHandle) -> Result<Vec<MarketplaceSkill
 }
 
 #[tauri::command]
-fn install_marketplace_skill(app: tauri::AppHandle, slug: String) -> Result<String, String> {
+fn install_marketplace_skill(
+    app: tauri::AppHandle,
+    slug: String,
+    files: Option<Vec<CustomSkillFile>>,
+) -> Result<String, String> {
+    if let Some(files) = files {
+        return install_marketplace_skill_files_at(&user_skills_root(&app)?, &slug, files);
+    }
     let resource_root = marketplace_resource_root(&app)?;
     let skills_root = user_skills_root(&app)?;
     install_marketplace_skill_at(&resource_root, &skills_root, &slug)
@@ -652,7 +787,6 @@ fn uninstall_marketplace_skill_at(skills_root: &Path, slug: &str) -> Result<(), 
 
 #[tauri::command]
 fn uninstall_marketplace_skill(app: tauri::AppHandle, slug: String) -> Result<(), String> {
-    manifest_for_slug(&marketplace_resource_root(&app)?, &slug)?;
     uninstall_marketplace_skill_at(&user_skills_root(&app)?, &slug)
 }
 
@@ -1105,7 +1239,8 @@ pub fn run() {
 #[cfg(test)]
 mod marketplace_tests {
     use super::{
-        install_marketplace_skill_at, save_session_log_archive_at, uninstall_marketplace_skill_at,
+        install_marketplace_skill_at, install_marketplace_skill_files_at,
+        save_session_log_archive_at, uninstall_marketplace_skill_at, CustomSkillFile,
     };
     use std::{
         fs,
@@ -1182,6 +1317,32 @@ mod marketplace_tests {
 
         uninstall_marketplace_skill_at(&user.0, "market-test-skill").expect("uninstall");
         assert!(!user.0.join("market-test-skill").exists());
+    }
+
+    #[test]
+    fn installs_a_validated_downloaded_package() {
+        let user = TestDirectory::new();
+        let files = vec![
+            CustomSkillFile {
+                path: "manifest.json".to_string(),
+                content: br#"{"id":"test-skill","slug":"market-test-skill","version":"2.0.0","files":["manifest.json","SKILL.md","scripts/invoke.ps1"]}"#.to_vec(),
+            },
+            CustomSkillFile {
+                path: "SKILL.md".to_string(),
+                content: b"---\nname: market-test-skill\n---\n\n# Downloaded\n".to_vec(),
+            },
+            CustomSkillFile {
+                path: "scripts/invoke.ps1".to_string(),
+                content: b"Write-Output downloaded\n".to_vec(),
+            },
+        ];
+        install_marketplace_skill_files_at(&user.0, "market-test-skill", files)
+            .expect("install downloaded package");
+        assert_eq!(
+            fs::read_to_string(user.0.join("market-test-skill/scripts/invoke.ps1"))
+                .expect("downloaded script"),
+            "Write-Output downloaded\n"
+        );
     }
 
     #[test]

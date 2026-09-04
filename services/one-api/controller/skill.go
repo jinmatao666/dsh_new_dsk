@@ -214,12 +214,10 @@ func GetSkillDisplayNames(c *gin.Context) {
 	})
 }
 
-// GetSkillBundle returns the assets payload for a single public skill.
-// Used by client-side sync/install to pull the bundled files (scripts/templates)
-// that must live on the user's machine. The skill body (工作手册正文) is
-// deliberately NOT returned here — it is injected server-side at chat time via
-// the X-Parvis-Skills header (see middleware.SkillInject), so it never needs to
-// be downloaded. Only visible skills (status==1 && !is_deleted) are served.
+// GetSkillBundle returns the downloadable file set for one published skill.
+// The package is available only to authenticated users and includes the local
+// SKILL.md plus executable assets required by the desktop runtime. Only visible
+// skills (status==1 && !is_deleted) are served.
 func GetSkillBundle(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -244,11 +242,8 @@ func GetSkillBundle(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			// 刻意不返回 body：skill 正文（工作手册）客户端本地不落盘、也不需要，
-			// 问答时由服务端 SkillInject 中间件按 X-Parvis-Skills 头注入。bundle 只
-			// 负责下发 assets（脚本/模板等必须落到用户机器上执行的随包文件）。
-			// 这样把"批量下载正文"这条最廉价的泄露路径砍掉；正文仅剩注入路径可达，
-			// 提取需逐次套话，成本大幅提高。body_updated_at 仅为时间戳，非内容，保留。
+			// 规范化文件集合存于 assets。客户端按 manifest.json 校验文件清单后再原子
+			// 写入本机技能目录；Body 仍由推理请求的注入链路使用，无需重复返回。
 			"body":              "",
 			"assets":            skill.Assets,
 			"body_updated_at":   skill.BodyUpdatedAt,

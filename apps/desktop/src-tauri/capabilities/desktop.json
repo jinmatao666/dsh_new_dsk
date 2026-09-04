@@ -12,6 +12,9 @@
     "allow-save-session-log-archive",
     "allow-list-marketplace-skills",
     "allow-install-marketplace-skill",
-    "allow-uninstall-marketplace-skill"
+    "allow-uninstall-marketplace-skill",
+    "allow-install-custom-skill",
+    "allow-uninstall-custom-skill",
+    "allow-list-custom-skills"
   ]
 }

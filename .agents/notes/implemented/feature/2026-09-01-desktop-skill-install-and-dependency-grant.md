@@ -10,7 +10,7 @@ Desktop users need an install action in the skill marketplace that creates a ski
 
 ## Decision
 
-The desktop installer carries official skill bundles as inactive read-only resources. The marketplace passes only a catalog slug to a native Tauri command, which validates the bundled manifest and atomically copies the complete bundle into the current user's `.dsh/skills/<slug>/` directory. The filesystem skill provider watches only that user root, so bundled skills remain unavailable until installation and a newly created conversation discovers an installed skill through the ordinary catalog. Installation state comes from the filesystem rather than browser storage. Updates and removal accept only a matching marketplace manifest or a recognized legacy marketplace `SKILL.md`; unrelated same-name user directories remain untouched.
+The OneAPI server owns the official skill catalogue and package bytes. At startup it creates missing records for the three bundled GIS skills without overwriting an administrator's later edits or publish state. The authenticated desktop host downloads a published package from the server; the renderer relays the package file set to a native Tauri command, which validates the manifest and atomically writes it into the current user's `.dsh/skills/<slug>/` directory. The installer still carries the same packages as an offline recovery source, but normal installation and updates use the server copy. The filesystem skill provider watches only that user root, so a newly created conversation discovers a skill after installation. Installation state comes from the filesystem rather than browser storage. Updates and removal accept only a matching marketplace manifest or a recognized legacy marketplace `SKILL.md`; unrelated same-name user directories remain untouched.
 
 Users may add a complete custom skill directory through the marketplace. The browser supplies only files selected by the user; the native command validates every relative path, a UTF-8 root `SKILL.md`, its kebab-case name, file count, and total size before atomically creating a marked directory under `.dsh/skills`. Only marked custom directories are removable from that UI. Search and “My installed” use the actual filesystem state for official and custom skills.
 
@@ -28,7 +28,7 @@ The desktop release matrix builds Linux x64 on Ubuntu 22.04 alongside the existi
 
 **Keep marketplace installation in browser storage** — rejected. A browser-only installed marker cannot place a skill in the host catalog or make it callable by a new conversation.
 
-**Send skill source from the renderer to the native installer** — rejected. Renderer-provided source can diverge from the reviewed package and gives web content authority to create arbitrary user skills. The native command installs only validated resources shipped with the application.
+**Trust arbitrary renderer-provided source as an official package** — rejected. The renderer may relay an authenticated server response, but the native command validates every file path and the manifest before replacing a marketplace directory. Browser-selected source remains the separate custom-skill flow.
 
 **Install every bundled skill on application startup** — rejected. Preinstalling the bundles makes them model-visible without a user choice and prevents the Marketplace from representing actual local state.
 
@@ -38,9 +38,9 @@ The desktop release matrix builds Linux x64 on Ubuntu 22.04 alongside the existi
 
 ## Consequences
 
-Installed marketplace skills are local to the desktop user and become available after the next conversation catalog fetch. The Marketplace UI can still render in a non-desktop browser, but only official packaged entries expose an enabled install action. Mock entries remain previewable and identify that no installable package exists.
+Installed marketplace skills are local to the desktop user and become available after the next conversation catalog fetch. The Marketplace UI can still render in a non-desktop browser, but only published server entries expose an enabled install action. A server version newer than the locally installed manifest appears as an update action and downloads the new server package. Mock entries remain previewable and identify that no installable package exists.
 
-The checked-in official manifests generate the desktop metadata projection. The administrator's skill list is backed by the server `skills` records rather than browser mock data; create, edit, delete, publish, and unpublish update that source. The desktop marketplace reads the public server list after authentication, so server-side publish state takes effect when the marketplace refreshes. The server must enable its `remote_skills` capability for these routes.
+The checked-in official manifests generate the desktop metadata projection and seed missing server records. The administrator's skill list is backed by the server `skills` records rather than browser mock data; create, edit, delete, publish, and unpublish update that source. The desktop marketplace reads the public server list after authentication, so server-side publish state takes effect when the marketplace refreshes. The server must enable its `remote_skills` capability for these routes.
 
 The desktop sidebar exposes Automations, Connectors, Expert Teams, and the Marketplace as separate actions stacked above Settings. Each action owns its own overlay and navigation state; the Marketplace no longer uses top-level product tabs to switch among those surfaces.
 
@@ -60,4 +60,4 @@ Workspace Write treats a pre-existing output filename as a user-owned choice. Th
 
 ## Verification
 
-Focused approval and deliverable tests cover the session grant and source-file exclusion. GIS invocation checks cover GeoJSON, Shape ZIP, Shape directory, and direct Shape-file inputs, including timestamped JSON, Markdown, Excel, and Word artifacts. Catalog validation checks identifiers, versions, declared files, and path containment. Native tests cover complete-directory installation, updates, legacy migration, custom-directory validation, ownership refusal, and removal. Type checking covers the marketplace, approval, and deliverables packages; Rust checks cover the desktop native commands.
+Focused approval and deliverable tests cover the session grant and source-file exclusion. GIS invocation checks cover GeoJSON, Shape ZIP, Shape directory, and direct Shape-file inputs, including timestamped JSON, Markdown, Excel, and Word artifacts. Catalog validation checks identifiers, versions, declared files, and path containment. Native tests cover complete-directory installation, authenticated-server package installation, updates, legacy migration, custom-directory validation, ownership refusal, and removal. Type checking covers the marketplace, approval, and deliverables packages; Rust checks cover the desktop native commands.

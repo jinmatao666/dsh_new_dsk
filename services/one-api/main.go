@@ -62,6 +62,9 @@ func main() {
 
 	// Initialize SQL Database
 	model.InitDB()
+	if err := seedBundledOfficialSkills(); err != nil {
+		logger.FatalLog("内置技能初始化失败: " + err.Error())
+	}
 	if err := model.MigratePlaintextChannelKeys(); err != nil {
 		logger.FatalLog("channel key migration failed: " + err.Error())
 	}

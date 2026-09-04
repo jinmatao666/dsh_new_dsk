@@ -8,7 +8,7 @@
   "category": "空间制图",
   "tags": ["官方", "推荐"],
   "capabilities": ["GeoJSON 与 Shape 面范围识别", "地质灾害隐患分区分析", "Excel 明细与 Word 专业报告交付"],
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "ZJUGIS GIS 服务",
   "submitter": "root",
   "createdAt": "2026-08-29 09:30:00",

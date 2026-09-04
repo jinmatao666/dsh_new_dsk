@@ -329,6 +329,22 @@ export function apply(ctx: Context, config: Config): void {
     return jsonBody<unknown>(response)
   }
 
+  const downloadPublishedSkillBundle = async (payload: unknown, signal?: AbortSignal): Promise<unknown> => {
+    const id = typeof (payload as { id?: unknown })?.id === 'number' ? (payload as { id: number }).id : Number.NaN
+    if (!Number.isInteger(id) || id < 1) throw new Error('技能标识无效')
+    const token = (await ctx.credentials.resolve(ref))?.value
+    if (token === undefined) throw new Error('请先登录后再安装技能')
+    const response = await fetch(`${baseURL}/api/skill/${String(id)}/bundle`, {
+      headers: { authorization: `Bearer ${token}` },
+      ...(signal === undefined ? {} : { signal }),
+    })
+    const result = await jsonBody<OneApiEnvelope<unknown>>(response)
+    if (!response.ok || result.success !== true || result.data === undefined) {
+      throw new Error(result.message ?? `技能包下载失败（HTTP ${String(response.status)}）`)
+    }
+    return result.data
+  }
+
   // Credentials intentionally survive normal restarts, but a newly built
   // installer carries a new marker and must show the login screen once.
   const installReady = (async (): Promise<void> => {
@@ -412,6 +428,13 @@ export function apply(ctx: Context, config: Config): void {
     if (endpoint === 'skill-list') {
       try {
         return { ok: true as const, value: await listPublishedSkills(signal) }
+      } catch (error) {
+        return internal(error instanceof Error ? error.message : String(error))
+      }
+    }
+    if (endpoint === 'skill-bundle') {
+      try {
+        return { ok: true as const, value: await downloadPublishedSkillBundle(payload, signal) }
       } catch (error) {
         return internal(error instanceof Error ? error.message : String(error))
       }

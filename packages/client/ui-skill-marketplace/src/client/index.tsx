@@ -24,6 +24,7 @@ type Skill = {
   params?: readonly SkillParam[]
   slug?: string
   installable?: boolean
+  remoteId?: number
 }
 
 type MarketplaceInstallState = 'notInstalled' | 'installed' | 'updateAvailable' | 'conflict'
@@ -98,6 +99,7 @@ type RemoteSkill = {
 }
 
 let loadRemoteSkills: (() => Promise<RemoteSkill[]>) | undefined
+let loadRemoteSkillBundle: ((id: number) => Promise<unknown>) | undefined
 
 function rpcValue(result: RpcResult<unknown>): unknown {
   if (!result.ok) throw new Error(result.error.message)
@@ -124,6 +126,26 @@ function marketplaceInstallErrorMessage(error: unknown): string {
   if (typeof error === 'string' && error.trim() !== '') return error
   if (error instanceof Error && error.message.trim() !== '') return error.message
   return '技能安装失败'
+}
+
+function serverSkillFiles(bundle: unknown): Array<{ path: string; content: number[] }> {
+  const assets = (typeof bundle === 'object' && bundle !== null ? (bundle as { assets?: unknown }).assets : undefined)
+  if (typeof assets !== 'string') throw new Error('服务器返回的技能包缺少文件内容')
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(assets)
+  } catch {
+    throw new Error('服务器返回的技能包格式无效')
+  }
+  const files = typeof parsed === 'object' && parsed !== null ? (parsed as { files?: unknown }).files : undefined
+  if (!Array.isArray(files) || files.length === 0) throw new Error('服务器返回的技能包不包含文件')
+  return files.map((file) => {
+    const path = typeof file === 'object' && file !== null ? (file as { path?: unknown }).path : undefined
+    const contentBase64 = typeof file === 'object' && file !== null ? (file as { contentBase64?: unknown }).contentBase64 : undefined
+    if (typeof path !== 'string' || typeof contentBase64 !== 'string') throw new Error('服务器返回的技能文件格式无效')
+    const binary = atob(contentBase64)
+    return { path, content: Array.from(binary, char => char.charCodeAt(0)) }
+  })
 }
 
 const L = {
@@ -174,6 +196,7 @@ const CATEGORIES = [
   '办公文档',
   '数据分析',
 ]
+
 
 const MOCK_SKILLS: readonly Skill[] = [
   { id: 'land-evaluation', name: '土地评估报告', category: '空间制图', tags: ['推荐'], summary: '写土地评估报告，基于宗地数据与基准地价生成规范化评估文书。', description: '面向土地估价场景的报告生成技能，覆盖估价方法选择（市场比较法、收益还原法、剩余法等）、参数取值说明、结果校验与报告排版，输出符合行业规范的土地评估报告。', installs: '53', accent: '#2563eb', icon: '地', version: '1.0.0', author: '规划测绘院', featured: true, params: [{ name: 'benchmarkPrice', type: 'number', required: false, description: '所在区域基准地价（元/平方米），缺省时按最新公示地价取值' }] },
@@ -662,10 +685,6 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
   const [remoteSkills, setRemoteSkills] = useState<RemoteSkill[] | null>(null)
 
   const [installStates, setInstallStates] = useState<Map<string, MarketplaceSkillState>>(new Map())
-  const installed = useMemo(() => new Set([...installStates.values()]
-    .filter(value => value.state === 'installed' || value.state === 'updateAvailable')
-    .map(value => value.id)), [installStates])
-
   const refreshInstallStates = async () => {
     try {
       const [value, customValue] = await Promise.all([
@@ -751,7 +770,9 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
     return () => { document.removeEventListener('pointerdown', closeForSidebarAction, true) }
   }, [open])
 
-  const allSkills = useMemo(() => {
+  const allSkills = useMemo<Skill[]>(() => {
+    // Demonstration cards are a desktop-only presentation fallback. They are
+    // never sent to, listed by, or installed from the management backend.
     if (remoteSkills === null) return [...discoveredCustomSkills, ...MOCK_SKILLS]
     const bySlug = new Map(OFFICIAL_SKILLS.map(skill => [skillSlug(skill), skill]))
     const published = remoteSkills.flatMap((remote): Skill[] => {
@@ -761,6 +782,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
       const official = bySlug.get(slug)
       if (official !== undefined) return [{
         ...official,
+        ...(typeof remote.id === 'number' ? { remoteId: remote.id } : {}),
         name: typeof remote.display_name === 'string' && remote.display_name !== '' ? remote.display_name : official.name,
         summary: typeof remote.description === 'string' && remote.description !== '' ? remote.description : official.summary,
         installs: String(typeof remote.downloads === 'number' ? remote.downloads : official.installs),
@@ -768,6 +790,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
       }]
       return [{
         id: `remote-${remoteId}`,
+        ...(typeof remote.id === 'number' ? { remoteId: remote.id } : {}),
         slug,
         name: typeof remote.display_name === 'string' && remote.display_name !== '' ? remote.display_name : slug,
         category: typeof remote.category === 'string' && remote.category !== '' ? remote.category : '其他',
@@ -777,12 +800,22 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
         installs: String(typeof remote.downloads === 'number' ? remote.downloads : 0),
         accent: '#2563eb', icon: '技', version: typeof remote.version === 'string' ? remote.version : '1.0.0',
         author: typeof remote.submitter === 'string' ? remote.submitter : '平台管理员',
-        installable: false,
+        installable: true,
       }]
     })
     const demonstrations = MOCK_SKILLS.filter(skill => !skill.tags.includes('官方'))
     return [...discoveredCustomSkills, ...published, ...demonstrations]
   }, [discoveredCustomSkills, remoteSkills])
+  const resolveInstallState = (skill: Skill): MarketplaceInstallState => {
+    const state = installStates.get(skill.id) ?? [...installStates.values()].find(item => item.slug === skillSlug(skill))
+    if (state === undefined) return 'notInstalled'
+    if (state.state !== 'installed' && state.state !== 'updateAvailable') return state.state
+    return state.installedVersion === skill.version ? 'installed' : 'updateAvailable'
+  }
+  const isInstalled = (skill: Skill): boolean => {
+    const state = resolveInstallState(skill)
+    return state === 'installed' || state === 'updateAvailable'
+  }
   const featuredPool = useMemo(() => allSkills
     .filter(skill => skill.featured)
     .sort((left, right) => Number(right.tags.includes('官方')) - Number(left.tags.includes('官方'))), [allSkills])
@@ -810,10 +843,10 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
       skills = skills.filter(s => `${s.name} ${s.summary} ${s.category}`.toLowerCase().includes(q))
     }
     if (showInstalledOnly) {
-      skills = skills.filter(s => installed.has(s.id))
+      skills = skills.filter(isInstalled)
     }
     return skills
-  }, [activeSubTab, allSkills, category, query, showInstalledOnly, installed])
+  }, [activeSubTab, allSkills, category, query, showInstalledOnly, installStates])
 
   if (!open) return null
 
@@ -826,7 +859,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
       return
     }
     const slug = skillSlug(skill)
-    const currentState = installStates.get(skill.id)?.state ?? 'notInstalled'
+    const currentState = resolveInstallState(skill)
     setInstallMessage(null)
     setInstalling(skill.id)
     let installedPath: unknown
@@ -842,7 +875,10 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
       } else if (currentState === 'installed') {
         await desktopInvoke('uninstall_marketplace_skill', { slug })
       } else {
-        installedPath = await desktopInvoke('install_marketplace_skill', { slug })
+        const files = skill.remoteId !== undefined && loadRemoteSkillBundle !== undefined
+          ? serverSkillFiles(await loadRemoteSkillBundle(skill.remoteId))
+          : undefined
+        installedPath = await desktopInvoke('install_marketplace_skill', { slug, files })
       }
     } catch (error) {
       setInstallMessage({ kind: 'error', text: marketplaceInstallErrorMessage(error) })
@@ -853,7 +889,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
     const nowInstalled = currentState !== 'installed'
     await refreshInstallStates()
     setInstallMessage(nowInstalled
-      ? { kind: 'success', text: `已安装到 ${typeof installedPath === 'string' ? installedPath : `~/.dsh/skills/${slug}/SKILL.md`}。新建对话后可输入 /${slug} 调用。` }
+      ? { kind: 'success', text: `${currentState === 'updateAvailable' ? '技能已更新到' : '已安装到'} ${typeof installedPath === 'string' ? installedPath : `~/.dsh/skills/${slug}/SKILL.md`}。新建对话后可输入 /${slug} 调用。` }
       : { kind: 'success', text: '技能已从本机移除。' })
   }
 
@@ -942,7 +978,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
           <SkillDetail
             skill={selectedSkill}
             onBack={() => { setView('list') }}
-            installState={installStates.get(selectedSkill.id)?.state ?? 'notInstalled'}
+            installState={resolveInstallState(selectedSkill)}
             installing={installing === selectedSkill.id}
             onToggleInstall={() => void toggleInstall(selectedSkill)}
           />
@@ -996,12 +1032,12 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                         </div>
                         <button
                           type="button"
-                          className={installed.has(skill.id) ? 'installed' : ''}
+                          className={isInstalled(skill) ? 'installed' : ''}
                           onClick={(e) => { e.stopPropagation(); void toggleInstall(skill) }}
-                          disabled={installing === skill.id || skill.installable !== true || installStates.get(skill.id)?.state === 'conflict'}
+                          disabled={installing === skill.id || skill.installable !== true || resolveInstallState(skill) === 'conflict'}
                           title={skill.installable === true ? undefined : '演示技能暂未开放安装'}
                         >
-                          {installed.has(skill.id) ? <CheckIcon /> : <PlusIcon />}
+                          {resolveInstallState(skill) === 'updateAvailable' ? '更新' : isInstalled(skill) ? <CheckIcon /> : <PlusIcon />}
                         </button>
                       </article>
                     ))}
@@ -1135,6 +1171,7 @@ export function apply(ctx: ClientContext): void {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'skill-list', {})) as { items?: unknown }
     return Array.isArray(raw?.items) ? raw.items.filter((item): item is RemoteSkill => typeof item === 'object' && item !== null) : []
   }
+  loadRemoteSkillBundle = async (id: number) => rpcValue(await connection.rpc.call('/desktop-auth', 'skill-bundle', { id }))
   const marketplaceUrl = (process.env.DSH_CLIENT_SKILL_MARKETPLACE_URL ?? 'https://skills.zjugis.com/').trim()
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(
