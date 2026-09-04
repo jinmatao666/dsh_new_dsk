@@ -63,17 +63,15 @@ function producedPaths(view: ToolResultNode['callView']): readonly string[] {
 /**
  * Deliverable files reported by a successful terminal command.
  *
- * Script-driven PowerPoint generation is intentionally kept as a terminal
- * workflow: it may use PowerPoint COM or a project-specific generator rather
- * than the mutation tools.  Those tools have no `locations` fact for the
- * generated document, so recognise an explicit final-file path from the
- * output and publish it beside normal mutation-tool deliverables. This keeps
- * a later revision of a Word or spreadsheet deliverable visible rather than
- * leaving only its generator script in the final row.
+ * Script-driven document and analysis generation is intentionally kept as a
+ * terminal workflow: it may use a project-specific generator rather than the
+ * mutation tools. Those tools have no `locations` fact for the final file, so
+ * recognize an explicit written path from the output and publish it beside
+ * normal mutation-tool deliverables.
  */
 function deliverablePaths(text: string): readonly string[] {
   const deliverablePattern =
-    /(?:[A-Za-z]:[^\r\n"'`<>|]*?\.(?:docx|xlsx|pptx|pdf)|[^\s"'`<>|]+\.(?:docx|xlsx|pptx|pdf))/g
+    /(?:[A-Za-z]:[\\/][^\r\n"'`<>|]*?\.(?:docx|xlsx|pptx|pdf|json|md)|[^\s"'`<>|:]+\.(?:docx|xlsx|pptx|pdf|json|md))/g
   // Terminal output frequently repeats an input file path while reading it.
   // Treat a path as a deliverable only when the same output line explicitly
   // says it was written/generated/saved. This keeps source PDFs out of the

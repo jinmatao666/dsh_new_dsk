@@ -12,6 +12,7 @@ const catalogPath = join(skillsRoot, 'catalog.json');
 const desktopProjectionPath = join(repositoryRoot, 'packages', 'client', 'ui-skill-marketplace', 'src', 'client', 'official-skills.generated.ts');
 const adminProjectionPath = join(airRoot, 'src', 'components', 'officialSkills.generated.mjs');
 const check = process.argv.includes('--check');
+const adminOnly = process.argv.includes('--admin-only');
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const semverPattern = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/;
 
@@ -80,7 +81,7 @@ const adminSkills = manifests.map(manifest => ({
 const adminProjection = `/** Generated from the checked-in official skill manifests. */\nexport const OFFICIAL_SKILLS = ${JSON.stringify(adminSkills, null, 2)};\n`;
 
 await emit(catalogPath, catalog);
-await emit(desktopProjectionPath, desktopProjection);
+if (!adminOnly) await emit(desktopProjectionPath, desktopProjection);
 await emit(adminProjectionPath, adminProjection);
 console.log(`${check ? 'Verified' : 'Generated'} ${manifests.length} official skill packages.`);
 

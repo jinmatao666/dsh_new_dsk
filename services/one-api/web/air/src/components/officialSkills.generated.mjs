@@ -10,14 +10,14 @@ export const OFFICIAL_SKILLS = [
       "官方",
       "推荐"
     ],
-    "summary": "调用 GIS_Service 分析指定面范围的地质灾害隐患分区与地质环境条件。",
-    "description": "读取当前工作区的 GeoJSON 面范围，调用地质条件分析服务并交付不可覆盖的原始分析结果。使用前必须确认输入坐标系与服务数据一致。",
+    "summary": "识别 GeoJSON、Shape 文件夹或 Shape ZIP 的项目范围，调用 GIS_Service 分析地质环境与地质灾害隐患分区。",
+    "description": "读取工作区中的 GeoJSON、完整 Shape 文件夹、.shp 文件或 Shape ZIP，自动提取面范围和坐标系信息，调用地质条件分析服务并交付原始结果 JSON 与 Markdown 分析文档。",
     "capabilities": [
-      "GeoJSON 面范围校验",
+      "GeoJSON 与 Shape 面范围识别",
       "地质灾害隐患分区分析",
-      "原始分析结果留档"
+      "原始 JSON 与 Markdown 结果交付"
     ],
-    "version": "1.0.0",
+    "version": "1.0.2",
     "team": "ZJUGIS GIS 服务",
     "submitter": "root",
     "created_at": "2026-08-29 09:30:00",
@@ -26,10 +26,10 @@ export const OFFICIAL_SKILLS = [
     "status": "published",
     "params": [
       {
-        "name": "geoJsonFile",
+        "name": "inputPath",
         "type": "file",
         "required": true,
-        "description": "包含 Polygon 或 MultiPolygon 的 GeoJSON 文件"
+        "description": "Polygon/MultiPolygon GeoJSON、.shp、包含完整 Shape 文件的 ZIP 或文件夹"
       },
       {
         "name": "YfxFieldName",
@@ -58,14 +58,14 @@ export const OFFICIAL_SKILLS = [
       "官方",
       "推荐"
     ],
-    "summary": "调用 GIS_Service 对项目范围开展土地利用规划符合性审查。",
-    "description": "读取当前工作区的 GeoJSON 面范围，调用规划审查接口并交付不可覆盖的原始审查结果。当前服务示例审查类别 Blxsw 默认为 4。",
+    "summary": "识别 GeoJSON、Shape 文件夹或 Shape ZIP 的项目范围，调用 GIS_Service 开展土地利用规划符合性审查。",
+    "description": "读取工作区中的 GeoJSON、完整 Shape 文件夹、.shp 文件或 Shape ZIP，自动提取面范围和坐标系信息，调用规划审查接口并交付原始结果 JSON 与 Markdown 分析文档。当前服务示例审查类别 Blxsw 默认为 4。",
     "capabilities": [
-      "GeoJSON 面范围校验",
+      "GeoJSON 与 Shape 面范围识别",
       "土地利用规划符合性审查",
-      "原始审查结果留档"
+      "原始 JSON 与 Markdown 结果交付"
     ],
-    "version": "1.0.0",
+    "version": "1.0.2",
     "team": "ZJUGIS GIS 服务",
     "submitter": "root",
     "created_at": "2026-08-29 09:35:00",
@@ -74,10 +74,10 @@ export const OFFICIAL_SKILLS = [
     "status": "published",
     "params": [
       {
-        "name": "geoJsonFile",
+        "name": "inputPath",
         "type": "file",
         "required": true,
-        "description": "包含 Polygon 或 MultiPolygon 的 GeoJSON 文件"
+        "description": "Polygon/MultiPolygon GeoJSON、.shp、包含完整 Shape 文件的 ZIP 或文件夹"
       },
       {
         "name": "Blxsw",
@@ -91,6 +91,7 @@ export const OFFICIAL_SKILLS = [
       "manifest.json",
       "SKILL.md",
       "scripts/invoke.ps1",
+      "scripts/invoke-implementation.ps1",
       "references/api.md"
     ],
     "package_base": "/skills/market-gis-land-use-plan-review",
@@ -106,14 +107,14 @@ export const OFFICIAL_SKILLS = [
       "官方",
       "推荐"
     ],
-    "summary": "调用 GIS_Service 对指定面范围开展三调土地利用现状与图斑专项分析。",
-    "description": "读取当前工作区的 GeoJSON 面范围与三调年度，调用 SanDXzAnalysis 并交付不可覆盖的原始分析结果。",
+    "summary": "识别 GeoJSON、Shape 文件夹或 Shape ZIP 的项目范围，调用 GIS_Service 开展三调土地利用现状与图斑分析。",
+    "description": "读取工作区中的 GeoJSON、完整 Shape 文件夹、.shp 文件或 Shape ZIP，自动提取面范围和坐标系信息，调用 SanDXzAnalysis 并交付原始结果 JSON 与 Markdown 分析文档。",
     "capabilities": [
-      "GeoJSON 面范围校验",
+      "GeoJSON 与 Shape 面范围识别",
       "三调现状与图斑分析",
-      "原始分析结果留档"
+      "原始 JSON 与 Markdown 结果交付"
     ],
-    "version": "1.0.0",
+    "version": "1.0.2",
     "team": "ZJUGIS GIS 服务",
     "submitter": "root",
     "created_at": "2026-08-29 09:40:00",
@@ -122,10 +123,10 @@ export const OFFICIAL_SKILLS = [
     "status": "published",
     "params": [
       {
-        "name": "geoJsonFile",
+        "name": "inputPath",
         "type": "file",
         "required": true,
-        "description": "包含 Polygon 或 MultiPolygon 的 GeoJSON 文件"
+        "description": "Polygon/MultiPolygon GeoJSON、.shp、包含完整 Shape 文件的 ZIP 或文件夹"
       },
       {
         "name": "Xznf",
@@ -139,6 +140,7 @@ export const OFFICIAL_SKILLS = [
       "manifest.json",
       "SKILL.md",
       "scripts/invoke.ps1",
+      "scripts/invoke-implementation.ps1",
       "references/api.md"
     ],
     "package_base": "/skills/market-gis-third-survey-analysis",

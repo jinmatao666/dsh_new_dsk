@@ -297,6 +297,31 @@ describe('produced-file Turn data', () => {
     value.flush()
     expect(producedForClosing(deliverablesOf(value))).toEqual(['first.txt', 'second.txt'])
   })
+
+  it('publishes explicitly generated JSON and Markdown files from terminal output', () => {
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      call(2, 'gis', { card: 'generic', title: 'Run GIS analysis' }),
+      at(3, 'tool/result', {
+        turn: 1,
+        step: 1,
+        message: {
+          source: { type: 'tool-result', callId: 'gis' },
+          content: [{ type: 'tool-result', content: [], isError: false }],
+        },
+      }, {
+        for: 'result',
+        view: {
+          card: 'terminal',
+          output: 'Generated result: E:\\workspace\\analysis-result.json\nGenerated report: E:\\workspace\\analysis-report.md',
+        },
+      }),
+    ])
+
+    expect(producedForClosing(deliverablesOf(value))).toEqual([
+      'E:\\workspace\\analysis-result.json', 'E:\\workspace\\analysis-report.md',
+    ])
+  })
 })
 
 describe('ProducedFiles row', () => {

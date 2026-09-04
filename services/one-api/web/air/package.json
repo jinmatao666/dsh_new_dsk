@@ -32,7 +32,8 @@
     "dev": "vite",
     "skills:generate": "node scripts/generate-official-skills.mjs",
     "skills:check": "node scripts/generate-official-skills.mjs --check",
-    "prebuild": "npm run skills:check",
+    "skills:check:admin": "node scripts/generate-official-skills.mjs --check --admin-only",
+    "prebuild": "npm run skills:check:admin",
     "build": "react-scripts build && node scripts/finalize-build.mjs",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

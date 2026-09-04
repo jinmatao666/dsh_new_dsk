@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-marketplace-skills"
+description = "Enables the list_marketplace_skills command without any pre-configured scope."
+commands.allow = ["list_marketplace_skills"]
+
+[[permission]]
+identifier = "deny-list-marketplace-skills"
+description = "Denies the list_marketplace_skills command without any pre-configured scope."
+commands.deny = ["list_marketplace_skills"]

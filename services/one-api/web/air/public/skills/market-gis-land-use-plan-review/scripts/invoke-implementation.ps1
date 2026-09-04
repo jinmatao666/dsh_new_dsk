@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][Alias('GeoJsonFile')][string]$InputPath,
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
-    [string]$YfxFieldName = '',
+    [int]$Blxsw = 4,
     [string]$BaseUrl = ''
 )
 
@@ -129,7 +129,7 @@ function Resolve-Input([string]$path) {
 
 function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath, $response, [string]$responseParseError) {
     $lines = [System.Collections.Generic.List[string]]::new()
-    [void]$lines.Add('# Geological condition analysis result')
+    [void]$lines.Add('# Land-use plan review result')
     [void]$lines.Add('')
     [void]$lines.Add('## Input inspection')
     [void]$lines.Add("- Source type: $($sourceInfo.SourceKind)")
@@ -164,29 +164,26 @@ try {
     $outputPath = [System.IO.Path]::GetFullPath($OutputDirectory)
     [System.IO.Directory]::CreateDirectory($outputPath) | Out-Null
     $rings = $resolved.Rings
-if ([string]::IsNullOrWhiteSpace($YfxFieldName)) {
-    $YfxFieldName = -join (0x5206, 0x533A, 0x540D, 0x79F0 | ForEach-Object { [char]$_ })
-}
 if ([string]::IsNullOrWhiteSpace($BaseUrl)) { $BaseUrl = $env:DSH_GIS_SERVICE_URL }
 if ([string]::IsNullOrWhiteSpace($BaseUrl)) { $BaseUrl = 'http://60.191.110.206:38010' }
 $arcGeometry = @{ hasZ = $false; hasM = $false; rings = $rings } | ConvertTo-Json -Compress -Depth 100
 $body = @{
     GeoJson = $arcGeometry
     IsAnaXzCoverBp = $false
-    IsAnaDzzhyfqk = $true
-    IsAnaDzhjtj = $true
-    YfxFieldName = $YfxFieldName
+    Blxsw = $Blxsw
+    IsAnaGh = $true
+    IsAnaGhWithCZJSKZQ = $false
 } | ConvertTo-Json -Compress -Depth 100
 $uri = "$($BaseUrl.TrimEnd('/'))/Analysis.svc/OneKeyAnalysis"
 $response = Invoke-WebRequest -UseBasicParsing -Method Post -Uri $uri -ContentType 'text/plain; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 $stamp = Get-Date -Format 'yyyyMMdd_HHmmss_fff'
-$target = Join-Path $outputPath "geology-analysis-result_$stamp.json"
+$target = Join-Path $outputPath "land-use-plan-review-result_$stamp.json"
 $content = if ($response.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($response.Content) } else { [string]$response.Content }
 [System.IO.File]::WriteAllText($target, $content, [System.Text.UTF8Encoding]::new($false))
 $responseJson = $null
 $responseParseError = ''
 try { $responseJson = $content | ConvertFrom-Json } catch { $responseParseError = $_.Exception.Message }
-$report = Join-Path $outputPath "geology-analysis-report_$stamp.md"
+$report = Join-Path $outputPath "land-use-plan-review-report_$stamp.md"
 Write-AnalysisMarkdown $report $resolved $target $responseJson $responseParseError
 Write-Output "Generated result: $target"
 Write-Output "Generated report: $report"

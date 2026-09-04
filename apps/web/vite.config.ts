@@ -1,3 +1,6 @@
+import { mkdirSync, readdirSync } from 'node:fs'
+import { copyFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import type { Plugin } from 'vite'
@@ -107,9 +110,46 @@ function npmPackageOf(id: string): string | undefined {
   return first
 }
 
+/**
+ * Windows dev-loop hardening: the webview or a realtime scanner can briefly
+ * hold dist files that vite's public-dir copy is about to overwrite, which
+ * aborts `vite build --watch` and kills the whole desktop dev shell. Copy
+ * the public tree ourselves with retries and skip (keeping the stale file)
+ * when a target stays locked.
+ */
+function tolerantPublicCopy(): Plugin {
+  let publicDir = ''
+  let outDir = ''
+  const copyTree = async (from: string, to: string): Promise<void> => {
+    mkdirSync(to, { recursive: true })
+    for (const entry of readdirSync(from, { withFileTypes: true })) {
+      const source = join(from, entry.name)
+      const target = join(to, entry.name)
+      if (entry.isDirectory()) { await copyTree(source, target); continue }
+      for (let attempt = 0; ; attempt += 1) {
+        try { await copyFile(source, target); break } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code
+          if (code !== 'EBUSY' && code !== 'EPERM') throw error
+          if (attempt >= 4) { console.warn(`[dsh-tolerant-public-copy] skipped locked file: ${entry.name}`); break }
+          await new Promise(done => setTimeout(done, 150))
+        }
+      }
+    }
+  }
+  return {
+    name: 'dsh-tolerant-public-copy',
+    apply: 'build',
+    configResolved(config) { publicDir = config.publicDir; outDir = config.build.outDir },
+    async closeBundle() {
+      if (publicDir !== '' && outDir !== '') await copyTree(publicDir, outDir)
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [/* rejectStandaloneServe(), */ clientDocumentTitle(), react()],
+  plugins: [/* rejectStandaloneServe(), */ clientDocumentTitle(), tolerantPublicCopy(), react()],
   build: {
+    copyPublicDir: false,
     sourcemap: true,
     rollupOptions: {
       output: {

@@ -18,7 +18,10 @@ WORKDIR /web
 COPY web/air/package.json ./air/package.json
 COPY web/org-admin/package.json web/org-admin/package-lock.json ./org-admin/
 
-RUN npm install --prefix /web/air --no-audit --no-fund
+# npmmirror is the default for fast domestic builds. The mirror may lag new
+# Tiptap releases, so route that small package scope to npmjs explicitly.
+RUN npm config set @tiptap:registry https://registry.npmjs.org && \
+    npm install --prefix /web/air --no-audit --no-fund
 RUN npm ci --prefix /web/org-admin --no-audit --no-fund
 
 COPY web/air ./air

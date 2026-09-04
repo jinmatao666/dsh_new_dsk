@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-uninstall-marketplace-skill"
+description = "Enables the uninstall_marketplace_skill command without any pre-configured scope."
+commands.allow = ["uninstall_marketplace_skill"]
+
+[[permission]]
+identifier = "deny-uninstall-marketplace-skill"
+description = "Denies the uninstall_marketplace_skill command without any pre-configured scope."
+commands.deny = ["uninstall_marketplace_skill"]
