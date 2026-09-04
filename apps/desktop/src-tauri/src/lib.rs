@@ -209,6 +209,35 @@ fn uninstall_custom_skill(app: tauri::AppHandle, slug: String) -> Result<(), Str
         .map_err(|error| format!("无法移除自定义技能 {}：{error}", directory.display()))
 }
 
+/// Read a compact, skill-generated analysis view for the desktop conversation UI.
+///
+/// The command deliberately accepts only the timestamped analysis-view JSON files
+/// created by the bundled GIS skills, rather than exposing arbitrary local file reads.
+#[tauri::command]
+fn read_analysis_view(path: String) -> Result<String, String> {
+    let candidate = PathBuf::from(&path);
+    if !candidate.is_absolute() {
+        return Err("分析结果路径必须是绝对路径".to_string());
+    }
+    let filename = candidate
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "分析结果文件名无效".to_string())?;
+    if !filename.contains("-analysis-view_") || !filename.ends_with(".json") {
+        return Err("只能读取本次分析生成的结果视图文件".to_string());
+    }
+    let metadata = fs::metadata(&candidate)
+        .map_err(|error| format!("无法读取分析结果文件 {}：{error}", candidate.display()))?;
+    if !metadata.is_file() {
+        return Err("分析结果路径不是文件".to_string());
+    }
+    if metadata.len() > 2 * 1024 * 1024 {
+        return Err("分析结果文件过大，无法在对话中展示".to_string());
+    }
+    fs::read_to_string(&candidate)
+        .map_err(|error| format!("无法读取分析结果文件 {}：{error}", candidate.display()))
+}
+
 struct Sidecar(Arc<Mutex<Option<Child>>>);
 
 impl Sidecar {
@@ -1231,6 +1260,7 @@ pub fn run() {
             install_custom_skill,
             uninstall_custom_skill,
             list_custom_skills,
+            read_analysis_view,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DSH Desktop");
@@ -1239,7 +1269,7 @@ pub fn run() {
 #[cfg(test)]
 mod marketplace_tests {
     use super::{
-        install_marketplace_skill_at, install_marketplace_skill_files_at,
+        install_marketplace_skill_at, install_marketplace_skill_files_at, read_analysis_view,
         save_session_log_archive_at, uninstall_marketplace_skill_at, CustomSkillFile,
     };
     use std::{
@@ -1398,5 +1428,20 @@ mod marketplace_tests {
         assert_eq!(fs::read(first).expect("first bytes"), b"first");
         assert_eq!(fs::read(second).expect("second bytes"), b"second");
         assert!(save_session_log_archive_at(&downloads.0, "../escape.zip", b"bad").is_err());
+    }
+
+    #[test]
+    fn reads_only_timestamped_analysis_view_json() {
+        let workspace = TestDirectory::new();
+        let view = workspace
+            .0
+            .join("third-survey-analysis-view_20260905_120000_000.json");
+        fs::write(&view, r#"{"schema_version":1,"tables":[]}"#).expect("write view");
+
+        assert!(read_analysis_view(view.display().to_string())
+            .expect("read analysis view")
+            .contains("schema_version"));
+        assert!(read_analysis_view(workspace.0.join("other.json").display().to_string()).is_err());
+        assert!(read_analysis_view("relative-analysis-view_1.json".to_string()).is_err());
     }
 }

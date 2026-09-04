@@ -14,7 +14,7 @@ export const OFFICIAL_SKILLS = [
     'installs': '0',
     'accent': '#a855f7',
     'icon': '地',
-    'version': '1.2.0',
+    'version': '1.3.0',
     'author': 'ZJUGIS GIS 服务',
     'featured': true,
     'params': [
@@ -48,7 +48,7 @@ export const OFFICIAL_SKILLS = [
     'installs': '0',
     'accent': '#2563eb',
     'icon': '审',
-    'version': '1.2.0',
+    'version': '1.3.0',
     'author': 'ZJUGIS GIS 服务',
     'featured': true,
     'params': [
@@ -82,7 +82,7 @@ export const OFFICIAL_SKILLS = [
     'installs': '0',
     'accent': '#059669',
     'icon': '三',
-    'version': '1.2.0',
+    'version': '1.3.0',
     'author': 'ZJUGIS GIS 服务',
     'featured': true,
     'params': [

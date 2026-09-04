@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][Alias('GeoJsonFile')][string]$InputPath,
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
     [string]$YfxFieldName = '',
@@ -175,10 +175,16 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
             }
         }
         if ($environment.Count -eq 0 -and $hazards.Count -eq 0) { [void]$lines.Add('- ' + (Localized '5pyq6L+U5Zue5bey56Gu6K6k55qE5Zyw6LSo5YiG5p6Q5a2X5q6144CC')) }
+        [void]$lines.Add('')
+        [void]$lines.Add('## 专业研判与建议')
+        [void]$lines.Add('- 地质环境条件与地质灾害易发分区分别反映工程地质背景和灾害发生可能性，报告按两个图层独立统计，不跨图层叠加面积。')
+        [void]$lines.Add('- 对复杂程度或易发等级较高的局部范围，应在项目选址、场地设计和施工组织阶段优先开展针对性工程地质勘察。')
+        [void]$lines.Add('- 建议结合拟建工程类型核查边坡、地基稳定性、地下水和不良地质作用，并将高风险局部范围落实到勘察点位和防治措施。')
+        [void]$lines.Add('- 本次成果适用于前期空间筛查和风险识别，不替代法定地质灾害危险性评估、工程勘察或现场调查。')
     }
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5pWw5o2u6ZmQ5Yi2'))
-    [void]$lines.Add('- ' + (Localized '5Lul5LiL57uT6K665LuF5L6d5o2uIEdJUyDmnI3liqHov5Tlm57lgLzlkozlt7Lnoa7orqTlrZfmrrXlrZflhbjvvJvpnaLnp6/ljZXkvY3ku6UgR0lTIOacjeWKoeWtl+auteWumuS5ieS4uuWHhuOAgg=='))
+    [void]$lines.Add('- 分析结论以本次输入范围和 GIS 服务返回的现势空间数据为依据；面积按各返回图层的独立统计口径表达。')
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5Y6f5aeL5o6l5Y+j6L+U5Zue'))
     [void]$lines.Add(('- [JSON]({0})' -f [System.IO.Path]::GetFileName($resultPath)))
@@ -217,9 +223,11 @@ $report = Join-Path $outputPath "geology-analysis-report_$stamp.md"
 Write-AnalysisMarkdown $report $resolved $target $responseJson $responseParseError
 $workbook = Join-Path $outputPath "geology-analysis-table_$stamp.xlsx"
 $wordReport = Join-Path $outputPath "geology-analysis-report_$stamp.docx"
-& (Join-Path $PSScriptRoot 'export-office.ps1') -Title '地质条件分析' -JsonPath $target -MarkdownPath $report -ExcelPath $workbook -WordPath $wordReport -OpenWorkbook
+$analysisView = Join-Path $outputPath "geology-analysis-view_$stamp.json"
+& (Join-Path $PSScriptRoot 'export-office.ps1') -Title '地质条件分析' -JsonPath $target -MarkdownPath $report -ExcelPath $workbook -WordPath $wordReport -ViewPath $analysisView -OpenWorkbook
 Write-Output "已生成接口原始结果：$target"
 Write-Output "已生成 Markdown 分析底稿：$report"
+Write-Output "已生成对话分析数据：$analysisView"
 } finally {
     if ($null -ne $resolved -and $null -ne $resolved.TemporaryDirectory -and [System.IO.Directory]::Exists($resolved.TemporaryDirectory)) { Remove-Item -LiteralPath $resolved.TemporaryDirectory -Recurse -Force }
 }

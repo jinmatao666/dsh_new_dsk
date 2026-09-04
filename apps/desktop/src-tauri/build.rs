@@ -9,6 +9,7 @@ fn main() {
             "install_custom_skill",
             "uninstall_custom_skill",
             "list_custom_skills",
+            "read_analysis_view",
         ]),
     ))
     .expect("failed to generate desktop command permissions");

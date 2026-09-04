@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][Alias('GeoJsonFile')][string]$InputPath,
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
     [int]$Xznf = 2024,

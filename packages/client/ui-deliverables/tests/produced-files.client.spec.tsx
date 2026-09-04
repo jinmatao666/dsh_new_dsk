@@ -31,6 +31,7 @@ import { apply as applyInvariant } from '../src/invariant.ts'
 import { en, zh } from '../src/client/locales.ts'
 
 const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
+const originalTauriInternals = Object.getOwnPropertyDescriptor(window, '__TAURI_INTERNALS__')
 
 afterEach(() => {
   cleanup()
@@ -40,6 +41,11 @@ afterEach(() => {
     delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth
   } else {
     Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth)
+  }
+  if (originalTauriInternals === undefined) {
+    delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+  } else {
+    Object.defineProperty(window, '__TAURI_INTERNALS__', originalTauriInternals)
   }
 })
 
@@ -350,6 +356,45 @@ describe('ProducedFiles row', () => {
     // Candidate-specific suffix widths matter at the 10 -> 9 digit boundary.
     expect(fitProducedFiles(126, 8, [60], [70, 50])).toBe(1)
     expect(fitProducedFiles(20, 8, [60], [70, 50])).toBe(0)
+  })
+
+  it('renders a GIS analysis view as a tabbed table and opens its office deliverables', async () => {
+    const openFile = vi.fn<(path: string) => void>()
+    const invoke = vi.fn().mockResolvedValue(JSON.stringify({
+      schema_version: 1,
+      title: '三调土地利用现状分析',
+      generated_at: '2026-09-05T12:00:00+08:00',
+      tables: [
+        { id: 'conclusion', title: '分析结论', columns: ['章节', '内容'], rows: [['结构', '建设用地为主']] },
+        { id: 'details', title: '接口明细', columns: ['字段', '值'], rows: [['HJMJ', '10.332']] },
+      ],
+    }))
+    Object.defineProperty(window, '__TAURI_INTERNALS__', {
+      configurable: true,
+      value: { invoke },
+    })
+    const rendered = render(
+      <ProducedFiles
+        matched={[
+          'E:\\workspace\\third-survey-analysis-view_1.json',
+          'E:\\workspace\\third-survey-analysis-table_1.xlsx',
+          'E:\\workspace\\third-survey-analysis-report_1.docx',
+        ]}
+        openFile={openFile}
+        t={t}
+        {...capability(true)}
+      />,
+    )
+
+    expect(await rendered.findByText('建设用地为主')).toBeTruthy()
+    expect(invoke).toHaveBeenCalledWith('read_analysis_view', {
+      path: 'E:\\workspace\\third-survey-analysis-view_1.json',
+    })
+    fireEvent.click(rendered.getByRole('tab', { name: '接口明细' }))
+    expect(rendered.getByText('10.332')).toBeTruthy()
+    fireEvent.click(rendered.getByRole('button', { name: '打开 Excel' }))
+    expect(openFile).toHaveBeenCalledWith('E:\\workspace\\third-survey-analysis-table_1.xlsx')
+    expect(rendered.queryByText('third-survey-analysis-view_1.json')).toBeNull()
   })
 
   it('keeps one measured line, updates on resize, and opens a file or the workspace folder', () => {

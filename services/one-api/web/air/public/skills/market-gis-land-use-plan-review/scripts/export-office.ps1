@@ -1,9 +1,10 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][string]$Title,
     [Parameter(Mandatory = $true)][string]$JsonPath,
     [Parameter(Mandatory = $true)][string]$MarkdownPath,
     [Parameter(Mandatory = $true)][string]$ExcelPath,
     [Parameter(Mandatory = $true)][string]$WordPath,
+    [string]$ViewPath,
     [switch]$OpenWorkbook
 )
 
@@ -78,6 +79,21 @@ function ReportRows([string[]]$lines) {
     return $rows.ToArray()
 }
 
+function ViewTable([string]$id, [string]$title, [object[][]]$rows) {
+    $data = [System.Collections.Generic.List[object[]]]::new()
+    for ($rowIndex = 1; $rowIndex -lt $rows.Count; $rowIndex++) {
+        $row = [System.Collections.Generic.List[string]]::new()
+        foreach ($value in $rows[$rowIndex]) { [void]$row.Add([string]$value) }
+        [void]$data.Add($row.ToArray())
+    }
+    return [ordered]@{
+        id = $id
+        title = $title
+        columns = @($rows[0] | ForEach-Object { [string]$_ })
+        rows = @($data)
+    }
+}
+
 function WordParagraph([string]$line) {
     $text = $line.Trim()
     if (-not $text) { return '<w:p/>' }
@@ -91,8 +107,10 @@ function WordParagraph([string]$line) {
 
 $markdownLines = [System.IO.File]::ReadAllLines($MarkdownPath, [System.Text.Encoding]::UTF8)
 $response = [System.IO.File]::ReadAllText($JsonPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
-$detailSheet = WorksheetXml (ResponseRows $response)
-$analysisSheet = WorksheetXml (ReportRows $markdownLines)
+$detailRows = ResponseRows $response
+$analysisRows = ReportRows $markdownLines
+$detailSheet = WorksheetXml $detailRows
+$analysisSheet = WorksheetXml $analysisRows
 $xlsxEntries = @{
     '[Content_Types].xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'
     '_rels/.rels' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'
@@ -111,6 +129,19 @@ $docxEntries = @{
     'word/document.xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + $body + '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>'
 }
 Write-ZipPackage $WordPath $docxEntries
+
+if (-not [string]::IsNullOrWhiteSpace($ViewPath)) {
+    $view = [ordered]@{
+        schema_version = 1
+        title = $Title
+        generated_at = (Get-Date).ToString('o')
+        tables = @(
+            (ViewTable 'conclusion' '分析结论' $analysisRows),
+            (ViewTable 'details' '接口明细' $detailRows)
+        )
+    } | ConvertTo-Json -Depth 16
+    [System.IO.File]::WriteAllText($ViewPath, $view, [System.Text.UTF8Encoding]::new($true))
+}
 
 Write-Output "已生成 Excel 分析表：$ExcelPath"
 Write-Output "已生成 Word 分析报告：$WordPath"

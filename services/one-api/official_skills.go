@@ -13,8 +13,8 @@ import (
 )
 
 // officialSkillFS contains the three server-managed GIS skill packages. The
-// first server start creates missing records; later edits and publish state are
-// owned by the administration API and are never overwritten at boot.
+// server start creates missing records and refreshes the bundled package of
+// existing records. Publish and deletion state remain owned by administrators.
 //
 //go:embed all:web/air/public/skills
 var officialSkillFS embed.FS
@@ -59,13 +59,6 @@ func seedBundledOfficialSkills() error {
 		if manifest.Slug == "" || len(manifest.Files) == 0 {
 			return fmt.Errorf("内置技能清单不完整: %s", manifest.Slug)
 		}
-		existing, err := model.GetSkillByNameAny(manifest.Slug)
-		if err == nil && existing != nil {
-			continue
-		}
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("查询内置技能 %s 失败: %w", manifest.Slug, err)
-		}
 		bundle := officialSkillBundle{SchemaVersion: 1, Files: make([]officialSkillBundleFile, 0, len(manifest.Files))}
 		var body string
 		for _, relative := range manifest.Files {
@@ -95,6 +88,26 @@ func seedBundledOfficialSkills() error {
 		tags, err := json.Marshal(manifest.Tags)
 		if err != nil {
 			return fmt.Errorf("编码内置技能 %s 标签失败: %w", manifest.Slug, err)
+		}
+		existing, err := model.GetSkillByNameAny(manifest.Slug)
+		if err == nil && existing != nil {
+			existing.Content = body
+			existing.Body = body
+			existing.Assets = string(assets)
+			existing.Version = manifest.Version
+			existing.DisplayName = manifest.DisplayName
+			existing.Category = manifest.Category
+			existing.Description = manifest.Description
+			existing.Scenario = manifest.Summary
+			existing.Submitter = manifest.Author
+			existing.Tags = tags
+			if err := model.UpdateSkill(existing); err != nil {
+				return fmt.Errorf("更新内置技能 %s 失败: %w", manifest.Slug, err)
+			}
+			continue
+		}
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("查询内置技能 %s 失败: %w", manifest.Slug, err)
 		}
 		skill := model.Skill{
 			Name:        manifest.Slug,

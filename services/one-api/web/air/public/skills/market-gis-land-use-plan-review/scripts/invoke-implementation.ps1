@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][Alias('GeoJsonFile')][string]$InputPath,
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
     [int]$Blxsw = 4,
@@ -177,10 +177,16 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
             }
         }
         if ($reviews.Count -eq 0 -and $zones.Count -eq 0) { [void]$lines.Add('- ' + (Localized '5pyq6L+U5Zue5bey56Gu6K6k55qE6KeE5YiS5a6h5p+l5a2X5q6144CC')) }
+        [void]$lines.Add('')
+        [void]$lines.Add('## 专业审查意见')
+        [void]$lines.Add('- 审查表用于判断项目范围与规划管控要求的空间关系，功能分区明细用于解释不同管控类型的面积构成；两个数据集分别统计，不跨图层累加。')
+        [void]$lines.Add('- 涉及永久基本农田、限制建设区或禁止建设区的部分，应优先核对空间位置，并在用地预审和规划许可阶段落实避让或专题论证。')
+        [void]$lines.Add('- 建设用地应结合允许建设、有条件建设和现状建设分区判断可实施性，不能仅依据项目总面积作出符合性结论。')
+        [void]$lines.Add('- 建议将本次空间审查结果与项目选址方案、国土空间总体规划及详细规划成果联合复核，形成可追溯的审查依据。')
     }
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5pWw5o2u6ZmQ5Yi2'))
-    [void]$lines.Add('- ' + (Localized '5Lul5LiL57uT6K665LuF5L6d5o2uIEdJUyDmnI3liqHov5Tlm57lgLzlkozlt7Lnoa7orqTlrZfmrrXlrZflhbjvvJvpnaLnp6/ljZXkvY3ku6UgR0lTIOacjeWKoeWtl+auteWumuS5ieS4uuWHhuOAgg=='))
+    [void]$lines.Add('- 审查结论以本次输入范围、审查类别和 GIS 服务返回的现势规划数据为依据；各规划图层采用独立面积口径。')
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5Y6f5aeL5o6l5Y+j6L+U5Zue'))
     [void]$lines.Add(('- [JSON]({0})' -f [System.IO.Path]::GetFileName($resultPath)))
@@ -216,9 +222,11 @@ $report = Join-Path $outputPath "land-use-plan-review-report_$stamp.md"
 Write-AnalysisMarkdown $report $resolved $target $responseJson $responseParseError
 $workbook = Join-Path $outputPath "land-use-plan-review-table_$stamp.xlsx"
 $wordReport = Join-Path $outputPath "land-use-plan-review-report_$stamp.docx"
-& (Join-Path $PSScriptRoot 'export-office.ps1') -Title '土地利用规划审查' -JsonPath $target -MarkdownPath $report -ExcelPath $workbook -WordPath $wordReport -OpenWorkbook
+$analysisView = Join-Path $outputPath "land-use-plan-review-view_$stamp.json"
+& (Join-Path $PSScriptRoot 'export-office.ps1') -Title '土地利用规划审查' -JsonPath $target -MarkdownPath $report -ExcelPath $workbook -WordPath $wordReport -ViewPath $analysisView -OpenWorkbook
 Write-Output "已生成接口原始结果：$target"
 Write-Output "已生成 Markdown 分析底稿：$report"
+Write-Output "已生成对话分析数据：$analysisView"
 } finally {
     if ($null -ne $resolved -and $null -ne $resolved.TemporaryDirectory -and [System.IO.Directory]::Exists($resolved.TemporaryDirectory)) { Remove-Item -LiteralPath $resolved.TemporaryDirectory -Recurse -Force }
 }

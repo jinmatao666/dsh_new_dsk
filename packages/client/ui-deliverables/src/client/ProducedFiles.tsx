@@ -4,12 +4,13 @@
 // through the same openFile the tool rows use — the Host's own opener, on the
 // Host machine.
 
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { basename } from './turn-deliverables.ts'
 import type { NS } from './locales.ts'
+import { AnalysisResultCard } from './AnalysisResultCard.tsx'
 import css from './ProducedFiles.module.css'
 
 /** At most six chips compete for the one-line summary; every other path stays counted. */
@@ -73,9 +74,16 @@ function moreLabel(t: ProducedFilesProps['t'], count: number): string {
 export function ProducedFiles({
   matched: paths, openFile, isLoopback, useHostDescription, t,
 }: ProducedFilesProps) {
+  const analysisViewPath = paths.find(path => /-analysis-view_[^\\/]+\.json$/iu.test(basename(path)))
+  const displayedPaths = useMemo(
+    () => paths.filter(path => path !== analysisViewPath),
+    [analysisViewPath, paths],
+  )
+  const excelPath = displayedPaths.find(path => /\.xlsx$/iu.test(path))
+  const wordPath = displayedPaths.find(path => /\.docx$/iu.test(path))
   const hostCanOpenPath = useHostDescription(description => description?.canOpenPath === true)
   const canOpenPath = isLoopback && hostCanOpenPath
-  const limit = Math.min(paths.length, SHOWN_LIMIT)
+  const limit = Math.min(displayedPaths.length, SHOWN_LIMIT)
   const [shownCount, setShownCount] = useState(limit)
   const rowRef = useRef<HTMLDivElement>(null)
   const chipProbes = useRef<Array<HTMLButtonElement | null>>([])
@@ -93,8 +101,8 @@ export function ProducedFiles({
       const activeChipProbes = chipProbes.current.slice(0, limit) as HTMLButtonElement[]
       const chips = activeChipProbes.map(probe => probe.getBoundingClientRect().width)
       const more = Array.from({ length: limit + 1 }, (_, candidate) => {
-        if (paths.length === candidate) return undefined
-        remainderProbe.textContent = moreLabel(t, paths.length - candidate)
+        if (displayedPaths.length === candidate) return undefined
+        remainderProbe.textContent = moreLabel(t, displayedPaths.length - candidate)
         return remainderProbe.getBoundingClientRect().width
       })
       setShownCount(fitProducedFiles(row.clientWidth, gap, chips, more))
@@ -107,50 +115,62 @@ export function ProducedFiles({
       if (probe !== null) observer.observe(probe)
     }
     return () => { observer.disconnect() }
-  }, [limit, paths, t])
+  }, [displayedPaths, limit, t])
 
   const visibleCount = Math.min(shownCount, limit)
-  const shown = paths.slice(0, visibleCount)
-  const hidden = paths.length - shown.length
+  const shown = displayedPaths.slice(0, visibleCount)
+  const hidden = displayedPaths.length - shown.length
   return (
-    <div className={css.root}>
-      <span className={css.label}>{t('produced.label')}</span>
-      <div ref={rowRef} className={css.row} data-produced-files-row>
-        {shown.map(path => (
-          <button
-            key={path}
-            type="button"
-            className={css.file}
-            // The full path is the disambiguator when two turns produce files
-            // that share a basename; the chip itself stays short.
-            title={path}
-            aria-label={t('produced.open', { name: path })}
-            onClick={() => { openFile(path) }}
-          >
-            {basename(path)}
-          </button>
-        ))}
-        {hidden > 0 && <span className={css.more}>{moreLabel(t, hidden)}</span>}
-      </div>
-      {hidden > 0 && canOpenPath && (
-        <button type="button" className={css.showFolder} onClick={() => { openFile('.') }}>
-          {t('produced.showInFolder')}
-        </button>
+    <>
+      {analysisViewPath !== undefined && (
+        <AnalysisResultCard
+          path={analysisViewPath}
+          openFile={openFile}
+          excelPath={excelPath}
+          wordPath={wordPath}
+        />
       )}
-      <div className={css.measure} aria-hidden="true">
-        {paths.slice(0, limit).map((path, index) => (
-          <button
-            key={path}
-            ref={(node) => { chipProbes.current[index] = node }}
-            type="button"
-            tabIndex={-1}
-            className={`${css.file} ${css.probe}`}
-          >
-            {basename(path)}
-          </button>
-        ))}
-        <span ref={moreProbe} className={`${css.more} ${css.probe}`} />
-      </div>
-    </div>
+      {displayedPaths.length > 0 && (
+        <div className={css.root}>
+          <span className={css.label}>{t('produced.label')}</span>
+          <div ref={rowRef} className={css.row} data-produced-files-row>
+            {shown.map(path => (
+              <button
+                key={path}
+                type="button"
+                className={css.file}
+                // The full path is the disambiguator when two turns produce files
+                // that share a basename; the chip itself stays short.
+                title={path}
+                aria-label={t('produced.open', { name: path })}
+                onClick={() => { openFile(path) }}
+              >
+                {basename(path)}
+              </button>
+            ))}
+            {hidden > 0 && <span className={css.more}>{moreLabel(t, hidden)}</span>}
+          </div>
+          {hidden > 0 && canOpenPath && (
+            <button type="button" className={css.showFolder} onClick={() => { openFile('.') }}>
+              {t('produced.showInFolder')}
+            </button>
+          )}
+          <div className={css.measure} aria-hidden="true">
+            {displayedPaths.slice(0, limit).map((path, index) => (
+              <button
+                key={path}
+                ref={(node) => { chipProbes.current[index] = node }}
+                type="button"
+                tabIndex={-1}
+                className={`${css.file} ${css.probe}`}
+              >
+                {basename(path)}
+              </button>
+            ))}
+            <span ref={moreProbe} className={`${css.more} ${css.probe}`} />
+          </div>
+        </div>
+      )}
+    </>
   )
 }

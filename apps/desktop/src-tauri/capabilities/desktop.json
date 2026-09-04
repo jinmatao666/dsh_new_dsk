@@ -15,6 +15,7 @@
     "allow-uninstall-marketplace-skill",
     "allow-install-custom-skill",
     "allow-uninstall-custom-skill",
-    "allow-list-custom-skills"
+    "allow-list-custom-skills",
+    "allow-read-analysis-view"
   ]
 }

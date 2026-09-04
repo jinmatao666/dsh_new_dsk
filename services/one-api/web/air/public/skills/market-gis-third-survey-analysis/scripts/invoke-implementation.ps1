@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][Alias('GeoJsonFile')][string]$InputPath,
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
     [int]$Xznf = 2024,
@@ -184,10 +184,16 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
             }
         }
         if ($summary.Count -eq 0 -and $landTypes.Count -eq 0 -and $ownership.Count -eq 0) { [void]$lines.Add('- ' + (Localized '5pyq6L+U5Zue5bey56Gu6K6k55qE5LiJ6LCD5YiG5p6Q5a2X5q6144CC')) }
+        [void]$lines.Add('')
+        [void]$lines.Add('## 土地利用结构研判')
+        [void]$lines.Add('- 分类面积汇总用于判断农用地、建设用地和未利用地总体结构；地类明细用于定位具体图斑；权属汇总用于识别管理主体，三个数据集不得相互累加。')
+        [void]$lines.Add('- 对耕地和永久基本农田，应重点核查其面积、图斑位置及与拟建工程范围的重叠关系，落实用途管制和占补平衡要求。')
+        [void]$lines.Add('- 对林地、水域及水利设施用地，应结合生态保护、水系连通和行业主管部门要求评估建设影响。')
+        [void]$lines.Add('- 权属单位分布可用于识别后续征地、供地和部门协调对象；零散小图斑仍应保留在明细中，避免仅按主导地类作出判断。')
     }
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5pWw5o2u6ZmQ5Yi2'))
-    [void]$lines.Add('- ' + (Localized '5Lul5LiL57uT6K665LuF5L6d5o2uIEdJUyDmnI3liqHov5Tlm57lgLzlkozlt7Lnoa7orqTlrZfmrrXlrZflhbjvvJvpnaLnp6/ljZXkvY3ku6UgR0lTIOacjeWKoeWtl+auteWumuS5ieS4uuWHhuOAgg=='))
+    [void]$lines.Add('- 分析结论以本次输入范围、分析年度和 GIS 服务返回的三调数据为依据；各汇总表按自身统计口径解释。')
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5Y6f5aeL5o6l5Y+j6L+U5Zue'))
     [void]$lines.Add(('- [JSON]({0})' -f [System.IO.Path]::GetFileName($resultPath)))
@@ -231,9 +237,11 @@ $report = Join-Path $outputPath "third-survey-analysis-report_$stamp.md"
 Write-AnalysisMarkdown $report $resolved $target $responseJson $responseParseError
 $workbook = Join-Path $outputPath "third-survey-analysis-table_$stamp.xlsx"
 $wordReport = Join-Path $outputPath "third-survey-analysis-report_$stamp.docx"
-& (Join-Path $PSScriptRoot 'export-office.ps1') -Title '三调土地利用现状分析' -JsonPath $target -MarkdownPath $report -ExcelPath $workbook -WordPath $wordReport -OpenWorkbook
+$analysisView = Join-Path $outputPath "third-survey-analysis-view_$stamp.json"
+& (Join-Path $PSScriptRoot 'export-office.ps1') -Title '三调土地利用现状分析' -JsonPath $target -MarkdownPath $report -ExcelPath $workbook -WordPath $wordReport -ViewPath $analysisView -OpenWorkbook
 Write-Output "已生成接口原始结果：$target"
 Write-Output "已生成 Markdown 分析底稿：$report"
+Write-Output "已生成对话分析数据：$analysisView"
 } finally {
     if ($null -ne $resolved -and $null -ne $resolved.TemporaryDirectory -and [System.IO.Directory]::Exists($resolved.TemporaryDirectory)) { Remove-Item -LiteralPath $resolved.TemporaryDirectory -Recurse -Force }
 }

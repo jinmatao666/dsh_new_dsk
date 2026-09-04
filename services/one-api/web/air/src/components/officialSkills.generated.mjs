@@ -17,7 +17,7 @@ export const OFFICIAL_SKILLS = [
       "地质灾害隐患分区分析",
       "Excel 明细与 Word 专业报告交付"
     ],
-    "version": "1.2.0",
+    "version": "1.3.0",
     "team": "ZJUGIS GIS 服务",
     "submitter": "root",
     "created_at": "2026-08-29 09:30:00",
@@ -66,7 +66,7 @@ export const OFFICIAL_SKILLS = [
       "土地利用规划符合性审查",
       "Excel 明细与 Word 专业报告交付"
     ],
-    "version": "1.2.0",
+    "version": "1.3.0",
     "team": "ZJUGIS GIS 服务",
     "submitter": "root",
     "created_at": "2026-08-29 09:35:00",
@@ -116,7 +116,7 @@ export const OFFICIAL_SKILLS = [
       "三调现状与图斑分析",
       "Excel 明细与 Word 专业报告交付"
     ],
-    "version": "1.2.0",
+    "version": "1.3.0",
     "team": "ZJUGIS GIS 服务",
     "submitter": "root",
     "created_at": "2026-08-29 09:40:00",
