@@ -190,6 +190,10 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
         [void]$lines.Add('- 对耕地和永久基本农田，应重点核查其面积、图斑位置及与拟建工程范围的重叠关系，落实用途管制和占补平衡要求。')
         [void]$lines.Add('- 对林地、水域及水利设施用地，应结合生态保护、水系连通和行业主管部门要求评估建设影响。')
         [void]$lines.Add('- 权属单位分布可用于识别后续征地、供地和部门协调对象；零散小图斑仍应保留在明细中，避免仅按主导地类作出判断。')
+        [void]$lines.Add('')
+        [void]$lines.Add('## 综合结论')
+        foreach ($row in $summary) { [void]$lines.Add(('- 项目范围总面积为 {0} 公顷，其中农用地 {1} 公顷、耕地 {2} 公顷、建设用地 {3} 公顷、永久基本农田 {4} 公顷。' -f (FieldValue $row 'HJMJ'), (FieldValue $row 'NYDMJ'), (FieldValue $row 'GDMJ'), (FieldValue $row 'JSYDMJ'), (FieldValue $row 'JBNTMJ'))) }
+        [void]$lines.Add('- 后续选址与用地方案应以结果汇总中的项目范围面积为统计口径，图斑原始面积仅用于识别来源图斑，不可直接与项目面积相加。')
     }
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5pWw5o2u6ZmQ5Yi2'))
@@ -227,17 +231,20 @@ $body = @{
 $uri = "$($BaseUrl.TrimEnd('/'))/Analysis.svc/SanDXzAnalysis"
 $response = Invoke-WebRequest -UseBasicParsing -Method Post -Uri $uri -ContentType 'text/plain; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 $stamp = Get-Date -Format 'yyyyMMdd_HHmmss_fff'
-$target = Join-Path $outputPath "third-survey-analysis-result_$stamp.json"
+$sourceName = [System.IO.Path]::GetFileNameWithoutExtension($resolved.SourcePath)
+if ([string]::IsNullOrWhiteSpace($sourceName)) { $sourceName = '空间范围' }
+$sourceName = ($sourceName -replace '[\\/:*?"<>|]', '_').Trim()
+$target = Join-Path $outputPath "${sourceName}_三调土地利用现状分析原始数据_${stamp}.json"
 $content = if ($response.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($response.Content) } else { [string]$response.Content }
 [System.IO.File]::WriteAllText($target, $content, [System.Text.UTF8Encoding]::new($false))
 $responseJson = $null
 $responseParseError = ''
 try { $responseJson = $content | ConvertFrom-Json } catch { $responseParseError = $_.Exception.Message }
-$report = Join-Path $outputPath "third-survey-analysis-report_$stamp.md"
+$report = Join-Path $outputPath "${sourceName}_三调土地利用现状分析底稿_${stamp}.md"
 Write-AnalysisMarkdown $report $resolved $target $responseJson $responseParseError
-$workbook = Join-Path $outputPath "third-survey-analysis-table_$stamp.xlsx"
-$wordReport = Join-Path $outputPath "third-survey-analysis-report_$stamp.docx"
-$analysisView = Join-Path $outputPath "third-survey-analysis-view_$stamp.json"
+$workbook = Join-Path $outputPath "${sourceName}_三调土地利用现状分析_${stamp}.xlsx"
+$wordReport = Join-Path $outputPath "${sourceName}_三调土地利用现状分析报告_${stamp}.docx"
+$analysisView = Join-Path $outputPath "${sourceName}_三调土地利用现状分析视图_${stamp}.json"
 & (Join-Path $PSScriptRoot 'export-office.ps1') -Title '三调土地利用现状分析' -JsonPath $target -MarkdownPath $report -ExcelPath $workbook -WordPath $wordReport -ViewPath $analysisView -OpenWorkbook
 Write-Output "已生成接口原始结果：$target"
 Write-Output "已生成 Markdown 分析底稿：$report"

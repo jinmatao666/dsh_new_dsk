@@ -60,8 +60,8 @@ function ResponseRows($response) {
         for ($index = 0; $index -lt $items.Count; $index++) {
             $item = $items[$index]
             if ($null -ne $item -and $item.psobject.Properties.Count -gt 0 -and $item -isnot [string]) {
-                foreach ($field in $item.psobject.Properties) { [void]$rows.Add(@($property.Name, $index + 1, $field.Name, $field.Value)) }
-            } else { [void]$rows.Add(@($property.Name, $index + 1, '值', $item)) }
+                foreach ($field in $item.psobject.Properties) { [void]$rows.Add(@($property.Name, ($index + 1), $field.Name, $field.Value)) }
+            } else { [void]$rows.Add(@($property.Name, ($index + 1), '值', $item)) }
         }
     }
     return $rows.ToArray()
@@ -79,7 +79,7 @@ function ReportRows([string[]]$lines) {
     return $rows.ToArray()
 }
 
-function ViewTable([string]$id, [string]$title, [object[][]]$rows) {
+function ViewTable([string]$id, [string]$title, [object]$rows) {
     $data = [System.Collections.Generic.List[object[]]]::new()
     for ($rowIndex = 1; $rowIndex -lt $rows.Count; $rowIndex++) {
         $row = [System.Collections.Generic.List[string]]::new()
@@ -89,9 +89,28 @@ function ViewTable([string]$id, [string]$title, [object[][]]$rows) {
     return [ordered]@{
         id = $id
         title = $title
-        columns = @($rows[0] | ForEach-Object { [string]$_ })
-        rows = @($data)
+        columns = [string[]]$rows[0]
+        rows = [object[]]$data.ToArray()
     }
+}
+
+function DetailViewTable($response) { $data = [System.Collections.Generic.List[object[]]]::new(); foreach ($property in $response.psobject.Properties) { $items = @($property.Value); for ($index = 0; $index -lt $items.Count; $index++) { $item = $items[$index]; if ($null -ne $item -and $item.psobject.Properties.Count -gt 0 -and $item -isnot [string]) { foreach ($field in $item.psobject.Properties) { [void]$data.Add(@($property.Name, ($index + 1), $field.Name, [string]$field.Value)) } } else { [void]$data.Add(@($property.Name, ($index + 1), '值', [string]$item)) } } }; return [ordered]@{ id = 'details'; title = '接口明细'; columns = [string[]]@('数据集', '序号', '字段', '值'); rows = [object[]]$data.ToArray() } }
+
+function ViewSections([string[]]$lines) {
+    $sections = [System.Collections.Generic.List[object]]::new(); $title = ''; $items = [System.Collections.Generic.List[string]]::new()
+    $flush = { if ($title -and $items.Count -gt 0) { $kind = if ($title -match '结论|审查意见') { 'conclusion' } elseif ($title -match '建议|风险') { 'advice' } else { 'analysis' }; [void]$sections.Add([ordered]@{ title = $title; kind = $kind; items = [string[]]$items.ToArray() }) } }
+    foreach ($line in $lines) { if ($line -match '^##\s+(.+)$') { & $flush; $title = $Matches[1].Trim(); $items.Clear(); continue }; if (-not $title -or $title -match '输入数据核验|原始接口返回') { continue }; $text = $line.Trim().TrimStart('-', '*').Trim(); if ($text -and -not $text.StartsWith('#') -and -not $text.StartsWith('[JSON]')) { [void]$items.Add($text) } }
+    & $flush; return [object[]]$sections.ToArray()
+}
+
+function ValueOf($record, [string]$field) { $property = if ($null -eq $record) { $null } else { $record.psobject.Properties[$field] }; if ($null -eq $property -or $null -eq $property.Value) { return '—' }; return [string]$property.Value }
+function RecordsOf($response, [string]$field) { $property = $response.psobject.Properties[$field]; if ($null -eq $property -or $null -eq $property.Value) { return @() }; return @($property.Value) }
+function ResultRows([string]$title, $response) {
+    $rows = [System.Collections.Generic.List[object[]]]::new()
+    if ($title -eq '地质条件分析') { [void]$rows.Add(@('分析图层', '空间判定', '等级', '占用面积（公顷）')); foreach ($row in (RecordsOf $response 'YZT_DZHJTJ_LIST')) { [void]$rows.Add(@('地质环境条件', (ValueOf $row 'DZHJTJ'), (ValueOf $row 'DJ'), (ValueOf $row 'ZYMJ'))) }; foreach ($row in (RecordsOf $response 'YZT_DZZHYFQK_LIST')) { [void]$rows.Add(@('地质灾害易发分区', (ValueOf $row 'FQMC'), (ValueOf $row 'DJ'), (ValueOf $row 'ZYMJ'))) } }
+    elseif ($title -eq '土地利用规划审查') { [void]$rows.Add(@('审查指标', '结果', '单位/说明')); foreach ($row in (RecordsOf $response 'YZT_GHSCB')) { foreach ($field in @('YDZMJ', 'SFZYJBNT', 'JBNTMJ', 'YXJSQMJ', 'YTJJSQMJ', 'XZJSQMJ', 'JZJSQMJ', 'SFZXCQFW')) { $unit = if ($field -match 'MJ$') { '公顷' } else { '服务返回代码' }; [void]$rows.Add(@($field, (ValueOf $row $field), $unit)) } } }
+    else { [void]$rows.Add(@('土地利用指标', '面积（公顷）', '占项目面积比例')); foreach ($row in (RecordsOf $response 'YZT_TDFLMJB_HZB')) { $total = [double]0; [void][double]::TryParse((ValueOf $row 'HJMJ'), [ref]$total); foreach ($item in @(@('农用地', 'NYDMJ'), @('耕地', 'GDMJ'), @('建设用地', 'JSYDMJ'), @('未利用地', 'WLYDMJ'), @('永久基本农田', 'JBNTMJ'))) { $value = [double]0; [void][double]::TryParse((ValueOf $row $item[1]), [ref]$value); $ratio = if ($total -gt 0) { '{0:P2}' -f ($value / $total) } else { '—' }; [void]$rows.Add(@($item[0], (ValueOf $row $item[1]), $ratio)) } } }
+    if ($rows.Count -eq 1) { [void]$rows.Add(@('未返回可展示的专项结果', '—', '—', '—')) }; return $rows.ToArray()
 }
 
 function WordParagraph([string]$line) {
@@ -109,16 +128,19 @@ $markdownLines = [System.IO.File]::ReadAllLines($MarkdownPath, [System.Text.Enco
 $response = [System.IO.File]::ReadAllText($JsonPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
 $detailRows = ResponseRows $response
 $analysisRows = ReportRows $markdownLines
+$resultRows = ResultRows $Title $response
 $detailSheet = WorksheetXml $detailRows
 $analysisSheet = WorksheetXml $analysisRows
+$resultSheet = WorksheetXml $resultRows
 $xlsxEntries = @{
-    '[Content_Types].xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'
+    '[Content_Types].xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'
     '_rels/.rels' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'
-    'xl/workbook.xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="分析结论" sheetId="1" r:id="rId1"/><sheet name="接口明细" sheetId="2" r:id="rId2"/></sheets></workbook>'
-    'xl/_rels/workbook.xml.rels' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'
+    'xl/workbook.xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="结果汇总" sheetId="1" r:id="rId1"/><sheet name="专业分析" sheetId="2" r:id="rId2"/><sheet name="接口明细" sheetId="3" r:id="rId3"/></sheets></workbook>'
+    'xl/_rels/workbook.xml.rels' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'
     'xl/styles.xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="等线"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="等线"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF2563EB"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs></styleSheet>'
-    'xl/worksheets/sheet1.xml' = $analysisSheet
-    'xl/worksheets/sheet2.xml' = $detailSheet
+    'xl/worksheets/sheet1.xml' = $resultSheet
+    'xl/worksheets/sheet2.xml' = $analysisSheet
+    'xl/worksheets/sheet3.xml' = $detailSheet
 }
 Write-ZipPackage $ExcelPath $xlsxEntries
 
@@ -135,10 +157,9 @@ if (-not [string]::IsNullOrWhiteSpace($ViewPath)) {
         schema_version = 1
         title = $Title
         generated_at = (Get-Date).ToString('o')
-        tables = @(
-            (ViewTable 'conclusion' '分析结论' $analysisRows),
-            (ViewTable 'details' '接口明细' $detailRows)
-        )
+        metrics = @([ordered]@{ label = '成果表格'; value = '3 个' }, [ordered]@{ label = '接口明细'; value = "$($detailRows.Count - 1) 条" }, [ordered]@{ label = '生成时间'; value = (Get-Date).ToString('yyyy-MM-dd HH:mm') })
+        sections = ViewSections $markdownLines
+        tables = @((ViewTable 'summary' '结果汇总' $resultRows), (ViewTable 'analysis' '专业分析' $analysisRows), (DetailViewTable $response))
     } | ConvertTo-Json -Depth 16
     [System.IO.File]::WriteAllText($ViewPath, $view, [System.Text.UTF8Encoding]::new($true))
 }

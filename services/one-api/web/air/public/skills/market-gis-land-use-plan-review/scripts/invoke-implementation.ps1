@@ -183,6 +183,10 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
         [void]$lines.Add('- 涉及永久基本农田、限制建设区或禁止建设区的部分，应优先核对空间位置，并在用地预审和规划许可阶段落实避让或专题论证。')
         [void]$lines.Add('- 建设用地应结合允许建设、有条件建设和现状建设分区判断可实施性，不能仅依据项目总面积作出符合性结论。')
         [void]$lines.Add('- 建议将本次空间审查结果与项目选址方案、国土空间总体规划及详细规划成果联合复核，形成可追溯的审查依据。')
+        [void]$lines.Add('')
+        [void]$lines.Add('## 综合结论')
+        foreach ($row in $reviews) { [void]$lines.Add(('- 本次审查范围面积为 {0} 公顷；永久基本农田占用标识为 {1}，占用面积为 {2} 公顷。' -f (FieldValue $row 'YDZMJ'), (FieldValue $row 'SFZYJBNT'), (FieldValue $row 'JBNTMJ'))) }
+        [void]$lines.Add('- 本结论仅说明本次服务返回的空间叠加结果；建设可实施性仍应结合具体规划图则、用地性质和审批要求综合判定。')
     }
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5pWw5o2u6ZmQ5Yi2'))
@@ -212,17 +216,20 @@ $body = @{
 $uri = "$($BaseUrl.TrimEnd('/'))/Analysis.svc/OneKeyAnalysis"
 $response = Invoke-WebRequest -UseBasicParsing -Method Post -Uri $uri -ContentType 'text/plain; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 $stamp = Get-Date -Format 'yyyyMMdd_HHmmss_fff'
-$target = Join-Path $outputPath "land-use-plan-review-result_$stamp.json"
+$sourceName = [System.IO.Path]::GetFileNameWithoutExtension($resolved.SourcePath)
+if ([string]::IsNullOrWhiteSpace($sourceName)) { $sourceName = '空间范围' }
+$sourceName = ($sourceName -replace '[\\/:*?"<>|]', '_').Trim()
+$target = Join-Path $outputPath "${sourceName}_土地利用规划审查原始数据_${stamp}.json"
 $content = if ($response.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($response.Content) } else { [string]$response.Content }
 [System.IO.File]::WriteAllText($target, $content, [System.Text.UTF8Encoding]::new($false))
 $responseJson = $null
 $responseParseError = ''
 try { $responseJson = $content | ConvertFrom-Json } catch { $responseParseError = $_.Exception.Message }
-$report = Join-Path $outputPath "land-use-plan-review-report_$stamp.md"
+$report = Join-Path $outputPath "${sourceName}_土地利用规划审查底稿_${stamp}.md"
 Write-AnalysisMarkdown $report $resolved $target $responseJson $responseParseError
-$workbook = Join-Path $outputPath "land-use-plan-review-table_$stamp.xlsx"
-$wordReport = Join-Path $outputPath "land-use-plan-review-report_$stamp.docx"
-$analysisView = Join-Path $outputPath "land-use-plan-review-view_$stamp.json"
+$workbook = Join-Path $outputPath "${sourceName}_土地利用规划审查_${stamp}.xlsx"
+$wordReport = Join-Path $outputPath "${sourceName}_土地利用规划审查报告_${stamp}.docx"
+$analysisView = Join-Path $outputPath "${sourceName}_土地利用规划审查视图_${stamp}.json"
 & (Join-Path $PSScriptRoot 'export-office.ps1') -Title '土地利用规划审查' -JsonPath $target -MarkdownPath $report -ExcelPath $workbook -WordPath $wordReport -ViewPath $analysisView -OpenWorkbook
 Write-Output "已生成接口原始结果：$target"
 Write-Output "已生成 Markdown 分析底稿：$report"

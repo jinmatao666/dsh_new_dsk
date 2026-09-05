@@ -212,7 +212,7 @@ fn uninstall_custom_skill(app: tauri::AppHandle, slug: String) -> Result<(), Str
 /// Read a compact, skill-generated analysis view for the desktop conversation UI.
 ///
 /// The command deliberately accepts only the timestamped analysis-view JSON files
-/// created by the bundled GIS skills, rather than exposing arbitrary local file reads.
+/// created by the bundled GIS skills, including their Chinese production names.
 #[tauri::command]
 fn read_analysis_view(path: String) -> Result<String, String> {
     let candidate = PathBuf::from(&path);
@@ -223,7 +223,9 @@ fn read_analysis_view(path: String) -> Result<String, String> {
         .file_name()
         .and_then(|value| value.to_str())
         .ok_or_else(|| "分析结果文件名无效".to_string())?;
-    if !filename.contains("-analysis-view_") || !filename.ends_with(".json") {
+    if !(filename.contains("-analysis-view_") || filename.contains("分析视图_"))
+        || !filename.ends_with(".json")
+    {
         return Err("只能读取本次分析生成的结果视图文件".to_string());
     }
     let metadata = fs::metadata(&candidate)
@@ -1441,6 +1443,12 @@ mod marketplace_tests {
         assert!(read_analysis_view(view.display().to_string())
             .expect("read analysis view")
             .contains("schema_version"));
+        let chinese_view = workspace
+            .0
+            .join("地块1_三调土地利用现状分析视图_20260905_120000_000.json");
+        fs::write(&chinese_view, r#"{"schema_version":1,"tables":[]}"#)
+            .expect("write Chinese view");
+        assert!(read_analysis_view(chinese_view.display().to_string()).is_ok());
         assert!(read_analysis_view(workspace.0.join("other.json").display().to_string()).is_err());
         assert!(read_analysis_view("relative-analysis-view_1.json".to_string()).is_err());
     }

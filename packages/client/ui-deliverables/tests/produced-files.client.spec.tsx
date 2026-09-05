@@ -364,6 +364,8 @@ describe('ProducedFiles row', () => {
       schema_version: 1,
       title: '三调土地利用现状分析',
       generated_at: '2026-09-05T12:00:00+08:00',
+      metrics: [{ label: '总面积', value: '0.1672 公顷' }],
+      sections: [{ title: '综合结论', kind: 'conclusion', items: ['不涉及永久基本农田。'] }],
       tables: [
         { id: 'conclusion', title: '分析结论', columns: ['章节', '内容'], rows: [['结构', '建设用地为主']] },
         { id: 'details', title: '接口明细', columns: ['字段', '值'], rows: [['HJMJ', '10.332']] },
@@ -376,9 +378,11 @@ describe('ProducedFiles row', () => {
     const rendered = render(
       <ProducedFiles
         matched={[
-          'E:\\workspace\\third-survey-analysis-view_1.json',
-          'E:\\workspace\\third-survey-analysis-table_1.xlsx',
-          'E:\\workspace\\third-survey-analysis-report_1.docx',
+          'E:\\workspace\\地块1_三调土地利用现状分析视图_20260905_120000_000.json',
+          'E:\\workspace\\地块1_三调土地利用现状分析_20260905_120000_000.xlsx',
+          'E:\\workspace\\地块1_三调土地利用现状分析报告_20260905_120000_000.docx',
+          'E:\\workspace\\地块1_三调土地利用现状分析原始数据_20260905_120000_000.json',
+          'E:\\workspace\\地块1_三调土地利用现状分析底稿_20260905_120000_000.md',
         ]}
         openFile={openFile}
         t={t}
@@ -388,13 +392,14 @@ describe('ProducedFiles row', () => {
 
     expect(await rendered.findByText('建设用地为主')).toBeTruthy()
     expect(invoke).toHaveBeenCalledWith('read_analysis_view', {
-      path: 'E:\\workspace\\third-survey-analysis-view_1.json',
+      path: 'E:\\workspace\\地块1_三调土地利用现状分析视图_20260905_120000_000.json',
     })
     fireEvent.click(rendered.getByRole('tab', { name: '接口明细' }))
     expect(rendered.getByText('10.332')).toBeTruthy()
     fireEvent.click(rendered.getByRole('button', { name: '打开 Excel' }))
-    expect(openFile).toHaveBeenCalledWith('E:\\workspace\\third-survey-analysis-table_1.xlsx')
-    expect(rendered.queryByText('third-survey-analysis-view_1.json')).toBeNull()
+    expect(openFile).toHaveBeenCalledWith('E:\\workspace\\地块1_三调土地利用现状分析_20260905_120000_000.xlsx')
+    expect(rendered.getByText('不涉及永久基本农田。')).toBeTruthy()
+    expect(rendered.queryByText('地块1_三调土地利用现状分析视图_20260905_120000_000.json')).toBeNull()
   })
 
   it('keeps one measured line, updates on resize, and opens a file or the workspace folder', () => {

@@ -74,9 +74,13 @@ function moreLabel(t: ProducedFilesProps['t'], count: number): string {
 export function ProducedFiles({
   matched: paths, openFile, isLoopback, useHostDescription, t,
 }: ProducedFilesProps) {
-  const analysisViewPath = paths.find(path => /-analysis-view_[^\\/]+\.json$/iu.test(basename(path)))
+  const analysisViewPath = paths.find(path => /(?:-analysis-view_|分析视图_)\d{8}_\d{6}_\d{3}\.json$/u.test(basename(path)))
   const displayedPaths = useMemo(
-    () => paths.filter(path => path !== analysisViewPath),
+    () => paths.filter(path => (
+      path !== analysisViewPath
+      && !/原始数据_\d{8}_\d{6}_\d{3}\.json$/u.test(basename(path))
+      && !/底稿_\d{8}_\d{6}_\d{3}\.md$/u.test(basename(path))
+    )),
     [analysisViewPath, paths],
   )
   const excelPath = displayedPaths.find(path => /\.xlsx$/iu.test(path))

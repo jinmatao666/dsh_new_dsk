@@ -1,41 +1,35 @@
 import { useEffect, useState } from 'react'
 import css from './AnalysisResultCard.module.css'
 
-/** One tabular section prepared by a GIS skill for in-chat display. */
-type AnalysisTable = {
-  id: string
-  title: string
-  columns: string[]
-  rows: string[][]
-}
+type AnalysisTable = { id: string; title: string; columns: string[]; rows: string[][] }
+type AnalysisMetric = { label: string; value: string }
+type AnalysisSection = { title: string; items: string[]; kind?: 'analysis' | 'conclusion' | 'advice' }
 
 /** Small, local JSON document produced alongside the office deliverables. */
 type AnalysisView = {
   schema_version: number
   title: string
   generated_at: string
+  metrics?: AnalysisMetric[]
+  sections?: AnalysisSection[]
   tables: AnalysisTable[]
 }
 
-type DesktopBridge = {
-  core?: {
-    invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown>
-  }
-}
+type DesktopBridge = { core?: { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> } }
+type DesktopInternals = { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> }
 
-type DesktopInternals = {
-  invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown>
-}
-
-const desktopWindow = window as Window & {
-  __TAURI__?: DesktopBridge
-  __TAURI_INTERNALS__?: DesktopInternals
-}
+const desktopWindow = window as Window & { __TAURI__?: DesktopBridge; __TAURI_INTERNALS__?: DesktopInternals }
 
 function isAnalysisView(value: unknown): value is AnalysisView {
   if (value === null || typeof value !== 'object') return false
   const record = value as Partial<AnalysisView>
-  return typeof record.title === 'string' && Array.isArray(record.tables)
+  return typeof record.title === 'string'
+    && Array.isArray(record.tables)
+    && record.tables.every(table => Array.isArray(table.columns) && Array.isArray(table.rows))
+}
+
+function Section({ section }: { section: AnalysisSection }) {
+  return <section className={section.kind === 'conclusion' ? css.conclusion : css.section}><h4>{section.title}</h4><ul>{section.items.map(item => <li key={item}>{item}</li>)}</ul></section>
 }
 
 /**
@@ -44,7 +38,7 @@ function isAnalysisView(value: unknown): value is AnalysisView {
  * @param openFile - Host file opener for the formal office deliverables.
  * @param excelPath - Generated analysis workbook path.
  * @param wordPath - Generated professional report path.
- * @returns An interactive result card, or nothing outside the desktop shell.
+ * @returns An interactive result card with structured analysis and scrollable tables.
  */
 export function AnalysisResultCard({
   path, openFile, excelPath, wordPath,
@@ -55,79 +49,54 @@ export function AnalysisResultCard({
   wordPath: string | undefined
 }) {
   const [view, setView] = useState<AnalysisView | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState(false)
+  const [visibleRows, setVisibleRows] = useState(100)
 
   useEffect(() => {
     const invoke = desktopWindow.__TAURI__?.core?.invoke ?? desktopWindow.__TAURI_INTERNALS__?.invoke
-    if (invoke === undefined) return
+    if (invoke === undefined) {
+      setError('当前环境不能读取本地分析视图，可直接打开 Excel 或 Word 成果。')
+      return
+    }
     let active = true
+    setView(null)
+    setError(null)
     void invoke('read_analysis_view', { path })
       .then((value) => {
-        if (!active || typeof value !== 'string') return
+        if (!active) return
+        if (typeof value !== 'string') throw new Error('分析视图返回格式无效')
         const parsed: unknown = JSON.parse(value)
-        if (!isAnalysisView(parsed)) return
+        if (!isAnalysisView(parsed) || parsed.tables.length === 0) throw new Error('分析视图缺少可展示的表格')
         setView(parsed)
         setSelectedId(parsed.tables[0]?.id ?? null)
       })
-      .catch(() => undefined)
+      .catch((reason: unknown) => {
+        if (!active) return
+        setError(reason instanceof Error ? reason.message : '分析视图加载失败')
+      })
     return () => { active = false }
   }, [path])
 
-  if (view === null || view.tables.length === 0) return null
-  const selected = view.tables.find(table => table.id === selectedId) ?? view.tables.at(0)
-  if (selected === undefined) return null
-  const rows = expanded ? selected.rows : selected.rows.slice(0, 8)
+  if (view === null) {
+    return <section className={css.root} aria-label="分析结果"><div className={css.heading}><div><div className={css.kicker}>分析结果</div><h3>{error === null ? '正在加载分析成果…' : '分析成果未能在对话区加载'}</h3></div><div className={css.actions}>{excelPath !== undefined && <button type="button" onClick={() => { openFile(excelPath) }}>打开 Excel</button>}{wordPath !== undefined && <button type="button" onClick={() => { openFile(wordPath) }}>打开 Word</button>}</div></div>{error !== null && <p className={css.error}>{error}</p>}</section>
+  }
+
+  const selected = view.tables.find(table => table.id === selectedId) ?? view.tables[0]
+  const rows = selected.rows.slice(0, visibleRows)
   return (
     <section className={css.root} aria-label={`${view.title}结果表格`}>
-      <div className={css.heading}>
-        <div>
-          <div className={css.kicker}>分析结果</div>
-          <h3>{view.title}</h3>
-        </div>
-        <div className={css.actions}>
-          {excelPath !== undefined && (
-            <button type="button" onClick={() => { openFile(excelPath) }}>打开 Excel</button>
-          )}
-          {wordPath !== undefined && (
-            <button type="button" onClick={() => { openFile(wordPath) }}>打开 Word</button>
-          )}
-        </div>
-      </div>
-      <div className={css.tabs} role="tablist" aria-label="分析数据分类">
-        {view.tables.map(table => (
-          <button
-            key={table.id}
-            type="button"
-            role="tab"
-            aria-selected={selected.id === table.id}
-            className={selected.id === table.id ? css.tabActive : css.tab}
-            onClick={() => { setSelectedId(table.id); setExpanded(false) }}
-          >
-            {table.title}
-          </button>
-        ))}
-      </div>
-      <div className={css.tableWrap}>
-        <table>
-          <thead>
-            <tr>{selected.columns.map(column => <th key={column}>{column}</th>)}</tr>
-          </thead>
-          <tbody>
-            {rows.map((row, index) => (
-              <tr key={`${selected.id}-${index}`}>
-                {selected.columns.map((column, columnIndex) => (
-                  <td key={column}>{row[columnIndex] ?? '—'}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {selected.rows.length > 8 && (
-        <button type="button" className={css.expand} onClick={() => { setExpanded(value => !value) }}>
-          {expanded ? '收起明细' : `查看全部 ${selected.rows.length} 条`}
-        </button>
+      <div className={css.heading}><div><div className={css.kicker}>空间分析成果</div><h3>{view.title}</h3></div><div className={css.actions}>{excelPath !== undefined && <button type="button" onClick={() => { openFile(excelPath) }}>打开 Excel</button>}{wordPath !== undefined && <button type="button" onClick={() => { openFile(wordPath) }}>打开 Word</button>}</div></div>
+      {view.metrics !== undefined && view.metrics.length > 0 && (
+        <dl className={css.metrics}>
+          {view.metrics.map(metric => <div key={metric.label}><dt>{metric.label}</dt><dd>{metric.value}</dd></div>)}
+        </dl>
+      )}
+      <div className={css.tabs} role="tablist" aria-label="分析数据分类">{view.tables.map(table => <button key={table.id} type="button" role="tab" aria-selected={selected.id === table.id} className={selected.id === table.id ? css.tabActive : css.tab} onClick={() => { setSelectedId(table.id); setVisibleRows(100) }}>{table.title}</button>)}</div>
+      <div className={css.tableWrap}><table><thead><tr>{selected.columns.map((column, index) => <th key={`${column}-${index}`}>{column}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${selected.id}-${index}`}>{selected.columns.map((column, columnIndex) => <td key={`${column}-${columnIndex}`}>{row[columnIndex] ?? '—'}</td>)}</tr>)}</tbody></table></div>
+      {selected.rows.length > visibleRows && <button type="button" className={css.expand} onClick={() => { setVisibleRows(count => count + 100) }}>加载更多（已显示 {visibleRows} / {selected.rows.length} 条）</button>}
+      {view.sections !== undefined && view.sections.length > 0 && (
+        <div className={css.sections}>{view.sections.map(section => <Section key={section.title} section={section} />)}</div>
       )}
     </section>
   )

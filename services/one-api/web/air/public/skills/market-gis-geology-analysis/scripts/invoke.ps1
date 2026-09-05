@@ -181,6 +181,10 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
         [void]$lines.Add('- 对复杂程度或易发等级较高的局部范围，应在项目选址、场地设计和施工组织阶段优先开展针对性工程地质勘察。')
         [void]$lines.Add('- 建议结合拟建工程类型核查边坡、地基稳定性、地下水和不良地质作用，并将高风险局部范围落实到勘察点位和防治措施。')
         [void]$lines.Add('- 本次成果适用于前期空间筛查和风险识别，不替代法定地质灾害危险性评估、工程勘察或现场调查。')
+        [void]$lines.Add('')
+        [void]$lines.Add('## 综合结论')
+        foreach ($row in $environment) { [void]$lines.Add(('- 地质环境条件判定为“{0}”（等级 {1}），本图层占用面积为 {2} 公顷。' -f (FieldValue $row 'DZHJTJ'), (FieldValue $row 'DJ'), (FieldValue $row 'ZYMJ'))) }
+        foreach ($row in $hazards) { [void]$lines.Add(('- 地质灾害易发分区判定为“{0}”（等级 {1}），本图层占用面积为 {2} 公顷。工程实施前应将上述空间结果落实到勘察与设计范围。' -f (FieldValue $row 'FQMC'), (FieldValue $row 'DJ'), (FieldValue $row 'ZYMJ'))) }
     }
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5pWw5o2u6ZmQ5Yi2'))
@@ -213,17 +217,20 @@ $body = @{
 $uri = "$($BaseUrl.TrimEnd('/'))/Analysis.svc/OneKeyAnalysis"
 $response = Invoke-WebRequest -UseBasicParsing -Method Post -Uri $uri -ContentType 'text/plain; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 $stamp = Get-Date -Format 'yyyyMMdd_HHmmss_fff'
-$target = Join-Path $outputPath "geology-analysis-result_$stamp.json"
+$sourceName = [System.IO.Path]::GetFileNameWithoutExtension($resolved.SourcePath)
+if ([string]::IsNullOrWhiteSpace($sourceName)) { $sourceName = '空间范围' }
+$sourceName = ($sourceName -replace '[\\/:*?"<>|]', '_').Trim()
+$target = Join-Path $outputPath "${sourceName}_地质条件分析原始数据_${stamp}.json"
 $content = if ($response.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($response.Content) } else { [string]$response.Content }
 [System.IO.File]::WriteAllText($target, $content, [System.Text.UTF8Encoding]::new($false))
 $responseJson = $null
 $responseParseError = ''
 try { $responseJson = $content | ConvertFrom-Json } catch { $responseParseError = $_.Exception.Message }
-$report = Join-Path $outputPath "geology-analysis-report_$stamp.md"
+$report = Join-Path $outputPath "${sourceName}_地质条件分析底稿_${stamp}.md"
 Write-AnalysisMarkdown $report $resolved $target $responseJson $responseParseError
-$workbook = Join-Path $outputPath "geology-analysis-table_$stamp.xlsx"
-$wordReport = Join-Path $outputPath "geology-analysis-report_$stamp.docx"
-$analysisView = Join-Path $outputPath "geology-analysis-view_$stamp.json"
+$workbook = Join-Path $outputPath "${sourceName}_地质条件分析_${stamp}.xlsx"
+$wordReport = Join-Path $outputPath "${sourceName}_地质条件分析报告_${stamp}.docx"
+$analysisView = Join-Path $outputPath "${sourceName}_地质条件分析视图_${stamp}.json"
 & (Join-Path $PSScriptRoot 'export-office.ps1') -Title '地质条件分析' -JsonPath $target -MarkdownPath $report -ExcelPath $workbook -WordPath $wordReport -ViewPath $analysisView -OpenWorkbook
 Write-Output "已生成接口原始结果：$target"
 Write-Output "已生成 Markdown 分析底稿：$report"
