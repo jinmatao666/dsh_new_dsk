@@ -66,7 +66,7 @@ export function AnalysisResultCard({
       .then((value) => {
         if (!active) return
         if (typeof value !== 'string') throw new Error('分析视图返回格式无效')
-        const parsed: unknown = JSON.parse(value)
+        const parsed: unknown = JSON.parse(value.replace(/^\uFEFF/u, ''))
         if (!isAnalysisView(parsed) || parsed.tables.length === 0) throw new Error('分析视图缺少可展示的表格')
         setView(parsed)
         setSelectedId(parsed.tables[0]?.id ?? null)

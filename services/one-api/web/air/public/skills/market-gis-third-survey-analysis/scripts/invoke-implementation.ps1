@@ -234,6 +234,7 @@ $stamp = Get-Date -Format 'yyyyMMdd_HHmmss_fff'
 $sourceName = [System.IO.Path]::GetFileNameWithoutExtension($resolved.SourcePath)
 if ([string]::IsNullOrWhiteSpace($sourceName)) { $sourceName = '空间范围' }
 $sourceName = ($sourceName -replace '[\\/:*?"<>|]', '_').Trim()
+$displayStamp = Get-Date -Format 'MMdd-HHmmss'
 $target = Join-Path $outputPath "${sourceName}_三调土地利用现状分析原始数据_${stamp}.json"
 $content = if ($response.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($response.Content) } else { [string]$response.Content }
 [System.IO.File]::WriteAllText($target, $content, [System.Text.UTF8Encoding]::new($false))
@@ -242,8 +243,8 @@ $responseParseError = ''
 try { $responseJson = $content | ConvertFrom-Json } catch { $responseParseError = $_.Exception.Message }
 $report = Join-Path $outputPath "${sourceName}_三调土地利用现状分析底稿_${stamp}.md"
 Write-AnalysisMarkdown $report $resolved $target $responseJson $responseParseError
-$workbook = Join-Path $outputPath "${sourceName}_三调土地利用现状分析_${stamp}.xlsx"
-$wordReport = Join-Path $outputPath "${sourceName}_三调土地利用现状分析报告_${stamp}.docx"
+$workbook = Join-Path $outputPath "${sourceName}_三调_${displayStamp}.xlsx"
+$wordReport = Join-Path $outputPath "${sourceName}_三调报告_${displayStamp}.docx"
 $analysisView = Join-Path $outputPath "${sourceName}_三调土地利用现状分析视图_${stamp}.json"
 & (Join-Path $PSScriptRoot 'export-office.ps1') -Title '三调土地利用现状分析' -JsonPath $target -MarkdownPath $report -ExcelPath $workbook -WordPath $wordReport -ViewPath $analysisView -OpenWorkbook
 Write-Output "已生成接口原始结果：$target"

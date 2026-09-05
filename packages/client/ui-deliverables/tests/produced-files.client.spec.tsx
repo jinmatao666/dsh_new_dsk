@@ -360,7 +360,7 @@ describe('ProducedFiles row', () => {
 
   it('renders a GIS analysis view as a tabbed table and opens its office deliverables', async () => {
     const openFile = vi.fn<(path: string) => void>()
-    const invoke = vi.fn().mockResolvedValue(JSON.stringify({
+    const invoke = vi.fn().mockResolvedValue(`\uFEFF${JSON.stringify({
       schema_version: 1,
       title: '三调土地利用现状分析',
       generated_at: '2026-09-05T12:00:00+08:00',
@@ -370,7 +370,7 @@ describe('ProducedFiles row', () => {
         { id: 'conclusion', title: '分析结论', columns: ['章节', '内容'], rows: [['结构', '建设用地为主']] },
         { id: 'details', title: '接口明细', columns: ['字段', '值'], rows: [['HJMJ', '10.332']] },
       ],
-    }))
+    })}`)
     Object.defineProperty(window, '__TAURI_INTERNALS__', {
       configurable: true,
       value: { invoke },
@@ -379,8 +379,8 @@ describe('ProducedFiles row', () => {
       <ProducedFiles
         matched={[
           'E:\\workspace\\地块1_三调土地利用现状分析视图_20260905_120000_000.json',
-          'E:\\workspace\\地块1_三调土地利用现状分析_20260905_120000_000.xlsx',
-          'E:\\workspace\\地块1_三调土地利用现状分析报告_20260905_120000_000.docx',
+          'E:\\workspace\\地块1_三调_0905-120000.xlsx',
+          'E:\\workspace\\地块1_三调报告_0905-120000.docx',
           'E:\\workspace\\地块1_三调土地利用现状分析原始数据_20260905_120000_000.json',
           'E:\\workspace\\地块1_三调土地利用现状分析底稿_20260905_120000_000.md',
         ]}
@@ -397,7 +397,7 @@ describe('ProducedFiles row', () => {
     fireEvent.click(rendered.getByRole('tab', { name: '接口明细' }))
     expect(rendered.getByText('10.332')).toBeTruthy()
     fireEvent.click(rendered.getByRole('button', { name: '打开 Excel' }))
-    expect(openFile).toHaveBeenCalledWith('E:\\workspace\\地块1_三调土地利用现状分析_20260905_120000_000.xlsx')
+    expect(openFile).toHaveBeenCalledWith('E:\\workspace\\地块1_三调_0905-120000.xlsx')
     expect(rendered.getByText('不涉及永久基本农田。')).toBeTruthy()
     expect(rendered.queryByText('地块1_三调土地利用现状分析视图_20260905_120000_000.json')).toBeNull()
   })

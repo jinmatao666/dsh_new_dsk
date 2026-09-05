@@ -113,15 +113,63 @@ function ResultRows([string]$title, $response) {
     if ($rows.Count -eq 1) { [void]$rows.Add(@('未返回可展示的专项结果', '—', '—', '—')) }; return $rows.ToArray()
 }
 
+function WordRun([string]$text, [int]$size = 22, [bool]$bold = $false) {
+    $weight = if ($bold) { '<w:b/>' } else { '' }
+    return '<w:r><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" w:eastAsia="等线"/>' + $weight + '<w:color w:val="000000"/><w:sz w:val="' + $size + '"/><w:szCs w:val="' + $size + '"/></w:rPr><w:t xml:space="preserve">' + (XmlText $text) + '</w:t></w:r>'
+}
+
 function WordParagraph([string]$line) {
     $text = $line.Trim()
-    if (-not $text) { return '<w:p/>' }
+    if (-not $text) { return '<w:p><w:pPr><w:spacing w:after="80"/></w:pPr></w:p>' }
     $heading = 0
     while ($heading -lt $text.Length -and $text[$heading] -eq '#') { $heading++ }
-    $text = $text.TrimStart('#').Trim().TrimStart('-', '*').Trim()
-    $size = if ($heading -eq 1) { 36 } elseif ($heading -eq 2) { 30 } elseif ($heading -ge 3) { 26 } else { 22 }
-    $bold = if ($heading -gt 0) { '<w:b/>' } else { '' }
-    return '<w:p><w:r><w:rPr>' + $bold + '<w:sz w:val="' + $size + '"/><w:szCs w:val="' + $size + '"/></w:rPr><w:t xml:space="preserve">' + (XmlText $text) + '</w:t></w:r></w:p>'
+    $text = $text.TrimStart('#').Trim()
+    $isBullet = $text.StartsWith('- ') -or $text.StartsWith('* ')
+    $text = $text.TrimStart('-', '*').Trim()
+    if ($heading -ge 2) {
+        return '<w:p><w:pPr><w:spacing w:before="280" w:after="140"/></w:pPr>' + (WordRun $text 28 $true) + '</w:p>'
+    }
+    $prefix = if ($isBullet) { '• ' } else { '' }
+    return '<w:p><w:pPr><w:spacing w:after="120"/><w:ind w:firstLine="420"/></w:pPr>' + (WordRun ($prefix + $text) 22 $false) + '</w:p>'
+}
+
+function WordCell([string]$text, [bool]$isHeader, [bool]$isAlternate, [int]$width) {
+    $fill = if ($isHeader) { '1F4E78' } elseif ($isAlternate) { 'F2F6FA' } else { 'FFFFFF' }
+    $color = if ($isHeader) { 'FFFFFF' } else { '000000' }
+    $weight = if ($isHeader) { '<w:b/>' } else { '' }
+    return '<w:tc><w:tcPr><w:tcW w:w="' + $width + '" w:type="dxa"/><w:shd w:val="clear" w:fill="' + $fill + '"/><w:tcMar><w:top w:w="100" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="100" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:spacing w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" w:eastAsia="等线"/>' + $weight + '<w:color w:val="' + $color + '"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr><w:t xml:space="preserve">' + (XmlText $text) + '</w:t></w:r></w:p></w:tc>'
+}
+
+function WordTable([object]$rows) {
+    $rowList = @($rows)
+    if ($rowList.Count -eq 0) { return '' }
+    $columnCount = @($rowList[0]).Count
+    $widths = if ($columnCount -eq 4) { @(1900, 2500, 1500, 3000) } elseif ($columnCount -eq 3) { @(2500, 2800, 3600) } else { @(8900) }
+    $grid = (($widths | ForEach-Object { '<w:gridCol w:w="' + $_ + '"/>' }) -join '')
+    $body = [System.Text.StringBuilder]::new()
+    for ($index = 0; $index -lt $rowList.Count; $index++) {
+        $cells = @($rowList[$index])
+        $isHeader = $index -eq 0
+        $isAlternate = (-not $isHeader) -and (($index % 2) -eq 0)
+        [void]$body.Append('<w:tr><w:trPr>')
+        if ($isHeader) { [void]$body.Append('<w:tblHeader/>') }
+        [void]$body.Append('</w:trPr>')
+        for ($column = 0; $column -lt $columnCount; $column++) {
+            $value = if ($column -lt $cells.Count -and $null -ne $cells[$column]) { [string]$cells[$column] } else { '—' }
+            [void]$body.Append((WordCell $value $isHeader $isAlternate $widths[$column]))
+        }
+        [void]$body.Append('</w:tr>')
+    }
+    return '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders><w:top w:val="single" w:sz="6" w:color="D9D9D9"/><w:left w:val="single" w:sz="6" w:color="D9D9D9"/><w:bottom w:val="single" w:sz="6" w:color="D9D9D9"/><w:right w:val="single" w:sz="6" w:color="D9D9D9"/><w:insideH w:val="single" w:sz="6" w:color="D9D9D9"/><w:insideV w:val="single" w:sz="6" w:color="D9D9D9"/></w:tblBorders><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>' + $grid + '</w:tblGrid>' + $body.ToString() + '</w:tbl>'
+}
+
+function WordTitle([string]$title) {
+    return '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="540" w:after="220"/></w:pPr>' + (WordRun ($title + '报告') 40 $true) + '</w:p>'
+}
+
+function WordMeta([string]$title) {
+    $text = '成果名称：' + $title + '    生成时间：' + (Get-Date).ToString('yyyy年MM月dd日 HH:mm')
+    return '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="420"/></w:pPr>' + (WordRun $text 20 $false) + '</w:p>'
 }
 
 $markdownLines = [System.IO.File]::ReadAllLines($MarkdownPath, [System.Text.Encoding]::UTF8)
@@ -144,11 +192,15 @@ $xlsxEntries = @{
 }
 Write-ZipPackage $ExcelPath $xlsxEntries
 
-$body = ($markdownLines | ForEach-Object { WordParagraph $_ }) -join ''
+$narrative = ($markdownLines | Select-Object -Skip 1 | ForEach-Object { WordParagraph $_ }) -join ''
+$body = (WordTitle $Title) + (WordMeta $Title) + '<w:p><w:pPr><w:spacing w:before="180" w:after="140"/></w:pPr>' + (WordRun '一、核心结果汇总' 28 $true) + '</w:p>' + (WordTable $resultRows) + '<w:p><w:pPr><w:spacing w:before="320" w:after="140"/></w:pPr>' + (WordRun '二、专业分析与建议' 28 $true) + '</w:p>' + $narrative
 $docxEntries = @{
-    '[Content_Types].xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'
+    '[Content_Types].xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>'
     '_rels/.rels' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
-    'word/document.xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + $body + '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>'
+    'word/_rels/document.xml.rels' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>'
+    'word/header1.xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="right"/></w:pPr>' + (WordRun 'ZJUGIS Harness 空间分析报告' 18 $false) + '</w:p></w:hdr>'
+    'word/footer1.xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="center"/></w:pPr>' + (WordRun '第 ' 18 $false) + '<w:fldSimple w:instr="PAGE"><w:r><w:rPr><w:sz w:val="18"/></w:rPr><w:t>1</w:t></w:r></w:fldSimple>' + (WordRun ' 页' 18 $false) + '</w:p></w:ftr>'
+    'word/document.xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>' + $body + '<w:sectPr><w:headerReference w:type="default" r:id="rId1"/><w:footerReference w:type="default" r:id="rId2"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720"/></w:sectPr></w:body></w:document>'
 }
 Write-ZipPackage $WordPath $docxEntries
 
@@ -161,7 +213,7 @@ if (-not [string]::IsNullOrWhiteSpace($ViewPath)) {
         sections = ViewSections $markdownLines
         tables = @((ViewTable 'summary' '结果汇总' $resultRows), (ViewTable 'analysis' '专业分析' $analysisRows), (DetailViewTable $response))
     } | ConvertTo-Json -Depth 16
-    [System.IO.File]::WriteAllText($ViewPath, $view, [System.Text.UTF8Encoding]::new($true))
+    [System.IO.File]::WriteAllText($ViewPath, $view, [System.Text.UTF8Encoding]::new($false))
 }
 
 Write-Output "已生成 Excel 分析表：$ExcelPath"
