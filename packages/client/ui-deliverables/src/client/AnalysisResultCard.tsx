@@ -83,6 +83,9 @@ export function AnalysisResultCard({
   }
 
   const selected = view.tables.find(table => table.id === selectedId) ?? view.tables[0]
+  if (selected === undefined) {
+    return <section className={css.root} aria-label="分析结果"><p className={css.error}>分析视图未提供可展示的结果表。</p></section>
+  }
   const rows = selected.rows.slice(0, visibleRows)
   return (
     <section className={css.root} aria-label={`${view.title}结果表格`}>
