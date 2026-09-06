@@ -176,15 +176,23 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
         }
         if ($environment.Count -eq 0 -and $hazards.Count -eq 0) { [void]$lines.Add('- ' + (Localized '5pyq6L+U5Zue5bey56Gu6K6k55qE5Zyw6LSo5YiG5p6Q5a2X5q6144CC')) }
         [void]$lines.Add('')
-        [void]$lines.Add('## 专业研判与建议')
-        [void]$lines.Add('- 地质环境条件与地质灾害易发分区分别反映工程地质背景和灾害发生可能性，报告按两个图层独立统计，不跨图层叠加面积。')
-        [void]$lines.Add('- 对复杂程度或易发等级较高的局部范围，应在项目选址、场地设计和施工组织阶段优先开展针对性工程地质勘察。')
-        [void]$lines.Add('- 建议结合拟建工程类型核查边坡、地基稳定性、地下水和不良地质作用，并将高风险局部范围落实到勘察点位和防治措施。')
-        [void]$lines.Add('- 本次成果适用于前期空间筛查和风险识别，不替代法定地质灾害危险性评估、工程勘察或现场调查。')
+        [void]$lines.Add('## 专业分析')
+        [void]$lines.Add('- 地质环境条件反映工程地质背景，地质灾害易发分区反映区域灾害倾向；两项均用于选址和勘察决策，但不跨图层叠加面积。')
+        foreach ($row in $environment) {
+            $condition = FieldValue $row 'DZHJTJ'
+            if ($condition -match '复杂') { [void]$lines.Add(('- 地质环境为“{0}”，工程实施前应将地基条件、边坡稳定性、地下水和不良地质作用列为勘察重点。' -f $condition)) }
+            else { [void]$lines.Add(('- 地质环境为“{0}”，仍应结合拟建工程的开挖、荷载和排水条件布置常规工程地质勘察。' -f $condition)) }
+        }
+        foreach ($row in $hazards) {
+            $zone = FieldValue $row 'FQMC'
+            if ($zone -match '低易发') { [void]$lines.Add(('- 地质灾害易发性为“{0}”，不以区域灾害倾向作为选址直接否决因素；但不减免复杂地质环境对应的勘察和设计要求。' -f $zone)) }
+            else { [void]$lines.Add(('- 地质灾害易发性为“{0}”，应在方案深化前将对应范围落实到勘察点位、施工组织和防治措施。' -f $zone)) }
+        }
         [void]$lines.Add('')
         [void]$lines.Add('## 综合结论')
-        foreach ($row in $environment) { [void]$lines.Add(('- 地质环境条件判定为“{0}”（等级 {1}），本图层占用面积为 {2} 公顷。' -f (FieldValue $row 'DZHJTJ'), (FieldValue $row 'DJ'), (FieldValue $row 'ZYMJ'))) }
-        foreach ($row in $hazards) { [void]$lines.Add(('- 地质灾害易发分区判定为“{0}”（等级 {1}），本图层占用面积为 {2} 公顷。工程实施前应将上述空间结果落实到勘察与设计范围。' -f (FieldValue $row 'FQMC'), (FieldValue $row 'DJ'), (FieldValue $row 'ZYMJ'))) }
+        foreach ($row in $environment) { [void]$lines.Add(('- **工程地质条件：**项目范围在本图层中判定为“{0}”（等级 {1}），涉及 {2} 公顷；工程设计应以该条件确定勘察重点。' -f (FieldValue $row 'DZHJTJ'), (FieldValue $row 'DJ'), (FieldValue $row 'ZYMJ'))) }
+        foreach ($row in $hazards) { [void]$lines.Add(('- **灾害倾向：**项目范围在本图层中属于“{0}”（等级 {1}），涉及 {2} 公顷。应将地质环境复杂程度和灾害倾向作为两项并列条件纳入选址与设计。' -f (FieldValue $row 'FQMC'), (FieldValue $row 'DJ'), (FieldValue $row 'ZYMJ'))) }
+        [void]$lines.Add('- **实施建议：**本次结果支持开展下一阶段工程方案深化；在施工图设计前，应完成与项目类型相匹配的工程地质勘察和风险处置设计。')
     }
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5pWw5o2u6ZmQ5Yi2'))
@@ -236,6 +244,7 @@ $analysisView = Join-Path $outputPath "${sourceName}_地质条件分析视图_${
 Write-Output "已生成接口原始结果：$target"
 Write-Output "已生成 Markdown 分析底稿：$report"
 Write-Output "已生成对话分析数据：$analysisView"
+Write-Output "DSH_ANALYSIS_VIEW=$analysisView"
 } finally {
     if ($null -ne $resolved -and $null -ne $resolved.TemporaryDirectory -and [System.IO.Directory]::Exists($resolved.TemporaryDirectory)) { Remove-Item -LiteralPath $resolved.TemporaryDirectory -Recurse -Force }
 }

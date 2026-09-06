@@ -328,6 +328,31 @@ describe('produced-file Turn data', () => {
       'E:\\workspace\\analysis-result.json', 'E:\\workspace\\analysis-report.md',
     ])
   })
+
+  it('publishes a marked GIS analysis view even when the terminal summary omits generation prose', () => {
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      call(2, 'gis', { card: 'generic', title: 'Run land-use review' }),
+      at(3, 'tool/result', {
+        turn: 1,
+        step: 1,
+        message: {
+          source: { type: 'tool-result', callId: 'gis' },
+          content: [{ type: 'tool-result', content: [], isError: false }],
+        },
+      }, {
+        for: 'result',
+        view: {
+          card: 'terminal',
+          output: 'DSH_ANALYSIS_VIEW=E:\\workspace\\地块1_土地利用规划审查视图_20260905_120000_000.json',
+        },
+      }),
+    ])
+
+    expect(producedForClosing(deliverablesOf(value))).toEqual([
+      'E:\\workspace\\地块1_土地利用规划审查视图_20260905_120000_000.json',
+    ])
+  })
 })
 
 describe('ProducedFiles row', () => {
@@ -362,7 +387,7 @@ describe('ProducedFiles row', () => {
     const openFile = vi.fn<(path: string) => void>()
     const invoke = vi.fn().mockResolvedValue(`\uFEFF${JSON.stringify({
       schema_version: 1,
-      title: '三调土地利用现状分析',
+      title: '土地利用规划审查',
       generated_at: '2026-09-05T12:00:00+08:00',
       metrics: [{ label: '总面积', value: '0.1672 公顷' }],
       sections: [{ title: '综合结论', kind: 'conclusion', items: ['不涉及永久基本农田。'] }],
@@ -378,11 +403,11 @@ describe('ProducedFiles row', () => {
     const rendered = render(
       <ProducedFiles
         matched={[
-          'E:\\workspace\\地块1_三调土地利用现状分析视图_20260905_120000_000.json',
-          'E:\\workspace\\地块1_三调_0905-120000.xlsx',
-          'E:\\workspace\\地块1_三调报告_0905-120000.docx',
-          'E:\\workspace\\地块1_三调土地利用现状分析原始数据_20260905_120000_000.json',
-          'E:\\workspace\\地块1_三调土地利用现状分析底稿_20260905_120000_000.md',
+          'E:\\workspace\\地块1_土地利用规划审查视图_20260905_120000_000.json',
+          'E:\\workspace\\地块1_规划_0905-120000.xlsx',
+          'E:\\workspace\\地块1_规划报告_0905-120000.docx',
+          'E:\\workspace\\地块1_土地利用规划审查原始数据_20260905_120000_000.json',
+          'E:\\workspace\\地块1_土地利用规划审查底稿_20260905_120000_000.md',
         ]}
         openFile={openFile}
         t={t}
@@ -392,14 +417,14 @@ describe('ProducedFiles row', () => {
 
     expect(await rendered.findByText('建设用地为主')).toBeTruthy()
     expect(invoke).toHaveBeenCalledWith('read_analysis_view', {
-      path: 'E:\\workspace\\地块1_三调土地利用现状分析视图_20260905_120000_000.json',
+      path: 'E:\\workspace\\地块1_土地利用规划审查视图_20260905_120000_000.json',
     })
     fireEvent.click(rendered.getByRole('tab', { name: '接口明细' }))
     expect(rendered.getByText('10.332')).toBeTruthy()
     fireEvent.click(rendered.getByRole('button', { name: '打开 Excel' }))
-    expect(openFile).toHaveBeenCalledWith('E:\\workspace\\地块1_三调_0905-120000.xlsx')
+    expect(openFile).toHaveBeenCalledWith('E:\\workspace\\地块1_规划_0905-120000.xlsx')
     expect(rendered.getByText('不涉及永久基本农田。')).toBeTruthy()
-    expect(rendered.queryByText('地块1_三调土地利用现状分析视图_20260905_120000_000.json')).toBeNull()
+    expect(rendered.queryByText('地块1_土地利用规划审查视图_20260905_120000_000.json')).toBeNull()
   })
 
   it('keeps one measured line, updates on resize, and opens a file or the workspace folder', () => {

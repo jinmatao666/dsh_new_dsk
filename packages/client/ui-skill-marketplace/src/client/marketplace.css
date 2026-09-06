@@ -775,6 +775,34 @@
   overflow: hidden;
 }
 
+.dsh-skill-installed-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 12px 0 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 14px;
+  background: var(--dsw-alias-bg-elevated);
+}
+
+.dsh-skill-installed-heading h2 { margin: 0 0 4px; font-size: 18px; }
+.dsh-skill-installed-heading p { margin: 0; color: var(--dsw-alias-label-secondary); font-size: 13px; }
+.dsh-skill-installed-heading button,
+.dsh-skill-card-uninstall {
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff;
+  color: #dc2626;
+  cursor: pointer;
+  font: inherit;
+}
+.dsh-skill-installed-heading button { padding: 8px 12px; color: var(--dsw-alias-primary, #2563eb); border-color: var(--dsw-alias-primary, #2563eb); }
+.dsh-skill-card-uninstall { margin-top: 10px; padding: 5px 10px; font-size: 12px; }
+.dsh-skill-card-uninstall:hover { background: #fef2f2; }
+.dsh-skill-card-uninstall:disabled { cursor: wait; opacity: .6; }
+
 .dsh-skill-empty {
   display: grid;
   min-height: 260px;

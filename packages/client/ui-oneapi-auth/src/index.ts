@@ -345,6 +345,18 @@ export function apply(ctx: Context, config: Config): void {
     return result.data
   }
 
+  const recordPublishedSkillInstall = async (payload: unknown, signal?: AbortSignal): Promise<unknown> => {
+    const id = typeof (payload as { id?: unknown })?.id === 'number' ? (payload as { id: number }).id : Number.NaN
+    if (!Number.isInteger(id) || id < 1) throw new Error('技能标识无效')
+    const response = await fetch(`${baseURL}/api/skill/${String(id)}/download`, {
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+    const result = await jsonBody<OneApiEnvelope<unknown>>(response)
+    if (!response.ok || result.success !== true) throw new Error(result.message ?? `技能安装计数失败（HTTP ${String(response.status)}）`)
+    return result.data
+  }
+
   // Credentials intentionally survive normal restarts, but a newly built
   // installer carries a new marker and must show the login screen once.
   const installReady = (async (): Promise<void> => {
@@ -435,6 +447,13 @@ export function apply(ctx: Context, config: Config): void {
     if (endpoint === 'skill-bundle') {
       try {
         return { ok: true as const, value: await downloadPublishedSkillBundle(payload, signal) }
+      } catch (error) {
+        return internal(error instanceof Error ? error.message : String(error))
+      }
+    }
+    if (endpoint === 'skill-download') {
+      try {
+        return { ok: true as const, value: await recordPublishedSkillInstall(payload, signal) }
       } catch (error) {
         return internal(error instanceof Error ? error.message : String(error))
       }

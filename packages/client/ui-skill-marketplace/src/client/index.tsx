@@ -100,6 +100,7 @@ type RemoteSkill = {
 
 let loadRemoteSkills: (() => Promise<RemoteSkill[]>) | undefined
 let loadRemoteSkillBundle: ((id: number) => Promise<unknown>) | undefined
+let recordRemoteSkillInstall: ((id: number) => Promise<unknown>) | undefined
 
 function rpcValue(result: RpcResult<unknown>): unknown {
   if (!result.ok) throw new Error(result.error.message)
@@ -126,6 +127,10 @@ function marketplaceInstallErrorMessage(error: unknown): string {
   if (typeof error === 'string' && error.trim() !== '') return error
   if (error instanceof Error && error.message.trim() !== '') return error.message
   return '技能安装失败'
+}
+
+function hasVerifiedInstallCount(skill: Skill): boolean {
+  return skill.remoteId !== undefined
 }
 
 function serverSkillFiles(bundle: unknown): Array<{ path: string; content: number[] }> {
@@ -174,7 +179,7 @@ const L = {
   noParams: '该技能无需配置参数',
   preview: '预览',
   uninstall: '卸载',
-  createSkill: '添加本地技能',
+  createSkill: '导入个人技能',
   skills: '技能',
   experts: '专家库',
   connectors: '连接器',
@@ -446,7 +451,7 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall 
   installing: boolean
   onToggleInstall: () => void
 }) {
-  const installed = installState === 'installed'
+  const installed = installState === 'installed' || installState === 'updateAvailable'
   const installLabel = skill.installable !== true
     ? '演示技能，暂未开放安装'
     : installState === 'updateAvailable'
@@ -469,7 +474,7 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall 
           <div className="dsh-skill-detail-meta">
             <span>{L.version}: {skill.version}</span>
             <span>{L.author}: {skill.author}</span>
-            <span>{skill.installs} {L.count}</span>
+            {hasVerifiedInstallCount(skill) && <span>{skill.installs} {L.count}</span>}
           </div>
         </div>
         <button
@@ -685,6 +690,11 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
   const [remoteSkills, setRemoteSkills] = useState<RemoteSkill[] | null>(null)
 
   const [installStates, setInstallStates] = useState<Map<string, MarketplaceSkillState>>(new Map())
+  useEffect(() => {
+    if (installMessage === null) return undefined
+    const timer = window.setTimeout(() => { setInstallMessage(null) }, 5_000)
+    return () => { window.clearTimeout(timer) }
+  }, [installMessage])
   const refreshInstallStates = async () => {
     try {
       const [value, customValue] = await Promise.all([
@@ -830,21 +840,19 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
 
   const visible = useMemo(() => {
     let skills = [...allSkills]
-    if (activeSubTab === 'skillHub') {
+    if (!showInstalledOnly && activeSubTab === 'skillHub') {
       skills = skills.filter(s => s.tags.includes('SkillHub'))
-    } else if (activeSubTab === 'suite') {
+    } else if (!showInstalledOnly && activeSubTab === 'suite') {
       skills = skills.filter(s => s.tags.includes(L.suite))
     }
-    if (category !== L.all) {
+    if (!showInstalledOnly && category !== L.all) {
       skills = skills.filter(s => s.category === category)
     }
     if (query.trim() !== '') {
       const q = query.trim().toLowerCase()
       skills = skills.filter(s => `${s.name} ${s.summary} ${s.category}`.toLowerCase().includes(q))
     }
-    if (showInstalledOnly) {
-      skills = skills.filter(isInstalled)
-    }
+    if (showInstalledOnly) skills = skills.filter(isInstalled)
     return skills
   }, [activeSubTab, allSkills, category, query, showInstalledOnly, installStates])
 
@@ -860,11 +868,11 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
     }
     const slug = skillSlug(skill)
     const currentState = resolveInstallState(skill)
+    const currentlyInstalled = isInstalled(skill)
     setInstallMessage(null)
     setInstalling(skill.id)
-    let installedPath: unknown
     try {
-      if (skill.tags.includes('本地') && currentState === 'installed') {
+      if (skill.tags.includes('本地') && currentlyInstalled) {
         await desktopInvoke('uninstall_custom_skill', { slug })
         const next = customSkills.filter(item => item.id !== skill.id)
         setCustomSkills(next)
@@ -872,13 +880,21 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
         localStorage.setItem('dsh.marketplace.custom-skills', JSON.stringify(next))
         setView('list')
         setSelectedSkill(null)
-      } else if (currentState === 'installed') {
+      } else if (currentlyInstalled) {
         await desktopInvoke('uninstall_marketplace_skill', { slug })
       } else {
         const files = skill.remoteId !== undefined && loadRemoteSkillBundle !== undefined
           ? serverSkillFiles(await loadRemoteSkillBundle(skill.remoteId))
           : undefined
-        installedPath = await desktopInvoke('install_marketplace_skill', { slug, files })
+        await desktopInvoke('install_marketplace_skill', { slug, files })
+        if (skill.remoteId !== undefined && recordRemoteSkillInstall !== undefined) {
+          try {
+            await recordRemoteSkillInstall(skill.remoteId)
+            if (loadRemoteSkills !== undefined) setRemoteSkills(await loadRemoteSkills())
+          } catch {
+            // The completed local installation remains valid when telemetry is unavailable.
+          }
+        }
       }
     } catch (error) {
       setInstallMessage({ kind: 'error', text: marketplaceInstallErrorMessage(error) })
@@ -886,10 +902,10 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
     } finally {
       setInstalling(null)
     }
-    const nowInstalled = currentState !== 'installed'
+    const nowInstalled = !currentlyInstalled
     await refreshInstallStates()
     setInstallMessage(nowInstalled
-      ? { kind: 'success', text: `${currentState === 'updateAvailable' ? '技能已更新到' : '已安装到'} ${typeof installedPath === 'string' ? installedPath : `~/.dsh/skills/${slug}/SKILL.md`}。新建对话后可输入 /${slug} 调用。` }
+      ? { kind: 'success', text: currentState === 'updateAvailable' ? '技能已更新，新建对话后即可使用。' : '技能已安装，新建对话后即可使用。' }
       : { kind: 'success', text: '技能已从本机移除。' })
   }
 
@@ -915,9 +931,8 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
       content: [...new Uint8Array(await file.arrayBuffer())],
     })))
     setInstalling(slug)
-    let installedPath: unknown
     try {
-      installedPath = await desktopInvoke('install_custom_skill', { slug, files })
+      await desktopInvoke('install_custom_skill', { slug, files })
     } catch (error) {
       setInstallMessage({ kind: 'error', text: marketplaceInstallErrorMessage(error) })
       setInstalling(null)
@@ -950,7 +965,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
     setCustomSkillFiles([])
     setSelectedSkill(skill)
     setView('detail')
-    setInstallMessage({ kind: 'success', text: `技能已安装到 ${String(installedPath)}，新建对话后即可使用。` })
+    setInstallMessage({ kind: 'success', text: '个人技能已安装，新建对话后即可使用。' })
   }
 
   const openDetail = (skill: Skill) => {
@@ -999,7 +1014,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                     <button
                       type="button"
                       className={showInstalledOnly ? 'active' : ''}
-                      onClick={() => { setShowInstalledOnly(value => !value) }}
+                      onClick={() => { setShowInstalledOnly(value => !value); setQuery('') }}
                     >
                       {L.myInstalled}
                     </button>
@@ -1008,7 +1023,12 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                 </div>
               </div>
 
-              {featuredSkills.length > 0 && (
+              {showInstalledOnly ? (
+                <div className="dsh-skill-installed-heading">
+                  <div><h2>我安装的技能</h2><p>仅显示安装在当前电脑上的个人技能和平台技能。</p></div>
+                  <button type="button" onClick={() => { setShowInstalledOnly(false) }}>浏览技能广场</button>
+                </div>
+              ) : featuredSkills.length > 0 && (
                 <div className="dsh-skill-featured-section">
                   <div className="dsh-skill-section-header">
                     <h2>{L.featured}</h2>
@@ -1045,7 +1065,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                 </div>
               )}
 
-              <div className="dsh-skill-sub-tabs">
+              {!showInstalledOnly && <div className="dsh-skill-sub-tabs">
                 {SUB_TABS.map(tab => (
                   <button
                     key={tab.id}
@@ -1056,9 +1076,9 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                     {tab.label}
                   </button>
                 ))}
-              </div>
+              </div>}
 
-              <div className="dsh-skill-categories">
+              {!showInstalledOnly && <div className="dsh-skill-categories">
                 {CATEGORIES.map(item => (
                   <button
                     key={item}
@@ -1069,7 +1089,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                     {item}
                   </button>
                 ))}
-              </div>
+              </div>}
 
               <div className="dsh-skill-grid">
                 {visible.map(skill => (
@@ -1084,10 +1104,11 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                     <div className="dsh-skill-card-body">
                       <div className="dsh-skill-card-meta">
                         <span className="dsh-skill-card-category" style={{ background: skill.accent + '14', color: skill.accent }}>{skill.category}</span>
-                        <small><DownloadIcon />{skill.installs}</small>
+                        {hasVerifiedInstallCount(skill) && <small><DownloadIcon />{skill.installs}</small>}
                       </div>
                       <h2>{skill.name}</h2>
                       <p>{skill.summary}</p>
+                      {showInstalledOnly && <button type="button" className="dsh-skill-card-uninstall" onClick={(event) => { event.stopPropagation(); void toggleInstall(skill) }} disabled={installing === skill.id}>卸载</button>}
                     </div>
                   </article>
                 ))}
@@ -1096,7 +1117,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
               {visible.length === 0 && (
                 <div className="dsh-skill-empty">
                   <div className="dsh-skill-empty-icon"><CategoryGlyph category={category} size={24} /></div>
-                  <span>{L.empty}</span>
+                  <span>{showInstalledOnly ? '暂未安装技能' : L.empty}</span>
                 </div>
               )}
             </>}
@@ -1115,7 +1136,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                 <h2>{L.createSkill}</h2>
                 <button type="button" onClick={() => { setAdding(false) }} aria-label="关闭">×</button>
               </div>
-              <label>技能名称<input autoFocus value={newSkill.name} onChange={(event) => { setNewSkill({ ...newSkill, name: event.target.value }) }} placeholder="例如：会议纪要整理" /></label>
+              <label>中文显示名称<input autoFocus value={newSkill.name} onChange={(event) => { setNewSkill({ ...newSkill, name: event.target.value }) }} placeholder="例如：会议纪要整理" /></label>
               <label>
                 分类
                 <select
@@ -1126,9 +1147,9 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                 </select>
               </label>
               <label>用途说明<textarea value={newSkill.summary} onChange={(event) => { setNewSkill({ ...newSkill, summary: event.target.value }) }} placeholder="说明这个技能何时使用、能完成什么任务" /></label>
-              <label>技能目录<input type="file" multiple {...{ webkitdirectory: '' }} onChange={(event) => { setCustomSkillFiles([...event.currentTarget.files ?? []]) }} /></label>
-              <small className="dsh-skill-add-hint">请选择包含 SKILL.md 的完整目录。安装后会复制到当前用户的技能目录，并在新对话中生效。</small>
-              <footer><button type="button" onClick={() => { setAdding(false) }}>取消</button><button type="submit" disabled={newSkill.name.trim() === '' || customSkillFiles.length === 0 || installing !== null}>添加并安装</button></footer>
+              <label>个人技能目录<input type="file" multiple {...{ webkitdirectory: '' }} onChange={(event) => { setCustomSkillFiles([...event.currentTarget.files ?? []]) }} /></label>
+              <small className="dsh-skill-add-hint">请选择包含 SKILL.md 的完整目录。目录中的脚本、Python 文件、模板、参考资料和其他子目录会完整复制到当前用户的本机技能目录，不会同步到后台。</small>
+              <footer><button type="button" onClick={() => { setAdding(false) }}>取消</button><button type="submit" disabled={newSkill.name.trim() === '' || customSkillFiles.length === 0 || installing !== null}>导入并安装</button></footer>
             </form>
           </div>
         )}
@@ -1172,6 +1193,7 @@ export function apply(ctx: ClientContext): void {
     return Array.isArray(raw?.items) ? raw.items.filter((item): item is RemoteSkill => typeof item === 'object' && item !== null) : []
   }
   loadRemoteSkillBundle = async (id: number) => rpcValue(await connection.rpc.call('/desktop-auth', 'skill-bundle', { id }))
+  recordRemoteSkillInstall = async (id: number) => rpcValue(await connection.rpc.call('/desktop-auth', 'skill-download', { id }))
   const marketplaceUrl = (process.env.DSH_CLIENT_SKILL_MARKETPLACE_URL ?? 'https://skills.zjugis.com/').trim()
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(

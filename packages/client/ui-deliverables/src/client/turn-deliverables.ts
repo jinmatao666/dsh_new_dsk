@@ -85,9 +85,17 @@ function deliverablePaths(text: string): readonly string[] {
     .filter(path => path !== '')
 }
 
+/** Extract an analysis-view path explicitly published by a GIS generator. */
+function markedAnalysisViewPaths(text: string): readonly string[] {
+  const marker = /DSH_ANALYSIS_VIEW=([^\r\n]+)/gu
+  return [...text.matchAll(marker)]
+    .map(match => match[1]?.trim() ?? '')
+    .filter(path => /(?:-analysis-view_|分析视图_|审查视图_)\d{8}_\d{6}_\d{3}\.json$/u.test(basename(path)))
+}
+
 function terminalDeliverablePaths(view: ToolResultNode['resultView']): readonly string[] {
   if (view?.card !== 'terminal' || view.output === undefined) return []
-  return deliverablePaths(view.output)
+  return [...new Set([...deliverablePaths(view.output), ...markedAnalysisViewPaths(view.output)])]
 }
 
 /**

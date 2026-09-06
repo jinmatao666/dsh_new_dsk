@@ -135,6 +135,13 @@ function FieldValue($record, [string]$field) {
     return [string]$property.Value
 }
 
+function NumberValue($record, [string]$field) {
+    $value = FieldValue $record $field
+    $number = 0.0
+    if ([double]::TryParse([string]$value, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$number)) { return $number }
+    return $null
+}
+
 function ResponseRecords($data, [string[]]$fields) {
     foreach ($field in $fields) {
         $property = $data.psobject.Properties[$field]
@@ -178,15 +185,26 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
         }
         if ($reviews.Count -eq 0 -and $zones.Count -eq 0) { [void]$lines.Add('- ' + (Localized '5pyq6L+U5Zue5bey56Gu6K6k55qE6KeE5YiS5a6h5p+l5a2X5q6144CC')) }
         [void]$lines.Add('')
-        [void]$lines.Add('## 专业审查意见')
-        [void]$lines.Add('- 审查表用于判断项目范围与规划管控要求的空间关系，功能分区明细用于解释不同管控类型的面积构成；两个数据集分别统计，不跨图层累加。')
-        [void]$lines.Add('- 涉及永久基本农田、限制建设区或禁止建设区的部分，应优先核对空间位置，并在用地预审和规划许可阶段落实避让或专题论证。')
-        [void]$lines.Add('- 建设用地应结合允许建设、有条件建设和现状建设分区判断可实施性，不能仅依据项目总面积作出符合性结论。')
-        [void]$lines.Add('- 建议将本次空间审查结果与项目选址方案、国土空间总体规划及详细规划成果联合复核，形成可追溯的审查依据。')
+        [void]$lines.Add('## 专业分析')
+        foreach ($row in $reviews) {
+            $farmland = NumberValue $row 'JBNTMJ'
+            $allowed = NumberValue $row 'YXJSQMJ'
+            $conditional = NumberValue $row 'YTJJSQMJ'
+            $restricted = NumberValue $row 'XZJSQMJ'
+            $prohibited = NumberValue $row 'JZJSQMJ'
+            if ($farmland -eq 0) { [void]$lines.Add('- 永久基本农田占用面积为 0，本次范围未表现出永久基本农田占用约束。') }
+            elseif ($null -ne $farmland) { [void]$lines.Add(('- 永久基本农田占用面积为 {0} 公顷，应优先调整项目边界并落实避让或法定论证。' -f (FieldValue $row 'JBNTMJ'))) }
+            if ($prohibited -gt 0 -or $restricted -gt 0) { [void]$lines.Add('- 项目范围存在限制或禁止建设区面积，建设方案应先完成对应管控要求的专项核查。') }
+            elseif ($allowed -gt 0 -or $conditional -gt 0) { [void]$lines.Add('- 项目范围与建设区空间关系已形成面积结果，可结合允许建设区和有条件建设区的范围优化项目布局。') }
+            else { [void]$lines.Add('- 本次审查的建设区分类未形成面积结果，项目推进应以规划用地性质、建设边界和详细规划图则作为下一步审查依据。') }
+        }
         [void]$lines.Add('')
         [void]$lines.Add('## 综合结论')
-        foreach ($row in $reviews) { [void]$lines.Add(('- 本次审查范围面积为 {0} 公顷；永久基本农田占用标识为 {1}，占用面积为 {2} 公顷。' -f (FieldValue $row 'YDZMJ'), (FieldValue $row 'SFZYJBNT'), (FieldValue $row 'JBNTMJ'))) }
-        [void]$lines.Add('- 本结论仅说明本次服务返回的空间叠加结果；建设可实施性仍应结合具体规划图则、用地性质和审批要求综合判定。')
+        foreach ($row in $reviews) {
+            $farmland = NumberValue $row 'JBNTMJ'
+            [void]$lines.Add(('- **核心结论：**项目范围为 {0} 公顷。{1}' -f (FieldValue $row 'YDZMJ'), $(if ($farmland -eq 0) { '未占用永久基本农田，耕地保护不构成当前范围的直接刚性约束。' } else { ('涉及永久基本农田 {0} 公顷，应作为项目边界优化和报批论证的首要约束。' -f (FieldValue $row 'JBNTMJ')) })))
+        }
+        [void]$lines.Add('- **规划行动：**以本次项目边界叠加国土空间总体规划和详细规划图则，核实规划用地性质、建设边界及专项管控要求后，形成可用于报批的规划符合性意见。')
     }
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5pWw5o2u6ZmQ5Yi2'))
@@ -230,11 +248,12 @@ $report = Join-Path $outputPath "${sourceName}_土地利用规划审查底稿_${
 Write-AnalysisMarkdown $report $resolved $target $responseJson $responseParseError
 $workbook = Join-Path $outputPath "${sourceName}_规划_${displayStamp}.xlsx"
 $wordReport = Join-Path $outputPath "${sourceName}_规划报告_${displayStamp}.docx"
-$analysisView = Join-Path $outputPath "${sourceName}_土地利用规划审查视图_${stamp}.json"
+$analysisView = Join-Path $outputPath "${sourceName}_土地利用规划分析视图_${stamp}.json"
 & (Join-Path $PSScriptRoot 'export-office.ps1') -Title '土地利用规划审查' -JsonPath $target -MarkdownPath $report -ExcelPath $workbook -WordPath $wordReport -ViewPath $analysisView -OpenWorkbook
 Write-Output "已生成接口原始结果：$target"
 Write-Output "已生成 Markdown 分析底稿：$report"
 Write-Output "已生成对话分析数据：$analysisView"
+Write-Output "DSH_ANALYSIS_VIEW=$analysisView"
 } finally {
     if ($null -ne $resolved -and $null -ne $resolved.TemporaryDirectory -and [System.IO.Directory]::Exists($resolved.TemporaryDirectory)) { Remove-Item -LiteralPath $resolved.TemporaryDirectory -Recurse -Force }
 }

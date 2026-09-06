@@ -136,6 +136,13 @@ function FieldValue($record, [string]$field) {
     return [string]$property.Value
 }
 
+function NumberValue($record, [string]$field) {
+    $value = FieldValue $record $field
+    $number = 0.0
+    if ([double]::TryParse([string]$value, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$number)) { return $number }
+    return $null
+}
+
 function ResponseRecords($data, [string[]]$fields) {
     foreach ($field in $fields) {
         $property = $data.psobject.Properties[$field]
@@ -185,15 +192,30 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
         }
         if ($summary.Count -eq 0 -and $landTypes.Count -eq 0 -and $ownership.Count -eq 0) { [void]$lines.Add('- ' + (Localized '5pyq6L+U5Zue5bey56Gu6K6k55qE5LiJ6LCD5YiG5p6Q5a2X5q6144CC')) }
         [void]$lines.Add('')
-        [void]$lines.Add('## 土地利用结构研判')
-        [void]$lines.Add('- 分类面积汇总用于判断农用地、建设用地和未利用地总体结构；地类明细用于定位具体图斑；权属汇总用于识别管理主体，三个数据集不得相互累加。')
-        [void]$lines.Add('- 对耕地和永久基本农田，应重点核查其面积、图斑位置及与拟建工程范围的重叠关系，落实用途管制和占补平衡要求。')
-        [void]$lines.Add('- 对林地、水域及水利设施用地，应结合生态保护、水系连通和行业主管部门要求评估建设影响。')
-        [void]$lines.Add('- 权属单位分布可用于识别后续征地、供地和部门协调对象；零散小图斑仍应保留在明细中，避免仅按主导地类作出判断。')
+        [void]$lines.Add('## 专业分析')
+        foreach ($row in $summary) {
+            $total = NumberValue $row 'HJMJ'
+            $construction = NumberValue $row 'JSYDMJ'
+            $farmland = NumberValue $row 'NYDMJ'
+            $cropland = NumberValue $row 'GDMJ'
+            $basicFarmland = NumberValue $row 'JBNTMJ'
+            if ($null -ne $total -and $total -gt 0 -and $null -ne $construction -and ($construction / $total) -ge 0.8) { [void]$lines.Add(('- 建设用地占项目范围约 {0:N2}%，属于建设用地主导型地块；后续重点应转向现状建设用地用途、权属和专项设施管控。' -f (($construction / $total) * 100))) }
+            elseif ($null -ne $total -and $total -gt 0 -and $null -ne $farmland -and ($farmland / $total) -ge 0.8) { [void]$lines.Add(('- 农用地占项目范围约 {0:N2}%，属于农用地主导型地块；项目边界和用地方案应优先控制农用地转用影响。' -f (($farmland / $total) * 100))) }
+            else { [void]$lines.Add('- 项目范围由多类用地共同构成，应以地类明细定位各类用地范围，并分别落实用途管制要求。') }
+            if ($basicFarmland -eq 0) { [void]$lines.Add('- 未检出永久基本农田，永久基本农田不构成本次范围的直接约束。') }
+            elseif ($null -ne $basicFarmland) { [void]$lines.Add(('- 永久基本农田面积为 {0} 公顷，应作为项目边界优化和用地方案论证的首要约束。' -f (FieldValue $row 'JBNTMJ'))) }
+            if ($null -ne $cropland -and $cropland -gt 0) { [void]$lines.Add(('- 范围内包含 {0} 公顷耕地，应在项目边界和施工临时用地安排中优先避让，并依法处理占用事项。' -f (FieldValue $row 'GDMJ'))) }
+        }
         [void]$lines.Add('')
         [void]$lines.Add('## 综合结论')
-        foreach ($row in $summary) { [void]$lines.Add(('- 项目范围总面积为 {0} 公顷，其中农用地 {1} 公顷、耕地 {2} 公顷、建设用地 {3} 公顷、永久基本农田 {4} 公顷。' -f (FieldValue $row 'HJMJ'), (FieldValue $row 'NYDMJ'), (FieldValue $row 'GDMJ'), (FieldValue $row 'JSYDMJ'), (FieldValue $row 'JBNTMJ'))) }
-        [void]$lines.Add('- 后续选址与用地方案应以结果汇总中的项目范围面积为统计口径，图斑原始面积仅用于识别来源图斑，不可直接与项目面积相加。')
+        foreach ($row in $summary) {
+            $total = NumberValue $row 'HJMJ'
+            $construction = NumberValue $row 'JSYDMJ'
+            $farmland = NumberValue $row 'NYDMJ'
+            $dominant = if ($null -ne $total -and $total -gt 0 -and $null -ne $construction -and ($construction / $total) -ge 0.8) { '建设用地主导型' } elseif ($null -ne $total -and $total -gt 0 -and $null -ne $farmland -and ($farmland / $total) -ge 0.8) { '农用地主导型' } else { '复合用地型' }
+            [void]$lines.Add(('- **核心结论：**项目范围总面积 {0} 公顷，属于{1}地块；农用地 {2} 公顷、耕地 {3} 公顷、建设用地 {4} 公顷、永久基本农田 {5} 公顷。' -f (FieldValue $row 'HJMJ'), $dominant, (FieldValue $row 'NYDMJ'), (FieldValue $row 'GDMJ'), (FieldValue $row 'JSYDMJ'), (FieldValue $row 'JBNTMJ')))
+        }
+        [void]$lines.Add('- **实施建议：**以三调地类明细定位需避让或依法处置的图斑，以权属明细确定协调主体；再与规划审查成果叠加核实用途一致性。')
     }
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5pWw5o2u6ZmQ5Yi2'))
@@ -250,6 +272,7 @@ $analysisView = Join-Path $outputPath "${sourceName}_三调土地利用现状分
 Write-Output "已生成接口原始结果：$target"
 Write-Output "已生成 Markdown 分析底稿：$report"
 Write-Output "已生成对话分析数据：$analysisView"
+Write-Output "DSH_ANALYSIS_VIEW=$analysisView"
 } finally {
     if ($null -ne $resolved -and $null -ne $resolved.TemporaryDirectory -and [System.IO.Directory]::Exists($resolved.TemporaryDirectory)) { Remove-Item -LiteralPath $resolved.TemporaryDirectory -Recurse -Force }
 }
