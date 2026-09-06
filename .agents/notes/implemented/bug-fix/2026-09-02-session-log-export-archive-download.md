@@ -10,7 +10,7 @@ The Session log action sent a `HEAD` request to confirm that the export endpoint
 
 ## Decision
 
-`dsh-session-log-export` requests the export endpoint with `GET` and waits for the ZIP bytes. In a browser it creates a Blob URL and uses the normal browser download gesture. In the desktop WebView it sends the fetched bytes through the trusted Tauri bridge to `save_session_log_archive`, which writes a new file in the current user's Downloads folder. The native writer rejects unsafe names and never replaces an existing export; duplicate names receive a numeric suffix. The success dialog is published only after the browser gesture or native write succeeds.
+`dsh-session-log-export` requests the export endpoint with `GET` and waits for the ZIP bytes. In a browser it creates a Blob URL and uses the normal browser download gesture. In the desktop WebView it sends the fetched bytes through a bridge installed for every external-sidecar document to `save_session_log_archive`, which writes a new file in the current user's Downloads folder. The native writer rejects unsafe names and never replaces an existing export; duplicate names receive a numeric suffix. The success dialog is published only after the browser gesture or native write succeeds.
 
 ## Alternatives considered
 
@@ -20,4 +20,4 @@ The Session log action sent a `HEAD` request to confirm that the export endpoint
 
 ## Consequences
 
-Export waits for the complete ZIP response before success is shown, so a large archive can keep the button in its preparing state longer than the former header-only request. Browser users receive a Blob-backed download; desktop users receive a verified file in Downloads. A native write failure is shown as an export error instead of a false successful download.
+Export waits for the complete ZIP response before success is shown, so a large archive can keep the button in its preparing state longer than the former header-only request. Browser users receive a Blob-backed download; desktop users receive a verified file in Downloads even after login or page navigation. A native write failure is shown as an export error instead of a false successful download.

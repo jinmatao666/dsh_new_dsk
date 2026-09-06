@@ -15,6 +15,24 @@ use tauri::{
 };
 use url::Url;
 
+const NATIVE_SKILLS_CHANGED_SCRIPT: &str =
+    "window.dispatchEvent(new Event('dsh:skills-changed'));";
+const NATIVE_BRIDGE_INITIALIZATION_SCRIPT: &str = r#"
+(() => {
+  const invoke = (command, argumentsValue) => {
+    const nativeInvoke = window.__TAURI__?.core?.invoke ?? window.__TAURI_INTERNALS__?.invoke;
+    if (typeof nativeInvoke !== 'function') {
+      return Promise.reject(new Error('桌面端原生服务暂不可用，请稍后重试。'));
+    }
+    return nativeInvoke(command, argumentsValue);
+  };
+  Object.defineProperty(window, '__ZJUGIS_NATIVE_INVOKE__', {
+    value: invoke,
+    configurable: true,
+  });
+})();
+"#;
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ServerConfig {
@@ -63,6 +81,23 @@ struct CustomSkillState {
     slug: String,
     name: String,
     description: String,
+}
+
+/// Notify the live renderer after an installed skill directory changes.
+///
+/// The local skill provider observes the same directory; this event only drops
+/// the renderer's per-session slash-menu cache so the following `/` request
+/// reads the updated host catalog instead of requiring a page reload.
+fn notify_skill_catalog_changed(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.eval(NATIVE_SKILLS_CHANGED_SCRIPT);
+    }
+}
+
+/// Give the watched local skill provider time to invalidate its catalog before
+/// telling the current page to request it again.
+fn wait_for_skill_catalog_observation() {
+    std::thread::sleep(Duration::from_millis(400));
 }
 
 fn custom_skill_front_matter_value(text: &str, key: &str) -> Option<String> {
@@ -162,7 +197,10 @@ fn install_custom_skill(
     slug: String,
     files: Vec<CustomSkillFile>,
 ) -> Result<String, String> {
-    install_custom_skill_at(&user_skills_root(&app)?, &slug, files)
+    let installed = install_custom_skill_at(&user_skills_root(&app)?, &slug, files)?;
+    wait_for_skill_catalog_observation();
+    notify_skill_catalog_changed(&app);
+    Ok(installed)
 }
 
 #[tauri::command]
@@ -206,7 +244,10 @@ fn uninstall_custom_skill(app: tauri::AppHandle, slug: String) -> Result<(), Str
         return Err(format!("技能 {slug} 不是通过“添加技能”安装的，拒绝删除"));
     }
     fs::remove_dir_all(&directory)
-        .map_err(|error| format!("无法移除自定义技能 {}：{error}", directory.display()))
+        .map_err(|error| format!("无法移除自定义技能 {}：{error}", directory.display()))?;
+    wait_for_skill_catalog_observation();
+    notify_skill_catalog_changed(&app);
+    Ok(())
 }
 
 /// Read a compact, skill-generated analysis view for the desktop conversation UI.
@@ -793,12 +834,16 @@ fn install_marketplace_skill(
     slug: String,
     files: Option<Vec<CustomSkillFile>>,
 ) -> Result<String, String> {
-    if let Some(files) = files {
-        return install_marketplace_skill_files_at(&user_skills_root(&app)?, &slug, files);
-    }
-    let resource_root = marketplace_resource_root(&app)?;
-    let skills_root = user_skills_root(&app)?;
-    install_marketplace_skill_at(&resource_root, &skills_root, &slug)
+    let installed = if let Some(files) = files {
+        install_marketplace_skill_files_at(&user_skills_root(&app)?, &slug, files)?
+    } else {
+        let resource_root = marketplace_resource_root(&app)?;
+        let skills_root = user_skills_root(&app)?;
+        install_marketplace_skill_at(&resource_root, &skills_root, &slug)?
+    };
+    wait_for_skill_catalog_observation();
+    notify_skill_catalog_changed(&app);
+    Ok(installed)
 }
 
 fn uninstall_marketplace_skill_at(skills_root: &Path, slug: &str) -> Result<(), String> {
@@ -820,7 +865,10 @@ fn uninstall_marketplace_skill_at(skills_root: &Path, slug: &str) -> Result<(), 
 
 #[tauri::command]
 fn uninstall_marketplace_skill(app: tauri::AppHandle, slug: String) -> Result<(), String> {
-    uninstall_marketplace_skill_at(&user_skills_root(&app)?, &slug)
+    uninstall_marketplace_skill_at(&user_skills_root(&app)?, &slug)?;
+    wait_for_skill_catalog_observation();
+    notify_skill_catalog_changed(&app);
+    Ok(())
 }
 
 fn append_log(path: &Path, message: impl AsRef<str>) {
@@ -1233,6 +1281,10 @@ pub fn run() {
                 .resizable(false)
                 .maximizable(false)
                 .center()
+                // External pages may replace their document during login or
+                // navigation. Reinstall the small bridge on each document so
+                // client features do not fall back to WebView browser downloads.
+                .initialization_script(NATIVE_BRIDGE_INITIALIZATION_SCRIPT)
                 // The external sidecar can lose window.__TAURI__ after a
                 // navigation. AuthGate emits this marker through
                 // document.title, which this native callback always sees.

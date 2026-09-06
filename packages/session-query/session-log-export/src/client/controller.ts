@@ -22,6 +22,7 @@ type Save = (archive: Blob, filename: string) => void | Promise<void>
 
 type DesktopBridge = { core?: { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> } }
 type DesktopInternals = { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> }
+type DesktopStableBridge = (command: string, argumentsValue?: unknown) => Promise<unknown>
 
 const INITIAL: SessionLogDownloadState = { bySession: {} }
 
@@ -40,8 +41,14 @@ export function sessionLogZipFilename(sessionId: SessionId): string {
  * @param filename - browser download filename.
  */
 export async function downloadArchive(archive: Blob, filename: string): Promise<void> {
-  const desktopWindow = window as Window & { __TAURI__?: DesktopBridge; __TAURI_INTERNALS__?: DesktopInternals }
-  const invoke = desktopWindow.__TAURI__?.core?.invoke ?? desktopWindow.__TAURI_INTERNALS__?.invoke
+  const desktopWindow = window as Window & {
+    __TAURI__?: DesktopBridge
+    __TAURI_INTERNALS__?: DesktopInternals
+    __ZJUGIS_NATIVE_INVOKE__?: DesktopStableBridge
+  }
+  const invoke = desktopWindow.__ZJUGIS_NATIVE_INVOKE__
+    ?? desktopWindow.__TAURI__?.core?.invoke
+    ?? desktopWindow.__TAURI_INTERNALS__?.invoke
   if (typeof invoke === 'function') {
     const bytes = Array.from(new Uint8Array(await archive.arrayBuffer()))
     await invoke('save_session_log_archive', { fileName: filename, bytes })

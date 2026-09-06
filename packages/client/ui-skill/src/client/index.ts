@@ -53,6 +53,8 @@ interface CatalogFetch {
   settled?: readonly SkillEntry[]
 }
 
+const SKILLS_CHANGED_EVENT = 'dsh:skills-changed'
+
 /** Required services: reference source faces plus the tool-row and locale registries. */
 export const inject = ['inputTriggers', 'connection', 'sessions', 'slots', 'locale', 'remote']
 
@@ -181,6 +183,17 @@ export function apply(ctx: ClientContext): void {
   // session's cached catalog belongs to the composition it no longer runs.
   ctx.remote.$on('agent-preset/selected', invalidate)
   ctx.on('connection/reset', clearAll)
+  ctx.effect(() => {
+    const eventTarget = globalThis as {
+      addEventListener?: (type: string, listener: () => void) => void
+      removeEventListener?: (type: string, listener: () => void) => void
+    }
+    if (eventTarget.addEventListener === undefined || eventTarget.removeEventListener === undefined) {
+      return () => {}
+    }
+    eventTarget.addEventListener(SKILLS_CHANGED_EVENT, clearAll)
+    return () => { eventTarget.removeEventListener?.(SKILLS_CHANGED_EVENT, clearAll) }
+  }, 'ui-skill: native skill catalog refresh')
   ctx.effect(() => {
     const unregister = inputTriggers.registerSource(source)
     return () => {

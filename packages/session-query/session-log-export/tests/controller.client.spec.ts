@@ -11,6 +11,7 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   Reflect.deleteProperty(window, '__TAURI_INTERNALS__')
+  Reflect.deleteProperty(window, '__ZJUGIS_NATIVE_INVOKE__')
 })
 
 describe('SessionLogDownloadController', () => {
@@ -137,6 +138,22 @@ describe('browser download helpers', () => {
     const invoke = vi.fn(async () => 'C:\\Users\\example\\Downloads\\archive.zip')
     Object.defineProperty(window, '__TAURI_INTERNALS__', {
       value: { invoke }, configurable: true,
+    })
+
+    await downloadArchive(new Blob(['zip']), 'archive.zip')
+
+    expect(invoke).toHaveBeenCalledWith('save_session_log_archive', {
+      fileName: 'archive.zip', bytes: [122, 105, 112],
+    })
+  })
+
+  it('prefers the stable desktop bridge injected for external pages', async () => {
+    const invoke = vi.fn(async () => 'C:\\Users\\example\\Downloads\\archive.zip')
+    Object.defineProperty(window, '__ZJUGIS_NATIVE_INVOKE__', {
+      value: invoke, configurable: true,
+    })
+    Object.defineProperty(window, '__TAURI_INTERNALS__', {
+      value: { invoke: vi.fn() }, configurable: true,
     })
 
     await downloadArchive(new Blob(['zip']), 'archive.zip')
