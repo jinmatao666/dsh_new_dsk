@@ -8,7 +8,11 @@ import { randomUUID } from 'node:crypto'
 
 const desktopDir = resolve(import.meta.dirname, '..')
 const root = resolve(desktopDir, '..', '..')
-const resources = join(desktopDir, 'src-tauri', 'resources', 'runtime')
+const releaseVersion = process.env.DSH_RELEASE_VERSION?.trim() || '0.1.0'
+if (!/^[0-9A-Za-z][0-9A-Za-z.-]*$/.test(releaseVersion)) {
+  throw new Error(`DSH_RELEASE_VERSION contains an unsupported runtime directory character: ${releaseVersion}`)
+}
+const resources = join(desktopDir, 'src-tauri', 'resources', `runtime-${releaseVersion}`)
 const marketplaceSkillsSource = join(root, 'services', 'one-api', 'web', 'air', 'public', 'skills')
 const marketplaceSkillsTarget = join(desktopDir, 'src-tauri', 'resources', 'skills')
 const appDir = join(resources, 'app')

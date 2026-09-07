@@ -992,8 +992,14 @@ fn server_config(resource_dir: &Path) -> Result<ServerConfig, String> {
     Ok(config)
 }
 
+const DESKTOP_RUNTIME_DIR: &str = env!("DSH_DESKTOP_RUNTIME_DIR");
+
+fn production_runtime(resource_dir: &Path) -> PathBuf {
+    bundled_resource(resource_dir, DESKTOP_RUNTIME_DIR)
+}
+
 fn production_command(resource_dir: &Path) -> (PathBuf, PathBuf, Vec<String>) {
-    let runtime = bundled_resource(resource_dir, "runtime");
+    let runtime = production_runtime(resource_dir);
     let node = runtime.join(if cfg!(windows) { "node.exe" } else { "node" });
     let app = runtime.join("app");
     (
@@ -1046,7 +1052,7 @@ fn spawn_sidecar(
             .join("scripts")
             .join("document-tool.mjs")
     } else {
-        bundled_resource(resource_dir, "runtime")
+        production_runtime(resource_dir)
             .join("app")
             .join("document-tool.mjs")
     };
