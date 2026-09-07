@@ -170,6 +170,31 @@ function base64ToBytes(text) {
   return out;
 }
 
+/** Decodes the complete file set stored by the official-skill bundle endpoint. */
+export function parseSkillPackageAssets(assets) {
+  if (typeof assets !== 'string' || !assets.trim()) return null;
+  let bundle;
+  try {
+    bundle = JSON.parse(assets);
+  } catch {
+    return null;
+  }
+  if (!bundle || !Array.isArray(bundle.files) || bundle.files.length === 0) return null;
+  const seen = new Set();
+  const files = [];
+  for (const file of bundle.files) {
+    const path = safePackagePath(file?.path);
+    if (!path || seen.has(path) || typeof file?.contentBase64 !== 'string') return null;
+    try {
+      files.push({ path, data: base64ToBytes(file.contentBase64) });
+    } catch {
+      return null;
+    }
+    seen.add(path);
+  }
+  return files.some(file => file.path === 'SKILL.md') ? files : null;
+}
+
 export function splitContent(content) {
   if (!content) return { body: '', assets: '' };
   const markers = [];
@@ -287,13 +312,11 @@ export function buildSkillZipBlob(skill) {
   if (!body) body = skill.content || '';
 
   const root = `${sanitizeName(skill.name)}/`;
-  const files = [
-    { path: `${root}SKILL.md`, data: encoder.encode(buildSkillMd(skill, body)) },
-    ...parseAssets(assets).map((file) => ({
-      ...file,
-      path: `${root}${file.path}`
-    }))
-  ];
+  const packageFiles = parseSkillPackageAssets(assets);
+  const files = (packageFiles || [
+    { path: 'SKILL.md', data: encoder.encode(buildSkillMd(skill, body)) },
+    ...parseAssets(assets)
+  ]).map(file => ({ ...file, path: `${root}${file.path}` }));
   return createZip(files);
 }
 

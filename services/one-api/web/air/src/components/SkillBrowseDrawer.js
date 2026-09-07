@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Empty, SideSheet, Spin, Tag, Tree } from '@douyinfe/semi-ui';
 import { IconDownload, IconFile, IconFolder } from '@douyinfe/semi-icons';
 import { showError, timestamp2string } from '../helpers';
-import { buildSkillMd, downloadOfficialSkillFiles, downloadSkillBlob, downloadSkillZip, fetchOfficialSkillFiles, fetchSkillFull, parseAssets, sanitizeName, splitContent } from './skillDownload';
+import { buildSkillMd, downloadOfficialSkillFiles, downloadSkillBlob, downloadSkillZip, fetchOfficialSkillFiles, fetchSkillFull, parseAssets, parseSkillPackageAssets, sanitizeName, splitContent } from './skillDownload';
 import './SkillsTable.css';
 
 const textExt = new Set(['md', 'txt', 'json', 'js', 'jsx', 'ts', 'tsx', 'py', 'go', 'sh', 'yaml', 'yml', 'toml', 'css', 'html', 'csv', 'xml', 'sql', 'vue', 'rs', 'java', 'c', 'cpp', 'h', 'rb', 'php', 'lua', 'r', 'mjs', 'cjs']);
@@ -66,9 +66,12 @@ export default function SkillBrowseDrawer({ visible, kind, id, skill: skillProp,
     if (skill.assets || !skill.content) return { body: skill.body || skill.content || '', assets: skill.assets || '' };
     const split = splitContent(skill.content); return { body: skill.body || split.body, assets: split.assets };
   }, [skill]);
-  const files = useMemo(() => skill?.source === 'official-package'
-    ? (officialFiles || [])
-    : (skill ? [{ path: 'SKILL.md', data: new TextEncoder().encode(buildSkillMd(skill, content.body)) }, ...parseAssets(content.assets)] : []), [skill, content, officialFiles]);
+  const files = useMemo(() => {
+    if (!skill) return [];
+    if (skill.source === 'official-package') return officialFiles || [];
+    const packageFiles = parseSkillPackageAssets(skill.assets);
+    return packageFiles || [{ path: 'SKILL.md', data: new TextEncoder().encode(buildSkillMd(skill, content.body)) }, ...parseAssets(content.assets)];
+  }, [skill, content, officialFiles]);
   const selectedFile = files.find(file => file.path === selected);
   const preview = useMemo(() => {
     if (!selectedFile) return null; const ext = extOf(selectedFile.path);
