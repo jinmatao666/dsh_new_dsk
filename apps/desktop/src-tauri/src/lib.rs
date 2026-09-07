@@ -124,6 +124,30 @@ fn validate_skill_relative_path(value: &str) -> Result<PathBuf, String> {
         .fold(PathBuf::new(), |parent, part| parent.join(part)))
 }
 
+/// Returns a same-volume staging directory outside the watched skills root.
+fn skill_staging_root(skills_root: &Path) -> Result<PathBuf, String> {
+    let home = skills_root
+        .parent()
+        .ok_or_else(|| format!("用户技能目录缺少上级目录 {}", skills_root.display()))?;
+    fs::create_dir_all(home)
+        .map_err(|error| format!("无法创建技能主目录 {}：{error}", home.display()))?;
+    let staging_root = home.join(".dsh-skill-staging");
+    if staging_root.exists()
+        && fs::symlink_metadata(&staging_root)
+            .map_err(|error| format!("无法读取技能暂存目录 {}：{error}", staging_root.display()))?
+            .file_type()
+            .is_symlink()
+    {
+        return Err(format!(
+            "拒绝使用符号链接技能暂存目录 {}",
+            staging_root.display()
+        ));
+    }
+    fs::create_dir_all(&staging_root)
+        .map_err(|error| format!("无法创建技能暂存目录 {}：{error}", staging_root.display()))?;
+    Ok(staging_root)
+}
+
 fn install_custom_skill_at(
     skills_root: &Path,
     slug: &str,
@@ -168,7 +192,8 @@ fn install_custom_skill_at(
         .duration_since(UNIX_EPOCH)
         .map_err(|error| format!("系统时间无效：{error}"))?
         .as_nanos();
-    let staging = skills_root.join(format!(".{slug}.custom-{}-{nonce}", std::process::id()));
+    let staging = skill_staging_root(skills_root)?
+        .join(format!(".{slug}.custom-{}-{nonce}", std::process::id()));
     let result = (|| {
         for (relative, content) in normalized {
             let destination = staging.join(relative);
@@ -660,8 +685,9 @@ fn install_marketplace_skill_at(
         .duration_since(UNIX_EPOCH)
         .map_err(|error| format!("系统时间无效：{error}"))?
         .as_nanos();
-    let staging = skills_root.join(format!(".{slug}.install-{}-{nonce}", std::process::id()));
-    let backup = skills_root.join(format!(".{slug}.backup-{}-{nonce}", std::process::id()));
+    let staging_root = skill_staging_root(skills_root)?;
+    let staging = staging_root.join(format!(".{slug}.install-{}-{nonce}", std::process::id()));
+    let backup = staging_root.join(format!(".{slug}.backup-{}-{nonce}", std::process::id()));
     if let Err(error) = copy_marketplace_directory(&source, &staging) {
         let _ = fs::remove_dir_all(&staging);
         return Err(error);
@@ -714,8 +740,9 @@ fn install_marketplace_skill_files_at(
         .map_err(|error| format!("系统时间无效：{error}"))?
         .as_nanos();
     let directory = skills_root.join(slug);
-    let staging = skills_root.join(format!(".{slug}.download-{}-{nonce}", std::process::id()));
-    let backup = skills_root.join(format!(".{slug}.backup-{}-{nonce}", std::process::id()));
+    let staging_root = skill_staging_root(skills_root)?;
+    let staging = staging_root.join(format!(".{slug}.download-{}-{nonce}", std::process::id()));
+    let backup = staging_root.join(format!(".{slug}.backup-{}-{nonce}", std::process::id()));
     fs::create_dir_all(&staging)
         .map_err(|error| format!("无法创建技能暂存目录 {}：{error}", staging.display()))?;
     if let Err(error) = write_marketplace_files(&staging, files) {
@@ -1382,32 +1409,41 @@ mod marketplace_tests {
     fn installs_updates_and_uninstalls_a_complete_package() {
         let resources = TestDirectory::new();
         let user = TestDirectory::new();
+        let skills = user.0.join("skills");
         write_package(&resources.0, "1.0.0", "First");
 
-        let installed = install_marketplace_skill_at(&resources.0, &user.0, "market-test-skill")
+        let installed = install_marketplace_skill_at(&resources.0, &skills, "market-test-skill")
             .expect("install");
         assert!(PathBuf::from(installed).exists());
         assert_eq!(
-            fs::read_to_string(user.0.join("market-test-skill/references/api.md"))
+            fs::read_to_string(skills.join("market-test-skill/references/api.md"))
                 .expect("reference"),
             "# API\n"
         );
 
         write_package(&resources.0, "1.1.0", "Second");
-        install_marketplace_skill_at(&resources.0, &user.0, "market-test-skill").expect("update");
+        install_marketplace_skill_at(&resources.0, &skills, "market-test-skill").expect("update");
         assert!(
-            fs::read_to_string(user.0.join("market-test-skill/SKILL.md"))
+            fs::read_to_string(skills.join("market-test-skill/SKILL.md"))
                 .expect("updated skill")
                 .contains("Second")
         );
 
-        uninstall_marketplace_skill_at(&user.0, "market-test-skill").expect("uninstall");
-        assert!(!user.0.join("market-test-skill").exists());
+        uninstall_marketplace_skill_at(&skills, "market-test-skill").expect("uninstall");
+        assert!(!skills.join("market-test-skill").exists());
+        assert!(user.0.join(".dsh-skill-staging").is_dir());
+        assert!(
+            fs::read_dir(user.0.join(".dsh-skill-staging"))
+                .expect("read staging")
+                .next()
+                .is_none()
+        );
     }
 
     #[test]
     fn installs_a_validated_downloaded_package() {
         let user = TestDirectory::new();
+        let skills = user.0.join("skills");
         let files = vec![
             CustomSkillFile {
                 path: "manifest.json".to_string(),
@@ -1422,10 +1458,10 @@ mod marketplace_tests {
                 content: b"Write-Output downloaded\n".to_vec(),
             },
         ];
-        install_marketplace_skill_files_at(&user.0, "market-test-skill", files)
+        install_marketplace_skill_files_at(&skills, "market-test-skill", files)
             .expect("install downloaded package");
         assert_eq!(
-            fs::read_to_string(user.0.join("market-test-skill/scripts/invoke.ps1"))
+            fs::read_to_string(skills.join("market-test-skill/scripts/invoke.ps1"))
                 .expect("downloaded script"),
             "Write-Output downloaded\n"
         );
@@ -1435,13 +1471,14 @@ mod marketplace_tests {
     fn refuses_to_replace_an_unmanaged_directory() {
         let resources = TestDirectory::new();
         let user = TestDirectory::new();
+        let skills = user.0.join("skills");
         write_package(&resources.0, "1.0.0", "First");
-        let target = user.0.join("market-test-skill");
+        let target = skills.join("market-test-skill");
         fs::create_dir_all(&target).expect("create unmanaged directory");
         fs::write(target.join("SKILL.md"), "---\nname: personal-skill\n---\n")
             .expect("write unmanaged skill");
 
-        let error = install_marketplace_skill_at(&resources.0, &user.0, "market-test-skill")
+        let error = install_marketplace_skill_at(&resources.0, &skills, "market-test-skill")
             .expect_err("must reject unmanaged directory");
         assert!(error.contains("不是由技能广场管理"));
         assert!(target.exists());
@@ -1451,8 +1488,9 @@ mod marketplace_tests {
     fn recognizes_a_legacy_marketplace_skill_for_upgrade() {
         let resources = TestDirectory::new();
         let user = TestDirectory::new();
+        let skills = user.0.join("skills");
         write_package(&resources.0, "1.0.0", "Packaged");
-        let target = user.0.join("market-test-skill");
+        let target = skills.join("market-test-skill");
         fs::create_dir_all(&target).expect("create legacy directory");
         fs::write(
             target.join("SKILL.md"),
@@ -1460,7 +1498,7 @@ mod marketplace_tests {
         )
         .expect("write legacy skill");
 
-        install_marketplace_skill_at(&resources.0, &user.0, "market-test-skill")
+        install_marketplace_skill_at(&resources.0, &skills, "market-test-skill")
             .expect("upgrade legacy skill");
         assert!(target.join("manifest.json").exists());
     }
