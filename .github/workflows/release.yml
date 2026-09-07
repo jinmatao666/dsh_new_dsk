@@ -111,9 +111,11 @@ jobs:
           sudo apt-get install --yes \
             build-essential \
             curl \
+            desktop-file-utils \
             file \
             libfuse2 \
             libayatana-appindicator3-dev \
+            libgdk-pixbuf-2.0-dev \
             libgtk-3-dev \
             libglib2.0-dev \
             libssl-dev \
@@ -123,7 +125,9 @@ jobs:
             patchelf \
             pkg-config \
             squashfs-tools \
-            wget
+            wget \
+            xdg-utils \
+            zsync
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Prepare production server config and app version
@@ -180,29 +184,46 @@ jobs:
           # Bundle artifacts are versioned outputs, however, and stale files
           # from a restored cache must never be published with this release.
           rm -rf "apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
+          diagnostic_dir="$RUNNER_TEMP/desktop-bundle-diagnostics"
+          mkdir -p "$diagnostic_dir"
           set +e
           build_status=1
           for attempt in 1 2; do
             echo "Desktop bundle attempt $attempt/2"
+            build_log="$diagnostic_dir/${{ matrix.platform }}-attempt-${attempt}.log"
             pnpm --filter @deepseek-ai/dsh-desktop-app exec tauri build \
               --target "${{ matrix.target }}" \
               --bundles "${{ matrix.bundles }}" \
-              --config "$DSH_TAURI_VERSION_CONFIG"
-            build_status=$?
+              --config "$DSH_TAURI_VERSION_CONFIG" 2>&1 | tee "$build_log"
+            build_status=${PIPESTATUS[0]}
             if [ "$build_status" -eq 0 ]; then
               break
             fi
-            if [ "${{ matrix.platform }}" != "windows-x64" ]; then
-              script="apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/bundle_dmg.sh"
-              if [ -f "$script" ]; then
-                echo "::group::DMG bundler diagnostic (attempt $attempt)"
-                bash -x "$script" || true
+            echo "::group::Desktop bundle failure summary (attempt $attempt)"
+            tail -n 300 "$build_log" || true
+            bundle_dir="apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
+            find "$bundle_dir" -maxdepth 3 -type f -print 2>/dev/null || true
+            if [ "${{ matrix.platform }}" = "linux-x64" ]; then
+              app_dir="$bundle_dir/appimage/ZJUGIS Harness.AppDir"
+              linuxdeploy="$(find "$HOME/.cache/tauri" -maxdepth 1 -type f -name 'linuxdeploy-x86_64.AppImage' -print -quit)"
+              if [ -n "$linuxdeploy" ] && [ -d "$app_dir" ]; then
+                echo "::group::linuxdeploy direct diagnostic (attempt $attempt)"
+                "$linuxdeploy" --appimage-extract-and-run --verbosity 3 \
+                  --appdir "$app_dir" --plugin gtk --output appimage || true
                 echo "::endgroup::"
               fi
             fi
+            echo "::endgroup::"
           done
           set -e
           exit "$build_status"
+      - name: Upload desktop bundle diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-desktop-diagnostics-${{ inputs.version }}-${{ matrix.platform }}
+          path: ${{ runner.temp }}/desktop-bundle-diagnostics/*
+          if-no-files-found: warn
       - name: Collect installers
         shell: bash
         run: |
