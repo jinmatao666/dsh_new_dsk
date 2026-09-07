@@ -44,16 +44,12 @@ export default function SkillBrowseDrawer({ visible, kind, id, skill: skillProp,
   useEffect(() => {
     if (!visible || id == null) return undefined;
     let cancelled = false; setLoading(true); setSkill(null); setOfficialFiles(null); setSelected('SKILL.md');
-    if (skillProp) {
+    if (skillProp?.source === 'official-package') {
       setSkill(skillProp);
-      if (skillProp.source === 'official-package') {
-        fetchOfficialSkillFiles(skillProp)
-          .then(files => { if (!cancelled) setOfficialFiles(files); })
-          .catch(error => { if (!cancelled) showError(error.message || '加载正式技能文件失败'); })
-          .finally(() => { if (!cancelled) setLoading(false); });
-      } else {
-        setLoading(false);
-      }
+      fetchOfficialSkillFiles(skillProp)
+        .then(files => { if (!cancelled) setOfficialFiles(files); })
+        .catch(error => { if (!cancelled) showError(error.message || '加载正式技能文件失败'); })
+        .finally(() => { if (!cancelled) setLoading(false); });
       return () => { cancelled = true; };
     }
     fetchSkillFull(kind, id).then(value => { if (!cancelled) setSkill(value); })
