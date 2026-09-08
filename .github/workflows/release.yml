@@ -217,6 +217,31 @@ jobs:
           done
           set -e
           exit "$build_status"
+      - name: Diagnose Linux AppImage bundler
+        if: failure() && runner.os == 'Linux'
+        shell: bash
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+          NO_STRIP: '1'
+        run: |
+          bundle_dir="apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
+          app_dir="$bundle_dir/appimage/ZJUGIS Harness.AppDir"
+          linuxdeploy="$(find "$HOME/.cache/tauri" -maxdepth 1 -type f -name 'linuxdeploy-x86_64.AppImage' -print -quit)"
+          echo "::group::Linux AppImage environment"
+          command -v xdg-open || true
+          command -v desktop-file-validate || true
+          command -v zsyncmake || true
+          command -v mksquashfs || true
+          find "$bundle_dir" -maxdepth 3 -type f -print 2>/dev/null || true
+          echo "::endgroup::"
+          if [ -z "$linuxdeploy" ] || [ ! -d "$app_dir" ]; then
+            echo "linuxdeploy or the generated AppDir is missing; see the bundle file list above."
+            exit 0
+          fi
+          echo "::group::linuxdeploy direct diagnostic"
+          "$linuxdeploy" --appimage-extract-and-run --verbosity 3 \
+            --appdir "$app_dir" --plugin gtk --output appimage || true
+          echo "::endgroup::"
       - name: Upload desktop bundle diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
