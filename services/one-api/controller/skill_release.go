@@ -292,7 +292,19 @@ func ImportSkillRelease(c *gin.Context) {
 			skillError(c, http.StatusInternalServerError, err)
 			return
 		}
+		if err = model.SyncPrimarySkillCategory(skill.Id, skill.Category); err != nil {
+			skillError(c, http.StatusInternalServerError, err)
+			return
+		}
 	} else if err != nil {
+		skillError(c, http.StatusInternalServerError, err)
+		return
+	}
+	var existingRelease model.SkillRelease
+	if err = model.DB.Where("skill_id = ? AND version = ?", skill.Id, pkg.manifest.Version).First(&existingRelease).Error; err == nil {
+		skillError(c, http.StatusConflict, fmt.Errorf("技能 %s 已存在版本 %s；请在 manifest.json 中提高 version 后重新导入", skill.Name, pkg.manifest.Version))
+		return
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		skillError(c, http.StatusInternalServerError, err)
 		return
 	}
@@ -319,7 +331,13 @@ func ValidateSkillRelease(c *gin.Context) {
 		skillError(c, http.StatusInternalServerError, fmt.Errorf("草稿包损坏：%w", err))
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"valid": true, "issues": []string{}, "sha256": release.Sha256, "file_count": release.FileCount, "size_bytes": release.SizeBytes, "files": bundle.Files}})
+	validatedAt := time.Now().Unix()
+	if err := model.DB.Model(&model.SkillRelease{}).Where("id = ? AND skill_id = ?", releaseID, skillID).Update("validated_at", validatedAt).Error; err != nil {
+		skillError(c, http.StatusInternalServerError, err)
+		return
+	}
+	release.ValidatedAt = validatedAt
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"valid": true, "issues": []string{}, "release": release, "sha256": release.Sha256, "file_count": release.FileCount, "size_bytes": release.SizeBytes, "files": bundle.Files}})
 }
 
 func metadataFromSkillPackage(raw string) (importedManifest, error) {
@@ -427,7 +445,14 @@ func publishSkillRelease(c *gin.Context, rollback bool) {
 		skillError(c, http.StatusBadRequest, err)
 		return
 	}
+	if !rollback && release.State == model.SkillReleaseDraft && release.ValidatedAt == 0 {
+		return fmt.Errorf("草稿尚未校验，请先校验完整文件结构与内容")
+	}
 	if err := model.RefreshSkillCache(); err != nil {
+		skillError(c, http.StatusInternalServerError, err)
+		return
+	}
+	if err := model.SyncPrimarySkillCategory(skillID, metadata.Category); err != nil {
 		skillError(c, http.StatusInternalServerError, err)
 		return
 	}

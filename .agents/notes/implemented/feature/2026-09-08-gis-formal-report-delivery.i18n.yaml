@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-08-gis-formal-report-delivery.md
+2026-09-08-gis-formal-report-delivery.md: 4ecaa797a7b3b59545b77252c0da5fc0a15924b9
+2026-09-08-gis-formal-report-delivery.zh.md: f2bc1b39f3282eded4d379d2fb9ad89891679192

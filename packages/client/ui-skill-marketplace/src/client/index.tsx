@@ -88,6 +88,7 @@ type RemoteSkill = {
   id?: unknown
   name?: unknown
   display_name?: unknown
+  icon?: unknown
   category?: unknown
   description?: unknown
   scenario?: unknown
@@ -367,6 +368,24 @@ function CategoryGlyph({ category, size = 20 }: { category: string; size?: numbe
   }
 }
 
+function SkillVisual({ skill, size = 20 }: { skill: Skill; size?: number }) {
+  if (skill.icon.startsWith('data:image/')) {
+    return <img className="dsh-skill-custom-icon" src={skill.icon} alt="" />
+  }
+  if (skill.icon.startsWith('glyph:')) {
+    const glyphs: Record<string, string> = {
+      'glyph:map': '⌖',
+      'glyph:document': '▤',
+      'glyph:chart': '◫',
+      'glyph:compass': '◉',
+      'glyph:bot': '✦',
+      'glyph:lightning': 'ϟ',
+    }
+    return <span className="dsh-skill-text-icon" style={{ fontSize: Math.max(15, size) }}>{glyphs[skill.icon] ?? '✦'}</span>
+  }
+  return <span className="dsh-skill-text-icon" style={{ fontSize: Math.max(13, size - 2) }}>{skill.icon || '技'}</span>
+}
+
 function DownloadIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -468,7 +487,7 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall 
       </button>
       <div className="dsh-skill-detail-header">
         <div className="dsh-skill-detail-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
-          <CategoryGlyph category={skill.category} size={28} />
+          <SkillVisual skill={skill} size={28} />
         </div>
         <div className="dsh-skill-detail-info">
           <h1>{skill.name}</h1>
@@ -800,7 +819,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
         summary: typeof remote.description === 'string' ? remote.description : '',
         description: typeof remote.scenario === 'string' && remote.scenario !== '' ? remote.scenario : (typeof remote.description === 'string' ? remote.description : ''),
         installs: String(typeof remote.downloads === 'number' ? remote.downloads : 0),
-        accent: '#2563eb', icon: '技', version: typeof remote.version === 'string' ? remote.version : '1.0.0',
+        accent: '#2563eb', icon: typeof remote.icon === 'string' && remote.icon.trim() !== '' ? remote.icon : 'glyph:bot', version: typeof remote.version === 'string' ? remote.version : '1.0.0',
         author: typeof remote.submitter === 'string' ? remote.submitter : '平台管理员',
         installable: true,
       }]
@@ -1040,7 +1059,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                         onClick={() => { openDetail(skill) }}
                       >
                         <div className="dsh-skill-featured-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
-                          <CategoryGlyph category={skill.category} />
+                          <SkillVisual skill={skill} />
                         </div>
                         <div className="dsh-skill-featured-body">
                           <h3>{skill.name}</h3>
@@ -1095,7 +1114,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                     onClick={() => { openDetail(skill) }}
                   >
                     <div className="dsh-skill-card-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
-                      <CategoryGlyph category={skill.category} />
+                      <SkillVisual skill={skill} />
                     </div>
                     <div className="dsh-skill-card-body">
                       <div className="dsh-skill-card-meta">

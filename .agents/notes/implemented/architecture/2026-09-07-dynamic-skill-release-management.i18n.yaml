@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-07-dynamic-skill-release-management.md
-2026-09-07-dynamic-skill-release-management.md: a15f3bc06f5017a6f81708e3d83f64ff311bbd56
-2026-09-07-dynamic-skill-release-management.zh.md: 903215a40b708f6d4d081c39efa5e3c346664b58
+2026-09-07-dynamic-skill-release-management.md: 102eb79c3e1e58ce6a948de177a3f38e087e4037
+2026-09-07-dynamic-skill-release-management.zh.md: f9129cd9e3a34bfd1174643bed203f2a3ab2fe53

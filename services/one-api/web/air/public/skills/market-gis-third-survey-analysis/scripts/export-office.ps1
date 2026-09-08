@@ -155,6 +155,33 @@ function WordParagraph([string]$line) {
     return '<w:p><w:pPr><w:spacing w:after="120"/><w:ind w:firstLine="420"/></w:pPr>' + (WordRun ($prefix + $text) 22 $false) + '</w:p>'
 }
 
+function FormalSectionParagraphs($sections, [string]$sectionName) {
+    $body = [System.Text.StringBuilder]::new()
+    foreach ($section in $sections) {
+        if ($section.title -ne $sectionName) { continue }
+        foreach ($item in $section.items) {
+            $clean = ([string]$item -replace '\*\*', '').Trim()
+            if ($clean) { [void]$body.Append((WordParagraph ('- ' + $clean))) }
+        }
+    }
+    return $body.ToString()
+}
+
+function FormalInputRows([string[]]$lines) {
+    $rows = [System.Collections.Generic.List[object[]]]::new()
+    [void]$rows.Add(@('项目', '内容'))
+    foreach ($line in $lines) {
+        $text = $line.Trim().TrimStart('-', '*').Trim()
+        if ($text -notmatch '^(数据类型|面要素数量|项目面积|项目范围面积|坐标系统)\s*[:：]\s*(.+)$') { continue }
+        $label = $Matches[1]
+        $value = $Matches[2].Trim()
+        if ($label -eq '坐标系统' -and $value.Length -gt 80) { $value = '已识别投影坐标参考系（完整定义见源数据）' }
+        [void]$rows.Add(@($label, $value))
+    }
+    if ($rows.Count -eq 1) { [void]$rows.Add(@('输入范围', '以本次提交的空间范围为准')) }
+    return $rows.ToArray()
+}
+
 function WordCell([string]$text, [bool]$isHeader, [bool]$isAlternate, [int]$width) {
     $fill = if ($isHeader) { '1F4E78' } elseif ($isAlternate) { 'F2F6FA' } else { 'FFFFFF' }
     $color = if ($isHeader) { 'FFFFFF' } else { '000000' }
@@ -215,8 +242,15 @@ $xlsxEntries = @{
 }
 Write-ZipPackage $ExcelPath $xlsxEntries
 
-$narrative = ($markdownLines | Select-Object -Skip 1 | ForEach-Object { WordParagraph $_ }) -join ''
-$body = (WordTitle $Title) + (WordMeta $Title) + '<w:p><w:pPr><w:spacing w:before="180" w:after="140"/></w:pPr>' + (WordRun '一、核心结果汇总' 28 $true) + '</w:p>' + (WordTable $resultRows) + '<w:p><w:pPr><w:spacing w:before="320" w:after="140"/></w:pPr>' + (WordRun '二、专业分析与建议' 28 $true) + '</w:p>' + $narrative
+$sections = ViewSections $markdownLines
+$projectRows = FormalInputRows $markdownLines
+$professional = FormalSectionParagraphs $sections '专业分析'
+$conclusion = FormalSectionParagraphs $sections '综合结论'
+$limitations = FormalSectionParagraphs $sections '数据限制'
+if (-not $professional) { $professional = WordParagraph '- 本报告以空间叠加结果为依据，对项目范围内的相关要素进行前期筛查。' }
+if (-not $conclusion) { $conclusion = WordParagraph '- 应结合项目方案和现场条件，对核心结果开展后续核查与深化。' }
+if (-not $limitations) { $limitations = WordParagraph '- 本报告适用于前期空间筛查，不替代法定审查、专项评估或现场调查。' }
+$body = (WordTitle $Title) + (WordMeta $Title) + '<w:p><w:pPr><w:keepNext/><w:spacing w:before="260" w:after="150"/></w:pPr>' + (WordRun '一、项目与数据概况' 28 $true) + '</w:p>' + (WordTable $projectRows) + '<w:p><w:pPr><w:keepNext/><w:spacing w:before="320" w:after="150"/></w:pPr>' + (WordRun '二、核心分析结论' 28 $true) + '</w:p>' + (WordTable $resultRows) + '<w:p><w:pPr><w:keepNext/><w:spacing w:before="320" w:after="150"/></w:pPr>' + (WordRun '三、专业研判' 28 $true) + '</w:p>' + $professional + '<w:p><w:pPr><w:keepNext/><w:spacing w:before="320" w:after="150"/></w:pPr>' + (WordRun '四、实施建议与结论' 28 $true) + '</w:p>' + $conclusion + '<w:p><w:pPr><w:keepNext/><w:spacing w:before="320" w:after="150"/></w:pPr>' + (WordRun '五、数据来源与使用限制' 28 $true) + '</w:p>' + $limitations
 $docxEntries = @{
     '[Content_Types].xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>'
     '_rels/.rels' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'

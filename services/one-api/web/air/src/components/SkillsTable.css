@@ -90,6 +90,41 @@
   min-width: 0;
 }
 
+.skill-name-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.skill-identity-icon {
+  display: inline-grid;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #d9e8fb;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #2874df;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.skill-identity-icon.small {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.skill-identity-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .skill-name-main {
   font-size: 13px;
   font-weight: 600;
@@ -211,6 +246,154 @@
   font-size: 13px;
   font-weight: 600;
 }
+
+.skill-status-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.skill-status-stack small {
+  color: #7b90ad;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.skill-validation-result {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e4ecf6;
+}
+
+.skill-validation-result > p {
+  margin: 5px 0 12px;
+  color: #6f86a5;
+  font-size: 12px;
+}
+
+.skill-validation-content {
+  display: grid;
+  grid-template-columns: minmax(170px, .65fr) minmax(0, 1.35fr);
+  min-height: 280px;
+  overflow: hidden;
+  border: 1px solid #dce7f4;
+  border-radius: 10px;
+}
+
+.skill-validation-tree {
+  overflow: auto;
+  padding: 10px;
+  border-right: 1px solid #e2ebf6;
+  background: #f8fbff;
+}
+
+.skill-validation-preview {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 10px;
+}
+
+.skill-validation-preview select {
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 9px;
+  border: 1px solid #d6e2f2;
+  border-radius: 7px;
+  color: #304b70;
+}
+
+.skill-validation-preview pre {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  padding: 11px;
+  border-radius: 7px;
+  background: #17243a;
+  color: #e6effc;
+  font: 12px/1.6 'JetBrains Mono', Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.skill-binary-file {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  color: #7b90ad;
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.skill-import-dialog > p {
+  margin: 0 0 16px;
+  color: #607a9e;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.skill-import-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.skill-import-option {
+  min-height: 108px;
+  padding: 16px;
+  border: 1px solid #d9e5f4;
+  border-radius: 12px;
+  background: #f9fbff;
+  color: #1d4f99;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .16s ease, background-color .16s ease, transform .16s ease;
+}
+
+.skill-import-option:hover {
+  border-color: #4d8ff1;
+  background: #edf5ff;
+  transform: translateY(-1px);
+}
+
+.skill-import-option strong,
+.skill-import-option span {
+  display: block;
+}
+
+.skill-import-option strong { font-size: 15px; }
+.skill-import-option span { margin-top: 8px; color: #7289a7; font-size: 12px; line-height: 1.55; }
+
+.skill-icon-picker {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid #e0e9f5;
+  border-radius: 12px;
+  background: #f9fbff;
+}
+
+.skill-icon-preview { flex: none; }
+.skill-icon-options { min-width: 0; }
+.skill-icon-presets { display: flex; flex-wrap: wrap; gap: 7px; }
+.skill-icon-presets button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #d6e2f2;
+  border-radius: 9px;
+  background: #fff;
+  color: #52769e;
+  cursor: pointer;
+  font-size: 16px;
+}
+.skill-icon-presets button.active { border-color: #2f7df0; background: #eaf3ff; color: #1766cf; box-shadow: 0 0 0 2px rgb(47 125 240 / 12%); }
+.skill-icon-options .form-inline-actions { margin-top: 9px; }
 
 /* ── 浏览抽屉 ───────────────────────────── */
 

@@ -321,17 +321,70 @@ func UpdateSkillCategory(category *SkillCategory) error {
 	if category.TypeId == 0 || category.Code == "" || strings.TrimSpace(category.Name) == "" {
 		return errors.New("type_id, code and name are required")
 	}
-	return DB.Model(&SkillCategory{}).Where("id = ?", category.Id).
-		Select("type_id", "parent_id", "code", "name", "description", "status", "sort_order").
-		Updates(map[string]interface{}{
-			"type_id":     category.TypeId,
-			"parent_id":   category.ParentId,
-			"code":        category.Code,
-			"name":        category.Name,
-			"description": category.Description,
-			"status":      category.Status,
-			"sort_order":  category.SortOrder,
-		}).Error
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var previous SkillCategory
+		if err := tx.First(&previous, category.Id).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&SkillCategory{}).Where("id = ?", category.Id).
+			Select("type_id", "parent_id", "code", "name", "description", "status", "sort_order").
+			Updates(map[string]interface{}{
+				"type_id":     category.TypeId,
+				"parent_id":   category.ParentId,
+				"code":        category.Code,
+				"name":        category.Name,
+				"description": category.Description,
+				"status":      category.Status,
+				"sort_order":  category.SortOrder,
+			}).Error; err != nil {
+			return err
+		}
+		var typ SkillCategoryType
+		if err := tx.First(&typ, previous.TypeId).Error; err != nil {
+			return err
+		}
+		if typ.Code != SkillCategoryTypePackage || previous.Name == category.Name {
+			return nil
+		}
+		return tx.Table("skills AS s").
+			Joins("JOIN skill_category_relations AS r ON r.skill_id = s.id").
+			Where("r.category_id = ?", category.Id).
+			Update("category", category.Name).Error
+	})
+}
+
+// SyncPrimarySkillCategory keeps the legacy skills.category display field and
+// the managed skill_package relation in lockstep. Category management is the
+// source of truth; an imported legacy category is created there on first use.
+func SyncPrimarySkillCategory(skillId int, categoryName string) error {
+	if skillId == 0 {
+		return errors.New("skill_id is required")
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var typ SkillCategoryType
+		if err := tx.Where("code = ?", SkillCategoryTypePackage).First(&typ).Error; err != nil {
+			return err
+		}
+		categoryName = strings.TrimSpace(categoryName)
+		sub := tx.Table("skill_categories AS c").Select("c.id").Where("c.type_id = ?", typ.Id)
+		if err := tx.Where("skill_id = ? AND category_id IN (?)", skillId, sub).Delete(&SkillCategoryRelation{}).Error; err != nil {
+			return err
+		}
+		if categoryName == "" {
+			return nil
+		}
+		var category SkillCategory
+		err := tx.Where("type_id = ? AND (name = ? OR code = ?)", typ.Id, categoryName, categoryName).First(&category).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			category = SkillCategory{TypeId: typ.Id, Code: categoryName, Name: categoryName, Status: 1}
+			if err := tx.Create(&category).Error; err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+		return appendSkillCategoriesTx(tx, []int{skillId}, []uint64{category.Id})
+	})
 }
 
 func DeleteSkillCategory(id uint64) error {

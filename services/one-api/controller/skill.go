@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -14,23 +15,25 @@ import (
 )
 
 type skillResponse struct {
-	Id              int                       `json:"id"`
-	Name            string                    `json:"name"`
-	DisplayName     string                    `json:"display_name"`
-	Category        string                    `json:"category"`
-	Description     string                    `json:"description"`
-	Scenario        string                    `json:"scenario"`
-	Submitter       string                    `json:"submitter"`
-	Tags            any                       `json:"tags"`
-	Downloads       int                       `json:"downloads"`
-	Version         string                    `json:"version"`
-	Status          int                       `json:"status"`
-	IsDeleted       bool                      `json:"is_deleted"`
-	CreatedAt       int64                     `json:"created_at"`
-	UpdatedAt       int64                     `json:"updated_at"`
-	BodyUpdatedAt   int64                     `json:"body_updated_at"`
-	AssetsUpdatedAt int64                     `json:"assets_updated_at"`
-	Categories      []model.SkillCategoryView `json:"categories,omitempty"`
+	Id                int                       `json:"id"`
+	Name              string                    `json:"name"`
+	DisplayName       string                    `json:"display_name"`
+	Icon              string                    `json:"icon"`
+	Category          string                    `json:"category"`
+	Description       string                    `json:"description"`
+	Scenario          string                    `json:"scenario"`
+	Submitter         string                    `json:"submitter"`
+	Tags              any                       `json:"tags"`
+	Downloads         int                       `json:"downloads"`
+	Version           string                    `json:"version"`
+	Status            int                       `json:"status"`
+	IsDeleted         bool                      `json:"is_deleted"`
+	CreatedAt         int64                     `json:"created_at"`
+	UpdatedAt         int64                     `json:"updated_at"`
+	BodyUpdatedAt     int64                     `json:"body_updated_at"`
+	AssetsUpdatedAt   int64                     `json:"assets_updated_at"`
+	DraftReleaseCount int                       `json:"draft_release_count,omitempty"`
+	Categories        []model.SkillCategoryView `json:"categories,omitempty"`
 }
 
 func skillToResponse(s model.Skill, categories ...[]model.SkillCategoryView) skillResponse {
@@ -42,6 +45,7 @@ func skillToResponse(s model.Skill, categories ...[]model.SkillCategoryView) ski
 		Id:              s.Id,
 		Name:            s.Name,
 		DisplayName:     s.DisplayName,
+		Icon:            s.Icon,
 		Category:        s.Category,
 		Description:     s.Description,
 		Scenario:        s.Scenario,
@@ -57,6 +61,26 @@ func skillToResponse(s model.Skill, categories ...[]model.SkillCategoryView) ski
 		AssetsUpdatedAt: s.AssetsUpdatedAt,
 		Categories:      cats,
 	}
+}
+
+func validateSkillIcon(icon string) error {
+	if icon == "" {
+		return nil
+	}
+	for _, glyph := range []string{"glyph:map", "glyph:document", "glyph:chart", "glyph:compass", "glyph:bot", "glyph:lightning"} {
+		if icon == glyph {
+			return nil
+		}
+	}
+	if len(icon) > 550000 {
+		return fmt.Errorf("技能图标不能超过 400 KB")
+	}
+	for _, prefix := range []string{"data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,"} {
+		if strings.HasPrefix(icon, prefix) {
+			return nil
+		}
+	}
+	return fmt.Errorf("技能图标仅支持 PNG、JPEG、WebP 或系统默认图标")
 }
 
 func buildSkillCategoryFilter(c *gin.Context) model.SkillCategoryFilter {
@@ -135,7 +159,6 @@ func ListSkills(c *gin.Context) {
 		})
 		return
 	}
-
 	totalPages := int(math.Ceil(float64(total) / float64(perPage)))
 	c.JSON(http.StatusOK, gin.H{
 		"page":       page,
@@ -297,6 +320,13 @@ func CreateSkill(c *gin.Context) {
 	if v, ok := payload["display_name"]; ok {
 		_ = json.Unmarshal(v, &skill.DisplayName)
 	}
+	if v, ok := payload["icon"]; ok {
+		_ = json.Unmarshal(v, &skill.Icon)
+		if err := validateSkillIcon(skill.Icon); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+	}
 	if v, ok := payload["category"]; ok {
 		_ = json.Unmarshal(v, &skill.Category)
 	}
@@ -435,6 +465,15 @@ func UpdateSkill(c *gin.Context) {
 	if v, ok := payload["display_name"]; ok {
 		_ = json.Unmarshal(v, &existing.DisplayName)
 	}
+	if v, ok := payload["icon"]; ok {
+		var icon string
+		_ = json.Unmarshal(v, &icon)
+		if err := validateSkillIcon(icon); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		existing.Icon = icon
+	}
 	if v, ok := payload["category"]; ok {
 		_ = json.Unmarshal(v, &existing.Category)
 	}
@@ -494,6 +533,12 @@ func UpdateSkill(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+	if _, categoryChanged := payload["category"]; categoryChanged {
+		if err := model.SyncPrimarySkillCategory(existing.Id, existing.Category); err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+			return
+		}
 	}
 	_ = model.RefreshSkillCache()
 	c.JSON(http.StatusOK, gin.H{
@@ -798,6 +843,18 @@ func AdminListSkills(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+	ids := make([]int, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.Id)
+	}
+	draftCounts, err := model.CountDraftSkillReleases(ids)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	for i := range items {
+		items[i].DraftReleaseCount = draftCounts[items[i].Id]
 	}
 
 	totalPages := int(math.Ceil(float64(total) / float64(perPage)))

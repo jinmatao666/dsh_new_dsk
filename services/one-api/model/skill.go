@@ -52,9 +52,12 @@ func SkillPackageSHA256(assets string) (string, error) {
 }
 
 type Skill struct {
-	Id              int             `json:"id" gorm:"primaryKey;autoIncrement"`
-	Name            string          `json:"name" gorm:"uniqueIndex;size:100;not null"`
-	DisplayName     string          `json:"display_name" gorm:"size:100;default:''"`
+	Id          int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	Name        string `json:"name" gorm:"uniqueIndex;size:100;not null"`
+	DisplayName string `json:"display_name" gorm:"size:100;default:''"`
+	// Icon is either a built-in glyph key (glyph:*) or a small raster data URL
+	// selected by the administrator. It is returned with marketplace metadata.
+	Icon            string          `json:"icon" gorm:"type:text"`
 	Category        string          `json:"category" gorm:"size:255;default:''"` // 分类,如 doc-processing / dev-tool
 	Description     string          `json:"description" gorm:"size:500;default:''"`
 	Scenario        string          `json:"scenario" gorm:"size:500;default:''"`
@@ -87,8 +90,8 @@ const (
 // same JSON file-set representation returned by the bundle endpoint.
 type SkillRelease struct {
 	Id          int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	SkillId     int    `json:"skill_id" gorm:"not null;uniqueIndex:idx_skill_release_version"`
-	Version     string `json:"version" gorm:"size:50;not null;uniqueIndex:idx_skill_release_version"`
+	SkillId     int    `json:"skill_id" gorm:"not null;uniqueIndex:idx_skill_release_skill_version,priority:1"`
+	Version     string `json:"version" gorm:"size:50;not null;uniqueIndex:idx_skill_release_skill_version,priority:2"`
 	State       string `json:"state" gorm:"size:20;not null;default:'draft';index"`
 	Package     string `json:"-" gorm:"type:text;not null"`
 	Body        string `json:"-" gorm:"type:text;not null"`
@@ -97,6 +100,7 @@ type SkillRelease struct {
 	SizeBytes   int64  `json:"size_bytes" gorm:"not null"`
 	Changelog   string `json:"changelog" gorm:"type:text"`
 	CreatedBy   string `json:"created_by" gorm:"size:100;default:''"`
+	ValidatedAt int64  `json:"validated_at" gorm:"default:0"`
 	CreatedAt   int64  `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt   int64  `json:"updated_at" gorm:"autoUpdateTime"`
 	PublishedAt int64  `json:"published_at" gorm:"default:0"`
@@ -208,6 +212,7 @@ func GetAllSkillMeta() []Skill {
 			Id:              s.Id,
 			Name:            s.Name,
 			DisplayName:     s.DisplayName,
+			Icon:            s.Icon,
 			Category:        s.Category,
 			Description:     s.Description,
 			Scenario:        s.Scenario,
@@ -337,7 +342,7 @@ func buildSkillSearchQuery(keyword string, filter SkillCategoryFilter, includeDi
 	return query
 }
 
-const skillListSelectColumns = "skills.id, skills.name, skills.display_name, skills.category, skills.description, skills.scenario, skills.submitter, skills.tags, skills.downloads, skills.version, skills.status, skills.is_deleted, skills.created_at, skills.updated_at, skills.body_updated_at, skills.assets_updated_at"
+const skillListSelectColumns = "skills.id, skills.name, skills.display_name, skills.icon, skills.category, skills.description, skills.scenario, skills.submitter, skills.tags, skills.downloads, skills.version, skills.status, skills.is_deleted, skills.created_at, skills.updated_at, skills.body_updated_at, skills.assets_updated_at"
 
 func SearchSkillsWithOptions(keyword string, filter SkillCategoryFilter, page, perPage int, includeDisabled bool, deletedFilter SkillDeletedFilter, sortField, sortOrder string) ([]Skill, int64, error) {
 	var skills []Skill
@@ -384,9 +389,49 @@ func ListSkillReleases(skillID int) ([]SkillRelease, error) {
 	return releases, err
 }
 
+// CountDraftSkillReleases returns draft-release counts in one query so the
+// management list can distinguish an unpublished draft from an off-shelf skill.
+func CountDraftSkillReleases(skillIDs []int) (map[int]int, error) {
+	counts := make(map[int]int, len(skillIDs))
+	if len(skillIDs) == 0 {
+		return counts, nil
+	}
+	type result struct {
+		SkillId int
+		Count   int
+	}
+	var rows []result
+	err := DB.Model(&SkillRelease{}).
+		Select("skill_id, COUNT(*) AS count").
+		Where("skill_id IN ? AND state = ?", skillIDs, SkillReleaseDraft).
+		Group("skill_id").
+		Scan(&rows).Error
+	for _, row := range rows {
+		counts[row.SkillId] = row.Count
+	}
+	return counts, err
+}
+
+// migrateSkillReleaseVersionIndex replaces the initial global version index
+// with the per-Skill index required for independent release histories.
+func migrateSkillReleaseVersionIndex() error {
+	if DB.Migrator().HasIndex(&SkillRelease{}, "idx_skill_release_version") {
+		if err := DB.Migrator().DropIndex(&SkillRelease{}, "idx_skill_release_version"); err != nil {
+			return err
+		}
+	}
+	if !DB.Migrator().HasIndex(&SkillRelease{}, "idx_skill_release_skill_version") {
+		return DB.Migrator().CreateIndex(&SkillRelease{}, "idx_skill_release_skill_version")
+	}
+	return nil
+}
+
 // MigrateLegacySkillReleases preserves already-published packages as immutable
 // release records. It never replaces a release selected by an administrator.
 func MigrateLegacySkillReleases() error {
+	if err := migrateSkillReleaseVersionIndex(); err != nil {
+		return err
+	}
 	var skills []Skill
 	if err := DB.Where("published_release_id IS NULL AND is_deleted = ? AND status = ?", false, 1).Find(&skills).Error; err != nil {
 		return err
@@ -481,6 +526,7 @@ type SkillBrief struct {
 	Id          int                 `json:"id"`
 	Name        string              `json:"name"`
 	DisplayName string              `json:"display_name"`
+	Icon        string              `json:"icon"`
 	Category    string              `json:"category"`
 	Categories  []SkillCategoryView `json:"categories,omitempty" gorm:"-"`
 	Description string              `json:"description"`
@@ -536,7 +582,7 @@ func ListSkillPackages() ([]SkillPackageInfo, error) {
 func ListSkillsByCategory(category string) ([]SkillBrief, error) {
 	var results []SkillBrief
 	err := DB.Table("skills AS s").
-		Select("s.id, s.name, s.display_name, s.category, s.description, s.version, s.downloads, s.updated_at").
+		Select("s.id, s.name, s.display_name, s.icon, s.category, s.description, s.version, s.downloads, s.updated_at").
 		Joins("JOIN skill_category_relations AS r ON r.skill_id = s.id").
 		Joins("JOIN skill_categories AS c ON c.id = r.category_id").
 		Joins("JOIN skill_category_types AS t ON t.id = c.type_id AND t.code = ?", SkillCategoryTypePackage).
@@ -552,7 +598,7 @@ func ListSkillsByCategory(category string) ([]SkillBrief, error) {
 	}
 
 	err = DB.Model(&Skill{}).
-		Select("id, name, display_name, category, description, version, downloads, updated_at").
+		Select("id, name, display_name, icon, category, description, version, downloads, updated_at").
 		Where("is_deleted = ? AND status = ? AND category = ?", false, 1, category).
 		Order("id ASC").
 		Find(&results).Error
