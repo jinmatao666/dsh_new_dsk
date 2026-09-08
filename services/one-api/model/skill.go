@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -447,6 +448,21 @@ func MigrateLegacySkillReleases() error {
 			}
 			if fresh.PublishedReleaseId != nil {
 				return nil
+			}
+			var published SkillRelease
+			if err := tx.Where("skill_id = ? AND state = ?", fresh.Id, SkillReleasePublished).
+				Order("id DESC").First(&published).Error; err == nil {
+				return tx.Model(&fresh).Update("published_release_id", published.Id).Error
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			var sameVersion SkillRelease
+			if err := tx.Where("skill_id = ? AND version = ?", fresh.Id, fresh.Version).
+				First(&sameVersion).Error; err == nil {
+				logger.SysLog(fmt.Sprintf("技能版本迁移跳过：技能 %d 的版本 %s 已存在但尚未发布", fresh.Id, fresh.Version))
+				return nil
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
 			}
 			sha256, err := SkillPackageSHA256(fresh.Assets)
 			if err != nil {

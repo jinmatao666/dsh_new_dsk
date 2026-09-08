@@ -174,6 +174,35 @@ jobs:
         run: pnpm install --frozen-lockfile --prod=false
       - name: Generate ZJUGIS desktop icons
         run: pnpm --filter @deepseek-ai/dsh-desktop-app exec tauri icon src-tauri/icons/zjugis-mark-source.png
+      - name: Stabilize macOS DMG detach
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # create-dmg occasionally loses the DiskArbitration race on hosted
+          # macOS runners.  Keep its normal behavior first, then retry a
+          # forced detach before declaring the DMG bundle failed.
+          mkdir -p "$RUNNER_TEMP/dsh-hdiutil"
+          cat > "$RUNNER_TEMP/dsh-hdiutil/hdiutil" <<'SH'
+          #!/usr/bin/env bash
+          set -u
+          if [ "${1:-}" != "detach" ]; then
+            exec /usr/bin/hdiutil "$@"
+          fi
+          if /usr/bin/hdiutil "$@"; then
+            exit 0
+          fi
+          target="${2:-}"
+          for attempt in 1 2 3 4 5; do
+            echo "Retrying forced DMG detach ($attempt/5): $target" >&2
+            sleep "$attempt"
+            if /usr/bin/hdiutil detach -force "$target"; then
+              exit 0
+            fi
+          done
+          exit 1
+          SH
+          chmod +x "$RUNNER_TEMP/dsh-hdiutil/hdiutil"
+          echo "$RUNNER_TEMP/dsh-hdiutil" >> "$GITHUB_PATH"
       - name: Build desktop installers
         shell: bash
         env:
@@ -250,6 +279,7 @@ jobs:
           echo "::endgroup::"
       - name: Upload desktop bundle diagnostics
         if: failure()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: dsh-desktop-diagnostics-${{ inputs.version }}-${{ matrix.platform }}

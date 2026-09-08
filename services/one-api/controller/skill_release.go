@@ -387,6 +387,10 @@ func publishSkillRelease(c *gin.Context, rollback bool) {
 		skillError(c, http.StatusNotFound, err)
 		return
 	}
+	if !rollback && releaseForMetadata.State == model.SkillReleaseDraft && releaseForMetadata.ValidatedAt == 0 {
+		skillError(c, http.StatusBadRequest, fmt.Errorf("草稿尚未校验，请先校验完整文件结构与内容"))
+		return
+	}
 	metadata, err := metadataFromSkillPackage(releaseForMetadata.Package)
 	if err != nil {
 		skillError(c, http.StatusBadRequest, fmt.Errorf("版本元数据无效：%w", err))
@@ -444,9 +448,6 @@ func publishSkillRelease(c *gin.Context, rollback bool) {
 	if err != nil {
 		skillError(c, http.StatusBadRequest, err)
 		return
-	}
-	if !rollback && release.State == model.SkillReleaseDraft && release.ValidatedAt == 0 {
-		return fmt.Errorf("草稿尚未校验，请先校验完整文件结构与内容")
 	}
 	if err := model.RefreshSkillCache(); err != nil {
 		skillError(c, http.StatusInternalServerError, err)
