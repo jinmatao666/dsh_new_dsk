@@ -129,6 +129,11 @@ jobs:
             wget \
             xdg-utils \
             zsync
+          # linuxdeploy searches its linker cache for the SONAME emitted by
+          # static musl binaries. Ubuntu provides musl under its loader name,
+          # so expose the SONAME expected by linuxdeploy for this CI job.
+          sudo ln -sf /lib/ld-musl-x86_64.so.1 /usr/lib/x86_64-linux-gnu/libc.musl-x86_64.so.1
+          sudo ldconfig
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Prepare production server config and app version
