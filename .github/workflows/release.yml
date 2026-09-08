@@ -280,7 +280,7 @@ jobs:
       - name: Upload desktop bundle diagnostics
         if: failure()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: dsh-desktop-diagnostics-${{ inputs.version }}-${{ matrix.platform }}
           path: ${{ runner.temp }}/desktop-bundle-diagnostics/*
@@ -294,7 +294,7 @@ jobs:
             \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.AppImage' -o -name '*.deb' \) \
             -exec cp {} artifacts/ \;
           test -n "$(find artifacts -type f -print -quit)"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: dsh-desktop-${{ inputs.version }}-${{ matrix.platform }}
           path: artifacts/*

@@ -336,15 +336,20 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       footer={null}
     >
       <div className='skill-import-dialog'>
-        <p>选择技能文件夹或 ZIP 压缩包导入。系统会创建草稿版本，完成校验后再发布到桌面端。</p>
+        <p>选择导入方式。导入后先生成草稿，完成校验后才会发布到桌面端。</p>
         <div className='skill-import-options'>
           <button type='button' className='skill-import-option' onClick={() => { void chooseSkillFolder(); }}>
-            <strong>选择技能文件夹</strong><span>需包含 SKILL.md，文件将自动打包</span>
+            <span className='skill-import-option-icon'>▣</span>
+            <span className='skill-import-option-copy'><strong>从技能文件夹导入</strong><span>选择包含 SKILL.md 的完整目录，系统自动打包</span></span>
+            <span className='skill-import-option-arrow'>→</span>
           </button>
           <button type='button' className='skill-import-option' onClick={() => zipInputRef.current?.click()}>
-            <strong>选择 ZIP 文件</strong><span>导入已准备好的技能包</span>
+            <span className='skill-import-option-icon'>⌁</span>
+            <span className='skill-import-option-copy'><strong>从 ZIP 文件导入</strong><span>导入已准备好的完整技能包</span></span>
+            <span className='skill-import-option-arrow'>→</span>
           </button>
         </div>
+        <div className='skill-import-footer'><button type='button' className='preview-button' onClick={() => setImportDialogVisible(false)}>取消</button></div>
       </div>
     </Modal>
     <Modal visible={Boolean(releases.skill)} title={`版本管理${releases.skill ? `：${releases.skill.display_name || releases.skill.name}` : ''}`} onCancel={() => setReleases({ skill: null, items: [], files: [], selectedFilePath: '' })} footer={null}>

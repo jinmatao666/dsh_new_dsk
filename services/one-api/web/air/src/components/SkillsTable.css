@@ -329,43 +329,62 @@
 }
 
 .skill-import-dialog > p {
-  margin: 0 0 16px;
+  margin: 0 0 14px;
   color: #607a9e;
   font-size: 14px;
-  line-height: 1.7;
+  line-height: 1.6;
 }
 
 .skill-import-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
 }
 
 .skill-import-option {
-  min-height: 108px;
-  padding: 16px;
+  display: flex;
+  align-items: center;
+  min-height: 66px;
+  padding: 11px 13px;
   border: 1px solid #d9e5f4;
-  border-radius: 12px;
+  border-radius: 10px;
   background: #f9fbff;
   color: #1d4f99;
   cursor: pointer;
   text-align: left;
-  transition: border-color .16s ease, background-color .16s ease, transform .16s ease;
+  transition: border-color .16s ease, background-color .16s ease;
 }
 
 .skill-import-option:hover {
   border-color: #4d8ff1;
   background: #edf5ff;
-  transform: translateY(-1px);
 }
 
-.skill-import-option strong,
-.skill-import-option span {
-  display: block;
+.skill-import-option-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  margin-right: 11px;
+  border-radius: 9px;
+  background: #e4f0ff;
+  color: #2675dc;
+  font-size: 18px;
 }
 
-.skill-import-option strong { font-size: 15px; }
-.skill-import-option span { margin-top: 8px; color: #7289a7; font-size: 12px; line-height: 1.55; }
+.skill-import-option-copy { min-width: 0; flex: 1; }
+.skill-import-option-copy strong,
+.skill-import-option-copy span { display: block; }
+.skill-import-option-copy strong { color: #244d86; font-size: 14px; }
+.skill-import-option-copy span { margin-top: 3px; color: #7289a7; font-size: 12px; line-height: 1.45; }
+.skill-import-option-arrow { color: #78a5df; font-size: 20px; }
+
+.skill-import-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
 
 .skill-icon-picker {
   display: flex;
