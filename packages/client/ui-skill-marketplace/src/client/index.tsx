@@ -4,7 +4,6 @@ import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connec
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
-import { OFFICIAL_SKILLS } from './official-skills.generated.ts'
 import './marketplace.css'
 
 type SkillParam = { name: string; type: string; required: boolean; description: string; defaultValue?: string }
@@ -97,6 +96,7 @@ type RemoteSkill = {
   submitter?: unknown
   tags?: unknown
 }
+type RemoteSkillBundle = { assets?: unknown; sha256?: unknown }
 
 let loadRemoteSkills: (() => Promise<RemoteSkill[]>) | undefined
 let loadRemoteSkillBundle: ((id: number) => Promise<unknown>) | undefined
@@ -133,7 +133,7 @@ function hasVerifiedInstallCount(skill: Skill): boolean {
   return skill.remoteId !== undefined
 }
 
-function serverSkillFiles(bundle: unknown): Array<{ path: string; content: number[] }> {
+function serverSkillFiles(bundle: unknown): { files: Array<{ path: string; content: number[] }>; sha256?: string } {
   const assets = (typeof bundle === 'object' && bundle !== null ? (bundle as { assets?: unknown }).assets : undefined)
   if (typeof assets !== 'string') throw new Error('服务器返回的技能包缺少文件内容')
   let parsed: unknown
@@ -144,13 +144,16 @@ function serverSkillFiles(bundle: unknown): Array<{ path: string; content: numbe
   }
   const files = typeof parsed === 'object' && parsed !== null ? (parsed as { files?: unknown }).files : undefined
   if (!Array.isArray(files) || files.length === 0) throw new Error('服务器返回的技能包不包含文件')
-  return files.map((file) => {
+  const candidateSha256 = (bundle as RemoteSkillBundle).sha256
+  const sha256 = typeof candidateSha256 === 'string' ? candidateSha256 : undefined
+  const decodedFiles = files.map((file) => {
     const path = typeof file === 'object' && file !== null ? (file as { path?: unknown }).path : undefined
     const contentBase64 = typeof file === 'object' && file !== null ? (file as { contentBase64?: unknown }).contentBase64 : undefined
     if (typeof path !== 'string' || typeof contentBase64 !== 'string') throw new Error('服务器返回的技能文件格式无效')
     const binary = atob(contentBase64)
     return { path, content: Array.from(binary, char => char.charCodeAt(0)) }
   })
+  return sha256 === undefined ? { files: decodedFiles } : { files: decodedFiles, sha256 }
 }
 
 const L = {
@@ -226,7 +229,6 @@ const MOCK_SKILLS: readonly Skill[] = [
   { id: 'spatial-econometrics', name: '空间计量经济学', category: '数据分析', tags: ['SkillHub'], summary: '空间计量经济学工具，支持空间权重矩阵构建、Moran I / Geary C 检验。', description: '适用于地理/网络数据的研究分析，提供空间自相关检验、空间滞后与误差模型估计的完整流程。', installs: '36', accent: '#8b5cf6', icon: '空', version: '1.0.1', author: '数据工坊' },
   { id: 'arcpy-script', name: 'ArcPy脚本生成', category: '空间制图', tags: ['SkillHub'], summary: 'ArcPy 脚本生成，当用户需要编写 ArcGIS/ArcPy 自动化脚本时使用。', description: '生成或调试 GIS 自动化脚本，覆盖要素分析、裁剪、投影转换、批量制图等常见 ArcPy 场景。', installs: '251', accent: '#0ea5e9', icon: 'Py', version: '1.4.0', author: 'GIS 工具链' },
   { id: 'map-coloring', name: '规划标准配色', category: '空间制图', tags: ['推荐'], summary: '规划标准配色方案，图纸与报告的标准配色，使用国土空间规划用地分类色标。', description: '按《国土空间规划用地用海分类》提供三调标准色标，支持图纸、图例与报告配色的统一输出。', installs: '271', accent: '#22c55e', icon: '色', version: '1.2.0', author: '规划测绘院' },
-  ...OFFICIAL_SKILLS,
   { id: 'contract-draft', name: '规划合同起草', category: '专业写作', tags: ['SkillHub'], summary: '起草规划编制合同（规划编制/咨询/测绘/技术服务），支持“写一份合同”等场景。', description: '按规划行业惯例生成合同草案，覆盖工作范围、成果交付、付款节点与违约责任条款，并提示风险点。', installs: '255', accent: '#f59e0b', icon: '合', version: '1.1.0', author: '专业写作室' },
   { id: 'research-report', name: '咨询报告生成器', category: '专业写作', tags: ['推荐'], summary: '生成研究、规划、政府服务和项目汇报中的结构化咨询报告。', description: '面向一类完整的项目任务：研究一个行业、分析一项政策、准备一次汇报，输出逻辑清楚、结构完整的咨询报告。', installs: '261', accent: '#6366f1', icon: '报', version: '1.7.0', author: '专业写作室' },
   { id: 'text-extract', name: '文本结构化提取', category: '专业写作', tags: ['SkillHub'], summary: '从非结构化文本中提取结构化数据的通用工作流，由用户定义字段。', description: '调用 extract_structured_data 工具完成提取，内置字段定义、抽样校验与结果导出流程。', installs: '36', accent: '#3b82f6', icon: '提', version: '1.0.2', author: '专业写作室' },
@@ -784,20 +786,10 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
     // Demonstration cards are a desktop-only presentation fallback. They are
     // never sent to, listed by, or installed from the management backend.
     if (remoteSkills === null) return [...discoveredCustomSkills, ...MOCK_SKILLS]
-    const bySlug = new Map(OFFICIAL_SKILLS.map(skill => [skillSlug(skill), skill]))
     const published = remoteSkills.flatMap((remote): Skill[] => {
       const slug = typeof remote.name === 'string' ? remote.name : ''
       if (slug === '') return []
       const remoteId = typeof remote.id === 'number' || typeof remote.id === 'string' ? String(remote.id) : slug
-      const official = bySlug.get(slug)
-      if (official !== undefined) return [{
-        ...official,
-        ...(typeof remote.id === 'number' ? { remoteId: remote.id } : {}),
-        name: typeof remote.display_name === 'string' && remote.display_name !== '' ? remote.display_name : official.name,
-        summary: typeof remote.description === 'string' && remote.description !== '' ? remote.description : official.summary,
-        installs: String(typeof remote.downloads === 'number' ? remote.downloads : official.installs),
-        version: typeof remote.version === 'string' ? remote.version : official.version,
-      }]
       return [{
         id: `remote-${remoteId}`,
         ...(typeof remote.id === 'number' ? { remoteId: remote.id } : {}),
@@ -813,7 +805,8 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
         installable: true,
       }]
     })
-    const demonstrations = MOCK_SKILLS.filter(skill => !skill.tags.includes('官方'))
+    const remoteSlugs = new Set(published.map(skillSlug))
+    const demonstrations = MOCK_SKILLS.filter(skill => !remoteSlugs.has(skillSlug(skill))).map(skill => ({ ...skill, installable: false, tags: [...skill.tags, '演示'] }))
     return [...discoveredCustomSkills, ...published, ...demonstrations]
   }, [discoveredCustomSkills, remoteSkills])
   const resolveInstallState = (skill: Skill): MarketplaceInstallState => {
@@ -883,10 +876,11 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
       } else if (currentlyInstalled) {
         await desktopInvoke('uninstall_marketplace_skill', { slug })
       } else {
-        const files = skill.remoteId !== undefined && loadRemoteSkillBundle !== undefined
+        const bundle = skill.remoteId !== undefined && loadRemoteSkillBundle !== undefined
           ? serverSkillFiles(await loadRemoteSkillBundle(skill.remoteId))
           : undefined
-        await desktopInvoke('install_marketplace_skill', { slug, files })
+        if (skill.remoteId !== undefined && bundle?.sha256 === undefined) throw new Error('服务器返回的技能包缺少 SHA-256 摘要')
+        await desktopInvoke('install_marketplace_skill', { slug, files: bundle?.files, sha256: bundle?.sha256 })
         if (skill.remoteId !== undefined && recordRemoteSkillInstall !== undefined) {
           try {
             await recordRemoteSkillInstall(skill.remoteId)
@@ -905,7 +899,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
     const nowInstalled = !currentlyInstalled
     await refreshInstallStates()
     setInstallMessage(nowInstalled
-      ? { kind: 'success', text: currentState === 'updateAvailable' ? '技能已更新，新建对话后即可使用。' : '技能已安装，新建对话后即可使用。' }
+      ? { kind: 'success', text: currentState === 'updateAvailable' ? '技能已更新，当前会话下一次输入 / 即可使用。' : '技能已安装，当前会话下一次输入 / 即可使用。' }
       : { kind: 'success', text: '技能已从本机移除。' })
   }
 
@@ -1026,7 +1020,9 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
               {showInstalledOnly ? (
                 <div className="dsh-skill-installed-heading">
                   <div><h2>我安装的技能</h2><p>仅显示安装在当前电脑上的个人技能和平台技能。</p></div>
-                  <button type="button" onClick={() => { setShowInstalledOnly(false) }}>浏览技能广场</button>
+                  <button type="button" className="dsh-skill-browse-market" onClick={() => { setShowInstalledOnly(false) }}>
+                    浏览技能广场 <span aria-hidden="true">→</span>
+                  </button>
                 </div>
               ) : featuredSkills.length > 0 && (
                 <div className="dsh-skill-featured-section">

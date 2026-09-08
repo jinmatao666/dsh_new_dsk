@@ -12,7 +12,29 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-function XmlText([object]$value) { return [System.Security.SecurityElement]::Escape([string]$value) }
+function XmlText([object]$value) {
+    $text = [string]$value
+    $clean = [System.Text.StringBuilder]::new($text.Length)
+    for ($index = 0; $index -lt $text.Length; $index++) {
+        $character = [int][char]$text[$index]
+        if ($character -ge 0xD800 -and $character -le 0xDBFF) {
+            if ($index + 1 -lt $text.Length -and [int][char]$text[$index + 1] -ge 0xDC00 -and [int][char]$text[$index + 1] -le 0xDFFF) {
+                [void]$clean.Append($text[$index]); $index++; [void]$clean.Append($text[$index])
+            }
+            continue
+        }
+        if ($character -ge 0xDC00 -and $character -le 0xDFFF) { continue }
+        if ($character -eq 0x9 -or $character -eq 0xA -or $character -eq 0xD -or ($character -ge 0x20 -and $character -le 0xFFFD)) {
+            [void]$clean.Append($text[$index])
+        }
+    }
+    return [System.Security.SecurityElement]::Escape($clean.ToString())
+}
+
+function Assert-WorksheetXml([string]$xml) {
+    $document = [System.Xml.XmlDocument]::new()
+    $document.LoadXml($xml)
+}
 
 function Write-ZipPackage([string]$path, [hashtable]$entries) {
     if ([System.IO.File]::Exists($path)) { throw "输出文件已存在：$path" }
@@ -241,6 +263,7 @@ $resultRows = ResultRows $Title $response
 $detailSheet = WorksheetXml $detailRows
 $analysisSheet = WorksheetXml $analysisRows
 $resultSheet = WorksheetXml $resultRows
+foreach ($sheet in @($resultSheet, $analysisSheet, $detailSheet)) { Assert-WorksheetXml $sheet }
 $xlsxEntries = @{
     '[Content_Types].xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'
     '_rels/.rels' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'

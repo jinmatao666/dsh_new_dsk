@@ -155,7 +155,7 @@ func GetSkill(c *gin.Context) {
 		})
 		return
 	}
-	skill, err := model.GetSkillById(id)
+	skill, err := model.GetVisibleSkillById(id)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -239,6 +239,24 @@ func GetSkillBundle(c *gin.Context) {
 		})
 		return
 	}
+	sha256 := ""
+	if skill.PublishedReleaseId != nil {
+		release, releaseErr := model.GetSkillRelease(skill.Id, *skill.PublishedReleaseId)
+		if releaseErr != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前已发布技能包不可用"})
+			return
+		}
+		skill.Assets = release.Package
+		skill.Version = release.Version
+		sha256 = release.Sha256
+	}
+	if sha256 == "" {
+		sha256, err = model.SkillPackageSHA256(skill.Assets)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前技能包摘要不可用"})
+			return
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
@@ -246,6 +264,8 @@ func GetSkillBundle(c *gin.Context) {
 			// 写入本机技能目录；Body 仍由推理请求的注入链路使用，无需重复返回。
 			"body":              "",
 			"assets":            skill.Assets,
+			"version":           skill.Version,
+			"sha256":            sha256,
 			"body_updated_at":   skill.BodyUpdatedAt,
 			"assets_updated_at": skill.AssetsUpdatedAt,
 		},
@@ -259,6 +279,14 @@ func CreateSkill(c *gin.Context) {
 			"success": false,
 			"message": "invalid request: " + err.Error(),
 		})
+		return
+	}
+	if _, hasBody := payload["body"]; hasBody {
+		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "请通过技能包导入创建草稿版本"})
+		return
+	}
+	if _, hasContent := payload["content"]; hasContent {
+		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "请通过技能包导入创建草稿版本"})
 		return
 	}
 
@@ -391,6 +419,12 @@ func UpdateSkill(c *gin.Context) {
 			"message": "invalid request: " + err.Error(),
 		})
 		return
+	}
+	for _, field := range []string{"content", "body", "assets", "version", "status"} {
+		if _, present := payload[field]; present {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "message": "技能包、版本与上下架状态只能通过版本管理接口修改"})
+			return
+		}
 	}
 
 	now := time.Now().Unix()
@@ -687,6 +721,10 @@ func IncrementSkillDownloads(c *gin.Context) {
 			"success": false,
 			"message": "invalid id",
 		})
+		return
+	}
+	if _, err := model.GetVisibleSkillById(id); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "技能不可安装"})
 		return
 	}
 	if err := model.IncrementSkillDownloads(id); err != nil {

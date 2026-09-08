@@ -10,7 +10,6 @@
  * 标记格式生成文本，经 parseAssets 解析为可预览的文件树。
  */
 
-import { OFFICIAL_SKILLS } from './officialSkills.generated.mjs';
 
 /** 与技能广场一致的分类列表。 */
 export const MOCK_SKILL_CATEGORIES = ['空间制图', '专业写作', '研究咨询', '办公文档', '数据分析'];
@@ -463,5 +462,4 @@ export const MARKETPLACE_MOCK_SKILLS = [
   ...RAW_SKILLS.map((entry, index) =>
     normalizeMockSkill({ ...entry, submitter: 'root', created_at: seedCreatedAt(index) })
   ),
-  ...OFFICIAL_SKILLS.map(entry => normalizeMockSkill(entry))
 ];

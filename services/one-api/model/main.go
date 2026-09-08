@@ -272,6 +272,9 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&Skill{}); err != nil {
 		return err
 	}
+	if err = DB.AutoMigrate(&SkillRelease{}); err != nil {
+		return err
+	}
 	if err = migrateSkillCategorySchema(); err != nil {
 		return err
 	}

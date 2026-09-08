@@ -74,8 +74,8 @@ function faceOf(slots: SlotRegistry) {
 
 describe('locale apply', () => {
   // These are wiring specs, not default-language specs. A fresh LocaleRuntime
-  // with no jsdom `window` skips browser detection and opens on FALLBACK_LOCALE
-  // (en); each test that reads localized copy stages its locale explicitly via
+  // with no jsdom `window` skips browser detection and opens on DEFAULT_LOCALE
+  // (zh); each test that reads localized copy stages its locale explicitly via
   // setLocale/Host preference instead of leaning on a dead browser pin.
 
   it('declares the slot service', () => {
@@ -91,7 +91,7 @@ describe('locale apply', () => {
     expect(() => locale.register('common', 'zh', {})).toThrow('already has locale')
     expect(() => locale.register('common', 'en', {})).toThrow('already has locale')
     // The lane has no jsdom `window`, so detection never runs and a fresh
-    // service opens on FALLBACK_LOCALE (en); read the zh side explicitly.
+    // service opens on DEFAULT_LOCALE (zh); read the zh side explicitly.
     locale.setLocale('zh')
     expect(locale.bind(SETTINGS_NS)('language.title')).toBe('语言')
     const entry = before.slots.entries(SLOT).find(e => e.component === LanguageRow)!
@@ -133,23 +133,23 @@ describe('locale apply', () => {
     const b = await bench()
     // The shared mirror read once at bench time; a Host-side change reaches it
     // through the document invalidation, exactly as production announces one.
-    // Preference must differ from the provisional locale (FALLBACK_LOCALE = en
+    // Preference must differ from the provisional locale (DEFAULT_LOCALE = zh
     // with no window), or clearing it below would be unobservable.
-    b.setHostPreference('zh')
+    b.setHostPreference('en')
     b.ctx.remote.$dispatch('settings/document-updated', [LOCALE_SETTINGS_NAMESPACE, 0])
     declareItems(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     const locale = b.ctx.get('locale') as LocaleRuntime
-    await vi.waitFor(() => { expect(locale.getLocale().active).toBe('zh') })
+    await vi.waitFor(() => { expect(locale.getLocale().active).toBe('en') })
     // Cleared preference falls back to the provisional locale.
     b.setHostPreference(undefined)
     b.ctx.remote.$dispatch('settings/document-updated', [LOCALE_SETTINGS_NAMESPACE, 0])
-    await vi.waitFor(() => { expect(locale.getLocale().active).toBe('en') })
-    // Re-selecting zh after the clear is an explicit pick of the provisional
-    // value and must persist as a written preference.
-    b.setHostPreference('zh')
-    b.ctx.remote.$dispatch('settings/document-updated', [LOCALE_SETTINGS_NAMESPACE, 0])
     await vi.waitFor(() => { expect(locale.getLocale().active).toBe('zh') })
+    // Re-selecting en after the clear is an explicit pick of the provisional
+    // value and must persist as a written preference.
+    b.setHostPreference('en')
+    b.ctx.remote.$dispatch('settings/document-updated', [LOCALE_SETTINGS_NAMESPACE, 0])
+    await vi.waitFor(() => { expect(locale.getLocale().active).toBe('en') })
     expect(b.describe).toHaveBeenCalledTimes(4)
   })
 

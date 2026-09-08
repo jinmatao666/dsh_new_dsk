@@ -126,3 +126,21 @@ export async function importSkillFolder(files) {
 
   return { name, displayName, description, body, assets, paths, fileCount: paths.length + 1 };
 }
+
+/** Creates the same ZIP payload as a file upload, preserving every file for
+ * server-side validation instead of flattening scripts into SKILL.md. */
+export async function zipSkillFolder(files) {
+  if (!files.length) throw new Error('请选择完整技能文件夹');
+  const first = files[0]?.webkitRelativePath || '';
+  const root = first.includes('/') ? first.slice(0, first.indexOf('/')) : '';
+  if (!root) throw new Error('请选择技能文件夹，而不是单个文件');
+  const entries = await Promise.all(files.map(async file => {
+    const rel = (file.webkitRelativePath || '').replace(/\\/g, '/');
+    if (!rel.startsWith(`${root}/`) || shouldSkipImportPath(rel.slice(root.length + 1))) return null;
+    return { path: rel, data: new Uint8Array(await file.arrayBuffer()) };
+  }));
+  const accepted = entries.filter(Boolean);
+  if (!accepted.some(entry => entry.path.endsWith('/SKILL.md')) || !accepted.some(entry => entry.path.endsWith('/manifest.json'))) throw new Error('技能文件夹根目录必须包含 SKILL.md 与 manifest.json');
+  const { createZip } = await import('./skillDownload');
+  return createZip(accepted);
+}

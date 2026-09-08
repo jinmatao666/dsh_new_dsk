@@ -6,6 +6,7 @@ import type { RunningToolCall, ToolResultNode } from '@deepseek-ai/dsh-client-ru
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { classifyTool, resultText, toolRowModel } from '../src/client/tool/models/tool-call-model.ts'
+import { toolTitle } from '../src/client/tool/tool-title.ts'
 import { ToolRow } from '../src/client/tool/components/ToolRow.tsx'
 import { GenericToolCard, type GenericToolCardProps } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
@@ -30,6 +31,32 @@ const result = (over?: Partial<ToolResultNode>): ToolResultNode => ({
 })
 
 describe('tool-call-model', () => {
+  it('localizes every generic tool title while preserving the technical identifier where useful', () => {
+    expect(toolTitle(t, 'bash', 'bash')).toBe('运行命令 · Bash')
+    expect(toolTitle(t, 'pwsh', 'bash')).toBe('运行 PowerShell · Pwsh')
+    expect(toolTitle(t, 'read', 'read')).toBe('读取文件 · Read')
+    expect(toolTitle(t, 'write', 'write')).toBe('写入文件 · Write')
+    expect(toolTitle(t, 'edit', 'edit')).toBe('编辑文件 · Edit')
+    expect(toolTitle(t, 'run_code', 'code')).toBe('运行代码 · Code')
+    expect(toolTitle(t, 'grep', 'search')).toBe('搜索文本 · Grep')
+    expect(toolTitle(t, 'glob', 'search')).toBe('搜索文件 · Glob')
+    expect(toolTitle(t, 'web_search', 'search')).toBe('网络搜索 · Web Search')
+    expect(toolTitle(t, 'web_fetch', 'read')).toBe('读取网页 · Web Fetch')
+    expect(toolTitle(t, 'cordis_package_inspect', 'read')).toBe('检查运行时')
+    expect(toolTitle(t, 'cordis_runtime_inspect', 'read')).toBe('检查运行时')
+    expect(toolTitle(t, 'cordis_run', 'others')).toBe('运行 Cordis 插件')
+    expect(toolTitle(t, 'cordis_stop', 'others')).toBe('停止 Cordis 插件')
+    expect(toolTitle(t, 'cordis_undefine', 'others')).toBe('移除 Cordis 插件')
+    expect(toolTitle(t, 'custom', 'search')).toBe('搜索')
+    expect(toolTitle(t, 'custom', 'read')).toBe('读取文件 · Read')
+    expect(toolTitle(t, 'custom', 'bash')).toBe('运行命令 · Bash')
+    expect(toolTitle(t, 'custom', 'write')).toBe('写入文件 · Write')
+    expect(toolTitle(t, 'custom', 'edit')).toBe('编辑文件 · Edit')
+    expect(toolTitle(t, 'custom', 'code')).toBe('运行代码 · Code')
+    expect(toolTitle(t, 'custom', 'others')).toBe('工具调用 · custom')
+    expect(toolTitle(t, '', 'others')).toBe('工具调用 · 未知工具')
+  })
+
   it('classifies known tools and falls back to others', () => {
     expect(classifyTool('bash')).toBe('bash')
     expect(classifyTool('pwsh')).toBe('bash')
@@ -364,9 +391,9 @@ describe('ToolRow', () => {
     const inspect = vi.fn()
     const view = render(<ToolRow {...rowProps} inspect={inspect} />)
     // Collapsed: no pill.
-    expect(view.queryByText('Inspect')).toBeNull()
+    expect(view.queryByText('查看详情')).toBeNull()
     fireEvent.click(view.getByRole('button', { name: /Bash/ }))
-    const pill = view.getByText('Inspect')
+    const pill = view.getByText('查看详情')
     fireEvent.click(pill)
     expect(inspect).toHaveBeenCalledTimes(1)
     // The pill click must not collapse the row (body is a .row sibling).
@@ -376,25 +403,25 @@ describe('ToolRow', () => {
   it('no inspect callback, no pill', () => {
     const view = render(<ToolRow {...rowProps} />)
     fireEvent.click(view.getByRole('button'))
-    expect(view.queryByText('Inspect')).toBeNull()
+    expect(view.queryByText('查看详情')).toBeNull()
   })
 
-  it('the expanded card gutter-labels each section it carries (IN / OUT)', () => {
+  it('the expanded card labels each section it carries in Chinese', () => {
     const both = render(<ToolRow {...rowProps} output="result text" />)
     fireEvent.click(both.getByRole('button'))
-    expect(both.getByText('IN')).toBeTruthy()
-    expect(both.getByText('OUT')).toBeTruthy()
+    expect(both.getByText('输入')).toBeTruthy()
+    expect(both.getByText('输出')).toBeTruthy()
     expect(both.getByText('result text')).toBeTruthy()
     cleanup()
     const inputOnly = render(<ToolRow {...rowProps} />)
     fireEvent.click(inputOnly.getByRole('button'))
-    expect(inputOnly.getByText('IN')).toBeTruthy()
-    expect(inputOnly.queryByText('OUT')).toBeNull()
+    expect(inputOnly.getByText('输入')).toBeTruthy()
+    expect(inputOnly.queryByText('输出')).toBeNull()
     cleanup()
     const outputOnly = render(<ToolRow {...rowProps} body={null} output="only out" />)
     fireEvent.click(outputOnly.getByRole('button'))
-    expect(outputOnly.queryByText('IN')).toBeNull()
-    expect(outputOnly.getByText('OUT')).toBeTruthy()
+    expect(outputOnly.queryByText('输入')).toBeNull()
+    expect(outputOnly.getByText('输出')).toBeTruthy()
     expect(outputOnly.getByText('only out')).toBeTruthy()
   })
 })
@@ -406,16 +433,16 @@ describe('GenericToolCard', () => {
 
   it('renders the classified variant row from the frozen slice', () => {
     const view = render(<GenericToolCard {...props('bash', result())} />)
-    expect(view.getByText('Bash')).toBeTruthy()
+    expect(view.getByText('运行命令 · Bash')).toBeTruthy()
     expect(view.getByText('List files')).toBeTruthy()
     expect(view.container.querySelector('[data-variant="bash"]')).not.toBeNull()
   })
 
-  it('unknown tools land on the others variant titled Tool call', () => {
+  it('unknown tools land on the others variant with a Chinese action title', () => {
     const view = render(
       <GenericToolCard {...props('todo_write', running({ name: 'todo_write', argsRaw: '{"note":"x"}' }))} />,
     )
-    expect(view.getByText('Tool call')).toBeTruthy()
+    expect(view.getByText('工具调用 · todo_write')).toBeTruthy()
     expect(view.container.querySelector('[data-variant="others"]')).not.toBeNull()
     expect(view.container.querySelector('[data-state="running"]')).not.toBeNull()
   })
@@ -427,7 +454,7 @@ describe('GenericToolCard', () => {
         argsRaw: '{"file_path":"src/x.ts","old_string":"before","new_string":"after"}',
       }))} />,
     )
-    expect(view.getByText('Edit')).toBeTruthy()
+    expect(view.getByText('编辑文件 · Edit')).toBeTruthy()
     expect(view.getByText('src/x.ts')).toBeTruthy()
     expect(view.container.querySelector('[data-variant="edit"]')).not.toBeNull()
     expect(view.container.querySelector('svg')).not.toBeNull()
@@ -440,7 +467,7 @@ describe('GenericToolCard', () => {
         argsRaw: '{"file_path":"src/x.ts","content":"hello"}',
       }))} />,
     )
-    expect(view.getByText('Write')).toBeTruthy()
+    expect(view.getByText('写入文件 · Write')).toBeTruthy()
     expect(view.getByText('src/x.ts')).toBeTruthy()
     expect(view.container.querySelector('[data-variant="write"]')).not.toBeNull()
     expect(view.container.querySelector('svg')).not.toBeNull()
@@ -450,7 +477,7 @@ describe('GenericToolCard', () => {
     const inspect = vi.fn()
     const view = render(<GenericToolCard {...props('bash', result())} inspect={inspect} />)
     fireEvent.click(view.getByRole('button', { name: /Bash/ }))
-    fireEvent.click(view.getByText('Inspect'))
+    fireEvent.click(view.getByText('查看详情'))
     expect(inspect).toHaveBeenCalledTimes(1)
   })
 

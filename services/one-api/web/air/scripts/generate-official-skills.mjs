@@ -35,8 +35,6 @@ for (const entry of entries.sort((left, right) => left.name.localeCompare(right.
   manifests.push(manifest);
 }
 
-if (manifests.length !== 3) throw new Error(`Expected 3 official GIS skills, found ${manifests.length}`);
-
 const catalog = `${JSON.stringify({ schemaVersion: 1, skills: manifests }, null, 2)}\n`;
 const desktopSkills = manifests.map(manifest => ({
   id: manifest.id,
@@ -86,12 +84,12 @@ await emit(adminProjectionPath, adminProjection);
 console.log(`${check ? 'Verified' : 'Generated'} ${manifests.length} official skill packages.`);
 
 function validateManifest(manifest, directoryName) {
-  const requiredStrings = ['id', 'slug', 'displayName', 'summary', 'description', 'category', 'version', 'author', 'submitter', 'createdAt', 'status', 'accent', 'icon'];
+  const requiredStrings = ['id', 'name', 'slug', 'displayName', 'summary', 'description', 'category', 'version', 'author', 'submitter', 'createdAt', 'status', 'accent', 'icon'];
   if (manifest.schemaVersion !== 1) throw new Error(`${directoryName}: schemaVersion must be 1`);
   for (const field of requiredStrings) {
     if (typeof manifest[field] !== 'string' || manifest[field].trim() === '') throw new Error(`${directoryName}: missing ${field}`);
   }
-  if (manifest.slug !== directoryName || !slugPattern.test(manifest.slug)) throw new Error(`${directoryName}: slug must match its directory`);
+  if (manifest.name !== manifest.slug || manifest.slug !== directoryName || !slugPattern.test(manifest.slug)) throw new Error(`${directoryName}: name and slug must match its directory`);
   if (!slugPattern.test(manifest.id)) throw new Error(`${directoryName}: invalid id`);
   if (!semverPattern.test(manifest.version)) throw new Error(`${directoryName}: invalid semver ${manifest.version}`);
   for (const field of ['tags', 'capabilities', 'params', 'files']) {

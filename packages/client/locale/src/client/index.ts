@@ -86,15 +86,10 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/**
- * English is both the locale the UI opens in when the browser names no shipped
- * language (and for non-browser runs), and the dictionary consulted after the
- * active locale misses a key. One constant serves both because the shipped
- * `zh`/`en` dictionaries carry identical key sets, so neither direction can
- * leave a key unresolved; the residual case points at English rather than
- * zh because a browser naming neither shipped language is the reader least
- * likely to read Chinese.
- */
+/** Product opening locale when neither settings nor browser preferences select a shipped language. */
+export const DEFAULT_LOCALE: LocaleId = 'zh'
+
+/** Dictionary fallback locale for a missing active-locale key. */
 export const FALLBACK_LOCALE: LocaleId = 'en'
 
 /** Shared namespace for shell-level texts. */
@@ -350,11 +345,11 @@ export class LocaleRuntime {
 }
 
 /**
- * The browser's own language wins over {@link FALLBACK_LOCALE}; an explicit
+ * The browser's own language wins over {@link DEFAULT_LOCALE}; an explicit
  * Host preference may replace this provisional value after plugin activation.
  */
 function resolveInitialLocale(): LocaleId {
-  return detectBrowserLocale() ?? FALLBACK_LOCALE
+  return detectBrowserLocale() ?? DEFAULT_LOCALE
 }
 
 /**

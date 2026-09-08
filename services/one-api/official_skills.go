@@ -1,3 +1,5 @@
+//go:build legacy_skill_samples
+
 package main
 
 import (

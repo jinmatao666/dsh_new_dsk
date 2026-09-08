@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "gis-geology-analysis",
+	"name": "market-gis-geology-analysis",
   "slug": "market-gis-geology-analysis",
   "displayName": "地质条件分析",
   "summary": "识别 GeoJSON、Shape 文件夹或 Shape ZIP 的项目范围，调用 GIS_Service 分析地质环境与地质灾害隐患分区。",

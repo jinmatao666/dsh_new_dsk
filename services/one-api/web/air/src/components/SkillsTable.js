@@ -1,7 +1,7 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Modal, Table, Tag, Tooltip } from '@douyinfe/semi-ui';
+import { Modal, Table, Tag, Tooltip, Tree } from '@douyinfe/semi-ui';
 import SkillBrowseDrawer from './SkillBrowseDrawer';
-import { importSkillFolder } from './skillFolderImport';
+import { importSkillFolder, zipSkillFolder } from './skillFolderImport';
 import { API, showError, showSuccess } from '../helpers';
 import './SkillsTable.css';
 
@@ -10,6 +10,11 @@ const STATUS_COLORS = { 1: 'green', 0: 'grey' };
 
 const splitLines = text => String(text || '').split('\n').map(line => line.trim()).filter(Boolean);
 const compactTime = value => value ? new Date(Number(value) * 1000).toLocaleString('zh-CN', { hour12: false }) : '-';
+const releaseFileTree = files => {
+  const root = { label: '技能包/', key: 'root', children: [] }; const folders = new Map([['', root]]);
+  for (const item of files) { const parts = String(item.path || '').split('/').filter(Boolean); const leaf = parts.pop(); let parent = root; let current = ''; for (const part of parts) { current = current ? `${current}/${part}` : part; if (!folders.has(current)) { const folder = { label: `${part}/`, key: `dir:${current}`, children: [] }; folders.set(current, folder); parent.children.push(folder); } parent = folders.get(current); } if (leaf) parent.children.push({ label: leaf, key: `file:${item.path}`, isLeaf: true }); }
+  return [root];
+};
 
 const EMPTY_FORM = {
   name: '',
@@ -33,6 +38,9 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   // 从文件夹导入的产物；null 表示本次编辑未导入
   const [imported, setImported] = useState(null);
   const folderInputRef = useRef(null);
+  const zipInputRef = useRef(null);
+  const importFolderInputRef = useRef(null);
+  const [releases, setReleases] = useState({ skill: null, items: [], files: [] });
   const loadSkills = useCallback(async () => {
     try {
       const response = await API.get('/api/skill/admin/list', { params: { page: 1, perPage: 100 } });
@@ -64,6 +72,41 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   const closeEditor = () => setEditor(null);
   const setField = field => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
 
+  const importZip = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const data = new FormData(); data.append('package', file); data.append('changelog', '后台导入');
+    try {
+      const response = await API.post('/api/skill/admin/import', data);
+      const result = response.data?.data;
+      await loadSkills();
+      showSuccess(`已创建 ${result?.release?.version || ''} 草稿，请在版本列表校验并发布`);
+      if (result?.skill?.id) await openReleases(result.skill);
+    } catch (error) { showError(error.response?.data?.message || error.message || '导入技能包失败'); }
+  };
+  const importFolder = async (event) => {
+    const files = Array.from(event.target.files || []); event.target.value = '';
+    if (!files.length) return;
+    try {
+      const zip = await zipSkillFolder(files);
+      await importZip({ target: { files: [new File([zip], `${files[0].webkitRelativePath.split('/')[0]}.zip`, { type: 'application/zip' })], value: '' } });
+    } catch (error) { showError(error.message || '导入技能文件夹失败'); }
+  };
+  const openReleases = async skill => {
+    try { const response = await API.get(`/api/skill/${skill.id}/releases`); setReleases({ skill, items: response.data?.data || [], files: [] }); }
+    catch (error) { showError(error.response?.data?.message || error.message || '加载版本失败'); }
+  };
+  const releaseAction = async (release, action) => {
+    const skill = releases.skill; if (!skill) return;
+    try {
+      const response = await API.post(`/api/skill/${skill.id}/releases/${release.id}/${action}`);
+      await loadSkills(); await openReleases(skill);
+      if (action === 'validate') setReleases(current => ({ ...current, files: response.data?.data?.files || [] }));
+      showSuccess(action === 'validate' ? '版本校验通过' : action === 'publish' ? '版本已发布' : '已回滚到该版本');
+    } catch (error) { showError(error.response?.data?.message || error.message || '版本操作失败'); }
+  };
+
   const handleFolderImport = async (e) => {
     const files = Array.from(e.target.files || []);
     if (folderInputRef.current) folderInputRef.current.value = '';
@@ -92,11 +135,11 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
 
   const removeSkill = skill => Modal.confirm({ title: `删除技能「${skill.display_name || skill.name}」？`, content: '删除后将不再出现在桌面技能广场。', okType: 'danger', onOk: async () => { await API.delete(`/api/skill/${skill.id}`); await loadSkills(); showSuccess('技能已删除'); } });
   const togglePublish = async skill => {
-    const nextStatus = skill.status === 1 ? 0 : 1;
+    if (skill.status !== 1) { showError('请在版本列表中选择一个已校验草稿发布'); return; }
     try {
-      await API.put(`/api/skill/${skill.id}`, { status: nextStatus });
+      await API.post(`/api/skill/${skill.id}/unpublish`);
       await loadSkills();
-      showSuccess(nextStatus === 1 ? '技能已上架，桌面端刷新后可见' : '技能已下架，桌面端刷新后将隐藏');
+      showSuccess('技能已下架，桌面端刷新后将隐藏');
     } catch (error) { showError(error.message || '更新状态失败'); }
   };
 
@@ -139,8 +182,9 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       title: '操作', width: 180, render: (_, record) => (
         <div className='skill-row-actions'>
           <button type='button' className='skill-text-action' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</button>
-          <button type='button' className='skill-text-action' onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '上架'}</button>
-          <button type='button' className='skill-text-action' onClick={() => openEditor(record)}>编辑</button>
+          <button type='button' className='skill-text-action' onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '版本发布'}</button>
+          <button type='button' className='skill-text-action' onClick={() => { void openReleases(record); }}>版本</button>
+          <button type='button' className='skill-text-action' onClick={() => openEditor(record)}>编辑元数据</button>
           <button type='button' className='skill-text-action danger' onClick={() => removeSkill(record)}>删除</button>
         </div>
       )
@@ -162,18 +206,15 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       scenario: form.summary,
       tags: splitLines(form.capabilities),
       submitter: base.submitter || 'root',
-      version: form.version || '1.0.0',
-      status: Number(form.status),
-      body: form.body || base.body || '',
-      assets: imported?.assets ?? base.assets ?? ''
+      version: base.version,
     };
-    if (!editor.base && !payload.body) { showError('请输入 SKILL.md 内容或导入技能文件夹'); return; }
+    if (!editor.base) { showError('请使用“导入技能 ZIP”或“导入技能文件夹”创建技能草稿'); return; }
     try {
       if (editor.base) await API.put(`/api/skill/${editor.base.id}`, payload);
       else await API.post('/api/skill/', payload);
       await loadSkills();
       setEditor(null);
-      showSuccess(payload.status === 1 ? '保存并上架成功' : '保存成功');
+      showSuccess('技能元数据已保存');
     } catch (error) { showError(error.response?.data?.message || error.message || '保存失败'); }
   };
 
@@ -195,11 +236,21 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     <section className='preview-surface skill-admin-surface'>
       <div className='preview-section-head'>
         <h2>技能列表</h2>
-        <span className='skill-admin-meta'>共 {filteredItems.length} 条{keyword.trim() ? ` · 搜索“${keyword.trim()}”` : ''}</span>
+        <div className='form-inline-actions'><span className='skill-admin-meta'>共 {filteredItems.length} 条{keyword.trim() ? ` · 搜索“${keyword.trim()}”` : ''}</span><button type='button' className='preview-button' onClick={() => importFolderInputRef.current?.click()}>导入技能文件夹</button><button type='button' className='preview-button primary' onClick={() => zipInputRef.current?.click()}>导入技能 ZIP</button></div>
       </div>
+      <input ref={zipInputRef} hidden type='file' accept='.zip,application/zip' onChange={importZip} />
+      <input ref={importFolderInputRef} hidden type='file' multiple onChange={importFolder} {...{ webkitdirectory: '', directory: '' }} />
       <Table columns={columns} dataSource={filteredItems} rowKey='id' pagination={{ pageSize: 20 }} scroll={{ x: 1062 }} empty='暂无技能' />
     </section>
     <SkillBrowseDrawer visible={browse.visible} kind='public' id={browse.skill?.id} skill={browse.skill} onClose={() => setBrowse({ visible: false, skill: null })} />
+    <Modal visible={Boolean(releases.skill)} title={`版本管理${releases.skill ? `：${releases.skill.display_name || releases.skill.name}` : ''}`} onCancel={() => setReleases({ skill: null, items: [], files: [] })} footer={null}>
+      <Table rowKey='id' dataSource={releases.items} pagination={false} columns={[
+        { title: '版本', dataIndex: 'version' }, { title: '状态', dataIndex: 'state', render: value => <Tag color={value === 'published' ? 'green' : value === 'draft' ? 'orange' : 'grey'}>{value === 'published' ? '已发布' : value === 'draft' ? '草稿' : '已归档'}</Tag> },
+        { title: '摘要', dataIndex: 'sha256', render: value => <span title={value}>{String(value || '').slice(0, 12)}</span> }, { title: '文件', dataIndex: 'file_count' },
+        { title: '操作', render: (_, release) => <div className='skill-row-actions'><button type='button' className='skill-text-action' onClick={() => { void releaseAction(release, 'validate'); }}>校验</button>{release.state !== 'published' && <button type='button' className='skill-text-action' onClick={() => { void releaseAction(release, release.state === 'draft' ? 'publish' : 'rollback'); }}>{release.state === 'draft' ? '发布' : '回滚'}</button>}</div> }
+      ]} />
+      {releases.files.length > 0 && <div style={{ marginTop: 16 }}><strong>服务端校验后的文件树</strong><Tree treeData={releaseFileTree(releases.files)} defaultExpandAll /></div>}
+    </Modal>
     {editor && (
       <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) closeEditor(); }}>
         <div className='zjugis-modal wide'>
@@ -221,17 +272,6 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
                 <span>分类</span>
                 <select value={form.category} onChange={setField('category')}>
                   {[...new Set(['办公文档', '空间制图', '研究咨询', '数据分析', ...items.map(item => item.category).filter(Boolean), '其他'])].map(value => <option key={value} value={value}>{value}</option>)}
-                </select>
-              </label>
-              <label className='zjugis-field'>
-                <span>版本</span>
-                <input value={form.version} onChange={setField('version')} placeholder='1.0.0' />
-              </label>
-              <label className='zjugis-field'>
-                <span>上架状态</span>
-                <select value={form.status} onChange={setField('status')}>
-                  <option value='0'>已下架</option>
-                  <option value='1'>已上架</option>
                 </select>
               </label>
             </div>

@@ -1,13 +1,55 @@
 package model
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
 	"github.com/songquanpeng/one-api/common/logger"
 	"gorm.io/gorm"
 )
+
+type skillPackageDigestFile struct {
+	Path          string `json:"path"`
+	ContentBase64 string `json:"contentBase64"`
+}
+
+type skillPackageDigest struct {
+	Files []skillPackageDigestFile `json:"files"`
+}
+
+// SkillPackageSHA256 returns the digest used by the release API and desktop
+// installer for the persisted file-set representation.
+func SkillPackageSHA256(assets string) (string, error) {
+	var pkg skillPackageDigest
+	if err := json.Unmarshal([]byte(assets), &pkg); err != nil {
+		return "", err
+	}
+	if len(pkg.Files) == 0 {
+		return "", fmt.Errorf("技能包不包含文件")
+	}
+	sort.Slice(pkg.Files, func(i, j int) bool { return pkg.Files[i].Path < pkg.Files[j].Path })
+	hash := sha256.New()
+	for _, file := range pkg.Files {
+		if file.Path == "" {
+			return "", fmt.Errorf("技能包包含空路径")
+		}
+		content, err := base64.StdEncoding.DecodeString(file.ContentBase64)
+		if err != nil {
+			return "", err
+		}
+		_, _ = hash.Write([]byte(file.Path))
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write(content)
+		_, _ = hash.Write([]byte{0})
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
 
 type Skill struct {
 	Id              int             `json:"id" gorm:"primaryKey;autoIncrement"`
@@ -29,6 +71,35 @@ type Skill struct {
 	UpdatedAt       int64           `json:"updated_at" gorm:"autoUpdateTime"`
 	BodyUpdatedAt   int64           `json:"body_updated_at" gorm:"default:0"`
 	AssetsUpdatedAt int64           `json:"assets_updated_at" gorm:"default:0"`
+	// PublishedReleaseId identifies the immutable package currently exposed to
+	// desktop clients. Body and Assets remain a denormalized runtime cache for
+	// prompt injection and legacy readers.
+	PublishedReleaseId *int `json:"published_release_id" gorm:"index"`
+}
+
+const (
+	SkillReleaseDraft     = "draft"
+	SkillReleasePublished = "published"
+	SkillReleaseArchived  = "archived"
+)
+
+// SkillRelease stores one validated, complete skill package. Package uses the
+// same JSON file-set representation returned by the bundle endpoint.
+type SkillRelease struct {
+	Id          int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	SkillId     int    `json:"skill_id" gorm:"not null;uniqueIndex:idx_skill_release_version"`
+	Version     string `json:"version" gorm:"size:50;not null;uniqueIndex:idx_skill_release_version"`
+	State       string `json:"state" gorm:"size:20;not null;default:'draft';index"`
+	Package     string `json:"-" gorm:"type:text;not null"`
+	Body        string `json:"-" gorm:"type:text;not null"`
+	Sha256      string `json:"sha256" gorm:"size:64;not null"`
+	FileCount   int    `json:"file_count" gorm:"not null"`
+	SizeBytes   int64  `json:"size_bytes" gorm:"not null"`
+	Changelog   string `json:"changelog" gorm:"type:text"`
+	CreatedBy   string `json:"created_by" gorm:"size:100;default:''"`
+	CreatedAt   int64  `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt   int64  `json:"updated_at" gorm:"autoUpdateTime"`
+	PublishedAt int64  `json:"published_at" gorm:"default:0"`
 }
 
 // EffectiveBody returns the body text used for LLM injection.
@@ -296,6 +367,56 @@ func CreateSkill(skill *Skill) error {
 
 func UpdateSkill(skill *Skill) error {
 	return DB.Save(skill).Error
+}
+
+func GetSkillRelease(skillID, releaseID int) (*SkillRelease, error) {
+	var release SkillRelease
+	err := DB.Where("id = ? AND skill_id = ?", releaseID, skillID).First(&release).Error
+	if err != nil {
+		return nil, err
+	}
+	return &release, nil
+}
+
+func ListSkillReleases(skillID int) ([]SkillRelease, error) {
+	var releases []SkillRelease
+	err := DB.Where("skill_id = ?", skillID).Order("id DESC").Find(&releases).Error
+	return releases, err
+}
+
+// MigrateLegacySkillReleases preserves already-published packages as immutable
+// release records. It never replaces a release selected by an administrator.
+func MigrateLegacySkillReleases() error {
+	var skills []Skill
+	if err := DB.Where("published_release_id IS NULL AND is_deleted = ? AND status = ?", false, 1).Find(&skills).Error; err != nil {
+		return err
+	}
+	for _, skill := range skills {
+		if strings.TrimSpace(skill.Assets) == "" || strings.TrimSpace(skill.EffectiveBody()) == "" {
+			continue
+		}
+		if err := DB.Transaction(func(tx *gorm.DB) error {
+			var fresh Skill
+			if err := tx.First(&fresh, skill.Id).Error; err != nil {
+				return err
+			}
+			if fresh.PublishedReleaseId != nil {
+				return nil
+			}
+			sha256, err := SkillPackageSHA256(fresh.Assets)
+			if err != nil {
+				return nil
+			}
+			release := SkillRelease{SkillId: fresh.Id, Version: fresh.Version, State: SkillReleasePublished, Package: fresh.Assets, Body: fresh.EffectiveBody(), Sha256: sha256, FileCount: 0, SizeBytes: int64(len(fresh.Assets)), CreatedBy: "legacy-migration", PublishedAt: fresh.UpdatedAt}
+			if err := tx.Create(&release).Error; err != nil {
+				return err
+			}
+			return tx.Model(&fresh).Updates(map[string]any{"published_release_id": release.Id}).Error
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // DeleteSkill 软删:UPDATE is_deleted=1。幂等 - 已软删的再调用返回 affected=0,不报错

@@ -13,8 +13,6 @@ if (!/^[0-9A-Za-z][0-9A-Za-z.-]*$/.test(releaseVersion)) {
   throw new Error(`DSH_RELEASE_VERSION contains an unsupported runtime directory character: ${releaseVersion}`)
 }
 const resources = join(desktopDir, 'src-tauri', 'resources', `runtime-${releaseVersion}`)
-const marketplaceSkillsSource = join(root, 'services', 'one-api', 'web', 'air', 'public', 'skills')
-const marketplaceSkillsTarget = join(desktopDir, 'src-tauri', 'resources', 'skills')
 const appDir = join(resources, 'app')
 let workspacePackageMap: Map<string, string> | undefined
 const runtimeDependencies = dependencyClosure([
@@ -38,12 +36,6 @@ const run = (command: string, args: string[]) => {
   const result = spawnSync(command, args, { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' })
   if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed`)
 }
-
-run(process.execPath, [join(root, 'services', 'one-api', 'web', 'air', 'scripts', 'generate-official-skills.mjs'), '--check'])
-if (existsSync(marketplaceSkillsTarget)) rmSync(marketplaceSkillsTarget, { recursive: true, force: true })
-cpSync(marketplaceSkillsSource, marketplaceSkillsTarget, { recursive: true, dereference: false })
-writeFileSync(join(marketplaceSkillsTarget, '.gitignore'), '*\n!.gitignore\n!.gitkeep\n')
-writeFileSync(join(marketplaceSkillsTarget, '.gitkeep'), '')
 
 run('corepack', ['pnpm', 'run', 'build:official'])
 if (existsSync(appDir)) rmSync(appDir, { recursive: true, force: true })

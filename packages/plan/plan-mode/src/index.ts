@@ -278,7 +278,7 @@ export class PlanModeController extends Service {
     ctx.inject(['commands'], (commandCtx) => {
       commandCtx.commands.register({
         name: 'plan',
-        description: 'Enter or leave plan mode',
+        description: '进入或退出计划模式',
         input: { hint: '[off|message]', images: true },
         handler: ({ agent, rawInput, attachments }) => {
           const message = rawInput.trim()

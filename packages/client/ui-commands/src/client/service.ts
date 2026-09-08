@@ -62,6 +62,25 @@ interface RankedCandidate {
   readonly score: number
 }
 
+/** Localize known host command metadata without changing command ids or execution payloads. */
+function localizeHostCommand(
+  t: TranslateNS<'command'>,
+  descriptor: CommandDescriptor,
+): Pick<InputTriggerCandidate, 'description' | 'hint'> {
+  const hint = (key: 'host.goal.hint' | 'host.permission.hint' | 'host.plan.hint' | 'host.model.hint') =>
+    descriptor.input === undefined ? {} : { hint: t(key) }
+  switch (descriptor.name) {
+    case 'goal': return { description: t('host.goal.description'), ...hint('host.goal.hint') }
+    case 'permission': return { description: t('host.permission.description'), ...hint('host.permission.hint') }
+    case 'plan': return { description: t('host.plan.description'), ...hint('host.plan.hint') }
+    case 'model': return { description: t('host.model.description'), ...hint('host.model.hint') }
+    default: return {
+      ...(descriptor.description === undefined ? {} : { description: descriptor.description }),
+      ...(descriptor.input === undefined ? {} : { hint: descriptor.input.hint }),
+    }
+  }
+}
+
 /** Extra weight for command-name starts and separator boundaries. */
 function boundaryBonus(name: string, index: number): number {
   return index === 0 || name.charAt(index - 1) === '-' || name.charAt(index - 1) === '_' ? 8 : 0
@@ -252,7 +271,7 @@ export class CommandUiRuntime extends Service implements CommandUiContract {
     const seen = new Set<string>()
     for (const c of list) {
       seen.add(c.name)
-      rows.push({ name: c.name, description: c.description, ...(c.input !== undefined ? { hint: c.input.hint } : {}) })
+      rows.push({ name: c.name, ...localizeHostCommand(this.t, c) })
     }
     for (const contribution of this.live.contributions.values()) {
       if (!contribution.available(session)) continue

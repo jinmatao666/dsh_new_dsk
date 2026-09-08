@@ -100,7 +100,7 @@ function executeFeedbackCommand(invocation: CommandInvocation, ctx: Context): Co
 export function apply(ctx: Context): void {
   ctx.commands.register({
     name: 'feedback',
-    description: 'record feedback about this session',
+    description: '记录本次会话的反馈',
     input: { hint: '<text>' },
     recordInput: false,
     handler: invocation => executeFeedbackCommand(invocation, ctx),

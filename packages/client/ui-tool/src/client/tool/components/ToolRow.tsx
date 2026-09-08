@@ -271,7 +271,7 @@ export function ToolRow({
                           <div className={css.ioCard}>
                             {cardBody !== null && (
                               <div className={css.ioSection}>
-                                <span className={css.ioLabel}>IN</span>
+                                <span className={css.ioLabel}>{t('tool.input')}</span>
                                 <span className={css.ioText}>{cardBody}</span>
                               </div>
                             )}
@@ -280,7 +280,7 @@ export function ToolRow({
                             )}
                             {outputText !== null && (
                               <div className={css.ioSection}>
-                                <span className={css.ioLabel}>OUT</span>
+                                <span className={css.ioLabel}>{t('tool.output')}</span>
                                 <span className={css.ioText} data-error={state === 'error' || undefined}>
                                   {outputText}
                                 </span>
@@ -297,7 +297,7 @@ export function ToolRow({
               onClick={inspect}
             >
               <IconInspectOutline12 />
-              Inspect
+              {t('tool.inspect')}
             </button>
           )}
         </div>

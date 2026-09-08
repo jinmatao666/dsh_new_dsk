@@ -43,7 +43,7 @@ function dosDateTime(date = new Date()) {
   return { time, day };
 }
 
-function createZip(files) {
+export function createZip(files) {
   const localParts = [];
   const centralParts = [];
   let offset = 0;

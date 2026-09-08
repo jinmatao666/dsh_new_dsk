@@ -13,6 +13,7 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '../../contract/slots.ts'
 import { readCardModel } from '../models/read-card-model.ts'
 import { toolRowModel } from '../models/tool-call-model.ts'
+import { toolTitle } from '../tool-title.ts'
 import { ToolRow } from '../components/ToolRow.tsx'
 import { CONVERSATION_NS as NS } from '../../locale.ts'
 
@@ -33,7 +34,7 @@ export function ReadRow({ toolName, block, cwd, home, openFile, inspect, t }: Re
       variant={model.variant}
       toolName={toolName}
       icon={<IconBrowseOutline16 size={14} />}
-      title={model.title}
+      title={toolTitle(t, toolName, model.variant)}
       summary={model.summary}
       body={null}
       output={model.output}

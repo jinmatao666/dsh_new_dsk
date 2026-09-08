@@ -28,6 +28,10 @@ COPY web/air ./air
 COPY web/org-admin ./org-admin
 RUN mkdir -p /web/build
 
+# Runtime skills are database releases. Checked-in GIS packages remain source
+# migration samples and are deliberately excluded from the shipped web assets.
+RUN rm -rf /web/air/public/skills
+
 RUN DISABLE_ESLINT_PLUGIN=true \
     REACT_APP_VERSION="$PARVIS_VERSION" \
     PUBLIC_URL="$DSH_ADMIN_PUBLIC_URL" \

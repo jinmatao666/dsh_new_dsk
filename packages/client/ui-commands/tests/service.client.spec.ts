@@ -220,7 +220,9 @@ describe('candidates', () => {
     const { source, listCalls } = await bench()
     const list = await source.candidates(proj('s1'), req('g'))
     expect(listCalls).toEqual([{ sessionId: sid('s1') }])
-    expect(list).toEqual([{ name: 'goal', description: 'leadingInput kind', hint: 'goal text' }])
+    expect(list).toEqual([{
+      name: 'goal', description: 'command:host.goal.description', hint: 'command:host.goal.hint',
+    }])
   })
 
   it('matches case-insensitive subsequences and ranks prefixes, boundaries, adjacency, gaps, then source order', async () => {

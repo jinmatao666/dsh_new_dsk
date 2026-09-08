@@ -19,7 +19,7 @@ export const zh = {
   'menu.aria': '模型与推理等级',
   'menu.model': '模型',
   'menu.effort': '推理等级',
-  'effort.providerDefault': 'Default',
+  'effort.providerDefault': '默认',
   'status.loading': '正在刷新模型列表…',
   'error.action': '模型操作失败：{message}',
   'action.reload': '重新加载',

@@ -18,7 +18,7 @@ const REQUESTED: CommandResult = {
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.commands.register({
     name: 'export',
-    description: 'Download this Session log as a ZIP archive',
+    description: '下载本次会话日志压缩包',
     handler: invocation => Promise.resolve(invocation.rawInput.trim() === ''
       ? REQUESTED
       : { kind: 'error', text: 'The Web /export command does not accept a path.' }),

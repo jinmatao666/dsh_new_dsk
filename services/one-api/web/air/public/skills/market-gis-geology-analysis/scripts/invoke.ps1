@@ -213,7 +213,7 @@ if ([string]::IsNullOrWhiteSpace($YfxFieldName)) {
     $YfxFieldName = -join (0x5206, 0x533A, 0x540D, 0x79F0 | ForEach-Object { [char]$_ })
 }
 if ([string]::IsNullOrWhiteSpace($BaseUrl)) { $BaseUrl = $env:DSH_GIS_SERVICE_URL }
-if ([string]::IsNullOrWhiteSpace($BaseUrl)) { $BaseUrl = 'http://60.191.110.206:38010' }
+if ([string]::IsNullOrWhiteSpace($BaseUrl)) { throw '未配置 DSH_GIS_SERVICE_URL；请在运行环境中提供 GIS 服务地址，或使用 -BaseUrl 指定。' }
 $arcGeometry = @{ hasZ = $false; hasM = $false; rings = $rings } | ConvertTo-Json -Compress -Depth 100
 $body = @{
     GeoJson = $arcGeometry

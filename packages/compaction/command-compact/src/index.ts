@@ -99,7 +99,7 @@ export function apply(ctx: Context): void {
     yield async () => { await Promise.allSettled(active) }
     yield ctx.commands.register({
       name: 'compact',
-      description: 'Compact older conversation history',
+      description: '压缩较早的对话记录',
       handler,
     })
   }, 'command-compact lifecycle')

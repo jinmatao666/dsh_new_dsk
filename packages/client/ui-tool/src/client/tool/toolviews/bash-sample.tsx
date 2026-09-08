@@ -23,6 +23,7 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '../../contract/slots.ts'
 import { terminalBlockLabels, terminalCardModel, terminalFailed } from '../models/terminal-card-model.ts'
 import { toolRowModel, type ToolRowState } from '../models/tool-call-model.ts'
+import { toolTitle } from '../tool-title.ts'
 import { CONVERSATION_NS as NS } from '../../locale.ts'
 import css from './bash-sample.module.css'
 
@@ -109,7 +110,7 @@ export function BashRow({ toolName, block, sessionId, useSessions, inspect, t }:
       >
         <span className={css.leading}>{leading}</span>
         {status !== null && <span className={css.visuallyHidden}>{status}</span>}
-        <span className={css.title}>{model.title}</span>
+        <span className={css.title}>{toolTitle(t, toolName, model.variant)}</span>
         <span className={css.sep} aria-hidden />
         {/* The terminal presenter's description is the contractual
             above-card summary; a failure's first line outranks both. */}
@@ -134,7 +135,7 @@ export function BashRow({ toolName, block, sessionId, useSessions, inspect, t }:
               <div className={css.ioCard}>
                 {model.body !== null && (
                   <div className={css.ioSection}>
-                    <span className={css.ioLabel}>IN</span>
+                    <span className={css.ioLabel}>{t('tool.input')}</span>
                     <span className={css.ioText}>{model.body}</span>
                   </div>
                 )}
@@ -143,7 +144,7 @@ export function BashRow({ toolName, block, sessionId, useSessions, inspect, t }:
                 )}
                 {model.output !== null && (
                   <div className={css.ioSection}>
-                    <span className={css.ioLabel}>OUT</span>
+                    <span className={css.ioLabel}>{t('tool.output')}</span>
                     <span className={css.ioText} data-error>
                       {model.output}
                     </span>
@@ -154,7 +155,7 @@ export function BashRow({ toolName, block, sessionId, useSessions, inspect, t }:
           {inspect !== undefined && (
             <button type="button" className={css.inspectButton} onClick={inspect}>
               <IconInspectOutline12 />
-              Inspect
+              {t('tool.inspect')}
             </button>
           )}
         </div>

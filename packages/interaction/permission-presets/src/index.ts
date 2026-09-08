@@ -257,7 +257,7 @@ export class PermissionPresetService extends Service {
     ctx.inject(['commands'], (commandCtx) => {
       commandCtx.commands.register({
         name: 'permission',
-        description: 'Switch the permission preset (sandbox mode + approval policy)',
+        description: '切换权限预设（沙盒模式和审批策略）',
         input: { hint: '<preset>' },
         // No settlement text labels its value with this command's own name: a
         // surface that renders `name · text` (the web command row) would

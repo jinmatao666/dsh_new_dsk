@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     io::{BufRead, BufReader, Read, Write},
@@ -15,8 +16,7 @@ use tauri::{
 };
 use url::Url;
 
-const NATIVE_SKILLS_CHANGED_SCRIPT: &str =
-    "window.dispatchEvent(new Event('dsh:skills-changed'));";
+const NATIVE_SKILLS_CHANGED_SCRIPT: &str = "window.dispatchEvent(new Event('dsh:skills-changed'));";
 const NATIVE_BRIDGE_INITIALIZATION_SCRIPT: &str = r#"
 (() => {
   const invoke = (command, argumentsValue) => {
@@ -797,33 +797,40 @@ fn install_marketplace_skill_files_at(
     Ok(directory.join("SKILL.md").display().to_string())
 }
 
+/// Matches the server's deterministic digest: sorted relative path, NUL, file
+/// bytes, NUL. The archive transport itself is intentionally not trusted.
+fn marketplace_package_sha256(files: &[CustomSkillFile]) -> String {
+    let mut entries: Vec<_> = files.iter().collect();
+    entries.sort_by(|left, right| left.path.cmp(&right.path));
+    let mut hash = Sha256::new();
+    for file in entries {
+        hash.update(file.path.as_bytes());
+        hash.update([0]);
+        hash.update(&file.content);
+        hash.update([0]);
+    }
+    format!("{:x}", hash.finalize())
+}
+
 #[tauri::command]
 fn list_marketplace_skills(app: tauri::AppHandle) -> Result<Vec<MarketplaceSkillState>, String> {
-    let resource_root = marketplace_resource_root(&app)?;
     let skills_root = user_skills_root(&app)?;
-    let catalog = read_marketplace_catalog(&resource_root)?;
-    let mut manifests = catalog.skills;
-    if skills_root.exists() {
-        for entry in fs::read_dir(&skills_root)
-            .map_err(|error| format!("无法枚举用户技能目录 {}：{error}", skills_root.display()))?
-        {
-            let entry = entry.map_err(|error| format!("无法读取用户技能目录项：{error}"))?;
-            let metadata = entry.file_type().map_err(|error| {
-                format!("无法读取技能目录类型 {}：{error}", entry.path().display())
-            })?;
-            if metadata.is_symlink() || !metadata.is_dir() {
-                continue;
-            }
-            let Ok(manifest) = read_marketplace_manifest(&entry.path()) else {
-                continue;
-            };
-            if manifest.slug.is_empty() || manifests.iter().any(|item| item.slug == manifest.slug) {
-                continue;
-            }
-            manifests.push(manifest);
-        }
+    if !skills_root.exists() {
+        return Ok(Vec::new());
     }
-    manifests
+    fs::read_dir(&skills_root)
+        .map_err(|error| format!("无法枚举用户技能目录 {}：{error}", skills_root.display()))?
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| {
+            let metadata = entry.file_type().ok()?;
+            if metadata.is_symlink()
+                || !metadata.is_dir()
+                || entry.path().join(".dsh-custom-skill").is_file()
+            {
+                return None;
+            }
+            read_marketplace_manifest(&entry.path()).ok()
+        })
         .into_iter()
         .map(|manifest| {
             let directory = skills_root.join(&manifest.slug);
@@ -860,8 +867,14 @@ fn install_marketplace_skill(
     app: tauri::AppHandle,
     slug: String,
     files: Option<Vec<CustomSkillFile>>,
+    sha256: Option<String>,
 ) -> Result<String, String> {
     let installed = if let Some(files) = files {
+        if let Some(expected) = sha256.filter(|value| !value.is_empty()) {
+            if marketplace_package_sha256(&files) != expected.to_ascii_lowercase() {
+                return Err("服务器技能包摘要校验失败，未写入本机目录".to_string());
+            }
+        }
         install_marketplace_skill_files_at(&user_skills_root(&app)?, &slug, files)?
     } else {
         let resource_root = marketplace_resource_root(&app)?;
@@ -1358,8 +1371,9 @@ pub fn run() {
 #[cfg(test)]
 mod marketplace_tests {
     use super::{
-        install_marketplace_skill_at, install_marketplace_skill_files_at, read_analysis_view,
-        save_session_log_archive_at, uninstall_marketplace_skill_at, CustomSkillFile,
+        install_marketplace_skill_at, install_marketplace_skill_files_at,
+        marketplace_package_sha256, read_analysis_view, save_session_log_archive_at,
+        uninstall_marketplace_skill_at, CustomSkillFile,
     };
     use std::{
         fs,
@@ -1438,12 +1452,10 @@ mod marketplace_tests {
         uninstall_marketplace_skill_at(&skills, "market-test-skill").expect("uninstall");
         assert!(!skills.join("market-test-skill").exists());
         assert!(user.0.join(".dsh-skill-staging").is_dir());
-        assert!(
-            fs::read_dir(user.0.join(".dsh-skill-staging"))
-                .expect("read staging")
-                .next()
-                .is_none()
-        );
+        assert!(fs::read_dir(user.0.join(".dsh-skill-staging"))
+            .expect("read staging")
+            .next()
+            .is_none());
     }
 
     #[test]
@@ -1470,6 +1482,34 @@ mod marketplace_tests {
             fs::read_to_string(skills.join("market-test-skill/scripts/invoke.ps1"))
                 .expect("downloaded script"),
             "Write-Output downloaded\n"
+        );
+    }
+
+    #[test]
+    fn hashes_downloaded_files_independently_of_transport_order() {
+        let first = vec![
+            CustomSkillFile {
+                path: "SKILL.md".to_string(),
+                content: b"skill".to_vec(),
+            },
+            CustomSkillFile {
+                path: "manifest.json".to_string(),
+                content: b"manifest".to_vec(),
+            },
+        ];
+        let second = vec![
+            CustomSkillFile {
+                path: "manifest.json".to_string(),
+                content: b"manifest".to_vec(),
+            },
+            CustomSkillFile {
+                path: "SKILL.md".to_string(),
+                content: b"skill".to_vec(),
+            },
+        ];
+        assert_eq!(
+            marketplace_package_sha256(&first),
+            marketplace_package_sha256(&second)
         );
     }
 
@@ -1550,8 +1590,7 @@ mod marketplace_tests {
         let review_view = workspace
             .0
             .join("地块1_土地利用规划审查视图_20260905_120000_000.json");
-        fs::write(&review_view, r#"{"schema_version":1,"tables":[]}"#)
-            .expect("write review view");
+        fs::write(&review_view, r#"{"schema_version":1,"tables":[]}"#).expect("write review view");
         assert!(read_analysis_view(review_view.display().to_string()).is_ok());
         assert!(read_analysis_view(workspace.0.join("other.json").display().to_string()).is_err());
         assert!(read_analysis_view("relative-analysis-view_1.json".to_string()).is_err());

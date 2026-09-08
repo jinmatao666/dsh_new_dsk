@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { stubSettingsScope, type StubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import type { LocaleSettings, LocaleSnapshot } from '@deepseek-ai/dsh-client-locale/client'
-import { FALLBACK_LOCALE, LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import { DEFAULT_LOCALE, FALLBACK_LOCALE, LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 const make = (host?: StubSettingsScope<LocaleSettings>): {
   ctx: Context
   svc: LocaleRuntime
@@ -158,16 +158,16 @@ describe('LocaleRuntime', () => {
   })
 
   it('persists an explicit pick of the provisional locale, so a shared DSH home agrees', () => {
-    // A browser naming no shipped language opens at FALLBACK_LOCALE with
+    // A browser naming no shipped language opens at DEFAULT_LOCALE with
     // nothing stored. Choosing that same language in the menu must become
     // durable, or a Chinese browser sharing the home still opens Chinese.
     stubLanguages('fr-FR')
     const host = stubSettingsScope<LocaleSettings>()
     const { svc } = make(host)
-    expect(svc.getLocale().active).toBe('en')
+    expect(svc.getLocale().active).toBe('zh')
     expect(host.set).not.toHaveBeenCalled()
-    svc.setLocale('en')
-    expect(host.set).toHaveBeenCalledWith('preference', 'en')
+    svc.setLocale('zh')
+    expect(host.set).toHaveBeenCalledWith('preference', 'zh')
   })
 
   it('setLocale without a host scope stays process-local', () => {
@@ -226,10 +226,10 @@ describe('LocaleRuntime', () => {
     expect(make().svc.getLocale().active).toBe('en')
     vi.stubGlobal('navigator', { language: 'en-US' })
     expect(make().svc.getLocale().active).toBe('en')
-    // No shipped language anywhere in the browser's preferences: en is the
+    // No shipped language anywhere in the browser's preferences: zh is the
     // product default rather than an arbitrary near-match.
     stubLanguages('fr-FR', 'de')
-    expect(make().svc.getLocale().active).toBe('en')
+    expect(make().svc.getLocale().active).toBe('zh')
   })
 
   it('runs outside a browser (node boots): the default decides and the machine language does not', () => {
@@ -238,7 +238,7 @@ describe('LocaleRuntime', () => {
     // reach the resolution at all.
     stubLanguages('zh-CN')
     const { svc } = make()
-    expect(svc.getLocale().active).toBe('en')
+    expect(svc.getLocale().active).toBe('zh')
     svc.setLocale('zh')
     expect(svc.getLocale().active).toBe('zh')
   })
@@ -250,11 +250,11 @@ describe('LocaleRuntime', () => {
     expect(svc.getLocale().active).toBe('zh')
   })
 
-  it('serves English as both the opening locale and the dictionary fallback', () => {
-    // One constant covers both jobs: the locale the UI opens in with no usable
-    // browser signal, and the dictionary backing a key the active locale
-    // misses. Safe to share only because the shipped zh/en dictionaries carry
-    // identical key sets (asserted below on a registered pair).
+  it('keeps Chinese opening locale separate from English dictionary fallback', () => {
+    // The user-facing default and dictionary fallback have distinct jobs: the
+    // UI opens in Chinese without a usable browser signal, while an active
+    // dictionary miss still resolves through English.
+    expect(DEFAULT_LOCALE).toBe('zh')
     expect(FALLBACK_LOCALE).toBe('en')
     vi.stubGlobal('window', undefined)
     const { svc } = make()
