@@ -122,6 +122,7 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libxdo-dev \
             librsvg2-dev \
+            musl \
             patchelf \
             pkg-config \
             squashfs-tools \
@@ -178,12 +179,6 @@ jobs:
           # native dependencies (for example Node addons). Keep their shipped
           # binaries intact; it only makes the AppImage somewhat larger.
           NO_STRIP: '1'
-          # landlock-run is a static musl launcher shipped inside the sidecar
-          # runtime. linuxdeploy mistakes its musl interpreter marker for a
-          # deployable shared library, which does not exist on Ubuntu's glibc
-          # runner. Keep the launcher in the AppImage but skip that false
-          # dependency during library collection.
-          LINUXDEPLOY_EXCLUDED_LIBRARIES: 'libc.musl-x86_64.so.1'
           RUST_LOG: tauri_bundler=debug
         run: |
           # The target directory is cached for Rust/Tauri compilation speed.
