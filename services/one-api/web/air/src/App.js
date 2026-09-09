@@ -50,7 +50,7 @@ import AdminPermissions from './pages/AdminPermissions';
 import Toolbox from './pages/Toolbox';
 import PermissionGuard from './components/PermissionGuard';
 import { ModelConfigPage as ZjugisModelConfigPage, UsersPage as ZjugisUsersPage, LogsPage as ZjugisLogsPage, AccountPage as ZjugisAccountPage } from './pages/Zjugis';
-import { prepareLocalSkillLayoutPreview } from './helpers/local-skill-layout-preview';
+import { isLocalSkillLayoutPreview, prepareLocalSkillLayoutPreview } from './helpers/local-skill-layout-preview';
 
 const LarkOAuth = lazy(() => import('./components/LarkOAuth'));
 
@@ -68,6 +68,7 @@ const RootRoute = ({ children }) => {
 
 function App() {
   const [, userDispatch] = useContext(UserContext);
+  const localSkillLayoutPreview = isLocalSkillLayoutPreview();
   // const [statusState, statusDispatch] = useContext(StatusContext);
 
   const loadUser = () => {
@@ -88,9 +89,9 @@ function App() {
           <Route
             path="/"
             element={
-              <Suspense fallback={<Loading></Loading>}>
-                <Home />
-              </Suspense>
+              localSkillLayoutPreview
+                ? <Navigate to="/skill?skillPreview=1" replace />
+                : <Suspense fallback={<Loading></Loading>}><Home /></Suspense>
             }
           />
           <Route

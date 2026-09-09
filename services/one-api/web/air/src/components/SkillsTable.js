@@ -1,5 +1,6 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Modal, Table, Tag, Tooltip, Tree } from '@douyinfe/semi-ui';
+import { Bot, ChartColumn, Compass, FileText, Map, Zap } from 'lucide-react';
 import SkillBrowseDrawer from './SkillBrowseDrawer';
 import { importSkillFolder, zipSkillFolder } from './skillFolderImport';
 import { API, showError, showSuccess } from '../helpers';
@@ -21,12 +22,12 @@ const PREVIEW_SKILLS = [
   { id: 'preview-4', name: 'meeting-minutes-report', display_name: '会议纪要整理与报告生成', category: '办公文档', version: '0.9.3', submitter: 'root', created_at: 1789091946, downloads: 0, status: 0, draft_release_count: 1, tags: ['会议要点提取', '待办事项整理'] }
 ];
 const DEFAULT_SKILL_ICONS = [
-  { value: 'glyph:map', label: '地图', glyph: '⌖' },
-  { value: 'glyph:document', label: '文档', glyph: '▤' },
-  { value: 'glyph:chart', label: '图表', glyph: '◫' },
-  { value: 'glyph:compass', label: '指南', glyph: '◉' },
-  { value: 'glyph:bot', label: '智能体', glyph: '✦' },
-  { value: 'glyph:lightning', label: '效率', glyph: 'ϟ' }
+  { value: 'glyph:map', label: '地图', Icon: Map },
+  { value: 'glyph:document', label: '文档', Icon: FileText },
+  { value: 'glyph:chart', label: '图表', Icon: ChartColumn },
+  { value: 'glyph:compass', label: '指南', Icon: Compass },
+  { value: 'glyph:bot', label: '智能体', Icon: Bot },
+  { value: 'glyph:lightning', label: '效率', Icon: Zap }
 ];
 
 const splitLines = text => String(text || '').split('\n').map(line => line.trim()).filter(Boolean);
@@ -34,8 +35,9 @@ const compactTime = value => {
   if (!value) return { display: '-', full: '-' };
   const date = new Date(Number(value) * 1000);
   const pad = number => String(number).padStart(2, '0');
-  const display = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  return { display, full: `${display}:${pad(date.getSeconds())}` };
+  const display = `${String(date.getFullYear()).slice(-2)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const full = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return { display, full };
 };
 const releaseFileTree = files => {
   const root = { label: '技能包/', key: 'root', children: [] }; const folders = new Map([['', root]]);
@@ -44,8 +46,9 @@ const releaseFileTree = files => {
 };
 const SkillIcon = ({ icon, small = false }) => {
   const preset = DEFAULT_SKILL_ICONS.find(item => item.value === icon) || DEFAULT_SKILL_ICONS[4];
+  const Icon = preset.Icon;
   return <span className={`skill-identity-icon${small ? ' small' : ''}`} title={preset.label}>
-    {String(icon || '').startsWith('data:image/') ? <img src={icon} alt='' /> : preset.glyph}
+    {String(icon || '').startsWith('data:image/') ? <img src={icon} alt='' /> : <Icon aria-hidden size={small ? 16 : 24} strokeWidth={1.8} />}
   </span>;
 };
 const previewableFile = path => /\.(?:md|txt|json|ya?ml|toml|js|jsx|ts|tsx|py|go|rs|sh|ps1|bat|cmd|css|html?|xml|sql|csv|tsv)$/i.test(path || '');
@@ -254,16 +257,16 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
 
   const columns = [
     {
-      title: '技能', width: 210, render: (_, record) => (
+      title: '技能', width: 215, render: (_, record) => (
         <div className='skill-name'>
-          <div className='skill-name-title'><SkillIcon icon={record.icon} small /><span className='skill-name-main'>{record.display_name}</span></div>
-          <span className='skill-name-sub'>{record.name} · {record.team || '-'}</span>
+          <div className='skill-name-title'><SkillIcon icon={record.icon} small /><Tooltip content={record.display_name || record.name}><span className='skill-name-main'>{record.display_name}</span></Tooltip></div>
+          <Tooltip content={`${record.name || '-'} · ${record.team || '-'}`}><span className='skill-name-sub'>{record.name} · {record.team || '-'}</span></Tooltip>
         </div>
       )
     },
-    { title: '分类', dataIndex: 'category', width: 90, render: value => <Tag color='blue' size='small'>{value}</Tag> },
+    { title: '分类', dataIndex: 'category', width: 96, render: value => <Tooltip content={value || '-'}><Tag color='blue' size='small'>{value}</Tag></Tooltip> },
     {
-      title: '主要能力', width: 180, render: (_, record) => {
+      title: '主要能力', width: 160, render: (_, record) => {
         const capabilities = Array.isArray(record.tags) ? record.tags : [];
         if (capabilities.length === 0) return null;
         return (
@@ -282,18 +285,18 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
         );
       }
     },
-    { title: '版本', dataIndex: 'version', width: 68, render: (value, record) => <button type='button' className='skill-version-action' onClick={() => { void openReleases(record); }}>v{value}</button> },
-    { title: '上传人', dataIndex: 'submitter', width: 92, render: value => <Tooltip content={value || 'root'}><span className='skill-uploader'>{value || 'root'}</span></Tooltip> },
-    { title: '上传时间', dataIndex: 'created_at', width: 142, render: value => { const time = compactTime(value); return <span className='skill-upload-time' title={time.full}>{time.display}</span>; } },
-    { title: '安装量', dataIndex: 'downloads', width: 68, render: value => <span className='skill-install-count'>{Number(value || 0)}</span> },
+    { title: '版本', dataIndex: 'version', width: 70, render: (value, record) => <button type='button' className='skill-version-action' title={`v${value || '-'}`} onClick={() => { void openReleases(record); }}>v{value}</button> },
+    { title: '上传人', dataIndex: 'submitter', width: 90, render: value => <Tooltip content={value || 'root'}><span className='skill-uploader'>{value || 'root'}</span></Tooltip> },
+    { title: '上传时间', dataIndex: 'created_at', width: 118, render: value => { const time = compactTime(value); return <span className='skill-upload-time' title={time.full}>{time.display}</span>; } },
+    { title: '安装量', dataIndex: 'downloads', width: 62, render: value => { const downloads = Number(value || 0); return <Tooltip content={`安装量：${downloads}`}><span className='skill-install-count'>{downloads}</span></Tooltip>; } },
     { title: '状态', width: 76, render: (_, record) => record.draft_release_count > 0
       ? <div className='skill-status-stack'><Tag color='orange' size='small'>草稿 {record.draft_release_count}</Tag>{record.status === 1 && <small>当前版本已上架</small>}</div>
       : <Tag color={STATUS_COLORS[record.status] || 'grey'} size='small'>{record.status === 1 ? STATUS_LABELS[record.status] : '未发布'}</Tag> },
     {
-      title: '操作', width: 146, render: (_, record) => (
+      title: '操作', width: 134, render: (_, record) => (
         <div className='skill-row-actions'>
           <button type='button' className='skill-text-action' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</button>
-          <button type='button' className='skill-text-action' onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '去发布'}</button>
+          <button type='button' className='skill-text-action' onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '发布'}</button>
           <button type='button' className='skill-text-action' onClick={() => openEditor(record)}>编辑</button>
           <button type='button' className='skill-text-action danger' onClick={() => removeSkill(record)}>删除</button>
         </div>
@@ -352,32 +355,57 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       </div>
       <input ref={zipInputRef} hidden type='file' accept='.zip,application/zip' onChange={importZip} />
       <input ref={importFolderInputRef} hidden type='file' multiple onChange={importFolder} {...{ webkitdirectory: '', directory: '' }} />
-      <Table columns={columns} dataSource={filteredItems} rowKey='id' pagination={{ pageSize: 20 }} empty='暂无技能' />
+      <Table columns={columns} dataSource={filteredItems} rowKey='id' tableLayout='fixed' pagination={{ pageSize: 20 }} empty='暂无技能' />
     </section>
     <SkillBrowseDrawer visible={browse.visible} kind='public' id={browse.skill?.id} skill={browse.skill} onClose={() => setBrowse({ visible: false, skill: null })} />
-    <Modal
-      visible={importDialogVisible}
-      title='导入技能'
-      onCancel={() => setImportDialogVisible(false)}
-      footer={null}
-    >
-      <div className='skill-import-dialog'>
-        <p>选择导入方式。导入后先生成草稿，完成校验后才会发布到桌面端。</p>
-        <div className='skill-import-options'>
-          <button type='button' className='skill-import-option' onClick={() => { void chooseSkillFolder(); }}>
-            <span className='skill-import-option-icon'>▣</span>
-            <span className='skill-import-option-copy'><strong>从技能文件夹导入</strong><span>选择包含 SKILL.md 的完整目录，系统自动打包</span></span>
-            <span className='skill-import-option-arrow'>→</span>
-          </button>
-          <button type='button' className='skill-import-option' onClick={() => zipInputRef.current?.click()}>
-            <span className='skill-import-option-icon'>⌁</span>
-            <span className='skill-import-option-copy'><strong>从 ZIP 文件导入</strong><span>导入已准备好的完整技能包</span></span>
-            <span className='skill-import-option-arrow'>→</span>
-          </button>
+    {importDialogVisible && (
+      <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) setImportDialogVisible(false); }}>
+        <div className='zjugis-modal'>
+          <div className='zjugis-modal-head'>
+            <h2>导入技能</h2>
+            <button type='button' onClick={() => setImportDialogVisible(false)} aria-label='关闭'>×</button>
+          </div>
+          <div className='skill-import-dialog'>
+            <p>选择导入方式。导入后先生成草稿，完成校验后才会发布到桌面端。</p>
+            <div className='skill-import-options'>
+              <button type='button' className='skill-import-option' onClick={() => { void chooseSkillFolder(); }}>
+                <span className='skill-import-option-icon'>
+                  <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
+                    <path d='M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z' />
+                    <path d='M12 10v6' />
+                    <path d='m9 13 3 3 3-3' />
+                  </svg>
+                </span>
+                <span className='skill-import-option-copy'><strong>从技能文件夹导入</strong><span>选择包含 SKILL.md 的完整目录，系统自动打包</span></span>
+                <span className='skill-import-option-arrow'>
+                  <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
+                    <path d='M5 12h14' />
+                    <path d='m13 6 6 6-6 6' />
+                  </svg>
+                </span>
+              </button>
+              <button type='button' className='skill-import-option' onClick={() => zipInputRef.current?.click()}>
+                <span className='skill-import-option-icon'>
+                  <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
+                    <rect x='3' y='4' width='18' height='4' rx='1' />
+                    <path d='M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8' />
+                    <path d='M10 12h4' />
+                  </svg>
+                </span>
+                <span className='skill-import-option-copy'><strong>从 ZIP 文件导入</strong><span>导入已准备好的完整技能包</span></span>
+                <span className='skill-import-option-arrow'>
+                  <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
+                    <path d='M5 12h14' />
+                    <path d='m13 6 6 6-6 6' />
+                  </svg>
+                </span>
+              </button>
+            </div>
+            <div className='skill-import-footer'><button type='button' className='preview-button' onClick={() => setImportDialogVisible(false)}>取消</button></div>
+          </div>
         </div>
-        <div className='skill-import-footer'><button type='button' className='preview-button' onClick={() => setImportDialogVisible(false)}>取消</button></div>
       </div>
-    </Modal>
+    )}
     <Modal visible={Boolean(releases.skill)} title={`版本管理${releases.skill ? `：${releases.skill.display_name || releases.skill.name}` : ''}`} onCancel={() => setReleases({ skill: null, items: [], files: [], selectedFilePath: '' })} footer={null}>
       <Table rowKey='id' dataSource={releases.items} pagination={false} columns={[
         { title: '版本', dataIndex: 'version' }, { title: '状态', render: (_, release) => <Tag color={release.state === 'published' ? 'green' : release.state === 'draft' ? (release.validated_at ? 'blue' : 'orange') : 'grey'}>{release.state === 'published' ? '已发布' : release.state === 'draft' ? (release.validated_at ? '已校验' : '草稿') : '已归档'}</Tag> },
@@ -427,15 +455,16 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
               </label>
             </div>
             <label className='zjugis-field full'>
-              <span>技能标识图片</span>
+              <span>技能图标</span>
               <div className='skill-icon-picker'>
                 <div className='skill-icon-preview'><SkillIcon icon={form.icon} /></div>
                 <div className='skill-icon-options'>
+                  <span className='skill-icon-picker-label'>选择通用图标</span>
                   <div className='skill-icon-presets'>
-                    {DEFAULT_SKILL_ICONS.map(item => <button key={item.value} type='button' className={form.icon === item.value ? 'active' : ''} onClick={() => setForm(prev => ({ ...prev, icon: item.value }))} title={item.label}>{item.glyph}</button>)}
+                    {DEFAULT_SKILL_ICONS.map(item => <button key={item.value} type='button' className={form.icon === item.value ? 'active' : ''} onClick={() => setForm(prev => ({ ...prev, icon: item.value }))} title={item.label} aria-label={item.label}><item.Icon aria-hidden size={18} strokeWidth={1.8} /></button>)}
                   </div>
                   <div className='form-inline-actions'>
-                    <button type='button' className='preview-button' onClick={() => iconInputRef.current?.click()}>上传图片</button>
+                    <button type='button' className='preview-button' onClick={() => iconInputRef.current?.click()}>上传自定义图标</button>
                     {String(form.icon || '').startsWith('data:image/') && <button type='button' className='skill-text-action' onClick={() => setForm(prev => ({ ...prev, icon: 'glyph:bot' }))}>恢复默认</button>}
                   </div>
                   <small className='preview-muted'>可选默认图标，或上传 PNG、JPEG、WebP（不超过 400 KB）；保存后桌面端技能广场会同步展示。</small>

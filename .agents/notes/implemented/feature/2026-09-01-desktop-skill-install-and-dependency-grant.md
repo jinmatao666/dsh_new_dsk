@@ -16,7 +16,7 @@ Startup migration is idempotent for legacy published skills. It reconnects a leg
 
 Skill category management owns the selectable marketplace category list. Administrators maintain a category name and optional description; category identifiers and package-type compatibility data remain server-managed. Import, metadata editing, and publication reject a missing or disabled category. An imported skill records the authenticated uploader, falling back to `root` only when no account name is available.
 
-Administrator prompt auditing stores only end-user text questions. Runtime-context snapshots, system instructions, skill and tool framing, and empty text are rejected before persistence; the audit list also hides matching legacy records.
+Administrator prompt auditing stores only end-user text questions. Runtime-context snapshots, system instructions, Skill injections beginning with `<skill_content>`, `<skill_resources>`, or `<skill_instructions>`, tool framing, and empty text are rejected before persistence; the audit list also hides matching legacy records.
 
 Users may add a complete custom skill directory through the marketplace. The browser supplies only files selected by the user; the native command validates every relative path, a UTF-8 root `SKILL.md`, its kebab-case name, file count, and total size in that same staging directory before atomically creating a marked directory under `.dsh/skills`. Scripts, templates, references, and other ordinary files retain their relative paths, remain local to the current user, and are never sent to the management backend. Only marked custom directories are removable from that UI. Search and “My installed” use the actual filesystem state for official and custom skills.
 

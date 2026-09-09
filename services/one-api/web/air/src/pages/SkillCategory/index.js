@@ -1,10 +1,9 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
-import { Button, Form, Input, Modal, SideSheet, Space, Table } from '@douyinfe/semi-ui';
+import { Button, Input, Modal, Space, Table } from '@douyinfe/semi-ui';
 import { IconPlus, IconSearch } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess } from '../../helpers';
 
 const EMPTY = { id: null, name: '', description: '' };
-const getEditorFormKey = (data) => (data.id ? `edit-${data.id}` : 'create');
 
 const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
   const [items, setItems] = useState([]);
@@ -87,9 +86,30 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
   return <div style={{ padding: embedded ? 0 : 24, height: embedded ? '100%' : undefined, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
     {!embedded && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}><Space><Button icon={<IconPlus />} theme='solid' type='primary' onClick={() => setEditor({ visible: true, data: EMPTY })}>新建分类</Button><Input prefix={<IconSearch />} placeholder='搜索名称或描述' value={localKeyword} onChange={setLocalKeyword} style={{ width: 280 }} showClear /></Space></div>}
     <div style={{ flex: 1, minHeight: 0 }}><Table columns={columns} dataSource={filteredItems} rowKey='id' loading={loading} pagination={{ pageSize: 20 }} /></div>
-    <SideSheet title={`${editor.data.id ? '编辑' : '新建'}分类${editor.data.name ? `：${editor.data.name}` : ''}`} visible={editor.visible} onCancel={closeEditor} width={560} maskClosable={false} footer={<Space><Button onClick={closeEditor}>取消</Button><Button theme='solid' type='primary' loading={saving} onClick={save}>保存</Button></Space>}>
-      <div style={{ height: 'calc(100vh - 120px)', overflowY: 'auto', paddingRight: 8 }}><Form key={getEditorFormKey(editor.data)} labelPosition='top' allowEmpty><Form.Input field='name' label='分类名称' placeholder='例如：空间制图' initValue={editor.data.name} onChange={(value) => updateEditor('name', value)} /><Form.TextArea field='description' label='描述（可选）' placeholder='说明该分类适用的技能' rows={5} initValue={editor.data.description} onChange={(value) => updateEditor('description', value)} /></Form></div>
-    </SideSheet>
+    {editor.visible && (
+      <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) closeEditor(); }}>
+        <div className='zjugis-modal'>
+          <div className='zjugis-modal-head'>
+            <h2>{editor.data.id ? '编辑分类' : '新建分类'}</h2>
+            <button type='button' onClick={closeEditor} aria-label='关闭'>×</button>
+          </div>
+          <div className='zjugis-form'>
+            <label className='zjugis-field'>
+              <span>分类名称<i className='skill-required'>*</i></span>
+              <input value={editor.data.name} onChange={(e) => updateEditor('name', e.target.value)} placeholder='例如：空间制图' />
+            </label>
+            <label className='zjugis-field'>
+              <span>描述（可选）</span>
+              <textarea rows='4' value={editor.data.description} onChange={(e) => updateEditor('description', e.target.value)} placeholder='说明该分类适用的技能' />
+            </label>
+            <div className='zjugis-modal-actions'>
+              <button type='button' className='preview-button' onClick={closeEditor}>取消</button>
+              <button type='button' className='preview-button primary' disabled={saving} onClick={() => { void save(); }}>{saving ? '保存中…' : '保存'}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
   </div>;
 });
 
