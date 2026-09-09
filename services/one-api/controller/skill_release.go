@@ -276,17 +276,21 @@ func ImportSkillRelease(c *gin.Context) {
 		return
 	}
 	changelog := strings.TrimSpace(c.PostForm("changelog"))
-	operator := c.GetString("username")
+	operator := strings.TrimSpace(c.GetString("username"))
+	if operator == "" {
+		operator = "root"
+	}
+	if err := model.ValidatePrimarySkillCategory(pkg.manifest.Category); err != nil {
+		skillError(c, http.StatusBadRequest, err)
+		return
+	}
 	var skill model.Skill
 	err = model.DB.Where("name = ?", pkg.manifest.Name).First(&skill).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		tags, _ := json.Marshal(pkg.manifest.Tags)
-		skill = model.Skill{Name: pkg.manifest.Name, DisplayName: pkg.manifest.DisplayName, Category: pkg.manifest.Category, Description: pkg.manifest.Description, Scenario: pkg.manifest.Summary, Submitter: pkg.manifest.Author, Tags: tags, Version: pkg.manifest.Version, Status: 0, Content: pkg.body, Body: pkg.body, Assets: pkg.bundle}
+		skill = model.Skill{Name: pkg.manifest.Name, DisplayName: pkg.manifest.DisplayName, Category: pkg.manifest.Category, Description: pkg.manifest.Description, Scenario: pkg.manifest.Summary, Submitter: operator, Tags: tags, Version: pkg.manifest.Version, Status: 0, Content: pkg.body, Body: pkg.body, Assets: pkg.bundle}
 		if skill.DisplayName == "" {
 			skill.DisplayName = skill.Name
-		}
-		if skill.Submitter == "" {
-			skill.Submitter = operator
 		}
 		if err = model.DB.Create(&skill).Error; err != nil {
 			skillError(c, http.StatusInternalServerError, err)
@@ -396,6 +400,10 @@ func publishSkillRelease(c *gin.Context, rollback bool) {
 		skillError(c, http.StatusBadRequest, fmt.Errorf("版本元数据无效：%w", err))
 		return
 	}
+	if err := model.ValidatePrimarySkillCategory(metadata.Category); err != nil {
+		skillError(c, http.StatusBadRequest, err)
+		return
+	}
 	tags, err := json.Marshal(metadata.Tags)
 	if err != nil {
 		skillError(c, http.StatusInternalServerError, err)
@@ -438,9 +446,6 @@ func publishSkillRelease(c *gin.Context, rollback bool) {
 		}
 		if metadata.Summary != "" {
 			skill.Scenario = metadata.Summary
-		}
-		if metadata.Author != "" {
-			skill.Submitter = metadata.Author
 		}
 		skill.Tags = tags
 		return tx.Save(&skill).Error

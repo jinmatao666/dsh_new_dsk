@@ -4,6 +4,7 @@ import { IconSearch } from '@douyinfe/semi-icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import SkillsTable from '../../components/SkillsTable';
 import SkillCategory from '../SkillCategory';
+import { isLocalSkillLayoutPreview } from '../../helpers/local-skill-layout-preview';
 
 const TABS = [
   ['public', '技能库'],
@@ -11,6 +12,7 @@ const TABS = [
 ];
 
 const Skill = () => {
+  const localLayoutPreview = isLocalSkillLayoutPreview();
   const location = useLocation();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(location.pathname === '/skill/categories' ? 'categories' : 'public');
@@ -79,6 +81,7 @@ const Skill = () => {
         </div>
         <div className='skill-page-actions'>{toolbar}</div>
       </div>
+      {localLayoutPreview && <div className='skill-layout-preview-notice'>本地样式预览：显示模拟数据，不会读取或修改后台数据。</div>}
       <div className='preview-tabs'>
         {TABS.map(([key, label]) => (
           <button

@@ -50,8 +50,11 @@ import AdminPermissions from './pages/AdminPermissions';
 import Toolbox from './pages/Toolbox';
 import PermissionGuard from './components/PermissionGuard';
 import { ModelConfigPage as ZjugisModelConfigPage, UsersPage as ZjugisUsersPage, LogsPage as ZjugisLogsPage, AccountPage as ZjugisAccountPage } from './pages/Zjugis';
+import { prepareLocalSkillLayoutPreview } from './helpers/local-skill-layout-preview';
 
 const LarkOAuth = lazy(() => import('./components/LarkOAuth'));
+
+prepareLocalSkillLayoutPreview();
 
 const Home = lazy(() => import('./pages/Home'));
 const About = lazy(() => import('./pages/About'));

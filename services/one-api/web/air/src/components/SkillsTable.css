@@ -45,6 +45,16 @@
   flex-wrap: wrap;
 }
 
+.skill-layout-preview-notice {
+  margin: -4px 0 2px;
+  padding: 9px 12px;
+  border: 1px solid #b9d8ff;
+  border-radius: 10px;
+  background: #edf6ff;
+  color: #2368ae;
+  font-size: 13px;
+}
+
 .skill-page-actions .preview-button.primary {
   min-height: 44px;
   padding-inline: 19px;
@@ -79,6 +89,25 @@
 
 .skill-admin-surface .semi-table-tbody > .semi-table-row:hover > .semi-table-row-cell {
   background: rgba(244, 248, 253, .8);
+}
+
+.skill-admin-surface .semi-table {
+  table-layout: fixed;
+  width: 100% !important;
+}
+
+.skill-admin-surface .semi-table-wrapper,
+.skill-admin-surface .semi-table-container {
+  overflow-x: hidden;
+}
+
+.skill-admin-surface .semi-table-thead > .semi-table-row > .semi-table-row-head,
+.skill-admin-surface .semi-table-tbody > .semi-table-row > .semi-table-row-cell {
+  overflow: hidden;
+}
+
+.skill-admin-surface .semi-table-thead > .semi-table-row > .semi-table-row-head:nth-last-child(-n + 5) {
+  white-space: nowrap;
 }
 
 /* ── 行内元素 ───────────────────────────── */
@@ -230,6 +259,37 @@
 .skill-text-action.danger:hover {
   background: #fff1f1;
   color: #d8424b;
+}
+
+.skill-version-action {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #607a9e;
+  cursor: pointer;
+  font: inherit;
+}
+
+.skill-version-action:hover,
+.skill-version-action:focus-visible {
+  color: #1766cf;
+  text-decoration: underline;
+}
+
+.skill-uploader,
+.skill-install-count {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-upload-time {
+  display: inline-block;
+  color: #607a9e;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* ── 新增/编辑弹窗（复用 zjugis-modal 骨架，见 index.css） ── */

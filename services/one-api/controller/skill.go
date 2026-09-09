@@ -395,6 +395,10 @@ func CreateSkill(c *gin.Context) {
 		})
 		return
 	}
+	if err := model.ValidatePrimarySkillCategory(skill.Category); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 
 	// 重名检测:无论对方是正常还是已软删,都返回 409 让前端弹 [更新]/[替换]/[取消]
 	if existing, err := model.GetSkillByNameAny(skill.Name); err == nil && existing != nil {
@@ -415,6 +419,10 @@ func CreateSkill(c *gin.Context) {
 			"success": false,
 			"message": err.Error(),
 		})
+		return
+	}
+	if err := model.SyncPrimarySkillCategory(skill.Id, skill.Category); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 	_ = model.RefreshSkillCache()
@@ -521,6 +529,13 @@ func UpdateSkill(c *gin.Context) {
 				existing.Body = existing.Content
 				existing.BodyUpdatedAt = now
 			}
+		}
+	}
+
+	if _, categoryChanged := payload["category"]; categoryChanged {
+		if err := model.ValidatePrimarySkillCategory(existing.Category); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
 		}
 	}
 

@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -303,9 +304,19 @@ func GetSkillCategoryById(id uint64) (*SkillCategory, error) {
 }
 
 func CreateSkillCategory(category *SkillCategory) error {
+	if category.TypeId == 0 {
+		var typ SkillCategoryType
+		if err := DB.Where("code = ? AND status = ?", SkillCategoryTypePackage, 1).First(&typ).Error; err != nil {
+			return err
+		}
+		category.TypeId = typ.Id
+	}
+	if strings.TrimSpace(category.Code) == "" {
+		category.Code = category.Name
+	}
 	category.Code = normalizeCategoryCode(category.Code)
 	if category.TypeId == 0 || category.Code == "" || strings.TrimSpace(category.Name) == "" {
-		return errors.New("type_id, code and name are required")
+		return errors.New("分类名称不能为空")
 	}
 	if category.Status == 0 {
 		category.Status = 1
@@ -317,14 +328,20 @@ func UpdateSkillCategory(category *SkillCategory) error {
 	if category.Id == 0 {
 		return errors.New("id is required")
 	}
-	category.Code = normalizeCategoryCode(category.Code)
-	if category.TypeId == 0 || category.Code == "" || strings.TrimSpace(category.Name) == "" {
-		return errors.New("type_id, code and name are required")
-	}
 	return DB.Transaction(func(tx *gorm.DB) error {
 		var previous SkillCategory
 		if err := tx.First(&previous, category.Id).Error; err != nil {
 			return err
+		}
+		if category.TypeId == 0 {
+			category.TypeId = previous.TypeId
+		}
+		if strings.TrimSpace(category.Code) == "" {
+			category.Code = previous.Code
+		}
+		category.Code = normalizeCategoryCode(category.Code)
+		if category.Code == "" || strings.TrimSpace(category.Name) == "" {
+			return errors.New("分类名称不能为空")
 		}
 		if err := tx.Model(&SkillCategory{}).Where("id = ?", category.Id).
 			Select("type_id", "parent_id", "code", "name", "description", "status", "sort_order").
@@ -354,8 +371,8 @@ func UpdateSkillCategory(category *SkillCategory) error {
 }
 
 // SyncPrimarySkillCategory keeps the legacy skills.category display field and
-// the managed skill_package relation in lockstep. Category management is the
-// source of truth; an imported legacy category is created there on first use.
+// the managed skill_package relation in lockstep. The selected category must
+// already exist in category management and be enabled.
 func SyncPrimarySkillCategory(skillId int, categoryName string) error {
 	if skillId == 0 {
 		return errors.New("skill_id is required")
@@ -374,17 +391,35 @@ func SyncPrimarySkillCategory(skillId int, categoryName string) error {
 			return nil
 		}
 		var category SkillCategory
-		err := tx.Where("type_id = ? AND (name = ? OR code = ?)", typ.Id, categoryName, categoryName).First(&category).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			category = SkillCategory{TypeId: typ.Id, Code: categoryName, Name: categoryName, Status: 1}
-			if err := tx.Create(&category).Error; err != nil {
-				return err
+		if err := tx.Where("type_id = ? AND (name = ? OR code = ?) AND status = ? AND is_deleted = ?", typ.Id, categoryName, categoryName, 1, false).First(&category).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("分类 %q 不存在或已禁用，请先在分类管理中创建并启用", categoryName)
 			}
-		} else if err != nil {
 			return err
 		}
 		return appendSkillCategoriesTx(tx, []int{skillId}, []uint64{category.Id})
 	})
+}
+
+// ValidatePrimarySkillCategory confirms that a selected marketplace category
+// exists and is enabled before a skill metadata change is persisted.
+func ValidatePrimarySkillCategory(categoryName string) error {
+	categoryName = strings.TrimSpace(categoryName)
+	if categoryName == "" {
+		return errors.New("请选择分类")
+	}
+	var typ SkillCategoryType
+	if err := DB.Where("code = ? AND status = ?", SkillCategoryTypePackage, 1).First(&typ).Error; err != nil {
+		return err
+	}
+	var category SkillCategory
+	if err := DB.Where("type_id = ? AND (name = ? OR code = ?) AND status = ? AND is_deleted = ?", typ.Id, categoryName, categoryName, 1, false).First(&category).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("分类 %q 不存在或已禁用，请先在分类管理中创建并启用", categoryName)
+		}
+		return err
+	}
+	return nil
 }
 
 func DeleteSkillCategory(id uint64) error {

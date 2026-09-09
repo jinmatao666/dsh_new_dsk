@@ -139,6 +139,22 @@ func TestDeleteSkillCategoryRejectsBoundCategory(t *testing.T) {
 	assert.False(t, got.IsDeleted)
 }
 
+func TestSyncPrimarySkillCategoryRejectsUnmanagedCategory(t *testing.T) {
+	setupSkillCategoryTestDB(t)
+	skill := seedSkill(t, "alpha", "", false)
+
+	err := SyncPrimarySkillCategory(skill.Id, "不存在的分类")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "分类")
+
+	category := createSkillCategoryForTest(t, SkillCategoryTypePackage, "mapping", "空间制图")
+	require.NoError(t, SyncPrimarySkillCategory(skill.Id, category.Name))
+	categories, err := ListSkillCategoriesForSkill(skill.Id)
+	require.NoError(t, err)
+	require.Len(t, categories, 1)
+	assert.Equal(t, category.Id, categories[0].Id)
+}
+
 func TestSearchSkillsWithCategoryFilter(t *testing.T) {
 	setupSkillCategoryTestDB(t)
 	a := seedSkill(t, "alpha", "", false)

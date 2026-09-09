@@ -44,7 +44,10 @@ jobs:
               # Use an Intel runner for x64. Native dependencies such as sharp
               # are selected while pnpm stages the sidecar runtime, so an ARM
               # host cannot reliably package an x64-native dependency tree.
-              {"platform": "macos-x64", "os": "macos-15-intel", "target": "x86_64-apple-darwin", "bundles": "app,dmg", "node_archive": "node-v22.19.0-darwin-x64.tar.gz", "node_dir": "node-v22.19.0-darwin-x64"},
+              # macos-13 is the stable Intel image for create-dmg. The newer
+              # macos-15 Intel image intermittently times out in
+              # DiskArbitration while create-dmg detaches its working volume.
+              {"platform": "macos-x64", "os": "macos-13", "target": "x86_64-apple-darwin", "bundles": "app,dmg", "node_archive": "node-v22.19.0-darwin-x64.tar.gz", "node_dir": "node-v22.19.0-darwin-x64"},
           ]
           if os.environ["PLATFORM_SCOPE"] == "windows-only":
               platforms = platforms[:1]

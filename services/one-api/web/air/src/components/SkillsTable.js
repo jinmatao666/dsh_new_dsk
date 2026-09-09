@@ -3,10 +3,23 @@ import { Modal, Table, Tag, Tooltip, Tree } from '@douyinfe/semi-ui';
 import SkillBrowseDrawer from './SkillBrowseDrawer';
 import { importSkillFolder, zipSkillFolder } from './skillFolderImport';
 import { API, showError, showSuccess } from '../helpers';
+import { isLocalSkillLayoutPreview } from '../helpers/local-skill-layout-preview';
 import './SkillsTable.css';
 
 const STATUS_LABELS = { 1: '已上架', 0: '已下架' };
 const STATUS_COLORS = { 1: 'green', 0: 'grey' };
+const SKILL_LAYOUT_PREVIEW = isLocalSkillLayoutPreview();
+const PREVIEW_CATEGORIES = [
+  { id: 'preview-spatial', name: '空间制图' },
+  { id: 'preview-document', name: '办公文档' },
+  { id: 'preview-analysis', name: '数据分析' }
+];
+const PREVIEW_SKILLS = [
+  { id: 'preview-1', name: 'market-gis-geology-analysis', display_name: '地质条件分析', category: '空间制图', version: '1.4.5', submitter: 'root', created_at: 1788832746, downloads: 1258, status: 1, tags: ['地质环境与灾害易发性分析'] },
+  { id: 'preview-2', name: 'market-gis-third-survey-analysis', display_name: '三调土地利用现状分析', category: '数据分析', version: '2.0.0', submitter: '系统管理员', created_at: 1788919146, downloads: 86, status: 1, tags: ['三调地类面积统计', '用地结构研判'] },
+  { id: 'preview-3', name: 'planning-compliance-review', display_name: '国土空间规划符合性审查', category: '空间制图', version: '1.0.12', submitter: '规划平台主管', created_at: 1789005546, downloads: 10032, status: 1, tags: ['规划管控规则核验'] },
+  { id: 'preview-4', name: 'meeting-minutes-report', display_name: '会议纪要整理与报告生成', category: '办公文档', version: '0.9.3', submitter: 'root', created_at: 1789091946, downloads: 0, status: 0, draft_release_count: 1, tags: ['会议要点提取', '待办事项整理'] }
+];
 const DEFAULT_SKILL_ICONS = [
   { value: 'glyph:map', label: '地图', glyph: '⌖' },
   { value: 'glyph:document', label: '文档', glyph: '▤' },
@@ -17,7 +30,13 @@ const DEFAULT_SKILL_ICONS = [
 ];
 
 const splitLines = text => String(text || '').split('\n').map(line => line.trim()).filter(Boolean);
-const compactTime = value => value ? new Date(Number(value) * 1000).toLocaleString('zh-CN', { hour12: false }) : '-';
+const compactTime = value => {
+  if (!value) return { display: '-', full: '-' };
+  const date = new Date(Number(value) * 1000);
+  const pad = number => String(number).padStart(2, '0');
+  const display = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return { display, full: `${display}:${pad(date.getSeconds())}` };
+};
 const releaseFileTree = files => {
   const root = { label: '技能包/', key: 'root', children: [] }; const folders = new Map([['', root]]);
   for (const item of files) { const parts = String(item.path || '').split('/').filter(Boolean); const leaf = parts.pop(); let parent = root; let current = ''; for (const part of parts) { current = current ? `${current}/${part}` : part; if (!folders.has(current)) { const folder = { label: `${part}/`, key: `dir:${current}`, children: [] }; folders.set(current, folder); parent.children.push(folder); } parent = folders.get(current); } if (leaf) parent.children.push({ label: leaf, key: `file:${item.path}`, isLeaf: true }); }
@@ -59,7 +78,7 @@ const filesFromDirectoryHandle = async (directory, root = directory.name, prefix
 const EMPTY_FORM = {
   name: '',
   display_name: '',
-  category: '办公文档',
+  category: '',
   version: '1.0.0',
   status: '0',
   summary: '',
@@ -86,19 +105,27 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   const iconInputRef = useRef(null);
   const [releases, setReleases] = useState({ skill: null, items: [], files: [], selectedFilePath: '' });
   const loadSkills = useCallback(async () => {
+    if (SKILL_LAYOUT_PREVIEW) {
+      setItems(PREVIEW_SKILLS);
+      setManagedCategories(PREVIEW_CATEGORIES);
+      return;
+    }
     try {
       const [response, categoryResponse] = await Promise.all([
         API.get('/api/skill/admin/list', { params: { page: 1, perPage: 100 } }),
-        API.get('/api/skill-category/', { params: { includeDisabled: 0 } })
+        API.get('/api/skill-category/', { params: { includeDisabled: 0, type: 'skill_package' } })
       ]);
       setItems(Array.isArray(response.data?.items) ? response.data.items : []);
-      setManagedCategories((Array.isArray(categoryResponse.data?.data) ? categoryResponse.data.data : [])
-        .filter(category => category.type_code === 'skill_package'));
+      setManagedCategories(Array.isArray(categoryResponse.data?.data) ? categoryResponse.data.data : []);
     } catch (error) {
       showError(error.message || '加载技能失败');
     }
   }, []);
   useEffect(() => { void loadSkills(); }, [loadSkills]);
+  useEffect(() => {
+    window.addEventListener('skill-categories-changed', loadSkills);
+    return () => window.removeEventListener('skill-categories-changed', loadSkills);
+  }, [loadSkills]);
 
   const onKeywordChange = useCallback(value => setKeyword(value || ''), []);
   useImperativeHandle(ref, () => ({ onKeywordChange, openCreate: () => openEditor(null) }));
@@ -109,7 +136,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       name: skill.name || '',
       display_name: skill.display_name || '',
       icon: skill.icon || 'glyph:bot',
-      category: skill.category || '办公文档',
+      category: skill.category || '',
       version: skill.version || '1.0.0',
       status: String(skill.status ?? 0),
       summary: skill.summary || '',
@@ -162,7 +189,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   };
   const chooseSkillFolder = async () => {
     if (typeof window.showDirectoryPicker !== 'function') {
-      importFolderInputRef.current?.click();
+      showError('文件夹导入需要通过 HTTPS 打开后台；当前可使用 ZIP 文件导入，避免浏览器批量上传确认提示。');
       return;
     }
     try {
@@ -255,20 +282,19 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
         );
       }
     },
-    { title: '版本', dataIndex: 'version', width: 70, render: value => <span style={{ color: '#607a9e' }}>v{value}</span> },
-    { title: '上传人', dataIndex: 'submitter', width: 74 },
-    { title: '上传时间', dataIndex: 'created_at', width: 136, render: value => <span style={{ color: '#607a9e' }}>{compactTime(value)}</span> },
-    { title: '安装量', dataIndex: 'downloads', width: 66 },
-    { title: '状态', width: 100, render: (_, record) => record.draft_release_count > 0
+    { title: '版本', dataIndex: 'version', width: 68, render: (value, record) => <button type='button' className='skill-version-action' onClick={() => { void openReleases(record); }}>v{value}</button> },
+    { title: '上传人', dataIndex: 'submitter', width: 92, render: value => <Tooltip content={value || 'root'}><span className='skill-uploader'>{value || 'root'}</span></Tooltip> },
+    { title: '上传时间', dataIndex: 'created_at', width: 142, render: value => { const time = compactTime(value); return <span className='skill-upload-time' title={time.full}>{time.display}</span>; } },
+    { title: '安装量', dataIndex: 'downloads', width: 68, render: value => <span className='skill-install-count'>{Number(value || 0)}</span> },
+    { title: '状态', width: 76, render: (_, record) => record.draft_release_count > 0
       ? <div className='skill-status-stack'><Tag color='orange' size='small'>草稿 {record.draft_release_count}</Tag>{record.status === 1 && <small>当前版本已上架</small>}</div>
       : <Tag color={STATUS_COLORS[record.status] || 'grey'} size='small'>{record.status === 1 ? STATUS_LABELS[record.status] : '未发布'}</Tag> },
     {
-      title: '操作', width: 180, render: (_, record) => (
+      title: '操作', width: 146, render: (_, record) => (
         <div className='skill-row-actions'>
           <button type='button' className='skill-text-action' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</button>
           <button type='button' className='skill-text-action' onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '去发布'}</button>
-          <button type='button' className='skill-text-action' onClick={() => { void openReleases(record); }}>版本</button>
-          <button type='button' className='skill-text-action' onClick={() => openEditor(record)}>编辑元数据</button>
+          <button type='button' className='skill-text-action' onClick={() => openEditor(record)}>编辑</button>
           <button type='button' className='skill-text-action danger' onClick={() => removeSkill(record)}>删除</button>
         </div>
       )
@@ -281,6 +307,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     const displayName = form.display_name.trim();
     if (!name) { showError('请输入技能标识'); return; }
     if (!displayName) { showError('请输入显示名称'); return; }
+    if (!form.category) { showError('请选择分类；分类由“分类管理”维护'); return; }
     const base = editor.base || {};
     const payload = {
       name,
@@ -290,7 +317,6 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       scenario: form.summary,
       tags: splitLines(form.capabilities),
       icon: form.icon,
-      submitter: base.submitter || 'root',
     };
     if (!editor.base) { showError('请先通过“导入技能”创建技能草稿'); return; }
     try {
@@ -326,7 +352,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       </div>
       <input ref={zipInputRef} hidden type='file' accept='.zip,application/zip' onChange={importZip} />
       <input ref={importFolderInputRef} hidden type='file' multiple onChange={importFolder} {...{ webkitdirectory: '', directory: '' }} />
-      <Table columns={columns} dataSource={filteredItems} rowKey='id' pagination={{ pageSize: 20 }} scroll={{ x: 1062 }} empty='暂无技能' />
+      <Table columns={columns} dataSource={filteredItems} rowKey='id' pagination={{ pageSize: 20 }} empty='暂无技能' />
     </section>
     <SkillBrowseDrawer visible={browse.visible} kind='public' id={browse.skill?.id} skill={browse.skill} onClose={() => setBrowse({ visible: false, skill: null })} />
     <Modal
@@ -394,9 +420,10 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
               <label className='zjugis-field'>
                 <span>分类</span>
                 <select value={form.category} onChange={setField('category')}>
-                  {[...new Set([...managedCategories.map(category => category.name), form.category].filter(Boolean))].map(value => <option key={value} value={value}>{value}</option>)}
+                  <option value=''>请选择分类</option>
+                  {managedCategories.map(category => <option key={category.id} value={category.name}>{category.name}</option>)}
                 </select>
-                <small className='preview-muted'>类别与“分类管理 → 技能包”保持同步。</small>
+                <small className='preview-muted'>只能选择“分类管理”中已启用的分类。</small>
               </label>
             </div>
             <label className='zjugis-field full'>

@@ -110,6 +110,15 @@ func UpdateSkillCategory(c *gin.Context) {
 	}
 	category := skillCategoryFromRequest(req)
 	category.Id = id
+	existing, err := model.GetSkillCategoryById(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	category.TypeId = existing.TypeId
+	category.Code = existing.Code
+	category.Status = existing.Status
+	category.SortOrder = existing.SortOrder
 	if err := model.UpdateSkillCategory(&category); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
