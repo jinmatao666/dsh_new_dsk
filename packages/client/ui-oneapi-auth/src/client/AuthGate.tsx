@@ -176,7 +176,9 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
       logo.style.height = '83px'
       logo.style.margin = '0'
       header.style.position = 'absolute'
-      header.style.left = '20px'
+      // The supplied horizontal wordmark has intrinsic left whitespace; shift
+      // its box so the visible mark aligns with the hero heading.
+      header.style.left = '-10px'
       header.style.top = '20px'
       header.style.zIndex = '1'
 
@@ -254,7 +256,7 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
             <span className={css.logoText}>
               <img
                 className={css.fullLogo}
-                src="/zjugis-harness.png"
+                src="/brand-wordmark.svg"
                 width={250}
                 height={83}
                 alt="ZJUGIS Harness"
@@ -284,7 +286,7 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
             </div>
           </div>
 
-          <p ref={footerRef} className={css.pageFooter}>© 2026 ZJUGIS · 智能体工作平台</p>
+          <p ref={footerRef} className={css.pageFooter}>© 2026 WANWEI · 智能体工作平台</p>
         </section>
 
         <section className={css.formSide} aria-label="账号登录">

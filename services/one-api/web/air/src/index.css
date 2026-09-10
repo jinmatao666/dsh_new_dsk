@@ -375,6 +375,32 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .preview-table td strong,.preview-table td small { display:block; }
 .preview-table td strong { color:#253b60; font-size:15px; }
 .preview-table td small { margin-top:4px; color:#98a8bd; font-size:12px; }
+
+/* 模型渠道名称、地址和模型清单可能很长。固定列宽后，短字段保持单行，
+   完整内容通过单元格 title 提供。 */
+.model-channel-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+.model-channel-name-column { width: 22%; }
+.model-channel-type-column { width: 9%; }
+.model-channel-models-column { width: 20%; }
+.model-channel-group-column { width: 8%; }
+.model-channel-priority-column { width: 10%; }
+.model-channel-status-column { width: 7%; }
+.model-channel-actions-column { width: 24%; }
+.model-channel-table td { overflow: hidden; }
+.model-channel-name-cell strong,
+.model-channel-name-cell small,
+.model-channel-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-channel-truncate { display: block; }
+.model-channel-priority,
+.model-channel-actions { white-space: nowrap; }
+.model-channel-actions .link-button { padding-inline: 4px; }
 .preview-empty { padding:65px 10px; color:#98a8bd; text-align:center; font-size:15px; }
 .tag { display:inline-flex; padding:5px 9px; border-radius:8px; color:#8797ab; background:#eef2f6; font-size:12px; }
 .tag.success { color:#34a67c; background:#e6f8f0; }
@@ -914,19 +940,15 @@ body {
 }
 
 .wanwei-auth-card-brand {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 10px;
     margin-bottom: 22px;
-    color: #2563eb;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 1.8px;
 }
 
 .wanwei-auth-card-brand img {
-    width: 30px;
-    height: 30px;
+    display: block;
+    width: 136px;
+    height: 34px;
     object-fit: contain;
 }
 
@@ -1280,6 +1302,28 @@ body[theme-mode='dark'] .wanwei-auth-card .semi-input {
     height: 18px;
     object-fit: contain;
     mix-blend-mode: multiply;
+}
+
+.product-switcher-tab-brand,
+.product-switcher-tab-brand.product-switcher-tab-active,
+.product-switcher-tab-brand.product-switcher-tab-active:hover {
+    min-height: 34px;
+    padding: 2px 4px;
+    border: 0;
+    background: transparent !important;
+    box-shadow: none;
+}
+
+.product-switcher-tab-brand:hover {
+    background: transparent !important;
+    opacity: 0.82;
+}
+
+.product-switcher-wordmark {
+    display: block;
+    width: 132px;
+    height: 33px;
+    object-fit: contain;
 }
 
 /* Keep the navigation rail wide enough for every label and align all icons to
@@ -2009,6 +2053,38 @@ body[theme-mode='dark'] .zjugis-page-content {
     width: 100% !important;
     min-width: 0;
     box-sizing: border-box;
+}
+
+/* Desktop authentication is a single-screen form. The narrow-screen rules
+   above deliberately keep natural scrolling for touch devices. */
+@media (min-width: 721px) {
+    .wanwei-auth-shell {
+        height: 100dvh;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .wanwei-auth-page {
+        height: 100%;
+        min-height: 0;
+    }
+
+    .wanwei-auth-visual {
+        min-height: 0 !important;
+        height: 100%;
+        padding: clamp(30px, 5vw, 72px);
+    }
+
+    .wanwei-auth-main {
+        min-height: 0;
+        height: 100%;
+        padding: clamp(20px, 4vw, 64px);
+        overflow: hidden;
+    }
+
+    .wanwei-auth-card .semi-card-body {
+        padding: clamp(26px, 3vw, 40px) !important;
+    }
 }
 
 /* Independent ZJUGIS shell: no legacy Semi layout/nav geometry. */

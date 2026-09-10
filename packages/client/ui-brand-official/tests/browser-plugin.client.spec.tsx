@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { apply, inject } from '../src/client/index.ts'
-import { OfficialBrandMark, OfficialBrandName } from '../src/client/Brand.tsx'
+import { OfficialBrandMark, OfficialBrandName, OfficialHeroBrand } from '../src/client/Brand.tsx'
 
 afterEach(() => {
   cleanup()
@@ -15,6 +15,7 @@ const HOLES = [
   'sidebar.brand.mark',
   'sidebar.brand.name',
   'conversation.hero.brand.mark',
+  'conversation.hero.brand',
 ] as const
 
 async function bench(declare = true) {
@@ -67,7 +68,7 @@ describe('official browser-brand plugin', () => {
 
   it('renders the official name independently from both requested mark sizes', () => {
     const name = render(<OfficialBrandName />)
-    expect(name.container.querySelector('img')?.getAttribute('src')).toBe('/zjugis-harness.png')
+    expect(name.container.querySelector('img')?.getAttribute('src')).toBe('/brand-wordmark.svg')
     name.unmount()
 
     const mark = render(<OfficialBrandMark size={34} className="hero-mark" />)
@@ -75,5 +76,9 @@ describe('official browser-brand plugin', () => {
     expect(mark.container.querySelector('img')?.getAttribute('class')).toBe('hero-mark')
     mark.rerender(<OfficialBrandMark size={24} />)
     expect(mark.container.querySelector('img')?.getAttribute('width')).toBe('24')
+
+    const hero = render(<OfficialHeroBrand />)
+    expect(hero.container.querySelector('img')?.getAttribute('src')).toBe('/brand-wordmark.svg')
+    expect(hero.container.querySelector('img')?.getAttribute('width')).toBe('244')
   })
 })

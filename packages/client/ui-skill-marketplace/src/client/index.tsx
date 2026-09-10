@@ -992,7 +992,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
         {view === 'list' && (
           <header className="dsh-skill-market-header">
             <div className="dsh-skill-market-heading">
-              <span className="dsh-skill-kicker">ZJUGIS HARNESS</span>
+              <span className="dsh-skill-kicker">WANWEI Buddy</span>
               <h1>{SECTION_COPY[section].title}</h1>
               <p>{SECTION_COPY[section].subtitle}</p>
             </div>

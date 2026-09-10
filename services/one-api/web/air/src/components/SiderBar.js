@@ -16,7 +16,7 @@ export default function SiderBar({ isCollapsed, onCollapseChange }) {
   const location = useLocation();
   const selected = items.find((item) => item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path));
   return <div className="zjugis-sidebar-inner">
-    <div className="zjugis-sidebar-brand">{isCollapsed ? <img src="/zjugis-mark.png" alt="ZJUGIS" /> : <img src="/zjugis-logo.png" alt="ZJUGIS Harness" />}</div>
+    <div className="zjugis-sidebar-brand">{isCollapsed ? <img src="/brand-mark.svg" alt="万维 Buddy" /> : <img src="/brand-wordmark.svg" alt="万维 Buddy" />}</div>
     {!isCollapsed && <div className="zjugis-sidebar-caption">管理工作台</div>}
     <nav className="zjugis-sidebar-nav" aria-label="主导航">
       {items.map(({ label, path, Icon }) => <Link key={path} to={path} className={`zjugis-sidebar-item${selected?.path === path ? ' active' : ''}`} title={isCollapsed ? label : undefined}>

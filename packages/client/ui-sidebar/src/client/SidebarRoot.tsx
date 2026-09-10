@@ -136,9 +136,6 @@ export function SidebarRoot({
             onClick={() => { startSession() }}
           >
             <span className={css.brandIdentity} aria-hidden="true">
-              <span className={css.brandMark}>
-                {renderSlot('sidebar.brand.mark', { size: 24 }, { fallback: <FishLogo size={24} /> })}
-              </span>
               <span className={css.brandName}>
                 {renderSlot('sidebar.brand.name', {}, {
                   fallback: (

@@ -12,13 +12,13 @@ it('ships install metadata with the built web application', async () => {
   const manifest: unknown = JSON.parse(await readFile(join(DIST_ROOT, 'manifest.webmanifest'), 'utf8'))
   expect(manifest).toEqual({
     id: '/',
-    name: 'ZJUGIS Harness',
-    short_name: 'DSH',
+    name: '万维Buddy',
+    short_name: '万维Buddy',
     start_url: '/',
     scope: '/',
     display: 'fullscreen',
     icons: [{
-      src: '/favicon.svg',
+      src: '/brand-mark.svg',
       sizes: 'any',
       type: 'image/svg+xml',
       purpose: 'any',

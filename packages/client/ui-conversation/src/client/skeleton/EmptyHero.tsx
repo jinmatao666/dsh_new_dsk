@@ -119,13 +119,19 @@ export function HeroShell({ t, renderSlot, children }: HeroShellProps) {
     <div className={css.root}>
       <div className={css.stack}>
         <div className={css.headline}>
-          {/* figma 34:10412: fish 34×25 leading the headline, gap 10. */}
-          <span className={css.fishHitbox}>
-            {renderSlot('conversation.hero.brand.mark', { size: 34, className: css.fish }, {
-              fallback: <FishLogo size={34} className={css.fish} />,
-            })}
-          </span>
-          <span className={css.headlineText}>{t('hero.headline')}</span>
+          {renderSlot('conversation.hero.brand', {}, {
+            fallback: (
+              <>
+                {/* figma 34:10412: fish 34×25 leading the headline, gap 10. */}
+                <span className={css.fishHitbox}>
+                  {renderSlot('conversation.hero.brand.mark', { size: 34, className: css.fish }, {
+                    fallback: <FishLogo size={34} className={css.fish} />,
+                  })}
+                </span>
+                <span className={css.headlineText}>{t('hero.headline')}</span>
+              </>
+            ),
+          })}
           <span className={css.previewBadge}>{t('hero.preview')}</span>
         </div>
         <div className={css.body}>

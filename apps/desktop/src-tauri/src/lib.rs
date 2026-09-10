@@ -1281,9 +1281,9 @@ pub fn run() {
             // application is controlled from the system tray and only exits
             // through the tray's explicit quit action.
             let show_item =
-                MenuItem::with_id(app, "show", "显示 ZJUGIS Harness", true, None::<&str>)?;
+                MenuItem::with_id(app, "show", "显示 万维Buddy", true, None::<&str>)?;
             let quit_item =
-                MenuItem::with_id(app, "quit", "退出 ZJUGIS Harness", true, None::<&str>)?;
+                MenuItem::with_id(app, "quit", "退出 万维Buddy", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().ok_or("缺少应用图标")?.clone())
@@ -1321,7 +1321,7 @@ pub fn run() {
                 .build(app)?;
 
             let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
-                .title("ZJUGIS Harness")
+                .title("万维Buddy")
                 .inner_size(1120.0, 720.0)
                 .min_inner_size(900.0, 580.0)
                 .resizable(false)
@@ -1341,7 +1341,7 @@ pub fn run() {
                         _ => return,
                     };
                     let _ = apply_auth_window_state(&window, authenticated);
-                    let _ = window.set_title("ZJUGIS Harness");
+                    let _ = window.set_title("万维Buddy");
                 })
                 .build()?;
             let window_for_events = window.clone();

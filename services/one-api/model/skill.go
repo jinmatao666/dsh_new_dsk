@@ -576,7 +576,7 @@ func ListSkillPackages() ([]SkillPackageInfo, error) {
 		Joins("LEFT JOIN skill_category_relations AS r ON r.category_id = c.id").
 		Joins("LEFT JOIN skills AS s ON s.id = r.skill_id AND s.is_deleted = ? AND s.status = ?", false, 1).
 		Where("c.is_deleted = ? AND c.status = ? AND t.status = ?", false, 1, 1).
-		Group("c.id, c.code, c.name, c.description").
+		Group("c.id, c.code, c.name, c.description, c.sort_order").
 		Having("COUNT(s.id) > 0").
 		Order("c.sort_order ASC, c.id DESC").
 		Find(&results).Error

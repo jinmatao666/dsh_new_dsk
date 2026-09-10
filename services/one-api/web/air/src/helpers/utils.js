@@ -43,7 +43,7 @@ export function getSystemName() {
 
 export function getLogo() {
   let logo = localStorage.getItem('logo');
-  if (!logo) return '/zjugis-harness.png';
+  if (!logo) return '/brand-mark.svg';
   return logo
 }
 

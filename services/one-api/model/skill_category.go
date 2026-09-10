@@ -211,6 +211,82 @@ func migrateSkillCategorySchema() error {
 	if err := ensureDefaultSkillCategoryTypes(); err != nil {
 		return err
 	}
+	if err := mergeDuplicateSkillCategories(); err != nil {
+		return err
+	}
+	return hideRetiredLegacySkillCategories()
+}
+
+func mergeDuplicateSkillCategories() error {
+	var categories []SkillCategory
+	if err := DB.Where("is_deleted = ?", false).
+		Order("type_id ASC, status DESC, id ASC").
+		Find(&categories).Error; err != nil {
+		return err
+	}
+
+	canonicalByName := make(map[string]*SkillCategory, len(categories))
+	for index := range categories {
+		category := &categories[index]
+		name := strings.ToLower(strings.TrimSpace(category.Name))
+		if name == "" {
+			continue
+		}
+		key := fmt.Sprintf("%d:%s", category.TypeId, name)
+		canonical, exists := canonicalByName[key]
+		if !exists {
+			canonicalByName[key] = category
+			continue
+		}
+		if err := DB.Transaction(func(tx *gorm.DB) error {
+			var relations []SkillCategoryRelation
+			if err := tx.Where("category_id = ?", category.Id).Find(&relations).Error; err != nil {
+				return err
+			}
+			for _, relation := range relations {
+				relation.Id = 0
+				relation.CategoryId = canonical.Id
+				if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&relation).Error; err != nil {
+					return err
+				}
+			}
+			if canonical.Description == "" && category.Description != "" {
+				if err := tx.Model(canonical).Update("description", category.Description).Error; err != nil {
+					return err
+				}
+				canonical.Description = category.Description
+			}
+			return tx.Model(category).Update("is_deleted", true).Error
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func hideRetiredLegacySkillCategories() error {
+	var categories []SkillCategory
+	if err := DB.Where("is_deleted = ?", false).Find(&categories).Error; err != nil {
+		return err
+	}
+	for _, category := range categories {
+		var relationCount int64
+		if err := DB.Model(&SkillCategoryRelation{}).Where("category_id = ?", category.Id).Count(&relationCount).Error; err != nil {
+			return err
+		}
+		if relationCount == 0 {
+			continue
+		}
+		activeCount, err := CountSkillCategoryRelations(category.Id)
+		if err != nil {
+			return err
+		}
+		if activeCount == 0 {
+			if err := DB.Model(&SkillCategory{}).Where("id = ?", category.Id).Update("is_deleted", true).Error; err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -268,9 +344,10 @@ func UpdateSkillCategoryType(typ *SkillCategoryType) error {
 func ListSkillCategoriesByType(typeCode string, includeDisabled bool) ([]SkillCategoryView, error) {
 	var categories []SkillCategoryView
 	query := DB.Table("skill_categories AS c").
-		Select("c.id, c.type_id, t.code AS type_code, t.name AS type_name, c.code, c.name, c.description, c.status, c.sort_order, COUNT(r.skill_id) AS skill_count").
+		Select("c.id, c.type_id, t.code AS type_code, t.name AS type_name, c.code, c.name, c.description, c.status, c.sort_order, COUNT(s.id) AS skill_count").
 		Joins("JOIN skill_category_types AS t ON t.id = c.type_id").
 		Joins("LEFT JOIN skill_category_relations AS r ON r.category_id = c.id").
+		Joins("LEFT JOIN skills AS s ON s.id = r.skill_id AND s.is_deleted = ? AND s.status = ?", false, 1).
 		Where("c.is_deleted = ?", false)
 	if typeCode != "" {
 		query = query.Where("t.code = ?", typeCode)
@@ -279,7 +356,7 @@ func ListSkillCategoriesByType(typeCode string, includeDisabled bool) ([]SkillCa
 		query = query.Where("c.status = ? AND t.status = ?", 1, 1)
 	}
 	err := query.
-		Group("c.id, c.type_id, t.code, t.name, c.code, c.name, c.description, c.status, c.sort_order").
+		Group("c.id, c.type_id, t.code, t.name, t.sort_order, c.code, c.name, c.description, c.status, c.sort_order").
 		Order("t.sort_order ASC, c.sort_order ASC, c.id DESC").
 		Find(&categories).Error
 	return categories, err
@@ -290,7 +367,10 @@ func CountSkillCategoryRelations(categoryId uint64) (int64, error) {
 		return 0, nil
 	}
 	var count int64
-	err := DB.Model(&SkillCategoryRelation{}).Where("category_id = ?", categoryId).Count(&count).Error
+	err := DB.Table("skill_category_relations AS r").
+		Joins("JOIN skills AS s ON s.id = r.skill_id AND s.is_deleted = ? AND s.status = ?", false, 1).
+		Where("r.category_id = ?", categoryId).
+		Count(&count).Error
 	return count, err
 }
 
@@ -321,6 +401,15 @@ func CreateSkillCategory(category *SkillCategory) error {
 	if category.Status == 0 {
 		category.Status = 1
 	}
+	var existing SkillCategory
+	err := DB.Where("type_id = ? AND is_deleted = ? AND LOWER(TRIM(name)) = ?", category.TypeId, false, strings.ToLower(strings.TrimSpace(category.Name))).
+		First(&existing).Error
+	if err == nil {
+		return fmt.Errorf("分类 %q 已存在", strings.TrimSpace(category.Name))
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
 	return DB.Create(category).Error
 }
 
@@ -342,6 +431,15 @@ func UpdateSkillCategory(category *SkillCategory) error {
 		category.Code = normalizeCategoryCode(category.Code)
 		if category.Code == "" || strings.TrimSpace(category.Name) == "" {
 			return errors.New("分类名称不能为空")
+		}
+		var duplicate SkillCategory
+		err := tx.Where("type_id = ? AND id <> ? AND is_deleted = ? AND LOWER(TRIM(name)) = ?", category.TypeId, category.Id, false, strings.ToLower(strings.TrimSpace(category.Name))).
+			First(&duplicate).Error
+		if err == nil {
+			return fmt.Errorf("分类 %q 已存在", strings.TrimSpace(category.Name))
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
 		}
 		if err := tx.Model(&SkillCategory{}).Where("id = ?", category.Id).
 			Select("type_id", "parent_id", "code", "name", "description", "status", "sort_order").

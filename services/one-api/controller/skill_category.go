@@ -94,6 +94,7 @@ func CreateSkillCategory(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	_ = model.RefreshSkillCache()
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": category})
 }
 
@@ -137,6 +138,7 @@ func DeleteSkillCategory(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	_ = model.RefreshSkillCache()
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 

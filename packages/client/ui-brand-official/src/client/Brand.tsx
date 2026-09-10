@@ -9,13 +9,9 @@ type OfficialBrandMarkProps = HeroBrandMarkOwnerProps & SidebarBrandMarkOwnerPro
  * @returns the official whale mark.
  */
 export function OfficialBrandMark({ size, className }: OfficialBrandMarkProps) {
-  // The sidebar wordmark is already the complete ZJUGIS Harness logo.  Keep
-  // this slot empty there so the standalone mark is not rendered twice.
-  if (size <= 24) return null
-
   return (
     <img
-      src="/zjugis-mark.png"
+      src="/brand-mark.svg"
       width={size}
       height={size}
       className={className}
@@ -34,11 +30,24 @@ export function OfficialBrandName() {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', maxWidth: '100%' }} aria-hidden="true">
       <img
-        src="/zjugis-harness.png"
-        height={65}
-        style={{ display: 'block', width: 'auto', height: 65, maxWidth: '100%', margin: 0, objectFit: 'contain' }}
+        src="/brand-wordmark.svg"
+        height={36}
+        style={{ display: 'block', width: 'auto', height: 36, maxWidth: '100%', margin: 0, objectFit: 'contain' }}
         alt=""
       />
     </span>
+  )
+}
+
+/** Render the horizontal lockup in the empty workspace hero. */
+export function OfficialHeroBrand() {
+  return (
+    <img
+      src="/brand-wordmark.svg"
+      width={244}
+      height={61}
+      style={{ display: 'block', width: 'min(244px, 52vw)', height: 'auto', margin: 0, objectFit: 'contain' }}
+      alt="万维 Buddy"
+    />
   )
 }

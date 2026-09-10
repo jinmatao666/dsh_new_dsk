@@ -679,7 +679,16 @@ export function ModelConfigPage() {
               </button>
             </div>
             <div className='preview-table-wrap'>
-              <table className='preview-table'>
+              <table className='preview-table model-channel-table'>
+                <colgroup>
+                  <col className='model-channel-name-column' />
+                  <col className='model-channel-type-column' />
+                  <col className='model-channel-models-column' />
+                  <col className='model-channel-group-column' />
+                  <col className='model-channel-priority-column' />
+                  <col className='model-channel-status-column' />
+                  <col className='model-channel-actions-column' />
+                </colgroup>
                 <thead>
                   <tr>
                     <th>名称</th>
@@ -694,23 +703,25 @@ export function ModelConfigPage() {
                 <tbody>
                   {rows.map((r) => (
                     <tr key={r.id}>
-                      <td>
-                        <strong>{r.name}</strong>
+                      <td className='model-channel-name-cell' title={`${r.name || '未命名渠道'}\n${r.base_url || '未设置地址'}`}>
+                        <strong>{r.name || '未命名渠道'}</strong>
                         <small>{r.base_url || '未设置地址'}</small>
                       </td>
-                      <td>
-                        {channelTypes.find(
+                      <td title={channelTypes.find(
                           (x) => x[0] === Number(r.type)
-                        )?.[1] || r.type}
+                        )?.[1] || String(r.type)}>
+                        <span className='model-channel-truncate'>{channelTypes.find(
+                          (x) => x[0] === Number(r.type)
+                        )?.[1] || r.type}</span>
                       </td>
-                      <td>
-                        {splitModels(r.models).slice(0, 3).join('、') || '—'}
+                      <td title={splitModels(r.models).join('、') || '—'}>
+                        <span className='model-channel-truncate'>{splitModels(r.models).slice(0, 3).join('、') || '—'}</span>
                       </td>
-                      <td>{r.group || r.groups || 'default'}</td>
-                      <td>
+                      <td title={r.group || r.groups || 'default'}><span className='model-channel-truncate'>{r.group || r.groups || 'default'}</span></td>
+                      <td className='model-channel-priority'>
                         {r.priority ?? 0} / {r.weight ?? 1}
                       </td>
-                      <td>
+                      <td className='model-channel-actions'>
                         <span
                           className={r.status === 1 ? 'tag success' : 'tag'}
                         >

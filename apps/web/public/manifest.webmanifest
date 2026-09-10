@@ -1,15 +1,15 @@
 {
   "id": "/",
-  "name": "ZJUGIS Harness",
-  "short_name": "ZJUGIS",
+  "name": "万维Buddy",
+  "short_name": "万维Buddy",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",
   "icons": [
     {
-      "src": "/zjugis-mark.png",
+      "src": "/brand-mark.svg",
       "sizes": "any",
-      "type": "image/png",
+      "type": "image/svg+xml",
       "purpose": "any"
     }
   ]

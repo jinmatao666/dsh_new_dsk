@@ -4,23 +4,10 @@ import { Bot, ChartColumn, Compass, FileText, Map, Zap } from 'lucide-react';
 import SkillBrowseDrawer from './SkillBrowseDrawer';
 import { importSkillFolder, zipSkillFolder } from './skillFolderImport';
 import { API, showError, showSuccess } from '../helpers';
-import { isLocalSkillLayoutPreview } from '../helpers/local-skill-layout-preview';
 import './SkillsTable.css';
 
 const STATUS_LABELS = { 1: '已上架', 0: '已下架' };
 const STATUS_COLORS = { 1: 'green', 0: 'grey' };
-const SKILL_LAYOUT_PREVIEW = isLocalSkillLayoutPreview();
-const PREVIEW_CATEGORIES = [
-  { id: 'preview-spatial', name: '空间制图' },
-  { id: 'preview-document', name: '办公文档' },
-  { id: 'preview-analysis', name: '数据分析' }
-];
-const PREVIEW_SKILLS = [
-  { id: 'preview-1', name: 'market-gis-geology-analysis', display_name: '地质条件分析', category: '空间制图', version: '1.4.5', submitter: 'root', created_at: 1788832746, downloads: 1258, status: 1, tags: ['地质环境与灾害易发性分析'] },
-  { id: 'preview-2', name: 'market-gis-third-survey-analysis', display_name: '三调土地利用现状分析', category: '数据分析', version: '2.0.0', submitter: '系统管理员', created_at: 1788919146, downloads: 86, status: 1, tags: ['三调地类面积统计', '用地结构研判'] },
-  { id: 'preview-3', name: 'planning-compliance-review', display_name: '国土空间规划符合性审查', category: '空间制图', version: '1.0.12', submitter: '规划平台主管', created_at: 1789005546, downloads: 10032, status: 1, tags: ['规划管控规则核验'] },
-  { id: 'preview-4', name: 'meeting-minutes-report', display_name: '会议纪要整理与报告生成', category: '办公文档', version: '0.9.3', submitter: 'root', created_at: 1789091946, downloads: 0, status: 0, draft_release_count: 1, tags: ['会议要点提取', '待办事项整理'] }
-];
 const DEFAULT_SKILL_ICONS = [
   { value: 'glyph:map', label: '地图', Icon: Map },
   { value: 'glyph:document', label: '文档', Icon: FileText },
@@ -108,11 +95,6 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   const iconInputRef = useRef(null);
   const [releases, setReleases] = useState({ skill: null, items: [], files: [], selectedFilePath: '' });
   const loadSkills = useCallback(async () => {
-    if (SKILL_LAYOUT_PREVIEW) {
-      setItems(PREVIEW_SKILLS);
-      setManagedCategories(PREVIEW_CATEGORIES);
-      return;
-    }
     try {
       const [response, categoryResponse] = await Promise.all([
         API.get('/api/skill/admin/list', { params: { page: 1, perPage: 100 } }),
@@ -192,7 +174,11 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   };
   const chooseSkillFolder = async () => {
     if (typeof window.showDirectoryPicker !== 'function') {
-      showError('文件夹导入需要通过 HTTPS 打开后台；当前可使用 ZIP 文件导入，避免浏览器批量上传确认提示。');
+      if (importFolderInputRef.current) {
+        importFolderInputRef.current.click();
+        return;
+      }
+      showError('当前浏览器不支持文件夹选择，请改用 ZIP 文件导入。');
       return;
     }
     try {

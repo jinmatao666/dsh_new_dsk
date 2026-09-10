@@ -121,7 +121,36 @@ func TestListSkillCategoriesByTypeIncludesSkillCount(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, categories, 1)
 	assert.Equal(t, category.Id, categories[0].Id)
-	assert.Equal(t, 3, categories[0].SkillCount)
+	assert.Equal(t, 2, categories[0].SkillCount)
+}
+
+func TestMergeDuplicateSkillCategoriesKeepsOneEnabledCategory(t *testing.T) {
+	setupSkillCategoryTestDB(t)
+	first := createSkillCategoryForTest(t, SkillCategoryTypePackage, "spatial-legacy", "空间制图")
+	second := createSkillCategoryForTest(t, SkillCategoryTypePackage, "spatial-current", "空间制图")
+	skill := seedSkill(t, "alpha", "", false)
+	require.NoError(t, ReplaceSkillCategories(skill.Id, []uint64{second.Id}))
+
+	require.NoError(t, mergeDuplicateSkillCategories())
+
+	categories, err := ListSkillCategoriesByType(SkillCategoryTypePackage, true)
+	require.NoError(t, err)
+	require.Len(t, categories, 1)
+	assert.Equal(t, first.Id, categories[0].Id)
+	assert.Equal(t, 1, categories[0].SkillCount)
+}
+
+func TestHideRetiredLegacySkillCategoriesHidesDeletedSkillBindings(t *testing.T) {
+	setupSkillCategoryTestDB(t)
+	category := createSkillCategoryForTest(t, SkillCategoryTypePackage, "retired", "历史分类")
+	skill := seedSkill(t, "deleted", "", true)
+	require.NoError(t, ReplaceSkillCategories(skill.Id, []uint64{category.Id}))
+
+	require.NoError(t, hideRetiredLegacySkillCategories())
+
+	categories, err := ListSkillCategoriesByType(SkillCategoryTypePackage, true)
+	require.NoError(t, err)
+	assert.Empty(t, categories)
 }
 
 func TestDeleteSkillCategoryRejectsBoundCategory(t *testing.T) {

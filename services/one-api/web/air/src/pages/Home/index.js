@@ -200,7 +200,7 @@ const Home = () => {
           <div className="zjugis-stat-strip"><div><strong>{modelRows.length || '—'}</strong><span>活跃模型</span></div><div><strong>{admin ? (ranking.length || '—') : '—'}</strong><span>{admin ? '活跃用户' : '用户排行'}</span></div><div><strong>{summary.failureKnown ? (summary.failed || '—') : '—'}</strong><span>失败请求</span></div></div>
         </article>
 
-        <aside className="zjugis-copilot-card"><div className="zjugis-copilot-brand"><img src="/zjugis-mark.png" alt="" /><span>ZJUGIS</span></div><h2>Harness<br /><em>Co-Pilot</em></h2><div className="zjugis-orb" aria-hidden="true"><div className="zjugis-orb-core" /></div><div className="zjugis-copilot-footer"><div><strong>{status.version || '—'}</strong><span>{status.system_name || '服务版本'}</span></div><Link to="/config/model" aria-label="打开模型配置"><ArrowUpRight size={18} /></Link></div></aside>
+        <aside className="zjugis-copilot-card"><div className="zjugis-copilot-brand"><img src="/brand-mark.svg" alt="" /><span>WANWEI</span></div><h2>Harness<br /><em>Co-Pilot</em></h2><div className="zjugis-orb" aria-hidden="true"><div className="zjugis-orb-core" /></div><div className="zjugis-copilot-footer"><div><strong>{status.version || '—'}</strong><span>{status.system_name || '服务版本'}</span></div><Link to="/config/model" aria-label="打开模型配置"><ArrowUpRight size={18} /></Link></div></aside>
       </section>
 
       <section className="zjugis-lower-grid">

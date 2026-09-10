@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-const DEFAULT_CLIENT_TITLE = 'ZJUGIS Harness'
+const DEFAULT_CLIENT_TITLE = '万维Buddy'
 
 /** Props for the browser title projection. */
 export interface DocumentTitleProps {

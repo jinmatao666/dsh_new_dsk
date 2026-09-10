@@ -49,17 +49,16 @@ const ProductSwitcher = () => {
           <button
             key={p.key}
             type="button"
-            className={`product-switcher-tab${selected ? ' product-switcher-tab-active' : ''}`}
+            className={`product-switcher-tab${selected ? ' product-switcher-tab-active' : ''}${p.key === 'parvis' ? ' product-switcher-tab-brand' : ''}`}
             onClick={() => handleSwitch(p.key)}
             aria-pressed={selected}
             aria-label={p.label}
           >
             {p.key === 'parvis' ? (
-              <img className="product-switcher-mark" src="/zjugis-mark.png" alt="" />
+              <img className="product-switcher-wordmark" src="/brand-wordmark.svg" alt="万维 Buddy" />
             ) : (
-              <Icon size={16} strokeWidth={1.75} />
+              <><Icon size={16} strokeWidth={1.75} /><span className="product-switcher-label">{p.label}</span></>
             )}
-            <span className="product-switcher-label">{p.label}</span>
           </button>
         );
       })}

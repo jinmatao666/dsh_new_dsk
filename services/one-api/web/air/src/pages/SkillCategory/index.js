@@ -4,6 +4,10 @@ import { IconPlus, IconSearch } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess } from '../../helpers';
 
 const EMPTY = { id: null, name: '', description: '' };
+const responseData = (response, fallback) => {
+  if (response.data?.success) return response.data.data;
+  throw new Error(response.data?.message || fallback);
+};
 
 const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
   const [items, setItems] = useState([]);
@@ -17,9 +21,10 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
     setLoading(true);
     try {
       const response = await API.get('/api/skill-category/', { params: { includeDisabled: 1, type: 'skill_package' } });
-      setItems(Array.isArray(response.data?.data) ? response.data.data : []);
+      const categories = responseData(response, '加载技能分类失败');
+      setItems(Array.isArray(categories) ? categories : []);
     } catch (error) {
-      showError(error.message || '加载技能分类失败');
+      showError(error.response?.data?.message || error.message || '加载技能分类失败');
     } finally {
       setLoading(false);
     }
@@ -39,12 +44,16 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
     setSaving(true);
     try {
       const payload = { name: editor.data.name.trim(), description: editor.data.description.trim() };
-      if (editor.data.id) await API.put(`/api/skill-category/${editor.data.id}`, payload);
-      else await API.post('/api/skill-category/', payload);
+      const response = editor.data.id
+        ? await API.put(`/api/skill-category/${editor.data.id}`, payload)
+        : await API.post('/api/skill-category/', payload);
+      responseData(response, '保存分类失败');
       await load();
       window.dispatchEvent(new Event('skill-categories-changed'));
       showSuccess('保存成功');
       closeEditor();
+    } catch (error) {
+      showError(error.response?.data?.message || error.message || '保存分类失败');
     } finally {
       setSaving(false);
     }
@@ -61,10 +70,15 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
       content: '删除后不可恢复。',
       okType: 'danger',
       onOk: async () => {
-        await API.delete(`/api/skill-category/${row.id}`);
-        await load();
-        window.dispatchEvent(new Event('skill-categories-changed'));
-        showSuccess('已删除');
+        try {
+          const response = await API.delete(`/api/skill-category/${row.id}`);
+          responseData(response, '删除分类失败');
+          await load();
+          window.dispatchEvent(new Event('skill-categories-changed'));
+          showSuccess('已删除');
+        } catch (error) {
+          showError(error.response?.data?.message || error.message || '删除分类失败');
+        }
       }
     });
   };

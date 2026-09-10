@@ -171,6 +171,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * package's `conversation` entry; the shell supplies a fish fallback.
      */
     'conversation.hero.brand.mark': { kind: 'single'; scope: 'root'; owner: HeroBrandMarkOwnerProps }
+    /** Complete blank-session brand lockup, replacing the default mark and title. */
+    'conversation.hero.brand': { kind: 'single'; scope: 'root' }
     /**
      * The agent-preset chip beside the workspace picker on the new-session
      * screen. Root scope: no session exists yet, so the choice is staged for
@@ -624,6 +626,7 @@ export type ConversationSlotProps =
     | 'conversation.input.dock' | 'conversation.composer.dock'
     | 'conversation.input.left' | 'conversation.input.right'
     | 'conversation.hero.brand.mark'
+    | 'conversation.hero.brand'
     | 'conversation.hero.workspace'
     | 'conversation.hero.agentPreset'
   >

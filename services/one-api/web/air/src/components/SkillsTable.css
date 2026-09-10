@@ -45,16 +45,6 @@
   flex-wrap: wrap;
 }
 
-.skill-layout-preview-notice {
-  margin: -4px 0 2px;
-  padding: 9px 12px;
-  border: 1px solid #b9d8ff;
-  border-radius: 10px;
-  background: #edf6ff;
-  color: #2368ae;
-  font-size: 13px;
-}
-
 .skill-page-actions .preview-button.primary {
   min-height: 44px;
   padding-inline: 19px;
