@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, IWorkspaces } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connection/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -158,8 +158,8 @@ function serverSkillFiles(bundle: unknown): { files: Array<{ path: string; conte
 }
 
 const L = {
-  title: '技能广场',
-  close: '关闭技能广场',
+  title: '技能市场',
+  close: '关闭技能市场',
   subtitle: '发现可复用的工作流和智能助手',
   search: '搜索技能',
   myInstalled: '我安装的',
@@ -174,7 +174,7 @@ const L = {
   install: '安装',
   count: '次安装',
   empty: '没有匹配的技能',
-  action: '技能广场',
+  action: '技能市场',
   back: '返回',
   detailInstall: '安装技能',
   version: '版本',
@@ -368,20 +368,31 @@ function CategoryGlyph({ category, size = 20 }: { category: string; size?: numbe
   }
 }
 
+const DEFAULT_SKILL_ICONS = [
+  { value: 'glyph:map', label: '地图' },
+  { value: 'glyph:document', label: '文档' },
+  { value: 'glyph:chart', label: '图表' },
+  { value: 'glyph:compass', label: '指南' },
+  { value: 'glyph:bot', label: '智能体' },
+  { value: 'glyph:lightning', label: '效率' },
+] as const
+
+function DefaultSkillIcon({ icon, size = 20 }: { icon: string; size?: number }) {
+  const shared = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true }
+  if (icon === 'glyph:map') return <svg {...shared}><path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2-6-2Z" /><path d="M9 4v14M15 6v14" /></svg>
+  if (icon === 'glyph:document') return <svg {...shared}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6M8 13h8M8 17h8" /></svg>
+  if (icon === 'glyph:chart') return <svg {...shared}><path d="M3 3v18h18" /><path d="M8 17v-5M13 17V8M18 17v-3" /></svg>
+  if (icon === 'glyph:compass') return <svg {...shared}><circle cx="12" cy="12" r="9" /><path d="m15 9-2.2 4.8L8 16l2.2-4.8L15 9Z" /></svg>
+  if (icon === 'glyph:lightning') return <svg {...shared}><path d="m13 2-8 12h7l-1 8 8-12h-7l1-8Z" /></svg>
+  return <svg {...shared}><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M8 12h.01M16 12h.01M9 16h6M12 2v3" /></svg>
+}
+
 function SkillVisual({ skill, size = 20 }: { skill: Skill; size?: number }) {
   if (skill.icon.startsWith('data:image/')) {
     return <img className="dsh-skill-custom-icon" src={skill.icon} alt="" />
   }
   if (skill.icon.startsWith('glyph:')) {
-    const glyphs: Record<string, string> = {
-      'glyph:map': '⌖',
-      'glyph:document': '▤',
-      'glyph:chart': '◫',
-      'glyph:compass': '◉',
-      'glyph:bot': '✦',
-      'glyph:lightning': 'ϟ',
-    }
-    return <span className="dsh-skill-text-icon" style={{ fontSize: Math.max(15, size) }}>{glyphs[skill.icon] ?? '✦'}</span>
+    return <DefaultSkillIcon icon={skill.icon} size={size} />
   }
   return <span className="dsh-skill-text-icon" style={{ fontSize: Math.max(13, size - 2) }}>{skill.icon || '技'}</span>
 }
@@ -462,7 +473,10 @@ const marketplaceControllers: Record<MarketplaceSection, Controller> = {
   automations: createController(),
 }
 
-type OverlayProps = PropsRuntime<'shell.overlay'> & { marketplaceUrl: string }
+type OverlayProps = PropsRuntime<'shell.overlay'> & {
+  marketplaceUrl: string
+  chooseDirectory: () => Promise<string | null>
+}
 type ActionProps = PropsRuntime<'sidebar.footer.action'> & SidebarFooterActionOwnerProps
 
 function SkillDetail({ skill, onBack, installState, installing, onToggleInstall }: {
@@ -687,7 +701,7 @@ function Automations() {
 }
 /* oxlint-enable @stylistic/arrow-parens, @stylistic/max-len */
 
-function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSection }) {
+function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section: MarketplaceSection }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState(L.all)
@@ -706,8 +720,8 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
   })
   const [discoveredCustomSkills, setDiscoveredCustomSkills] = useState<Skill[]>([])
   const [adding, setAdding] = useState(false)
-  const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '办公文档' })
-  const [customSkillFiles, setCustomSkillFiles] = useState<File[]>([])
+  const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '办公文档', icon: 'glyph:bot' })
+  const [customSkillDirectory, setCustomSkillDirectory] = useState<string | null>(null)
   const [remoteSkills, setRemoteSkills] = useState<RemoteSkill[] | null>(null)
 
   const [installStates, setInstallStates] = useState<Map<string, MarketplaceSkillState>>(new Map())
@@ -922,36 +936,36 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
       : { kind: 'success', text: '技能已从本机移除。' })
   }
 
+  const selectCustomSkillDirectory = async () => {
+    try {
+      const directory = await chooseDirectory()
+      if (directory !== null) setCustomSkillDirectory(directory)
+    } catch (error) {
+      setInstallMessage({ kind: 'error', text: marketplaceInstallErrorMessage(error) })
+    }
+  }
+
   const createSkill = async () => {
     const name = newSkill.name.trim()
-    if (name === '' || customSkillFiles.length === 0) return
-    const skillMd = customSkillFiles.find(file => (file.webkitRelativePath || file.name).replace(/\\/g, '/').split('/').at(-1) === 'SKILL.md')
-    if (skillMd === undefined) {
-      setInstallMessage({ kind: 'error', text: '所选技能目录中缺少 SKILL.md。' })
-      return
-    }
-    const skillText = await skillMd.text()
-    const declaredName = /^name:\s*([a-z0-9]+(?:-[a-z0-9]+)*)\s*$/mu.exec(skillText)?.[1]
-    if (declaredName === undefined) {
-      setInstallMessage({ kind: 'error', text: 'SKILL.md 必须在 YAML 头部声明合法的 kebab-case name。' })
-      return
-    }
-    const slug = declaredName
-    const firstPath = customSkillFiles[0]?.webkitRelativePath.replace(/\\/g, '/') ?? ''
-    const rootPrefix = firstPath.includes('/') ? firstPath.slice(0, firstPath.indexOf('/') + 1) : ''
-    const files = await Promise.all(customSkillFiles.map(async file => ({
-      path: (file.webkitRelativePath.replace(/\\/g, '/') || file.name).replace(rootPrefix, ''),
-      content: [...new Uint8Array(await file.arrayBuffer())],
-    })))
-    setInstalling(slug)
+    if (name === '' || customSkillDirectory === null) return
+    setInstalling('custom-skill-import')
+    let installed: CustomSkillState
     try {
-      await desktopInvoke('install_custom_skill', { slug, files })
+      const value = await desktopInvoke('install_custom_skill_directory', { directory: customSkillDirectory })
+      if (typeof value !== 'object' || value === null
+        || typeof (value as Partial<CustomSkillState>).slug !== 'string'
+        || typeof (value as Partial<CustomSkillState>).name !== 'string'
+        || typeof (value as Partial<CustomSkillState>).description !== 'string') {
+        throw new Error('桌面端返回的个人技能信息无效。')
+      }
+      installed = value as CustomSkillState
     } catch (error) {
       setInstallMessage({ kind: 'error', text: marketplaceInstallErrorMessage(error) })
       setInstalling(null)
       return
     }
     setInstalling(null)
+    const slug = installed.slug
     const id = `local-${slug}`
     const skill: Skill = {
       id,
@@ -963,7 +977,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
       description: newSkill.summary.trim() || '此技能已安装到当前用户技能目录，新建对话后即可被智能体发现。',
       installs: '0',
       accent: '#2563eb',
-      icon: '自',
+      icon: newSkill.icon,
       version: '1.0.0',
       author: '当前用户',
       installable: true,
@@ -974,8 +988,8 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
     localStorage.setItem('dsh.marketplace.custom-skills', JSON.stringify(next))
     setInstallStates(previous => new Map(previous).set(id, { id, slug, version: '1.0.0', installedVersion: '1.0.0', state: 'installed' }))
     setAdding(false)
-    setNewSkill({ name: '', summary: '', category: '办公文档' })
-    setCustomSkillFiles([])
+    setNewSkill({ name: '', summary: '', category: '办公文档', icon: 'glyph:bot' })
+    setCustomSkillDirectory(null)
     setSelectedSkill(skill)
     setView('detail')
     setInstallMessage({ kind: 'success', text: '个人技能已安装，新建对话后即可使用。' })
@@ -1040,7 +1054,7 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                 <div className="dsh-skill-installed-heading">
                   <div><h2>我安装的技能</h2><p>仅显示安装在当前电脑上的个人技能和平台技能。</p></div>
                   <button type="button" className="dsh-skill-browse-market" onClick={() => { setShowInstalledOnly(false) }}>
-                    浏览技能广场 <span aria-hidden="true">→</span>
+                    浏览技能市场 <span aria-hidden="true">→</span>
                   </button>
                 </div>
               ) : featuredSkills.length > 0 && (
@@ -1086,7 +1100,11 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                     key={tab.id}
                     type="button"
                     className={activeSubTab === tab.id ? 'active' : ''}
-                    onClick={() => { setActiveSubTab(tab.id) }}
+                    onClick={() => {
+                      setActiveSubTab(tab.id)
+                      void refreshInstallStates()
+                      if (loadRemoteSkills !== undefined) void loadRemoteSkills().then(setRemoteSkills).catch(() => setRemoteSkills(null))
+                    }}
                   >
                     {tab.label}
                   </button>
@@ -1099,7 +1117,10 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                     key={item}
                     type="button"
                     className={item === category ? 'active' : ''}
-                    onClick={() => { setCategory(item) }}
+                    onClick={() => {
+                      setCategory(item)
+                      if (loadRemoteSkills !== undefined) void loadRemoteSkills().then(setRemoteSkills).catch(() => setRemoteSkills(null))
+                    }}
                   >
                     {item}
                   </button>
@@ -1162,9 +1183,20 @@ function SkillMarketplace({ section }: OverlayProps & { section: MarketplaceSect
                 </select>
               </label>
               <label>用途说明<textarea value={newSkill.summary} onChange={(event) => { setNewSkill({ ...newSkill, summary: event.target.value }) }} placeholder="说明这个技能何时使用、能完成什么任务" /></label>
-              <label>个人技能目录<input type="file" multiple {...{ webkitdirectory: '' }} onChange={(event) => { setCustomSkillFiles([...event.currentTarget.files ?? []]) }} /></label>
-              <small className="dsh-skill-add-hint">请选择包含 SKILL.md 的完整目录。目录中的脚本、Python 文件、模板、参考资料和其他子目录会完整复制到当前用户的本机技能目录，不会同步到后台。</small>
-              <footer><button type="button" onClick={() => { setAdding(false) }}>取消</button><button type="submit" disabled={newSkill.name.trim() === '' || customSkillFiles.length === 0 || installing !== null}>导入并安装</button></footer>
+              <label>
+                技能图标
+                <span className="dsh-skill-add-icon-options">
+                  {DEFAULT_SKILL_ICONS.map(item => <button key={item.value} type="button" title={item.label} aria-label={item.label} className={newSkill.icon === item.value ? 'active' : ''} onClick={() => { setNewSkill({ ...newSkill, icon: item.value }) }}><DefaultSkillIcon icon={item.value} size={18} /></button>)}
+                </span>
+                <small className="dsh-skill-add-icon-hint">选择一个通用 SVG 图标，仅用于当前电脑上的个人技能展示。</small>
+              </label>
+              <label>
+                个人技能目录
+                <button type="button" className="dsh-skill-add-directory" onClick={() => { void selectCustomSkillDirectory() }} disabled={installing !== null}>选择技能目录</button>
+                {customSkillDirectory !== null && <small className="dsh-skill-add-selected" title={customSkillDirectory}>已选择：{customSkillDirectory}</small>}
+              </label>
+              <small className="dsh-skill-add-hint">请选择包含 SKILL.md 的完整目录。系统会通过桌面端原生目录选择器导入，目录中的脚本、Python 文件、模板、参考资料和其他子目录会完整复制到当前用户的本机技能目录，不会同步到后台。</small>
+              <footer><button type="button" onClick={() => { setAdding(false) }}>取消</button><button type="submit" disabled={newSkill.name.trim() === '' || customSkillDirectory === null || installing !== null}>导入并安装</button></footer>
             </form>
           </div>
         )}
@@ -1200,9 +1232,10 @@ function SkillMarketplaceAction({ wide, section = 'skills' }: ActionProps & { se
   )
 }
 
-export const inject = ['slots', 'connection']
+export const inject = ['slots', 'connection', 'workspaces']
 export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as unknown as ConnectionHandle
+  const workspaces = ctx.get('workspaces') as unknown as IWorkspaces
   loadRemoteSkills = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'skill-list', {})) as { items?: unknown }
     return Array.isArray(raw?.items) ? raw.items.filter((item): item is RemoteSkill => typeof item === 'object' && item !== null) : []
@@ -1237,7 +1270,7 @@ export function apply(ctx: ClientContext): void {
   for (const [index, section] of (['skills', 'experts', 'connectors', 'automations'] as const).entries()) {
     ctx.slots.inject('shell.overlay', () =>
       ctx.slots.register(
-        { name: 'shell.overlay', id: `skill-marketplace-${section}`, order: 100 + index, inject: () => ({ marketplaceUrl, section }) },
+        { name: 'shell.overlay', id: `skill-marketplace-${section}`, order: 100 + index, inject: () => ({ marketplaceUrl, section, chooseDirectory: () => workspaces.pickDirectory() }) },
         SkillMarketplace,
       ),
     )

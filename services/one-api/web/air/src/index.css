@@ -1312,6 +1312,7 @@ body[theme-mode='dark'] .wanwei-auth-card .semi-input {
     border: 0;
     background: transparent !important;
     box-shadow: none;
+    transform: translateX(-10px);
 }
 
 .product-switcher-tab-brand:hover {

@@ -51,6 +51,7 @@ type importedManifest struct {
 	Description string   `json:"description"`
 	Summary     string   `json:"summary"`
 	Author      string   `json:"author"`
+	Icon        string   `json:"icon"`
 	Tags        []string `json:"tags"`
 	Files       []string `json:"files"`
 }
@@ -96,6 +97,70 @@ func declaredSkillName(body []byte) string {
 		}
 	}
 	return ""
+}
+
+// normalizeImportedManifest intentionally accepts ordinary Codex skill folders.
+// The package name is an internal identifier, not a reason to reject a user's
+// skill just because its directory, frontmatter and optional manifest disagree.
+func normalizeImportedManifest(manifest *importedManifest, skillMd []byte, prefix string) error {
+	candidates := []string{
+		strings.TrimSpace(manifest.Name),
+		strings.TrimSpace(manifest.Slug),
+		declaredSkillName(skillMd),
+		strings.TrimSpace(prefix),
+	}
+	for _, candidate := range candidates {
+		if skillSlugPattern.MatchString(candidate) {
+			manifest.Name = candidate
+			manifest.Slug = candidate
+			break
+		}
+	}
+	if !skillSlugPattern.MatchString(manifest.Name) {
+		return fmt.Errorf("技能需要一个 kebab-case 标识；请在 SKILL.md 的 name 或 manifest.json 的 name 中填写")
+	}
+	manifest.Version = strings.TrimSpace(manifest.Version)
+	if manifest.Version == "" {
+		manifest.Version = "0.1.0"
+	}
+	manifest.DisplayName = strings.TrimSpace(manifest.DisplayName)
+	if manifest.DisplayName == "" {
+		manifest.DisplayName = manifest.Name
+	}
+	manifest.Category = strings.TrimSpace(manifest.Category)
+	if manifest.Category == "" {
+		manifest.Category = model.DefaultSkillCategoryName
+	}
+	if len(manifest.Tags) == 0 {
+		manifest.Tags = []string{"通用能力"}
+	}
+	manifest.Icon = strings.TrimSpace(manifest.Icon)
+	if err := validateSkillIcon(manifest.Icon); err != nil {
+		return err
+	}
+	return nil
+}
+
+func normalizedManifestJSON(raw []byte, exists bool, manifest importedManifest) ([]byte, error) {
+	document := map[string]interface{}{}
+	if exists {
+		if err := json.Unmarshal(raw, &document); err != nil {
+			return nil, fmt.Errorf("manifest.json 不是有效 JSON：%w", err)
+		}
+	}
+	document["schemaVersion"] = 1
+	document["name"] = manifest.Name
+	document["slug"] = manifest.Slug
+	document["version"] = manifest.Version
+	document["displayName"] = manifest.DisplayName
+	document["category"] = manifest.Category
+	document["description"] = manifest.Description
+	document["summary"] = manifest.Summary
+	document["author"] = manifest.Author
+	document["icon"] = manifest.Icon
+	document["tags"] = manifest.Tags
+	document["files"] = manifest.Files
+	return json.Marshal(document)
 }
 
 func validateSkillArchive(raw []byte) (*validatedSkillPackage, error) {
@@ -179,58 +244,50 @@ func validateSkillArchive(raw []byte) (*validatedSkillPackage, error) {
 			sources[i].path = strings.TrimPrefix(sources[i].path, prefix+"/")
 		}
 	}
-	sort.Slice(sources, func(i, j int) bool { return sources[i].path < sources[j].path })
-	files := make([]skillPackageFile, 0, len(sources))
 	contents := map[string][]byte{}
 	for _, item := range sources {
 		if _, duplicate := contents[item.path]; duplicate {
 			return nil, fmt.Errorf("技能包标准化后包含重复路径：%s", item.path)
 		}
 		contents[item.path] = item.content
-		files = append(files, skillPackageFile{Path: item.path, ContentBase64: base64.StdEncoding.EncodeToString(item.content)})
 	}
 	skillMd, hasSkillMd := contents["SKILL.md"]
 	manifestRaw, hasManifest := contents["manifest.json"]
-	if !hasSkillMd || !hasManifest {
-		return nil, fmt.Errorf("技能包根目录必须包含 UTF-8 SKILL.md 与 manifest.json")
+	if !hasSkillMd {
+		return nil, fmt.Errorf("技能包根目录必须包含 UTF-8 SKILL.md")
 	}
-	if !utf8.Valid(skillMd) || !utf8.Valid(manifestRaw) {
-		return nil, fmt.Errorf("SKILL.md 与 manifest.json 必须使用 UTF-8")
+	if !utf8.Valid(skillMd) {
+		return nil, fmt.Errorf("SKILL.md 必须使用 UTF-8")
 	}
 	var manifest importedManifest
-	if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
-		return nil, fmt.Errorf("manifest.json 不是有效 JSON：%w", err)
-	}
-	if !skillSlugPattern.MatchString(manifest.Name) || manifest.Version == "" {
-		return nil, fmt.Errorf("manifest.json 必须声明 kebab-case name 和 version")
-	}
-	if manifest.Slug != "" && manifest.Slug != manifest.Name {
-		return nil, fmt.Errorf("manifest.json 的 name 与 slug 不一致")
-	}
-	if declared := declaredSkillName(skillMd); declared != manifest.Name {
-		return nil, fmt.Errorf("SKILL.md 的 name 必须与 manifest.json 一致")
-	}
-	if prefix != "" && prefix != manifest.Name {
-		return nil, fmt.Errorf("技能包目录名必须与 name 一致")
-	}
-	if len(manifest.Files) == 0 {
-		return nil, fmt.Errorf("manifest.json 必须声明完整 files 清单")
-	}
-	declared := map[string]struct{}{}
-	for _, item := range manifest.Files {
-		safe, err := cleanSkillArchivePath(item)
-		if err != nil {
-			return nil, err
+	if hasManifest {
+		if !utf8.Valid(manifestRaw) {
+			return nil, fmt.Errorf("manifest.json 必须使用 UTF-8")
 		}
-		declared[safe] = struct{}{}
-	}
-	if len(declared) != len(files) {
-		return nil, fmt.Errorf("manifest.json 的 files 清单必须与技能包文件完全一致")
-	}
-	for _, file := range files {
-		if _, ok := declared[file.Path]; !ok {
-			return nil, fmt.Errorf("manifest.json 缺少文件：%s", file.Path)
+		if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
+			return nil, fmt.Errorf("manifest.json 不是有效 JSON：%w", err)
 		}
+	}
+	if err := normalizeImportedManifest(&manifest, skillMd, prefix); err != nil {
+		return nil, err
+	}
+	paths := make([]string, 0, len(contents)+1)
+	for filePath := range contents {
+		if filePath != "manifest.json" {
+			paths = append(paths, filePath)
+		}
+	}
+	paths = append(paths, "manifest.json")
+	sort.Strings(paths)
+	manifest.Files = paths
+	normalizedManifest, err := normalizedManifestJSON(manifestRaw, hasManifest, manifest)
+	if err != nil {
+		return nil, err
+	}
+	contents["manifest.json"] = normalizedManifest
+	files := make([]skillPackageFile, 0, len(paths))
+	for _, filePath := range paths {
+		files = append(files, skillPackageFile{Path: filePath, ContentBase64: base64.StdEncoding.EncodeToString(contents[filePath])})
 	}
 	hash := sha256.New()
 	for _, file := range files {
@@ -280,15 +337,17 @@ func ImportSkillRelease(c *gin.Context) {
 	if operator == "" {
 		operator = "root"
 	}
-	if err := model.ValidatePrimarySkillCategory(pkg.manifest.Category); err != nil {
+	category, err := model.EnsurePrimarySkillCategory(pkg.manifest.Category)
+	if err != nil {
 		skillError(c, http.StatusBadRequest, err)
 		return
 	}
+	pkg.manifest.Category = category
 	var skill model.Skill
 	err = model.DB.Where("name = ?", pkg.manifest.Name).First(&skill).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		tags, _ := json.Marshal(pkg.manifest.Tags)
-		skill = model.Skill{Name: pkg.manifest.Name, DisplayName: pkg.manifest.DisplayName, Category: pkg.manifest.Category, Description: pkg.manifest.Description, Scenario: pkg.manifest.Summary, Submitter: operator, Tags: tags, Version: pkg.manifest.Version, Status: 0, Content: pkg.body, Body: pkg.body, Assets: pkg.bundle}
+		skill = model.Skill{Name: pkg.manifest.Name, DisplayName: pkg.manifest.DisplayName, Icon: pkg.manifest.Icon, Category: pkg.manifest.Category, Description: pkg.manifest.Description, Scenario: pkg.manifest.Summary, Submitter: operator, Tags: tags, Version: pkg.manifest.Version, Status: 0, Content: pkg.body, Body: pkg.body, Assets: pkg.bundle}
 		if skill.DisplayName == "" {
 			skill.DisplayName = skill.Name
 		}
@@ -303,6 +362,43 @@ func ImportSkillRelease(c *gin.Context) {
 	} else if err != nil {
 		skillError(c, http.StatusInternalServerError, err)
 		return
+	} else if skill.IsDeleted {
+		// Deleting a skill from management means an administrator expects a clean
+		// re-import to work. Keep the stable skill ID for relations, but discard
+		// its hidden release history so the same initial version can be imported.
+		tags, _ := json.Marshal(pkg.manifest.Tags)
+		if err = model.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Where("skill_id = ?", skill.Id).Delete(&model.SkillRelease{}).Error; err != nil {
+				return err
+			}
+			return tx.Model(&model.Skill{}).Where("id = ?", skill.Id).Updates(map[string]interface{}{
+				"display_name":         pkg.manifest.DisplayName,
+				"category":             pkg.manifest.Category,
+				"description":          pkg.manifest.Description,
+				"scenario":             pkg.manifest.Summary,
+				"submitter":            operator,
+				"tags":                 tags,
+				"version":              pkg.manifest.Version,
+				"status":               0,
+				"is_deleted":           false,
+				"content":              pkg.body,
+				"body":                 pkg.body,
+				"assets":               pkg.bundle,
+				"published_release_id": nil,
+			}).Error
+		}); err != nil {
+			skillError(c, http.StatusInternalServerError, err)
+			return
+		}
+		skill.DisplayName = pkg.manifest.DisplayName
+		skill.Category = pkg.manifest.Category
+		skill.IsDeleted = false
+		skill.Status = 0
+		skill.PublishedReleaseId = nil
+		if err = model.SyncPrimarySkillCategory(skill.Id, skill.Category); err != nil {
+			skillError(c, http.StatusInternalServerError, err)
+			return
+		}
 	}
 	var existingRelease model.SkillRelease
 	if err = model.DB.Where("skill_id = ? AND version = ?", skill.Id, pkg.manifest.Version).First(&existingRelease).Error; err == nil {
@@ -312,9 +408,9 @@ func ImportSkillRelease(c *gin.Context) {
 		skillError(c, http.StatusInternalServerError, err)
 		return
 	}
-	release := model.SkillRelease{SkillId: skill.Id, Version: pkg.manifest.Version, State: model.SkillReleaseDraft, Package: pkg.bundle, Body: pkg.body, Sha256: pkg.sha256, FileCount: pkg.fileCount, SizeBytes: pkg.sizeBytes, Changelog: changelog, CreatedBy: operator}
+	release := model.SkillRelease{SkillId: skill.Id, Version: pkg.manifest.Version, State: model.SkillReleaseUnpublished, Package: pkg.bundle, Body: pkg.body, Sha256: pkg.sha256, FileCount: pkg.fileCount, SizeBytes: pkg.sizeBytes, Changelog: changelog, CreatedBy: operator}
 	if err = model.DB.Create(&release).Error; err != nil {
-		skillError(c, http.StatusConflict, fmt.Errorf("无法创建草稿版本：%w", err))
+		skillError(c, http.StatusConflict, fmt.Errorf("无法创建未上架版本：%w", err))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"skill": skillToResponse(skill), "release": release, "files": json.RawMessage(pkg.bundle)}})
@@ -391,19 +487,17 @@ func publishSkillRelease(c *gin.Context, rollback bool) {
 		skillError(c, http.StatusNotFound, err)
 		return
 	}
-	if !rollback && releaseForMetadata.State == model.SkillReleaseDraft && releaseForMetadata.ValidatedAt == 0 {
-		skillError(c, http.StatusBadRequest, fmt.Errorf("草稿尚未校验，请先校验完整文件结构与内容"))
-		return
-	}
 	metadata, err := metadataFromSkillPackage(releaseForMetadata.Package)
 	if err != nil {
 		skillError(c, http.StatusBadRequest, fmt.Errorf("版本元数据无效：%w", err))
 		return
 	}
-	if err := model.ValidatePrimarySkillCategory(metadata.Category); err != nil {
+	category, err := model.EnsurePrimarySkillCategory(metadata.Category)
+	if err != nil {
 		skillError(c, http.StatusBadRequest, err)
 		return
 	}
+	metadata.Category = category
 	tags, err := json.Marshal(metadata.Tags)
 	if err != nil {
 		skillError(c, http.StatusInternalServerError, err)
@@ -446,6 +540,9 @@ func publishSkillRelease(c *gin.Context, rollback bool) {
 		}
 		if metadata.Summary != "" {
 			skill.Scenario = metadata.Summary
+		}
+		if metadata.Icon != "" {
+			skill.Icon = metadata.Icon
 		}
 		skill.Tags = tags
 		return tx.Save(&skill).Error

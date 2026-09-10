@@ -14,6 +14,7 @@ import (
 const (
 	SkillCategoryTypePackage  = "skill_package"
 	SkillCategoryTypeFunction = "function_category"
+	DefaultSkillCategoryName  = "通用类"
 )
 
 type SkillCategoryType struct {
@@ -211,10 +212,74 @@ func migrateSkillCategorySchema() error {
 	if err := ensureDefaultSkillCategoryTypes(); err != nil {
 		return err
 	}
+	if err := ensureDefaultPrimarySkillCategory(); err != nil {
+		return err
+	}
 	if err := mergeDuplicateSkillCategories(); err != nil {
 		return err
 	}
+	if err := normalizePrimarySkillCategoryRelations(); err != nil {
+		return err
+	}
 	return hideRetiredLegacySkillCategories()
+}
+
+func ensureDefaultPrimarySkillCategory() error {
+	var typ SkillCategoryType
+	if err := DB.Where("code = ? AND status = ?", SkillCategoryTypePackage, 1).First(&typ).Error; err != nil {
+		return err
+	}
+	now := time.Now().Unix()
+	category := SkillCategory{TypeId: typ.Id, Code: DefaultSkillCategoryName, Name: DefaultSkillCategoryName, Status: 1, CreatedAt: now, UpdatedAt: now}
+	return DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "type_id"}, {Name: "code"}},
+		DoUpdates: clause.Assignments(map[string]interface{}{"name": DefaultSkillCategoryName, "status": 1, "is_deleted": false, "updated_at": now}),
+	}).Create(&category).Error
+}
+
+// normalizePrimarySkillCategoryRelations repairs older multi-category data.
+// A skill package has exactly one primary category: its legacy display value
+// when valid, otherwise the default “通用类”.
+func normalizePrimarySkillCategoryRelations() error {
+	var typ SkillCategoryType
+	if err := DB.Where("code = ?", SkillCategoryTypePackage).First(&typ).Error; err != nil {
+		return err
+	}
+	var fallback SkillCategory
+	if err := DB.Where("type_id = ? AND code = ? AND status = ? AND is_deleted = ?", typ.Id, DefaultSkillCategoryName, 1, false).First(&fallback).Error; err != nil {
+		return err
+	}
+	var skills []Skill
+	if err := DB.Where("is_deleted = ?", false).Find(&skills).Error; err != nil {
+		return err
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		sub := tx.Table("skill_categories").Select("id").Where("type_id = ?", typ.Id)
+		for _, skill := range skills {
+			target := fallback
+			name := strings.TrimSpace(skill.Category)
+			if name != "" {
+				var selected SkillCategory
+				if err := tx.Where("type_id = ? AND (name = ? OR code = ?) AND status = ? AND is_deleted = ?", typ.Id, name, name, 1, false).First(&selected).Error; err == nil {
+					target = selected
+				} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+					return err
+				}
+			}
+			if err := tx.Where("skill_id = ? AND category_id IN (?)", skill.Id, sub).Delete(&SkillCategoryRelation{}).Error; err != nil {
+				return err
+			}
+			if err := appendSkillCategoriesTx(tx, []int{skill.Id}, []uint64{target.Id}); err != nil {
+				return err
+			}
+			if skill.Category != target.Name {
+				if err := tx.Model(&Skill{}).Where("id = ?", skill.Id).Update("category", target.Name).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 func mergeDuplicateSkillCategories() error {
@@ -347,7 +412,7 @@ func ListSkillCategoriesByType(typeCode string, includeDisabled bool) ([]SkillCa
 		Select("c.id, c.type_id, t.code AS type_code, t.name AS type_name, c.code, c.name, c.description, c.status, c.sort_order, COUNT(s.id) AS skill_count").
 		Joins("JOIN skill_category_types AS t ON t.id = c.type_id").
 		Joins("LEFT JOIN skill_category_relations AS r ON r.category_id = c.id").
-		Joins("LEFT JOIN skills AS s ON s.id = r.skill_id AND s.is_deleted = ? AND s.status = ?", false, 1).
+		Joins("LEFT JOIN skills AS s ON s.id = r.skill_id AND s.is_deleted = ?", false).
 		Where("c.is_deleted = ?", false)
 	if typeCode != "" {
 		query = query.Where("t.code = ?", typeCode)
@@ -368,7 +433,7 @@ func CountSkillCategoryRelations(categoryId uint64) (int64, error) {
 	}
 	var count int64
 	err := DB.Table("skill_category_relations AS r").
-		Joins("JOIN skills AS s ON s.id = r.skill_id AND s.is_deleted = ? AND s.status = ?", false, 1).
+		Joins("JOIN skills AS s ON s.id = r.skill_id AND s.is_deleted = ?", false).
 		Where("r.category_id = ?", categoryId).
 		Count(&count).Error
 	return count, err
@@ -481,12 +546,12 @@ func SyncPrimarySkillCategory(skillId int, categoryName string) error {
 			return err
 		}
 		categoryName = strings.TrimSpace(categoryName)
+		if categoryName == "" {
+			categoryName = DefaultSkillCategoryName
+		}
 		sub := tx.Table("skill_categories AS c").Select("c.id").Where("c.type_id = ?", typ.Id)
 		if err := tx.Where("skill_id = ? AND category_id IN (?)", skillId, sub).Delete(&SkillCategoryRelation{}).Error; err != nil {
 			return err
-		}
-		if categoryName == "" {
-			return nil
 		}
 		var category SkillCategory
 		if err := tx.Where("type_id = ? AND (name = ? OR code = ?) AND status = ? AND is_deleted = ?", typ.Id, categoryName, categoryName, 1, false).First(&category).Error; err != nil {
@@ -520,9 +585,48 @@ func ValidatePrimarySkillCategory(categoryName string) error {
 	return nil
 }
 
+// EnsurePrimarySkillCategory makes package import self-service: a skill's
+// primary category is created on first use instead of blocking the upload.
+func EnsurePrimarySkillCategory(categoryName string) (string, error) {
+	categoryName = strings.TrimSpace(categoryName)
+	if categoryName == "" {
+		categoryName = DefaultSkillCategoryName
+	}
+	if err := ValidatePrimarySkillCategory(categoryName); err == nil {
+		return categoryName, nil
+	}
+	var typ SkillCategoryType
+	if err := DB.Where("code = ? AND status = ?", SkillCategoryTypePackage, 1).First(&typ).Error; err != nil {
+		return "", err
+	}
+	var category SkillCategory
+	err := DB.Where("type_id = ? AND (name = ? OR code = ?)", typ.Id, categoryName, categoryName).First(&category).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		category = SkillCategory{TypeId: typ.Id, Code: categoryName, Name: categoryName, Status: 1}
+		if err := DB.Create(&category).Error; err != nil {
+			return "", err
+		}
+		return categoryName, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if err := DB.Model(&SkillCategory{}).Where("id = ?", category.Id).Updates(map[string]interface{}{"status": 1, "is_deleted": false}).Error; err != nil {
+		return "", err
+	}
+	return categoryName, nil
+}
+
 func DeleteSkillCategory(id uint64) error {
 	if id == 0 {
 		return errors.New("id is required")
+	}
+	var category SkillCategory
+	if err := DB.First(&category, id).Error; err != nil {
+		return err
+	}
+	if category.Name == DefaultSkillCategoryName || category.Code == DefaultSkillCategoryName {
+		return errors.New("通用类是默认分类，不能删除")
 	}
 	count, err := CountSkillCategoryRelations(id)
 	if err != nil {
@@ -532,6 +636,68 @@ func DeleteSkillCategory(id uint64) error {
 		return errors.New("分类下已绑定 skill，请先移除分类下的 skill 后再删除")
 	}
 	return DB.Model(&SkillCategory{}).Where("id = ?", id).Update("is_deleted", true).Error
+}
+
+type SkillCategorySkillView struct {
+	Id          int    `json:"id"`
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Version     string `json:"version"`
+	Status      int    `json:"status"`
+}
+
+func ListSkillsForCategory(categoryId uint64) ([]SkillCategorySkillView, error) {
+	var skills []SkillCategorySkillView
+	err := DB.Table("skills AS s").
+		Select("s.id, s.name, s.display_name, s.version, s.status").
+		Joins("JOIN skill_category_relations AS r ON r.skill_id = s.id").
+		Where("r.category_id = ? AND s.is_deleted = ?", categoryId, false).
+		Order("s.display_name ASC, s.id ASC").
+		Find(&skills).Error
+	return skills, err
+}
+
+// RemoveSkillFromCategory moves an associated package skill to the default
+// category so every skill remains classified after an administrator removes it.
+func RemoveSkillFromCategory(categoryId uint64, skillId int) error {
+	if categoryId == 0 || skillId == 0 {
+		return errors.New("category_id and skill_id are required")
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var category SkillCategory
+		if err := tx.First(&category, categoryId).Error; err != nil {
+			return err
+		}
+		var typ SkillCategoryType
+		if err := tx.First(&typ, category.TypeId).Error; err != nil {
+			return err
+		}
+		if typ.Code != SkillCategoryTypePackage {
+			return errors.New("只能移除技能包主分类")
+		}
+		if category.Name == DefaultSkillCategoryName || category.Code == DefaultSkillCategoryName {
+			return errors.New("通用类是默认分类，不能移除其中的技能")
+		}
+		var fallback SkillCategory
+		if err := tx.Where("type_id = ? AND code = ? AND status = ? AND is_deleted = ?", typ.Id, DefaultSkillCategoryName, 1, false).First(&fallback).Error; err != nil {
+			return err
+		}
+		var relationCount int64
+		if err := tx.Model(&SkillCategoryRelation{}).Where("skill_id = ? AND category_id = ?", skillId, categoryId).Count(&relationCount).Error; err != nil {
+			return err
+		}
+		if relationCount == 0 {
+			return errors.New("该技能不属于此分类")
+		}
+		sub := tx.Table("skill_categories").Select("id").Where("type_id = ?", typ.Id)
+		if err := tx.Where("skill_id = ? AND category_id IN (?)", skillId, sub).Delete(&SkillCategoryRelation{}).Error; err != nil {
+			return err
+		}
+		if err := appendSkillCategoriesTx(tx, []int{skillId}, []uint64{fallback.Id}); err != nil {
+			return err
+		}
+		return tx.Model(&Skill{}).Where("id = ?", skillId).Update("category", fallback.Name).Error
+	})
 }
 
 func ListSkillCategoriesForSkill(skillId int) ([]SkillCategoryView, error) {

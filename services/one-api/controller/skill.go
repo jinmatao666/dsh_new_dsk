@@ -15,25 +15,25 @@ import (
 )
 
 type skillResponse struct {
-	Id                int                       `json:"id"`
-	Name              string                    `json:"name"`
-	DisplayName       string                    `json:"display_name"`
-	Icon              string                    `json:"icon"`
-	Category          string                    `json:"category"`
-	Description       string                    `json:"description"`
-	Scenario          string                    `json:"scenario"`
-	Submitter         string                    `json:"submitter"`
-	Tags              any                       `json:"tags"`
-	Downloads         int                       `json:"downloads"`
-	Version           string                    `json:"version"`
-	Status            int                       `json:"status"`
-	IsDeleted         bool                      `json:"is_deleted"`
-	CreatedAt         int64                     `json:"created_at"`
-	UpdatedAt         int64                     `json:"updated_at"`
-	BodyUpdatedAt     int64                     `json:"body_updated_at"`
-	AssetsUpdatedAt   int64                     `json:"assets_updated_at"`
-	DraftReleaseCount int                       `json:"draft_release_count,omitempty"`
-	Categories        []model.SkillCategoryView `json:"categories,omitempty"`
+	Id                      int                       `json:"id"`
+	Name                    string                    `json:"name"`
+	DisplayName             string                    `json:"display_name"`
+	Icon                    string                    `json:"icon"`
+	Category                string                    `json:"category"`
+	Description             string                    `json:"description"`
+	Scenario                string                    `json:"scenario"`
+	Submitter               string                    `json:"submitter"`
+	Tags                    any                       `json:"tags"`
+	Downloads               int                       `json:"downloads"`
+	Version                 string                    `json:"version"`
+	Status                  int                       `json:"status"`
+	IsDeleted               bool                      `json:"is_deleted"`
+	CreatedAt               int64                     `json:"created_at"`
+	UpdatedAt               int64                     `json:"updated_at"`
+	BodyUpdatedAt           int64                     `json:"body_updated_at"`
+	AssetsUpdatedAt         int64                     `json:"assets_updated_at"`
+	UnpublishedReleaseCount int                       `json:"unpublished_release_count,omitempty"`
+	Categories              []model.SkillCategoryView `json:"categories,omitempty"`
 }
 
 func skillToResponse(s model.Skill, categories ...[]model.SkillCategoryView) skillResponse {
@@ -61,6 +61,26 @@ func skillToResponse(s model.Skill, categories ...[]model.SkillCategoryView) ski
 		AssetsUpdatedAt: s.AssetsUpdatedAt,
 		Categories:      cats,
 	}
+}
+
+// normalizeSkillTags prevents a later metadata save from clearing the skill's
+// capability label when the client sends an empty or malformed tag list.
+func normalizeSkillTags(raw json.RawMessage) json.RawMessage {
+	var tags []string
+	if err := json.Unmarshal(raw, &tags); err == nil {
+		clean := make([]string, 0, len(tags))
+		for _, tag := range tags {
+			if tag = strings.TrimSpace(tag); tag != "" {
+				clean = append(clean, tag)
+			}
+		}
+		if len(clean) > 0 {
+			if normalized, err := json.Marshal(clean); err == nil {
+				return normalized
+			}
+		}
+	}
+	return json.RawMessage(`["通用能力"]`)
 }
 
 func validateSkillIcon(icon string) error {
@@ -346,7 +366,7 @@ func CreateSkill(c *gin.Context) {
 		_ = json.Unmarshal(v, &skill.Status)
 	}
 	if v, ok := payload["tags"]; ok {
-		skill.Tags = v
+		skill.Tags = normalizeSkillTags(v)
 	}
 
 	now := time.Now().Unix()
@@ -395,10 +415,12 @@ func CreateSkill(c *gin.Context) {
 		})
 		return
 	}
-	if err := model.ValidatePrimarySkillCategory(skill.Category); err != nil {
+	category, err := model.EnsurePrimarySkillCategory(skill.Category)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	skill.Category = category
 
 	// 重名检测:无论对方是正常还是已软删,都返回 409 让前端弹 [更新]/[替换]/[取消]
 	if existing, err := model.GetSkillByNameAny(skill.Name); err == nil && existing != nil {
@@ -501,7 +523,7 @@ func UpdateSkill(c *gin.Context) {
 		_ = json.Unmarshal(v, &existing.Status)
 	}
 	if v, ok := payload["tags"]; ok {
-		existing.Tags = v
+		existing.Tags = normalizeSkillTags(v)
 	}
 	if v, ok := payload["content"]; ok {
 		_ = json.Unmarshal(v, &existing.Content)
@@ -533,10 +555,12 @@ func UpdateSkill(c *gin.Context) {
 	}
 
 	if _, categoryChanged := payload["category"]; categoryChanged {
-		if err := model.ValidatePrimarySkillCategory(existing.Category); err != nil {
+		category, err := model.EnsurePrimarySkillCategory(existing.Category)
+		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 			return
 		}
+		existing.Category = category
 	}
 
 	existing.Id = id
@@ -863,13 +887,13 @@ func AdminListSkills(c *gin.Context) {
 	for _, item := range items {
 		ids = append(ids, item.Id)
 	}
-	draftCounts, err := model.CountDraftSkillReleases(ids)
+	unpublishedCounts, err := model.CountUnpublishedSkillReleases(ids)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 	for i := range items {
-		items[i].DraftReleaseCount = draftCounts[items[i].Id]
+		items[i].UnpublishedReleaseCount = unpublishedCounts[items[i].Id]
 	}
 
 	totalPages := int(math.Ceil(float64(total) / float64(perPage)))

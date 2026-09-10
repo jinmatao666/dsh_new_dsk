@@ -17,6 +17,7 @@ fn main() {
             "install_marketplace_skill",
             "uninstall_marketplace_skill",
             "install_custom_skill",
+            "install_custom_skill_directory",
             "uninstall_custom_skill",
             "list_custom_skills",
             "read_analysis_view",

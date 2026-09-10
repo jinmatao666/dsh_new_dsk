@@ -73,7 +73,7 @@ var modules = []ModuleSpec{
 		{Name: "org_audit_logs", TimeField: "created_at", TimeKind: TimeKindDateTime, Primary: true},
 		{Name: "org_timed_quotas", TimeField: "created_at", TimeKind: TimeKindDateTime, Primary: true},
 	}},
-	{Key: "skills", Name: "技能广场", Tables: []TableSpec{
+	{Key: "skills", Name: "技能市场", Tables: []TableSpec{
 		{Name: "skills", TimeField: "created_at", TimeKind: TimeKindUnixSec, Primary: true},
 		{Name: "skill_category_types", TimeKind: TimeKindNone},
 		{Name: "skill_categories", TimeKind: TimeKindNone},

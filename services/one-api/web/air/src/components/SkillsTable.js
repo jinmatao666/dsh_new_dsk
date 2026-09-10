@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Modal, Table, Tag, Tooltip, Tree } from '@douyinfe/semi-ui';
+import { Modal, Table, Tag, Tooltip } from '@douyinfe/semi-ui';
 import { Bot, ChartColumn, Compass, FileText, Map, Zap } from 'lucide-react';
 import SkillBrowseDrawer from './SkillBrowseDrawer';
 import { importSkillFolder, zipSkillFolder } from './skillFolderImport';
@@ -18,6 +18,17 @@ const DEFAULT_SKILL_ICONS = [
 ];
 
 const splitLines = text => String(text || '').split('\n').map(line => line.trim()).filter(Boolean);
+const tagsToLines = tags => {
+  if (Array.isArray(tags)) return tags.filter(Boolean).join('\n');
+  if (typeof tags === 'string') {
+    try {
+      const parsed = JSON.parse(tags);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean).join('\n');
+    } catch { /* keep the original text as a safe fallback */ }
+    return tags.trim();
+  }
+  return '';
+};
 const compactTime = value => {
   if (!value) return { display: '-', full: '-' };
   const date = new Date(Number(value) * 1000);
@@ -25,11 +36,6 @@ const compactTime = value => {
   const display = `${String(date.getFullYear()).slice(-2)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   const full = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   return { display, full };
-};
-const releaseFileTree = files => {
-  const root = { label: '技能包/', key: 'root', children: [] }; const folders = new Map([['', root]]);
-  for (const item of files) { const parts = String(item.path || '').split('/').filter(Boolean); const leaf = parts.pop(); let parent = root; let current = ''; for (const part of parts) { current = current ? `${current}/${part}` : part; if (!folders.has(current)) { const folder = { label: `${part}/`, key: `dir:${current}`, children: [] }; folders.set(current, folder); parent.children.push(folder); } parent = folders.get(current); } if (leaf) parent.children.push({ label: leaf, key: `file:${item.path}`, isLeaf: true }); }
-  return [root];
 };
 const SkillIcon = ({ icon, small = false }) => {
   const preset = DEFAULT_SKILL_ICONS.find(item => item.value === icon) || DEFAULT_SKILL_ICONS[4];
@@ -73,7 +79,7 @@ const EMPTY_FORM = {
   status: '0',
   summary: '',
   description: '',
-  capabilities: '',
+  capabilities: '通用能力',
   body: '',
   icon: 'glyph:bot'
 };
@@ -89,6 +95,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   // 从文件夹导入的产物；null 表示本次编辑未导入
   const [imported, setImported] = useState(null);
   const [importDialogVisible, setImportDialogVisible] = useState(false);
+  const [importSuccess, setImportSuccess] = useState(null);
   const folderInputRef = useRef(null);
   const zipInputRef = useRef(null);
   const importFolderInputRef = useRef(null);
@@ -126,7 +133,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       status: String(skill.status ?? 0),
       summary: skill.summary || '',
       description: skill.description || '',
-      capabilities: '',
+      capabilities: tagsToLines(skill.tags) || '通用能力',
       body: skill.body || ''
     } : { ...EMPTY_FORM });
     setEditor({ base: skill || null });
@@ -156,8 +163,10 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       const response = await API.post('/api/skill/admin/import', data);
       const result = response.data?.data;
       await loadSkills();
-      showSuccess(`已创建 ${result?.release?.version || ''} 草稿，请在版本列表校验并发布`);
-      if (result?.skill?.id) await openReleases(result.skill);
+      setImportSuccess({
+        displayName: result?.skill?.display_name || result?.skill?.name || '技能',
+        version: result?.release?.version || ''
+      });
     } catch (error) { showError(error.response?.data?.message || error.message || '导入技能包失败'); }
   };
   const importFolderFiles = async (files) => {
@@ -192,16 +201,16 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     try { const response = await API.get(`/api/skill/${skill.id}/releases`); setReleases({ skill, items: response.data?.data || [], files: [], selectedFilePath: '' }); }
     catch (error) { showError(error.response?.data?.message || error.message || '加载版本失败'); }
   };
+  const closeReleases = () => setReleases({ skill: null, items: [], files: [], selectedFilePath: '' });
   const releaseAction = async (release, action) => {
     const skill = releases.skill; if (!skill) return;
     try {
       const response = await API.post(`/api/skill/${skill.id}/releases/${release.id}/${action}`);
-      await loadSkills(); await openReleases(skill);
-      if (action === 'validate') {
-        const files = response.data?.data?.files || [];
-        setReleases(current => ({ ...current, files, selectedFilePath: files.find(file => file.path === 'SKILL.md')?.path || files[0]?.path || '' }));
-      }
-      showSuccess(action === 'validate' ? '版本校验通过，请核对完整文件后发布' : action === 'publish' ? '版本已发布' : '已回滚到该版本');
+      const files = action === 'validate' && Array.isArray(response.data?.data?.files) ? response.data.data.files : [];
+      const listResponse = await API.get(`/api/skill/${skill.id}/releases`);
+      setReleases({ skill, items: listResponse.data?.data || [], files, selectedFilePath: files.find(file => file.path === 'SKILL.md')?.path || files[0]?.path || '' });
+      await loadSkills();
+      showSuccess(action === 'validate' ? '已加载完整文件结构与内容' : action === 'publish' ? '版本已上架' : '已回滚并上架该版本');
     } catch (error) { showError(error.response?.data?.message || error.message || '版本操作失败'); }
   };
 
@@ -231,10 +240,18 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     return items.filter(item => [item.name, item.display_name, item.description, item.category, item.submitter].join(' ').toLowerCase().includes(query));
   }, [items, keyword]);
 
-  const removeSkill = skill => Modal.confirm({ title: `删除技能「${skill.display_name || skill.name}」？`, content: '删除后将不再出现在桌面技能广场。', okType: 'danger', onOk: async () => { await API.delete(`/api/skill/${skill.id}`); await loadSkills(); showSuccess('技能已删除'); } });
+  const removeSkill = skill => Modal.confirm({ title: `删除技能「${skill.display_name || skill.name}」？`, content: '删除后将不再出现在桌面技能市场。', okType: 'danger', onOk: async () => { await API.delete(`/api/skill/${skill.id}`); await loadSkills(); showSuccess('技能已删除'); } });
   const togglePublish = async skill => {
-    if (skill.status !== 1) { await openReleases(skill); return; }
     try {
+      if (skill.status !== 1) {
+        const response = await API.get(`/api/skill/${skill.id}/releases`);
+        const target = (response.data?.data || []).find(release => ['unpublished', 'draft'].includes(release.state));
+        if (!target) { showError('未找到可上架的技能版本'); return; }
+        await API.post(`/api/skill/${skill.id}/releases/${target.id}/publish`);
+        await loadSkills();
+        showSuccess('技能已上架，桌面端刷新后可见');
+        return;
+      }
       await API.post(`/api/skill/${skill.id}/unpublish`);
       await loadSkills();
       showSuccess('技能已下架，桌面端刷新后将隐藏');
@@ -252,7 +269,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     },
     { title: '分类', dataIndex: 'category', width: 96, render: value => <Tooltip content={value || '-'}><Tag color='blue' size='small'>{value}</Tag></Tooltip> },
     {
-      title: '主要能力', width: 160, render: (_, record) => {
+      title: '标签', width: 160, render: (_, record) => {
         const capabilities = Array.isArray(record.tags) ? record.tags : [];
         if (capabilities.length === 0) return null;
         return (
@@ -275,15 +292,15 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     { title: '上传人', dataIndex: 'submitter', width: 90, render: value => <Tooltip content={value || 'root'}><span className='skill-uploader'>{value || 'root'}</span></Tooltip> },
     { title: '上传时间', dataIndex: 'created_at', width: 118, render: value => { const time = compactTime(value); return <span className='skill-upload-time' title={time.full}>{time.display}</span>; } },
     { title: '安装量', dataIndex: 'downloads', width: 62, render: value => { const downloads = Number(value || 0); return <Tooltip content={`安装量：${downloads}`}><span className='skill-install-count'>{downloads}</span></Tooltip>; } },
-    { title: '状态', width: 76, render: (_, record) => record.draft_release_count > 0
-      ? <div className='skill-status-stack'><Tag color='orange' size='small'>草稿 {record.draft_release_count}</Tag>{record.status === 1 && <small>当前版本已上架</small>}</div>
+    { title: '状态', width: 100, render: (_, record) => record.unpublished_release_count > 0
+      ? <div className='skill-status-stack'><Tag color='orange' size='small'>{record.status === 1 ? '待更新' : '未上架'}</Tag>{record.status === 1 && <small>当前版本已上架</small>}</div>
       : <Tag color={STATUS_COLORS[record.status] || 'grey'} size='small'>{record.status === 1 ? STATUS_LABELS[record.status] : '未发布'}</Tag> },
     {
-      title: '操作', width: 134, render: (_, record) => (
+      title: '操作', width: 160, render: (_, record) => (
         <div className='skill-row-actions'>
-          <button type='button' className='skill-text-action' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</button>
-          <button type='button' className='skill-text-action' onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '发布'}</button>
           <button type='button' className='skill-text-action' onClick={() => openEditor(record)}>编辑</button>
+          <button type='button' className='skill-text-action' onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '上架'}</button>
+          <button type='button' className='skill-text-action' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</button>
           <button type='button' className='skill-text-action danger' onClick={() => removeSkill(record)}>删除</button>
         </div>
       )
@@ -304,10 +321,10 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       category: form.category,
       description: form.description || form.summary,
       scenario: form.summary,
-      tags: splitLines(form.capabilities),
+      tags: splitLines(form.capabilities).length ? splitLines(form.capabilities) : ['通用能力'],
       icon: form.icon,
     };
-    if (!editor.base) { showError('请先通过“导入技能”创建技能草稿'); return; }
+    if (!editor.base) { showError('请先通过“导入技能”创建技能'); return; }
     try {
       if (editor.base) await API.put(`/api/skill/${editor.base.id}`, payload);
       else await API.post('/api/skill/', payload);
@@ -344,6 +361,16 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       <Table columns={columns} dataSource={filteredItems} rowKey='id' tableLayout='fixed' pagination={{ pageSize: 20 }} empty='暂无技能' />
     </section>
     <SkillBrowseDrawer visible={browse.visible} kind='public' id={browse.skill?.id} skill={browse.skill} onClose={() => setBrowse({ visible: false, skill: null })} />
+    {importSuccess && <div className='zjugis-modal-backdrop skill-release-backdrop' onMouseDown={(event) => { if (event.target === event.currentTarget) setImportSuccess(null); }}>
+      <div className='zjugis-modal skill-import-success-dialog' role='dialog' aria-modal='true' aria-label='技能上传完成'>
+        <div className='zjugis-modal-head'>
+          <div><h2>技能上传完成</h2><p>{importSuccess.displayName}{importSuccess.version ? ` · v${importSuccess.version}` : ''}</p></div>
+          <button type='button' onClick={() => setImportSuccess(null)} aria-label='关闭'>×</button>
+        </div>
+        <p className='skill-import-success-copy'>技能包已完整保存，当前状态为<strong>未上架</strong>，不会同步到桌面端。关闭后可在列表中点击“上架”。</p>
+        <div className='zjugis-modal-actions'><button type='button' className='preview-button primary' onClick={() => setImportSuccess(null)}>知道了</button></div>
+      </div>
+    </div>}
     {importDialogVisible && (
       <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) setImportDialogVisible(false); }}>
         <div className='zjugis-modal'>
@@ -352,7 +379,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
             <button type='button' onClick={() => setImportDialogVisible(false)} aria-label='关闭'>×</button>
           </div>
           <div className='skill-import-dialog'>
-            <p>选择导入方式。导入后先生成草稿，完成校验后才会发布到桌面端。</p>
+            <p>选择导入方式。上传成功后技能将保存为未上架状态，管理员可在列表中自行上架到桌面端。</p>
             <div className='skill-import-options'>
               <button type='button' className='skill-import-option' onClick={() => { void chooseSkillFolder(); }}>
                 <span className='skill-import-option-icon'>
@@ -362,7 +389,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
                     <path d='m9 13 3 3 3-3' />
                   </svg>
                 </span>
-                <span className='skill-import-option-copy'><strong>从技能文件夹导入</strong><span>选择包含 SKILL.md 的完整目录，系统自动打包</span></span>
+                <span className='skill-import-option-copy'><strong>从技能文件夹导入</strong><span>选择包含 SKILL.md 的目录，系统会自动补齐技能元数据</span></span>
                 <span className='skill-import-option-arrow'>
                   <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
                     <path d='M5 12h14' />
@@ -378,7 +405,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
                     <path d='M10 12h4' />
                   </svg>
                 </span>
-                <span className='skill-import-option-copy'><strong>从 ZIP 文件导入</strong><span>导入已准备好的完整技能包</span></span>
+                <span className='skill-import-option-copy'><strong>从 ZIP 文件导入</strong><span>导入包含 SKILL.md 的技能包，目录名无需与技能名一致</span></span>
                 <span className='skill-import-option-arrow'>
                   <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
                     <path d='M5 12h14' />
@@ -392,28 +419,35 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
         </div>
       </div>
     )}
-    <Modal visible={Boolean(releases.skill)} title={`版本管理${releases.skill ? `：${releases.skill.display_name || releases.skill.name}` : ''}`} onCancel={() => setReleases({ skill: null, items: [], files: [], selectedFilePath: '' })} footer={null}>
-      <Table rowKey='id' dataSource={releases.items} pagination={false} columns={[
-        { title: '版本', dataIndex: 'version' }, { title: '状态', render: (_, release) => <Tag color={release.state === 'published' ? 'green' : release.state === 'draft' ? (release.validated_at ? 'blue' : 'orange') : 'grey'}>{release.state === 'published' ? '已发布' : release.state === 'draft' ? (release.validated_at ? '已校验' : '草稿') : '已归档'}</Tag> },
-        { title: '摘要', dataIndex: 'sha256', render: value => <span title={value}>{String(value || '').slice(0, 12)}</span> }, { title: '文件', dataIndex: 'file_count' },
-        { title: '操作', render: (_, release) => <div className='skill-row-actions'><button type='button' className='skill-text-action' onClick={() => { void releaseAction(release, 'validate'); }}>{release.validated_at ? '重新校验' : '校验'}</button>{release.state === 'draft' && release.validated_at && <button type='button' className='skill-text-action' onClick={() => { void releaseAction(release, 'publish'); }}>发布</button>}{release.state === 'archived' && <button type='button' className='skill-text-action' onClick={() => { void releaseAction(release, 'rollback'); }}>回滚</button>}</div> }
-      ]} />
-      {releases.files.length > 0 && <div className='skill-validation-result'>
-        <strong>服务端校验后的完整技能包</strong>
-        <p>已校验 {releases.files.length} 个文件。展开结构并查看内容后，再发布到桌面端。</p>
-        <div className='skill-validation-content'>
-          <div className='skill-validation-tree'><Tree treeData={releaseFileTree(releases.files)} defaultExpandAll /></div>
-          <div className='skill-validation-preview'>
-            <select value={releases.selectedFilePath} onChange={event => setReleases(current => ({ ...current, selectedFilePath: event.target.value }))}>
-              {releases.files.map(file => <option key={file.path} value={file.path}>{file.path}</option>)}
-            </select>
-            {selectedReleaseFile && (previewableFile(selectedReleaseFile.path)
-              ? <pre>{decodePackageText(selectedReleaseFile.contentBase64)}</pre>
-              : <div className='skill-binary-file'>二进制文件：{selectedReleaseFile.path}<br />已纳入校验包，不提供文本预览。</div>)}
-          </div>
+    {releases.skill && <div className='zjugis-modal-backdrop skill-release-backdrop' onMouseDown={(event) => { if (event.target === event.currentTarget) closeReleases(); }}>
+      <div className='zjugis-modal wide skill-release-dialog' role='dialog' aria-modal='true' aria-label='版本管理'>
+        <div className='zjugis-modal-head'>
+          <div><h2>版本管理</h2><p>{releases.skill.display_name || releases.skill.name}</p></div>
+          <button type='button' onClick={closeReleases} aria-label='关闭'>×</button>
         </div>
-      </div>}
-    </Modal>
+        <Table rowKey='id' dataSource={releases.items} pagination={false} columns={[
+          { title: '版本', dataIndex: 'version', width: 100 },
+          { title: '状态', width: 104, render: (_, release) => <Tag color={release.state === 'published' ? 'green' : release.state === 'archived' ? 'grey' : 'orange'}>{release.state === 'published' ? '已上架' : release.state === 'archived' ? '已归档' : '未上架'}</Tag> },
+          { title: '文件', dataIndex: 'file_count', width: 88, render: value => `${Number(value || 0)} 个` },
+          { title: '创建时间', dataIndex: 'created_at', width: 150, render: value => <span className='skill-upload-time'>{compactTime(value).display}</span> },
+          { title: '操作', render: (_, release) => <div className='skill-row-actions'><button type='button' className='skill-text-action' onClick={() => { void releaseAction(release, 'validate'); }}>查看文件</button>{['unpublished', 'draft'].includes(release.state) && <button type='button' className='skill-text-action' onClick={() => { void releaseAction(release, 'publish'); }}>上架</button>}{release.state === 'archived' && <button type='button' className='skill-text-action' onClick={() => { void releaseAction(release, 'rollback'); }}>回滚并上架</button>}</div> }
+        ]} />
+        {releases.files.length > 0 && <div className='skill-validation-result'>
+          <strong>服务端校验后的完整技能包</strong>
+          <p>已校验 {releases.files.length} 个文件。请查看文件结构与内容，确认后再发布到桌面端。</p>
+          <div className='skill-validation-content'>
+            <div className='skill-validation-tree' aria-label='文件结构'>
+              {releases.files.map(file => <button type='button' key={file.path} className={`skill-validation-file${file.path === releases.selectedFilePath ? ' active' : ''}`} onClick={() => setReleases(current => ({ ...current, selectedFilePath: file.path }))}>{file.path}</button>)}
+            </div>
+            <div className='skill-validation-preview'>
+              {selectedReleaseFile && (previewableFile(selectedReleaseFile.path)
+                ? <pre>{decodePackageText(selectedReleaseFile.contentBase64)}</pre>
+                : <div className='skill-binary-file'>二进制文件：{selectedReleaseFile.path}<br />已纳入校验包，不提供文本预览。</div>)}
+            </div>
+          </div>
+        </div>}
+      </div>
+    </div>}
     {editor && (
       <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) closeEditor(); }}>
         <div className='zjugis-modal wide'>
@@ -453,7 +487,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
                     <button type='button' className='preview-button' onClick={() => iconInputRef.current?.click()}>上传自定义图标</button>
                     {String(form.icon || '').startsWith('data:image/') && <button type='button' className='skill-text-action' onClick={() => setForm(prev => ({ ...prev, icon: 'glyph:bot' }))}>恢复默认</button>}
                   </div>
-                  <small className='preview-muted'>可选默认图标，或上传 PNG、JPEG、WebP（不超过 400 KB）；保存后桌面端技能广场会同步展示。</small>
+                  <small className='preview-muted'>可选默认图标，或上传 PNG、JPEG、WebP（不超过 400 KB）；保存后桌面端技能市场会同步展示。</small>
                 </div>
               </div>
               <input ref={iconInputRef} hidden type='file' accept='image/png,image/jpeg,image/webp' onChange={chooseIconFile} />

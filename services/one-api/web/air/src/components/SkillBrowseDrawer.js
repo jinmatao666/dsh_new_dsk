@@ -15,8 +15,8 @@ const formatTime = value => {
   return typeof value === 'number' ? timestamp2string(value) : String(value);
 };
 
-const STATUS_LABELS = { published: '已上架', draft: '草稿', disabled: '已下架' };
-const STATUS_COLORS = { published: 'green', draft: 'orange', disabled: 'grey' };
+const STATUS_LABELS = { published: '已上架', unpublished: '未上架', draft: '未上架', disabled: '已下架' };
+const STATUS_COLORS = { published: 'green', unpublished: 'orange', draft: 'orange', disabled: 'grey' };
 
 function treeData(name, files) {
   const root = { label: `${name}/`, key: 'root', icon: <IconFolder />, children: [] };

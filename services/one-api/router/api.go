@@ -507,6 +507,8 @@ func SetApiRouter(router *gin.Engine) {
 			skillCategoryRoute.PUT("/types/:id", controller.UpdateSkillCategoryType)
 			skillCategoryRoute.GET("/", controller.ListSkillCategoriesAdmin)
 			skillCategoryRoute.POST("/", controller.CreateSkillCategory)
+			skillCategoryRoute.GET("/:id/skills", controller.ListSkillCategorySkills)
+			skillCategoryRoute.DELETE("/:id/skills/:skillId", controller.RemoveSkillFromCategory)
 			skillCategoryRoute.PUT("/:id", controller.UpdateSkillCategory)
 			skillCategoryRoute.DELETE("/:id", controller.DeleteSkillCategory)
 		}

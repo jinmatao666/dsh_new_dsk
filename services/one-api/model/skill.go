@@ -82,9 +82,10 @@ type Skill struct {
 }
 
 const (
-	SkillReleaseDraft     = "draft"
-	SkillReleasePublished = "published"
-	SkillReleaseArchived  = "archived"
+	SkillReleaseDraft       = "draft"
+	SkillReleaseUnpublished = "unpublished"
+	SkillReleasePublished   = "published"
+	SkillReleaseArchived    = "archived"
 )
 
 // SkillRelease stores one validated, complete skill package. Package uses the
@@ -390,9 +391,9 @@ func ListSkillReleases(skillID int) ([]SkillRelease, error) {
 	return releases, err
 }
 
-// CountDraftSkillReleases returns draft-release counts in one query so the
-// management list can distinguish an unpublished draft from an off-shelf skill.
-func CountDraftSkillReleases(skillIDs []int) (map[int]int, error) {
+// CountUnpublishedSkillReleases includes the historical draft state so older
+// packages remain manageable after the upload workflow switched to “未上架”.
+func CountUnpublishedSkillReleases(skillIDs []int) (map[int]int, error) {
 	counts := make(map[int]int, len(skillIDs))
 	if len(skillIDs) == 0 {
 		return counts, nil
@@ -404,7 +405,7 @@ func CountDraftSkillReleases(skillIDs []int) (map[int]int, error) {
 	var rows []result
 	err := DB.Model(&SkillRelease{}).
 		Select("skill_id, COUNT(*) AS count").
-		Where("skill_id IN ? AND state = ?", skillIDs, SkillReleaseDraft).
+		Where("skill_id IN ? AND state IN ?", skillIDs, []string{SkillReleaseUnpublished, SkillReleaseDraft}).
 		Group("skill_id").
 		Scan(&rows).Error
 	for _, row := range rows {

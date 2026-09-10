@@ -1,7 +1,7 @@
 /**
- * 技能广场对齐的 Mock 数据源。
+ * 技能市场对齐的 Mock 数据源。
  *
- * 与安装包（桌面端）技能广场的展示字段逐条对齐，并补齐后台管理需要的
+ * 与安装包（桌面端）技能市场的展示字段逐条对齐，并补齐后台管理需要的
  * 上传人（submitter）、上传时间（created_at）、主要能力（capabilities）与
  * 技能包文件清单（package_files）。正式接口接入前，本文件是唯一数据源。
  *
@@ -11,7 +11,7 @@
  */
 
 
-/** 与技能广场一致的分类列表。 */
+/** 与技能市场一致的分类列表。 */
 export const MOCK_SKILL_CATEGORIES = ['空间制图', '专业写作', '研究咨询', '办公文档', '数据分析'];
 
 /** 上传一条记录所需的全部字段（未含 body/assets，由 normalizeMockSkill 生成）。 */
@@ -457,7 +457,7 @@ function seedCreatedAt(index) {
   return `2026-08-${pad(day)} ${pad(hour)}:${pad(minute)}:00`;
 }
 
-/** 与技能广场对齐的 26 条 mock 技能，后台管理页的初始数据源（上传人统一展示为 root）。 */
+/** 与技能市场对齐的 26 条 mock 技能，后台管理页的初始数据源（上传人统一展示为 root）。 */
 export const MARKETPLACE_MOCK_SKILLS = [
   ...RAW_SKILLS.map((entry, index) =>
     normalizeMockSkill({ ...entry, submitter: 'root', created_at: seedCreatedAt(index) })

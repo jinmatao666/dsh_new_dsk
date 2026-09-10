@@ -14,6 +14,7 @@
     "allow-install-marketplace-skill",
     "allow-uninstall-marketplace-skill",
     "allow-install-custom-skill",
+    "allow-install-custom-skill-directory",
     "allow-uninstall-custom-skill",
     "allow-list-custom-skills",
     "allow-read-analysis-view"

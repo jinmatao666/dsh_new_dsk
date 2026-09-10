@@ -321,6 +321,53 @@
   border-top: 1px solid #e4ecf6;
 }
 
+.skill-release-backdrop {
+  z-index: 1100;
+}
+
+.skill-release-dialog {
+  width: min(980px, 100%);
+  max-height: min(820px, calc(100vh - 40px));
+}
+
+.skill-release-dialog .zjugis-modal-head {
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.skill-release-dialog .zjugis-modal-head p {
+  margin: 5px 0 0;
+  color: #7289a7;
+  font-size: 14px;
+}
+
+.skill-import-success-dialog {
+  width: min(560px, 100%);
+}
+
+.skill-import-success-dialog .zjugis-modal-head {
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.skill-import-success-dialog .zjugis-modal-head p {
+  margin: 5px 0 0;
+  color: #7289a7;
+  font-size: 14px;
+}
+
+.skill-import-success-copy {
+  margin: 0;
+  color: #516b90;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.skill-import-success-copy strong {
+  margin: 0 3px;
+  color: #d97706;
+}
+
 .skill-validation-result > p {
   margin: 5px 0 12px;
   color: #6f86a5;
@@ -341,6 +388,33 @@
   padding: 10px;
   border-right: 1px solid #e2ebf6;
   background: #f8fbff;
+}
+
+.skill-validation-file {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #4c668c;
+  cursor: pointer;
+  font: 12px/1.45 'JetBrains Mono', Consolas, monospace;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-validation-file:hover {
+  background: #edf5ff;
+  color: #1766cf;
+}
+
+.skill-validation-file.active {
+  background: #ddebff;
+  color: #155fc5;
+  font-weight: 700;
 }
 
 .skill-validation-preview {

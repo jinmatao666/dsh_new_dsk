@@ -40,6 +40,20 @@ func TestValidateSkillArchiveAcceptsCompletePackage(t *testing.T) {
 	}
 }
 
+func TestValidateSkillArchiveCarriesManifestIcon(t *testing.T) {
+	manifest := `{"name":"icon-skill","slug":"icon-skill","version":"1.0.0","icon":"glyph:chart"}`
+	pkg, err := validateSkillArchive(skillArchiveForTest(t, map[string]string{
+		"SKILL.md":      "---\nname: icon-skill\n---\n# Icon\n",
+		"manifest.json": manifest,
+	}))
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if pkg.manifest.Icon != "glyph:chart" {
+		t.Fatalf("icon not retained: %#v", pkg.manifest)
+	}
+}
+
 func TestValidateSkillArchiveRejectsPathEscapeAndNameMismatch(t *testing.T) {
 	_, err := validateSkillArchive(skillArchiveForTest(t, map[string]string{
 		"../SKILL.md":   "---\nname: bad\n---\n",

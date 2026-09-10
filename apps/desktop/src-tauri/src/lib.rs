@@ -216,6 +216,113 @@ fn install_custom_skill_at(
     result
 }
 
+/// Validate and install a local skill directory chosen by the native host picker.
+fn install_custom_skill_directory_at(
+    skills_root: &Path,
+    source: &Path,
+) -> Result<CustomSkillState, String> {
+    let source_metadata = fs::symlink_metadata(source)
+        .map_err(|error| format!("无法读取个人技能目录 {}：{error}", source.display()))?;
+    if source_metadata.file_type().is_symlink() || !source_metadata.is_dir() {
+        return Err(format!("个人技能目录无效 {}", source.display()));
+    }
+    let skill_md = source.join("SKILL.md");
+    let skill_md_metadata = fs::symlink_metadata(&skill_md)
+        .map_err(|error| format!("所选目录根部缺少 SKILL.md：{error}"))?;
+    if skill_md_metadata.file_type().is_symlink() || !skill_md_metadata.is_file() {
+        return Err("所选目录根部的 SKILL.md 必须是普通文件".to_string());
+    }
+    let skill_text = fs::read_to_string(&skill_md)
+        .map_err(|error| format!("无法读取 SKILL.md：{error}"))?;
+    let slug = custom_skill_front_matter_value(&skill_text, "name")
+        .ok_or_else(|| "SKILL.md 必须声明 name".to_string())?;
+    validate_marketplace_slug(&slug)?;
+    let mut file_count = 0usize;
+    let mut total_size = 0u64;
+    validate_custom_skill_directory_tree(source, 0, &mut file_count, &mut total_size)?;
+
+    if skills_root.exists()
+        && fs::symlink_metadata(skills_root)
+            .map_err(|error| format!("无法读取用户技能目录 {}：{error}", skills_root.display()))?
+            .file_type()
+            .is_symlink()
+    {
+        return Err(format!("拒绝使用符号链接技能根目录 {}", skills_root.display()));
+    }
+    fs::create_dir_all(skills_root)
+        .map_err(|error| format!("无法创建用户技能目录 {}：{error}", skills_root.display()))?;
+    let target = skills_root.join(&slug);
+    if target.exists() {
+        return Err(format!("技能 {slug} 已存在，请先卸载后再添加"));
+    }
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("系统时间无效：{error}"))?
+        .as_nanos();
+    let staging = skill_staging_root(skills_root)?
+        .join(format!(".{slug}.custom-directory-{}-{nonce}", std::process::id()));
+    let result = (|| {
+        copy_marketplace_directory(source, &staging)?;
+        fs::write(staging.join(".dsh-custom-skill"), format!("slug={slug}\n"))
+            .map_err(|error| format!("无法写入自定义技能标记：{error}"))?;
+        fs::rename(&staging, &target)
+            .map_err(|error| format!("无法启用自定义技能 {}：{error}", target.display()))?;
+        Ok(CustomSkillState {
+            slug,
+            name: custom_skill_front_matter_value(&skill_text, "name")
+                .unwrap_or_else(|| target.file_name().unwrap_or_default().to_string_lossy().to_string()),
+            description: custom_skill_front_matter_value(&skill_text, "description")
+                .unwrap_or_else(|| "本地添加的自定义技能。".to_string()),
+        })
+    })();
+    if result.is_err() && staging.exists() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    result
+}
+
+fn validate_custom_skill_directory_tree(
+    directory: &Path,
+    depth: usize,
+    file_count: &mut usize,
+    total_size: &mut u64,
+) -> Result<(), String> {
+    if depth > 16 {
+        return Err("个人技能目录层级不能超过 16 层".to_string());
+    }
+    for entry in fs::read_dir(directory)
+        .map_err(|error| format!("无法枚举个人技能目录 {}：{error}", directory.display()))?
+    {
+        let entry = entry.map_err(|error| format!("无法读取个人技能目录项：{error}"))?;
+        let metadata = entry
+            .file_type()
+            .map_err(|error| format!("无法读取个人技能目录项类型 {}：{error}", entry.path().display()))?;
+        if metadata.is_symlink() {
+            return Err(format!("个人技能目录不能包含符号链接 {}", entry.path().display()));
+        }
+        if metadata.is_dir() {
+            validate_custom_skill_directory_tree(&entry.path(), depth + 1, file_count, total_size)?;
+        } else if metadata.is_file() {
+            *file_count += 1;
+            if *file_count > 128 {
+                return Err("自定义技能必须包含 1 至 128 个文件".to_string());
+            }
+            let size = fs::metadata(entry.path())
+                .map_err(|error| format!("无法读取个人技能文件 {}：{error}", entry.path().display()))?
+                .len();
+            *total_size = total_size
+                .checked_add(size)
+                .ok_or_else(|| "自定义技能文件总大小无效".to_string())?;
+            if *total_size > 16 * 1024 * 1024 {
+                return Err("自定义技能文件总大小不能超过 16 MB".to_string());
+            }
+        } else {
+            return Err(format!("个人技能目录只能包含普通文件或目录 {}", entry.path().display()));
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn install_custom_skill(
     app: tauri::AppHandle,
@@ -223,6 +330,17 @@ fn install_custom_skill(
     files: Vec<CustomSkillFile>,
 ) -> Result<String, String> {
     let installed = install_custom_skill_at(&user_skills_root(&app)?, &slug, files)?;
+    wait_for_skill_catalog_observation();
+    notify_skill_catalog_changed(&app);
+    Ok(installed)
+}
+
+#[tauri::command]
+fn install_custom_skill_directory(
+    app: tauri::AppHandle,
+    directory: String,
+) -> Result<CustomSkillState, String> {
+    let installed = install_custom_skill_directory_at(&user_skills_root(&app)?, Path::new(&directory))?;
     wait_for_skill_catalog_observation();
     notify_skill_catalog_changed(&app);
     Ok(installed)
@@ -529,7 +647,7 @@ fn installed_manifest(directory: &Path, slug: &str) -> Result<Option<Marketplace
         return Ok(None);
     }
     Err(format!(
-        "技能目录 {} 不是由技能广场管理，拒绝覆盖或删除",
+        "技能目录 {} 不是由技能市场管理，拒绝覆盖或删除",
         directory.display()
     ))
 }
@@ -1360,6 +1478,7 @@ pub fn run() {
             install_marketplace_skill,
             uninstall_marketplace_skill,
             install_custom_skill,
+            install_custom_skill_directory,
             uninstall_custom_skill,
             list_custom_skills,
             read_analysis_view,
@@ -1371,7 +1490,7 @@ pub fn run() {
 #[cfg(test)]
 mod marketplace_tests {
     use super::{
-        install_marketplace_skill_at, install_marketplace_skill_files_at,
+        install_custom_skill_directory_at, install_marketplace_skill_at, install_marketplace_skill_files_at,
         marketplace_package_sha256, read_analysis_view, save_session_log_archive_at,
         uninstall_marketplace_skill_at, CustomSkillFile,
     };
@@ -1486,6 +1605,31 @@ mod marketplace_tests {
     }
 
     #[test]
+    fn imports_a_complete_custom_skill_directory() {
+        let source = TestDirectory::new();
+        let user = TestDirectory::new();
+        fs::create_dir_all(source.0.join("scripts")).expect("create scripts");
+        fs::write(
+            source.0.join("SKILL.md"),
+            "---\nname: personal-meeting-notes\ndescription: Organize meeting notes\n---\n",
+        )
+        .expect("write skill");
+        fs::write(source.0.join("scripts/invoke.ps1"), "Write-Output notes\n")
+            .expect("write script");
+
+        let installed = install_custom_skill_directory_at(&user.0.join("skills"), &source.0)
+            .expect("import custom directory");
+        assert_eq!(installed.slug, "personal-meeting-notes");
+        assert_eq!(installed.description, "Organize meeting notes");
+        assert_eq!(
+            fs::read_to_string(user.0.join("skills/personal-meeting-notes/scripts/invoke.ps1"))
+                .expect("copied script"),
+            "Write-Output notes\n"
+        );
+        assert!(user.0.join("skills/personal-meeting-notes/.dsh-custom-skill").is_file());
+    }
+
+    #[test]
     fn hashes_downloaded_files_independently_of_transport_order() {
         let first = vec![
             CustomSkillFile {
@@ -1526,7 +1670,7 @@ mod marketplace_tests {
 
         let error = install_marketplace_skill_at(&resources.0, &skills, "market-test-skill")
             .expect_err("must reject unmanaged directory");
-        assert!(error.contains("不是由技能广场管理"));
+        assert!(error.contains("不是由技能市场管理"));
         assert!(target.exists());
     }
 

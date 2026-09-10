@@ -27,6 +27,9 @@ describe('desktop profile composition', () => {
     expect(entries.find(entry => entry.id === 'ui-oneapi-auth')).toMatchObject({
       name: '@deepseek-ai/dsh-client-ui-oneapi-auth',
     })
+    expect(entries.find(entry => entry.id === 'system-prompt')).toMatchObject({
+      config: { persona: expect.stringContaining('审批理由') },
+    })
   })
 
   it('keeps the production plugin tree in local Tauri development', () => {
