@@ -698,3 +698,131 @@
 .skill-browse-preview img {
   max-width: 100%;
 }
+
+/* ── 分类管理：与技能库视觉语言对齐 ───────────────────────────── */
+
+.skill-category-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.skill-category-expand {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #8aa2c0;
+  cursor: pointer;
+  transition: background-color .16s ease, color .16s ease;
+}
+
+.skill-category-expand:hover { background: #edf5ff; color: #1766cf; }
+
+.skill-category-expand svg { display: block; transition: transform .18s ease; }
+
+.skill-category-expand.open svg { transform: rotate(180deg); }
+
+.skill-category-title {
+  overflow: hidden;
+  color: #1d2e4c;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-category-count {
+  display: inline-block;
+  min-width: 28px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* 展开行：去掉 Semi 默认单元格内边距，铺浅蓝底 */
+.skill-admin-surface tr:has(.skill-category-skills) > .semi-table-row-cell {
+  padding: 0;
+  background: #f7faff;
+}
+
+.skill-admin-surface tr:has(.skill-category-skills):hover > .semi-table-row-cell {
+  background: #f7faff;
+}
+
+.skill-category-skills {
+  padding: 10px 20px 16px 46px;
+}
+
+.skill-category-skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skill-category-skill-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  border: 1px solid #e2ebf6;
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.skill-category-skill-row:hover {
+  border-color: #bcd7f7;
+  box-shadow: 0 6px 16px rgb(43 82 134 / 6%);
+}
+
+.skill-category-skill-info {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+}
+
+.skill-category-skill-info strong {
+  overflow: hidden;
+  color: #24406b;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-category-skill-info span {
+  overflow: hidden;
+  color: #8aa2c0;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-category-default-tag {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #7b90ad;
+  font-size: 12px;
+}
+
+.skill-category-skills-empty {
+  padding: 14px 10px;
+  color: #8aa2c0;
+  font-size: 13px;
+  text-align: center;
+}

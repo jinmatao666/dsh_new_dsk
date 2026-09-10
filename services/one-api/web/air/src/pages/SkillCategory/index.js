@@ -125,18 +125,47 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
 
   const renderExpandedSkills = (row) => {
     if (expanded.category?.id !== row.id) return null;
-    return <div style={{ padding: '8px 18px 12px 42px', background: '#f9fbff' }}>
-      {expanded.loading ? <span style={{ color: '#7890ad' }}>正在加载关联技能…</span> : expanded.skills.length === 0 ? <span style={{ color: '#7890ad' }}>该分类暂无关联技能</span> : expanded.skills.map((skill) => <div key={skill.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, minHeight: 38, borderTop: '1px solid #edf2f8' }}><div><strong style={{ color: '#294566' }}>{skill.display_name || skill.name}</strong><span style={{ marginLeft: 9, color: '#7890ad', fontSize: 12 }}>{skill.name} · v{skill.version || '-'}</span></div>{row.name === '通用类' ? <span style={{ color: '#8a9bb1', fontSize: 12 }}>默认分类</span> : <Button size='small' type='danger' theme='light' onClick={() => removeSkill(row, skill)}>移出分类</Button>}</div>)}
+    return <div className='skill-category-skills'>
+      {expanded.loading || expanded.skills.length === 0
+        ? <div className='skill-category-skills-empty'>{expanded.loading ? '正在加载关联技能…' : '该分类暂无关联技能'}</div>
+        : <div className='skill-category-skill-list'>
+          {expanded.skills.map((skill) => (
+            <div key={skill.id} className='skill-category-skill-row'>
+              <div className='skill-category-skill-info'>
+                <strong>{skill.display_name || skill.name}</strong>
+                <span>{skill.name} · v{skill.version || '-'}</span>
+              </div>
+              {row.name === '通用类'
+                ? <span className='skill-category-default-tag'>默认分类</span>
+                : <button type='button' className='skill-text-action danger' onClick={() => removeSkill(row, skill)}>移出分类</button>}
+            </div>
+          ))}
+        </div>}
     </div>;
   };
 
   const columns = [
-    { title: '分类名称', dataIndex: 'name', width: 240, render: (value, row) => <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><button type='button' aria-label={expanded.category?.id === row.id ? '收起分类技能' : '展开分类技能'} onClick={() => { void expandCategory(row); }} style={{ width: 18, padding: 0, border: 0, color: '#5d7fa9', background: 'transparent', cursor: 'pointer', fontSize: 13, transform: expanded.category?.id === row.id ? 'rotate(180deg)' : 'none', transition: 'transform .16s' }}>⌄</button><span>{value}</span></div> },
-    { title: '描述', dataIndex: 'description', ellipsis: { showTitle: true } },
-    { title: '技能数量', dataIndex: 'skill_count', width: 110, render: (value) => Number(value || 0) },
     {
-      title: '操作', width: 160,
-      render: (_, row) => <Space><Button size='small' type='tertiary' theme='light' onClick={() => setEditor({ visible: true, data: { ...EMPTY, ...row } })}>编辑</Button><Button size='small' type='danger' theme='light' onClick={() => remove(row)}>删除</Button></Space>
+      title: '分类名称', dataIndex: 'name', width: 240,
+      render: (value, row) => (
+        <div className='skill-category-name'>
+          <button type='button' className={`skill-category-expand${expanded.category?.id === row.id ? ' open' : ''}`} aria-label={expanded.category?.id === row.id ? '收起分类技能' : '展开分类技能'} onClick={() => { void expandCategory(row); }}>
+            <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'><path d='m6 9 6 6 6-6' /></svg>
+          </button>
+          <span className='skill-category-title'>{value}</span>
+        </div>
+      )
+    },
+    { title: '描述', dataIndex: 'description', ellipsis: { showTitle: true } },
+    { title: '技能数量', dataIndex: 'skill_count', width: 110, render: (value) => <span className='skill-category-count'>{Number(value || 0)}</span> },
+    {
+      title: '操作', width: 146,
+      render: (_, row) => (
+        <div className='skill-row-actions'>
+          <button type='button' className='skill-text-action' onClick={() => setEditor({ visible: true, data: { ...EMPTY, ...row } })}>编辑</button>
+          <button type='button' className='skill-text-action danger' onClick={() => remove(row)}>删除</button>
+        </div>
+      )
     }
   ];
   const filteredItems = useMemo(() => {

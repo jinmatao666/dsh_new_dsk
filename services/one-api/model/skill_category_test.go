@@ -151,6 +151,57 @@ func TestListSkillCategoriesByTypeIncludesSkillCount(t *testing.T) {
 	assert.Equal(t, 2, categories[0].SkillCount)
 }
 
+func TestCategoryAdminViewsUseRelationsInsteadOfLegacyCategoryName(t *testing.T) {
+	setupSkillCategoryTestDB(t)
+	skill := seedSkill(t, "spatial-analysis", "通用类", false)
+	general := createSkillCategoryForTest(t, SkillCategoryTypePackage, "general", "通用类")
+	spatial := createSkillCategoryForTest(t, SkillCategoryTypePackage, "spatial", "空间制图")
+	require.NoError(t, ReplaceSkillCategories(skill.Id, []uint64{spatial.Id}))
+
+	categories, err := ListSkillCategoriesByType(SkillCategoryTypePackage, true)
+	require.NoError(t, err)
+	counts := map[uint64]int{}
+	for _, category := range categories {
+		counts[category.Id] = category.SkillCount
+	}
+	assert.Zero(t, counts[general.Id])
+	assert.Equal(t, 1, counts[spatial.Id])
+
+	generalSkills, err := ListSkillsForCategory(general.Id)
+	require.NoError(t, err)
+	assert.Empty(t, generalSkills)
+	spatialSkills, err := ListSkillsForCategory(spatial.Id)
+	require.NoError(t, err)
+	require.Len(t, spatialSkills, 1)
+	assert.Equal(t, skill.Id, spatialSkills[0].Id)
+
+	count, err := CountSkillCategoryRelations(spatial.Id)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count)
+}
+
+func TestUpdateSkillCategoryPreservesStableCodeAndType(t *testing.T) {
+	setupSkillCategoryTestDB(t)
+	general := createSkillCategoryForTest(t, SkillCategoryTypePackage, "general", "通用类")
+	spatial := createSkillCategoryForTest(t, SkillCategoryTypePackage, "spatial", "空间制图")
+
+	updated := SkillCategory{
+		Id:          general.Id,
+		TypeId:      spatial.TypeId,
+		Code:        spatial.Code,
+		Name:        "默认分类",
+		Description: "默认技能分类",
+	}
+	require.NoError(t, UpdateSkillCategory(&updated))
+
+	var got SkillCategory
+	require.NoError(t, DB.First(&got, general.Id).Error)
+	assert.Equal(t, general.TypeId, got.TypeId)
+	assert.Equal(t, general.Code, got.Code)
+	assert.Equal(t, "默认分类", got.Name)
+	assert.Equal(t, "默认技能分类", got.Description)
+}
+
 func TestMergeDuplicateSkillCategoriesKeepsOneEnabledCategory(t *testing.T) {
 	setupSkillCategoryTestDB(t)
 	first := createSkillCategoryForTest(t, SkillCategoryTypePackage, "spatial-legacy", "空间制图")

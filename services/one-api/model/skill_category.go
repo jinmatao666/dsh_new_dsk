@@ -401,11 +401,12 @@ func UpdateSkillCategoryType(typ *SkillCategoryType) error {
 func ListSkillCategoriesByType(typeCode string, includeDisabled bool) ([]SkillCategoryView, error) {
 	var categories []SkillCategoryView
 	query := DB.Table("skill_categories AS c").
-		Select("c.id, c.type_id, t.code AS type_code, t.name AS type_name, c.code, c.name, c.description, c.status, c.sort_order, COUNT(s.id) AS skill_count").
+		Select("c.id, c.type_id, t.code AS type_code, t.name AS type_name, c.code, c.name, c.description, c.status, c.sort_order, COUNT(DISTINCT s.id) AS skill_count").
 		Joins("JOIN skill_category_types AS t ON t.id = c.type_id").
-		// skills.category is the single primary package category. Counting it
-		// directly keeps older duplicate relation rows from being shown twice.
-		Joins("LEFT JOIN skills AS s ON s.category = c.name AND s.is_deleted = ?", false).
+		// Relations are authoritative. Joining by the legacy display name makes
+		// categories with an old/stale skills.category value appear bound twice.
+		Joins("LEFT JOIN skill_category_relations AS r ON r.category_id = c.id").
+		Joins("LEFT JOIN skills AS s ON s.id = r.skill_id AND s.is_deleted = ?", false).
 		Where("c.is_deleted = ?", false)
 	if typeCode != "" {
 		query = query.Where("t.code = ?", typeCode)
@@ -425,9 +426,9 @@ func CountSkillCategoryRelations(categoryId uint64) (int64, error) {
 		return 0, nil
 	}
 	var count int64
-	err := DB.Table("skills AS s").
-		Joins("JOIN skill_categories AS c ON c.name = s.category").
-		Where("c.id = ? AND s.is_deleted = ?", categoryId, false).
+	err := DB.Table("skill_category_relations AS r").
+		Joins("JOIN skills AS s ON s.id = r.skill_id").
+		Where("r.category_id = ? AND s.is_deleted = ?", categoryId, false).
 		Count(&count).Error
 	return count, err
 }
@@ -480,18 +481,11 @@ func UpdateSkillCategory(category *SkillCategory) error {
 		if err := tx.First(&previous, category.Id).Error; err != nil {
 			return err
 		}
-		if category.TypeId == 0 {
-			category.TypeId = previous.TypeId
-		}
-		if strings.TrimSpace(category.Code) == "" {
-			category.Code = previous.Code
-		}
-		category.Code = normalizeCategoryCode(category.Code)
-		if category.Code == "" || strings.TrimSpace(category.Name) == "" {
+		if strings.TrimSpace(category.Name) == "" {
 			return errors.New("分类名称不能为空")
 		}
 		var duplicate SkillCategory
-		err := tx.Where("type_id = ? AND id <> ? AND is_deleted = ? AND LOWER(TRIM(name)) = ?", category.TypeId, category.Id, false, strings.ToLower(strings.TrimSpace(category.Name))).
+		err := tx.Where("type_id = ? AND id <> ? AND is_deleted = ? AND LOWER(TRIM(name)) = ?", previous.TypeId, category.Id, false, strings.ToLower(strings.TrimSpace(category.Name))).
 			First(&duplicate).Error
 		if err == nil {
 			return fmt.Errorf("分类 %q 已存在", strings.TrimSpace(category.Name))
@@ -499,16 +493,14 @@ func UpdateSkillCategory(category *SkillCategory) error {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
+		// Category management exposes only name and description. Keep the type,
+		// stable code, status, and ordering untouched so an edit cannot rewrite a
+		// legacy unique index or accidentally move a category between types.
 		if err := tx.Model(&SkillCategory{}).Where("id = ?", category.Id).
-			Select("type_id", "parent_id", "code", "name", "description", "status", "sort_order").
+			Select("name", "description").
 			Updates(map[string]interface{}{
-				"type_id":     category.TypeId,
-				"parent_id":   category.ParentId,
-				"code":        category.Code,
 				"name":        category.Name,
 				"description": category.Description,
-				"status":      category.Status,
-				"sort_order":  category.SortOrder,
 			}).Error; err != nil {
 			return err
 		}
@@ -643,7 +635,9 @@ func ListSkillsForCategory(categoryId uint64) ([]SkillCategorySkillView, error) 
 	var skills []SkillCategorySkillView
 	err := DB.Table("skills AS s").
 		Select("s.id, s.name, s.display_name, s.version, s.status").
-		Joins("JOIN skill_categories AS c ON c.name = s.category").
+		Joins("JOIN skill_category_relations AS r ON r.skill_id = s.id").
+		Joins("JOIN skill_categories AS c ON c.id = r.category_id").
+		Joins("JOIN skill_category_types AS t ON t.id = c.type_id AND t.code = ?", SkillCategoryTypePackage).
 		Where("c.id = ? AND s.is_deleted = ?", categoryId, false).
 		Order("s.display_name ASC, s.id ASC").
 		Find(&skills).Error
