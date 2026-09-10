@@ -1382,7 +1382,7 @@ pub fn run() {
             let app_data_dir = app.path().app_local_data_dir()?;
             let log_path = app_data_dir.join("logs").join("startup.log");
             let _ = fs::remove_file(&log_path);
-            append_log(&log_path, "ZJUGIS Harness startup");
+            append_log(&log_path, "万维Buddy startup");
             disable_legacy_vision_tool(&log_path);
             let config = server_config(&resource_dir).map_err(|message| {
                 append_log(&log_path, format!("[fatal] {message}"));

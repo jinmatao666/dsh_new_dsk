@@ -241,7 +241,7 @@ jobs:
             bundle_dir="apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
             find "$bundle_dir" -maxdepth 3 -type f -print 2>/dev/null || true
             if [ "${{ matrix.platform }}" = "linux-x64" ]; then
-              app_dir="$bundle_dir/appimage/ZJUGIS Harness.AppDir"
+              app_dir="$bundle_dir/appimage/万维Buddy.AppDir"
               linuxdeploy="$(find "$HOME/.cache/tauri" -maxdepth 1 -type f -name 'linuxdeploy-x86_64.AppImage' -print -quit)"
               if [ -n "$linuxdeploy" ] && [ -d "$app_dir" ]; then
                 echo "::group::linuxdeploy direct diagnostic (attempt $attempt)"
@@ -274,7 +274,7 @@ jobs:
           NO_STRIP: '1'
         run: |
           bundle_dir="apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
-          app_dir="$bundle_dir/appimage/ZJUGIS Harness.AppDir"
+          app_dir="$bundle_dir/appimage/万维Buddy.AppDir"
           linuxdeploy="$(find "$HOME/.cache/tauri" -maxdepth 1 -type f -name 'linuxdeploy-x86_64.AppImage' -print -quit)"
           echo "::group::Linux AppImage environment"
           command -v xdg-open || true
@@ -327,5 +327,5 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ inputs.version }}
-          name: ZJUGIS Harness v${{ inputs.version }}
+          name: 万维Buddy v${{ inputs.version }}
           files: release-assets/*

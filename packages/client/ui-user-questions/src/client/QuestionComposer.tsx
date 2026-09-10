@@ -45,6 +45,10 @@ function isComposing(event: KeyboardEvent<HTMLTextAreaElement | HTMLInputElement
   return event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229
 }
 
+function hasChineseText(value: string | undefined): value is string {
+  return value !== undefined && /[\u3400-\u9fff]/.test(value)
+}
+
 /**
  * Composer takeover boundary; the carrier key keys local drafts, so a
  * same-request replay (same key, new carrier object) preserves them.
@@ -89,6 +93,9 @@ function QuestionFlow({ pending, t }: { pending: PendingQuestion } & Pick<Questi
   // oxlint-disable-next-line typescript/no-non-null-assertion
   const draft = drafts[index]!
   const hasOptions = (question.options?.length ?? 0) > 0
+  const header = hasChineseText(question.header) ? question.header : t('fallback.header')
+  const questionText = hasChineseText(question.question) ? question.question : t('fallback.question')
+  const detail = hasChineseText(question.detail) ? question.detail : undefined
 
   const cancelFlow = (): void => {
     setBusy('cancel')
@@ -205,9 +212,9 @@ function QuestionFlow({ pending, t }: { pending: PendingQuestion } & Pick<Questi
       >
         <header className={css.header}>
           <div className={css.headingBlock}>
-            {question.header !== undefined && <div className={css.eyebrow}>{question.header}</div>}
+            <div className={css.eyebrow}>{header}</div>
             <h2 className={css.title} id={`question-${pending.key}-${String(index)}`}>
-              {question.question}
+              {questionText}
             </h2>
           </div>
           <div className={css.headerActions}>
@@ -234,20 +241,22 @@ function QuestionFlow({ pending, t }: { pending: PendingQuestion } & Pick<Questi
         {!minimized && (
           <>
             <div className={css.body} data-question-scroll>
-              {question.detail !== undefined && (
-                <div className={css.detail}><MarkdownText text={question.detail} /></div>
+              {detail !== undefined && (
+                <div className={css.detail}><MarkdownText text={detail} /></div>
               )}
               <div className={css.options} role={question.multiSelect === true ? 'group' : 'radiogroup'}>
                 {(question.options ?? []).map((option, optionIndex) => {
                   const selected = draft.selected.includes(option.label)
                   const display = parseRecommendedLabel(option.label)
+                  const optionLabel = hasChineseText(display.label) ? display.label : `${t('fallback.option')} ${String(optionIndex + 1)}`
+                  const optionDescription = hasChineseText(option.description) ? option.description : undefined
                   return (
                     <button
                       type="button" key={`${option.label}-${String(optionIndex)}`}
                       className={clsx(css.option, selected && question.multiSelect !== true && css.optionSelected)}
                       role={question.multiSelect === true ? 'checkbox' : 'radio'}
                       aria-checked={selected}
-                      aria-label={display.label}
+                      aria-label={optionLabel}
                       disabled={busy !== null}
                       onClick={() => { choose(option.label) }}
                       onKeyDown={(event) => {
@@ -265,12 +274,12 @@ function QuestionFlow({ pending, t }: { pending: PendingQuestion } & Pick<Questi
                         : <span className={css.number}>{optionIndex + 1}</span>}
                       <span className={css.optionCopy}>
                         <span className={css.optionLine}>
-                          <span className={css.optionLabel}>{display.label}</span>
+                          <span className={css.optionLabel}>{optionLabel}</span>
                           {display.recommended && (
                             <span className={css.badge}>{t('option.recommended')}</span>
                           )}
-                          {option.description !== undefined && (
-                            <span className={css.description}>{option.description}</span>
+                          {optionDescription !== undefined && (
+                            <span className={css.description}>{optionDescription}</span>
                           )}
                         </span>
                       </span>

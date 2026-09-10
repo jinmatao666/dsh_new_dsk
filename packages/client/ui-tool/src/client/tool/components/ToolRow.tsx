@@ -125,6 +125,12 @@ function stateStatus(state: ToolRowState, t: TranslateNS<'conversation'>): strin
   }
 }
 
+/** Keep model-authored prose out of the product chrome when it is not Chinese. */
+function localizedSummary(summary: string, fileLink: boolean, t: TranslateNS<'conversation'>): string {
+  if (fileLink || summary === '' || /[\u3400-\u9fff]/.test(summary)) return summary
+  return t('bash.running')
+}
+
 export function ToolRow({
   t,
   variant,
@@ -165,12 +171,13 @@ export function ToolRow({
   // An error row's collapsed summary IS the failure: the first error line in
   // the error color outranks both the args summary and a terminal description.
   const failureLine = state === 'error' ? errorSummary ?? null : null
-  const summaryText = failureLine ?? summary
+  const rawSummary = failureLine ?? summary
   // The failure line replaces the summary wholesale, so a suffix derived from
   // the call args has nothing left to sit beside.
   const suffix = failureLine === null ? summarySuffix ?? null : null
   // The failure line is error prose, not the path: no open-file affordance.
   const fileLink = filePath !== undefined && onOpenFile !== undefined && failureLine === null
+  const summaryText = failureLine === null ? localizedSummary(rawSummary, fileLink, t) : rawSummary
   const toggleExpand = () => {
     setExpanded(v => !v)
   }

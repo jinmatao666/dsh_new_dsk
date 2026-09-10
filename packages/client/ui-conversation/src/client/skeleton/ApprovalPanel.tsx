@@ -54,6 +54,9 @@ function ApprovalFlow({ pending, command, t }: {
   command?: string
   t: ApprovalComposerProps['t']
 }) {
+  const reason = pending.reason !== undefined && /[\u3400-\u9fff]/.test(pending.reason)
+    ? pending.reason
+    : t('approval.escalation', { toolName: pending.toolName })
   // Local one-shot latch: the panel leaves only when the resolved frame
   // lands; until then the buttons must not re-fire. An answer failure
   // (rejected receipt / transport) re-arms them for retry.
@@ -70,7 +73,7 @@ function ApprovalFlow({ pending, command, t }: {
             holds nothing focusable of its own, so without one a keyboard-only
             user cannot reach the command's tail before answering. */}
         <div className={css.body} data-approval-scroll="" tabIndex={0} role="group" aria-label={t('approval.detail.aria')}>
-          <div className={css.headline}>{pending.reason ?? t('approval.escalation', { toolName: pending.toolName })}</div>
+          <div className={css.headline}>{reason}</div>
           {command !== undefined && <div className={css.command}>{command}</div>}
         </div>
         <div className={css.actionRow}>

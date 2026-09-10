@@ -253,7 +253,7 @@ describe('chat row terminal body', () => {
   it('the expanded body is the command output inside the row scroll container', () => {
     const view = render(<GenericToolCard {...ownerProps(settled())} />)
     // Collapsed: the one-line summary row only, no output.
-    expect(view.getByText('List files')).toBeTruthy()
+    expect(view.getByText('运行中')).toBeTruthy()
     expect(view.queryByText(/a\.ts/)).toBeNull()
     toggleRow(view)
     expect(view.getByText('a.ts  b.ts', RAW)).toBeTruthy()
@@ -284,27 +284,22 @@ describe('chat row terminal body', () => {
     expect(view.container.querySelectorAll('[data-terminal] [data-state]')).toHaveLength(1)
   })
 
-  it('the fallback row shows the presenter description, not the args summary', () => {
-    // Any terminal-declaring tool without its own keyed row lands here, so the
-    // contract's above-card description has to win at this render site as well.
+  it('the fallback row replaces a non-Chinese presenter description with Chinese chrome copy', () => {
     const view = render(<GenericToolCard {...ownerProps(settled({
       callView: callTerminal({ description: 'Terminal 3' }),
     }))} />)
-    expect(view.getByText('Terminal 3')).toBeTruthy()
-    expect(view.queryByText('List files')).toBeNull()
+    expect(view.getByText('运行中')).toBeTruthy()
+    expect(view.queryByText('Terminal 3')).toBeNull()
   })
 
-  it('keeps the presenter description visible once the terminal card is expanded', () => {
-    // The contract puts the description ABOVE the card. The collapsed summary is
-    // hidden while a row is open, so an expanded terminal row has to draw it
-    // itself or the description would only ever be visible collapsed.
+  it('keeps the Chinese fallback visible once the terminal card is expanded', () => {
     const view = render(<GenericToolCard {...ownerProps(settled({
       callView: callTerminal({ description: 'Terminal 3' }),
     }))} />)
-    expect(view.getByText('Terminal 3')).toBeTruthy()
+    expect(view.getByText('运行中')).toBeTruthy()
     toggleRow(view)
     expect(view.container.querySelector('[data-terminal]')).not.toBeNull()
-    expect(view.getByText('Terminal 3')).toBeTruthy()
+    expect(view.getByText('运行中')).toBeTruthy()
   })
 
   it('a running terminal call expands to the prompt line with no output yet', () => {
@@ -360,7 +355,7 @@ describe('BashRow terminal card', () => {
 
   it('collapses to the summary row; the whole row toggles the command output', () => {
     const view = render(<BashRow {...rowProps(settled())} />)
-    expect(view.getByText('List files')).toBeTruthy()
+    expect(view.getByText('运行中')).toBeTruthy()
     expect(view.queryByText(/a\.ts/)).toBeNull()
     fireEvent.click(view.container.querySelector('[data-expandable]')!)
     expect(view.getByText('a.ts  b.ts', RAW)).toBeTruthy()
@@ -368,7 +363,7 @@ describe('BashRow terminal card', () => {
     // Collapse back in place: the summary row returns, the card unmounts.
     fireEvent.click(view.container.querySelector('[data-expandable]')!)
     expect(view.queryByText(/a\.ts/)).toBeNull()
-    expect(view.getByText('List files')).toBeTruthy()
+    expect(view.getByText('运行中')).toBeTruthy()
   })
 
   // The row's leading StateDot and the card's run-state dot describe the same
@@ -393,21 +388,19 @@ describe('BashRow terminal card', () => {
     expect(view.container.querySelector('[data-variant="bash"]')?.getAttribute('data-state')).toBe('error')
   })
 
-  it('shows the terminal presenter\'s description instead of the args summary', () => {
-    // `terminal_send`-style presenters author a description the args do not
-    // repeat; the contract puts it above the card, which is this row's summary.
+  it('replaces a non-Chinese terminal presenter description with Chinese chrome copy', () => {
     const view = render(<BashRow {...rowProps(settled({
       callView: callTerminal({ description: 'Terminal 3' }),
     }))} />)
-    expect(view.getByText('Terminal 3')).toBeTruthy()
-    expect(view.queryByText('List files')).toBeNull()
+    expect(view.getByText('运行中')).toBeTruthy()
+    expect(view.queryByText('Terminal 3')).toBeNull()
   })
 
-  it('keeps the args-derived summary when the presenter authored no description', () => {
+  it('replaces a non-Chinese args summary when the presenter authored no description', () => {
     const view = render(<BashRow {...rowProps(settled({
       callView: { card: 'terminal', title: 'ls -la' },
     }))} />)
-    expect(view.getByText('List files')).toBeTruthy()
+    expect(view.getByText('运行中')).toBeTruthy()
   })
 
   it('a non-terminal bash call (background start) renders the summary row alone', () => {
@@ -415,7 +408,7 @@ describe('BashRow terminal card', () => {
       callView: { card: 'generic', title: 'sleep 30', kind: 'execute' },
       resultView: { card: 'generic' },
     }))} />)
-    expect(view.getByText('List files')).toBeTruthy()
+    expect(view.getByText('运行中')).toBeTruthy()
     expect(view.queryByText(/a\.ts/)).toBeNull()
     expect(view.container.querySelector('[data-sample="bash"]')?.getAttribute('role')).toBeNull()
   })
@@ -435,8 +428,8 @@ describe('BashRow terminal card', () => {
     fireEvent.click(row)
 
     expect(row.getAttribute('aria-expanded')).toBe('true')
-    expect(view.getByText('IN')).toBeTruthy()
-    expect(view.getByText('OUT')).toBeTruthy()
+    expect(view.getByText('输入')).toBeTruthy()
+    expect(view.getByText('输出')).toBeTruthy()
     expect(view.getByText(/"command": "ls -la"/)).toBeTruthy()
     expect(view.container.querySelector('[data-error]')?.textContent).toBe('Error: command aborted')
   })

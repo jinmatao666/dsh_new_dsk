@@ -261,6 +261,31 @@ describe('QuestionComposer', () => {
     expect(screen.getByPlaceholderText('Type your answer')).toBeTruthy()
   })
 
+  it('replaces non-Chinese model question copy with Chinese fallback text', () => {
+    const carrier = new PendingWait(
+      'question',
+      RpcId('english-model-copy'),
+      SID,
+      {
+        questions: [{
+          id: 'choice',
+          header: 'Permission request',
+          question: 'Choose how to proceed.',
+          detail: 'This command needs broader access.',
+          options: [{ label: 'Retry with workspace permissions', description: 'Retry the command.' }],
+        }],
+      },
+      vi.fn(),
+    )
+    render(<QuestionComposer matched={carrier} interactions={[carrier]} {...kit} />)
+
+    expect(screen.getByText('需要确认')).toBeTruthy()
+    expect(screen.getByText('请确认是否继续执行此操作。')).toBeTruthy()
+    expect(screen.getByRole('radio', { name: '选项 1' })).toBeTruthy()
+    expect(screen.queryByText('Permission request')).toBeNull()
+    expect(screen.queryByText('This command needs broader access.')).toBeNull()
+  })
+
   it('same-key carrier replacement (baseline replay) keeps drafts', () => {
     const first = wait('same-id')
     const view = render(<QuestionComposer matched={first.carrier} interactions={[first.carrier]} {...kit} />)

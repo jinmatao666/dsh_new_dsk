@@ -49,6 +49,11 @@ function stateStatus(state: ToolRowState, t: BashRowProps['t']): string | null {
   }
 }
 
+function shellSummary(text: string | undefined, fallback: string, t: BashRowProps['t']): string {
+  const candidate = text ?? fallback
+  return /[\u3400-\u9fff]/.test(candidate) ? candidate : t('bash.running')
+}
+
 /**
  * Bash row: icon + Bash · {description} in the shared ToolRow chrome, the
  * whole row toggling the command's terminal or generic error card (ToolRow's unified
@@ -76,6 +81,7 @@ export function BashRow({ toolName, block, sessionId, useSessions, inspect, t }:
   const expandable = terminal !== null || genericError
   const open = expanded && expandable
   const failureLine = model.state === 'error' ? model.errorSummary : null
+  const summary = shellSummary(terminal?.description, model.summary, t)
   const toggleExpand = () => {
     setExpanded(v => !v)
   }
@@ -115,7 +121,7 @@ export function BashRow({ toolName, block, sessionId, useSessions, inspect, t }:
         {/* The terminal presenter's description is the contractual
             above-card summary; a failure's first line outranks both. */}
         <span className={clsx(css.summary, failureLine !== null && css.errorSummary)}>
-          {failureLine ?? terminal?.description ?? model.summary}
+          {failureLine ?? summary}
         </span>
       </div>
       {open && (

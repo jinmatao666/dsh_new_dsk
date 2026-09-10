@@ -245,7 +245,9 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     try {
       if (skill.status !== 1) {
         const response = await API.get(`/api/skill/${skill.id}/releases`);
-        const target = (response.data?.data || []).find(release => ['unpublished', 'draft'].includes(release.state));
+        // A skill that was merely taken off shelf still has its last published
+        // package. That package is the valid target for putting it on shelf again.
+        const target = (response.data?.data || []).find(release => ['unpublished', 'draft', 'published'].includes(release.state));
         if (!target) { showError('未找到可上架的技能版本'); return; }
         await API.post(`/api/skill/${skill.id}/releases/${target.id}/publish`);
         await loadSkills();

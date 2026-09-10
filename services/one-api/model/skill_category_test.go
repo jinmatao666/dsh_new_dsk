@@ -90,6 +90,33 @@ func TestMigrateLegacySkillCategories(t *testing.T) {
 	assert.Equal(t, int64(2), relationCount)
 }
 
+func TestMigrateSkillCategorySchemaCreatesDefaultPrimaryCategory(t *testing.T) {
+	setupSkillTestDB(t)
+
+	require.NoError(t, migrateSkillCategorySchema())
+
+	var typ SkillCategoryType
+	require.NoError(t, DB.Where("code = ?", SkillCategoryTypePackage).First(&typ).Error)
+	var category SkillCategory
+	require.NoError(t, DB.Where("type_id = ? AND code = ? AND status = ? AND is_deleted = ?", typ.Id, DefaultSkillCategoryName, 1, false).First(&category).Error)
+	assert.Equal(t, DefaultSkillCategoryName, category.Name)
+}
+
+func TestMigrateSkillCategorySchemaAcceptsLegacyDefaultCategoryCode(t *testing.T) {
+	setupSkillTestDB(t)
+	require.NoError(t, DB.AutoMigrate(&SkillCategoryType{}, &SkillCategory{}, &SkillCategoryRelation{}))
+	require.NoError(t, ensureDefaultSkillCategoryTypes())
+	legacyDefault := SkillCategory{
+		TypeId: getCategoryTypeId(t, SkillCategoryTypePackage),
+		Code:   "legacy-general",
+		Name:   DefaultSkillCategoryName,
+		Status: 1,
+	}
+	require.NoError(t, DB.Create(&legacyDefault).Error)
+
+	require.NoError(t, migrateSkillCategorySchema())
+}
+
 func TestListSkillCategoriesByTypeIncludesStatus(t *testing.T) {
 	setupSkillCategoryTestDB(t)
 	category := createSkillCategoryForTest(t, SkillCategoryTypePackage, "disabled-doc", "禁用分类")

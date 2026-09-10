@@ -225,16 +225,8 @@ func migrateSkillCategorySchema() error {
 }
 
 func ensureDefaultPrimarySkillCategory() error {
-	var typ SkillCategoryType
-	if err := DB.Where("code = ? AND status = ?", SkillCategoryTypePackage, 1).First(&typ).Error; err != nil {
-		return err
-	}
-	now := time.Now().Unix()
-	category := SkillCategory{TypeId: typ.Id, Code: DefaultSkillCategoryName, Name: DefaultSkillCategoryName, Status: 1, CreatedAt: now, UpdatedAt: now}
-	return DB.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "type_id"}, {Name: "code"}},
-		DoUpdates: clause.Assignments(map[string]interface{}{"name": DefaultSkillCategoryName, "status": 1, "is_deleted": false, "updated_at": now}),
-	}).Create(&category).Error
+	_, err := EnsurePrimarySkillCategory(DefaultSkillCategoryName)
+	return err
 }
 
 // normalizePrimarySkillCategoryRelations repairs older multi-category data.
@@ -246,7 +238,7 @@ func normalizePrimarySkillCategoryRelations() error {
 		return err
 	}
 	var fallback SkillCategory
-	if err := DB.Where("type_id = ? AND code = ? AND status = ? AND is_deleted = ?", typ.Id, DefaultSkillCategoryName, 1, false).First(&fallback).Error; err != nil {
+	if err := DB.Where("type_id = ? AND (code = ? OR name = ?) AND status = ? AND is_deleted = ?", typ.Id, DefaultSkillCategoryName, DefaultSkillCategoryName, 1, false).First(&fallback).Error; err != nil {
 		return err
 	}
 	var skills []Skill
@@ -411,8 +403,9 @@ func ListSkillCategoriesByType(typeCode string, includeDisabled bool) ([]SkillCa
 	query := DB.Table("skill_categories AS c").
 		Select("c.id, c.type_id, t.code AS type_code, t.name AS type_name, c.code, c.name, c.description, c.status, c.sort_order, COUNT(s.id) AS skill_count").
 		Joins("JOIN skill_category_types AS t ON t.id = c.type_id").
-		Joins("LEFT JOIN skill_category_relations AS r ON r.category_id = c.id").
-		Joins("LEFT JOIN skills AS s ON s.id = r.skill_id AND s.is_deleted = ?", false).
+		// skills.category is the single primary package category. Counting it
+		// directly keeps older duplicate relation rows from being shown twice.
+		Joins("LEFT JOIN skills AS s ON s.category = c.name AND s.is_deleted = ?", false).
 		Where("c.is_deleted = ?", false)
 	if typeCode != "" {
 		query = query.Where("t.code = ?", typeCode)
@@ -432,9 +425,9 @@ func CountSkillCategoryRelations(categoryId uint64) (int64, error) {
 		return 0, nil
 	}
 	var count int64
-	err := DB.Table("skill_category_relations AS r").
-		Joins("JOIN skills AS s ON s.id = r.skill_id AND s.is_deleted = ?", false).
-		Where("r.category_id = ?", categoryId).
+	err := DB.Table("skills AS s").
+		Joins("JOIN skill_categories AS c ON c.name = s.category").
+		Where("c.id = ? AND s.is_deleted = ?", categoryId, false).
 		Count(&count).Error
 	return count, err
 }
@@ -650,8 +643,8 @@ func ListSkillsForCategory(categoryId uint64) ([]SkillCategorySkillView, error) 
 	var skills []SkillCategorySkillView
 	err := DB.Table("skills AS s").
 		Select("s.id, s.name, s.display_name, s.version, s.status").
-		Joins("JOIN skill_category_relations AS r ON r.skill_id = s.id").
-		Where("r.category_id = ? AND s.is_deleted = ?", categoryId, false).
+		Joins("JOIN skill_categories AS c ON c.name = s.category").
+		Where("c.id = ? AND s.is_deleted = ?", categoryId, false).
 		Order("s.display_name ASC, s.id ASC").
 		Find(&skills).Error
 	return skills, err
@@ -678,16 +671,16 @@ func RemoveSkillFromCategory(categoryId uint64, skillId int) error {
 		if category.Name == DefaultSkillCategoryName || category.Code == DefaultSkillCategoryName {
 			return errors.New("通用类是默认分类，不能移除其中的技能")
 		}
+		var skill Skill
+		if err := tx.Where("id = ? AND is_deleted = ?", skillId, false).First(&skill).Error; err != nil {
+			return err
+		}
+		if skill.Category != category.Name {
+			return errors.New("该技能当前不属于此分类")
+		}
 		var fallback SkillCategory
-		if err := tx.Where("type_id = ? AND code = ? AND status = ? AND is_deleted = ?", typ.Id, DefaultSkillCategoryName, 1, false).First(&fallback).Error; err != nil {
+		if err := tx.Where("type_id = ? AND (code = ? OR name = ?) AND status = ? AND is_deleted = ?", typ.Id, DefaultSkillCategoryName, DefaultSkillCategoryName, 1, false).First(&fallback).Error; err != nil {
 			return err
-		}
-		var relationCount int64
-		if err := tx.Model(&SkillCategoryRelation{}).Where("skill_id = ? AND category_id = ?", skillId, categoryId).Count(&relationCount).Error; err != nil {
-			return err
-		}
-		if relationCount == 0 {
-			return errors.New("该技能不属于此分类")
 		}
 		sub := tx.Table("skill_categories").Select("id").Where("type_id = ?", typ.Id)
 		if err := tx.Where("skill_id = ? AND category_id IN (?)", skillId, sub).Delete(&SkillCategoryRelation{}).Error; err != nil {
