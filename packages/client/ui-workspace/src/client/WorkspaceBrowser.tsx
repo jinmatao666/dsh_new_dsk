@@ -38,6 +38,30 @@ const SEARCH_QUERY_MAX_CODE_UNITS = 500
 /** Session rows visible per Workspace before the local overflow control. */
 const COLLAPSED_SESSION_LIMIT = 5
 
+type WorkspaceImportFile = { name: string; bytes: number[] }
+
+type DesktopWindow = Window & {
+  __ZJUGIS_NATIVE_INVOKE__?: (command: string, argumentsValue: unknown) => Promise<unknown>
+}
+
+function isFileDrop(event: DragEvent): boolean {
+  return event.dataTransfer?.types.includes('Files') === true
+}
+
+async function desktopImportWorkspaceFiles(workspacePath: string, files: readonly File[]): Promise<readonly string[]> {
+  const invoke = (window as DesktopWindow).__ZJUGIS_NATIVE_INVOKE__
+  if (invoke === undefined) throw new Error('当前版本不支持直接导入工作区文件。')
+  const payload: WorkspaceImportFile[] = await Promise.all(files.map(async file => ({
+    name: file.name,
+    bytes: [...new Uint8Array(await file.arrayBuffer())],
+  })))
+  const imported = await invoke('import_workspace_files', { workspacePath, files: payload })
+  if (!Array.isArray(imported) || !imported.every(path => typeof path === 'string')) {
+    throw new Error('桌面端返回的导入结果无效。')
+  }
+  return imported
+}
+
 /** Keep controlled input and RPC payload inside the session.search wire contract. */
 function sanitizeSearchQuery(value: string): string {
   const withoutNul = value.replaceAll('\0', '')
@@ -775,6 +799,37 @@ export function WorkspaceBrowser({
   const workspaces = useWorkspaces(state => state.items)
   const workspacePhase = useWorkspaces(state => state.phase)
   const archivedSessionIds = useWorkspaces(state => state.archivedSessionIds)
+  const sessionList = useSessions(state => state)
+  const currentSessionId = sessionList.current
+  const currentWorkspace = currentSessionId === undefined
+    ? undefined
+    : workspaces.find(workspace => workspace.sessionIds.includes(currentSessionId)
+      && workspace.path === sessionList.byId[currentSessionId]?.cwd)
+  const [fileDropActive, setFileDropActive] = useState(false)
+  const [fileDropStatus, setFileDropStatus] = useState<{ text: string; error: boolean } | null>(null)
+  const importDroppedFiles = (event: DragEvent) => {
+    if (!isFileDrop(event)) return
+    event.preventDefault()
+    setFileDropActive(false)
+    const files = Array.from(event.dataTransfer?.files ?? [])
+    if (currentWorkspace === undefined) {
+      setFileDropStatus({ text: t('workspace.drop.noTarget'), error: true })
+      return
+    }
+    if (files.length === 0) return
+    setFileDropStatus({ text: t('workspace.drop.importing'), error: false })
+    void desktopImportWorkspaceFiles(currentWorkspace.path, files).then((imported) => {
+      setFileDropStatus({
+        text: t(imported.length === 1 ? 'workspace.drop.success.one' : 'workspace.drop.success.other', {
+          n: imported.length,
+        }),
+        error: false,
+      })
+    }).catch((reason: unknown) => {
+      const message = reason instanceof Error ? reason.message : String(reason)
+      setFileDropStatus({ text: t('workspace.drop.failed', { message }), error: true })
+    })
+  }
   // Live occupancy of this surface's directory-flow hole (the same source the
   // flow reads): a composition without a picking affordance can add nothing.
   const directoryFlowAvailable = useDirectoryFlow(occupied => occupied)
@@ -989,7 +1044,26 @@ export function WorkspaceBrowser({
   }
 
   return (
-    <div className={clsx(css.root, !wide && css.rail)}>
+    <div
+      className={clsx(css.root, !wide && css.rail, fileDropActive && css.fileDropActive)}
+      data-file-drop-message={t('workspace.drop.ready')}
+      onDragEnter={(event) => {
+        if (!isFileDrop(event.nativeEvent)) return
+        event.preventDefault()
+        setFileDropActive(true)
+      }}
+      onDragOver={(event) => {
+        if (!isFileDrop(event.nativeEvent)) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'copy'
+        setFileDropActive(true)
+      }}
+      onDragLeave={(event) => {
+        if (!isFileDrop(event.nativeEvent) || event.currentTarget.contains(event.relatedTarget as Node | null)) return
+        setFileDropActive(false)
+      }}
+      onDrop={(event) => { importDroppedFiles(event.nativeEvent) }}
+    >
       <div className={css.sectionHeader}>
         {wide && (
           <span className={clsx(css.sectionLabel, css.wide, searchExpanded && css.sectionLabelHidden)}>
@@ -1122,6 +1196,11 @@ export function WorkspaceBrowser({
       {/* Always-mounted seat keeps the region's flex slot while the list
           itself is wide-only. */}
       <div className={css.listArea}>
+        {fileDropStatus !== null && (
+          <div className={clsx(css.fileDropStatus, fileDropStatus.error && css.fileDropError)} role="status">
+            {fileDropStatus.text}
+          </div>
+        )}
         {wide && (normalizedQuery !== ''
           ? (
             <SearchResults

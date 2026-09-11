@@ -97,6 +97,47 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
 }
 
 describe('WorkspaceBrowser', () => {
+  it('imports an external file into the current workspace through the desktop bridge', async () => {
+    const invoke = vi.fn(async () => ['/projects/alpha/地图.png'])
+    Object.defineProperty(window, '__ZJUGIS_NATIVE_INVOKE__', { value: invoke, configurable: true })
+    try {
+      const current = summary('alpha-s', 1, { cwd: '/projects/alpha' })
+      const b = mount({
+        useSessions: hook(sessionState([current], { current: current.id })),
+        useWorkspaces: hook(workspaceState([workspace('alpha', ['alpha-s'])])),
+      })
+      const file = new File(['map'], '地图.png', { type: 'image/png' })
+      Object.defineProperty(file, 'arrayBuffer', { value: async () => new Uint8Array([109, 97, 112]).buffer })
+      const event = createEvent.drop(b.view.container.firstElementChild as HTMLElement)
+      Object.defineProperty(event, 'dataTransfer', {
+        value: { types: ['Files'], files: [file] },
+      })
+      fireEvent(b.view.container.firstElementChild as HTMLElement, event)
+      await waitFor(() => {
+        expect(invoke).toHaveBeenCalledWith('import_workspace_files', {
+          workspacePath: '/projects/alpha',
+          files: [{ name: '地图.png', bytes: [109, 97, 112] }],
+        })
+      })
+      expect(screen.getByRole('status').textContent).toBe('已导入 1 个文件')
+    } finally {
+      delete (window as Window & { __ZJUGIS_NATIVE_INVOKE__?: unknown }).__ZJUGIS_NATIVE_INVOKE__
+    }
+  })
+
+  it('does not import an external file when the current session is not in a workspace', () => {
+    const b = mount({
+      useSessions: hook(sessionState([summary('loose', 1, { cwd: '/elsewhere' })], { current: sid('loose') })),
+      useWorkspaces: hook(workspaceState([workspace('alpha', [])])),
+    })
+    const event = createEvent.drop(b.view.container.firstElementChild as HTMLElement)
+    Object.defineProperty(event, 'dataTransfer', {
+      value: { types: ['Files'], files: [new File(['x'], 'notes.txt')] },
+    })
+    fireEvent(b.view.container.firstElementChild as HTMLElement, event)
+    expect(screen.getByRole('status').textContent).toBe('请先打开一个已关联工作区的会话，再拖入文件。')
+  })
+
   it('workspace hover card shows a POSIX home descendant as ~', () => {
     vi.useFakeTimers()
     try {

@@ -13,6 +13,35 @@
   flex-direction: column;
   box-sizing: border-box;
   padding-right: var(--dsh-session-list-edge-inset);
+  position: relative;
+}
+
+.fileDropActive::after {
+  content: attr(data-file-drop-message);
+  position: absolute;
+  z-index: 3;
+  inset: 4px 0 4px 4px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--dsw-alias-state-business-primary);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 88%, transparent);
+  color: var(--dsw-alias-state-business-primary);
+  font-size: 12px;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.fileDropStatus {
+  flex: none;
+  margin: -2px 8px 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.fileDropError {
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .root.rail {

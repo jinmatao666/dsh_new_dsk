@@ -17,6 +17,9 @@ use tauri::{
 use url::Url;
 
 const NATIVE_SKILLS_CHANGED_SCRIPT: &str = "window.dispatchEvent(new Event('dsh:skills-changed'));";
+const WORKSPACE_IMPORT_MAX_FILES: usize = 64;
+const WORKSPACE_IMPORT_MAX_FILE_BYTES: usize = 64 * 1024 * 1024;
+const WORKSPACE_IMPORT_MAX_TOTAL_BYTES: usize = 256 * 1024 * 1024;
 const NATIVE_BRIDGE_INITIALIZATION_SCRIPT: &str = r#"
 (() => {
   const invoke = (command, argumentsValue) => {
@@ -73,6 +76,13 @@ struct MarketplaceSkillState {
 struct CustomSkillFile {
     path: String,
     content: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceImportFile {
+    name: String,
+    bytes: Vec<u8>,
 }
 
 #[derive(Debug, Serialize)]
@@ -589,6 +599,105 @@ fn save_session_log_archive_at(
 fn save_session_log_archive(file_name: String, bytes: Vec<u8>) -> Result<String, String> {
     let destination = save_session_log_archive_at(&user_downloads_root()?, &file_name, &bytes)?;
     Ok(destination.display().to_string())
+}
+
+fn workspace_import_file_name(name: &str) -> Result<&str, String> {
+    let path = Path::new(name);
+    let file_name = path.file_name().and_then(|value| value.to_str());
+    if name.is_empty()
+        || name.contains(['/', '\\', ':'])
+        || path.is_absolute()
+        || file_name != Some(name)
+        || matches!(name, "." | "..")
+    {
+        return Err(format!("工作区文件名无效：{name}"));
+    }
+    Ok(name)
+}
+
+fn workspace_import_destination(root: &Path, name: &str) -> Result<PathBuf, String> {
+    let source = Path::new(name);
+    let stem = source
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| format!("工作区文件名无效：{name}"))?;
+    let extension = source.extension().and_then(|value| value.to_str());
+    for suffix in 0..10_000 {
+        let candidate = match (suffix, extension) {
+            (0, _) => name.to_string(),
+            (_, Some(extension)) => format!("{stem} ({suffix}).{extension}"),
+            (_, None) => format!("{stem} ({suffix})"),
+        };
+        let destination = root.join(candidate);
+        if !destination.exists() {
+            return Ok(destination);
+        }
+    }
+    Err(format!("工作区中同名文件过多：{name}"))
+}
+
+fn import_workspace_files_at(
+    workspace_path: &Path,
+    files: Vec<WorkspaceImportFile>,
+) -> Result<Vec<String>, String> {
+    if files.is_empty() {
+        return Err("没有可导入的文件".to_string());
+    }
+    if files.len() > WORKSPACE_IMPORT_MAX_FILES {
+        return Err(format!(
+            "一次最多可导入 {WORKSPACE_IMPORT_MAX_FILES} 个文件"
+        ));
+    }
+    let root = fs::canonicalize(workspace_path)
+        .map_err(|error| format!("无法访问工作区 {}：{error}", workspace_path.display()))?;
+    if !root.is_dir() {
+        return Err(format!("工作区路径不是文件夹：{}", root.display()));
+    }
+    let mut total_bytes = 0usize;
+    let mut imported = Vec::with_capacity(files.len());
+    for file in files {
+        let name = workspace_import_file_name(&file.name)?;
+        if file.bytes.len() > WORKSPACE_IMPORT_MAX_FILE_BYTES {
+            return Err(format!(
+                "文件超过 {} MB 限制：{name}",
+                WORKSPACE_IMPORT_MAX_FILE_BYTES / 1024 / 1024
+            ));
+        }
+        total_bytes = total_bytes
+            .checked_add(file.bytes.len())
+            .ok_or_else(|| "导入文件总大小无效".to_string())?;
+        if total_bytes > WORKSPACE_IMPORT_MAX_TOTAL_BYTES {
+            return Err(format!(
+                "导入文件总大小不能超过 {} MB",
+                WORKSPACE_IMPORT_MAX_TOTAL_BYTES / 1024 / 1024
+            ));
+        }
+        let destination = workspace_import_destination(&root, name)?;
+        let mut output = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&destination)
+            .map_err(|error| format!("无法创建工作区文件 {}：{error}", destination.display()))?;
+        if let Err(error) = output.write_all(&file.bytes) {
+            let _ = fs::remove_file(&destination);
+            return Err(format!(
+                "无法写入工作区文件 {}：{error}",
+                destination.display()
+            ));
+        }
+        imported.push(destination.display().to_string());
+    }
+    Ok(imported)
+}
+
+/// Copy browser-dropped files into the selected Workspace without exposing a
+/// general filesystem-write command to the renderer.
+#[tauri::command]
+fn import_workspace_files(
+    workspace_path: String,
+    files: Vec<WorkspaceImportFile>,
+) -> Result<Vec<String>, String> {
+    import_workspace_files_at(Path::new(&workspace_path), files)
 }
 
 fn marketplace_resource_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -1482,6 +1591,7 @@ pub fn run() {
             uninstall_custom_skill,
             list_custom_skills,
             read_analysis_view,
+            import_workspace_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DSH Desktop");
@@ -1491,8 +1601,8 @@ pub fn run() {
 mod marketplace_tests {
     use super::{
         install_custom_skill_directory_at, install_marketplace_skill_at, install_marketplace_skill_files_at,
-        marketplace_package_sha256, read_analysis_view, save_session_log_archive_at,
-        uninstall_marketplace_skill_at, CustomSkillFile,
+        import_workspace_files_at, marketplace_package_sha256, read_analysis_view, save_session_log_archive_at,
+        uninstall_marketplace_skill_at, CustomSkillFile, WorkspaceImportFile,
     };
     use std::{
         fs,
@@ -1712,6 +1822,51 @@ mod marketplace_tests {
         assert_eq!(fs::read(first).expect("first bytes"), b"first");
         assert_eq!(fs::read(second).expect("second bytes"), b"second");
         assert!(save_session_log_archive_at(&downloads.0, "../escape.zip", b"bad").is_err());
+    }
+
+    #[test]
+    fn imports_workspace_files_without_overwriting_existing_files() {
+        let workspace = TestDirectory::new();
+        fs::write(workspace.0.join("地图.png"), b"existing").expect("existing file");
+        let imported = import_workspace_files_at(
+            &workspace.0,
+            vec![
+                WorkspaceImportFile {
+                    name: "地图.png".to_string(),
+                    bytes: b"new image".to_vec(),
+                },
+                WorkspaceImportFile {
+                    name: "说明.pdf".to_string(),
+                    bytes: b"pdf".to_vec(),
+                },
+            ],
+        )
+        .expect("import files");
+        assert_eq!(imported.len(), 2);
+        assert_eq!(
+            fs::read(workspace.0.join("地图.png")).expect("existing"),
+            b"existing"
+        );
+        assert_eq!(
+            fs::read(workspace.0.join("地图 (1).png")).expect("renamed"),
+            b"new image"
+        );
+        assert_eq!(fs::read(workspace.0.join("说明.pdf")).expect("pdf"), b"pdf");
+    }
+
+    #[test]
+    fn rejects_workspace_import_paths_outside_the_workspace_root() {
+        let workspace = TestDirectory::new();
+        let error = import_workspace_files_at(
+            &workspace.0,
+            vec![WorkspaceImportFile {
+                name: "../outside.txt".to_string(),
+                bytes: b"bad".to_vec(),
+            }],
+        )
+        .expect_err("reject traversal");
+        assert!(error.contains("文件名无效"));
+        assert!(!workspace.0.join("outside.txt").exists());
     }
 
     #[test]
