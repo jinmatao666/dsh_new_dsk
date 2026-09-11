@@ -749,18 +749,29 @@
   text-align: center;
 }
 
-/* 展开行：去掉 Semi 默认单元格内边距，铺浅蓝底 */
-.skill-admin-surface tr:has(.skill-category-skills) > .semi-table-row-cell {
+/* 展开行：覆盖 Semi 默认灰底与单元格内边距（选择器优先级需高于 semi.css） */
+.skill-admin-surface .semi-table-tbody > .semi-table-row.semi-table-row-expand > .semi-table-row-cell {
   padding: 0;
   background: #f7faff;
 }
 
-.skill-admin-surface tr:has(.skill-category-skills):hover > .semi-table-row-cell {
+.skill-admin-surface .semi-table-tbody > .semi-table-row.semi-table-row-expand:hover > .semi-table-row-cell {
   background: #f7faff;
 }
 
+/* Semi 的 expand-inner 默认 sticky 且随内容收缩，导致展开区变窄贴左，重置为通栏 */
+.skill-admin-surface .semi-table-fixed > .semi-table-tbody > .semi-table-row-expand > .semi-table-row-cell > .semi-table-expand-inner {
+  position: static;
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+
 .skill-category-skills {
-  padding: 10px 20px 16px 46px;
+  padding: 12px 20px 16px 46px;
 }
 
 .skill-category-skill-list {

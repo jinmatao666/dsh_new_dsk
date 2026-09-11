@@ -2189,3 +2189,163 @@ body[theme-mode='dark'] .zjugis-page-content {
         display: none;
     }
 }
+
+/* ── 全局柔和滚动条：细圆角半透明，统一所有可滚动区域（弹窗 / 表格 / 内容区） ── */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.38);
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: rgba(120, 140, 170, 0.55);
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:active {
+    background: rgba(100, 122, 155, 0.65);
+    background-clip: padding-box;
+}
+
+body[theme-mode='dark'] * {
+    scrollbar-color: rgba(203, 213, 225, 0.25) transparent;
+}
+
+body[theme-mode='dark'] *::-webkit-scrollbar-thumb {
+    background: rgba(203, 213, 225, 0.28);
+    background-clip: padding-box;
+}
+
+
+/* ── 统一自定义下拉：触发器与输入框体同款，弹层为页面内圆角浮层 ── */
+.zjugis-select { position: relative; min-width: 0; }
+
+.zjugis-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 13px;
+  border: 1px solid #dbe5f1;
+  border-radius: 11px;
+  outline: 0;
+  color: #243958;
+  background: #f8fbff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.zjugis-select-trigger:hover { border-color: #bcd7f7; }
+
+.zjugis-select.open .zjugis-select-trigger,
+.zjugis-select-trigger:focus-visible {
+  border-color: #5b96ec;
+  box-shadow: 0 0 0 3px rgba(91, 150, 236, .14);
+}
+
+.zjugis-select-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.zjugis-select-trigger > span.is-placeholder { color: #93a6c2; }
+
+.zjugis-select-trigger svg { flex: none; color: #8aa2c0; transition: transform .18s ease; }
+
+.zjugis-select.open .zjugis-select-trigger svg { transform: rotate(180deg); }
+
+.zjugis-select-menu {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 264px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid #e2ebf6;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 14px 38px rgb(30 60 110 / 14%), 0 3px 10px rgb(30 60 110 / 8%);
+}
+
+.zjugis-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #33455f;
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color .12s ease, color .12s ease;
+}
+
+.zjugis-select-option > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.zjugis-select-option:hover { background: #f0f6ff; color: #1766cf; }
+
+.zjugis-select-option.active { background: #e8f1ff; color: #1d4ed8; font-weight: 600; }
+
+/* 看板统计周期：紧凑无边框变体 */
+.zjugis-period .zjugis-select-trigger {
+  width: auto;
+  min-width: 70px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #273c60;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.zjugis-period .zjugis-select-trigger:hover,
+.zjugis-period .zjugis-select.open .zjugis-select-trigger { border: 0; box-shadow: none; }
+
+.zjugis-period .zjugis-select-menu { left: auto; right: 0; min-width: 110px; }
+
+/* 暗色模式 */
+body[theme-mode='dark'] .zjugis-select-trigger {
+  border-color: rgba(120, 150, 200, .3);
+  background: rgba(20, 34, 58, .6);
+  color: #dce8fb;
+}
+
+body[theme-mode='dark'] .zjugis-select-menu {
+  border-color: rgba(120, 150, 200, .25);
+  background: #16263f;
+  box-shadow: 0 14px 38px rgb(0 0 0 / 40%);
+}
+
+body[theme-mode='dark'] .zjugis-select-option { color: #c6d6ee; }
+
+body[theme-mode='dark'] .zjugis-select-option:hover { background: rgba(90, 140, 220, .14); color: #8ab8ff; }
+
+body[theme-mode='dark'] .zjugis-select-option.active { background: rgba(90, 140, 220, .2); color: #8ab8ff; }
+
+body[theme-mode='dark'] .zjugis-period .zjugis-select-trigger { border: 0; background: transparent; color: #dce8fb; }

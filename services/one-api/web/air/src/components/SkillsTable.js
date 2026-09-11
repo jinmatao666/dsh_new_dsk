@@ -2,6 +2,7 @@ import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo
 import { Modal, Table, Tag, Tooltip } from '@douyinfe/semi-ui';
 import { Bot, ChartColumn, Compass, FileText, Map, Zap } from 'lucide-react';
 import SkillBrowseDrawer from './SkillBrowseDrawer';
+import CustomSelect from './CustomSelect';
 import { importSkillFolder, zipSkillFolder } from './skillFolderImport';
 import { API, showError, showSuccess } from '../helpers';
 import './SkillsTable.css';
@@ -84,6 +85,23 @@ const EMPTY_FORM = {
   icon: 'glyph:bot'
 };
 
+const useSkillMockData = process.env.NODE_ENV === 'development'
+  && process.env.REACT_APP_USE_SKILL_MOCK_DATA === 'true';
+
+const loadMockSkillData = () => {
+  const { MOCK_SKILL_CATEGORIES, MARKETPLACE_MOCK_SKILLS } = require('./skillMarketplaceMock');
+  return {
+    skills: MARKETPLACE_MOCK_SKILLS.map((skill, index) => ({
+      ...skill,
+      id: skill.id || index + 1,
+      status: skill.status === 'published' ? 1 : 0,
+      created_at: Math.floor(new Date(skill.created_at).getTime() / 1000),
+      unpublished_release_count: 0
+    })),
+    categories: MOCK_SKILL_CATEGORIES.map((name, index) => ({ id: index + 1, name }))
+  };
+};
+
 const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   const [items, setItems] = useState([]);
   const [managedCategories, setManagedCategories] = useState([]);
@@ -102,6 +120,12 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   const iconInputRef = useRef(null);
   const [releases, setReleases] = useState({ skill: null, items: [], files: [], selectedFilePath: '' });
   const loadSkills = useCallback(async () => {
+    if (useSkillMockData) {
+      const { skills, categories } = loadMockSkillData();
+      setItems(skills);
+      setManagedCategories(categories);
+      return;
+    }
     try {
       const [response, categoryResponse] = await Promise.all([
         API.get('/api/skill/admin/list', { params: { page: 1, perPage: 100 } }),
@@ -198,6 +222,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     }
   };
   const openReleases = async skill => {
+    if (useSkillMockData) { showError('演示数据仅用于本地预览，不能查看或修改版本'); return; }
     try { const response = await API.get(`/api/skill/${skill.id}/releases`); setReleases({ skill, items: response.data?.data || [], files: [], selectedFilePath: '' }); }
     catch (error) { showError(error.response?.data?.message || error.message || '加载版本失败'); }
   };
@@ -240,8 +265,12 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     return items.filter(item => [item.name, item.display_name, item.description, item.category, item.submitter].join(' ').toLowerCase().includes(query));
   }, [items, keyword]);
 
-  const removeSkill = skill => Modal.confirm({ title: `删除技能「${skill.display_name || skill.name}」？`, content: '删除后将不再出现在桌面技能市场。', okType: 'danger', onOk: async () => { await API.delete(`/api/skill/${skill.id}`); await loadSkills(); showSuccess('技能已删除'); } });
+  const removeSkill = skill => {
+    if (useSkillMockData) { showError('演示数据仅用于本地预览，不能删除'); return; }
+    Modal.confirm({ title: `删除技能「${skill.display_name || skill.name}」？`, content: '删除后将不再出现在桌面技能市场。', okType: 'danger', onOk: async () => { await API.delete(`/api/skill/${skill.id}`); await loadSkills(); showSuccess('技能已删除'); } });
+  };
   const togglePublish = async skill => {
+    if (useSkillMockData) { showError('演示数据仅用于本地预览，不能修改上架状态'); return; }
     try {
       if (skill.status !== 1) {
         const response = await API.get(`/api/skill/${skill.id}/releases`);
@@ -311,6 +340,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
 
   const saveSkill = async (e) => {
     e.preventDefault();
+    if (useSkillMockData) { showError('演示数据仅用于本地预览，不能保存修改'); return; }
     const name = form.name.trim();
     const displayName = form.display_name.trim();
     if (!name) { showError('请输入技能标识'); return; }
@@ -469,10 +499,10 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
               </label>
               <label className='zjugis-field'>
                 <span>分类</span>
-                <select value={form.category} onChange={setField('category')}>
+                <CustomSelect value={form.category} onChange={setField('category')}>
                   <option value=''>请选择分类</option>
                   {managedCategories.map(category => <option key={category.id} value={category.name}>{category.name}</option>)}
-                </select>
+                </CustomSelect>
                 <small className='preview-muted'>只能选择“分类管理”中已启用的分类。</small>
               </label>
             </div>

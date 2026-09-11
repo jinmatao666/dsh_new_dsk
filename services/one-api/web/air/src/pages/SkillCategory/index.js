@@ -4,6 +4,15 @@ import { IconPlus, IconSearch } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess } from '../../helpers';
 
 const EMPTY = { id: null, name: '', description: '' };
+const useSkillMockData = process.env.NODE_ENV === 'development'
+  && process.env.REACT_APP_USE_SKILL_MOCK_DATA === 'true';
+const loadMockCategorySkills = (category) => {
+  const { MARKETPLACE_MOCK_SKILLS } = require('../../components/skillMarketplaceMock');
+  return MARKETPLACE_MOCK_SKILLS.filter((skill) => {
+    const mockCategory = skill.id === 'spatial-econometrics' ? '其他' : skill.category;
+    return mockCategory === category.name;
+  });
+};
 const responseData = (response, fallback) => {
   if (response.data?.success) return response.data.data;
   throw new Error(response.data?.message || fallback);
@@ -19,6 +28,11 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
   const searchKeyword = embedded ? keyword : localKeyword;
 
   const load = async () => {
+    if (useSkillMockData) {
+      const { SKILL_CATEGORIES_MOCK } = require('../../components/skillCategoryMock');
+      setItems(SKILL_CATEGORIES_MOCK.filter((category) => category.type_id === 1));
+      return;
+    }
     setLoading(true);
     try {
       const response = await API.get('/api/skill-category/', { params: { includeDisabled: 1, type: 'skill_package' } });
@@ -38,6 +52,10 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
   const updateEditor = (field, value) => setEditor((current) => ({ ...current, data: { ...current.data, [field]: value } }));
 
   const save = async () => {
+    if (useSkillMockData) {
+      showError('演示数据仅用于本地预览，不能保存修改');
+      return;
+    }
     if (!editor.data.name.trim()) {
       showError('分类名称必填');
       return;
@@ -61,6 +79,10 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
   };
 
   const remove = (row) => {
+    if (useSkillMockData) {
+      showError('演示数据仅用于本地预览，不能删除');
+      return;
+    }
     const skillCount = Number(row.skill_count || 0);
     if (skillCount > 0) {
       void expandCategory(row);
@@ -90,6 +112,10 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
       setExpanded({ category: null, skills: [], loading: false });
       return;
     }
+    if (useSkillMockData) {
+      setExpanded({ category: row, skills: loadMockCategorySkills(row), loading: false });
+      return;
+    }
     setExpanded({ category: row, skills: [], loading: true });
     try {
       const response = await API.get(`/api/skill-category/${row.id}/skills`);
@@ -102,6 +128,10 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
   };
 
   const removeSkill = (category, skill) => {
+    if (useSkillMockData) {
+      showError('演示数据仅用于本地预览，不能移除关联技能');
+      return;
+    }
     Modal.confirm({
       title: `移出分类：${skill.display_name || skill.name}`,
       content: `移出“${category.name}”后，该技能将自动归入“通用类”。`,

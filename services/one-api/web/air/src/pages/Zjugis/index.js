@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { API } from '../../helpers';
+import CustomSelect from '../../components/CustomSelect';
 
 const emptyChannel = {
   name: '',
@@ -161,12 +162,12 @@ function Field({ label, ...props }) {
 }
 function SelectField({ label, value, onChange, children }) {
   return (
-    <label className='zjugis-field'>
+    <div className='zjugis-field'>
       <span>{label}</span>
-      <select value={value ?? ''} onChange={onChange}>
+      <CustomSelect value={value ?? ''} onChange={onChange}>
         {children}
-      </select>
-    </label>
+      </CustomSelect>
+    </div>
   );
 }
 
@@ -1356,9 +1357,9 @@ export function ModelConfigPage() {
                 rows='2'
               />
             </label>
-            <label className='zjugis-field full'>
+            <div className='zjugis-field full'>
               <span>来源渠道</span>
-              <select
+              <CustomSelect
                 value={String((modelEdit.sourceChannelIds || [])[0] || '')}
                 onChange={(e) =>
                   setModelEdit({
@@ -1373,9 +1374,9 @@ export function ModelConfigPage() {
                     {r.name}（{r.id}）
                   </option>
                 ))}
-              </select>
+              </CustomSelect>
               <small className='preview-muted'>选择该模型实际调用的来源渠道；需要备用渠道时可在后续编辑中调整。</small>
-            </label>
+            </div>
             <div className='form-inline-actions'>
               <label className='zjugis-check'>
                 <input
@@ -1465,6 +1466,7 @@ export function UsersPage() {
     username: '',
     display_name: '',
     password: '',
+    role: 1,
   });
   const shown = list.rows.filter(
     (u) =>
@@ -1477,7 +1479,7 @@ export function UsersPage() {
     const res = await API.post('/api/user/', form);
     if (res.data?.success) {
       setModal(null);
-      setForm({ username: '', display_name: '', password: '' });
+      setForm({ username: '', display_name: '', password: '', role: 1 });
       list.refresh();
     } else dialog.notice(res.data?.message || '保存失败');
   };
@@ -1729,24 +1731,36 @@ export function UsersPage() {
       {modal && (
         <Modal title='添加用户' onClose={() => setModal(null)}>
           <form className='zjugis-form' onSubmit={save}>
-            <Field
-              label='用户名'
-              value={form.username}
-              onChange={(e) => set('username', e.target.value)}
-              required
-            />
-            <Field
-              label='显示名称'
-              value={form.display_name}
-              onChange={(e) => set('display_name', e.target.value)}
-            />
-            <Field
-              label='密码'
-              type='password'
-              value={form.password}
-              onChange={(e) => set('password', e.target.value)}
-              required
-            />
+            <div className='form-grid'>
+              <Field
+                label='用户名'
+                value={form.username}
+                onChange={(e) => set('username', e.target.value)}
+                required
+              />
+              <Field
+                label='显示名称'
+                value={form.display_name}
+                onChange={(e) => set('display_name', e.target.value)}
+              />
+            </div>
+            <div className='form-grid'>
+              <Field
+                label='密码'
+                type='password'
+                value={form.password}
+                onChange={(e) => set('password', e.target.value)}
+                required
+              />
+              <SelectField
+                label='角色权限'
+                value={form.role}
+                onChange={(e) => set('role', Number(e.target.value))}
+              >
+                <option value={1}>普通用户</option>
+                <option value={100}>超级管理员</option>
+              </SelectField>
+            </div>
             <div className='zjugis-modal-actions'>
               <button
                 type='button'

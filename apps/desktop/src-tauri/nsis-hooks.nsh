@@ -16,6 +16,36 @@
   !insertmacro WANWEI_STOP_RUNNING_APP
 !macroend
 
+; Releases before the rebrand registered their own product name, installation
+; directory, and shortcut. Tauri only detects an installed release by the
+; current product name, so remove that legacy installation after the new one
+; is safely in place. The legacy uninstaller keeps app data unless its own UI
+; explicitly selected data deletion; silent migration never makes that choice.
+!macro WANWEI_REMOVE_LEGACY_INSTALLATION
+  ; The unnamed value is the raw installation directory. InstallLocation is
+  ; quoted by Tauri's generated installer and cannot safely be extended.
+  ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\ZJUGIS Harness" ""
+  StrCmp $0 "" wanwei_legacy_location_missing wanwei_legacy_location_found
+
+  wanwei_legacy_location_missing:
+  StrCpy $0 "$LOCALAPPDATA\ZJUGIS Harness"
+
+  wanwei_legacy_location_found:
+  ; Do not act if a user deliberately selected the legacy directory for this
+  ; installation.
+  StrCmp "$INSTDIR" "$0" wanwei_legacy_installation_done
+  IfFileExists "$0\uninstall.exe" 0 wanwei_legacy_installation_done
+
+  StrCpy $1 '"$0\uninstall.exe" /S _?=$0'
+  ExecWait '$1' $2
+
+  wanwei_legacy_installation_done:
+!macroend
+
+!macro NSIS_HOOK_POSTINSTALL
+  !insertmacro WANWEI_REMOVE_LEGACY_INSTALLATION
+!macroend
+
 !macro NSIS_HOOK_PREUNINSTALL
   !insertmacro WANWEI_STOP_RUNNING_APP
 !macroend

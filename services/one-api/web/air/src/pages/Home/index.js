@@ -14,6 +14,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { API, isAdmin, showError } from '../../helpers';
+import CustomSelect from '../../components/CustomSelect';
 import { renderNumber, renderQuota } from '../../helpers/render';
 
 const PERIODS = [
@@ -170,10 +171,9 @@ const Home = () => {
         <div className="zjugis-header-actions">
           <label className="zjugis-period" htmlFor="zjugis-period-select">
             <span>统计周期</span>
-            <select id="zjugis-period-select" value={period} onChange={(event) => setPeriod(event.target.value)}>
+            <CustomSelect id="zjugis-period-select" className="zjugis-period-select" value={period} onChange={(event) => setPeriod(event.target.value)}>
               {PERIODS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}
-            </select>
-            <ChevronDown size={14} />
+            </CustomSelect>
           </label>
           <button className="zjugis-refresh-button" type="button" onClick={() => loadData(true)} disabled={!DASHBOARD_DATA_ENABLED || refreshing} aria-label="刷新看板">
             <RefreshCw size={15} className={refreshing ? 'is-spinning' : ''} />

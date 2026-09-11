@@ -911,11 +911,21 @@ func CreateUser(c *gin.Context) {
 	if user.DisplayName == "" {
 		user.DisplayName = user.Username
 	}
-	myRole := c.GetInt("role")
-	if user.Role >= myRole {
+	requestedRole := user.Role
+	if requestedRole == model.RoleGuestUser {
+		requestedRole = model.RoleCommonUser
+	}
+	if requestedRole != model.RoleCommonUser && requestedRole != model.RoleRootUser {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "无法创建权限大于等于自己的用户",
+			"message": "只能创建普通用户或超级管理员",
+		})
+		return
+	}
+	if requestedRole == model.RoleRootUser && c.GetInt(ctxkey.Role) != model.RoleRootUser {
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": "只有超级管理员可以创建超级管理员",
 		})
 		return
 	}
@@ -924,6 +934,7 @@ func CreateUser(c *gin.Context) {
 		Username:    user.Username,
 		Password:    user.Password,
 		DisplayName: user.DisplayName,
+		Role:        requestedRole,
 	}
 	if err := cleanUser.Insert(ctx, 0); err != nil {
 		c.JSON(http.StatusOK, gin.H{
