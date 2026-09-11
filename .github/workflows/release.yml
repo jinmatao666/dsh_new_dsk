@@ -174,8 +174,8 @@ jobs:
       # CLI before generating icons and invoking Tauri packaging.
       - name: Restore packaging tools
         run: pnpm install --frozen-lockfile --prod=false
-      - name: Generate ZJUGIS desktop icons
-        run: pnpm --filter @deepseek-ai/dsh-desktop-app exec tauri icon src-tauri/icons/zjugis-mark-source.png
+      - name: Generate WanweiBuddy desktop icons
+        run: pnpm --filter @deepseek-ai/dsh-desktop-app exec tauri icon src-tauri/icons/icon.png
       - name: Stabilize macOS DMG detach
         if: runner.os == 'macOS'
         shell: bash
