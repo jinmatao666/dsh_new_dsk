@@ -950,16 +950,30 @@ export function ModelConfigPage() {
       )}
       {testResult && (
         <Modal title='渠道测试结果' onClose={() => setTestResult(null)}>
-          <div className='channel-test-success'>
-            <div className='channel-test-success-icon'>✓</div>
-            <div>
-              <h3>{testResult.channel} 测试成功</h3>
-              <p>
-                模型：{testResult.model}
-                {testResult.time
-                  ? ` · 耗时 ${Number(testResult.time).toFixed(2)} 秒`
-                  : ''}
-              </p>
+          <div className='zjugis-channel-test-card'>
+            <div className='zjugis-channel-test-summary'>
+              <div className='zjugis-channel-test-icon' aria-hidden='true'>
+                <svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'>
+                  <polyline points='20 6 9 17 4 12' />
+                </svg>
+              </div>
+              <div>
+                <span className='zjugis-channel-test-status'>连接正常</span>
+                <h3>{testResult.channel}</h3>
+                <p>渠道已成功响应测试请求，可以正常使用。</p>
+              </div>
+            </div>
+            <div className='zjugis-channel-test-details'>
+              <div>
+                <span>测试模型</span>
+                <strong title={testResult.model}>{testResult.model}</strong>
+              </div>
+              <div>
+                <span>响应耗时</span>
+                <strong>
+                  {testResult.time ? `${Number(testResult.time).toFixed(2)} 秒` : '—'}
+                </strong>
+              </div>
             </div>
           </div>
           <div className='zjugis-modal-actions'>
@@ -1118,22 +1132,36 @@ export function ModelConfigPage() {
                 </button>
               </div>
               {fetchedModels.length > 0 ? (
-                <div className='zjugis-model-picker'>
-                  <div className='zjugis-model-picker-head'>
-                    <strong>上游返回 {fetchedModels.length} 个模型</strong>
-                    <span>
-                      已选择 {selectedModels.filter((name) => fetchedModels.includes(name)).length} 个
-                    </span>
-                    <button type='button' className='link-button' onClick={() => selectFetchedModels(true)}>全选</button>
-                    <button type='button' className='link-button' onClick={() => selectFetchedModels(false)}>取消全选</button>
+                <div className='zjugis-channel-model-picker'>
+                  <div className='zjugis-channel-model-picker-head'>
+                    <div>
+                      <strong>获取到 {fetchedModels.length} 个模型</strong>
+                      <span>
+                        已选择 {selectedModels.filter((name) => fetchedModels.includes(name)).length} 个
+                      </span>
+                    </div>
+                    <div className='zjugis-channel-model-picker-actions'>
+                      <button type='button' onClick={() => selectFetchedModels(true)}>全选</button>
+                      <button type='button' onClick={() => selectFetchedModels(false)}>清空</button>
+                    </div>
                   </div>
-                  <div className='zjugis-model-options'>
-                    {fetchedModels.map((name) => (
-                      <label key={name} className='zjugis-model-option'>
-                        <input type='checkbox' checked={selectedModels.includes(name)} onChange={() => toggleFetchedModel(name)} />
-                        <span>{name}</span>
-                      </label>
-                    ))}
+                  <div className='zjugis-channel-model-options'>
+                    {fetchedModels.map((name) => {
+                      const checked = selectedModels.includes(name);
+                      return (
+                        <label key={name} className={`zjugis-channel-model-option${checked ? ' checked' : ''}`}>
+                          <input type='checkbox' checked={checked} onChange={() => toggleFetchedModel(name)} />
+                          <span className='zjugis-channel-model-name' title={name}>{name}</span>
+                          <span className='zjugis-channel-model-check' aria-hidden='true'>
+                            {checked && (
+                              <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'>
+                                <polyline points='20 6 9 17 4 12' />
+                              </svg>
+                            )}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
               ) : (
