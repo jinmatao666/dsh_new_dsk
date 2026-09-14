@@ -43,6 +43,42 @@ const splitModels = (v) =>
     .map((x) => x.trim())
     .filter(Boolean);
 
+const isDevelopmentPreview = process.env.NODE_ENV === 'development';
+const previewChannelModels = [
+  'qwen3.8-27b-fp8',
+  'bge-m3',
+  'bge-reranker-v2-m3',
+  'qwen3.5-9b',
+];
+const previewChannels = [
+  {
+    id: 'preview-4090',
+    name: 'ZJUGIS4090',
+    type: 50,
+    base_url: 'http://ac.zjugis.com:20330/v1',
+    models: previewChannelModels.slice(0, 3).join(','),
+    group: 'default',
+    priority: 10,
+    weight: 1,
+    status: 1,
+    test_model: 'qwen3.8-27b-fp8',
+    isDevelopmentPreview: true,
+  },
+  {
+    id: 'preview-cloud',
+    name: '办公模型服务',
+    type: 50,
+    base_url: 'https://api.example.com/v1',
+    models: 'deepseek-chat,qwen3.5-9b',
+    group: 'default',
+    priority: 0,
+    weight: 1,
+    status: 1,
+    test_model: 'deepseek-chat',
+    isDevelopmentPreview: true,
+  },
+];
+
 function useList(path, query = '') {
   const [state, setState] = useState({ rows: [], loading: false, error: '' });
   const refresh = async () => {
@@ -188,7 +224,8 @@ export function ModelConfigPage() {
   });
   const [testResult, setTestResult] = useState(null);
   const [modelTest, setModelTest] = useState(null);
-  const rows = list.rows;
+  const rows =
+    isDevelopmentPreview && list.rows.length === 0 ? previewChannels : list.rows;
   const models = useMemo(
     () => [...new Set(rows.flatMap((r) => splitModels(r.models)))],
     [rows]
@@ -255,6 +292,15 @@ export function ModelConfigPage() {
     }
     setBusy(`${name}-${row.id}`);
     try {
+      if (isDevelopmentPreview && row.isDevelopmentPreview) {
+        if (name === 'test') {
+          const model = value || row.test_model || splitModels(row.models)[0];
+          setTestResult({ channel: row.name, model, time: 0.48 });
+        } else {
+          dialog.notice('这是本地预览数据，仅用于查看页面效果');
+        }
+        return;
+      }
       let res;
       let model = '';
       if (name === 'delete') res = await API.delete(`/api/channel/${row.id}/`);
@@ -285,6 +331,13 @@ export function ModelConfigPage() {
   const fetchModels = async () => {
     setBusy('fetch-models');
     try {
+      if (
+        isDevelopmentPreview &&
+        (form.isDevelopmentPreview || !String(form.base_url || '').trim())
+      ) {
+        setFetchedModels(previewChannelModels);
+        return;
+      }
       const res =
         form.id && !form.key
           ? await API.get(`/api/channel/${form.id}/fetch_models`)
