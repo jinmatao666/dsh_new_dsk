@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { API } from '../../helpers';
+import { fetchManagedRoles } from '../../helpers/roles';
 import CustomSelect from '../../components/CustomSelect';
 import RolePermissions from '../../components/RolePermissions';
 
@@ -1423,10 +1424,9 @@ export function UsersPage() {
     let cancelled = false;
     setRolesLoading(true);
     setRoleLoadError('');
-    API.get('/api/role/')
-      .then((res) => {
-        if (!res.data?.success) throw new Error(res.data?.message || '读取角色失败');
-        const activeRoles = (res.data.data || []).filter((role) => Number(role.status) === 1);
+    fetchManagedRoles()
+      .then((data) => {
+        const activeRoles = data.filter((role) => Number(role.status) === 1);
         if (cancelled) return;
         setRoles(activeRoles);
         setForm((current) => ({

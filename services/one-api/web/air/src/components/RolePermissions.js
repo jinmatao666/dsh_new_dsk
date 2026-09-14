@@ -2,6 +2,7 @@
 import { Button, Modal } from '@douyinfe/semi-ui';
 import { Cpu, Pencil, Plus, ShieldCheck, Users } from 'lucide-react';
 import { API, showError, showSuccess } from '../helpers';
+import { fetchManagedRoles } from '../helpers/roles';
 
 const MOCK_MODELS = [
   { name: 'deepseek-chat', display_name: 'DeepSeek Chat', model_type: 'chat' },
@@ -17,6 +18,7 @@ const toRoleView = (role) => ({ ...role, models: role.permissions?.models || [] 
 
 export default function RolePermissions() {
   const [roles, setRoles] = useState([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
   const [models, setModels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
@@ -35,12 +37,18 @@ export default function RolePermissions() {
       .catch(() => setModels(MOCK_MODELS))
       .finally(() => setLoading(false));
 
-    API.get('/api/role/')
-      .then((res) => {
-        if (!res.data?.success) throw new Error(res.data?.message || '读取角色失败');
-        setRoles((res.data.data || []).map(toRoleView));
+    let cancelled = false;
+    fetchManagedRoles()
+      .then((data) => {
+        if (!cancelled) setRoles(data.map(toRoleView));
       })
-      .catch((error) => showError(error.message || '读取角色失败'));
+      .catch((error) => {
+        if (!cancelled) showError(error.message);
+      })
+      .finally(() => {
+        if (!cancelled) setRolesLoading(false);
+      });
+    return () => { cancelled = true; };
   }, []);
 
   const openEditor = (role) => { setDraftModels([...role.models]); setEditingId(role.role); };
@@ -88,10 +96,11 @@ export default function RolePermissions() {
         </button>
       </div>
       <div className='zjugis-role-rows'>
+        {rolesLoading && <div className='preview-empty'>正在读取角色…</div>}
         {roles.map((role) => {
           const Icon = ROLE_ICONS[role.role] || Cpu;
           return (
-            <div key={role.id} className='zjugis-role-row'>
+            <div key={role.role} className='zjugis-role-row'>
               <div className='zjugis-role-row-icon'><Icon size={17} strokeWidth={1.8} /></div>
               <div className='zjugis-role-row-info'>
                 <strong>{role.name}</strong>
@@ -103,6 +112,7 @@ export default function RolePermissions() {
             </div>
           );
         })}
+        {!rolesLoading && roles.length === 0 && <div className='preview-empty'>暂时无法读取角色，请稍后重试</div>}
       </div>
       {editing && (
         <div className='zjugis-role-modal-mask' onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingId(null); }}>
