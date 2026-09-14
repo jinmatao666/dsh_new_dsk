@@ -140,6 +140,23 @@ func ListModels(c *gin.Context) {
 		userGroup, _ := model.CacheGetUserGroup(userId)
 		availableModels, _ = model.CacheGetGroupModels(ctx, userGroup)
 	}
+	user, err := model.GetUserById(c.GetInt(ctxkey.Id), false)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取用户角色失败"})
+		return
+	}
+	roleModels, roleConfigured, err := model.GetRoleModels(user.Role)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取角色模型权限失败"})
+		return
+	}
+	if roleConfigured {
+		roleSet := make(map[string]bool, len(roleModels))
+		for _, roleModel := range roleModels {
+			roleSet[roleModel] = true
+		}
+		availableModels = filterModels(availableModels, roleSet)
+	}
 	modelSet := make(map[string]bool)
 	for _, availableModel := range availableModels {
 		modelSet[availableModel] = true
@@ -167,6 +184,19 @@ func ListModels(c *gin.Context) {
 		"object": "list",
 		"data":   availableOpenAIModels,
 	})
+}
+
+func filterModels(models []string, allowed map[string]bool) []string {
+	if allowed["*"] {
+		return models
+	}
+	filtered := make([]string, 0, len(models))
+	for _, name := range models {
+		if allowed[name] {
+			filtered = append(filtered, name)
+		}
+	}
+	return filtered
 }
 
 func RetrieveModel(c *gin.Context) {
@@ -204,6 +234,23 @@ func GetUserAvailableModels(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+	user, err := model.GetUserById(id, false)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "读取用户角色失败"})
+		return
+	}
+	roleModels, configured, err := model.GetRoleModels(user.Role)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "读取角色模型权限失败"})
+		return
+	}
+	if configured {
+		allowed := make(map[string]bool, len(roleModels))
+		for _, name := range roleModels {
+			allowed[name] = true
+		}
+		models = filterModels(models, allowed)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

@@ -667,6 +667,17 @@ func UpdateUser(c *gin.Context) {
 		})
 		return
 	}
+	if updatedUser.Role == model.RoleGuestUser {
+		updatedUser.Role = originUser.Role
+	}
+	role, err := model.GetRole(updatedUser.Role)
+	if err != nil || role.Status != 1 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "指定角色不存在或已停用",
+		})
+		return
+	}
 	myRole := c.GetInt(ctxkey.Role)
 	if myRole <= originUser.Role && myRole != model.RoleRootUser {
 		c.JSON(http.StatusOK, gin.H{
@@ -911,21 +922,22 @@ func CreateUser(c *gin.Context) {
 	if user.DisplayName == "" {
 		user.DisplayName = user.Username
 	}
+	if c.GetInt(ctxkey.Role) != model.RoleRootUser {
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": "只有超级管理员可以创建用户",
+		})
+		return
+	}
 	requestedRole := user.Role
 	if requestedRole == model.RoleGuestUser {
 		requestedRole = model.RoleCommonUser
 	}
-	if requestedRole != model.RoleCommonUser && requestedRole != model.RoleRootUser {
+	role, err := model.GetRole(requestedRole)
+	if err != nil || role.Status != 1 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "只能创建普通用户或超级管理员",
-		})
-		return
-	}
-	if requestedRole == model.RoleRootUser && c.GetInt(ctxkey.Role) != model.RoleRootUser {
-		c.JSON(http.StatusForbidden, gin.H{
-			"success": false,
-			"message": "只有超级管理员可以创建超级管理员",
+			"message": "指定角色不存在或已停用",
 		})
 		return
 	}

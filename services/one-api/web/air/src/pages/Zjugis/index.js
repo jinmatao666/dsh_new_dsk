@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { API } from '../../helpers';
 import CustomSelect from '../../components/CustomSelect';
+import RolePermissions from '../../components/RolePermissions';
 
 const emptyChannel = {
   name: '',
@@ -9,14 +10,11 @@ const emptyChannel = {
   base_url: '',
   models: '',
   groups: 'default',
-  other: '',
   openai_organization: '',
   model_mapping: '',
-  system_prompt: '',
   auto_ban: 1,
   priority: 0,
   weight: 1,
-  test_model: '',
   status: 1,
 };
 // Keep these numeric values aligned with the legacy OneAPI CHANNEL_OPTIONS.
@@ -178,7 +176,6 @@ export function ModelConfigPage() {
   const [tab, setTab] = useState('channels');
   const [form, setForm] = useState(emptyChannel);
   const [busy, setBusy] = useState('');
-  const [probe, setProbe] = useState(null);
   const [fetchedModels, setFetchedModels] = useState([]);
   const [definitions, setDefinitions] = useState([]);
   const [modelEdit, setModelEdit] = useState(null);
@@ -197,7 +194,6 @@ export function ModelConfigPage() {
   );
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   const open = (row) => {
-    setProbe(null);
     setFetchedModels([]);
     setEditing(row || {});
     setForm(
@@ -223,6 +219,10 @@ export function ModelConfigPage() {
       }
     }
     const configuredModels = splitModels(form.models);
+    if (configuredModels.length === 0) {
+      dialog.notice('请至少选择一个渠道模型');
+      return;
+    }
     const payload = {
       ...form,
       models: configuredModels.join(','),
@@ -282,7 +282,6 @@ export function ModelConfigPage() {
     }
   };
   const fetchModels = async () => {
-    if (!form.key && !form.id) return dialog.notice('请先填写 API 密钥');
     setBusy('fetch-models');
     try {
       const res =
@@ -330,21 +329,6 @@ export function ModelConfigPage() {
             .filter((name) => !fetchedModels.includes(name))
             .join(',')
     );
-  const probeModels = async () => {
-    if (!form.id) return dialog.notice('请先保存渠道');
-    setBusy('probe');
-    try {
-      const res = await API.post(`/api/channel/${form.id}/probe_models`, {
-        models: splitModels(form.models),
-      });
-      if (!res.data?.success) throw new Error(res.data?.message || '验证失败');
-      setProbe(res.data.data);
-    } catch (e) {
-      dialog.notice(e.message || '验证失败');
-    } finally {
-      setBusy('');
-    }
-  };
   const loadDefinitions = async () => {
     try {
       const res = await API.get('/api/model_definition/aggregated');
@@ -1113,11 +1097,11 @@ export function ModelConfigPage() {
                 onChange={(e) => set('base_url', e.target.value)}
               />
               <Field
-                label='API 密钥'
+                label='API 密钥（可选）'
                 type='password'
                 value={form.key || ''}
                 onChange={(e) => set('key', e.target.value)}
-                placeholder={form.id ? '留空表示保持原密钥' : ''}
+                placeholder={form.id ? '留空表示保持原密钥' : '本地无鉴权服务可留空'}
               />
             </div>
             <label className='zjugis-field full'>
@@ -1130,21 +1114,6 @@ export function ModelConfigPage() {
                   disabled={!!busy}
                 >
                   自动获取模型
-                </button>
-                <button
-                  type='button'
-                  className='preview-button'
-                  onClick={probeModels}
-                  disabled={!!busy || !form.id}
-                >
-                  逐个验证可用性
-                </button>
-                <button
-                  type='button'
-                  className='preview-button'
-                  onClick={() => set('models', '')}
-                >
-                  清除模型
                 </button>
               </div>
               {fetchedModels.length > 0 ? (
@@ -1178,13 +1147,10 @@ export function ModelConfigPage() {
                   placeholder='仅在上游不支持模型列表时手工填写，逗号或换行分隔'
                 />
               </details>
-              {probe && (
-                <small className='preview-muted'>
-                  验证结果：{probe.ok_count}/{probe.total} 个模型可用
-                </small>
-              )}
             </label>
-            <div className='form-grid'>
+            <details className='zjugis-channel-advanced'>
+              <summary>高级设置</summary>
+              <div className='form-grid'>
               <Field
                 label='分组（逗号分隔）'
                 value={form.groups || 'default'}
@@ -1207,11 +1173,6 @@ export function ModelConfigPage() {
                 value={form.weight ?? 1}
                 onChange={(e) => set('weight', Number(e.target.value))}
               />
-              <Field
-                label='测试模型'
-                value={form.test_model || ''}
-                onChange={(e) => set('test_model', e.target.value)}
-              />
               <SelectField
                 label='自动禁用'
                 value={Number(form.auto_ban) ? 1 : 0}
@@ -1220,32 +1181,17 @@ export function ModelConfigPage() {
                 <option value='1'>开启</option>
                 <option value='0'>关闭</option>
               </SelectField>
-            </div>
-            <label className='zjugis-field full'>
-              <span>模型映射 JSON</span>
-              <textarea
-                value={form.model_mapping || ''}
-                onChange={(e) => set('model_mapping', e.target.value)}
-                rows='3'
-                placeholder='{"qwen3.6-plus":"qwen3.6-plus"}'
-              />
-            </label>
-            <label className='zjugis-field full'>
-              <span>系统提示词</span>
-              <textarea
-                value={form.system_prompt || ''}
-                onChange={(e) => set('system_prompt', e.target.value)}
-                rows='3'
-              />
-            </label>
-            <label className='zjugis-field full'>
-              <span>其他参数 JSON</span>
-              <textarea
-                value={form.other || ''}
-                onChange={(e) => set('other', e.target.value)}
-                rows='3'
-              />
-            </label>
+              </div>
+              <label className='zjugis-field full'>
+                <span>模型映射 JSON</span>
+                <textarea
+                  value={form.model_mapping || ''}
+                  onChange={(e) => set('model_mapping', e.target.value)}
+                  rows='3'
+                  placeholder='{"qwen3.6-plus":"qwen3.6-plus"}'
+                />
+              </label>
+            </details>
             <div className='zjugis-modal-actions'>
               <button
                 type='button'
@@ -1442,6 +1388,7 @@ export function ModelConfigPage() {
 
 export function UsersPage() {
   const dialog = useDialog();
+  const [tab, setTab] = useState('users');
   const [keyword, setKeyword] = useState('');
   const list = useList('/api/user/', 'p=0&size=100&order=');
   const [modal, setModal] = useState(null);
@@ -1449,6 +1396,7 @@ export function UsersPage() {
   const [edit, setEdit] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [deletePassword, setDeletePassword] = useState('');
+  const [roles, setRoles] = useState([]);
   const [tokens, setTokens] = useState([]);
   const [topup, setTopup] = useState({
     quota: '',
@@ -1468,6 +1416,13 @@ export function UsersPage() {
     password: '',
     role: 1,
   });
+  useEffect(() => {
+    API.get('/api/role/')
+      .then((res) => {
+        if (res.data?.success) setRoles((res.data.data || []).filter((role) => role.status === 1));
+      })
+      .catch(() => {});
+  }, []);
   const shown = list.rows.filter(
     (u) =>
       !keyword ||
@@ -1524,6 +1479,7 @@ export function UsersPage() {
       username: edit.username,
       display_name: edit.display_name,
       password: edit.password,
+      role: edit.role,
       phone: edit.phone,
       group: edit.group,
       admin_password: edit.admin_password,
@@ -1594,12 +1550,22 @@ export function UsersPage() {
       list.refresh();
     } else dialog.notice(res.data?.message || '积分发放失败');
   };
+  if (tab === 'roles') return (
+    <div className='zjugis-new-page'>
+      <PageHead kicker='ACCOUNT CENTER' title='用户权限' description='管理用户账号与角色可见模型。' />
+      <div className='zjugis-user-permission-tabs'>
+        <button onClick={() => setTab('users')}>用户管理</button>
+        <button className='active'>角色权限</button>
+      </div>
+      <RolePermissions />
+    </div>
+  );
   return (
     <div className='zjugis-new-page'>
       <PageHead
         kicker='ACCOUNT CENTER'
-        title='用户管理'
-        description='管理登录账号、权限、额度、令牌和使用状态。'
+        title='用户权限'
+        description='管理用户账号与角色可见模型。'
         action={
           <button
             className='preview-button primary'
@@ -1609,6 +1575,10 @@ export function UsersPage() {
           </button>
         }
       />
+      <div className='zjugis-user-permission-tabs'>
+        <button className='active'>用户管理</button>
+        <button onClick={() => setTab('roles')}>角色权限</button>
+      </div>
       <div className='preview-stat-grid'>
         <div>
           <span>用户总数</span>
@@ -1757,8 +1727,7 @@ export function UsersPage() {
                 value={form.role}
                 onChange={(e) => set('role', Number(e.target.value))}
               >
-                <option value={1}>普通用户</option>
-                <option value={100}>超级管理员</option>
+                {roles.map((role) => <option key={role.role} value={role.role}>{role.name}</option>)}
               </SelectField>
             </div>
             <div className='zjugis-modal-actions'>
@@ -1832,6 +1801,13 @@ export function UsersPage() {
                 value={edit.group || 'default'}
                 onChange={(e) => setEdit({ ...edit, group: e.target.value })}
               />
+              <SelectField
+                label='角色权限'
+                value={edit.role || ''}
+                onChange={(e) => setEdit({ ...edit, role: Number(e.target.value) })}
+              >
+                {roles.map((role) => <option key={role.role} value={role.role}>{role.name}</option>)}
+              </SelectField>
               <Field
                 label='管理员密码（修改敏感信息时需要）'
                 type='password'

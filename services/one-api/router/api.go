@@ -96,7 +96,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/:id", controller.GetUser)
 				adminRoute.GET("/:id/activity-logs", controller.GetUserActivityLogs)
-				adminRoute.POST("/", controller.CreateUser)
+				adminRoute.POST("/", middleware.RootAuth(), controller.CreateUser)
 				adminRoute.POST("/timed_quota/batch", controller.BatchAdminTimedQuota)
 				adminRoute.POST("/manage", controller.ManageUser)
 				adminRoute.POST("/batch_manage", controller.BatchManageUser)
@@ -261,6 +261,13 @@ func SetApiRouter(router *gin.Engine) {
 			adminPermReadRoute.GET("/", controller.GetAdminPermissions)
 			adminPermReadRoute.PUT("/:id", controller.UpdateAdminPermissions)
 			adminPermReadRoute.PUT("/:id/role", controller.UpdateAdminRole)
+		}
+		roleRoute := apiRouter.Group("/role")
+		roleRoute.Use(middleware.AdminAuth())
+		{
+			roleRoute.GET("/", controller.ListRoles)
+			roleRoute.POST("/", controller.CreateRole)
+			roleRoute.PUT("/:role", controller.UpdateRole)
 		}
 		channelRoute := apiRouter.Group("/channel")
 		channelRoute.Use(middleware.AdminAuth())

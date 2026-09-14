@@ -37,7 +37,7 @@ const INERT_DECORATIONS: DraftDecorations = { token: null, chips: [], textRefs: 
 export type InputBarProps = ComposerBarProps
 
 export function InputBar({
-  useSession, useInput, inputActions, keyboard, addImages, removeImage, draftImages,
+  useSession, useInput, inputActions, keyboard, addFiles, addImages, removeImage, draftImages,
   resolveSubmitMode, toggleCommandMenu, stop, command, t,
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
@@ -464,6 +464,15 @@ export function InputBar({
     if (rejected !== null) showToast(rejected)
   }, [addImages, attachments, imageLimits, showToast, t])
 
+  const intakeFiles = useCallback((files: readonly File[]): void => {
+    const images = files.filter(file => file.type.startsWith('image/'))
+    const other = files.filter(file => !file.type.startsWith('image/'))
+    if (images.length > 0) intakeImages(images)
+    if (other.length > 0 && addFiles !== undefined) void addFiles(other).catch((error: unknown) => {
+      showToast(error instanceof Error ? error.message : String(error))
+    })
+  }, [addFiles, intakeImages, showToast])
+
   const canAcceptDrop = !locked && !machineBusy && addImages !== undefined
 
   const onSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>): void => {
@@ -636,6 +645,7 @@ export function InputBar({
           attachments,
           canAcceptDrop,
           onAddImages: intakeImages,
+          onAddFiles: intakeFiles,
           onRemoveImage: (id) => { removeImage?.(id) },
           dropLimits: imageLimits === undefined ? undefined : {
             count: imageLimits.maxImagesPerMessage,

@@ -10,6 +10,11 @@ import (
 	"strings"
 )
 
+// emptyChannelKey is persisted for unauthenticated upstreams because the
+// channel runtime expects every channel to carry a non-empty credential.
+// It is never returned by the management API.
+const emptyChannelKey = "__oneapi_no_auth__"
+
 func GetAllChannels(c *gin.Context) {
 	p, _ := strconv.Atoi(c.Query("p"))
 	if p < 0 {
@@ -85,7 +90,7 @@ func maskKey(key string) string {
 	if idx := strings.IndexAny(key, "\n"); idx >= 0 {
 		key = strings.TrimSpace(key[:idx])
 	}
-	if key == "" {
+	if key == "" || key == emptyChannelKey {
 		return ""
 	}
 	r := []rune(key)
@@ -105,10 +110,21 @@ func AddChannel(c *gin.Context) {
 		})
 		return
 	}
+	if strings.TrimSpace(channel.Models) == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "新建渠道必须选择至少一个模型",
+		})
+		return
+	}
 	channel.CreatedTime = helper.GetTimestamp()
 	// T2.1 渠道新增默认不启用(草稿要求),需启用时由「启用」操作单独开启
 	channel.Status = model.ChannelStatusManuallyDisabled
-	keys := strings.Split(channel.Key, "\n")
+	key := strings.TrimSpace(channel.Key)
+	if key == "" {
+		key = emptyChannelKey
+	}
+	keys := strings.Split(key, "\n")
 	channels := make([]model.Channel, 0, len(keys))
 	for _, key := range keys {
 		if key == "" {

@@ -89,6 +89,7 @@ type upstreamModelsResponse struct {
 }
 
 // fetchUpstreamModels 用给定凭证打上游 /v1/models，返回去重后的模型名列表。
+// 无鉴权上游仍携带内部占位值，兼容要求 Authorization 头存在的 OpenAI 兼容服务。
 func fetchUpstreamModels(channelType int, key, baseURL string) ([]string, error) {
 	resolved := resolveBaseURL(channelType, baseURL)
 	if resolved == "" {
@@ -100,7 +101,7 @@ func fetchUpstreamModels(channelType int, key, baseURL string) ([]string, error)
 	}
 	key = strings.TrimSpace(key)
 	if key == "" {
-		return nil, fmt.Errorf("缺少密钥，无法获取模型列表")
+		key = emptyChannelKey
 	}
 
 	url := modelsEndpoint(channelType, resolved)

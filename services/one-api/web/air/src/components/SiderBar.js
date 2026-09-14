@@ -7,7 +7,7 @@ const items = [
   { label: '分析看板', path: '/', Icon: Home },
   { label: '模型配置', path: '/config/model', Icon: Cpu },
   { label: '技能管理', path: '/skill', Icon: Sparkles },
-  { label: '用户管理', path: '/user', Icon: Users },
+  { label: '用户权限', path: '/user', Icon: Users },
   { label: '模型日志', path: '/log', Icon: ClipboardList },
   { label: '账户设置', path: '/setting/personal', Icon: Settings }
 ];

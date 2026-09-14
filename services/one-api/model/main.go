@@ -221,6 +221,12 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&User{}); err != nil {
 		return err
 	}
+	if err = DB.AutoMigrate(&Role{}); err != nil {
+		return err
+	}
+	if err = SeedBuiltinRoles(); err != nil {
+		return err
+	}
 	if err = DB.AutoMigrate(&Option{}); err != nil {
 		return err
 	}

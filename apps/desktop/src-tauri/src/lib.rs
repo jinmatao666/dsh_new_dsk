@@ -694,10 +694,24 @@ fn import_workspace_files_at(
 /// general filesystem-write command to the renderer.
 #[tauri::command]
 fn import_workspace_files(
-    workspace_path: String,
+    app: tauri::AppHandle,
+    workspace_path: Option<String>,
     files: Vec<WorkspaceImportFile>,
 ) -> Result<Vec<String>, String> {
-    import_workspace_files_at(Path::new(&workspace_path), files)
+    let root = match workspace_path {
+        Some(path) => PathBuf::from(path),
+        None => {
+            let path = app
+                .path()
+                .app_local_data_dir()
+                .map_err(|error| format!("无法定位默认导入目录：{error}"))?
+                .join("imports");
+            fs::create_dir_all(&path)
+                .map_err(|error| format!("无法创建默认导入目录 {}：{error}", path.display()))?;
+            path
+        }
+    };
+    import_workspace_files_at(&root, files)
 }
 
 fn marketplace_resource_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {

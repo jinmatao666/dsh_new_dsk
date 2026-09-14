@@ -57,6 +57,7 @@ function props(overrides: Partial<ComposerAttachmentsOwnerProps> = {}): Composer
   return {
     attachments: [],
     canAcceptDrop: true,
+    onAddFiles: () => {},
     onAddImages: () => {},
     onRemoveImage: () => {},
     t,
@@ -66,9 +67,9 @@ function props(overrides: Partial<ComposerAttachmentsOwnerProps> = {}): Composer
 
 describe('ComposerAttachments', () => {
   it('accepts file drops anywhere on the document and keeps non-file drags native', () => {
-    const onAddImages = vi.fn()
+    const onAddFiles = vi.fn()
     const view = render(<ComposerAttachments {...props({
-      onAddImages,
+      onAddFiles,
       dropLimits: { count: 20, size: '5MB' },
     })} />)
 
@@ -87,7 +88,7 @@ describe('ComposerAttachments', () => {
     expect(fireEvent.dragOver(document.body, { dataTransfer })).toBe(false)
     expect(dataTransfer.dropEffect).toBe('copy')
     expect(fireEvent.drop(document.body, { dataTransfer })).toBe(false)
-    expect(onAddImages).toHaveBeenCalledWith([image])
+    expect(onAddFiles).toHaveBeenCalledWith([image])
     expect(view.queryByRole('status')).toBeNull()
   })
 
@@ -115,6 +116,14 @@ describe('ComposerAttachments', () => {
     fireEvent.dragEnter(document.body, { dataTransfer })
     fireEvent.dragEnd(window, { dataTransfer })
     expect(view.queryByRole('status')).toBeNull()
+  })
+
+  it('forwards dropped non-image files to the composer importer', () => {
+    const onAddFiles = vi.fn()
+    render(<ComposerAttachments {...props({ onAddFiles })} />)
+    const file = new File(['notes'], 'notes.txt', { type: 'text/plain' })
+    fireEvent.drop(document.body, { dataTransfer: { types: ['Files'], files: [file], dropEffect: 'none' } })
+    expect(onAddFiles).toHaveBeenCalledWith([file])
   })
 
   it('shows a blocked drop without forwarding its files', () => {

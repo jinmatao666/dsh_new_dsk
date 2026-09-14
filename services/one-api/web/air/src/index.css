@@ -432,16 +432,48 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .danger-button { color:#fff !important; background:#d9475f !important; border-color:#d9475f !important; }
 .form-inline-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px; }
 .zjugis-model-picker { margin-top:12px; border:1px solid #dbe5f1; border-radius:12px; overflow:hidden; background:#fbfdff; }
+
+
+
+.zjugis-role-setting-card strong { color:#29486e; }.zjugis-role-setting-card p { margin:6px 0 0; color:#7187a6; font-size:13px; }.zjugis-role-selected em { color:#95a6bb; font-size:13px; font-style:normal; }
+
+
+
+
+
+
+
+
+
+.zjugis-role-chip { max-width:180px; padding:3px 10px; border-radius:999px; background:#eef4fd; color:#3b629c; font-size:12px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.zjugis-role-chip.more { background:#e7ecf5; color:#7187a6; }
+
+
+
+
+
+
+
+
+
+
+
+
+.zjugis-user-permission-tabs { display:flex; gap:8px; margin:0 0 20px; border-bottom:1px solid #dce7f4; }.zjugis-user-permission-tabs button { padding:10px 16px; border:0; border-bottom:2px solid transparent; color:#7187a6; background:transparent; cursor:pointer; font:inherit; }.zjugis-user-permission-tabs button.active { border-bottom-color:#2f75ed; color:#286bc8; font-weight:700; }
+@media (max-width:760px) {  }
 .zjugis-model-picker-head { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid #e7eef7; color:#4f688d; font-size:13px; }
 .zjugis-model-picker-head strong { color:#243958; font-size:14px; margin-right:auto; }
-.zjugis-model-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; max-height:236px; overflow:auto; padding:10px 12px; }
-.zjugis-model-option { display:flex; align-items:center; min-width:0; gap:8px; padding:7px 8px; border-radius:8px; color:#304c71; cursor:pointer; font-size:13px; }
-.zjugis-model-option:hover { background:#eef5ff; }
-.zjugis-model-option input { width:15px; height:15px; margin:0; flex:none; accent-color:#2563eb; }
-.zjugis-model-option span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+
+
+
+
 .zjugis-manual-models { margin-top:10px; color:#67809f; font-size:13px; }
 .zjugis-manual-models summary { cursor:pointer; user-select:none; }
 .zjugis-manual-models textarea { margin-top:8px; }
+.zjugis-channel-advanced { margin-top:18px; padding-top:16px; border-top:1px solid #e2ebf6; }
+.zjugis-channel-advanced summary { color:#67809f; cursor:pointer; font-size:13px; font-weight:600; user-select:none; }
+.zjugis-channel-advanced[open] summary { margin-bottom:14px; }
 .zjugis-test-progress,.zjugis-test-result { display:grid; grid-template-columns:auto minmax(0,1fr); gap:14px; align-items:center; padding:8px 2px 16px; }
 .zjugis-test-progress h3,.zjugis-test-result h3 { margin:0 0 5px; color:#243958; font-size:18px; }
 .zjugis-test-progress p,.zjugis-test-result p { margin:0; color:#7186a3; font-size:14px; line-height:1.55; }
@@ -461,7 +493,7 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .zjugis-test-live-results { max-height:280px; overflow:auto; padding-right:2px; }
 @keyframes zjugis-spin { to { transform:rotate(360deg); } }
 @keyframes zjugis-progress { 0% { transform:translateX(-110%); } 100% { transform:translateX(270%); } }
-@media (max-width:900px) { .zjugis-model-options { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:900px) {  }
 .preview-search { min-width:260px; padding:10px 12px; border:1px solid #dbe5f1; border-radius:11px; color:#243958; background:#f8fbff; font:inherit; }
 .detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
 .detail-grid > div { padding:12px 14px; border:1px solid #e3ebf5; border-radius:12px; background:#f8fbff; }
@@ -2349,3 +2381,144 @@ body[theme-mode='dark'] .zjugis-select-option:hover { background: rgba(90, 140, 
 body[theme-mode='dark'] .zjugis-select-option.active { background: rgba(90, 140, 220, .2); color: #8ab8ff; }
 
 body[theme-mode='dark'] .zjugis-period .zjugis-select-trigger { border: 0; background: transparent; color: #dce8fb; }
+
+
+/* ── 角色权限：可见模型逐条可编辑列表 ── */
+.zjugis-role-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 10px; }
+.zjugis-role-count { color:#7187a6; font-size:13px; }
+.zjugis-role-quick { display:flex; gap:8px; }
+.zjugis-role-quick button { padding:5px 12px; border:1px solid #dbe5f1; border-radius:8px; background:#f8fbff; color:#3b629c; font:inherit; font-size:12.5px; cursor:pointer; transition:border-color .15s ease, color .15s ease, background-color .15s ease; }
+.zjugis-role-quick button:hover { border-color:#5b96ec; color:#1d4ed8; background:#eef5ff; }
+
+.zjugis-role-model-rows { display:flex; flex-direction:column; gap:8px; max-height:420px; overflow:auto; padding:2px; }
+
+.zjugis-role-model-row {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:11px 14px;
+  border:1px solid #e2ebf6;
+  border-radius:12px;
+  background:#fbfdff;
+  cursor:pointer;
+  transition:border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+
+.zjugis-role-model-row:hover { border-color:#bcd7f7; background:#f6faff; }
+
+.zjugis-role-model-row.visible { border-color:#cfe1fb; background:#f4f9ff; box-shadow:inset 3px 0 0 #5b96ec; }
+
+.zjugis-role-model-icon { display:flex; align-items:center; justify-content:center; width:34px; height:34px; flex:none; border-radius:10px; background:#e8f1ff; color:#2563eb; }
+
+.zjugis-role-model-row.visible .zjugis-role-model-icon { background:#dbeafe; }
+
+.zjugis-role-model-info { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
+.zjugis-role-model-info strong { color:#243958; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.zjugis-role-model-info span { color:#8aa2c0; font-size:12px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.zjugis-role-model-type { flex:none; padding:3px 9px; border-radius:999px; background:#eef2f8; color:#64789a; font-size:11px; letter-spacing:.4px; text-transform:uppercase; }
+
+.zjugis-role-switch { display:flex; align-items:center; gap:8px; flex:none; }
+.zjugis-role-switch-label { width:26px; color:#8aa2c0; font-size:12px; }
+.zjugis-role-model-row.visible .zjugis-role-switch-label { color:#1d4ed8; }
+
+.zjugis-role-switch-track { position:relative; display:inline-block; width:38px; height:21px; border-radius:999px; background:#d5dfec; transition:background-color .18s ease; }
+.zjugis-role-model-row.visible .zjugis-role-switch-track { background:#2563eb; }
+.zjugis-role-switch-knob { position:absolute; top:3px; left:3px; width:15px; height:15px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgb(30 60 110 / .25); transition:transform .18s ease; }
+.zjugis-role-model-row.visible .zjugis-role-switch-knob { transform:translateX(17px); }
+
+body[theme-mode='dark'] .zjugis-role-model-row { border-color:rgba(120,150,200,.25); background:rgba(20,34,58,.5); }
+body[theme-mode='dark'] .zjugis-role-model-row.visible { border-color:rgba(90,140,220,.45); background:rgba(37,99,235,.12); box-shadow:inset 3px 0 0 #3b82f6; }
+body[theme-mode='dark'] .zjugis-role-model-info strong { color:#dce8fb; }
+body[theme-mode='dark'] .zjugis-role-model-icon { background:rgba(90,140,220,.18); color:#8ab8ff; }
+body[theme-mode='dark'] .zjugis-role-model-type { background:rgba(120,150,200,.18); color:#9fb3d1; }
+body[theme-mode='dark'] .zjugis-role-switch-track { background:rgba(120,150,200,.35); }
+body[theme-mode='dark'] .zjugis-role-quick button { border-color:rgba(120,150,200,.3); background:rgba(20,34,58,.6); color:#9fb3d1; }
+/* ── 角色权限 ── */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@media (max-width:760px) {    }
+/* ─ 角色权限：每行一个角色 ─ */
+.zjugis-role-permissions { display:flex; flex-direction:column; gap:14px; }
+.zjugis-role-toolbar { display:flex; justify-content:space-between; align-items:center; }
+.zjugis-role-toolbar-title { color:#26446a; font-size:15px; font-weight:600; }
+.zjugis-role-rows { display:flex; flex-direction:column; gap:10px; }
+.zjugis-role-row { display:flex; align-items:center; gap:14px; padding:14px 18px; border:1px solid #e2ebf6; border-radius:14px; background:#fff; transition:border-color .15s ease, box-shadow .15s ease; }
+.zjugis-role-row:hover { border-color:#bcd7f7; box-shadow:0 6px 18px rgb(30 60 110 / 6%); }
+.zjugis-role-row-icon { display:flex; align-items:center; justify-content:center; width:38px; height:38px; flex:none; border-radius:11px; background:#e8f1ff; color:#2563eb; }
+.zjugis-role-row-info { display:flex; flex:1; flex-direction:column; gap:3px; min-width:0; }
+.zjugis-role-row-info strong { color:#243958; font-size:15px; }
+.zjugis-role-row-info span { color:#8aa2c0; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.zjugis-role-row-models { display:flex; flex-wrap:wrap; gap:6px; align-items:center; flex:1; min-width:0; }
+.zjugis-role-none { color:#a3b4cb; font-size:12.5px; }
+.zjugis-role-row-count { flex:none; color:#7187a6; font-size:12.5px; }
+.zjugis-role-edit-btn { display:inline-flex; align-items:center; gap:6px; flex:none; padding:7px 14px; border:1px solid #cfe1fb; border-radius:9px; background:#f4f9ff; color:#1d4ed8; font:inherit; font-size:13px; cursor:pointer; transition:background-color .15s ease, border-color .15s ease; }
+.zjugis-role-edit-btn:hover { border-color:#5b96ec; background:#e6f0ff; }
+.zjugis-role-modal-mask { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; background:rgb(20 35 60 / .38); backdrop-filter:blur(2px); }
+.zjugis-role-modal { display:flex; flex-direction:column; width:min(680px, calc(100vw - 48px)); max-height:min(760px, calc(100vh - 64px)); padding:22px 24px; border-radius:16px; background:#fff; box-shadow:0 24px 64px rgb(20 40 80 / .28); }
+.zjugis-role-modal-head { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; margin-bottom:14px; }
+.zjugis-role-modal-head span { color:#7290b5; font-size:11px; font-weight:700; letter-spacing:1.1px; }
+.zjugis-role-modal-head h3 { margin:5px 0 4px; color:#213b5d; font-size:20px; }
+.zjugis-role-modal-head p { margin:0; color:#7086a3; font-size:13px; }
+.zjugis-role-modal-close { display:flex; align-items:center; justify-content:center; width:30px; height:30px; flex:none; border:0; border-radius:9px; background:#eef2f8; color:#5d7396; cursor:pointer; transition:background-color .15s ease, color .15s ease; }
+.zjugis-role-modal-close:hover { background:#e0e8f3; color:#243958; }
+.zjugis-role-modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
+.zjugis-modal-btn { padding:8px 18px; border-radius:9px; border:1px solid #d5dfec; background:#fff; color:#527092; font:inherit; font-size:13px; cursor:pointer; transition:all .15s ease; }
+.zjugis-modal-btn.cancel:hover { border-color:#bcd7f7; background:#f8fbff; }
+.zjugis-modal-btn.primary { border-color:#2563eb; background:#2563eb; color:#fff; }
+.zjugis-modal-btn.primary:hover { background:#1d4ed8; }
+.zjugis-model-options { display:flex; flex-direction:column; gap:8px; max-height:380px; overflow:auto; padding:2px; }
+.zjugis-model-option { display:flex; align-items:center; gap:12px; padding:11px 14px; border:1px solid #e2ebf6; border-radius:11px; background:#fbfdff; cursor:pointer; transition:border-color .15s ease, background-color .15s ease; }
+.zjugis-model-option:hover { border-color:#bcd7f7; background:#f6faff; }
+.zjugis-model-option.checked { border-color:#cfe1fb; background:#f4f9ff; }
+.zjugis-model-option-icon { display:flex; align-items:center; justify-content:center; width:32px; height:32px; flex:none; border-radius:9px; background:#e8f1ff; color:#2563eb; }
+.zjugis-model-option.checked .zjugis-model-option-icon { background:#dbeafe; }
+.zjugis-model-option-info { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
+.zjugis-model-option-info strong { color:#243958; font-size:14px; }
+.zjugis-model-option-info span { color:#8aa2c0; font-size:12px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.zjugis-model-option-type { flex:none; padding:3px 9px; border-radius:999px; background:#eef2f8; color:#64789a; font-size:11px; letter-spacing:.4px; text-transform:uppercase; }
+.zjugis-model-option-check { display:flex; align-items:center; justify-content:center; width:24px; height:24px; flex:none; border-radius:50%; border:2px solid #d5dfec; color:transparent; transition:border-color .15s ease, background-color .15s ease, color .15s ease; }
+.zjugis-model-option-check.active { border-color:#2563eb; background:#2563eb; color:#fff; }
+.zjugis-role-form { display:flex; flex-direction:column; gap:14px; }
+.zjugis-role-form label { display:flex; flex-direction:column; gap:6px; color:#527092; font-size:13px; font-weight:600; }
+.zjugis-role-form label input, .zjugis-role-form label textarea { padding:9px 12px; border:1px solid #d5dfec; border-radius:9px; background:#f8fbff; font:inherit; font-size:14px; color:#243958; outline:none; transition:border-color .15s ease; }
+.zjugis-role-form label input:focus, .zjugis-role-form label textarea:focus { border-color:#5b96ec; }
+@media (max-width:760px) { .zjugis-role-row { flex-wrap:wrap; } }

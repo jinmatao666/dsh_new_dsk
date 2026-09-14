@@ -10,19 +10,19 @@ Administrators need to create user accounts with an explicit business role inste
 
 ## Decision
 
-The administrative user-creation form presents two roles: common user and root user.
+The administrative user-creation and edit forms load active roles from the role-management API.
 
-Only a root user can select and create another root user.
+Each selected role number is stored directly in `users.role`.
 
-The server accepts only those two roles for this creation path, treats an omitted role as a common user for existing callers, and rejects a root-user request from every other role.
+The server accepts a selected role only when a matching active role record exists. An omitted role continues to select the common-user role.
 
-Existing administrator accounts and their module permissions remain unchanged.
+Numbers from 10 upward remain reserved for the existing system-management checks; custom roles use numbers from 2 through 9.
 
 ## Alternatives considered
 
-Expose the existing administrator role in the creation form.
+Keep a fixed pair of common-user and root-user options.
 
-Administrator access is already managed through the dedicated administrator-permissions page, while the requested account-creation flow has two business choices.
+The user form would not reflect roles created through role management.
 
 Trust the browser to hide the root-user option.
 
@@ -30,6 +30,6 @@ A crafted request could bypass the browser, so the server must enforce the same 
 
 ## Consequences
 
-New accounts receive an explicit common-user or root-user role.
+New and edited accounts receive an explicit role that exists in the role-management table.
 
-The creation dialog stays simple, and non-root administrators cannot create privileged accounts.
+The existing numeric system-management checks remain intact while role permissions can define model access for each role.

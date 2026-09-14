@@ -146,6 +146,22 @@ func TokenAuth() func(c *gin.Context) {
 			return
 		}
 		c.Set(ctxkey.RequestModel, requestModel)
+		if requestModel != "" {
+			user, err := model.GetUserById(token.UserId, false)
+			if err != nil {
+				abortWithMessage(c, http.StatusInternalServerError, "读取用户角色失败")
+				return
+			}
+			configured, allowed, err := model.RoleAllowsModel(user.Role, requestModel)
+			if err != nil {
+				abortWithMessage(c, http.StatusInternalServerError, "读取角色模型权限失败")
+				return
+			}
+			if configured && !allowed {
+				abortWithMessage(c, http.StatusForbidden, fmt.Sprintf("当前角色无权使用模型：%s", requestModel))
+				return
+			}
+		}
 		if token.Models != nil && *token.Models != "" {
 			c.Set(ctxkey.AvailableModels, *token.Models)
 			if requestModel != "" && !isModelInList(requestModel, *token.Models) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { API, showError, showSuccess } from '../helpers';
+import { API, isRoot, showError, showSuccess } from '../helpers';
 import { Button, Input, Modal, Table, Tag, Tooltip, Dropdown, Typography } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
 import { renderGroup, renderNumber, renderQuota } from '../helpers/render';
@@ -579,14 +579,16 @@ const UsersTable = () => {
               {renderSelectedOption(orderBy)}
             </Button>
           </Dropdown>
-          <Button
-            theme="borderless"
-            type="tertiary"
-            style={{ color: 'var(--semi-color-text-0)' }}
-            onClick={() => setShowAddUser(true)}
-          >
-            添加用户
-          </Button>
+          {isRoot() && (
+            <Button
+              theme="borderless"
+              type="tertiary"
+              style={{ color: 'var(--semi-color-text-0)' }}
+              onClick={() => setShowAddUser(true)}
+            >
+              添加用户
+            </Button>
+          )}
           {columnConfigButton}
         </div>
 

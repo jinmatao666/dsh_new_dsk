@@ -75,6 +75,29 @@ const ABSENT_MENU_LAUNCHER = {
   subscribe: () => () => {},
 }
 
+interface DesktopWindow extends Window {
+  __ZJUGIS_NATIVE_INVOKE__?: (command: string, argumentsValue: unknown) => Promise<unknown>
+}
+
+function fileMention(path: string): string {
+  if (/[\u0000--"]/u.test(path)) throw new Error('导入后的文件路径不能作为引用。')
+  return /\s/u.test(path) ? `@"${path}"` : `@${path}`
+}
+
+async function importDesktopFiles(path: string | undefined, files: readonly File[]): Promise<readonly string[]> {
+  const invoke = (window as DesktopWindow).__ZJUGIS_NATIVE_INVOKE__
+  if (invoke === undefined) throw new Error('当前版本不支持直接导入文件。')
+  const payload = await Promise.all(files.map(async file => ({
+    name: file.name,
+    bytes: [...new Uint8Array(await file.arrayBuffer())],
+  })))
+  const imported = await invoke('import_workspace_files', { workspacePath: path, files: payload })
+  if (!Array.isArray(imported) || !imported.every(item => typeof item === 'string')) {
+    throw new Error('桌面端返回的导入结果无效。')
+  }
+  return imported
+}
+
 const CHAT_NODE_INJECT: ChatNodeTurnDataInjected = {
   hooks: {
     turnData: ({ useSession }, nodeKey) => function useTurnData(key) {
@@ -292,6 +315,7 @@ export function apply(ctx: Context): void {
       if (sessionId === undefined) {
         return {
           keyboard: undefined,
+          addFiles: undefined,
           addImages: undefined,
           removeImage: undefined,
           draftImages: undefined,
@@ -308,6 +332,12 @@ export function apply(ctx: Context): void {
       const inputTriggers = inputHub.inputTriggers(sessionId)
       return {
         keyboard: shell,
+        addFiles: async (files) => {
+          const target = sessions.list.getSnapshot().byId[sessionId]?.cwd
+          const imported = await importDesktopFiles(target, files)
+          const prefix = shell.snapshot.draft === '' || /\s$/u.test(shell.snapshot.draft) ? '' : ' '
+          shell.setDraft(`${shell.snapshot.draft}${prefix}${imported.map(fileMention).join(' ')}`)
+        },
         addImages: (files) => {
           try {
             const images = conversation.createDraftImages(files)
