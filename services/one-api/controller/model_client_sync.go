@@ -88,6 +88,11 @@ func GetUserAvailableModelsDetail(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	names, err = filterModelsForUserRole(id, names)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "读取角色模型权限失败"})
+		return
+	}
 
 	defs, err := model.GetModelDefinitionsByNames(names)
 	if err != nil {

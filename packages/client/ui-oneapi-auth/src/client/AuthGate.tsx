@@ -55,6 +55,7 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
   const [smsCode, setSmsCode] = useState('')
   const [smsSent, setSmsSent] = useState(false)
   const [qrNonce, setQrNonce] = useState(0)
+  const authRef = useRef<AuthState | { state: 'checking' }>(auth)
   const pageRef = useRef<HTMLElement | null>(null)
   const brandSideRef = useRef<HTMLElement | null>(null)
   const brandHeaderRef = useRef<HTMLDivElement | null>(null)
@@ -69,18 +70,48 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
   }, [auth])
 
   useEffect(() => {
-    const controller = new AbortController()
-    void status(controller.signal).then((next) => {
-      setAuth(next)
-      syncNativeWindowState(next.state === 'authenticated')
-    }, (cause: unknown) => {
-      if (!controller.signal.aborted) {
-        const next = { state: 'offline' as const, message: cause instanceof Error ? cause.message : String(cause) }
-        setAuth(next)
-        syncNativeWindowState(false)
-      }
-    })
-    return () => { controller.abort() }
+    authRef.current = auth
+  }, [auth])
+
+  useEffect(() => {
+    const controllers = new Set<AbortController>()
+    let refreshing = false
+    const refresh = () => {
+      if (refreshing) return
+      refreshing = true
+      const controller = new AbortController()
+      controllers.add(controller)
+      void status(controller.signal).then((next) => {
+        if (controller.signal.aborted) return
+        const resolved = authRef.current.state === 'authenticated' && next.state === 'offline'
+          ? authRef.current
+          : next
+        setAuth(resolved)
+        syncNativeWindowState(resolved.state === 'authenticated')
+      }, (cause: unknown) => {
+        if (!controller.signal.aborted && authRef.current.state !== 'authenticated') {
+          const next = { state: 'offline' as const, message: cause instanceof Error ? cause.message : String(cause) }
+          setAuth(next)
+          syncNativeWindowState(false)
+        }
+      }).finally(() => {
+        controllers.delete(controller)
+        refreshing = false
+      })
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    refresh()
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    const timer = window.setInterval(refresh, 300000)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      for (const controller of controllers) controller.abort()
+    }
   }, [status])
 
   useEffect(() => subscribe((next) => {

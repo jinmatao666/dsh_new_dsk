@@ -140,22 +140,10 @@ func ListModels(c *gin.Context) {
 		userGroup, _ := model.CacheGetUserGroup(userId)
 		availableModels, _ = model.CacheGetGroupModels(ctx, userGroup)
 	}
-	user, err := model.GetUserById(c.GetInt(ctxkey.Id), false)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取用户角色失败"})
-		return
-	}
-	roleModels, roleConfigured, err := model.GetRoleModels(user.Role)
+	availableModels, err := filterModelsForUserRole(c.GetInt(ctxkey.Id), availableModels)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取角色模型权限失败"})
 		return
-	}
-	if roleConfigured {
-		roleSet := make(map[string]bool, len(roleModels))
-		for _, roleModel := range roleModels {
-			roleSet[roleModel] = true
-		}
-		availableModels = filterModels(availableModels, roleSet)
 	}
 	modelSet := make(map[string]bool)
 	for _, availableModel := range availableModels {
@@ -199,6 +187,28 @@ func filterModels(models []string, allowed map[string]bool) []string {
 	return filtered
 }
 
+// filterModelsForUserRole intersects group-visible models with the explicit
+// model allow-list assigned to the user's role. An unconfigured role retains
+// the group model policy.
+func filterModelsForUserRole(userID int, names []string) ([]string, error) {
+	user, err := model.GetUserById(userID, false)
+	if err != nil {
+		return nil, err
+	}
+	roleModels, configured, err := model.GetRoleModels(user.Role)
+	if err != nil {
+		return nil, err
+	}
+	if !configured {
+		return names, nil
+	}
+	allowed := make(map[string]bool, len(roleModels))
+	for _, name := range roleModels {
+		allowed[name] = true
+	}
+	return filterModels(names, allowed), nil
+}
+
 func RetrieveModel(c *gin.Context) {
 	modelId := c.Param("model")
 	if model, ok := modelsMap[modelId]; ok {
@@ -235,22 +245,10 @@ func GetUserAvailableModels(c *gin.Context) {
 		})
 		return
 	}
-	user, err := model.GetUserById(id, false)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "读取用户角色失败"})
-		return
-	}
-	roleModels, configured, err := model.GetRoleModels(user.Role)
+	models, err = filterModelsForUserRole(id, models)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "读取角色模型权限失败"})
 		return
-	}
-	if configured {
-		allowed := make(map[string]bool, len(roleModels))
-		for _, name := range roleModels {
-			allowed[name] = true
-		}
-		models = filterModels(models, allowed)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

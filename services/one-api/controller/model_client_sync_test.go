@@ -103,3 +103,26 @@ func TestSortModelNames(t *testing.T) {
 		}
 	}
 }
+
+func TestFilterModelsUsesRoleAllowList(t *testing.T) {
+	names := []string{"allowed", "denied", "also-allowed"}
+	allowed := map[string]bool{"allowed": true, "also-allowed": true}
+	result := filterModels(names, allowed)
+	want := []string{"allowed", "also-allowed"}
+	if len(result) != len(want) {
+		t.Fatalf("角色模型过滤结果不符，期望 %v，实际 %v", want, result)
+	}
+	for i := range want {
+		if result[i] != want[i] {
+			t.Fatalf("角色模型过滤结果不符，期望 %v，实际 %v", want, result)
+		}
+	}
+}
+
+func TestFilterModelsAllowsWildcard(t *testing.T) {
+	names := []string{"first", "second"}
+	result := filterModels(names, map[string]bool{"*": true})
+	if len(result) != len(names) || result[0] != names[0] || result[1] != names[1] {
+		t.Fatalf("通配符应保留全部模型，期望 %v，实际 %v", names, result)
+	}
+}

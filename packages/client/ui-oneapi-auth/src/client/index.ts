@@ -20,9 +20,21 @@ function value(result: RpcResult<unknown>): unknown {
 export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as unknown as ConnectionHandle
   const listeners = new Set<(state: AuthState) => void>()
-  const publish = (state: AuthState): AuthState => { for (const listener of listeners) listener(state); return state }
+  let publishedState: AuthState | undefined
+  const publish = (state: AuthState): AuthState => {
+    publishedState = state
+    for (const listener of listeners) listener(state)
+    return state
+  }
   const injected = {
-    status: async (signal?: AbortSignal) => publish(value(await connection.rpc.call('/desktop-auth', 'status', {}, signal)) as AuthState),
+    status: async (signal?: AbortSignal) => {
+      const state = value(await connection.rpc.call('/desktop-auth', 'status', {}, signal)) as AuthState
+      // A transient refresh failure must not reopen the login gate for a user
+      // whose authenticated provider remains usable. Authentication failures
+      // arrive as logged-out and are still published immediately.
+      if (state.state === 'offline' && publishedState?.state === 'authenticated') return state
+      return publish(state)
+    },
     login: async (username: string, password: string, signal?: AbortSignal) => publish(value(await connection.rpc.call('/desktop-auth', 'login', { username, password }, signal)) as AuthState),
     logout: async () => publish(value(await connection.rpc.call('/desktop-auth', 'logout', {})) as AuthState),
     subscribe: (listener: (state: AuthState) => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
