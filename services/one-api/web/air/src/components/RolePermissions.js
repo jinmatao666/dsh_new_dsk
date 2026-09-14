@@ -2,7 +2,7 @@
 import { Button, Modal } from '@douyinfe/semi-ui';
 import { Cpu, Pencil, Plus, ShieldCheck, Users } from 'lucide-react';
 import { API, showError, showSuccess } from '../helpers';
-import { fetchManagedRoles } from '../helpers/roles';
+import { cacheManagedRole, fetchManagedRoles } from '../helpers/roles';
 
 const MOCK_MODELS = [
   { name: 'deepseek-chat', display_name: 'DeepSeek Chat', model_type: 'chat' },
@@ -63,6 +63,7 @@ export default function RolePermissions() {
         permissions: { models: draftModels },
       });
       if (!res.data?.success) throw new Error(res.data?.message || '保存失败');
+      cacheManagedRole(res.data.data);
       const updated = toRoleView(res.data.data);
       setRoles((current) => current.map((role) => role.role === updated.role ? updated : role));
       setEditingId(null);
@@ -78,6 +79,7 @@ export default function RolePermissions() {
     try {
       const res = await API.post('/api/role/', { role: roleCode, name, description: draft.description.trim(), permissions: { models: [] } });
       if (!res.data?.success) throw new Error(res.data?.message || '新建角色失败');
+      cacheManagedRole(res.data.data);
       setRoles((current) => [...current, toRoleView(res.data.data)].sort((a, b) => a.role - b.role));
       setDraft({ role: '', name: '', description: '' });
       setCreateModal(false);

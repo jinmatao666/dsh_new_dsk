@@ -28,6 +28,7 @@ func roleFromRequest(role int, req roleRequest) (model.Role, error) {
 }
 
 func ListRoles(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	roles, err := model.ListRoles()
 	if err != nil {
 		respondError(c, err.Error())
