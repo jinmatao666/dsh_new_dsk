@@ -158,11 +158,11 @@ function Field({ label, ...props }) {
     </label>
   );
 }
-function SelectField({ label, value, onChange, children }) {
+function SelectField({ label, children, ...props }) {
   return (
     <div className='zjugis-field'>
       <span>{label}</span>
-      <CustomSelect value={value ?? ''} onChange={onChange}>
+      <CustomSelect {...props}>
         {children}
       </CustomSelect>
     </div>
@@ -1397,6 +1397,8 @@ export function UsersPage() {
   const [deleting, setDeleting] = useState(null);
   const [deletePassword, setDeletePassword] = useState('');
   const [roles, setRoles] = useState([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
+  const [roleLoadError, setRoleLoadError] = useState('');
   const [tokens, setTokens] = useState([]);
   const [topup, setTopup] = useState({
     quota: '',
@@ -1414,15 +1416,36 @@ export function UsersPage() {
     username: '',
     display_name: '',
     password: '',
-    role: 1,
+    role: '',
   });
   useEffect(() => {
+    if (tab !== 'users') return undefined;
+    let cancelled = false;
+    setRolesLoading(true);
+    setRoleLoadError('');
     API.get('/api/role/')
       .then((res) => {
-        if (res.data?.success) setRoles((res.data.data || []).filter((role) => role.status === 1));
+        if (!res.data?.success) throw new Error(res.data?.message || '读取角色失败');
+        const activeRoles = (res.data.data || []).filter((role) => Number(role.status) === 1);
+        if (cancelled) return;
+        setRoles(activeRoles);
+        setForm((current) => ({
+          ...current,
+          role: activeRoles.some((role) => Number(role.role) === Number(current.role))
+            ? current.role
+            : activeRoles[0]?.role ?? '',
+        }));
       })
-      .catch(() => {});
-  }, []);
+      .catch((error) => {
+        if (cancelled) return;
+        setRoles([]);
+        setRoleLoadError(error.message || '读取角色失败');
+      })
+      .finally(() => {
+        if (!cancelled) setRolesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [tab, modal, edit?.id]);
   const shown = list.rows.filter(
     (u) =>
       !keyword ||
@@ -1431,10 +1454,14 @@ export function UsersPage() {
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   const save = async (e) => {
     e.preventDefault();
+    if (!roles.some((role) => Number(role.role) === Number(form.role))) {
+      dialog.notice(roleLoadError || '请先选择一个可用角色');
+      return;
+    }
     const res = await API.post('/api/user/', form);
     if (res.data?.success) {
       setModal(null);
-      setForm({ username: '', display_name: '', password: '', role: 1 });
+      setForm({ username: '', display_name: '', password: '', role: roles[0]?.role ?? '' });
       list.refresh();
     } else dialog.notice(res.data?.message || '保存失败');
   };
@@ -1726,10 +1753,13 @@ export function UsersPage() {
                 label='角色权限'
                 value={form.role}
                 onChange={(e) => set('role', Number(e.target.value))}
+                placeholder={rolesLoading ? '正在加载角色…' : roles.length > 0 ? '请选择角色' : '暂无可用角色'}
+                disabled={rolesLoading || roles.length === 0}
               >
                 {roles.map((role) => <option key={role.role} value={role.role}>{role.name}</option>)}
               </SelectField>
             </div>
+            {roleLoadError && <small className='preview-muted'>角色读取失败：{roleLoadError}</small>}
             <div className='zjugis-modal-actions'>
               <button
                 type='button'
@@ -1805,6 +1835,8 @@ export function UsersPage() {
                 label='角色权限'
                 value={edit.role || ''}
                 onChange={(e) => setEdit({ ...edit, role: Number(e.target.value) })}
+                placeholder={rolesLoading ? '正在加载角色…' : roles.length > 0 ? '请选择角色' : '暂无可用角色'}
+                disabled={rolesLoading || roles.length === 0}
               >
                 {roles.map((role) => <option key={role.role} value={role.role}>{role.name}</option>)}
               </SelectField>
