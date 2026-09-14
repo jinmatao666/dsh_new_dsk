@@ -51,6 +51,7 @@ function mountBar(shell: SessionInputShell, over?: { running?: boolean; disabled
     useInput: bindSnapshotSelector(shell.state),
     inputActions: shell.actions,
     keyboard: shell,
+    addFiles: undefined,
     addImages: () => null,
     removeImage: () => {},
     // Every id resolves so the bar's registry prune never drops a test image.

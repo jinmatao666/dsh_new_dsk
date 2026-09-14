@@ -473,7 +473,7 @@ export function InputBar({
     })
   }, [addFiles, intakeImages, showToast])
 
-  const canAcceptDrop = !locked && !machineBusy && addImages !== undefined
+  const canAcceptDrop = !locked && !machineBusy && (addImages !== undefined || addFiles !== undefined)
 
   const onSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>): void => {
     // Any caret/selection gesture ends a live paste attempt (the machine

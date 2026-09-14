@@ -202,6 +202,7 @@ function mount(
           useInput={useInput}
           inputActions={inputActions}
           keyboard={wiring}
+          addFiles={undefined}
           addImages={() => null}
           removeImage={() => {}}
           draftImages={() => []}

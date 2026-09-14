@@ -170,6 +170,7 @@ function bench(over?: BenchOptions) {
     useInput: bindSnapshotSelector(shell.state),
     inputActions: shell.actions,
     keyboard: shell,
+    addFiles: undefined,
     addImages: over?.addImages ?? (() => null),
     removeImage,
     draftImages: ids => ids.flatMap((id) => {
