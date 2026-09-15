@@ -58,7 +58,7 @@ def main() -> int:
 
         destination = folders_root / slug
         shutil.copytree(source, destination)
-        archive = archives_root / f"{slug}-1.0.0.zip"
+        archive = archives_root / f"{slug}-{manifest['version']}.zip"
         with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as bundle:
             for relative in sorted(actual):
                 bundle.write(source / relative, arcname=f"{slug}/{relative}")

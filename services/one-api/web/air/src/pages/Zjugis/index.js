@@ -520,9 +520,9 @@ export function ModelConfigPage() {
       try {
         const detection = await API.post(`/api/model_definition/${savedId}/detect_vision`);
         if (!detection.data?.success)
-          visionDetectionError = detection.data?.message || '视觉能力检测失败';
+          visionDetectionError = detection.data?.message || '模型类型检测失败';
       } catch (error) {
-        visionDetectionError = error.message || '视觉能力检测失败';
+        visionDetectionError = error.message || '模型类型检测失败';
       }
     }
     const optRes = await API.get('/api/option/');
@@ -620,19 +620,17 @@ export function ModelConfigPage() {
       .split(',')
       .map((value) => value.trim())
       .includes('image');
-  const visionCapability = (model) => {
-    if (isVisionModel(model)) return 'vision';
-    return String(model.modalities || '').trim() ? 'text' : 'pending';
-  };
+  const modelCapabilityLabel = (model) =>
+    isVisionModel(model) ? '多模态模型' : '文本模型';
   const detectVision = async (model, notify = true) => {
     try {
       const res = await API.post(`/api/model_definition/${model.id}/detect_vision`);
-      if (!res.data?.success) throw new Error(res.data?.message || '视觉能力检测失败');
+      if (!res.data?.success) throw new Error(res.data?.message || '模型类型检测失败');
       if (notify) dialog.notice(`${model.name}：${res.data.message}`);
       return { success: true, message: res.data.message };
     } catch (error) {
-      if (notify) dialog.notice(error.message || '视觉能力检测失败');
-      return { success: false, message: error.message || '视觉能力检测失败' };
+      if (notify) dialog.notice(error.message || '模型类型检测失败');
+      return { success: false, message: error.message || '模型类型检测失败' };
     } finally {
       if (notify) loadDefinitions();
     }
@@ -648,16 +646,14 @@ export function ModelConfigPage() {
     }
     setVisionDetecting(false);
     await loadDefinitions();
-    dialog.notice(`视觉能力检测完成：${succeeded}/${candidates.length} 个模型已判定`);
+    dialog.notice(`模型类型检测完成：${succeeded}/${candidates.length} 个模型已判定`);
   };
-  const testAllModels = async (visionOnly = false) => {
-    const enabled = definitions.filter(
-      (m) => m.enabled && (!visionOnly || isVisionModel(m))
-    );
+  const testAllModels = async () => {
+    const enabled = definitions.filter((m) => m.enabled);
     if (enabled.length === 0)
-      return dialog.notice(visionOnly ? '没有已启用且支持图片输入的模型可测试' : '没有已启用的模型可测试');
+      return dialog.notice('没有已启用的模型可测试');
     setModelTest({
-      model: visionOnly ? '全部视觉模型' : '全部已启用模型',
+      model: '全部已启用模型',
       status: 'running',
       results: [],
       batch: { current: 0, total: enabled.length },
@@ -698,7 +694,7 @@ export function ModelConfigPage() {
       setModelTest((previous) => ({ ...previous, results: [...allResults] }));
     }
     setModelTest({
-      model: visionOnly ? '全部视觉模型' : '全部已启用模型',
+      model: '全部已启用模型',
       status: allResults.every((result) => result.success) ? 'success' : 'failed',
       results: allResults,
       batch: { current: enabled.length, total: enabled.length },
@@ -877,7 +873,7 @@ export function ModelConfigPage() {
               <button
                 className='preview-button'
                 disabled={modelTest?.status === 'running' || definitions.length === 0}
-                onClick={testAllModels}
+                onClick={() => testAllModels()}
               >
                 {modelTest?.status === 'running' ? '测试中…' : '全部测试模型'}
               </button>
@@ -885,9 +881,9 @@ export function ModelConfigPage() {
                 className='preview-button'
                 disabled={visionDetecting || !definitions.some((m) => m.enabled && m.id)}
                 onClick={detectAllVisionCapabilities}
-                title='由后台发送内置测试图片，自动判断模型是否支持图片输入'
+                title='通过多张测试图片判断模型是文本模型还是多模态模型'
               >
-                {visionDetecting ? '检测中…' : '检测视觉能力'}
+                {visionDetecting ? '检测中…' : '检测模型类型'}
               </button>
               <button
                 className='preview-button primary'
@@ -903,9 +899,8 @@ export function ModelConfigPage() {
                 <tr>
                   <th>模型</th>
                   <th>显示名称</th>
-                  <th>类型</th>
+                  <th>模型类型</th>
                   <th>来源渠道</th>
-                  <th>倍率</th>
                   <th>上下文</th>
                   <th>状态</th>
                   <th>默认</th>
@@ -917,24 +912,14 @@ export function ModelConfigPage() {
                   <tr key={m.name}>
                     <td>
                       <strong>{m.name}</strong>
-                      {visionCapability(m) === 'vision' ? (
-                        <span className='tag zjugis-vision-tag'>视觉</span>
-                      ) : visionCapability(m) === 'text' ? (
-                        <span className='tag'>纯文本</span>
-                      ) : (
-                        <span className='tag warning'>待检测</span>
-                      )}
                       {m.remark ? <small>{m.remark}</small> : null}
                     </td>
                     <td>{m.display_name || m.name || ''}</td>
-                    <td>{m.model_type || 'chat'}</td>
+                    <td>{modelCapabilityLabel(m)}</td>
                     <td>
                       {(m.sources || [])
                         .map((x) => x.channel_name || `#${x.channel_id}`)
                         .join('、') || ''}
-                    </td>
-                    <td>
-                      {m.model_ratio ?? 0} / {m.completion_ratio ?? 0}
                     </td>
                     <td>{m.context_limit || '默认'}</td>
                     <td>
@@ -972,7 +957,7 @@ export function ModelConfigPage() {
                         disabled={!m.id}
                         onClick={() => detectVision(m)}
                       >
-                        检测视觉
+                        检测类型
                       </button>
                       <button
                         className='link-button'
@@ -1488,17 +1473,7 @@ export function ModelConfigPage() {
                 />
                 支持显式缓存
               </label>
-              <div className='zjugis-check'>
-                视觉能力：{
-                  visionCapability(modelEdit) === 'vision'
-                    ? '视觉模型'
-                    : visionCapability(modelEdit) === 'text'
-                      ? '纯文本模型'
-                      : '保存后自动检测'
-                }
-              </div>
             </div>
-            <small className='preview-muted'>视觉能力由后台使用内置测试图片自动识别，识别结果会同步给桌面端，无需人工勾选。</small>
             <div className='zjugis-modal-actions'>
               <button
                 type='button'

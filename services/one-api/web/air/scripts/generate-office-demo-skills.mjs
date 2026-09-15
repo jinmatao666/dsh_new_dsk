@@ -14,7 +14,7 @@ const skills = [
   {
     slug: 'office-word-to-pdf', name: 'Word 转 PDF', icon: 'W', accent: '#2563eb',
     summary: '将一个或多个 Word 文档转换为便于打印、发送和归档的 PDF，并保持原文件不变。',
-    capabilities: ['Word 批量转 PDF', '优先使用 Microsoft Word 高保真转换', '不覆盖原文件并生成处理报告'],
+    capabilities: ['Word 批量转 PDF', 'Microsoft Word、WPS 与 LibreOffice 逐级回退', '不覆盖原文件并生成处理报告'],
     params: [fileList('inputPaths', '一个或多个 .doc、.docx、.docm 文件'), outputDirectory()],
     command: 'word-to-pdf', requirements: [], special: 'word',
     body: `## 适用场景
@@ -25,7 +25,7 @@ const skills = [
 ## 执行与交互
 
 1. 确认输入是 \`.doc\`、\`.docx\` 或 \`.docm\`。多个候选文件且用户没有说清时，先列出文件让用户确认。
-2. 运行 \`scripts/invoke.ps1 -InputPaths <文件列表> -OutputDirectory <目录>\`。脚本优先调用 Microsoft Word；不可用时回退到 LibreOffice。
+2. 运行 \`scripts/invoke.ps1 -InputPaths <文件列表> -OutputDirectory <目录>\`。脚本依次尝试 Microsoft Word、WPS 和 LibreOffice；任一转换器启动或导出失败时继续尝试下一项。
 3. 每个输入独立转换。输出与原文件同名；重名时自动追加序号，绝不覆盖原文件。
 4. 转换失败时保留其他已成功文件，并明确列出失败文件和原因，不把“已复制但未转换”的文件冒充 PDF。
 
@@ -115,7 +115,7 @@ const skills = [
 
 ## 执行与交互
 
-1. 先读取工作簿的工作表和表头。去重列、筛选列或业务口径不明确时再询问用户。
+1. 先读取工作簿的工作表和表头。用户已经明确去重列、筛选条件和保留规则时直接执行；规则不明确且不同选择会改变数据时再询问一次。
 2. 运行 \`scripts/invoke.ps1 --input <xlsx> --sheet <工作表> --dedupe-columns "列1,列2" --filter "状态=有效" --output-directory <目录>\`；未要求去重或筛选时省略对应参数。
 3. 原始工作簿只读。输出固定为 \`.xlsx\`，避免把未保留宏的内容错误标为 \`.xlsm\`。
 4. 处理后的工作表增加规范样式，并追加“处理报告”工作表记录输入、输出、原始行数、保留行数和删除原因。
@@ -162,7 +162,8 @@ const skills = [
 1. 运行 \`scripts/invoke.ps1 extract --inputs <文件...> --output-directory <目录>\`，得到带来源边界的文本底稿。
 2. 若用户给出关注重点，围绕该重点组织；否则使用默认结构：“一句话结论、关键要点、风险与问题、时间节点、待办事项、来源说明”。
 3. 每个事实尽量标注来源文件；材料没有明确责任人、期限或结论时写“未明确”，不得补造。
-4. 将最终 Markdown 保存后，运行 \`scripts/invoke.ps1 render --input <摘要.md> --title "文档摘要与要点" --output-directory <目录>\` 生成 Word。
+4. 交付前复核数字、比例、责任人、期限和风险数量；摘要、要点和风险章节对同一事实必须一致。近似值必须标注“约”，同时保留可核对的精确值。
+5. 将最终 Markdown 保存后，运行 \`scripts/invoke.ps1 render --input <摘要.md> --title "文档摘要与要点" --output-directory <目录>\` 生成 Word。
 
 ## 交付
 
@@ -207,6 +208,7 @@ const skills = [
 2. 运行 \`scripts/invoke.ps1 --inputs <图片...> --format webp --quality 85 --max-width 1920 --max-height 1080 --output-directory <目录>\`。
 3. 保留宽高比并应用 EXIF 方向。转 JPG 时透明区域铺白底；不覆盖原图。
 4. PNG 的 quality 不是有损质量控制，脚本会使用优化压缩；不要承诺 PNG 一定显著变小。
+5. 转换后单个文件体积增大时必须在报告中点名说明；格式转换是用户明确目标时仍保留产物，不把“转换成功”表述为“压缩成功”。
 
 ## 交付
 
@@ -229,7 +231,7 @@ const skills = [
 1. 文字材料：\`scripts/invoke.ps1 prepare --materials <文件...> --transcript <可选转写稿> --meeting-title <名称> --output-directory <目录>\`。
 2. 音频材料：\`scripts/invoke.ps1 prepare --audio <音频> --materials <可选文件...> --meeting-title <名称> --output-directory <目录>\`。脚本依次完成转写、内容整理和 Word 渲染。
 3. 默认服务不要求密钥；如网关后来启用鉴权，通过 \`WANWEI_MEETING_API_KEY\` 提供，不能写入技能包、命令记录或报告。服务地址和两个模型均可通过同名前缀的环境变量覆盖。
-4. 责任人、期限、参会人未在材料中出现时必须写“未明确”。接口失败时保留已产生的材料或转写文件并报告原始原因，不得伪造纪要。
+4. 责任人、期限、参会人未在材料中出现时必须写“未明确”。相对时间保留材料原文，不把“今天下班前”“周三开始”等表达转换成材料没有给出的具体日期或钟点。接口失败时保留已产生的材料或转写文件并报告原始原因，不得伪造纪要。
 
 ## 输出样式
 
@@ -256,16 +258,7 @@ for (const skill of skills) {
   await writeText(join(directory, 'manifest.json'), `${JSON.stringify(manifest(skill, files), null, 2)}\n`);
   await writeText(join(directory, 'SKILL.md'), skillMarkdown(skill));
   const wrapper = skill.special === 'word' ? wordWrapper() : pythonWrapper(skill.command);
-  const normalizedWrapper = wrapper
-    .replaceAll('\n+', '\n')
-    .replace("  [string] $OutputDirectory = '',\n  [switch] $Overwrite\n)", "  [string] $OutputDirectory = ''\n)")
-    .replace('if ($Overwrite -or -not (Test-Path -LiteralPath $candidate))', 'if (-not (Test-Path -LiteralPath $candidate))')
-    .replace("$ErrorActionPreference = 'Stop'\n", "$ErrorActionPreference = 'Stop'\n[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)\n")
-    .replace(
-      'if ($word) { $word.Quit(); [void][Runtime.InteropServices.Marshal]::ReleaseComObject($word) }',
-      "if ($word) {\n  try { $word.Quit() } catch { # Word may close its RPC server immediately after export.\n  }\n  try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($word) } catch { # The COM object may already be released.\n  }\n}",
-    );
-  await writeText(join(directory, 'scripts', 'invoke.ps1'), `\uFEFF${normalizedWrapper}`);
+  await writeText(join(directory, 'scripts', 'invoke.ps1'), `\uFEFF${wrapper}`);
 }
 
 console.log(`Generated ${skills.length} office demo skill packages.`);
@@ -282,7 +275,7 @@ function manifest(skill, files) {
     category: '办公工具',
     tags: ['官方', '办公', '演示'],
     capabilities: skill.capabilities,
-    version: '1.0.0',
+    version: '1.0.1',
     author: '万维Buddy 办公工具',
     submitter: 'root',
     createdAt: generatedAt,
@@ -297,7 +290,7 @@ function manifest(skill, files) {
 
 function skillMarkdown(skill) {
   const dependencies = skill.requirements.length > 0
-    ? `\n## 运行依赖\n\n首次执行前运行 \`python -m pip install -r <技能目录>/requirements.txt\`。若依赖缺失，只提供这条安装命令，不得自行安装。\n`
+    ? `\n## 运行依赖\n\n执行处理脚本前检查 \`requirements.txt\` 中声明的依赖。只有依赖缺失时才运行 \`python -m pip install --user -r <技能目录>/requirements.txt\`；Workspace Write 模式拒绝该写入时，使用相同命令申请桌面端依赖安装审批。用户拒绝或安装失败时停止，安装成功后自动重试原处理命令。\n`
     : '';
   return `---\nname: ${skill.slug}\ndescription: ${skill.name}：${skill.summary} 当用户明确提出这类办公文件处理请求时使用。\n---\n\n# ${skill.name}\n\n${skill.body}${dependencies}\n## 通用约束\n\n- 输入可以来自工作区外；先使用用户提供的绝对路径。技能安装目录视为只读，所有输出写入用户指定目录或输入文件旁的独立输出目录。\n- 不修改、不删除、不覆盖输入文件。除批量重命名的确认执行外，所有产物都使用安全的新文件名。\n- 只有命令成功且目标文件真实存在时才能声明完成。错误信息应包含失败文件、原因和下一步，不展示堆栈给普通用户。\n- 最终回复先给结果摘要，再给主要产物链接，最后列出必要的限制或失败项。\n`;
 }
@@ -312,7 +305,132 @@ function pythonWrapper(command) {
 }
 
 function wordWrapper() {
-  return `param(\n+  [Parameter(Mandatory = $true)] [string[]] $InputPaths,\n+  [string] $OutputDirectory = '',\n+  [switch] $Overwrite\n+)\n+\n+$ErrorActionPreference = 'Stop'\n+$supported = @('.doc', '.docx', '.docm')\n+$inputs = foreach ($item in $InputPaths) {\n+  $resolved = Resolve-Path -LiteralPath $item -ErrorAction Stop\n+  $file = Get-Item -LiteralPath $resolved.Path\n+  if ($file.PSIsContainer -or $supported -notcontains $file.Extension.ToLowerInvariant()) {\n+    throw "不支持的 Word 输入：$($file.FullName)"\n+  }\n+  $file\n+}\n+if (-not $OutputDirectory) { $OutputDirectory = Join-Path $inputs[0].DirectoryName 'Word转PDF' }\n+$outputRoot = [System.IO.Path]::GetFullPath($OutputDirectory)\n+[System.IO.Directory]::CreateDirectory($outputRoot) | Out-Null\n+\n+function New-OutputPath([string] $baseName) {\n+  $candidate = Join-Path $outputRoot "$baseName.pdf"\n+  if ($Overwrite -or -not (Test-Path -LiteralPath $candidate)) { return $candidate }\n+  for ($index = 2; ; $index++) {\n+    $candidate = Join-Path $outputRoot "$baseName-$index.pdf"\n+    if (-not (Test-Path -LiteralPath $candidate)) { return $candidate }\n+  }\n+}\n+\n+$results = [System.Collections.Generic.List[object]]::new()\n+$word = $null\n+try {\n+  try {\n+    $word = New-Object -ComObject Word.Application\n+    $word.Visible = $false\n+    $word.DisplayAlerts = 0\n+  } catch {\n+    $word = $null\n+  }\n+\n+  $soffice = if (-not $word) { Get-Command soffice -ErrorAction SilentlyContinue } else { $null }\n+  if (-not $word -and -not $soffice) {\n+    throw '未找到 Microsoft Word 或 LibreOffice。请安装其中一个后重试。'\n+  }\n+\n+  foreach ($input in $inputs) {\n+    $target = New-OutputPath $input.BaseName\n+    try {\n+      if ($word) {\n+        $document = $word.Documents.Open($input.FullName, $false, $true)\n+        try { $document.ExportAsFixedFormat($target, 17) } finally { $document.Close($false) }\n+      } else {\n+        $temporary = Join-Path $outputRoot ('.convert-' + [guid]::NewGuid().ToString('N'))\n+        [System.IO.Directory]::CreateDirectory($temporary) | Out-Null\n+        try {\n+          & $soffice.Source --headless --convert-to pdf --outdir $temporary $input.FullName | Out-Null\n+          if ($LASTEXITCODE -ne 0) { throw "LibreOffice 返回退出码 $LASTEXITCODE" }\n+          $converted = Join-Path $temporary ($input.BaseName + '.pdf')\n+          if (-not (Test-Path -LiteralPath $converted)) { throw 'LibreOffice 未生成 PDF' }\n+          Move-Item -LiteralPath $converted -Destination $target\n+        } finally { Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue }\n+      }\n+      if (-not (Test-Path -LiteralPath $target)) { throw '转换命令结束但未生成 PDF' }\n+      $results.Add([pscustomobject]@{ input = $input.FullName; output = $target; success = $true; error = $null })\n+    } catch {\n+      $results.Add([pscustomobject]@{ input = $input.FullName; output = $null; success = $false; error = $_.Exception.Message })\n+    }\n+  }\n+} finally {\n+  if ($word) { $word.Quit(); [void][Runtime.InteropServices.Marshal]::ReleaseComObject($word) }\n+}\n+\n+$report = Join-Path $outputRoot 'Word转PDF-处理报告.json'\n+$results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $report -Encoding utf8\n+$successCount = @($results | Where-Object success).Count\n+$payload = [ordered]@{ success = ($successCount -eq $results.Count); successCount = $successCount; failureCount = $results.Count - $successCount; outputDirectory = $outputRoot; report = $report; files = @($results) }\n+Write-Output ('WANWEI_RESULT=' + ($payload | ConvertTo-Json -Compress -Depth 6))\n+if ($successCount -ne $results.Count) { exit 2 }\n+`;
+  return `param(
+  [Parameter(Mandatory = $true)] [string[]] $InputPaths,
+  [string] $OutputDirectory = ''
+)
+
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$supported = @('.doc', '.docx', '.docm')
+$inputs = foreach ($item in $InputPaths) {
+  $resolved = Resolve-Path -LiteralPath $item -ErrorAction Stop
+  $file = Get-Item -LiteralPath $resolved.Path
+  if ($file.PSIsContainer -or $supported -notcontains $file.Extension.ToLowerInvariant()) {
+    throw "不支持的 Word 输入：$($file.FullName)"
+  }
+  $file
+}
+if (-not $OutputDirectory) { $OutputDirectory = Join-Path $inputs[0].DirectoryName 'Word转PDF' }
+$outputRoot = [System.IO.Path]::GetFullPath($OutputDirectory)
+[System.IO.Directory]::CreateDirectory($outputRoot) | Out-Null
+
+function New-OutputPath([string] $baseName) {
+  $candidate = Join-Path $outputRoot "$baseName.pdf"
+  if (-not (Test-Path -LiteralPath $candidate)) { return $candidate }
+  for ($index = 2; ; $index++) {
+    $candidate = Join-Path $outputRoot "$baseName-$index.pdf"
+    if (-not (Test-Path -LiteralPath $candidate)) { return $candidate }
+  }
+}
+
+function Invoke-ComExport([string] $programId, [System.IO.FileInfo] $input, [string] $target) {
+  $application = $null
+  $document = $null
+  try {
+    $application = New-Object -ComObject $programId
+    $application.Visible = $false
+    $application.DisplayAlerts = 0
+    $document = $application.Documents.Open($input.FullName, $false, $true)
+    $document.ExportAsFixedFormat($target, 17)
+    if (-not (Test-Path -LiteralPath $target)) { throw "$programId 未生成 PDF" }
+  } finally {
+    if ($document) {
+      try { $document.Close($false) } catch {
+        # The converter can close its document RPC server immediately after export.
+      }
+      try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($document) } catch {
+        # The document COM object can already be released by the converter.
+      }
+    }
+    if ($application) {
+      try { $application.Quit() } catch {
+        # The converter can close its application RPC server immediately after export.
+      }
+      try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($application) } catch {
+        # The application COM object can already be released by the converter.
+      }
+    }
+  }
+}
+
+function Invoke-LibreOfficeExport([System.IO.FileInfo] $input, [string] $target, $soffice) {
+  $temporary = Join-Path $outputRoot ('.convert-' + [guid]::NewGuid().ToString('N'))
+  [System.IO.Directory]::CreateDirectory($temporary) | Out-Null
+  try {
+    & $soffice.Source --headless --convert-to pdf --outdir $temporary $input.FullName | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "LibreOffice 返回退出码 $LASTEXITCODE" }
+    $converted = Join-Path $temporary ($input.BaseName + '.pdf')
+    if (-not (Test-Path -LiteralPath $converted)) { throw 'LibreOffice 未生成 PDF' }
+    Move-Item -LiteralPath $converted -Destination $target
+  } finally {
+    Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
+$results = [System.Collections.Generic.List[object]]::new()
+$programIds = @('Word.Application', 'Kwps.Application', 'wps.Application')
+$soffice = Get-Command soffice -ErrorAction SilentlyContinue
+foreach ($input in $inputs) {
+  $target = New-OutputPath $input.BaseName
+  $errors = [System.Collections.Generic.List[string]]::new()
+  $converted = $false
+  foreach ($programId in $programIds) {
+    try {
+      Invoke-ComExport $programId $input $target
+      $converted = $true
+      break
+    } catch {
+      $errors.Add("$programId：$($_.Exception.Message)")
+      if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
+    }
+  }
+  if (-not $converted -and $soffice) {
+    try {
+      Invoke-LibreOfficeExport $input $target $soffice
+      $converted = $true
+    } catch {
+      $errors.Add("LibreOffice：$($_.Exception.Message)")
+      if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
+    }
+  }
+  if ($converted) {
+    $results.Add([pscustomobject]@{ input = $input.FullName; output = $target; success = $true; error = $null })
+  } else {
+    if (-not $soffice) { $errors.Add('LibreOffice：未找到 soffice 命令') }
+    $results.Add([pscustomobject]@{ input = $input.FullName; output = $null; success = $false; error = ($errors -join '；') })
+  }
+}
+
+$report = Join-Path $outputRoot 'Word转PDF-处理报告.json'
+$results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $report -Encoding utf8
+$successCount = @($results | Where-Object success).Count
+$artifacts = [System.Collections.Generic.List[object]]::new()
+foreach ($item in $results | Where-Object success) {
+  $artifacts.Add([ordered]@{ path = $item.output; kind = 'pdf'; description = "转换后的 PDF：$([System.IO.Path]::GetFileName($item.output))" })
+}
+$artifacts.Add([ordered]@{ path = $report; kind = 'report'; description = '处理报告' })
+$payload = [ordered]@{
+  success = ($successCount -eq $results.Count)
+  successCount = $successCount
+  failureCount = $results.Count - $successCount
+  outputDirectory = $outputRoot
+  files = @($results)
+  artifacts = @($artifacts)
+}
+Write-Output ('WANWEI_RESULT=' + ($payload | ConvertTo-Json -Compress -Depth 6))
+if ($successCount -ne $results.Count) { exit 2 }
+`;
 }
 
 function fileParam(name, description, required = true) { return { name, type: 'file', required, description }; }

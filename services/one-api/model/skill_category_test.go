@@ -166,6 +166,9 @@ func TestCategoryAdminViewsUseRelationsInsteadOfLegacyCategoryName(t *testing.T)
 	}
 	assert.Zero(t, counts[general.Id])
 	assert.Equal(t, 1, counts[spatial.Id])
+	for _, category := range categories {
+		assert.Equal(t, category.Id == general.Id, category.IsDefault)
+	}
 
 	generalSkills, err := ListSkillsForCategory(general.Id)
 	require.NoError(t, err)
@@ -182,7 +185,7 @@ func TestCategoryAdminViewsUseRelationsInsteadOfLegacyCategoryName(t *testing.T)
 
 func TestRemoveSkillFromCategoryUsesDefaultNameInsteadOfLegacyCode(t *testing.T) {
 	setupSkillCategoryTestDB(t)
-	skill := seedSkill(t, "spatial-analysis", "空间制图", false)
+	skill := seedSkill(t, "spatial-analysis", DefaultSkillCategoryName, false)
 	general := createSkillCategoryForTest(t, SkillCategoryTypePackage, "general", DefaultSkillCategoryName)
 	spatial := createSkillCategoryForTest(t, SkillCategoryTypePackage, DefaultSkillCategoryName, "空间制图")
 	require.NoError(t, ReplaceSkillCategories(skill.Id, []uint64{spatial.Id}))
@@ -197,6 +200,46 @@ func TestRemoveSkillFromCategoryUsesDefaultNameInsteadOfLegacyCode(t *testing.T)
 	var updated Skill
 	require.NoError(t, DB.First(&updated, skill.Id).Error)
 	assert.Equal(t, DefaultSkillCategoryName, updated.Category)
+}
+
+func TestRemoveSkillFromNamedCategoryRecoversMismatchedCategoryID(t *testing.T) {
+	setupSkillCategoryTestDB(t)
+	skill := seedSkill(t, "spatial-analysis", "空间制图", false)
+	general := createSkillCategoryForTest(t, SkillCategoryTypePackage, "general", DefaultSkillCategoryName)
+	spatial := createSkillCategoryForTest(t, SkillCategoryTypePackage, "spatial", "空间制图")
+	require.NoError(t, ReplaceSkillCategories(skill.Id, []uint64{spatial.Id}))
+
+	require.NoError(t, RemoveSkillFromNamedCategory(general.Id, spatial.Name, skill.Id))
+
+	categories, err := ListSkillCategoriesForSkill(skill.Id)
+	require.NoError(t, err)
+	require.Len(t, categories, 1)
+	assert.Equal(t, general.Id, categories[0].Id)
+}
+
+func TestCategoryReadsAndMigrationDeduplicateRelations(t *testing.T) {
+	setupSkillCategoryTestDB(t)
+	skill := seedSkill(t, "spatial-analysis", "空间制图", false)
+	spatial := createSkillCategoryForTest(t, SkillCategoryTypePackage, "spatial", "空间制图")
+	require.NoError(t, ReplaceSkillCategories(skill.Id, []uint64{spatial.Id}))
+	require.NoError(t, DB.Migrator().DropIndex(&SkillCategoryRelation{}, "idx_skill_category_relations_skill_category"))
+	require.NoError(t, DB.Create(&SkillCategoryRelation{SkillId: skill.Id, CategoryId: spatial.Id}).Error)
+
+	skills, err := ListSkillsForCategory(spatial.Id)
+	require.NoError(t, err)
+	require.Len(t, skills, 1)
+
+	require.NoError(t, deduplicateSkillCategoryRelations())
+	var relationCount int64
+	require.NoError(t, DB.Model(&SkillCategoryRelation{}).Where("skill_id = ? AND category_id = ?", skill.Id, spatial.Id).Count(&relationCount).Error)
+	assert.Equal(t, int64(1), relationCount)
+}
+
+func TestFunctionCategoryNamedGeneralIsNotDefault(t *testing.T) {
+	setupSkillCategoryTestDB(t)
+	category := createSkillCategoryForTest(t, SkillCategoryTypeFunction, "general-function", DefaultSkillCategoryName)
+
+	require.NoError(t, DeleteSkillCategory(category.Id))
 }
 
 func TestUpdateSkillCategoryPreservesStableCodeAndType(t *testing.T) {

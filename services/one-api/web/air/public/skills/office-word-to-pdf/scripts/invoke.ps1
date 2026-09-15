@@ -27,57 +27,99 @@ function New-OutputPath([string] $baseName) {
   }
 }
 
-$results = [System.Collections.Generic.List[object]]::new()
-$word = $null
-try {
+function Invoke-ComExport([string] $programId, [System.IO.FileInfo] $input, [string] $target) {
+  $application = $null
+  $document = $null
   try {
-    $word = New-Object -ComObject Word.Application
-    $word.Visible = $false
-    $word.DisplayAlerts = 0
-  } catch {
-    $word = $null
-  }
-
-  $soffice = if (-not $word) { Get-Command soffice -ErrorAction SilentlyContinue } else { $null }
-  if (-not $word -and -not $soffice) {
-    throw '未找到 Microsoft Word 或 LibreOffice。请安装其中一个后重试。'
-  }
-
-  foreach ($input in $inputs) {
-    $target = New-OutputPath $input.BaseName
-    try {
-      if ($word) {
-        $document = $word.Documents.Open($input.FullName, $false, $true)
-        try { $document.ExportAsFixedFormat($target, 17) } finally { $document.Close($false) }
-      } else {
-        $temporary = Join-Path $outputRoot ('.convert-' + [guid]::NewGuid().ToString('N'))
-        [System.IO.Directory]::CreateDirectory($temporary) | Out-Null
-        try {
-          & $soffice.Source --headless --convert-to pdf --outdir $temporary $input.FullName | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw "LibreOffice 返回退出码 $LASTEXITCODE" }
-          $converted = Join-Path $temporary ($input.BaseName + '.pdf')
-          if (-not (Test-Path -LiteralPath $converted)) { throw 'LibreOffice 未生成 PDF' }
-          Move-Item -LiteralPath $converted -Destination $target
-        } finally { Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue }
+    $application = New-Object -ComObject $programId
+    $application.Visible = $false
+    $application.DisplayAlerts = 0
+    $document = $application.Documents.Open($input.FullName, $false, $true)
+    $document.ExportAsFixedFormat($target, 17)
+    if (-not (Test-Path -LiteralPath $target)) { throw "$programId 未生成 PDF" }
+  } finally {
+    if ($document) {
+      try { $document.Close($false) } catch {
+        # The converter can close its document RPC server immediately after export.
       }
-      if (-not (Test-Path -LiteralPath $target)) { throw '转换命令结束但未生成 PDF' }
-      $results.Add([pscustomobject]@{ input = $input.FullName; output = $target; success = $true; error = $null })
-    } catch {
-      $results.Add([pscustomobject]@{ input = $input.FullName; output = $null; success = $false; error = $_.Exception.Message })
+      try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($document) } catch {
+        # The document COM object can already be released by the converter.
+      }
+    }
+    if ($application) {
+      try { $application.Quit() } catch {
+        # The converter can close its application RPC server immediately after export.
+      }
+      try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($application) } catch {
+        # The application COM object can already be released by the converter.
+      }
     }
   }
-} finally {
-  if ($word) {
-  try { $word.Quit() } catch { # Word may close its RPC server immediately after export.
-  }
-  try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($word) } catch { # The COM object may already be released.
+}
+
+function Invoke-LibreOfficeExport([System.IO.FileInfo] $input, [string] $target, $soffice) {
+  $temporary = Join-Path $outputRoot ('.convert-' + [guid]::NewGuid().ToString('N'))
+  [System.IO.Directory]::CreateDirectory($temporary) | Out-Null
+  try {
+    & $soffice.Source --headless --convert-to pdf --outdir $temporary $input.FullName | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "LibreOffice 返回退出码 $LASTEXITCODE" }
+    $converted = Join-Path $temporary ($input.BaseName + '.pdf')
+    if (-not (Test-Path -LiteralPath $converted)) { throw 'LibreOffice 未生成 PDF' }
+    Move-Item -LiteralPath $converted -Destination $target
+  } finally {
+    Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue
   }
 }
+
+$results = [System.Collections.Generic.List[object]]::new()
+$programIds = @('Word.Application', 'Kwps.Application', 'wps.Application')
+$soffice = Get-Command soffice -ErrorAction SilentlyContinue
+foreach ($input in $inputs) {
+  $target = New-OutputPath $input.BaseName
+  $errors = [System.Collections.Generic.List[string]]::new()
+  $converted = $false
+  foreach ($programId in $programIds) {
+    try {
+      Invoke-ComExport $programId $input $target
+      $converted = $true
+      break
+    } catch {
+      $errors.Add("$programId：$($_.Exception.Message)")
+      if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
+    }
+  }
+  if (-not $converted -and $soffice) {
+    try {
+      Invoke-LibreOfficeExport $input $target $soffice
+      $converted = $true
+    } catch {
+      $errors.Add("LibreOffice：$($_.Exception.Message)")
+      if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
+    }
+  }
+  if ($converted) {
+    $results.Add([pscustomobject]@{ input = $input.FullName; output = $target; success = $true; error = $null })
+  } else {
+    if (-not $soffice) { $errors.Add('LibreOffice：未找到 soffice 命令') }
+    $results.Add([pscustomobject]@{ input = $input.FullName; output = $null; success = $false; error = ($errors -join '；') })
+  }
 }
 
 $report = Join-Path $outputRoot 'Word转PDF-处理报告.json'
 $results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $report -Encoding utf8
 $successCount = @($results | Where-Object success).Count
-$payload = [ordered]@{ success = ($successCount -eq $results.Count); successCount = $successCount; failureCount = $results.Count - $successCount; outputDirectory = $outputRoot; report = $report; files = @($results) }
+$artifacts = [System.Collections.Generic.List[object]]::new()
+foreach ($item in $results | Where-Object success) {
+  $artifacts.Add([ordered]@{ path = $item.output; kind = 'pdf'; description = "转换后的 PDF：$([System.IO.Path]::GetFileName($item.output))" })
+}
+$artifacts.Add([ordered]@{ path = $report; kind = 'report'; description = '处理报告' })
+$payload = [ordered]@{
+  success = ($successCount -eq $results.Count)
+  successCount = $successCount
+  failureCount = $results.Count - $successCount
+  outputDirectory = $outputRoot
+  files = @($results)
+  artifacts = @($artifacts)
+}
 Write-Output ('WANWEI_RESULT=' + ($payload | ConvertTo-Json -Compress -Depth 6))
 if ($successCount -ne $results.Count) { exit 2 }

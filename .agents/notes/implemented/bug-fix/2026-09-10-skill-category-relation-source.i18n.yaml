@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-10-skill-category-relation-source.md
-2026-09-10-skill-category-relation-source.md: c8fc6cdad6e5d27ac5049cb80779955111470e1a
-2026-09-10-skill-category-relation-source.zh.md: a8e9d98149d2f7a8b41868cd54ae3064f0708108
+2026-09-10-skill-category-relation-source.md: bb079199d8582a2f5839f0293222664fe69a3907
+2026-09-10-skill-category-relation-source.zh.md: 4c8bb75c2ed598d8668c21ecc5633bcf43d042ab

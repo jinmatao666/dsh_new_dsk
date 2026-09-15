@@ -127,14 +127,18 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       return;
     }
     try {
-      const [response, categoryResponse] = await Promise.all([
-        API.get('/api/skill/admin/list', { params: { page: 1, perPage: 100 } }),
-        API.get('/api/skill-category/', { params: { includeDisabled: 0, type: 'skill_package' } })
-      ]);
+      const response = await API.get('/api/skill/admin/list', { params: { page: 1, perPage: 100 } });
       setItems(Array.isArray(response.data?.items) ? response.data.items : []);
-      setManagedCategories(Array.isArray(categoryResponse.data?.data) ? categoryResponse.data.data : []);
     } catch (error) {
       showError(error.message || '加载技能失败');
+    }
+
+    try {
+      const categoryResponse = await API.get('/api/skill-category/', { params: { includeDisabled: 0, type: 'skill_package' } });
+      setManagedCategories(Array.isArray(categoryResponse.data?.data) ? categoryResponse.data.data : []);
+    } catch (error) {
+      setManagedCategories([]);
+      showError(error.message || '加载技能分类失败');
     }
   }, []);
   useEffect(() => { void loadSkills(); }, [loadSkills]);

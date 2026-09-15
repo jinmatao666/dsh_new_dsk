@@ -46,9 +46,10 @@ def require(module_name: str, package_name: str | None = None):
         return __import__(module_name)
     except ImportError as exc:
         package = package_name or module_name
+        requirements = Path(__file__).resolve().parent.parent / "requirements.txt"
         raise UserError(
-            f"缺少运行依赖 {package}。请由管理员在桌面运行环境中预装，"
-            f"不要在工作区中临时安装。"
+            f"缺少运行依赖 {package}。请通过桌面端依赖安装审批运行："
+            f'python -m pip install --user -r "{requirements}"'
         ) from exc
 
 
@@ -445,9 +446,23 @@ def document_compare(args: argparse.Namespace) -> dict[str, Any]:
         if tag == "equal":
             counts["unchanged"] += old_end - old_start
             continue
-        kind = {"insert": "added", "delete": "deleted", "replace": "modified"}[tag]
-        counts[kind] += max(old_end - old_start, new_end - new_start)
-        changes.append({"type": kind, "old": old_lines[old_start:old_end], "new": new_lines[new_start:new_end]})
+        old_block = old_lines[old_start:old_end]
+        new_block = new_lines[new_start:new_end]
+        if tag == "replace":
+            paired = min(len(old_block), len(new_block))
+            if paired:
+                counts["modified"] += paired
+                changes.append({"type": "modified", "old": old_block[:paired], "new": new_block[:paired]})
+            if len(old_block) > paired:
+                counts["deleted"] += len(old_block) - paired
+                changes.append({"type": "deleted", "old": old_block[paired:], "new": []})
+            if len(new_block) > paired:
+                counts["added"] += len(new_block) - paired
+                changes.append({"type": "added", "old": [], "new": new_block[paired:]})
+            continue
+        kind = {"insert": "added", "delete": "deleted"}[tag]
+        counts[kind] += len(new_block) if tag == "insert" else len(old_block)
+        changes.append({"type": kind, "old": old_block, "new": new_block})
     directory = output_directory(args.output_dir)
     basename = safe_name(f"{old_path.stem}_对比_{new_path.stem}")
     json_path = unique_path(directory, f"{basename}_差异.json", args.overwrite)
@@ -545,6 +560,7 @@ def image_process(args: argparse.Namespace) -> dict[str, Any]:
     inputs = [existing_file(item, {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}) for item in args.inputs]
     directory = output_directory(args.output_dir)
     artifacts: list[Artifact] = []
+    file_results: list[dict[str, Any]] = []
     saved_bytes = 0
     original_bytes = 0
     for source in inputs:
@@ -571,11 +587,38 @@ def image_process(args: argparse.Namespace) -> dict[str, Any]:
             image.save(target, save_format, **options)
         original_bytes += source.stat().st_size
         saved_bytes += target.stat().st_size
+        source_bytes = source.stat().st_size
+        target_bytes = target.stat().st_size
+        file_results.append({
+            "input": str(source),
+            "output": str(target),
+            "input_bytes": source_bytes,
+            "output_bytes": target_bytes,
+            "saved_bytes": source_bytes - target_bytes,
+        })
         artifacts.append(Artifact(str(target), "image", f"处理后的图片：{source.name}"))
     percent = 0 if original_bytes == 0 else round((1 - saved_bytes / original_bytes) * 100, 1)
-    report = write_report(directory, "图片批量处理", "图片压缩与格式转换报告", f"已处理 {len(inputs)} 张图片，体积变化 {percent:+g}%。", [f"- 输出格式：{args.format}", f"- 图片质量：{args.quality}", f"- 原始总大小：{original_bytes} 字节", f"- 输出总大小：{saved_bytes} 字节"], artifacts)
+    size_summary = f"总体体积减少 {percent:g}%" if percent >= 0 else f"总体体积增加 {-percent:g}%"
+    larger = [item for item in file_results if item["saved_bytes"] < 0]
+    details = [
+        f"- 输出格式：{args.format}",
+        f"- 图片质量：{args.quality}",
+        f"- 原始总大小：{original_bytes} 字节",
+        f"- 输出总大小：{saved_bytes} 字节",
+        f"- 转换后体积增大的文件：{len(larger)} 个",
+    ]
+    details.extend(
+        f"- {Path(item['input']).name}：{item['input_bytes']} → {item['output_bytes']} 字节（转换后增大）"
+        for item in larger
+    )
+    report = write_report(directory, "图片批量处理", "图片压缩与格式转换报告", f"已处理 {len(inputs)} 张图片，{size_summary}。", details, artifacts)
     artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "size_change_percent": percent, "artifacts": [asdict(item) for item in artifacts]}
+    return {
+        "success": True,
+        "size_reduction_percent": percent,
+        "files": file_results,
+        "artifacts": [asdict(item) for item in artifacts],
+    }
 
 
 def render_markdown_docx(args: argparse.Namespace) -> dict[str, Any]:
@@ -808,6 +851,8 @@ def generate_meeting_minutes(materials: str, args: argparse.Namespace) -> str:
         "输出纯 Markdown，不要代码围栏。结构必须依次包含：会议基本信息表、核心结论、"
         "议题与讨论、决策事项、待办事项表、风险与未决问题。待办表列为序号、事项、"
         "责任人、截止时间、状态。材料未明确的字段填写‘未明确’，不要写‘待确认’。"
+        "相对日期和时间必须保留材料原文；‘今天下班前’、‘周三开始’等表达不得转换为材料中"
+        "没有出现的具体日期或钟点。只有材料明确给出时，才能写精确日期和时间。"
     )
     payload = json.dumps({
         "model": model,

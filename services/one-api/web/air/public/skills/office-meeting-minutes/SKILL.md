@@ -15,7 +15,7 @@ description: 会议纪要：将会议语音转为文字，并结合会议材料�
 1. 文字材料：`scripts/invoke.ps1 prepare --materials <文件...> --transcript <可选转写稿> --meeting-title <名称> --output-directory <目录>`。
 2. 音频材料：`scripts/invoke.ps1 prepare --audio <音频> --materials <可选文件...> --meeting-title <名称> --output-directory <目录>`。脚本依次完成转写、内容整理和 Word 渲染。
 3. 默认服务不要求密钥；如网关后来启用鉴权，通过 `WANWEI_MEETING_API_KEY` 提供，不能写入技能包、命令记录或报告。服务地址和两个模型均可通过同名前缀的环境变量覆盖。
-4. 责任人、期限、参会人未在材料中出现时必须写“未明确”。接口失败时保留已产生的材料或转写文件并报告原始原因，不得伪造纪要。
+4. 责任人、期限、参会人未在材料中出现时必须写“未明确”。相对时间保留材料原文，不把“今天下班前”“周三开始”等表达转换成材料没有给出的具体日期或钟点。接口失败时保留已产生的材料或转写文件并报告原始原因，不得伪造纪要。
 
 ## 输出样式
 
@@ -25,7 +25,7 @@ description: 会议纪要：将会议语音转为文字，并结合会议材料�
 - 清楚区分“材料明确内容”和“未明确项”，不得补造会议结论。
 ## 运行依赖
 
-首次执行前运行 `python -m pip install -r <技能目录>/requirements.txt`。若依赖缺失，只提供这条安装命令，不得自行安装。
+执行处理脚本前检查 `requirements.txt` 中声明的依赖。只有依赖缺失时才运行 `python -m pip install --user -r <技能目录>/requirements.txt`；Workspace Write 模式拒绝该写入时，使用相同命令申请桌面端依赖安装审批。用户拒绝或安装失败时停止，安装成功后自动重试原处理命令。
 
 ## 通用约束
 

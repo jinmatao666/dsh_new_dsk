@@ -14,10 +14,10 @@
   ],
   "capabilities": [
     "Word 批量转 PDF",
-    "优先使用 Microsoft Word 高保真转换",
+    "Microsoft Word、WPS 与 LibreOffice 逐级回退",
     "不覆盖原文件并生成处理报告"
   ],
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "万维Buddy 办公工具",
   "submitter": "root",
   "createdAt": "2026-09-14 19:00:00",

@@ -14,7 +14,8 @@ description: 文档摘要与要点提取：读取 Word、PDF、Excel 和文本�
 1. 运行 `scripts/invoke.ps1 extract --inputs <文件...> --output-directory <目录>`，得到带来源边界的文本底稿。
 2. 若用户给出关注重点，围绕该重点组织；否则使用默认结构：“一句话结论、关键要点、风险与问题、时间节点、待办事项、来源说明”。
 3. 每个事实尽量标注来源文件；材料没有明确责任人、期限或结论时写“未明确”，不得补造。
-4. 将最终 Markdown 保存后，运行 `scripts/invoke.ps1 render --input <摘要.md> --title "文档摘要与要点" --output-directory <目录>` 生成 Word。
+4. 交付前复核数字、比例、责任人、期限和风险数量；摘要、要点和风险章节对同一事实必须一致。近似值必须标注“约”，同时保留可核对的精确值。
+5. 将最终 Markdown 保存后，运行 `scripts/invoke.ps1 render --input <摘要.md> --title "文档摘要与要点" --output-directory <目录>` 生成 Word。
 
 ## 交付
 
@@ -22,7 +23,7 @@ description: 文档摘要与要点提取：读取 Word、PDF、Excel 和文本�
 - 扫描 PDF 无可提取文本时明确提示需要 OCR。长材料应分来源归纳，避免把不同文件中的观点混为一个事实。
 ## 运行依赖
 
-首次执行前运行 `python -m pip install -r <技能目录>/requirements.txt`。若依赖缺失，只提供这条安装命令，不得自行安装。
+执行处理脚本前检查 `requirements.txt` 中声明的依赖。只有依赖缺失时才运行 `python -m pip install --user -r <技能目录>/requirements.txt`；Workspace Write 模式拒绝该写入时，使用相同命令申请桌面端依赖安装审批。用户拒绝或安装失败时停止，安装成功后自动重试原处理命令。
 
 ## 通用约束
 

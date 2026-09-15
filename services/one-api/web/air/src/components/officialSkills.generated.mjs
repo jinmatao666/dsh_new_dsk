@@ -167,7 +167,7 @@ export const OFFICIAL_SKILLS = [
       "执行前 CSV 预览",
       "冲突检查与两阶段安全改名"
     ],
-    "version": "1.0.0",
+    "version": "1.0.1",
     "team": "万维Buddy 办公工具",
     "submitter": "root",
     "created_at": "2026-09-14 19:00:00",
@@ -234,7 +234,7 @@ export const OFFICIAL_SKILLS = [
       "新增删除内容统计",
       "可读 HTML 与 Markdown 对比报告"
     ],
-    "version": "1.0.0",
+    "version": "1.0.1",
     "team": "万维Buddy 办公工具",
     "submitter": "root",
     "created_at": "2026-09-14 19:00:00",
@@ -289,7 +289,7 @@ export const OFFICIAL_SKILLS = [
       "结构化摘要与风险识别",
       "待办和时间节点整理"
     ],
-    "version": "1.0.0",
+    "version": "1.0.1",
     "team": "万维Buddy 办公工具",
     "submitter": "root",
     "created_at": "2026-09-14 19:00:00",
@@ -344,7 +344,7 @@ export const OFFICIAL_SKILLS = [
       "文本和表格格式统一",
       "基础统计与处理报告"
     ],
-    "version": "1.0.0",
+    "version": "1.0.1",
     "team": "万维Buddy 办公工具",
     "submitter": "root",
     "created_at": "2026-09-14 19:00:00",
@@ -411,7 +411,7 @@ export const OFFICIAL_SKILLS = [
       "等比例尺寸调整",
       "JPG/PNG/WebP 格式转换"
     ],
-    "version": "1.0.0",
+    "version": "1.0.1",
     "team": "万维Buddy 办公工具",
     "submitter": "root",
     "created_at": "2026-09-14 19:00:00",
@@ -493,7 +493,7 @@ export const OFFICIAL_SKILLS = [
       "A4/A3/Letter 与原尺寸",
       "自动旋转和留白排版"
     ],
-    "version": "1.0.0",
+    "version": "1.0.1",
     "team": "万维Buddy 办公工具",
     "submitter": "root",
     "created_at": "2026-09-14 19:00:00",
@@ -574,7 +574,7 @@ export const OFFICIAL_SKILLS = [
       "Qwen3.8 结构化会议纪要",
       "Markdown 与 Word 交付"
     ],
-    "version": "1.0.0",
+    "version": "1.0.1",
     "team": "万维Buddy 办公工具",
     "submitter": "root",
     "created_at": "2026-09-14 19:00:00",
@@ -635,7 +635,7 @@ export const OFFICIAL_SKILLS = [
       "按页码范围拆分",
       "按单页批量拆分"
     ],
-    "version": "1.0.0",
+    "version": "1.0.1",
     "team": "万维Buddy 办公工具",
     "submitter": "root",
     "created_at": "2026-09-14 19:00:00",
@@ -701,7 +701,7 @@ export const OFFICIAL_SKILLS = [
       "PNG 与 JPG 输出",
       "页码范围和清晰度控制"
     ],
-    "version": "1.0.0",
+    "version": "1.0.1",
     "team": "万维Buddy 办公工具",
     "submitter": "root",
     "created_at": "2026-09-14 19:00:00",
@@ -771,10 +771,10 @@ export const OFFICIAL_SKILLS = [
     "description": "将一个或多个 Word 文档转换为便于打印、发送和归档的 PDF，并保持原文件不变。 包含可直接运行的本地处理脚本、依赖说明、错误处理和统一中文交付规范。",
     "capabilities": [
       "Word 批量转 PDF",
-      "优先使用 Microsoft Word 高保真转换",
+      "Microsoft Word、WPS 与 LibreOffice 逐级回退",
       "不覆盖原文件并生成处理报告"
     ],
-    "version": "1.0.0",
+    "version": "1.0.1",
     "team": "万维Buddy 办公工具",
     "submitter": "root",
     "created_at": "2026-09-14 19:00:00",

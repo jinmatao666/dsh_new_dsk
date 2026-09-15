@@ -13,7 +13,7 @@ description: Word 转 PDF：将一个或多个 Word 文档转换为便于打印�
 ## 执行与交互
 
 1. 确认输入是 `.doc`、`.docx` 或 `.docm`。多个候选文件且用户没有说清时，先列出文件让用户确认。
-2. 运行 `scripts/invoke.ps1 -InputPaths <文件列表> -OutputDirectory <目录>`。脚本优先调用 Microsoft Word；不可用时回退到 LibreOffice。
+2. 运行 `scripts/invoke.ps1 -InputPaths <文件列表> -OutputDirectory <目录>`。脚本依次尝试 Microsoft Word、WPS 和 LibreOffice；任一转换器启动或导出失败时继续尝试下一项。
 3. 每个输入独立转换。输出与原文件同名；重名时自动追加序号，绝不覆盖原文件。
 4. 转换失败时保留其他已成功文件，并明确列出失败文件和原因，不把“已复制但未转换”的文件冒充 PDF。
 

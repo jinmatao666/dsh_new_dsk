@@ -405,7 +405,6 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .tag { display:inline-flex; padding:5px 9px; border-radius:8px; color:#8797ab; background:#eef2f6; font-size:12px; }
 .tag.success { color:#34a67c; background:#e6f8f0; }
 .tag.failed { color:#c34d5f; background:#ffeaee; }
-.zjugis-vision-tag { margin-left:8px; color:#2563d8; background:#e7f0ff; border:1px solid #c8dbff; vertical-align:middle; }
 .link-button { margin-right:12px; padding:3px 0; border:0; color:#327be7; background:transparent; cursor:pointer; font-size:14px; }
 .link-button.danger { color:#d76b77; }
 .preview-chip-list { display:flex; flex-wrap:wrap; gap:10px; }

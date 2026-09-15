@@ -167,7 +167,7 @@ func RemoveSkillFromCategory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid skill id"})
 		return
 	}
-	if err := model.RemoveSkillFromCategory(categoryId, skillId); err != nil {
+	if err := model.RemoveSkillFromNamedCategory(categoryId, c.Query("category_name"), skillId); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}

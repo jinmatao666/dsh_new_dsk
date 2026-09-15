@@ -85,6 +85,35 @@ function deliverablePaths(text: string): readonly string[] {
     .filter(path => path !== '')
 }
 
+const OFFICE_RESULT_PREFIX = 'WANWEI_RESULT='
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null
+}
+
+/** Extract artifact paths explicitly published by an office-skill runtime. */
+function markedOfficeArtifactPaths(text: string): readonly string[] {
+  const paths: string[] = []
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trimStart()
+    if (!trimmed.startsWith(OFFICE_RESULT_PREFIX)) continue
+    try {
+      const result: unknown = JSON.parse(trimmed.slice(OFFICE_RESULT_PREFIX.length))
+      if (!isRecord(result)) continue
+      const artifacts = result.artifacts
+      if (!Array.isArray(artifacts)) continue
+      for (const artifact of artifacts) {
+        if (!isRecord(artifact)) continue
+        if (typeof artifact.path !== 'string' || artifact.path.trim() === '') continue
+        paths.push(artifact.path.trim())
+      }
+    } catch {
+      // Ignore a malformed runtime marker; ordinary terminal-path recognition still applies.
+    }
+  }
+  return paths
+}
+
 /** Extract an analysis-view path explicitly published by a GIS generator. */
 function markedAnalysisViewPaths(text: string): readonly string[] {
   const marker = /DSH_ANALYSIS_VIEW=([^\r\n]+)/gu
@@ -95,7 +124,11 @@ function markedAnalysisViewPaths(text: string): readonly string[] {
 
 function terminalDeliverablePaths(view: ToolResultNode['resultView']): readonly string[] {
   if (view?.card !== 'terminal' || view.output === undefined) return []
-  return [...new Set([...deliverablePaths(view.output), ...markedAnalysisViewPaths(view.output)])]
+  return [...new Set([
+    ...markedOfficeArtifactPaths(view.output),
+    ...deliverablePaths(view.output),
+    ...markedAnalysisViewPaths(view.output),
+  ])]
 }
 
 /**

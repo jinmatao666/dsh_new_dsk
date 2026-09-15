@@ -15,6 +15,7 @@ description: 图片压缩与格式转换：批量压缩图片、按最大尺寸�
 2. 运行 `scripts/invoke.ps1 --inputs <图片...> --format webp --quality 85 --max-width 1920 --max-height 1080 --output-directory <目录>`。
 3. 保留宽高比并应用 EXIF 方向。转 JPG 时透明区域铺白底；不覆盖原图。
 4. PNG 的 quality 不是有损质量控制，脚本会使用优化压缩；不要承诺 PNG 一定显著变小。
+5. 转换后单个文件体积增大时必须在报告中点名说明；格式转换是用户明确目标时仍保留产物，不把“转换成功”表述为“压缩成功”。
 
 ## 交付
 
@@ -22,7 +23,7 @@ description: 图片压缩与格式转换：批量压缩图片、按最大尺寸�
 - 图片较多时提供报告和目录链接，不在对话中铺满所有图片。
 ## 运行依赖
 
-首次执行前运行 `python -m pip install -r <技能目录>/requirements.txt`。若依赖缺失，只提供这条安装命令，不得自行安装。
+执行处理脚本前检查 `requirements.txt` 中声明的依赖。只有依赖缺失时才运行 `python -m pip install --user -r <技能目录>/requirements.txt`；Workspace Write 模式拒绝该写入时，使用相同命令申请桌面端依赖安装审批。用户拒绝或安装失败时停止，安装成功后自动重试原处理命令。
 
 ## 通用约束
 

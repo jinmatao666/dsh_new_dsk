@@ -18,6 +18,7 @@ const responseData = (response, fallback) => {
   throw new Error(response.data?.message || fallback);
 };
 const categoryRowKey = (category) => `${category.type_code || category.type_id || 'category'}:${category.code || category.name}:${category.id}`;
+const isDefaultCategory = (category) => category.is_default === true;
 
 const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
   const [items, setItems] = useState([]);
@@ -154,7 +155,9 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
             ? { ...item, skill_count: Number(item.skill_count || 0) + 1 }
             : item));
       } else {
-        const response = await API.delete(`/api/skill-category/${category.id}/skills/${skill.id}`);
+        const response = await API.delete(`/api/skill-category/${category.id}/skills/${skill.id}`, {
+          params: { category_name: category.name }
+        });
         responseData(response, '移除关联技能失败');
         await load();
         window.dispatchEvent(new Event('skill-categories-changed'));
@@ -182,7 +185,7 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
                 <strong>{skill.display_name || skill.name}</strong>
                 <span>{skill.name} · v{skill.version || '-'}</span>
               </div>
-              {row.name === '通用类'
+              {isDefaultCategory(row)
                 ? <span className='skill-category-default-tag'>默认分类</span>
                 : <button type='button' className='skill-text-action danger' onClick={() => removeSkill(row, skill)}>移出分类</button>}
             </div>
@@ -210,7 +213,7 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
       render: (_, row) => (
         <div className='skill-row-actions'>
           <button type='button' className='skill-text-action' onClick={() => setEditor({ visible: true, data: { ...EMPTY, ...row } })}>编辑</button>
-          {row.name === '通用类'
+          {isDefaultCategory(row)
             ? <span className='skill-category-default-tag'>默认分类</span>
             : <button type='button' className='skill-text-action danger' onClick={() => remove(row)}>删除</button>}
         </div>
@@ -219,13 +222,14 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
   ];
   const filteredItems = useMemo(() => {
     const term = (searchKeyword || '').trim().toLowerCase();
-    return term ? items.filter((item) => [item.name, item.description].filter(Boolean).some((value) => String(value).toLowerCase().includes(term))) : items;
+    const visible = term ? items.filter((item) => [item.name, item.description].filter(Boolean).some((value) => String(value).toLowerCase().includes(term))) : items;
+    return visible.map((item) => ({ ...item, row_key: categoryRowKey(item) }));
   }, [items, searchKeyword]);
 
   return <div style={{ padding: embedded ? 0 : 24, height: embedded ? '100%' : undefined, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
     {!embedded && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}><Space><Button icon={<IconPlus />} theme='solid' type='primary' onClick={() => setEditor({ visible: true, data: EMPTY })}>新建分类</Button><Input prefix={<IconSearch />} placeholder='搜索名称或描述' value={localKeyword} onChange={setLocalKeyword} style={{ width: 280 }} showClear /></Space></div>}
     <div style={{ flex: 1, minHeight: 0 }}>
-      <Table columns={columns} dataSource={filteredItems} rowKey={categoryRowKey} loading={loading} pagination={{ pageSize: 20 }} expandedRowRender={renderExpandedSkills} expandedRowKeys={expanded.key ? [expanded.key] : []} expandIcon={false} />
+      <Table columns={columns} dataSource={filteredItems} rowKey='row_key' loading={loading} pagination={{ pageSize: 20 }} expandedRowRender={renderExpandedSkills} expandedRowKeys={expanded.key ? [expanded.key] : []} expandIcon={false} />
     </div>
     {editor.visible && (
       <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) closeEditor(); }}>
@@ -237,8 +241,8 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
           <div className='zjugis-form'>
             <label className='zjugis-field'>
               <span>分类名称<i className='skill-required'>*</i></span>
-              <input disabled={editor.data.name === '通用类'} value={editor.data.name} onChange={(e) => updateEditor('name', e.target.value)} placeholder='例如：空间制图' />
-              {editor.data.name === '通用类' && <small className='skill-field-hint'>默认分类名称不可修改</small>}
+              <input disabled={isDefaultCategory(editor.data)} value={editor.data.name} onChange={(e) => updateEditor('name', e.target.value)} placeholder='例如：空间制图' />
+              {isDefaultCategory(editor.data) && <small className='skill-field-hint'>默认分类名称不可修改</small>}
             </label>
             <label className='zjugis-field'>
               <span>描述（可选）</span>

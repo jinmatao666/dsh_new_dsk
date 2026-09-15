@@ -21,7 +21,7 @@ description: PDF 转图片：将 PDF 每一页批量转换为 PNG 或 JPG，支�
 - 汇报格式、DPI、生成张数、页面范围和失败项；图片较多时只展示前几项并提供目录链接。
 ## 运行依赖
 
-首次执行前运行 `python -m pip install -r <技能目录>/requirements.txt`。若依赖缺失，只提供这条安装命令，不得自行安装。
+执行处理脚本前检查 `requirements.txt` 中声明的依赖。只有依赖缺失时才运行 `python -m pip install --user -r <技能目录>/requirements.txt`；Workspace Write 模式拒绝该写入时，使用相同命令申请桌面端依赖安装审批。用户拒绝或安装失败时停止，安装成功后自动重试原处理命令。
 
 ## 通用约束
 

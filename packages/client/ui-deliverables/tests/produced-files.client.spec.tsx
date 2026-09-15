@@ -329,6 +329,69 @@ describe('produced-file Turn data', () => {
     ])
   })
 
+  it('publishes every artifact declared by the office runtime result marker', () => {
+    const marker = `WANWEI_RESULT=${JSON.stringify({
+      success: true,
+      artifacts: [
+        { path: 'E:\\workspace\\汇总表.csv', kind: 'csv' },
+        { path: 'E:\\workspace\\压缩图片.webp', kind: 'image' },
+        { path: 'E:\\workspace\\处理报告.html', kind: 'report' },
+      ],
+    })}`
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      call(2, 'office', { card: 'generic', title: 'Run office skill' }),
+      at(3, 'tool/result', {
+        turn: 1,
+        step: 1,
+        message: {
+          source: { type: 'tool-result', callId: 'office' },
+          content: [{ type: 'tool-result', content: [], isError: false }],
+        },
+      }, {
+        for: 'result',
+        view: { card: 'terminal', output: marker },
+      }),
+    ])
+
+    expect(producedForClosing(deliverablesOf(value))).toEqual([
+      'E:\\workspace\\汇总表.csv',
+      'E:\\workspace\\压缩图片.webp',
+      'E:\\workspace\\处理报告.html',
+    ])
+  })
+
+  it('ignores malformed office runtime markers and helper-script artifacts', () => {
+    const validMarker = `WANWEI_RESULT=${JSON.stringify({
+      artifacts: [
+        null,
+        { path: '' },
+        { path: 'E:\\workspace\\generator.py' },
+        { path: 'E:\\workspace\\最终报告.pdf' },
+      ],
+    })}`
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      call(2, 'office', { card: 'generic', title: 'Run office skill' }),
+      at(3, 'tool/result', {
+        turn: 1,
+        step: 1,
+        message: {
+          source: { type: 'tool-result', callId: 'office' },
+          content: [{ type: 'tool-result', content: [], isError: false }],
+        },
+      }, {
+        for: 'result',
+        view: {
+          card: 'terminal',
+          output: `WANWEI_RESULT={invalid json}\n${validMarker}`,
+        },
+      }),
+    ])
+
+    expect(producedForClosing(deliverablesOf(value))).toEqual(['E:\\workspace\\最终报告.pdf'])
+  })
+
   it('publishes a marked GIS analysis view even when the terminal summary omits generation prose', () => {
     const value = assembler([
       at(1, 'turn/start', { turn: 1 }),

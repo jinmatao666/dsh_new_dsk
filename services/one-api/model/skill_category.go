@@ -63,6 +63,7 @@ type SkillCategoryView struct {
 	Status      int    `json:"status"`
 	SortOrder   int    `json:"sort_order"`
 	SkillCount  int    `json:"skill_count"`
+	IsDefault   bool   `json:"is_default"`
 }
 
 type SkillCategoryFilter struct {
@@ -221,6 +222,9 @@ func migrateSkillCategorySchema() error {
 	if err := normalizePrimarySkillCategoryRelations(); err != nil {
 		return err
 	}
+	if err := deduplicateSkillCategoryRelations(); err != nil {
+		return err
+	}
 	return hideRetiredLegacySkillCategories()
 }
 
@@ -313,12 +317,40 @@ func mergeDuplicateSkillCategories() error {
 				}
 				canonical.Description = category.Description
 			}
+			if err := tx.Where("category_id = ?", category.Id).Delete(&SkillCategoryRelation{}).Error; err != nil {
+				return err
+			}
 			return tx.Model(category).Update("is_deleted", true).Error
 		}); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func deduplicateSkillCategoryRelations() error {
+	type duplicateRelation struct {
+		SkillId    int
+		CategoryId uint64
+		KeepId     uint64
+	}
+	var duplicates []duplicateRelation
+	if err := DB.Model(&SkillCategoryRelation{}).
+		Select("skill_id, category_id, MIN(id) AS keep_id").
+		Group("skill_id, category_id").
+		Having("COUNT(*) > 1").
+		Scan(&duplicates).Error; err != nil {
+		return err
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		for _, duplicate := range duplicates {
+			if err := tx.Where("skill_id = ? AND category_id = ? AND id <> ?", duplicate.SkillId, duplicate.CategoryId, duplicate.KeepId).
+				Delete(&SkillCategoryRelation{}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func hideRetiredLegacySkillCategories() error {
@@ -418,6 +450,9 @@ func ListSkillCategoriesByType(typeCode string, includeDisabled bool) ([]SkillCa
 		Group("c.id, c.type_id, t.code, t.name, t.sort_order, c.code, c.name, c.description, c.status, c.sort_order").
 		Order("t.sort_order ASC, c.sort_order ASC, c.id DESC").
 		Find(&categories).Error
+	for index := range categories {
+		categories[index].IsDefault = categories[index].TypeCode == SkillCategoryTypePackage && strings.TrimSpace(categories[index].Name) == DefaultSkillCategoryName
+	}
 	return categories, err
 }
 
@@ -429,6 +464,7 @@ func CountSkillCategoryRelations(categoryId uint64) (int64, error) {
 	err := DB.Table("skill_category_relations AS r").
 		Joins("JOIN skills AS s ON s.id = r.skill_id").
 		Where("r.category_id = ? AND s.is_deleted = ?", categoryId, false).
+		Distinct("r.skill_id").
 		Count(&count).Error
 	return count, err
 }
@@ -484,7 +520,11 @@ func UpdateSkillCategory(category *SkillCategory) error {
 		if strings.TrimSpace(category.Name) == "" {
 			return errors.New("分类名称不能为空")
 		}
-		if previous.Name == DefaultSkillCategoryName && category.Name != DefaultSkillCategoryName {
+		var typ SkillCategoryType
+		if err := tx.First(&typ, previous.TypeId).Error; err != nil {
+			return err
+		}
+		if typ.Code == SkillCategoryTypePackage && strings.TrimSpace(previous.Name) == DefaultSkillCategoryName && strings.TrimSpace(category.Name) != DefaultSkillCategoryName {
 			return errors.New("通用类是默认分类，不能修改名称")
 		}
 		var duplicate SkillCategory
@@ -505,10 +545,6 @@ func UpdateSkillCategory(category *SkillCategory) error {
 				"name":        category.Name,
 				"description": category.Description,
 			}).Error; err != nil {
-			return err
-		}
-		var typ SkillCategoryType
-		if err := tx.First(&typ, previous.TypeId).Error; err != nil {
 			return err
 		}
 		if typ.Code != SkillCategoryTypePackage || previous.Name == category.Name {
@@ -613,7 +649,11 @@ func DeleteSkillCategory(id uint64) error {
 	if err := DB.First(&category, id).Error; err != nil {
 		return err
 	}
-	if category.Name == DefaultSkillCategoryName {
+	var typ SkillCategoryType
+	if err := DB.First(&typ, category.TypeId).Error; err != nil {
+		return err
+	}
+	if typ.Code == SkillCategoryTypePackage && strings.TrimSpace(category.Name) == DefaultSkillCategoryName {
 		return errors.New("通用类是默认分类，不能删除")
 	}
 	count, err := CountSkillCategoryRelations(id)
@@ -637,7 +677,7 @@ type SkillCategorySkillView struct {
 func ListSkillsForCategory(categoryId uint64) ([]SkillCategorySkillView, error) {
 	var skills []SkillCategorySkillView
 	err := DB.Table("skills AS s").
-		Select("s.id, s.name, s.display_name, s.version, s.status").
+		Distinct("s.id, s.name, s.display_name, s.version, s.status").
 		Joins("JOIN skill_category_relations AS r ON r.skill_id = s.id").
 		Joins("JOIN skill_categories AS c ON c.id = r.category_id").
 		Joins("JOIN skill_category_types AS t ON t.id = c.type_id AND t.code = ?", SkillCategoryTypePackage).
@@ -650,6 +690,17 @@ func ListSkillsForCategory(categoryId uint64) ([]SkillCategorySkillView, error) 
 // RemoveSkillFromCategory moves an associated package skill to the default
 // category so every skill remains classified after an administrator removes it.
 func RemoveSkillFromCategory(categoryId uint64, skillId int) error {
+	return removeSkillFromCategory(categoryId, "", skillId)
+}
+
+// RemoveSkillFromNamedCategory verifies the UI's category identity before
+// moving the skill. The name recovers historical rows whose serialized ID did
+// not identify the category shown to the administrator.
+func RemoveSkillFromNamedCategory(categoryId uint64, categoryName string, skillId int) error {
+	return removeSkillFromCategory(categoryId, strings.TrimSpace(categoryName), skillId)
+}
+
+func removeSkillFromCategory(categoryId uint64, categoryName string, skillId int) error {
 	if categoryId == 0 || skillId == 0 {
 		return errors.New("category_id and skill_id are required")
 	}
@@ -658,6 +709,17 @@ func RemoveSkillFromCategory(categoryId uint64, skillId int) error {
 		if err := tx.First(&category, categoryId).Error; err != nil {
 			return err
 		}
+		if categoryName != "" && strings.TrimSpace(category.Name) != categoryName {
+			if err := tx.Table("skill_categories AS c").
+				Select("c.*").
+				Joins("JOIN skill_category_types AS t ON t.id = c.type_id AND t.code = ?", SkillCategoryTypePackage).
+				Joins("JOIN skill_category_relations AS r ON r.category_id = c.id AND r.skill_id = ?", skillId).
+				Where("c.name = ? AND c.status = ? AND c.is_deleted = ?", categoryName, 1, false).
+				Order("c.id ASC").
+				First(&category).Error; err != nil {
+				return fmt.Errorf("分类信息已变化，请刷新页面后重试：%w", err)
+			}
+		}
 		var typ SkillCategoryType
 		if err := tx.First(&typ, category.TypeId).Error; err != nil {
 			return err
@@ -665,14 +727,18 @@ func RemoveSkillFromCategory(categoryId uint64, skillId int) error {
 		if typ.Code != SkillCategoryTypePackage {
 			return errors.New("只能移除技能包主分类")
 		}
-		if category.Name == DefaultSkillCategoryName {
+		if strings.TrimSpace(category.Name) == DefaultSkillCategoryName {
 			return errors.New("通用类是默认分类，不能移除其中的技能")
 		}
 		var skill Skill
 		if err := tx.Where("id = ? AND is_deleted = ?", skillId, false).First(&skill).Error; err != nil {
 			return err
 		}
-		if skill.Category != category.Name {
+		var relationCount int64
+		if err := tx.Model(&SkillCategoryRelation{}).Where("skill_id = ? AND category_id = ?", skillId, category.Id).Count(&relationCount).Error; err != nil {
+			return err
+		}
+		if relationCount == 0 {
 			return errors.New("该技能当前不属于此分类")
 		}
 		var fallback SkillCategory
@@ -708,12 +774,13 @@ func BatchListSkillCategoriesForSkills(skillIds []int) (map[int][]SkillCategoryV
 	}
 
 	type row struct {
-		SkillId int `json:"skill_id"`
+		SkillId       int `json:"skill_id"`
+		TypeSortOrder int `json:"-"`
 		SkillCategoryView
 	}
 	var rows []row
 	err := DB.Table("skill_category_relations AS r").
-		Select("r.skill_id, c.id, c.type_id, t.code AS type_code, t.name AS type_name, c.code, c.name, c.description, c.sort_order").
+		Distinct("r.skill_id, c.id, c.type_id, t.code AS type_code, t.name AS type_name, t.sort_order AS type_sort_order, c.code, c.name, c.description, c.sort_order").
 		Joins("JOIN skill_categories AS c ON c.id = r.category_id").
 		Joins("JOIN skill_category_types AS t ON t.id = c.type_id").
 		Where("r.skill_id IN ?", skillIds).
@@ -724,6 +791,7 @@ func BatchListSkillCategoriesForSkills(skillIds []int) (map[int][]SkillCategoryV
 		return nil, err
 	}
 	for _, row := range rows {
+		row.IsDefault = row.TypeCode == SkillCategoryTypePackage && strings.TrimSpace(row.Name) == DefaultSkillCategoryName
 		result[row.SkillId] = append(result[row.SkillId], row.SkillCategoryView)
 	}
 	return result, nil

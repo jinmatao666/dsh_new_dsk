@@ -11,20 +11,34 @@ import (
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
 
-const visionProbeImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQ0AAAzCMP5/un0CNkuZ41wybXsHAAAAAAAAAAAAxR4yw/wuPL6QkAAAAABJRU5ErkJggg=="
+type visionProbe struct {
+	expected string
+	image    string
+}
 
-func buildVisionProbeRequest(modelName string) *relaymodel.GeneralOpenAIRequest {
+var visionProbes = []visionProbe{
+	{expected: "red", image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQ0AAAzCMP5/un0CNkuZ41wybXsHAAAAAAAAAAAAxR4yw/wuPL6QkAAAAABJRU5ErkJggg=="},
+	{expected: "green", image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABPSURBVFhHxcghAQAgAASx75+HfhBg/hAz287uV0SNqBE1okbUiBpRI2pEjagRNaJG1IgaUSNqRI2oETWiRtSIGlEjakSNqBE1okbUiBoRe3QFzFthuhvUAAAAAElFTkSuQmCC"},
+	{expected: "blue", image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABQSURBVFhHxcgxAQAwDMCgSpx/M60A/uzgYebtfkXUiBpRI2pEjagRNaJG1IgaUSNqRI2oETWiRtSIGlEjakSNqBE1okbUiBpRI2pEjagRsQOS0DiIlYBoPQAAAABJRU5ErkJggg=="},
+}
+
+func buildVisionProbeRequest(modelName string, probe visionProbe) *relaymodel.GeneralOpenAIRequest {
 	return &relaymodel.GeneralOpenAIRequest{
 		Model: modelName,
 		Messages: []relaymodel.Message{{
 			Role: "user",
 			Content: []any{
-				map[string]any{"type": "text", "text": "Name the dominant color in this image using one word."},
-				map[string]any{"type": "image_url", "image_url": map[string]any{"url": visionProbeImage}},
+				map[string]any{"type": "text", "text": "Return the dominant color of this image as exactly one lowercase English word."},
+				map[string]any{"type": "image_url", "image_url": map[string]any{"url": probe.image}},
 			},
 		}},
 		MaxTokens: 16,
 	}
+}
+
+func matchesVisionProbe(response string, probe visionProbe) bool {
+	answer := strings.ToLower(strings.Trim(response, " \t\r\n`'\".,:;!?"))
+	return answer == probe.expected
 }
 
 func isExplicitImageUnsupported(message string) bool {
@@ -227,8 +241,8 @@ func TestModelChannels(c *gin.Context) {
 	})
 }
 
-// DetectModelVisionCapability probes the model with a small built-in image and
-// stores the result in the existing desktop synchronization fields.
+// DetectModelVisionCapability verifies image input across every enabled source
+// before storing the capability used by desktop synchronization.
 func DetectModelVisionCapability(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -246,59 +260,74 @@ func DetectModelVisionCapability(c *gin.Context) {
 		return
 	}
 	if len(sources) == 0 {
-		respondError(c, "模型尚未绑定来源渠道，无法检测视觉能力")
+		respondError(c, "模型尚未绑定来源渠道，无法检测模型类型")
 		return
 	}
 
-	var failures []string
-	explicitlyUnsupported := false
+	var inconclusive []string
+	var confirmedText []string
+	enabledSources := 0
 	for _, source := range sources {
 		if !source.Enabled || source.Status != model.ChannelStatusEnabled {
 			continue
 		}
+		enabledSources++
 		channel, channelErr := model.GetChannelById(source.ChannelId, true)
 		if channelErr != nil {
-			failures = append(failures, source.ChannelName+": 渠道不存在")
+			inconclusive = append(inconclusive, source.ChannelName+": 渠道不存在")
 			continue
 		}
-		response, probeErr, _ := testChannel(c.Request.Context(), channel, buildVisionProbeRequest(def.Name))
-		if probeErr == nil {
-			answer := strings.ToLower(strings.TrimSpace(response))
-			if strings.Contains(answer, "red") || strings.Contains(answer, "红") {
-				if err := model.UpdateModelDefinitionVisionCapability(def.Id, true); err != nil {
-					respondError(c, err.Error())
-					return
+		sourcePassed := true
+		for _, probe := range visionProbes {
+			response, probeErr, _ := testChannel(c.Request.Context(), channel, buildVisionProbeRequest(def.Name, probe))
+			if probeErr != nil {
+				sourcePassed = false
+				message := source.ChannelName + ": " + probeErr.Error()
+				if isExplicitImageUnsupported(probeErr.Error()) {
+					confirmedText = append(confirmedText, message)
+				} else {
+					inconclusive = append(inconclusive, message)
 				}
-				c.JSON(http.StatusOK, gin.H{
-					"success": true,
-					"message": "已识别为视觉模型",
-					"data":    gin.H{"status": "vision", "supports_image": true},
-				})
-				return
+				break
 			}
-			failures = append(failures, source.ChannelName+": 模型未正确识别测试图片")
+			if !matchesVisionProbe(response, probe) {
+				sourcePassed = false
+				confirmedText = append(confirmedText, source.ChannelName+": 模型未正确识别测试图片")
+				break
+			}
+		}
+		if !sourcePassed {
 			continue
 		}
-		if isExplicitImageUnsupported(probeErr.Error()) {
-			explicitlyUnsupported = true
-		}
-		failures = append(failures, source.ChannelName+": "+probeErr.Error())
 	}
 
-	if explicitlyUnsupported {
+	if enabledSources == 0 {
+		respondError(c, "没有已启用的来源渠道")
+		return
+	}
+	if len(confirmedText) > 0 {
 		if err := model.UpdateModelDefinitionVisionCapability(def.Id, false); err != nil {
 			respondError(c, err.Error())
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
-			"message": "已识别为纯文本模型",
+			"message": "已识别为文本模型",
 			"data":    gin.H{"status": "text", "supports_image": false},
 		})
 		return
 	}
-	if len(failures) == 0 {
-		failures = append(failures, "没有已启用的来源渠道")
+	if len(inconclusive) > 0 {
+		respondError(c, "模型能力检测失败："+strings.Join(inconclusive, "；"))
+		return
 	}
-	respondError(c, "视觉能力检测失败："+strings.Join(failures, "；"))
+	if err := model.UpdateModelDefinitionVisionCapability(def.Id, true); err != nil {
+		respondError(c, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "已识别为多模态模型",
+		"data":    gin.H{"status": "vision", "supports_image": true},
+	})
 }

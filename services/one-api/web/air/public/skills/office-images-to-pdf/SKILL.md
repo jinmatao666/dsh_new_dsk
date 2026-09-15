@@ -22,7 +22,7 @@ description: 图片转 PDF：将多张图片按指定顺序排版为一个 PDF�
 - 无法读取的图片单独报错，不静默跳过；输出不覆盖已有文件。
 ## 运行依赖
 
-首次执行前运行 `python -m pip install -r <技能目录>/requirements.txt`。若依赖缺失，只提供这条安装命令，不得自行安装。
+执行处理脚本前检查 `requirements.txt` 中声明的依赖。只有依赖缺失时才运行 `python -m pip install --user -r <技能目录>/requirements.txt`；Workspace Write 模式拒绝该写入时，使用相同命令申请桌面端依赖安装审批。用户拒绝或安装失败时停止，安装成功后自动重试原处理命令。
 
 ## 通用约束
 

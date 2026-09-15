@@ -117,7 +117,7 @@ export const OFFICIAL_SKILLS = [
     'installs': '0',
     'accent': '#0f766e',
     'icon': '名',
-    'version': '1.0.0',
+    'version': '1.0.1',
     'author': '万维Buddy 办公工具',
     'featured': true,
     'params': [
@@ -170,7 +170,7 @@ export const OFFICIAL_SKILLS = [
     'installs': '0',
     'accent': '#db2777',
     'icon': '比',
-    'version': '1.0.0',
+    'version': '1.0.1',
     'author': '万维Buddy 办公工具',
     'featured': true,
     'params': [
@@ -210,7 +210,7 @@ export const OFFICIAL_SKILLS = [
     'installs': '0',
     'accent': '#4f46e5',
     'icon': '摘',
-    'version': '1.0.0',
+    'version': '1.0.1',
     'author': '万维Buddy 办公工具',
     'featured': true,
     'params': [
@@ -250,7 +250,7 @@ export const OFFICIAL_SKILLS = [
     'installs': '0',
     'accent': '#16a34a',
     'icon': '表',
-    'version': '1.0.0',
+    'version': '1.0.1',
     'author': '万维Buddy 办公工具',
     'featured': true,
     'params': [
@@ -302,7 +302,7 @@ export const OFFICIAL_SKILLS = [
     'installs': '0',
     'accent': '#ca8a04',
     'icon': '压',
-    'version': '1.0.0',
+    'version': '1.0.1',
     'author': '万维Buddy 办公工具',
     'featured': true,
     'params': [
@@ -369,7 +369,7 @@ export const OFFICIAL_SKILLS = [
     'installs': '0',
     'accent': '#ea580c',
     'icon': '册',
-    'version': '1.0.0',
+    'version': '1.0.1',
     'author': '万维Buddy 办公工具',
     'featured': true,
     'params': [
@@ -435,7 +435,7 @@ export const OFFICIAL_SKILLS = [
     'installs': '0',
     'accent': '#9333ea',
     'icon': '会',
-    'version': '1.0.0',
+    'version': '1.0.1',
     'author': '万维Buddy 办公工具',
     'featured': true,
     'params': [
@@ -481,7 +481,7 @@ export const OFFICIAL_SKILLS = [
     'installs': '0',
     'accent': '#7c3aed',
     'icon': '合',
-    'version': '1.0.0',
+    'version': '1.0.1',
     'author': '万维Buddy 办公工具',
     'featured': true,
     'params': [
@@ -532,7 +532,7 @@ export const OFFICIAL_SKILLS = [
     'installs': '0',
     'accent': '#0891b2',
     'icon': '图',
-    'version': '1.0.0',
+    'version': '1.0.1',
     'author': '万维Buddy 办公工具',
     'featured': true,
     'params': [
@@ -590,7 +590,7 @@ export const OFFICIAL_SKILLS = [
     'installs': '0',
     'accent': '#2563eb',
     'icon': 'W',
-    'version': '1.0.0',
+    'version': '1.0.1',
     'author': '万维Buddy 办公工具',
     'featured': true,
     'params': [

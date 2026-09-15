@@ -80,7 +80,9 @@ class OfficeToolsSmokeTest(unittest.TestCase):
             "document-compare", "--original", str(self.inputs / "old.docx"),
             "--revised", str(self.inputs / "new.docx"), "--output-dir", str(self.outputs / "compare"),
         )
-        self.assertGreater(compared["counts"]["modified"] + compared["counts"]["added"], 0)
+        self.assertEqual(1, compared["counts"]["modified"])
+        self.assertEqual(1, compared["counts"]["added"])
+        self.assertEqual(0, compared["counts"]["deleted"])
         self.run_tool(
             "document-extract", "--inputs", str(self.inputs / "new.docx"), str(self.inputs / "ledger.xlsx"),
             "--output-dir", str(self.outputs / "extract"),
@@ -113,6 +115,8 @@ class OfficeToolsSmokeTest(unittest.TestCase):
             "--quality", "80", "--max-width", "320", "--output-dir", str(self.outputs / "images"),
         )
         self.assertEqual("image", optimized["artifacts"][0]["kind"])
+        self.assertIn("size_reduction_percent", optimized)
+        self.assertEqual(1, len(optimized["files"]))
 
         meeting = self.run_tool(
             "meeting-prepare", "--transcript", str(self.inputs / "transcript.txt"),
