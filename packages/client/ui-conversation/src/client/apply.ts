@@ -98,6 +98,21 @@ async function importDesktopFiles(path: string | undefined, files: readonly File
   return imported
 }
 
+async function importNativeDrop(path: string | undefined): Promise<readonly string[]> {
+  const invoke = (window as DesktopWindow).__ZJUGIS_NATIVE_INVOKE__
+  if (invoke === undefined) throw new Error('当前版本不支持直接导入文件。')
+  const imported = await invoke('import_dropped_workspace_files', { workspacePath: path })
+  if (!Array.isArray(imported) || !imported.every(item => typeof item === 'string')) {
+    throw new Error('桌面端返回的导入结果无效。')
+  }
+  return imported
+}
+
+function appendFileMentions(shell: ReturnType<InputHub['shell']>, imported: readonly string[]): void {
+  const prefix = shell.snapshot.draft === '' || /\s$/u.test(shell.snapshot.draft) ? '' : ' '
+  shell.setDraft(`${shell.snapshot.draft}${prefix}${imported.map(fileMention).join(' ')}`)
+}
+
 const CHAT_NODE_INJECT: ChatNodeTurnDataInjected = {
   hooks: {
     turnData: ({ useSession }, nodeKey) => function useTurnData(key) {
@@ -335,8 +350,12 @@ export function apply(ctx: Context): void {
         addFiles: async (files) => {
           const target = sessions.list.getSnapshot().byId[sessionId]?.cwd
           const imported = await importDesktopFiles(target, files)
-          const prefix = shell.snapshot.draft === '' || /\s$/u.test(shell.snapshot.draft) ? '' : ' '
-          shell.setDraft(`${shell.snapshot.draft}${prefix}${imported.map(fileMention).join(' ')}`)
+          appendFileMentions(shell, imported)
+        },
+        addDroppedFiles: async () => {
+          const target = sessions.list.getSnapshot().byId[sessionId]?.cwd
+          const imported = await importNativeDrop(target)
+          appendFileMentions(shell, imported)
         },
         addImages: (files) => {
           try {

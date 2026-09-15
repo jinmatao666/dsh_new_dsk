@@ -37,7 +37,7 @@ const INERT_DECORATIONS: DraftDecorations = { token: null, chips: [], textRefs: 
 export type InputBarProps = ComposerBarProps
 
 export function InputBar({
-  useSession, useInput, inputActions, keyboard, addFiles, addImages, removeImage, draftImages,
+  useSession, useInput, inputActions, keyboard, addFiles, addDroppedFiles, addImages, removeImage, draftImages,
   resolveSubmitMode, toggleCommandMenu, stop, command, t,
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
@@ -473,7 +473,15 @@ export function InputBar({
     })
   }, [addFiles, intakeImages, showToast])
 
-  const canAcceptDrop = !locked && !machineBusy && (addImages !== undefined || addFiles !== undefined)
+  const intakeNativeFiles = useCallback((): void => {
+    if (addDroppedFiles === undefined) return
+    void addDroppedFiles().catch((error: unknown) => {
+      showToast(error instanceof Error ? error.message : String(error))
+    })
+  }, [addDroppedFiles, showToast])
+
+  const canAcceptDrop = !locked && !machineBusy
+    && (addImages !== undefined || addFiles !== undefined || addDroppedFiles !== undefined)
 
   const onSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>): void => {
     // Any caret/selection gesture ends a live paste attempt (the machine
@@ -646,6 +654,7 @@ export function InputBar({
           canAcceptDrop,
           onAddImages: intakeImages,
           onAddFiles: intakeFiles,
+          onAddNativeFiles: intakeNativeFiles,
           onRemoveImage: (id) => { removeImage?.(id) },
           dropLimits: imageLimits === undefined ? undefined : {
             count: imageLimits.maxImagesPerMessage,

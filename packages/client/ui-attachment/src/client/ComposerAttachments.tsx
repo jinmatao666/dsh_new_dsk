@@ -16,7 +16,7 @@ interface ComposerRailItem extends AttachmentRailItem {
 
 /** Draft-image rail, document drop target, and original-image preview slot entry. */
 export function ComposerAttachments({
-  attachments, canAcceptDrop, onAddFiles, onRemoveImage, dropLimits, t,
+  attachments, canAcceptDrop, onAddFiles, onAddNativeFiles, onRemoveImage, dropLimits, t,
 }: ComposerAttachmentsProps) {
   const [preview, setPreview] = useState<ComposerAttachment | null>(null)
   const [dragActive, setDragActive] = useState(false)
@@ -64,19 +64,35 @@ export function ComposerAttachments({
       reset()
       if (canAcceptDrop) onAddFiles([...dataTransfer.files])
     }
+    const onNativeDragEnter = (): void => {
+      setDragActive(true)
+    }
+    const onNativeDragLeave = (): void => {
+      reset()
+    }
+    const onNativeDrop = (): void => {
+      reset()
+      if (canAcceptDrop) onAddNativeFiles?.()
+    }
     document.addEventListener('dragenter', onDragEnter)
     document.addEventListener('dragover', onDragOver)
     document.addEventListener('dragleave', onDragLeave)
     document.addEventListener('drop', onDrop)
     window.addEventListener('dragend', reset)
+    window.addEventListener('dsh:native-file-drag-enter', onNativeDragEnter)
+    window.addEventListener('dsh:native-file-drag-leave', onNativeDragLeave)
+    window.addEventListener('dsh:native-file-drop', onNativeDrop)
     return () => {
       document.removeEventListener('dragenter', onDragEnter)
       document.removeEventListener('dragover', onDragOver)
       document.removeEventListener('dragleave', onDragLeave)
       document.removeEventListener('drop', onDrop)
       window.removeEventListener('dragend', reset)
+      window.removeEventListener('dsh:native-file-drag-enter', onNativeDragEnter)
+      window.removeEventListener('dsh:native-file-drag-leave', onNativeDragLeave)
+      window.removeEventListener('dsh:native-file-drop', onNativeDrop)
     }
-  }, [canAcceptDrop, onAddFiles])
+  }, [canAcceptDrop, onAddFiles, onAddNativeFiles])
 
   const railItems = useMemo<ComposerRailItem[]>(() => attachments.map(attachment => ({
     id: attachment.id,

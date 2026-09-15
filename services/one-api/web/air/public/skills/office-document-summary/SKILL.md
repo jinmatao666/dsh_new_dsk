@@ -11,15 +11,16 @@ description: 文档摘要与要点提取：读取 Word、PDF、Excel 和文本�
 
 ## 执行与交互
 
-1. 运行 `scripts/invoke.ps1 extract --inputs <文件...> --output-directory <目录>`，得到带来源边界的文本底稿。
+1. 在临时工作目录运行 `scripts/invoke.ps1 extract --inputs <文件...> --output-directory <临时目录>`，从结果的 `workingFiles` 读取带来源边界的文本底稿。
 2. 若用户给出关注重点，围绕该重点组织；否则使用默认结构：“一句话结论、关键要点、风险与问题、时间节点、待办事项、来源说明”。
 3. 每个事实尽量标注来源文件；材料没有明确责任人、期限或结论时写“未明确”，不得补造。
 4. 交付前复核数字、比例、责任人、期限和风险数量；摘要、要点和风险章节对同一事实必须一致。近似值必须标注“约”，同时保留可核对的精确值。
-5. 将最终 Markdown 保存后，运行 `scripts/invoke.ps1 render --input <摘要.md> --title "文档摘要与要点" --output-directory <目录>` 生成 Word。
+5. 将最终 Markdown 仅作为临时工作文件，用 PowerShell 在同一条处理流程中写入临时目录，再运行 `scripts/invoke.ps1 render --input <临时摘要.md> --title "文档摘要与要点" --output-directory <用户输出目录>` 生成 Word。确认 Word 已生成后清理临时工作目录；不要用 Write/Edit 工具创建会被界面识别为用户产物的 Markdown。
+6. 操作说明和最终回复使用中文，不输出类似 `Now generate the Word report` 的英文过程语句。
 
 ## 交付
 
-- 优先交付 Word 摘要和 Markdown 底稿；在对话中展示精炼摘要。
+- 只向用户交付 Word 摘要；Markdown 和 JSON 均为临时内部文件，不列入产物、不保留在用户输出目录。在对话中展示精炼摘要。
 - 扫描 PDF 无可提取文本时明确提示需要 OCR。长材料应分来源归纳，避免把不同文件中的观点混为一个事实。
 ## 运行依赖
 

@@ -83,24 +83,7 @@ func normalizeSkillTags(raw json.RawMessage) json.RawMessage {
 }
 
 func normalizeSkillIcon(icon string) string {
-	icon = strings.TrimSpace(icon)
-	if icon == "" {
-		return "glyph:bot"
-	}
-	for _, glyph := range []string{"glyph:map", "glyph:document", "glyph:chart", "glyph:compass", "glyph:bot", "glyph:lightning"} {
-		if icon == glyph {
-			return icon
-		}
-	}
-	if len(icon) <= 3<<20 {
-		lower := strings.ToLower(icon)
-		for _, prefix := range []string{"data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,", "data:image/gif;base64,"} {
-			if strings.HasPrefix(lower, prefix) {
-				return icon
-			}
-		}
-	}
-	return "glyph:bot"
+	return model.NormalizeSkillIcon(icon)
 }
 
 func buildSkillCategoryFilter(c *gin.Context) model.SkillCategoryFilter {

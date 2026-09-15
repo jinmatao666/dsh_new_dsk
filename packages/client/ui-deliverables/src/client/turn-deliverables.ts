@@ -91,15 +91,23 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null
 }
 
-/** Extract artifact paths explicitly published by an office-skill runtime. */
-function markedOfficeArtifactPaths(text: string): readonly string[] {
+interface OfficeArtifactMarker {
+  readonly recognized: boolean
+  readonly paths: readonly string[]
+}
+
+/** Read the authoritative artifact result published by an office-skill runtime. */
+function markedOfficeArtifacts(text: string): OfficeArtifactMarker {
   const paths: string[] = []
+  let recognized = false
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trimStart()
     if (!trimmed.startsWith(OFFICE_RESULT_PREFIX)) continue
     try {
       const result: unknown = JSON.parse(trimmed.slice(OFFICE_RESULT_PREFIX.length))
       if (!isRecord(result)) continue
+      recognized = true
+      if (result.success === false) continue
       const artifacts = result.artifacts
       if (!Array.isArray(artifacts)) continue
       for (const artifact of artifacts) {
@@ -111,7 +119,7 @@ function markedOfficeArtifactPaths(text: string): readonly string[] {
       // Ignore a malformed runtime marker; ordinary terminal-path recognition still applies.
     }
   }
-  return paths
+  return { recognized, paths }
 }
 
 /** Extract an analysis-view path explicitly published by a GIS generator. */
@@ -124,8 +132,9 @@ function markedAnalysisViewPaths(text: string): readonly string[] {
 
 function terminalDeliverablePaths(view: ToolResultNode['resultView']): readonly string[] {
   if (view?.card !== 'terminal' || view.output === undefined) return []
+  const office = markedOfficeArtifacts(view.output)
+  if (office.recognized) return [...new Set(office.paths)]
   return [...new Set([
-    ...markedOfficeArtifactPaths(view.output),
     ...deliverablePaths(view.output),
     ...markedAnalysisViewPaths(view.output),
   ])]

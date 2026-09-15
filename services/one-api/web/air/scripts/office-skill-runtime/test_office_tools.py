@@ -67,7 +67,8 @@ class OfficeToolsSmokeTest(unittest.TestCase):
             "pdf-to-images", "--input", str(merged_pdf), "--pages", "2-3", "--format", "jpg",
             "--dpi", "96", "--output-dir", str(self.outputs / "pdf-images"),
         )
-        self.assertEqual(3, len(converted["artifacts"]))  # two images and one report
+        self.assertEqual(2, len(converted["artifacts"]))
+        self.assertTrue(all(artifact["kind"] == "image" for artifact in converted["artifacts"]))
 
         cleaned = self.run_tool(
             "excel-process", "--input", str(self.inputs / "ledger.xlsx"), "--dedupe-columns", "编号",
@@ -75,6 +76,7 @@ class OfficeToolsSmokeTest(unittest.TestCase):
         )
         self.assertEqual(3, cleaned["rows_before"])
         self.assertEqual(1, cleaned["rows_after"])
+        self.assertEqual(["xlsx"], [artifact["kind"] for artifact in cleaned["artifacts"]])
 
         compared = self.run_tool(
             "document-compare", "--original", str(self.inputs / "old.docx"),
@@ -83,10 +85,16 @@ class OfficeToolsSmokeTest(unittest.TestCase):
         self.assertEqual(1, compared["counts"]["modified"])
         self.assertEqual(1, compared["counts"]["added"])
         self.assertEqual(0, compared["counts"]["deleted"])
-        self.run_tool(
+        self.assertEqual(["docx", "html"], [artifact["kind"] for artifact in compared["artifacts"]])
+        html_text = Path(compared["artifacts"][1]["path"]).read_text(encoding="utf-8")
+        self.assertIn(".diff_next{display:none}", html_text)
+        extracted = self.run_tool(
             "document-extract", "--inputs", str(self.inputs / "new.docx"), str(self.inputs / "ledger.xlsx"),
             "--output-dir", str(self.outputs / "extract"),
         )
+        self.assertEqual([], extracted["artifacts"])
+        self.assertEqual(2, len(extracted["workingFiles"]))
+        self.assertTrue(all(Path(path).is_file() for path in extracted["workingFiles"]))
         self.run_tool(
             "render-markdown-docx", "--input", str(self.inputs / "summary.md"),
             "--title", "测试摘要", "--output-dir", str(self.outputs / "render"),
@@ -109,12 +117,17 @@ class OfficeToolsSmokeTest(unittest.TestCase):
         )
         self.assertTrue(applied["applied"])
         self.assertFalse(rename_a.exists())
+        self.assertEqual(2, len(applied["artifacts"]))
+        self.assertTrue(all(artifact["kind"] == "file" for artifact in applied["artifacts"]))
+        self.assertTrue(all(Path(artifact["path"]).is_file() for artifact in applied["artifacts"]))
+        self.assertEqual(2, len(applied["internalFiles"]))
 
         optimized = self.run_tool(
             "image-process", "--inputs", str(self.inputs / "red.png"), "--format", "webp",
             "--quality", "80", "--max-width", "320", "--output-dir", str(self.outputs / "images"),
         )
         self.assertEqual("image", optimized["artifacts"][0]["kind"])
+        self.assertEqual(1, len(optimized["artifacts"]))
         self.assertIn("size_reduction_percent", optimized)
         self.assertEqual(1, len(optimized["files"]))
 

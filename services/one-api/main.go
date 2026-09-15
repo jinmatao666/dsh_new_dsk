@@ -62,6 +62,11 @@ func main() {
 
 	// Initialize SQL Database
 	model.InitDB()
+	if migrated, err := model.MigrateSkillIcons(); err != nil {
+		logger.FatalLog("技能图标迁移失败: " + err.Error())
+	} else if migrated > 0 {
+		logger.SysLogf("compressed %d skill icons", migrated)
+	}
 	if err := model.MigrateLegacySkillReleases(); err != nil {
 		logger.FatalLog("技能版本迁移失败: " + err.Error())
 	}

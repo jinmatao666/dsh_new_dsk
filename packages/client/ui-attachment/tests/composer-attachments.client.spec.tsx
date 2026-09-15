@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import type {
   ComposerAttachment, ComposerAttachmentsOwnerProps, ComposerAttachmentsProps,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -124,6 +124,16 @@ describe('ComposerAttachments', () => {
     const file = new File(['notes'], 'notes.txt', { type: 'text/plain' })
     fireEvent.drop(document.body, { dataTransfer: { types: ['Files'], files: [file], dropEffect: 'none' } })
     expect(onAddFiles).toHaveBeenCalledWith([file])
+  })
+
+  it('consumes native desktop drops without reading browser File objects', () => {
+    const onAddNativeFiles = vi.fn()
+    const view = render(<ComposerAttachments {...props({ onAddNativeFiles })} />)
+    act(() => { window.dispatchEvent(new Event('dsh:native-file-drag-enter')) })
+    expect(view.getByRole('status')).toBeTruthy()
+    act(() => { window.dispatchEvent(new Event('dsh:native-file-drop')) })
+    expect(onAddNativeFiles).toHaveBeenCalledOnce()
+    expect(view.queryByRole('status')).toBeNull()
   })
 
   it('shows a blocked drop without forwarding its files', () => {

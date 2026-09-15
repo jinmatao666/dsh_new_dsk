@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-11-desktop-workspace-external-file-drop.md
-2026-09-11-desktop-workspace-external-file-drop.md: 47672a2fe265f78d53e8df4b4edd948ea7ed32cc
-2026-09-11-desktop-workspace-external-file-drop.zh.md: f4aef90557807cd78f8c50c25f3b79af9152ed9b
+2026-09-11-desktop-workspace-external-file-drop.md: 87530743a1a798ef564e2b9e5c594971df5d5e5c
+2026-09-11-desktop-workspace-external-file-drop.zh.md: 3cb1a444d45bc8c4a4e87d2bc86dbe18779cd44d

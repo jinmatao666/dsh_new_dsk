@@ -13,6 +13,7 @@ import mimetypes
 import os
 import re
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 import uuid
@@ -22,7 +23,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 
-RUNTIME_VERSION = "1.0.0"
+RUNTIME_VERSION = "1.0.1"
 DEFAULT_FONT = "Microsoft YaHei"
 INVALID_FILENAME = re.compile(r'[\\/:*?"<>|]+')
 DEFAULT_MEETING_BASE_URL = "http://ac.zjugis.com:20330/v1"
@@ -174,8 +175,7 @@ def pdf_merge(args: argparse.Namespace) -> dict[str, Any]:
         writer.write(stream)
     artifacts = [Artifact(str(target), "pdf", "合并后的 PDF")]
     report = write_report(directory, target.stem, "PDF 合并处理报告", f"已将 {len(inputs)} 个 PDF 合并为 {pages} 页。", [f"- 输入文件数：{len(inputs)}", f"- 总页数：{pages}"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "operation": "merge", "artifacts": [asdict(item) for item in artifacts]}
+    return {"success": True, "operation": "merge", "internalFiles": [str(report)], "artifacts": [asdict(item) for item in artifacts]}
 
 
 def pdf_split(args: argparse.Namespace) -> dict[str, Any]:
@@ -199,8 +199,7 @@ def pdf_split(args: argparse.Namespace) -> dict[str, Any]:
             writer.write(stream)
         artifacts.append(Artifact(str(target), "pdf", f"第 {label} 页"))
     report = write_report(directory, source.stem, "PDF 拆分处理报告", f"已按 {args.ranges} 生成 {len(artifacts)} 个 PDF。", [f"- 原始页数：{len(reader.pages)}", f"- 页码范围：{args.ranges}"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "operation": "split", "artifacts": [asdict(item) for item in artifacts]}
+    return {"success": True, "operation": "split", "internalFiles": [str(report)], "artifacts": [asdict(item) for item in artifacts]}
 
 
 def pdf_to_images(args: argparse.Namespace) -> dict[str, Any]:
@@ -229,8 +228,7 @@ def pdf_to_images(args: argparse.Namespace) -> dict[str, Any]:
     finally:
         document.close()
     report = write_report(directory, source.stem, "PDF 转图片处理报告", f"已将 PDF 的 {len(artifacts)} 页转换为 {extension.upper()}。", [f"- 输出分辨率：{args.dpi} DPI", f"- 输出格式：{extension.upper()}"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "artifacts": [asdict(item) for item in artifacts]}
+    return {"success": True, "internalFiles": [str(report)], "artifacts": [asdict(item) for item in artifacts]}
 
 
 def _page_pixels(page_size: str, orientation: str, dpi: int) -> tuple[int, int] | None:
@@ -275,8 +273,7 @@ def images_to_pdf(args: argparse.Namespace) -> dict[str, Any]:
         page.close()
     artifacts = [Artifact(str(target), "pdf", "图片合成 PDF")]
     report = write_report(directory, target.stem, "图片转 PDF 处理报告", f"已按输入顺序将 {len(inputs)} 张图片合成为 PDF。", [f"- 页面尺寸：{args.page_size.upper()}", f"- 页边距：{args.margin_mm:g} mm"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "artifacts": [asdict(item) for item in artifacts]}
+    return {"success": True, "internalFiles": [str(report)], "artifacts": [asdict(item) for item in artifacts]}
 
 
 def _normalize_cell(value: Any, trim_text: bool) -> Any:
@@ -366,8 +363,7 @@ def excel_process(args: argparse.Namespace) -> dict[str, Any]:
     output.save(target)
     artifacts = [Artifact(str(target), "xlsx", "整理后的 Excel")]
     report = write_report(directory, source.stem, "Excel 数据处理报告", f"已处理 {original_count} 行，输出 {len(data)} 行。", [f"- 工作表：{sheet.title}", f"- 去重列：{'、'.join(deduplicate) or '未启用'}", f"- 筛选条件：{len(filters)} 个"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "rows_before": original_count, "rows_after": len(data), "artifacts": [asdict(item) for item in artifacts]}
+    return {"success": True, "rows_before": original_count, "rows_after": len(data), "internalFiles": [str(report)], "artifacts": [asdict(item) for item in artifacts]}
 
 
 def extract_text(path_value: str | Path) -> str:
@@ -409,7 +405,6 @@ def extract_text(path_value: str | Path) -> str:
 def document_extract(args: argparse.Namespace) -> dict[str, Any]:
     inputs = [existing_file(item) for item in args.inputs]
     directory = output_directory(args.output_dir)
-    artifacts: list[Artifact] = []
     sections: list[str] = [f"# {args.title or '材料提取结果'}", ""]
     metadata = []
     for source in inputs:
@@ -422,10 +417,7 @@ def document_extract(args: argparse.Namespace) -> dict[str, Any]:
     extracted.write_text("\n".join(sections), encoding="utf-8")
     index = unique_path(directory, f"{safe_name(args.basename or '材料')}_提取索引.json", args.overwrite)
     write_json(index, {"schemaVersion": 1, "purpose": args.purpose, "files": metadata})
-    artifacts.extend([Artifact(str(extracted), "markdown", "提取后的材料"), Artifact(str(index), "json", "材料索引")])
-    report = write_report(directory, safe_name(args.basename or "材料"), "文档内容提取报告", f"已从 {len(inputs)} 个文件提取内容，供模型继续处理。", [f"- 使用目的：{args.purpose}", f"- 输入文件数：{len(inputs)}"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "artifacts": [asdict(item) for item in artifacts]}
+    return {"success": True, "workingFiles": [str(extracted), str(index)], "artifacts": []}
 
 
 def document_compare(args: argparse.Namespace) -> dict[str, Any]:
@@ -464,30 +456,40 @@ def document_compare(args: argparse.Namespace) -> dict[str, Any]:
         counts[kind] += len(new_block) if tag == "insert" else len(old_block)
         changes.append({"type": kind, "old": old_block, "new": new_block})
     directory = output_directory(args.output_dir)
-    basename = safe_name(f"{old_path.stem}_对比_{new_path.stem}")
-    json_path = unique_path(directory, f"{basename}_差异.json", args.overwrite)
-    write_json(json_path, {"schemaVersion": 1, "old": str(old_path), "new": str(new_path), "counts": counts, "changes": changes})
-    html_path = unique_path(directory, f"{basename}_逐行对比.html", args.overwrite)
+    html_path = unique_path(directory, "文档逐行对比.html", args.overwrite)
     table = difflib.HtmlDiff(wrapcolumn=90).make_table(old_lines, new_lines, fromdesc=html.escape(old_path.name), todesc=html.escape(new_path.name), context=True, numlines=3)
     html_path.write_text(_comparison_html(table, counts), encoding="utf-8")
-    markdown_path = unique_path(directory, f"{basename}_差异摘要.md", args.overwrite)
     rows = [["新增", counts["added"]], ["删除", counts["deleted"]], ["修改", counts["modified"]], ["未变化", counts["unchanged"]]]
-    lines = ["# 文档对比摘要", "", f"- 旧版本：`{old_path.name}`", f"- 新版本：`{new_path.name}`", "", "## 差异统计", "", *markdown_table(["类型", "行数"], rows), "", "## 重点差异", ""]
+    lines = ["# 文档差异对比报告", "", f"- 原始版本：`{old_path.name}`", f"- 新版本：`{new_path.name}`", "", "## 差异统计", "", *markdown_table(["类型", "行数"], rows), "", "## 重点差异", ""]
     if changes:
         for index, change in enumerate(changes[:100], start=1):
-            lines.extend([f"### 差异 {index} · {change['type']}", "", f"- 旧内容：{' / '.join(change['old']) or '（无）'}", f"- 新内容：{' / '.join(change['new']) or '（无）'}", ""])
+            label = {"added": "新增", "deleted": "删除", "modified": "修改"}[change["type"]]
+            lines.extend([f"### 差异 {index} · {label}", "", f"- 原内容：{' / '.join(change['old']) or '（无）'}", f"- 新内容：{' / '.join(change['new']) or '（无）'}", ""])
     else:
         lines.append("两份文档提取后的文本内容一致。")
-    markdown_path.write_text("\n".join(lines), encoding="utf-8")
-    artifacts = [Artifact(str(markdown_path), "markdown", "差异摘要"), Artifact(str(html_path), "html", "可视化逐行对比"), Artifact(str(json_path), "json", "结构化差异数据")]
-    report = write_report(directory, basename, "文档对比处理报告", f"识别新增 {counts['added']} 行、删除 {counts['deleted']} 行、修改 {counts['modified']} 行。", [f"- 旧版本：{old_path.name}", f"- 新版本：{new_path.name}"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
+    lines.extend([
+        "", "## 风险与建议", "",
+        "- 本报告用于快速定位文本变化，重要条款、数字、日期和责任分工应由经办人员复核。",
+        "- 对比范围不包括版式、图片、批注、修订痕迹等视觉差异。",
+    ])
+    with tempfile.TemporaryDirectory(prefix="wanwei-document-compare-") as temporary:
+        summary = Path(temporary) / "文档差异对比报告.md"
+        summary.write_text("\n".join(lines), encoding="utf-8")
+        rendered = render_markdown_docx(argparse.Namespace(
+            input=str(summary),
+            output_name="文档差异对比报告.docx",
+            title="文档差异对比报告",
+            output_dir=str(directory),
+            overwrite=args.overwrite,
+        ))
+    docx_path = rendered["artifacts"][0]["path"]
+    artifacts = [Artifact(docx_path, "docx", "文档差异对比报告"), Artifact(str(html_path), "html", "可视化逐行对比")]
     return {"success": True, "counts": counts, "artifacts": [asdict(item) for item in artifacts]}
 
 
 def _comparison_html(table: str, counts: dict[str, int]) -> str:
     return f"""<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>文档逐行对比</title><style>
-body{{margin:0;padding:32px;background:#f4f7fb;color:#1f3657;font-family:{DEFAULT_FONT},sans-serif}}main{{max-width:1400px;margin:auto;background:#fff;padding:28px;border-radius:18px;box-shadow:0 16px 45px #1f36571c}}h1{{margin-top:0}}.stats{{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}}.stat{{padding:10px 14px;border-radius:10px;background:#edf4ff}}table.diff{{width:100%;border-collapse:collapse;font-family:Consolas,monospace;font-size:13px}}.diff td,.diff th{{padding:6px;border:1px solid #dce6f3;vertical-align:top}}.diff_header{{background:#eaf1fb}}.diff_add{{background:#dff7e8}}.diff_sub{{background:#ffe5e8}}.diff_chg{{background:#fff3c7}}</style></head><body><main><h1>文档逐行对比</h1><div class=\"stats\"><span class=\"stat\">新增 {counts['added']}</span><span class=\"stat\">删除 {counts['deleted']}</span><span class=\"stat\">修改 {counts['modified']}</span></div>{table}</main></body></html>"""
+*{{box-sizing:border-box}}body{{margin:0;padding:32px;background:#f4f7fb;color:#1f3657;font-family:{DEFAULT_FONT},sans-serif}}main{{max-width:1600px;margin:auto;background:#fff;padding:28px;border-radius:18px;box-shadow:0 16px 45px #1f36571c;overflow:hidden}}h1{{margin-top:0}}.stats{{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}}.stat{{padding:10px 14px;border-radius:10px;background:#edf4ff}}.comparison{{width:100%;overflow:auto}}table.diff{{width:100%;min-width:900px;border-collapse:collapse;table-layout:fixed;font-family:Consolas,{DEFAULT_FONT},monospace;font-size:13px}}.diff td,.diff th{{padding:7px;border:1px solid #dce6f3;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}}.diff td.diff_header{{width:48px;text-align:right;background:#eaf1fb}}.diff_next{{display:none}}.diff_add{{background:#dff7e8}}.diff_sub{{background:#ffe5e8}}.diff_chg{{background:#fff3c7}}@media(max-width:800px){{body{{padding:12px}}main{{padding:16px}}}}</style></head><body><main><h1>文档逐行对比</h1><div class=\"stats\"><span class=\"stat\">新增 {counts['added']}</span><span class=\"stat\">删除 {counts['deleted']}</span><span class=\"stat\">修改 {counts['modified']}</span></div><div class=\"comparison\">{table}</div></main></body></html>"""
 
 
 def batch_rename(args: argparse.Namespace) -> dict[str, Any]:
@@ -528,6 +530,7 @@ def batch_rename(args: argparse.Namespace) -> dict[str, Any]:
         writer.writeheader()
         writer.writerows(proposals)
     artifacts = [Artifact(str(preview), "csv", "重命名预览表")]
+    internal_files: list[str] = []
     if args.apply:
         staged = []
         try:
@@ -540,7 +543,8 @@ def batch_rename(args: argparse.Namespace) -> dict[str, Any]:
                 temporary.rename(target)
             rollback = unique_path(directory, "批量重命名回滚表.json", args.overwrite)
             write_json(rollback, {"schemaVersion": 1, "renamed": proposals})
-            artifacts.append(Artifact(str(rollback), "json", "重命名回滚映射"))
+            internal_files = [str(preview), str(rollback)]
+            artifacts = [Artifact(item["target"], "file", f"重命名后的文件：{item['new_name']}") for item in proposals]
         except Exception:
             for source, temporary, target in reversed(staged):
                 if temporary.exists():
@@ -548,9 +552,7 @@ def batch_rename(args: argparse.Namespace) -> dict[str, Any]:
                 elif target.exists() and not source.exists():
                     target.rename(source)
             raise
-    report = write_report(directory, "批量重命名", "文件批量重命名报告", f"已{'完成' if args.apply else '预览'} {len(proposals)} 个文件的重命名。", [f"- 执行状态：{'已执行' if args.apply else '仅预览，原文件未修改'}", f"- 命名模板：`{args.template}`"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "applied": args.apply, "proposals": proposals, "artifacts": [asdict(item) for item in artifacts]}
+    return {"success": True, "applied": args.apply, "proposals": proposals, "internalFiles": internal_files, "artifacts": [asdict(item) for item in artifacts]}
 
 
 def image_process(args: argparse.Namespace) -> dict[str, Any]:
@@ -611,11 +613,11 @@ def image_process(args: argparse.Namespace) -> dict[str, Any]:
         f"- {Path(item['input']).name}：{item['input_bytes']} → {item['output_bytes']} 字节（转换后增大）"
         for item in larger
     )
-    report = write_report(directory, "图片批量处理", "图片压缩与格式转换报告", f"已处理 {len(inputs)} 张图片，{size_summary}。", details, artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
     return {
         "success": True,
         "size_reduction_percent": percent,
+        "summary": size_summary,
+        "details": details,
         "files": file_results,
         "artifacts": [asdict(item) for item in artifacts],
     }

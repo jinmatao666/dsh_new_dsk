@@ -12,11 +12,17 @@ use std::{
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent},
-    Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+    DragDropEvent, Manager, State, WebviewEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 use url::Url;
 
 const NATIVE_SKILLS_CHANGED_SCRIPT: &str = "window.dispatchEvent(new Event('dsh:skills-changed'));";
+const NATIVE_FILE_DRAG_ENTER_SCRIPT: &str =
+    "window.dispatchEvent(new Event('dsh:native-file-drag-enter'));";
+const NATIVE_FILE_DRAG_LEAVE_SCRIPT: &str =
+    "window.dispatchEvent(new Event('dsh:native-file-drag-leave'));";
+const NATIVE_FILE_DROP_SCRIPT: &str =
+    "window.dispatchEvent(new Event('dsh:native-file-drop'));";
 const WORKSPACE_IMPORT_MAX_FILES: usize = 64;
 const WORKSPACE_IMPORT_MAX_FILE_BYTES: usize = 64 * 1024 * 1024;
 const WORKSPACE_IMPORT_MAX_TOTAL_BYTES: usize = 256 * 1024 * 1024;
@@ -84,6 +90,9 @@ struct WorkspaceImportFile {
     name: String,
     bytes: Vec<u8>,
 }
+
+/// One operating-system drop that the renderer may consume exactly once.
+struct PendingWorkspaceDrop(Mutex<Option<Vec<PathBuf>>>);
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -690,16 +699,12 @@ fn import_workspace_files_at(
     Ok(imported)
 }
 
-/// Copy browser-dropped files into the selected Workspace without exposing a
-/// general filesystem-write command to the renderer.
-#[tauri::command]
-fn import_workspace_files(
-    app: tauri::AppHandle,
+fn workspace_import_root(
+    app: &tauri::AppHandle,
     workspace_path: Option<String>,
-    files: Vec<WorkspaceImportFile>,
-) -> Result<Vec<String>, String> {
-    let root = match workspace_path {
-        Some(path) => PathBuf::from(path),
+) -> Result<PathBuf, String> {
+    match workspace_path {
+        Some(path) => Ok(PathBuf::from(path)),
         None => {
             let path = app
                 .path()
@@ -708,10 +713,98 @@ fn import_workspace_files(
                 .join("imports");
             fs::create_dir_all(&path)
                 .map_err(|error| format!("无法创建默认导入目录 {}：{error}", path.display()))?;
-            path
+            Ok(path)
         }
-    };
+    }
+}
+
+fn import_workspace_paths_at(
+    workspace_path: &Path,
+    paths: Vec<PathBuf>,
+) -> Result<Vec<String>, String> {
+    if paths.is_empty() {
+        return Err("没有可导入的文件".to_string());
+    }
+    if paths.len() > WORKSPACE_IMPORT_MAX_FILES {
+        return Err(format!(
+            "一次最多可导入 {WORKSPACE_IMPORT_MAX_FILES} 个文件"
+        ));
+    }
+    let root = fs::canonicalize(workspace_path)
+        .map_err(|error| format!("无法访问工作区 {}：{error}", workspace_path.display()))?;
+    if !root.is_dir() {
+        return Err(format!("工作区路径不是文件夹：{}", root.display()));
+    }
+    let mut total_bytes = 0u64;
+    let mut imported = Vec::with_capacity(paths.len());
+    for path in paths {
+        let source = fs::canonicalize(&path)
+            .map_err(|error| format!("无法访问拖入的文件 {}：{error}", path.display()))?;
+        let metadata = fs::metadata(&source)
+            .map_err(|error| format!("无法读取拖入的文件 {}：{error}", source.display()))?;
+        if !metadata.is_file() {
+            return Err(format!("暂不支持拖入文件夹：{}", source.display()));
+        }
+        let name = source
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| format!("拖入的文件名无效：{}", source.display()))?;
+        let name = workspace_import_file_name(name)?;
+        if metadata.len() > WORKSPACE_IMPORT_MAX_FILE_BYTES as u64 {
+            return Err(format!(
+                "文件超过 {} MB 限制：{name}",
+                WORKSPACE_IMPORT_MAX_FILE_BYTES / 1024 / 1024
+            ));
+        }
+        total_bytes = total_bytes
+            .checked_add(metadata.len())
+            .ok_or_else(|| "导入文件总大小无效".to_string())?;
+        if total_bytes > WORKSPACE_IMPORT_MAX_TOTAL_BYTES as u64 {
+            return Err(format!(
+                "导入文件总大小不能超过 {} MB",
+                WORKSPACE_IMPORT_MAX_TOTAL_BYTES / 1024 / 1024
+            ));
+        }
+        let destination = workspace_import_destination(&root, name)?;
+        if let Err(error) = fs::copy(&source, &destination) {
+            let _ = fs::remove_file(&destination);
+            return Err(format!(
+                "无法复制拖入的文件 {}：{error}",
+                source.display()
+            ));
+        }
+        imported.push(destination.display().to_string());
+    }
+    Ok(imported)
+}
+
+/// Copy browser-dropped files into the selected Workspace without exposing a
+/// general filesystem-write command to the renderer.
+#[tauri::command]
+fn import_workspace_files(
+    app: tauri::AppHandle,
+    workspace_path: Option<String>,
+    files: Vec<WorkspaceImportFile>,
+) -> Result<Vec<String>, String> {
+    let root = workspace_import_root(&app, workspace_path)?;
     import_workspace_files_at(&root, files)
+}
+
+/// Consume the latest operating-system drop and copy it into the active directory.
+#[tauri::command]
+fn import_dropped_workspace_files(
+    app: tauri::AppHandle,
+    pending: State<'_, PendingWorkspaceDrop>,
+    workspace_path: Option<String>,
+) -> Result<Vec<String>, String> {
+    let paths = pending
+        .0
+        .lock()
+        .map_err(|_| "拖入文件状态不可用，请重新拖入".to_string())?
+        .take()
+        .ok_or_else(|| "拖入的文件已失效，请重新拖入".to_string())?;
+    let root = workspace_import_root(&app, workspace_path)?;
+    import_workspace_paths_at(&root, paths)
 }
 
 fn marketplace_resource_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -1500,6 +1593,28 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
+        .on_webview_event(|webview, event| {
+            let WebviewEvent::DragDrop(event) = event else {
+                return;
+            };
+            match event {
+                DragDropEvent::Enter { .. } => {
+                    let _ = webview.eval(NATIVE_FILE_DRAG_ENTER_SCRIPT);
+                }
+                DragDropEvent::Drop { paths, .. } => {
+                    let state = webview.app_handle().state::<PendingWorkspaceDrop>();
+                    if let Ok(mut pending) = state.0.lock() {
+                        *pending = Some(paths.clone());
+                    }
+                    let _ = webview.eval(NATIVE_FILE_DROP_SCRIPT);
+                }
+                DragDropEvent::Leave => {
+                    let _ = webview.eval(NATIVE_FILE_DRAG_LEAVE_SCRIPT);
+                }
+                DragDropEvent::Over { .. } => {}
+                _ => {}
+            }
+        })
         .setup(|app| {
             let resource_dir = app.path().resource_dir()?;
             let app_data_dir = app.path().app_local_data_dir()?;
@@ -1517,6 +1632,7 @@ pub fn run() {
                     std::io::Error::other(message)
                 })?;
             app.manage(Sidecar(Arc::new(Mutex::new(Some(child)))));
+            app.manage(PendingWorkspaceDrop(Mutex::new(None)));
 
             // Keep the sidecar alive when the user closes the window. The
             // application is controlled from the system tray and only exits
@@ -1568,7 +1684,6 @@ pub fn run() {
                 .resizable(false)
                 .maximizable(false)
                 .center()
-                .disable_drag_drop_handler()
                 // External pages may replace their document during login or
                 // navigation. Reinstall the small bridge on each document so
                 // client features do not fall back to WebView browser downloads.
@@ -1607,6 +1722,7 @@ pub fn run() {
             list_custom_skills,
             read_analysis_view,
             import_workspace_files,
+            import_dropped_workspace_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DSH Desktop");
@@ -1616,7 +1732,8 @@ pub fn run() {
 mod marketplace_tests {
     use super::{
         install_custom_skill_directory_at, install_marketplace_skill_at, install_marketplace_skill_files_at,
-        import_workspace_files_at, marketplace_package_sha256, read_analysis_view, save_session_log_archive_at,
+        import_workspace_files_at, import_workspace_paths_at, marketplace_package_sha256, read_analysis_view,
+        save_session_log_archive_at,
         uninstall_marketplace_skill_at, CustomSkillFile, WorkspaceImportFile,
     };
     use std::{
@@ -1867,6 +1984,25 @@ mod marketplace_tests {
             b"new image"
         );
         assert_eq!(fs::read(workspace.0.join("说明.pdf")).expect("pdf"), b"pdf");
+    }
+
+    #[test]
+    fn copies_native_drop_paths_without_overwriting_existing_files() {
+        let source = TestDirectory::new();
+        let workspace = TestDirectory::new();
+        let source_file = source.0.join("记录.wav");
+        fs::write(&source_file, b"audio").expect("source file");
+        fs::write(workspace.0.join("记录.wav"), b"existing").expect("existing file");
+
+        let imported = import_workspace_paths_at(&workspace.0, vec![source_file])
+            .expect("copy native drop");
+
+        assert_eq!(imported.len(), 1);
+        assert_eq!(fs::read(workspace.0.join("记录.wav")).expect("existing"), b"existing");
+        assert_eq!(fs::read(workspace.0.join("记录 (1).wav")).expect("copy"), b"audio");
+        assert!(import_workspace_paths_at(&workspace.0, vec![source.0.clone()])
+            .expect_err("reject directory")
+            .contains("不支持拖入文件夹"));
     }
 
     #[test]

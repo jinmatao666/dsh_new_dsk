@@ -21,6 +21,8 @@ fn main() {
             "uninstall_custom_skill",
             "list_custom_skills",
             "read_analysis_view",
+            "import_workspace_files",
+            "import_dropped_workspace_files",
         ]),
     ))
     .expect("failed to generate desktop command permissions");

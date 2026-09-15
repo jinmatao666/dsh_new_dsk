@@ -10,11 +10,11 @@ Desktop users can open an existing Workspace but cannot put a file from the oper
 
 ## Decision
 
-The desktop Workspace sidebar accepts operating-system file drops when the current Session belongs to a registered Workspace. The browser reads the dropped file bytes and invokes the Tauri-only `import_workspace_files` command with that Workspace path. The native shell canonicalizes the root, accepts only base filenames, and creates new files there. It accepts at most 64 files, 64 MiB per file, and 256 MiB per drop. Existing files remain unchanged; a conflicting filename receives a numeric suffix.
+The desktop shell accepts operating-system file drops for the active Session. Tauri retains the paths from one native drop, and the renderer consumes that batch exactly once without asking WebView to materialize browser `File` bytes. The native shell canonicalizes the destination and sources, accepts regular files only, and copies them into the Session Workspace or the app-local default import directory when the Session has no Workspace. It accepts at most 64 files, 64 MiB per file, and 256 MiB per drop. Existing files remain unchanged; a conflicting filename receives a numeric suffix.
 
-The user-facing import path receives file bytes only for an active user drop and writes immediate children of the current registered Workspace. It does not contact One API or persist a chat attachment. Browser deployments have no bridge and report that direct import is unavailable. Directory drops are not represented as file objects and remain unsupported.
+The native drop is replaced by a later drop and removed before copying begins, so a page cannot replay it or supply arbitrary source paths. The operation does not contact One API or persist a chat attachment. Browser deployments have no bridge and report that direct import is unavailable. Directory drops remain unsupported.
 
-The Workspace association rule matches [Workspace UI Complete Product Flow](2026-07-25-workspace-ui-product-flow.md): the selected Session must appear in the Workspace index and have the same Workspace cwd. Ungrouped Sessions cannot receive a drop because there is no registered destination.
+The active Session cwd selects the Workspace destination. A Session without a cwd uses the desktop app's local default import directory, preserving the draft in the same Session while making the copied file available by its appended reference.
 
 ## Alternatives considered
 
@@ -22,11 +22,11 @@ The Workspace association rule matches [Workspace UI Complete Product Flow](2026
 
 **Treat every drop as a chat attachment.** A conversation image reference does not place an ordinary file in the Workspace where tools expect it, and it would exclude non-image files.
 
-**Pass a source path to a native copy command.** Browser drag data does not provide a portable source path, while selected bytes work for every admitted file type and make the transferred content explicit.
+**Read browser `File` bytes before invoking Tauri.** Windows WebView2 can invalidate a path-backed `File` before `arrayBuffer()` finishes, which rejects a valid operating-system drop before the native shell sees it.
 
 ## Verification
 
-The Workspace browser test exercises a file drop into a selected Workspace and the no-Workspace rejection. Native tests pin collision suffixes and reject path traversal.
+Attachment UI tests exercise native drag visibility and one drop consumption. Native tests pin source copying, collision suffixes, limits, and directory rejection.
 
 ## Consequences
 

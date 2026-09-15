@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-import-dropped-workspace-files"
+description = "Enables the import_dropped_workspace_files command without any pre-configured scope."
+commands.allow = ["import_dropped_workspace_files"]
+
+[[permission]]
+identifier = "deny-import-dropped-workspace-files"
+description = "Denies the import_dropped_workspace_files command without any pre-configured scope."
+commands.deny = ["import_dropped_workspace_files"]

@@ -523,7 +523,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
                     <button type='button' className='preview-button' onClick={() => iconInputRef.current?.click()}>上传自定义图标</button>
                     {String(form.icon || '').startsWith('data:image/') && <button type='button' className='skill-text-action' onClick={() => setForm(prev => ({ ...prev, icon: 'glyph:bot' }))}>恢复默认</button>}
                   </div>
-                  <small className='preview-muted'>可以使用默认图标，也可以上传不超过 2 MB 的 PNG、JPEG、WebP 或 GIF；技能包中的其他图标写法会自动使用默认图标。</small>
+                  <small className='preview-muted'>可以使用默认图标，也可以上传不超过 2 MB 的 PNG、JPEG、WebP 或 GIF；图片会自动生成适合桌面端显示的清晰缩略图。</small>
                 </div>
               </div>
               <input ref={iconInputRef} hidden type='file' accept='image/png,image/jpeg,image/webp,image/gif' onChange={chooseIconFile} />

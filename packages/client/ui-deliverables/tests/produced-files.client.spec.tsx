@@ -361,6 +361,32 @@ describe('produced-file Turn data', () => {
     ])
   })
 
+  it('does not reinterpret a failed office runtime marker as produced files', () => {
+    const marker = `WANWEI_RESULT=${JSON.stringify({
+      success: false,
+      outputDirectory: 'E:\\workspace\\output',
+      files: [{ input: 'E:\\workspace\\source.docx', output: null, success: false }],
+      artifacts: [{ path: 'E:\\workspace\\处理报告.json', kind: 'report' }],
+    })}`
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      call(2, 'office', { card: 'generic', title: 'Run office skill' }),
+      at(3, 'tool/result', {
+        turn: 1,
+        step: 1,
+        message: {
+          source: { type: 'tool-result', callId: 'office' },
+          content: [{ type: 'tool-result', content: [], isError: false }],
+        },
+      }, {
+        for: 'result',
+        view: { card: 'terminal', output: marker },
+      }),
+    ])
+
+    expect(producedForClosing(deliverablesOf(value))).toEqual([])
+  })
+
   it('ignores malformed office runtime markers and helper-script artifacts', () => {
     const validMarker = `WANWEI_RESULT=${JSON.stringify({
       artifacts: [
