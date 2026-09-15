@@ -169,8 +169,8 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { showError('图标仅支持 PNG、JPEG、WebP 格式'); return; }
-    if (file.size > 400 * 1024) { showError('图标文件不能超过 400 KB'); return; }
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) { showError('请选择 PNG、JPEG、WebP 或 GIF 图片'); return; }
+    if (file.size > 2 * 1024 * 1024) { showError('图标文件不能超过 2 MB'); return; }
     const reader = new FileReader();
     reader.onload = () => setForm(prev => ({ ...prev, icon: String(reader.result || '') }));
     reader.onerror = () => showError('读取图标失败');
@@ -519,10 +519,10 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
                     <button type='button' className='preview-button' onClick={() => iconInputRef.current?.click()}>上传自定义图标</button>
                     {String(form.icon || '').startsWith('data:image/') && <button type='button' className='skill-text-action' onClick={() => setForm(prev => ({ ...prev, icon: 'glyph:bot' }))}>恢复默认</button>}
                   </div>
-                  <small className='preview-muted'>可选默认图标，或上传 PNG、JPEG、WebP（不超过 400 KB）；保存后桌面端技能市场会同步展示。</small>
+                  <small className='preview-muted'>可以使用默认图标，也可以上传不超过 2 MB 的 PNG、JPEG、WebP 或 GIF；技能包中的其他图标写法会自动使用默认图标。</small>
                 </div>
               </div>
-              <input ref={iconInputRef} hidden type='file' accept='image/png,image/jpeg,image/webp' onChange={chooseIconFile} />
+              <input ref={iconInputRef} hidden type='file' accept='image/png,image/jpeg,image/webp,image/gif' onChange={chooseIconFile} />
             </label>
             {!editor.base && (
               <label className='zjugis-field full'>

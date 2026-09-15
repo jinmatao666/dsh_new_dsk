@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "id": "office-batch-rename",
+  "name": "office-batch-rename",
+  "slug": "office-batch-rename",
+  "displayName": "文件批量重命名",
+  "summary": "按项目名、日期、序号等规则批量重命名文件，执行前先生成预览清单。",
+  "description": "按项目名、日期、序号等规则批量重命名文件，执行前先生成预览清单。 包含可直接运行的本地处理脚本、依赖说明、错误处理和统一中文交付规范。",
+  "category": "办公工具",
+  "tags": [
+    "官方",
+    "办公",
+    "演示"
+  ],
+  "capabilities": [
+    "批量命名规则生成",
+    "执行前 CSV 预览",
+    "冲突检查与两阶段安全改名"
+  ],
+  "version": "1.0.0",
+  "author": "万维Buddy 办公工具",
+  "submitter": "root",
+  "createdAt": "2026-09-14 19:00:00",
+  "featured": true,
+  "status": "published",
+  "accent": "#0f766e",
+  "icon": "名",
+  "params": [
+    {
+      "name": "inputPaths",
+      "type": "files",
+      "required": true,
+      "description": "需要重命名的文件"
+    },
+    {
+      "name": "template",
+      "type": "string",
+      "required": true,
+      "description": "命名模板，支持 {project} {date} {index} {name} {ext}"
+    },
+    {
+      "name": "project",
+      "type": "string",
+      "required": false,
+      "description": "项目名"
+    },
+    {
+      "name": "startIndex",
+      "type": "number",
+      "required": false,
+      "description": "起始序号",
+      "defaultValue": "1"
+    },
+    {
+      "name": "outputDirectory",
+      "type": "directory",
+      "required": false,
+      "description": "输出目录；留空时在输入文件旁创建独立目录"
+    }
+  ],
+  "files": [
+    "manifest.json",
+    "SKILL.md",
+    "scripts/invoke.ps1",
+    "scripts/office_tools.py"
+  ]
+}

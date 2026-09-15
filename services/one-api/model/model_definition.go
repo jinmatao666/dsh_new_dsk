@@ -18,6 +18,7 @@ import (
 //   - 计费倍率第一版不进本表,仍走 options(ModelRatio/CompletionRatio map)。
 //   - capabilities 字段供桌面端 provider.models 动态下发使用(方案 B),
 //     结构对齐 opencode 的 ModelsDev.Model。
+//
 // 模型类型:决定是否在客户端对话框展示。
 //   - chat(对话):客户端可见可选
 //   - other(其他):仅供工具内部调用,不在对话框展示
@@ -30,15 +31,15 @@ type ModelDefinition struct {
 	Id          int    `json:"id"`
 	Name        string `json:"name" gorm:"type:varchar(255);uniqueIndex"` // 对外统一模型名,唯一
 	DisplayName string `json:"display_name" gorm:"type:varchar(255);default:''"`
-	Enabled     bool   `json:"enabled" gorm:"default:true"` // 模型整体启停(所有来源)
+	Enabled     bool   `json:"enabled" gorm:"default:true"`                       // 模型整体启停(所有来源)
 	ModelType   string `json:"model_type" gorm:"type:varchar(16);default:'chat'"` // chat=对话(客户端可见) / other=其他
 	RedirectTo  string `json:"redirect_to" gorm:"type:varchar(255);default:''"`   // 别名入口:指向的真实模型名;空=普通模型
 	Remark      string `json:"remark" gorm:"type:varchar(512);default:''"`
 	Sort        int    `json:"sort" gorm:"default:0;index"` // 显示顺序,小在前
 
 	// capabilities —— 供客户端模型同步(方案 B / T5)下发
-	ContextLimit int    `json:"context_limit" gorm:"default:0"` // 上下文窗口
-	OutputLimit  int    `json:"output_limit" gorm:"default:0"`  // 最大输出
+	ContextLimit int    `json:"context_limit" gorm:"default:0"`                 // 上下文窗口
+	OutputLimit  int    `json:"output_limit" gorm:"default:0"`                  // 最大输出
 	Modalities   string `json:"modalities" gorm:"type:varchar(255);default:''"` // 逗号分隔: text,image,...
 	Reasoning    bool   `json:"reasoning" gorm:"default:false"`
 	ToolCall     bool   `json:"tool_call" gorm:"default:true"`
@@ -144,22 +145,35 @@ func (def *ModelDefinition) Update() error {
 	// 用 map 显式更新,避免 gorm 结构体更新忽略 bool/数值零值
 	// (例如 enabled=false 会被 Updates(struct) 跳过,导致「禁用」无效)。
 	return DB.Model(def).Where("id = ?", def.Id).Updates(map[string]interface{}{
-		"name":          def.Name,
-		"display_name":  def.DisplayName,
-		"enabled":       def.Enabled,
-		"model_type":    def.ModelType,
-		"redirect_to":   def.RedirectTo,
-		"remark":        def.Remark,
-		"context_limit": def.ContextLimit,
-		"output_limit":  def.OutputLimit,
-		"modalities":    def.Modalities,
-		"reasoning":     def.Reasoning,
-		"tool_call":     def.ToolCall,
-		"attachment":    def.Attachment,
+		"name":                   def.Name,
+		"display_name":           def.DisplayName,
+		"enabled":                def.Enabled,
+		"model_type":             def.ModelType,
+		"redirect_to":            def.RedirectTo,
+		"remark":                 def.Remark,
+		"context_limit":          def.ContextLimit,
+		"output_limit":           def.OutputLimit,
+		"modalities":             def.Modalities,
+		"reasoning":              def.Reasoning,
+		"tool_call":              def.ToolCall,
+		"attachment":             def.Attachment,
 		"support_explicit_cache": def.SupportExplicitCache,
-		"updated_time":  def.UpdatedTime,
+		"updated_time":           def.UpdatedTime,
 		// 注意:不更新 sort —— 显示顺序只由 ReorderModelDefinitions 维护,
 		// 否则启用/禁用等普通更新会把 sort 重置为零值导致模型跳位。
+	}).Error
+}
+
+// UpdateModelDefinitionVisionCapability persists the server-detected image-input capability.
+func UpdateModelDefinitionVisionCapability(id int, supportsImage bool) error {
+	modalities := "text"
+	if supportsImage {
+		modalities = "text,image"
+	}
+	return DB.Model(&ModelDefinition{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"modalities":   modalities,
+		"attachment":   supportsImage,
+		"updated_time": helper.GetTimestamp(),
 	}).Error
 }
 

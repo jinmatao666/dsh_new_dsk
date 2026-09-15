@@ -306,6 +306,7 @@ func SetApiRouter(router *gin.Engine) {
 			// 模型↔渠道来源
 			modelDefRoute.GET("/:id/sources", controller.GetModelChannelSources)
 			modelDefRoute.GET("/:id/test", controller.TestModelChannels)
+			modelDefRoute.POST("/:id/detect_vision", controller.DetectModelVisionCapability)
 			modelDefRoute.POST("/source", controller.AddModelChannelSource)
 			modelDefRoute.DELETE("/source", controller.DeleteModelChannelSource)
 			modelDefRoute.PUT("/source/priority", controller.SetModelChannelSourcePriority)

@@ -253,7 +253,7 @@ export function AuthGate({ status, login, subscribe }: AuthGateProps) {
       window.removeEventListener('resize', update)
       clearInlineLayout()
     }
-  }, [])
+  }, [auth.state])
 
   if (auth.state === 'authenticated') {
     return null

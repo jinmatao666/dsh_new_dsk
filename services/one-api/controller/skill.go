@@ -2,7 +2,6 @@ package controller
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -83,24 +82,25 @@ func normalizeSkillTags(raw json.RawMessage) json.RawMessage {
 	return json.RawMessage(`["通用能力"]`)
 }
 
-func validateSkillIcon(icon string) error {
+func normalizeSkillIcon(icon string) string {
+	icon = strings.TrimSpace(icon)
 	if icon == "" {
-		return nil
+		return "glyph:bot"
 	}
 	for _, glyph := range []string{"glyph:map", "glyph:document", "glyph:chart", "glyph:compass", "glyph:bot", "glyph:lightning"} {
 		if icon == glyph {
-			return nil
+			return icon
 		}
 	}
-	if len(icon) > 550000 {
-		return fmt.Errorf("技能图标不能超过 400 KB")
-	}
-	for _, prefix := range []string{"data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,"} {
-		if strings.HasPrefix(icon, prefix) {
-			return nil
+	if len(icon) <= 3<<20 {
+		lower := strings.ToLower(icon)
+		for _, prefix := range []string{"data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,", "data:image/gif;base64,"} {
+			if strings.HasPrefix(lower, prefix) {
+				return icon
+			}
 		}
 	}
-	return fmt.Errorf("技能图标仅支持 PNG、JPEG、WebP 或系统默认图标")
+	return "glyph:bot"
 }
 
 func buildSkillCategoryFilter(c *gin.Context) model.SkillCategoryFilter {
@@ -342,10 +342,7 @@ func CreateSkill(c *gin.Context) {
 	}
 	if v, ok := payload["icon"]; ok {
 		_ = json.Unmarshal(v, &skill.Icon)
-		if err := validateSkillIcon(skill.Icon); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
-			return
-		}
+		skill.Icon = normalizeSkillIcon(skill.Icon)
 	}
 	if v, ok := payload["category"]; ok {
 		_ = json.Unmarshal(v, &skill.Category)
@@ -498,11 +495,7 @@ func UpdateSkill(c *gin.Context) {
 	if v, ok := payload["icon"]; ok {
 		var icon string
 		_ = json.Unmarshal(v, &icon)
-		if err := validateSkillIcon(icon); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
-			return
-		}
-		existing.Icon = icon
+		existing.Icon = normalizeSkillIcon(icon)
 	}
 	if v, ok := payload["category"]; ok {
 		_ = json.Unmarshal(v, &existing.Category)

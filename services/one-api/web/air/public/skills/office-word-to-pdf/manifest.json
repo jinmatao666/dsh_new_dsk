@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "office-word-to-pdf",
+  "name": "office-word-to-pdf",
+  "slug": "office-word-to-pdf",
+  "displayName": "Word 转 PDF",
+  "summary": "将一个或多个 Word 文档转换为便于打印、发送和归档的 PDF，并保持原文件不变。",
+  "description": "将一个或多个 Word 文档转换为便于打印、发送和归档的 PDF，并保持原文件不变。 包含可直接运行的本地处理脚本、依赖说明、错误处理和统一中文交付规范。",
+  "category": "办公工具",
+  "tags": [
+    "官方",
+    "办公",
+    "演示"
+  ],
+  "capabilities": [
+    "Word 批量转 PDF",
+    "优先使用 Microsoft Word 高保真转换",
+    "不覆盖原文件并生成处理报告"
+  ],
+  "version": "1.0.0",
+  "author": "万维Buddy 办公工具",
+  "submitter": "root",
+  "createdAt": "2026-09-14 19:00:00",
+  "featured": true,
+  "status": "published",
+  "accent": "#2563eb",
+  "icon": "W",
+  "params": [
+    {
+      "name": "inputPaths",
+      "type": "files",
+      "required": true,
+      "description": "一个或多个 .doc、.docx、.docm 文件"
+    },
+    {
+      "name": "outputDirectory",
+      "type": "directory",
+      "required": false,
+      "description": "输出目录；留空时在输入文件旁创建独立目录"
+    }
+  ],
+  "files": [
+    "manifest.json",
+    "SKILL.md",
+    "scripts/invoke.ps1"
+  ]
+}

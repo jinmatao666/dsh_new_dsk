@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "id": "office-pdf-to-images",
+  "name": "office-pdf-to-images",
+  "slug": "office-pdf-to-images",
+  "displayName": "PDF 转图片",
+  "summary": "将 PDF 每一页批量转换为 PNG 或 JPG，支持清晰度和页码范围控制。",
+  "description": "将 PDF 每一页批量转换为 PNG 或 JPG，支持清晰度和页码范围控制。 包含可直接运行的本地处理脚本、依赖说明、错误处理和统一中文交付规范。",
+  "category": "办公工具",
+  "tags": [
+    "官方",
+    "办公",
+    "演示"
+  ],
+  "capabilities": [
+    "PDF 逐页转图",
+    "PNG 与 JPG 输出",
+    "页码范围和清晰度控制"
+  ],
+  "version": "1.0.0",
+  "author": "万维Buddy 办公工具",
+  "submitter": "root",
+  "createdAt": "2026-09-14 19:00:00",
+  "featured": true,
+  "status": "published",
+  "accent": "#0891b2",
+  "icon": "图",
+  "params": [
+    {
+      "name": "inputPath",
+      "type": "file",
+      "required": true,
+      "description": "PDF 文件"
+    },
+    {
+      "name": "format",
+      "type": "select",
+      "required": true,
+      "description": "图片格式",
+      "options": [
+        "png",
+        "jpg"
+      ],
+      "defaultValue": "png"
+    },
+    {
+      "name": "dpi",
+      "type": "number",
+      "required": false,
+      "description": "清晰度 DPI",
+      "defaultValue": "144"
+    },
+    {
+      "name": "pages",
+      "type": "string",
+      "required": false,
+      "description": "可选页码范围，例如 1-3,5"
+    },
+    {
+      "name": "outputDirectory",
+      "type": "directory",
+      "required": false,
+      "description": "输出目录；留空时在输入文件旁创建独立目录"
+    }
+  ],
+  "files": [
+    "manifest.json",
+    "SKILL.md",
+    "scripts/invoke.ps1",
+    "scripts/office_tools.py",
+    "requirements.txt"
+  ]
+}

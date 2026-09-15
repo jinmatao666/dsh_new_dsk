@@ -238,7 +238,7 @@ func normalizePrimarySkillCategoryRelations() error {
 		return err
 	}
 	var fallback SkillCategory
-	if err := DB.Where("type_id = ? AND (code = ? OR name = ?) AND status = ? AND is_deleted = ?", typ.Id, DefaultSkillCategoryName, DefaultSkillCategoryName, 1, false).First(&fallback).Error; err != nil {
+	if err := DB.Where("type_id = ? AND name = ? AND status = ? AND is_deleted = ?", typ.Id, DefaultSkillCategoryName, 1, false).First(&fallback).Error; err != nil {
 		return err
 	}
 	var skills []Skill
@@ -252,7 +252,7 @@ func normalizePrimarySkillCategoryRelations() error {
 			name := strings.TrimSpace(skill.Category)
 			if name != "" {
 				var selected SkillCategory
-				if err := tx.Where("type_id = ? AND (name = ? OR code = ?) AND status = ? AND is_deleted = ?", typ.Id, name, name, 1, false).First(&selected).Error; err == nil {
+				if err := tx.Where("type_id = ? AND name = ? AND status = ? AND is_deleted = ?", typ.Id, name, 1, false).First(&selected).Error; err == nil {
 					target = selected
 				} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 					return err
@@ -484,6 +484,9 @@ func UpdateSkillCategory(category *SkillCategory) error {
 		if strings.TrimSpace(category.Name) == "" {
 			return errors.New("分类名称不能为空")
 		}
+		if previous.Name == DefaultSkillCategoryName && category.Name != DefaultSkillCategoryName {
+			return errors.New("通用类是默认分类，不能修改名称")
+		}
 		var duplicate SkillCategory
 		err := tx.Where("type_id = ? AND id <> ? AND is_deleted = ? AND LOWER(TRIM(name)) = ?", previous.TypeId, category.Id, false, strings.ToLower(strings.TrimSpace(category.Name))).
 			First(&duplicate).Error
@@ -539,7 +542,7 @@ func SyncPrimarySkillCategory(skillId int, categoryName string) error {
 			return err
 		}
 		var category SkillCategory
-		if err := tx.Where("type_id = ? AND (name = ? OR code = ?) AND status = ? AND is_deleted = ?", typ.Id, categoryName, categoryName, 1, false).First(&category).Error; err != nil {
+		if err := tx.Where("type_id = ? AND name = ? AND status = ? AND is_deleted = ?", typ.Id, categoryName, 1, false).First(&category).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return fmt.Errorf("分类 %q 不存在或已禁用，请先在分类管理中创建并启用", categoryName)
 			}
@@ -561,7 +564,7 @@ func ValidatePrimarySkillCategory(categoryName string) error {
 		return err
 	}
 	var category SkillCategory
-	if err := DB.Where("type_id = ? AND (name = ? OR code = ?) AND status = ? AND is_deleted = ?", typ.Id, categoryName, categoryName, 1, false).First(&category).Error; err != nil {
+	if err := DB.Where("type_id = ? AND name = ? AND status = ? AND is_deleted = ?", typ.Id, categoryName, 1, false).First(&category).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("分类 %q 不存在或已禁用，请先在分类管理中创建并启用", categoryName)
 		}
@@ -585,7 +588,7 @@ func EnsurePrimarySkillCategory(categoryName string) (string, error) {
 		return "", err
 	}
 	var category SkillCategory
-	err := DB.Where("type_id = ? AND (name = ? OR code = ?)", typ.Id, categoryName, categoryName).First(&category).Error
+	err := DB.Where("type_id = ? AND name = ?", typ.Id, categoryName).First(&category).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		category = SkillCategory{TypeId: typ.Id, Code: categoryName, Name: categoryName, Status: 1}
 		if err := DB.Create(&category).Error; err != nil {
@@ -610,7 +613,7 @@ func DeleteSkillCategory(id uint64) error {
 	if err := DB.First(&category, id).Error; err != nil {
 		return err
 	}
-	if category.Name == DefaultSkillCategoryName || category.Code == DefaultSkillCategoryName {
+	if category.Name == DefaultSkillCategoryName {
 		return errors.New("通用类是默认分类，不能删除")
 	}
 	count, err := CountSkillCategoryRelations(id)
@@ -662,7 +665,7 @@ func RemoveSkillFromCategory(categoryId uint64, skillId int) error {
 		if typ.Code != SkillCategoryTypePackage {
 			return errors.New("只能移除技能包主分类")
 		}
-		if category.Name == DefaultSkillCategoryName || category.Code == DefaultSkillCategoryName {
+		if category.Name == DefaultSkillCategoryName {
 			return errors.New("通用类是默认分类，不能移除其中的技能")
 		}
 		var skill Skill
@@ -673,7 +676,7 @@ func RemoveSkillFromCategory(categoryId uint64, skillId int) error {
 			return errors.New("该技能当前不属于此分类")
 		}
 		var fallback SkillCategory
-		if err := tx.Where("type_id = ? AND (code = ? OR name = ?) AND status = ? AND is_deleted = ?", typ.Id, DefaultSkillCategoryName, DefaultSkillCategoryName, 1, false).First(&fallback).Error; err != nil {
+		if err := tx.Where("type_id = ? AND name = ? AND status = ? AND is_deleted = ?", typ.Id, DefaultSkillCategoryName, 1, false).First(&fallback).Error; err != nil {
 			return err
 		}
 		sub := tx.Table("skill_categories").Select("id").Where("type_id = ?", typ.Id)

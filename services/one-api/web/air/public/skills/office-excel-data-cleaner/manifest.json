@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "id": "office-excel-data-cleaner",
+  "name": "office-excel-data-cleaner",
+  "slug": "office-excel-data-cleaner",
+  "displayName": "Excel 数据处理",
+  "summary": "清理 Excel 台账，完成去重、筛选、文本规范化、格式统一和基础统计。",
+  "description": "清理 Excel 台账，完成去重、筛选、文本规范化、格式统一和基础统计。 包含可直接运行的本地处理脚本、依赖说明、错误处理和统一中文交付规范。",
+  "category": "办公工具",
+  "tags": [
+    "官方",
+    "办公",
+    "演示"
+  ],
+  "capabilities": [
+    "Excel 去重与筛选",
+    "文本和表格格式统一",
+    "基础统计与处理报告"
+  ],
+  "version": "1.0.0",
+  "author": "万维Buddy 办公工具",
+  "submitter": "root",
+  "createdAt": "2026-09-14 19:00:00",
+  "featured": true,
+  "status": "published",
+  "accent": "#16a34a",
+  "icon": "表",
+  "params": [
+    {
+      "name": "inputPath",
+      "type": "file",
+      "required": true,
+      "description": "Excel 工作簿"
+    },
+    {
+      "name": "sheet",
+      "type": "string",
+      "required": false,
+      "description": "工作表名称；留空使用首个工作表"
+    },
+    {
+      "name": "dedupeColumns",
+      "type": "string",
+      "required": false,
+      "description": "去重列名，多个用英文逗号分隔"
+    },
+    {
+      "name": "filter",
+      "type": "string",
+      "required": false,
+      "description": "筛选条件，例如 状态=有效"
+    },
+    {
+      "name": "outputDirectory",
+      "type": "directory",
+      "required": false,
+      "description": "输出目录；留空时在输入文件旁创建独立目录"
+    }
+  ],
+  "files": [
+    "manifest.json",
+    "SKILL.md",
+    "scripts/invoke.ps1",
+    "scripts/office_tools.py",
+    "requirements.txt"
+  ]
+}

@@ -430,6 +430,17 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .zjugis-danger-copy { margin:0 0 18px; color:#5d6f8b; line-height:1.7; }
 .zjugis-danger-copy strong { color:#d44761; }
 .danger-button { color:#fff !important; background:#d9475f !important; border-color:#d9475f !important; }
+.skill-category-confirm-modal { width:min(520px,100%); padding:24px; overflow:visible; }
+.skill-category-confirm-modal .zjugis-modal-head { align-items:flex-start; margin-bottom:20px; }
+.skill-category-confirm-heading { display:flex; align-items:center; gap:13px; min-width:0; }
+.skill-category-confirm-heading h2 { font-size:21px; }
+.skill-category-confirm-heading p { margin:4px 0 0; color:#8092ad; font-size:13px; }
+.skill-category-confirm-icon { display:grid; flex:0 0 38px; height:38px; place-items:center; border-radius:12px; color:#d9485f; background:#fff0f2; font-size:20px; font-weight:700; }
+.skill-category-confirm-body { padding:17px 18px; border:1px solid #e1e9f3; border-radius:14px; background:#f8fbff; }
+.skill-category-confirm-body strong { display:block; overflow:hidden; color:#213857; font-size:16px; text-overflow:ellipsis; white-space:nowrap; }
+.skill-category-confirm-body p { margin:8px 0 0; color:#667c9c; font-size:14px; line-height:1.65; }
+.skill-category-confirm-modal .zjugis-modal-actions { margin-top:20px; }
+.skill-field-hint { color:#8495ad; font-size:12px; font-style:normal; }
 .form-inline-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px; }
 .zjugis-channel-model-picker { margin-top:12px; overflow:hidden; border:1px solid #dbe5f1; border-radius:14px; background:#fbfdff; }
 .zjugis-channel-model-picker-head { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 14px; border-bottom:1px solid #e7eef7; background:#f7faff; }
@@ -498,9 +509,6 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 
 
 
-.zjugis-manual-models { margin-top:10px; color:#67809f; font-size:13px; }
-.zjugis-manual-models summary { cursor:pointer; user-select:none; }
-.zjugis-manual-models textarea { margin-top:8px; }
 .zjugis-channel-advanced { margin-top:18px; padding-top:16px; border-top:1px solid #e2ebf6; }
 .zjugis-channel-advanced summary { color:#67809f; cursor:pointer; font-size:13px; font-weight:600; user-select:none; }
 .zjugis-channel-advanced[open] summary { margin-bottom:14px; }
@@ -536,6 +544,13 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .zjugis-log-tabs button { min-width:128px; padding:9px 16px; border:0; border-radius:10px; background:transparent; color:#6d84a4; cursor:pointer; font:700 14px/20px inherit; transition:background .18s ease,color .18s ease,box-shadow .18s ease; }
 .zjugis-log-tabs button:hover { color:#2563eb; background:#eef5ff; }
 .zjugis-log-tabs button.active { color:#fff; background:linear-gradient(135deg,#2563eb,#4786f5); box-shadow:0 6px 14px rgba(37,99,235,.25); }
+.zjugis-table-pagination { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 2px 0; border-top:1px solid #e7eef7; color:#7b90ad; font-size:13px; }
+.zjugis-table-pagination > div { display:flex; align-items:center; gap:6px; }
+.zjugis-table-pagination button { min-width:34px; height:34px; padding:0 10px; border:1px solid #dbe5f1; border-radius:9px; color:#557299; background:#fff; cursor:pointer; font:inherit; }
+.zjugis-table-pagination button:hover:not(:disabled) { border-color:#9fc1f3; color:#2563eb; background:#f2f7ff; }
+.zjugis-table-pagination button.active { border-color:#347ce8; color:#fff; background:#347ce8; }
+.zjugis-table-pagination button:disabled { cursor:not-allowed; opacity:.48; }
+.zjugis-pagination-gap { min-width:20px; color:#9aabc0; text-align:center; }
 .zjugis-prompt-detail > div + div { margin-top:16px; }
 .zjugis-prompt-detail > div > span { display:block; color:#6f84a2; font-size:13px; font-weight:700; margin-bottom:7px; }
 .zjugis-prompt-detail pre { margin:0; padding:14px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; border:1px solid #e3ebf5; border-radius:12px; background:#f8fbff; color:#243958; font:13px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
@@ -548,7 +563,7 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .token-row small { margin-top:4px; color:#7a90ae; }
 .zjugis-check { display:flex; align-items:center; gap:8px; padding-top:26px; color:#4f688d; }
 .basic-form { max-width:760px; }
-@media (max-width: 700px) { .detail-grid { grid-template-columns:1fr; } .preview-search { min-width:0; width:100%; } }
+@media (max-width: 700px) { .detail-grid { grid-template-columns:1fr; } .preview-search { min-width:0; width:100%; } .zjugis-table-pagination { align-items:flex-start; flex-direction:column; } .zjugis-table-pagination > div { flex-wrap:wrap; } }
 .account-grid { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(280px,.75fr); gap:22px; }
 .account-card { min-height:300px; }
 .account-card h2 { margin:10px 0 20px; color:#1c2e4c; font-size:23px; }

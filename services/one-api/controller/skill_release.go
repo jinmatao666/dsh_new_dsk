@@ -25,11 +25,11 @@ import (
 )
 
 const (
-	maxSkillArchiveBytes = 10 << 20
-	maxSkillPackageBytes = 30 << 20
-	maxSkillFileBytes    = 5 << 20
-	maxSkillFiles        = 200
-	maxSkillDepth        = 8
+	maxSkillArchiveBytes = 25 << 20
+	maxSkillPackageBytes = 80 << 20
+	maxSkillFileBytes    = 20 << 20
+	maxSkillFiles        = 500
+	maxSkillDepth        = 12
 )
 
 var skillSlugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
@@ -99,10 +99,56 @@ func declaredSkillName(body []byte) string {
 	return ""
 }
 
+func normalizedSkillSlug(value string) string {
+	var slug strings.Builder
+	separator := false
+	for _, char := range strings.ToLower(strings.TrimSpace(value)) {
+		if char >= 'a' && char <= 'z' || char >= '0' && char <= '9' {
+			if separator && slug.Len() > 0 {
+				slug.WriteByte('-')
+			}
+			slug.WriteRune(char)
+			separator = false
+		} else if slug.Len() > 0 {
+			separator = true
+		}
+	}
+	return strings.Trim(slug.String(), "-")
+}
+
+func ignoredSkillArchivePath(name string) bool {
+	cleaned := strings.ToLower(strings.ReplaceAll(name, `\`, "/"))
+	base := path.Base(cleaned)
+	return strings.HasPrefix(cleaned, "__macosx/") || base == ".ds_store" || base == "thumbs.db" || base == "desktop.ini"
+}
+
+func canonicalSkillRootFile(contents map[string][]byte, canonical string) ([]byte, bool, error) {
+	if content, ok := contents[canonical]; ok {
+		return content, true, nil
+	}
+	matched := ""
+	for filePath := range contents {
+		if strings.EqualFold(filePath, canonical) {
+			if matched != "" {
+				return nil, false, fmt.Errorf("技能包包含多个 %s 文件", canonical)
+			}
+			matched = filePath
+		}
+	}
+	if matched == "" {
+		return nil, false, nil
+	}
+	content := contents[matched]
+	delete(contents, matched)
+	contents[canonical] = content
+	return content, true, nil
+}
+
 // normalizeImportedManifest intentionally accepts ordinary Codex skill folders.
 // The package name is an internal identifier, not a reason to reject a user's
 // skill just because its directory, frontmatter and optional manifest disagree.
 func normalizeImportedManifest(manifest *importedManifest, skillMd []byte, prefix string) error {
+	displayFallback := firstNonEmpty(strings.TrimSpace(manifest.DisplayName), strings.TrimSpace(manifest.Name), declaredSkillName(skillMd), strings.TrimSpace(prefix))
 	candidates := []string{
 		strings.TrimSpace(manifest.Name),
 		strings.TrimSpace(manifest.Slug),
@@ -115,9 +161,16 @@ func normalizeImportedManifest(manifest *importedManifest, skillMd []byte, prefi
 			manifest.Slug = candidate
 			break
 		}
+		if normalized := normalizedSkillSlug(candidate); skillSlugPattern.MatchString(normalized) {
+			manifest.Name = normalized
+			manifest.Slug = normalized
+			break
+		}
 	}
 	if !skillSlugPattern.MatchString(manifest.Name) {
-		return fmt.Errorf("技能需要一个 kebab-case 标识；请在 SKILL.md 的 name 或 manifest.json 的 name 中填写")
+		digest := sha256.Sum256(skillMd)
+		manifest.Name = "skill-" + hex.EncodeToString(digest[:6])
+		manifest.Slug = manifest.Name
 	}
 	manifest.Version = strings.TrimSpace(manifest.Version)
 	if manifest.Version == "" {
@@ -125,7 +178,7 @@ func normalizeImportedManifest(manifest *importedManifest, skillMd []byte, prefi
 	}
 	manifest.DisplayName = strings.TrimSpace(manifest.DisplayName)
 	if manifest.DisplayName == "" {
-		manifest.DisplayName = manifest.Name
+		manifest.DisplayName = firstNonEmpty(displayFallback, manifest.Name)
 	}
 	manifest.Category = strings.TrimSpace(manifest.Category)
 	if manifest.Category == "" {
@@ -134,10 +187,7 @@ func normalizeImportedManifest(manifest *importedManifest, skillMd []byte, prefi
 	if len(manifest.Tags) == 0 {
 		manifest.Tags = []string{"通用能力"}
 	}
-	manifest.Icon = strings.TrimSpace(manifest.Icon)
-	if err := validateSkillIcon(manifest.Icon); err != nil {
-		return err
-	}
+	manifest.Icon = normalizeSkillIcon(manifest.Icon)
 	return nil
 }
 
@@ -171,8 +221,8 @@ func validateSkillArchive(raw []byte) (*validatedSkillPackage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("技能包不是有效 ZIP：%w", err)
 	}
-	if len(zr.File) == 0 || len(zr.File) > maxSkillFiles {
-		return nil, fmt.Errorf("技能包文件数量必须在 1 至 %d 之间", maxSkillFiles)
+	if len(zr.File) == 0 {
+		return nil, fmt.Errorf("技能包没有文件")
 	}
 	type source struct {
 		path    string
@@ -182,7 +232,7 @@ func validateSkillArchive(raw []byte) (*validatedSkillPackage, error) {
 	seen := map[string]struct{}{}
 	var total int64
 	for _, entry := range zr.File {
-		if entry.FileInfo().IsDir() {
+		if entry.FileInfo().IsDir() || ignoredSkillArchivePath(entry.Name) {
 			continue
 		}
 		if entry.Mode()&0o170000 == 0o120000 {
@@ -219,6 +269,9 @@ func validateSkillArchive(raw []byte) (*validatedSkillPackage, error) {
 			return nil, fmt.Errorf("技能包文件超过 %d MB：%s", maxSkillFileBytes>>20, name)
 		}
 		sources = append(sources, source{name, content})
+		if len(sources) > maxSkillFiles {
+			return nil, fmt.Errorf("技能包普通文件不能超过 %d 个", maxSkillFiles)
+		}
 	}
 	if len(sources) == 0 {
 		return nil, fmt.Errorf("技能包没有普通文件")
@@ -251,8 +304,14 @@ func validateSkillArchive(raw []byte) (*validatedSkillPackage, error) {
 		}
 		contents[item.path] = item.content
 	}
-	skillMd, hasSkillMd := contents["SKILL.md"]
-	manifestRaw, hasManifest := contents["manifest.json"]
+	skillMd, hasSkillMd, err := canonicalSkillRootFile(contents, "SKILL.md")
+	if err != nil {
+		return nil, err
+	}
+	manifestRaw, hasManifest, err := canonicalSkillRootFile(contents, "manifest.json")
+	if err != nil {
+		return nil, err
+	}
 	if !hasSkillMd {
 		return nil, fmt.Errorf("技能包根目录必须包含 UTF-8 SKILL.md")
 	}

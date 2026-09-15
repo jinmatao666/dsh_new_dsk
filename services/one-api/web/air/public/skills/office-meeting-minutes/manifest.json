@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "office-meeting-minutes",
+  "name": "office-meeting-minutes",
+  "slug": "office-meeting-minutes",
+  "displayName": "会议纪要",
+  "summary": "将会议语音转为文字，并结合会议材料生成结构化 Markdown 和 Word 会议纪要。",
+  "description": "将会议语音转为文字，并结合会议材料生成结构化 Markdown 和 Word 会议纪要。 包含可直接运行的本地处理脚本、依赖说明、错误处理和统一中文交付规范。",
+  "category": "办公工具",
+  "tags": [
+    "官方",
+    "办公",
+    "演示"
+  ],
+  "capabilities": [
+    "Qwen3-ASR 语音转写",
+    "Qwen3.8 结构化会议纪要",
+    "Markdown 与 Word 交付"
+  ],
+  "version": "1.0.0",
+  "author": "万维Buddy 办公工具",
+  "submitter": "root",
+  "createdAt": "2026-09-14 19:00:00",
+  "featured": true,
+  "status": "published",
+  "accent": "#9333ea",
+  "icon": "会",
+  "params": [
+    {
+      "name": "materials",
+      "type": "files",
+      "required": true,
+      "description": "会议材料或已有转写稿"
+    },
+    {
+      "name": "audioPath",
+      "type": "file",
+      "required": false,
+      "description": "可选语音文件；需先配置转写接口"
+    },
+    {
+      "name": "meetingTitle",
+      "type": "string",
+      "required": false,
+      "description": "会议名称"
+    },
+    {
+      "name": "outputDirectory",
+      "type": "directory",
+      "required": false,
+      "description": "输出目录；留空时在输入文件旁创建独立目录"
+    }
+  ],
+  "files": [
+    "manifest.json",
+    "SKILL.md",
+    "scripts/invoke.ps1",
+    "scripts/office_tools.py",
+    "requirements.txt"
+  ]
+}

@@ -3,11 +3,44 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/model"
+	relaymodel "github.com/songquanpeng/one-api/relay/model"
 )
+
+const visionProbeImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQ0AAAzCMP5/un0CNkuZ41wybXsHAAAAAAAAAAAAxR4yw/wuPL6QkAAAAABJRU5ErkJggg=="
+
+func buildVisionProbeRequest(modelName string) *relaymodel.GeneralOpenAIRequest {
+	return &relaymodel.GeneralOpenAIRequest{
+		Model: modelName,
+		Messages: []relaymodel.Message{{
+			Role: "user",
+			Content: []any{
+				map[string]any{"type": "text", "text": "Name the dominant color in this image using one word."},
+				map[string]any{"type": "image_url", "image_url": map[string]any{"url": visionProbeImage}},
+			},
+		}},
+		MaxTokens: 16,
+	}
+}
+
+func isExplicitImageUnsupported(message string) bool {
+	message = strings.ToLower(message)
+	markers := []string{
+		"image input is not supported", "does not support image", "doesn't support image",
+		"image_url is not supported", "unsupported image", "vision is not supported",
+		"不支持图片", "不支持图像", "不支持视觉", "不支持多模态",
+	}
+	for _, marker := range markers {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+	return false
+}
 
 // 模型↔渠道关系接口(T1.3)
 // ability 表是「模型挂渠道」的唯一权威,以下接口供模型配置页维护某模型的渠道来源。
@@ -192,4 +225,80 @@ func TestModelChannels(c *gin.Context) {
 		"message": "",
 		"data":    results,
 	})
+}
+
+// DetectModelVisionCapability probes the model with a small built-in image and
+// stores the result in the existing desktop synchronization fields.
+func DetectModelVisionCapability(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		respondError(c, err.Error())
+		return
+	}
+	def, err := model.GetModelDefinitionById(id)
+	if err != nil {
+		respondError(c, err.Error())
+		return
+	}
+	sources, err := model.GetModelChannelSources(def.Name)
+	if err != nil {
+		respondError(c, err.Error())
+		return
+	}
+	if len(sources) == 0 {
+		respondError(c, "模型尚未绑定来源渠道，无法检测视觉能力")
+		return
+	}
+
+	var failures []string
+	explicitlyUnsupported := false
+	for _, source := range sources {
+		if !source.Enabled || source.Status != model.ChannelStatusEnabled {
+			continue
+		}
+		channel, channelErr := model.GetChannelById(source.ChannelId, true)
+		if channelErr != nil {
+			failures = append(failures, source.ChannelName+": 渠道不存在")
+			continue
+		}
+		response, probeErr, _ := testChannel(c.Request.Context(), channel, buildVisionProbeRequest(def.Name))
+		if probeErr == nil {
+			answer := strings.ToLower(strings.TrimSpace(response))
+			if strings.Contains(answer, "red") || strings.Contains(answer, "红") {
+				if err := model.UpdateModelDefinitionVisionCapability(def.Id, true); err != nil {
+					respondError(c, err.Error())
+					return
+				}
+				c.JSON(http.StatusOK, gin.H{
+					"success": true,
+					"message": "已识别为视觉模型",
+					"data":    gin.H{"status": "vision", "supports_image": true},
+				})
+				return
+			}
+			failures = append(failures, source.ChannelName+": 模型未正确识别测试图片")
+			continue
+		}
+		if isExplicitImageUnsupported(probeErr.Error()) {
+			explicitlyUnsupported = true
+		}
+		failures = append(failures, source.ChannelName+": "+probeErr.Error())
+	}
+
+	if explicitlyUnsupported {
+		if err := model.UpdateModelDefinitionVisionCapability(def.Id, false); err != nil {
+			respondError(c, err.Error())
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "已识别为纯文本模型",
+			"data":    gin.H{"status": "text", "supports_image": false},
+		})
+		return
+	}
+	if len(failures) == 0 {
+		failures = append(failures, "没有已启用的来源渠道")
+	}
+	respondError(c, "视觉能力检测失败："+strings.Join(failures, "；"))
 }

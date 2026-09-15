@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "id": "office-image-optimizer",
+  "name": "office-image-optimizer",
+  "slug": "office-image-optimizer",
+  "displayName": "图片压缩与格式转换",
+  "summary": "批量压缩图片、按最大尺寸缩放，并转换为 JPG、PNG 或 WebP。",
+  "description": "批量压缩图片、按最大尺寸缩放，并转换为 JPG、PNG 或 WebP。 包含可直接运行的本地处理脚本、依赖说明、错误处理和统一中文交付规范。",
+  "category": "办公工具",
+  "tags": [
+    "官方",
+    "办公",
+    "演示"
+  ],
+  "capabilities": [
+    "批量图片压缩",
+    "等比例尺寸调整",
+    "JPG/PNG/WebP 格式转换"
+  ],
+  "version": "1.0.0",
+  "author": "万维Buddy 办公工具",
+  "submitter": "root",
+  "createdAt": "2026-09-14 19:00:00",
+  "featured": true,
+  "status": "published",
+  "accent": "#ca8a04",
+  "icon": "压",
+  "params": [
+    {
+      "name": "inputPaths",
+      "type": "files",
+      "required": true,
+      "description": "一个或多个图片"
+    },
+    {
+      "name": "format",
+      "type": "select",
+      "required": true,
+      "description": "输出格式",
+      "options": [
+        "jpg",
+        "png",
+        "webp"
+      ],
+      "defaultValue": "jpg"
+    },
+    {
+      "name": "quality",
+      "type": "number",
+      "required": false,
+      "description": "质量 1–100",
+      "defaultValue": "85"
+    },
+    {
+      "name": "maxWidth",
+      "type": "number",
+      "required": false,
+      "description": "最大宽度；0 表示不限制",
+      "defaultValue": "0"
+    },
+    {
+      "name": "maxHeight",
+      "type": "number",
+      "required": false,
+      "description": "最大高度；0 表示不限制",
+      "defaultValue": "0"
+    },
+    {
+      "name": "outputDirectory",
+      "type": "directory",
+      "required": false,
+      "description": "输出目录；留空时在输入文件旁创建独立目录"
+    }
+  ],
+  "files": [
+    "manifest.json",
+    "SKILL.md",
+    "scripts/invoke.ps1",
+    "scripts/office_tools.py",
+    "requirements.txt"
+  ]
+}

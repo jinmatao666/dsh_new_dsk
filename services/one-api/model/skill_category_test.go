@@ -180,26 +180,57 @@ func TestCategoryAdminViewsUseRelationsInsteadOfLegacyCategoryName(t *testing.T)
 	assert.Equal(t, int64(1), count)
 }
 
+func TestRemoveSkillFromCategoryUsesDefaultNameInsteadOfLegacyCode(t *testing.T) {
+	setupSkillCategoryTestDB(t)
+	skill := seedSkill(t, "spatial-analysis", "空间制图", false)
+	general := createSkillCategoryForTest(t, SkillCategoryTypePackage, "general", DefaultSkillCategoryName)
+	spatial := createSkillCategoryForTest(t, SkillCategoryTypePackage, DefaultSkillCategoryName, "空间制图")
+	require.NoError(t, ReplaceSkillCategories(skill.Id, []uint64{spatial.Id}))
+
+	require.NoError(t, RemoveSkillFromCategory(spatial.Id, skill.Id))
+
+	categories, err := ListSkillCategoriesForSkill(skill.Id)
+	require.NoError(t, err)
+	require.Len(t, categories, 1)
+	assert.Equal(t, general.Id, categories[0].Id)
+
+	var updated Skill
+	require.NoError(t, DB.First(&updated, skill.Id).Error)
+	assert.Equal(t, DefaultSkillCategoryName, updated.Category)
+}
+
 func TestUpdateSkillCategoryPreservesStableCodeAndType(t *testing.T) {
 	setupSkillCategoryTestDB(t)
-	general := createSkillCategoryForTest(t, SkillCategoryTypePackage, "general", "通用类")
 	spatial := createSkillCategoryForTest(t, SkillCategoryTypePackage, "spatial", "空间制图")
 
 	updated := SkillCategory{
-		Id:          general.Id,
-		TypeId:      spatial.TypeId,
-		Code:        spatial.Code,
-		Name:        "默认分类",
-		Description: "默认技能分类",
+		Id:          spatial.Id,
+		TypeId:      999,
+		Code:        "rewritten-code",
+		Name:        "空间分析",
+		Description: "空间分析技能分类",
 	}
 	require.NoError(t, UpdateSkillCategory(&updated))
 
 	var got SkillCategory
+	require.NoError(t, DB.First(&got, spatial.Id).Error)
+	assert.Equal(t, spatial.TypeId, got.TypeId)
+	assert.Equal(t, spatial.Code, got.Code)
+	assert.Equal(t, "空间分析", got.Name)
+	assert.Equal(t, "空间分析技能分类", got.Description)
+}
+
+func TestUpdateSkillCategoryRejectsDefaultCategoryRename(t *testing.T) {
+	setupSkillCategoryTestDB(t)
+	general := createSkillCategoryForTest(t, SkillCategoryTypePackage, "general", DefaultSkillCategoryName)
+
+	err := UpdateSkillCategory(&SkillCategory{Id: general.Id, Name: "默认分类"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "不能修改名称")
+
+	var got SkillCategory
 	require.NoError(t, DB.First(&got, general.Id).Error)
-	assert.Equal(t, general.TypeId, got.TypeId)
-	assert.Equal(t, general.Code, got.Code)
-	assert.Equal(t, "默认分类", got.Name)
-	assert.Equal(t, "默认技能分类", got.Description)
+	assert.Equal(t, DefaultSkillCategoryName, got.Name)
 }
 
 func TestMergeDuplicateSkillCategoriesKeepsOneEnabledCategory(t *testing.T) {

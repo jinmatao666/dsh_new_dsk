@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "id": "office-document-summary",
+  "name": "office-document-summary",
+  "slug": "office-document-summary",
+  "displayName": "文档摘要与要点提取",
+  "summary": "读取 Word、PDF、Excel 和文本材料，提炼重点、风险、时间节点和待办事项。",
+  "description": "读取 Word、PDF、Excel 和文本材料，提炼重点、风险、时间节点和待办事项。 包含可直接运行的本地处理脚本、依赖说明、错误处理和统一中文交付规范。",
+  "category": "办公工具",
+  "tags": [
+    "官方",
+    "办公",
+    "演示"
+  ],
+  "capabilities": [
+    "多格式文本提取",
+    "结构化摘要与风险识别",
+    "待办和时间节点整理"
+  ],
+  "version": "1.0.0",
+  "author": "万维Buddy 办公工具",
+  "submitter": "root",
+  "createdAt": "2026-09-14 19:00:00",
+  "featured": true,
+  "status": "published",
+  "accent": "#4f46e5",
+  "icon": "摘",
+  "params": [
+    {
+      "name": "inputPaths",
+      "type": "files",
+      "required": true,
+      "description": "一个或多个 Word、PDF、Excel 或文本文件"
+    },
+    {
+      "name": "focus",
+      "type": "string",
+      "required": false,
+      "description": "可选关注重点"
+    },
+    {
+      "name": "outputDirectory",
+      "type": "directory",
+      "required": false,
+      "description": "输出目录；留空时在输入文件旁创建独立目录"
+    }
+  ],
+  "files": [
+    "manifest.json",
+    "SKILL.md",
+    "scripts/invoke.ps1",
+    "scripts/office_tools.py",
+    "requirements.txt"
+  ]
+}

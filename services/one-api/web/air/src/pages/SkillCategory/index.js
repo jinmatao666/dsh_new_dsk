@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Button, Input, Modal, Space, Table } from '@douyinfe/semi-ui';
 import { IconPlus, IconSearch } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess } from '../../helpers';
@@ -17,6 +17,7 @@ const responseData = (response, fallback) => {
   if (response.data?.success) return response.data.data;
   throw new Error(response.data?.message || fallback);
 };
+const categoryRowKey = (category) => `${category.type_code || category.type_id || 'category'}:${category.code || category.name}:${category.id}`;
 
 const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
   const [items, setItems] = useState([]);
@@ -24,7 +25,10 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
   const [saving, setSaving] = useState(false);
   const [localKeyword, setLocalKeyword] = useState('');
   const [editor, setEditor] = useState({ visible: false, data: EMPTY });
-  const [expanded, setExpanded] = useState({ category: null, skills: [], loading: false });
+  const [expanded, setExpanded] = useState({ key: null, category: null, skills: [], loading: false });
+  const [removeTarget, setRemoveTarget] = useState(null);
+  const [removing, setRemoving] = useState(false);
+  const expandRequest = useRef(0);
   const searchKeyword = embedded ? keyword : localKeyword;
 
   const load = async () => {
@@ -108,53 +112,66 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
   };
 
   const expandCategory = async (row) => {
-    if (expanded.category?.id === row.id) {
-      setExpanded({ category: null, skills: [], loading: false });
+    const key = categoryRowKey(row);
+    const request = ++expandRequest.current;
+    if (expanded.key === key) {
+      setExpanded({ key: null, category: null, skills: [], loading: false });
       return;
     }
     if (useSkillMockData) {
-      setExpanded({ category: row, skills: loadMockCategorySkills(row), loading: false });
+      setExpanded({ key, category: row, skills: loadMockCategorySkills(row), loading: false });
       return;
     }
-    setExpanded({ category: row, skills: [], loading: true });
+    setExpanded({ key, category: row, skills: [], loading: true });
     try {
       const response = await API.get(`/api/skill-category/${row.id}/skills`);
       const skills = responseData(response, '加载关联技能失败');
-      setExpanded({ category: row, skills: Array.isArray(skills) ? skills : [], loading: false });
+      if (request !== expandRequest.current) return;
+      setExpanded({ key, category: row, skills: Array.isArray(skills) ? skills : [], loading: false });
     } catch (error) {
-      setExpanded({ category: null, skills: [], loading: false });
+      if (request !== expandRequest.current) return;
+      setExpanded({ key: null, category: null, skills: [], loading: false });
       showError(error.response?.data?.message || error.message || '加载关联技能失败');
     }
   };
 
   const removeSkill = (category, skill) => {
-    if (useSkillMockData) {
-      showError('演示数据仅用于本地预览，不能移除关联技能');
-      return;
-    }
-    Modal.confirm({
-      title: `移出分类：${skill.display_name || skill.name}`,
-      content: `移出“${category.name}”后，该技能将自动归入“通用类”。`,
-      okText: '移出',
-      okType: 'danger',
-      onOk: async () => {
-        try {
-          const response = await API.delete(`/api/skill-category/${category.id}/skills/${skill.id}`);
-          responseData(response, '移除关联技能失败');
-          await load();
-          window.dispatchEvent(new Event('skill-categories-changed'));
-          const refreshed = await API.get(`/api/skill-category/${category.id}/skills`);
-          setExpanded({ category, skills: responseData(refreshed, '加载关联技能失败') || [], loading: false });
-          showSuccess('已移出分类，并归入通用类');
-        } catch (error) {
-          showError(error.response?.data?.message || error.message || '移除关联技能失败');
-        }
+    setRemoveTarget({ category, skill, key: categoryRowKey(category) });
+  };
+
+  const confirmRemoveSkill = async () => {
+    if (!removeTarget || removing) return;
+    const { category, skill, key } = removeTarget;
+    setRemoving(true);
+    try {
+      if (useSkillMockData) {
+        setExpanded((current) => current.key === key
+          ? { ...current, skills: current.skills.filter((item) => item.id !== skill.id) }
+          : current);
+        setItems((current) => current.map((item) => categoryRowKey(item) === key
+          ? { ...item, skill_count: Math.max(0, Number(item.skill_count || 0) - 1) }
+          : item.name === '通用类'
+            ? { ...item, skill_count: Number(item.skill_count || 0) + 1 }
+            : item));
+      } else {
+        const response = await API.delete(`/api/skill-category/${category.id}/skills/${skill.id}`);
+        responseData(response, '移除关联技能失败');
+        await load();
+        window.dispatchEvent(new Event('skill-categories-changed'));
+        const refreshed = await API.get(`/api/skill-category/${category.id}/skills`);
+        setExpanded({ key, category, skills: responseData(refreshed, '加载关联技能失败') || [], loading: false });
       }
-    });
+      setRemoveTarget(null);
+      showSuccess('已移出分类，并归入通用类');
+    } catch (error) {
+      showError(error.response?.data?.message || error.message || '移除关联技能失败');
+    } finally {
+      setRemoving(false);
+    }
   };
 
   const renderExpandedSkills = (row) => {
-    if (expanded.category?.id !== row.id) return null;
+    if (expanded.key !== categoryRowKey(row)) return null;
     return <div className='skill-category-skills'>
       {expanded.loading || expanded.skills.length === 0
         ? <div className='skill-category-skills-empty'>{expanded.loading ? '正在加载关联技能…' : '该分类暂无关联技能'}</div>
@@ -179,7 +196,7 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
       title: '分类名称', dataIndex: 'name', width: 240,
       render: (value, row) => (
         <div className='skill-category-name'>
-          <button type='button' className={`skill-category-expand${expanded.category?.id === row.id ? ' open' : ''}`} aria-label={expanded.category?.id === row.id ? '收起分类技能' : '展开分类技能'} onClick={() => { void expandCategory(row); }}>
+          <button type='button' className={`skill-category-expand${expanded.key === categoryRowKey(row) ? ' open' : ''}`} aria-label={expanded.key === categoryRowKey(row) ? '收起分类技能' : '展开分类技能'} onClick={() => { void expandCategory(row); }}>
             <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'><path d='m6 9 6 6 6-6' /></svg>
           </button>
           <span className='skill-category-title'>{value}</span>
@@ -193,7 +210,9 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
       render: (_, row) => (
         <div className='skill-row-actions'>
           <button type='button' className='skill-text-action' onClick={() => setEditor({ visible: true, data: { ...EMPTY, ...row } })}>编辑</button>
-          <button type='button' className='skill-text-action danger' onClick={() => remove(row)}>删除</button>
+          {row.name === '通用类'
+            ? <span className='skill-category-default-tag'>默认分类</span>
+            : <button type='button' className='skill-text-action danger' onClick={() => remove(row)}>删除</button>}
         </div>
       )
     }
@@ -206,7 +225,7 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
   return <div style={{ padding: embedded ? 0 : 24, height: embedded ? '100%' : undefined, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
     {!embedded && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}><Space><Button icon={<IconPlus />} theme='solid' type='primary' onClick={() => setEditor({ visible: true, data: EMPTY })}>新建分类</Button><Input prefix={<IconSearch />} placeholder='搜索名称或描述' value={localKeyword} onChange={setLocalKeyword} style={{ width: 280 }} showClear /></Space></div>}
     <div style={{ flex: 1, minHeight: 0 }}>
-      <Table columns={columns} dataSource={filteredItems} rowKey='id' loading={loading} pagination={{ pageSize: 20 }} expandedRowRender={renderExpandedSkills} expandedRowKeys={expanded.category ? [expanded.category.id] : []} expandIcon={false} />
+      <Table columns={columns} dataSource={filteredItems} rowKey={categoryRowKey} loading={loading} pagination={{ pageSize: 20 }} expandedRowRender={renderExpandedSkills} expandedRowKeys={expanded.key ? [expanded.key] : []} expandIcon={false} />
     </div>
     {editor.visible && (
       <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) closeEditor(); }}>
@@ -218,7 +237,8 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
           <div className='zjugis-form'>
             <label className='zjugis-field'>
               <span>分类名称<i className='skill-required'>*</i></span>
-              <input value={editor.data.name} onChange={(e) => updateEditor('name', e.target.value)} placeholder='例如：空间制图' />
+              <input disabled={editor.data.name === '通用类'} value={editor.data.name} onChange={(e) => updateEditor('name', e.target.value)} placeholder='例如：空间制图' />
+              {editor.data.name === '通用类' && <small className='skill-field-hint'>默认分类名称不可修改</small>}
             </label>
             <label className='zjugis-field'>
               <span>描述（可选）</span>
@@ -228,6 +248,30 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
               <button type='button' className='preview-button' onClick={closeEditor}>取消</button>
               <button type='button' className='preview-button primary' disabled={saving} onClick={() => { void save(); }}>{saving ? '保存中…' : '保存'}</button>
             </div>
+          </div>
+        </div>
+      </div>
+    )}
+    {removeTarget && (
+      <div className='zjugis-modal-backdrop' onMouseDown={(event) => { if (!removing && event.target === event.currentTarget) setRemoveTarget(null); }}>
+        <div className='zjugis-modal skill-category-confirm-modal' role='dialog' aria-modal='true' aria-labelledby='remove-skill-title'>
+          <div className='zjugis-modal-head'>
+            <div className='skill-category-confirm-heading'>
+              <span className='skill-category-confirm-icon' aria-hidden='true'>!</span>
+              <div>
+                <h2 id='remove-skill-title'>移出分类</h2>
+                <p>调整技能所属分类</p>
+              </div>
+            </div>
+            <button type='button' disabled={removing} onClick={() => setRemoveTarget(null)} aria-label='关闭'>×</button>
+          </div>
+          <div className='skill-category-confirm-body'>
+            <strong>{removeTarget.skill.display_name || removeTarget.skill.name}</strong>
+            <p>将从“{removeTarget.category.name}”移出，并自动归入默认分类“通用类”。</p>
+          </div>
+          <div className='zjugis-modal-actions'>
+            <button type='button' className='preview-button' disabled={removing} onClick={() => setRemoveTarget(null)}>取消</button>
+            <button type='button' className='preview-button danger-button' disabled={removing} onClick={() => { void confirmRemoveSkill(); }}>{removing ? '正在移出…' : '确认移出'}</button>
           </div>
         </div>
       </div>

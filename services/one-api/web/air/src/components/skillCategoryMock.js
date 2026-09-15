@@ -20,6 +20,7 @@ const seedTime = (day, hour, minute) =>
 
 /** 预置分类：5 个业务分类 + 1 个兜底分类 + 4 个功能分类。 */
 export const SKILL_CATEGORIES_MOCK = [
+  { id: 11, type_id: 1, code: 'general', name: '通用类', description: '未指定分类的技能会自动归入这里。', status: 1, sort_order: 0, skill_count: 0, updated_at: seedTime(25, 9, 30) },
   { id: 1, type_id: 1, code: 'spatial-mapping', name: '空间制图', description: '制图、图层处理与 ArcGIS 相关技能。', status: 1, sort_order: 1, skill_count: 6, updated_at: seedTime(25, 10, 0) },
   { id: 2, type_id: 1, code: 'pro-writing', name: '专业写作', description: '合同、报告等规划行业文书写作技能。', status: 1, sort_order: 2, skill_count: 4, updated_at: seedTime(25, 14, 30) },
   { id: 3, type_id: 1, code: 'research-consulting', name: '研究咨询', description: '可研、政策解析与案例研究类技能。', status: 1, sort_order: 3, skill_count: 5, updated_at: seedTime(26, 9, 20) },

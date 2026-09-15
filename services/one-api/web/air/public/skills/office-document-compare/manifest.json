@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "id": "office-document-compare",
+  "name": "office-document-compare",
+  "slug": "office-document-compare",
+  "displayName": "文档对比助手",
+  "summary": "对比两份 Word、PDF 或文本文件，整理新增、删除和修改内容。",
+  "description": "对比两份 Word、PDF 或文本文件，整理新增、删除和修改内容。 包含可直接运行的本地处理脚本、依赖说明、错误处理和统一中文交付规范。",
+  "category": "办公工具",
+  "tags": [
+    "官方",
+    "办公",
+    "演示"
+  ],
+  "capabilities": [
+    "Word/PDF/文本差异提取",
+    "新增删除内容统计",
+    "可读 HTML 与 Markdown 对比报告"
+  ],
+  "version": "1.0.0",
+  "author": "万维Buddy 办公工具",
+  "submitter": "root",
+  "createdAt": "2026-09-14 19:00:00",
+  "featured": true,
+  "status": "published",
+  "accent": "#db2777",
+  "icon": "比",
+  "params": [
+    {
+      "name": "originalPath",
+      "type": "file",
+      "required": true,
+      "description": "原始版本"
+    },
+    {
+      "name": "revisedPath",
+      "type": "file",
+      "required": true,
+      "description": "新版本"
+    },
+    {
+      "name": "outputDirectory",
+      "type": "directory",
+      "required": false,
+      "description": "输出目录；留空时在输入文件旁创建独立目录"
+    }
+  ],
+  "files": [
+    "manifest.json",
+    "SKILL.md",
+    "scripts/invoke.ps1",
+    "scripts/office_tools.py",
+    "requirements.txt"
+  ]
+}

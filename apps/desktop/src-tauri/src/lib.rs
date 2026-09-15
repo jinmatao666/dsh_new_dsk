@@ -1568,6 +1568,7 @@ pub fn run() {
                 .resizable(false)
                 .maximizable(false)
                 .center()
+                .disable_drag_drop_handler()
                 // External pages may replace their document during login or
                 // navigation. Reinstall the small bridge on each document so
                 // client features do not fall back to WebView browser downloads.

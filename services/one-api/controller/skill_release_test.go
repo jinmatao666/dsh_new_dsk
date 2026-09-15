@@ -54,7 +54,37 @@ func TestValidateSkillArchiveCarriesManifestIcon(t *testing.T) {
 	}
 }
 
-func TestValidateSkillArchiveRejectsPathEscapeAndNameMismatch(t *testing.T) {
+func TestValidateSkillArchiveUsesDefaultForTextIcon(t *testing.T) {
+	manifest := `{"name":"icon-skill","version":"1.0.0","icon":"W"}`
+	pkg, err := validateSkillArchive(skillArchiveForTest(t, map[string]string{
+		"SKILL.md":      "---\nname: icon-skill\n---\n# Icon\n",
+		"manifest.json": manifest,
+	}))
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if pkg.manifest.Icon != "glyph:bot" {
+		t.Fatalf("unexpected normalized icon: %q", pkg.manifest.Icon)
+	}
+}
+
+func TestValidateSkillArchiveNormalizesManagerFriendlyPackage(t *testing.T) {
+	pkg, err := validateSkillArchive(skillArchiveForTest(t, map[string]string{
+		"中文办公技能/skill.md":  "---\nname: Word 转 PDF\n---\n# Word 转 PDF\n",
+		"中文办公技能/.DS_Store": "ignored",
+	}))
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if pkg.manifest.Name != "word-pdf" || pkg.manifest.DisplayName != "Word 转 PDF" {
+		t.Fatalf("unexpected manifest: %#v", pkg.manifest)
+	}
+	if pkg.fileCount != 2 {
+		t.Fatalf("unexpected file count: %d", pkg.fileCount)
+	}
+}
+
+func TestValidateSkillArchiveRejectsPathEscapeAndAcceptsNameMismatch(t *testing.T) {
 	_, err := validateSkillArchive(skillArchiveForTest(t, map[string]string{
 		"../SKILL.md":   "---\nname: bad\n---\n",
 		"manifest.json": `{"name":"bad","version":"1.0.0","files":["SKILL.md","manifest.json"]}`,
@@ -63,11 +93,14 @@ func TestValidateSkillArchiveRejectsPathEscapeAndNameMismatch(t *testing.T) {
 		t.Fatal("expected path escape rejection")
 	}
 
-	_, err = validateSkillArchive(skillArchiveForTest(t, map[string]string{
+	pkg, err := validateSkillArchive(skillArchiveForTest(t, map[string]string{
 		"SKILL.md":      "---\nname: another-skill\n---\n",
 		"manifest.json": `{"name":"example-skill","version":"1.0.0","files":["SKILL.md","manifest.json"]}`,
 	}))
-	if err == nil {
-		t.Fatal("expected name mismatch rejection")
+	if err != nil {
+		t.Fatalf("validate mismatch: %v", err)
+	}
+	if pkg.manifest.Name != "example-skill" {
+		t.Fatalf("unexpected normalized name: %q", pkg.manifest.Name)
 	}
 }

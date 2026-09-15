@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { API } from '../../helpers';
 import { fetchManagedRoles } from '../../helpers/roles';
 import CustomSelect from '../../components/CustomSelect';
@@ -79,21 +79,41 @@ const previewChannels = [
   },
 ];
 
+const promptAuditPageSize = 50;
+
+function paginationItems(currentPage, pageCount) {
+  const pages = [...new Set([1, pageCount, currentPage - 1, currentPage, currentPage + 1])]
+    .filter((page) => page >= 1 && page <= pageCount)
+    .sort((left, right) => left - right);
+  const items = [];
+  pages.forEach((page, index) => {
+    if (index > 0 && page - pages[index - 1] > 1) items.push(`gap-${page}`);
+    items.push(page);
+  });
+  return items;
+}
+
 function useList(path, query = '') {
-  const [state, setState] = useState({ rows: [], loading: false, error: '' });
+  const [state, setState] = useState({ rows: [], total: 0, loading: false, error: '' });
+  const requestSequence = useRef(0);
   const refresh = async () => {
+    const request = ++requestSequence.current;
     setState((s) => ({ ...s, loading: true, error: '' }));
     try {
       const res = await API.get(`${path}${query ? `?${query}` : ''}`);
       if (!res.data?.success) throw new Error(res.data?.message || '请求失败');
+      if (request !== requestSequence.current) return;
       setState({
         rows: Array.isArray(res.data.data) ? res.data.data : [],
+        total: Number(res.data.total ?? 0),
         loading: false,
         error: '',
       });
     } catch (e) {
+      if (request !== requestSequence.current) return;
       setState({
         rows: [],
+        total: 0,
         loading: false,
         error: e?.message || '服务暂不可用',
       });
@@ -224,6 +244,7 @@ export function ModelConfigPage() {
   });
   const [testResult, setTestResult] = useState(null);
   const [modelTest, setModelTest] = useState(null);
+  const [visionDetecting, setVisionDetecting] = useState(false);
   const rows =
     isDevelopmentPreview && list.rows.length === 0 ? previewChannels : list.rows;
   const models = useMemo(
@@ -434,7 +455,7 @@ export function ModelConfigPage() {
             model_type: 'chat',
             context_limit: 0,
             support_explicit_cache: false,
-            modalities: 'text',
+            modalities: '',
             attachment: false,
             sourceChannelIds: [],
             model_ratio: 0,
@@ -464,10 +485,6 @@ export function ModelConfigPage() {
   const saveModel = async (e) => {
     e.preventDefault();
     const m = modelEdit;
-    const supportsImage =
-      m.image_input !== undefined
-        ? !!m.image_input
-        : String(m.modalities || '').split(',').includes('image');
     const body = {
       name: m.name,
       display_name: m.display_name || '',
@@ -476,11 +493,9 @@ export function ModelConfigPage() {
       model_type: m.model_type || 'chat',
       context_limit: Number(m.context_limit) || 0,
       support_explicit_cache: !!m.support_explicit_cache,
-      // Desktop reads this server-owned capability during login.  Do not
-      // advertise image support just because a provider happens to have some
-      // visual models — the administrator enables it per model.
-      modalities: supportsImage ? 'text,image' : 'text',
-      attachment: supportsImage,
+      // These values are server-owned and are updated only by visual probing.
+      modalities: m.modalities || '',
+      attachment: !!m.attachment,
     };
     const res = m.id
       ? await API.put('/api/model_definition/', { ...body, id: m.id })
@@ -499,6 +514,17 @@ export function ModelConfigPage() {
       await API.delete('/api/model_definition/source', {
         data: { model: m.name, channel_id: channelId, group: 'default' },
       });
+    const savedId = m.id || res.data?.data?.id;
+    let visionDetectionError = '';
+    if (savedId && sources.size > 0) {
+      try {
+        const detection = await API.post(`/api/model_definition/${savedId}/detect_vision`);
+        if (!detection.data?.success)
+          visionDetectionError = detection.data?.message || '视觉能力检测失败';
+      } catch (error) {
+        visionDetectionError = error.message || '视觉能力检测失败';
+      }
+    }
     const optRes = await API.get('/api/option/');
     if (optRes.data?.success) {
       const map = {};
@@ -519,6 +545,7 @@ export function ModelConfigPage() {
     }
     setModelEdit(null);
     loadDefinitions();
+    if (visionDetectionError) dialog.notice(visionDetectionError);
   };
   const removeModel = async (m) => {
     if (m.enabled) return dialog.notice('请先禁用模型再删除');
@@ -593,6 +620,36 @@ export function ModelConfigPage() {
       .split(',')
       .map((value) => value.trim())
       .includes('image');
+  const visionCapability = (model) => {
+    if (isVisionModel(model)) return 'vision';
+    return String(model.modalities || '').trim() ? 'text' : 'pending';
+  };
+  const detectVision = async (model, notify = true) => {
+    try {
+      const res = await API.post(`/api/model_definition/${model.id}/detect_vision`);
+      if (!res.data?.success) throw new Error(res.data?.message || '视觉能力检测失败');
+      if (notify) dialog.notice(`${model.name}：${res.data.message}`);
+      return { success: true, message: res.data.message };
+    } catch (error) {
+      if (notify) dialog.notice(error.message || '视觉能力检测失败');
+      return { success: false, message: error.message || '视觉能力检测失败' };
+    } finally {
+      if (notify) loadDefinitions();
+    }
+  };
+  const detectAllVisionCapabilities = async () => {
+    const candidates = definitions.filter((model) => model.enabled && model.id);
+    if (candidates.length === 0) return dialog.notice('没有可检测的已启用模型');
+    setVisionDetecting(true);
+    let succeeded = 0;
+    for (const model of candidates) {
+      const result = await detectVision(model, false);
+      if (result.success) succeeded += 1;
+    }
+    setVisionDetecting(false);
+    await loadDefinitions();
+    dialog.notice(`视觉能力检测完成：${succeeded}/${candidates.length} 个模型已判定`);
+  };
   const testAllModels = async (visionOnly = false) => {
     const enabled = definitions.filter(
       (m) => m.enabled && (!visionOnly || isVisionModel(m))
@@ -826,11 +883,11 @@ export function ModelConfigPage() {
               </button>
               <button
                 className='preview-button'
-                disabled={modelTest?.status === 'running' || !definitions.some((m) => m.enabled && isVisionModel(m))}
-                onClick={() => testAllModels(true)}
-                title='仅测试已启用且标记为支持图片输入的模型'
+                disabled={visionDetecting || !definitions.some((m) => m.enabled && m.id)}
+                onClick={detectAllVisionCapabilities}
+                title='由后台发送内置测试图片，自动判断模型是否支持图片输入'
               >
-                测试视觉模型
+                {visionDetecting ? '检测中…' : '检测视觉能力'}
               </button>
               <button
                 className='preview-button primary'
@@ -860,9 +917,13 @@ export function ModelConfigPage() {
                   <tr key={m.name}>
                     <td>
                       <strong>{m.name}</strong>
-                      {isVisionModel(m) ? (
+                      {visionCapability(m) === 'vision' ? (
                         <span className='tag zjugis-vision-tag'>视觉</span>
-                      ) : null}
+                      ) : visionCapability(m) === 'text' ? (
+                        <span className='tag'>纯文本</span>
+                      ) : (
+                        <span className='tag warning'>待检测</span>
+                      )}
                       {m.remark ? <small>{m.remark}</small> : null}
                     </td>
                     <td>{m.display_name || m.name || ''}</td>
@@ -905,6 +966,13 @@ export function ModelConfigPage() {
                         onClick={() => testModel(m)}
                       >
                         测试
+                      </button>
+                      <button
+                        className='link-button'
+                        disabled={!m.id}
+                        onClick={() => detectVision(m)}
+                      >
+                        检测视觉
                       </button>
                       <button
                         className='link-button'
@@ -993,7 +1061,7 @@ export function ModelConfigPage() {
               </SelectField>
             </div>
             <p className='preview-muted'>
-              未匹配到具体模型时使用默认上下文限制；默认视觉模型只列出已启用且勾选“支持图片输入”的模型，供桌面端识图工具独立调用；预扣额度会在请求完成后按实际用量多退少补。
+              未匹配到具体模型时使用默认上下文限制；默认视觉模型只列出后台已自动识别为支持图片输入的模型，供桌面端识图工具独立调用；预扣额度会在请求完成后按实际用量多退少补。
             </p>
             <div className='zjugis-modal-actions'>
               <button className='preview-button primary'>保存设置</button>
@@ -1220,15 +1288,6 @@ export function ModelConfigPage() {
               ) : (
                 <small className='preview-muted'>点击“自动获取模型”后，在这里勾选需要向用户提供的模型。</small>
               )}
-              <details className='zjugis-manual-models'>
-                <summary>手工补充模型（可选）</summary>
-                <textarea
-                  value={form.models || ''}
-                  onChange={(e) => set('models', e.target.value)}
-                  rows='3'
-                  placeholder='仅在上游不支持模型列表时手工填写，逗号或换行分隔'
-                />
-              </details>
             </label>
             <details className='zjugis-channel-advanced'>
               <summary>高级设置</summary>
@@ -1429,27 +1488,17 @@ export function ModelConfigPage() {
                 />
                 支持显式缓存
               </label>
-              <label className='zjugis-check'>
-                <input
-                  type='checkbox'
-                  checked={
-                    modelEdit.image_input !== undefined
-                      ? !!modelEdit.image_input
-                      : String(modelEdit.modalities || '').split(',').includes('image')
-                  }
-                  onChange={(e) =>
-                    setModelEdit({
-                      ...modelEdit,
-                      image_input: e.target.checked,
-                      modalities: e.target.checked ? 'text,image' : 'text',
-                      attachment: e.target.checked,
-                    })
-                  }
-                />
-                支持图片输入
-              </label>
+              <div className='zjugis-check'>
+                视觉能力：{
+                  visionCapability(modelEdit) === 'vision'
+                    ? '视觉模型'
+                    : visionCapability(modelEdit) === 'text'
+                      ? '纯文本模型'
+                      : '保存后自动检测'
+                }
+              </div>
             </div>
-            <small className='preview-muted'>勾选后桌面端可使用识图与图片附件；请仅为上游实际支持视觉的模型启用。</small>
+            <small className='preview-muted'>视觉能力由后台使用内置测试图片自动识别，识别结果会同步给桌面端，无需人工勾选。</small>
             <div className='zjugis-modal-actions'>
               <button
                 type='button'
@@ -2104,7 +2153,11 @@ export function UsersPage() {
 
 export function LogsPage() {
   const list = useList('/api/log/', 'p=0&page_size=100');
-  const prompts = useList('/api/admin/user-prompts', 'p=0&page_size=100');
+  const [promptPage, setPromptPage] = useState(0);
+  const prompts = useList(
+    '/api/admin/user-prompts',
+    `p=${promptPage}&page_size=${promptAuditPageSize}`
+  );
   const [keyword, setKeyword] = useState('');
   const [detail, setDetail] = useState(null);
   const [promptDetail, setPromptDetail] = useState(null);
@@ -2115,6 +2168,13 @@ export function LogsPage() {
       JSON.stringify(r).toLowerCase().includes(keyword.toLowerCase())
   );
   const okay = (r) => r.timing_status === 'ok' || r.type === 0 || r.type === 2;
+  const promptPageCount = Math.max(1, Math.ceil(prompts.total / promptAuditPageSize));
+  const promptPages = paginationItems(promptPage + 1, promptPageCount);
+  useEffect(() => {
+    if (!prompts.loading && promptPage >= promptPageCount) {
+      setPromptPage(promptPageCount - 1);
+    }
+  }, [promptPage, promptPageCount, prompts.loading]);
   return (
     <div className='zjugis-new-page'>
       <PageHead
@@ -2174,6 +2234,16 @@ export function LogsPage() {
             </tbody>
           </table>
           {!prompts.loading && prompts.rows.length === 0 && <div className='preview-empty'>暂无用户提问记录；升级后产生的新请求会自动记录在这里。</div>}
+        </div>
+        <div className='zjugis-table-pagination'>
+          <span>共 {prompts.total} 条，每页 {promptAuditPageSize} 条</span>
+          <div>
+            <button type='button' disabled={prompts.loading || promptPage === 0} onClick={() => setPromptPage((page) => Math.max(0, page - 1))}>上一页</button>
+            {promptPages.map((item) => typeof item === 'number'
+              ? <button key={item} type='button' disabled={prompts.loading} className={item === promptPage + 1 ? 'active' : ''} aria-current={item === promptPage + 1 ? 'page' : undefined} onClick={() => setPromptPage(item - 1)}>{item}</button>
+              : <span key={item} className='zjugis-pagination-gap'>…</span>)}
+            <button type='button' disabled={prompts.loading || promptPage + 1 >= promptPageCount} onClick={() => setPromptPage((page) => Math.min(promptPageCount - 1, page + 1))}>下一页</button>
+          </div>
         </div>
       </section>}
       {logTab === 'calls' && <section className='preview-surface'>

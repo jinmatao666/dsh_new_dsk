@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "id": "office-images-to-pdf",
+  "name": "office-images-to-pdf",
+  "slug": "office-images-to-pdf",
+  "displayName": "图片转 PDF",
+  "summary": "将多张图片按指定顺序排版为一个 PDF，支持常见纸张、方向和页边距。",
+  "description": "将多张图片按指定顺序排版为一个 PDF，支持常见纸张、方向和页边距。 包含可直接运行的本地处理脚本、依赖说明、错误处理和统一中文交付规范。",
+  "category": "办公工具",
+  "tags": [
+    "官方",
+    "办公",
+    "演示"
+  ],
+  "capabilities": [
+    "多图按序合成 PDF",
+    "A4/A3/Letter 与原尺寸",
+    "自动旋转和留白排版"
+  ],
+  "version": "1.0.0",
+  "author": "万维Buddy 办公工具",
+  "submitter": "root",
+  "createdAt": "2026-09-14 19:00:00",
+  "featured": true,
+  "status": "published",
+  "accent": "#ea580c",
+  "icon": "册",
+  "params": [
+    {
+      "name": "inputPaths",
+      "type": "files",
+      "required": true,
+      "description": "按页面顺序提供图片"
+    },
+    {
+      "name": "pageSize",
+      "type": "select",
+      "required": true,
+      "description": "纸张",
+      "options": [
+        "A4",
+        "A3",
+        "Letter",
+        "original"
+      ],
+      "defaultValue": "A4"
+    },
+    {
+      "name": "orientation",
+      "type": "select",
+      "required": true,
+      "description": "方向",
+      "options": [
+        "auto",
+        "portrait",
+        "landscape"
+      ],
+      "defaultValue": "auto"
+    },
+    {
+      "name": "marginMm",
+      "type": "number",
+      "required": false,
+      "description": "页边距（毫米）",
+      "defaultValue": "10"
+    },
+    {
+      "name": "outputDirectory",
+      "type": "directory",
+      "required": false,
+      "description": "输出目录；留空时在输入文件旁创建独立目录"
+    }
+  ],
+  "files": [
+    "manifest.json",
+    "SKILL.md",
+    "scripts/invoke.ps1",
+    "scripts/office_tools.py",
+    "requirements.txt"
+  ]
+}

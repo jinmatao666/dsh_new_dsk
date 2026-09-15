@@ -22,10 +22,17 @@ func GetUserPromptAudits(c *gin.Context) {
 	if pageSize > 100 {
 		pageSize = 100
 	}
-	audits, err := model.GetUserPromptAudits(c.Query("keyword"), p*pageSize, pageSize)
+	audits, total, err := model.GetUserPromptAudits(c.Query("keyword"), p*pageSize, pageSize)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": audits})
+	c.JSON(http.StatusOK, gin.H{
+		"success":   true,
+		"message":   "",
+		"data":      audits,
+		"total":     total,
+		"page":      p,
+		"page_size": pageSize,
+	})
 }

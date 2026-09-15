@@ -6,7 +6,28 @@ import (
 
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/logger"
+	"gorm.io/gorm"
 )
+
+var userPromptAuditIgnoredPrefixes = []string{
+	"<system-reminder>",
+	"<app-context>",
+	"<skills_instructions>",
+	"<skill_content",
+	"<skill_resources>",
+	"<skill_instructions>",
+	"<permissions instructions>",
+	"<collaboration_mode>",
+	"<environment_context>",
+	"<recommended_plugins>",
+	"current runtime context.",
+	"current runtime context:",
+	"generate the session title from this json array",
+	"you are an ai assistant accessed by an api.",
+	"# agents.md instructions",
+	"## skills",
+	"a skill is a reusable set of task-specific",
+}
 
 // UserPromptAudit 是面向管理员的长期审计记录。它刻意只保存用户本次发出的
 // 文本问题与请求结果，不保存模型回答、图片附件或完整历史上下文。
@@ -55,29 +76,12 @@ func IsUserPromptAuditQuestion(value string) bool {
 	if normalized == "" {
 		return false
 	}
-	for _, prefix := range []string{
-		"<system-reminder>",
-		"<app-context>",
-		"<skills_instructions>",
-		"<skill_content",
-		"<skill_resources>",
-		"<skill_instructions>",
-		"<permissions instructions>",
-		"<collaboration_mode>",
-		"<environment_context>",
-		"<recommended_plugins>",
-		"current runtime context.",
-		"current runtime context:",
-		"generate the session title from this json array",
-		"you are an ai assistant accessed by an api.",
-		"# agents.md instructions",
-		"## skills",
-	} {
+	for _, prefix := range userPromptAuditIgnoredPrefixes {
 		if strings.HasPrefix(normalized, prefix) {
 			return false
 		}
 	}
-	return !strings.HasPrefix(normalized, "a skill is a reusable set of task-specific")
+	return true
 }
 
 // StartUserPromptAudit 在请求真正发送给上游前记录本次用户问题，保证上游异常时
@@ -126,27 +130,29 @@ func FinishUserPromptAudit(ctx context.Context, status, errorMessage string, quo
 	}
 }
 
-func GetUserPromptAudits(keyword string, startIdx, num int) (audits []*UserPromptAudit, err error) {
-	if num <= 0 {
-		return []*UserPromptAudit{}, nil
+func userPromptAuditQuery(keyword string) *gorm.DB {
+	query := DB.Model(&UserPromptAudit{}).Where("TRIM(question) <> ''")
+	for _, prefix := range userPromptAuditIgnoredPrefixes {
+		query = query.Where("LOWER(TRIM(question)) NOT LIKE ?", prefix+"%")
 	}
-	query := DB.Model(&UserPromptAudit{})
 	if keyword = strings.TrimSpace(keyword); keyword != "" {
 		like := "%" + keyword + "%"
 		query = query.Where("username LIKE ? OR model_name LIKE ? OR question LIKE ? OR error_message LIKE ?", like, like, like, like)
 	}
-	var candidates []*UserPromptAudit
-	err = query.Order("created_at DESC").Limit(num * 4).Offset(startIdx).Find(&candidates).Error
+	return query
+}
+
+// GetUserPromptAudits returns one filtered audit page and its matching row count.
+func GetUserPromptAudits(keyword string, startIdx, num int) (audits []*UserPromptAudit, total int64, err error) {
+	if num <= 0 {
+		return []*UserPromptAudit{}, 0, nil
+	}
+	if err = userPromptAuditQuery(keyword).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err = userPromptAuditQuery(keyword).Order("created_at DESC").Limit(num).Offset(startIdx).Find(&audits).Error
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	for _, audit := range candidates {
-		if IsUserPromptAuditQuestion(audit.Question) {
-			audits = append(audits, audit)
-			if len(audits) == num {
-				break
-			}
-		}
-	}
-	return audits, nil
+	return audits, total, nil
 }
