@@ -1,0 +1,128 @@
+# Build the isolated Wanwei desktop preview. This workflow is manual-only and
+# has no image, registry, OneAPI deployment, or database steps.
+name: Wanwei desktop preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Preview version without the v prefix (for example 0.2.0-preview.1)
+        required: true
+        type: string
+      publish_github_release:
+        description: Publish the generated installer as a preview GitHub Release
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: wanwei-desktop-preview-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PRIMARY_NODE_VERSION: '22.19.0'
+  DSH_RELEASE_VERSION: ${{ inputs.version }}
+  DSH_DESKTOP_SERVER_URL: ${{ vars.DSH_ONEAPI_URL || 'http://ac.zjugis.com:3300' }}
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  build-windows:
+    name: Build Windows preview installer
+    runs-on: windows-2025
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          dest: ${{ runner.temp }}/setup-pnpm-wanwei-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust and Tauri output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            products/wanwei-desktop/src-tauri/target
+          key: windows-wanwei-preview-${{ hashFiles('products/wanwei-desktop/src-tauri/Cargo.lock', 'products/wanwei-desktop/src-tauri/Cargo.toml') }}
+          restore-keys: |
+            windows-wanwei-preview-
+
+      - name: Validate release inputs
+        shell: pwsh
+        run: |
+          if ($env:DSH_RELEASE_VERSION -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$') {
+            throw "Invalid Tauri SemVer version: $env:DSH_RELEASE_VERSION"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:DSH_DESKTOP_SERVER_URL)) {
+            throw 'DSH_ONEAPI_URL repository variable must contain the existing OneAPI service URL.'
+          }
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare preview version override
+        shell: pwsh
+        run: |
+          $configPath = Join-Path $env:RUNNER_TEMP 'wanwei-preview-version.json'
+          @{ version = $env:DSH_RELEASE_VERSION } | ConvertTo-Json -Compress | Set-Content -LiteralPath $configPath -Encoding utf8
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "DSH_TAURI_VERSION_CONFIG=$configPath"
+
+      - name: Build self-contained Windows installer
+        shell: pwsh
+        run: pnpm --dir products/wanwei-desktop run build:runner -- --bundles nsis --config "$env:DSH_TAURI_VERSION_CONFIG"
+
+      - name: Collect preview installer
+        shell: pwsh
+        run: |
+          $bundleRoot = Resolve-Path 'products/wanwei-desktop/src-tauri/target/release/bundle'
+          $artifactRoot = Join-Path $env:RUNNER_TEMP 'wanwei-preview-artifacts'
+          New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
+          $installers = Get-ChildItem -LiteralPath $bundleRoot -Recurse -File | Where-Object { $_.Extension -in '.exe', '.msi' }
+          if ($installers.Count -eq 0) {
+            throw "No Windows installer was produced under $bundleRoot"
+          }
+          foreach ($installer in $installers) {
+            Copy-Item -LiteralPath $installer.FullName -Destination $artifactRoot
+          }
+
+      - name: Upload preview installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: wanwei-buddy-preview-${{ inputs.version }}-windows-x64
+          path: ${{ runner.temp }}/wanwei-preview-artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish preview release
+    if: ${{ inputs.publish_github_release }}
+    needs: build-windows
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: wanwei-buddy-preview-${{ inputs.version }}-windows-x64
+          path: release-assets
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: wanwei-preview-v${{ inputs.version }}
+          name: 万维 Buddy 预览版 v${{ inputs.version }}
+          prerelease: true
+          files: release-assets/*
