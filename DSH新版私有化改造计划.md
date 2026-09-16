@@ -66,7 +66,7 @@
    ├─ Tauri 桌面壳
    ├─ DSH Sidecar
    ├─ wanwei-desktop profile
-   └─ Windows/macOS 安装包
+   └─ Windows/macOS/Linux 安装包
 ```
 
 ### 4.1 官方层
@@ -96,7 +96,7 @@ interface WanweiSkillApi {}
 
 ### 4.5 交付层
 
-桌面安装包、Sidecar、离线运行时、升级器和 CI/CD 独立维护，只消费已经组装完成的产品。开发机只验证源码、运行时暂存和桌面二进制；Windows/macOS 安装包由 GitHub Runner 统一构建。
+桌面安装包、Sidecar、离线运行时、升级器和 CI/CD 独立维护，只消费已经组装完成的产品。开发机只验证源码、运行时暂存和桌面二进制；Windows、macOS 和 Linux 安装包由 GitHub Runner 统一构建。
 
 ## 5. OneAPI 和数据库策略
 
@@ -150,7 +150,7 @@ interface WanweiSkillApi {}
 - [x] 迁移旧版 `ui-oneapi-auth` 的完整品牌登录界面、真实账号登录、状态恢复和账户页，适配新版 DSH 的服务、事件、插槽、Locale 和模型接口；短信/扫码保留紫色预览入口并明确标记为暂未开放，不模拟成功。
 - [x] 复用旧版 desktop bundle 的 OneAPI Provider 组装与登录门禁，并按新版 Slot、Locale 和客户端构建机制完成迁移。
 - [x] 使用现有线上 OneAPI 地址和真实账号完成新版桌面开发壳登录验证，登录后可正常进入新版主界面。
-- [x] 复用旧版 `release.yml` 桌面构建思路，新增手动触发的 Windows Runner workflow，调整为万维预览版路径、标识和产物名称，并与镜像/数据库部署完全隔离。
+- [x] 复用旧版 `release.yml` 桌面构建思路，新增手动触发的 Windows x64、macOS arm64 与 Linux x64 Runner workflow，分别生成 NSIS、DMG、DEB/AppImage 产物，并与镜像/数据库部署完全隔离。
 - [x] 接通现有 OneAPI 登录、模型列表和首轮会话；已使用真实账号和授权模型 `qwen3.8-27b-fp8` 完成首轮回复与用量统计验证。
 
 验收内容：
@@ -192,6 +192,7 @@ interface WanweiSkillApi {}
 
 - Windows 安装包。
 - macOS 安装包。
+- Linux 安装包。
 - 自动升级。
 - 新旧客户端本地数据迁移。
 - CI/CD 和发布通道。
@@ -217,7 +218,7 @@ interface WanweiSkillApi {}
 预览版与当前正式版至少隔离以下内容：
 
 - 应用显示名称。
-- Windows/macOS 应用标识。
+- Windows/macOS/Linux 应用标识。
 - 安装目录。
 - 安装器 Upgrade Code。
 - 本地配置目录。
@@ -261,7 +262,7 @@ Tauri 会根据应用标识隔离单实例锁、WebView profile 和平台应用�
 
 ## 10. 待继续讨论的问题
 
-- 新版首个预览安装包需要支持哪些操作系统和架构。
+- 首个预览安装包支持 Windows x64、macOS arm64 和 Linux x64；是否追加 macOS Intel、Windows arm64 或 Linux arm64 留待真实需求确认。
 - 新旧桌面端是否允许同时登录同一账号。
 - 新版是否读取旧版的本地会话和工作区数据。
 - OneAPI 客户端协议版本和能力声明的具体字段。

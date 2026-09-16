@@ -16,7 +16,7 @@ Status: implemented
 
 现有包中只有 profile 发现、CLI 安装闭包与 Host 构建聚合引用产品 bundle。这些接入点不承载产品行为。
 
-仅支持手动触发的 `wanwei-desktop-preview.yml` workflow 负责生成 Windows 安装包。它在 Windows Runner 上构建 `products/wanwei-desktop`，通过产品脚本准备自包含运行时，上传预览版专用 Artifact，并可使用产品专用标签发布预发行版本。它没有 push 触发器，也不包含容器、OneAPI 部署或数据库 job。
+仅支持手动触发的 `wanwei-desktop-preview.yml` workflow 负责跨平台安装包生产。其矩阵将 `products/wanwei-desktop` 分别构建为 Windows x64 NSIS、macOS arm64 DMG 与 Linux x64 DEB/AppImage 产物。每个矩阵项都通过产品脚本准备平台原生的自包含运行时；macOS 预览包使用 ad-hoc 签名，可选预发行版本会在产品专用标签下汇总全部平台 Artifact。该 workflow 没有 push 触发器，也不包含容器、OneAPI 部署或数据库 job。
 
 ## 考虑过的替代方案
 

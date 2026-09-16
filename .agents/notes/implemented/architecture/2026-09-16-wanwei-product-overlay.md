@@ -16,7 +16,7 @@ The product bundle began with an empty patch. Each private capability enters as 
 
 Only profile discovery, the CLI installation closure, and the Host build aggregate reference the product bundle from existing packages. Product behavior does not enter those integration points.
 
-The manual-only `wanwei-desktop-preview.yml` workflow owns Windows installer production. It builds `products/wanwei-desktop` on a Windows runner, stages the self-contained runtime through the product script, uploads a preview-specific artifact, and can publish a prerelease under a product-specific tag. It has no push trigger and no container, OneAPI deployment, or database job.
+The manual-only `wanwei-desktop-preview.yml` workflow owns cross-platform installer production. Its matrix builds `products/wanwei-desktop` as Windows x64 NSIS, macOS arm64 DMG, and Linux x64 DEB/AppImage artifacts. Every row stages a native self-contained runtime through the product script; macOS preview builds use ad-hoc signing, and the optional prerelease combines all platform artifacts under a product-specific tag. The workflow has no push trigger and no container, OneAPI deployment, or database job.
 
 ## Alternatives considered
 

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-16-wanwei-product-overlay.md
-2026-09-16-wanwei-product-overlay.md: 53ef1e7d2ddae93919987fbb6180ab589a47ee74
-2026-09-16-wanwei-product-overlay.zh.md: 1518bade1e7884b87fb2b206f13e31832f9eb88f
+2026-09-16-wanwei-product-overlay.md: ec4fd5ad3edb2d5117bb0230c2d34f878a56190c
+2026-09-16-wanwei-product-overlay.zh.md: 952613da721d6db7913965fec002894e544b8dfc
