@@ -61,6 +61,12 @@ export const zh = {
 
 export type WanweiAuthKey = keyof typeof zh
 
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    'wanwei.auth': WanweiAuthKey
+  }
+}
+
 export const en: { [Key in WanweiAuthKey]: string } = {
   brandMark: 'W',
   accountNav: 'Account',

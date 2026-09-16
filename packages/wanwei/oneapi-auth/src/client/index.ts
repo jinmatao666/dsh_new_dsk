@@ -8,15 +8,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { AccountSection, type AccountInjected } from './AccountSection.tsx'
 import { AuthGate, type AuthInjected } from './AuthGate.tsx'
 import { AuthController } from './controller.ts'
-import { en, zh, type WanweiAuthKey } from './locales.ts'
+import { en, zh } from './locales.ts'
 
 export type { WanweiAuthKey } from './locales.ts'
-
-declare module '@deepseek-ai/dsh-client-ui-slots' {
-  interface LocaleNamespaceMap {
-    'wanwei.auth': WanweiAuthKey
-  }
-}
 
 const NS = 'wanwei.auth'
 

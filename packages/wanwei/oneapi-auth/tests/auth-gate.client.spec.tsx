@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { AuthView } from '../src/client/controller.ts'
-import { AuthGate } from '../src/client/AuthGate.tsx'
-import { zh, type WanweiAuthKey } from '../src/client/locales.ts'
+import { AuthGate, type AuthGateProps } from '../src/client/AuthGate.tsx'
+import { zh } from '../src/client/locales.ts'
 
 afterEach(() => { cleanup() })
 
@@ -14,14 +16,22 @@ beforeEach(() => {
   })
 })
 
-const t = (key: WanweiAuthKey): string => zh[key]
+const t: Parameters<typeof AuthGate>[0]['t'] = makeTranslate(zh, commonZh)
+const unusedHook = (() => { throw new Error('unused by AuthGate') }) as never
+type AttentionSnapshot = Parameters<Parameters<AuthGateProps['useSessionPendingInteraction']>[0]>[0]
+const noAttention: AttentionSnapshot = new Map()
+const kit = {
+  useSessions: unusedHook,
+  useSessionPendingInteraction: (selector => selector(noAttention)) as AuthGateProps['useSessionPendingInteraction'],
+  useWorkspaces: unusedHook,
+}
 
 function renderGate(view: AuthView = { state: 'logged-out' }) {
   const login = vi.fn(() => Promise.resolve({ state: 'authenticated' as const, username: 'wanwei', models: ['qwen'] }))
   const refresh = vi.fn(() => Promise.resolve({ state: 'logged-out' as const }))
   const fail = vi.fn()
   const useAuth = <Selected,>(selector: (state: AuthView) => Selected): Selected => selector(view)
-  render(<AuthGate useAuth={useAuth} login={login} refresh={refresh} fail={fail} t={t} />)
+  render(<AuthGate {...kit} useAuth={useAuth} login={login} refresh={refresh} fail={fail} t={t} />)
   return { login, refresh, fail }
 }
 
