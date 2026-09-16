@@ -8,12 +8,24 @@ import (
 type PersonalSkill struct {
 	Id                  int             `json:"id" gorm:"primaryKey;autoIncrement"`
 	Name                string          `json:"name" gorm:"size:100;not null"`
+	DisplayName         string          `json:"display_name" gorm:"size:100;default:''"`
+	Category            string          `json:"category" gorm:"size:255;default:''"`
+	Icon                string          `json:"icon" gorm:"type:text"`
+	Version             string          `json:"version" gorm:"size:50;default:'1.0.0'"`
 	Description         string          `json:"description" gorm:"size:500;default:''"`
 	Scenario            string          `json:"scenario" gorm:"size:500;default:''"`
 	Content             string          `json:"content" gorm:"type:text;not null"`
 	Body                string          `json:"body" gorm:"type:text"`
 	Assets              string          `json:"assets" gorm:"type:text"`
 	Owner               string          `json:"owner" gorm:"size:100;not null;index"`
+	Visibility          string          `json:"visibility" gorm:"size:20;not null;default:'private';index"`
+	ReviewStatus        string          `json:"review_status" gorm:"size:20;not null;default:'none';index"`
+	ReviewReason        string          `json:"review_reason" gorm:"size:500;default:''"`
+	ReviewedBy          string          `json:"reviewed_by" gorm:"size:100;default:''"`
+	ReviewedAt          int64           `json:"reviewed_at" gorm:"default:0"`
+	SubmittedAt         int64           `json:"submitted_at" gorm:"default:0;index"`
+	PublishedSkillId    *int            `json:"published_skill_id" gorm:"index"`
+	PublishedVersion    string          `json:"published_version" gorm:"size:50;default:''"`
 	ForkedFrom          string          `json:"forked_from" gorm:"size:100;default:''"`
 	ForkedFromUpdated   string          `json:"forked_from_updated" gorm:"size:100;default:''"`
 	ForkedFromContent   string          `json:"forked_from_content" gorm:"type:text"`
@@ -24,6 +36,15 @@ type PersonalSkill struct {
 	BodyUpdatedAt       int64           `json:"body_updated_at" gorm:"default:0"`
 	AssetsUpdatedAt     int64           `json:"assets_updated_at" gorm:"default:0"`
 }
+
+const (
+	PersonalSkillPrivate        = "private"
+	PersonalSkillPublic         = "public"
+	PersonalSkillReviewNone     = "none"
+	PersonalSkillReviewPending  = "pending"
+	PersonalSkillReviewApproved = "approved"
+	PersonalSkillReviewRejected = "rejected"
+)
 
 // EffectiveBody returns the body text used for LLM injection.
 // Falls back to legacy Content when Body has not been migrated yet.
@@ -44,6 +65,35 @@ func GetPersonalSkillsByOwner(owner string, page, perPage int) ([]PersonalSkill,
 		Offset((page - 1) * perPage).
 		Limit(perPage).
 		Find(&skills).Error
+	return skills, total, err
+}
+
+// GetPersonalSkillByOwnerAndName returns one owner's stable personal-skill record.
+func GetPersonalSkillByOwnerAndName(owner, name string) (*PersonalSkill, error) {
+	var skill PersonalSkill
+	err := DB.Where("owner = ? AND name = ?", owner, name).First(&skill).Error
+	if err != nil {
+		return nil, err
+	}
+	return &skill, nil
+}
+
+// SearchPersonalSkillReviews returns public submissions for the administrator review queue.
+func SearchPersonalSkillReviews(keyword, status string, page, perPage int) ([]PersonalSkill, int64, error) {
+	skills := []PersonalSkill{}
+	var total int64
+	query := DB.Model(&PersonalSkill{}).Where("visibility = ?", PersonalSkillPublic)
+	if status != "" && status != "all" {
+		query = query.Where("review_status = ?", status)
+	}
+	if keyword != "" {
+		like := "%" + keyword + "%"
+		query = query.Where("name LIKE ? OR display_name LIKE ? OR description LIKE ? OR owner LIKE ?", like, like, like, like)
+	}
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := query.Order("submitted_at DESC, id DESC").Offset((page - 1) * perPage).Limit(perPage).Find(&skills).Error
 	return skills, total, err
 }
 

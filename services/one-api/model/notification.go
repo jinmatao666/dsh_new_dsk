@@ -33,8 +33,8 @@ type Notification struct {
 	StartAt     *time.Time `json:"start_at" gorm:"comment:生效开始，空=立即"`
 	EndAt       *time.Time `json:"end_at" gorm:"comment:生效结束，空=不过期"`
 	PublishedAt *time.Time `json:"published_at" gorm:"comment:最近一次发布时间，重新发布会刷新；客户端按 id+此值去重，重发即重新触达"`
-	CreatedAt time.Time  `json:"created_at" gorm:"autoCreateTime;comment:创建时间"`
-	UpdatedAt time.Time  `json:"updated_at" gorm:"autoUpdateTime;comment:更新时间"`
+	CreatedAt   time.Time  `json:"created_at" gorm:"autoCreateTime;comment:创建时间"`
+	UpdatedAt   time.Time  `json:"updated_at" gorm:"autoUpdateTime;comment:更新时间"`
 }
 
 func (Notification) TableName() string {
@@ -126,8 +126,8 @@ func (n *Notification) validate() error {
 	if n.Content == "" {
 		return errors.New("正文不能为空")
 	}
-	if n.Audience == NotificationAudienceCrowd && (n.CrowdId == nil || *n.CrowdId == 0) {
-		return errors.New("定向人群时必须选择分群")
+	if n.Audience == NotificationAudienceCrowd {
+		return errors.New("用户分群功能已下线，请选择全员或指定用户")
 	}
 	if n.Plane == NotificationPlaneB && n.Category != NotificationCategoryNotification {
 		return errors.New("广播平面(B)仅限通知类(全屏弹窗停服公告)")
@@ -239,16 +239,12 @@ func ListPublicNotifications() ([]*Notification, error) {
 	return out, nil
 }
 
-// ListNotificationsForUser 登录用户:返回该用户可见的生效通知(已叠加定向过滤)。
-// 定向统一走 SQL 路径判命中:audience=all 全员;audience=users 命中 target_users;
-// audience=crowd 则该用户 id 是否落入分群 SQL 结果集(规避单用户内存路径字段缺失)。
+// ListNotificationsForUser 登录用户:返回全员及指定用户可见的生效通知。
 func ListNotificationsForUser(userId int) ([]*Notification, error) {
 	all, err := listActiveByCategories(nil)
 	if err != nil {
 		return nil, err
 	}
-	// 预取:该用户命中的分群 id 集合，避免每条通知重复跑 SQL。
-	matchedCrowds := map[int]bool{}
 	out := make([]*Notification, 0, len(all))
 	for _, n := range all {
 		switch n.Audience {
@@ -259,17 +255,7 @@ func ListNotificationsForUser(userId int) ([]*Notification, error) {
 				out = append(out, n)
 			}
 		case NotificationAudienceCrowd:
-			if n.CrowdId == nil || *n.CrowdId == 0 {
-				continue
-			}
-			hit, ok := matchedCrowds[*n.CrowdId]
-			if !ok {
-				hit = userInCrowd(*n.CrowdId, userId)
-				matchedCrowds[*n.CrowdId] = hit
-			}
-			if hit {
-				out = append(out, n)
-			}
+			// Historical crowd-targeted notifications stay stored but are no longer delivered.
 		}
 	}
 	return out, nil

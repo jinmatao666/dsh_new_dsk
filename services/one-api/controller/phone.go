@@ -39,7 +39,6 @@ type PhoneRegisterRequest struct {
 	Phone    string `json:"phone" binding:"required"`
 	Code     string `json:"code" binding:"required"`
 	Password string `json:"password"`
-	AffCode  string `json:"aff_code"`
 	Username string `json:"username"` // 可选；为空时默认使用规范化后的手机号作为登录用户名
 	// UseLoginSMS 为 true 时，允许使用「登录」用途短信验证码完成注册（须号码未注册；用于登录页引导弹窗，避免二次发短信）
 	UseLoginSMS bool `json:"use_login_sms"`
@@ -395,9 +394,6 @@ func PhoneRegister(c *gin.Context) {
 		return
 	}
 
-	// Get inviter ID
-	inviterId, _ := model.GetUserIdByAffCode(req.AffCode)
-
 	// 登录用户名为手机号（11 位，符合 model 中 username 长度上限）
 	username := strings.TrimSpace(req.Username)
 	if username == "" {
@@ -417,26 +413,14 @@ func PhoneRegister(c *gin.Context) {
 		Password:      req.Password,
 		Phone:         req.Phone,
 		PhoneVerified: true,
-		InviterId:     inviterId,
 	}
 
-	if err := user.Insert(ctx, inviterId); err != nil {
+	if err := user.Insert(ctx, 0); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
 		})
 		return
-	}
-
-	// 异步触发注册邀请活动
-	if req.AffCode != "" {
-		affCode := req.AffCode
-		userId := user.Id
-		go func() {
-			if err := model.TriggerInviteActivities(ctx, "registration", userId, affCode, "", 0); err != nil {
-				logger.SysError(fmt.Sprintf("触发手机注册邀请活动失败 user=%d: %v", userId, err))
-			}
-		}()
 	}
 
 	common.DeletePhoneVerificationCode(req.Phone, codePurpose)

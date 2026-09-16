@@ -269,7 +269,6 @@ type CreateOrderRequest struct {
 	PackageID    int    `json:"package_id"`
 	PayType      string `json:"pay_type"`      // wechat/alipay
 	BillingCycle string `json:"billing_cycle"` // monthly/yearly
-	InviteCode   string `json:"invite_code"`   // 邀请码（可选）
 }
 
 // PLACEHOLDER_FOR_CREATE_ORDER
@@ -391,20 +390,6 @@ func CreatePaymentOrder(c *gin.Context) {
 		Status:         "pending",
 		PaidAt:         nil,        // 未支付时为 nil
 		ExpiredAt:      &expiredAt, // 过期时间
-	}
-
-	// 处理邀请码抵扣
-	if req.InviteCode != "" {
-		deduction, err := model.GetInviteDeductionAmount(req.InviteCode)
-		if err == nil && deduction > 0 {
-			discount := int(deduction)
-			if discount > orderAmount {
-				discount = orderAmount
-			}
-			order.Amount = orderAmount - discount
-			order.InviteDiscount = discount
-			order.InviteCode = req.InviteCode
-		}
 	}
 
 	err = model.DB.Table("orders").Create(&order).Error
@@ -1495,16 +1480,6 @@ func fulfillOrder(order Order) error {
 		fulfillErr = createSubscriptionAfterPayment(order)
 	}
 
-	// 触发邀请付费活动（异步，不阻塞主流程）
-	if order.InviteCode != "" {
-		go func() {
-			ctx := context.Background()
-			if err := model.TriggerInviteActivities(ctx, "payment", order.UserID, order.InviteCode, order.OrderNo, int64(order.Amount)); err != nil {
-				logger.SysError(fmt.Sprintf("触发付费邀请活动失败 order=%s: %v", order.OrderNo, err))
-			}
-		}()
-	}
-
 	return fulfillErr
 }
 
@@ -1654,8 +1629,8 @@ func createSubscriptionAfterPayment(order Order) error {
 	quotaPerPeriod := pkg.CalcQuota()
 
 	subStatus := model.SubscriptionStatusActive
-	periodsUsed := 1               // 立即生效块本期即发,已发期数=1
-	grantedNow := quotaPerPeriod   // 立即 drip 的积分额
+	periodsUsed := 1             // 立即生效块本期即发,已发期数=1
+	grantedNow := quotaPerPeriod // 立即 drip 的积分额
 	var frozenAt *time.Time
 	if !isUpgrade {
 		subStatus = model.SubscriptionStatusFrozen

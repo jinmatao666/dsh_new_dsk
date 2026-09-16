@@ -27,14 +27,14 @@ function New-OutputPath([string] $baseName) {
   }
 }
 
-function Invoke-ComExport([string] $programId, [System.IO.FileInfo] $sourceFile, [string] $target) {
+function Invoke-ComExport([string] $programId, [System.IO.FileInfo] $input, [string] $target) {
   $application = $null
   $document = $null
   try {
     $application = New-Object -ComObject $programId
     $application.Visible = $false
     $application.DisplayAlerts = 0
-    $document = $application.Documents.Open($sourceFile.FullName, $false, $true)
+    $document = $application.Documents.Open($input.FullName, $false, $true)
     $document.ExportAsFixedFormat($target, 17)
     if (-not (Test-Path -LiteralPath $target)) { throw "$programId 未生成 PDF" }
   } finally {
@@ -57,13 +57,13 @@ function Invoke-ComExport([string] $programId, [System.IO.FileInfo] $sourceFile,
   }
 }
 
-function Invoke-LibreOfficeExport([System.IO.FileInfo] $sourceFile, [string] $target, $soffice) {
+function Invoke-LibreOfficeExport([System.IO.FileInfo] $input, [string] $target, $soffice) {
   $temporary = Join-Path $outputRoot ('.convert-' + [guid]::NewGuid().ToString('N'))
   [System.IO.Directory]::CreateDirectory($temporary) | Out-Null
   try {
-    & $soffice.Source --headless --convert-to pdf --outdir $temporary $sourceFile.FullName | Out-Null
+    & $soffice.Source --headless --convert-to pdf --outdir $temporary $input.FullName | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "LibreOffice 返回退出码 $LASTEXITCODE" }
-    $converted = Join-Path $temporary ($sourceFile.BaseName + '.pdf')
+    $converted = Join-Path $temporary ($input.BaseName + '.pdf')
     if (-not (Test-Path -LiteralPath $converted)) { throw 'LibreOffice 未生成 PDF' }
     Move-Item -LiteralPath $converted -Destination $target
   } finally {
@@ -74,13 +74,13 @@ function Invoke-LibreOfficeExport([System.IO.FileInfo] $sourceFile, [string] $ta
 $results = [System.Collections.Generic.List[object]]::new()
 $programIds = @('Word.Application', 'Kwps.Application', 'wps.Application')
 $soffice = Get-Command soffice -ErrorAction SilentlyContinue
-foreach ($sourceFile in $inputs) {
-  $target = New-OutputPath $sourceFile.BaseName
+foreach ($input in $inputs) {
+  $target = New-OutputPath $input.BaseName
   $errors = [System.Collections.Generic.List[string]]::new()
   $converted = $false
   foreach ($programId in $programIds) {
     try {
-      Invoke-ComExport $programId $sourceFile $target
+      Invoke-ComExport $programId $input $target
       $converted = $true
       break
     } catch {
@@ -90,7 +90,7 @@ foreach ($sourceFile in $inputs) {
   }
   if (-not $converted -and $soffice) {
     try {
-      Invoke-LibreOfficeExport $sourceFile $target $soffice
+      Invoke-LibreOfficeExport $input $target $soffice
       $converted = $true
     } catch {
       $errors.Add("LibreOffice：$($_.Exception.Message)")
@@ -98,10 +98,10 @@ foreach ($sourceFile in $inputs) {
     }
   }
   if ($converted) {
-    $results.Add([pscustomobject]@{ input = $sourceFile.FullName; output = $target; success = $true; error = $null })
+    $results.Add([pscustomobject]@{ input = $input.FullName; output = $target; success = $true; error = $null })
   } else {
     if (-not $soffice) { $errors.Add('LibreOffice：未找到 soffice 命令') }
-    $results.Add([pscustomobject]@{ input = $sourceFile.FullName; output = $null; success = $false; error = ($errors -join '；') })
+    $results.Add([pscustomobject]@{ input = $input.FullName; output = $null; success = $false; error = ($errors -join '；') })
   }
 }
 
@@ -112,13 +112,13 @@ $artifacts = [System.Collections.Generic.List[object]]::new()
 foreach ($item in $results | Where-Object success) {
   $artifacts.Add([ordered]@{ path = $item.output; kind = 'pdf'; description = "转换后的 PDF：$([System.IO.Path]::GetFileName($item.output))" })
 }
+$artifacts.Add([ordered]@{ path = $report; kind = 'report'; description = '处理报告' })
 $payload = [ordered]@{
   success = ($successCount -eq $results.Count)
   successCount = $successCount
   failureCount = $results.Count - $successCount
   outputDirectory = $outputRoot
   files = @($results)
-  internalFiles = @($report)
   artifacts = @($artifacts)
 }
 Write-Output ('WANWEI_RESULT=' + ($payload | ConvertTo-Json -Compress -Depth 6))

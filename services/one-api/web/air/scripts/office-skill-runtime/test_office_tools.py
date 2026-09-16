@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
+import wave
 from pathlib import Path
+from unittest import mock
+
+import office_tools
 
 
 RUNTIME = Path(__file__).with_name("office_tools.py")
@@ -138,6 +143,50 @@ class OfficeToolsSmokeTest(unittest.TestCase):
         )
         self.assertGreaterEqual(len(meeting["artifacts"]), 4)
 
+    def test_audio_is_split_and_transcribed_in_order(self) -> None:
+        audio = self.inputs / "audio.wav"
+        arguments = argparse.Namespace(
+            base_url="http://example.invalid/v1",
+            transcription_url="",
+            transcription_model="",
+            transcription_api_key="",
+            api_key="",
+            audio_segment_seconds=30,
+            transcription_timeout=60,
+            overwrite=False,
+        )
+        with mock.patch.object(office_tools, "_transcribe_audio_chunk", side_effect=lambda path, *_: path.stem):
+            transcript = office_tools.transcribe_audio(audio, self.outputs, arguments)
+        self.assertEqual("segment-0001\n\nsegment-0002\n\nsegment-0003\n", transcript.read_text(encoding="utf-8"))
+
+    def test_qwen_audio_uses_native_json_request(self) -> None:
+        audio = self.inputs / "audio.wav"
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def read(self) -> bytes:
+                return json.dumps({"output": {"text": "会议转写内容"}}).encode("utf-8")
+
+        with mock.patch.object(office_tools.urllib.request, "urlopen", return_value=Response()) as urlopen:
+            text = office_tools._transcribe_audio_chunk(
+                audio,
+                "https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+                "qwen-audio-3.0-asr-flash",
+                "test-key",
+                60,
+            )
+        self.assertEqual("会议转写内容", text)
+        request = urlopen.call_args.args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+        self.assertEqual("qwen-audio-3.0-asr-flash", payload["model"])
+        self.assertTrue(payload["input"]["messages"][0]["content"][0]["input_audio"]["data"].startswith("data:audio/wav;base64,"))
+        self.assertEqual("Bearer test-key", request.get_header("Authorization"))
+
     def _create_fixtures(self) -> None:
         from PIL import Image
         from docx import Document
@@ -174,7 +223,11 @@ class OfficeToolsSmokeTest(unittest.TestCase):
             "会议决定周三完成终稿。张三负责接口联调，截止 9 月 20 日。",
             encoding="utf-8",
         )
-        (self.inputs / "audio.wav").write_bytes(b"RIFF0000WAVE")
+        with wave.open(str(self.inputs / "audio.wav"), "wb") as audio:
+            audio.setnchannels(1)
+            audio.setsampwidth(2)
+            audio.setframerate(16000)
+            audio.writeframes(b"\0\0" * 16000 * 65)
 
 
 if __name__ == "__main__":

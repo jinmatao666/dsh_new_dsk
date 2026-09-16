@@ -1,21 +1,24 @@
 ---
 name: office-meeting-minutes
-description: 会议纪要：将会议语音转为文字，并结合会议材料生成结构化 Markdown 和 Word 会议纪要。 当用户明确提出这类办公文件处理请求时使用。
+description: 会议纪要：将常见音频转换、分段转写，并结合会议材料生成结构化会议纪要。 当用户明确提出这类办公文件处理请求时使用。
 ---
 
 # 会议纪要
 
 ## 当前能力
 
-- 可基于语音、已有转写稿、Word、PDF、Excel、Markdown、TXT、CSV、JSON 材料生成会议纪要。
-- 默认服务为 `http://ac.zjugis.com:20330/v1`：`Qwen3-ASR-1.7B` 通过 `/audio/transcriptions` 转写，`qwen3.8-27b-fp8` 通过 `/chat/completions` 生成纪要。
+- 可基于 WAV、M4A、MP3 等语音、已有转写稿和常见办公材料生成会议纪要。
+- 默认服务为 `http://ac.zjugis.com:20330/v1`：`Qwen3-ASR-1.7B` 通过 `/audio/transcriptions` 转写，`qwen3.8-27b-fp8` 通过 `/chat/completions` 生成纪要。技能也支持直接调用百炼 `qwen-audio-3.0-asr-flash` 原生 HTTP 接口，模型名为该系列时自动把分段 WAV 编码为 Base64 JSON。
+- 音频在本地统一转换为 16 kHz、单声道、16 位 PCM WAV，并按默认 120 秒切分后逐段串行转写，最后按原顺序拼接。可用 `--audio-segment-seconds` 或 `WANWEI_AUDIO_SEGMENT_SECONDS` 在 30–180 秒范围内调整。
 
 ## 执行与交互
 
 1. 文字材料：`scripts/invoke.ps1 prepare --materials <文件...> --transcript <可选转写稿> --meeting-title <名称> --output-directory <目录>`。
 2. 音频材料：`scripts/invoke.ps1 prepare --audio <音频> --materials <可选文件...> --meeting-title <名称> --output-directory <目录>`。脚本依次完成转写、内容整理和 Word 渲染。
-3. 默认服务不要求密钥；如网关后来启用鉴权，通过 `WANWEI_MEETING_API_KEY` 提供，不能写入技能包、命令记录或报告。服务地址和两个模型均可通过同名前缀的环境变量覆盖。
-4. 责任人、期限、参会人未在材料中出现时必须写“未明确”。相对时间保留材料原文，不把“今天下班前”“周三开始”等表达转换成材料没有给出的具体日期或钟点。接口失败时保留已产生的材料或转写文件并报告原始原因，不得伪造纪要。
+   - 非标准 WAV 的转换需要本机 `ffmpeg`。脚本会先检查；缺失时只请求一次安装或让用户安装，Windows 可使用 `winget install --id Gyan.FFmpeg -e`，安装完成后原样重试处理命令。
+   - 长音频只允许逐段串行请求转写接口，不并发上传片段。任一片段失败时停止，并指出失败片段序号；不得跳过后继续生成不完整纪要。
+3. 默认服务不要求密钥。使用其他 OpenAI 兼容 ASR 时，通过 `WANWEI_TRANSCRIPTION_URL`、`WANWEI_TRANSCRIPTION_MODEL` 和 `WANWEI_TRANSCRIPTION_API_KEY` 提供转写端点、模型名和令牌。直接使用百炼 `qwen-audio-3.0-asr-flash` 时，URL 必须是百炼原生 `/api/v1/services/aigc/multimodal-generation/generation` 地址，密钥也可通过 `DASHSCOPE_API_KEY` 提供。纪要生成服务继续使用 `WANWEI_MEETING_BASE_URL`、`WANWEI_MEETING_MODEL` 和 `WANWEI_MEETING_API_KEY`。任何密钥都不能写入技能包、命令记录或报告。
+4. 责任人、期限、参会人未在材料中出现时必须写“未明确”。相对时间保留材料原文，不把“今天下班前”“周三开始”等表达转换成材料没有给出的具体日期或钟点。接口失败时报告原始原因和失败片段，不得伪造纪要。
 
 ## 输出样式
 

@@ -44,6 +44,11 @@ export default function SkillBrowseDrawer({ visible, kind, id, skill: skillProp,
   useEffect(() => {
     if (!visible || id == null) return undefined;
     let cancelled = false; setLoading(true); setSkill(null); setOfficialFiles(null); setSelected('SKILL.md');
+    if (skillProp?.mock) {
+      setSkill(skillProp);
+      setLoading(false);
+      return () => { cancelled = true; };
+    }
     if (skillProp?.source === 'official-package') {
       setSkill(skillProp);
       fetchOfficialSkillFiles(skillProp)
@@ -98,13 +103,14 @@ export default function SkillBrowseDrawer({ visible, kind, id, skill: skillProp,
         <div style={{ minWidth: 0 }}>
           <div className='skill-browse-title-row'>
             <span className='skill-browse-title'>{skill.display_name || skill.name}</span>
+            <Tag size='small' color={kind === 'personal' || skill.source === 'personal' ? 'orange' : 'cyan'}>{kind === 'personal' || skill.source === 'personal' ? '个人' : '官方'}</Tag>
             {statusTag}
             {categoryDisplay}
           </div>
           <div className='skill-browse-sub'>{skill.name}{skill.version ? ` · v${skill.version}` : ''}</div>
         </div>
         <div className='skill-browse-stats'>
-          <div><span>上传人</span><strong>{skill.submitter || '-'}</strong></div>
+          <div><span>上传人</span><strong>{skill.submitter || skill.owner || '-'}</strong></div>
           <div><span>上传时间</span><strong>{formatTime(skill.created_at)}</strong></div>
           <div><span>更新时间</span><strong>{formatTime(skill.updated_at)}</strong></div>
           <div><span>下载次数</span><strong>{String(skill.downloads ?? 0)}</strong></div>

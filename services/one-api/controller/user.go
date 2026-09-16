@@ -96,13 +96,6 @@ func SetupLogin(user *model.User, c *gin.Context) {
 		AdminPermissions: user.AdminPermissions,
 	}
 
-	// ✨ 触发登录活动
-	if err := model.TriggerActivities(c.Request.Context(), "login", user.Id); err != nil {
-		logger.SysError(fmt.Sprintf("触发登录活动失败 user=%d: %v", user.Id, err))
-		// 埋点上报
-		// telemetry.track("登录活动异常", map[string]interface{}{"user_id": user.Id, "error": err.Error()})
-	}
-
 	c.JSON(http.StatusOK, gin.H{
 		"message": "",
 		"success": true,
@@ -175,32 +168,20 @@ func Register(c *gin.Context) {
 			return
 		}
 	}
-	affCode := user.AffCode // this code is the inviter's code, not the user's own code
-	inviterId, _ := model.GetUserIdByAffCode(affCode)
 	cleanUser := model.User{
 		Username:    user.Username,
 		Password:    user.Password,
 		DisplayName: user.Username,
-		InviterId:   inviterId,
 	}
 	if config.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
 	}
-	if err := cleanUser.Insert(ctx, inviterId); err != nil {
+	if err := cleanUser.Insert(ctx, 0); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
 		})
 		return
-	}
-
-	// 异步触发注册邀请活动
-	if affCode != "" {
-		go func() {
-			if err := model.TriggerInviteActivities(ctx, "registration", cleanUser.Id, affCode, "", 0); err != nil {
-				logger.SysError(fmt.Sprintf("触发注册邀请活动失败 user=%d: %v", cleanUser.Id, err))
-			}
-		}()
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -235,10 +216,6 @@ func GetAllUsers(c *gin.Context) {
 	}
 
 	// 填充每个用户的运营标签用于后台列表展示;失败不阻断列表返回。
-	if err := model.AttachTagsToUsers(users); err != nil {
-		logger.SysError("填充用户标签失败: " + err.Error())
-	}
-
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -255,10 +232,6 @@ func SearchUsers(c *gin.Context) {
 			"message": "[SearchUsers] " + err.Error(),
 		})
 		return
-	}
-	// 填充每个用户的运营标签用于后台列表展示;失败不阻断列表返回。
-	if err := model.AttachTagsToUsers(users); err != nil {
-		logger.SysError("填充用户标签失败: " + err.Error())
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

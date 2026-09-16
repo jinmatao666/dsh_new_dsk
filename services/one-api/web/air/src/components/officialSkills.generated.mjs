@@ -567,14 +567,15 @@ export const OFFICIAL_SKILLS = [
       "办公",
       "演示"
     ],
-    "summary": "将会议语音转为文字，并结合会议材料生成结构化 Markdown 和 Word 会议纪要。",
-    "description": "将会议语音转为文字，并结合会议材料生成结构化 Markdown 和 Word 会议纪要。 包含可直接运行的本地处理脚本、依赖说明、错误处理和统一中文交付规范。",
+    "summary": "将常见音频转换、分段转写，并结合会议材料生成结构化会议纪要。",
+    "description": "将常见音频转换、分段转写，并结合会议材料生成结构化会议纪要。 包含可直接运行的本地处理脚本、依赖说明、错误处理和统一中文交付规范。",
     "capabilities": [
-      "Qwen3-ASR 语音转写",
+      "Qwen3-ASR 或后台百炼 Qwen-Audio 语音转写",
+      "音频转 WAV 与长录音分段转写",
       "Qwen3.8 结构化会议纪要",
       "Markdown 与 Word 交付"
     ],
-    "version": "1.0.1",
+    "version": "1.0.3",
     "team": "万维Buddy 办公工具",
     "submitter": "root",
     "created_at": "2026-09-14 19:00:00",
@@ -585,14 +586,14 @@ export const OFFICIAL_SKILLS = [
       {
         "name": "materials",
         "type": "files",
-        "required": true,
-        "description": "会议材料或已有转写稿"
+        "required": false,
+        "description": "可选会议材料或已有转写稿"
       },
       {
         "name": "audioPath",
         "type": "file",
         "required": false,
-        "description": "可选语音文件；需先配置转写接口"
+        "description": "可选 WAV、M4A、MP3 等语音文件；长音频自动分段转写"
       },
       {
         "name": "meetingTitle",

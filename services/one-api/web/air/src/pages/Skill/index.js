@@ -4,36 +4,51 @@ import { IconSearch } from '@douyinfe/semi-icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import SkillsTable from '../../components/SkillsTable';
 import SkillCategory from '../SkillCategory';
+import SkillReviewTable from '../../components/SkillReviewTable';
+import { isRoot } from '../../helpers';
 
 const TABS = [
   ['public', '技能库'],
-  ['categories', '分类管理']
+  ['categories', '分类管理'],
+  ['reviews', '技能审核']
 ];
 
 const Skill = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState(location.pathname === '/skill/categories' ? 'categories' : 'public');
+  const canReview = isRoot();
+  const [activeTab, setActiveTab] = useState(location.pathname === '/skill/categories' ? 'categories' : location.pathname === '/skill/reviews' && canReview ? 'reviews' : 'public');
   const [libraryKeyword, setLibraryKeyword] = useState('');
   const [categoryKeyword, setCategoryKeyword] = useState('');
   const libraryRef = useRef(null);
   const categoryRef = useRef(null);
+  const reviewRef = useRef(null);
 
   useEffect(() => {
     setActiveTab((prev) => {
       if (location.pathname === '/skill/categories') {
         return 'categories';
       }
-      return prev === 'categories' ? 'public' : prev;
+      if (location.pathname === '/skill/reviews' && canReview) return 'reviews';
+      return prev === 'categories' || prev === 'reviews' ? 'public' : prev;
     });
-  }, [location.pathname]);
+  }, [location.pathname, canReview]);
 
   const handleTabChange = (key) => {
     setActiveTab(key);
-    navigate(key === 'categories' ? '/skill/categories' : '/skill');
+    navigate(key === 'categories' ? '/skill/categories' : key === 'reviews' ? '/skill/reviews' : '/skill');
   };
 
-  const toolbar =
+  const toolbar = activeTab === 'reviews' ? (
+    <Input
+      className='skill-page-search'
+      prefix={<IconSearch />}
+      placeholder='搜索技能 / 上传人'
+      onChange={value => reviewRef.current?.onKeywordChange(value)}
+      style={{ width: 260 }}
+      showClear
+    />
+  ) :
     activeTab === 'categories' ? (
       <>
         <button type='button' className='preview-button primary' onClick={() => categoryRef.current?.openCreate()}>
@@ -75,12 +90,12 @@ const Skill = () => {
         <div>
           <div className='preview-kicker'>SKILL CENTER</div>
           <h1>技能管理</h1>
-          <p>管理技能库技能和技能分类。</p>
+          <p>管理技能库、技能分类和用户投稿审核。</p>
         </div>
         <div className='skill-page-actions'>{toolbar}</div>
       </div>
       <div className='preview-tabs'>
-        {TABS.map(([key, label]) => (
+        {TABS.filter(([key]) => key !== 'reviews' || canReview).map(([key, label]) => (
           <button
             key={key}
             type='button'
@@ -97,6 +112,7 @@ const Skill = () => {
           <SkillCategory ref={categoryRef} embedded keyword={categoryKeyword} />
         </section>
       )}
+      {activeTab === 'reviews' && <SkillReviewTable ref={reviewRef} />}
     </div>
   );
 };

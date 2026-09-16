@@ -15,9 +15,9 @@
   "capabilities": [
     "Word/PDF/文本差异提取",
     "新增删除内容统计",
-    "Word 报告与可视化 HTML 对比"
+    "可读 HTML 与 Markdown 对比报告"
   ],
-  "version": "1.0.2",
+  "version": "1.0.1",
   "author": "万维Buddy 办公工具",
   "submitter": "root",
   "createdAt": "2026-09-14 19:00:00",

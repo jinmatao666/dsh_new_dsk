@@ -4,31 +4,35 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import difflib
 import hashlib
 import html
 import json
-import mimetypes
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import urllib.error
 import urllib.request
 import uuid
+import wave
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 
-RUNTIME_VERSION = "1.0.1"
+RUNTIME_VERSION = "1.0.3"
 DEFAULT_FONT = "Microsoft YaHei"
 INVALID_FILENAME = re.compile(r'[\\/:*?"<>|]+')
 DEFAULT_MEETING_BASE_URL = "http://ac.zjugis.com:20330/v1"
 DEFAULT_MEETING_MODEL = "qwen3.8-27b-fp8"
 DEFAULT_TRANSCRIPTION_MODEL = "Qwen3-ASR-1.7B"
+DEFAULT_AUDIO_SEGMENT_SECONDS = 120
 
 
 class UserError(RuntimeError):
@@ -886,25 +890,125 @@ def generate_meeting_minutes(materials: str, args: argparse.Namespace) -> str:
     return re.sub(r"\s+([，。；：！？）])", r"\1", content)
 
 
-def transcribe_audio(audio_path: Path, directory: Path, args: argparse.Namespace) -> Path:
-    base_url = (args.base_url or os.getenv("WANWEI_MEETING_BASE_URL", "") or DEFAULT_MEETING_BASE_URL).rstrip("/")
-    endpoint = (args.transcription_url or os.getenv("WANWEI_TRANSCRIPTION_URL", "") or f"{base_url}/audio/transcriptions").strip()
-    model = (args.transcription_model or os.getenv("WANWEI_TRANSCRIPTION_MODEL", "") or DEFAULT_TRANSCRIPTION_MODEL).strip()
-    api_key = (args.transcription_api_key or args.api_key or os.getenv("WANWEI_TRANSCRIPTION_API_KEY", "") or os.getenv("WANWEI_MEETING_API_KEY", "")).strip()
+def _standard_wav(path: Path) -> bool:
+    try:
+        with wave.open(str(path), "rb") as audio:
+            return audio.getnchannels() == 1 and audio.getsampwidth() == 2 and audio.getframerate() == 16000 and audio.getcomptype() == "NONE"
+    except (wave.Error, EOFError):
+        return False
+
+
+def _ffmpeg_path() -> str:
+    configured = os.getenv("WANWEI_FFMPEG_PATH", "").strip()
+    if configured and Path(configured).is_file():
+        return configured
+    discovered = shutil.which("ffmpeg")
+    if discovered:
+        return discovered
+    if os.name == "nt":
+        local = Path(os.getenv("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Packages"
+        matches = sorted(local.glob("Gyan.FFmpeg_*/*/bin/ffmpeg.exe"), reverse=True)
+        if matches:
+            return str(matches[0])
+    raise UserError("当前音频需要先转换为标准 WAV，但未找到 ffmpeg。请安装 FFmpeg 后重试；Windows 可运行：winget install --id Gyan.FFmpeg -e")
+
+
+def _normalize_audio(audio_path: Path, temporary: Path) -> Path:
+    if _standard_wav(audio_path):
+        return audio_path
+    target = temporary / "normalized.wav"
+    completed = subprocess.run(
+        [_ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-y", "-i", str(audio_path), "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(target)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if completed.returncode != 0 or not target.is_file():
+        message = completed.stderr.strip()[-1000:] or f"退出码 {completed.returncode}"
+        raise UserError(f"音频转换为 WAV 失败：{message}")
+    return target
+
+
+def _split_wav(source: Path, temporary: Path, segment_seconds: int) -> list[Path]:
+    with wave.open(str(source), "rb") as audio:
+        frames_per_segment = audio.getframerate() * segment_seconds
+        if audio.getnframes() <= frames_per_segment:
+            return [source]
+        parameters = audio.getparams()
+        chunks: list[Path] = []
+        index = 1
+        while frames := audio.readframes(frames_per_segment):
+            target = temporary / f"segment-{index:04d}.wav"
+            with wave.open(str(target), "wb") as chunk:
+                chunk.setparams(parameters)
+                chunk.writeframes(frames)
+            chunks.append(target)
+            index += 1
+    return chunks
+
+
+def _transcribe_audio_chunk(audio_path: Path, endpoint: str, model: str, api_key: str, timeout: int) -> str:
+    if model.lower().startswith("qwen-audio-3.0-asr-flash"):
+        if not api_key:
+            raise UserError("qwen-audio-3.0-asr-flash 需要 WANWEI_TRANSCRIPTION_API_KEY 或 DASHSCOPE_API_KEY")
+        payload = {
+            "model": model,
+            "input": {
+                "messages": [{
+                    "role": "user",
+                    "content": [{
+                        "type": "input_audio",
+                        "input_audio": {
+                            "data": "data:audio/wav;base64," + base64.b64encode(audio_path.read_bytes()).decode("ascii"),
+                        },
+                    }],
+                }],
+            },
+            "parameters": {"format": "wav", "sample_rate": "16000"},
+        }
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "X-DashScope-SSE": "disable",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                decoded = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")[:1000]
+            raise UserError(f"百炼语音转写接口返回 HTTP {exc.code}：{body}") from exc
+        except urllib.error.URLError as exc:
+            raise UserError(f"无法访问百炼语音转写接口：{exc.reason}") from exc
+        except json.JSONDecodeError as exc:
+            raise UserError("百炼语音转写接口返回了无效 JSON") from exc
+        if decoded.get("code"):
+            raise UserError(f"百炼语音转写失败：{decoded.get('code')}：{decoded.get('message', '')}")
+        output = decoded.get("output", {})
+        text = output.get("text") or output.get("sentence", {}).get("text")
+        if not text:
+            raise UserError("百炼语音转写接口未返回 output.text")
+        return str(text).strip()
+
     boundary = f"----WanweiBoundary{uuid.uuid4().hex}"
-    mime = mimetypes.guess_type(audio_path.name)[0] or "application/octet-stream"
     parts = []
 
     def field(name: str, value: str) -> None:
         parts.extend([f"--{boundary}\r\n".encode(), f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(), value.encode("utf-8"), b"\r\n"])
 
     field("model", model)
-    parts.extend([f"--{boundary}\r\n".encode(), f'Content-Disposition: form-data; name="file"; filename="{audio_path.name}"\r\n'.encode("utf-8"), f"Content-Type: {mime}\r\n\r\n".encode(), audio_path.read_bytes(), b"\r\n", f"--{boundary}--\r\n".encode()])
+    parts.extend([f"--{boundary}\r\n".encode(), f'Content-Disposition: form-data; name="file"; filename="{audio_path.name}"\r\n'.encode("utf-8"), b"Content-Type: audio/wav\r\n\r\n", audio_path.read_bytes(), b"\r\n", f"--{boundary}--\r\n".encode()])
     request = urllib.request.Request(endpoint, data=b"".join(parts), method="POST", headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
     if api_key:
         request.add_header("Authorization", f"Bearer {api_key}")
     try:
-        with urllib.request.urlopen(request, timeout=args.transcription_timeout) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")[:1000]
@@ -918,8 +1022,32 @@ def transcribe_audio(audio_path: Path, directory: Path, args: argparse.Namespace
         text = payload.strip()
     if not text:
         raise UserError("语音转写接口未返回 text 字段")
+    return str(text).strip()
+
+
+def transcribe_audio(audio_path: Path, directory: Path, args: argparse.Namespace) -> Path:
+    base_url = (args.base_url or os.getenv("WANWEI_MEETING_BASE_URL", "") or DEFAULT_MEETING_BASE_URL).rstrip("/")
+    endpoint = (args.transcription_url or os.getenv("WANWEI_TRANSCRIPTION_URL", "") or f"{base_url}/audio/transcriptions").strip()
+    model = (args.transcription_model or os.getenv("WANWEI_TRANSCRIPTION_MODEL", "") or DEFAULT_TRANSCRIPTION_MODEL).strip()
+    api_key = (args.transcription_api_key or args.api_key or os.getenv("WANWEI_TRANSCRIPTION_API_KEY", "") or os.getenv("DASHSCOPE_API_KEY", "") or os.getenv("WANWEI_MEETING_API_KEY", "")).strip()
+    try:
+        configured_seconds = args.audio_segment_seconds or int(os.getenv("WANWEI_AUDIO_SEGMENT_SECONDS", DEFAULT_AUDIO_SEGMENT_SECONDS))
+    except ValueError as exc:
+        raise UserError("WANWEI_AUDIO_SEGMENT_SECONDS 必须是整数") from exc
+    if not 30 <= configured_seconds <= 180:
+        raise UserError("音频分段时长必须在 30–180 秒之间")
+    with tempfile.TemporaryDirectory(prefix=".meeting-audio-", dir=directory) as temporary_name:
+        temporary = Path(temporary_name)
+        normalized = _normalize_audio(audio_path, temporary)
+        chunks = _split_wav(normalized, temporary, configured_seconds)
+        transcripts = []
+        for index, chunk in enumerate(chunks, start=1):
+            try:
+                transcripts.append(_transcribe_audio_chunk(chunk, endpoint, model, api_key, args.transcription_timeout))
+            except UserError as exc:
+                raise UserError(f"语音第 {index}/{len(chunks)} 段转写失败：{exc}") from exc
     target = unique_path(directory, f"{audio_path.stem}_转写.txt", args.overwrite)
-    target.write_text(str(text).strip() + "\n", encoding="utf-8")
+    target.write_text("\n\n".join(transcripts).strip() + "\n", encoding="utf-8")
     return target
 
 
@@ -1027,6 +1155,7 @@ def build_parser() -> argparse.ArgumentParser:
     meeting.add_argument("--transcription-model", default="")
     meeting.add_argument("--transcription-api-key", default="")
     meeting.add_argument("--transcription-timeout", type=int, default=600)
+    meeting.add_argument("--audio-segment-seconds", type=int, default=0)
     meeting.add_argument("--synthesis-timeout", type=int, default=600)
     meeting.add_argument("--skip-synthesis", action="store_true", help=argparse.SUPPRESS)
     add_common(meeting)

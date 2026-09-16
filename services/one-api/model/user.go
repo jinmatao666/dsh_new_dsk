@@ -325,16 +325,6 @@ func (user *User) Insert(ctx context.Context, inviterId int) error {
 		user.Username, user.Email, user.Phone, user.PhoneVerified = pendingUsername, pendingEmail, pendingPhone, pendingPhoneVerified
 		user.WeChatId, user.GitHubId, user.LarkId, user.OidcId = pendingWeChat, pendingGitHub, pendingLark, pendingOidc
 	}
-	// 注册赠送积分已统一改由「活动配置」(trigger_type=register)发放,见下方 TriggerActivities。
-	// 原 QuotaForNewUser option 已下线。
-
-	// ✨ 触发注册活动
-	if err := TriggerActivities(ctx, "register", user.Id); err != nil {
-		logger.SysError(fmt.Sprintf("触发注册活动失败 user=%d: %v", user.Id, err))
-		// 埋点上报
-		// telemetry.track("注册活动异常", map[string]interface{}{"user_id": user.Id, "error": err.Error()})
-	}
-
 	if freeQuota := GetTrialFreeQuota(); freeQuota > 0 {
 		// 首月免费额度走 monthly_free 账本笔(带 30 天过期),与每月免费 cron 完全一致:
 		// 既插入 user_timed_quota 行(供扣费/过期/对账),又同步累加 subscription_quota。
@@ -482,18 +472,12 @@ func (user *User) HardDelete() error {
 		// 逐表删除：每条 Where 都新建查询，避免链式条件累积。
 		for _, m := range []interface{}{
 			&Token{}, &Redemption{}, &Subscription{}, &Order{}, &UserTimedQuota{},
-			&UserCoupon{}, &Invoice{}, &RechargeRecord{}, &ActivityParticipation{},
-			&UserTagRelation{}, &ClientEvent{}, &AccountTypeChange{},
-			&OrgMember{}, &OrgMemberLimit{}, &CustomDashboardChart{}, &OperationDashboard{},
+			&Invoice{}, &RechargeRecord{}, &ClientEvent{}, &AccountTypeChange{},
+			&OrgMember{}, &OrgMemberLimit{}, &CustomDashboardChart{},
 		} {
 			if err := tx.Where("user_id = ?", uid).Delete(m).Error; err != nil {
 				return err
 			}
-		}
-		// 邀请记录：该用户既可能是邀请人也可能是被邀请人，两个键都要清。
-		if err := tx.Where("inviter_id = ? OR invitee_id = ?", uid, uid).
-			Delete(&InviteRecord{}).Error; err != nil {
-			return err
 		}
 		// 最后物理删除 users 本行（注意：User 无软删字段，这是真正的 DELETE）。
 		if err := tx.Where("id = ?", uid).Delete(&User{}).Error; err != nil {

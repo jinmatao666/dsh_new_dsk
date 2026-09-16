@@ -9,13 +9,25 @@ import './SkillsTable.css';
 
 const STATUS_LABELS = { 1: '已上架', 0: '已下架' };
 const STATUS_COLORS = { 1: 'green', 0: 'grey' };
-const DEFAULT_SKILL_ICONS = [
+const LEGACY_SKILL_ICONS = [
   { value: 'glyph:map', label: '地图', Icon: Map },
   { value: 'glyph:document', label: '文档', Icon: FileText },
   { value: 'glyph:chart', label: '图表', Icon: ChartColumn },
   { value: 'glyph:compass', label: '指南', Icon: Compass },
   { value: 'glyph:bot', label: '智能体', Icon: Bot },
   { value: 'glyph:lightning', label: '效率', Icon: Zap }
+];
+const DEFAULT_SKILL_ICONS = [
+  { value: 'preset:checklist', label: '文档整理', src: '/skill-icons/checklist.png' },
+  { value: 'preset:batch-documents', label: '批量文档', src: '/skill-icons/batch-documents.png' },
+  { value: 'preset:assistant', label: '智能助手', src: '/skill-icons/assistant.png' },
+  { value: 'preset:document-settings', label: '文档配置', src: '/skill-icons/document-settings.png' },
+  { value: 'preset:workflow', label: '工作流程', src: '/skill-icons/workflow.png' },
+  { value: 'preset:analytics', label: '数据分析', src: '/skill-icons/analytics.png' },
+  { value: 'preset:conversation', label: '沟通协作', src: '/skill-icons/conversation.png' },
+  { value: 'preset:integration', label: '工具集成', src: '/skill-icons/integration.png' },
+  { value: 'preset:cloud-upload', label: '云端上传', src: '/skill-icons/cloud-upload.png' },
+  { value: 'preset:toolbox', label: '工具箱', src: '/skill-icons/toolbox.png' }
 ];
 
 const splitLines = text => String(text || '').split('\n').map(line => line.trim()).filter(Boolean);
@@ -39,10 +51,11 @@ const compactTime = value => {
   return { display, full };
 };
 const SkillIcon = ({ icon, small = false }) => {
-  const preset = DEFAULT_SKILL_ICONS.find(item => item.value === icon) || DEFAULT_SKILL_ICONS[4];
-  const Icon = preset.Icon;
-  return <span className={`skill-identity-icon${small ? ' small' : ''}`} title={preset.label}>
-    {String(icon || '').startsWith('data:image/') ? <img src={icon} alt='' /> : <Icon aria-hidden size={small ? 16 : 24} strokeWidth={1.8} />}
+  const preset = DEFAULT_SKILL_ICONS.find(item => item.value === icon);
+  const legacy = LEGACY_SKILL_ICONS.find(item => item.value === icon) || LEGACY_SKILL_ICONS[4];
+  const Icon = legacy.Icon;
+  return <span className={`skill-identity-icon${small ? ' small' : ''}`} title={preset?.label || legacy.label}>
+    {String(icon || '').startsWith('data:image/') ? <img src={icon} alt='' /> : preset ? <img src={preset.src} alt='' /> : <Icon aria-hidden size={small ? 16 : 24} strokeWidth={1.8} />}
   </span>;
 };
 const previewableFile = path => /\.(?:md|txt|json|ya?ml|toml|js|jsx|ts|tsx|py|go|rs|sh|ps1|bat|cmd|css|html?|xml|sql|csv|tsv)$/i.test(path || '');
@@ -82,24 +95,7 @@ const EMPTY_FORM = {
   description: '',
   capabilities: '通用能力',
   body: '',
-  icon: 'glyph:bot'
-};
-
-const useSkillMockData = process.env.NODE_ENV === 'development'
-  && process.env.REACT_APP_USE_SKILL_MOCK_DATA === 'true';
-
-const loadMockSkillData = () => {
-  const { MOCK_SKILL_CATEGORIES, MARKETPLACE_MOCK_SKILLS } = require('./skillMarketplaceMock');
-  return {
-    skills: MARKETPLACE_MOCK_SKILLS.map((skill, index) => ({
-      ...skill,
-      id: skill.id || index + 1,
-      status: skill.status === 'published' ? 1 : 0,
-      created_at: Math.floor(new Date(skill.created_at).getTime() / 1000),
-      unpublished_release_count: 0
-    })),
-    categories: MOCK_SKILL_CATEGORIES.map((name, index) => ({ id: index + 1, name }))
-  };
+  icon: 'preset:assistant'
 };
 
 const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
@@ -120,12 +116,6 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   const iconInputRef = useRef(null);
   const [releases, setReleases] = useState({ skill: null, items: [], files: [], selectedFilePath: '' });
   const loadSkills = useCallback(async () => {
-    if (useSkillMockData) {
-      const { skills, categories } = loadMockSkillData();
-      setItems(skills);
-      setManagedCategories(categories);
-      return;
-    }
     try {
       const response = await API.get('/api/skill/admin/list', { params: { page: 1, perPage: 100 } });
       setItems(Array.isArray(response.data?.items) ? response.data.items : []);
@@ -155,7 +145,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     setForm(skill ? {
       name: skill.name || '',
       display_name: skill.display_name || '',
-      icon: skill.icon || 'glyph:bot',
+      icon: skill.icon || 'preset:assistant',
       category: skill.category || '',
       version: skill.version || '1.0.0',
       status: String(skill.status ?? 0),
@@ -226,7 +216,6 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     }
   };
   const openReleases = async skill => {
-    if (useSkillMockData) { showError('演示数据仅用于本地预览，不能查看或修改版本'); return; }
     try { const response = await API.get(`/api/skill/${skill.id}/releases`); setReleases({ skill, items: response.data?.data || [], files: [], selectedFilePath: '' }); }
     catch (error) { showError(error.response?.data?.message || error.message || '加载版本失败'); }
   };
@@ -270,11 +259,9 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   }, [items, keyword]);
 
   const removeSkill = skill => {
-    if (useSkillMockData) { showError('演示数据仅用于本地预览，不能删除'); return; }
     Modal.confirm({ title: `删除技能「${skill.display_name || skill.name}」？`, content: '删除后将不再出现在桌面技能市场。', okType: 'danger', onOk: async () => { await API.delete(`/api/skill/${skill.id}`); await loadSkills(); showSuccess('技能已删除'); } });
   };
   const togglePublish = async skill => {
-    if (useSkillMockData) { showError('演示数据仅用于本地预览，不能修改上架状态'); return; }
     try {
       if (skill.status !== 1) {
         const response = await API.get(`/api/skill/${skill.id}/releases`);
@@ -297,7 +284,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     {
       title: '技能', width: 215, render: (_, record) => (
         <div className='skill-name'>
-          <div className='skill-name-title'><SkillIcon icon={record.icon} small /><Tooltip content={record.display_name || record.name}><span className='skill-name-main'>{record.display_name}</span></Tooltip></div>
+          <div className='skill-name-title'><SkillIcon icon={record.icon} small /><Tooltip content={record.display_name || record.name}><span className='skill-name-main'>{record.display_name}</span></Tooltip><Tag color={record.source === 'personal' ? 'orange' : 'cyan'} size='small'>{record.source === 'personal' ? '个人' : '官方'}</Tag></div>
           <Tooltip content={`${record.name || '-'} · ${record.team || '-'}`}><span className='skill-name-sub'>{record.name} · {record.team || '-'}</span></Tooltip>
         </div>
       )
@@ -344,7 +331,6 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
 
   const saveSkill = async (e) => {
     e.preventDefault();
-    if (useSkillMockData) { showError('演示数据仅用于本地预览，不能保存修改'); return; }
     const name = form.name.trim();
     const displayName = form.display_name.trim();
     if (!name) { showError('请输入技能标识'); return; }
@@ -517,11 +503,11 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
                 <div className='skill-icon-options'>
                   <span className='skill-icon-picker-label'>选择通用图标</span>
                   <div className='skill-icon-presets'>
-                    {DEFAULT_SKILL_ICONS.map(item => <button key={item.value} type='button' className={form.icon === item.value ? 'active' : ''} onClick={() => setForm(prev => ({ ...prev, icon: item.value }))} title={item.label} aria-label={item.label}><item.Icon aria-hidden size={18} strokeWidth={1.8} /></button>)}
+                    {DEFAULT_SKILL_ICONS.map(item => <button key={item.value} type='button' className={form.icon === item.value ? 'active' : ''} onClick={() => setForm(prev => ({ ...prev, icon: item.value }))} title={item.label} aria-label={item.label}><img src={item.src} alt='' /></button>)}
                   </div>
                   <div className='form-inline-actions'>
                     <button type='button' className='preview-button' onClick={() => iconInputRef.current?.click()}>上传自定义图标</button>
-                    {String(form.icon || '').startsWith('data:image/') && <button type='button' className='skill-text-action' onClick={() => setForm(prev => ({ ...prev, icon: 'glyph:bot' }))}>恢复默认</button>}
+                    {String(form.icon || '').startsWith('data:image/') && <button type='button' className='skill-text-action' onClick={() => setForm(prev => ({ ...prev, icon: 'preset:assistant' }))}>恢复默认</button>}
                   </div>
                   <small className='preview-muted'>可以使用默认图标，也可以上传不超过 2 MB 的 PNG、JPEG、WebP 或 GIF；图片会自动生成适合桌面端显示的清晰缩略图。</small>
                 </div>

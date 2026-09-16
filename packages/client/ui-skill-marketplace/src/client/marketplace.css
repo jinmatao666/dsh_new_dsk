@@ -641,10 +641,18 @@
 .dsh-skill-add-directory:hover { border-color: var(--dsw-alias-primary, #2563eb); color: var(--dsw-alias-primary, #2563eb); }
 .dsh-skill-add-directory:disabled { cursor: not-allowed; opacity: .5; }
 .dsh-skill-add-selected { overflow: hidden; color: var(--dsw-alias-label-secondary); font-size: 12px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
-.dsh-skill-add-icon-options { display: flex; gap: 8px; }
+.dsh-skill-add-icon-options { display: flex; flex-wrap: wrap; gap: 8px; }
 .dsh-skill-add-icon-options button { display: grid; width: 38px; height: 38px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; place-items: center; background: var(--dsw-alias-bg-elevated); color: #54729d; cursor: pointer; }
 .dsh-skill-add-icon-options button:hover, .dsh-skill-add-icon-options button.active { border-color: var(--dsw-alias-primary, #2563eb); background: rgb(37 99 235 / 8%); color: var(--dsw-alias-primary, #2563eb); }
+.dsh-skill-preset-icon { display: block; width: 100%; height: 100%; object-fit: contain; }
 .dsh-skill-add-icon-hint { color: var(--dsw-alias-label-secondary); font-size: 12px; font-weight: 400; }
+.dsh-skill-add-visibility { margin: 14px 0; padding: 0; border: 0; }
+.dsh-skill-add-visibility legend { margin-bottom: 8px; color: #49617f; font-size: 13px; font-weight: 600; }
+.dsh-skill-add-visibility > div { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.dsh-skill-add-visibility button { display: flex; flex-direction: column; gap: 3px; padding: 11px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: var(--dsw-alias-bg-elevated); color: var(--dsw-alias-label-primary); cursor: pointer; text-align: left; transition: border-color .2s ease, background .2s ease, box-shadow .2s ease; }
+.dsh-skill-add-visibility button.active { border-color: var(--dsw-alias-primary, #2563eb); background: rgb(37 99 235 / 7%); box-shadow: 0 0 0 3px rgb(37 99 235 / 8%); }
+.dsh-skill-add-visibility button strong { font-size: 13px; }
+.dsh-skill-add-visibility button span { color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 400; }
 .dsh-skill-add-hint { display: block; margin-top: -4px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.55; }
 .dsh-skill-add-dialog footer { display: flex; justify-content: end; gap: 10px; margin-top: 20px; }
 .dsh-skill-add-dialog footer button { border: 0; border-radius: 9px; background: var(--dsw-alias-bg-elevated); color: var(--dsw-alias-label-secondary); cursor: pointer; padding: 9px 14px; transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease; }
@@ -656,6 +664,13 @@
 .dsh-skill-install-message { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; padding: 11px 13px; border-radius: 10px; background: #ecfdf3; color: #166534; font-size: 13px; }
 .dsh-skill-install-message.error { background: #fff1f2; color: #be123c; }
 .dsh-skill-install-message button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 18px; }
+.dsh-skill-source { display: inline-flex; align-items: center; width: fit-content; padding: 2px 7px; border-radius: 999px; background: #eef3f9; color: #60758f; font-size: 11px; font-weight: 600; line-height: 18px; }
+.dsh-skill-source.personal { background: #fff5e6; color: #a86612; }
+.dsh-skill-review-status { display: inline-flex; width: fit-content; padding: 2px 7px; border-radius: 999px; background: #eef3f9; color: #60758f; font-size: 11px; font-weight: 600; line-height: 18px; }
+.dsh-skill-review-status.pending { background: #fff7e6; color: #b26a00; }
+.dsh-skill-review-status.approved { background: #eaf8ef; color: #168052; }
+.dsh-skill-review-status.rejected { background: #fff0f1; color: #c83c4d; }
+.dsh-skill-review-notice { margin: -12px 0 22px 82px; padding: 10px 12px; border: 1px solid #ffd6dc; border-radius: 10px; background: #fff7f8; color: #a93a4a; font-size: 13px; line-height: 1.55; }
 
 .dsh-skill-sub-tabs button {
   border: 0;

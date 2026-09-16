@@ -16,12 +16,11 @@ description: PDF 合并拆分：将多个 PDF 按指定顺序合并，或按页�
 2. 合并：`scripts/invoke.ps1 merge --inputs <PDF...> --output-directory <目录>`。
 3. 范围拆分：`scripts/invoke.ps1 split --input <PDF> --ranges "1-3,5" --output-directory <目录>`。逐页拆分追加 `--separate-pages`。
 4. 输入页码越界、倒序或重复时停止并说明问题，不擅自修正。
-5. 脚本已经生成完整处理报告；不要在完成后用临时 PowerShell 命令改写报告，也不要为润色报告额外执行脚本。
 
 ## 交付
 
-- 合并结果：把合并后的 PDF 作为产物，在对话中说明输入顺序和总页数。
-- 拆分结果：把拆分后的 PDF 作为产物，在对话中说明各文件对应的页码范围和页数。
+- 合并结果：PDF、输入顺序、总页数和处理报告。
+- 拆分结果：每个 PDF 对应的页码范围、页数和处理报告。
 - 输出名称可读且不覆盖已有文件；仅把最终 PDF 作为主要交付文件。
 ## 运行依赖
 

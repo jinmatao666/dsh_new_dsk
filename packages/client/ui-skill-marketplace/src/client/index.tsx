@@ -4,6 +4,9 @@ import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connec
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+import { buildMarketplaceCatalog } from './catalog.ts'
+import { marketplaceInstallAction } from './install-action.ts'
+import type { MarketplaceInstallState } from './install-action.ts'
 import './marketplace.css'
 
 type SkillParam = { name: string; type: string; required: boolean; description: string; defaultValue?: string }
@@ -24,9 +27,11 @@ type Skill = {
   slug?: string
   installable?: boolean
   remoteId?: number
+  source?: 'official' | 'personal'
+  reviewStatus?: 'none' | 'pending' | 'approved' | 'rejected'
+  reviewReason?: string
 }
 
-type MarketplaceInstallState = 'notInstalled' | 'installed' | 'updateAvailable' | 'conflict'
 type MarketplaceSkillState = {
   id: string
   slug: string
@@ -96,18 +101,37 @@ type RemoteSkill = {
   version?: unknown
   submitter?: unknown
   tags?: unknown
+  source?: unknown
 }
 type RemoteSkillBundle = { assets?: unknown; sha256?: unknown }
+type RemotePersonalSkill = {
+  name?: unknown
+  review_status?: unknown
+  review_reason?: unknown
+}
+
+function parseReviewStatus(value: unknown): NonNullable<Skill['reviewStatus']> | undefined {
+  if (value === 'none' || value === 'pending' || value === 'approved' || value === 'rejected') return value
+  return undefined
+}
 
 let loadRemoteSkills: (() => Promise<RemoteSkill[]>) | undefined
 let loadRemoteSkillBundle: ((id: number) => Promise<unknown>) | undefined
 let recordRemoteSkillInstall: ((id: number) => Promise<unknown>) | undefined
+let submitPersonalSkill: ((payload: unknown) => Promise<unknown>) | undefined
+let loadPersonalSkills: (() => Promise<RemotePersonalSkill[]>) | undefined
 
 function rpcValue(result: RpcResult<unknown>): unknown {
   if (!result.ok) throw new Error(result.error.message)
   return result.value
 }
-type CustomSkillState = { slug: string; name: string; description: string }
+type CustomSkillState = {
+  slug: string
+  name: string
+  description: string
+  body?: string
+  files?: Array<{ path: string; contentBase64: string }>
+}
 
 function skillSlug(skill: Skill): string {
   if (skill.slug !== undefined) return skill.slug
@@ -204,36 +228,6 @@ const CATEGORIES = [
   '研究咨询',
   '办公文档',
   '数据分析',
-]
-
-
-const MOCK_SKILLS: readonly Skill[] = [
-  { id: 'land-evaluation', name: '土地评估报告', category: '空间制图', tags: ['推荐'], summary: '写土地评估报告，基于宗地数据与基准地价生成规范化评估文书。', description: '面向土地估价场景的报告生成技能，覆盖估价方法选择（市场比较法、收益还原法、剩余法等）、参数取值说明、结果校验与报告排版，输出符合行业规范的土地评估报告。', installs: '53', accent: '#2563eb', icon: '地', version: '1.0.0', author: '规划测绘院', featured: true, params: [{ name: 'benchmarkPrice', type: 'number', required: false, description: '所在区域基准地价（元/平方米），缺省时按最新公示地价取值' }] },
-  { id: 'arcgis-plugin', name: 'ArcGIS插件创建', category: '空间制图', tags: ['推荐', 'SkillHub', '套件'], summary: '当用户要求创建、修改或打包 ArcGIS/ArcMap .esriAddIn 插件时使用。', description: '指导创建、修改或打包 ArcGIS/ArcMap .esriAddIn 插件与工具条，例如“帮我做一个 ArcGIS 插件/小工具”。覆盖工程结构、AddIn 配置、工具类编写与本地安装验证。', installs: '284', accent: '#0ea5e9', icon: 'A', version: '1.2.0', author: 'GIS 工具链', featured: true, params: [{ name: 'arcgisVersion', type: 'string', required: true, description: '目标 ArcGIS Desktop 版本', defaultValue: '10.8' }] },
-  { id: 'gov-doc', name: '公文写作助手', category: '办公文档', tags: ['推荐'], summary: '中国党政机关公文写作知识库，覆盖通知、请示、报告、纪要等文种。', description: '当用户不知道该选哪种文种（通知/请示/报告/函/意见/决定/批复/公告/通报）、询问公文格式或需要起草公文时使用，提供文种选择、版式规范与范文参考。', installs: '262', accent: '#e60012', icon: '公', version: '2.0.0', author: '办公助手', featured: true },
-  { id: 'residential-judicial', name: '房地产住宅司法计算', category: '数据分析', tags: ['推荐'], summary: '用于房地产估价机构开展住宅类涉房地产司法评估时的计算与取证。', description: '面向司法评估场景的住宅价值计算工具，覆盖法院委托、权属登记、现场查勘、买卖与租赁案例及可检核等流程，输出可追溯的计算过程。', installs: '122', accent: '#8b5cf6', icon: '司', version: '1.1.0', author: '估价计算组' },
-  { id: 'residential-mortgage', name: '房地产住宅抵押计算', category: '数据分析', tags: ['SkillHub'], summary: '用于住宅房地产抵押估价，独立读取当前项目的权属、查勘与案例数据。', description: '读取抵押估价项目的权属、查勘、买卖案例、租赁与参数资料，取得可核验参数，完成抵押价值计算并生成过程表。', installs: '110', accent: '#8b5cf6', icon: '押', version: '1.0.2', author: '估价计算组' },
-  { id: 'gis-merge', name: 'GIS图层合并', category: '空间制图', tags: ['推荐'], summary: '从一个或多个文件夹中找到所有 .gdb，并将指定图层合并为一个或多个图层。', description: '当用户要求批量合并空间数据时使用：扫描目录下的 .gdb 文件，按图层名归并要素类，处理坐标系差异与字段映射，输出合并结果。', installs: '280', accent: '#06b6d4', icon: '合', version: '1.3.0', author: 'GIS 工具链', featured: true },
-  { id: 'gis-export', name: 'GIS制图导出', category: '空间制图', tags: ['SkillHub', '套件'], summary: '将 .mpk 或 .mxd 数据制图并导出为 PNG 规划图纸。', description: '当用户需要将工程包或地图文档批量出图时使用，仅适用于 Windows + ArcGIS Desktop 10.x 环境，支持图框整饰、比例尺与图例自动配置。', installs: '277', accent: '#06b6d4', icon: '出', version: '1.2.1', author: 'GIS 工具链' },
-  { id: 'invoice-batch', name: '发票批量汇总', category: '办公文档', tags: ['推荐'], summary: '批量解析 PDF 发票并生成格式化 Excel 汇总表，适用于报销粘贴与台账登记。', description: '批量读取 PDF 发票（增值税专用/普通发票、电子发票等），提取金额、税额、开票日期与购销方信息，生成报销汇总、财务对账等场景的 Excel 台账。', installs: '35', accent: '#f59e0b', icon: '票', version: '1.0.4', author: '财务效率组' },
-  { id: 'data-insight', name: '数据分析洞察家', category: '数据分析', tags: ['推荐'], summary: '从 csv / xlsx / 数据库中识别规律，做分组/相关/趋势分析并生成结构化报告。', description: '数据集分析与洞察提取工具：自动识别字段类型，执行分组统计、相关性分析与趋势检测，输出带图表说明的结构化分析报告。', installs: '36', accent: '#10b981', icon: '数', version: '1.1.0', author: '数据工坊', featured: true },
-  { id: 'data-clean', name: '数据清洗诊断', category: '数据分析', tags: ['SkillHub'], summary: '通用数据清洗与质量诊断工具，覆盖社科、自然科学及工程领域常见质量问题。', description: '对提交的数据文件做缺失值、异常值、重复记录与类型一致性诊断，给出清洗建议并可执行标准化清洗流程。', installs: '36', accent: '#10b981', icon: '洗', version: '1.0.6', author: '数据工坊' },
-  { id: 'qa-table', name: '问卷表格匹配', category: '办公文档', tags: ['SkillHub'], summary: '在两张表之间做模糊文本匹配（可选）回填数据，只需查看匹配结果即可直接使用。', description: '按用户需求在两张工作表间做模糊匹配并回填，支持轻量模式（仅输出匹配对照）与完整模式（直接写回目标表）。', installs: '37', accent: '#3b82f6', icon: '配', version: '1.0.3', author: '办公助手' },
-  { id: 'word-edit', name: 'Word文档编辑', category: '办公文档', tags: ['推荐'], summary: 'Word 文档修订与结构化编辑工作流指导，支持修订追踪与批注工作流。', description: '触发：需要 tracked changes（修订追踪）/批注工作流，或直接编辑 .docx 结构。提供样式、目录、域与修订管理的标准操作路径。', installs: '38', accent: '#2563eb', icon: 'W', version: '1.4.0', author: '办公助手', featured: true },
-  { id: 'ppt-demo', name: 'PPT演示文稿处理', category: '办公文档', tags: ['SkillHub'], summary: 'PPT 演示文稿创建、编辑与分析，支持内容生成、修改与主题/字体分析。', description: '支持 .pptx 文件的内容生成、版式修改、主题与字体分析、OOXML 原生结构操作，适用于汇报材料快速成稿。', installs: '37', accent: '#f97316', icon: 'P', version: '1.2.0', author: '办公助手' },
-  { id: 'excel-table', name: 'Excel表格处理', category: '办公文档', tags: ['推荐'], summary: 'Excel 电子表格创建、编辑与可视化，支持公式、格式、图表与金融模型规范。', description: '触发：用户要求新建/修改 Excel 表格、编写公式、制作图表或搭建预算/测算模型。遵循表格建模规范，输出可审计的电子表格。', installs: '36', accent: '#16a34a', icon: 'E', version: '1.5.0', author: '办公助手', featured: true },
-  { id: 'questionnaire-design', name: '问卷量表设计', category: '研究咨询', tags: ['SkillHub'], summary: '问卷/量表设计工具，覆盖学术研究问卷、临床量表、市场调研与组织行为调查。', description: '提供题项编写、量表选择、信效度建议与排版输出，适用于学术研究、临床与市场调研场景的问卷设计。', installs: '35', accent: '#ec4899', icon: '问', version: '1.0.5', author: '研究咨询所' },
-  { id: 'feasibility', name: '可行性研究报告', category: '研究咨询', tags: ['推荐'], summary: '起草和审查中国政府投资项目可行性研究报告（可研报告）。', description: '当用户要“写可研”、“可行性研究”、“项目立项报告”时使用，按发改部门规范组织章节、投资估算与经济评价内容。', installs: '282', accent: '#6366f1', icon: '可', version: '2.1.0', author: '研究咨询所', featured: true },
-  { id: 'case-compare', name: '规划案例比较分析', category: '研究咨询', tags: ['SkillHub'], summary: '“规划行业案例比较分析”，对多个城市/地区的规划实践进行结构化对比。', description: '覆盖国土空间规划、产业发展、城市更新、乡村建设等主题，输出案例对比矩阵与经验启示。', installs: '258', accent: '#6366f1', icon: '比', version: '1.3.0', author: '研究咨询所' },
-  { id: 'policy-analysis', name: '政策文件解析', category: '研究咨询', tags: ['推荐'], summary: '政府政策文件解析，提取结构化信息和关键要求。', description: '对政策原文做条款拆解，提取适用范围、主管部门、关键指标与时间节点，生成结构化政策要点卡片。', installs: '262', accent: '#ef4444', icon: '策', version: '1.6.0', author: '研究咨询所', featured: true },
-  { id: 'population-forecast', name: '人口规模预测', category: '研究咨询', tags: ['SkillHub'], summary: '规划人口预测，当用户需要预测城市/地区未来人口规模时使用。', description: '支持综合增长率法、劳动力需求法、灰色预测 GM(1,1) 等方法，输出多方案人口规模预测结果与参数说明。', installs: '250', accent: '#0ea5e9', icon: '人', version: '1.1.2', author: '研究咨询所' },
-  { id: 'spatial-econometrics', name: '空间计量经济学', category: '数据分析', tags: ['SkillHub'], summary: '空间计量经济学工具，支持空间权重矩阵构建、Moran I / Geary C 检验。', description: '适用于地理/网络数据的研究分析，提供空间自相关检验、空间滞后与误差模型估计的完整流程。', installs: '36', accent: '#8b5cf6', icon: '空', version: '1.0.1', author: '数据工坊' },
-  { id: 'arcpy-script', name: 'ArcPy脚本生成', category: '空间制图', tags: ['SkillHub'], summary: 'ArcPy 脚本生成，当用户需要编写 ArcGIS/ArcPy 自动化脚本时使用。', description: '生成或调试 GIS 自动化脚本，覆盖要素分析、裁剪、投影转换、批量制图等常见 ArcPy 场景。', installs: '251', accent: '#0ea5e9', icon: 'Py', version: '1.4.0', author: 'GIS 工具链' },
-  { id: 'map-coloring', name: '规划标准配色', category: '空间制图', tags: ['推荐'], summary: '规划标准配色方案，图纸与报告的标准配色，使用国土空间规划用地分类色标。', description: '按《国土空间规划用地用海分类》提供三调标准色标，支持图纸、图例与报告配色的统一输出。', installs: '271', accent: '#22c55e', icon: '色', version: '1.2.0', author: '规划测绘院' },
-  { id: 'contract-draft', name: '规划合同起草', category: '专业写作', tags: ['SkillHub'], summary: '起草规划编制合同（规划编制/咨询/测绘/技术服务），支持“写一份合同”等场景。', description: '按规划行业惯例生成合同草案，覆盖工作范围、成果交付、付款节点与违约责任条款，并提示风险点。', installs: '255', accent: '#f59e0b', icon: '合', version: '1.1.0', author: '专业写作室' },
-  { id: 'research-report', name: '咨询报告生成器', category: '专业写作', tags: ['推荐'], summary: '生成研究、规划、政府服务和项目汇报中的结构化咨询报告。', description: '面向一类完整的项目任务：研究一个行业、分析一项政策、准备一次汇报，输出逻辑清楚、结构完整的咨询报告。', installs: '261', accent: '#6366f1', icon: '报', version: '1.7.0', author: '专业写作室' },
-  { id: 'text-extract', name: '文本结构化提取', category: '专业写作', tags: ['SkillHub'], summary: '从非结构化文本中提取结构化数据的通用工作流，由用户定义字段。', description: '调用 extract_structured_data 工具完成提取，内置字段定义、抽样校验与结果导出流程。', installs: '36', accent: '#3b82f6', icon: '提', version: '1.0.2', author: '专业写作室' },
-  { id: 'template-imitation', name: '模板仿写生成', category: '专业写作', tags: ['SkillHub'], summary: '按用户提供的模板文件和参考资料，仿写生成 Word 格式文档。', description: '触发场景：用户提供“模板”+“参考资料/素材”，要求“按此模板”生成文档；保持模板版式与章节结构，填充新内容。', installs: '36', accent: '#3b82f6', icon: '仿', version: '1.0.0', author: '专业写作室' },
 ]
 
 const EXPERT_TEAMS: readonly ExpertTeam[] = [
@@ -369,15 +363,21 @@ function CategoryGlyph({ category, size = 20 }: { category: string; size?: numbe
 }
 
 const DEFAULT_SKILL_ICONS = [
-  { value: 'glyph:map', label: '地图' },
-  { value: 'glyph:document', label: '文档' },
-  { value: 'glyph:chart', label: '图表' },
-  { value: 'glyph:compass', label: '指南' },
-  { value: 'glyph:bot', label: '智能体' },
-  { value: 'glyph:lightning', label: '效率' },
+  { value: 'preset:checklist', label: '文档整理', src: '/skill-icons/checklist.png' },
+  { value: 'preset:batch-documents', label: '批量文档', src: '/skill-icons/batch-documents.png' },
+  { value: 'preset:assistant', label: '智能助手', src: '/skill-icons/assistant.png' },
+  { value: 'preset:document-settings', label: '文档配置', src: '/skill-icons/document-settings.png' },
+  { value: 'preset:workflow', label: '工作流程', src: '/skill-icons/workflow.png' },
+  { value: 'preset:analytics', label: '数据分析', src: '/skill-icons/analytics.png' },
+  { value: 'preset:conversation', label: '沟通协作', src: '/skill-icons/conversation.png' },
+  { value: 'preset:integration', label: '工具集成', src: '/skill-icons/integration.png' },
+  { value: 'preset:cloud-upload', label: '云端上传', src: '/skill-icons/cloud-upload.png' },
+  { value: 'preset:toolbox', label: '工具箱', src: '/skill-icons/toolbox.png' },
 ] as const
 
 function DefaultSkillIcon({ icon, size = 20 }: { icon: string; size?: number }) {
+  const preset = DEFAULT_SKILL_ICONS.find(item => item.value === icon)
+  if (preset !== undefined) return <img className="dsh-skill-preset-icon" src={preset.src} alt="" width={size} height={size} />
   const shared = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true }
   if (icon === 'glyph:map') return <svg {...shared}><path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2-6-2Z" /><path d="M9 4v14M15 6v14" /></svg>
   if (icon === 'glyph:document') return <svg {...shared}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6M8 13h8M8 17h8" /></svg>
@@ -391,7 +391,7 @@ function SkillVisual({ skill, size = 20 }: { skill: Skill; size?: number }) {
   if (skill.icon.startsWith('data:image/')) {
     return <img className="dsh-skill-custom-icon" src={skill.icon} alt="" />
   }
-  if (skill.icon.startsWith('glyph:')) {
+  if (skill.icon.startsWith('glyph:') || skill.icon.startsWith('preset:')) {
     return <DefaultSkillIcon icon={skill.icon} size={size} />
   }
   return <span className="dsh-skill-text-icon" style={{ fontSize: Math.max(13, size - 2) }}>{skill.icon || '技'}</span>
@@ -488,7 +488,7 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall 
 }) {
   const installed = installState === 'installed' || installState === 'updateAvailable'
   const installLabel = skill.installable !== true
-    ? '演示技能，暂未开放安装'
+    ? '暂未开放安装'
     : installState === 'updateAvailable'
       ? '更新技能'
       : installState === 'conflict'
@@ -507,6 +507,8 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall 
           <h1>{skill.name}</h1>
           <p>{skill.summary}</p>
           <div className="dsh-skill-detail-meta">
+            <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>{skill.source === 'personal' ? '个人' : '官方'}</span>
+            {skill.reviewStatus !== undefined && <span className={`dsh-skill-review-status ${skill.reviewStatus}`}>{skill.reviewStatus === 'pending' ? '审核中' : skill.reviewStatus === 'approved' ? '已公开' : skill.reviewStatus === 'rejected' ? '未通过' : '私人'}</span>}
             <span>{L.version}: {skill.version}</span>
             <span>{L.author}: {skill.author}</span>
             {hasVerifiedInstallCount(skill) && <span>{skill.installs} {L.count}</span>}
@@ -521,6 +523,7 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall 
           {installing ? '处理中…' : installLabel}
         </button>
       </div>
+      {skill.reviewStatus === 'rejected' && skill.reviewReason && <div className="dsh-skill-review-notice">审核意见：{skill.reviewReason}</div>}
       <div className="dsh-skill-detail-body">
         <div className="dsh-skill-detail-section">
           <h3>{L.params}</h3>
@@ -720,9 +723,10 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   })
   const [discoveredCustomSkills, setDiscoveredCustomSkills] = useState<Skill[]>([])
   const [adding, setAdding] = useState(false)
-  const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '办公文档', icon: 'glyph:bot' })
+  const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '办公文档', icon: 'preset:assistant', visibility: 'private' as 'private' | 'public' })
   const [customSkillDirectory, setCustomSkillDirectory] = useState<string | null>(null)
   const [remoteSkills, setRemoteSkills] = useState<RemoteSkill[] | null>(null)
+  const [personalSkills, setPersonalSkills] = useState<RemotePersonalSkill[]>([])
 
   const [installStates, setInstallStates] = useState<Map<string, MarketplaceSkillState>>(new Map())
   useEffect(() => {
@@ -749,13 +753,17 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
           && typeof (item as Partial<CustomSkillState>).name === 'string'
           && typeof (item as Partial<CustomSkillState>).description === 'string')
         : []
-      const knownCustomSkills = new Map(customSkills.map(skill => [skillSlug(skill), skill]))
+      const knownCustomSkills = new Map(customSkills.map(skill => [skillSlug(skill), {
+        ...skill,
+        tags: [...new Set([...skill.tags, '本地', '个人'])],
+        source: 'personal' as const,
+      }]))
       const discovered = customEntries.map((item): Skill => knownCustomSkills.get(item.slug) ?? {
         id: `local-${item.slug}`,
         slug: item.slug,
         name: item.name,
         category: '本地技能',
-        tags: ['本地'],
+        tags: ['本地', '个人'],
         summary: item.description,
         description: item.description,
         installs: '0',
@@ -763,6 +771,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
         icon: '自',
         version: '1.0.0',
         author: '当前用户',
+        source: 'personal',
         installable: true,
       })
       setDiscoveredCustomSkills(discovered)
@@ -783,6 +792,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       if (section === 'skills') {
         void refreshInstallStates()
         if (loadRemoteSkills !== undefined) void loadRemoteSkills().then(setRemoteSkills).catch(() => setRemoteSkills(null))
+        if (loadPersonalSkills !== undefined) void loadPersonalSkills().then(setPersonalSkills).catch(() => setPersonalSkills([]))
       }
       // Only one capability panel may be expanded: opening this section
       // collapses the others, otherwise stacked overlays block each other
@@ -816,32 +826,40 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   }, [open])
 
   const allSkills = useMemo<Skill[]>(() => {
-    // Demonstration cards are a desktop-only presentation fallback. They are
-    // never sent to, listed by, or installed from the management backend.
-    if (remoteSkills === null) return [...discoveredCustomSkills, ...MOCK_SKILLS]
-    const published = remoteSkills.flatMap((remote): Skill[] => {
+    const published = remoteSkills?.flatMap((remote): Skill[] => {
       const slug = typeof remote.name === 'string' ? remote.name : ''
       if (slug === '') return []
       const remoteId = typeof remote.id === 'number' || typeof remote.id === 'string' ? String(remote.id) : slug
+      const source = remote.source === 'personal' ? 'personal' : 'official'
+      const remoteTags = Array.isArray(remote.tags) ? remote.tags.filter((tag): tag is string => typeof tag === 'string') : []
       return [{
         id: `remote-${remoteId}`,
         ...(typeof remote.id === 'number' ? { remoteId: remote.id } : {}),
         slug,
         name: typeof remote.display_name === 'string' && remote.display_name !== '' ? remote.display_name : slug,
         category: typeof remote.category === 'string' && remote.category !== '' ? remote.category : '其他',
-        tags: Array.isArray(remote.tags) ? remote.tags.filter((tag): tag is string => typeof tag === 'string') : ['服务端'],
+        tags: [...new Set([...remoteTags, source === 'personal' ? '个人' : '官方'])],
         summary: typeof remote.description === 'string' ? remote.description : '',
         description: typeof remote.scenario === 'string' && remote.scenario !== '' ? remote.scenario : (typeof remote.description === 'string' ? remote.description : ''),
         installs: String(typeof remote.downloads === 'number' ? remote.downloads : 0),
-        accent: '#2563eb', icon: typeof remote.icon === 'string' && remote.icon.trim() !== '' ? remote.icon : 'glyph:bot', version: typeof remote.version === 'string' ? remote.version : '1.0.0',
+        accent: '#2563eb', icon: typeof remote.icon === 'string' && remote.icon.trim() !== '' ? remote.icon : 'preset:assistant', version: typeof remote.version === 'string' ? remote.version : '1.0.0',
         author: typeof remote.submitter === 'string' ? remote.submitter : '平台管理员',
+        source,
         installable: true,
       }]
+    }) ?? null
+    const reviewBySlug = new Map(personalSkills.flatMap(item => typeof item.name === 'string' ? [[item.name, item] as const] : []))
+    const local = discoveredCustomSkills.map((skill) => {
+      const review = reviewBySlug.get(skillSlug(skill))
+      const reviewStatus = parseReviewStatus(review?.review_status)
+      return {
+        ...skill,
+        ...(reviewStatus === undefined ? {} : { reviewStatus }),
+        ...(typeof review?.review_reason === 'string' && review.review_reason !== '' ? { reviewReason: review.review_reason } : {}),
+      }
     })
-    const remoteSlugs = new Set(published.map(skillSlug))
-    const demonstrations = MOCK_SKILLS.filter(skill => !remoteSlugs.has(skillSlug(skill))).map(skill => ({ ...skill, installable: false, tags: [...skill.tags, '演示'] }))
-    return [...discoveredCustomSkills, ...published, ...demonstrations]
-  }, [discoveredCustomSkills, remoteSkills])
+    return buildMarketplaceCatalog(local, published)
+  }, [discoveredCustomSkills, personalSkills, remoteSkills])
   const resolveInstallState = (skill: Skill): MarketplaceInstallState => {
     const state = installStates.get(skill.id) ?? [...installStates.values()].find(item => item.slug === skillSlug(skill))
     if (state === undefined) return 'notInstalled'
@@ -889,16 +907,16 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   const toggleInstall = async (skill: Skill) => {
     if (installing !== null) return
     if (skill.installable !== true) {
-      setInstallMessage({ kind: 'error', text: '该条目是演示技能，暂未提供可安装的正式技能包。' })
+      setInstallMessage({ kind: 'error', text: '该技能暂未提供可安装的技能包。' })
       return
     }
     const slug = skillSlug(skill)
     const currentState = resolveInstallState(skill)
-    const currentlyInstalled = isInstalled(skill)
+    const action = marketplaceInstallAction(currentState)
     setInstallMessage(null)
     setInstalling(skill.id)
     try {
-      if (skill.tags.includes('本地') && currentlyInstalled) {
+      if (skill.tags.includes('本地') && action === 'uninstall') {
         await desktopInvoke('uninstall_custom_skill', { slug })
         const next = customSkills.filter(item => item.id !== skill.id)
         setCustomSkills(next)
@@ -906,7 +924,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
         localStorage.setItem('dsh.marketplace.custom-skills', JSON.stringify(next))
         setView('list')
         setSelectedSkill(null)
-      } else if (currentlyInstalled) {
+      } else if (action === 'uninstall') {
         await desktopInvoke('uninstall_marketplace_skill', { slug })
       } else {
         const bundle = skill.remoteId !== undefined && loadRemoteSkillBundle !== undefined
@@ -929,11 +947,12 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     } finally {
       setInstalling(null)
     }
-    const nowInstalled = !currentlyInstalled
     await refreshInstallStates()
-    setInstallMessage(nowInstalled
-      ? { kind: 'success', text: currentState === 'updateAvailable' ? '技能已更新，当前会话下一次输入 / 即可使用。' : '技能已安装，当前会话下一次输入 / 即可使用。' }
-      : { kind: 'success', text: '技能已从本机移除。' })
+    setInstallMessage(action === 'update'
+      ? { kind: 'success', text: '技能已更新，当前会话下一次输入 / 即可使用。' }
+      : action === 'install'
+        ? { kind: 'success', text: '技能已安装，当前会话下一次输入 / 即可使用。' }
+        : { kind: 'success', text: '技能已从本机移除。' })
   }
 
   const selectCustomSkillDirectory = async () => {
@@ -964,6 +983,24 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       setInstalling(null)
       return
     }
+    try {
+      if (typeof installed.body !== 'string' || !Array.isArray(installed.files) || submitPersonalSkill === undefined) throw new Error('桌面端暂不支持个人技能上传，请更新后重试。')
+      await submitPersonalSkill({
+        slug: installed.slug,
+        displayName: name,
+        category: newSkill.category,
+        icon: newSkill.icon,
+        description: newSkill.summary.trim() || installed.description,
+        visibility: newSkill.visibility,
+        body: installed.body,
+        files: installed.files,
+      })
+      if (loadPersonalSkills !== undefined) void loadPersonalSkills().then(setPersonalSkills).catch(() => {})
+    } catch (error) {
+      setInstallMessage({ kind: 'error', text: `技能已保存在本机，但上传失败：${marketplaceInstallErrorMessage(error)}` })
+      setInstalling(null)
+      return
+    }
     setInstalling(null)
     const slug = installed.slug
     const id = `local-${slug}`
@@ -972,7 +1009,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       slug,
       name,
       category: newSkill.category,
-      tags: ['本地'],
+      tags: ['本地', '个人'],
       summary: newSkill.summary.trim() || '本地添加的自定义技能。',
       description: newSkill.summary.trim() || '此技能已安装到当前用户技能目录，新建对话后即可被智能体发现。',
       installs: '0',
@@ -980,6 +1017,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       icon: newSkill.icon,
       version: '1.0.0',
       author: '当前用户',
+      source: 'personal',
       installable: true,
     }
     const next = [skill, ...customSkills.filter(item => item.id !== id)]
@@ -988,11 +1026,13 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     localStorage.setItem('dsh.marketplace.custom-skills', JSON.stringify(next))
     setInstallStates(previous => new Map(previous).set(id, { id, slug, version: '1.0.0', installedVersion: '1.0.0', state: 'installed' }))
     setAdding(false)
-    setNewSkill({ name: '', summary: '', category: '办公文档', icon: 'glyph:bot' })
+    setNewSkill({ name: '', summary: '', category: '办公文档', icon: 'preset:assistant', visibility: 'private' })
     setCustomSkillDirectory(null)
     setSelectedSkill(skill)
     setView('detail')
-    setInstallMessage({ kind: 'success', text: '个人技能已安装，新建对话后即可使用。' })
+    setInstallMessage({ kind: 'success', text: newSkill.visibility === 'public'
+      ? '技能已安装并提交审核，审核通过后将进入技能市场。'
+      : '个人技能已保存并安装，仅自己可见。' })
   }
 
   const openDetail = (skill: Skill) => {
@@ -1084,7 +1124,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                           className={isInstalled(skill) ? 'installed' : ''}
                           onClick={(e) => { e.stopPropagation(); void toggleInstall(skill) }}
                           disabled={installing === skill.id || skill.installable !== true || resolveInstallState(skill) === 'conflict'}
-                          title={skill.installable === true ? undefined : '演示技能暂未开放安装'}
+                          title={skill.installable === true ? undefined : '该技能暂未开放安装'}
                         >
                           {resolveInstallState(skill) === 'updateAvailable' ? '更新' : isInstalled(skill) ? <CheckIcon /> : <PlusIcon />}
                         </button>
@@ -1140,6 +1180,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                     <div className="dsh-skill-card-body">
                       <div className="dsh-skill-card-meta">
                         <span className="dsh-skill-card-category" style={{ background: skill.accent + '14', color: skill.accent }}>{skill.category}</span>
+                        <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>{skill.source === 'personal' ? '个人' : '官方'}</span>
+                        {skill.reviewStatus !== undefined && <span className={`dsh-skill-review-status ${skill.reviewStatus}`}>{skill.reviewStatus === 'pending' ? '审核中' : skill.reviewStatus === 'approved' ? '已公开' : skill.reviewStatus === 'rejected' ? '未通过' : '私人'}</span>}
                         {hasVerifiedInstallCount(skill) && <small><DownloadIcon />{skill.installs}</small>}
                       </div>
                       <h2>{skill.name}</h2>
@@ -1186,17 +1228,24 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
               <label>
                 技能图标
                 <span className="dsh-skill-add-icon-options">
-                  {DEFAULT_SKILL_ICONS.map(item => <button key={item.value} type="button" title={item.label} aria-label={item.label} className={newSkill.icon === item.value ? 'active' : ''} onClick={() => { setNewSkill({ ...newSkill, icon: item.value }) }}><DefaultSkillIcon icon={item.value} size={18} /></button>)}
+                  {DEFAULT_SKILL_ICONS.map(item => <button key={item.value} type="button" title={item.label} aria-label={item.label} className={newSkill.icon === item.value ? 'active' : ''} onClick={() => { setNewSkill({ ...newSkill, icon: item.value }) }}><DefaultSkillIcon icon={item.value} size={30} /></button>)}
                 </span>
-                <small className="dsh-skill-add-icon-hint">选择一个通用 SVG 图标，仅用于当前电脑上的个人技能展示。</small>
+                <small className="dsh-skill-add-icon-hint">选择一个通用技能图标，用于个人技能和审核通过后的技能市场展示。</small>
               </label>
+              <fieldset className="dsh-skill-add-visibility">
+                <legend>可见范围</legend>
+                <div>
+                  <button type="button" className={newSkill.visibility === 'private' ? 'active' : ''} onClick={() => { setNewSkill({ ...newSkill, visibility: 'private' }) }}><strong>私人</strong><span>仅自己可见，无需审核</span></button>
+                  <button type="button" className={newSkill.visibility === 'public' ? 'active' : ''} onClick={() => { setNewSkill({ ...newSkill, visibility: 'public' }) }}><strong>公开</strong><span>提交管理员审核</span></button>
+                </div>
+              </fieldset>
               <label>
                 个人技能目录
                 <button type="button" className="dsh-skill-add-directory" onClick={() => { void selectCustomSkillDirectory() }} disabled={installing !== null}>选择技能目录</button>
                 {customSkillDirectory !== null && <small className="dsh-skill-add-selected" title={customSkillDirectory}>已选择：{customSkillDirectory}</small>}
               </label>
-              <small className="dsh-skill-add-hint">请选择包含 SKILL.md 的完整目录。系统会通过桌面端原生目录选择器导入，目录中的脚本、Python 文件、模板、参考资料和其他子目录会完整复制到当前用户的本机技能目录，不会同步到后台。</small>
-              <footer><button type="button" onClick={() => { setAdding(false) }}>取消</button><button type="submit" disabled={newSkill.name.trim() === '' || customSkillDirectory === null || installing !== null}>导入并安装</button></footer>
+              <small className="dsh-skill-add-hint">请选择包含 SKILL.md 的完整目录。文件会安装到本机并安全上传；公开技能审核通过前不会出现在技能市场，更新已公开技能也需要再次审核。</small>
+              <footer><button type="button" onClick={() => { setAdding(false) }}>取消</button><button type="submit" disabled={newSkill.name.trim() === '' || customSkillDirectory === null || installing !== null}>{newSkill.visibility === 'public' ? '提交审核并安装' : '保存并安装'}</button></footer>
             </form>
           </div>
         )}
@@ -1242,6 +1291,11 @@ export function apply(ctx: ClientContext): void {
   }
   loadRemoteSkillBundle = async (id: number) => rpcValue(await connection.rpc.call('/desktop-auth', 'skill-bundle', { id }))
   recordRemoteSkillInstall = async (id: number) => rpcValue(await connection.rpc.call('/desktop-auth', 'skill-download', { id }))
+  submitPersonalSkill = async (payload: unknown) => rpcValue(await connection.rpc.call('/desktop-auth', 'personal-skill-submit', payload))
+  loadPersonalSkills = async () => {
+    const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'personal-skill-list', {})) as { items?: unknown }
+    return Array.isArray(raw.items) ? raw.items as RemotePersonalSkill[] : []
+  }
   const marketplaceUrl = (process.env.DSH_CLIENT_SKILL_MARKETPLACE_URL ?? 'https://skills.zjugis.com/').trim()
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(

@@ -28,6 +28,7 @@ func skillIconDataURL(t *testing.T, width, height int) string {
 
 func TestNormalizeSkillIconRetainsGlyph(t *testing.T) {
 	assert.Equal(t, "glyph:chart", NormalizeSkillIcon(" glyph:chart "))
+	assert.Equal(t, "preset:assistant", NormalizeSkillIcon(" preset:assistant "))
 }
 
 func TestNormalizeSkillIconCompactsRasterWithoutChangingAspectRatio(t *testing.T) {

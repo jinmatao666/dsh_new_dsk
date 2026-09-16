@@ -535,6 +535,33 @@ func releaseIDs(c *gin.Context) (int, int, bool) {
 	return skillID, releaseID, true
 }
 
+func applyPublishedSkillRelease(skill *model.Skill, release model.SkillRelease, metadata importedManifest, tags json.RawMessage, now int64) {
+	skill.PublishedReleaseId = &release.Id
+	skill.Version = release.Version
+	skill.Body = release.Body
+	skill.Content = release.Body
+	skill.Assets = release.Package
+	skill.BodyUpdatedAt = now
+	skill.AssetsUpdatedAt = now
+	skill.Status = 1
+	skill.IsDeleted = false
+	if metadata.DisplayName != "" {
+		skill.DisplayName = metadata.DisplayName
+	}
+	if metadata.Category != "" {
+		skill.Category = metadata.Category
+	}
+	if metadata.Description != "" {
+		skill.Description = metadata.Description
+	}
+	if metadata.Summary != "" {
+		skill.Scenario = metadata.Summary
+	}
+	// The icon is administrator-owned catalogue presentation. Publishing or
+	// rolling back package content must not replace the current selection.
+	skill.Tags = tags
+}
+
 func publishSkillRelease(c *gin.Context, rollback bool) {
 	skillID, releaseID, ok := releaseIDs(c)
 	if !ok {
@@ -579,31 +606,7 @@ func publishSkillRelease(c *gin.Context, rollback bool) {
 		if err := tx.Save(&release).Error; err != nil {
 			return err
 		}
-		skill.PublishedReleaseId = &release.Id
-		skill.Version = release.Version
-		skill.Body = release.Body
-		skill.Content = release.Body
-		skill.Assets = release.Package
-		skill.BodyUpdatedAt = now
-		skill.AssetsUpdatedAt = now
-		skill.Status = 1
-		skill.IsDeleted = false
-		if metadata.DisplayName != "" {
-			skill.DisplayName = metadata.DisplayName
-		}
-		if metadata.Category != "" {
-			skill.Category = metadata.Category
-		}
-		if metadata.Description != "" {
-			skill.Description = metadata.Description
-		}
-		if metadata.Summary != "" {
-			skill.Scenario = metadata.Summary
-		}
-		if metadata.Icon != "" {
-			skill.Icon = metadata.Icon
-		}
-		skill.Tags = tags
+		applyPublishedSkillRelease(&skill, release, metadata, tags, now)
 		return tx.Save(&skill).Error
 	})
 	if err != nil {

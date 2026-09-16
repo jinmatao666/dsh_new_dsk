@@ -22,6 +22,7 @@ type skillResponse struct {
 	Description             string                    `json:"description"`
 	Scenario                string                    `json:"scenario"`
 	Submitter               string                    `json:"submitter"`
+	Source                  string                    `json:"source"`
 	Tags                    any                       `json:"tags"`
 	Downloads               int                       `json:"downloads"`
 	Version                 string                    `json:"version"`
@@ -49,6 +50,7 @@ func skillToResponse(s model.Skill, categories ...[]model.SkillCategoryView) ski
 		Description:     s.Description,
 		Scenario:        s.Scenario,
 		Submitter:       s.Submitter,
+		Source:          s.Source,
 		Tags:            s.Tags,
 		Downloads:       s.Downloads,
 		Version:         s.Version,

@@ -58,23 +58,25 @@ type Skill struct {
 	DisplayName string `json:"display_name" gorm:"size:100;default:''"`
 	// Icon is either a built-in glyph key (glyph:*) or a small raster data URL
 	// selected by the administrator. It is returned with marketplace metadata.
-	Icon            string          `json:"icon" gorm:"type:text"`
-	Category        string          `json:"category" gorm:"size:255;default:''"` // 分类,如 doc-processing / dev-tool
-	Description     string          `json:"description" gorm:"size:500;default:''"`
-	Scenario        string          `json:"scenario" gorm:"size:500;default:''"`
-	Content         string          `json:"content" gorm:"type:text;not null"`
-	Body            string          `json:"body" gorm:"type:text"`
-	Assets          string          `json:"assets" gorm:"type:text"`
-	Submitter       string          `json:"submitter" gorm:"size:100;default:''"`
-	Tags            json.RawMessage `json:"tags" gorm:"type:json"`
-	Downloads       int             `json:"downloads" gorm:"default:0"`
-	Version         string          `json:"version" gorm:"size:50;default:'1.0'"`
-	Status          int             `json:"status" gorm:"default:1"`                       // 历史字段,保留但不再暴露
-	IsDeleted       bool            `json:"is_deleted" gorm:"column:is_deleted;default:0"` // 软删除生命周期
-	CreatedAt       int64           `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt       int64           `json:"updated_at" gorm:"autoUpdateTime"`
-	BodyUpdatedAt   int64           `json:"body_updated_at" gorm:"default:0"`
-	AssetsUpdatedAt int64           `json:"assets_updated_at" gorm:"default:0"`
+	Icon                  string          `json:"icon" gorm:"type:text"`
+	Category              string          `json:"category" gorm:"size:255;default:''"` // 分类,如 doc-processing / dev-tool
+	Description           string          `json:"description" gorm:"size:500;default:''"`
+	Scenario              string          `json:"scenario" gorm:"size:500;default:''"`
+	Content               string          `json:"content" gorm:"type:text;not null"`
+	Body                  string          `json:"body" gorm:"type:text"`
+	Assets                string          `json:"assets" gorm:"type:text"`
+	Submitter             string          `json:"submitter" gorm:"size:100;default:''"`
+	Source                string          `json:"source" gorm:"size:20;not null;default:'official';index"`
+	SourcePersonalSkillId *int            `json:"source_personal_skill_id" gorm:"uniqueIndex"`
+	Tags                  json.RawMessage `json:"tags" gorm:"type:json"`
+	Downloads             int             `json:"downloads" gorm:"default:0"`
+	Version               string          `json:"version" gorm:"size:50;default:'1.0'"`
+	Status                int             `json:"status" gorm:"default:1"`                       // 历史字段,保留但不再暴露
+	IsDeleted             bool            `json:"is_deleted" gorm:"column:is_deleted;default:0"` // 软删除生命周期
+	CreatedAt             int64           `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt             int64           `json:"updated_at" gorm:"autoUpdateTime"`
+	BodyUpdatedAt         int64           `json:"body_updated_at" gorm:"default:0"`
+	AssetsUpdatedAt       int64           `json:"assets_updated_at" gorm:"default:0"`
 	// PublishedReleaseId identifies the immutable package currently exposed to
 	// desktop clients. Body and Assets remain a denormalized runtime cache for
 	// prompt injection and legacy readers.
@@ -82,6 +84,8 @@ type Skill struct {
 }
 
 const (
+	SkillSourceOfficial     = "official"
+	SkillSourcePersonal     = "personal"
 	SkillReleaseDraft       = "draft"
 	SkillReleaseUnpublished = "unpublished"
 	SkillReleasePublished   = "published"
@@ -344,7 +348,7 @@ func buildSkillSearchQuery(keyword string, filter SkillCategoryFilter, includeDi
 	return query
 }
 
-const skillListSelectColumns = "skills.id, skills.name, skills.display_name, skills.icon, skills.category, skills.description, skills.scenario, skills.submitter, skills.tags, skills.downloads, skills.version, skills.status, skills.is_deleted, skills.created_at, skills.updated_at, skills.body_updated_at, skills.assets_updated_at"
+const skillListSelectColumns = "skills.id, skills.name, skills.display_name, skills.icon, skills.category, skills.description, skills.scenario, skills.submitter, skills.source, skills.source_personal_skill_id, skills.tags, skills.downloads, skills.version, skills.status, skills.is_deleted, skills.created_at, skills.updated_at, skills.body_updated_at, skills.assets_updated_at"
 
 func SearchSkillsWithOptions(keyword string, filter SkillCategoryFilter, page, perPage int, includeDisabled bool, deletedFilter SkillDeletedFilter, sortField, sortOrder string) ([]Skill, int64, error) {
 	var skills []Skill

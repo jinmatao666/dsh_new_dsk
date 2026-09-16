@@ -3,7 +3,10 @@ package controller
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"testing"
+
+	"github.com/songquanpeng/one-api/model"
 )
 
 func skillArchiveForTest(t *testing.T, files map[string]string) []byte {
@@ -102,5 +105,27 @@ func TestValidateSkillArchiveRejectsPathEscapeAndAcceptsNameMismatch(t *testing.
 	}
 	if pkg.manifest.Name != "example-skill" {
 		t.Fatalf("unexpected normalized name: %q", pkg.manifest.Name)
+	}
+}
+
+func TestApplyPublishedSkillReleasePreservesAdministratorIcon(t *testing.T) {
+	skill := model.Skill{Icon: "data:image/png;base64,administrator-selected", Status: 0, IsDeleted: true}
+	release := model.SkillRelease{Id: 12, Version: "2.0.0", Body: "updated body", Package: "updated package"}
+	metadata := importedManifest{
+		DisplayName: "Updated skill",
+		Icon:        "glyph:bot",
+		Category:    "通用办公",
+		Description: "Updated description",
+		Summary:     "Updated summary",
+	}
+	tags := json.RawMessage(`["updated"]`)
+
+	applyPublishedSkillRelease(&skill, release, metadata, tags, 123)
+
+	if skill.Icon != "data:image/png;base64,administrator-selected" {
+		t.Fatalf("package publication replaced administrator icon: %q", skill.Icon)
+	}
+	if skill.PublishedReleaseId == nil || *skill.PublishedReleaseId != release.Id || skill.Version != release.Version || skill.Body != release.Body || skill.Assets != release.Package {
+		t.Fatalf("release content was not applied: %#v", skill)
 	}
 }

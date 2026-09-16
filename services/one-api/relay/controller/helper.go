@@ -209,18 +209,6 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 	model.UpdateUserUsedQuotaAndRequestCount(meta.UserId, quota)
 	model.UpdateChannelUsedQuota(meta.ChannelId, quota)
 
-	// 用户产生实际计费调用后触发「首次请求」类活动（含每日签到：活动配 grant_limit=daily
-	// 即每日首次调用发一次；once 则全生命周期首次调用发一次）。发放/去重/预算/资格校验
-	// 全部委托活动系统 TriggerActivities → GrantActivityReward，内含 HasParticipated 幂等。
-	// 仅个人额度路径触发；企业调用不参与。旁路增益，失败仅记日志、不影响计费主流程。
-	if quota > 0 && !meta.UseOrgQuota {
-		go func() {
-			defer func() { _ = recover() }()
-			if err := model.TriggerFirstRequestActivities(context.Background(), meta.UserId); err != nil {
-				logger.SysError("触发首次请求活动失败: " + err.Error())
-			}
-		}()
-	}
 }
 
 // latestUserQuestion 仅提取本次请求最后一条用户文本，不记录图片附件、工具返回或

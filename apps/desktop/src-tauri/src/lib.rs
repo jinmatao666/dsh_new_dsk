@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -12,7 +13,7 @@ use std::{
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent},
-    DragDropEvent, Manager, State, WebviewEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+    DragDropEvent, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 use url::Url;
 
@@ -21,8 +22,7 @@ const NATIVE_FILE_DRAG_ENTER_SCRIPT: &str =
     "window.dispatchEvent(new Event('dsh:native-file-drag-enter'));";
 const NATIVE_FILE_DRAG_LEAVE_SCRIPT: &str =
     "window.dispatchEvent(new Event('dsh:native-file-drag-leave'));";
-const NATIVE_FILE_DROP_SCRIPT: &str =
-    "window.dispatchEvent(new Event('dsh:native-file-drop'));";
+const NATIVE_FILE_DROP_SCRIPT: &str = "window.dispatchEvent(new Event('dsh:native-file-drop'));";
 const WORKSPACE_IMPORT_MAX_FILES: usize = 64;
 const WORKSPACE_IMPORT_MAX_FILE_BYTES: usize = 64 * 1024 * 1024;
 const WORKSPACE_IMPORT_MAX_TOTAL_BYTES: usize = 256 * 1024 * 1024;
@@ -100,6 +100,17 @@ struct CustomSkillState {
     slug: String,
     name: String,
     description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    body: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    files: Option<Vec<CustomSkillUploadFile>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomSkillUploadFile {
+    path: String,
+    content_base64: String,
 }
 
 /// Notify the live renderer after an installed skill directory changes.
@@ -251,14 +262,16 @@ fn install_custom_skill_directory_at(
     if skill_md_metadata.file_type().is_symlink() || !skill_md_metadata.is_file() {
         return Err("所选目录根部的 SKILL.md 必须是普通文件".to_string());
     }
-    let skill_text = fs::read_to_string(&skill_md)
-        .map_err(|error| format!("无法读取 SKILL.md：{error}"))?;
+    let skill_text =
+        fs::read_to_string(&skill_md).map_err(|error| format!("无法读取 SKILL.md：{error}"))?;
     let slug = custom_skill_front_matter_value(&skill_text, "name")
         .ok_or_else(|| "SKILL.md 必须声明 name".to_string())?;
     validate_marketplace_slug(&slug)?;
     let mut file_count = 0usize;
     let mut total_size = 0u64;
     validate_custom_skill_directory_tree(source, 0, &mut file_count, &mut total_size)?;
+    let mut upload_files = Vec::with_capacity(file_count);
+    collect_custom_skill_upload_files(source, source, &mut upload_files)?;
 
     if skills_root.exists()
         && fs::symlink_metadata(skills_root)
@@ -266,38 +279,115 @@ fn install_custom_skill_directory_at(
             .file_type()
             .is_symlink()
     {
-        return Err(format!("拒绝使用符号链接技能根目录 {}", skills_root.display()));
+        return Err(format!(
+            "拒绝使用符号链接技能根目录 {}",
+            skills_root.display()
+        ));
     }
     fs::create_dir_all(skills_root)
         .map_err(|error| format!("无法创建用户技能目录 {}：{error}", skills_root.display()))?;
     let target = skills_root.join(&slug);
-    if target.exists() {
-        return Err(format!("技能 {slug} 已存在，请先卸载后再添加"));
-    }
+    let replaces_custom_skill = if target.exists() {
+        let metadata = fs::symlink_metadata(&target)
+            .map_err(|error| format!("无法读取现有技能 {}：{error}", target.display()))?;
+        if metadata.file_type().is_symlink()
+            || !metadata.is_dir()
+            || !target.join(".dsh-custom-skill").is_file()
+        {
+            return Err(format!("技能 {slug} 已存在且不是个人技能，不能覆盖"));
+        }
+        true
+    } else {
+        false
+    };
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| format!("系统时间无效：{error}"))?
         .as_nanos();
-    let staging = skill_staging_root(skills_root)?
-        .join(format!(".{slug}.custom-directory-{}-{nonce}", std::process::id()));
+    let staging = skill_staging_root(skills_root)?.join(format!(
+        ".{slug}.custom-directory-{}-{nonce}",
+        std::process::id()
+    ));
+    let backup = skill_staging_root(skills_root)?.join(format!(
+        ".{slug}.custom-backup-{}-{nonce}",
+        std::process::id()
+    ));
     let result = (|| {
         copy_marketplace_directory(source, &staging)?;
         fs::write(staging.join(".dsh-custom-skill"), format!("slug={slug}\n"))
             .map_err(|error| format!("无法写入自定义技能标记：{error}"))?;
-        fs::rename(&staging, &target)
-            .map_err(|error| format!("无法启用自定义技能 {}：{error}", target.display()))?;
+        if replaces_custom_skill {
+            fs::rename(&target, &backup)
+                .map_err(|error| format!("无法暂存现有个人技能 {}：{error}", target.display()))?;
+        }
+        if let Err(error) = fs::rename(&staging, &target) {
+            if replaces_custom_skill {
+                let _ = fs::rename(&backup, &target);
+            }
+            return Err(format!("无法启用自定义技能 {}：{error}", target.display()));
+        }
+        if replaces_custom_skill {
+            let _ = fs::remove_dir_all(&backup);
+        }
         Ok(CustomSkillState {
             slug,
-            name: custom_skill_front_matter_value(&skill_text, "name")
-                .unwrap_or_else(|| target.file_name().unwrap_or_default().to_string_lossy().to_string()),
+            name: custom_skill_front_matter_value(&skill_text, "name").unwrap_or_else(|| {
+                target
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string()
+            }),
             description: custom_skill_front_matter_value(&skill_text, "description")
                 .unwrap_or_else(|| "本地添加的自定义技能。".to_string()),
+            body: Some(skill_text),
+            files: Some(upload_files),
         })
     })();
     if result.is_err() && staging.exists() {
         let _ = fs::remove_dir_all(&staging);
     }
     result
+}
+
+fn collect_custom_skill_upload_files(
+    root: &Path,
+    directory: &Path,
+    files: &mut Vec<CustomSkillUploadFile>,
+) -> Result<(), String> {
+    let mut entries = fs::read_dir(directory)
+        .map_err(|error| format!("无法枚举个人技能目录 {}：{error}", directory.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("无法读取个人技能目录项：{error}"))?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let path = entry.path();
+        let metadata = entry
+            .file_type()
+            .map_err(|error| format!("无法读取个人技能目录项类型 {}：{error}", path.display()))?;
+        if metadata.is_dir() {
+            collect_custom_skill_upload_files(root, &path, files)?;
+            continue;
+        }
+        if !metadata.is_file() {
+            return Err(format!(
+                "个人技能目录只能包含普通文件或目录 {}",
+                path.display()
+            ));
+        }
+        let relative = path
+            .strip_prefix(root)
+            .map_err(|error| format!("无法计算技能文件相对路径：{error}"))?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let content = fs::read(&path)
+            .map_err(|error| format!("无法读取个人技能文件 {}：{error}", path.display()))?;
+        files.push(CustomSkillUploadFile {
+            path: relative,
+            content_base64: BASE64_STANDARD.encode(content),
+        });
+    }
+    Ok(())
 }
 
 fn validate_custom_skill_directory_tree(
@@ -313,11 +403,17 @@ fn validate_custom_skill_directory_tree(
         .map_err(|error| format!("无法枚举个人技能目录 {}：{error}", directory.display()))?
     {
         let entry = entry.map_err(|error| format!("无法读取个人技能目录项：{error}"))?;
-        let metadata = entry
-            .file_type()
-            .map_err(|error| format!("无法读取个人技能目录项类型 {}：{error}", entry.path().display()))?;
+        let metadata = entry.file_type().map_err(|error| {
+            format!(
+                "无法读取个人技能目录项类型 {}：{error}",
+                entry.path().display()
+            )
+        })?;
         if metadata.is_symlink() {
-            return Err(format!("个人技能目录不能包含符号链接 {}", entry.path().display()));
+            return Err(format!(
+                "个人技能目录不能包含符号链接 {}",
+                entry.path().display()
+            ));
         }
         if metadata.is_dir() {
             validate_custom_skill_directory_tree(&entry.path(), depth + 1, file_count, total_size)?;
@@ -327,7 +423,9 @@ fn validate_custom_skill_directory_tree(
                 return Err("自定义技能必须包含 1 至 128 个文件".to_string());
             }
             let size = fs::metadata(entry.path())
-                .map_err(|error| format!("无法读取个人技能文件 {}：{error}", entry.path().display()))?
+                .map_err(|error| {
+                    format!("无法读取个人技能文件 {}：{error}", entry.path().display())
+                })?
                 .len();
             *total_size = total_size
                 .checked_add(size)
@@ -336,7 +434,10 @@ fn validate_custom_skill_directory_tree(
                 return Err("自定义技能文件总大小不能超过 16 MB".to_string());
             }
         } else {
-            return Err(format!("个人技能目录只能包含普通文件或目录 {}", entry.path().display()));
+            return Err(format!(
+                "个人技能目录只能包含普通文件或目录 {}",
+                entry.path().display()
+            ));
         }
     }
     Ok(())
@@ -359,7 +460,8 @@ fn install_custom_skill_directory(
     app: tauri::AppHandle,
     directory: String,
 ) -> Result<CustomSkillState, String> {
-    let installed = install_custom_skill_directory_at(&user_skills_root(&app)?, Path::new(&directory))?;
+    let installed =
+        install_custom_skill_directory_at(&user_skills_root(&app)?, Path::new(&directory))?;
     wait_for_skill_catalog_observation();
     notify_skill_catalog_changed(&app);
     Ok(installed)
@@ -386,6 +488,8 @@ fn list_custom_skills(app: tauri::AppHandle) -> Result<Vec<CustomSkillState>, St
                         .unwrap_or_else(|| slug.to_string()),
                     description: custom_skill_front_matter_value(&skill_md, "description")
                         .unwrap_or_else(|| "本地添加的自定义技能。".to_string()),
+                    body: None,
+                    files: None,
                 });
             }
         }
@@ -768,10 +872,7 @@ fn import_workspace_paths_at(
         let destination = workspace_import_destination(&root, name)?;
         if let Err(error) = fs::copy(&source, &destination) {
             let _ = fs::remove_file(&destination);
-            return Err(format!(
-                "无法复制拖入的文件 {}：{error}",
-                source.display()
-            ));
+            return Err(format!("无法复制拖入的文件 {}：{error}", source.display()));
         }
         imported.push(destination.display().to_string());
     }
@@ -1544,7 +1645,7 @@ fn spawn_sidecar(
         // Node/tsx loader is warming up. Probe the fixed loopback port as a
         // reliable readiness signal, then use the normal printed URL if it
         // arrives first.
-        let deadline = std::time::Instant::now() + Duration::from_secs(45);
+        let deadline = std::time::Instant::now() + Duration::from_secs(120);
         loop {
             if let Ok(url) = receiver.try_recv() {
                 break url;
@@ -1569,14 +1670,14 @@ fn spawn_sidecar(
                 }
             }
             if std::time::Instant::now() >= deadline {
-                return Err("DSH Sidecar 在 45 秒内未就绪，请检查日志和 server.json".to_string());
+                return Err("DSH Sidecar 在 120 秒内未就绪，请检查日志和 server.json".to_string());
             }
             std::thread::sleep(Duration::from_millis(150));
         }
     } else {
         receiver
-            .recv_timeout(Duration::from_secs(45))
-            .map_err(|_| "DSH Sidecar 在 45 秒内未就绪，请检查日志和 server.json".to_string())?
+            .recv_timeout(Duration::from_secs(120))
+            .map_err(|_| "DSH Sidecar 在 120 秒内未就绪，请检查日志和 server.json".to_string())?
     };
     Ok((child, url))
 }
@@ -1593,28 +1694,6 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
-        .on_webview_event(|webview, event| {
-            let WebviewEvent::DragDrop(event) = event else {
-                return;
-            };
-            match event {
-                DragDropEvent::Enter { .. } => {
-                    let _ = webview.eval(NATIVE_FILE_DRAG_ENTER_SCRIPT);
-                }
-                DragDropEvent::Drop { paths, .. } => {
-                    let state = webview.app_handle().state::<PendingWorkspaceDrop>();
-                    if let Ok(mut pending) = state.0.lock() {
-                        *pending = Some(paths.clone());
-                    }
-                    let _ = webview.eval(NATIVE_FILE_DROP_SCRIPT);
-                }
-                DragDropEvent::Leave => {
-                    let _ = webview.eval(NATIVE_FILE_DRAG_LEAVE_SCRIPT);
-                }
-                DragDropEvent::Over { .. } => {}
-                _ => {}
-            }
-        })
         .setup(|app| {
             let resource_dir = app.path().resource_dir()?;
             let app_data_dir = app.path().app_local_data_dir()?;
@@ -1637,10 +1716,8 @@ pub fn run() {
             // Keep the sidecar alive when the user closes the window. The
             // application is controlled from the system tray and only exits
             // through the tray's explicit quit action.
-            let show_item =
-                MenuItem::with_id(app, "show", "显示 万维Buddy", true, None::<&str>)?;
-            let quit_item =
-                MenuItem::with_id(app, "quit", "退出 万维Buddy", true, None::<&str>)?;
+            let show_item = MenuItem::with_id(app, "show", "显示 万维Buddy", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "退出 万维Buddy", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().ok_or("缺少应用图标")?.clone())
@@ -1702,11 +1779,31 @@ pub fn run() {
                 })
                 .build()?;
             let window_for_events = window.clone();
-            window.on_window_event(move |event| {
-                if let WindowEvent::CloseRequested { api, .. } = event {
+            window.on_window_event(move |event| match event {
+                WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     let _ = window_for_events.hide();
                 }
+                WindowEvent::DragDrop(event) => match event {
+                    DragDropEvent::Enter { .. } => {
+                        let _ = window_for_events.eval(NATIVE_FILE_DRAG_ENTER_SCRIPT);
+                    }
+                    DragDropEvent::Drop { paths, .. } => {
+                        let state = window_for_events
+                            .app_handle()
+                            .state::<PendingWorkspaceDrop>();
+                        if let Ok(mut pending) = state.0.lock() {
+                            *pending = Some(paths.clone());
+                        }
+                        let _ = window_for_events.eval(NATIVE_FILE_DROP_SCRIPT);
+                    }
+                    DragDropEvent::Leave => {
+                        let _ = window_for_events.eval(NATIVE_FILE_DRAG_LEAVE_SCRIPT);
+                    }
+                    DragDropEvent::Over { .. } => {}
+                    _ => {}
+                },
+                _ => {}
             });
             Ok(())
         })
@@ -1731,9 +1828,9 @@ pub fn run() {
 #[cfg(test)]
 mod marketplace_tests {
     use super::{
-        install_custom_skill_directory_at, install_marketplace_skill_at, install_marketplace_skill_files_at,
-        import_workspace_files_at, import_workspace_paths_at, marketplace_package_sha256, read_analysis_view,
-        save_session_log_archive_at,
+        import_workspace_files_at, import_workspace_paths_at, install_custom_skill_directory_at,
+        install_marketplace_skill_at, install_marketplace_skill_files_at,
+        marketplace_package_sha256, read_analysis_view, save_session_log_archive_at,
         uninstall_marketplace_skill_at, CustomSkillFile, WorkspaceImportFile,
     };
     use std::{
@@ -1863,12 +1960,35 @@ mod marketplace_tests {
             .expect("import custom directory");
         assert_eq!(installed.slug, "personal-meeting-notes");
         assert_eq!(installed.description, "Organize meeting notes");
+        assert!(installed.body.as_deref().unwrap_or_default().contains("personal-meeting-notes"));
+        let uploaded = installed.files.as_ref().expect("upload files");
+        assert_eq!(uploaded.len(), 2);
+        assert!(uploaded.iter().any(|file| file.path == "SKILL.md"));
         assert_eq!(
-            fs::read_to_string(user.0.join("skills/personal-meeting-notes/scripts/invoke.ps1"))
-                .expect("copied script"),
+            fs::read_to_string(
+                user.0
+                    .join("skills/personal-meeting-notes/scripts/invoke.ps1")
+            )
+            .expect("copied script"),
             "Write-Output notes\n"
         );
-        assert!(user.0.join("skills/personal-meeting-notes/.dsh-custom-skill").is_file());
+        assert!(user
+            .0
+            .join("skills/personal-meeting-notes/.dsh-custom-skill")
+            .is_file());
+
+        fs::write(source.0.join("scripts/invoke.ps1"), "Write-Output updated\n")
+            .expect("update script");
+        install_custom_skill_directory_at(&user.0.join("skills"), &source.0)
+            .expect("replace managed custom skill");
+        assert_eq!(
+            fs::read_to_string(
+                user.0
+                    .join("skills/personal-meeting-notes/scripts/invoke.ps1")
+            )
+            .expect("updated script"),
+            "Write-Output updated\n"
+        );
     }
 
     #[test]
@@ -1994,15 +2114,23 @@ mod marketplace_tests {
         fs::write(&source_file, b"audio").expect("source file");
         fs::write(workspace.0.join("记录.wav"), b"existing").expect("existing file");
 
-        let imported = import_workspace_paths_at(&workspace.0, vec![source_file])
-            .expect("copy native drop");
+        let imported =
+            import_workspace_paths_at(&workspace.0, vec![source_file]).expect("copy native drop");
 
         assert_eq!(imported.len(), 1);
-        assert_eq!(fs::read(workspace.0.join("记录.wav")).expect("existing"), b"existing");
-        assert_eq!(fs::read(workspace.0.join("记录 (1).wav")).expect("copy"), b"audio");
-        assert!(import_workspace_paths_at(&workspace.0, vec![source.0.clone()])
-            .expect_err("reject directory")
-            .contains("不支持拖入文件夹"));
+        assert_eq!(
+            fs::read(workspace.0.join("记录.wav")).expect("existing"),
+            b"existing"
+        );
+        assert_eq!(
+            fs::read(workspace.0.join("记录 (1).wav")).expect("copy"),
+            b"audio"
+        );
+        assert!(
+            import_workspace_paths_at(&workspace.0, vec![source.0.clone()])
+                .expect_err("reject directory")
+                .contains("不支持拖入文件夹")
+        );
     }
 
     #[test]

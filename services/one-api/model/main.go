@@ -302,9 +302,6 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&CustomDashboardChart{}); err != nil {
 		return err
 	}
-	if err = DB.AutoMigrate(&OperationDashboard{}); err != nil {
-		return err
-	}
 	if err = DB.AutoMigrate(&OrgTimedQuota{}); err != nil {
 		return err
 	}
@@ -320,47 +317,7 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&OrgAuditLog{}); err != nil {
 		return err
 	}
-	if err = DB.AutoMigrate(&Activity{}); err != nil {
-		return err
-	}
-	if err = DB.AutoMigrate(&ActivityParticipation{}); err != nil {
-		return err
-	}
 	if err = DB.AutoMigrate(&MemberIdentity{}); err != nil {
-		return err
-	}
-	if err = DB.AutoMigrate(&UserCrowd{}); err != nil {
-		return err
-	}
-	if err = DB.AutoMigrate(&UserTag{}); err != nil {
-		return err
-	}
-	if err = DB.AutoMigrate(&UserTagRelation{}); err != nil {
-		return err
-	}
-	if err = DB.AutoMigrate(&UserCoupon{}); err != nil {
-		return err
-	}
-	if err = DB.AutoMigrate(&InviteRecord{}); err != nil {
-		return err
-	}
-	if err = DB.AutoMigrate(&InfluencerCode{}); err != nil {
-		return err
-	}
-	// 兑换码唯一键已从「手机号」改为「手机号+渠道」复合唯一索引。
-	// AutoMigrate 会建复合索引但不会删旧的单列唯一索引，需显式清理，否则旧索引仍限制"一手机一码"。
-	if mig := DB.Migrator(); mig.HasIndex(&InfluencerCode{}, "idx_influencer_codes_issuer_phone") {
-		if err = mig.DropIndex(&InfluencerCode{}, "idx_influencer_codes_issuer_phone"); err != nil {
-			logger.SysError("删除兑换码旧手机号唯一索引失败: " + err.Error())
-		}
-	}
-	if err = DB.AutoMigrate(&RedeemRecord{}); err != nil {
-		return err
-	}
-	if err = DB.AutoMigrate(&RewardSettlement{}); err != nil {
-		return err
-	}
-	if err = DB.AutoMigrate(&RewardSettlementItem{}); err != nil {
 		return err
 	}
 	if err = DB.AutoMigrate(&VersionNote{}); err != nil {
@@ -397,13 +354,6 @@ func migrateDB() error {
 		DB.Exec("ALTER TABLE `org_departments` COMMENT '企业部门(树状)'")
 		DB.Exec("ALTER TABLE `org_member_limits` COMMENT '企业成员日/月用量限额'")
 		DB.Exec("ALTER TABLE `org_audit_logs` COMMENT '企业管理操作审计'")
-		DB.Exec("ALTER TABLE `activities` COMMENT '活动管理'")
-		DB.Exec("ALTER TABLE `activity_participations` COMMENT '活动参与记录表'")
-		DB.Exec("ALTER TABLE `user_crowds` COMMENT '用户人群定义表'")
-		DB.Exec("ALTER TABLE `user_tags` COMMENT '用户标签定义表'")
-		DB.Exec("ALTER TABLE `user_tag_relations` COMMENT '用户与标签关联表'")
-		DB.Exec("ALTER TABLE `influencer_codes` COMMENT '达人兑换码定义(瘦表:码→发码人映射)'")
-		DB.Exec("ALTER TABLE `redeem_records` COMMENT '达人兑换码兑换归因流水'")
 	}
 	// PR2: 把存量 users.quota 一次性迁移到 user_timed_quotas 永久行.
 	// 依赖前置:本次部署内所有写入路径已切到新 API(注册/邀请/兑换/充值/管理员/续期/免费/退款),

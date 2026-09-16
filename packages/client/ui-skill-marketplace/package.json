@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-skill-marketplace",
-  "description": "Desktop skill marketplace entry with mock catalog and future install seam",
+  "description": "Desktop skill marketplace backed by published server entries and local skills",
   "version": "0.1.0-rc.8",
   "private": true,
   "type": "module",

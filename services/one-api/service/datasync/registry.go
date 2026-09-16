@@ -37,7 +37,7 @@ func (m ModuleSpec) SupportsRange() bool {
 // modules 模块注册表。新增表只改这一处。
 // 时间字段风格依据计划文档第二节：
 //   - Unix 秒 int64: logs/tokens/channels/redemptions/skills/feedback/model_definitions
-//   - time.Time DATETIME: users/orders/invoices/organizations/subscriptions/client_events/activities
+//   - time.Time DATETIME: users/orders/invoices/organizations/subscriptions/client_events
 var modules = []ModuleSpec{
 	{Key: "users", Name: "用户与令牌", Tables: []TableSpec{
 		{Name: "users", TimeField: "created_at", TimeKind: TimeKindDateTime, Primary: true},
@@ -63,6 +63,7 @@ var modules = []ModuleSpec{
 		{Name: "recharge_packages", TimeKind: TimeKindNone},
 		{Name: "recharge_records", TimeField: "created_at", TimeKind: TimeKindDateTime, Primary: true},
 		{Name: "subscriptions", TimeField: "created_at", TimeKind: TimeKindDateTime, Primary: true},
+		{Name: "member_identities", TimeKind: TimeKindNone},
 	}},
 	{Key: "orgs", Name: "企业组织", Tables: []TableSpec{
 		{Name: "organizations", TimeField: "created_at", TimeKind: TimeKindDateTime, Primary: true},
@@ -85,23 +86,12 @@ var modules = []ModuleSpec{
 		{Name: "feedbacks", TimeField: "created_at", TimeKind: TimeKindUnixSec, Primary: true},
 		{Name: "admin_operation_logs", TimeField: "created_at", TimeKind: TimeKindDateTime, Primary: true},
 	}},
-	{Key: "marketing", Name: "运营活动", Tables: []TableSpec{
-		{Name: "activities", TimeField: "created_at", TimeKind: TimeKindDateTime, Primary: true},
-		{Name: "activity_participations", TimeKind: TimeKindNone},
-		{Name: "user_crowds", TimeKind: TimeKindNone},
-		{Name: "member_identities", TimeKind: TimeKindNone},
-		{Name: "user_tags", TimeKind: TimeKindNone},
-		{Name: "user_tag_relations", TimeKind: TimeKindNone},
-		{Name: "user_coupons", TimeKind: TimeKindNone},
-		{Name: "invite_records", TimeKind: TimeKindNone},
-	}},
 	{Key: "versions", Name: "版本管理", Tables: []TableSpec{
 		{Name: "version_notes", TimeField: "created_at", TimeKind: TimeKindDateTime, Primary: true},
 		{Name: "version_releases", TimeField: "detected_at", TimeKind: TimeKindDateTime, Primary: true},
 	}},
 	{Key: "dashboards", Name: "仪表盘配置", Tables: []TableSpec{
 		{Name: "custom_dashboard_charts", TimeField: "created_at", TimeKind: TimeKindUnixSec, Primary: true},
-		{Name: "operation_dashboards", TimeField: "created_at", TimeKind: TimeKindUnixSec, Primary: true},
 	}},
 }
 

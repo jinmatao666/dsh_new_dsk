@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	defaultSkillIcon         = "glyph:bot"
+	defaultSkillIcon         = "preset:assistant"
 	maxSkillIconInputChars   = 3 << 20
 	maxSkillIconDataURLBytes = 48 << 10
 	maxSkillIconDimension    = 96
@@ -28,6 +28,16 @@ var skillIconGlyphs = map[string]struct{}{
 	"glyph:compass":   {},
 	"glyph:bot":       {},
 	"glyph:lightning": {},
+	"preset:checklist":         {},
+	"preset:batch-documents":   {},
+	"preset:assistant":         {},
+	"preset:document-settings": {},
+	"preset:workflow":          {},
+	"preset:analytics":         {},
+	"preset:conversation":      {},
+	"preset:integration":       {},
+	"preset:cloud-upload":      {},
+	"preset:toolbox":           {},
 }
 
 // NormalizeSkillIcon retains built-in glyphs and converts raster data URLs to

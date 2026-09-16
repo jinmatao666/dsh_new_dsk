@@ -4,30 +4,35 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import difflib
 import hashlib
 import html
 import json
-import mimetypes
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 import uuid
+import wave
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 
-RUNTIME_VERSION = "1.0.0"
+RUNTIME_VERSION = "1.0.3"
 DEFAULT_FONT = "Microsoft YaHei"
 INVALID_FILENAME = re.compile(r'[\\/:*?"<>|]+')
 DEFAULT_MEETING_BASE_URL = "http://ac.zjugis.com:20330/v1"
 DEFAULT_MEETING_MODEL = "qwen3.8-27b-fp8"
 DEFAULT_TRANSCRIPTION_MODEL = "Qwen3-ASR-1.7B"
+DEFAULT_AUDIO_SEGMENT_SECONDS = 120
 
 
 class UserError(RuntimeError):
@@ -174,8 +179,7 @@ def pdf_merge(args: argparse.Namespace) -> dict[str, Any]:
         writer.write(stream)
     artifacts = [Artifact(str(target), "pdf", "合并后的 PDF")]
     report = write_report(directory, target.stem, "PDF 合并处理报告", f"已将 {len(inputs)} 个 PDF 合并为 {pages} 页。", [f"- 输入文件数：{len(inputs)}", f"- 总页数：{pages}"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "operation": "merge", "artifacts": [asdict(item) for item in artifacts]}
+    return {"success": True, "operation": "merge", "internalFiles": [str(report)], "artifacts": [asdict(item) for item in artifacts]}
 
 
 def pdf_split(args: argparse.Namespace) -> dict[str, Any]:
@@ -199,8 +203,7 @@ def pdf_split(args: argparse.Namespace) -> dict[str, Any]:
             writer.write(stream)
         artifacts.append(Artifact(str(target), "pdf", f"第 {label} 页"))
     report = write_report(directory, source.stem, "PDF 拆分处理报告", f"已按 {args.ranges} 生成 {len(artifacts)} 个 PDF。", [f"- 原始页数：{len(reader.pages)}", f"- 页码范围：{args.ranges}"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "operation": "split", "artifacts": [asdict(item) for item in artifacts]}
+    return {"success": True, "operation": "split", "internalFiles": [str(report)], "artifacts": [asdict(item) for item in artifacts]}
 
 
 def pdf_to_images(args: argparse.Namespace) -> dict[str, Any]:
@@ -229,8 +232,7 @@ def pdf_to_images(args: argparse.Namespace) -> dict[str, Any]:
     finally:
         document.close()
     report = write_report(directory, source.stem, "PDF 转图片处理报告", f"已将 PDF 的 {len(artifacts)} 页转换为 {extension.upper()}。", [f"- 输出分辨率：{args.dpi} DPI", f"- 输出格式：{extension.upper()}"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "artifacts": [asdict(item) for item in artifacts]}
+    return {"success": True, "internalFiles": [str(report)], "artifacts": [asdict(item) for item in artifacts]}
 
 
 def _page_pixels(page_size: str, orientation: str, dpi: int) -> tuple[int, int] | None:
@@ -275,8 +277,7 @@ def images_to_pdf(args: argparse.Namespace) -> dict[str, Any]:
         page.close()
     artifacts = [Artifact(str(target), "pdf", "图片合成 PDF")]
     report = write_report(directory, target.stem, "图片转 PDF 处理报告", f"已按输入顺序将 {len(inputs)} 张图片合成为 PDF。", [f"- 页面尺寸：{args.page_size.upper()}", f"- 页边距：{args.margin_mm:g} mm"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "artifacts": [asdict(item) for item in artifacts]}
+    return {"success": True, "internalFiles": [str(report)], "artifacts": [asdict(item) for item in artifacts]}
 
 
 def _normalize_cell(value: Any, trim_text: bool) -> Any:
@@ -366,8 +367,7 @@ def excel_process(args: argparse.Namespace) -> dict[str, Any]:
     output.save(target)
     artifacts = [Artifact(str(target), "xlsx", "整理后的 Excel")]
     report = write_report(directory, source.stem, "Excel 数据处理报告", f"已处理 {original_count} 行，输出 {len(data)} 行。", [f"- 工作表：{sheet.title}", f"- 去重列：{'、'.join(deduplicate) or '未启用'}", f"- 筛选条件：{len(filters)} 个"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "rows_before": original_count, "rows_after": len(data), "artifacts": [asdict(item) for item in artifacts]}
+    return {"success": True, "rows_before": original_count, "rows_after": len(data), "internalFiles": [str(report)], "artifacts": [asdict(item) for item in artifacts]}
 
 
 def extract_text(path_value: str | Path) -> str:
@@ -409,7 +409,6 @@ def extract_text(path_value: str | Path) -> str:
 def document_extract(args: argparse.Namespace) -> dict[str, Any]:
     inputs = [existing_file(item) for item in args.inputs]
     directory = output_directory(args.output_dir)
-    artifacts: list[Artifact] = []
     sections: list[str] = [f"# {args.title or '材料提取结果'}", ""]
     metadata = []
     for source in inputs:
@@ -422,10 +421,7 @@ def document_extract(args: argparse.Namespace) -> dict[str, Any]:
     extracted.write_text("\n".join(sections), encoding="utf-8")
     index = unique_path(directory, f"{safe_name(args.basename or '材料')}_提取索引.json", args.overwrite)
     write_json(index, {"schemaVersion": 1, "purpose": args.purpose, "files": metadata})
-    artifacts.extend([Artifact(str(extracted), "markdown", "提取后的材料"), Artifact(str(index), "json", "材料索引")])
-    report = write_report(directory, safe_name(args.basename or "材料"), "文档内容提取报告", f"已从 {len(inputs)} 个文件提取内容，供模型继续处理。", [f"- 使用目的：{args.purpose}", f"- 输入文件数：{len(inputs)}"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "artifacts": [asdict(item) for item in artifacts]}
+    return {"success": True, "workingFiles": [str(extracted), str(index)], "artifacts": []}
 
 
 def document_compare(args: argparse.Namespace) -> dict[str, Any]:
@@ -464,30 +460,40 @@ def document_compare(args: argparse.Namespace) -> dict[str, Any]:
         counts[kind] += len(new_block) if tag == "insert" else len(old_block)
         changes.append({"type": kind, "old": old_block, "new": new_block})
     directory = output_directory(args.output_dir)
-    basename = safe_name(f"{old_path.stem}_对比_{new_path.stem}")
-    json_path = unique_path(directory, f"{basename}_差异.json", args.overwrite)
-    write_json(json_path, {"schemaVersion": 1, "old": str(old_path), "new": str(new_path), "counts": counts, "changes": changes})
-    html_path = unique_path(directory, f"{basename}_逐行对比.html", args.overwrite)
+    html_path = unique_path(directory, "文档逐行对比.html", args.overwrite)
     table = difflib.HtmlDiff(wrapcolumn=90).make_table(old_lines, new_lines, fromdesc=html.escape(old_path.name), todesc=html.escape(new_path.name), context=True, numlines=3)
     html_path.write_text(_comparison_html(table, counts), encoding="utf-8")
-    markdown_path = unique_path(directory, f"{basename}_差异摘要.md", args.overwrite)
     rows = [["新增", counts["added"]], ["删除", counts["deleted"]], ["修改", counts["modified"]], ["未变化", counts["unchanged"]]]
-    lines = ["# 文档对比摘要", "", f"- 旧版本：`{old_path.name}`", f"- 新版本：`{new_path.name}`", "", "## 差异统计", "", *markdown_table(["类型", "行数"], rows), "", "## 重点差异", ""]
+    lines = ["# 文档差异对比报告", "", f"- 原始版本：`{old_path.name}`", f"- 新版本：`{new_path.name}`", "", "## 差异统计", "", *markdown_table(["类型", "行数"], rows), "", "## 重点差异", ""]
     if changes:
         for index, change in enumerate(changes[:100], start=1):
-            lines.extend([f"### 差异 {index} · {change['type']}", "", f"- 旧内容：{' / '.join(change['old']) or '（无）'}", f"- 新内容：{' / '.join(change['new']) or '（无）'}", ""])
+            label = {"added": "新增", "deleted": "删除", "modified": "修改"}[change["type"]]
+            lines.extend([f"### 差异 {index} · {label}", "", f"- 原内容：{' / '.join(change['old']) or '（无）'}", f"- 新内容：{' / '.join(change['new']) or '（无）'}", ""])
     else:
         lines.append("两份文档提取后的文本内容一致。")
-    markdown_path.write_text("\n".join(lines), encoding="utf-8")
-    artifacts = [Artifact(str(markdown_path), "markdown", "差异摘要"), Artifact(str(html_path), "html", "可视化逐行对比"), Artifact(str(json_path), "json", "结构化差异数据")]
-    report = write_report(directory, basename, "文档对比处理报告", f"识别新增 {counts['added']} 行、删除 {counts['deleted']} 行、修改 {counts['modified']} 行。", [f"- 旧版本：{old_path.name}", f"- 新版本：{new_path.name}"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
+    lines.extend([
+        "", "## 风险与建议", "",
+        "- 本报告用于快速定位文本变化，重要条款、数字、日期和责任分工应由经办人员复核。",
+        "- 对比范围不包括版式、图片、批注、修订痕迹等视觉差异。",
+    ])
+    with tempfile.TemporaryDirectory(prefix="wanwei-document-compare-") as temporary:
+        summary = Path(temporary) / "文档差异对比报告.md"
+        summary.write_text("\n".join(lines), encoding="utf-8")
+        rendered = render_markdown_docx(argparse.Namespace(
+            input=str(summary),
+            output_name="文档差异对比报告.docx",
+            title="文档差异对比报告",
+            output_dir=str(directory),
+            overwrite=args.overwrite,
+        ))
+    docx_path = rendered["artifacts"][0]["path"]
+    artifacts = [Artifact(docx_path, "docx", "文档差异对比报告"), Artifact(str(html_path), "html", "可视化逐行对比")]
     return {"success": True, "counts": counts, "artifacts": [asdict(item) for item in artifacts]}
 
 
 def _comparison_html(table: str, counts: dict[str, int]) -> str:
     return f"""<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>文档逐行对比</title><style>
-body{{margin:0;padding:32px;background:#f4f7fb;color:#1f3657;font-family:{DEFAULT_FONT},sans-serif}}main{{max-width:1400px;margin:auto;background:#fff;padding:28px;border-radius:18px;box-shadow:0 16px 45px #1f36571c}}h1{{margin-top:0}}.stats{{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}}.stat{{padding:10px 14px;border-radius:10px;background:#edf4ff}}table.diff{{width:100%;border-collapse:collapse;font-family:Consolas,monospace;font-size:13px}}.diff td,.diff th{{padding:6px;border:1px solid #dce6f3;vertical-align:top}}.diff_header{{background:#eaf1fb}}.diff_add{{background:#dff7e8}}.diff_sub{{background:#ffe5e8}}.diff_chg{{background:#fff3c7}}</style></head><body><main><h1>文档逐行对比</h1><div class=\"stats\"><span class=\"stat\">新增 {counts['added']}</span><span class=\"stat\">删除 {counts['deleted']}</span><span class=\"stat\">修改 {counts['modified']}</span></div>{table}</main></body></html>"""
+*{{box-sizing:border-box}}body{{margin:0;padding:32px;background:#f4f7fb;color:#1f3657;font-family:{DEFAULT_FONT},sans-serif}}main{{max-width:1600px;margin:auto;background:#fff;padding:28px;border-radius:18px;box-shadow:0 16px 45px #1f36571c;overflow:hidden}}h1{{margin-top:0}}.stats{{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}}.stat{{padding:10px 14px;border-radius:10px;background:#edf4ff}}.comparison{{width:100%;overflow:auto}}table.diff{{width:100%;min-width:900px;border-collapse:collapse;table-layout:fixed;font-family:Consolas,{DEFAULT_FONT},monospace;font-size:13px}}.diff td,.diff th{{padding:7px;border:1px solid #dce6f3;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}}.diff td.diff_header{{width:48px;text-align:right;background:#eaf1fb}}.diff_next{{display:none}}.diff_add{{background:#dff7e8}}.diff_sub{{background:#ffe5e8}}.diff_chg{{background:#fff3c7}}@media(max-width:800px){{body{{padding:12px}}main{{padding:16px}}}}</style></head><body><main><h1>文档逐行对比</h1><div class=\"stats\"><span class=\"stat\">新增 {counts['added']}</span><span class=\"stat\">删除 {counts['deleted']}</span><span class=\"stat\">修改 {counts['modified']}</span></div><div class=\"comparison\">{table}</div></main></body></html>"""
 
 
 def batch_rename(args: argparse.Namespace) -> dict[str, Any]:
@@ -528,6 +534,7 @@ def batch_rename(args: argparse.Namespace) -> dict[str, Any]:
         writer.writeheader()
         writer.writerows(proposals)
     artifacts = [Artifact(str(preview), "csv", "重命名预览表")]
+    internal_files: list[str] = []
     if args.apply:
         staged = []
         try:
@@ -540,7 +547,8 @@ def batch_rename(args: argparse.Namespace) -> dict[str, Any]:
                 temporary.rename(target)
             rollback = unique_path(directory, "批量重命名回滚表.json", args.overwrite)
             write_json(rollback, {"schemaVersion": 1, "renamed": proposals})
-            artifacts.append(Artifact(str(rollback), "json", "重命名回滚映射"))
+            internal_files = [str(preview), str(rollback)]
+            artifacts = [Artifact(item["target"], "file", f"重命名后的文件：{item['new_name']}") for item in proposals]
         except Exception:
             for source, temporary, target in reversed(staged):
                 if temporary.exists():
@@ -548,9 +556,7 @@ def batch_rename(args: argparse.Namespace) -> dict[str, Any]:
                 elif target.exists() and not source.exists():
                     target.rename(source)
             raise
-    report = write_report(directory, "批量重命名", "文件批量重命名报告", f"已{'完成' if args.apply else '预览'} {len(proposals)} 个文件的重命名。", [f"- 执行状态：{'已执行' if args.apply else '仅预览，原文件未修改'}", f"- 命名模板：`{args.template}`"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
-    return {"success": True, "applied": args.apply, "proposals": proposals, "artifacts": [asdict(item) for item in artifacts]}
+    return {"success": True, "applied": args.apply, "proposals": proposals, "internalFiles": internal_files, "artifacts": [asdict(item) for item in artifacts]}
 
 
 def image_process(args: argparse.Namespace) -> dict[str, Any]:
@@ -611,11 +617,11 @@ def image_process(args: argparse.Namespace) -> dict[str, Any]:
         f"- {Path(item['input']).name}：{item['input_bytes']} → {item['output_bytes']} 字节（转换后增大）"
         for item in larger
     )
-    report = write_report(directory, "图片批量处理", "图片压缩与格式转换报告", f"已处理 {len(inputs)} 张图片，{size_summary}。", details, artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
     return {
         "success": True,
         "size_reduction_percent": percent,
+        "summary": size_summary,
+        "details": details,
         "files": file_results,
         "artifacts": [asdict(item) for item in artifacts],
     }
@@ -884,25 +890,125 @@ def generate_meeting_minutes(materials: str, args: argparse.Namespace) -> str:
     return re.sub(r"\s+([，。；：！？）])", r"\1", content)
 
 
-def transcribe_audio(audio_path: Path, directory: Path, args: argparse.Namespace) -> Path:
-    base_url = (args.base_url or os.getenv("WANWEI_MEETING_BASE_URL", "") or DEFAULT_MEETING_BASE_URL).rstrip("/")
-    endpoint = (args.transcription_url or os.getenv("WANWEI_TRANSCRIPTION_URL", "") or f"{base_url}/audio/transcriptions").strip()
-    model = (args.transcription_model or os.getenv("WANWEI_TRANSCRIPTION_MODEL", "") or DEFAULT_TRANSCRIPTION_MODEL).strip()
-    api_key = (args.transcription_api_key or args.api_key or os.getenv("WANWEI_TRANSCRIPTION_API_KEY", "") or os.getenv("WANWEI_MEETING_API_KEY", "")).strip()
+def _standard_wav(path: Path) -> bool:
+    try:
+        with wave.open(str(path), "rb") as audio:
+            return audio.getnchannels() == 1 and audio.getsampwidth() == 2 and audio.getframerate() == 16000 and audio.getcomptype() == "NONE"
+    except (wave.Error, EOFError):
+        return False
+
+
+def _ffmpeg_path() -> str:
+    configured = os.getenv("WANWEI_FFMPEG_PATH", "").strip()
+    if configured and Path(configured).is_file():
+        return configured
+    discovered = shutil.which("ffmpeg")
+    if discovered:
+        return discovered
+    if os.name == "nt":
+        local = Path(os.getenv("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Packages"
+        matches = sorted(local.glob("Gyan.FFmpeg_*/*/bin/ffmpeg.exe"), reverse=True)
+        if matches:
+            return str(matches[0])
+    raise UserError("当前音频需要先转换为标准 WAV，但未找到 ffmpeg。请安装 FFmpeg 后重试；Windows 可运行：winget install --id Gyan.FFmpeg -e")
+
+
+def _normalize_audio(audio_path: Path, temporary: Path) -> Path:
+    if _standard_wav(audio_path):
+        return audio_path
+    target = temporary / "normalized.wav"
+    completed = subprocess.run(
+        [_ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-y", "-i", str(audio_path), "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(target)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if completed.returncode != 0 or not target.is_file():
+        message = completed.stderr.strip()[-1000:] or f"退出码 {completed.returncode}"
+        raise UserError(f"音频转换为 WAV 失败：{message}")
+    return target
+
+
+def _split_wav(source: Path, temporary: Path, segment_seconds: int) -> list[Path]:
+    with wave.open(str(source), "rb") as audio:
+        frames_per_segment = audio.getframerate() * segment_seconds
+        if audio.getnframes() <= frames_per_segment:
+            return [source]
+        parameters = audio.getparams()
+        chunks: list[Path] = []
+        index = 1
+        while frames := audio.readframes(frames_per_segment):
+            target = temporary / f"segment-{index:04d}.wav"
+            with wave.open(str(target), "wb") as chunk:
+                chunk.setparams(parameters)
+                chunk.writeframes(frames)
+            chunks.append(target)
+            index += 1
+    return chunks
+
+
+def _transcribe_audio_chunk(audio_path: Path, endpoint: str, model: str, api_key: str, timeout: int) -> str:
+    if model.lower().startswith("qwen-audio-3.0-asr-flash"):
+        if not api_key:
+            raise UserError("qwen-audio-3.0-asr-flash 需要 WANWEI_TRANSCRIPTION_API_KEY 或 DASHSCOPE_API_KEY")
+        payload = {
+            "model": model,
+            "input": {
+                "messages": [{
+                    "role": "user",
+                    "content": [{
+                        "type": "input_audio",
+                        "input_audio": {
+                            "data": "data:audio/wav;base64," + base64.b64encode(audio_path.read_bytes()).decode("ascii"),
+                        },
+                    }],
+                }],
+            },
+            "parameters": {"format": "wav", "sample_rate": "16000"},
+        }
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "X-DashScope-SSE": "disable",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                decoded = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")[:1000]
+            raise UserError(f"百炼语音转写接口返回 HTTP {exc.code}：{body}") from exc
+        except urllib.error.URLError as exc:
+            raise UserError(f"无法访问百炼语音转写接口：{exc.reason}") from exc
+        except json.JSONDecodeError as exc:
+            raise UserError("百炼语音转写接口返回了无效 JSON") from exc
+        if decoded.get("code"):
+            raise UserError(f"百炼语音转写失败：{decoded.get('code')}：{decoded.get('message', '')}")
+        output = decoded.get("output", {})
+        text = output.get("text") or output.get("sentence", {}).get("text")
+        if not text:
+            raise UserError("百炼语音转写接口未返回 output.text")
+        return str(text).strip()
+
     boundary = f"----WanweiBoundary{uuid.uuid4().hex}"
-    mime = mimetypes.guess_type(audio_path.name)[0] or "application/octet-stream"
     parts = []
 
     def field(name: str, value: str) -> None:
         parts.extend([f"--{boundary}\r\n".encode(), f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(), value.encode("utf-8"), b"\r\n"])
 
     field("model", model)
-    parts.extend([f"--{boundary}\r\n".encode(), f'Content-Disposition: form-data; name="file"; filename="{audio_path.name}"\r\n'.encode("utf-8"), f"Content-Type: {mime}\r\n\r\n".encode(), audio_path.read_bytes(), b"\r\n", f"--{boundary}--\r\n".encode()])
+    parts.extend([f"--{boundary}\r\n".encode(), f'Content-Disposition: form-data; name="file"; filename="{audio_path.name}"\r\n'.encode("utf-8"), b"Content-Type: audio/wav\r\n\r\n", audio_path.read_bytes(), b"\r\n", f"--{boundary}--\r\n".encode()])
     request = urllib.request.Request(endpoint, data=b"".join(parts), method="POST", headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
     if api_key:
         request.add_header("Authorization", f"Bearer {api_key}")
     try:
-        with urllib.request.urlopen(request, timeout=args.transcription_timeout) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")[:1000]
@@ -916,8 +1022,32 @@ def transcribe_audio(audio_path: Path, directory: Path, args: argparse.Namespace
         text = payload.strip()
     if not text:
         raise UserError("语音转写接口未返回 text 字段")
+    return str(text).strip()
+
+
+def transcribe_audio(audio_path: Path, directory: Path, args: argparse.Namespace) -> Path:
+    base_url = (args.base_url or os.getenv("WANWEI_MEETING_BASE_URL", "") or DEFAULT_MEETING_BASE_URL).rstrip("/")
+    endpoint = (args.transcription_url or os.getenv("WANWEI_TRANSCRIPTION_URL", "") or f"{base_url}/audio/transcriptions").strip()
+    model = (args.transcription_model or os.getenv("WANWEI_TRANSCRIPTION_MODEL", "") or DEFAULT_TRANSCRIPTION_MODEL).strip()
+    api_key = (args.transcription_api_key or args.api_key or os.getenv("WANWEI_TRANSCRIPTION_API_KEY", "") or os.getenv("DASHSCOPE_API_KEY", "") or os.getenv("WANWEI_MEETING_API_KEY", "")).strip()
+    try:
+        configured_seconds = args.audio_segment_seconds or int(os.getenv("WANWEI_AUDIO_SEGMENT_SECONDS", DEFAULT_AUDIO_SEGMENT_SECONDS))
+    except ValueError as exc:
+        raise UserError("WANWEI_AUDIO_SEGMENT_SECONDS 必须是整数") from exc
+    if not 30 <= configured_seconds <= 180:
+        raise UserError("音频分段时长必须在 30–180 秒之间")
+    with tempfile.TemporaryDirectory(prefix=".meeting-audio-", dir=directory) as temporary_name:
+        temporary = Path(temporary_name)
+        normalized = _normalize_audio(audio_path, temporary)
+        chunks = _split_wav(normalized, temporary, configured_seconds)
+        transcripts = []
+        for index, chunk in enumerate(chunks, start=1):
+            try:
+                transcripts.append(_transcribe_audio_chunk(chunk, endpoint, model, api_key, args.transcription_timeout))
+            except UserError as exc:
+                raise UserError(f"语音第 {index}/{len(chunks)} 段转写失败：{exc}") from exc
     target = unique_path(directory, f"{audio_path.stem}_转写.txt", args.overwrite)
-    target.write_text(str(text).strip() + "\n", encoding="utf-8")
+    target.write_text("\n\n".join(transcripts).strip() + "\n", encoding="utf-8")
     return target
 
 
@@ -1025,6 +1155,7 @@ def build_parser() -> argparse.ArgumentParser:
     meeting.add_argument("--transcription-model", default="")
     meeting.add_argument("--transcription-api-key", default="")
     meeting.add_argument("--transcription-timeout", type=int, default=600)
+    meeting.add_argument("--audio-segment-seconds", type=int, default=0)
     meeting.add_argument("--synthesis-timeout", type=int, default=600)
     meeting.add_argument("--skip-synthesis", action="store_true", help=argparse.SUPPRESS)
     add_common(meeting)

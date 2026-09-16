@@ -66,16 +66,11 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.PUT("/self", controller.UpdateSelf)
 				selfRoute.DELETE("/self", controller.DeleteSelf)
 				selfRoute.GET("/token", controller.GenerateAccessToken)
-				selfRoute.GET("/aff", controller.GetAffCode)
 				selfRoute.GET("/self/quota-records", controller.GetSelfQuotaRecords)
 				selfRoute.GET("/self/activity-logs", controller.GetSelfActivityLogs)
 				selfRoute.POST("/topup", middleware.RequirePersonalAccount(), controller.TopUp)
-				selfRoute.POST("/self/redeem-influencer-code", middleware.RequirePersonalAccount(), controller.RedeemInfluencerCode)
-				selfRoute.GET("/self/redeem-influencer-code/status", controller.RedeemInfluencerCodeStatus)
 				selfRoute.GET("/available_models", controller.GetUserAvailableModels)
 				selfRoute.GET("/available_models/detail", controller.GetUserAvailableModelsDetail)
-				// 每日签到状态（签到已改为使用后自动触发，无手动领取接口）
-				selfRoute.GET("/checkin/status", controller.GetCheckinStatus)
 				// Phone management routes
 				selfRoute.POST("/self/phone/bind", controller.BindPhone)
 				selfRoute.POST("/self/phone/quick-bind", controller.QuickBindPhone)
@@ -149,51 +144,6 @@ func SetApiRouter(router *gin.Engine) {
 			notificationRoute.DELETE("/:id", controller.AdminDeleteNotification)
 			notificationRoute.POST("/:id/publish", controller.AdminPublishNotification)
 		}
-		// 活动管理(平台管理员)
-		activityRoute := apiRouter.Group("/activity")
-		activityRoute.Use(middleware.AdminAuth())
-		{
-			activityRoute.GET("/", controller.AdminListActivities)
-			activityRoute.GET("/:id", controller.AdminGetActivity)
-			activityRoute.POST("/", controller.AdminCreateActivity)
-			activityRoute.PUT("/", controller.AdminUpdateActivity)
-			activityRoute.DELETE("/:id", controller.AdminDeleteActivity)
-		}
-		// 达人兑换码管理 + 流量看板(平台管理员)
-		influencerCodeRoute := apiRouter.Group("/influencer-code")
-		influencerCodeRoute.Use(middleware.AdminAuth())
-		{
-			// 看板/明细：具体路径需在 /:id 之前注册，避免被 :id 捕获
-			influencerCodeRoute.GET("/stats", controller.AdminInfluencerCodeStats)
-			influencerCodeRoute.GET("/stats/trend", controller.AdminInfluencerCodeTrend)
-			influencerCodeRoute.GET("/redemptions", controller.AdminInfluencerCodeRedemptions)
-			influencerCodeRoute.GET("/with-reward", controller.AdminListInfluencerCodesWithReward)
-			influencerCodeRoute.POST("/batch-import", controller.AdminBatchImportInfluencerCodes)
-			influencerCodeRoute.POST("/batch-operate", controller.AdminBatchOperateInfluencerCodes)
-			influencerCodeRoute.GET("/", controller.AdminListInfluencerCodes)
-			influencerCodeRoute.GET("/:id", controller.AdminGetInfluencerCode)
-			influencerCodeRoute.POST("/", controller.AdminCreateInfluencerCode)
-			influencerCodeRoute.PUT("/:id", controller.AdminUpdateInfluencerCode)
-			influencerCodeRoute.DELETE("/:id", controller.AdminDeleteInfluencerCode)
-		}
-		// 达人奖励规则(平台管理员) — AI 生成 + 设置读写(T6 在同组追加 GET/PUT /settings)
-		rewardRuleRoute := apiRouter.Group("/reward-rule")
-		rewardRuleRoute.Use(middleware.AdminAuth())
-		{
-			rewardRuleRoute.POST("/generate", controller.AdminGenerateRewardRule)
-			rewardRuleRoute.GET("/settings", controller.AdminGetRewardSettings)
-			rewardRuleRoute.PUT("/settings", controller.AdminUpdateRewardSettings)
-		}
-		// 达人奖励结算(平台管理员) — 结算 + 奖励记录 + 单码结算历史
-		rewardSettlementRoute := apiRouter.Group("/reward-settlement")
-		rewardSettlementRoute.Use(middleware.AdminAuth())
-		{
-			// 具体路径需在 /:id 之前注册，避免被 :id 捕获
-			rewardSettlementRoute.POST("/settle", controller.AdminSettleReward)
-			rewardSettlementRoute.GET("/by-code", controller.AdminGetSettlementHistoryByCode)
-			rewardSettlementRoute.GET("/", controller.AdminListRewardSettlements)
-			rewardSettlementRoute.GET("/:id/items", controller.AdminGetRewardSettlementItems)
-		}
 		// 会员身份管理(平台管理员)
 		memberIdentityRoute := apiRouter.Group("/member-identity")
 		memberIdentityRoute.Use(middleware.AdminAuth())
@@ -202,43 +152,6 @@ func SetApiRouter(router *gin.Engine) {
 			memberIdentityRoute.POST("/", controller.AdminCreateMemberIdentity)
 			memberIdentityRoute.PUT("/", controller.AdminUpdateMemberIdentity)
 			memberIdentityRoute.DELETE("/:id", controller.AdminDeleteMemberIdentity)
-		}
-		// 用户分群管理(平台管理员) - Phase 2 功能，暂时注释
-		userCrowdRoute := apiRouter.Group("/user-crowd")
-		userCrowdRoute.Use(middleware.AdminAuth())
-		{
-			userCrowdRoute.GET("/", controller.AdminGetUserCrowds)
-			userCrowdRoute.GET("/:id", controller.AdminGetUserCrowd)
-			userCrowdRoute.POST("/", controller.AdminCreateUserCrowd)
-			userCrowdRoute.PUT("/", controller.AdminUpdateUserCrowd)
-			userCrowdRoute.DELETE("/:id", controller.AdminDeleteUserCrowd)
-			userCrowdRoute.GET("/:id/users", controller.AdminGetCrowdUsers)
-			userCrowdRoute.POST("/:id/calculate", controller.AdminCalculateCrowdCount)
-			userCrowdRoute.POST("/calculate-all", controller.AdminCalculateAllCrowdCounts)
-			userCrowdRoute.POST("/preview", controller.AdminPreviewCrowd)
-			userCrowdRoute.POST("/batch-grant", controller.AdminBatchGrant)
-		}
-		// 用户标签管理(平台管理员)
-		userTagRoute := apiRouter.Group("/user-tag")
-		userTagRoute.Use(middleware.AdminAuth())
-		{
-			userTagRoute.GET("/", controller.AdminGetUserTags)
-			userTagRoute.POST("/", controller.AdminCreateUserTag)
-			userTagRoute.PUT("/", controller.AdminUpdateUserTag)
-			userTagRoute.DELETE("/:id", controller.AdminDeleteUserTag)
-			userTagRoute.POST("/batch", controller.AdminBatchTagUsers)
-			userTagRoute.POST("/batch-untag", controller.AdminBatchUntagUsers)
-			userTagRoute.POST("/users", controller.AdminGetUsersTags)
-		}
-		// 运营看板（平台管理员）
-		operationDashboardRoute := apiRouter.Group("/operation-dashboard")
-		operationDashboardRoute.Use(middleware.AdminAuth())
-		{
-			operationDashboardRoute.GET("/stats", controller.GetOperationDashboardStats)
-			operationDashboardRoute.GET("", controller.ListOperationDashboards)
-			operationDashboardRoute.POST("", controller.CreateOperationDashboard)
-			operationDashboardRoute.PUT("/:id", controller.UpdateOperationDashboard)
-			operationDashboardRoute.DELETE("/:id", controller.DeleteOperationDashboard)
 		}
 		optionRoute := apiRouter.Group("/option")
 		optionRoute.Use(middleware.RootAuth())
@@ -533,6 +446,7 @@ func SetApiRouter(router *gin.Engine) {
 		personalSkillRoute.Use(middleware.UserAuth())
 		{
 			personalSkillRoute.GET("/", controller.ListPersonalSkills)
+			personalSkillRoute.POST("/submit", controller.SubmitPersonalSkill)
 			personalSkillRoute.GET("/:id", controller.GetPersonalSkill)
 			personalSkillRoute.GET("/:id/bundle", controller.GetPersonalSkillBundle)
 			personalSkillRoute.POST("/", controller.CreatePersonalSkill)
@@ -545,21 +459,11 @@ func SetApiRouter(router *gin.Engine) {
 		personalSkillAdminRoute.Use(middleware.AdminAuth())
 		{
 			personalSkillAdminRoute.GET("/", controller.AdminListPersonalSkills)
+			personalSkillAdminRoute.GET("/reviews", middleware.RootAuth(), controller.AdminListPersonalSkillReviews)
+			personalSkillAdminRoute.POST("/:id/review/:action", middleware.RootAuth(), controller.ReviewPersonalSkill)
 			personalSkillAdminRoute.GET("/:id", controller.AdminGetPersonalSkill)
 			personalSkillAdminRoute.PUT("/:id", controller.AdminUpdatePersonalSkill)
 			personalSkillAdminRoute.DELETE("/:id", controller.AdminDeletePersonalSkill)
-		}
-		// 邀请码相关接口
-		inviteRoute := apiRouter.Group("/invite")
-		{
-			inviteRoute.GET("/validate", controller.ValidateInviteCode)
-			inviteRoute.GET("/activities", controller.GetInviteActivities)
-		}
-		inviteSelfRoute := apiRouter.Group("/user/invite")
-		inviteSelfRoute.Use(middleware.UserAuth())
-		{
-			inviteSelfRoute.GET("", controller.GetMyInvite)
-			inviteSelfRoute.GET("/list", controller.GetMyInviteList)
 		}
 		// Feedback route
 		feedbackRoute := apiRouter.Group("/feedback")
