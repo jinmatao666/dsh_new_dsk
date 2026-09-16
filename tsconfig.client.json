@@ -100,6 +100,7 @@
     { "path": "./packages/client/ui-renderer" },
     { "path": "./packages/client/ui-session" },
     { "path": "./packages/client/web" },
+    { "path": "./packages/wanwei/oneapi-auth/tsconfig.client.json" },
     { "path": "./packages/context/file-reference" },
     { "path": "./apps/web" }
   ]

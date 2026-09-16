@@ -1,0 +1,14 @@
+# Wanwei-owned product layer over dsh-base and dsh-web-app. Private features
+# enter through this layer instead of editing either official bundle.
+- insert:
+    - id: wanwei-oneapi-auth
+      name: '@deepseek-ai/dsh-wanwei-oneapi-auth'
+      config:
+        baseURL: !!js process.env.DSH_ONEAPI_URL ?? 'http://127.0.0.1:3000'
+        provider: dsh-server
+        credentialRef: DSH_ONEAPI_TOKEN
+        tokenName: DSH Desktop Auto Token
+        defaultInput: [text]
+        defaultModel: !!js process.env.DSH_DEFAULT_MODEL
+        installId: !!js process.env.DSH_INSTALL_ID
+        developmentBypass: !!js process.env.DSH_DESKTOP_DEVELOPMENT === '1'
