@@ -91,7 +91,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build self-contained installer
-        run: pnpm --dir products/wanwei-desktop run build:runner -- --bundles ${{ matrix.bundles }} --config "${{ runner.temp }}/wanwei-preview-${{ matrix.platform }}.json"
+        run: pnpm --dir products/wanwei-desktop run build:runner --bundles ${{ matrix.bundles }} --config "${{ runner.temp }}/wanwei-preview-${{ matrix.platform }}.json"
 
       - name: Upload Windows preview installer
         if: ${{ matrix.platform == 'windows-x64' }}
