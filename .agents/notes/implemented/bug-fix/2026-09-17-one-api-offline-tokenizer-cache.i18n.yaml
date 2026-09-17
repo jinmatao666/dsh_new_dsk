@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-17-one-api-offline-tokenizer-cache.md
+2026-09-17-one-api-offline-tokenizer-cache.md: 733a99f73fd664db3e7332adf12b829296f89a1f
+2026-09-17-one-api-offline-tokenizer-cache.zh.md: b01d3c01a142b358787fef96a45d9a023388a8d4

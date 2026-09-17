@@ -75,10 +75,13 @@ RUN go build -trimpath \
 FROM ${DOCKER_MIRROR}/library/alpine:latest
 ARG ALPINE_MIRROR
 
+ENV TIKTOKEN_CACHE_DIR=/opt/tiktoken-cache
+
 RUN sed -i "s#dl-cdn.alpinelinux.org/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories && \
     apk add --no-cache ca-certificates tzdata
 
 COPY --from=go-builder /build/one-api /one-api
+COPY tiktoken-cache /opt/tiktoken-cache
 
 EXPOSE 3000 3001
 WORKDIR /data
