@@ -20,6 +20,15 @@ describe('Wanwei desktop preview workflow', () => {
   it('is manual-only and builds isolated Windows, macOS, and Linux preview products', () => {
     const workflow = loadWorkflow()
     expect(Object.keys(workflow.on as Record<string, unknown>)).toEqual(['workflow_dispatch'])
+    const dispatch = (workflow.on as Record<string, Record<string, unknown>>).workflow_dispatch
+    expect(dispatch).toBeDefined()
+    expect(dispatch?.inputs).toMatchObject({
+      source_ref: {
+        required: true,
+        default: 'new-version',
+        type: 'string',
+      },
+    })
     const jobs = workflow.jobs as Record<string, Record<string, unknown>>
     const build = jobs['build-desktop']
     expect(build?.['runs-on']).toBe('${{ matrix.runner }}')
@@ -32,6 +41,10 @@ describe('Wanwei desktop preview workflow', () => {
       { name: 'Linux x64', platform: 'linux-x64', runner: 'ubuntu-22.04', bundles: 'deb,appimage' },
     ])
     const steps = build?.steps as Array<Record<string, unknown>>
+    expect(steps[0]).toMatchObject({
+      uses: 'actions/checkout@v6',
+      with: { ref: '${{ inputs.source_ref }}' },
+    })
     const commands = steps.filter(step => typeof step.run === 'string').map(step => step.run).join('\n')
     expect(commands).toContain('products/wanwei-desktop run check:identity')
     expect(commands).toContain('products/wanwei-desktop run dev:prepare')

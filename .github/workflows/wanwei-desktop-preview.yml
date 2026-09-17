@@ -5,6 +5,11 @@ name: Wanwei desktop preview
 on:
   workflow_dispatch:
     inputs:
+      source_ref:
+        description: Source branch or commit to build
+        required: true
+        default: new-version
+        type: string
       version:
         description: Preview version without the v prefix (for example 0.2.0-preview.1)
         required: true
@@ -16,7 +21,7 @@ on:
         type: boolean
 
 concurrency:
-  group: wanwei-desktop-preview-${{ github.ref }}
+  group: wanwei-desktop-preview-${{ inputs.source_ref }}
   cancel-in-progress: false
 
 env:
@@ -51,6 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ inputs.source_ref }}
           fetch-depth: 1
           persist-credentials: false
 
