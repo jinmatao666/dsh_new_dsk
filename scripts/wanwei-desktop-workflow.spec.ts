@@ -33,12 +33,22 @@ describe('Wanwei desktop preview workflow', () => {
     ])
     const steps = build?.steps as Array<Record<string, unknown>>
     const commands = steps.filter(step => typeof step.run === 'string').map(step => step.run).join('\n')
-    expect(commands).toContain('products/wanwei-desktop run build:runner')
+    expect(commands).toContain('products/wanwei-desktop run check:identity')
+    expect(commands).toContain('products/wanwei-desktop run dev:prepare')
+    expect(commands).toContain('products/wanwei-desktop run prepare:runtime')
+    expect(commands).toContain('products/wanwei-desktop run check:runtime')
+    expect(commands).toContain('products/wanwei-desktop run build:runner:bundle')
     expect(commands).toContain('prepare-runner-config.mjs ${{ matrix.platform }}')
     expect(commands).toContain('libwebkit2gtk-4.1-dev')
     expect(commands).toContain('--bundles ${{ matrix.bundles }}')
     expect(commands).not.toContain('--ci')
-    expect(commands).not.toContain('run build:runner -- --bundles')
+    expect(commands).not.toContain('run build:runner:bundle -- --bundles')
+    expect(steps.map(step => step.name)).toEqual(expect.arrayContaining([
+      'Build DSH and desktop assets',
+      'Stage self-contained runtime',
+      'Verify staged runtime and sidecar',
+      'Build platform installer',
+    ]))
     expect(JSON.stringify(steps)).toContain('bundle/nsis/*.exe')
     expect(JSON.stringify(steps)).toContain('bundle/dmg/*.dmg')
     expect(JSON.stringify(steps)).toContain('bundle/deb/*.deb')

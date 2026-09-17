@@ -90,8 +90,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build self-contained installer
-        run: pnpm --dir products/wanwei-desktop run build:runner --bundles ${{ matrix.bundles }} --config "${{ runner.temp }}/wanwei-preview-${{ matrix.platform }}.json"
+      - name: Verify Wanwei product identity
+        run: pnpm --dir products/wanwei-desktop run check:identity
+
+      - name: Build DSH and desktop assets
+        run: pnpm --dir products/wanwei-desktop run dev:prepare
+
+      - name: Stage self-contained runtime
+        run: pnpm --dir products/wanwei-desktop run prepare:runtime
+
+      - name: Verify staged runtime and sidecar
+        run: pnpm --dir products/wanwei-desktop run check:runtime
+
+      - name: Build platform installer
+        run: pnpm --dir products/wanwei-desktop run build:runner:bundle --bundles ${{ matrix.bundles }} --config "${{ runner.temp }}/wanwei-preview-${{ matrix.platform }}.json"
 
       - name: Upload Windows preview installer
         if: ${{ matrix.platform == 'windows-x64' }}

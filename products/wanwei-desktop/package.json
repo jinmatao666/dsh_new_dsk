@@ -8,12 +8,14 @@
     "check:sidecar": "node scripts/verify-sidecar.mjs",
     "check:runtime": "node scripts/verify-sidecar.mjs --staged",
     "check:rust": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "check:runner": "node scripts/require-github-runner.mjs",
     "dev:prepare": "pnpm --dir ../.. run build",
     "dev": "pnpm run check:identity && pnpm run dev:prepare && tauri dev --config src-tauri/tauri.dev.conf.json",
     "prepare:runtime": "node scripts/prepare-runtime.mjs",
     "build:prepare": "pnpm run check:identity && pnpm run dev:prepare && pnpm run prepare:runtime && pnpm run check:runtime",
     "build:local": "pnpm run build:prepare && tauri build --no-bundle",
-    "build:runner": "node scripts/require-github-runner.mjs && pnpm run build:prepare && tauri build",
+    "build:runner": "pnpm run check:runner && pnpm run build:prepare && tauri build",
+    "build:runner:bundle": "pnpm run check:runner && tauri build",
     "build": "pnpm run build:local"
   },
   "devDependencies": {
