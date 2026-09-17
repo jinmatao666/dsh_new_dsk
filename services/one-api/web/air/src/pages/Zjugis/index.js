@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { API } from '../../helpers';
+import { API, copy } from '../../helpers';
 import { fetchManagedRoles } from '../../helpers/roles';
 import CustomSelect from '../../components/CustomSelect';
 import RolePermissions from '../../components/RolePermissions';
@@ -1661,6 +1661,14 @@ export function UsersPage() {
       openDetail(detail);
     } else dialog.notice(res.data?.message || '创建令牌失败');
   };
+  const copyToken = async (token) => {
+    const value = `sk-${token.key}`;
+    if (await copy(value)) {
+      dialog.notice('令牌已复制');
+    } else {
+      dialog.notice(`无法自动复制，请手动复制：${value}`);
+    }
+  };
   const grant = async (e) => {
     e.preventDefault();
     const perUnit = Number(localStorage.getItem('quota_per_unit') || 1000);
@@ -2044,10 +2052,9 @@ export function UsersPage() {
                 </div>
                 <div>
                   <button
+                    type='button'
                     className='link-button'
-                    onClick={() =>
-                      navigator.clipboard?.writeText(`sk-${t.key}`)
-                    }
+                    onClick={() => { void copyToken(t); }}
                   >
                     复制
                   </button>

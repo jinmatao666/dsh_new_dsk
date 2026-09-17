@@ -30,7 +30,10 @@ import (
 func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatusCode {
 	ctx := c.Request.Context()
 	meta := meta.GetByContext(c)
-	audioModel := "whisper-1"
+	audioModel := c.GetString(ctxkey.RequestModel)
+	if audioModel == "" {
+		audioModel = "whisper-1"
+	}
 
 	tokenId := c.GetInt(ctxkey.TokenId)
 	channelType := c.GetInt(ctxkey.Channel)
@@ -142,6 +145,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	}()
 
 	// map model name
+	originalAudioModel := audioModel
 	modelMapping := c.GetStringMapString(ctxkey.ModelMapping)
 	if modelMapping != nil && modelMapping[audioModel] != "" {
 		audioModel = modelMapping[audioModel]
@@ -154,6 +158,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	}
 
 	fullRequestURL := openai.GetFullRequestURL(baseURL, requestURL, channelType)
+	aliBailianTranscription := channelType == channeltype.AliBailian && relayMode == relaymode.AudioTranscription
 	if channelType == channeltype.Azure {
 		apiVersion := meta.Config.APIVersion
 		if relayMode == relaymode.AudioTranscription {
@@ -171,7 +176,25 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		return openai.ErrorWrapper(err, "new_request_body_failed", http.StatusInternalServerError)
 	}
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody.Bytes()))
+	requestContentType := c.Request.Header.Get("Content-Type")
+	if relayMode != relaymode.AudioSpeech && audioModel != originalAudioModel {
+		rewrittenBody, rewrittenContentType, rewriteErr := rewriteMultipartModel(requestBody.Bytes(), requestContentType, audioModel)
+		if rewriteErr != nil {
+			return openai.ErrorWrapper(rewriteErr, "rewrite_audio_model_failed", http.StatusBadRequest)
+		}
+		requestBody = bytes.NewBuffer(rewrittenBody)
+		requestContentType = rewrittenContentType
+	}
 	responseFormat := c.DefaultPostForm("response_format", "json")
+	if aliBailianTranscription {
+		aliBody, convertErr := buildAliBailianTranscriptionRequest(requestBody.Bytes(), requestContentType, audioModel)
+		if convertErr != nil {
+			return openai.ErrorWrapper(convertErr, "convert_audio_request_failed", http.StatusBadRequest)
+		}
+		requestBody = bytes.NewBuffer(aliBody)
+		requestContentType = "application/json"
+		fullRequestURL = aliBailianTranscriptionURL(baseURL)
+	}
 
 	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
@@ -187,8 +210,11 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	} else {
 		req.Header.Set("Authorization", c.Request.Header.Get("Authorization"))
 	}
-	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
+	req.Header.Set("Content-Type", requestContentType)
 	req.Header.Set("Accept", c.Request.Header.Get("Accept"))
+	if aliBailianTranscription {
+		req.Header.Set("X-DashScope-SSE", "disable")
+	}
 
 	resp, err := client.HTTPClient.Do(req)
 	if err != nil {
@@ -212,6 +238,19 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		err = resp.Body.Close()
 		if err != nil {
 			return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError)
+		}
+		if aliBailianTranscription {
+			if resp.StatusCode != http.StatusOK {
+				resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
+				return RelayErrorHandler(resp)
+			}
+			responseBody, err = convertAliBailianTranscriptionResponse(responseBody, responseFormat)
+			if err != nil {
+				return openai.ErrorWrapper(err, "convert_audio_response_failed", http.StatusInternalServerError)
+			}
+			resp.Header.Set("Content-Type", aliBailianResponseContentType(responseFormat))
+			resp.Header.Del("Content-Length")
+			resp.ContentLength = int64(len(responseBody))
 		}
 
 		var openAIErr openai.SlimTextResponse

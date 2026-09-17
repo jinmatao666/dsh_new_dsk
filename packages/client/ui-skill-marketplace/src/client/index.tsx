@@ -4,7 +4,7 @@ import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connec
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
-import { buildMarketplaceCatalog } from './catalog.ts'
+import { browseMarketplaceCatalog, buildMarketplaceCatalog, buildMarketplaceCategories, publishedSkillCategories } from './catalog.ts'
 import { marketplaceInstallAction } from './install-action.ts'
 import type { MarketplaceInstallState } from './install-action.ts'
 import './marketplace.css'
@@ -14,6 +14,7 @@ type Skill = {
   id: string
   name: string
   category: string
+  categories?: readonly string[]
   tags: readonly string[]
   summary: string
   description: string
@@ -26,6 +27,7 @@ type Skill = {
   params?: readonly SkillParam[]
   slug?: string
   installable?: boolean
+  marketplacePublished?: boolean
   remoteId?: number
   source?: 'official' | 'personal'
   reviewStatus?: 'none' | 'pending' | 'approved' | 'rejected'
@@ -102,7 +104,9 @@ type RemoteSkill = {
   submitter?: unknown
   tags?: unknown
   source?: unknown
+  categories?: unknown
 }
+type RemoteSkillCategory = { name?: unknown; code?: unknown }
 type RemoteSkillBundle = { assets?: unknown; sha256?: unknown }
 type RemotePersonalSkill = {
   name?: unknown
@@ -116,6 +120,7 @@ function parseReviewStatus(value: unknown): NonNullable<Skill['reviewStatus']> |
 }
 
 let loadRemoteSkills: (() => Promise<RemoteSkill[]>) | undefined
+let loadRemoteCategories: (() => Promise<RemoteSkillCategory[]>) | undefined
 let loadRemoteSkillBundle: ((id: number) => Promise<unknown>) | undefined
 let recordRemoteSkillInstall: ((id: number) => Promise<unknown>) | undefined
 let submitPersonalSkill: ((payload: unknown) => Promise<unknown>) | undefined
@@ -220,15 +225,6 @@ const SECTION_COPY: Record<MarketplaceSection, { title: string; subtitle: string
   connectors: { title: L.connectors, subtitle: '管理已授权的政务协同与数据服务连接' },
   automations: { title: L.automations, subtitle: '配置定时执行、事件触发和自动交付流程' },
 }
-
-const CATEGORIES = [
-  L.all,
-  '空间制图',
-  '专业写作',
-  '研究咨询',
-  '办公文档',
-  '数据分析',
-]
 
 const EXPERT_TEAMS: readonly ExpertTeam[] = [
   { id: 'planning-review', name: '国土空间规划审查专家团', summary: '由政策解读、GIS 制图、文本审查与报告交付技能协同完成规划材料审查。', members: ['规划主理人', '政策分析师', 'GIS 工程师', '报告审核员'], skills: ['政策文件解析', 'GIS 制图导出', '咨询报告生成器'], accent: '#2563eb' },
@@ -723,9 +719,10 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   })
   const [discoveredCustomSkills, setDiscoveredCustomSkills] = useState<Skill[]>([])
   const [adding, setAdding] = useState(false)
-  const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '办公文档', icon: 'preset:assistant', visibility: 'private' as 'private' | 'public' })
+  const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '通用类', icon: 'preset:assistant', visibility: 'private' as 'private' | 'public' })
   const [customSkillDirectory, setCustomSkillDirectory] = useState<string | null>(null)
   const [remoteSkills, setRemoteSkills] = useState<RemoteSkill[] | null>(null)
+  const [remoteCategories, setRemoteCategories] = useState<RemoteSkillCategory[] | null>(null)
   const [personalSkills, setPersonalSkills] = useState<RemotePersonalSkill[]>([])
 
   const [installStates, setInstallStates] = useState<Map<string, MarketplaceSkillState>>(new Map())
@@ -792,6 +789,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       if (section === 'skills') {
         void refreshInstallStates()
         if (loadRemoteSkills !== undefined) void loadRemoteSkills().then(setRemoteSkills).catch(() => setRemoteSkills(null))
+        if (loadRemoteCategories !== undefined) void loadRemoteCategories().then(setRemoteCategories).catch(() => setRemoteCategories(null))
         if (loadPersonalSkills !== undefined) void loadPersonalSkills().then(setPersonalSkills).catch(() => setPersonalSkills([]))
       }
       // Only one capability panel may be expanded: opening this section
@@ -832,12 +830,16 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       const remoteId = typeof remote.id === 'number' || typeof remote.id === 'string' ? String(remote.id) : slug
       const source = remote.source === 'personal' ? 'personal' : 'official'
       const remoteTags = Array.isArray(remote.tags) ? remote.tags.filter((tag): tag is string => typeof tag === 'string') : []
+      const relationCategories = publishedSkillCategories(remote.categories)
+      const legacyCategory = typeof remote.category === 'string' && remote.category.trim() !== '' ? remote.category.trim() : '通用类'
+      const categories = relationCategories.length > 0 ? relationCategories : [legacyCategory]
       return [{
         id: `remote-${remoteId}`,
         ...(typeof remote.id === 'number' ? { remoteId: remote.id } : {}),
         slug,
         name: typeof remote.display_name === 'string' && remote.display_name !== '' ? remote.display_name : slug,
-        category: typeof remote.category === 'string' && remote.category !== '' ? remote.category : '其他',
+        category: categories[0] ?? legacyCategory,
+        categories,
         tags: [...new Set([...remoteTags, source === 'personal' ? '个人' : '官方'])],
         summary: typeof remote.description === 'string' ? remote.description : '',
         description: typeof remote.scenario === 'string' && remote.scenario !== '' ? remote.scenario : (typeof remote.description === 'string' ? remote.description : ''),
@@ -846,6 +848,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
         author: typeof remote.submitter === 'string' ? remote.submitter : '平台管理员',
         source,
         installable: true,
+        marketplacePublished: true,
       }]
     }) ?? null
     const reviewBySlug = new Map(personalSkills.flatMap(item => typeof item.name === 'string' ? [[item.name, item] as const] : []))
@@ -860,6 +863,17 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     })
     return buildMarketplaceCatalog(local, published)
   }, [discoveredCustomSkills, personalSkills, remoteSkills])
+  const categories = useMemo(() => [
+    L.all,
+    ...buildMarketplaceCategories(remoteCategories, allSkills.map(skill => skill.categories ?? [skill.category])),
+  ], [allSkills, remoteCategories])
+  useEffect(() => {
+    if (!categories.includes(category)) setCategory(L.all)
+    const selectable = categories[1]
+    if (selectable !== undefined && !categories.slice(1).includes(newSkill.category)) {
+      setNewSkill(current => ({ ...current, category: selectable }))
+    }
+  }, [categories, category, newSkill.category])
   const resolveInstallState = (skill: Skill): MarketplaceInstallState => {
     const state = installStates.get(skill.id) ?? [...installStates.values()].find(item => item.slug === skillSlug(skill))
     if (state === undefined) return 'notInstalled'
@@ -870,7 +884,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     const state = resolveInstallState(skill)
     return state === 'installed' || state === 'updateAvailable'
   }
-  const featuredPool = useMemo(() => allSkills
+  const featuredPool = useMemo(() => browseMarketplaceCatalog(allSkills)
     .filter(skill => skill.featured)
     .sort((left, right) => Number(right.tags.includes('官方')) - Number(left.tags.includes('官方'))), [allSkills])
   const [featuredOffset, setFeaturedOffset] = useState(0)
@@ -883,14 +897,14 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   }, [featuredPool, featuredOffset])
 
   const visible = useMemo(() => {
-    let skills = [...allSkills]
+    let skills = showInstalledOnly ? [...allSkills] : browseMarketplaceCatalog(allSkills)
     if (!showInstalledOnly && activeSubTab === 'skillHub') {
       skills = skills.filter(s => s.tags.includes('SkillHub'))
     } else if (!showInstalledOnly && activeSubTab === 'suite') {
       skills = skills.filter(s => s.tags.includes(L.suite))
     }
     if (!showInstalledOnly && category !== L.all) {
-      skills = skills.filter(s => s.category === category)
+      skills = skills.filter(s => (s.categories ?? [s.category]).includes(category))
     }
     if (query.trim() !== '') {
       const q = query.trim().toLowerCase()
@@ -1026,7 +1040,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     localStorage.setItem('dsh.marketplace.custom-skills', JSON.stringify(next))
     setInstallStates(previous => new Map(previous).set(id, { id, slug, version: '1.0.0', installedVersion: '1.0.0', state: 'installed' }))
     setAdding(false)
-    setNewSkill({ name: '', summary: '', category: '办公文档', icon: 'preset:assistant', visibility: 'private' })
+    setNewSkill({ name: '', summary: '', category: categories[1] ?? '通用类', icon: 'preset:assistant', visibility: 'private' })
     setCustomSkillDirectory(null)
     setSelectedSkill(skill)
     setView('detail')
@@ -1085,7 +1099,12 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                     >
                       {L.myInstalled}
                     </button>
-                    <button type="button" className="primary" onClick={() => { setAdding(true) }}>{L.addSkill}</button>
+                    <button type="button" className="primary" onClick={() => {
+                      setAdding(true)
+                      if (loadRemoteCategories !== undefined) {
+                        void loadRemoteCategories().then(setRemoteCategories).catch(() => setRemoteCategories(null))
+                      }
+                    }}>{L.addSkill}</button>
                   </div>
                 </div>
               </div>
@@ -1144,6 +1163,9 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                       setActiveSubTab(tab.id)
                       void refreshInstallStates()
                       if (loadRemoteSkills !== undefined) void loadRemoteSkills().then(setRemoteSkills).catch(() => setRemoteSkills(null))
+                      if (loadRemoteCategories !== undefined) {
+                        void loadRemoteCategories().then(setRemoteCategories).catch(() => setRemoteCategories(null))
+                      }
                     }}
                   >
                     {tab.label}
@@ -1152,7 +1174,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
               </div>}
 
               {!showInstalledOnly && <div className="dsh-skill-categories">
-                {CATEGORIES.map(item => (
+                {categories.map(item => (
                   <button
                     key={item}
                     type="button"
@@ -1160,6 +1182,9 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                     onClick={() => {
                       setCategory(item)
                       if (loadRemoteSkills !== undefined) void loadRemoteSkills().then(setRemoteSkills).catch(() => setRemoteSkills(null))
+                      if (loadRemoteCategories !== undefined) {
+                        void loadRemoteCategories().then(setRemoteCategories).catch(() => setRemoteCategories(null))
+                      }
                     }}
                   >
                     {item}
@@ -1215,27 +1240,35 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                 <button type="button" onClick={() => { setAdding(false) }} aria-label="关闭">×</button>
               </div>
               <label>中文显示名称<input autoFocus value={newSkill.name} onChange={(event) => { setNewSkill({ ...newSkill, name: event.target.value }) }} placeholder="例如：会议纪要整理" /></label>
-              <label>
-                分类
-                <select
-                  value={newSkill.category}
-                  onChange={(event) => { setNewSkill({ ...newSkill, category: event.target.value }) }}
-                >
-                  {CATEGORIES.slice(1).map(item => <option key={item}>{item}</option>)}
-                </select>
+              <label className="dsh-skill-add-field">
+                <span className="dsh-skill-add-field-label">分类</span>
+                <span className="dsh-skill-add-select-shell">
+                  <select
+                    value={newSkill.category}
+                    disabled={categories.length <= 1}
+                    onChange={(event) => { setNewSkill(current => ({ ...current, category: event.target.value })) }}
+                  >
+                    {categories.length <= 1 && <option value={newSkill.category}>暂无可用分类</option>}
+                    {categories.slice(1).map(item => <option key={item}>{item}</option>)}
+                  </select>
+                  <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg>
+                </span>
               </label>
               <label>用途说明<textarea value={newSkill.summary} onChange={(event) => { setNewSkill({ ...newSkill, summary: event.target.value }) }} placeholder="说明这个技能何时使用、能完成什么任务" /></label>
               <label>
                 技能图标
-                <span className="dsh-skill-add-icon-options">
-                  {DEFAULT_SKILL_ICONS.map(item => <button key={item.value} type="button" title={item.label} aria-label={item.label} className={newSkill.icon === item.value ? 'active' : ''} onClick={() => { setNewSkill({ ...newSkill, icon: item.value }) }}><DefaultSkillIcon icon={item.value} size={30} /></button>)}
+                <span className="dsh-skill-add-icon-options" role="radiogroup" aria-label="技能图标">
+                  {DEFAULT_SKILL_ICONS.map((item) => {
+                    const selected = newSkill.icon === item.value
+                    return <button key={item.value} type="button" role="radio" aria-checked={selected} title={item.label} aria-label={item.label} className={selected ? 'active' : ''} onClick={() => { setNewSkill(current => ({ ...current, icon: item.value })) }}><DefaultSkillIcon icon={item.value} size={30} /></button>
+                  })}
                 </span>
                 <small className="dsh-skill-add-icon-hint">选择一个通用技能图标，用于个人技能和审核通过后的技能市场展示。</small>
               </label>
               <fieldset className="dsh-skill-add-visibility">
                 <legend>可见范围</legend>
                 <div>
-                  <button type="button" className={newSkill.visibility === 'private' ? 'active' : ''} onClick={() => { setNewSkill({ ...newSkill, visibility: 'private' }) }}><strong>私人</strong><span>仅自己可见，无需审核</span></button>
+                  <button type="button" className={newSkill.visibility === 'private' ? 'active' : ''} onClick={() => { setNewSkill({ ...newSkill, visibility: 'private' }) }}><strong>私人</strong><span>仅自己使用；管理员可查看和下载</span></button>
                   <button type="button" className={newSkill.visibility === 'public' ? 'active' : ''} onClick={() => { setNewSkill({ ...newSkill, visibility: 'public' }) }}><strong>公开</strong><span>提交管理员审核</span></button>
                 </div>
               </fieldset>
@@ -1245,7 +1278,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                 {customSkillDirectory !== null && <small className="dsh-skill-add-selected" title={customSkillDirectory}>已选择：{customSkillDirectory}</small>}
               </label>
               <small className="dsh-skill-add-hint">请选择包含 SKILL.md 的完整目录。文件会安装到本机并安全上传；公开技能审核通过前不会出现在技能市场，更新已公开技能也需要再次审核。</small>
-              <footer><button type="button" onClick={() => { setAdding(false) }}>取消</button><button type="submit" disabled={newSkill.name.trim() === '' || customSkillDirectory === null || installing !== null}>{newSkill.visibility === 'public' ? '提交审核并安装' : '保存并安装'}</button></footer>
+              <footer><button type="button" onClick={() => { setAdding(false) }}>取消</button><button type="submit" disabled={newSkill.name.trim() === '' || customSkillDirectory === null || installing !== null || !categories.slice(1).includes(newSkill.category)}>{newSkill.visibility === 'public' ? '提交审核并安装' : '保存并安装'}</button></footer>
             </form>
           </div>
         )}
@@ -1288,6 +1321,10 @@ export function apply(ctx: ClientContext): void {
   loadRemoteSkills = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'skill-list', {})) as { items?: unknown }
     return Array.isArray(raw?.items) ? raw.items.filter((item): item is RemoteSkill => typeof item === 'object' && item !== null) : []
+  }
+  loadRemoteCategories = async () => {
+    const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'skill-categories', {})) as { items?: unknown }
+    return Array.isArray(raw?.items) ? raw.items.filter((item): item is RemoteSkillCategory => typeof item === 'object' && item !== null) : []
   }
   loadRemoteSkillBundle = async (id: number) => rpcValue(await connection.rpc.call('/desktop-auth', 'skill-bundle', { id }))
   recordRemoteSkillInstall = async (id: number) => rpcValue(await connection.rpc.call('/desktop-auth', 'skill-download', { id }))

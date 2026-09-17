@@ -4,6 +4,7 @@ import { Bot, ChartColumn, Compass, FileText, Map, Zap } from 'lucide-react';
 import SkillBrowseDrawer from './SkillBrowseDrawer';
 import CustomSelect from './CustomSelect';
 import { importSkillFolder, zipSkillFolder } from './skillFolderImport';
+import { downloadSkillZip } from './skillDownload';
 import { API, showError, showSuccess } from '../helpers';
 import './SkillsTable.css';
 
@@ -98,10 +99,21 @@ const EMPTY_FORM = {
   icon: 'preset:assistant'
 };
 
+const SKILL_SCOPES = [
+  ['all', '全部'],
+  ['official', '官方'],
+  ['personal-public', '个人公开'],
+  ['private', '私人']
+];
+
+const isPrivateSkill = skill => skill.record_type === 'private';
+const skillScope = skill => isPrivateSkill(skill) ? 'private' : skill.source === 'personal' ? 'personal-public' : 'official';
+
 const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   const [items, setItems] = useState([]);
   const [managedCategories, setManagedCategories] = useState([]);
   const [keyword, setKeyword] = useState(keywordProp);
+  const [scope, setScope] = useState('all');
   const [browse, setBrowse] = useState({ visible: false, skill: null });
   // editor.base 为被编辑的技能；null 表示新增
   const [editor, setEditor] = useState(null);
@@ -117,8 +129,20 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   const [releases, setReleases] = useState({ skill: null, items: [], files: [], selectedFilePath: '' });
   const loadSkills = useCallback(async () => {
     try {
-      const response = await API.get('/api/skill/admin/list', { params: { page: 1, perPage: 100 } });
-      setItems(Array.isArray(response.data?.items) ? response.data.items : []);
+      const [publishedResponse, privateResponse] = await Promise.all([
+        API.get('/api/skill/admin/list', { params: { page: 1, perPage: 100 } }),
+        API.get('/api/personal-skill/admin/', { params: { page: 1, perPage: 100, visibility: 'private' } })
+      ]);
+      const published = Array.isArray(publishedResponse.data?.items) ? publishedResponse.data.items : [];
+      const privateSkills = (Array.isArray(privateResponse.data?.items) ? privateResponse.data.items : []).map(skill => ({
+        ...skill,
+        record_type: 'private',
+        submitter: skill.owner,
+        downloads: 0,
+        status: null,
+        _rowKey: `private-${skill.id}`
+      }));
+      setItems([...published.map(skill => ({ ...skill, _rowKey: `published-${skill.id}` })), ...privateSkills]);
     } catch (error) {
       showError(error.message || '加载技能失败');
     }
@@ -254,9 +278,20 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
 
   const filteredItems = useMemo(() => {
     const query = keyword.trim().toLowerCase();
-    if (!query) return items;
-    return items.filter(item => [item.name, item.display_name, item.description, item.category, item.submitter].join(' ').toLowerCase().includes(query));
-  }, [items, keyword]);
+    return items.filter(item => {
+      if (scope !== 'all' && skillScope(item) !== scope) return false;
+      if (!query) return true;
+      return [item.name, item.display_name, item.description, item.category, item.submitter, item.owner].join(' ').toLowerCase().includes(query);
+    });
+  }, [items, keyword, scope]);
+
+  const downloadSkill = async skill => {
+    try {
+      await downloadSkillZip(isPrivateSkill(skill) ? 'personal' : 'public', skill.id);
+    } catch (error) {
+      showError(error.message || '下载技能失败');
+    }
+  };
 
   const removeSkill = skill => {
     Modal.confirm({ title: `删除技能「${skill.display_name || skill.name}」？`, content: '删除后将不再出现在桌面技能市场。', okType: 'danger', onOk: async () => { await API.delete(`/api/skill/${skill.id}`); await loadSkills(); showSuccess('技能已删除'); } });
@@ -284,7 +319,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     {
       title: '技能', width: 215, render: (_, record) => (
         <div className='skill-name'>
-          <div className='skill-name-title'><SkillIcon icon={record.icon} small /><Tooltip content={record.display_name || record.name}><span className='skill-name-main'>{record.display_name}</span></Tooltip><Tag color={record.source === 'personal' ? 'orange' : 'cyan'} size='small'>{record.source === 'personal' ? '个人' : '官方'}</Tag></div>
+          <div className='skill-name-title'><SkillIcon icon={record.icon} small /><Tooltip content={record.display_name || record.name}><span className='skill-name-main'>{record.display_name || record.name}</span></Tooltip><Tag color={isPrivateSkill(record) ? 'grey' : record.source === 'personal' ? 'orange' : 'cyan'} size='small'>{isPrivateSkill(record) ? '私人' : record.source === 'personal' ? '个人公开' : '官方'}</Tag></div>
           <Tooltip content={`${record.name || '-'} · ${record.team || '-'}`}><span className='skill-name-sub'>{record.name} · {record.team || '-'}</span></Tooltip>
         </div>
       )
@@ -310,20 +345,23 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
         );
       }
     },
-    { title: '版本', dataIndex: 'version', width: 70, render: (value, record) => <button type='button' className='skill-version-action' title={`v${value || '-'}`} onClick={() => { void openReleases(record); }}>v{value}</button> },
+    { title: '版本', dataIndex: 'version', width: 70, render: (value, record) => isPrivateSkill(record) ? <span>v{value || '-'}</span> : <button type='button' className='skill-version-action' title={`v${value || '-'}`} onClick={() => { void openReleases(record); }}>v{value}</button> },
     { title: '上传人', dataIndex: 'submitter', width: 90, render: value => <Tooltip content={value || 'root'}><span className='skill-uploader'>{value || 'root'}</span></Tooltip> },
     { title: '上传时间', dataIndex: 'created_at', width: 118, render: value => { const time = compactTime(value); return <span className='skill-upload-time' title={time.full}>{time.display}</span>; } },
     { title: '安装量', dataIndex: 'downloads', width: 62, render: value => { const downloads = Number(value || 0); return <Tooltip content={`安装量：${downloads}`}><span className='skill-install-count'>{downloads}</span></Tooltip>; } },
-    { title: '状态', width: 100, render: (_, record) => record.unpublished_release_count > 0
+    { title: '状态', width: 100, render: (_, record) => isPrivateSkill(record)
+      ? <Tag color='grey' size='small'>私人留存</Tag>
+      : record.unpublished_release_count > 0
       ? <div className='skill-status-stack'><Tag color='orange' size='small'>{record.status === 1 ? '待更新' : '未上架'}</Tag>{record.status === 1 && <small>当前版本已上架</small>}</div>
       : <Tag color={STATUS_COLORS[record.status] || 'grey'} size='small'>{record.status === 1 ? STATUS_LABELS[record.status] : '未发布'}</Tag> },
     {
       title: '操作', width: 160, render: (_, record) => (
         <div className='skill-row-actions'>
-          <button type='button' className='skill-text-action' onClick={() => openEditor(record)}>编辑</button>
-          <button type='button' className='skill-text-action' onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '上架'}</button>
+          {!isPrivateSkill(record) && record.source !== 'personal' && <button type='button' className='skill-text-action' onClick={() => openEditor(record)}>编辑</button>}
+          {!isPrivateSkill(record) && <button type='button' className='skill-text-action' onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '上架'}</button>}
           <button type='button' className='skill-text-action' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</button>
-          <button type='button' className='skill-text-action danger' onClick={() => removeSkill(record)}>删除</button>
+          {(isPrivateSkill(record) || record.source === 'personal') && <button type='button' className='skill-text-action' onClick={() => { void downloadSkill(record); }}>下载</button>}
+          {!isPrivateSkill(record) && record.source !== 'personal' && <button type='button' className='skill-text-action danger' onClick={() => removeSkill(record)}>删除</button>}
         </div>
       )
     }
@@ -336,7 +374,6 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     if (!name) { showError('请输入技能标识'); return; }
     if (!displayName) { showError('请输入显示名称'); return; }
     if (!form.category) { showError('请选择分类；分类由“分类管理”维护'); return; }
-    const base = editor.base || {};
     const payload = {
       name,
       display_name: displayName,
@@ -375,14 +412,19 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     </div>
     <section className='preview-surface skill-admin-surface'>
       <div className='preview-section-head'>
-        <h2>技能列表</h2>
+        <div className='skill-list-heading'>
+          <h2>技能列表</h2>
+          <div className='skill-list-filters' role='group' aria-label='技能来源筛选'>
+            {SKILL_SCOPES.map(([value, label]) => <button key={value} type='button' className={scope === value ? 'active' : ''} aria-pressed={scope === value} onClick={() => setScope(value)}>{label}</button>)}
+          </div>
+        </div>
         <div className='form-inline-actions'><span className='skill-admin-meta'>共 {filteredItems.length} 条{keyword.trim() ? ` · 搜索“${keyword.trim()}”` : ''}</span><button type='button' className='preview-button primary' onClick={() => setImportDialogVisible(true)}>导入技能</button></div>
       </div>
       <input ref={zipInputRef} hidden type='file' accept='.zip,application/zip' onChange={importZip} />
       <input ref={importFolderInputRef} hidden type='file' multiple onChange={importFolder} {...{ webkitdirectory: '', directory: '' }} />
-      <Table columns={columns} dataSource={filteredItems} rowKey='id' tableLayout='fixed' pagination={{ pageSize: 20 }} empty='暂无技能' />
+      <Table columns={columns} dataSource={filteredItems} rowKey='_rowKey' tableLayout='fixed' pagination={{ pageSize: 20 }} empty='暂无技能' />
     </section>
-    <SkillBrowseDrawer visible={browse.visible} kind='public' id={browse.skill?.id} skill={browse.skill} onClose={() => setBrowse({ visible: false, skill: null })} />
+    <SkillBrowseDrawer visible={browse.visible} kind={isPrivateSkill(browse.skill || {}) ? 'personal' : 'public'} id={browse.skill?.id} skill={browse.skill} onClose={() => setBrowse({ visible: false, skill: null })} />
     {importSuccess && <div className='zjugis-modal-backdrop skill-release-backdrop' onMouseDown={(event) => { if (event.target === event.currentTarget) setImportSuccess(null); }}>
       <div className='zjugis-modal skill-import-success-dialog' role='dialog' aria-modal='true' aria-label='技能上传完成'>
         <div className='zjugis-modal-head'>

@@ -52,14 +52,30 @@ export function getFooterHTML() {
 }
 
 export async function copy(text) {
-  let okay = true;
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch (e) {
-    okay = false;
-    console.error(e);
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {
+      console.error(e);
+    }
   }
-  return okay;
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+  try {
+    return document.execCommand('copy');
+  } catch (e) {
+    console.error(e);
+    return false;
+  } finally {
+    textarea.remove();
+  }
 }
 
 export function isMobile() {

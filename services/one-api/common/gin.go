@@ -34,7 +34,7 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 		err = json.Unmarshal(requestBody, &v)
 	} else {
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
-		err = c.ShouldBind(&v)
+		err = c.ShouldBind(v)
 	}
 	if err != nil {
 		return err

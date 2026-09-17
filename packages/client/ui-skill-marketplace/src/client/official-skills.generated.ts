@@ -435,7 +435,7 @@ export const OFFICIAL_SKILLS = [
     'installs': '0',
     'accent': '#9333ea',
     'icon': '会',
-    'version': '1.0.3',
+    'version': '1.0.4',
     'author': '万维Buddy 办公工具',
     'featured': true,
     'params': [

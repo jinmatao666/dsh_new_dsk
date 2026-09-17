@@ -266,11 +266,16 @@ func DeletePersonalSkill(c *gin.Context) {
 	})
 }
 
-// AdminListPersonalSkills lists ALL users' personal skills with optional
-// keyword + owner filters. Admin-only.
+// AdminListPersonalSkills lists all users' personal skills with optional
+// keyword, owner, and visibility filters. Admin-only.
 func AdminListPersonalSkills(c *gin.Context) {
 	keyword := c.Query("keyword")
 	owner := c.Query("owner")
+	visibility := c.Query("visibility")
+	if visibility != "" && visibility != model.PersonalSkillPrivate && visibility != model.PersonalSkillPublic {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "visibility must be public or private"})
+		return
+	}
 	sortField := c.Query("sort_field")
 	sortOrder := c.Query("sort_order")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -282,7 +287,7 @@ func AdminListPersonalSkills(c *gin.Context) {
 		perPage = 20
 	}
 
-	skills, total, err := model.SearchPersonalSkillsSorted(keyword, owner, page, perPage, sortField, sortOrder)
+	skills, total, err := model.SearchPersonalSkillsSortedByVisibility(keyword, owner, visibility, page, perPage, sortField, sortOrder)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

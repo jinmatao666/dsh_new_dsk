@@ -376,6 +376,17 @@ export function apply(ctx: Context, config: Config): void {
     return jsonBody<unknown>(response)
   }
 
+  const listPublishedSkillCategories = async (signal?: AbortSignal): Promise<unknown> => {
+    const response = await fetch(`${baseURL}/api/skill-package/`, {
+      ...(signal === undefined ? {} : { signal }),
+    })
+    const result = await jsonBody<OneApiEnvelope<unknown[]>>(response)
+    if (!response.ok || result.success !== true) {
+      throw new Error(result.message ?? `技能分类暂时不可用（HTTP ${String(response.status)}）`)
+    }
+    return { items: Array.isArray(result.data) ? result.data : [] }
+  }
+
   const downloadPublishedSkillBundle = async (payload: unknown, signal?: AbortSignal): Promise<unknown> => {
     const id = typeof (payload as { id?: unknown })?.id === 'number' ? (payload as { id: number }).id : Number.NaN
     if (!Number.isInteger(id) || id < 1) throw new Error('技能标识无效')
@@ -523,6 +534,13 @@ export function apply(ctx: Context, config: Config): void {
     if (endpoint === 'skill-list') {
       try {
         return { ok: true as const, value: await listPublishedSkills(signal) }
+      } catch (error) {
+        return internal(error instanceof Error ? error.message : String(error))
+      }
+    }
+    if (endpoint === 'skill-categories') {
+      try {
+        return { ok: true as const, value: await listPublishedSkillCategories(signal) }
       } catch (error) {
         return internal(error instanceof Error ? error.message : String(error))
       }

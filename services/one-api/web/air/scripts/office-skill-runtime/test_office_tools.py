@@ -187,6 +187,34 @@ class OfficeToolsSmokeTest(unittest.TestCase):
         self.assertTrue(payload["input"]["messages"][0]["content"][0]["input_audio"]["data"].startswith("data:audio/wav;base64,"))
         self.assertEqual("Bearer test-key", request.get_header("Authorization"))
 
+    def test_qwen_audio_uses_multipart_request_through_one_api(self) -> None:
+        audio = self.inputs / "audio.wav"
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def read(self) -> bytes:
+                return json.dumps({"text": "网关转写内容"}).encode("utf-8")
+
+        with mock.patch.object(office_tools.urllib.request, "urlopen", return_value=Response()) as urlopen:
+            text = office_tools._transcribe_audio_chunk(
+                audio,
+                "http://one-api.example/v1/audio/transcriptions",
+                "qwen-audio-3.0-asr-flash",
+                "test-key",
+                60,
+            )
+        self.assertEqual("网关转写内容", text)
+        request = urlopen.call_args.args[0]
+        self.assertTrue(request.get_header("Content-type").startswith("multipart/form-data; boundary="))
+        self.assertIn(b'qwen-audio-3.0-asr-flash', request.data)
+        self.assertIn(b'filename="audio.wav"', request.data)
+        self.assertEqual("Bearer test-key", request.get_header("Authorization"))
+
     def _create_fixtures(self) -> None:
         from PIL import Image
         from docx import Document

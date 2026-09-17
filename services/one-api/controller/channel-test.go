@@ -66,6 +66,10 @@ func parseTestResponse(resp string) (*openai.TextResponse, string, error) {
 }
 
 func testChannel(ctx context.Context, channel *model.Channel, request *relaymodel.GeneralOpenAIRequest) (responseMessage string, err error, openaiErr *relaymodel.Error) {
+	if definition, lookupErr := model.GetModelDefinitionByName(request.Model); lookupErr == nil && definition.ModelType == model.ModelTypeAudio {
+		return controller.ProbeAudioTranscription(ctx, channel, request.Model)
+	}
+
 	startTime := time.Now()
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)

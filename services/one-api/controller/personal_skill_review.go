@@ -121,6 +121,10 @@ func SubmitPersonalSkill(c *gin.Context) {
 	if input.Category == "" {
 		input.Category = model.DefaultSkillCategoryName
 	}
+	if err := model.ValidatePrimarySkillCategory(input.Category); err != nil {
+		skillError(c, http.StatusBadRequest, err)
+		return
+	}
 	now := time.Now().Unix()
 	owner := c.GetString(ctxkey.Username)
 	existing, err := model.GetPersonalSkillByOwnerAndName(owner, input.Name)

@@ -24,6 +24,7 @@ import (
 //   - other(其他):仅供工具内部调用,不在对话框展示
 const (
 	ModelTypeChat  = "chat"
+	ModelTypeAudio = "audio"
 	ModelTypeOther = "other"
 )
 

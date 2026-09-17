@@ -10,3 +10,46 @@ export function buildMarketplaceCatalog<T>(
 ): T[] {
   return [...localSkills, ...(publishedSkills ?? [])]
 }
+
+/**
+ * Keep public browsing separate from owner-only and review-pending local skills.
+ * @param skills - Combined local and server-backed skill entries.
+ * @returns Only entries confirmed as published by the server.
+ */
+export function browseMarketplaceCatalog<T extends { marketplacePublished?: boolean }>(skills: readonly T[]): T[] {
+  return skills.filter(skill => skill.marketplacePublished === true)
+}
+
+/**
+ * Read the active package-category names attached to one published skill.
+ * @param value - The category relation payload returned by OneAPI.
+ * @returns Ordered, unique names of active package categories.
+ */
+export function publishedSkillCategories(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.flatMap((entry) => {
+    if (typeof entry !== 'object' || entry === null) return []
+    const category = entry as { type_code?: unknown; name?: unknown; status?: unknown }
+    if (category.type_code !== 'skill_package' || category.status === 0) return []
+    return typeof category.name === 'string' && category.name.trim() !== '' ? [category.name.trim()] : []
+  }))]
+}
+
+/**
+ * Build category navigation from the backend list, falling back to loaded skills while offline.
+ * @param remoteCategories - Ordered category records returned by category management.
+ * @param skillCategories - Category names attached to the loaded skills.
+ * @returns Ordered, unique category names for marketplace navigation.
+ */
+export function buildMarketplaceCategories(
+  remoteCategories: readonly unknown[] | null,
+  skillCategories: readonly (readonly string[])[],
+): string[] {
+  const backend = remoteCategories?.flatMap((entry) => {
+    if (typeof entry !== 'object' || entry === null) return []
+    const category = entry as { name?: unknown }
+    return typeof category.name === 'string' && category.name.trim() !== '' ? [category.name.trim()] : []
+  })
+  const source = backend !== null && backend !== undefined ? backend : skillCategories.flat()
+  return [...new Set(source)]
+}

@@ -575,7 +575,7 @@ export const OFFICIAL_SKILLS = [
       "Qwen3.8 结构化会议纪要",
       "Markdown 与 Word 交付"
     ],
-    "version": "1.0.3",
+    "version": "1.0.4",
     "team": "万维Buddy 办公工具",
     "submitter": "root",
     "created_at": "2026-09-14 19:00:00",

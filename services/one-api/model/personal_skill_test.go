@@ -56,6 +56,18 @@ func TestSearchPersonalSkills_OwnerAndKeywordCombined(t *testing.T) {
 	assert.Equal(t, "alice", skills[0].Owner)
 }
 
+func TestSearchPersonalSkillsSortedByVisibility_PrivateOnly(t *testing.T) {
+	setupTestDB(t)
+	require.NoError(t, CreatePersonalSkill(&PersonalSkill{Name: "private-skill", Owner: "alice", Content: "x", Visibility: PersonalSkillPrivate}))
+	require.NoError(t, CreatePersonalSkill(&PersonalSkill{Name: "public-skill", Owner: "alice", Content: "x", Visibility: PersonalSkillPublic}))
+
+	skills, total, err := SearchPersonalSkillsSortedByVisibility("", "", PersonalSkillPrivate, 1, 20, "", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, skills, 1)
+	assert.Equal(t, "private-skill", skills[0].Name)
+}
+
 func TestSearchPersonalSkillsSorted_sortsAcrossPagesBeforePagination(t *testing.T) {
 	setupTestDB(t)
 	records := []struct {

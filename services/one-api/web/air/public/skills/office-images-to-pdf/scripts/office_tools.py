@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 
-RUNTIME_VERSION = "1.0.3"
+RUNTIME_VERSION = "1.0.4"
 DEFAULT_FONT = "Microsoft YaHei"
 INVALID_FILENAME = re.compile(r'[\\/:*?"<>|]+')
 DEFAULT_MEETING_BASE_URL = "http://ac.zjugis.com:20330/v1"
@@ -949,10 +949,14 @@ def _split_wav(source: Path, temporary: Path, segment_seconds: int) -> list[Path
     return chunks
 
 
+def _is_dashscope_native_transcription_endpoint(endpoint: str) -> bool:
+    return "/api/v1/services/aigc/multimodal-generation/generation" in endpoint.lower()
+
+
 def _transcribe_audio_chunk(audio_path: Path, endpoint: str, model: str, api_key: str, timeout: int) -> str:
-    if model.lower().startswith("qwen-audio-3.0-asr-flash"):
+    if _is_dashscope_native_transcription_endpoint(endpoint):
         if not api_key:
-            raise UserError("qwen-audio-3.0-asr-flash 需要 WANWEI_TRANSCRIPTION_API_KEY 或 DASHSCOPE_API_KEY")
+            raise UserError("百炼原生语音转写接口需要 WANWEI_TRANSCRIPTION_API_KEY 或 DASHSCOPE_API_KEY")
         payload = {
             "model": model,
             "input": {

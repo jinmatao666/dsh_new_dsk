@@ -122,12 +122,21 @@ func personalSkillListOrder(sortField, sortOrder string) string {
 }
 
 func SearchPersonalSkillsSorted(keyword, owner string, page, perPage int, sortField, sortOrder string) ([]PersonalSkill, int64, error) {
+	return SearchPersonalSkillsSortedByVisibility(keyword, owner, "", page, perPage, sortField, sortOrder)
+}
+
+// SearchPersonalSkillsSortedByVisibility returns administrator-visible personal
+// skills and optionally limits the result to public or private records.
+func SearchPersonalSkillsSortedByVisibility(keyword, owner, visibility string, page, perPage int, sortField, sortOrder string) ([]PersonalSkill, int64, error) {
 	// 初始化为非 nil 空切片：查无数据时序列化为 [] 而非 null
 	skills := []PersonalSkill{}
 	var total int64
 	query := DB.Model(&PersonalSkill{})
 	if owner != "" {
 		query = query.Where("owner = ?", owner)
+	}
+	if visibility != "" {
+		query = query.Where("visibility = ?", visibility)
 	}
 	if keyword != "" {
 		query = query.Where("name LIKE ? OR description LIKE ? OR owner LIKE ?",

@@ -851,3 +851,16 @@
 .skill-review-identity span { overflow: hidden; color: #86a0c2; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .skill-review-actions { display: flex; align-items: center; gap: 6px; }
 .skill-review-reject-copy { margin: 0 0 12px; color: #667f9f; line-height: 1.6; }
+
+.skill-list-heading { display: flex; min-width: 0; align-items: center; gap: 18px; }
+.skill-list-heading h2 { flex: none; }
+.skill-list-filters { display: flex; align-items: center; gap: 4px; padding: 3px; border: 1px solid #e2ebf7; border-radius: 10px; background: #f3f7fc; }
+.skill-list-filters button { min-width: 54px; padding: 6px 11px; border: 0; border-radius: 7px; background: transparent; color: #6680a2; font-size: 13px; line-height: 20px; cursor: pointer; transition: color .16s ease, background-color .16s ease, box-shadow .16s ease; }
+.skill-list-filters button:hover { color: #2874e8; }
+.skill-list-filters button.active { background: #fff; color: #2874e8; font-weight: 600; box-shadow: 0 2px 8px rgb(31 78 140 / 10%); }
+.skill-list-filters button:focus-visible { outline: 2px solid rgb(40 116 232 / 35%); outline-offset: 1px; }
+
+@media (max-width: 960px) {
+  .skill-list-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .skill-list-filters { flex-wrap: wrap; }
+}

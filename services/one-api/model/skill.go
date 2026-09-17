@@ -571,7 +571,7 @@ func fillSkillBriefCategories(skills []SkillBrief) ([]SkillBrief, error) {
 	return skills, nil
 }
 
-// ListSkillPackages 按新 skill_package 分类统计未软删技能数量,返回技能包列表。
+// ListSkillPackages 按新 skill_package 分类统计未软删技能数量,返回全部启用的技能包分类。
 // 当新分类尚无数据时,回退旧 skills.category 聚合以兼容迁移前数据。
 func ListSkillPackages() ([]SkillPackageInfo, error) {
 	var results []SkillPackageInfo
@@ -582,7 +582,6 @@ func ListSkillPackages() ([]SkillPackageInfo, error) {
 		Joins("LEFT JOIN skills AS s ON s.id = r.skill_id AND s.is_deleted = ? AND s.status = ?", false, 1).
 		Where("c.is_deleted = ? AND c.status = ? AND t.status = ?", false, 1, 1).
 		Group("c.id, c.code, c.name, c.description, c.sort_order").
-		Having("COUNT(s.id) > 0").
 		Order("c.sort_order ASC, c.id DESC").
 		Find(&results).Error
 	if err != nil || len(results) > 0 {

@@ -49,6 +49,21 @@ func TestSkillCategoryRelations_allowMultipleTypesAndPackages(t *testing.T) {
 	assert.Equal(t, "office-study", categories[2].Code)
 }
 
+func TestListSkillPackages_includesEnabledEmptyCategories(t *testing.T) {
+	setupSkillCategoryTestDB(t)
+	createSkillCategoryForTest(t, SkillCategoryTypePackage, "general", "通用类")
+	createSkillCategoryForTest(t, SkillCategoryTypePackage, "mapping", "空间制图")
+
+	packages, err := ListSkillPackages()
+	require.NoError(t, err)
+	require.Len(t, packages, 2)
+	counts := map[string]int{}
+	for _, item := range packages {
+		counts[item.Name] = item.SkillCount
+	}
+	assert.Equal(t, map[string]int{"通用类": 0, "空间制图": 0}, counts)
+}
+
 func TestReplaceSkillCategoriesByType_keepsOtherTypes(t *testing.T) {
 	setupSkillCategoryTestDB(t)
 	skill := seedSkill(t, "alpha", "", false)
