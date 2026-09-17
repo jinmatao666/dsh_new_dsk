@@ -37,6 +37,7 @@ describe('Wanwei desktop preview workflow', () => {
     expect(commands).toContain('prepare-runner-config.mjs ${{ matrix.platform }}')
     expect(commands).toContain('libwebkit2gtk-4.1-dev')
     expect(commands).toContain('--bundles ${{ matrix.bundles }}')
+    expect(commands).not.toContain('--ci')
     expect(JSON.stringify(steps)).toContain('bundle/nsis/*.exe')
     expect(JSON.stringify(steps)).toContain('bundle/dmg/*.dmg')
     expect(JSON.stringify(steps)).toContain('bundle/deb/*.deb')
