@@ -127,6 +127,13 @@ function prepareServerConfig() {
 function run(command, args) {
   const result = spawnSync(command, args, {
     cwd: repositoryRoot,
+    env: {
+      ...process.env,
+      // `pnpm deploy --legacy` starts a nested production install. CLI config
+      // is not forwarded to that process, so use npm's standard environment
+      // form to keep repository lifecycle scripts disabled in the staged app.
+      npm_config_ignore_scripts: 'true',
+    },
     stdio: 'inherit',
     shell: process.platform === 'win32',
   })

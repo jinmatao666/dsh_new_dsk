@@ -7,6 +7,7 @@ import * as yaml from 'js-yaml'
 
 const workflowPath = resolve(import.meta.dirname, '..', '.github', 'workflows', 'wanwei-desktop-preview.yml')
 const runnerConfigPath = resolve(import.meta.dirname, '..', 'products', 'wanwei-desktop', 'scripts', 'prepare-runner-config.mjs')
+const runtimeScriptPath = resolve(import.meta.dirname, '..', 'products', 'wanwei-desktop', 'scripts', 'prepare-runtime.mjs')
 
 function loadWorkflow(): Record<string, unknown> {
   const value: unknown = yaml.load(readFileSync(workflowPath, 'utf8'))
@@ -91,6 +92,11 @@ describe('Wanwei desktop preview workflow', () => {
     for (const forbidden of ['docker', 'container', 'build-push-action', 'database', 'ssh-action']) {
       expect(workflowText).not.toContain(forbidden)
     }
+  })
+
+  it('disables lifecycle scripts in the nested production runtime install', () => {
+    const runtimeScript = readFileSync(runtimeScriptPath, 'utf8')
+    expect(runtimeScript).toContain("npm_config_ignore_scripts: 'true'")
   })
 
   it.each([
