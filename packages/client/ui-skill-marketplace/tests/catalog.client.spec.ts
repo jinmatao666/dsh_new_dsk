@@ -37,10 +37,9 @@ describe('marketplace categories', () => {
     ])).toEqual(['空间制图'])
   })
 
-  it('uses backend category order and falls back to loaded skill relations', () => {
-    expect(buildMarketplaceCategories([{ name: '通用类' }, { name: '空间制图' }], [['旧分类']]))
+  it('uses only backend-managed categories in backend order', () => {
+    expect(buildMarketplaceCategories([{ name: '通用类' }, { name: '空间制图' }]))
       .toEqual(['通用类', '空间制图'])
-    expect(buildMarketplaceCategories(null, [['空间制图'], ['通用类', '空间制图']]))
-      .toEqual(['空间制图', '通用类'])
+    expect(buildMarketplaceCategories(null)).toEqual([])
   })
 })

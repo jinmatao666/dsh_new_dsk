@@ -73,11 +73,22 @@ const UserTokensSubTable = ({ userId }) => {
     }
   };
 
-  const copyKey = async (key) => {
-    if (await copy('sk-' + key)) {
-      showSuccess('已复制到剪贴板');
-    } else {
-      Modal.error({ title: '无法复制到剪贴板，请手动复制', content: 'sk-' + key });
+  const copyKey = async (record) => {
+    try {
+      const response = await API.get(`/api/admin/token/user/${userId}/${record.id}`);
+      const { success, message, data } = response.data;
+      if (!success || !data?.key) {
+        showError(message || '无法读取令牌密钥');
+        return;
+      }
+      const value = `sk-${data.key}`;
+      if (await copy(value)) {
+        showSuccess('已复制真实令牌到剪贴板');
+      } else {
+        Modal.error({ title: '无法复制到剪贴板，请手动复制', content: value });
+      }
+    } catch (error) {
+      showError(error.response?.data?.message || error.message || '无法读取令牌密钥');
     }
   };
 
@@ -124,7 +135,7 @@ const UserTokensSubTable = ({ userId }) => {
             size="small"
             theme="borderless"
             type="secondary"
-            onClick={() => copyKey(record.key)}
+            onClick={() => copyKey(record)}
           >
             复制
           </Button>

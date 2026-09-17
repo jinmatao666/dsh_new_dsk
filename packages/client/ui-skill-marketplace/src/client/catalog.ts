@@ -36,20 +36,17 @@ export function publishedSkillCategories(value: unknown): string[] {
 }
 
 /**
- * Build category navigation from the backend list, falling back to loaded skills while offline.
+ * Build category navigation exclusively from the backend-managed list.
  * @param remoteCategories - Ordered category records returned by category management.
- * @param skillCategories - Category names attached to the loaded skills.
  * @returns Ordered, unique category names for marketplace navigation.
  */
 export function buildMarketplaceCategories(
   remoteCategories: readonly unknown[] | null,
-  skillCategories: readonly (readonly string[])[],
 ): string[] {
   const backend = remoteCategories?.flatMap((entry) => {
     if (typeof entry !== 'object' || entry === null) return []
     const category = entry as { name?: unknown }
     return typeof category.name === 'string' && category.name.trim() !== '' ? [category.name.trim()] : []
-  })
-  const source = backend !== null && backend !== undefined ? backend : skillCategories.flat()
-  return [...new Set(source)]
+  }) ?? []
+  return [...new Set(backend)]
 }

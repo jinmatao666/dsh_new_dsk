@@ -281,6 +281,22 @@ func GetUserTokens(c *gin.Context) {
 	})
 }
 
+// AdminGetUserToken returns the current full token value for an administrator copy action.
+func AdminGetUserToken(c *gin.Context) {
+	userId, userErr := strconv.Atoi(c.Param("user_id"))
+	tokenId, tokenErr := strconv.Atoi(c.Param("id"))
+	if userErr != nil || tokenErr != nil || userId <= 0 || tokenId <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的用户或令牌 ID"})
+		return
+	}
+	token, err := model.GetTokenByIds(tokenId, userId)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": token})
+}
+
 // AdminAddToken 管理员为指定用户创建令牌。
 func AdminAddToken(c *gin.Context) {
 	userId, err := strconv.Atoi(c.Param("user_id"))

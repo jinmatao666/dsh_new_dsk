@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-17-admin-token-authoritative-copy.md
+2026-09-17-admin-token-authoritative-copy.md: bba94d547c1f13074236bdc9f0d6d22171f56dd8
+2026-09-17-admin-token-authoritative-copy.zh.md: 6acc2a0badfdecc146f5adb47b1ed9a4abb1edbc

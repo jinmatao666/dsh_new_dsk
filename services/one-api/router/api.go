@@ -238,6 +238,7 @@ func SetApiRouter(router *gin.Engine) {
 		adminTokenRoute.Use(middleware.AdminAuth())
 		{
 			adminTokenRoute.GET("/user/:user_id", controller.GetUserTokens)
+			adminTokenRoute.GET("/user/:user_id/:id", controller.AdminGetUserToken)
 			adminTokenRoute.POST("/user/:user_id", controller.AdminAddToken)
 			adminTokenRoute.PUT("/user/:user_id", controller.AdminUpdateToken)
 			adminTokenRoute.DELETE("/user/:user_id/:id", controller.AdminDeleteToken)

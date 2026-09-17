@@ -298,7 +298,7 @@ func SearchSkillsWithCategoryFilter(keyword string, filter SkillCategoryFilter, 
 	if includeDeleted {
 		deletedFilter = SkillDeletedAll
 	}
-	return SearchSkillsWithOptions(keyword, filter, page, perPage, includeDisabled, deletedFilter, "", "")
+	return searchSkillsWithOptions(keyword, filter, page, perPage, includeDisabled, deletedFilter, "", "", true)
 }
 
 type SkillDeletedFilter string
@@ -328,7 +328,7 @@ func skillListOrder(sortField, sortOrder string) string {
 	return column + " " + direction + ", skills.id " + direction
 }
 
-func buildSkillSearchQuery(keyword string, filter SkillCategoryFilter, includeDisabled bool, deletedFilter SkillDeletedFilter) *gorm.DB {
+func buildSkillSearchQuery(keyword string, filter SkillCategoryFilter, includeDisabled bool, deletedFilter SkillDeletedFilter, publishedOnly bool) *gorm.DB {
 	query := DB.Model(&Skill{})
 	switch deletedFilter {
 	case SkillDeletedOnly:
@@ -339,6 +339,9 @@ func buildSkillSearchQuery(keyword string, filter SkillCategoryFilter, includeDi
 	}
 	if !includeDisabled {
 		query = query.Where("skills.status = ?", 1)
+	}
+	if publishedOnly {
+		query = query.Where("skills.source <> ? OR skills.published_release_id IS NOT NULL", SkillSourcePersonal)
 	}
 	query = applySkillCategoryFilter(query, filter)
 	if keyword != "" {
@@ -351,6 +354,10 @@ func buildSkillSearchQuery(keyword string, filter SkillCategoryFilter, includeDi
 const skillListSelectColumns = "skills.id, skills.name, skills.display_name, skills.icon, skills.category, skills.description, skills.scenario, skills.submitter, skills.source, skills.source_personal_skill_id, skills.tags, skills.downloads, skills.version, skills.status, skills.is_deleted, skills.created_at, skills.updated_at, skills.body_updated_at, skills.assets_updated_at"
 
 func SearchSkillsWithOptions(keyword string, filter SkillCategoryFilter, page, perPage int, includeDisabled bool, deletedFilter SkillDeletedFilter, sortField, sortOrder string) ([]Skill, int64, error) {
+	return searchSkillsWithOptions(keyword, filter, page, perPage, includeDisabled, deletedFilter, sortField, sortOrder, false)
+}
+
+func searchSkillsWithOptions(keyword string, filter SkillCategoryFilter, page, perPage int, includeDisabled bool, deletedFilter SkillDeletedFilter, sortField, sortOrder string, publishedOnly bool) ([]Skill, int64, error) {
 	var skills []Skill
 	var total int64
 
@@ -358,12 +365,12 @@ func SearchSkillsWithOptions(keyword string, filter SkillCategoryFilter, page, p
 	// statement leaks DISTINCT into the list SELECT. PostgreSQL then tries to
 	// compare the JSON tags column and fails with SQLSTATE 42883 because json
 	// has no equality operator.
-	countQuery := buildSkillSearchQuery(keyword, filter, includeDisabled, deletedFilter)
+	countQuery := buildSkillSearchQuery(keyword, filter, includeDisabled, deletedFilter, publishedOnly)
 	if err := countQuery.Distinct("skills.id").Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	listQuery := buildSkillSearchQuery(keyword, filter, includeDisabled, deletedFilter)
+	listQuery := buildSkillSearchQuery(keyword, filter, includeDisabled, deletedFilter, publishedOnly)
 	err := listQuery.Select(skillListSelectColumns).
 		Order(skillListOrder(sortField, sortOrder)).
 		Offset((page - 1) * perPage).
@@ -571,8 +578,7 @@ func fillSkillBriefCategories(skills []SkillBrief) ([]SkillBrief, error) {
 	return skills, nil
 }
 
-// ListSkillPackages 按新 skill_package 分类统计未软删技能数量,返回全部启用的技能包分类。
-// 当新分类尚无数据时,回退旧 skills.category 聚合以兼容迁移前数据。
+// ListSkillPackages 按 skill_package 分类统计未软删技能数量,返回全部启用的技能包分类。
 func ListSkillPackages() ([]SkillPackageInfo, error) {
 	var results []SkillPackageInfo
 	err := DB.Table("skill_categories AS c").
@@ -583,16 +589,6 @@ func ListSkillPackages() ([]SkillPackageInfo, error) {
 		Where("c.is_deleted = ? AND c.status = ? AND t.status = ?", false, 1, 1).
 		Group("c.id, c.code, c.name, c.description, c.sort_order").
 		Order("c.sort_order ASC, c.id DESC").
-		Find(&results).Error
-	if err != nil || len(results) > 0 {
-		return results, err
-	}
-
-	err = DB.Model(&Skill{}).
-		Select("category, category AS code, category AS name, COUNT(*) as skill_count").
-		Where("is_deleted = ? AND status = ? AND category != ?", false, 1, "").
-		Group("category").
-		Order("category").
 		Find(&results).Error
 	return results, err
 }

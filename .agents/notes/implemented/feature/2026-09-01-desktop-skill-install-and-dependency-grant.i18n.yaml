@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-01-desktop-skill-install-and-dependency-grant.md
-2026-09-01-desktop-skill-install-and-dependency-grant.md: d14fe5e089f3e942f85de1e27f3f88799717b692
-2026-09-01-desktop-skill-install-and-dependency-grant.zh.md: 22e363415d27fdeecbd4109713f49b17fad29db7
+2026-09-01-desktop-skill-install-and-dependency-grant.md: a54d38a8307821f57485f7f4e53732afd35eff27
+2026-09-01-desktop-skill-install-and-dependency-grant.zh.md: 32a3fe53130cd96fb9ebed0247991352f06956da

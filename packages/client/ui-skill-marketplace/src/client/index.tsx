@@ -700,6 +700,56 @@ function Automations() {
 }
 /* oxlint-enable @stylistic/arrow-parens, @stylistic/max-len */
 
+function SkillCategorySelect({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly string[]
+  value: string
+  onChange: (value: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const disabled = options.length === 0
+
+  return (
+    <span
+      className={`dsh-skill-add-select-shell${open ? ' open' : ''}`}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
+      }}
+    >
+      <button
+        type="button"
+        className="dsh-skill-add-select-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => { setOpen(current => !current) }}
+      >
+        <span>{disabled ? '暂无可用分类' : value}</span>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg>
+      </button>
+      {open && (
+        <span className="dsh-skill-add-select-options" role="listbox" aria-label="技能分类">
+          {options.map(option => (
+            <button
+              key={option}
+              type="button"
+              role="option"
+              aria-selected={option === value}
+              className={option === value ? 'active' : ''}
+              onClick={() => { onChange(option); setOpen(false) }}
+            >
+              {option}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section: MarketplaceSection }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -754,6 +804,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
         ...skill,
         tags: [...new Set([...skill.tags, '本地', '个人'])],
         source: 'personal' as const,
+        marketplacePublished: false,
       }]))
       const discovered = customEntries.map((item): Skill => knownCustomSkills.get(item.slug) ?? {
         id: `local-${item.slug}`,
@@ -770,6 +821,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
         author: '当前用户',
         source: 'personal',
         installable: true,
+        marketplacePublished: false,
       })
       setDiscoveredCustomSkills(discovered)
       const customStates = discovered
@@ -865,8 +917,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   }, [discoveredCustomSkills, personalSkills, remoteSkills])
   const categories = useMemo(() => [
     L.all,
-    ...buildMarketplaceCategories(remoteCategories, allSkills.map(skill => skill.categories ?? [skill.category])),
-  ], [allSkills, remoteCategories])
+    ...buildMarketplaceCategories(remoteCategories),
+  ], [remoteCategories])
   useEffect(() => {
     if (!categories.includes(category)) setCategory(L.all)
     const selectable = categories[1]
@@ -1033,6 +1085,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       author: '当前用户',
       source: 'personal',
       installable: true,
+      marketplacePublished: false,
+      reviewStatus: newSkill.visibility === 'public' ? 'pending' : 'none',
     }
     const next = [skill, ...customSkills.filter(item => item.id !== id)]
     setCustomSkills(next)
@@ -1242,17 +1296,11 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
               <label>中文显示名称<input autoFocus value={newSkill.name} onChange={(event) => { setNewSkill({ ...newSkill, name: event.target.value }) }} placeholder="例如：会议纪要整理" /></label>
               <label className="dsh-skill-add-field">
                 <span className="dsh-skill-add-field-label">分类</span>
-                <span className="dsh-skill-add-select-shell">
-                  <select
-                    value={newSkill.category}
-                    disabled={categories.length <= 1}
-                    onChange={(event) => { setNewSkill(current => ({ ...current, category: event.target.value })) }}
-                  >
-                    {categories.length <= 1 && <option value={newSkill.category}>暂无可用分类</option>}
-                    {categories.slice(1).map(item => <option key={item}>{item}</option>)}
-                  </select>
-                  <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg>
-                </span>
+                <SkillCategorySelect
+                  options={categories.slice(1)}
+                  value={newSkill.category}
+                  onChange={(value) => { setNewSkill(current => ({ ...current, category: value })) }}
+                />
               </label>
               <label>用途说明<textarea value={newSkill.summary} onChange={(event) => { setNewSkill({ ...newSkill, summary: event.target.value }) }} placeholder="说明这个技能何时使用、能完成什么任务" /></label>
               <label>

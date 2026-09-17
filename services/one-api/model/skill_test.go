@@ -111,14 +111,14 @@ func TestSkillSearchListQueryDoesNotInheritDistinctFromCount(t *testing.T) {
 	require.NoError(t, err)
 	DB = db
 
-	countQuery := buildSkillSearchQuery("", SkillCategoryFilter{}, true, SkillDeletedNormal)
+	countQuery := buildSkillSearchQuery("", SkillCategoryFilter{}, true, SkillDeletedNormal, false)
 	var total int64
 	countQuery = countQuery.Distinct("skills.id").Count(&total)
 	require.NoError(t, countQuery.Error)
 	assert.Contains(t, strings.ToUpper(countQuery.Statement.SQL.String()), "COUNT(DISTINCT")
 
 	var skills []Skill
-	listQuery := buildSkillSearchQuery("", SkillCategoryFilter{}, true, SkillDeletedNormal).
+	listQuery := buildSkillSearchQuery("", SkillCategoryFilter{}, true, SkillDeletedNormal, false).
 		Select(skillListSelectColumns).
 		Find(&skills)
 
@@ -126,6 +126,22 @@ func TestSkillSearchListQueryDoesNotInheritDistinctFromCount(t *testing.T) {
 	assert.False(t, listQuery.Statement.Distinct)
 	assert.NotContains(t, strings.ToUpper(listQuery.Statement.SQL.String()), "SELECT DISTINCT")
 	assert.Contains(t, listQuery.Statement.SQL.String(), "skills.tags")
+}
+
+func TestPublicSkillSearchRequiresPersonalSkillPublication(t *testing.T) {
+	db, err := gorm.Open(postgres.Open("host=localhost user=test dbname=test sslmode=disable"), &gorm.Config{
+		DryRun:               true,
+		DisableAutomaticPing: true,
+	})
+	require.NoError(t, err)
+	DB = db
+
+	query := buildSkillSearchQuery("", SkillCategoryFilter{}, false, SkillDeletedNormal, true).
+		Find(&[]Skill{})
+
+	require.NoError(t, query.Error)
+	assert.Contains(t, query.Statement.SQL.String(), "skills.source <> $3 OR skills.published_release_id IS NOT NULL")
+	assert.Contains(t, query.Statement.Vars, SkillSourcePersonal)
 }
 
 func TestSearchSkills_filtersByCategory(t *testing.T) {
