@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   linkSync,
   mkdirSync,
@@ -212,6 +213,21 @@ function runInstaller(
 }
 
 describe('worktree-local Lefthook installer', { timeout: 30_000 }, () => {
+  it('skips automated jobs before resolving the development-only lefthook package', () => {
+    const isolated = mkdtempSync(join(tmpdir(), 'dsh-lefthook-isolated-'))
+    fixtures.push(isolated)
+    const isolatedInstaller = join(isolated, 'install-lefthook.mjs')
+    copyFileSync(installer, isolatedInstaller)
+
+    const result = commandResult(process.execPath, [isolatedInstaller], isolated, {
+      ...process.env,
+      CI: 'false',
+      GITHUB_ACTIONS: 'true',
+    })
+
+    expect(result.status, result.stderr).toBe(0)
+  })
+
   for (const [label, extraEnv] of [
     ['CI', { CI: 'true' }],
     ['GitHub Actions', { GITHUB_ACTIONS: 'true' }],
