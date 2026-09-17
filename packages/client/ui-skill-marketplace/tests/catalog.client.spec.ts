@@ -20,7 +20,11 @@ describe('marketplace skill catalog', () => {
     const privateSkill = { id: 'local-private' }
     const approved = { id: 'remote-approved', marketplacePublished: true }
 
-    expect(browseMarketplaceCatalog([pending, privateSkill, approved])).toEqual([approved])
+    expect(browseMarketplaceCatalog<{
+      id: string
+      marketplacePublished?: boolean
+      reviewStatus?: string
+    }>([pending, privateSkill, approved])).toEqual([approved])
   })
 })
 
