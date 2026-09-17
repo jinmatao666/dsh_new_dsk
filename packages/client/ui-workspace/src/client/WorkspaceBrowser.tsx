@@ -62,6 +62,18 @@ async function desktopImportWorkspaceFiles(workspacePath: string, files: readonl
   return imported
 }
 
+async function desktopOpenWorkspaceDirectory(
+  workspacePath: string,
+  fallback: (path: string) => Promise<void>,
+): Promise<void> {
+  const invoke = (window as DesktopWindow).__ZJUGIS_NATIVE_INVOKE__
+  if (invoke === undefined) {
+    await fallback(workspacePath)
+    return
+  }
+  await invoke('open_workspace_directory', { workspacePath })
+}
+
 /** Keep controlled input and RPC payload inside the session.search wire contract. */
 function sanitizeSearchQuery(value: string): string {
   const withoutNul = value.replaceAll('\0', '')
@@ -1259,8 +1271,10 @@ export function WorkspaceBrowser({
                   setDeleteError(null)
                 }}
                 onOpenWorkspace={(path) => {
-                  void openWorkspace(path).catch((reason: unknown) => {
-                    console.warn('workspace open rejected:', reason)
+                  setFileDropStatus(null)
+                  void desktopOpenWorkspaceDirectory(path, openWorkspace).catch((reason: unknown) => {
+                    const message = reason instanceof Error ? reason.message : String(reason)
+                    setFileDropStatus({ text: t('workspace.open.failed', { message }), error: true })
                   })
                 }}
               />

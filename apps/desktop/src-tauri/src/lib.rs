@@ -714,6 +714,41 @@ fn save_session_log_archive(file_name: String, bytes: Vec<u8>) -> Result<String,
     Ok(destination.display().to_string())
 }
 
+fn open_workspace_directory_at(workspace_path: &Path) -> Result<(), String> {
+    let metadata = fs::metadata(workspace_path)
+        .map_err(|error| format!("无法访问工作区目录 {}：{error}", workspace_path.display()))?;
+    if !metadata.is_dir() {
+        return Err(format!(
+            "工作区路径不是文件夹：{}",
+            workspace_path.display()
+        ));
+    }
+
+    #[cfg(target_os = "windows")]
+    let mut command = Command::new("explorer.exe");
+    #[cfg(target_os = "macos")]
+    let mut command = Command::new("open");
+    #[cfg(target_os = "linux")]
+    let mut command = Command::new("xdg-open");
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    return Err("当前系统不支持打开工作区目录".to_string());
+
+    command
+        .arg(workspace_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("无法打开工作区目录 {}：{error}", workspace_path.display()))?;
+    Ok(())
+}
+
+/// Open a Workspace in the desktop file manager from the Tauri process.
+#[tauri::command]
+fn open_workspace_directory(workspace_path: String) -> Result<(), String> {
+    open_workspace_directory_at(Path::new(&workspace_path))
+}
+
 fn workspace_import_file_name(name: &str) -> Result<&str, String> {
     let path = Path::new(name);
     let file_name = path.file_name().and_then(|value| value.to_str());
@@ -1818,6 +1853,7 @@ pub fn run() {
             uninstall_custom_skill,
             list_custom_skills,
             read_analysis_view,
+            open_workspace_directory,
             import_workspace_files,
             import_dropped_workspace_files,
         ])

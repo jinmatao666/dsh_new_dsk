@@ -50,12 +50,12 @@ function hook<T>(snapshot: T) {
 function fireDrag(row: HTMLElement, kind: 'dragOver' | 'drop', clientY: number): void {
   const event = kind === 'dragOver' ? createEvent.dragOver(row) : createEvent.drop(row)
   Object.defineProperty(event, 'clientY', { value: clientY })
-  Object.defineProperty(event, 'dataTransfer', { value: { effectAllowed: '', dropEffect: '' } })
+  Object.defineProperty(event, 'dataTransfer', { value: { effectAllowed: '', dropEffect: '', types: [] } })
   fireEvent(row, event)
 }
 
-function dragData(): Pick<DataTransfer, 'effectAllowed' | 'dropEffect' | 'setData'> {
-  return { effectAllowed: 'uninitialized', dropEffect: 'none', setData: vi.fn() }
+function dragData(): Pick<DataTransfer, 'effectAllowed' | 'dropEffect' | 'setData' | 'types'> {
+  return { effectAllowed: 'uninitialized', dropEffect: 'none', setData: vi.fn(), types: [] }
 }
 
 function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
@@ -136,6 +136,55 @@ describe('WorkspaceBrowser', () => {
     })
     fireEvent(b.view.container.firstElementChild as HTMLElement, event)
     expect(screen.getByRole('status').textContent).toBe('请先打开一个已关联工作区的会话，再拖入文件。')
+  })
+
+  it('opens a Workspace through the desktop bridge', async () => {
+    const invoke = vi.fn(async () => undefined)
+    const openWorkspace = vi.fn(async () => {})
+    Object.defineProperty(window, '__ZJUGIS_NATIVE_INVOKE__', { value: invoke, configurable: true })
+    try {
+      mount({
+        useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
+        openWorkspace,
+      })
+      fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: '打开工作空间' }))
+      await waitFor(() => {
+        expect(invoke).toHaveBeenCalledWith('open_workspace_directory', { workspacePath: '/projects/alpha' })
+      })
+      expect(openWorkspace).not.toHaveBeenCalled()
+    } finally {
+      delete (window as Window & { __ZJUGIS_NATIVE_INVOKE__?: unknown }).__ZJUGIS_NATIVE_INVOKE__
+    }
+  })
+
+  it('falls back to the Host opener outside the desktop shell', async () => {
+    const openWorkspace = vi.fn(async () => {})
+    mount({
+      useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])),
+      openWorkspace,
+    })
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '打开工作空间' }))
+    await waitFor(() => { expect(openWorkspace).toHaveBeenCalledWith('/projects/alpha') })
+  })
+
+  it.each([
+    [new Error('Explorer unavailable'), '打开工作区失败：Explorer unavailable'],
+    ['Explorer denied', '打开工作区失败：Explorer denied'],
+  ])('shows desktop open failures in the Workspace panel', async (failure, expected) => {
+    const invoke = vi.fn(async () => { throw failure })
+    Object.defineProperty(window, '__ZJUGIS_NATIVE_INVOKE__', { value: invoke, configurable: true })
+    try {
+      mount({ useWorkspaces: hook(workspaceState([workspace('alpha', [], 'Alpha')])) })
+      fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: '打开工作空间' }))
+      await waitFor(() => {
+        expect(screen.getByRole('status').textContent).toBe(expected)
+      })
+    } finally {
+      delete (window as Window & { __ZJUGIS_NATIVE_INVOKE__?: unknown }).__ZJUGIS_NATIVE_INVOKE__
+    }
   })
 
   it('workspace hover card shows a POSIX home descendant as ~', () => {
