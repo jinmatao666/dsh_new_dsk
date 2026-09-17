@@ -31,6 +31,7 @@ const t = ((key: string, params?: Readonly<Record<string, unknown>>): string => 
     'image.scrollRight': '向右滚动图片',
     'image.dropBlocked': '当前无法添加图片',
     'image.dropTitle': '图片拖动到此处即可添加',
+    'file.dropTitle': '将图片或文件拖动到此处即可添加',
   }
   if (key === 'image.remove') {
     const name = params?.name
@@ -40,6 +41,11 @@ const t = ((key: string, params?: Readonly<Record<string, unknown>>): string => 
     const count = params?.count
     const size = params?.size
     return `最多 ${typeof count === 'number' ? String(count) : ''} 张，每张 ${typeof size === 'string' ? size : ''}`
+  }
+  if (key === 'file.dropDesc') {
+    const count = params?.count
+    const size = params?.size
+    return `图片最多 ${typeof count === 'number' ? String(count) : ''} 张，每张 ${typeof size === 'string' ? size : ''}；其他文件将复制到工作区`
   }
   return messages[key] ?? key
 }) as ComposerAttachmentsProps['t']
@@ -83,8 +89,8 @@ describe('ComposerAttachments', () => {
     const image = attachment('dropped').file
     const dataTransfer = { types: ['Files'], files: [image], dropEffect: 'none' }
     expect(fireEvent.dragEnter(document.body, { dataTransfer })).toBe(false)
-    expect(view.getByRole('status').textContent).toContain('图片拖动到此处即可添加')
-    expect(view.getByRole('status').textContent).toContain('最多 20 张，每张 5MB')
+    expect(view.getByRole('status').textContent).toContain('将图片或文件拖动到此处即可添加')
+    expect(view.getByRole('status').textContent).toContain('图片最多 20 张，每张 5MB；其他文件将复制到工作区')
     expect(fireEvent.dragOver(document.body, { dataTransfer })).toBe(false)
     expect(dataTransfer.dropEffect).toBe('copy')
     expect(fireEvent.drop(document.body, { dataTransfer })).toBe(false)

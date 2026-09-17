@@ -16,6 +16,8 @@ The native drop is replaced by a later drop and removed before copying begins, s
 
 The active Session cwd selects the Workspace destination. A Session without a cwd uses the desktop app's local default import directory, preserving the draft in the same Session while making the copied file available by its appended reference.
 
+The desktop window capability explicitly authorizes both import paths: `import_workspace_files` for browser-provided bytes and `import_dropped_workspace_files` for retained operating-system paths. The full-window drop overlay names both images and ordinary files; it keeps image limits visible and explains that ordinary files are copied into the Workspace.
+
 ## Alternatives considered
 
 **Send dropped files to the server.** The Workspace is local to the desktop host, while uploading to One API would create remote retention and authorization behavior unrelated to local file import.
@@ -30,4 +32,4 @@ Attachment UI tests exercise native drag visibility and one drop consumption. Na
 
 ## Consequences
 
-Desktop file drops work for ordinary documents and images without changing the One API service or image-attachment protocol. Large batches and directory trees still require an explicit future import flow.
+Desktop file drops work for ordinary documents and images without changing the One API service or image-attachment protocol. Command registration and window ACL authorization remain paired, so a registered import command cannot fail only when the renderer invokes it. Large batches and directory trees still require an explicit future import flow.

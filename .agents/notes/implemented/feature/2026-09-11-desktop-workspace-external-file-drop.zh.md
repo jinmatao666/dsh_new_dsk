@@ -16,6 +16,8 @@ Status: implemented
 
 当前 Session 的 cwd 决定 Workspace 目标。没有 cwd 的 Session 使用桌面应用本地默认导入目录，草稿留在同一 Session，并追加复制后文件的引用。
 
+桌面窗口 capability 明确授权两条导入路径：`import_workspace_files` 用于浏览器提供的字节，`import_dropped_workspace_files` 用于保留的操作系统路径。全窗口拖入遮罩同时说明图片和普通文件；它保留图片限制提示，并说明普通文件会复制到 Workspace。
+
 ## Alternatives considered
 
 **将拖入文件发送给服务器。** Workspace 位于桌面端主机本地；上传到 One API 会引入与本地文件导入无关的远程保留和授权行为。
@@ -30,4 +32,4 @@ Status: implemented
 
 ## Consequences
 
-桌面端文件拖放支持普通文档和图片，不改变 One API 服务或图片附件协议。大批量文件和目录树仍需要未来明确的导入流程。
+桌面端文件拖放支持普通文档和图片，不改变 One API 服务或图片附件协议。命令注册和窗口 ACL 授权始终成对，因此已注册的导入命令不会只在渲染器调用时失败。大批量文件和目录树仍需要未来明确的导入流程。
