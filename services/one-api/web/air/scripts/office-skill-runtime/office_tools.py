@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 
-RUNTIME_VERSION = "1.0.4"
+RUNTIME_VERSION = "1.0.5"
 DEFAULT_FONT = "Microsoft YaHei"
 INVALID_FILENAME = re.compile(r'[\\/:*?"<>|]+')
 DEFAULT_MEETING_BASE_URL = "http://ac.zjugis.com:20330/v1"
@@ -808,29 +808,29 @@ def meeting_prepare(args: argparse.Namespace) -> dict[str, Any]:
         sections.extend([f"## 材料：{material.name}", "", content, ""])
     if not transcript_path and not materials:
         raise UserError("请至少提供会议文字材料、已有转写文本或音频文件")
-    source_path = unique_path(directory, "会议纪要_材料汇总.md", args.overwrite)
-    source_path.write_text("\n".join(sections), encoding="utf-8")
-    artifacts.append(Artifact(str(source_path), "markdown", "会议材料汇总"))
+    materials_text = "\n".join(sections)
     if args.skip_synthesis:
         minutes = meeting_template()
-        synthesis = "测试模式：未调用纪要模型"
     else:
-        minutes = generate_meeting_minutes(source_path.read_text(encoding="utf-8"), args)
-        synthesis = f"{args.minutes_model or DEFAULT_MEETING_MODEL} / chat/completions"
-    minutes_path = unique_path(directory, "会议纪要.md", args.overwrite)
+        minutes = generate_meeting_minutes(materials_text, args)
+    minutes_path = directory / f"wanwei-meeting-temp-{uuid.uuid4().hex}.md"
     minutes_path.write_text(minutes.rstrip() + "\n", encoding="utf-8")
-    artifacts.append(Artifact(str(minutes_path), "markdown", "结构化会议纪要"))
-    rendered = render_markdown_docx(argparse.Namespace(
-        input=str(minutes_path),
-        output_name="会议纪要.docx",
-        title=args.meeting_title or "会议纪要",
-        output_dir=str(directory),
-        overwrite=args.overwrite,
-    ))
+    try:
+        rendered = render_markdown_docx(argparse.Namespace(
+            input=str(minutes_path),
+            output_name="会议纪要.docx",
+            title=args.meeting_title or "会议纪要",
+            output_dir=str(directory),
+            overwrite=args.overwrite,
+        ))
+    finally:
+        try:
+            minutes_path.unlink(missing_ok=True)
+        except OSError:
+            # A locked transient file must not hide the primary Word result or its error.
+            pass
     for artifact in rendered["artifacts"]:
         artifacts.append(Artifact(**artifact))
-    report = write_report(directory, "会议纪要", "会议纪要处理报告", "会议材料已完成转写、整理和文档生成。", [f"- 会议材料数：{len(materials)}", f"- 转写来源：{'已有文本或语音接口' if transcript_path else '未提供'}", f"- 纪要生成：{synthesis}"], artifacts)
-    artifacts.append(Artifact(str(report), "report", "处理报告"))
     return {"success": True, "artifacts": [asdict(item) for item in artifacts]}
 
 
@@ -913,10 +913,9 @@ def _ffmpeg_path() -> str:
     raise UserError("当前音频需要先转换为标准 WAV，但未找到 ffmpeg。请安装 FFmpeg 后重试；Windows 可运行：winget install --id Gyan.FFmpeg -e")
 
 
-def _normalize_audio(audio_path: Path, temporary: Path) -> Path:
+def _normalize_audio(audio_path: Path, target: Path) -> Path:
     if _standard_wav(audio_path):
         return audio_path
-    target = temporary / "normalized.wav"
     completed = subprocess.run(
         [_ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-y", "-i", str(audio_path), "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(target)],
         capture_output=True,
@@ -931,16 +930,17 @@ def _normalize_audio(audio_path: Path, temporary: Path) -> Path:
     return target
 
 
-def _split_wav(source: Path, temporary: Path, segment_seconds: int) -> list[Path]:
+def _split_wav(source: Path, directory: Path, segment_seconds: int) -> list[Path]:
     with wave.open(str(source), "rb") as audio:
         frames_per_segment = audio.getframerate() * segment_seconds
         if audio.getnframes() <= frames_per_segment:
             return [source]
         parameters = audio.getparams()
         chunks: list[Path] = []
+        prefix = f"wanwei-meeting-temp-{uuid.uuid4().hex}"
         index = 1
         while frames := audio.readframes(frames_per_segment):
-            target = temporary / f"segment-{index:04d}.wav"
+            target = directory / f"{prefix}-segment-{index:04d}.wav"
             with wave.open(str(target), "wb") as chunk:
                 chunk.setparams(parameters)
                 chunk.writeframes(frames)
@@ -1040,16 +1040,27 @@ def transcribe_audio(audio_path: Path, directory: Path, args: argparse.Namespace
         raise UserError("WANWEI_AUDIO_SEGMENT_SECONDS 必须是整数") from exc
     if not 30 <= configured_seconds <= 180:
         raise UserError("音频分段时长必须在 30–180 秒之间")
-    with tempfile.TemporaryDirectory(prefix=".meeting-audio-", dir=directory) as temporary_name:
-        temporary = Path(temporary_name)
-        normalized = _normalize_audio(audio_path, temporary)
-        chunks = _split_wav(normalized, temporary, configured_seconds)
+    normalized_target = directory / f"wanwei-meeting-temp-{uuid.uuid4().hex}-normalized.wav"
+    temporary_files: list[Path] = []
+    try:
+        normalized = _normalize_audio(audio_path, normalized_target)
+        if normalized == normalized_target:
+            temporary_files.append(normalized)
+        chunks = _split_wav(normalized, directory, configured_seconds)
+        temporary_files.extend(chunk for chunk in chunks if chunk != audio_path and chunk != normalized)
         transcripts = []
         for index, chunk in enumerate(chunks, start=1):
             try:
                 transcripts.append(_transcribe_audio_chunk(chunk, endpoint, model, api_key, args.transcription_timeout))
             except UserError as exc:
                 raise UserError(f"语音第 {index}/{len(chunks)} 段转写失败：{exc}") from exc
+    finally:
+        for path in temporary_files:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                # A locked transient file must not replace the actionable transcription result.
+                pass
     target = unique_path(directory, f"{audio_path.stem}_转写.txt", args.overwrite)
     target.write_text("\n\n".join(transcripts).strip() + "\n", encoding="utf-8")
     return target

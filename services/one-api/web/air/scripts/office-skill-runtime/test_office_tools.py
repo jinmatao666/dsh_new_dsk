@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -141,7 +142,8 @@ class OfficeToolsSmokeTest(unittest.TestCase):
             "--materials", str(self.inputs / "new.docx"), "--skip-synthesis",
             "--output-dir", str(self.outputs / "meeting"),
         )
-        self.assertGreaterEqual(len(meeting["artifacts"]), 4)
+        self.assertEqual(["docx"], [artifact["kind"] for artifact in meeting["artifacts"]])
+        self.assertEqual([], list((self.outputs / "meeting").glob("*.md")))
 
     def test_audio_is_split_and_transcribed_in_order(self) -> None:
         audio = self.inputs / "audio.wav"
@@ -157,7 +159,9 @@ class OfficeToolsSmokeTest(unittest.TestCase):
         )
         with mock.patch.object(office_tools, "_transcribe_audio_chunk", side_effect=lambda path, *_: path.stem):
             transcript = office_tools.transcribe_audio(audio, self.outputs, arguments)
-        self.assertEqual("segment-0001\n\nsegment-0002\n\nsegment-0003\n", transcript.read_text(encoding="utf-8"))
+        text = transcript.read_text(encoding="utf-8")
+        self.assertEqual(3, len(re.findall(r"segment-\d{4}", text)))
+        self.assertEqual([], list(self.outputs.glob("wanwei-meeting-temp-*")))
 
     def test_qwen_audio_uses_native_json_request(self) -> None:
         audio = self.inputs / "audio.wav"

@@ -16,9 +16,9 @@
     "Qwen3-ASR 或后台百炼 Qwen-Audio 语音转写",
     "音频转 WAV 与长录音分段转写",
     "Qwen3.8 结构化会议纪要",
-    "Markdown 与 Word 交付"
+    "转写 TXT 与会议纪要 Word 交付"
   ],
-  "version": "1.0.4",
+  "version": "1.0.5",
   "author": "万维Buddy 办公工具",
   "submitter": "root",
   "createdAt": "2026-09-14 19:00:00",
