@@ -60,9 +60,16 @@ describe('Wanwei desktop preview workflow', () => {
     expect(steps.map(step => step.name)).toEqual(expect.arrayContaining([
       'Build DSH and desktop assets',
       'Stage self-contained runtime',
+      'Restore installer build dependencies',
       'Verify staged runtime and sidecar',
       'Build platform installer',
     ]))
+    const stageIndex = steps.findIndex(step => step.name === 'Stage self-contained runtime')
+    const restoreIndex = steps.findIndex(step => step.name === 'Restore installer build dependencies')
+    const installerIndex = steps.findIndex(step => step.name === 'Build platform installer')
+    expect(steps[restoreIndex]?.run).toBe('pnpm install --frozen-lockfile --ignore-scripts')
+    expect(stageIndex).toBeLessThan(restoreIndex)
+    expect(restoreIndex).toBeLessThan(installerIndex)
     expect(JSON.stringify(steps)).toContain('bundle/nsis/*.exe')
     expect(JSON.stringify(steps)).toContain('bundle/dmg/*.dmg')
     expect(JSON.stringify(steps)).toContain('bundle/deb/*.deb')

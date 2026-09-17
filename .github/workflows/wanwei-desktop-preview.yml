@@ -105,6 +105,11 @@ jobs:
       - name: Stage self-contained runtime
         run: pnpm --dir products/wanwei-desktop run prepare:runtime
 
+      # pnpm's legacy production deploy prunes workspace development packages.
+      # Restore the locked build toolchain before invoking the Tauri CLI.
+      - name: Restore installer build dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
       - name: Verify staged runtime and sidecar
         run: pnpm --dir products/wanwei-desktop run check:runtime
 
