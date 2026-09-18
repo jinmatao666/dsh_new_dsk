@@ -250,6 +250,7 @@ describe('workspace browser rows', () => {
   })
 
   it('workspace row menu opens on the ellipsis, renames, and shows the danger delete row', () => {
+    const onOpen = vi.fn()
     const onRename = vi.fn()
     const onDelete = vi.fn()
     const onToggle = vi.fn()
@@ -259,7 +260,7 @@ describe('workspace browser rows', () => {
     }
     render(<ProjectRowItem
       group={group} onToggle={onToggle} onCreate={vi.fn()}
-      actions={{ rename: onRename, delete: onDelete }} t={t}
+      actions={{ open: onOpen, rename: onRename, delete: onDelete }} t={t}
     />)
     fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
     // Opening the menu neither toggles the group nor renames yet.
