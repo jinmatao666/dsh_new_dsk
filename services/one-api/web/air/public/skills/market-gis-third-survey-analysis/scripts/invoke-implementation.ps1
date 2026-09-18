@@ -107,7 +107,7 @@ function Get-ShapeSource([string]$path) {
     $geometry = Read-ShapefileRings $shape.FullName
     $prjPath = "$base.prj"
     return [PSCustomObject]@{
-        SourcePath = $source; SourceKind = if ($temporary) { 'Shape ZIP' } elseif ([System.IO.Directory]::Exists($source)) { 'Shape directory' } else { 'Shape file' }
+        SourcePath = $source; SourceKind = if ($temporary) { '空间矢量数据压缩包' } elseif ([System.IO.Directory]::Exists($source)) { '空间矢量数据文件夹' } else { '空间矢量数据文件' }
         Rings = $geometry.Rings; FeatureCount = $geometry.FeatureCount; CoordinateSystem = if ([System.IO.File]::Exists($prjPath)) { [System.IO.File]::ReadAllText($prjPath).Trim() } else { '.prj file was not provided' }
         AttributeFields = Read-DbfFields "$base.dbf"; TemporaryDirectory = $temporary
     }
@@ -181,13 +181,13 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
         if ($landTypes.Count -gt 0) {
             [void]$lines.Add(('### {0} ({1})' -f (Localized '6K+m57uG5Zyw57G76K6w5b2V'), $landTypes.Count))
             foreach ($row in $landTypes) {
-                [void]$lines.Add(('- {0}: {1}; {2}: {3}; {4}: {5}; {6}: {7}; {8}: {9}' -f (Localized '5Zyw57G757yW56CB'), (FieldValue $row 'DLBM'), (Localized '5Zyw57G75ZCN56ew'), (FieldValue $row 'DLMC'), (Localized '5Zu+5paR6Z2i56ev'), (FieldValue $row 'TBMJ'), (Localized '5p2D5bGe5Y2V5L2N'), (FieldValue $row 'QSDWMC'), 'QSDWDM', (FieldValue $row 'QSDWDM')))
+                [void]$lines.Add(('- {0}: {1}; {2}: {3}; {4}: {5}; {6}: {7}; 权属单位代码（QSDWDM）: {8}' -f (Localized '5Zyw57G757yW56CB'), (FieldValue $row 'DLBM'), (Localized '5Zyw57G75ZCN56ew'), (FieldValue $row 'DLMC'), (Localized '5Zu+5paR6Z2i56ev'), (FieldValue $row 'TBMJ'), (Localized '5p2D5bGe5Y2V5L2N'), (FieldValue $row 'QSDWMC'), (FieldValue $row 'QSDWDM')))
             }
         }
         if ($ownership.Count -gt 0) {
             [void]$lines.Add(('### {0} ({1})' -f (Localized '5p2D5bGe6Z2i56ev5rGH5oC7'), $ownership.Count))
             foreach ($row in $ownership) {
-                [void]$lines.Add(('- {0}: {1}; HZMJ: {2}; {3}: {4}; {5}: {6}; {7}: {8}; {9}: {10}' -f (Localized '5p2D5bGe5Y2V5L2N'), (FieldValue $row 'QSDWMC'), (FieldValue $row 'HZMJ'), (Localized '5Yac55So5Zyw'), (FieldValue $row 'NYD'), (Localized '5p6X5Zyw'), (FieldValue $row 'LD'), (Localized '5bu66K6+55So5Zyw'), (FieldValue $row 'JSYD'), (Localized '5Z+65pys5Yac55Sw'), (FieldValue $row 'JBNT')))
+                [void]$lines.Add(('- {0}: {1}; 汇总面积（HZMJ）: {2}; {3}（NYD）: {4}; {5}（LD）: {6}; {7}（JSYD）: {8}; {9}（JBNT）: {10}' -f (Localized '5p2D5bGe5Y2V5L2N'), (FieldValue $row 'QSDWMC'), (FieldValue $row 'HZMJ'), (Localized '5Yac55So5Zyw'), (FieldValue $row 'NYD'), (Localized '5p6X5Zyw'), (FieldValue $row 'LD'), (Localized '5bu66K6+55So5Zyw'), (FieldValue $row 'JSYD'), (Localized '5Z+65pys5Yac55Sw'), (FieldValue $row 'JBNT')))
             }
         }
         if ($summary.Count -eq 0 -and $landTypes.Count -eq 0 -and $ownership.Count -eq 0) { [void]$lines.Add('- ' + (Localized '5pyq6L+U5Zue5bey56Gu6K6k55qE5LiJ6LCD5YiG5p6Q5a2X5q6144CC')) }
@@ -213,13 +213,13 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
             $construction = NumberValue $row 'JSYDMJ'
             $farmland = NumberValue $row 'NYDMJ'
             $dominant = if ($null -ne $total -and $total -gt 0 -and $null -ne $construction -and ($construction / $total) -ge 0.8) { '建设用地主导型' } elseif ($null -ne $total -and $total -gt 0 -and $null -ne $farmland -and ($farmland / $total) -ge 0.8) { '农用地主导型' } else { '复合用地型' }
-            [void]$lines.Add(('- **核心结论：**项目范围总面积 {0} 公顷，属于{1}地块；农用地 {2} 公顷、耕地 {3} 公顷、建设用地 {4} 公顷、永久基本农田 {5} 公顷。' -f (FieldValue $row 'HJMJ'), $dominant, (FieldValue $row 'NYDMJ'), (FieldValue $row 'GDMJ'), (FieldValue $row 'JSYDMJ'), (FieldValue $row 'JBNTMJ')))
+            [void]$lines.Add(('- 核心结论：项目范围总面积 {0} 公顷，属于{1}地块；农用地 {2} 公顷、耕地 {3} 公顷、建设用地 {4} 公顷、永久基本农田 {5} 公顷。' -f (FieldValue $row 'HJMJ'), $dominant, (FieldValue $row 'NYDMJ'), (FieldValue $row 'GDMJ'), (FieldValue $row 'JSYDMJ'), (FieldValue $row 'JBNTMJ')))
         }
-        [void]$lines.Add('- **实施建议：**以三调地类明细定位需避让或依法处置的图斑，以权属明细确定协调主体；再与规划审查成果叠加核实用途一致性。')
+        [void]$lines.Add('- 实施建议：以三调地类明细定位需避让或依法处置的图斑，以权属明细确定协调主体；再与规划审查成果叠加核实用途一致性。')
     }
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5pWw5o2u6ZmQ5Yi2'))
-    [void]$lines.Add('- 分析结论以本次输入范围、分析年度和 GIS 服务返回的三调数据为依据；各汇总表按自身统计口径解释。')
+    [void]$lines.Add('- 分析结论以本次输入范围、分析年度和地理信息分析服务返回的三调数据为依据；各汇总表按自身统计口径解释。')
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5Y6f5aeL5o6l5Y+j6L+U5Zue'))
     [void]$lines.Add(('- [JSON]({0})' -f [System.IO.Path]::GetFileName($resultPath)))
@@ -233,7 +233,7 @@ try {
     [System.IO.Directory]::CreateDirectory($outputPath) | Out-Null
     $rings = $resolved.Rings
 if ([string]::IsNullOrWhiteSpace($BaseUrl)) { $BaseUrl = $env:DSH_GIS_SERVICE_URL }
-if ([string]::IsNullOrWhiteSpace($BaseUrl)) { throw '未配置 DSH_GIS_SERVICE_URL；请在运行环境中提供 GIS 服务地址，或使用 -BaseUrl 指定。' }
+if ([string]::IsNullOrWhiteSpace($BaseUrl)) { $BaseUrl = 'http://60.191.110.206:38010' }
 $arcGeometry = @{ hasZ = $false; hasM = $false; rings = $rings } | ConvertTo-Json -Compress -Depth 100
 $body = @{
     GeoJson = $arcGeometry

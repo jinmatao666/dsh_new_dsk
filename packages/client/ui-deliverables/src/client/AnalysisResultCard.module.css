@@ -111,8 +111,9 @@
 
 .tableWrap th {
   position: sticky;
+  z-index: 1;
   top: 0;
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font-weight: 600;
 }

@@ -12,6 +12,12 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
+$FieldLabels = @{ ID='记录编号'; DZHJTJ='地质环境条件'; FQMC='易发分区名称'; DJ='分区等级'; ZYMJ='重叠面积' }
+$DatasetLabels = @{ YZT_DZHJTJ_LIST='地质环境条件列表'; YZT_DZHJTJ='地质环境条件列表'; YZT_DZZHYFQK_LIST='地质灾害易发区列表'; YZT_DZZHYFQK='地质灾害易发区列表' }
+function FieldDisplay([string]$field) { if ($field -eq '值') { return '值' }; $label = $FieldLabels[$field]; if ($label) { return "$label（$field）" }; return "接口字段（$field）" }
+function DatasetDisplay([string]$dataset) { $label = $DatasetLabels[$dataset]; if ($label) { return "$label（$dataset）" }; return "接口数据集（$dataset）" }
+function PlainText([string]$text) { return (($text -replace '\*\*', '') -replace '`', '').Trim() }
+
 function XmlText([object]$value) {
     $text = [string]$value
     $clean = [System.Text.StringBuilder]::new($text.Length)
@@ -82,8 +88,8 @@ function ResponseRows($response) {
         for ($index = 0; $index -lt $items.Count; $index++) {
             $item = $items[$index]
             if ($null -ne $item -and $item.psobject.Properties.Count -gt 0 -and $item -isnot [string]) {
-                foreach ($field in $item.psobject.Properties) { [void]$rows.Add(@($property.Name, ($index + 1), $field.Name, $field.Value)) }
-            } else { [void]$rows.Add(@($property.Name, ($index + 1), '值', $item)) }
+                foreach ($field in $item.psobject.Properties) { [void]$rows.Add(@((DatasetDisplay $property.Name), ($index + 1), (FieldDisplay $field.Name), $field.Value)) }
+            } else { [void]$rows.Add(@((DatasetDisplay $property.Name), ($index + 1), '值', $item)) }
         }
     }
     return $rows.ToArray()
@@ -95,7 +101,7 @@ function ReportRows([string[]]$lines) {
     $section = $Title
     foreach ($line in $lines) {
         if ($line.StartsWith('#')) { $section = $line.TrimStart('#').Trim(); continue }
-        $text = $line.Trim().TrimStart('-', '*').Trim()
+        $text = PlainText ($line.Trim().TrimStart('-', '*').Trim())
         if ($text) { [void]$rows.Add(@($section, $text, '', '')) }
     }
     return $rows.ToArray()
@@ -123,8 +129,8 @@ function DetailViewTable($response) {
         for ($index = 0; $index -lt $items.Count; $index++) {
             $item = $items[$index]
             if ($null -ne $item -and $item.psobject.Properties.Count -gt 0 -and $item -isnot [string]) {
-                foreach ($field in $item.psobject.Properties) { [void]$data.Add(@($property.Name, ($index + 1), $field.Name, [string]$field.Value)) }
-            } else { [void]$data.Add(@($property.Name, ($index + 1), '值', [string]$item)) }
+                foreach ($field in $item.psobject.Properties) { [void]$data.Add(@((DatasetDisplay $property.Name), ($index + 1), (FieldDisplay $field.Name), [string]$field.Value)) }
+            } else { [void]$data.Add(@((DatasetDisplay $property.Name), ($index + 1), '值', [string]$item)) }
         }
     }
     return [ordered]@{ id = 'details'; title = '接口明细'; columns = [string[]]@('数据集', '序号', '字段', '值'); rows = [object[]]$data.ToArray() }
@@ -148,7 +154,7 @@ function ViewSections([string[]]$lines) {
             continue
         }
         if (-not $title -or $title -match '输入数据核验|原始接口返回') { continue }
-        $text = $line.Trim().TrimStart('-', '*').Trim()
+        $text = PlainText ($line.Trim().TrimStart('-', '*').Trim())
         if ($text -and -not $text.StartsWith('#') -and -not $text.StartsWith('[JSON]')) { [void]$items.Add($text) }
     }
     & $flush
@@ -177,8 +183,8 @@ function ResultRows([string]$title, $response) {
         [void]$rows.Add(@('审查指标', '结果', '单位/说明'))
         foreach ($row in (RecordsOf $response 'YZT_GHSCB')) {
             foreach ($field in @('YDZMJ', 'SFZYJBNT', 'JBNTMJ', 'YXJSQMJ', 'YTJJSQMJ', 'XZJSQMJ', 'JZJSQMJ', 'SFZXCQFW')) {
-                $unit = if ($field -match 'MJ$') { '公顷' } else { '服务返回代码' }
-                [void]$rows.Add(@($field, (ValueOf $row $field), $unit))
+                $unit = if ($field -match 'MJ$') { '公顷' } else { '服务返回值' }
+                [void]$rows.Add(@((FieldDisplay $field), (ValueOf $row $field), $unit))
             }
         }
     } else {
@@ -254,7 +260,7 @@ function WordTable([object]$rows) {
     $rowList = @($rows)
     if ($rowList.Count -eq 0) { return '' }
     $columnCount = @($rowList[0]).Count
-    $widths = if ($columnCount -eq 4) { @(1900, 2500, 1500, 3000) } elseif ($columnCount -eq 3) { @(2500, 2800, 3600) } else { @(8900) }
+    $widths = if ($columnCount -eq 4) { @(1900, 2500, 1500, 3000) } elseif ($columnCount -eq 3) { @(2500, 2800, 3600) } elseif ($columnCount -eq 2) { @(2300, 6600) } else { @(8900) }
     $grid = (($widths | ForEach-Object { '<w:gridCol w:w="' + $_ + '"/>' }) -join '')
     $body = [System.Text.StringBuilder]::new()
     for ($index = 0; $index -lt $rowList.Count; $index++) {
@@ -316,7 +322,7 @@ $docxEntries = @{
     '[Content_Types].xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>'
     '_rels/.rels' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
     'word/_rels/document.xml.rels' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>'
-    'word/header1.xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="right"/></w:pPr>' + (WordRun 'ZJUGIS Harness 空间分析报告' 18 $false) + '</w:p></w:hdr>'
+    'word/header1.xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="right"/></w:pPr>' + (WordRun '万维空间分析报告' 18 $false) + '</w:p></w:hdr>'
     'word/footer1.xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="center"/></w:pPr>' + (WordRun '第 ' 18 $false) + '<w:fldSimple w:instr="PAGE"><w:r><w:rPr><w:sz w:val="18"/></w:rPr><w:t>1</w:t></w:r></w:fldSimple>' + (WordRun ' 页' 18 $false) + '</w:p></w:ftr>'
     'word/document.xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>' + $body + '<w:sectPr><w:headerReference w:type="default" r:id="rId1"/><w:footerReference w:type="default" r:id="rId2"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720"/></w:sectPr></w:body></w:document>'
 }

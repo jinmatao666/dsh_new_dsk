@@ -108,6 +108,86 @@
   padding: 10px 12px 0;
 }
 
+.fileCards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.fileCard {
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  width: min(220px, calc(100% - 8px));
+  min-height: 58px;
+  padding: 8px 34px 8px 8px;
+  border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
+  border-radius: 13px;
+  background: var(--dsw-alias-bg-elevated);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 5%);
+}
+
+.fileCardIcon {
+  display: grid;
+  width: 34px;
+  height: 38px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.fileCardIcon[data-kind='folder'] {
+  background: rgb(37 99 235 / 10%);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.fileCardCopy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.fileCardCopy strong {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileCardCopy small {
+  color: var(--dsw-alias-label-caption);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.fileCardRemove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-bg-elevated);
+  cursor: pointer;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.fileCardRemove:hover { opacity: .82; }
+.fileCardRemove:disabled { cursor: default; opacity: .45; }
+
 /* Floating overlay anchor (menu / popupSelect shell): entries position
    themselves against the card (bottom: 100% + gap); closed entries render null. */
 .overlayAnchor {
@@ -470,4 +550,8 @@
   text-decoration: line-through;
   opacity: 0.7;
   color: var(--dsw-alias-state-error-primary);
+}
+
+.chipInFileCard {
+  color: transparent;
 }

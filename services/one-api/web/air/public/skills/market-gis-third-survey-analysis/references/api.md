@@ -2,6 +2,7 @@
 
 - 方法：`POST`
 - 路径：`/Analysis.svc/SanDXzAnalysis`
+- 默认服务地址：`http://60.191.110.206:38010`；`-BaseUrl` 参数优先，其次使用 `DSH_GIS_SERVICE_URL` 环境变量，均未配置时使用默认地址
 - 内容类型：`text/plain; charset=utf-8`
 - `GeoJson`：ArcGIS `{ hasZ, hasM, rings }` 对象序列化后的字符串
 - `Xznf`：三调年度，默认 2024

@@ -531,6 +531,17 @@ export function InputBar({
   // text. Claim tokens and references retain the draft's own glyph metrics,
   // so their decoration cannot drift from wrapping, selection, or the caret.
   const deco = input === undefined ? INERT_DECORATIONS : deriveDecorations(input, lexicon)
+  const fileReferences = deco.chips.filter(chip => chip.appearance === 'file' || chip.appearance === 'folder')
+  const removeFileReference = (occurrenceId: number): void => {
+    if (input === undefined || keyboard === undefined || locked || machineBusy) return
+    const occurrence = input.occurrences.find(item => item.occurrenceId === occurrenceId)
+    if (occurrence === undefined) return
+    const start = occurrence.offset
+    let end = occurrence.offset + occurrence.length
+    if (draft[end] === ' ') end += 1
+    keyboard.setDraft(draft.slice(0, start) + draft.slice(end), { start, end, insertedLength: 0 })
+    inputRef.current?.focus()
+  }
   const backdrop: ReactNode[] = []
   {
     // Segment boundaries: the token range end, every structured-reference
@@ -565,7 +576,11 @@ export function InputBar({
         backdrop.push(
           <span
             key={`chip-${chip.occurrenceId}`}
-            className={clsx(css.chip, chip.invalid && css.chipInvalid)}
+            className={clsx(
+              css.chip,
+              (chip.appearance === 'file' || chip.appearance === 'folder') && css.chipInFileCard,
+              chip.invalid && css.chipInvalid,
+            )}
             data-decoration="chip"
             data-reference-appearance={chip.appearance}
             data-occurrence={chip.occurrenceId}
@@ -661,6 +676,38 @@ export function InputBar({
             size: imageSizeText(imageLimits.maxImageBytes),
           },
         })}
+        {fileReferences.length > 0 && (
+          <div className={css.fileCards} aria-label="已添加的文件">
+            {fileReferences.map((reference) => {
+              const kind = reference.appearance === 'folder' ? 'folder' : 'file'
+              const extension = kind === 'folder'
+                ? '文件夹'
+                : reference.label.includes('.')
+                  ? reference.label.split('.').at(-1)?.toUpperCase() ?? '文件'
+                  : '文件'
+              return (
+                <div key={reference.occurrenceId} className={css.fileCard}>
+                  <span className={css.fileCardIcon} data-kind={kind}>
+                    <ReferenceIcon kind={kind} size={20} />
+                  </span>
+                  <span className={css.fileCardCopy}>
+                    <strong title={reference.label}>{reference.label}</strong>
+                    <small>{extension}</small>
+                  </span>
+                  <button
+                    type="button"
+                    className={css.fileCardRemove}
+                    aria-label={`移除 ${reference.label}`}
+                    onClick={() => { removeFileReference(reference.occurrenceId) }}
+                    disabled={locked || machineBusy}
+                  >
+                    ×
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
         {/* One scrollport, two text layers. The hidden mirror renders draft+'\n' and stretches the
             stack to the draft's FULL height (counting rows by '\n' cannot see soft wraps); the
             absolutely-positioned backdrop and textarea ride that height, and .scroll — capped at 14

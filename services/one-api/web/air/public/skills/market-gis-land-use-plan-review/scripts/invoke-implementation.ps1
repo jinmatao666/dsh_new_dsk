@@ -106,7 +106,7 @@ function Get-ShapeSource([string]$path) {
     $geometry = Read-ShapefileRings $shape.FullName
     $prjPath = "$base.prj"
     return [PSCustomObject]@{
-        SourcePath = $source; SourceKind = if ($temporary) { 'Shape ZIP' } elseif ([System.IO.Directory]::Exists($source)) { 'Shape directory' } else { 'Shape file' }
+        SourcePath = $source; SourceKind = if ($temporary) { '空间矢量数据压缩包' } elseif ([System.IO.Directory]::Exists($source)) { '空间矢量数据文件夹' } else { '空间矢量数据文件' }
         Rings = $geometry.Rings; FeatureCount = $geometry.FeatureCount; CoordinateSystem = if ([System.IO.File]::Exists($prjPath)) { [System.IO.File]::ReadAllText($prjPath).Trim() } else { '.prj file was not provided' }
         AttributeFields = Read-DbfFields "$base.dbf"; TemporaryDirectory = $temporary
     }
@@ -180,7 +180,7 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
         if ($zones.Count -gt 0) {
             [void]$lines.Add(('### {0} ({1})' -f (Localized '5Yqf6IO95Yy65piO57uG'), $zones.Count))
             foreach ($row in $zones) {
-                [void]$lines.Add(('- {0}: {1}; JBNTBHQMJ: {2}; JBNTMJ: {3}; SZJSYDQMJ: {4}; CZJSYDQMJ: {5}' -f (Localized '5Yqf6IO95Yy657G75Z6L'), (FieldValue $row 'GNQLX'), (FieldValue $row 'JBNTBHQMJ'), (FieldValue $row 'JBNTMJ'), (FieldValue $row 'SZJSYDQMJ'), (FieldValue $row 'CZJSYDQMJ')))
+                [void]$lines.Add(('- {0}: {1}; 基本农田保护区面积（JBNTBHQMJ）: {2}; 永久基本农田面积（JBNTMJ）: {3}; 城镇建设用地区面积（SZJSYDQMJ）: {4}; 村镇建设用地区面积（CZJSYDQMJ）: {5}' -f (Localized '5Yqf6IO95Yy657G75Z6L'), (FieldValue $row 'GNQLX'), (FieldValue $row 'JBNTBHQMJ'), (FieldValue $row 'JBNTMJ'), (FieldValue $row 'SZJSYDQMJ'), (FieldValue $row 'CZJSYDQMJ')))
             }
         }
         if ($reviews.Count -eq 0 -and $zones.Count -eq 0) { [void]$lines.Add('- ' + (Localized '5pyq6L+U5Zue5bey56Gu6K6k55qE6KeE5YiS5a6h5p+l5a2X5q6144CC')) }
@@ -202,13 +202,13 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
         [void]$lines.Add('## 综合结论')
         foreach ($row in $reviews) {
             $farmland = NumberValue $row 'JBNTMJ'
-            [void]$lines.Add(('- **核心结论：**项目范围为 {0} 公顷。{1}' -f (FieldValue $row 'YDZMJ'), $(if ($farmland -eq 0) { '未占用永久基本农田，耕地保护不构成当前范围的直接刚性约束。' } else { ('涉及永久基本农田 {0} 公顷，应作为项目边界优化和报批论证的首要约束。' -f (FieldValue $row 'JBNTMJ')) })))
+            [void]$lines.Add(('- 核心结论：项目范围为 {0} 公顷。{1}' -f (FieldValue $row 'YDZMJ'), $(if ($farmland -eq 0) { '未占用永久基本农田，耕地保护不构成当前范围的直接刚性约束。' } else { ('涉及永久基本农田 {0} 公顷，应作为项目边界优化和报批论证的首要约束。' -f (FieldValue $row 'JBNTMJ')) })))
         }
-        [void]$lines.Add('- **规划行动：**以本次项目边界叠加国土空间总体规划和详细规划图则，核实规划用地性质、建设边界及专项管控要求后，形成可用于报批的规划符合性意见。')
+        [void]$lines.Add('- 规划行动：以本次项目边界叠加国土空间总体规划和详细规划图则，核实规划用地性质、建设边界及专项管控要求后，形成可用于报批的规划符合性意见。')
     }
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5pWw5o2u6ZmQ5Yi2'))
-    [void]$lines.Add('- 审查结论以本次输入范围、审查类别和 GIS 服务返回的现势规划数据为依据；各规划图层采用独立面积口径。')
+    [void]$lines.Add('- 审查结论以本次输入范围、审查类别和地理信息分析服务返回的现势规划数据为依据；各规划图层采用独立面积口径。')
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5Y6f5aeL5o6l5Y+j6L+U5Zue'))
     [void]$lines.Add(('- [JSON]({0})' -f [System.IO.Path]::GetFileName($resultPath)))
@@ -222,7 +222,7 @@ try {
     [System.IO.Directory]::CreateDirectory($outputPath) | Out-Null
     $rings = $resolved.Rings
 if ([string]::IsNullOrWhiteSpace($BaseUrl)) { $BaseUrl = $env:DSH_GIS_SERVICE_URL }
-if ([string]::IsNullOrWhiteSpace($BaseUrl)) { throw '未配置 DSH_GIS_SERVICE_URL；请在运行环境中提供 GIS 服务地址，或使用 -BaseUrl 指定。' }
+if ([string]::IsNullOrWhiteSpace($BaseUrl)) { $BaseUrl = 'http://60.191.110.206:38010' }
 $arcGeometry = @{ hasZ = $false; hasM = $false; rings = $rings } | ConvertTo-Json -Compress -Depth 100
 $body = @{
     GeoJson = $arcGeometry

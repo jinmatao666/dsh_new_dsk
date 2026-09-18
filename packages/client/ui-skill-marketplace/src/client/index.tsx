@@ -40,8 +40,8 @@ type Skill = {
   reviewStatus?: 'none' | 'pending' | 'approved' | 'rejected'
   reviewReason?: string
   visibility?: 'private' | 'public'
-  submittedAt?: string
-  reviewedAt?: string
+  submittedAt?: string | number
+  reviewedAt?: string | number
   publishedSkillId?: number
   publishedVersion?: string
 }
@@ -134,6 +134,8 @@ type RemotePersonalSkill = {
   review_reason?: unknown
   submitted_at?: unknown
   reviewed_at?: unknown
+  created_at?: unknown
+  updated_at?: unknown
   published_skill_id?: unknown
   published_version?: unknown
 }
@@ -143,16 +145,22 @@ function parseReviewStatus(value: unknown): NonNullable<Skill['reviewStatus']> |
   return undefined
 }
 
-function formatReviewTime(value: string | undefined): string {
+function parseReviewTime(...values: unknown[]): string | number | undefined {
+  return values.find(value => (typeof value === 'string' && value.trim() !== '')
+    || (typeof value === 'number' && Number.isFinite(value) && value > 0)) as string | number | undefined
+}
+
+function formatReviewTime(value: string | number | undefined): string {
   if (value === undefined || value === '') return '—'
-  const time = new Date(value)
-  if (Number.isNaN(time.getTime())) return value
+  const time = new Date(typeof value === 'number' && value < 10_000_000_000 ? value * 1000 : value)
+  if (Number.isNaN(time.getTime())) return String(value)
   return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
     hour12: false,
   }).format(time)
 }
@@ -240,11 +248,9 @@ const L = {
   myUploads: '我的上传',
   addSkill: '添加技能',
   all: '全部',
-  featured: '精选技能',
+  featured: '推荐技能',
+  allSkills: '全部技能',
   refresh: '换一批',
-  recommend: '推荐',
-  skillHub: 'SkillHub',
-  suite: '套件',
   installed: '已安装',
   install: '安装',
   count: '次安装',
@@ -335,12 +341,6 @@ const AUTOMATION_HISTORY = [
   { id: 'run-02', name: '投标文件变更提醒', time: '昨天 10:12', status: '已完成', detail: '发现 2 处澄清变更，已生成差异摘要' },
   { id: 'run-03', name: '成果归档检查', time: '08-29 15:00', status: '需关注', detail: '发现 3 项待补充成果' },
 ] as const
-
-const SUB_TABS = [
-  { id: 'recommend', label: L.recommend },
-  { id: 'skillHub', label: L.skillHub },
-  { id: 'suite', label: L.suite },
-]
 
 function PlusIcon() {
   return (
@@ -521,12 +521,13 @@ type OverlayProps = PropsRuntime<'shell.overlay'> & {
 }
 type ActionProps = PropsRuntime<'sidebar.footer.action'> & SidebarFooterActionOwnerProps
 
-function SkillDetail({ skill, onBack, installState, installing, onToggleInstall }: {
+function SkillDetail({ skill, onBack, installState, installing, onToggleInstall, showReview = false }: {
   skill: Skill
   onBack: () => void
   installState: MarketplaceInstallState
   installing: boolean
   onToggleInstall: () => void
+  showReview?: boolean
 }) {
   const installed = installState === 'installed' || installState === 'updateAvailable'
   const installLabel = skill.installable !== true
@@ -550,7 +551,9 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall 
           <p>{skill.summary}</p>
           <div className="dsh-skill-detail-meta">
             <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>{skill.source === 'personal' ? '个人' : '官方'}</span>
-            {skill.reviewStatus !== undefined && skill.reviewStatus !== 'approved' && <span className={`dsh-skill-review-status ${skill.reviewStatus}`}>{skill.reviewStatus === 'pending' ? '审核中' : skill.reviewStatus === 'rejected' ? '未通过' : '私人'}</span>}
+            {showReview && skill.reviewStatus !== undefined && skill.reviewStatus !== 'none' && (
+              <span className={`dsh-skill-review-status ${skill.reviewStatus}`}>{reviewStatusLabel(skill.reviewStatus)}</span>
+            )}
             <span>{L.version}: {skill.version}</span>
             <span>{L.author}: {skill.author}</span>
             {hasVerifiedInstallCount(skill) && <span>{skill.installs} {L.count}</span>}
@@ -565,7 +568,9 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall 
           {installing ? '处理中…' : installLabel}
         </button>
       </div>
-      {skill.reviewStatus === 'rejected' && skill.reviewReason && <div className="dsh-skill-review-notice">审核意见：{skill.reviewReason}</div>}
+      {showReview && skill.reviewStatus === 'rejected' && skill.reviewReason && (
+        <div className="dsh-skill-review-notice">审核意见：{skill.reviewReason}</div>
+      )}
       <div className="dsh-skill-detail-body">
         <div className="dsh-skill-detail-section">
           <h3>{L.params}</h3>
@@ -800,7 +805,6 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState(L.all)
-  const [activeSubTab, setActiveSubTab] = useState('recommend')
   const [view, setView] = useState<'list' | 'detail'>('list')
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
   const [libraryView, setLibraryView] = useState<'market' | 'installed' | 'uploads'>('market')
@@ -951,18 +955,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
         marketplacePublished: true,
       }]
     }) ?? null
-    const reviewBySlug = new Map(personalSkills.flatMap(item => typeof item.name === 'string' ? [[item.name, item] as const] : []))
-    const local = discoveredCustomSkills.map((skill) => {
-      const review = reviewBySlug.get(skillSlug(skill))
-      const reviewStatus = parseReviewStatus(review?.review_status)
-      return {
-        ...skill,
-        ...(reviewStatus === undefined ? {} : { reviewStatus }),
-        ...(typeof review?.review_reason === 'string' && review.review_reason !== '' ? { reviewReason: review.review_reason } : {}),
-      }
-    })
-    return buildMarketplaceCatalog(local, published)
-  }, [discoveredCustomSkills, personalSkills, remoteSkills])
+    return buildMarketplaceCatalog(discoveredCustomSkills, published)
+  }, [discoveredCustomSkills, remoteSkills])
   const uploadedSkills = useMemo<Skill[]>(() => personalSkills.flatMap((remote): Skill[] => {
     const slug = typeof remote.name === 'string' ? remote.name : ''
     const visibility = remote.visibility === 'public' ? 'public' : remote.visibility === 'private' ? 'private' : undefined
@@ -972,6 +966,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     const categoryName = typeof remote.category === 'string' && remote.category.trim() !== ''
       ? remote.category.trim()
       : '未分类'
+    const submittedAt = parseReviewTime(remote.submitted_at, remote.updated_at, remote.created_at)
+    const reviewedAt = parseReviewTime(remote.reviewed_at)
     return [{
       id: `upload-${id}`,
       slug,
@@ -994,8 +990,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       ...(typeof remote.review_reason === 'string' && remote.review_reason.trim() !== ''
         ? { reviewReason: remote.review_reason.trim() }
         : {}),
-      ...(typeof remote.submitted_at === 'string' ? { submittedAt: remote.submitted_at } : {}),
-      ...(typeof remote.reviewed_at === 'string' ? { reviewedAt: remote.reviewed_at } : {}),
+      ...(submittedAt === undefined ? {} : { submittedAt }),
+      ...(reviewedAt === undefined ? {} : { reviewedAt }),
       ...(typeof remote.published_skill_id === 'number' ? { publishedSkillId: remote.published_skill_id } : {}),
       ...(typeof remote.published_version === 'string' ? { publishedVersion: remote.published_version } : {}),
     }]
@@ -1021,15 +1017,14 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     const state = resolveInstallState(skill)
     return state === 'installed' || state === 'updateAvailable'
   }
-  const featuredPool = useMemo(() => browseMarketplaceCatalog(allSkills)
-    .filter(skill => skill.featured)
-    .sort((left, right) => Number(right.tags.includes('官方')) - Number(left.tags.includes('官方'))), [allSkills])
-  const [featuredOffset, setFeaturedOffset] = useState(0)
+  const featuredPool = useMemo(() => browseMarketplaceCatalog(allSkills), [allSkills])
+  const [featuredOffset, setFeaturedOffset] = useState(() => Math.floor(Math.random() * 10_000))
   const featuredSkills = useMemo(() => {
     if (featuredPool.length <= 3) return featuredPool
     const start = featuredOffset % featuredPool.length
+    const step = Math.max(1, Math.floor(featuredPool.length / 3))
     return [0, 1, 2]
-      .map(i => featuredPool[(start + i) % featuredPool.length])
+      .map(i => featuredPool[(start + i * step) % featuredPool.length])
       .filter((skill): skill is Skill => skill !== undefined)
   }, [featuredPool, featuredOffset])
 
@@ -1041,11 +1036,6 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       return uploads.filter(skill => `${skill.name} ${skill.summary} ${skill.category}`.toLowerCase().includes(q))
     }
     let skills = libraryView === 'installed' ? [...allSkills] : browseMarketplaceCatalog(allSkills)
-    if (libraryView === 'market' && activeSubTab === 'skillHub') {
-      skills = skills.filter(s => s.tags.includes('SkillHub'))
-    } else if (libraryView === 'market' && activeSubTab === 'suite') {
-      skills = skills.filter(s => s.tags.includes(L.suite))
-    }
     if (libraryView === 'market' && category !== L.all) {
       skills = skills.filter(s => (s.categories ?? [s.category]).includes(category))
     }
@@ -1055,7 +1045,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     }
     if (libraryView === 'installed') skills = skills.filter(isInstalled)
     return skills
-  }, [activeSubTab, allSkills, category, query, libraryView, uploadView, reviewFilter, uploadedSkills, installStates])
+  }, [allSkills, category, query, libraryView, uploadView, reviewFilter, uploadedSkills, installStates])
 
   if (!open) return null
 
@@ -1221,6 +1211,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
             onBack={() => { setView('list') }}
             installState={resolveInstallState(selectedSkill)}
             installing={installing === selectedSkill.id}
+            showReview={libraryView === 'uploads'}
             onToggleInstall={() => void toggleInstall(selectedSkill)}
           />
         ) : (
@@ -1324,7 +1315,11 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                 <div className="dsh-skill-featured-section">
                   <div className="dsh-skill-section-header">
                     <h2>{L.featured}</h2>
-                    <button type="button" className="dsh-skill-refresh" onClick={() => { setFeaturedOffset(offset => offset + 3) }}>
+                    <button
+                      type="button"
+                      className="dsh-skill-refresh"
+                      onClick={() => { setFeaturedOffset(Math.floor(Math.random() * 10_000)) }}
+                    >
                       <RefreshIcon /> {L.refresh}
                     </button>
                   </div>
@@ -1357,52 +1352,42 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                 </div>
               )}
 
-              {libraryView === 'market' && <div className="dsh-skill-sub-tabs">
-                {SUB_TABS.map(tab => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    className={activeSubTab === tab.id ? 'active' : ''}
-                    onClick={() => {
-                      setActiveSubTab(tab.id)
-                      void refreshInstallStates()
-                      if (loadRemoteSkills !== undefined) void loadRemoteSkills().then(setRemoteSkills).catch(() => setRemoteSkills(null))
-                      if (loadRemoteCategories !== undefined) {
-                        void loadRemoteCategories().then(setRemoteCategories).catch(() => setRemoteCategories(null))
-                      }
-                    }}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>}
-
-              {libraryView === 'market' && <div className="dsh-skill-categories">
-                {categories.map(item => (
-                  <button
-                    key={item}
-                    type="button"
-                    className={item === category ? 'active' : ''}
-                    onClick={() => {
-                      setCategory(item)
-                      if (loadRemoteSkills !== undefined) void loadRemoteSkills().then(setRemoteSkills).catch(() => setRemoteSkills(null))
-                      if (loadRemoteCategories !== undefined) {
-                        void loadRemoteCategories().then(setRemoteCategories).catch(() => setRemoteCategories(null))
-                      }
-                    }}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>}
+              {libraryView === 'market' && (
+                <section className="dsh-skill-all-section">
+                  <div className="dsh-skill-section-header">
+                    <h2>{L.allSkills}</h2>
+                  </div>
+                  <div className="dsh-skill-categories">
+                    {categories.map(item => (
+                      <button
+                        key={item}
+                        type="button"
+                        className={item === category ? 'active' : ''}
+                        onClick={() => {
+                          setCategory(item)
+                          if (loadRemoteSkills !== undefined) {
+                            void loadRemoteSkills().then(setRemoteSkills).catch(() => { setRemoteSkills(null) })
+                          }
+                          if (loadRemoteCategories !== undefined) {
+                            void loadRemoteCategories().then(setRemoteCategories).catch(() => { setRemoteCategories(null) })
+                          }
+                        }}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {libraryView === 'uploads' && uploadView === 'reviews' ? (
                 <div className="dsh-skill-review-list">
                   <div className="dsh-skill-review-list-header" aria-hidden="true">
                     <span>技能</span>
-                    <span>审核类型</span>
+                    <span>提交版本</span>
                     <span>提交时间</span>
                     <span>状态</span>
+                    <span>审核意见</span>
                     <span>操作</span>
                   </div>
                   {visible.map(skill => (
@@ -1415,20 +1400,24 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                           <strong>{skill.name}</strong>
                           <div>
                             <span>{skill.category}</span>
-                            <span>提交版本 {skill.version}</span>
                           </div>
-                          {skill.reviewStatus === 'rejected' && skill.reviewReason && (
-                            <p><b>审核意见</b>{skill.reviewReason}</p>
-                          )}
                         </div>
                       </div>
-                      <div className="dsh-skill-review-kind">
-                        <strong>{skill.publishedSkillId === undefined ? '首次发布' : '版本更新'}</strong>
-                        {skill.publishedVersion && <span>线上版本 {skill.publishedVersion}</span>}
+                      <div className="dsh-skill-review-version">
+                        <strong>v{skill.version}</strong>
+                        {skill.publishedVersion && <span>当前公开版本 v{skill.publishedVersion}</span>}
                       </div>
-                      <time dateTime={skill.submittedAt}>{formatReviewTime(skill.submittedAt)}</time>
+                      <time dateTime={typeof skill.submittedAt === 'string' ? skill.submittedAt : undefined}>
+                        {formatReviewTime(skill.submittedAt)}
+                      </time>
                       <span className={`dsh-skill-review-status ${skill.reviewStatus ?? 'none'}`}>
                         {reviewStatusLabel(skill.reviewStatus)}
+                      </span>
+                      <span
+                        className={`dsh-skill-review-opinion${skill.reviewStatus === 'rejected' ? ' rejected' : ''}`}
+                        title={skill.reviewStatus === 'rejected' ? skill.reviewReason : undefined}
+                      >
+                        {skill.reviewStatus === 'rejected' && skill.reviewReason ? skill.reviewReason : '—'}
                       </span>
                       <button
                         type="button"
@@ -1462,9 +1451,9 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                           <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>
                             {skill.source === 'personal' ? '个人' : '官方'}
                           </span>
-                          {skill.reviewStatus !== undefined && skill.reviewStatus !== 'approved' && (
+                          {libraryView === 'uploads' && skill.reviewStatus !== undefined && skill.reviewStatus !== 'none' && (
                             <span className={`dsh-skill-review-status ${skill.reviewStatus}`}>
-                              {skill.reviewStatus === 'pending' ? '审核中' : skill.reviewStatus === 'rejected' ? '未通过' : '私人'}
+                              {reviewStatusLabel(skill.reviewStatus)}
                             </span>
                           )}
                           {hasVerifiedInstallCount(skill) && <small><DownloadIcon />{skill.installs}</small>}

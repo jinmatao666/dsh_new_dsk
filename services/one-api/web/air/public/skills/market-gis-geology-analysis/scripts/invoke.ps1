@@ -106,7 +106,7 @@ function Get-ShapeSource([string]$path) {
     $geometry = Read-ShapefileRings $shape.FullName
     $prjPath = "$base.prj"
     return [PSCustomObject]@{
-        SourcePath = $source; SourceKind = if ($temporary) { 'Shape ZIP' } elseif ([System.IO.Directory]::Exists($source)) { 'Shape directory' } else { 'Shape file' }
+        SourcePath = $source; SourceKind = if ($temporary) { '空间矢量数据压缩包' } elseif ([System.IO.Directory]::Exists($source)) { '空间矢量数据文件夹' } else { '空间矢量数据文件' }
         Rings = $geometry.Rings; FeatureCount = $geometry.FeatureCount; CoordinateSystem = if ([System.IO.File]::Exists($prjPath)) { [System.IO.File]::ReadAllText($prjPath).Trim() } else { '.prj file was not provided' }
         AttributeFields = Read-DbfFields "$base.dbf"; TemporaryDirectory = $temporary
     }
@@ -165,7 +165,7 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
         if ($environment.Count -gt 0) {
             [void]$lines.Add(('### {0} ({1})' -f (Localized '5Zyw6LSo546v5aKD5p2h5Lu2'), $environment.Count))
             foreach ($row in $environment) {
-                [void]$lines.Add(('- DZHJTJ: {0}; {1}: {2}; {3}: {4}' -f (FieldValue $row 'DZHJTJ'), (Localized '5Zyw6LSo546v5aKD562J57qn'), (FieldValue $row 'DJ'), (Localized '5Y2g55So6Z2i56ev'), (FieldValue $row 'ZYMJ')))
+                [void]$lines.Add(('- 地质环境条件（DZHJTJ）: {0}; {1}: {2}; {3}: {4}' -f (FieldValue $row 'DZHJTJ'), (Localized '5Zyw6LSo546v5aKD562J57qn'), (FieldValue $row 'DJ'), (Localized '5Y2g55So6Z2i56ev'), (FieldValue $row 'ZYMJ')))
             }
         }
         if ($hazards.Count -gt 0) {
@@ -190,13 +190,13 @@ function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath,
         }
         [void]$lines.Add('')
         [void]$lines.Add('## 综合结论')
-        foreach ($row in $environment) { [void]$lines.Add(('- **工程地质条件：**项目范围在本图层中判定为“{0}”（等级 {1}），涉及 {2} 公顷；工程设计应以该条件确定勘察重点。' -f (FieldValue $row 'DZHJTJ'), (FieldValue $row 'DJ'), (FieldValue $row 'ZYMJ'))) }
-        foreach ($row in $hazards) { [void]$lines.Add(('- **灾害倾向：**项目范围在本图层中属于“{0}”（等级 {1}），涉及 {2} 公顷。应将地质环境复杂程度和灾害倾向作为两项并列条件纳入选址与设计。' -f (FieldValue $row 'FQMC'), (FieldValue $row 'DJ'), (FieldValue $row 'ZYMJ'))) }
-        [void]$lines.Add('- **实施建议：**本次结果支持开展下一阶段工程方案深化；在施工图设计前，应完成与项目类型相匹配的工程地质勘察和风险处置设计。')
+        foreach ($row in $environment) { [void]$lines.Add(('- 工程地质条件：项目范围在本图层中判定为“{0}”（等级 {1}），涉及 {2} 公顷；工程设计应以该条件确定勘察重点。' -f (FieldValue $row 'DZHJTJ'), (FieldValue $row 'DJ'), (FieldValue $row 'ZYMJ'))) }
+        foreach ($row in $hazards) { [void]$lines.Add(('- 灾害倾向：项目范围在本图层中属于“{0}”（等级 {1}），涉及 {2} 公顷。应将地质环境复杂程度和灾害倾向作为两项并列条件纳入选址与设计。' -f (FieldValue $row 'FQMC'), (FieldValue $row 'DJ'), (FieldValue $row 'ZYMJ'))) }
+        [void]$lines.Add('- 实施建议：本次结果支持开展下一阶段工程方案深化；在施工图设计前，应完成与项目类型相匹配的工程地质勘察和风险处置设计。')
     }
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5pWw5o2u6ZmQ5Yi2'))
-    [void]$lines.Add('- 分析结论以本次输入范围和 GIS 服务返回的现势空间数据为依据；面积按各返回图层的独立统计口径表达。')
+    [void]$lines.Add('- 分析结论以本次输入范围和地理信息分析服务返回的现势空间数据为依据；面积按各返回图层的独立统计口径表达。')
     [void]$lines.Add('')
     [void]$lines.Add('## ' + (Localized '5Y6f5aeL5o6l5Y+j6L+U5Zue'))
     [void]$lines.Add(('- [JSON]({0})' -f [System.IO.Path]::GetFileName($resultPath)))
@@ -213,7 +213,7 @@ if ([string]::IsNullOrWhiteSpace($YfxFieldName)) {
     $YfxFieldName = -join (0x5206, 0x533A, 0x540D, 0x79F0 | ForEach-Object { [char]$_ })
 }
 if ([string]::IsNullOrWhiteSpace($BaseUrl)) { $BaseUrl = $env:DSH_GIS_SERVICE_URL }
-if ([string]::IsNullOrWhiteSpace($BaseUrl)) { throw '未配置 DSH_GIS_SERVICE_URL；请在运行环境中提供 GIS 服务地址，或使用 -BaseUrl 指定。' }
+if ([string]::IsNullOrWhiteSpace($BaseUrl)) { $BaseUrl = 'http://60.191.110.206:38010' }
 $arcGeometry = @{ hasZ = $false; hasM = $false; rings = $rings } | ConvertTo-Json -Compress -Depth 100
 $body = @{
     GeoJson = $arcGeometry

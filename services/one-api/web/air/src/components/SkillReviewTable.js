@@ -72,15 +72,12 @@ const SkillReviewTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       title: '技能', dataIndex: 'display_name', width: 260,
       render: (_, skill) => <div className='skill-review-identity'>
         <strong>{skill.display_name || skill.name}</strong>
-        <span>{skill.name} · v{skill.version || '1.0.0'}</span>
+        <span>{skill.name} · 提交版本 v{skill.version || '1.0.0'}</span>
+        {skill.published_version && <span>当前公开版本 v{skill.published_version}</span>}
       </div>
     },
     { title: '上传人', dataIndex: 'owner', width: 150 },
     { title: '分类', dataIndex: 'category', width: 120, render: value => value || '通用类' },
-    {
-      title: '审核类型', width: 100,
-      render: (_, skill) => <Tag color={skill.published_skill_id ? 'blue' : 'cyan'}>{skill.published_skill_id ? '更新' : '首次发布'}</Tag>
-    },
     {
       title: '提交时间', dataIndex: 'submitted_at', width: 160,
       render: value => value ? timestamp2string(value) : '-'
