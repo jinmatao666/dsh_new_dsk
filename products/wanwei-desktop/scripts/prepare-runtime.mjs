@@ -69,6 +69,7 @@ restoreWorkspaceClosure([
   join(repositoryRoot, 'packages', 'bundle', 'wanwei-desktop', 'package.json'),
 ])
 materializeLinks(join(appRoot, 'node_modules'))
+copyFileSync(join(productRoot, 'scripts', 'document-tool.mjs'), join(appRoot, 'document-tool.mjs'))
 
 const cli = join(appRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
 const productPatch = join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-wanwei-desktop', 'cordis.patch.yml')

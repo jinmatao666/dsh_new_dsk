@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-read-analysis-view"
+description = "Enables the read_analysis_view command without any pre-configured scope."
+commands.allow = ["read_analysis_view"]
+
+[[permission]]
+identifier = "deny-read-analysis-view"
+description = "Denies the read_analysis_view command without any pre-configured scope."
+commands.deny = ["read_analysis_view"]

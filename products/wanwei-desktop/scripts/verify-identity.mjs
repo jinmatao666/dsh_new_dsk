@@ -10,11 +10,19 @@ const expected = {
   productName: '万维 Buddy 预览版',
   releaseIdentifier: 'com.wanwei.harness.preview',
   developmentIdentifier: 'com.wanwei.harness.preview.development',
+  bundleIcons: [
+    'icons/32x32.png',
+    'icons/128x128.png',
+    'icons/128x128@2x.png',
+    'icons/icon.icns',
+    'icons/icon.ico',
+  ],
 }
 
 assertEqual(release.productName, expected.productName, 'preview product name')
 assertEqual(release.identifier, expected.releaseIdentifier, 'preview release identifier')
 assertEqual(development.identifier, expected.developmentIdentifier, 'preview development identifier')
+assertEqual(JSON.stringify(release.bundle?.icon), JSON.stringify(expected.bundleIcons), 'preview bundle icons')
 if (release.identifier === development.identifier) fail('release and development identifiers must differ')
 if (release.identifier === 'com.wanwei.harness') fail('preview must not reuse the installed production identifier')
 

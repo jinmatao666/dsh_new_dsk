@@ -18,6 +18,11 @@
     "build:runner:bundle": "pnpm run check:runner && tauri build",
     "build": "pnpm run build:local"
   },
+  "dependencies": {
+    "mammoth": "^1.10.0",
+    "pdfjs-dist": "^4.10.38",
+    "xlsx": "^0.18.5"
+  },
   "devDependencies": {
     "@tauri-apps/cli": "^2.8.4"
   }

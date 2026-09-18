@@ -1,21 +1,50 @@
-use serde::Deserialize;
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Write},
+    net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::{mpsc, Mutex},
-    time::Duration,
+    sync::{mpsc, Arc, Mutex},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{TrayIconBuilder, TrayIconEvent},
+    DragDropEvent, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+};
 use url::Url;
 
-const PRODUCT_PROFILE: &str = "wanwei-desktop";
+const NATIVE_SKILLS_CHANGED_SCRIPT: &str = "window.dispatchEvent(new Event('dsh:skills-changed'));";
+const NATIVE_FILE_DRAG_ENTER_SCRIPT: &str =
+    "window.dispatchEvent(new Event('dsh:native-file-drag-enter'));";
+const NATIVE_FILE_DRAG_LEAVE_SCRIPT: &str =
+    "window.dispatchEvent(new Event('dsh:native-file-drag-leave'));";
+const NATIVE_FILE_DROP_SCRIPT: &str = "window.dispatchEvent(new Event('dsh:native-file-drop'));";
+const WORKSPACE_IMPORT_MAX_FILES: usize = 64;
+const WORKSPACE_IMPORT_MAX_FILE_BYTES: usize = 64 * 1024 * 1024;
+const WORKSPACE_IMPORT_MAX_TOTAL_BYTES: usize = 256 * 1024 * 1024;
+const NATIVE_BRIDGE_INITIALIZATION_SCRIPT: &str = r#"
+(() => {
+  const invoke = (command, argumentsValue) => {
+    const nativeInvoke = window.__TAURI__?.core?.invoke ?? window.__TAURI_INTERNALS__?.invoke;
+    if (typeof nativeInvoke !== 'function') {
+      return Promise.reject(new Error('桌面端原生服务暂不可用，请稍后重试。'));
+    }
+    return nativeInvoke(command, argumentsValue);
+  };
+  Object.defineProperty(window, '__ZJUGIS_NATIVE_INVOKE__', {
+    value: invoke,
+    configurable: true,
+  });
+})();
+"#;
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ServerConfig {
-    #[serde(default)]
     one_api_url: String,
     #[serde(default)]
     default_model: String,
@@ -23,24 +52,1403 @@ struct ServerConfig {
     install_id: String,
 }
 
-/// Owns the child so normal Tauri shutdown also terminates the local DSH host.
-struct Sidecar(Mutex<Child>);
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MarketplaceCatalog {
+    skills: Vec<MarketplaceManifest>,
+}
 
-impl Drop for Sidecar {
-    fn drop(&mut self) {
-        if let Ok(child) = self.0.get_mut() {
-            let _ = child.kill();
-            let _ = child.wait();
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MarketplaceManifest {
+    id: String,
+    slug: String,
+    version: String,
+    files: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MarketplaceSkillState {
+    id: String,
+    slug: String,
+    version: String,
+    installed_version: Option<String>,
+    state: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomSkillFile {
+    path: String,
+    content: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceImportFile {
+    name: String,
+    bytes: Vec<u8>,
+}
+
+/// One operating-system drop that the renderer may consume exactly once.
+struct PendingWorkspaceDrop(Mutex<Option<Vec<PathBuf>>>);
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomSkillState {
+    slug: String,
+    name: String,
+    description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    body: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    files: Option<Vec<CustomSkillUploadFile>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomSkillUploadFile {
+    path: String,
+    content_base64: String,
+}
+
+/// Notify the live renderer after an installed skill directory changes.
+///
+/// The local skill provider observes the same directory; this event only drops
+/// the renderer's per-session slash-menu cache so the following `/` request
+/// reads the updated host catalog instead of requiring a page reload.
+fn notify_skill_catalog_changed(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.eval(NATIVE_SKILLS_CHANGED_SCRIPT);
+    }
+}
+
+/// Give the watched local skill provider time to invalidate its catalog before
+/// telling the current page to request it again.
+fn wait_for_skill_catalog_observation() {
+    std::thread::sleep(Duration::from_millis(400));
+}
+
+fn custom_skill_front_matter_value(text: &str, key: &str) -> Option<String> {
+    text.lines()
+        .take(32)
+        .find_map(|line| line.trim().strip_prefix(&format!("{key}:")))
+        .map(|value| value.trim().trim_matches(['\'', '"']).to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn validate_skill_relative_path(value: &str) -> Result<PathBuf, String> {
+    let normalized = value.replace('\\', "/");
+    if normalized.is_empty()
+        || normalized.starts_with('/')
+        || normalized.contains(':')
+        || normalized
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err(format!("技能文件路径无效：{value}"));
+    }
+    Ok(normalized
+        .split('/')
+        .fold(PathBuf::new(), |parent, part| parent.join(part)))
+}
+
+/// Returns a same-volume staging directory outside the watched skills root.
+fn skill_staging_root(skills_root: &Path) -> Result<PathBuf, String> {
+    let home = skills_root
+        .parent()
+        .ok_or_else(|| format!("用户技能目录缺少上级目录 {}", skills_root.display()))?;
+    fs::create_dir_all(home)
+        .map_err(|error| format!("无法创建技能主目录 {}：{error}", home.display()))?;
+    let staging_root = home.join(".dsh-skill-staging");
+    if staging_root.exists()
+        && fs::symlink_metadata(&staging_root)
+            .map_err(|error| format!("无法读取技能暂存目录 {}：{error}", staging_root.display()))?
+            .file_type()
+            .is_symlink()
+    {
+        return Err(format!(
+            "拒绝使用符号链接技能暂存目录 {}",
+            staging_root.display()
+        ));
+    }
+    fs::create_dir_all(&staging_root)
+        .map_err(|error| format!("无法创建技能暂存目录 {}：{error}", staging_root.display()))?;
+    Ok(staging_root)
+}
+
+fn install_custom_skill_at(
+    skills_root: &Path,
+    slug: &str,
+    files: Vec<CustomSkillFile>,
+) -> Result<String, String> {
+    validate_marketplace_slug(slug)?;
+    if files.is_empty() || files.len() > 128 {
+        return Err("自定义技能必须包含 1 至 128 个文件".to_string());
+    }
+    let mut total = 0usize;
+    let mut normalized = Vec::with_capacity(files.len());
+    for file in files {
+        total = total
+            .checked_add(file.content.len())
+            .ok_or_else(|| "自定义技能文件总大小无效".to_string())?;
+        if total > 16 * 1024 * 1024 {
+            return Err("自定义技能文件总大小不能超过 16 MB".to_string());
+        }
+        normalized.push((validate_skill_relative_path(&file.path)?, file.content));
+    }
+    let skill_source = normalized
+        .iter()
+        .find(|(path, _)| path == Path::new("SKILL.md"))
+        .ok_or_else(|| "所选目录根部缺少 SKILL.md".to_string())?;
+    let skill_text = std::str::from_utf8(&skill_source.1)
+        .map_err(|_| "SKILL.md 必须使用 UTF-8 编码".to_string())?;
+    if !skill_text
+        .lines()
+        .take(20)
+        .any(|line| line.trim() == format!("name: {slug}"))
+    {
+        return Err(format!("SKILL.md 的 name 必须为 {slug}"));
+    }
+
+    fs::create_dir_all(skills_root)
+        .map_err(|error| format!("无法创建用户技能目录 {}：{error}", skills_root.display()))?;
+    let target = skills_root.join(slug);
+    if target.exists() {
+        return Err(format!("技能 {slug} 已存在，请先卸载后再添加"));
+    }
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("系统时间无效：{error}"))?
+        .as_nanos();
+    let staging = skill_staging_root(skills_root)?
+        .join(format!(".{slug}.custom-{}-{nonce}", std::process::id()));
+    let result = (|| {
+        for (relative, content) in normalized {
+            let destination = staging.join(relative);
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|error| format!("无法创建技能子目录 {}：{error}", parent.display()))?;
+            }
+            fs::write(&destination, content)
+                .map_err(|error| format!("无法写入技能文件 {}：{error}", destination.display()))?;
+        }
+        fs::write(staging.join(".dsh-custom-skill"), format!("slug={slug}\n"))
+            .map_err(|error| format!("无法写入自定义技能标记：{error}"))?;
+        fs::rename(&staging, &target)
+            .map_err(|error| format!("无法启用自定义技能 {}：{error}", target.display()))?;
+        Ok(target.join("SKILL.md").display().to_string())
+    })();
+    if result.is_err() && staging.exists() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    result
+}
+
+/// Validate and install a local skill directory chosen by the native host picker.
+fn install_custom_skill_directory_at(
+    skills_root: &Path,
+    source: &Path,
+) -> Result<CustomSkillState, String> {
+    let source_metadata = fs::symlink_metadata(source)
+        .map_err(|error| format!("无法读取个人技能目录 {}：{error}", source.display()))?;
+    if source_metadata.file_type().is_symlink() || !source_metadata.is_dir() {
+        return Err(format!("个人技能目录无效 {}", source.display()));
+    }
+    let skill_md = source.join("SKILL.md");
+    let skill_md_metadata = fs::symlink_metadata(&skill_md)
+        .map_err(|error| format!("所选目录根部缺少 SKILL.md：{error}"))?;
+    if skill_md_metadata.file_type().is_symlink() || !skill_md_metadata.is_file() {
+        return Err("所选目录根部的 SKILL.md 必须是普通文件".to_string());
+    }
+    let skill_text =
+        fs::read_to_string(&skill_md).map_err(|error| format!("无法读取 SKILL.md：{error}"))?;
+    let slug = custom_skill_front_matter_value(&skill_text, "name")
+        .ok_or_else(|| "SKILL.md 必须声明 name".to_string())?;
+    validate_marketplace_slug(&slug)?;
+    let mut file_count = 0usize;
+    let mut total_size = 0u64;
+    validate_custom_skill_directory_tree(source, 0, &mut file_count, &mut total_size)?;
+    let mut upload_files = Vec::with_capacity(file_count);
+    collect_custom_skill_upload_files(source, source, &mut upload_files)?;
+
+    if skills_root.exists()
+        && fs::symlink_metadata(skills_root)
+            .map_err(|error| format!("无法读取用户技能目录 {}：{error}", skills_root.display()))?
+            .file_type()
+            .is_symlink()
+    {
+        return Err(format!(
+            "拒绝使用符号链接技能根目录 {}",
+            skills_root.display()
+        ));
+    }
+    fs::create_dir_all(skills_root)
+        .map_err(|error| format!("无法创建用户技能目录 {}：{error}", skills_root.display()))?;
+    let target = skills_root.join(&slug);
+    let replaces_custom_skill = if target.exists() {
+        let metadata = fs::symlink_metadata(&target)
+            .map_err(|error| format!("无法读取现有技能 {}：{error}", target.display()))?;
+        if metadata.file_type().is_symlink()
+            || !metadata.is_dir()
+            || !target.join(".dsh-custom-skill").is_file()
+        {
+            return Err(format!("技能 {slug} 已存在且不是个人技能，不能覆盖"));
+        }
+        true
+    } else {
+        false
+    };
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("系统时间无效：{error}"))?
+        .as_nanos();
+    let staging = skill_staging_root(skills_root)?.join(format!(
+        ".{slug}.custom-directory-{}-{nonce}",
+        std::process::id()
+    ));
+    let backup = skill_staging_root(skills_root)?.join(format!(
+        ".{slug}.custom-backup-{}-{nonce}",
+        std::process::id()
+    ));
+    let result = (|| {
+        copy_marketplace_directory(source, &staging)?;
+        fs::write(staging.join(".dsh-custom-skill"), format!("slug={slug}\n"))
+            .map_err(|error| format!("无法写入自定义技能标记：{error}"))?;
+        if replaces_custom_skill {
+            fs::rename(&target, &backup)
+                .map_err(|error| format!("无法暂存现有个人技能 {}：{error}", target.display()))?;
+        }
+        if let Err(error) = fs::rename(&staging, &target) {
+            if replaces_custom_skill {
+                let _ = fs::rename(&backup, &target);
+            }
+            return Err(format!("无法启用自定义技能 {}：{error}", target.display()));
+        }
+        if replaces_custom_skill {
+            let _ = fs::remove_dir_all(&backup);
+        }
+        Ok(CustomSkillState {
+            slug,
+            name: custom_skill_front_matter_value(&skill_text, "name").unwrap_or_else(|| {
+                target
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string()
+            }),
+            description: custom_skill_front_matter_value(&skill_text, "description")
+                .unwrap_or_else(|| "本地添加的自定义技能。".to_string()),
+            body: Some(skill_text),
+            files: Some(upload_files),
+        })
+    })();
+    if result.is_err() && staging.exists() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    result
+}
+
+fn collect_custom_skill_upload_files(
+    root: &Path,
+    directory: &Path,
+    files: &mut Vec<CustomSkillUploadFile>,
+) -> Result<(), String> {
+    let mut entries = fs::read_dir(directory)
+        .map_err(|error| format!("无法枚举个人技能目录 {}：{error}", directory.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("无法读取个人技能目录项：{error}"))?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let path = entry.path();
+        let metadata = entry
+            .file_type()
+            .map_err(|error| format!("无法读取个人技能目录项类型 {}：{error}", path.display()))?;
+        if metadata.is_dir() {
+            collect_custom_skill_upload_files(root, &path, files)?;
+            continue;
+        }
+        if !metadata.is_file() {
+            return Err(format!(
+                "个人技能目录只能包含普通文件或目录 {}",
+                path.display()
+            ));
+        }
+        let relative = path
+            .strip_prefix(root)
+            .map_err(|error| format!("无法计算技能文件相对路径：{error}"))?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let content = fs::read(&path)
+            .map_err(|error| format!("无法读取个人技能文件 {}：{error}", path.display()))?;
+        files.push(CustomSkillUploadFile {
+            path: relative,
+            content_base64: BASE64_STANDARD.encode(content),
+        });
+    }
+    Ok(())
+}
+
+fn validate_custom_skill_directory_tree(
+    directory: &Path,
+    depth: usize,
+    file_count: &mut usize,
+    total_size: &mut u64,
+) -> Result<(), String> {
+    if depth > 16 {
+        return Err("个人技能目录层级不能超过 16 层".to_string());
+    }
+    for entry in fs::read_dir(directory)
+        .map_err(|error| format!("无法枚举个人技能目录 {}：{error}", directory.display()))?
+    {
+        let entry = entry.map_err(|error| format!("无法读取个人技能目录项：{error}"))?;
+        let metadata = entry.file_type().map_err(|error| {
+            format!(
+                "无法读取个人技能目录项类型 {}：{error}",
+                entry.path().display()
+            )
+        })?;
+        if metadata.is_symlink() {
+            return Err(format!(
+                "个人技能目录不能包含符号链接 {}",
+                entry.path().display()
+            ));
+        }
+        if metadata.is_dir() {
+            validate_custom_skill_directory_tree(&entry.path(), depth + 1, file_count, total_size)?;
+        } else if metadata.is_file() {
+            *file_count += 1;
+            if *file_count > 128 {
+                return Err("自定义技能必须包含 1 至 128 个文件".to_string());
+            }
+            let size = fs::metadata(entry.path())
+                .map_err(|error| {
+                    format!("无法读取个人技能文件 {}：{error}", entry.path().display())
+                })?
+                .len();
+            *total_size = total_size
+                .checked_add(size)
+                .ok_or_else(|| "自定义技能文件总大小无效".to_string())?;
+            if *total_size > 16 * 1024 * 1024 {
+                return Err("自定义技能文件总大小不能超过 16 MB".to_string());
+            }
+        } else {
+            return Err(format!(
+                "个人技能目录只能包含普通文件或目录 {}",
+                entry.path().display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn install_custom_skill(
+    app: tauri::AppHandle,
+    slug: String,
+    files: Vec<CustomSkillFile>,
+) -> Result<String, String> {
+    let installed = install_custom_skill_at(&user_skills_root(&app)?, &slug, files)?;
+    wait_for_skill_catalog_observation();
+    notify_skill_catalog_changed(&app);
+    Ok(installed)
+}
+
+#[tauri::command]
+fn install_custom_skill_directory(
+    app: tauri::AppHandle,
+    directory: String,
+) -> Result<CustomSkillState, String> {
+    let installed =
+        install_custom_skill_directory_at(&user_skills_root(&app)?, Path::new(&directory))?;
+    wait_for_skill_catalog_observation();
+    notify_skill_catalog_changed(&app);
+    Ok(installed)
+}
+
+#[tauri::command]
+fn list_custom_skills(app: tauri::AppHandle) -> Result<Vec<CustomSkillState>, String> {
+    let root = user_skills_root(&app)?;
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+    let mut skills = Vec::new();
+    for entry in fs::read_dir(&root)
+        .map_err(|error| format!("无法读取用户技能目录 {}：{error}", root.display()))?
+    {
+        let entry = entry.map_err(|error| format!("无法读取用户技能：{error}"))?;
+        if entry.path().join(".dsh-custom-skill").is_file() {
+            if let Some(slug) = entry.file_name().to_str() {
+                let skill_md = fs::read_to_string(entry.path().join("SKILL.md"))
+                    .map_err(|error| format!("无法读取自定义技能 {slug} 的 SKILL.md：{error}"))?;
+                skills.push(CustomSkillState {
+                    slug: slug.to_string(),
+                    name: custom_skill_front_matter_value(&skill_md, "name")
+                        .unwrap_or_else(|| slug.to_string()),
+                    description: custom_skill_front_matter_value(&skill_md, "description")
+                        .unwrap_or_else(|| "本地添加的自定义技能。".to_string()),
+                    body: None,
+                    files: None,
+                });
+            }
+        }
+    }
+    skills.sort_by(|left, right| left.slug.cmp(&right.slug));
+    Ok(skills)
+}
+
+#[tauri::command]
+fn uninstall_custom_skill(app: tauri::AppHandle, slug: String) -> Result<(), String> {
+    validate_marketplace_slug(&slug)?;
+    let directory = user_skills_root(&app)?.join(&slug);
+    if !directory.exists() {
+        return Ok(());
+    }
+    let marker = directory.join(".dsh-custom-skill");
+    if !marker.is_file() {
+        return Err(format!("技能 {slug} 不是通过“添加技能”安装的，拒绝删除"));
+    }
+    fs::remove_dir_all(&directory)
+        .map_err(|error| format!("无法移除自定义技能 {}：{error}", directory.display()))?;
+    wait_for_skill_catalog_observation();
+    notify_skill_catalog_changed(&app);
+    Ok(())
+}
+
+/// Read a compact, skill-generated analysis view for the desktop conversation UI.
+///
+/// The command deliberately accepts only the timestamped analysis-view JSON files
+/// created by the bundled GIS skills, including their Chinese production names.
+#[tauri::command]
+fn read_analysis_view(path: String) -> Result<String, String> {
+    let candidate = PathBuf::from(&path);
+    if !candidate.is_absolute() {
+        return Err("分析结果路径必须是绝对路径".to_string());
+    }
+    let filename = candidate
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "分析结果文件名无效".to_string())?;
+    if !(filename.contains("-analysis-view_")
+        || filename.contains("分析视图_")
+        || filename.contains("审查视图_"))
+        || !filename.ends_with(".json")
+    {
+        return Err("只能读取本次分析生成的结果视图文件".to_string());
+    }
+    let metadata = fs::metadata(&candidate)
+        .map_err(|error| format!("无法读取分析结果文件 {}：{error}", candidate.display()))?;
+    if !metadata.is_file() {
+        return Err("分析结果路径不是文件".to_string());
+    }
+    if metadata.len() > 2 * 1024 * 1024 {
+        return Err("分析结果文件过大，无法在对话中展示".to_string());
+    }
+    fs::read_to_string(&candidate)
+        .map_err(|error| format!("无法读取分析结果文件 {}：{error}", candidate.display()))
+}
+
+struct Sidecar(Arc<Mutex<Option<Child>>>);
+
+impl Sidecar {
+    /// Stop the Node runtime before terminating the native shell. This makes
+    /// upgrades deterministic: `sharp` keeps libvips loaded while Node lives.
+    fn stop(&self) {
+        if let Ok(mut guard) = self.0.lock() {
+            if let Some(child) = guard.as_mut() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            *guard = None;
         }
     }
 }
 
+const NATIVE_AUTH_TITLE_PREFIX: &str = "__zjugis_native_auth:";
+
+/// The application is rendered by a sidecar on an external URL. Its
+/// JavaScript Tauri bridge is therefore optional; this native helper remains
+/// the source of truth for the two shell window modes.
+fn apply_auth_window_state(
+    window: &tauri::WebviewWindow,
+    authenticated: bool,
+) -> Result<(), String> {
+    window
+        .set_resizable(authenticated)
+        .map_err(|error| format!("Unable to set resize permission: {error}"))?;
+    window
+        .set_maximizable(authenticated)
+        .map_err(|error| format!("Unable to set maximize permission: {error}"))?;
+
+    if !authenticated {
+        let _ = window.unmaximize();
+        window
+            .set_size(tauri::Size::Logical(tauri::LogicalSize::new(1120.0, 720.0)))
+            .map_err(|error| format!("Unable to restore login window size: {error}"))?;
+        let _ = window.center();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn set_auth_window_state(app: tauri::AppHandle, authenticated: bool) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window has not been created yet".to_string())?;
+    apply_auth_window_state(&window, authenticated)
+}
+
+fn validate_marketplace_slug(slug: &str) -> Result<(), String> {
+    let valid = !slug.is_empty()
+        && !slug.starts_with('-')
+        && !slug.ends_with('-')
+        && !slug.contains("--")
+        && slug.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
+        });
+    if valid {
+        Ok(())
+    } else {
+        Err("技能标识必须使用小写字母、数字和单个连字符".to_string())
+    }
+}
+
+fn development_harness_home(app_data_dir: &Path) -> Option<PathBuf> {
+    #[cfg(debug_assertions)]
+    {
+        Some(app_data_dir.join("development").join("dsh-home"))
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let _ = app_data_dir;
+        None
+    }
+}
+
+fn user_skills_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let app_data_dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("无法定位桌面应用数据目录：{error}"))?;
+    if let Some(home) = development_harness_home(&app_data_dir) {
+        return Ok(home.join("skills"));
+    }
+    let home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .ok_or_else(|| "无法定位当前用户目录".to_string())?;
+    Ok(PathBuf::from(home).join(".dsh").join("skills"))
+}
+
+fn user_downloads_root() -> Result<PathBuf, String> {
+    let home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .ok_or_else(|| "无法定位当前用户目录".to_string())?;
+    Ok(PathBuf::from(home).join("Downloads"))
+}
+
+fn save_session_log_archive_at(
+    downloads_root: &Path,
+    file_name: &str,
+    bytes: &[u8],
+) -> Result<PathBuf, String> {
+    if file_name.is_empty()
+        || file_name.len() > 180
+        || !file_name.ends_with(".zip")
+        || Path::new(file_name)
+            .file_name()
+            .and_then(|value| value.to_str())
+            != Some(file_name)
+        || !file_name.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+        })
+    {
+        return Err("导出文件名无效".to_string());
+    }
+    if bytes.len() > 512 * 1024 * 1024 {
+        return Err("Session 导出文件超过 512 MB 限制".to_string());
+    }
+    fs::create_dir_all(downloads_root)
+        .map_err(|error| format!("无法创建下载目录 {}：{error}", downloads_root.display()))?;
+
+    let stem = file_name.trim_end_matches(".zip");
+    for suffix in 0..10_000 {
+        let name = if suffix == 0 {
+            file_name.to_string()
+        } else {
+            format!("{stem}-{suffix}.zip")
+        };
+        let destination = downloads_root.join(name);
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&destination)
+        {
+            Ok(mut file) => {
+                file.write_all(bytes).map_err(|error| {
+                    let _ = fs::remove_file(&destination);
+                    format!(
+                        "无法写入 Session 导出文件 {}：{error}",
+                        destination.display()
+                    )
+                })?;
+                return Ok(destination);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(format!(
+                    "无法创建 Session 导出文件 {}：{error}",
+                    destination.display()
+                ))
+            }
+        }
+    }
+    Err("下载目录中存在过多同名 Session 导出文件".to_string())
+}
+
+/// Persist a Host-exported Session archive through the desktop shell rather
+/// than relying on WebView anchor-download support.
+#[tauri::command]
+fn save_session_log_archive(file_name: String, bytes: Vec<u8>) -> Result<String, String> {
+    let destination = save_session_log_archive_at(&user_downloads_root()?, &file_name, &bytes)?;
+    Ok(destination.display().to_string())
+}
+
+fn open_workspace_directory_at(workspace_path: &Path) -> Result<(), String> {
+    let metadata = fs::metadata(workspace_path)
+        .map_err(|error| format!("无法访问工作区目录 {}：{error}", workspace_path.display()))?;
+    if !metadata.is_dir() {
+        return Err(format!(
+            "工作区路径不是文件夹：{}",
+            workspace_path.display()
+        ));
+    }
+
+    #[cfg(target_os = "windows")]
+    let mut command = Command::new("explorer.exe");
+    #[cfg(target_os = "macos")]
+    let mut command = Command::new("open");
+    #[cfg(target_os = "linux")]
+    let mut command = Command::new("xdg-open");
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    return Err("当前系统不支持打开工作区目录".to_string());
+
+    command
+        .arg(workspace_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("无法打开工作区目录 {}：{error}", workspace_path.display()))?;
+    Ok(())
+}
+
+/// Open a Workspace in the desktop file manager from the Tauri process.
+#[tauri::command]
+fn open_workspace_directory(workspace_path: String) -> Result<(), String> {
+    open_workspace_directory_at(Path::new(&workspace_path))
+}
+
+fn workspace_import_file_name(name: &str) -> Result<&str, String> {
+    let path = Path::new(name);
+    let file_name = path.file_name().and_then(|value| value.to_str());
+    if name.is_empty()
+        || name.contains(['/', '\\', ':'])
+        || path.is_absolute()
+        || file_name != Some(name)
+        || matches!(name, "." | "..")
+    {
+        return Err(format!("工作区文件名无效：{name}"));
+    }
+    Ok(name)
+}
+
+fn workspace_import_destination(root: &Path, name: &str) -> Result<PathBuf, String> {
+    let source = Path::new(name);
+    let stem = source
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| format!("工作区文件名无效：{name}"))?;
+    let extension = source.extension().and_then(|value| value.to_str());
+    for suffix in 0..10_000 {
+        let candidate = match (suffix, extension) {
+            (0, _) => name.to_string(),
+            (_, Some(extension)) => format!("{stem} ({suffix}).{extension}"),
+            (_, None) => format!("{stem} ({suffix})"),
+        };
+        let destination = root.join(candidate);
+        if !destination.exists() {
+            return Ok(destination);
+        }
+    }
+    Err(format!("工作区中同名文件过多：{name}"))
+}
+
+fn import_workspace_files_at(
+    workspace_path: &Path,
+    files: Vec<WorkspaceImportFile>,
+) -> Result<Vec<String>, String> {
+    if files.is_empty() {
+        return Err("没有可导入的文件".to_string());
+    }
+    if files.len() > WORKSPACE_IMPORT_MAX_FILES {
+        return Err(format!(
+            "一次最多可导入 {WORKSPACE_IMPORT_MAX_FILES} 个文件"
+        ));
+    }
+    let root = fs::canonicalize(workspace_path)
+        .map_err(|error| format!("无法访问工作区 {}：{error}", workspace_path.display()))?;
+    if !root.is_dir() {
+        return Err(format!("工作区路径不是文件夹：{}", root.display()));
+    }
+    let mut total_bytes = 0usize;
+    let mut imported = Vec::with_capacity(files.len());
+    for file in files {
+        let name = workspace_import_file_name(&file.name)?;
+        if file.bytes.len() > WORKSPACE_IMPORT_MAX_FILE_BYTES {
+            return Err(format!(
+                "文件超过 {} MB 限制：{name}",
+                WORKSPACE_IMPORT_MAX_FILE_BYTES / 1024 / 1024
+            ));
+        }
+        total_bytes = total_bytes
+            .checked_add(file.bytes.len())
+            .ok_or_else(|| "导入文件总大小无效".to_string())?;
+        if total_bytes > WORKSPACE_IMPORT_MAX_TOTAL_BYTES {
+            return Err(format!(
+                "导入文件总大小不能超过 {} MB",
+                WORKSPACE_IMPORT_MAX_TOTAL_BYTES / 1024 / 1024
+            ));
+        }
+        let destination = workspace_import_destination(&root, name)?;
+        let mut output = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&destination)
+            .map_err(|error| format!("无法创建工作区文件 {}：{error}", destination.display()))?;
+        if let Err(error) = output.write_all(&file.bytes) {
+            let _ = fs::remove_file(&destination);
+            return Err(format!(
+                "无法写入工作区文件 {}：{error}",
+                destination.display()
+            ));
+        }
+        imported.push(destination.display().to_string());
+    }
+    Ok(imported)
+}
+
+fn workspace_import_root(
+    app: &tauri::AppHandle,
+    workspace_path: Option<String>,
+) -> Result<PathBuf, String> {
+    match workspace_path {
+        Some(path) => Ok(PathBuf::from(path)),
+        None => {
+            let path = app
+                .path()
+                .app_local_data_dir()
+                .map_err(|error| format!("无法定位默认导入目录：{error}"))?
+                .join("imports");
+            fs::create_dir_all(&path)
+                .map_err(|error| format!("无法创建默认导入目录 {}：{error}", path.display()))?;
+            Ok(path)
+        }
+    }
+}
+
+fn import_workspace_paths_at(
+    workspace_path: &Path,
+    paths: Vec<PathBuf>,
+) -> Result<Vec<String>, String> {
+    if paths.is_empty() {
+        return Err("没有可导入的文件".to_string());
+    }
+    if paths.len() > WORKSPACE_IMPORT_MAX_FILES {
+        return Err(format!(
+            "一次最多可导入 {WORKSPACE_IMPORT_MAX_FILES} 个文件"
+        ));
+    }
+    let root = fs::canonicalize(workspace_path)
+        .map_err(|error| format!("无法访问工作区 {}：{error}", workspace_path.display()))?;
+    if !root.is_dir() {
+        return Err(format!("工作区路径不是文件夹：{}", root.display()));
+    }
+    let mut total_bytes = 0u64;
+    let mut imported = Vec::with_capacity(paths.len());
+    for path in paths {
+        let source = fs::canonicalize(&path)
+            .map_err(|error| format!("无法访问拖入的文件 {}：{error}", path.display()))?;
+        let metadata = fs::metadata(&source)
+            .map_err(|error| format!("无法读取拖入的文件 {}：{error}", source.display()))?;
+        if !metadata.is_file() {
+            return Err(format!("暂不支持拖入文件夹：{}", source.display()));
+        }
+        let name = source
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| format!("拖入的文件名无效：{}", source.display()))?;
+        let name = workspace_import_file_name(name)?;
+        if metadata.len() > WORKSPACE_IMPORT_MAX_FILE_BYTES as u64 {
+            return Err(format!(
+                "文件超过 {} MB 限制：{name}",
+                WORKSPACE_IMPORT_MAX_FILE_BYTES / 1024 / 1024
+            ));
+        }
+        total_bytes = total_bytes
+            .checked_add(metadata.len())
+            .ok_or_else(|| "导入文件总大小无效".to_string())?;
+        if total_bytes > WORKSPACE_IMPORT_MAX_TOTAL_BYTES as u64 {
+            return Err(format!(
+                "导入文件总大小不能超过 {} MB",
+                WORKSPACE_IMPORT_MAX_TOTAL_BYTES / 1024 / 1024
+            ));
+        }
+        let destination = workspace_import_destination(&root, name)?;
+        if let Err(error) = fs::copy(&source, &destination) {
+            let _ = fs::remove_file(&destination);
+            return Err(format!("无法复制拖入的文件 {}：{error}", source.display()));
+        }
+        imported.push(destination.display().to_string());
+    }
+    Ok(imported)
+}
+
+/// Copy browser-dropped files into the selected Workspace without exposing a
+/// general filesystem-write command to the renderer.
+#[tauri::command]
+fn import_workspace_files(
+    app: tauri::AppHandle,
+    workspace_path: Option<String>,
+    files: Vec<WorkspaceImportFile>,
+) -> Result<Vec<String>, String> {
+    let root = workspace_import_root(&app, workspace_path)?;
+    import_workspace_files_at(&root, files)
+}
+
+/// Consume the latest operating-system drop and copy it into the active directory.
+#[tauri::command]
+fn import_dropped_workspace_files(
+    app: tauri::AppHandle,
+    pending: State<'_, PendingWorkspaceDrop>,
+    workspace_path: Option<String>,
+) -> Result<Vec<String>, String> {
+    let paths = pending
+        .0
+        .lock()
+        .map_err(|_| "拖入文件状态不可用，请重新拖入".to_string())?
+        .take()
+        .ok_or_else(|| "拖入的文件已失效，请重新拖入".to_string())?;
+    let root = workspace_import_root(&app, workspace_path)?;
+    import_workspace_paths_at(&root, paths)
+}
+
+fn marketplace_resource_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|error| format!("无法定位安装包资源目录：{error}"))?;
+    Ok(bundled_resource(&resource_dir, "skills"))
+}
+
+fn read_marketplace_catalog(root: &Path) -> Result<MarketplaceCatalog, String> {
+    let path = root.join("catalog.json");
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("无法读取技能目录 {}：{error}", path.display()))?;
+    serde_json::from_str(&source)
+        .map_err(|error| format!("技能目录格式无效 {}：{error}", path.display()))
+}
+
+fn read_marketplace_manifest(directory: &Path) -> Result<MarketplaceManifest, String> {
+    let path = directory.join("manifest.json");
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("无法读取技能清单 {}：{error}", path.display()))?;
+    serde_json::from_str(&source)
+        .map_err(|error| format!("技能清单格式无效 {}：{error}", path.display()))
+}
+
+fn manifest_for_slug(root: &Path, slug: &str) -> Result<MarketplaceManifest, String> {
+    let catalog = read_marketplace_catalog(root)?;
+    catalog
+        .skills
+        .into_iter()
+        .find(|manifest| manifest.slug == slug)
+        .ok_or_else(|| format!("安装包中不存在技能 {slug}"))
+}
+
+fn is_legacy_marketplace_skill(directory: &Path, slug: &str) -> bool {
+    let Ok(source) = fs::read_to_string(directory.join("SKILL.md")) else {
+        return false;
+    };
+    source
+        .lines()
+        .take(12)
+        .any(|line| line.trim() == format!("name: {slug}"))
+}
+
+fn installed_manifest(directory: &Path, slug: &str) -> Result<Option<MarketplaceManifest>, String> {
+    let manifest_path = directory.join("manifest.json");
+    if manifest_path.exists() {
+        let manifest = read_marketplace_manifest(directory)?;
+        if manifest.slug != slug {
+            return Err(format!("技能目录 {} 的清单标识不匹配", directory.display()));
+        }
+        return Ok(Some(manifest));
+    }
+    if is_legacy_marketplace_skill(directory, slug) {
+        return Ok(None);
+    }
+    Err(format!(
+        "技能目录 {} 不是由技能市场管理，拒绝覆盖或删除",
+        directory.display()
+    ))
+}
+
+fn validate_marketplace_tree(
+    directory: &Path,
+    manifest: &MarketplaceManifest,
+) -> Result<(), String> {
+    for relative in &manifest.files {
+        let normalized = relative.replace('\\', "/");
+        if normalized.is_empty()
+            || normalized.starts_with('/')
+            || normalized
+                .split('/')
+                .any(|part| part.is_empty() || part == "." || part == "..")
+        {
+            return Err(format!(
+                "技能 {} 包含不安全的文件路径 {relative}",
+                manifest.slug
+            ));
+        }
+        let path = normalized
+            .split('/')
+            .fold(directory.to_path_buf(), |parent, part| parent.join(part));
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("技能文件缺失 {}：{error}", path.display()))?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(format!("技能文件必须是普通文件 {}", path.display()));
+        }
+    }
+    Ok(())
+}
+
+fn copy_marketplace_directory(source: &Path, target: &Path) -> Result<(), String> {
+    let source_metadata = fs::symlink_metadata(source)
+        .map_err(|error| format!("无法读取技能资源 {}：{error}", source.display()))?;
+    if source_metadata.file_type().is_symlink() || !source_metadata.is_dir() {
+        return Err(format!("技能资源目录无效 {}", source.display()));
+    }
+    fs::create_dir_all(target)
+        .map_err(|error| format!("无法创建技能目录 {}：{error}", target.display()))?;
+    for entry in fs::read_dir(source)
+        .map_err(|error| format!("无法枚举技能资源 {}：{error}", source.display()))?
+    {
+        let entry = entry.map_err(|error| format!("无法读取技能资源项：{error}"))?;
+        let metadata = entry
+            .file_type()
+            .map_err(|error| format!("无法读取技能资源类型 {}：{error}", entry.path().display()))?;
+        if metadata.is_symlink() {
+            return Err(format!(
+                "技能资源不能包含符号链接 {}",
+                entry.path().display()
+            ));
+        }
+        let destination = target.join(entry.file_name());
+        if metadata.is_dir() {
+            copy_marketplace_directory(&entry.path(), &destination)?;
+        } else if metadata.is_file() {
+            fs::copy(entry.path(), &destination)
+                .map_err(|error| format!("无法复制技能文件 {}：{error}", entry.path().display()))?;
+        } else {
+            return Err(format!(
+                "技能资源必须是普通文件或目录 {}",
+                entry.path().display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn write_marketplace_files(target: &Path, files: Vec<CustomSkillFile>) -> Result<(), String> {
+    if files.is_empty() || files.len() > 128 {
+        return Err("服务器技能包必须包含 1 至 128 个文件".to_string());
+    }
+    let mut total_size = 0_usize;
+    let mut written = std::collections::HashSet::with_capacity(files.len());
+    for file in files {
+        total_size = total_size
+            .checked_add(file.content.len())
+            .ok_or_else(|| "服务器技能包文件大小无效".to_string())?;
+        if total_size > 16 * 1024 * 1024 {
+            return Err("服务器技能包总大小不能超过 16 MB".to_string());
+        }
+        let relative = validate_skill_relative_path(&file.path)?;
+        if !written.insert(relative.clone()) {
+            return Err(format!(
+                "服务器技能包包含重复文件路径 {}",
+                relative.display()
+            ));
+        }
+        let destination = target.join(relative);
+        let parent = destination
+            .parent()
+            .ok_or_else(|| "服务器技能包文件路径无效".to_string())?;
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("无法创建技能文件目录 {}：{error}", parent.display()))?;
+        fs::write(&destination, file.content)
+            .map_err(|error| format!("无法写入技能文件 {}：{error}", destination.display()))?;
+    }
+    Ok(())
+}
+
+fn install_marketplace_skill_at(
+    resource_root: &Path,
+    skills_root: &Path,
+    slug: &str,
+) -> Result<String, String> {
+    validate_marketplace_slug(slug)?;
+    if skills_root.exists()
+        && fs::symlink_metadata(skills_root)
+            .map_err(|error| format!("无法读取用户技能目录 {}：{error}", skills_root.display()))?
+            .file_type()
+            .is_symlink()
+    {
+        return Err(format!(
+            "拒绝使用符号链接技能根目录 {}",
+            skills_root.display()
+        ));
+    }
+    let manifest = manifest_for_slug(resource_root, slug)?;
+    let source = resource_root.join(slug);
+    validate_marketplace_tree(&source, &manifest)?;
+    if skills_root.exists()
+        && fs::symlink_metadata(skills_root)
+            .map_err(|error| format!("无法读取用户技能目录 {}：{error}", skills_root.display()))?
+            .file_type()
+            .is_symlink()
+    {
+        return Err(format!(
+            "拒绝使用符号链接技能根目录 {}",
+            skills_root.display()
+        ));
+    }
+    fs::create_dir_all(skills_root)
+        .map_err(|error| format!("无法创建用户技能目录 {}：{error}", skills_root.display()))?;
+    let directory = skills_root.join(slug);
+    if directory.exists() {
+        let metadata = fs::symlink_metadata(&directory)
+            .map_err(|error| format!("无法读取技能目录 {}：{error}", directory.display()))?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(format!("拒绝覆盖非普通技能目录 {}", directory.display()));
+        }
+        let installed = installed_manifest(&directory, slug)?;
+        if installed
+            .as_ref()
+            .is_some_and(|value| value.version == manifest.version)
+        {
+            return Ok(directory.join("SKILL.md").display().to_string());
+        }
+    }
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("系统时间无效：{error}"))?
+        .as_nanos();
+    let staging_root = skill_staging_root(skills_root)?;
+    let staging = staging_root.join(format!(".{slug}.install-{}-{nonce}", std::process::id()));
+    let backup = staging_root.join(format!(".{slug}.backup-{}-{nonce}", std::process::id()));
+    if let Err(error) = copy_marketplace_directory(&source, &staging) {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+    let staged_manifest = match read_marketplace_manifest(&staging) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(error);
+        }
+    };
+    if staged_manifest.slug != slug || staged_manifest.version != manifest.version {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(format!("技能 {slug} 的暂存清单校验失败"));
+    }
+    if let Err(error) = validate_marketplace_tree(&staging, &staged_manifest) {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+
+    if directory.exists() {
+        fs::rename(&directory, &backup)
+            .map_err(|error| format!("无法暂存旧技能目录 {}：{error}", directory.display()))?;
+    }
+    if let Err(error) = fs::rename(&staging, &directory) {
+        if backup.exists() {
+            let _ = fs::rename(&backup, &directory);
+        }
+        let _ = fs::remove_dir_all(&staging);
+        return Err(format!("无法启用技能目录 {}：{error}", directory.display()));
+    }
+    if backup.exists() {
+        fs::remove_dir_all(&backup).map_err(|error| {
+            format!("技能已更新，但无法移除旧版本 {}：{error}", backup.display())
+        })?;
+    }
+    Ok(directory.join("SKILL.md").display().to_string())
+}
+
+fn install_marketplace_skill_files_at(
+    skills_root: &Path,
+    slug: &str,
+    files: Vec<CustomSkillFile>,
+) -> Result<String, String> {
+    validate_marketplace_slug(slug)?;
+    fs::create_dir_all(skills_root)
+        .map_err(|error| format!("无法创建用户技能目录 {}：{error}", skills_root.display()))?;
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("系统时间无效：{error}"))?
+        .as_nanos();
+    let directory = skills_root.join(slug);
+    let staging_root = skill_staging_root(skills_root)?;
+    let staging = staging_root.join(format!(".{slug}.download-{}-{nonce}", std::process::id()));
+    let backup = staging_root.join(format!(".{slug}.backup-{}-{nonce}", std::process::id()));
+    fs::create_dir_all(&staging)
+        .map_err(|error| format!("无法创建技能暂存目录 {}：{error}", staging.display()))?;
+    if let Err(error) = write_marketplace_files(&staging, files) {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+    let manifest = match read_marketplace_manifest(&staging) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(error);
+        }
+    };
+    if manifest.slug != slug {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(format!("下载的技能包标识与请求不一致：{slug}"));
+    }
+    if let Err(error) = validate_marketplace_tree(&staging, &manifest) {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+    if directory.exists() {
+        let metadata = fs::symlink_metadata(&directory)
+            .map_err(|error| format!("无法读取技能目录 {}：{error}", directory.display()))?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(format!("拒绝覆盖非普通技能目录 {}", directory.display()));
+        }
+        let installed = installed_manifest(&directory, slug)?;
+        if installed
+            .as_ref()
+            .is_some_and(|value| value.version == manifest.version)
+        {
+            let _ = fs::remove_dir_all(&staging);
+            return Ok(directory.join("SKILL.md").display().to_string());
+        }
+        fs::rename(&directory, &backup)
+            .map_err(|error| format!("无法暂存旧技能目录 {}：{error}", directory.display()))?;
+    }
+    if let Err(error) = fs::rename(&staging, &directory) {
+        if backup.exists() {
+            let _ = fs::rename(&backup, &directory);
+        }
+        let _ = fs::remove_dir_all(&staging);
+        return Err(format!("无法启用下载的技能 {}：{error}", slug));
+    }
+    if backup.exists() {
+        fs::remove_dir_all(&backup).map_err(|error| {
+            format!("技能已更新，但无法移除旧版本 {}：{error}", backup.display())
+        })?;
+    }
+    Ok(directory.join("SKILL.md").display().to_string())
+}
+
+/// Matches the server's deterministic digest: sorted relative path, NUL, file
+/// bytes, NUL. The archive transport itself is intentionally not trusted.
+fn marketplace_package_sha256(files: &[CustomSkillFile]) -> String {
+    let mut entries: Vec<_> = files.iter().collect();
+    entries.sort_by(|left, right| left.path.cmp(&right.path));
+    let mut hash = Sha256::new();
+    for file in entries {
+        hash.update(file.path.as_bytes());
+        hash.update([0]);
+        hash.update(&file.content);
+        hash.update([0]);
+    }
+    format!("{:x}", hash.finalize())
+}
+
+#[tauri::command]
+fn list_marketplace_skills(app: tauri::AppHandle) -> Result<Vec<MarketplaceSkillState>, String> {
+    let skills_root = user_skills_root(&app)?;
+    if !skills_root.exists() {
+        return Ok(Vec::new());
+    }
+    fs::read_dir(&skills_root)
+        .map_err(|error| format!("无法枚举用户技能目录 {}：{error}", skills_root.display()))?
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| {
+            let metadata = entry.file_type().ok()?;
+            if metadata.is_symlink()
+                || !metadata.is_dir()
+                || entry.path().join(".dsh-custom-skill").is_file()
+            {
+                return None;
+            }
+            read_marketplace_manifest(&entry.path()).ok()
+        })
+        .into_iter()
+        .map(|manifest| {
+            let directory = skills_root.join(&manifest.slug);
+            let (installed_version, state) = if !directory.exists() {
+                (None, "notInstalled")
+            } else if fs::symlink_metadata(&directory)
+                .map(|metadata| metadata.file_type().is_symlink() || !metadata.is_dir())
+                .unwrap_or(true)
+            {
+                (None, "conflict")
+            } else {
+                match installed_manifest(&directory, &manifest.slug) {
+                    Ok(Some(installed)) if installed.version == manifest.version => {
+                        (Some(installed.version), "installed")
+                    }
+                    Ok(Some(installed)) => (Some(installed.version), "updateAvailable"),
+                    Ok(None) => (None, "updateAvailable"),
+                    Err(_) => (None, "conflict"),
+                }
+            };
+            Ok(MarketplaceSkillState {
+                id: manifest.id,
+                slug: manifest.slug,
+                version: manifest.version,
+                installed_version,
+                state: state.to_string(),
+            })
+        })
+        .collect()
+}
+
+#[tauri::command]
+fn install_marketplace_skill(
+    app: tauri::AppHandle,
+    slug: String,
+    files: Option<Vec<CustomSkillFile>>,
+    sha256: Option<String>,
+) -> Result<String, String> {
+    let installed = if let Some(files) = files {
+        if let Some(expected) = sha256.filter(|value| !value.is_empty()) {
+            if marketplace_package_sha256(&files) != expected.to_ascii_lowercase() {
+                return Err("服务器技能包摘要校验失败，未写入本机目录".to_string());
+            }
+        }
+        install_marketplace_skill_files_at(&user_skills_root(&app)?, &slug, files)?
+    } else {
+        let resource_root = marketplace_resource_root(&app)?;
+        let skills_root = user_skills_root(&app)?;
+        install_marketplace_skill_at(&resource_root, &skills_root, &slug)?
+    };
+    wait_for_skill_catalog_observation();
+    notify_skill_catalog_changed(&app);
+    Ok(installed)
+}
+
+fn uninstall_marketplace_skill_at(skills_root: &Path, slug: &str) -> Result<(), String> {
+    validate_marketplace_slug(slug)?;
+    let directory = skills_root.join(slug);
+    if !directory.exists() {
+        return Ok(());
+    }
+    let metadata = fs::symlink_metadata(&directory)
+        .map_err(|error| format!("无法读取技能目录 {}：{error}", directory.display()))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(format!("拒绝移除非普通技能目录 {}", directory.display()));
+    }
+    installed_manifest(&directory, slug)?;
+    fs::remove_dir_all(&directory)
+        .map_err(|error| format!("无法移除技能目录 {}：{error}", directory.display()))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn uninstall_marketplace_skill(app: tauri::AppHandle, slug: String) -> Result<(), String> {
+    uninstall_marketplace_skill_at(&user_skills_root(&app)?, &slug)?;
+    wait_for_skill_catalog_observation();
+    notify_skill_catalog_changed(&app);
+    Ok(())
+}
+
 fn append_log(path: &Path, message: impl AsRef<str>) {
+    use std::io::Write;
+
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
     if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {
         let _ = writeln!(file, "{}", message.as_ref());
+    }
+}
+
+/// Early desktop builds used a third-party agent-plane vision tool. It shares
+/// the `recognize_image` name with the bundled ZJUGIS implementation but
+/// expects a different host service (`vision`), so an old user-level preset
+/// can shadow the bundled tool after an installer upgrade. Disable only that
+/// exact obsolete entry and retain a one-time backup of the user's preset.
+fn disable_legacy_vision_tool(log_path: &Path) {
+    let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) else {
+        return;
+    };
+    let path = PathBuf::from(home)
+        .join(".dsh")
+        .join(".agent-presets")
+        .join("vision")
+        .join("agent.cordis.yml");
+    let Ok(raw) = fs::read_to_string(&path) else {
+        return;
+    };
+    if !raw.contains("@linenxi-ctrl/dsh-vision/lib/tool.js") {
+        return;
+    }
+
+    let mut changed = false;
+    let mut lines = raw.lines().peekable();
+    let mut updated = String::new();
+    while let Some(line) = lines.next() {
+        if line.trim() == "- id: tool-vision"
+            && lines
+                .peek()
+                .is_some_and(|next| next.contains("@linenxi-ctrl/dsh-vision/lib/tool.js"))
+        {
+            let _ = lines.next();
+            changed = true;
+            continue;
+        }
+        updated.push_str(line);
+        updated.push('\n');
+    }
+    if !changed {
+        return;
+    }
+
+    let backup = path.with_extension("yml.zjugis-vision-backup");
+    if !backup.exists() {
+        let _ = fs::write(&backup, &raw);
+    }
+    match fs::write(&path, updated) {
+        Ok(()) => append_log(
+            log_path,
+            "disabled obsolete @linenxi-ctrl/dsh-vision tool; bundled dsh-vision is now authoritative",
+        ),
+        Err(error) => append_log(log_path, format!("could not disable obsolete vision tool: {error}")),
+    }
+}
+
+impl Drop for Sidecar {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
@@ -53,18 +1461,12 @@ fn bundled_resource(resource_dir: &Path, name: &str) -> PathBuf {
     }
 }
 
-fn read_server_config(resource_dir: &Path) -> Result<ServerConfig, String> {
+fn server_config(resource_dir: &Path) -> Result<ServerConfig, String> {
     let path = bundled_resource(resource_dir, "server.json");
     let raw = fs::read_to_string(&path)
         .map_err(|error| format!("无法读取 {}：{error}", path.display()))?;
     let config: ServerConfig =
         serde_json::from_str(&raw).map_err(|error| format!("server.json 无效：{error}"))?;
-    if config.one_api_url.is_empty() {
-        if cfg!(not(debug_assertions)) {
-            return Err("server.json 必须配置 OneAPI 地址".into());
-        }
-        return Ok(config);
-    }
     let url =
         Url::parse(&config.one_api_url).map_err(|error| format!("OneAPI 地址无效：{error}"))?;
     if !matches!(url.scheme(), "http" | "https") {
@@ -73,8 +1475,29 @@ fn read_server_config(resource_dir: &Path) -> Result<ServerConfig, String> {
     Ok(config)
 }
 
+fn production_runtime(resource_dir: &Path) -> PathBuf {
+    bundled_resource(resource_dir, "runtime")
+}
+
+fn production_command(resource_dir: &Path) -> (PathBuf, PathBuf, Vec<String>) {
+    let runtime = production_runtime(resource_dir);
+    let node = runtime.join(if cfg!(windows) { "node.exe" } else { "node" });
+    let app = runtime.join("app");
+    (
+        node,
+        app.clone(),
+        vec![app
+            .join("node_modules/@deepseek-ai/dsh/lib/bin.js")
+            .display()
+            .to_string()],
+    )
+}
+
 fn development_command() -> (PathBuf, PathBuf, Vec<String>) {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    // Keep local Tauri development on the same Node runtime as the staged
+    // production sidecar. This avoids silently resolving an older system
+    // `node.exe` that cannot load the current TypeScript/ESM runtime.
     let node = std::env::var_os("DSH_NODE_BINARY")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("node"));
@@ -89,96 +1512,140 @@ fn development_command() -> (PathBuf, PathBuf, Vec<String>) {
     )
 }
 
-fn production_command(resource_dir: &Path) -> (PathBuf, PathBuf, Vec<String>) {
-    let runtime = bundled_resource(resource_dir, "runtime");
-    let node = runtime.join(if cfg!(windows) { "node.exe" } else { "node" });
-    let app = runtime.join("app");
-    (
-        node,
-        app.clone(),
-        vec![app
-            .join("node_modules/@deepseek-ai/dsh/lib/bin.js")
-            .display()
-            .to_string()],
-    )
+fn development_port() -> Result<u16, String> {
+    TcpListener::bind("127.0.0.1:0")
+        .and_then(|listener| listener.local_addr())
+        .map(|address| address.port())
+        .map_err(|error| format!("无法分配本地开发端口：{error}"))
 }
 
 fn spawn_sidecar(
     resource_dir: &Path,
-    app_data_dir: &Path,
     config: &ServerConfig,
     log_path: &Path,
+    app_data_dir: &Path,
 ) -> Result<(Child, Url), String> {
     let (program, cwd, mut args) = if cfg!(debug_assertions) {
         development_command()
     } else {
         production_command(resource_dir)
     };
-    let dsh_home = app_data_dir.join("dsh-home");
-    fs::create_dir_all(&dsh_home)
-        .map_err(|error| format!("无法创建预览版 DSH_HOME {}：{error}", dsh_home.display()))?;
-
+    let document_tool = if cfg!(debug_assertions) {
+        cwd.join("products")
+            .join("wanwei-desktop")
+            .join("scripts")
+            .join("document-tool.mjs")
+    } else {
+        production_runtime(resource_dir)
+            .join("app")
+            .join("document-tool.mjs")
+    };
+    if !document_tool.exists() {
+        return Err(format!(
+            "Bundled document helper is missing: {}",
+            document_tool.display()
+        ));
+    }
+    // Keep optional Python packages and pip's download cache outside the active
+    // workspace.  This makes one desktop user's specialised dependencies
+    // reusable across all Workspaces and prevents temporary pip files from
+    // polluting customer project folders.
+    let python_root = app_data_dir.join("python");
+    let python_userbase = python_root.join("userbase");
+    let pip_cache = python_root.join("pip-cache");
+    let python_temp = python_root.join("tmp");
+    for directory in [&python_userbase, &pip_cache, &python_temp] {
+        fs::create_dir_all(directory).map_err(|error| {
+            format!(
+                "Unable to create shared Python directory {}: {error}",
+                directory.display()
+            )
+        })?;
+    }
+    let dev_port = if cfg!(debug_assertions) {
+        Some(development_port()?)
+    } else {
+        None
+    };
+    args.extend(["--profile".into(), "wanwei-desktop".into()]);
     args.extend([
-        "--profile".into(),
-        PRODUCT_PROFILE.into(),
         "--host".into(),
         "127.0.0.1".into(),
         "--port".into(),
-        "0".into(),
+        // A development shell can be closed from the debugger before its
+        // Sidecar observes shutdown. Choose a free loopback port on every
+        // launch instead of failing against that stale process.
+        dev_port.map_or_else(|| "0".to_string(), |port| port.to_string()),
+        // Tauri owns the visible WebView. The DSH web launcher otherwise
+        // hands the loopback URL to the system browser as well, which creates
+        // a duplicate browser tab/window for every desktop launch.
         "--no-open".into(),
     ]);
-    append_log(
-        log_path,
-        format!("starting sidecar: {} {}", program.display(), args.join(" ")),
-    );
-
+    let rendered_args = args.join(" ");
     let mut command = Command::new(&program);
     command
-        .args(&args)
-        .current_dir(&cwd)
-        .env("DSH_HOME", &dsh_home)
+        .args(args)
+        .current_dir(cwd)
+        .env("DSH_ONEAPI_URL", &config.one_api_url)
         .env("DSH_NODE_BINARY", &program)
+        .env("DSH_DOCUMENT_TOOL", &document_tool)
+        .env("PYTHONUSERBASE", &python_userbase)
+        .env("PIP_CACHE_DIR", &pip_cache)
+        .env("TEMP", &python_temp)
+        .env("TMP", &python_temp)
+        .env("TMPDIR", &python_temp)
+        .env("PYTHONUTF8", "1")
+        .env("PYTHONIOENCODING", "utf-8")
+        .env("PIP_DISABLE_PIP_VERSION_CHECK", "1")
+        // Workspace Write users approve the first package-manager download in
+        // a session. Later dependency installs reuse that explicit session grant.
+        .env("DSH_DEPENDENCY_INSTALL_APPROVALS", "session-once")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    if !config.one_api_url.is_empty() {
-        command.env("DSH_ONEAPI_URL", &config.one_api_url);
-    }
-    // Source development normally bypasses login so UI work never depends on
-    // a live service. An explicit real-auth launch keeps the debug identity
-    // and isolated DSH_HOME while exercising the production login path.
+    let home = app_data_dir.join("dsh-home");
+    fs::create_dir_all(&home).map_err(|error| {
+        format!("Unable to create preview DSH_HOME {}: {error}", home.display())
+    })?;
+    command.env("DSH_HOME", &home);
     if cfg!(debug_assertions) && std::env::var_os("DSH_DESKTOP_REAL_AUTH").is_none() {
         command.env("DSH_DESKTOP_DEVELOPMENT", "1");
     }
+    append_log(log_path, format!("preview DSH_HOME: {}", home.display()));
     if !config.default_model.is_empty() {
         command.env("DSH_DEFAULT_MODEL", &config.default_model);
     }
     if !config.install_id.is_empty() {
         command.env("DSH_INSTALL_ID", &config.install_id);
     }
+    append_log(
+        log_path,
+        format!("starting sidecar: {} {rendered_args}", program.display()),
+    );
+    // The release desktop app hides the sidecar console. During `tauri dev`,
+    // keep the child attached so its readiness line can be captured reliably
+    // by the development shell on Windows.
     #[cfg(all(windows, not(debug_assertions)))]
     {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000);
     }
-
     let mut child = command
         .spawn()
-        .map_err(|error| format!("无法启动 DSH Sidecar（{}）：{error}", program.display()))?;
+        .map_err(|error| format!("无法启动本地 DSH Sidecar（{}）：{error}", program.display()))?;
+
     let stdout = child.stdout.take().ok_or("无法读取 DSH Sidecar 输出")?;
     let stderr = child.stderr.take().ok_or("无法读取 DSH Sidecar 错误输出")?;
     let (sender, receiver) = mpsc::channel();
-
     let stdout_log = log_path.to_path_buf();
     std::thread::spawn(move || {
-        let mut ready_sender = Some(sender);
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             append_log(&stdout_log, format!("[stdout] {line}"));
+            eprintln!("[dsh] {line}");
             if let Some(raw) = line.strip_prefix("dsh web: ") {
                 let candidate = raw.split_whitespace().next().unwrap_or(raw);
                 if let Ok(url) = Url::parse(candidate) {
-                    if let Some(sender) = ready_sender.take() {
-                        let _ = sender.send(url);
-                    }
+                    let _ = sender.send(url);
+                    break;
                 }
             }
         }
@@ -187,48 +1654,541 @@ fn spawn_sidecar(
     std::thread::spawn(move || {
         for line in BufReader::new(stderr).lines().map_while(Result::ok) {
             append_log(&stderr_log, format!("[stderr] {line}"));
+            eprintln!("[dsh:error] {line}");
         }
     });
-
-    match receiver.recv_timeout(Duration::from_secs(90)) {
-        Ok(url) => Ok((child, url)),
-        Err(_) => {
-            let _ = child.kill();
-            let _ = child.wait();
-            Err(format!(
-                "DSH Sidecar 在 90 秒内未就绪，请检查 {}",
-                log_path.display()
-            ))
+    let url = if let Some(port) = dev_port {
+        // In local Windows development stdout can be delayed while the
+        // Node/tsx loader is warming up. Probe the fixed loopback port as a
+        // reliable readiness signal, then use the normal printed URL if it
+        // arrives first.
+        let deadline = std::time::Instant::now() + Duration::from_secs(120);
+        loop {
+            if let Ok(url) = receiver.try_recv() {
+                break url;
+            }
+            if let Ok(mut stream) = TcpStream::connect_timeout(
+                &format!("127.0.0.1:{port}")
+                    .parse()
+                    .map_err(|_| "本地端口无效")?,
+                Duration::from_millis(250),
+            ) {
+                let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+                let ready_request = format!(
+                    "GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+                );
+                let mut response = [0u8; 256];
+                if stream.write_all(ready_request.as_bytes()).is_ok()
+                    && stream.read(&mut response).is_ok()
+                    && response.starts_with(b"HTTP/1.1 200")
+                {
+                    break Url::parse(&format!("http://127.0.0.1:{port}"))
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err("DSH Sidecar 在 120 秒内未就绪，请检查日志和 server.json".to_string());
+            }
+            std::thread::sleep(Duration::from_millis(150));
         }
-    }
+    } else {
+        receiver
+            .recv_timeout(Duration::from_secs(120))
+            .map_err(|_| "DSH Sidecar 在 120 秒内未就绪，请检查日志和 server.json".to_string())?
+    };
+    Ok((child, url))
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // A second launch only restores the existing window. Most
+        // importantly, it never starts another Node sidecar that could keep
+        // bundled runtime DLLs locked during the next installer upgrade.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .setup(|app| {
             let resource_dir = app.path().resource_dir()?;
             let app_data_dir = app.path().app_local_data_dir()?;
             let log_path = app_data_dir.join("logs").join("startup.log");
             let _ = fs::remove_file(&log_path);
-            append_log(&log_path, "Wanwei Buddy preview startup");
-            let config = read_server_config(&resource_dir).map_err(|message| {
+            append_log(&log_path, "万维Buddy startup");
+            disable_legacy_vision_tool(&log_path);
+            let config = server_config(&resource_dir).map_err(|message| {
                 append_log(&log_path, format!("[fatal] {message}"));
-                message
+                std::io::Error::new(std::io::ErrorKind::InvalidData, message)
             })?;
-            let (child, url) = spawn_sidecar(&resource_dir, &app_data_dir, &config, &log_path)
+            let (child, url) = spawn_sidecar(&resource_dir, &config, &log_path, &app_data_dir)
                 .map_err(|message| {
                     append_log(&log_path, format!("[fatal] {message}"));
-                    message
+                    std::io::Error::other(message)
                 })?;
-            app.manage(Sidecar(Mutex::new(child)));
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
-                .title("万维 Buddy 预览版")
-                .inner_size(1180.0, 760.0)
-                .min_inner_size(900.0, 600.0)
+            app.manage(Sidecar(Arc::new(Mutex::new(Some(child)))));
+            app.manage(PendingWorkspaceDrop(Mutex::new(None)));
+
+            // Keep the sidecar alive when the user closes the window. The
+            // application is controlled from the system tray and only exits
+            // through the tray's explicit quit action.
+            let show_item = MenuItem::with_id(app, "show", "显示 万维Buddy", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "退出 万维Buddy", true, None::<&str>)?;
+            let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+            TrayIconBuilder::new()
+                .icon(app.default_window_icon().ok_or("缺少应用图标")?.clone())
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            // A native minimize leaves the window minimized even
+                            // after `show()`, which makes the first tray double
+                            // click only reveal a taskbar button. Restore the
+                            // native state before showing and focusing it.
+                            let _ = window.unminimize();
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "quit" => {
+                        if let Some(sidecar) = app.try_state::<Sidecar>() {
+                            sidecar.stop();
+                        }
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::DoubleClick { .. } = event {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            let _ = window.unminimize();
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+                .title("万维Buddy")
+                .inner_size(1120.0, 720.0)
+                .min_inner_size(900.0, 580.0)
+                .resizable(false)
+                .maximizable(false)
+                .center()
+                // External pages may replace their document during login or
+                // navigation. Reinstall the small bridge on each document so
+                // client features do not fall back to WebView browser downloads.
+                .initialization_script(NATIVE_BRIDGE_INITIALIZATION_SCRIPT)
+                // The external sidecar can lose window.__TAURI__ after a
+                // navigation. AuthGate emits this marker through
+                // document.title, which this native callback always sees.
+                .on_document_title_changed(|window, title| {
+                    let authenticated = match title.strip_prefix(NATIVE_AUTH_TITLE_PREFIX) {
+                        Some("authenticated") => true,
+                        Some("login") => false,
+                        _ => return,
+                    };
+                    let _ = apply_auth_window_state(&window, authenticated);
+                    let _ = window.set_title("万维Buddy");
+                })
                 .build()?;
+            let window_for_events = window.clone();
+            window.on_window_event(move |event| match event {
+                WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = window_for_events.hide();
+                }
+                WindowEvent::DragDrop(event) => match event {
+                    DragDropEvent::Enter { .. } => {
+                        let _ = window_for_events.eval(NATIVE_FILE_DRAG_ENTER_SCRIPT);
+                    }
+                    DragDropEvent::Drop { paths, .. } => {
+                        let state = window_for_events
+                            .app_handle()
+                            .state::<PendingWorkspaceDrop>();
+                        if let Ok(mut pending) = state.0.lock() {
+                            *pending = Some(paths.clone());
+                        }
+                        let _ = window_for_events.eval(NATIVE_FILE_DROP_SCRIPT);
+                    }
+                    DragDropEvent::Leave => {
+                        let _ = window_for_events.eval(NATIVE_FILE_DRAG_LEAVE_SCRIPT);
+                    }
+                    DragDropEvent::Over { .. } => {}
+                    _ => {}
+                },
+                _ => {}
+            });
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![
+            set_auth_window_state,
+            save_session_log_archive,
+            list_marketplace_skills,
+            install_marketplace_skill,
+            uninstall_marketplace_skill,
+            install_custom_skill,
+            install_custom_skill_directory,
+            uninstall_custom_skill,
+            list_custom_skills,
+            read_analysis_view,
+            open_workspace_directory,
+            import_workspace_files,
+            import_dropped_workspace_files,
+        ])
         .run(tauri::generate_context!())
-        .expect("failed to run Wanwei Buddy preview shell");
+        .expect("error while running DSH Desktop");
+}
+
+#[cfg(test)]
+mod marketplace_tests {
+    use super::{
+        import_workspace_files_at, import_workspace_paths_at, install_custom_skill_directory_at,
+        install_marketplace_skill_at, install_marketplace_skill_files_at,
+        marketplace_package_sha256, read_analysis_view, save_session_log_archive_at,
+        uninstall_marketplace_skill_at, CustomSkillFile, WorkspaceImportFile,
+    };
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    struct TestDirectory(PathBuf);
+
+    impl TestDirectory {
+        fn new() -> Self {
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "dsh-marketplace-test-{}-{nonce}",
+                std::process::id()
+            ));
+            fs::create_dir_all(&path).expect("create test directory");
+            Self(path)
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn write_package(root: &PathBuf, version: &str, body: &str) {
+        let slug = "market-test-skill";
+        let directory = root.join(slug);
+        fs::create_dir_all(directory.join("references")).expect("create package");
+        fs::write(
+            directory.join("SKILL.md"),
+            format!("---\nname: {slug}\ndescription: Test skill\n---\n\n{body}\n"),
+        )
+        .expect("write skill");
+        fs::write(directory.join("references/api.md"), "# API\n").expect("write reference");
+        let manifest = format!(
+            r#"{{"id":"test-skill","slug":"{slug}","version":"{version}","files":["manifest.json","SKILL.md","references/api.md"]}}"#
+        );
+        fs::write(directory.join("manifest.json"), &manifest).expect("write manifest");
+        fs::write(
+            root.join("catalog.json"),
+            format!(r#"{{"skills":[{manifest}]}}"#),
+        )
+        .expect("write catalog");
+    }
+
+    #[test]
+    fn installs_updates_and_uninstalls_a_complete_package() {
+        let resources = TestDirectory::new();
+        let user = TestDirectory::new();
+        let skills = user.0.join("skills");
+        write_package(&resources.0, "1.0.0", "First");
+
+        let installed = install_marketplace_skill_at(&resources.0, &skills, "market-test-skill")
+            .expect("install");
+        assert!(PathBuf::from(installed).exists());
+        assert_eq!(
+            fs::read_to_string(skills.join("market-test-skill/references/api.md"))
+                .expect("reference"),
+            "# API\n"
+        );
+
+        write_package(&resources.0, "1.1.0", "Second");
+        install_marketplace_skill_at(&resources.0, &skills, "market-test-skill").expect("update");
+        assert!(
+            fs::read_to_string(skills.join("market-test-skill/SKILL.md"))
+                .expect("updated skill")
+                .contains("Second")
+        );
+
+        uninstall_marketplace_skill_at(&skills, "market-test-skill").expect("uninstall");
+        assert!(!skills.join("market-test-skill").exists());
+        assert!(user.0.join(".dsh-skill-staging").is_dir());
+        assert!(fs::read_dir(user.0.join(".dsh-skill-staging"))
+            .expect("read staging")
+            .next()
+            .is_none());
+    }
+
+    #[test]
+    fn installs_a_validated_downloaded_package() {
+        let user = TestDirectory::new();
+        let skills = user.0.join("skills");
+        let files = vec![
+            CustomSkillFile {
+                path: "manifest.json".to_string(),
+                content: br#"{"id":"test-skill","slug":"market-test-skill","version":"2.0.0","files":["manifest.json","SKILL.md","scripts/invoke.ps1"]}"#.to_vec(),
+            },
+            CustomSkillFile {
+                path: "SKILL.md".to_string(),
+                content: b"---\nname: market-test-skill\n---\n\n# Downloaded\n".to_vec(),
+            },
+            CustomSkillFile {
+                path: "scripts/invoke.ps1".to_string(),
+                content: b"Write-Output downloaded\n".to_vec(),
+            },
+        ];
+        install_marketplace_skill_files_at(&skills, "market-test-skill", files)
+            .expect("install downloaded package");
+        assert_eq!(
+            fs::read_to_string(skills.join("market-test-skill/scripts/invoke.ps1"))
+                .expect("downloaded script"),
+            "Write-Output downloaded\n"
+        );
+    }
+
+    #[test]
+    fn imports_a_complete_custom_skill_directory() {
+        let source = TestDirectory::new();
+        let user = TestDirectory::new();
+        fs::create_dir_all(source.0.join("scripts")).expect("create scripts");
+        fs::write(
+            source.0.join("SKILL.md"),
+            "---\nname: personal-meeting-notes\ndescription: Organize meeting notes\n---\n",
+        )
+        .expect("write skill");
+        fs::write(source.0.join("scripts/invoke.ps1"), "Write-Output notes\n")
+            .expect("write script");
+
+        let installed = install_custom_skill_directory_at(&user.0.join("skills"), &source.0)
+            .expect("import custom directory");
+        assert_eq!(installed.slug, "personal-meeting-notes");
+        assert_eq!(installed.description, "Organize meeting notes");
+        assert!(installed.body.as_deref().unwrap_or_default().contains("personal-meeting-notes"));
+        let uploaded = installed.files.as_ref().expect("upload files");
+        assert_eq!(uploaded.len(), 2);
+        assert!(uploaded.iter().any(|file| file.path == "SKILL.md"));
+        assert_eq!(
+            fs::read_to_string(
+                user.0
+                    .join("skills/personal-meeting-notes/scripts/invoke.ps1")
+            )
+            .expect("copied script"),
+            "Write-Output notes\n"
+        );
+        assert!(user
+            .0
+            .join("skills/personal-meeting-notes/.dsh-custom-skill")
+            .is_file());
+
+        fs::write(source.0.join("scripts/invoke.ps1"), "Write-Output updated\n")
+            .expect("update script");
+        install_custom_skill_directory_at(&user.0.join("skills"), &source.0)
+            .expect("replace managed custom skill");
+        assert_eq!(
+            fs::read_to_string(
+                user.0
+                    .join("skills/personal-meeting-notes/scripts/invoke.ps1")
+            )
+            .expect("updated script"),
+            "Write-Output updated\n"
+        );
+    }
+
+    #[test]
+    fn hashes_downloaded_files_independently_of_transport_order() {
+        let first = vec![
+            CustomSkillFile {
+                path: "SKILL.md".to_string(),
+                content: b"skill".to_vec(),
+            },
+            CustomSkillFile {
+                path: "manifest.json".to_string(),
+                content: b"manifest".to_vec(),
+            },
+        ];
+        let second = vec![
+            CustomSkillFile {
+                path: "manifest.json".to_string(),
+                content: b"manifest".to_vec(),
+            },
+            CustomSkillFile {
+                path: "SKILL.md".to_string(),
+                content: b"skill".to_vec(),
+            },
+        ];
+        assert_eq!(
+            marketplace_package_sha256(&first),
+            marketplace_package_sha256(&second)
+        );
+    }
+
+    #[test]
+    fn refuses_to_replace_an_unmanaged_directory() {
+        let resources = TestDirectory::new();
+        let user = TestDirectory::new();
+        let skills = user.0.join("skills");
+        write_package(&resources.0, "1.0.0", "First");
+        let target = skills.join("market-test-skill");
+        fs::create_dir_all(&target).expect("create unmanaged directory");
+        fs::write(target.join("SKILL.md"), "---\nname: personal-skill\n---\n")
+            .expect("write unmanaged skill");
+
+        let error = install_marketplace_skill_at(&resources.0, &skills, "market-test-skill")
+            .expect_err("must reject unmanaged directory");
+        assert!(error.contains("不是由技能市场管理"));
+        assert!(target.exists());
+    }
+
+    #[test]
+    fn recognizes_a_legacy_marketplace_skill_for_upgrade() {
+        let resources = TestDirectory::new();
+        let user = TestDirectory::new();
+        let skills = user.0.join("skills");
+        write_package(&resources.0, "1.0.0", "Packaged");
+        let target = skills.join("market-test-skill");
+        fs::create_dir_all(&target).expect("create legacy directory");
+        fs::write(
+            target.join("SKILL.md"),
+            "---\nname: market-test-skill\ndescription: Legacy\n---\n",
+        )
+        .expect("write legacy skill");
+
+        install_marketplace_skill_at(&resources.0, &skills, "market-test-skill")
+            .expect("upgrade legacy skill");
+        assert!(target.join("manifest.json").exists());
+    }
+
+    #[test]
+    fn saves_session_exports_without_overwriting_a_prior_download() {
+        let downloads = TestDirectory::new();
+        let first = save_session_log_archive_at(&downloads.0, "dsh-session-root.zip", b"first")
+            .expect("first export");
+        let second = save_session_log_archive_at(&downloads.0, "dsh-session-root.zip", b"second")
+            .expect("second export");
+
+        assert_eq!(
+            first.file_name().and_then(|value| value.to_str()),
+            Some("dsh-session-root.zip")
+        );
+        assert_eq!(
+            second.file_name().and_then(|value| value.to_str()),
+            Some("dsh-session-root-1.zip")
+        );
+        assert_eq!(fs::read(first).expect("first bytes"), b"first");
+        assert_eq!(fs::read(second).expect("second bytes"), b"second");
+        assert!(save_session_log_archive_at(&downloads.0, "../escape.zip", b"bad").is_err());
+    }
+
+    #[test]
+    fn imports_workspace_files_without_overwriting_existing_files() {
+        let workspace = TestDirectory::new();
+        fs::write(workspace.0.join("地图.png"), b"existing").expect("existing file");
+        let imported = import_workspace_files_at(
+            &workspace.0,
+            vec![
+                WorkspaceImportFile {
+                    name: "地图.png".to_string(),
+                    bytes: b"new image".to_vec(),
+                },
+                WorkspaceImportFile {
+                    name: "说明.pdf".to_string(),
+                    bytes: b"pdf".to_vec(),
+                },
+            ],
+        )
+        .expect("import files");
+        assert_eq!(imported.len(), 2);
+        assert_eq!(
+            fs::read(workspace.0.join("地图.png")).expect("existing"),
+            b"existing"
+        );
+        assert_eq!(
+            fs::read(workspace.0.join("地图 (1).png")).expect("renamed"),
+            b"new image"
+        );
+        assert_eq!(fs::read(workspace.0.join("说明.pdf")).expect("pdf"), b"pdf");
+    }
+
+    #[test]
+    fn copies_native_drop_paths_without_overwriting_existing_files() {
+        let source = TestDirectory::new();
+        let workspace = TestDirectory::new();
+        let source_file = source.0.join("记录.wav");
+        fs::write(&source_file, b"audio").expect("source file");
+        fs::write(workspace.0.join("记录.wav"), b"existing").expect("existing file");
+
+        let imported =
+            import_workspace_paths_at(&workspace.0, vec![source_file]).expect("copy native drop");
+
+        assert_eq!(imported.len(), 1);
+        assert_eq!(
+            fs::read(workspace.0.join("记录.wav")).expect("existing"),
+            b"existing"
+        );
+        assert_eq!(
+            fs::read(workspace.0.join("记录 (1).wav")).expect("copy"),
+            b"audio"
+        );
+        assert!(
+            import_workspace_paths_at(&workspace.0, vec![source.0.clone()])
+                .expect_err("reject directory")
+                .contains("不支持拖入文件夹")
+        );
+    }
+
+    #[test]
+    fn rejects_workspace_import_paths_outside_the_workspace_root() {
+        let workspace = TestDirectory::new();
+        let error = import_workspace_files_at(
+            &workspace.0,
+            vec![WorkspaceImportFile {
+                name: "../outside.txt".to_string(),
+                bytes: b"bad".to_vec(),
+            }],
+        )
+        .expect_err("reject traversal");
+        assert!(error.contains("文件名无效"));
+        assert!(!workspace.0.join("outside.txt").exists());
+    }
+
+    #[test]
+    fn reads_only_timestamped_analysis_view_json() {
+        let workspace = TestDirectory::new();
+        let view = workspace
+            .0
+            .join("third-survey-analysis-view_20260905_120000_000.json");
+        fs::write(&view, r#"{"schema_version":1,"tables":[]}"#).expect("write view");
+
+        assert!(read_analysis_view(view.display().to_string())
+            .expect("read analysis view")
+            .contains("schema_version"));
+        let chinese_view = workspace
+            .0
+            .join("地块1_三调土地利用现状分析视图_20260905_120000_000.json");
+        fs::write(&chinese_view, r#"{"schema_version":1,"tables":[]}"#)
+            .expect("write Chinese view");
+        assert!(read_analysis_view(chinese_view.display().to_string()).is_ok());
+        let review_view = workspace
+            .0
+            .join("地块1_土地利用规划审查视图_20260905_120000_000.json");
+        fs::write(&review_view, r#"{"schema_version":1,"tables":[]}"#).expect("write review view");
+        assert!(read_analysis_view(review_view.display().to_string()).is_ok());
+        assert!(read_analysis_view(workspace.0.join("other.json").display().to_string()).is_err());
+        assert!(read_analysis_view("relative-analysis-view_1.json".to_string()).is_err());
+    }
 }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-install-custom-skill-directory"
+description = "Enables the install_custom_skill_directory command without any pre-configured scope."
+commands.allow = ["install_custom_skill_directory"]
+
+[[permission]]
+identifier = "deny-install-custom-skill-directory"
+description = "Denies the install_custom_skill_directory command without any pre-configured scope."
+commands.deny = ["install_custom_skill_directory"]
