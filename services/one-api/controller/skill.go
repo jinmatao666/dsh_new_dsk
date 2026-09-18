@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -12,6 +14,37 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/model"
 )
+
+func ensureMarketplaceManifestID(assets, fallbackID string) (string, error) {
+	var bundle skillPackage
+	if err := json.Unmarshal([]byte(assets), &bundle); err != nil {
+		return "", err
+	}
+	for index := range bundle.Files {
+		if bundle.Files[index].Path != "manifest.json" {
+			continue
+		}
+		content, err := base64.StdEncoding.DecodeString(bundle.Files[index].ContentBase64)
+		if err != nil {
+			return "", err
+		}
+		var manifest map[string]interface{}
+		if err := json.Unmarshal(content, &manifest); err != nil {
+			return "", err
+		}
+		if id, _ := manifest["id"].(string); strings.TrimSpace(id) == "" {
+			manifest["id"] = fallbackID
+			content, err = json.Marshal(manifest)
+			if err != nil {
+				return "", err
+			}
+			bundle.Files[index].ContentBase64 = base64.StdEncoding.EncodeToString(content)
+		}
+		encoded, err := json.Marshal(bundle)
+		return string(encoded), err
+	}
+	return "", fmt.Errorf("技能包缺少 manifest.json")
+}
 
 type skillResponse struct {
 	Id                      int                       `json:"id"`
@@ -267,7 +300,6 @@ func GetSkillBundle(c *gin.Context) {
 		})
 		return
 	}
-	sha256 := ""
 	if skill.PublishedReleaseId != nil {
 		release, releaseErr := model.GetSkillRelease(skill.Id, *skill.PublishedReleaseId)
 		if releaseErr != nil {
@@ -276,14 +308,16 @@ func GetSkillBundle(c *gin.Context) {
 		}
 		skill.Assets = release.Package
 		skill.Version = release.Version
-		sha256 = release.Sha256
 	}
-	if sha256 == "" {
-		sha256, err = model.SkillPackageSHA256(skill.Assets)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前技能包摘要不可用"})
-			return
-		}
+	skill.Assets, err = ensureMarketplaceManifestID(skill.Assets, skill.Name)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前技能包清单不可用"})
+		return
+	}
+	sha256, err := model.SkillPackageSHA256(skill.Assets)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前技能包摘要不可用"})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

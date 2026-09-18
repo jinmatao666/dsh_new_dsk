@@ -10,12 +10,6 @@ const STATUS = {
   rejected: ['已驳回', 'red']
 };
 
-const REVIEW_MOCKS = [
-  { id: -1, mock: true, name: 'meeting-minutes-pro', display_name: '会议纪要整理助手', version: '1.0.0', owner: '张明 · 市场部', category: '办公文档', description: '将会议录音转写稿整理为结构化会议纪要，并提取决策、待办和责任人。', body: '# 会议纪要整理助手\n\n整理会议材料并输出结构化纪要。', review_status: 'pending', submitted_at: Math.floor(Date.now() / 1000) - 1800 },
-  { id: -2, mock: true, name: 'excel-ledger-cleaner', display_name: 'Excel 台账清洗', version: '1.2.0', published_skill_id: 18, owner: '李雪 · 财务部', category: '数据分析', description: '批量处理台账中的重复记录、空值、日期和金额格式。', body: '# Excel 台账清洗\n\n清理并统一 Excel 台账格式。', review_status: 'pending', submitted_at: Math.floor(Date.now() / 1000) - 7200 },
-  { id: -3, mock: true, name: 'contract-risk-check', display_name: '合同风险检查', version: '1.0.0', owner: '王磊 · 法务部', category: '办公文档', description: '识别合同中的付款、违约、期限和责任条款风险。', body: '# 合同风险检查\n\n检查合同关键条款与潜在风险。', review_status: 'approved', submitted_at: Math.floor(Date.now() / 1000) - 86400 }
-];
-
 const SkillReviewTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   const [items, setItems] = useState([]);
   const [keyword, setKeyword] = useState(keywordProp);
@@ -34,17 +28,12 @@ const SkillReviewTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
         params: { page, perPage: 20, keyword, status }
       });
       const loaded = Array.isArray(response.data?.items) ? response.data.items : [];
-      const visible = status === 'all' ? REVIEW_MOCKS : REVIEW_MOCKS.filter(item => item.review_status === status);
-      setItems(process.env.NODE_ENV === 'development' && loaded.length === 0 ? visible : loaded);
-      setTotal(process.env.NODE_ENV === 'development' && loaded.length === 0 ? visible.length : Number(response.data?.totalItems || 0));
+      setItems(loaded);
+      setTotal(Number(response.data?.totalItems || 0));
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        const visible = status === 'all' ? REVIEW_MOCKS : REVIEW_MOCKS.filter(item => item.review_status === status);
-        setItems(visible);
-        setTotal(visible.length);
-      } else {
-        showError(error.message || '加载技能审核列表失败');
-      }
+      setItems([]);
+      setTotal(0);
+      showError(error.message || '加载技能审核列表失败');
     } finally {
       setLoading(false);
     }
@@ -56,14 +45,6 @@ const SkillReviewTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   }));
 
   const review = async (skill, action, reviewReason = '') => {
-    if (skill.mock) {
-      setItems(current => current.map(item => item.id === skill.id ? { ...item, review_status: action === 'approve' ? 'approved' : 'rejected', review_reason: reviewReason } : item));
-      setTotal(current => Math.max(0, status === 'pending' ? current - 1 : current));
-      showSuccess(action === 'approve' ? '审核通过，技能已发布' : '已驳回该技能');
-      setRejecting(null);
-      setReason('');
-      return;
-    }
     try {
       const response = await API.post(`/api/personal-skill/admin/${skill.id}/review/${action}`, { reason: reviewReason });
       if (response.data?.success === false) throw new Error(response.data.message || '审核失败');

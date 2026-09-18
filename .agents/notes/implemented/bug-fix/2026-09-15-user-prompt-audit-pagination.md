@@ -18,6 +18,8 @@ The desktop session id and ordinal of the latest accepted user message identify 
 
 Audit writes and reads resolve the account-center username through the local-user product mapping. The stored legacy username remains a fallback when the account center is unavailable, while list-time overlay gives historical placeholder records the current authoritative login name without rewriting audit history.
 
+List-time projection also groups adjacent legacy rows that have no turn id when user, session, model, and question match within five minutes. Their usage is summed for display while the stored request records remain unchanged. Explicit turn ids never enter this compatibility grouping.
+
 ## Alternatives considered
 
 **Paginate the first response in the browser.** Client-side pagination cannot expose records that the server never returned.
@@ -28,4 +30,4 @@ Audit writes and reads resolve the account-center username through the local-use
 
 ## Consequences
 
-Administrators can browse the complete filtered audit history in stable 50-row pages. Each page request also performs a filtered count query so the interface can show the total and page numbers. A desktop turn appears once with aggregate usage and the account-center login name; request-level detail remains available in the ordinary model-call log.
+Administrators can browse the complete filtered audit history in stable 50-row pages. The endpoint projects matching records before pagination so totals and page numbers describe the displayed turns. A desktop turn appears once with aggregate usage and the account-center login name; request-level detail remains available in the ordinary model-call log.

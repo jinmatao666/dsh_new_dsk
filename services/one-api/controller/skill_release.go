@@ -43,6 +43,7 @@ type skillPackage struct {
 	Files         []skillPackageFile `json:"files"`
 }
 type importedManifest struct {
+	ID          string   `json:"id"`
 	Name        string   `json:"name"`
 	Slug        string   `json:"slug"`
 	Version     string   `json:"version"`
@@ -172,6 +173,7 @@ func normalizeImportedManifest(manifest *importedManifest, skillMd []byte, prefi
 		manifest.Name = "skill-" + hex.EncodeToString(digest[:6])
 		manifest.Slug = manifest.Name
 	}
+	manifest.ID = manifest.Slug
 	manifest.Version = strings.TrimSpace(manifest.Version)
 	if manifest.Version == "" {
 		manifest.Version = "0.1.0"
@@ -199,6 +201,7 @@ func normalizedManifestJSON(raw []byte, exists bool, manifest importedManifest) 
 		}
 	}
 	document["schemaVersion"] = 1
+	document["id"] = manifest.ID
 	document["name"] = manifest.Name
 	document["slug"] = manifest.Slug
 	document["version"] = manifest.Version

@@ -35,7 +35,7 @@ describe('SessionLogDownloadDialog', () => {
     const b = bench()
     act(() => {
       b.controller.store.set({
-        bySession: { [SID]: { open: true, status: 'error', error: 'toolbar failed' } },
+        bySession: { [SID]: { open: true, status: 'error', error: 'toolbar failed', savedPath: null } },
       })
     })
     const dialog = await b.view.findByRole('dialog', { name: 'Session export failed' })
@@ -56,14 +56,14 @@ describe('SessionLogDownloadDialog', () => {
     expect(await b.view.findByRole('dialog', { name: 'Exporting Session' })).toBeTruthy()
     release(new Response('zip', { status: 200 }))
     await download
-    expect(await b.view.findByRole('dialog', { name: 'Session download started' })).toBeTruthy()
+    expect(await b.view.findByRole('dialog', { name: 'Session export saved' })).toBeTruthy()
   })
 
   it('uses fallback copy when a failure has no detail', async () => {
     const b = bench()
     act(() => {
       b.controller.store.set({
-        bySession: { [SID]: { open: true, status: 'error', error: '' } },
+        bySession: { [SID]: { open: true, status: 'error', error: '', savedPath: null } },
       })
     })
     const dialog = await b.view.findByRole('dialog', { name: 'Session export failed' })

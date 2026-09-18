@@ -211,7 +211,7 @@ func communitySkillPackage(personal model.PersonalSkill) (string, string, import
 	}
 	slug := fmt.Sprintf("community-%d", personal.Id)
 	manifest := importedManifest{
-		Name: slug, Slug: slug, Version: personal.Version, DisplayName: personal.DisplayName,
+		ID: slug, Name: slug, Slug: slug, Version: personal.Version, DisplayName: personal.DisplayName,
 		Category: personal.Category, Description: personal.Description, Summary: personal.Scenario,
 		Author: personal.Owner, Icon: model.NormalizeSkillIcon(personal.Icon),
 	}

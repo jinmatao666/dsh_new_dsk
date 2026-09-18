@@ -15,7 +15,7 @@ The command is mounted only by the Web bundle. The local `command/executed` ackn
 
 The Host download endpoint flushes a live root Session before `readRaw`, so a slash-triggered ZIP includes the `command/run` and `command/done` pair whose acknowledgment started the download. Cold persisted Sessions require no flush.
 
-The modal reports preparation, download start, or failure. Closing it does not cancel an in-flight download and does not reopen it when that operation later settles. One Session admits one active download at a time; repeated gestures share that operation.
+The modal reports preparation, the saved archive, or failure. A desktop success displays the exact saved path and provides an action that reveals the ZIP in the operating-system file manager; a browser success remains under the browser download manager. Closing the modal does not cancel an in-flight download and does not reopen it when that operation later settles. One Session admits one active download at a time; repeated gestures share that operation.
 
 ## Composition
 

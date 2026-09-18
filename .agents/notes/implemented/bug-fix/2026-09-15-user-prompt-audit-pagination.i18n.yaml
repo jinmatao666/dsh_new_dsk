@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-15-user-prompt-audit-pagination.md
-2026-09-15-user-prompt-audit-pagination.md: dc2020a157900b81b10220c81fe7900c89cd7bab
-2026-09-15-user-prompt-audit-pagination.zh.md: fa3fbc990c34c511c26b86adbd2d03db8bf0511b
+2026-09-15-user-prompt-audit-pagination.md: 92c44f044047d11f2577ffa9ec746763133524e6
+2026-09-15-user-prompt-audit-pagination.zh.md: 6ace35827b34bd9314044f3afa4ebf24ee8eee7e

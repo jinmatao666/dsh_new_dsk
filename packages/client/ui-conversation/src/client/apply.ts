@@ -110,7 +110,26 @@ async function importNativeDrop(path: string | undefined): Promise<readonly stri
 
 function appendFileMentions(shell: ReturnType<InputHub['shell']>, imported: readonly string[]): void {
   const prefix = shell.snapshot.draft === '' || /\s$/u.test(shell.snapshot.draft) ? '' : ' '
-  shell.setDraft(`${shell.snapshot.draft}${prefix}${imported.map(fileMention).join(' ')}`)
+  if (prefix !== '') shell.setDraft(`${shell.snapshot.draft}${prefix}`)
+  for (const path of imported) {
+    const directory = path.endsWith('/')
+    const label = path.slice(0, directory ? -1 : undefined).split('/').at(-1)
+    if (label === undefined || label === '') throw new Error('导入后的文件名称无效。')
+    const mention = fileMention(path)
+    const snapshot = shell.snapshot
+    const inserted = shell.insertReference({
+      source: 'reference',
+      ref: mention,
+      label,
+      appearance: directory ? 'folder' : 'file',
+      clipboardText: mention,
+    }, {
+      start: snapshot.draft.length,
+      end: snapshot.draft.length,
+      draftRev: snapshot.draftRev,
+    })
+    if (!inserted) throw new Error('当前输入状态无法添加文件引用。')
+  }
 }
 
 const CHAT_NODE_INJECT: ChatNodeTurnDataInjected = {

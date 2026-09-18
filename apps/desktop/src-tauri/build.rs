@@ -21,6 +21,8 @@ fn main() {
             "uninstall_custom_skill",
             "list_custom_skills",
             "read_analysis_view",
+            "open_workspace_directory",
+            "reveal_downloaded_file",
             "import_workspace_files",
             "import_dropped_workspace_files",
         ]),

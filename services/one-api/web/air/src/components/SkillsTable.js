@@ -4,7 +4,6 @@ import { Bot, ChartColumn, Compass, FileText, Map, Zap } from 'lucide-react';
 import SkillBrowseDrawer from './SkillBrowseDrawer';
 import CustomSelect from './CustomSelect';
 import { importSkillFolder, zipSkillFolder } from './skillFolderImport';
-import { downloadSkillZip } from './skillDownload';
 import { API, showError, showSuccess } from '../helpers';
 import './SkillsTable.css';
 
@@ -285,14 +284,6 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     });
   }, [items, keyword, scope]);
 
-  const downloadSkill = async skill => {
-    try {
-      await downloadSkillZip(isPrivateSkill(skill) ? 'personal' : 'public', skill.id);
-    } catch (error) {
-      showError(error.message || '下载技能失败');
-    }
-  };
-
   const removeSkill = skill => {
     Modal.confirm({ title: `删除技能「${skill.display_name || skill.name}」？`, content: '删除后将不再出现在桌面技能市场。', okType: 'danger', onOk: async () => { await API.delete(`/api/skill/${skill.id}`); await loadSkills(); showSuccess('技能已删除'); } });
   };
@@ -357,11 +348,10 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     {
       title: '操作', width: 160, render: (_, record) => (
         <div className='skill-row-actions'>
-          {!isPrivateSkill(record) && record.source !== 'personal' && <button type='button' className='skill-text-action' onClick={() => openEditor(record)}>编辑</button>}
+          {!isPrivateSkill(record) && <button type='button' className='skill-text-action' onClick={() => openEditor(record)}>编辑</button>}
           {!isPrivateSkill(record) && <button type='button' className='skill-text-action' onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '上架'}</button>}
           <button type='button' className='skill-text-action' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</button>
-          {(isPrivateSkill(record) || record.source === 'personal') && <button type='button' className='skill-text-action' onClick={() => { void downloadSkill(record); }}>下载</button>}
-          {!isPrivateSkill(record) && record.source !== 'personal' && <button type='button' className='skill-text-action danger' onClick={() => removeSkill(record)}>删除</button>}
+          {!isPrivateSkill(record) && <button type='button' className='skill-text-action danger' onClick={() => removeSkill(record)}>删除</button>}
         </div>
       )
     }

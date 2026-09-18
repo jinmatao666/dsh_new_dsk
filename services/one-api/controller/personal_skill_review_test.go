@@ -33,8 +33,24 @@ func TestCommunitySkillPackageUsesStableInternalName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manifest.Name != "community-42" || manifest.DisplayName != "允许重复的显示名称" {
+	if manifest.ID != "community-42" || manifest.Name != "community-42" || manifest.DisplayName != "允许重复的显示名称" {
 		t.Fatalf("unexpected manifest: %#v", manifest)
+	}
+	var published skillPackage
+	if err := json.Unmarshal([]byte(assets), &published); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range published.Files {
+		if file.Path != "manifest.json" {
+			continue
+		}
+		decoded, decodeErr := base64.StdEncoding.DecodeString(file.ContentBase64)
+		if decodeErr != nil {
+			t.Fatal(decodeErr)
+		}
+		if !strings.Contains(string(decoded), `"id":"community-42"`) {
+			t.Fatalf("published manifest has no stable id: %s", decoded)
+		}
 	}
 	if !strings.Contains(body, "name: community-42") || strings.Contains(body, "name: user-chosen-name") {
 		t.Fatalf("SKILL.md internal name was not rewritten: %s", body)

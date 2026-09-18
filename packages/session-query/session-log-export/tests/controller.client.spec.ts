@@ -33,8 +33,20 @@ describe('SessionLogDownloadController', () => {
     expect(archive.size).toBe(3)
     expect(filename).toBe('dsh-session-session-export-controller.zip')
     expect(controller.store.getSnapshot().bySession[SID]).toEqual({
-      open: true, status: 'success', error: null,
+      open: true, status: 'success', error: null, savedPath: null,
     })
+  })
+
+  it('publishes the exact desktop save path', async () => {
+    const controller = new SessionLogDownloadController(
+      async () => new Response('zip', { status: 200 }),
+      async () => 'C:\\Users\\example\\Downloads\\archive.zip',
+    )
+
+    await controller.download(SID)
+
+    expect(controller.store.getSnapshot().bySession[SID]?.savedPath)
+      .toBe('C:\\Users\\example\\Downloads\\archive.zip')
   })
 
   it('collapses concurrent gestures and preserves a dismissed dialog', async () => {
@@ -63,6 +75,7 @@ describe('SessionLogDownloadController', () => {
       open: true,
       status: 'error',
       error: 'Export failed: HTTP 500 backend unavailable',
+      savedPath: null,
     })
 
     const transport = new SessionLogDownloadController(async () => { throw 'offline' }, vi.fn())

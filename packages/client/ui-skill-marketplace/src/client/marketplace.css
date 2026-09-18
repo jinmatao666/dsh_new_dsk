@@ -732,11 +732,45 @@
 .dsh-skill-review-status.approved { background: #eaf8ef; color: #168052; }
 .dsh-skill-review-status.rejected { background: #fff0f1; color: #c83c4d; }
 .dsh-skill-review-notice { margin: -12px 0 22px 82px; padding: 10px 12px; border: 1px solid #ffd6dc; border-radius: 10px; background: #fff7f8; color: #a93a4a; font-size: 13px; line-height: 1.55; }
-.dsh-skill-card-review-reason { display: flex; gap: 6px; margin-top: 10px; padding: 8px 10px; border: 1px solid #ffd6dc; border-radius: 8px; background: #fff7f8; color: #a93a4a; font-size: 12px; line-height: 1.45; }
-.dsh-skill-card-review-reason strong { flex: 0 0 auto; }
-.dsh-skill-card-review-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; color: var(--dsw-alias-label-tertiary, #7c8da3); font-size: 12px; }
-.dsh-skill-card-review-meta span + span { position: relative; }
-.dsh-skill-card-review-meta span + span::before { position: absolute; left: -7px; color: var(--dsw-alias-border-l2); content: '·'; }
+
+.dsh-skill-review-list {
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 14px;
+  background: var(--dsw-alias-bg-elevated, #fff);
+}
+.dsh-skill-review-list-header,
+.dsh-skill-review-row {
+  display: grid;
+  grid-template-columns: minmax(280px, 2.2fr) minmax(120px, 0.8fr) minmax(150px, 0.9fr) 90px 48px;
+  gap: 20px;
+  align-items: center;
+}
+.dsh-skill-review-list-header {
+  min-height: 42px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-muted, #f8fafc);
+  color: var(--dsw-alias-label-tertiary, #7c8da3);
+  font-size: 12px;
+}
+.dsh-skill-review-row {
+  min-height: 84px;
+  padding: 14px 18px;
+}
+.dsh-skill-review-row + .dsh-skill-review-row { border-top: 1px solid var(--dsw-alias-border-l1); }
+.dsh-skill-review-skill { display: flex; min-width: 0; gap: 12px; align-items: flex-start; }
+.dsh-skill-review-skill-copy { min-width: 0; }
+.dsh-skill-review-skill-copy strong,
+.dsh-skill-review-kind strong { display: block; color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 1.45; }
+.dsh-skill-review-skill-copy > div { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; color: var(--dsw-alias-label-tertiary, #7c8da3); font-size: 12px; }
+.dsh-skill-review-skill-copy p { margin: 8px 0 0; color: #b33143; font-size: 12px; line-height: 1.45; }
+.dsh-skill-review-skill-copy p b { margin-right: 7px; font-weight: 600; }
+.dsh-skill-review-kind span { display: block; margin-top: 4px; color: var(--dsw-alias-label-tertiary, #7c8da3); font-size: 12px; }
+.dsh-skill-review-row time { color: var(--dsw-alias-label-secondary); font-size: 13px; }
+.dsh-skill-review-view { border: 0; padding: 4px 0; background: transparent; color: var(--dsw-alias-primary, #2563eb); cursor: pointer; font-size: 13px; }
+.dsh-skill-review-view:hover { color: var(--dsw-alias-primary-hover, #1d4ed8); }
+.dsh-skill-review-view:focus-visible { border-radius: 4px; outline: 2px solid rgb(37 99 235 / 28%); outline-offset: 3px; }
 
 .dsh-skill-sub-tabs button {
   border: 0;
@@ -895,13 +929,21 @@
 
 .dsh-skill-installed-heading h2 { margin: 0 0 4px; font-size: 18px; }
 .dsh-skill-installed-heading p { margin: 0; color: var(--dsw-alias-label-secondary); font-size: 13px; }
-.dsh-skill-card-uninstall {
+.dsh-skill-card-install-action {
+  margin-top: 10px;
+  padding: 5px 10px;
   border: 1px solid #fecaca;
   border-radius: 8px;
   background: #fff;
   color: #dc2626;
   cursor: pointer;
   font: inherit;
+  font-size: 12px;
+}
+.dsh-skill-card-install-action.update {
+  border-color: var(--dsw-alias-primary, #2563eb);
+  background: var(--dsw-alias-primary, #2563eb);
+  color: #fff;
 }
 .dsh-skill-browse-market {
   flex: 0 0 auto;
@@ -916,9 +958,9 @@
 }
 .dsh-skill-browse-market:hover { color: var(--dsw-alias-primary-hover, #1d4ed8); text-decoration: underline; }
 .dsh-skill-browse-market:focus-visible { outline: 2px solid var(--dsw-alias-primary, #2563eb); outline-offset: 3px; border-radius: 3px; }
-.dsh-skill-card-uninstall { margin-top: 10px; padding: 5px 10px; font-size: 12px; }
-.dsh-skill-card-uninstall:hover { background: #fef2f2; }
-.dsh-skill-card-uninstall:disabled { cursor: wait; opacity: .6; }
+.dsh-skill-card-install-action.uninstall:hover { background: #fef2f2; }
+.dsh-skill-card-install-action.update:hover { background: var(--dsw-alias-primary-hover, #1d4ed8); }
+.dsh-skill-card-install-action:disabled { cursor: wait; opacity: .6; }
 
 .dsh-skill-empty {
   display: grid;
@@ -1123,6 +1165,12 @@
   .dsh-expert-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dsh-connectors-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dsh-skill-special-grid { grid-template-columns: 1fr; }
+  .dsh-skill-review-list-header { display: none; }
+  .dsh-skill-review-row {
+    grid-template-columns: minmax(120px, 1fr) auto auto auto;
+    gap: 10px 16px;
+  }
+  .dsh-skill-review-skill { grid-column: 1 / -1; }
 }
 
 @media (max-width: 640px) {
@@ -1144,6 +1192,10 @@
     flex-direction: column;
     align-items: stretch;
   }
+  .dsh-skill-review-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .dsh-skill-review-row time { grid-column: 1; }
+  .dsh-skill-review-row .dsh-skill-review-status,
+  .dsh-skill-review-view { justify-self: end; }
 
   .dsh-skill-search-actions {
     flex-wrap: wrap;

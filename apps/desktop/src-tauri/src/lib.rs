@@ -749,6 +749,49 @@ fn open_workspace_directory(workspace_path: String) -> Result<(), String> {
     open_workspace_directory_at(Path::new(&workspace_path))
 }
 
+/// Reveal a downloaded file in the desktop file manager.
+#[tauri::command]
+fn reveal_downloaded_file(file_path: String) -> Result<(), String> {
+    let path = PathBuf::from(file_path);
+    let metadata = fs::metadata(&path)
+        .map_err(|error| format!("无法访问下载文件 {}：{error}", path.display()))?;
+    if !metadata.is_file() {
+        return Err(format!("下载路径不是文件：{}", path.display()));
+    }
+
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("explorer.exe");
+        command.arg("/select,").arg(&path);
+        command
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg("-R").arg(&path);
+        command
+    };
+    #[cfg(target_os = "linux")]
+    let mut command = {
+        let parent = path
+            .parent()
+            .ok_or_else(|| format!("无法定位下载文件目录：{}", path.display()))?;
+        let mut command = Command::new("xdg-open");
+        command.arg(parent);
+        command
+    };
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    return Err("当前系统不支持打开下载文件位置".to_string());
+
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("无法打开下载文件位置 {}：{error}", path.display()))?;
+    Ok(())
+}
+
 fn workspace_import_file_name(name: &str) -> Result<&str, String> {
     let path = Path::new(name);
     let file_name = path.file_name().and_then(|value| value.to_str());
@@ -782,6 +825,33 @@ fn workspace_import_destination(root: &Path, name: &str) -> Result<PathBuf, Stri
         }
     }
     Err(format!("工作区中同名文件过多：{name}"))
+}
+
+fn workspace_import_directory_destination(root: &Path, name: &str) -> Result<PathBuf, String> {
+    for suffix in 0..10_000 {
+        let candidate = if suffix == 0 {
+            name.to_string()
+        } else {
+            format!("{name} ({suffix})")
+        };
+        let destination = root.join(candidate);
+        if !destination.exists() {
+            return Ok(destination);
+        }
+    }
+    Err(format!("工作区中同名文件夹过多：{name}"))
+}
+
+fn imported_workspace_reference(destination: &Path, directory: bool) -> Result<String, String> {
+    let name = destination
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| format!("导入后的名称无效：{}", destination.display()))?;
+    Ok(if directory {
+        format!("{name}/")
+    } else {
+        name.to_string()
+    })
 }
 
 fn import_workspace_files_at(
@@ -833,7 +903,7 @@ fn import_workspace_files_at(
                 destination.display()
             ));
         }
-        imported.push(destination.display().to_string());
+        imported.push(imported_workspace_reference(&destination, false)?);
     }
     Ok(imported)
 }
@@ -857,6 +927,93 @@ fn workspace_import_root(
     }
 }
 
+fn copy_imported_workspace_file(
+    source: &Path,
+    destination: &Path,
+    file_count: &mut usize,
+    total_bytes: &mut u64,
+) -> Result<(), String> {
+    let metadata = fs::metadata(source)
+        .map_err(|error| format!("无法读取拖入的文件 {}：{error}", source.display()))?;
+    if metadata.len() > WORKSPACE_IMPORT_MAX_FILE_BYTES as u64 {
+        return Err(format!(
+            "文件超过 {} MB 限制：{}",
+            WORKSPACE_IMPORT_MAX_FILE_BYTES / 1024 / 1024,
+            source.display()
+        ));
+    }
+    *file_count = file_count
+        .checked_add(1)
+        .ok_or_else(|| "导入文件数量无效".to_string())?;
+    if *file_count > WORKSPACE_IMPORT_MAX_FILES {
+        return Err(format!(
+            "一次最多可导入 {WORKSPACE_IMPORT_MAX_FILES} 个文件"
+        ));
+    }
+    *total_bytes = total_bytes
+        .checked_add(metadata.len())
+        .ok_or_else(|| "导入文件总大小无效".to_string())?;
+    if *total_bytes > WORKSPACE_IMPORT_MAX_TOTAL_BYTES as u64 {
+        return Err(format!(
+            "导入文件总大小不能超过 {} MB",
+            WORKSPACE_IMPORT_MAX_TOTAL_BYTES / 1024 / 1024
+        ));
+    }
+    if let Err(error) = fs::copy(source, destination) {
+        let _ = fs::remove_file(destination);
+        return Err(format!("无法复制拖入的文件 {}：{error}", source.display()));
+    }
+    Ok(())
+}
+
+fn copy_imported_workspace_directory(
+    source: &Path,
+    destination: &Path,
+    file_count: &mut usize,
+    total_bytes: &mut u64,
+) -> Result<(), String> {
+    fs::create_dir(destination)
+        .map_err(|error| format!("无法创建工作区文件夹 {}：{error}", destination.display()))?;
+    let entries = fs::read_dir(source)
+        .map_err(|error| format!("无法读取拖入的文件夹 {}：{error}", source.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("无法读取拖入的文件夹条目：{error}"))?;
+        let entry_source = entry.path();
+        let metadata = fs::symlink_metadata(&entry_source)
+            .map_err(|error| format!("无法读取拖入路径 {}：{error}", entry_source.display()))?;
+        if metadata.file_type().is_symlink() {
+            return Err(format!(
+                "不支持拖入包含符号链接的文件夹：{}",
+                entry_source.display()
+            ));
+        }
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| format!("拖入路径包含无效名称：{}", entry_source.display()))?;
+        workspace_import_file_name(&name)?;
+        let entry_destination = destination.join(name);
+        if metadata.is_dir() {
+            copy_imported_workspace_directory(
+                &entry_source,
+                &entry_destination,
+                file_count,
+                total_bytes,
+            )?;
+        } else if metadata.is_file() {
+            copy_imported_workspace_file(
+                &entry_source,
+                &entry_destination,
+                file_count,
+                total_bytes,
+            )?;
+        } else {
+            return Err(format!("不支持拖入此类路径：{}", entry_source.display()));
+        }
+    }
+    Ok(())
+}
+
 fn import_workspace_paths_at(
     workspace_path: &Path,
     paths: Vec<PathBuf>,
@@ -875,41 +1032,49 @@ fn import_workspace_paths_at(
         return Err(format!("工作区路径不是文件夹：{}", root.display()));
     }
     let mut total_bytes = 0u64;
+    let mut file_count = 0usize;
     let mut imported = Vec::with_capacity(paths.len());
     for path in paths {
+        let original_metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("无法读取拖入的文件 {}：{error}", path.display()))?;
+        if original_metadata.file_type().is_symlink() {
+            return Err(format!("不支持拖入符号链接：{}", path.display()));
+        }
         let source = fs::canonicalize(&path)
             .map_err(|error| format!("无法访问拖入的文件 {}：{error}", path.display()))?;
         let metadata = fs::metadata(&source)
             .map_err(|error| format!("无法读取拖入的文件 {}：{error}", source.display()))?;
-        if !metadata.is_file() {
-            return Err(format!("暂不支持拖入文件夹：{}", source.display()));
-        }
         let name = source
             .file_name()
             .and_then(|value| value.to_str())
             .ok_or_else(|| format!("拖入的文件名无效：{}", source.display()))?;
         let name = workspace_import_file_name(name)?;
-        if metadata.len() > WORKSPACE_IMPORT_MAX_FILE_BYTES as u64 {
+        if metadata.is_file() {
+            let destination = workspace_import_destination(&root, name)?;
+            copy_imported_workspace_file(&source, &destination, &mut file_count, &mut total_bytes)?;
+            imported.push(imported_workspace_reference(&destination, false)?);
+            continue;
+        }
+        if !metadata.is_dir() {
+            return Err(format!("不支持拖入此类路径：{}", source.display()));
+        }
+        if root.starts_with(&source) {
             return Err(format!(
-                "文件超过 {} MB 限制：{name}",
-                WORKSPACE_IMPORT_MAX_FILE_BYTES / 1024 / 1024
+                "不能把包含当前工作区的文件夹拖入工作区：{}",
+                source.display()
             ));
         }
-        total_bytes = total_bytes
-            .checked_add(metadata.len())
-            .ok_or_else(|| "导入文件总大小无效".to_string())?;
-        if total_bytes > WORKSPACE_IMPORT_MAX_TOTAL_BYTES as u64 {
-            return Err(format!(
-                "导入文件总大小不能超过 {} MB",
-                WORKSPACE_IMPORT_MAX_TOTAL_BYTES / 1024 / 1024
-            ));
+        let destination = workspace_import_directory_destination(&root, name)?;
+        if let Err(error) = copy_imported_workspace_directory(
+            &source,
+            &destination,
+            &mut file_count,
+            &mut total_bytes,
+        ) {
+            let _ = fs::remove_dir_all(&destination);
+            return Err(error);
         }
-        let destination = workspace_import_destination(&root, name)?;
-        if let Err(error) = fs::copy(&source, &destination) {
-            let _ = fs::remove_file(&destination);
-            return Err(format!("无法复制拖入的文件 {}：{error}", source.display()));
-        }
-        imported.push(destination.display().to_string());
+        imported.push(imported_workspace_reference(&destination, true)?);
     }
     Ok(imported)
 }
@@ -1854,6 +2019,7 @@ pub fn run() {
             list_custom_skills,
             read_analysis_view,
             open_workspace_directory,
+            reveal_downloaded_file,
             import_workspace_files,
             import_dropped_workspace_files,
         ])
@@ -1996,7 +2162,11 @@ mod marketplace_tests {
             .expect("import custom directory");
         assert_eq!(installed.slug, "personal-meeting-notes");
         assert_eq!(installed.description, "Organize meeting notes");
-        assert!(installed.body.as_deref().unwrap_or_default().contains("personal-meeting-notes"));
+        assert!(installed
+            .body
+            .as_deref()
+            .unwrap_or_default()
+            .contains("personal-meeting-notes"));
         let uploaded = installed.files.as_ref().expect("upload files");
         assert_eq!(uploaded.len(), 2);
         assert!(uploaded.iter().any(|file| file.path == "SKILL.md"));
@@ -2013,8 +2183,11 @@ mod marketplace_tests {
             .join("skills/personal-meeting-notes/.dsh-custom-skill")
             .is_file());
 
-        fs::write(source.0.join("scripts/invoke.ps1"), "Write-Output updated\n")
-            .expect("update script");
+        fs::write(
+            source.0.join("scripts/invoke.ps1"),
+            "Write-Output updated\n",
+        )
+        .expect("update script");
         install_custom_skill_directory_at(&user.0.join("skills"), &source.0)
             .expect("replace managed custom skill");
         assert_eq!(
@@ -2130,7 +2303,7 @@ mod marketplace_tests {
             ],
         )
         .expect("import files");
-        assert_eq!(imported.len(), 2);
+        assert_eq!(imported, vec!["地图 (1).png", "说明.pdf"]);
         assert_eq!(
             fs::read(workspace.0.join("地图.png")).expect("existing"),
             b"existing"
@@ -2143,17 +2316,22 @@ mod marketplace_tests {
     }
 
     #[test]
-    fn copies_native_drop_paths_without_overwriting_existing_files() {
+    fn copies_native_drop_files_and_directories_without_overwriting_existing_files() {
         let source = TestDirectory::new();
         let workspace = TestDirectory::new();
         let source_file = source.0.join("记录.wav");
+        let source_directory = source.0.join("材料");
+        fs::create_dir(&source_directory).expect("source directory");
+        fs::create_dir(source_directory.join("附件")).expect("nested directory");
+        fs::write(source_directory.join("说明.txt"), b"summary").expect("directory file");
+        fs::write(source_directory.join("附件").join("数据.csv"), b"data").expect("nested file");
         fs::write(&source_file, b"audio").expect("source file");
         fs::write(workspace.0.join("记录.wav"), b"existing").expect("existing file");
 
-        let imported =
-            import_workspace_paths_at(&workspace.0, vec![source_file]).expect("copy native drop");
+        let imported = import_workspace_paths_at(&workspace.0, vec![source_file, source_directory])
+            .expect("copy native drop");
 
-        assert_eq!(imported.len(), 1);
+        assert_eq!(imported, vec!["记录 (1).wav", "材料/"]);
         assert_eq!(
             fs::read(workspace.0.join("记录.wav")).expect("existing"),
             b"existing"
@@ -2162,10 +2340,9 @@ mod marketplace_tests {
             fs::read(workspace.0.join("记录 (1).wav")).expect("copy"),
             b"audio"
         );
-        assert!(
-            import_workspace_paths_at(&workspace.0, vec![source.0.clone()])
-                .expect_err("reject directory")
-                .contains("不支持拖入文件夹")
+        assert_eq!(
+            fs::read(workspace.0.join("材料").join("附件").join("数据.csv")).expect("nested copy"),
+            b"data"
         );
     }
 

@@ -178,15 +178,53 @@ func GetUserPromptAudits(keyword string, startIdx, num int) (audits []*UserPromp
 	if num <= 0 {
 		return []*UserPromptAudit{}, 0, nil
 	}
-	if err = userPromptAuditQuery(keyword).Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	err = userPromptAuditQuery(keyword).Order("created_at DESC").Limit(num).Offset(startIdx).Find(&audits).Error
+	var matching []*UserPromptAudit
+	err = userPromptAuditQuery(keyword).Order("created_at DESC, id DESC").Find(&matching).Error
 	if err != nil {
 		return nil, 0, err
 	}
+	matching = collapseLegacyUserPromptAudits(matching)
+	total = int64(len(matching))
+	if startIdx >= len(matching) {
+		return []*UserPromptAudit{}, total, nil
+	}
+	end := startIdx + num
+	if end > len(matching) {
+		end = len(matching)
+	}
+	audits = matching[startIdx:end]
 	overlayUserPromptAuditUsernames(audits)
 	return audits, total, nil
+}
+
+const legacyPromptAuditMergeWindowSeconds int64 = 5 * 60
+
+func collapseLegacyUserPromptAudits(audits []*UserPromptAudit) []*UserPromptAudit {
+	result := make([]*UserPromptAudit, 0, len(audits))
+	for _, audit := range audits {
+		if audit == nil {
+			continue
+		}
+		if audit.TurnId == "" && len(result) > 0 {
+			newer := result[len(result)-1]
+			if newer.TurnId == "" && newer.UserId == audit.UserId && newer.SessionId != "" &&
+				newer.SessionId == audit.SessionId && newer.ModelName == audit.ModelName &&
+				newer.Question == audit.Question && newer.CreatedAt-audit.CreatedAt <= legacyPromptAuditMergeWindowSeconds {
+				newer.CreatedAt = audit.CreatedAt
+				newer.Quota += audit.Quota
+				newer.PromptTokens += audit.PromptTokens
+				newer.CompletionTokens += audit.CompletionTokens
+				newer.ElapsedTime += audit.ElapsedTime
+				if newer.ErrorMessage == "" {
+					newer.ErrorMessage = audit.ErrorMessage
+				}
+				continue
+			}
+		}
+		copy := *audit
+		result = append(result, &copy)
+	}
+	return result
 }
 
 func overlayUserPromptAuditUsernames(audits []*UserPromptAudit) {

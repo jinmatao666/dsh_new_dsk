@@ -8,6 +8,7 @@ export const zh = {
   'dialog.successTitle': 'Session 导出已保存',
   'dialog.successDescription': 'Session ZIP 已保存到本机“下载”文件夹。',
   'dialog.errorTitle': 'Session 导出失败',
+  'dialog.reveal': '打开文件位置',
   'dialog.close': '关闭',
   'dialog.commandFailed': '无法启动 Session 导出。',
 } as const
@@ -19,6 +20,7 @@ export const en: Record<keyof typeof zh, string> = {
   'dialog.successTitle': 'Session export saved',
   'dialog.successDescription': 'The Session ZIP was saved to your local Downloads folder.',
   'dialog.errorTitle': 'Session export failed',
+  'dialog.reveal': 'Show in folder',
   'dialog.close': 'Close',
   'dialog.commandFailed': 'Could not start the Session export.',
 }

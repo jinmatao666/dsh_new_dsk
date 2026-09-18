@@ -1,8 +1,9 @@
 import type { ObservableSnapshot, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { SessionLogDownloadState } from './controller.ts'
+import { revealDownloadedFile, type SessionLogDownloadState } from './controller.ts'
 import { NS } from './locales.ts'
+import css from './Dialog.module.css'
 
 /** Browser operations and state injected into the Session Header contribution. */
 export interface SessionLogDownloadDialogInjected {
@@ -35,6 +36,7 @@ export function SessionLogDownloadDialog({
   const description = status === 'downloading'
     ? t('dialog.preparingDescription')
     : status === 'success' ? t('dialog.successDescription') : error ?? t('dialog.commandFailed')
+  const savedPath = status === 'success' ? entry?.savedPath ?? null : null
 
   return (
     <Modal
@@ -43,7 +45,18 @@ export function SessionLogDownloadDialog({
       title={title}
       description={description}
       closeLabel={t('dialog.close')}
-      footer={<Button variant="primary" onClick={() => { dismiss(sessionId) }}>{t('dialog.close')}</Button>}
-    />
+      footer={(
+        <>
+          {savedPath !== null && (
+            <Button variant="outline" onClick={() => { void revealDownloadedFile(savedPath) }}>
+              {t('dialog.reveal')}
+            </Button>
+          )}
+          <Button variant="primary" onClick={() => { dismiss(sessionId) }}>{t('dialog.close')}</Button>
+        </>
+      )}
+    >
+      {savedPath !== null && <code className={css.savedPath}>{savedPath}</code>}
+    </Modal>
   )
 }

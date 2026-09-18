@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -44,11 +45,14 @@ func doGetBundle(t *testing.T, id string) (int, map[string]any) {
 func TestGetSkillBundle_stripsBodyReturnsAssets(t *testing.T) {
 	setupSkillBundleTestDB(t)
 
+	manifest := base64.StdEncoding.EncodeToString([]byte(`{"slug":"normal","version":"1.0.0","files":["manifest.json","SKILL.md"]}`))
+	skillMD := base64.StdEncoding.EncodeToString([]byte("---\nname: normal\n---\n"))
+	assets := `{"schemaVersion":1,"files":[{"path":"manifest.json","contentBase64":"` + manifest + `"},{"path":"SKILL.md","contentBase64":"` + skillMD + `"}]}`
 	normal := &model.Skill{
 		Name:      "normal",
 		Content:   "legacy",
 		Body:      "工作手册正文",
-		Assets:    "<!-- file: a.py -->\n```python\nprint(1)\n```",
+		Assets:    assets,
 		Status:    1,
 		IsDeleted: false,
 	}
@@ -63,6 +67,27 @@ func TestGetSkillBundle_stripsBodyReturnsAssets(t *testing.T) {
 	assert.Equal(t, "", data["body"], "bundle 不应返回 body 正文")
 	// assets 仍完整下发(客户端安装依赖它)。
 	assert.NotEmpty(t, data["assets"], "bundle 应返回 assets")
+	var repaired skillPackage
+	require.NoError(t, json.Unmarshal([]byte(data["assets"].(string)), &repaired))
+	manifestBytes, err := base64.StdEncoding.DecodeString(repaired.Files[0].ContentBase64)
+	require.NoError(t, err)
+	assert.Contains(t, string(manifestBytes), `"id":"normal"`)
+}
+
+func TestEnsureMarketplaceManifestIDRepairsLegacyPackage(t *testing.T) {
+	manifest := base64.StdEncoding.EncodeToString([]byte(`{"slug":"community-42","version":"1.0.0","files":["manifest.json","SKILL.md"]}`))
+	skillMD := base64.StdEncoding.EncodeToString([]byte("---\nname: community-42\n---\n"))
+	assets := `{"schemaVersion":1,"files":[{"path":"manifest.json","contentBase64":"` + manifest + `"},{"path":"SKILL.md","contentBase64":"` + skillMD + `"}]}`
+
+	repairedAssets, err := ensureMarketplaceManifestID(assets, "community-42")
+	require.NoError(t, err)
+	var repaired skillPackage
+	require.NoError(t, json.Unmarshal([]byte(repairedAssets), &repaired))
+	manifestBytes, err := base64.StdEncoding.DecodeString(repaired.Files[0].ContentBase64)
+	require.NoError(t, err)
+	assert.Contains(t, string(manifestBytes), `"id":"community-42"`)
+	_, err = model.SkillPackageSHA256(repairedAssets)
+	require.NoError(t, err)
 }
 
 func TestGetSkillBundle_disabledOrDeletedNotFound(t *testing.T) {

@@ -44,11 +44,6 @@ export default function SkillBrowseDrawer({ visible, kind, id, skill: skillProp,
   useEffect(() => {
     if (!visible || id == null) return undefined;
     let cancelled = false; setLoading(true); setSkill(null); setOfficialFiles(null); setSelected('SKILL.md');
-    if (skillProp?.mock) {
-      setSkill(skillProp);
-      setLoading(false);
-      return () => { cancelled = true; };
-    }
     if (skillProp?.source === 'official-package') {
       setSkill(skillProp);
       fetchOfficialSkillFiles(skillProp)

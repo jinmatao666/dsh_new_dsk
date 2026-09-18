@@ -93,3 +93,27 @@ func TestUserPromptAuditKeepsRepeatedTextInSeparateTurns(t *testing.T) {
 	require.NoError(t, DB.Model(&UserPromptAudit{}).Count(&count).Error)
 	require.Equal(t, int64(2), count)
 }
+
+func TestCollapseLegacyUserPromptAuditsMergesOnlyAdjacentModelCalls(t *testing.T) {
+	rows := []*UserPromptAudit{
+		{Id: 4, CreatedAt: 400, UserId: 7, SessionId: "session-a", ModelName: "model-a", Question: "继续", Quota: 4},
+		{Id: 3, CreatedAt: 390, UserId: 7, SessionId: "session-a", ModelName: "model-a", Question: "继续", Quota: 3},
+		{Id: 2, CreatedAt: 20, UserId: 7, SessionId: "session-a", ModelName: "model-a", Question: "继续", Quota: 2},
+		{Id: 1, CreatedAt: 10, UserId: 7, SessionId: "session-a", ModelName: "model-a", Question: "继续", Quota: 1},
+	}
+
+	collapsed := collapseLegacyUserPromptAudits(rows)
+	require.Len(t, collapsed, 2)
+	require.Equal(t, 7, collapsed[0].Quota)
+	require.Equal(t, int64(390), collapsed[0].CreatedAt)
+	require.Equal(t, 3, collapsed[1].Quota)
+}
+
+func TestCollapseLegacyUserPromptAuditsPreservesExplicitTurns(t *testing.T) {
+	rows := []*UserPromptAudit{
+		{Id: 2, CreatedAt: 20, UserId: 7, SessionId: "session-a", TurnId: "session-a:2", Question: "继续"},
+		{Id: 1, CreatedAt: 10, UserId: 7, SessionId: "session-a", TurnId: "session-a:1", Question: "继续"},
+	}
+
+	require.Len(t, collapseLegacyUserPromptAudits(rows), 2)
+}

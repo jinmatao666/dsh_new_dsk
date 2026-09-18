@@ -143,6 +143,27 @@ function parseReviewStatus(value: unknown): NonNullable<Skill['reviewStatus']> |
   return undefined
 }
 
+function formatReviewTime(value: string | undefined): string {
+  if (value === undefined || value === '') return '—'
+  const time = new Date(value)
+  if (Number.isNaN(time.getTime())) return value
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(time)
+}
+
+function reviewStatusLabel(status: Skill['reviewStatus']): string {
+  if (status === 'pending') return '审核中'
+  if (status === 'rejected') return '未通过'
+  if (status === 'approved') return '已通过'
+  return '未提交'
+}
+
 let loadRemoteSkills: (() => Promise<RemoteSkill[]>) | undefined
 let loadRemoteCategories: (() => Promise<RemoteSkillCategory[]>) | undefined
 let loadRemoteSkillBundle: ((id: number) => Promise<unknown>) | undefined
@@ -529,7 +550,7 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall 
           <p>{skill.summary}</p>
           <div className="dsh-skill-detail-meta">
             <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>{skill.source === 'personal' ? '个人' : '官方'}</span>
-            {skill.reviewStatus !== undefined && <span className={`dsh-skill-review-status ${skill.reviewStatus}`}>{skill.reviewStatus === 'pending' ? '审核中' : skill.reviewStatus === 'approved' ? '已公开' : skill.reviewStatus === 'rejected' ? '未通过' : '私人'}</span>}
+            {skill.reviewStatus !== undefined && skill.reviewStatus !== 'approved' && <span className={`dsh-skill-review-status ${skill.reviewStatus}`}>{skill.reviewStatus === 'pending' ? '审核中' : skill.reviewStatus === 'rejected' ? '未通过' : '私人'}</span>}
             <span>{L.version}: {skill.version}</span>
             <span>{L.author}: {skill.author}</span>
             {hasVerifiedInstallCount(skill) && <span>{skill.installs} {L.count}</span>}
@@ -1375,40 +1396,98 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                 ))}
               </div>}
 
-              <div className="dsh-skill-grid">
-                {visible.map(skill => (
-                  <article
-                    key={skill.id}
-                    className="dsh-skill-card"
-                    onClick={() => { openDetail(skill) }}
-                  >
-                    <div className="dsh-skill-card-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
-                      <SkillVisual skill={skill} />
-                    </div>
-                    <div className="dsh-skill-card-body">
-                      <div className="dsh-skill-card-meta">
-                        <span className="dsh-skill-card-category" style={{ background: skill.accent + '14', color: skill.accent }}>{skill.category}</span>
-                        <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>{skill.source === 'personal' ? '个人' : '官方'}</span>
-                        {skill.reviewStatus !== undefined && <span className={`dsh-skill-review-status ${skill.reviewStatus}`}>{skill.reviewStatus === 'pending' ? '审核中' : skill.reviewStatus === 'approved' ? '已公开' : skill.reviewStatus === 'rejected' ? '未通过' : '私人'}</span>}
-                        {hasVerifiedInstallCount(skill) && <small><DownloadIcon />{skill.installs}</small>}
-                      </div>
-                      <h2>{skill.name}</h2>
-                      <p>{skill.summary}</p>
-                      {libraryView === 'uploads' && uploadView === 'reviews' && skill.reviewStatus === 'rejected' && skill.reviewReason && (
-                        <div className="dsh-skill-card-review-reason"><strong>审核意见</strong><span>{skill.reviewReason}</span></div>
-                      )}
-                      {libraryView === 'uploads' && uploadView === 'reviews' && (
-                        <div className="dsh-skill-card-review-meta">
-                          <span>{skill.publishedSkillId === undefined ? '首次发布' : '版本更新'}</span>
-                          {skill.publishedVersion && <span>线上版本 {skill.publishedVersion}</span>}
-                          <span>提交版本 {skill.version}</span>
+              {libraryView === 'uploads' && uploadView === 'reviews' ? (
+                <div className="dsh-skill-review-list">
+                  <div className="dsh-skill-review-list-header" aria-hidden="true">
+                    <span>技能</span>
+                    <span>审核类型</span>
+                    <span>提交时间</span>
+                    <span>状态</span>
+                    <span>操作</span>
+                  </div>
+                  {visible.map(skill => (
+                    <article key={skill.id} className="dsh-skill-review-row">
+                      <div className="dsh-skill-review-skill">
+                        <div className="dsh-skill-card-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
+                          <SkillVisual skill={skill} />
                         </div>
-                      )}
-                      {libraryView === 'installed' && <button type="button" className="dsh-skill-card-uninstall" onClick={(event) => { event.stopPropagation(); void toggleInstall(skill) }} disabled={installing === skill.id}>卸载</button>}
-                    </div>
-                  </article>
-                ))}
-              </div>
+                        <div className="dsh-skill-review-skill-copy">
+                          <strong>{skill.name}</strong>
+                          <div>
+                            <span>{skill.category}</span>
+                            <span>提交版本 {skill.version}</span>
+                          </div>
+                          {skill.reviewStatus === 'rejected' && skill.reviewReason && (
+                            <p><b>审核意见</b>{skill.reviewReason}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="dsh-skill-review-kind">
+                        <strong>{skill.publishedSkillId === undefined ? '首次发布' : '版本更新'}</strong>
+                        {skill.publishedVersion && <span>线上版本 {skill.publishedVersion}</span>}
+                      </div>
+                      <time dateTime={skill.submittedAt}>{formatReviewTime(skill.submittedAt)}</time>
+                      <span className={`dsh-skill-review-status ${skill.reviewStatus ?? 'none'}`}>
+                        {reviewStatusLabel(skill.reviewStatus)}
+                      </span>
+                      <button
+                        type="button"
+                        className="dsh-skill-review-view"
+                        onClick={() => { openDetail(skill) }}
+                      >
+                        查看
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="dsh-skill-grid">
+                  {visible.map(skill => (
+                    <article
+                      key={skill.id}
+                      className="dsh-skill-card"
+                      onClick={() => { openDetail(skill) }}
+                    >
+                      <div className="dsh-skill-card-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
+                        <SkillVisual skill={skill} />
+                      </div>
+                      <div className="dsh-skill-card-body">
+                        <div className="dsh-skill-card-meta">
+                          <span
+                            className="dsh-skill-card-category"
+                            style={{ background: skill.accent + '14', color: skill.accent }}
+                          >
+                            {skill.category}
+                          </span>
+                          <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>
+                            {skill.source === 'personal' ? '个人' : '官方'}
+                          </span>
+                          {skill.reviewStatus !== undefined && skill.reviewStatus !== 'approved' && (
+                            <span className={`dsh-skill-review-status ${skill.reviewStatus}`}>
+                              {skill.reviewStatus === 'pending' ? '审核中' : skill.reviewStatus === 'rejected' ? '未通过' : '私人'}
+                            </span>
+                          )}
+                          {hasVerifiedInstallCount(skill) && <small><DownloadIcon />{skill.installs}</small>}
+                        </div>
+                        <h2>{skill.name}</h2>
+                        <p>{skill.summary}</p>
+                        {libraryView === 'installed' && (
+                          <button
+                            type="button"
+                            className={resolveInstallState(skill) === 'updateAvailable'
+                              ? 'dsh-skill-card-install-action update'
+                              : 'dsh-skill-card-install-action uninstall'}
+                            onClick={(event) => { event.stopPropagation(); void toggleInstall(skill) }}
+                            disabled={installing === skill.id}
+                          >
+                            {resolveInstallState(skill) === 'updateAvailable' ? '更新' : '卸载'}
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
 
               {visible.length === 0 && (
                 <div className="dsh-skill-empty">

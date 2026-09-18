@@ -10,6 +10,7 @@ export interface SessionLogDownloadEntry {
   readonly open: boolean
   readonly status: SessionLogDownloadStatus
   readonly error: string | null
+  readonly savedPath: string | null
 }
 
 /** Download states keyed by the Session whose Header owns the dialog. */
@@ -18,7 +19,7 @@ export interface SessionLogDownloadState {
 }
 
 type Fetch = (input: string | URL, init?: RequestInit) => Promise<Response>
-type Save = (archive: Blob, filename: string) => void | Promise<void>
+type Save = (archive: Blob, filename: string) => string | null | void | Promise<string | null | void>
 
 type DesktopBridge = { core?: { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> } }
 type DesktopInternals = { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> }
@@ -40,7 +41,7 @@ export function sessionLogZipFilename(sessionId: SessionId): string {
  * @param archive - complete ZIP archive returned by the Host.
  * @param filename - browser download filename.
  */
-export async function downloadArchive(archive: Blob, filename: string): Promise<void> {
+export async function downloadArchive(archive: Blob, filename: string): Promise<string | null> {
   const desktopWindow = window as Window & {
     __TAURI__?: DesktopBridge
     __TAURI_INTERNALS__?: DesktopInternals
@@ -51,8 +52,11 @@ export async function downloadArchive(archive: Blob, filename: string): Promise<
     ?? desktopWindow.__TAURI_INTERNALS__?.invoke
   if (typeof invoke === 'function') {
     const bytes = Array.from(new Uint8Array(await archive.arrayBuffer()))
-    await invoke('save_session_log_archive', { fileName: filename, bytes })
-    return
+    const savedPath = await invoke('save_session_log_archive', { fileName: filename, bytes })
+    if (typeof savedPath !== 'string' || savedPath === '') {
+      throw new Error('Desktop shell returned no Session export path.')
+    }
+    return savedPath
   }
   const url = URL.createObjectURL(archive)
   const anchor = document.createElement('a')
@@ -63,6 +67,14 @@ export async function downloadArchive(archive: Blob, filename: string): Promise<
   anchor.click()
   anchor.remove()
   setTimeout(() => { URL.revokeObjectURL(url) }, 0)
+  return null
+}
+
+/** Reveal one desktop-saved archive in the operating system file manager. */
+export async function revealDownloadedFile(path: string): Promise<void> {
+  const invoke = (window as Window & { __ZJUGIS_NATIVE_INVOKE__?: DesktopStableBridge }).__ZJUGIS_NATIVE_INVOKE__
+  if (invoke === undefined) return
+  await invoke('reveal_downloaded_file', { filePath: path })
 }
 
 /** Resolve the browser's Host base with the connection carrier's null-origin fallback. */
@@ -131,7 +143,7 @@ export class SessionLogDownloadController {
   }
 
   private async run(sessionId: SessionId, signal: AbortSignal): Promise<void> {
-    this.publish(sessionId, { open: true, status: 'downloading', error: null })
+    this.publish(sessionId, { open: true, status: 'downloading', error: null, savedPath: null })
     try {
       const url = new URL('/api/session.export', hostBase())
       url.searchParams.set('sessionId', sessionId)
@@ -141,13 +153,18 @@ export class SessionLogDownloadController {
         const detail = await response.text().catch(() => '')
         throw new Error(`Export failed: HTTP ${response.status}${detail === '' ? '' : ` ${detail}`}`)
       }
-      await this.save(await response.blob(), sessionLogZipFilename(sessionId))
+      const savedPath = await this.save(await response.blob(), sessionLogZipFilename(sessionId))
       const open = this.store.getSnapshot().bySession[String(sessionId)]?.open ?? true
-      this.publish(sessionId, { open, status: 'success', error: null })
+      this.publish(sessionId, {
+        open,
+        status: 'success',
+        error: null,
+        savedPath: typeof savedPath === 'string' ? savedPath : null,
+      })
     } catch (error: unknown) {
       if (signal.aborted) return
       const open = this.store.getSnapshot().bySession[String(sessionId)]?.open ?? true
-      this.publish(sessionId, { open, status: 'error', error: messageOf(error) })
+      this.publish(sessionId, { open, status: 'error', error: messageOf(error), savedPath: null })
     }
   }
 

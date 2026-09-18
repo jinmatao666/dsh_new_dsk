@@ -18,6 +18,8 @@
     "allow-uninstall-custom-skill",
     "allow-list-custom-skills",
     "allow-read-analysis-view",
+    "allow-open-workspace-directory",
+    "allow-reveal-downloaded-file",
     "allow-import-workspace-files",
     "allow-import-dropped-workspace-files"
   ]
