@@ -519,6 +519,9 @@ type OverlayProps = PropsRuntime<'shell.overlay'> & {
   marketplaceUrl: string
   chooseDirectory: () => Promise<string | null>
 }
+type CustomSkillSource =
+  | { kind: 'directory'; path: string }
+  | { kind: 'archive'; name: string; bytes: number[] }
 type ActionProps = PropsRuntime<'sidebar.footer.action'> & SidebarFooterActionOwnerProps
 
 function SkillDetail({ skill, onBack, installState, installing, onToggleInstall, showReview = false }: {
@@ -821,8 +824,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   })
   const [discoveredCustomSkills, setDiscoveredCustomSkills] = useState<Skill[]>([])
   const [adding, setAdding] = useState(false)
-  const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '通用类', icon: 'preset:assistant', visibility: 'private' as 'private' | 'public' })
-  const [customSkillDirectory, setCustomSkillDirectory] = useState<string | null>(null)
+  const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '通用', icon: 'preset:assistant', visibility: 'private' as 'private' | 'public' })
+  const [customSkillSource, setCustomSkillSource] = useState<CustomSkillSource | null>(null)
   const [remoteSkills, setRemoteSkills] = useState<RemoteSkill[] | null>(null)
   const [remoteCategories, setRemoteCategories] = useState<RemoteSkillCategory[] | null>(null)
   const [personalSkills, setPersonalSkills] = useState<RemotePersonalSkill[]>([])
@@ -891,6 +894,11 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     setOpen(next.open)
     if (next.open) {
       if (section === 'skills') {
+        setLibraryView('market')
+        setView('list')
+        setSelectedSkill(null)
+        setQuery('')
+        setCategory(L.all)
         void refreshInstallStates()
         if (loadRemoteSkills !== undefined) void loadRemoteSkills().then(setRemoteSkills).catch(() => setRemoteSkills(null))
         if (loadRemoteCategories !== undefined) void loadRemoteCategories().then(setRemoteCategories).catch(() => setRemoteCategories(null))
@@ -935,7 +943,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       const source = remote.source === 'personal' ? 'personal' : 'official'
       const remoteTags = Array.isArray(remote.tags) ? remote.tags.filter((tag): tag is string => typeof tag === 'string') : []
       const relationCategories = publishedSkillCategories(remote.categories)
-      const legacyCategory = typeof remote.category === 'string' && remote.category.trim() !== '' ? remote.category.trim() : '通用类'
+      const legacyCategory = typeof remote.category === 'string' && remote.category.trim() !== '' ? remote.category.trim() : '通用'
       const categories = relationCategories.length > 0 ? relationCategories : [legacyCategory]
       return [{
         id: `remote-${remoteId}`,
@@ -998,7 +1006,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   }), [personalSkills])
   const categories = useMemo(() => [
     L.all,
-    ...buildMarketplaceCategories(remoteCategories),
+    ...new Set(['通用', ...buildMarketplaceCategories(remoteCategories)]),
   ], [remoteCategories])
   useEffect(() => {
     if (!categories.includes(category)) setCategory(L.all)
@@ -1105,19 +1113,34 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   const selectCustomSkillDirectory = async () => {
     try {
       const directory = await chooseDirectory()
-      if (directory !== null) setCustomSkillDirectory(directory)
+      if (directory !== null) setCustomSkillSource({ kind: 'directory', path: directory })
     } catch (error) {
       setInstallMessage({ kind: 'error', text: marketplaceInstallErrorMessage(error) })
     }
   }
 
+  const selectCustomSkillArchive = async (file: File | undefined) => {
+    if (file === undefined) return
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      setInstallMessage({ kind: 'error', text: '请选择 ZIP 格式的个人技能包。' })
+      return
+    }
+    if (file.size > 16 * 1024 * 1024) {
+      setInstallMessage({ kind: 'error', text: '个人技能 ZIP 不能超过 16 MB。' })
+      return
+    }
+    setCustomSkillSource({ kind: 'archive', name: file.name, bytes: [...new Uint8Array(await file.arrayBuffer())] })
+  }
+
   const createSkill = async () => {
     const name = newSkill.name.trim()
-    if (name === '' || customSkillDirectory === null) return
+    if (name === '' || customSkillSource === null) return
     setInstalling('custom-skill-import')
     let installed: CustomSkillState
     try {
-      const value = await desktopInvoke('install_custom_skill_directory', { directory: customSkillDirectory })
+      const value = customSkillSource.kind === 'directory'
+        ? await desktopInvoke('install_custom_skill_directory', { directory: customSkillSource.path })
+        : await desktopInvoke('install_custom_skill_archive', { archive: customSkillSource.bytes })
       if (typeof value !== 'object' || value === null
         || typeof (value as Partial<CustomSkillState>).slug !== 'string'
         || typeof (value as Partial<CustomSkillState>).name !== 'string'
@@ -1175,8 +1198,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     localStorage.setItem('dsh.marketplace.custom-skills', JSON.stringify(next))
     setInstallStates(previous => new Map(previous).set(id, { id, slug, version: '1.0.0', installedVersion: '1.0.0', state: 'installed' }))
     setAdding(false)
-    setNewSkill({ name: '', summary: '', category: categories[1] ?? '通用类', icon: 'preset:assistant', visibility: 'private' })
-    setCustomSkillDirectory(null)
+    setNewSkill({ name: '', summary: '', category: categories[1] ?? '通用', icon: 'preset:assistant', visibility: 'private' })
+    setCustomSkillSource(null)
     setSelectedSkill(skill)
     setView('detail')
     setInstallMessage({ kind: 'success', text: newSkill.visibility === 'public'
@@ -1535,13 +1558,44 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                   <button type="button" className={newSkill.visibility === 'public' ? 'active' : ''} onClick={() => { setNewSkill({ ...newSkill, visibility: 'public' }) }}><strong>公开</strong><span>提交管理员审核</span></button>
                 </div>
               </fieldset>
-              <label>
-                个人技能目录
-                <button type="button" className="dsh-skill-add-directory" onClick={() => { void selectCustomSkillDirectory() }} disabled={installing !== null}>选择技能目录</button>
-                {customSkillDirectory !== null && <small className="dsh-skill-add-selected" title={customSkillDirectory}>已选择：{customSkillDirectory}</small>}
-              </label>
-              <small className="dsh-skill-add-hint">请选择包含 SKILL.md 的完整目录。文件会安装到本机并安全上传；公开技能审核通过前不会出现在技能市场，更新已公开技能也需要再次审核。</small>
-              <footer><button type="button" onClick={() => { setAdding(false) }}>取消</button><button type="submit" disabled={newSkill.name.trim() === '' || customSkillDirectory === null || installing !== null || !categories.slice(1).includes(newSkill.category)}>{newSkill.visibility === 'public' ? '提交审核并安装' : '保存并安装'}</button></footer>
+              <div className="dsh-skill-add-source-field">
+                个人技能来源
+                <span className="dsh-skill-add-source-actions">
+                  <button type="button" className="dsh-skill-add-directory" onClick={() => { void selectCustomSkillDirectory() }} disabled={installing !== null}>选择目录</button>
+                  <label className={`dsh-skill-add-directory${installing !== null ? ' disabled' : ''}`}>
+                    选择 ZIP
+                    <input
+                      type="file"
+                      accept=".zip,application/zip"
+                      disabled={installing !== null}
+                      hidden
+                      onChange={(event) => {
+                        void selectCustomSkillArchive(event.target.files?.[0])
+                        event.target.value = ''
+                      }}
+                    />
+                  </label>
+                </span>
+                {customSkillSource !== null && (
+                  <small
+                    className="dsh-skill-add-selected"
+                    title={customSkillSource.kind === 'directory' ? customSkillSource.path : customSkillSource.name}
+                  >
+                    已选择：{customSkillSource.kind === 'directory' ? customSkillSource.path : customSkillSource.name}
+                  </small>
+                )}
+              </div>
+              <small className="dsh-skill-add-hint">请选择包含 SKILL.md 的完整目录或 ZIP。文件会安装到本机并安全上传；公开技能审核通过前不会出现在技能市场，更新已公开技能也需要再次审核。</small>
+              <footer>
+                <button type="button" onClick={() => { setAdding(false) }}>取消</button>
+                <button
+                  type="submit"
+                  disabled={newSkill.name.trim() === '' || customSkillSource === null || installing !== null
+                    || !categories.slice(1).includes(newSkill.category)}
+                >
+                  {newSkill.visibility === 'public' ? '提交审核并安装' : '保存并安装'}
+                </button>
+              </footer>
             </form>
           </div>
         )}

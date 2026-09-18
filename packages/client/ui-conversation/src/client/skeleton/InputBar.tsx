@@ -688,7 +688,7 @@ export function InputBar({
               return (
                 <div key={reference.occurrenceId} className={css.fileCard}>
                   <span className={css.fileCardIcon} data-kind={kind}>
-                    <ReferenceIcon kind={kind} size={20} />
+                    <ReferenceIcon kind={kind} size={16} />
                   </span>
                   <span className={css.fileCardCopy}>
                     <strong title={reference.label}>{reference.label}</strong>

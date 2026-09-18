@@ -678,6 +678,10 @@
 .dsh-skill-add-directory { width: fit-content; border: 1px solid var(--dsw-alias-border-l2); border-radius: 9px; background: var(--dsw-alias-bg-elevated); color: var(--dsw-alias-label-primary); cursor: pointer; padding: 9px 12px; font: inherit; }
 .dsh-skill-add-directory:hover { border-color: var(--dsw-alias-primary, #2563eb); color: var(--dsw-alias-primary, #2563eb); }
 .dsh-skill-add-directory:disabled { cursor: not-allowed; opacity: .5; }
+.dsh-skill-add-directory.disabled { cursor: not-allowed; opacity: .5; }
+.dsh-skill-add-source-field { display: grid; gap: 7px; color: #49617f; font-weight: 600; }
+.dsh-skill-add-source-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.dsh-skill-add-source-actions label.dsh-skill-add-directory { display: inline-flex; align-items: center; }
 .dsh-skill-add-selected { overflow: hidden; color: var(--dsw-alias-label-secondary); font-size: 12px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .dsh-skill-add-icon-options { display: flex; flex-wrap: wrap; gap: 8px; }
 .dsh-skill-add-icon-options button { position: relative; display: grid; width: 38px; height: 38px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; place-items: center; background: var(--dsw-alias-bg-elevated); color: #54729d; cursor: pointer; transition: border-color .15s ease, background .15s ease, box-shadow .15s ease; }

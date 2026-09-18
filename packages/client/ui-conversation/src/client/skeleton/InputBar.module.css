@@ -111,30 +111,30 @@
 .fileCards {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   padding: 0 12px;
 }
 
 .fileCard {
   position: relative;
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-columns: 30px minmax(0, 1fr);
   align-items: center;
-  width: min(220px, calc(100% - 8px));
-  min-height: 58px;
-  padding: 8px 34px 8px 8px;
+  width: min(180px, calc(100% - 6px));
+  min-height: 48px;
+  padding: 6px 26px 6px 7px;
   border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
-  border-radius: 13px;
+  border-radius: 10px;
   background: var(--dsw-alias-bg-elevated);
   box-shadow: 0 1px 3px rgb(15 23 42 / 5%);
 }
 
 .fileCardIcon {
   display: grid;
-  width: 34px;
-  height: 38px;
+  width: 28px;
+  height: 32px;
   place-items: center;
-  border-radius: 9px;
+  border-radius: 7px;
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-secondary);
 }
@@ -168,24 +168,27 @@
 
 .fileCardRemove {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 5px;
+  right: 5px;
   display: grid;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   place-items: center;
   border: 0;
   border-radius: 50%;
-  background: var(--dsw-alias-label-primary);
-  color: var(--dsw-alias-bg-elevated);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1;
 }
 
-.fileCardRemove:hover { opacity: .82; }
+.fileCardRemove:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
 .fileCardRemove:disabled { cursor: default; opacity: .45; }
 
 /* Floating overlay anchor (menu / popupSelect shell): entries position

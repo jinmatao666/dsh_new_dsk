@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::{BufRead, BufReader, Read, Write},
+    io::{BufRead, BufReader, Cursor, Read, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -350,6 +350,92 @@ fn install_custom_skill_directory_at(
     result
 }
 
+/// Extract and install a ZIP containing one skill directory.
+fn install_custom_skill_archive_at(
+    skills_root: &Path,
+    archive_bytes: Vec<u8>,
+) -> Result<CustomSkillState, String> {
+    if archive_bytes.is_empty() || archive_bytes.len() > 16 * 1024 * 1024 {
+        return Err("个人技能 ZIP 大小必须在 1 字节到 16 MB 之间".to_string());
+    }
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("系统时间无效：{error}"))?
+        .as_nanos();
+    let extraction = skill_staging_root(skills_root)?
+        .join(format!(".custom-archive-{}-{nonce}", std::process::id()));
+    let result = (|| {
+        fs::create_dir_all(&extraction)
+            .map_err(|error| format!("无法创建 ZIP 解压目录 {}：{error}", extraction.display()))?;
+        let mut archive = zip::ZipArchive::new(Cursor::new(archive_bytes))
+            .map_err(|error| format!("个人技能 ZIP 无效：{error}"))?;
+        if archive.len() > 128 {
+            return Err("个人技能 ZIP 最多包含 128 个条目".to_string());
+        }
+        let mut total_size = 0u64;
+        for index in 0..archive.len() {
+            let mut entry = archive
+                .by_index(index)
+                .map_err(|error| format!("无法读取个人技能 ZIP：{error}"))?;
+            let relative = entry
+                .enclosed_name()
+                .ok_or_else(|| format!("个人技能 ZIP 包含不安全路径：{}", entry.name()))?
+                .to_path_buf();
+            if relative.as_os_str().is_empty() {
+                continue;
+            }
+            if entry
+                .unix_mode()
+                .is_some_and(|mode| mode & 0o170000 == 0o120000)
+            {
+                return Err(format!("个人技能 ZIP 不能包含符号链接：{}", entry.name()));
+            }
+            let destination = extraction.join(relative);
+            if entry.is_dir() {
+                fs::create_dir_all(&destination).map_err(|error| {
+                    format!("无法创建 ZIP 子目录 {}：{error}", destination.display())
+                })?;
+                continue;
+            }
+            total_size = total_size
+                .checked_add(entry.size())
+                .ok_or_else(|| "个人技能 ZIP 解压大小无效".to_string())?;
+            if total_size > 16 * 1024 * 1024 {
+                return Err("个人技能 ZIP 解压后不能超过 16 MB".to_string());
+            }
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent).map_err(|error| {
+                    format!("无法创建 ZIP 子目录 {}：{error}", parent.display())
+                })?;
+            }
+            let mut output = fs::File::create(&destination)
+                .map_err(|error| format!("无法写入 ZIP 文件 {}：{error}", destination.display()))?;
+            std::io::copy(&mut entry, &mut output)
+                .map_err(|error| format!("无法解压 ZIP 文件 {}：{error}", destination.display()))?;
+        }
+        let source = if extraction.join("SKILL.md").is_file() {
+            extraction.clone()
+        } else {
+            let directories = fs::read_dir(&extraction)
+                .map_err(|error| format!("无法读取 ZIP 解压目录：{error}"))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| format!("无法读取 ZIP 解压条目：{error}"))?
+                .into_iter()
+                .filter(|entry| entry.path().is_dir())
+                .collect::<Vec<_>>();
+            if directories.len() != 1 || !directories[0].path().join("SKILL.md").is_file() {
+                return Err("个人技能 ZIP 根目录或唯一的一级目录中必须包含 SKILL.md".to_string());
+            }
+            directories[0].path()
+        };
+        install_custom_skill_directory_at(skills_root, &source)
+    })();
+    if extraction.exists() {
+        let _ = fs::remove_dir_all(&extraction);
+    }
+    result
+}
+
 fn collect_custom_skill_upload_files(
     root: &Path,
     directory: &Path,
@@ -462,6 +548,17 @@ fn install_custom_skill_directory(
 ) -> Result<CustomSkillState, String> {
     let installed =
         install_custom_skill_directory_at(&user_skills_root(&app)?, Path::new(&directory))?;
+    wait_for_skill_catalog_observation();
+    notify_skill_catalog_changed(&app);
+    Ok(installed)
+}
+
+#[tauri::command]
+fn install_custom_skill_archive(
+    app: tauri::AppHandle,
+    archive: Vec<u8>,
+) -> Result<CustomSkillState, String> {
+    let installed = install_custom_skill_archive_at(&user_skills_root(&app)?, archive)?;
     wait_for_skill_catalog_observation();
     notify_skill_catalog_changed(&app);
     Ok(installed)
@@ -2015,6 +2112,7 @@ pub fn run() {
             uninstall_marketplace_skill,
             install_custom_skill,
             install_custom_skill_directory,
+            install_custom_skill_archive,
             uninstall_custom_skill,
             list_custom_skills,
             read_analysis_view,
