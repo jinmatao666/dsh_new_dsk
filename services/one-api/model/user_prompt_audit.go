@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/songquanpeng/one-api/common/helper"
@@ -45,6 +46,7 @@ type UserPromptAudit struct {
 	// group the administrator's prompt audit; the conversation itself remains
 	// on the user's local desktop and is never uploaded here.
 	SessionId        string `json:"session_id" gorm:"type:varchar(256);index;default:''"`
+	TurnId           string `json:"turn_id" gorm:"type:varchar(320);index;default:''"`
 	RequestId        string `json:"request_id" gorm:"uniqueIndex;default:''"`
 	Question         string `json:"question" gorm:"type:text"`
 	Status           string `json:"status" gorm:"index;default:'processing'"`
@@ -86,21 +88,50 @@ func IsUserPromptAuditQuestion(value string) bool {
 
 // StartUserPromptAudit 在请求真正发送给上游前记录本次用户问题，保证上游异常时
 // 仍然保留可追溯的问题文本。
-func StartUserPromptAudit(ctx context.Context, userId, channelId int, modelName, sessionId, question string) {
+func StartUserPromptAudit(
+	ctx context.Context,
+	userId, channelId int,
+	modelName, sessionId string,
+	questionOrdinal int,
+	question string,
+) {
 	question = trimAuditText(question, 20000)
 	sessionId = trimAuditText(sessionId, 256)
 	if !IsUserPromptAuditQuestion(question) || userId == 0 {
 		return
 	}
 	now := helper.GetTimestamp()
+	turnId := ""
+	if sessionId != "" && questionOrdinal > 0 {
+		turnId = sessionId + ":" + fmt.Sprintf("%d", questionOrdinal)
+		var existing UserPromptAudit
+		if err := DB.Where("user_id = ? AND turn_id = ?", userId, turnId).First(&existing).Error; err == nil {
+			updates := map[string]any{
+				"updated_at": now, "channel_id": channelId, "model_name": modelName,
+				"request_id": helper.GetRequestID(ctx), "status": "processing", "error_message": "",
+			}
+			if err := DB.Model(&existing).Updates(updates).Error; err != nil {
+				logger.Errorf(ctx, "failed to continue user prompt audit: %s", err.Error())
+			}
+			return
+		} else if err != gorm.ErrRecordNotFound {
+			logger.Errorf(ctx, "failed to find user prompt audit turn: %s", err.Error())
+			return
+		}
+	}
+	username := GetUsernameById(userId)
+	if names := resolveUsernamesByLocalUsers([]int{userId}); names[userId] != "" {
+		username = names[userId]
+	}
 	audit := &UserPromptAudit{
 		CreatedAt: now,
 		UpdatedAt: now,
 		UserId:    userId,
-		Username:  GetUsernameById(userId),
+		Username:  username,
 		ChannelId: channelId,
 		ModelName: modelName,
 		SessionId: sessionId,
+		TurnId:    turnId,
 		RequestId: helper.GetRequestID(ctx),
 		Question:  question,
 		Status:    "processing",
@@ -120,10 +151,10 @@ func FinishUserPromptAudit(ctx context.Context, status, errorMessage string, quo
 		"updated_at":        helper.GetTimestamp(),
 		"status":            status,
 		"error_message":     trimAuditText(errorMessage, 2000),
-		"quota":             quota,
-		"prompt_tokens":     promptTokens,
-		"completion_tokens": completionTokens,
-		"elapsed_time":      elapsedTime,
+		"quota":             gorm.Expr("quota + ?", quota),
+		"prompt_tokens":     gorm.Expr("prompt_tokens + ?", promptTokens),
+		"completion_tokens": gorm.Expr("completion_tokens + ?", completionTokens),
+		"elapsed_time":      gorm.Expr("elapsed_time + ?", elapsedTime),
 	}
 	if err := DB.Model(&UserPromptAudit{}).Where("request_id = ?", requestId).Updates(updates).Error; err != nil {
 		logger.Errorf(ctx, "failed to finish user prompt audit: %s", err.Error())
@@ -154,5 +185,27 @@ func GetUserPromptAudits(keyword string, startIdx, num int) (audits []*UserPromp
 	if err != nil {
 		return nil, 0, err
 	}
+	overlayUserPromptAuditUsernames(audits)
 	return audits, total, nil
+}
+
+func overlayUserPromptAuditUsernames(audits []*UserPromptAudit) {
+	userIDs := make([]int, 0, len(audits))
+	seen := make(map[int]struct{}, len(audits))
+	for _, audit := range audits {
+		if audit == nil || audit.UserId == 0 {
+			continue
+		}
+		if _, ok := seen[audit.UserId]; ok {
+			continue
+		}
+		seen[audit.UserId] = struct{}{}
+		userIDs = append(userIDs, audit.UserId)
+	}
+	nameByUser := resolveUsernamesByLocalUsers(userIDs)
+	for _, audit := range audits {
+		if name := nameByUser[audit.UserId]; name != "" {
+			audit.Username = name
+		}
+	}
 }

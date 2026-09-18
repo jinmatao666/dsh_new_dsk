@@ -33,6 +33,9 @@ func TestLatestUserQuestionKeepsLatestUserText(t *testing.T) {
 	}
 
 	require.Equal(t, "最新问题", latestUserQuestion(request))
+	question, ordinal := latestUserQuestionAndOrdinal(request)
+	require.Equal(t, "最新问题", question)
+	require.Equal(t, 2, ordinal)
 }
 
 func TestLatestUserQuestionSkipsRuntimeContextSnapshot(t *testing.T) {
@@ -55,4 +58,6 @@ func TestLatestUserQuestionSkipsSkillContent(t *testing.T) {
 	}
 
 	require.Equal(t, "请验证刚安装的技能", latestUserQuestion(request))
+	_, ordinal := latestUserQuestionAndOrdinal(request)
+	require.Equal(t, 1, ordinal)
 }

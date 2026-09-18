@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
-import { Button, Modal, Table, Tag, TextArea } from '@douyinfe/semi-ui';
+import { Modal, Table, Tag, TextArea } from '@douyinfe/semi-ui';
 import SkillBrowseDrawer from './SkillBrowseDrawer';
 import { API, showError, showSuccess, timestamp2string } from '../helpers';
 import './SkillsTable.css';
@@ -109,12 +109,12 @@ const SkillReviewTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       render: value => { const entry = STATUS[value] || [value || '-', 'grey']; return <Tag color={entry[1]}>{entry[0]}</Tag>; }
     },
     {
-      title: '操作', width: 210,
+      title: '操作', width: 160,
       render: (_, skill) => <div className='skill-review-actions'>
-        <Button type='tertiary' onClick={() => setBrowse({ visible: true, skill })}>浏览</Button>
+        <button type='button' className='skill-text-action' onClick={() => setBrowse({ visible: true, skill })}>浏览</button>
         {skill.review_status === 'pending' && <>
-          <Button theme='solid' type='primary' onClick={() => approve(skill)}>通过</Button>
-          <Button type='danger' onClick={() => { setRejecting(skill); setReason(''); }}>驳回</Button>
+          <button type='button' className='skill-text-action' onClick={() => approve(skill)}>通过</button>
+          <button type='button' className='skill-text-action danger' onClick={() => { setRejecting(skill); setReason(''); }}>驳回</button>
         </>}
       </div>
     }

@@ -849,7 +849,7 @@
 .skill-review-identity { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
 .skill-review-identity strong { overflow: hidden; color: #17335d; text-overflow: ellipsis; white-space: nowrap; }
 .skill-review-identity span { overflow: hidden; color: #86a0c2; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.skill-review-actions { display: flex; align-items: center; gap: 6px; }
+.skill-review-actions { display: flex; align-items: center; gap: 2px; white-space: nowrap; }
 .skill-review-reject-copy { margin: 0 0 12px; color: #667f9f; line-height: 1.6; }
 
 .skill-list-heading { display: flex; min-width: 0; align-items: center; gap: 18px; }

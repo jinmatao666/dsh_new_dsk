@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { browseMarketplaceCatalog, buildMarketplaceCatalog, buildMarketplaceCategories, publishedSkillCategories } from '../src/client/catalog.ts'
+import {
+  browseMarketplaceCatalog,
+  buildMarketplaceCatalog,
+  buildMarketplaceCategories,
+  filterPersonalSkillUploads,
+  publishedSkillCategories,
+} from '../src/client/catalog.ts'
 
 describe('marketplace skill catalog', () => {
   it('shows only local skills while the server catalog is unavailable', () => {
@@ -25,6 +31,27 @@ describe('marketplace skill catalog', () => {
       marketplacePublished?: boolean
       reviewStatus?: string
     }>([pending, privateSkill, approved])).toEqual([approved])
+  })
+})
+
+describe('personal skill uploads', () => {
+  const uploads = [
+    { id: 'private', visibility: 'private' as const, reviewStatus: 'none' as const },
+    { id: 'pending', visibility: 'public' as const, reviewStatus: 'pending' as const },
+    { id: 'rejected', visibility: 'public' as const, reviewStatus: 'rejected' as const },
+    { id: 'approved', visibility: 'public' as const, reviewStatus: 'approved' as const },
+  ]
+
+  it('separates approved public skills from private skills', () => {
+    expect(filterPersonalSkillUploads(uploads, 'public').map(skill => skill.id)).toEqual(['approved'])
+    expect(filterPersonalSkillUploads(uploads, 'private').map(skill => skill.id)).toEqual(['private'])
+  })
+
+  it('keeps public submission history filterable by review status', () => {
+    expect(filterPersonalSkillUploads(uploads, 'reviews').map(skill => skill.id))
+      .toEqual(['pending', 'rejected', 'approved'])
+    expect(filterPersonalSkillUploads(uploads, 'reviews', 'rejected').map(skill => skill.id))
+      .toEqual(['rejected'])
   })
 })
 

@@ -213,12 +213,13 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 
 // latestUserQuestion 仅提取本次请求最后一条用户文本，不记录图片附件、工具返回或
 // 系统提示，避免把完整会话上下文复制进审计库。
-func latestUserQuestion(request *relaymodel.GeneralOpenAIRequest) string {
+func latestUserQuestionAndOrdinal(request *relaymodel.GeneralOpenAIRequest) (string, int) {
 	if request == nil {
-		return ""
+		return "", 0
 	}
-	for i := len(request.Messages) - 1; i >= 0; i-- {
-		message := request.Messages[i]
+	question := ""
+	ordinal := 0
+	for _, message := range request.Messages {
 		if message.Role == "user" {
 			text := strings.TrimSpace(message.StringContent())
 			// DSH 新会话首条消息会使用 OpenAI Responses 风格的
@@ -233,18 +234,24 @@ func latestUserQuestion(request *relaymodel.GeneralOpenAIRequest) string {
 			// message，不能作为用户问题写进长期审计。跳过后继续向前
 			// 查找本次请求中的真实用户文本。
 			if model.IsUserPromptAuditQuestion(text) {
-				return text
+				ordinal++
+				question = text
 			}
 		}
 	}
-	return ""
+	return question, ordinal
+}
+
+func latestUserQuestion(request *relaymodel.GeneralOpenAIRequest) string {
+	question, _ := latestUserQuestionAndOrdinal(request)
+	return question
 }
 
 // auditSessionID reads the per-request desktop session marker. The header is
 // emitted by the local DSH sidecar and is deliberately independent from the
 // OneAPI request id, which changes for every model call within one session.
 func auditSessionID(c *gin.Context) string {
-	for _, header := range []string{"X-DSH-Session-Id", "X-Session-Id", "Session-Id"} {
+	for _, header := range []string{"X-DeepSeek-Harness-Session-Id", "X-DSH-Session-Id", "X-Session-Id", "Session-Id"} {
 		if value := strings.TrimSpace(c.GetHeader(header)); value != "" {
 			return value
 		}
