@@ -69,7 +69,7 @@ function FileImportAction(props: FileImportProps) {
       setError(undefined)
       void nativeImport('import_dropped_workspace_files', workspacePath)
         .then(append)
-        .catch((reason) => { setError(reason instanceof Error ? reason.message : String(reason)) })
+        .catch((reason: unknown) => { setError(reason instanceof Error ? reason.message : String(reason)) })
         .finally(() => { setBusy(false) })
     }
     window.addEventListener('dsh:native-file-drop', drop)
@@ -96,17 +96,30 @@ function WanweiBrandName() {
   return <span className="wanwei-product-wordmark" aria-label="万维 Buddy">万维 <strong>Buddy</strong></span>
 }
 
+function WanweiHeroBrand() {
+  return (
+    <div className="wanwei-product-hero-brand" aria-label="Wanwei Buddy preview">
+      <WanweiBrandMark size={56} className="wanwei-product-hero-mark" />
+      <WanweiBrandName />
+      <span className="wanwei-product-hero-badge">预览版</span>
+      <span className="wanwei-product-hero-subtitle">专业智能助手</span>
+    </div>
+  )
+}
+
 export const inject = ['slots']
 
 /** Installs only Wanwei-owned occupants; official DSH packages stay untouched. */
 export function apply(ctx: Context): void {
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.inject('sidebar.brand.name', () =>
-      ctx.slots.inject('conversation.hero.brand.mark', function* () {
-        yield ctx.slots.register({ name: 'sidebar.brand.mark' }, WanweiBrandMark)
-        yield ctx.slots.register({ name: 'sidebar.brand.name' }, WanweiBrandName)
-        yield ctx.slots.register({ name: 'conversation.hero.brand.mark' }, WanweiBrandMark)
-      })))
+      ctx.slots.inject('conversation.hero.brand', () =>
+        ctx.slots.inject('conversation.hero.brand.mark', function* () {
+          yield ctx.slots.register({ name: 'sidebar.brand.mark' }, WanweiBrandMark)
+          yield ctx.slots.register({ name: 'sidebar.brand.name' }, WanweiBrandName)
+          yield ctx.slots.register({ name: 'conversation.hero.brand' }, WanweiHeroBrand)
+          yield ctx.slots.register({ name: 'conversation.hero.brand.mark' }, WanweiBrandMark)
+        }))))
   ctx.slots.inject('conversation.input.left', () =>
     ctx.slots.register({ name: 'conversation.input.left', id: 'wanwei-file-import', order: -100 }, FileImportAction))
 }

@@ -112,17 +112,22 @@ export interface HeroShellProps {
  * @returns the centered hero element tree.
  */
 export function HeroShell({ t, renderSlot, children }: HeroShellProps) {
+  const productBrand = renderSlot('conversation.hero.brand', {})
   return (
     <div className={css.root}>
       <div className={css.stack}>
         <div className={css.headline}>
-          <span className={css.fishHitbox}>
-            {renderSlot('conversation.hero.brand.mark', { size: 34, className: css.fish }, {
-              fallback: <FishLogo size={34} className={css.fish} />,
-            })}
-          </span>
-          <span className={css.headlineText}>{t('hero.headline')}</span>
-          <span className={css.previewBadge}>{t('hero.preview')}</span>
+          {productBrand ?? (
+            <>
+              <span className={css.fishHitbox}>
+                {renderSlot('conversation.hero.brand.mark', { size: 34, className: css.fish }, {
+                  fallback: <FishLogo size={34} className={css.fish} />,
+                })}
+              </span>
+              <span className={css.headlineText}>{t('hero.headline')}</span>
+              <span className={css.previewBadge}>{t('hero.preview')}</span>
+            </>
+          )}
         </div>
         <div className={css.body}>
           {/* The composer remains mounted outside this component. */}
