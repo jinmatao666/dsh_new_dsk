@@ -1475,8 +1475,10 @@ fn server_config(resource_dir: &Path) -> Result<ServerConfig, String> {
     Ok(config)
 }
 
+const DESKTOP_RUNTIME_DIR: &str = env!("DSH_DESKTOP_RUNTIME_DIR");
+
 fn production_runtime(resource_dir: &Path) -> PathBuf {
-    bundled_resource(resource_dir, "runtime")
+    bundled_resource(resource_dir, DESKTOP_RUNTIME_DIR)
 }
 
 fn production_command(resource_dir: &Path) -> (PathBuf, PathBuf, Vec<String>) {

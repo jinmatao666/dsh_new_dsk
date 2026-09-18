@@ -24,8 +24,7 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "resources/server.json",
-      "resources/runtime/**/*"
+      "resources/**/*"
     ],
     "windows": {
       "nsis": {

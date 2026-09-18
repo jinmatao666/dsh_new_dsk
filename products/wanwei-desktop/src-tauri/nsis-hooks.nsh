@@ -1,6 +1,6 @@
-; Close only the preview application before replacing its executable and
-; versioned runtime. The existing production Wanwei Buddy remains untouched
-; while the new-version branch is under evaluation.
+; Each release writes its runtime into a versioned resource directory, so an
+; orphaned Node sidecar cannot block replacement of Sharp's native DLL. Close
+; only the preview shell; the existing production Wanwei Buddy stays untouched.
 !macro WANWEI_PREVIEW_STOP_RUNNING_APP
   nsExec::Exec 'taskkill.exe /F /T /IM "wanwei-buddy-preview.exe"'
   Pop $0

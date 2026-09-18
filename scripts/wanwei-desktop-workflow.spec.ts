@@ -62,14 +62,18 @@ describe('Wanwei desktop preview workflow', () => {
       'Stage self-contained runtime',
       'Restore installer build dependencies',
       'Verify staged runtime and sidecar',
+      'Clear stale installer outputs',
       'Build platform installer',
     ]))
     const stageIndex = steps.findIndex(step => step.name === 'Stage self-contained runtime')
     const restoreIndex = steps.findIndex(step => step.name === 'Restore installer build dependencies')
+    const clearIndex = steps.findIndex(step => step.name === 'Clear stale installer outputs')
     const installerIndex = steps.findIndex(step => step.name === 'Build platform installer')
     expect(steps[restoreIndex]?.run).toBe('pnpm install --frozen-lockfile --ignore-scripts')
+    expect(steps[clearIndex]?.run).toContain("rmSync('products/wanwei-desktop/src-tauri/target/release/bundle'")
     expect(stageIndex).toBeLessThan(restoreIndex)
     expect(restoreIndex).toBeLessThan(installerIndex)
+    expect(clearIndex).toBeLessThan(installerIndex)
     expect(JSON.stringify(steps)).toContain('bundle/nsis/*.exe')
     expect(JSON.stringify(steps)).toContain('bundle/dmg/*.dmg')
     expect(JSON.stringify(steps)).toContain('bundle/deb/*.deb')
@@ -104,6 +108,8 @@ describe('Wanwei desktop preview workflow', () => {
   it('disables lifecycle scripts in the nested production runtime install', () => {
     const runtimeScript = readFileSync(runtimeScriptPath, 'utf8')
     expect(runtimeScript).toContain("npm_config_ignore_scripts: 'true'")
+    expect(runtimeScript).toContain('`runtime-${releaseVersion}`')
+    expect(runtimeScript).toContain("entry.name.startsWith('runtime-')")
   })
 
   it.each([

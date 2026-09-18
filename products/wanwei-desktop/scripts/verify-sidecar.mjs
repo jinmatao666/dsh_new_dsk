@@ -8,7 +8,11 @@ const productRoot = resolve(import.meta.dirname, '..')
 const repositoryRoot = resolve(productRoot, '..', '..')
 const dshHome = await mkdtemp(join(tmpdir(), 'wanwei-desktop-sidecar-'))
 const staged = process.argv.includes('--staged')
-const runtimeRoot = join(productRoot, 'src-tauri', 'resources', 'runtime')
+const releaseVersion = process.env.DSH_RELEASE_VERSION?.trim() || '0.1.0'
+if (!/^[0-9A-Za-z][0-9A-Za-z.-]*$/u.test(releaseVersion)) {
+  throw new Error(`DSH_RELEASE_VERSION contains an unsupported runtime directory character: ${releaseVersion}`)
+}
+const runtimeRoot = join(productRoot, 'src-tauri', 'resources', `runtime-${releaseVersion}`)
 const program = staged
   ? join(runtimeRoot, process.platform === 'win32' ? 'node.exe' : 'node')
   : process.execPath

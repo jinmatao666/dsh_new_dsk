@@ -17,7 +17,12 @@ import process from 'node:process'
 
 const productRoot = resolve(import.meta.dirname, '..')
 const repositoryRoot = resolve(productRoot, '..', '..')
-const runtimeRoot = resolve(productRoot, 'src-tauri', 'resources', 'runtime')
+const releaseVersion = process.env.DSH_RELEASE_VERSION?.trim() || '0.1.0'
+if (!/^[0-9A-Za-z][0-9A-Za-z.-]*$/u.test(releaseVersion)) {
+  throw new Error(`DSH_RELEASE_VERSION contains an unsupported runtime directory character: ${releaseVersion}`)
+}
+const resourcesRoot = resolve(productRoot, 'src-tauri', 'resources')
+const runtimeRoot = resolve(resourcesRoot, `runtime-${releaseVersion}`)
 const appRoot = resolve(runtimeRoot, 'app')
 const nodeTarget = join(runtimeRoot, process.platform === 'win32' ? 'node.exe' : 'node')
 
@@ -25,7 +30,11 @@ assertDescendant(runtimeRoot, appRoot)
 if (Number(process.versions.node.split('.')[0]) < 22) {
   throw new Error(`Wanwei desktop runtime requires Node 22+, got ${process.version}`)
 }
-if (existsSync(appRoot)) rmSync(appRoot, { recursive: true, force: true })
+for (const entry of readdirSync(resourcesRoot, { withFileTypes: true })) {
+  if (entry.isDirectory() && (entry.name === 'runtime' || entry.name.startsWith('runtime-'))) {
+    rmSync(join(resourcesRoot, entry.name), { recursive: true, force: true })
+  }
+}
 mkdirSync(runtimeRoot, { recursive: true })
 
 run('corepack', [

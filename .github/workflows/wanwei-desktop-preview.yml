@@ -77,7 +77,32 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+          sudo apt-get install --yes \
+            build-essential \
+            curl \
+            desktop-file-utils \
+            file \
+            libayatana-appindicator3-dev \
+            libfuse2 \
+            libgdk-pixbuf-2.0-dev \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            musl \
+            patchelf \
+            pkg-config \
+            squashfs-tools \
+            wget \
+            xdg-utils \
+            zsync
+          # The staged runtime contains a static musl launcher. linuxdeploy
+          # looks up its interpreter marker as a shared-library SONAME, while
+          # Ubuntu exposes musl under the loader path below.
+          sudo ln -sf /lib/ld-musl-x86_64.so.1 /usr/lib/x86_64-linux-gnu/libc.musl-x86_64.so.1
+          sudo ldconfig
 
       - name: Cache Rust and Tauri output
         uses: actions/cache@v4
@@ -113,8 +138,43 @@ jobs:
       - name: Verify staged runtime and sidecar
         run: pnpm --dir products/wanwei-desktop run check:runtime
 
+      # The target directory is cached to speed up Rust compilation, but bundle
+      # outputs are versioned artifacts and must never survive between runs.
+      - name: Clear stale installer outputs
+        run: |
+          node -e "require('node:fs').rmSync('products/wanwei-desktop/src-tauri/target/release/bundle', { recursive: true, force: true })"
+
       - name: Build platform installer
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.platform == 'linux-x64' && '1' || '' }}
+          NO_STRIP: ${{ matrix.platform == 'linux-x64' && '1' || '' }}
+          RUST_LOG: ${{ matrix.platform == 'linux-x64' && 'tauri_bundler=debug' || '' }}
         run: pnpm --dir products/wanwei-desktop run build:runner:bundle --bundles ${{ matrix.bundles }} --config "${{ runner.temp }}/wanwei-preview-${{ matrix.platform }}.json"
+
+      - name: Diagnose Linux AppImage bundler
+        if: ${{ failure() && matrix.platform == 'linux-x64' }}
+        shell: bash
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+          NO_STRIP: '1'
+        run: |
+          bundle_dir="products/wanwei-desktop/src-tauri/target/release/bundle"
+          app_dir="$(find "$bundle_dir/appimage" -maxdepth 1 -type d -name '*.AppDir' -print -quit 2>/dev/null || true)"
+          linuxdeploy="$(find "$HOME/.cache/tauri" -maxdepth 1 -type f -name 'linuxdeploy-x86_64.AppImage' -print -quit 2>/dev/null || true)"
+          echo "::group::Linux AppImage environment"
+          command -v desktop-file-validate || true
+          command -v mksquashfs || true
+          command -v zsyncmake || true
+          find "$bundle_dir" -maxdepth 3 -type f -print 2>/dev/null || true
+          echo "::endgroup::"
+          if [ -z "$linuxdeploy" ] || [ -z "$app_dir" ]; then
+            echo "linuxdeploy or the generated AppDir is missing; see the file list above."
+            exit 0
+          fi
+          echo "::group::linuxdeploy direct diagnostic"
+          "$linuxdeploy" --appimage-extract-and-run --verbosity 3 \
+            --appdir "$app_dir" --plugin gtk --output appimage || true
+          echo "::endgroup::"
 
       - name: Upload Windows preview installer
         if: ${{ matrix.platform == 'windows-x64' }}
