@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  downloadUrl, SessionLogDownloadController, sessionLogZipFilename,
+  downloadUrl, saveArchiveInDesktop, SessionLogDownloadController, sessionLogZipFilename,
 } from '../src/client/controller.ts'
 
 const SID = 'session-export-controller' as SessionId
@@ -10,6 +10,7 @@ const SID = 'session-export-controller' as SessionId
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  Reflect.deleteProperty(window, '__ZJUGIS_NATIVE_INVOKE__')
 })
 
 describe('SessionLogDownloadController', () => {
@@ -133,6 +134,18 @@ describe('SessionLogDownloadController', () => {
 })
 
 describe('browser download helpers', () => {
+  it('saves archive bytes through the stable desktop bridge', async () => {
+    const invoke = vi.fn(async () => 'C:\\Users\\example\\Downloads\\archive.zip')
+    Object.defineProperty(window, '__ZJUGIS_NATIVE_INVOKE__', {
+      value: invoke, configurable: true,
+    })
+
+    await expect(saveArchiveInDesktop(new Blob(['zip']), 'archive.zip')).resolves.toBe(true)
+    expect(invoke).toHaveBeenCalledWith('save_session_log_archive', {
+      fileName: 'archive.zip', bytes: [122, 105, 112],
+    })
+  })
+
   it('sanitizes the archive filename and hands the URL to a download anchor', () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 

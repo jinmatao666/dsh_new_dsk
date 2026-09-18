@@ -25,7 +25,8 @@ import {
   fitProducedFiles, ProducedFiles, type ProducedFilesInjected, type ProducedFilesProps,
 } from '../src/client/ProducedFiles.tsx'
 import {
-  basename, deliverablesDefinition, producedFileMentions, producedForClosing, selectProducedFiles,
+  basename, deliverablesDefinition, producedFileMentions, producedForClosing, runtimeDeliverablePaths,
+  selectProducedFiles,
   type DeliverablesTurnData,
 } from '../src/client/turn-deliverables.ts'
 import { apply, inject } from '../src/client/index.ts'
@@ -175,6 +176,21 @@ function deliverablesOf(value: ConversationNodeAssembler, turn = 1): Readonly<De
 }
 
 describe('produced-file Turn data', () => {
+  it('reads office artifacts and analysis views from runtime output', () => {
+    const marker = `WANWEI_RESULT=${JSON.stringify({
+      success: true,
+      artifacts: [
+        { path: 'E:\\workspace\\summary.xlsx' },
+        { path: 'E:\\workspace\\helper.py' },
+      ],
+    })}`
+    expect(runtimeDeliverablePaths(`${marker}\nDSH_ANALYSIS_VIEW=E:\\workspace\\city-analysis-view_20260917_120000_001.json`))
+      .toEqual([
+        'E:\\workspace\\summary.xlsx',
+        'E:\\workspace\\city-analysis-view_20260917_120000_001.json',
+      ])
+  })
+
   it('deduplicates paths in first-seen order and stops at the closing Assistant seq', () => {
     const data = produced(
       [3, 'out/index.html'],

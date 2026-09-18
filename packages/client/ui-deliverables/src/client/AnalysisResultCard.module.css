@@ -1,0 +1,22 @@
+.root { margin-top: 16px; overflow: hidden; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; background: var(--dsw-alias-bg-base); }
+.heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 16px; }
+.kicker { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.heading h3 { margin: 2px 0 0; color: var(--dsw-alias-label-primary); font-size: 16px; }
+.actions { display: flex; flex: 0 0 auto; gap: 8px; }
+.actions button, .expand { border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 5px 9px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 0; padding: 0 16px 14px; }
+.metrics div, .section, .conclusion { padding: 10px; border-radius: 8px; background: var(--dsw-alias-interactive-bg-hover); }
+.metrics dt { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.metrics dd { margin: 4px 0 0; color: var(--dsw-alias-label-primary); font-weight: 600; }
+.tabs { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--dsw-alias-border-l2); }
+.tab, .tabActive { padding: 8px 10px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; }
+.tabActive { border-bottom-color: #7c3aed; color: var(--dsw-alias-label-primary); font-weight: 600; }
+.tableWrap { max-height: 320px; overflow: auto; }
+.tableWrap table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 13px; }
+.tableWrap th, .tableWrap td { min-width: 110px; padding: 9px 12px; border-bottom: 1px solid var(--dsw-alias-border-l2); text-align: left; }
+.tableWrap th { position: sticky; top: 0; background: var(--dsw-alias-interactive-bg-hover); }
+.expand { display: block; margin: 12px auto; }
+.sections { display: grid; gap: 12px; padding: 16px; border-top: 1px solid var(--dsw-alias-border-l2); }
+.conclusion { border-left: 3px solid #7c3aed; }
+.section h4, .conclusion h4 { margin: 0 0 8px; }
+.section ul, .conclusion ul { margin: 0; padding-left: 20px; }

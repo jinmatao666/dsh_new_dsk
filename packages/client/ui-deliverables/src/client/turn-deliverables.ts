@@ -102,6 +102,61 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+const OFFICE_RESULT_PREFIX = 'WANWEI_RESULT='
+const PROCESS_FILE_EXTENSIONS = new Set([
+  'py', 'pyw', 'ps1', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'sh', 'bat', 'cmd',
+])
+
+function isUserDeliverable(path: string): boolean {
+  const name = basename(path)
+  const extension = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLocaleLowerCase() : ''
+  return !PROCESS_FILE_EXTENSIONS.has(extension)
+}
+
+/** Extract explicit office and analysis artifacts from successful tool output. */
+export function runtimeDeliverablePaths(text: string): readonly string[] {
+  const paths: string[] = []
+  let officeMarkerSeen = false
+  for (const line of text.split(/\r?\n/u)) {
+    const trimmed = line.trimStart()
+    if (!trimmed.startsWith(OFFICE_RESULT_PREFIX)) continue
+    try {
+      const value: unknown = JSON.parse(trimmed.slice(OFFICE_RESULT_PREFIX.length))
+      if (!isRecord(value)) continue
+      officeMarkerSeen = true
+      if (value.success === false || !Array.isArray(value.artifacts)) continue
+      for (const artifact of value.artifacts) {
+        if (!isRecord(artifact) || typeof artifact.path !== 'string') continue
+        const path = artifact.path.trim()
+        if (path !== '' && isUserDeliverable(path)) paths.push(path)
+      }
+    } catch {
+      // A malformed marker does not hide a later valid marker.
+    }
+  }
+  const analysis = [...text.matchAll(/DSH_ANALYSIS_VIEW=([^\r\n]+)/gu)]
+    .map(match => match[1]?.trim() ?? '')
+    .filter(path => /(?:-analysis-view_|分析视图_|审查视图_)\d{8}_\d{6}_\d{3}\.json$/u.test(basename(path)))
+  if (officeMarkerSeen) return [...new Set([...paths, ...analysis])]
+
+  const generatedLines = text.split(/\r?\n/u)
+    .filter(line => /(?:created|generated|saved|written|output|deliverable|生成|已生成|保存|写入|输出|交付)/iu.test(line))
+    .join('\n')
+  /* oxlint-disable sonarjs/duplicates-in-character-class -- path separators and shell punctuation are intentional. */
+  const discovered = [...generatedLines.matchAll(
+    /(?:[A-Za-z]:[\\/][^\r\n"'`<>|]*?\.(?:docx|xlsx|pptx|pdf|json|md|csv|html)|[^\s"'`<>|:]+\.(?:docx|xlsx|pptx|pdf|json|md|csv|html))/giu,
+  )].map(match => match[0].replace(/[),.;:]+$/u, '').trim())
+  /* oxlint-enable sonarjs/duplicates-in-character-class */
+  return [...new Set([...discovered.filter(isUserDeliverable), ...analysis])]
+}
+
+function toolResultText(result: { content: readonly unknown[] }): string {
+  return result.content.flatMap((block) => {
+    if (!isRecord(block) || block.type !== 'text' || typeof block.text !== 'string') return []
+    return [block.text]
+  }).join('\n')
+}
+
 /**
  * Files produced by one Turn data value.
  *
@@ -173,9 +228,13 @@ export const deliverablesDefinition: ConversationNodeDefinition<DeliverablesStat
     if (result.isError === true) return context.state
     const callId = String(match.event.data.message.source.callId)
     const path = context.state.calls.get(callId)
-    return path === null || path === undefined
+    const runtimePaths = runtimeDeliverablePaths(toolResultText(result))
+    const additions = [path, ...runtimePaths]
+      .filter((value): value is string => value !== null && value !== undefined)
+      .map(value => ({ seq: match.event.seq, path: value }))
+    return additions.length === 0
       ? context.state
-      : { ...context.state, produced: [...context.state.produced, { seq: match.event.seq, path }] }
+      : { ...context.state, produced: [...context.state.produced, ...additions] }
   },
   buildLocationData: (context, scope) => scope !== 'turn' || context.state === undefined
     ? null

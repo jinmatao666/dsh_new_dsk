@@ -20,6 +20,22 @@ export interface SessionLogDownloadState {
 
 type Fetch = (input: string | URL, init?: RequestInit) => Promise<Response>
 type Save = (url: string, filename: string) => void
+type DesktopSave = (archive: Blob, filename: string) => Promise<boolean>
+
+type DesktopBridge = { core?: { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> } }
+type DesktopInternals = { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> }
+type DesktopStableBridge = (command: string, argumentsValue?: unknown) => Promise<unknown>
+
+function desktopInvoke(): DesktopStableBridge | undefined {
+  const desktopWindow = window as Window & {
+    __TAURI__?: DesktopBridge
+    __TAURI_INTERNALS__?: DesktopInternals
+    __ZJUGIS_NATIVE_INVOKE__?: DesktopStableBridge
+  }
+  return desktopWindow.__ZJUGIS_NATIVE_INVOKE__
+    ?? desktopWindow.__TAURI__?.core?.invoke
+    ?? desktopWindow.__TAURI_INTERNALS__?.invoke
+}
 
 const INITIAL: SessionLogDownloadState = { bySession: {} }
 
@@ -42,6 +58,15 @@ export function downloadUrl(url: string, filename: string): void {
   anchor.href = url
   anchor.download = filename
   anchor.click()
+}
+
+/** Save downloaded bytes through the desktop shell when one is present. */
+export async function saveArchiveInDesktop(archive: Blob, filename: string): Promise<boolean> {
+  const invoke = desktopInvoke()
+  if (typeof invoke !== 'function') return false
+  const bytes = Array.from(new Uint8Array(await archive.arrayBuffer()))
+  await invoke('save_session_log_archive', { fileName: filename, bytes })
+  return true
 }
 
 /** Resolve the browser's Host base with the connection carrier's null-origin fallback. */
@@ -69,6 +94,7 @@ export class SessionLogDownloadController {
   constructor(
     private readonly fetcher: Fetch = (input, init) => fetch(input, init),
     private readonly save: Save = downloadUrl,
+    private readonly desktopSave: DesktopSave = saveArchiveInDesktop,
   ) {}
 
   /**
@@ -115,12 +141,16 @@ export class SessionLogDownloadController {
       const url = new URL('/api/session.export', hostBase())
       url.searchParams.set('sessionId', sessionId)
       url.searchParams.set('includeDescendants', 'true')
-      const response = await this.fetcher(url, { method: 'HEAD', signal })
+      const desktop = desktopInvoke() !== undefined
+      const response = await this.fetcher(url, { method: desktop ? 'GET' : 'HEAD', signal })
       if (!response.ok) {
         const detail = await response.text().catch(() => '')
         throw new Error(`Export failed: HTTP ${response.status}${detail === '' ? '' : ` ${detail}`}`)
       }
-      this.save(url.toString(), sessionLogZipFilename(sessionId))
+      const filename = sessionLogZipFilename(sessionId)
+      if (!desktop || !await this.desktopSave(await response.blob(), filename)) {
+        this.save(url.toString(), filename)
+      }
       const open = this.store.getSnapshot().bySession[String(sessionId)]?.open ?? true
       this.publish(sessionId, { open, status: 'success', error: null })
     } catch (error: unknown) {

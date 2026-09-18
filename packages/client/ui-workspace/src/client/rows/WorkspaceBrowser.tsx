@@ -40,6 +40,16 @@ const SEARCH_QUERY_MAX_CODE_UNITS = 500
 /** Session rows visible per Workspace before the local overflow control. */
 const COLLAPSED_SESSION_LIMIT = 5
 
+type DesktopWindow = Window & {
+  __ZJUGIS_NATIVE_INVOKE__?: (command: string, argumentsValue?: unknown) => Promise<unknown>
+}
+
+async function desktopOpenWorkspaceDirectory(workspacePath: string): Promise<void> {
+  const invoke = (window as DesktopWindow).__ZJUGIS_NATIVE_INVOKE__
+  if (invoke === undefined) throw new Error('桌面端目录打开能力不可用')
+  await invoke('open_workspace_directory', { workspacePath })
+}
+
 /** Fold one Workspace without charging its provisional New Session against the ordinary-row limit. */
 function collapsedSessionRows(sessions: readonly SessionNode[]): {
   rows: readonly SessionNode[]
@@ -254,6 +264,8 @@ type SessionTreeProps = Pick<
   archivedSessionIds: readonly SessionNode['id'][]
   /** Open the browser-owned rename dialog for a real Workspace group. */
   onRenameRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
+  /** Open the Workspace directory through the desktop shell. */
+  onOpenWorkspace: (workspacePath: string) => void
   /** Open the browser-owned delete-confirmation dialog for a real Workspace group. */
   onDeleteRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
   /** Open the browser-owned session rename dialog. */
@@ -267,7 +279,7 @@ type SessionTreeProps = Pick<
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
 function SessionTree({
   useSessions, useSessionPendingInteraction, startSession, open, forkSession, workspaces, archivedSessionIds,
-  onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive,
+  onOpenWorkspace, onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive,
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
@@ -515,6 +527,9 @@ function SessionTree({
                 actions={group.workspaceId === undefined
                   ? undefined
                   : {
+                    open: () => {
+                      if (group.cwd !== undefined) onOpenWorkspace(group.cwd)
+                    },
                     rename: () => {
                     /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                       if (group.workspaceId !== undefined) onRenameRequest(group.workspaceId, group.label)
@@ -824,6 +839,7 @@ export function WorkspaceBrowser({
   renderSlot,
   t,
 }: WorkspaceBrowserProps) {
+  const [workspaceOpenError, setWorkspaceOpenError] = useState<string | null>(null)
   const home = useConnectionGeneration(generation => generation?.host.home)
   const workspaces = useWorkspaces(state => state.items)
   const workspacePhase = useWorkspaces(state => state.phase)
@@ -1201,6 +1217,9 @@ export function WorkspaceBrowser({
       {/* Always-mounted seat keeps the region's flex slot while the list
           itself is wide-only. */}
       <div className={css.listArea}>
+        {workspaceOpenError !== null && (
+          <div role="status">{t('workspace.open.failed', { message: workspaceOpenError })}</div>
+        )}
         {wide && (normalizedQuery !== ''
           ? (
             <SearchResults
@@ -1252,6 +1271,12 @@ export function WorkspaceBrowser({
                 orderBy={orderBy}
                 home={home}
                 t={t}
+                onOpenWorkspace={(workspacePath) => {
+                  setWorkspaceOpenError(null)
+                  void desktopOpenWorkspaceDirectory(workspacePath).catch((reason: unknown) => {
+                    setWorkspaceOpenError(reason instanceof Error ? reason.message : String(reason))
+                  })
+                }}
                 onRenameRequest={(workspaceId, currentTitle) => {
                   setRenameTarget({ workspaceId, currentTitle })
                   setRenameDraft(currentTitle)
