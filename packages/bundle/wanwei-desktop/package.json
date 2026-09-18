@@ -39,7 +39,11 @@
     }
   },
   "dependencies": {
-    "@deepseek-ai/dsh-wanwei-oneapi-auth": "workspace:^"
+    "@deepseek-ai/dsh-client-ui-skill-marketplace": "workspace:^",
+    "@deepseek-ai/dsh-document-local": "workspace:^",
+    "@deepseek-ai/dsh-vision": "workspace:^",
+    "@deepseek-ai/dsh-wanwei-oneapi-auth": "workspace:^",
+    "@deepseek-ai/dsh-wanwei-product-ui": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",

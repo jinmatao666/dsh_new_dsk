@@ -1,0 +1,19 @@
+:root {
+  --dsw-static-deepseek-50: rgb(247, 243, 255);
+  --dsw-static-deepseek-100: rgb(237, 228, 255);
+  --dsw-static-deepseek-200: rgb(222, 205, 255);
+  --dsw-static-deepseek-300: rgb(199, 170, 255);
+  --dsw-static-deepseek-400: rgb(166, 118, 245);
+  --dsw-static-deepseek-450: rgb(146, 92, 232);
+  --dsw-static-deepseek-500: rgb(126, 71, 208);
+  --dsw-static-deepseek-600: rgb(104, 55, 177);
+  --dsw-static-deepseek-700-delete: rgb(82, 42, 143);
+  --dsw-static-deepseek-800: rgb(63, 39, 91);
+  --dsw-static-deepseek-900: rgb(43, 29, 59);
+}
+.wanwei-product-wordmark { display:inline-flex;align-items:baseline;gap:4px;color:var(--dsw-static-deepseek-600);font-size:19px;font-weight:650;letter-spacing:-.4px;white-space:nowrap; }
+.wanwei-product-wordmark strong { color:var(--dsw-static-deepseek-450);font-weight:750; }
+.wanwei-product-file-input { display:none; }
+.wanwei-product-file-button { display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:9px;background:transparent;color:var(--dsw-alias-label-secondary);font:300 25px/1 sans-serif;cursor:pointer; }
+.wanwei-product-file-button:hover { background:var(--dsw-static-deepseek-100);color:var(--dsw-static-deepseek-600); }
+.wanwei-product-file-button:disabled { cursor:wait;opacity:.45; }

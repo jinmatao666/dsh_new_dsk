@@ -12,3 +12,14 @@
         defaultModel: !!js process.env.DSH_DEFAULT_MODEL
         installId: !!js process.env.DSH_INSTALL_ID
         developmentBypass: !!js process.env.DSH_DESKTOP_DEVELOPMENT === '1'
+    - id: wanwei-document-local
+      name: '@deepseek-ai/dsh-document-local'
+    - id: wanwei-vision
+      name: '@deepseek-ai/dsh-vision'
+      config:
+        baseURL: !!js process.env.DSH_ONEAPI_URL ?? 'http://127.0.0.1:3000'
+        credentialRef: DSH_ONEAPI_TOKEN
+    - id: wanwei-skill-marketplace
+      name: '@deepseek-ai/dsh-client-ui-skill-marketplace'
+    - id: wanwei-product-ui
+      name: '@deepseek-ai/dsh-wanwei-product-ui'

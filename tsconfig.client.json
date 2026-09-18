@@ -101,6 +101,8 @@
     { "path": "./packages/client/ui-session" },
     { "path": "./packages/client/web" },
     { "path": "./packages/wanwei/oneapi-auth/tsconfig.client.json" },
+    { "path": "./packages/client/ui-skill-marketplace" },
+    { "path": "./packages/wanwei/product-ui" },
     { "path": "./packages/context/file-reference" },
     { "path": "./apps/web" }
   ]
