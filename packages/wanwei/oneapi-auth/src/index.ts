@@ -107,6 +107,17 @@ interface QuestionReport {
   status?: unknown
   error?: unknown
 }
+interface PersonalSkillUploadFile { path: string; contentBase64: string }
+interface PersonalSkillSubmission {
+  slug: string
+  displayName: string
+  category: string
+  icon: string
+  description: string
+  visibility: 'private' | 'public'
+  body: string
+  files: PersonalSkillUploadFile[]
+}
 
 function internal(message: string): { ok: false; error: { code: 'internal'; message: string; details: Record<string, never> } } {
   return { ok: false, error: { code: 'internal', message, details: {} } }
@@ -155,8 +166,44 @@ function loginPayload(payload: unknown): LoginPayload {
   return { username: input.username.trim(), password: input.password }
 }
 
+function personalSkillSubmission(payload: unknown): PersonalSkillSubmission {
+  if (typeof payload !== 'object' || payload === null) throw new Error('个人技能上传参数无效')
+  const input = payload as Record<string, unknown>
+  const text = (key: string, max: number): string => {
+    const value = input[key]
+    if (typeof value !== 'string' || value.trim() === '') throw new Error(`个人技能字段 ${key} 不能为空`)
+    if (value.length > max) throw new Error(`个人技能字段 ${key} 过长`)
+    return value.trim()
+  }
+  if (input.visibility !== 'private' && input.visibility !== 'public') throw new Error('个人技能可见范围无效')
+  if (!Array.isArray(input.files) || input.files.length === 0 || input.files.length > 128) {
+    throw new Error('个人技能必须包含 1 至 128 个文件')
+  }
+  const files = input.files.map((entry): PersonalSkillUploadFile => {
+    if (typeof entry !== 'object' || entry === null) throw new Error('个人技能文件信息无效')
+    const file = entry as Record<string, unknown>
+    if (typeof file.path !== 'string' || file.path === '' || file.path.length > 512) throw new Error('个人技能文件路径无效')
+    if (typeof file.contentBase64 !== 'string' || file.contentBase64.length > 24 * 1024 * 1024) {
+      throw new Error(`个人技能文件 ${String(file.path)} 内容无效`)
+    }
+    return { path: file.path, contentBase64: file.contentBase64 }
+  })
+  const body = typeof input.body === 'string' ? input.body : ''
+  if (body.length > 1024 * 1024) throw new Error('SKILL.md 内容过大')
+  return {
+    slug: text('slug', 128),
+    displayName: text('displayName', 128),
+    category: text('category', 128),
+    icon: text('icon', 512),
+    description: typeof input.description === 'string' ? input.description.trim().slice(0, 4_000) : '',
+    visibility: input.visibility,
+    body,
+    files,
+  }
+}
+
 /** Narrow test seam for protocol-boundary parsing with no service access. */
-export const internals = { normalizedOrigin, sessionCookie, loginPayload }
+export const internals = { normalizedOrigin, sessionCookie, loginPayload, personalSkillSubmission }
 
 async function fetchModels(baseURL: string, token: string, signal?: AbortSignal): Promise<string[]> {
   const response = await fetch(`${baseURL}/v1/models`, {
@@ -329,6 +376,17 @@ export function apply(ctx: Context, config: Config): void {
     return jsonBody<unknown>(response)
   }
 
+  const listPublishedSkillCategories = async (signal?: AbortSignal): Promise<unknown> => {
+    const response = await fetch(`${baseURL}/api/skill-package/`, {
+      ...(signal === undefined ? {} : { signal }),
+    })
+    const result = await jsonBody<OneApiEnvelope<unknown[]>>(response)
+    if (!response.ok || result.success !== true) {
+      throw new Error(result.message ?? `技能分类暂时不可用（HTTP ${String(response.status)}）`)
+    }
+    return { items: Array.isArray(result.data) ? result.data : [] }
+  }
+
   const downloadPublishedSkillBundle = async (payload: unknown, signal?: AbortSignal): Promise<unknown> => {
     const id = typeof (payload as { id?: unknown })?.id === 'number' ? (payload as { id: number }).id : Number.NaN
     if (!Number.isInteger(id) || id < 1) throw new Error('技能标识无效')
@@ -355,6 +413,44 @@ export function apply(ctx: Context, config: Config): void {
     const result = await jsonBody<OneApiEnvelope<unknown>>(response)
     if (!response.ok || result.success !== true) throw new Error(result.message ?? `技能安装计数失败（HTTP ${String(response.status)}）`)
     return result.data
+  }
+
+  const submitPersonalSkill = async (payload: unknown, signal?: AbortSignal): Promise<unknown> => {
+    const input = personalSkillSubmission(payload)
+    const token = (await ctx.credentials.resolve(ref))?.value
+    if (token === undefined) throw new Error('请先登录后再上传个人技能')
+    const response = await fetch(`${baseURL}/api/personal-skill/submit`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: input.slug,
+        display_name: input.displayName,
+        category: input.category,
+        icon: input.icon,
+        description: input.description,
+        body: input.body,
+        assets: JSON.stringify({ schemaVersion: 1, files: input.files }),
+        visibility: input.visibility,
+        tags: ['个人'],
+      }),
+      ...(signal === undefined ? {} : { signal }),
+    })
+    const result = await jsonBody<OneApiEnvelope<unknown>>(response)
+    if (!response.ok || result.success !== true) {
+      throw new Error(result.message ?? `个人技能上传失败（HTTP ${String(response.status)}）`)
+    }
+    return result.data
+  }
+
+  const listPersonalSkills = async (signal?: AbortSignal): Promise<unknown> => {
+    const token = (await ctx.credentials.resolve(ref))?.value
+    if (token === undefined) throw new Error('请先登录后再读取个人技能')
+    const response = await fetch(`${baseURL}/api/personal-skill/?page=1&perPage=100`, {
+      headers: { authorization: `Bearer ${token}` },
+      ...(signal === undefined ? {} : { signal }),
+    })
+    if (!response.ok) throw new Error(`个人技能暂时不可用（HTTP ${String(response.status)}）`)
+    return jsonBody<unknown>(response)
   }
 
   // Credentials intentionally survive normal restarts, but a newly built
@@ -444,6 +540,13 @@ export function apply(ctx: Context, config: Config): void {
         return internal(error instanceof Error ? error.message : String(error))
       }
     }
+    if (endpoint === 'skill-categories') {
+      try {
+        return { ok: true as const, value: await listPublishedSkillCategories(signal) }
+      } catch (error) {
+        return internal(error instanceof Error ? error.message : String(error))
+      }
+    }
     if (endpoint === 'skill-bundle') {
       try {
         return { ok: true as const, value: await downloadPublishedSkillBundle(payload, signal) }
@@ -454,6 +557,20 @@ export function apply(ctx: Context, config: Config): void {
     if (endpoint === 'skill-download') {
       try {
         return { ok: true as const, value: await recordPublishedSkillInstall(payload, signal) }
+      } catch (error) {
+        return internal(error instanceof Error ? error.message : String(error))
+      }
+    }
+    if (endpoint === 'personal-skill-submit') {
+      try {
+        return { ok: true as const, value: await submitPersonalSkill(payload, signal) }
+      } catch (error) {
+        return internal(error instanceof Error ? error.message : String(error))
+      }
+    }
+    if (endpoint === 'personal-skill-list') {
+      try {
+        return { ok: true as const, value: await listPersonalSkills(signal) }
       } catch (error) {
         return internal(error instanceof Error ? error.message : String(error))
       }
