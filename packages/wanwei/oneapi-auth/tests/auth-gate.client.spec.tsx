@@ -20,9 +20,10 @@ const t: Parameters<typeof AuthGate>[0]['t'] = makeTranslate(zh, commonZh)
 const unusedHook = (() => { throw new Error('unused by AuthGate') }) as never
 type AttentionSnapshot = Parameters<Parameters<AuthGateProps['useSessionPendingInteraction']>[0]>[0]
 const noAttention: AttentionSnapshot = new Map()
+const useSessionPendingInteraction: AuthGateProps['useSessionPendingInteraction'] = selector => selector(noAttention)
 const kit = {
   useSessions: unusedHook,
-  useSessionPendingInteraction: (selector => selector(noAttention)) as AuthGateProps['useSessionPendingInteraction'],
+  useSessionPendingInteraction,
   useWorkspaces: unusedHook,
 }
 
@@ -36,26 +37,25 @@ function renderGate(view: AuthView = { state: 'logged-out' }) {
 }
 
 describe('Wanwei authentication gate', () => {
-  it('renders the complete purple-preview product and account-login surface', async () => {
+  it('renders the production product lockup with the purple account-login surface', async () => {
     const subject = renderGate()
-    expect(screen.getByText(zh.productName)).toBeTruthy()
-    expect(screen.getByText(zh.previewBadge)).toBeTruthy()
+    expect(screen.getByAltText(zh.productName)).toBeTruthy()
     expect(screen.getByText(zh.heroTitle)).toBeTruthy()
     expect(screen.getByText(zh.agentCapabilities)).toBeTruthy()
     expect(screen.getByText(zh.documentProcessing)).toBeTruthy()
     expect(screen.getByRole('tab', { name: zh.accountLogin }).getAttribute('aria-selected')).toBe('true')
-    expect((screen.getByRole('button', { name: zh.signIn }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: zh.signIn })).toHaveProperty('disabled', true)
     await waitFor(() => { expect(subject.refresh).toHaveBeenCalledOnce() })
   })
 
-  it('keeps unconfigured SMS and QR entry points visible without simulating authentication', async () => {
+  it('keeps the production SMS and QR demonstration entry points visible without authenticating', async () => {
     renderGate()
     fireEvent.click(screen.getByRole('tab', { name: zh.smsLogin }))
-    expect(screen.getByText(zh.smsUnavailableTitle)).toBeTruthy()
+    expect(screen.getByPlaceholderText(zh.phonePlaceholder)).toBeTruthy()
+    expect(screen.getByText(zh.smsMockNotice)).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: zh.qrLogin }))
-    expect(screen.getByText(zh.qrUnavailableTitle)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: zh.useAccountLogin }))
-    expect(screen.getByLabelText(zh.username)).toBeTruthy()
+    expect(screen.getByLabelText(zh.qrCodeLabel)).toBeTruthy()
+    expect(screen.getByText(zh.qrInstruction)).toBeTruthy()
   })
 
   it('submits credentials only through the live account login action', async () => {

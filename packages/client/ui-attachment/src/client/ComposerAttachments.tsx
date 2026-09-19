@@ -62,19 +62,35 @@ export function ComposerAttachments({
       if (dataTransfer === null) return
       event.preventDefault()
       reset()
-      if (canAcceptDrop) onAddImages([...dataTransfer.files])
+      if (!canAcceptDrop) return
+      const files = [...dataTransfer.files]
+      const images = files.filter(file => file.type.startsWith('image/'))
+      const documents = files.filter(file => !file.type.startsWith('image/'))
+      if (images.length > 0) onAddImages(images)
+      if (documents.length > 0) {
+        window.dispatchEvent(new CustomEvent('dsh:browser-file-drop', { detail: { files: documents } }))
+      }
     }
+    const onNativeDragEnter = (): void => { setDragActive(true) }
+    const onNativeDragLeave = (): void => { reset() }
+    const onNativeDrop = (): void => { reset() }
     document.addEventListener('dragenter', onDragEnter)
     document.addEventListener('dragover', onDragOver)
     document.addEventListener('dragleave', onDragLeave)
     document.addEventListener('drop', onDrop)
     window.addEventListener('dragend', reset)
+    window.addEventListener('dsh:native-file-drag-enter', onNativeDragEnter)
+    window.addEventListener('dsh:native-file-drag-leave', onNativeDragLeave)
+    window.addEventListener('dsh:native-file-drop', onNativeDrop)
     return () => {
       document.removeEventListener('dragenter', onDragEnter)
       document.removeEventListener('dragover', onDragOver)
       document.removeEventListener('dragleave', onDragLeave)
       document.removeEventListener('drop', onDrop)
       window.removeEventListener('dragend', reset)
+      window.removeEventListener('dsh:native-file-drag-enter', onNativeDragEnter)
+      window.removeEventListener('dsh:native-file-drag-leave', onNativeDragLeave)
+      window.removeEventListener('dsh:native-file-drop', onNativeDrop)
     }
   }, [canAcceptDrop, onAddImages])
 

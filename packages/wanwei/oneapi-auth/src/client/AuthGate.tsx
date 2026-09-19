@@ -26,6 +26,10 @@ export function AuthGate({ useAuth, refresh, login, fail, t }: AuthGateProps) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const [loginMode, setLoginMode] = useState<LoginMode>('account')
+  const [phone, setPhone] = useState('')
+  const [smsCode, setSmsCode] = useState('')
+  const [smsSent, setSmsSent] = useState(false)
+  const [qrNonce, setQrNonce] = useState(0)
   const pageRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
@@ -106,9 +110,9 @@ export function AuthGate({ useAuth, refresh, login, fail, t }: AuthGateProps) {
       <main ref={pageRef} className={css.page} aria-label={t('pageLabel')}>
         <section className={css.brandSide} aria-label={t('productIntroLabel')}>
           <div className={css.brandHeader} aria-label={t('productName')}>
-            <span className={css.brandSymbol} aria-hidden="true"><span>{t('brandMark')}</span></span>
-            <strong>{t('productName')}</strong>
-            <span className={css.previewBadge}>{t('previewBadge')}</span>
+            <span className={css.logoText}>
+              <img className={css.fullLogo} src="/brand-wordmark.svg" width={250} height={83} alt={t('productName')} />
+            </span>
           </div>
           <div className={css.brandHero}>
             <h1>{t('heroTitle')}<br /><span>{t('heroHighlight')}</span></h1>
@@ -159,9 +163,40 @@ export function AuthGate({ useAuth, refresh, login, fail, t }: AuthGateProps) {
                   </form>
                 )
                 : loginMode === 'sms'
-                  ? <UnavailablePanel icon={<PhoneIcon />} title={t('smsUnavailableTitle')} detail={t('smsUnavailableDetail')} action={t('useAccountLogin')} onAction={() => { changeMode('account') }} />
-                  : <UnavailablePanel icon={<QrIcon />} title={t('qrUnavailableTitle')} detail={t('qrUnavailableDetail')} action={t('useAccountLogin')} onAction={() => { changeMode('account') }} qr />}
-            <p className={css.legalNotice}>{t('legalPrefix')}<button type="button" disabled>{t('userAgreement')}</button>{t('legalJoin')}<button type="button" disabled>{t('privacyPolicy')}</button></p>
+                  ? (
+                    <form className={css.mockForm} onSubmit={(event) => { event.preventDefault(); setError(t('smsMockError')) }}>
+                      <label>{t('phone')}<input type="tel" autoComplete="tel" value={phone} onChange={(event) => { setPhone(event.target.value); setSmsSent(false) }} placeholder={t('phonePlaceholder')} /></label>
+                      <div className={css.smsCodeRow}>
+                        <label>{t('verificationCode')}<input inputMode="numeric" value={smsCode} onChange={(event) => { setSmsCode(event.target.value) }} placeholder={t('codePlaceholder')} /></label>
+                        <button className={css.smsCodeButton} type="button" disabled={phone.trim() === ''} onClick={() => { setSmsSent(true) }}>{smsSent ? t('codeSentMock') : t('getCode')}</button>
+                      </div>
+                      {error === undefined ? null : <p className={css.error} role="alert">{error}</p>}
+                      <p className={css.mockNotice}>{t('smsMockNotice')}</p>
+                      <button className={css.primaryButton} type="submit">{t('signIn')}</button>
+                    </form>
+                  )
+                  : (
+                    <div className={css.qrPanel}>
+                      <div className={css.qrMock} key={qrNonce} aria-label={t('qrCodeLabel')}>
+                        {Array.from({ length: 169 }, (_, index) => {
+                          const x = index % 13
+                          const y = Math.floor(index / 13)
+                          const finder = (ox: number, oy: number): boolean => {
+                            const inSquare = x >= ox && x < ox + 5 && y >= oy && y < oy + 5
+                            const border = x === ox || x === ox + 4 || y === oy || y === oy + 4
+                            const center = x >= ox + 1 && x <= ox + 3 && y >= oy + 1 && y <= oy + 3
+                            return inSquare && (border || center)
+                          }
+                          const dark = finder(0, 0) || finder(8, 0) || finder(0, 8) || ((x * 17 + y * 11 + qrNonce * 7) % 7 < 3)
+                          return <span key={`${qrNonce}-${index}`} className={dark ? css.qrDark : undefined} />
+                        })}
+                      </div>
+                      <strong>{t('qrLogin')}</strong>
+                      <p>{t('qrInstruction')}</p>
+                      <button type="button" onClick={() => { setQrNonce(value => value + 1) }}>{t('refreshQr')}</button>
+                    </div>
+                  )}
+            <p className={css.legalNotice}>{t('legalPrefix')}<button type="button" disabled>{t('userAgreement')}</button>{t('legalJoin')}<button type="button" disabled>{t('privacyPolicy')}</button><br />{t('mobileRegistrationNotice')}</p>
             <p className={css.formFooter}>{t('noAccount')}<button type="button" disabled>{t('requestAccess')}</button></p>
           </div>
         </section>
@@ -183,33 +218,7 @@ function Capability({ icon, title, detail }: { icon: ReactNode; title: string; d
   )
 }
 
-function UnavailablePanel({
-  icon,
-  title,
-  detail,
-  action,
-  onAction,
-  qr = false,
-}: {
-  icon: ReactNode
-  title: string
-  detail: string
-  action: string
-  onAction: () => void
-  qr?: boolean
-}) {
-  return (
-    <div className={css.unavailablePanel} role="tabpanel">
-      <span className={qr ? css.qrPlaceholder : css.unavailableIcon}>{icon}</span>
-      <strong>{title}</strong>
-      <p>{detail}</p>
-      <button type="button" onClick={onAction}>{action}</button>
-    </div>
-  )
-}
 function FileIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h4" /></svg> }
 function SearchIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg> }
 function FlowIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M8.5 6H13a5 5 0 0 1 5 5v4.5M15.5 18H11a5 5 0 0 1-5-5V8.5" /></svg> }
 function ServerIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1.5" /><rect x="4" y="14" width="16" height="6" rx="1.5" /><path d="M8 7h.01M8 17h.01" /></svg> }
-function PhoneIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M10 18h4" /></svg> }
-function QrIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM15 14h2v2h-2zM19 14h2v4h-2zM14 19h4v2h-4zM20 20h1v1h-1z" /></svg> }

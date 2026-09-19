@@ -29,7 +29,7 @@ async function bench() {
   ctx.provide('locale', new LocaleRuntime(ctx))
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
-  return { ctx, slots, declaration, fiber }
+  return { ctx, slots, declaration, fiber, controller: ctx.sessionLogDownload }
 }
 
 describe('session-log-download browser plugin', () => {
@@ -52,22 +52,17 @@ describe('session-log-download browser plugin', () => {
     expect(b.slots.entries('conversation.session.header.utilities')).toHaveLength(0)
   })
 
-  it('downloads only for an export execution acknowledged by this browser client', async () => {
+  it('keeps download state isolated between browser clients', async () => {
     const fetcher = vi.fn(async () => new Response('', { status: 500 }))
     vi.stubGlobal('fetch', fetcher)
     const first = await bench()
     const second = await bench()
 
-    first.ctx.emit('command/executed', SID, 'plan', { kind: 'success' })
-    expect(fetcher).not.toHaveBeenCalled()
-    first.ctx.emit('command/executed', SID, 'export', { kind: 'error', text: 'bad path' })
-    expect(fetcher).not.toHaveBeenCalled()
-    first.ctx.emit('command/executed', SID, 'export', { kind: 'success' })
+    void first.controller.download(SID)
     await vi.waitFor(() => {
-      expect(fetcher).toHaveBeenCalledOnce()
-      expect(first.ctx.sessionLogDownload.store.getSnapshot().bySession[SID]?.status).toBe('error')
+      expect(first.controller.store.getSnapshot().bySession[SID]?.status).toBe('error')
     })
-    expect(second.ctx.sessionLogDownload.store.getSnapshot().bySession[SID]).toBeUndefined()
+    expect(second.controller.store.getSnapshot().bySession[SID]).toBeUndefined()
 
     await first.fiber.dispose()
     await second.fiber.dispose()

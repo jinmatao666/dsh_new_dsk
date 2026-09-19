@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import type {
   ComposerAttachment, ComposerAttachmentsOwnerProps, ComposerAttachmentsProps,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -31,6 +31,7 @@ const t = ((key: string, params?: Readonly<Record<string, unknown>>): string => 
     'image.scrollRight': '向右滚动图片',
     'image.dropBlocked': '当前无法添加图片',
     'image.dropTitle': '图片拖动到此处即可添加',
+    'file.dropTitle': '将图片或文件拖动到此处即可添加',
   }
   if (key === 'image.remove') {
     const name = params?.name
@@ -40,6 +41,11 @@ const t = ((key: string, params?: Readonly<Record<string, unknown>>): string => 
     const count = params?.count
     const size = params?.size
     return `最多 ${typeof count === 'number' ? String(count) : ''} 张，每张 ${typeof size === 'string' ? size : ''}`
+  }
+  if (key === 'file.dropDesc') {
+    const count = params?.count
+    const size = params?.size
+    return `图片最多 ${typeof count === 'number' ? String(count) : ''} 张，每张 ${typeof size === 'string' ? size : ''}；其他文件将复制到工作区`
   }
   return messages[key] ?? key
 }) as ComposerAttachmentsProps['t']
@@ -82,12 +88,30 @@ describe('ComposerAttachments', () => {
     const image = attachment('dropped').file
     const dataTransfer = { types: ['Files'], files: [image], dropEffect: 'none' }
     expect(fireEvent.dragEnter(document.body, { dataTransfer })).toBe(false)
-    expect(view.getByRole('status').textContent).toContain('图片拖动到此处即可添加')
-    expect(view.getByRole('status').textContent).toContain('最多 20 张，每张 5MB')
+    expect(view.getByRole('status').textContent).toContain('将图片或文件拖动到此处即可添加')
+    expect(view.getByRole('status').textContent).toContain('图片最多 20 张，每张 5MB；其他文件将复制到工作区')
     expect(fireEvent.dragOver(document.body, { dataTransfer })).toBe(false)
     expect(dataTransfer.dropEffect).toBe('copy')
     expect(fireEvent.drop(document.body, { dataTransfer })).toBe(false)
     expect(onAddImages).toHaveBeenCalledWith([image])
+    expect(view.queryByRole('status')).toBeNull()
+  })
+
+  it('forwards dropped non-image files to the composer importer', () => {
+    const onAddFiles = vi.fn()
+    window.addEventListener('dsh:browser-file-drop', onAddFiles, { once: true })
+    render(<ComposerAttachments {...props()} />)
+    const file = new File(['notes'], 'notes.txt', { type: 'text/plain' })
+    fireEvent.drop(document.body, { dataTransfer: { types: ['Files'], files: [file], dropEffect: 'none' } })
+    expect(onAddFiles).toHaveBeenCalledOnce()
+    expect((onAddFiles.mock.calls[0]?.[0] as CustomEvent<{ files: File[] }>).detail.files).toEqual([file])
+  })
+
+  it('consumes native desktop drops without reading browser File objects', () => {
+    const view = render(<ComposerAttachments {...props()} />)
+    act(() => { window.dispatchEvent(new Event('dsh:native-file-drag-enter')) })
+    expect(view.getByRole('status')).toBeTruthy()
+    act(() => { window.dispatchEvent(new Event('dsh:native-file-drop')) })
     expect(view.queryByRole('status')).toBeNull()
   })
 

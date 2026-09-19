@@ -25,15 +25,27 @@ export function AccountSection({ useAuth, logout, t }: AccountSectionProps) {
   }
   return (
     <section className={css.section}>
-      <h2>{t('accountTitle')}</h2>
-      {auth.state === 'authenticated'
-        ? <>
-          <div className={css.row}><span>{t('signedInAs')}</span><strong>{auth.username ?? '—'}</strong></div>
-          <div className={css.models}><span>{t('models')}</span>{auth.models.length > 0 ? <ul>{auth.models.map(model => <li key={model}>{model}</li>)}</ul> : <p>{t('noModels')}</p>}</div>
-          {error === undefined ? null : <p className={css.error} role="alert">{error}</p>}
-          <button type="button" disabled={busy} onClick={() => { void signOut() }}>{busy ? t('signingOut') : t('signOut')}</button>
-        </>
-        : <p>{t('loginIntro')}</p>}
+      <h1>{t('accountTitle')}</h1>
+      <p className={css.hint}>{t('accountHint')}</p>
+      <div className={css.card}>
+        <div>
+          <div className={css.label}>{t('signedInAs')}</div>
+          <div className={css.value}>{auth.state === 'authenticated'
+            ? (auth.username ?? t('signedInFallback'))
+            : auth.state === 'offline'
+              ? `${t('offlinePrefix')}${auth.message}`
+              : auth.state === 'checking'
+                ? t('checking')
+                : t('loggedOut')}</div>
+        </div>
+        {auth.state === 'authenticated'
+          ? <button className={css.logout} type="button" disabled={busy} onClick={() => { void signOut() }}>{busy ? t('signingOut') : t('signOut')}</button>
+          : null}
+      </div>
+      {auth.state === 'authenticated' && auth.models.length > 0
+        ? <div className={css.models}><span>{t('models')}</span><ul>{auth.models.map(model => <li key={model}>{model}</li>)}</ul></div>
+        : null}
+      {error === undefined ? null : <p className={css.error} role="alert">{error}</p>}
     </section>
   )
 }

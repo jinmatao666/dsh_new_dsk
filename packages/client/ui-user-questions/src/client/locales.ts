@@ -2,6 +2,9 @@
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
+  'fallback.header': '需要确认',
+  'fallback.question': '请确认是否继续执行此操作。',
+  'fallback.option': '选项',
   'error.incomplete': '请先完成这道问题。',
   'error.unanswered': '请选择一个选项或填写自定义答案。',
   'nav.prev': '上一题',
@@ -24,6 +27,9 @@ export type QuestionKey = keyof typeof zh
 
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
+  'fallback.header': 'Confirmation needed',
+  'fallback.question': 'Confirm whether to continue this action.',
+  'fallback.option': 'Option',
   'error.incomplete': 'Please complete this question first.',
   'error.unanswered': 'Please select an option or enter a custom answer.',
   'nav.prev': 'Previous question',

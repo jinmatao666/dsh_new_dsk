@@ -6,7 +6,14 @@ import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connec
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
-import { browseMarketplaceCatalog, buildMarketplaceCatalog, buildMarketplaceCategories, publishedSkillCategories } from './catalog.ts'
+import {
+  browseMarketplaceCatalog,
+  buildMarketplaceCatalog,
+  buildMarketplaceCategories,
+  filterPersonalSkillUploads,
+  publishedSkillCategories,
+} from './catalog.ts'
+import type { PersonalSkillReviewFilter, PersonalSkillUploadView } from './catalog.ts'
 import { marketplaceInstallAction } from './install-action.ts'
 import type { MarketplaceInstallState } from './install-action.ts'
 import './marketplace.css'
@@ -34,6 +41,11 @@ type Skill = {
   source?: 'official' | 'personal'
   reviewStatus?: 'none' | 'pending' | 'approved' | 'rejected'
   reviewReason?: string
+  visibility?: 'private' | 'public'
+  submittedAt?: string | number
+  reviewedAt?: string | number
+  publishedSkillId?: number
+  publishedVersion?: string
 }
 
 type MarketplaceSkillState = {
@@ -111,14 +123,55 @@ type RemoteSkill = {
 type RemoteSkillCategory = { name?: unknown; code?: unknown }
 type RemoteSkillBundle = { assets?: unknown; sha256?: unknown }
 type RemotePersonalSkill = {
+  id?: unknown
   name?: unknown
+  display_name?: unknown
+  category?: unknown
+  icon?: unknown
+  version?: unknown
+  description?: unknown
+  owner?: unknown
+  visibility?: unknown
   review_status?: unknown
   review_reason?: unknown
+  submitted_at?: unknown
+  reviewed_at?: unknown
+  created_at?: unknown
+  updated_at?: unknown
+  published_skill_id?: unknown
+  published_version?: unknown
 }
 
 function parseReviewStatus(value: unknown): NonNullable<Skill['reviewStatus']> | undefined {
   if (value === 'none' || value === 'pending' || value === 'approved' || value === 'rejected') return value
   return undefined
+}
+
+function parseReviewTime(...values: unknown[]): string | number | undefined {
+  return values.find(value => (typeof value === 'string' && value.trim() !== '')
+    || (typeof value === 'number' && Number.isFinite(value) && value > 0)) as string | number | undefined
+}
+
+function formatReviewTime(value: string | number | undefined): string {
+  if (value === undefined || value === '') return '—'
+  const time = new Date(typeof value === 'number' && value < 10_000_000_000 ? value * 1000 : value)
+  if (Number.isNaN(time.getTime())) return String(value)
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(time)
+}
+
+function reviewStatusLabel(status: Skill['reviewStatus']): string {
+  if (status === 'pending') return '审核中'
+  if (status === 'rejected') return '未通过'
+  if (status === 'approved') return '已通过'
+  return '未提交'
 }
 
 let loadRemoteSkills: (() => Promise<RemoteSkill[]>) | undefined
@@ -193,14 +246,13 @@ const L = {
   close: '关闭技能市场',
   subtitle: '发现可复用的工作流和智能助手',
   search: '搜索技能',
-  myInstalled: '我安装的',
+  myInstalled: '我的安装',
+  myUploads: '我的上传',
   addSkill: '添加技能',
   all: '全部',
-  featured: '精选技能',
+  featured: '推荐技能',
+  allSkills: '全部技能',
   refresh: '换一批',
-  recommend: '推荐',
-  skillHub: 'SkillHub',
-  suite: '套件',
   installed: '已安装',
   install: '安装',
   count: '次安装',
@@ -291,12 +343,6 @@ const AUTOMATION_HISTORY = [
   { id: 'run-02', name: '投标文件变更提醒', time: '昨天 10:12', status: '已完成', detail: '发现 2 处澄清变更，已生成差异摘要' },
   { id: 'run-03', name: '成果归档检查', time: '08-29 15:00', status: '需关注', detail: '发现 3 项待补充成果' },
 ] as const
-
-const SUB_TABS = [
-  { id: 'recommend', label: L.recommend },
-  { id: 'skillHub', label: L.skillHub },
-  { id: 'suite', label: L.suite },
-]
 
 function PlusIcon() {
   return (
@@ -475,14 +521,18 @@ type OverlayProps = PropsRuntime<'shell.overlay'> & {
   marketplaceUrl: string
   chooseDirectory: () => Promise<string | null>
 }
+type CustomSkillSource =
+  | { kind: 'directory'; path: string }
+  | { kind: 'archive'; name: string; bytes: number[] }
 type ActionProps = PropsRuntime<'sidebar.footer.action'> & SidebarFooterActionOwnerProps
 
-function SkillDetail({ skill, onBack, installState, installing, onToggleInstall }: {
+function SkillDetail({ skill, onBack, installState, installing, onToggleInstall, showReview = false }: {
   skill: Skill
   onBack: () => void
   installState: MarketplaceInstallState
   installing: boolean
   onToggleInstall: () => void
+  showReview?: boolean
 }) {
   const installed = installState === 'installed' || installState === 'updateAvailable'
   const installLabel = skill.installable !== true
@@ -506,7 +556,9 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall 
           <p>{skill.summary}</p>
           <div className="dsh-skill-detail-meta">
             <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>{skill.source === 'personal' ? '个人' : '官方'}</span>
-            {skill.reviewStatus !== undefined && <span className={`dsh-skill-review-status ${skill.reviewStatus}`}>{skill.reviewStatus === 'pending' ? '审核中' : skill.reviewStatus === 'approved' ? '已公开' : skill.reviewStatus === 'rejected' ? '未通过' : '私人'}</span>}
+            {showReview && skill.reviewStatus !== undefined && skill.reviewStatus !== 'none' && (
+              <span className={`dsh-skill-review-status ${skill.reviewStatus}`}>{reviewStatusLabel(skill.reviewStatus)}</span>
+            )}
             <span>{L.version}: {skill.version}</span>
             <span>{L.author}: {skill.author}</span>
             {hasVerifiedInstallCount(skill) && <span>{skill.installs} {L.count}</span>}
@@ -521,7 +573,9 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall 
           {installing ? '处理中…' : installLabel}
         </button>
       </div>
-      {skill.reviewStatus === 'rejected' && skill.reviewReason && <div className="dsh-skill-review-notice">审核意见：{skill.reviewReason}</div>}
+      {showReview && skill.reviewStatus === 'rejected' && skill.reviewReason && (
+        <div className="dsh-skill-review-notice">审核意见：{skill.reviewReason}</div>
+      )}
       <div className="dsh-skill-detail-body">
         <div className="dsh-skill-detail-section">
           <h3>{L.params}</h3>
@@ -576,13 +630,13 @@ function ExpertMarket() {
   const [selected, setSelected] = useState<ExpertMarketDetail | null>(null)
   const categories = ['全部', '规划编制', '用地报批', '政策法规', '空间分析', '调查监测', '生态保护', '耕地地质', '供地与利用', '执法督察', '不动产登记', '政务协同']
   const visibleExperts = category === '全部' ? EXPERTS : EXPERTS.filter(expert => expert.category === category)
-  const openExpert = (expert: Expert) => setSelected({ name: expert.name, role: expert.role, summary: expert.summary, tags: expert.tags, examples: expert.examples, accent: expert.accent })
-  const openTeam = (team: ExpertTeam) => setSelected({ name: team.name, role: '多角色协同工作流', summary: team.summary, tags: team.members, examples: ['根据当前工作区资料启动该专家团审查', '为该专家团补充本项目的交付要求'], accent: team.accent, members: team.members, skills: team.skills })
+  const openExpert = (expert: Expert) =>{  setSelected({ name: expert.name, role: expert.role, summary: expert.summary, tags: expert.tags, examples: expert.examples, accent: expert.accent }) }
+  const openTeam = (team: ExpertTeam) =>{  setSelected({ name: team.name, role: '多角色协同工作流', summary: team.summary, tags: team.members, examples: ['根据当前工作区资料启动该专家团审查', '为该专家团补充本项目的交付要求'], accent: team.accent, members: team.members, skills: team.skills }) }
   return <section className="dsh-expert-market">
-    <nav className="dsh-expert-tabs" aria-label="专家库内容"><button type="button" className={tab === 'experts' ? 'active' : ''} onClick={() => setTab('experts')}>专家</button><button type="button" className={tab === 'teams' ? 'active' : ''} onClick={() => setTab('teams')}>专家团</button></nav>
-    {tab === 'experts' && <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div><div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} onClick={() => openExpert(expert)}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>}
-    {tab === 'teams' && <div className="dsh-expert-grid teams">{EXPERT_TEAMS.map(team => <button type="button" className="dsh-expert-card" key={team.id} onClick={() => openTeam(team)}><span className="dsh-expert-avatar" style={{ background: `${team.accent}18`, color: team.accent }}><MarketplaceSectionIcon section="experts" size={25} /></span><div><strong>{team.name}</strong><small>多角色协同工作流</small></div><p>{team.summary}</p><footer>{team.members.slice(0, 3).map(member => <b key={member}>{member}</b>)}<b>+{team.members.length}</b></footer></button>)}</div>}
-    {selected !== null && <div className="dsh-expert-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}><section className="dsh-expert-detail" aria-label={`${selected.name}详情`}><header><div><span style={{ background: `${selected.accent}18`, color: selected.accent }}><MarketplaceSectionIcon section="experts" size={24} /></span><div><h2>{selected.name}</h2><p>{selected.role}</p></div></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header><p className="dsh-expert-detail-summary">{selected.summary}</p><div className="dsh-expert-detail-block"><span>{selected.members === undefined ? '专业方向' : '协作角色'}</span><div>{selected.tags.map(tag => <b key={tag}>{tag}</b>)}</div></div>{selected.skills !== undefined && <div className="dsh-expert-detail-block"><span>编排技能</span><div>{selected.skills.map(skill => <b key={skill}>{skill}</b>)}</div></div>}<div className="dsh-expert-detail-block examples"><span>可以这样开始</span>{selected.examples.map(example => <p key={example}>“{example}”</p>)}</div><footer><small>当前为专家库演示，不会启动实际多 Agent 协作。</small><button type="button" onClick={() => window.alert(`已为“${selected.name}”准备演示任务草稿。`)}>创建演示任务</button></footer></section></div>}
+    <nav className="dsh-expert-tabs" aria-label="专家库内容"><button type="button" className={tab === 'experts' ? 'active' : ''} onClick={() =>{  setTab('experts') }}>专家</button><button type="button" className={tab === 'teams' ? 'active' : ''} onClick={() =>{  setTab('teams') }}>专家团</button></nav>
+    {tab === 'experts' && <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() =>{  setCategory(item) }}>{item}</button>)}</div><div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} onClick={() =>{  openExpert(expert) }}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>}
+    {tab === 'teams' && <div className="dsh-expert-grid teams">{EXPERT_TEAMS.map(team => <button type="button" className="dsh-expert-card" key={team.id} onClick={() =>{  openTeam(team) }}><span className="dsh-expert-avatar" style={{ background: `${team.accent}18`, color: team.accent }}><MarketplaceSectionIcon section="experts" size={25} /></span><div><strong>{team.name}</strong><small>多角色协同工作流</small></div><p>{team.summary}</p><footer>{team.members.slice(0, 3).map(member => <b key={member}>{member}</b>)}<b>+{team.members.length}</b></footer></button>)}</div>}
+    {selected !== null && <div className="dsh-expert-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}><section className="dsh-expert-detail" aria-label={`${selected.name}详情`}><header><div><span style={{ background: `${selected.accent}18`, color: selected.accent }}><MarketplaceSectionIcon section="experts" size={24} /></span><div><h2>{selected.name}</h2><p>{selected.role}</p></div></div><button type="button" onClick={() =>{  setSelected(null) }} aria-label="关闭">×</button></header><p className="dsh-expert-detail-summary">{selected.summary}</p><div className="dsh-expert-detail-block"><span>{selected.members === undefined ? '专业方向' : '协作角色'}</span><div>{selected.tags.map(tag => <b key={tag}>{tag}</b>)}</div></div>{selected.skills !== undefined && <div className="dsh-expert-detail-block"><span>编排技能</span><div>{selected.skills.map(skill => <b key={skill}>{skill}</b>)}</div></div>}<div className="dsh-expert-detail-block examples"><span>可以这样开始</span>{selected.examples.map(example => <p key={example}>“{example}”</p>)}</div><footer><small>当前为专家库演示，不会启动实际多 Agent 协作。</small><button type="button" onClick={() =>{  window.alert(`已为“${selected.name}”准备演示任务草稿。`) }}>创建演示任务</button></footer></section></div>}
   </section>
 }
 
@@ -638,7 +692,7 @@ function Connectors() {
   const [customCategory, setCustomCategory] = useState('协同办公')
   const [customDescription, setCustomDescription] = useState('')
   const connectors = [...CONNECTORS, ...customConnectors]
-  const requestAccess = (connector: Connector) => setRequested(current => new Set(current).add(connector.id))
+  const requestAccess = (connector: Connector) =>{  setRequested(current => new Set(current).add(connector.id)) }
   const saveCustomConnector = () => {
     const name = customName.trim()
     if (name === '') return
@@ -650,16 +704,16 @@ function Connectors() {
     setSelected(connector)
   }
   return <section className="dsh-connectors-page">
-    <div className="dsh-connectors-toolbar"><button type="button" onClick={() => setShowCustom(true)}><PlusIcon /> 自定义连接器</button></div>
+    <div className="dsh-connectors-toolbar"><button type="button" onClick={() =>{  setShowCustom(true) }}><PlusIcon /> 自定义连接器</button></div>
     <div className="dsh-connectors-grid">
-      {connectors.map(connector => <button type="button" className="dsh-connector-card" key={connector.id} onClick={() => setSelected(connector)}>
+      {connectors.map(connector => <button type="button" className="dsh-connector-card" key={connector.id} onClick={() =>{  setSelected(connector) }}>
         <div className="dsh-connector-card-top"><ConnectorBrandIcon icon={connector.icon} accent={connector.accent} /><span>{connector.scope}</span></div>
         <strong>{connector.name}</strong><p>{connector.summary}</p>
         <small>{requested.has(connector.id) ? '已保存申请' : '点击查看接入详情'}</small><i aria-hidden="true">›</i>
       </button>)}
     </div>
-    {selected !== null && <div className="dsh-connector-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}><section className="dsh-connector-detail" aria-label={`${selected.name}连接器详情`}><header><div><ConnectorBrandIcon icon={selected.icon} accent={selected.accent} /><div><h2>{selected.name}</h2><p>{selected.scope} · 本地演示目录</p></div></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header><p className="dsh-connector-detail-summary">{selected.summary}</p><div className="dsh-connector-detail-block"><span>可协助完成</span><div>{selected.capabilities.map(item => <b key={item}>{item}</b>)}</div></div><div className="dsh-connector-detail-block"><span>接入说明</span><p>{selected.access}</p></div><footer><small>接入后仅在授权范围内访问数据。</small><button type="button" className={requested.has(selected.id) ? 'requested' : ''} onClick={() => requestAccess(selected)}>{requested.has(selected.id) ? '已提交申请' : '申请接入'}</button></footer></section></div>}
-    {showCustom && <div className="dsh-connector-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setShowCustom(false) }}><form className="dsh-connector-custom" onSubmit={event => { event.preventDefault(); saveCustomConnector() }}><header><div><h2>自定义连接器</h2><p>添加团队内部服务说明，当前仅保存在本机演示列表。</p></div><button type="button" onClick={() => setShowCustom(false)} aria-label="关闭">×</button></header><label>连接器名称<input autoFocus value={customName} onChange={event => setCustomName(event.target.value)} placeholder="例如：项目资料共享库" /></label><label>服务类型<select value={customCategory} onChange={event => setCustomCategory(event.target.value)}><option>协同办公</option><option>文档服务</option><option>邮箱服务</option><option>内部数据</option></select></label><label>用途说明<textarea value={customDescription} onChange={event => setCustomDescription(event.target.value)} placeholder="说明它能帮助处理哪些资料或协作事项" /></label><div className="dsh-connector-custom-tip">暂不要求填写地址、密钥或账户信息；正式接入时将由管理员统一配置。</div><footer><button type="button" onClick={() => setShowCustom(false)}>取消</button><button type="submit" disabled={customName.trim() === ''}>添加到演示列表</button></footer></form></div>}
+    {selected !== null && <div className="dsh-connector-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}><section className="dsh-connector-detail" aria-label={`${selected.name}连接器详情`}><header><div><ConnectorBrandIcon icon={selected.icon} accent={selected.accent} /><div><h2>{selected.name}</h2><p>{selected.scope} · 本地演示目录</p></div></div><button type="button" onClick={() =>{  setSelected(null) }} aria-label="关闭">×</button></header><p className="dsh-connector-detail-summary">{selected.summary}</p><div className="dsh-connector-detail-block"><span>可协助完成</span><div>{selected.capabilities.map(item => <b key={item}>{item}</b>)}</div></div><div className="dsh-connector-detail-block"><span>接入说明</span><p>{selected.access}</p></div><footer><small>接入后仅在授权范围内访问数据。</small><button type="button" className={requested.has(selected.id) ? 'requested' : ''} onClick={() =>{  requestAccess(selected) }}>{requested.has(selected.id) ? '已提交申请' : '申请接入'}</button></footer></section></div>}
+    {showCustom && <div className="dsh-connector-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setShowCustom(false) }}><form className="dsh-connector-custom" onSubmit={event => { event.preventDefault(); saveCustomConnector() }}><header><div><h2>自定义连接器</h2><p>添加团队内部服务说明，当前仅保存在本机演示列表。</p></div><button type="button" onClick={() =>{  setShowCustom(false) }} aria-label="关闭">×</button></header><label>连接器名称<input autoFocus value={customName} onChange={event =>{  setCustomName(event.target.value) }} placeholder="例如：项目资料共享库" /></label><label>服务类型<select value={customCategory} onChange={event =>{  setCustomCategory(event.target.value) }}><option>协同办公</option><option>文档服务</option><option>邮箱服务</option><option>内部数据</option></select></label><label>用途说明<textarea value={customDescription} onChange={event =>{  setCustomDescription(event.target.value) }} placeholder="说明它能帮助处理哪些资料或协作事项" /></label><div className="dsh-connector-custom-tip">暂不要求填写地址、密钥或账户信息；正式接入时将由管理员统一配置。</div><footer><button type="button" onClick={() =>{  setShowCustom(false) }}>取消</button><button type="submit" disabled={customName.trim() === ''}>添加到演示列表</button></footer></form></div>}
   </section>
 }
 
@@ -669,7 +723,7 @@ function Automations() {
   const [draft, setDraft] = useState<AutomationDraft | null>(null)
   const [configured, setConfigured] = useState<AutomationDraft[]>([])
   const [notice, setNotice] = useState<string | null>(null)
-  const openManual = () => setDraft({ id: `manual-${Date.now()}`, name: '', cadence: '每个工作日', time: '09:00', prompt: '', source: '手动' })
+  const openManual = () =>{  setDraft({ id: `manual-${Date.now()}`, name: '', cadence: '每个工作日', time: '09:00', prompt: '', source: '手动' }) }
   const openTemplate = (template: AutomationTemplate) => {
     setSelected(template)
     setDraft({ id: template.id, name: template.name, cadence: template.cadence, time: template.trigger.split(' ').at(-1) ?? '09:00', prompt: template.prompt, source: '模板' })
@@ -682,22 +736,22 @@ function Automations() {
     setTab('configured')
     setNotice('自动化任务已保存到本地演示列表，当前不会实际执行。')
   }
-  const startConversation = () => setNotice('已准备自动化创建草稿；正式接入后将新建对话并自动填入任务内容。')
+  const startConversation = () =>{  setNotice('已准备自动化创建草稿；正式接入后将新建对话并自动填入任务内容。') }
   return <section className="dsh-automation-page">
     <div className="dsh-automation-actions">
       <button type="button" onClick={openManual}>手动新建</button>
       <button type="button" className="primary" onClick={startConversation}><PlusIcon /> 在对话中创建</button>
     </div>
     <nav className="dsh-automation-tabs" aria-label="自动化页面">
-      <button type="button" className={tab === 'configured' ? 'active' : ''} onClick={() => setTab('configured')}>已配置<span>{configured.length}</span></button>
-      <button type="button" className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>执行历史</button>
-      <button type="button" className={tab === 'templates' ? 'active' : ''} onClick={() => setTab('templates')}>任务模板</button>
+      <button type="button" className={tab === 'configured' ? 'active' : ''} onClick={() =>{  setTab('configured') }}>已配置<span>{configured.length}</span></button>
+      <button type="button" className={tab === 'history' ? 'active' : ''} onClick={() =>{  setTab('history') }}>执行历史</button>
+      <button type="button" className={tab === 'templates' ? 'active' : ''} onClick={() =>{  setTab('templates') }}>任务模板</button>
     </nav>
-    {notice !== null && <div className="dsh-automation-notice">{notice}<button type="button" onClick={() => setNotice(null)}>×</button></div>}
-    {tab === 'configured' && (configured.length === 0 ? <div className="dsh-automation-empty"><div><MarketplaceSectionIcon section="automations" size={30} /></div><h2>尚未配置自动化</h2><p>从工作模板开始，建立适合当前工作区的周期任务。</p><button type="button" onClick={() => setTab('templates')}>从模板创建</button></div> : <div className="dsh-automation-configured">{configured.map(item => <article key={item.id}><div className="dsh-automation-configured-icon"><MarketplaceSectionIcon section="automations" size={19} /></div><div><h2>{item.name}</h2><p>{item.cadence} · {item.time} · {item.source}创建</p><small>{item.prompt}</small></div><span>演示模式</span></article>)}</div>)}
+    {notice !== null && <div className="dsh-automation-notice">{notice}<button type="button" onClick={() =>{  setNotice(null) }}>×</button></div>}
+    {tab === 'configured' && (configured.length === 0 ? <div className="dsh-automation-empty"><div><MarketplaceSectionIcon section="automations" size={30} /></div><h2>尚未配置自动化</h2><p>从工作模板开始，建立适合当前工作区的周期任务。</p><button type="button" onClick={() =>{  setTab('templates') }}>从模板创建</button></div> : <div className="dsh-automation-configured">{configured.map(item => <article key={item.id}><div className="dsh-automation-configured-icon"><MarketplaceSectionIcon section="automations" size={19} /></div><div><h2>{item.name}</h2><p>{item.cadence} · {item.time} · {item.source}创建</p><small>{item.prompt}</small></div><span>演示模式</span></article>)}</div>)}
     {tab === 'history' && <div className="dsh-automation-history">{AUTOMATION_HISTORY.map(item => <article key={item.id}><div><strong>{item.name}</strong><span>{item.time}</span></div><p>{item.detail}</p><b className={item.status === '需关注' ? 'attention' : ''}>{item.status}</b></article>)}</div>}
-    {tab === 'templates' && <div className="dsh-automation-template-grid">{AUTOMATION_TEMPLATES.map(item => <button type="button" className="dsh-automation-template" key={item.id} onClick={() => openTemplate(item)}><div className="dsh-automation-template-icon" style={{ background: item.accent }}><MarketplaceSectionIcon section="automations" size={20} /></div><strong>{item.name}</strong><span>{item.trigger}</span><p>{item.summary}</p><small>{item.scope}</small></button>)}</div>}
-    {draft !== null && <div className="dsh-automation-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) { setDraft(null); setSelected(null) } }}><form className="dsh-automation-modal" onSubmit={event => { event.preventDefault(); saveDraft() }}><header><div><span>{selected === null ? '新建自动化任务' : '从任务模板创建'}</span><small>{selected === null ? '配置一个仅保存在本机演示列表中的任务。' : selected.summary}</small></div><button type="button" onClick={() => { setDraft(null); setSelected(null) }} aria-label="关闭">×</button></header><label>任务名称<input autoFocus value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} placeholder="例如：项目周报汇总" /></label><div className="dsh-automation-schedule"><label>触发频率<select value={draft.cadence} onChange={event => setDraft({ ...draft, cadence: event.target.value })}><option>每个工作日</option><option>每天</option><option>每周</option><option>文件变更时</option></select></label><label>执行时间<input type="time" value={draft.time} onChange={event => setDraft({ ...draft, time: event.target.value })} disabled={draft.cadence === '文件变更时'} /></label></div><label>任务说明<textarea value={draft.prompt} onChange={event => setDraft({ ...draft, prompt: event.target.value })} placeholder="描述希望智能体按计划完成的工作" /></label><div className="dsh-automation-modal-tip">演示阶段仅展示配置流程，不会创建定时任务或调用外部连接器。</div><footer><button type="button" onClick={() => { setDraft(null); setSelected(null) }}>取消</button><button type="submit" disabled={draft.name.trim() === '' || draft.prompt.trim() === ''}>保存任务</button></footer></form></div>}
+    {tab === 'templates' && <div className="dsh-automation-template-grid">{AUTOMATION_TEMPLATES.map(item => <button type="button" className="dsh-automation-template" key={item.id} onClick={() =>{  openTemplate(item) }}><div className="dsh-automation-template-icon" style={{ background: item.accent }}><MarketplaceSectionIcon section="automations" size={20} /></div><strong>{item.name}</strong><span>{item.trigger}</span><p>{item.summary}</p><small>{item.scope}</small></button>)}</div>}
+    {draft !== null && <div className="dsh-automation-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) { setDraft(null); setSelected(null) } }}><form className="dsh-automation-modal" onSubmit={event => { event.preventDefault(); saveDraft() }}><header><div><span>{selected === null ? '新建自动化任务' : '从任务模板创建'}</span><small>{selected === null ? '配置一个仅保存在本机演示列表中的任务。' : selected.summary}</small></div><button type="button" onClick={() => { setDraft(null); setSelected(null) }} aria-label="关闭">×</button></header><label>任务名称<input autoFocus value={draft.name} onChange={event =>{  setDraft({ ...draft, name: event.target.value }) }} placeholder="例如：项目周报汇总" /></label><div className="dsh-automation-schedule"><label>触发频率<select value={draft.cadence} onChange={event =>{  setDraft({ ...draft, cadence: event.target.value }) }}><option>每个工作日</option><option>每天</option><option>每周</option><option>文件变更时</option></select></label><label>执行时间<input type="time" value={draft.time} onChange={event =>{  setDraft({ ...draft, time: event.target.value }) }} disabled={draft.cadence === '文件变更时'} /></label></div><label>任务说明<textarea value={draft.prompt} onChange={event =>{  setDraft({ ...draft, prompt: event.target.value }) }} placeholder="描述希望智能体按计划完成的工作" /></label><div className="dsh-automation-modal-tip">演示阶段仅展示配置流程，不会创建定时任务或调用外部连接器。</div><footer><button type="button" onClick={() => { setDraft(null); setSelected(null) }}>取消</button><button type="submit" disabled={draft.name.trim() === '' || draft.prompt.trim() === ''}>保存任务</button></footer></form></div>}
   </section>
 }
 /* oxlint-enable @stylistic/arrow-parens, @stylistic/max-len */
@@ -756,10 +810,11 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState(L.all)
-  const [activeSubTab, setActiveSubTab] = useState('recommend')
   const [view, setView] = useState<'list' | 'detail'>('list')
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
-  const [showInstalledOnly, setShowInstalledOnly] = useState(false)
+  const [libraryView, setLibraryView] = useState<'market' | 'installed' | 'uploads'>('market')
+  const [uploadView, setUploadView] = useState<PersonalSkillUploadView>('public')
+  const [reviewFilter, setReviewFilter] = useState<PersonalSkillReviewFilter>('all')
   const [installing, setInstalling] = useState<string | null>(null)
   const [installMessage, setInstallMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [customSkills, setCustomSkills] = useState<Skill[]>(() => {
@@ -771,8 +826,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   })
   const [discoveredCustomSkills, setDiscoveredCustomSkills] = useState<Skill[]>([])
   const [adding, setAdding] = useState(false)
-  const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '通用类', icon: 'preset:assistant', visibility: 'private' as 'private' | 'public' })
-  const [customSkillDirectory, setCustomSkillDirectory] = useState<string | null>(null)
+  const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '通用', icon: 'preset:assistant', visibility: 'private' as 'private' | 'public' })
+  const [customSkillSource, setCustomSkillSource] = useState<CustomSkillSource | null>(null)
   const [remoteSkills, setRemoteSkills] = useState<RemoteSkill[] | null>(null)
   const [remoteCategories, setRemoteCategories] = useState<RemoteSkillCategory[] | null>(null)
   const [personalSkills, setPersonalSkills] = useState<RemotePersonalSkill[]>([])
@@ -841,10 +896,21 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     setOpen(next.open)
     if (next.open) {
       if (section === 'skills') {
+        setLibraryView('market')
+        setView('list')
+        setSelectedSkill(null)
+        setQuery('')
+        setCategory(L.all)
         void refreshInstallStates()
-        if (loadRemoteSkills !== undefined) void loadRemoteSkills().then(setRemoteSkills).catch(() => setRemoteSkills(null))
-        if (loadRemoteCategories !== undefined) void loadRemoteCategories().then(setRemoteCategories).catch(() => setRemoteCategories(null))
-        if (loadPersonalSkills !== undefined) void loadPersonalSkills().then(setPersonalSkills).catch(() => setPersonalSkills([]))
+        if (loadRemoteSkills !== undefined) {
+          void loadRemoteSkills().then(setRemoteSkills).catch(() => { setRemoteSkills(null) })
+        }
+        if (loadRemoteCategories !== undefined) {
+          void loadRemoteCategories().then(setRemoteCategories).catch(() => { setRemoteCategories(null) })
+        }
+        if (loadPersonalSkills !== undefined) {
+          void loadPersonalSkills().then(setPersonalSkills).catch(() => { setPersonalSkills([]) })
+        }
       }
       // Only one capability panel may be expanded: opening this section
       // collapses the others, otherwise stacked overlays block each other
@@ -885,7 +951,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       const source = remote.source === 'personal' ? 'personal' : 'official'
       const remoteTags = Array.isArray(remote.tags) ? remote.tags.filter((tag): tag is string => typeof tag === 'string') : []
       const relationCategories = publishedSkillCategories(remote.categories)
-      const legacyCategory = typeof remote.category === 'string' && remote.category.trim() !== '' ? remote.category.trim() : '通用类'
+      const legacyCategory = typeof remote.category === 'string' && remote.category.trim() !== '' ? remote.category.trim() : '通用'
       const categories = relationCategories.length > 0 ? relationCategories : [legacyCategory]
       return [{
         id: `remote-${remoteId}`,
@@ -905,21 +971,50 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
         marketplacePublished: true,
       }]
     }) ?? null
-    const reviewBySlug = new Map(personalSkills.flatMap(item => typeof item.name === 'string' ? [[item.name, item] as const] : []))
-    const local = discoveredCustomSkills.map((skill) => {
-      const review = reviewBySlug.get(skillSlug(skill))
-      const reviewStatus = parseReviewStatus(review?.review_status)
-      return {
-        ...skill,
-        ...(reviewStatus === undefined ? {} : { reviewStatus }),
-        ...(typeof review?.review_reason === 'string' && review.review_reason !== '' ? { reviewReason: review.review_reason } : {}),
-      }
-    })
-    return buildMarketplaceCatalog(local, published)
-  }, [discoveredCustomSkills, personalSkills, remoteSkills])
+    return buildMarketplaceCatalog(discoveredCustomSkills, published)
+  }, [discoveredCustomSkills, remoteSkills])
+  const uploadedSkills = useMemo<Skill[]>(() => personalSkills.flatMap((remote): Skill[] => {
+    const slug = typeof remote.name === 'string' ? remote.name : ''
+    const visibility = remote.visibility === 'public' ? 'public' : remote.visibility === 'private' ? 'private' : undefined
+    const reviewStatus = parseReviewStatus(remote.review_status)
+    if (slug === '' || visibility === undefined || reviewStatus === undefined) return []
+    const id = typeof remote.id === 'number' || typeof remote.id === 'string' ? String(remote.id) : slug
+    const categoryName = typeof remote.category === 'string' && remote.category.trim() !== ''
+      ? remote.category.trim()
+      : '未分类'
+    const submittedAt = parseReviewTime(remote.submitted_at, remote.updated_at, remote.created_at)
+    const reviewedAt = parseReviewTime(remote.reviewed_at)
+    return [{
+      id: `upload-${id}`,
+      slug,
+      name: typeof remote.display_name === 'string' && remote.display_name.trim() !== '' ? remote.display_name : slug,
+      category: categoryName,
+      categories: [categoryName],
+      tags: ['个人'],
+      summary: typeof remote.description === 'string' ? remote.description : '',
+      description: typeof remote.description === 'string' ? remote.description : '',
+      installs: '0',
+      accent: '#2563eb',
+      icon: typeof remote.icon === 'string' && remote.icon.trim() !== '' ? remote.icon : 'preset:assistant',
+      version: typeof remote.version === 'string' && remote.version !== '' ? remote.version : '1.0.0',
+      author: typeof remote.owner === 'string' && remote.owner !== '' ? remote.owner : '当前用户',
+      source: 'personal',
+      installable: true,
+      marketplacePublished: visibility === 'public' && reviewStatus === 'approved',
+      visibility,
+      reviewStatus,
+      ...(typeof remote.review_reason === 'string' && remote.review_reason.trim() !== ''
+        ? { reviewReason: remote.review_reason.trim() }
+        : {}),
+      ...(submittedAt === undefined ? {} : { submittedAt }),
+      ...(reviewedAt === undefined ? {} : { reviewedAt }),
+      ...(typeof remote.published_skill_id === 'number' ? { publishedSkillId: remote.published_skill_id } : {}),
+      ...(typeof remote.published_version === 'string' ? { publishedVersion: remote.published_version } : {}),
+    }]
+  }), [personalSkills])
   const categories = useMemo(() => [
     L.all,
-    ...buildMarketplaceCategories(remoteCategories),
+    ...new Set(['通用', ...buildMarketplaceCategories(remoteCategories)]),
   ], [remoteCategories])
   useEffect(() => {
     if (!categories.includes(category)) setCategory(L.all)
@@ -938,35 +1033,35 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     const state = resolveInstallState(skill)
     return state === 'installed' || state === 'updateAvailable'
   }
-  const featuredPool = useMemo(() => browseMarketplaceCatalog(allSkills)
-    .filter(skill => skill.featured)
-    .sort((left, right) => Number(right.tags.includes('官方')) - Number(left.tags.includes('官方'))), [allSkills])
-  const [featuredOffset, setFeaturedOffset] = useState(0)
+  const featuredPool = useMemo(() => browseMarketplaceCatalog(allSkills), [allSkills])
+  const [featuredOffset, setFeaturedOffset] = useState(() => Math.floor(Math.random() * 10_000))
   const featuredSkills = useMemo(() => {
     if (featuredPool.length <= 3) return featuredPool
     const start = featuredOffset % featuredPool.length
+    const step = Math.max(1, Math.floor(featuredPool.length / 3))
     return [0, 1, 2]
-      .map(i => featuredPool[(start + i) % featuredPool.length])
+      .map(i => featuredPool[(start + i * step) % featuredPool.length])
       .filter((skill): skill is Skill => skill !== undefined)
   }, [featuredPool, featuredOffset])
 
   const visible = useMemo(() => {
-    let skills = showInstalledOnly ? [...allSkills] : browseMarketplaceCatalog(allSkills)
-    if (!showInstalledOnly && activeSubTab === 'skillHub') {
-      skills = skills.filter(s => s.tags.includes('SkillHub'))
-    } else if (!showInstalledOnly && activeSubTab === 'suite') {
-      skills = skills.filter(s => s.tags.includes(L.suite))
+    if (libraryView === 'uploads') {
+      const uploads = filterPersonalSkillUploads(uploadedSkills, uploadView, reviewFilter)
+      if (query.trim() === '') return uploads
+      const q = query.trim().toLowerCase()
+      return uploads.filter(skill => `${skill.name} ${skill.summary} ${skill.category}`.toLowerCase().includes(q))
     }
-    if (!showInstalledOnly && category !== L.all) {
+    let skills = libraryView === 'installed' ? [...allSkills] : browseMarketplaceCatalog(allSkills)
+    if (libraryView === 'market' && category !== L.all) {
       skills = skills.filter(s => (s.categories ?? [s.category]).includes(category))
     }
     if (query.trim() !== '') {
       const q = query.trim().toLowerCase()
       skills = skills.filter(s => `${s.name} ${s.summary} ${s.category}`.toLowerCase().includes(q))
     }
-    if (showInstalledOnly) skills = skills.filter(isInstalled)
+    if (libraryView === 'installed') skills = skills.filter(isInstalled)
     return skills
-  }, [activeSubTab, allSkills, category, query, showInstalledOnly, installStates])
+  }, [allSkills, category, query, libraryView, uploadView, reviewFilter, uploadedSkills, installStates])
 
   if (!open) return null
 
@@ -1026,19 +1121,34 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   const selectCustomSkillDirectory = async () => {
     try {
       const directory = await chooseDirectory()
-      if (directory !== null) setCustomSkillDirectory(directory)
+      if (directory !== null) setCustomSkillSource({ kind: 'directory', path: directory })
     } catch (error) {
       setInstallMessage({ kind: 'error', text: marketplaceInstallErrorMessage(error) })
     }
   }
 
+  const selectCustomSkillArchive = async (file: File | undefined) => {
+    if (file === undefined) return
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      setInstallMessage({ kind: 'error', text: '请选择 ZIP 格式的个人技能包。' })
+      return
+    }
+    if (file.size > 16 * 1024 * 1024) {
+      setInstallMessage({ kind: 'error', text: '个人技能 ZIP 不能超过 16 MB。' })
+      return
+    }
+    setCustomSkillSource({ kind: 'archive', name: file.name, bytes: [...new Uint8Array(await file.arrayBuffer())] })
+  }
+
   const createSkill = async () => {
     const name = newSkill.name.trim()
-    if (name === '' || customSkillDirectory === null) return
+    if (name === '' || customSkillSource === null) return
     setInstalling('custom-skill-import')
     let installed: CustomSkillState
     try {
-      const value = await desktopInvoke('install_custom_skill_directory', { directory: customSkillDirectory })
+      const value = customSkillSource.kind === 'directory'
+        ? await desktopInvoke('install_custom_skill_directory', { directory: customSkillSource.path })
+        : await desktopInvoke('install_custom_skill_archive', { archive: customSkillSource.bytes })
       if (typeof value !== 'object' || value === null
         || typeof (value as Partial<CustomSkillState>).slug !== 'string'
         || typeof (value as Partial<CustomSkillState>).name !== 'string'
@@ -1096,8 +1206,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     localStorage.setItem('dsh.marketplace.custom-skills', JSON.stringify(next))
     setInstallStates(previous => new Map(previous).set(id, { id, slug, version: '1.0.0', installedVersion: '1.0.0', state: 'installed' }))
     setAdding(false)
-    setNewSkill({ name: '', summary: '', category: categories[1] ?? '通用类', icon: 'preset:assistant', visibility: 'private' })
-    setCustomSkillDirectory(null)
+    setNewSkill({ name: '', summary: '', category: categories[1] ?? '通用', icon: 'preset:assistant', visibility: 'private' })
+    setCustomSkillSource(null)
     setSelectedSkill(skill)
     setView('detail')
     setInstallMessage({ kind: 'success', text: newSkill.visibility === 'public'
@@ -1132,6 +1242,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
             onBack={() => { setView('list') }}
             installState={resolveInstallState(selectedSkill)}
             installing={installing === selectedSkill.id}
+            showReview={libraryView === 'uploads'}
             onToggleInstall={() => void toggleInstall(selectedSkill)}
           />
         ) : (
@@ -1150,33 +1261,96 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                   <div className="dsh-skill-search-actions">
                     <button
                       type="button"
-                      className={showInstalledOnly ? 'active' : ''}
-                      onClick={() => { setShowInstalledOnly(value => !value); setQuery('') }}
+                      className={libraryView === 'installed' ? 'active' : ''}
+                      onClick={() => { setLibraryView(current => current === 'installed' ? 'market' : 'installed'); setQuery('') }}
                     >
                       {L.myInstalled}
+                    </button>
+                    <button
+                      type="button"
+                      className={libraryView === 'uploads' ? 'active' : ''}
+                      onClick={() => {
+                        setLibraryView(current => current === 'uploads' ? 'market' : 'uploads')
+                        setQuery('')
+                        if (loadPersonalSkills !== undefined) {
+                          void loadPersonalSkills().then(setPersonalSkills).catch(() =>{  setPersonalSkills([]) })
+                        }
+                      }}
+                    >
+                      {L.myUploads}
                     </button>
                     <button type="button" className="primary" onClick={() => {
                       setAdding(true)
                       if (loadRemoteCategories !== undefined) {
-                        void loadRemoteCategories().then(setRemoteCategories).catch(() => setRemoteCategories(null))
+                        void loadRemoteCategories().then(setRemoteCategories).catch(() =>{  setRemoteCategories(null) })
                       }
                     }}>{L.addSkill}</button>
                   </div>
                 </div>
               </div>
 
-              {showInstalledOnly ? (
+              {libraryView === 'installed' ? (
                 <div className="dsh-skill-installed-heading">
-                  <div><h2>我安装的技能</h2><p>仅显示安装在当前电脑上的个人技能和平台技能。</p></div>
-                  <button type="button" className="dsh-skill-browse-market" onClick={() => { setShowInstalledOnly(false) }}>
+                  <div><h2>我的安装</h2><p>当前电脑已安装的技能，包括个人技能和从技能市场添加的技能。</p></div>
+                  <button type="button" className="dsh-skill-browse-market" onClick={() => { setLibraryView('market') }}>
                     浏览技能市场 <span aria-hidden="true">→</span>
                   </button>
+                </div>
+              ) : libraryView === 'uploads' ? (
+                <div className="dsh-skill-upload-management">
+                  <div className="dsh-skill-installed-heading">
+                    <div><h2>我的上传</h2><p>管理已公开、私人保存和提交审核的个人技能。</p></div>
+                    <button type="button" className="dsh-skill-browse-market" onClick={() => { setLibraryView('market') }}>
+                      浏览技能市场 <span aria-hidden="true">→</span>
+                    </button>
+                  </div>
+                  <div className="dsh-skill-upload-navigation">
+                    <div className="dsh-skill-sub-tabs" aria-label="我的上传分类">
+                      {([
+                        ['public', '公开技能'],
+                        ['private', '私人技能'],
+                        ['reviews', '审核记录'],
+                      ] as const).map(([id, label]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          className={uploadView === id ? 'active' : ''}
+                          onClick={() => { setUploadView(id) }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {uploadView === 'reviews' && (
+                      <div className="dsh-skill-categories dsh-skill-review-filters" aria-label="审核状态">
+                        {([
+                          ['all', '全部'],
+                          ['pending', '审核中'],
+                          ['rejected', '未通过'],
+                          ['approved', '已通过'],
+                        ] as const).map(([id, label]) => (
+                          <button
+                            key={id}
+                            type="button"
+                            className={reviewFilter === id ? 'active' : ''}
+                            onClick={() => { setReviewFilter(id) }}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : featuredSkills.length > 0 && (
                 <div className="dsh-skill-featured-section">
                   <div className="dsh-skill-section-header">
                     <h2>{L.featured}</h2>
-                    <button type="button" className="dsh-skill-refresh" onClick={() => { setFeaturedOffset(offset => offset + 3) }}>
+                    <button
+                      type="button"
+                      className="dsh-skill-refresh"
+                      onClick={() => { setFeaturedOffset(Math.floor(Math.random() * 10_000)) }}
+                    >
                       <RefreshIcon /> {L.refresh}
                     </button>
                   </div>
@@ -1209,74 +1383,144 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                 </div>
               )}
 
-              {!showInstalledOnly && <div className="dsh-skill-sub-tabs">
-                {SUB_TABS.map(tab => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    className={activeSubTab === tab.id ? 'active' : ''}
-                    onClick={() => {
-                      setActiveSubTab(tab.id)
-                      void refreshInstallStates()
-                      if (loadRemoteSkills !== undefined) void loadRemoteSkills().then(setRemoteSkills).catch(() => setRemoteSkills(null))
-                      if (loadRemoteCategories !== undefined) {
-                        void loadRemoteCategories().then(setRemoteCategories).catch(() => setRemoteCategories(null))
-                      }
-                    }}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>}
+              {libraryView === 'market' && (
+                <section className="dsh-skill-all-section">
+                  <div className="dsh-skill-section-header">
+                    <h2>{L.allSkills}</h2>
+                  </div>
+                  <div className="dsh-skill-categories">
+                    {categories.map(item => (
+                      <button
+                        key={item}
+                        type="button"
+                        className={item === category ? 'active' : ''}
+                        onClick={() => {
+                          setCategory(item)
+                          if (loadRemoteSkills !== undefined) {
+                            void loadRemoteSkills().then(setRemoteSkills).catch(() => { setRemoteSkills(null) })
+                          }
+                          if (loadRemoteCategories !== undefined) {
+                            void loadRemoteCategories().then(setRemoteCategories).catch(() => { setRemoteCategories(null) })
+                          }
+                        }}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
 
-              {!showInstalledOnly && <div className="dsh-skill-categories">
-                {categories.map(item => (
-                  <button
-                    key={item}
-                    type="button"
-                    className={item === category ? 'active' : ''}
-                    onClick={() => {
-                      setCategory(item)
-                      if (loadRemoteSkills !== undefined) void loadRemoteSkills().then(setRemoteSkills).catch(() => setRemoteSkills(null))
-                      if (loadRemoteCategories !== undefined) {
-                        void loadRemoteCategories().then(setRemoteCategories).catch(() => setRemoteCategories(null))
-                      }
-                    }}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>}
-
-              <div className="dsh-skill-grid">
-                {visible.map(skill => (
-                  <article
-                    key={skill.id}
-                    className="dsh-skill-card"
-                    onClick={() => { openDetail(skill) }}
-                  >
-                    <div className="dsh-skill-card-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
-                      <SkillVisual skill={skill} />
-                    </div>
-                    <div className="dsh-skill-card-body">
-                      <div className="dsh-skill-card-meta">
-                        <span className="dsh-skill-card-category" style={{ background: skill.accent + '14', color: skill.accent }}>{skill.category}</span>
-                        <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>{skill.source === 'personal' ? '个人' : '官方'}</span>
-                        {skill.reviewStatus !== undefined && <span className={`dsh-skill-review-status ${skill.reviewStatus}`}>{skill.reviewStatus === 'pending' ? '审核中' : skill.reviewStatus === 'approved' ? '已公开' : skill.reviewStatus === 'rejected' ? '未通过' : '私人'}</span>}
-                        {hasVerifiedInstallCount(skill) && <small><DownloadIcon />{skill.installs}</small>}
+              {libraryView === 'uploads' && uploadView === 'reviews' ? (
+                <div className="dsh-skill-review-list">
+                  <div className="dsh-skill-review-list-header" aria-hidden="true">
+                    <span>技能</span>
+                    <span>提交版本</span>
+                    <span>提交时间</span>
+                    <span>状态</span>
+                    <span>审核意见</span>
+                    <span>操作</span>
+                  </div>
+                  {visible.map(skill => (
+                    <article key={skill.id} className="dsh-skill-review-row">
+                      <div className="dsh-skill-review-skill">
+                        <div className="dsh-skill-card-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
+                          <SkillVisual skill={skill} />
+                        </div>
+                        <div className="dsh-skill-review-skill-copy">
+                          <strong>{skill.name}</strong>
+                          <div>
+                            <span>{skill.category}</span>
+                          </div>
+                        </div>
                       </div>
-                      <h2>{skill.name}</h2>
-                      <p>{skill.summary}</p>
-                      {showInstalledOnly && <button type="button" className="dsh-skill-card-uninstall" onClick={(event) => { event.stopPropagation(); void toggleInstall(skill) }} disabled={installing === skill.id}>卸载</button>}
-                    </div>
-                  </article>
-                ))}
-              </div>
+                      <div className="dsh-skill-review-version">
+                        <strong>v{skill.version}</strong>
+                        {skill.publishedVersion && <span>当前公开版本 v{skill.publishedVersion}</span>}
+                      </div>
+                      <time dateTime={typeof skill.submittedAt === 'string' ? skill.submittedAt : undefined}>
+                        {formatReviewTime(skill.submittedAt)}
+                      </time>
+                      <span className={`dsh-skill-review-status ${skill.reviewStatus ?? 'none'}`}>
+                        {reviewStatusLabel(skill.reviewStatus)}
+                      </span>
+                      <span
+                        className={`dsh-skill-review-opinion${skill.reviewStatus === 'rejected' ? ' rejected' : ''}`}
+                        title={skill.reviewStatus === 'rejected' ? skill.reviewReason : undefined}
+                      >
+                        {skill.reviewStatus === 'rejected' && skill.reviewReason ? skill.reviewReason : '—'}
+                      </span>
+                      <button
+                        type="button"
+                        className="dsh-skill-review-view"
+                        onClick={() => { openDetail(skill) }}
+                      >
+                        查看
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="dsh-skill-grid">
+                  {visible.map(skill => (
+                    <article
+                      key={skill.id}
+                      className="dsh-skill-card"
+                      onClick={() => { openDetail(skill) }}
+                    >
+                      <div className="dsh-skill-card-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
+                        <SkillVisual skill={skill} />
+                      </div>
+                      <div className="dsh-skill-card-body">
+                        <div className="dsh-skill-card-meta">
+                          <span
+                            className="dsh-skill-card-category"
+                            style={{ background: skill.accent + '14', color: skill.accent }}
+                          >
+                            {skill.category}
+                          </span>
+                          <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>
+                            {skill.source === 'personal' ? '个人' : '官方'}
+                          </span>
+                          {libraryView === 'uploads' && skill.reviewStatus !== undefined && skill.reviewStatus !== 'none' && (
+                            <span className={`dsh-skill-review-status ${skill.reviewStatus}`}>
+                              {reviewStatusLabel(skill.reviewStatus)}
+                            </span>
+                          )}
+                          {hasVerifiedInstallCount(skill) && <small><DownloadIcon />{skill.installs}</small>}
+                        </div>
+                        <h2>{skill.name}</h2>
+                        <p>{skill.summary}</p>
+                        {libraryView === 'installed' && (
+                          <button
+                            type="button"
+                            className={resolveInstallState(skill) === 'updateAvailable'
+                              ? 'dsh-skill-card-install-action update'
+                              : 'dsh-skill-card-install-action uninstall'}
+                            onClick={(event) => { event.stopPropagation(); void toggleInstall(skill) }}
+                            disabled={installing === skill.id}
+                          >
+                            {resolveInstallState(skill) === 'updateAvailable' ? '更新' : '卸载'}
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
 
               {visible.length === 0 && (
                 <div className="dsh-skill-empty">
                   <div className="dsh-skill-empty-icon"><CategoryGlyph category={category} size={24} /></div>
-                  <span>{showInstalledOnly ? '暂未安装技能' : L.empty}</span>
+                  <span>{libraryView === 'installed'
+                    ? '暂未安装技能'
+                    : libraryView === 'uploads'
+                      ? uploadView === 'public'
+                        ? '暂无审核通过的公开技能'
+                        : uploadView === 'private'
+                          ? '暂无私人技能'
+                          : '暂无符合条件的审核记录'
+                      : L.empty}</span>
                 </div>
               )}
             </>}
@@ -1322,13 +1566,44 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                   <button type="button" className={newSkill.visibility === 'public' ? 'active' : ''} onClick={() => { setNewSkill({ ...newSkill, visibility: 'public' }) }}><strong>公开</strong><span>提交管理员审核</span></button>
                 </div>
               </fieldset>
-              <label>
-                个人技能目录
-                <button type="button" className="dsh-skill-add-directory" onClick={() => { void selectCustomSkillDirectory() }} disabled={installing !== null}>选择技能目录</button>
-                {customSkillDirectory !== null && <small className="dsh-skill-add-selected" title={customSkillDirectory}>已选择：{customSkillDirectory}</small>}
-              </label>
-              <small className="dsh-skill-add-hint">请选择包含 SKILL.md 的完整目录。文件会安装到本机并安全上传；公开技能审核通过前不会出现在技能市场，更新已公开技能也需要再次审核。</small>
-              <footer><button type="button" onClick={() => { setAdding(false) }}>取消</button><button type="submit" disabled={newSkill.name.trim() === '' || customSkillDirectory === null || installing !== null || !categories.slice(1).includes(newSkill.category)}>{newSkill.visibility === 'public' ? '提交审核并安装' : '保存并安装'}</button></footer>
+              <div className="dsh-skill-add-source-field">
+                个人技能来源
+                <span className="dsh-skill-add-source-actions">
+                  <button type="button" className="dsh-skill-add-directory" onClick={() => { void selectCustomSkillDirectory() }} disabled={installing !== null}>选择目录</button>
+                  <label className={`dsh-skill-add-directory${installing !== null ? ' disabled' : ''}`}>
+                    选择 ZIP
+                    <input
+                      type="file"
+                      accept=".zip,application/zip"
+                      disabled={installing !== null}
+                      hidden
+                      onChange={(event) => {
+                        void selectCustomSkillArchive(event.target.files?.[0])
+                        event.target.value = ''
+                      }}
+                    />
+                  </label>
+                </span>
+                {customSkillSource !== null && (
+                  <small
+                    className="dsh-skill-add-selected"
+                    title={customSkillSource.kind === 'directory' ? customSkillSource.path : customSkillSource.name}
+                  >
+                    已选择：{customSkillSource.kind === 'directory' ? customSkillSource.path : customSkillSource.name}
+                  </small>
+                )}
+              </div>
+              <small className="dsh-skill-add-hint">请选择包含 SKILL.md 的完整目录或 ZIP。文件会安装到本机并安全上传；公开技能审核通过前不会出现在技能市场，更新已公开技能也需要再次审核。</small>
+              <footer>
+                <button type="button" onClick={() => { setAdding(false) }}>取消</button>
+                <button
+                  type="submit"
+                  disabled={newSkill.name.trim() === '' || customSkillSource === null || installing !== null
+                    || !categories.slice(1).includes(newSkill.category)}
+                >
+                  {newSkill.visibility === 'public' ? '提交审核并安装' : '保存并安装'}
+                </button>
+              </footer>
             </form>
           </div>
         )}
@@ -1347,7 +1622,7 @@ function SkillMarketplaceAction({ wide, section = 'skills' }: ActionProps & { se
   // Clicking the entry again collapses its panel: the button reflects the
   // controller's open state so the toggle reads as selected while expanded.
   const open = useSyncExternalStore(
-    marketplaceControllers[section].subscribe,
+    listener => marketplaceControllers[section].subscribe(listener),
     () => marketplaceControllers[section].isOpen(),
   )
   return (
@@ -1369,11 +1644,11 @@ export function apply(ctx: Context): void {
   const connection = ctx.get('connection') as unknown as ConnectionHandle
   loadRemoteSkills = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'skill-list', {})) as { items?: unknown }
-    return Array.isArray(raw?.items) ? raw.items.filter((item): item is RemoteSkill => typeof item === 'object' && item !== null) : []
+    return Array.isArray(raw.items) ? raw.items.filter((item): item is RemoteSkill => typeof item === 'object' && item !== null) : []
   }
   loadRemoteCategories = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'skill-categories', {})) as { items?: unknown }
-    return Array.isArray(raw?.items) ? raw.items.filter((item): item is RemoteSkillCategory => typeof item === 'object' && item !== null) : []
+    return Array.isArray(raw.items) ? raw.items.filter((item): item is RemoteSkillCategory => typeof item === 'object' && item !== null) : []
   }
   loadRemoteSkillBundle = async (id: number) => rpcValue(await connection.rpc.call('/desktop-auth', 'skill-bundle', { id }))
   recordRemoteSkillInstall = async (id: number) => rpcValue(await connection.rpc.call('/desktop-auth', 'skill-download', { id }))

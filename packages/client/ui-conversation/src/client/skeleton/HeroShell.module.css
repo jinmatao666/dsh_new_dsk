@@ -27,11 +27,10 @@
    badge is a product addition outside that source: a mono superscript pill
    riding the title's top-right. */
 .headline {
-  display: grid;
-  grid-template-columns: 34px auto auto;
-  column-gap: 10px;
+  display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
   font-size: 26px;
   line-height: 32px;
   font-weight: 500;
@@ -39,16 +38,15 @@
 }
 
 .headlineText {
-  grid-row: 1;
-  grid-column: 2;
+  white-space: nowrap;
 }
 
 .previewBadge {
-  grid-row: 1;
-  grid-column: 3;
+  position: absolute;
+  left: calc(50% + 106px);
   align-self: start;
   margin-top: 2px;
-  margin-left: -3px;
+  margin-left: 0;
   padding: 1px 7px 0;
   border: 1px solid var(--dsw-alias-interactive-bg-hover);
   border-radius: 24px;
@@ -63,8 +61,7 @@
 
 /* Keep hover detection on a stationary box while the mark moves within it. */
 .fishHitbox {
-  grid-row: 1;
-  grid-column: 1;
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;

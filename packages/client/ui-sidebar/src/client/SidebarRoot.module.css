@@ -129,8 +129,7 @@
 .brandIdentity {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 24px;
+  height: 36px;
   min-width: 0;
 }
 
@@ -144,9 +143,9 @@
 .brandName {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
   min-width: 0;
-  height: 24px;
+  height: 36px;
   font-size: 18px;
   font-weight: 600;
   line-height: 24px;

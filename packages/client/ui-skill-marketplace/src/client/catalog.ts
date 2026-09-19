@@ -10,7 +10,6 @@ export function buildMarketplaceCatalog<T>(
 ): T[] {
   return [...localSkills, ...(publishedSkills ?? [])]
 }
-
 /**
  * Keep public browsing separate from owner-only and review-pending local skills.
  * @param skills - Combined local and server-backed skill entries.
@@ -18,6 +17,32 @@ export function buildMarketplaceCatalog<T>(
  */
 export function browseMarketplaceCatalog<T extends { marketplacePublished?: boolean }>(skills: readonly T[]): T[] {
   return skills.filter(skill => skill.marketplacePublished === true)
+}
+
+export type PersonalSkillUploadView = 'public' | 'private' | 'reviews'
+export type PersonalSkillReviewFilter = 'all' | 'pending' | 'rejected' | 'approved'
+
+/**
+ * Select one owner-facing personal-skill collection without exposing it in public browsing.
+ * @param skills - Personal skills returned by the authenticated owner endpoint.
+ * @param view - Uploaded-skill section selected by the owner.
+ * @param reviewFilter - Optional status filter used by the review-history section.
+ * @returns Skills belonging to the selected owner-facing collection.
+ */
+export function filterPersonalSkillUploads<T extends {
+  visibility?: 'private' | 'public'
+  reviewStatus?: 'none' | 'pending' | 'approved' | 'rejected'
+}>(
+  skills: readonly T[],
+  view: PersonalSkillUploadView,
+  reviewFilter: PersonalSkillReviewFilter = 'all',
+): T[] {
+  if (view === 'private') return skills.filter(skill => skill.visibility === 'private')
+  if (view === 'public') {
+    return skills.filter(skill => skill.visibility === 'public' && skill.reviewStatus === 'approved')
+  }
+  return skills.filter(skill => skill.visibility === 'public'
+    && (reviewFilter === 'all' || skill.reviewStatus === reviewFilter))
 }
 
 /**

@@ -63,17 +63,40 @@ function FileImportAction(props: FileImportProps) {
     finally { setBusy(false) }
   }
   useEffect(() => {
+    const browserDrop = (event: Event) => {
+      const files = (event as CustomEvent<{ files?: readonly File[] }>).detail.files
+      if (files === undefined) return
+      void importFiles(files)
+    }
     const drop = () => {
       if (busy) return
       setBusy(true)
       setError(undefined)
+      window.dispatchEvent(new CustomEvent('dsh:native-file-import-status', {
+        detail: { text: '正在导入文件…', error: false },
+      }))
       void nativeImport('import_dropped_workspace_files', workspacePath)
-        .then(append)
-        .catch((reason: unknown) => { setError(reason instanceof Error ? reason.message : String(reason)) })
+        .then((paths) => {
+          append(paths)
+          window.dispatchEvent(new CustomEvent('dsh:native-file-import-status', {
+            detail: { text: `已导入 ${paths.length} 个文件`, error: false },
+          }))
+        })
+        .catch((reason: unknown) => {
+          const message = reason instanceof Error ? reason.message : String(reason)
+          setError(message)
+          window.dispatchEvent(new CustomEvent('dsh:native-file-import-status', {
+            detail: { text: `文件导入失败：${message}`, error: true },
+          }))
+        })
         .finally(() => { setBusy(false) })
     }
+    window.addEventListener('dsh:browser-file-drop', browserDrop)
     window.addEventListener('dsh:native-file-drop', drop)
-    return () => { window.removeEventListener('dsh:native-file-drop', drop) }
+    return () => {
+      window.removeEventListener('dsh:browser-file-drop', browserDrop)
+      window.removeEventListener('dsh:native-file-drop', drop)
+    }
   }, [busy, input.draft, workspacePath])
   const choose = (event: ChangeEvent<HTMLInputElement>) => {
     const files = [...(event.currentTarget.files ?? [])]
@@ -89,21 +112,36 @@ function FileImportAction(props: FileImportProps) {
 }
 
 function WanweiBrandMark({ size, className }: BrandMarkProps) {
-  return <svg className={className} width={size} height={size} viewBox="0 0 70 61" aria-label="万维 Buddy"><path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M34 5.5 55.5 17.8v22.9L34.5 53l-22-12.3V17.2L34 5.5Zm-6.5 9.7L20 20v16.2l8.7 5 5.3-3.2 6.8 3.2 6.4-3.9V20.1L41 15.8l-.7 1.3v15.5H39l-5-3.8-5 3.9h-1.3V16.2l-.2-1Z" /></svg>
+  return (
+    <img
+      src="/brand-mark.svg"
+      width={size}
+      height={size}
+      className={className}
+      style={{ display: 'block', width: `${size}px`, height: 'auto', margin: 0, objectFit: 'contain' }}
+      alt=""
+      aria-hidden="true"
+    />
+  )
 }
 
 function WanweiBrandName() {
-  return <span className="wanwei-product-wordmark" aria-label="万维 Buddy">万维 <strong>Buddy</strong></span>
+  return (
+    <span className="wanwei-product-wordmark" aria-hidden="true">
+      <img src="/brand-wordmark.svg" height={36} alt="" />
+    </span>
+  )
 }
 
 function WanweiHeroBrand() {
   return (
-    <div className="wanwei-product-hero-brand" aria-label="Wanwei Buddy preview">
-      <WanweiBrandMark size={56} className="wanwei-product-hero-mark" />
-      <WanweiBrandName />
-      <span className="wanwei-product-hero-badge">预览版</span>
-      <span className="wanwei-product-hero-subtitle">专业智能助手</span>
-    </div>
+    <img
+      className="wanwei-product-hero-brand"
+      src="/brand-wordmark.svg"
+      width={244}
+      height={61}
+      alt="万维 Buddy"
+    />
   )
 }
 

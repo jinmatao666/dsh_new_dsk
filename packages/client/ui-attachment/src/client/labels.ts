@@ -43,8 +43,8 @@ export function dropOverlayLabels(
 ): DropOverlayLabels {
   if (!accepting) return { title: t('image.dropBlocked') }
   return {
-    title: t('image.dropTitle'),
-    desc: limits === undefined ? undefined : t('image.dropDesc', limits),
+    title: t('file.dropTitle'),
+    desc: limits === undefined ? undefined : t('file.dropDesc', limits),
   }
 }
 

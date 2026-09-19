@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reveal-downloaded-file"
+description = "Enables the reveal_downloaded_file command without any pre-configured scope."
+commands.allow = ["reveal_downloaded_file"]
+
+[[permission]]
+identifier = "deny-reveal-downloaded-file"
+description = "Denies the reveal_downloaded_file command without any pre-configured scope."
+commands.deny = ["reveal_downloaded_file"]
