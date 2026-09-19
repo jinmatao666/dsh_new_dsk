@@ -528,8 +528,8 @@ export function InputBar({
     : <PermissionSelect key={sessionId} value={permissions} locked={locked} command={command} t={t} />
 
   // Mirror-layer decorations: a visible backdrop with transparent textarea
-  // text. Claim tokens and references retain the draft's own glyph metrics,
-  // so their decoration cannot drift from wrapping, selection, or the caret.
+  // text. Inline references retain the draft's glyph metrics; file and folder
+  // references occupy invisible tokens because the cards above own their presentation.
   const deco = input === undefined ? INERT_DECORATIONS : deriveDecorations(input, lexicon)
   const fileReferences = deco.chips.filter(chip => chip.appearance === 'file' || chip.appearance === 'folder')
   const removeFileReference = (occurrenceId: number): void => {

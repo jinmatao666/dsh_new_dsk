@@ -274,6 +274,20 @@ describe('input-machine: insert-ref and the occurrence table', () => {
     expect(m.state.phase).toBe('plain')
   })
 
+  it('keeps file references in an invisible editing token while preserving their clipboard form', () => {
+    const m = new InputMachine()
+    const reference = {
+      ...refOf('report.md', 'reference'),
+      appearance: 'file' as const,
+      clipboardText: '@report.md',
+    }
+    m.dispatch({ type: 'insert-ref', reference, span: spanOf(m, 0, 0) })
+
+    expect(m.state.draft).toBe('\u2060 ')
+    expect(m.state.occurrences).toMatchObject([{ label: 'report.md', offset: 0, length: 1 }])
+    expect(projectClipboard(m.state)).toBe('@report.md ')
+  })
+
   it('same-named references stay independent: distinct occurrenceIds, one deletion leaves the other', () => {
     const m = new InputMachine()
     m.dispatch({ type: 'draft-changed', draft: '/alp' })

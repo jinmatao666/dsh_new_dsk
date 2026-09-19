@@ -522,10 +522,9 @@
   transform: translate(-50%, -50%);
 }
 
-/* Structured references use the same inline-backdrop technique as /skill:
-   their complete display text remains in the textarea, so wrapping and caret
-   geometry come from the browser's native glyph metrics. The leading marker
-   reserves the icon's advance while the backdrop paints the domain glyph. */
+/* Inline structured references use the same backdrop technique as /skill.
+   File and folder references use invisible editing tokens because their cards
+   above the textarea provide the complete presentation. */
 .chip {
   position: relative;
   color: var(--dsw-alias-state-business-primary);

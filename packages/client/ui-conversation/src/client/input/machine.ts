@@ -4,8 +4,9 @@
  * clock. Package-private — the SessionInput shell is the only caller and the
  * sole executor of the returned effects.
  *
- * Draft truth: the draft string holds each reference's complete inline display
- * text; the occurrence table carries identity, range, and the owner's cached projections. Every
+ * Draft truth: the draft string holds each reference's inline editing token;
+ * file and folder references use an invisible token because their cards own presentation. The
+ * occurrence table carries identity, range, and the owner's cached projections. Every
  * draft mutation is one transaction — draft edit, occurrence reconciliation,
  * and undo-log push are atomic inside dispatch() — and bumps draftRev, which
  * is what lets span CAS reduce to a revision-equality check: equal rev ⟹
@@ -22,16 +23,17 @@ import type {
 
 /** Legacy fixed-width object replacement character rejected from pasted text. */
 export const PLACEHOLDER = '￼'
+const FILE_REFERENCE_PLACEHOLDER = '\u2060'
 
 const REFERENCE_PLACEHOLDER_RE = /[\uE100-\uE11D\uFFFC]/gu
 
 /**
- * Build the inline draft text whose leading marker is decorated as the
- * reference icon in the backdrop.
+ * Build the editing token occupied by one structured reference.
  * @param reference - reference insertion with its cached display projection.
- * @returns display text with one marker glyph followed by the complete label.
+ * @returns an invisible token for card-rendered files and folders, otherwise the inline label.
  */
-export function referenceDraftText(reference: Pick<ReferenceInsert, 'label'>): string {
+export function referenceDraftText(reference: Pick<ReferenceInsert, 'appearance' | 'label'>): string {
+  if (reference.appearance === 'file' || reference.appearance === 'folder') return FILE_REFERENCE_PLACEHOLDER
   return `@${reference.label}`
 }
 

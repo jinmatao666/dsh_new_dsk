@@ -12,7 +12,7 @@ Desktop users can open an existing Workspace but cannot put a file from the oper
 
 The desktop shell accepts operating-system file and directory drops for the active Session. The main `WebviewWindow` consumes Tauri's window-level `DragDropEvent` stream; Wry synthesizes drops for a window-content WebView as window events rather than webview events. Tauri retains the paths from one native drop, and the renderer consumes that batch exactly once without asking WebView to materialize browser `File` bytes. The native shell canonicalizes the destination and sources, recursively copies ordinary files and directories into the Session Workspace or the app-local default import directory when the Session has no Workspace, and rejects symbolic links and special files. It accepts at most 64 files across the complete drop, 64 MiB per file, and 256 MiB in total. Existing entries remain unchanged; a conflicting top-level name receives a numeric suffix.
 
-The native drop is replaced by a later drop and removed before copying begins, so a page cannot replay it or supply arbitrary source paths. The operation does not contact One API or persist a chat attachment. Browser deployments have no bridge and report that direct import is unavailable. A copied top-level file or directory is inserted into the composer as a structured reference with the standard file or folder presentation and serializes to its Workspace-relative `@` mention.
+The native drop is replaced by a later drop and removed before copying begins, so a page cannot replay it or supply arbitrary source paths. The operation does not contact One API or persist a chat attachment. Browser deployments have no bridge and report that direct import is unavailable. A copied top-level file or directory is inserted into the composer as a structured reference. Its ordered card owns the visible filename, while an invisible editing token preserves deletion and serialization to the Workspace-relative `@` mention without duplicating the filename in the text area.
 
 The active Session cwd selects the Workspace destination. A Session without a cwd uses the desktop app's local default import directory, preserving the draft in the same Session while making the copied file available by its appended reference.
 
@@ -28,7 +28,7 @@ The desktop window capability explicitly authorizes both import paths: `import_w
 
 ## Verification
 
-Attachment UI tests exercise native drag visibility and one drop consumption. Native tests pin file and recursive directory copying, collision suffixes, and limits.
+Attachment UI tests exercise native drag visibility and one drop consumption. Input-machine tests pin the invisible file token and its clipboard projection. Native tests pin file and recursive directory copying, collision suffixes, and limits.
 
 ## Consequences
 

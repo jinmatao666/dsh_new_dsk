@@ -149,8 +149,8 @@ export interface EditRange extends EditSelection {
 }
 
 /**
- * One reference occurrence backed by its complete inline display text in the
- * draft. Identity is occurrenceId — same-named
+ * One reference occurrence backed by its editing token in the draft. File and
+ * folder tokens are invisible because their cards own presentation. Identity is occurrenceId — same-named
  * references stay independently addressable. label/appearance/clipboardText are the
  * owner's insert-time projections, cached so the chip survives owner loss
  * (invalid flips instead of dropping the occurrence).
@@ -162,9 +162,9 @@ export interface Occurrence {
   readonly source: string
   /** Owner-scoped reference id. */
   readonly ref: string
-  /** Display-text offset in the draft. */
+  /** Editing-token offset in the draft. */
   readonly offset: number
-  /** Display-text length; the occurrence occupies exactly [offset, offset+length). */
+  /** Editing-token length; the occurrence occupies exactly [offset, offset+length). */
   readonly length: number
   /** Inline display label (insert-time cache). */
   readonly label: string
