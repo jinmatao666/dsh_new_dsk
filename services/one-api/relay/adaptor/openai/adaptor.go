@@ -93,7 +93,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		}
 		request.StreamOptions.IncludeUsage = true
 	}
-	if a.ChannelType == channeltype.AliBailian && c.GetBool(ctxkey.WebSearch) {
+	if c.GetBool(ctxkey.WebSearch) {
 		request.EnableSearch = true
 		request.SearchOptions = &model.SearchOptions{ForcedSearch: true}
 	}

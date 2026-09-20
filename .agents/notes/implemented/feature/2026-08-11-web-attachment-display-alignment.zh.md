@@ -16,7 +16,7 @@ Web 输入框的图片界面缺乏基本可用性（用户反馈，issue #2248�
 
 附件展示位于 `@deepseek-ai/dsh-client-ui-attachment`（`packages/client/ui-attachment`）：`AttachmentRail`（64px、16px 圆角缩略图，单击 `onOpen`，卡片内部的删除按钮悬停或聚焦显示、`pointer: coarse` 下常显，隐藏滚动条配两端圆形箭头并依滚动几何重算，纵向滚轮转横向平移且单次钳制 60px，新增条目滚到栏尾），`MessageImage`/`ImageGallery`（单击预览），以及 `ImageLightbox`。这些组件仍是包内的纯 props 组件。`ui-conversation` 声明输入框附件与消息图片 slot，并提供草稿 id、图片加载、接收回调及其 locale seat；动态 ui-attachment 客户端 entry 等待这些声明并注册呈现。[动态渲染与附件归属 Note](../architecture/2026-08-17-dynamic-client-render-and-attachment-ownership.md)负责这项包集成决策；本 Note 记录的视觉行为保持不变。
 
-两个浮层都 portal 到 body：从聊天消息打开的灯箱位于带 transform 的祖先之下，`position: fixed` 会被困在祖先的盒子里（遮罩只盖住聊天列），因此 `ImageLightbox` 与 `Toast` 经 `createPortal(document.body)` 渲染，从任何打开位置都覆盖整个视口。短时横幅是 `ui-primitives` 的 `Toast` 原子（距视口顶部 120px，水平中心跟随可选锚点——composer 卡片，因此横幅在聊天列上居中——`role="alert"`、`pointer-events: none`，停留三秒再一秒淡出，`onDone` 卸载，按展示序号作 key 使相同文案重新播报）。`InputBar` 把接收拒绝（`addImages` 返回的原因）和 `promptError` 都改走 toast，替换内联红条，`ModelSelect` 的模型选择被拒也走同一原子，其菜单内带 Retry 的错误条仍是目录加载的呈现面；状态机 notice 条不受影响。DeepSeek Chat 源码（本地参考副本）提供了目标行为：其 `ImageThumbnailInInput`（64px 卡片、透明度过渡的删除钮）、`ScrollArrows`（哨兵驱动的翻页）与 `useToast` 用法。
+两个浮层都 portal 到 body：从聊天消息打开的灯箱位于带 transform 的祖先之下，`position: fixed` 会被困在祖先的盒子里（遮罩只盖住聊天列），因此 `ImageLightbox` 与 `Toast` 经 `createPortal(document.body)` 渲染，从任何打开位置都覆盖整个视口。短时横幅是共享的 `ui-primitives` `Toast` 原子：距视口顶部 20px 的紧凑半透明浮层，水平中心跟随可选锚点，带语义状态圆点、单行省略、显式关闭按钮和 `role="alert"`。它停留三秒，再用 420ms 边上移边淡出；悬停时暂停，并在生命周期结束时调用 `onDone`。`InputBar` 的接收拒绝（`addImages` 返回的原因）和 `promptError`、`ModelSelect` 的模型选择拒绝以及技能市场操作结果都使用该组件，不再占据页面底部。需要长期保留或可操作的上下文错误仍留在原位置，包括模型菜单里带 Retry 的目录加载错误。
 
 ## 备选方案
 
@@ -30,4 +30,4 @@ Web 输入框的图片界面缺乏基本可用性（用户反馈，issue #2248�
 
 ## 结果
 
-输入框与历史图片界面的交互模型与 DeepSeek Chat 一致，纯 props 组件通过 conversation slot 的 locale seat 渲染，无需触达应用状态。代价是一个真实的动态包边界：`ui-attachment` 带有标准插件脚手架（客户端 bundle、invariant 伴生、双语 README、tsconfig face、逐文件 100% 覆盖率），省略该插件会让两个可选附件 slot 保持为空。错误横幅是短时的——用户移开视线四秒就会错过消息，这正是 DeepSeek Chat 自己做的取舍。非图片附件仍不支持；附件栏的卡片模型已就绪，但输入框的接收仍只认图片（记录于包 README 的限制一节）。
+输入框与历史图片界面的交互模型与 DeepSeek Chat 一致，纯 props 组件通过 conversation slot 的 locale seat 渲染，无需触达应用状态。代价是一个真实的动态包边界：`ui-attachment` 带有标准插件脚手架（客户端 bundle、invariant 伴生、双语 README、tsconfig face、逐文件 100% 覆盖率），省略该插件会让两个可选附件 slot 保持为空。错误横幅是短时的——用户移开视线约三秒半就会错过消息，悬停可暂停；需要长期保留或可操作的错误仍在上下文中展示。非图片附件仍不支持；附件栏的卡片模型已就绪，但输入框的接收仍只认图片（记录于包 README 的限制一节）。

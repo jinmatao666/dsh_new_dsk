@@ -9,7 +9,6 @@ import (
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/channeltype"
 )
 
 const webSearchHeader = "X-Dsh-Web-Search"
@@ -45,7 +44,7 @@ func BindConfiguredWebSearchRoute() gin.HandlerFunc {
 			return
 		}
 		channel, err := model.GetChannelById(channelID, true)
-		if err != nil || channel.Status != model.ChannelStatusEnabled || channel.Type != channeltype.AliBailian {
+		if err != nil || channel.Status != model.ChannelStatusEnabled {
 			abortWithMessage(c, http.StatusServiceUnavailable, "configured web search channel is unavailable")
 			return
 		}

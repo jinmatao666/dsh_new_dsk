@@ -7,7 +7,7 @@ import css from './Toast.module.css'
  * toast-fade delay (Toast.module.css) or the banner unmounts mid-fade. */
 const HOLD_MS = 3000
 /** Fade duration. Must agree with the stylesheet's toast-fade duration. */
-const FADE_MS = 1000
+const FADE_MS = 420
 
 /**
  * Transient top-center banner: slides in, holds at full opacity, fades out,
@@ -22,21 +22,27 @@ const FADE_MS = 1000
  * @param props.anchor - optional element whose horizontal center the banner
  * follows (e.g. the composer card, so the banner centers over the chat column
  * rather than the whole window); omitted, it centers on the viewport.
+ * @param props.tone - semantic accent for the unobtrusive status marker.
  * @param props.onDone - called once the fade completes; unmount the toast here.
  * @returns the floating banner.
  */
-export function Toast({ text, icon, anchor, onDone }: {
+export type ToastTone = 'info' | 'success' | 'warning' | 'error'
+
+export function Toast({ text, icon, anchor, tone = 'info', onDone }: {
   text: string
   icon?: ReactNode
   anchor?: HTMLElement | null
+  tone?: ToastTone
   onDone: () => void
 }) {
+  const [paused, setPaused] = useState(false)
   useEffect(() => {
+    if (paused) return
     const timer = setTimeout(onDone, HOLD_MS + FADE_MS)
     return () => { clearTimeout(timer) }
-  }, [onDone])
+  }, [onDone, paused])
   // Anchor-centered placement re-measures on window resizes; the banner lives
-  // four seconds, so sub-window layout drift within that span stays out of
+  // only briefly, so sub-window layout drift within that span stays out of
   // scope.
   const [left, setLeft] = useState<number | null>(null)
   useLayoutEffect(() => {
@@ -50,9 +56,10 @@ export function Toast({ text, icon, anchor, onDone }: {
     return () => { window.removeEventListener('resize', measure) }
   }, [anchor])
   return createPortal(
-    <div className={css.toast} role="alert" style={left === null ? undefined : { left }}>
+    <div className={css.toast} data-tone={tone} role="alert" style={left === null ? undefined : { left }} onMouseEnter={() => { setPaused(true) }} onMouseLeave={() => { setPaused(false) }}>
       {icon !== undefined && <span className={css.icon} aria-hidden>{icon}</span>}
-      <span className={css.text}>{text}</span>
+      <span className={css.text} title={text}>{text}</span>
+      <button className={css.close} type="button" aria-label="关闭通知" onClick={onDone}>×</button>
     </div>,
     document.body,
   )

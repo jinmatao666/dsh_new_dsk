@@ -1,6 +1,6 @@
 import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
-import { isJsonValue, snapshotJsonValue, type JsonValue } from '@deepseek-ai/dsh-session'
+import { isJsonValue, snapshotJsonValue, stringifyJsonValue, type JsonValue } from '@deepseek-ai/dsh-session'
 
 function objectWithForgedIntrinsicPrototype(revoked = false): Record<string, unknown> {
   const prototype = Object.create(null) as Record<string, unknown>
@@ -178,6 +178,42 @@ describe('snapshotJsonValue', () => {
 
     expect(() => snapshotJsonValue(source)).toThrow(failure)
     expect(reads).toBe(1)
+  })
+})
+
+describe('stringifyJsonValue', () => {
+  it('ignores prototype toJSON hooks that would rewrite provenance arrays', () => {
+    const arrayDescriptor = Object.getOwnPropertyDescriptor(Array.prototype, 'toJSON')
+    const objectDescriptor = Object.getOwnPropertyDescriptor(Object.prototype, 'toJSON')
+    try {
+      Object.defineProperty(Array.prototype, 'toJSON', {
+        configurable: true,
+        value: () => [[766, 864]],
+      })
+      Object.defineProperty(Object.prototype, 'toJSON', {
+        configurable: true,
+        value: () => ({ corrupted: true }),
+      })
+
+      expect(stringifyJsonValue({
+        type: 'assistant/message',
+        sourceEventSeqs: [766, 767, 768],
+      })).toBe('{"type":"assistant/message","sourceEventSeqs":[766,767,768]}')
+    } finally {
+      if (arrayDescriptor === undefined) delete (Array.prototype as { toJSON?: unknown }).toJSON
+      else Object.defineProperty(Array.prototype, 'toJSON', arrayDescriptor)
+      if (objectDescriptor === undefined) delete (Object.prototype as { toJSON?: unknown }).toJSON
+      else Object.defineProperty(Object.prototype, 'toJSON', objectDescriptor)
+    }
+  })
+
+  it('rejects values outside the lossless JSON vocabulary', () => {
+    expect(() => stringifyJsonValue({ value: undefined })).toThrow(/not losslessly JSON-serializable/)
+  })
+
+  it('quotes strings that equal serializer punctuation', () => {
+    const value = { values: [',', ':', '[', ']', '{', '}', 'line\nbreak'] }
+    expect(stringifyJsonValue(value)).toBe(JSON.stringify(value))
   })
 })
 

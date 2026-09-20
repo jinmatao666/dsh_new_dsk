@@ -4,6 +4,7 @@ import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connec
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+import { Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
   browseMarketplaceCatalog,
   buildMarketplaceCatalog,
@@ -822,7 +823,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       return []
     }
   })
-  const [discoveredCustomSkills, setDiscoveredCustomSkills] = useState<Skill[]>([])
+  const [discoveredCustomStates, setDiscoveredCustomStates] = useState<CustomSkillState[]>([])
   const [adding, setAdding] = useState(false)
   const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '', icon: 'preset:assistant', visibility: 'private' as 'private' | 'public' })
   const [customSkillSource, setCustomSkillSource] = useState<CustomSkillSource | null>(null)
@@ -831,11 +832,6 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   const [personalSkills, setPersonalSkills] = useState<RemotePersonalSkill[]>([])
 
   const [installStates, setInstallStates] = useState<Map<string, MarketplaceSkillState>>(new Map())
-  useEffect(() => {
-    if (installMessage === null) return undefined
-    const timer = window.setTimeout(() => { setInstallMessage(null) }, 5_000)
-    return () => { window.clearTimeout(timer) }
-  }, [installMessage])
   const refreshInstallStates = async () => {
     try {
       const [value, customValue] = await Promise.all([
@@ -855,32 +851,9 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
           && typeof (item as Partial<CustomSkillState>).name === 'string'
           && typeof (item as Partial<CustomSkillState>).description === 'string')
         : []
-      const knownCustomSkills = new Map(customSkills.map(skill => [skillSlug(skill), {
-        ...skill,
-        tags: [...new Set([...skill.tags, '本地', '个人'])],
-        source: 'personal' as const,
-        marketplacePublished: false,
-      }]))
-      const discovered = customEntries.map((item): Skill => knownCustomSkills.get(item.slug) ?? {
-        id: `local-${item.slug}`,
-        slug: item.slug,
-        name: item.name,
-        category: '本地技能',
-        tags: ['本地', '个人'],
-        summary: item.description,
-        description: item.description,
-        installs: '0',
-        accent: '#2563eb',
-        icon: '自',
-        version: '1.0.0',
-        author: '当前用户',
-        source: 'personal',
-        installable: true,
-        marketplacePublished: false,
-      })
-      setDiscoveredCustomSkills(discovered)
-      const customStates = discovered
-        .map(skill => [skill.id, { id: skill.id, slug: skillSlug(skill), version: skill.version, installedVersion: skill.version, state: 'installed' as const }] as const)
+      setDiscoveredCustomStates(customEntries)
+      const customStates = customEntries
+        .map(item => [`local-${item.slug}`, { id: `local-${item.slug}`, slug: item.slug, version: '1.0.0', installedVersion: '1.0.0', state: 'installed' as const }] as const)
       setInstallStates(new Map([
         ...customStates,
         ...states.map(state => [state.id, state] as const),
@@ -935,6 +908,48 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     return () => { document.removeEventListener('pointerdown', closeForSidebarAction, true) }
   }, [open])
 
+  const discoveredCustomSkills = useMemo<Skill[]>(() => {
+    const cachedBySlug = new Map(customSkills.map(skill => [skillSlug(skill), skill]))
+    const uploadedBySlug = new Map(personalSkills.flatMap((remote): Array<[string, RemotePersonalSkill]> => {
+      const slug = typeof remote.name === 'string' ? remote.name : ''
+      return slug === '' ? [] : [[slug, remote]]
+    }))
+    return discoveredCustomStates.map((item): Skill => {
+      const cached = cachedBySlug.get(item.slug)
+      const uploaded = uploadedBySlug.get(item.slug)
+      const category = typeof uploaded?.category === 'string' && uploaded.category.trim() !== ''
+        ? uploaded.category.trim()
+        : cached?.category ?? '本地技能'
+      const displayName = typeof uploaded?.display_name === 'string' && uploaded.display_name.trim() !== ''
+        ? uploaded.display_name.trim()
+        : cached?.name ?? item.name
+      const description = typeof uploaded?.description === 'string' && uploaded.description.trim() !== ''
+        ? uploaded.description.trim()
+        : cached?.summary ?? item.description
+      const icon = typeof uploaded?.icon === 'string' && uploaded.icon.trim() !== ''
+        ? uploaded.icon
+        : cached?.icon ?? 'preset:assistant'
+      return {
+        ...(cached ?? {}),
+        id: `local-${item.slug}`,
+        slug: item.slug,
+        name: displayName,
+        category,
+        categories: [category],
+        tags: ['本地', '个人'],
+        summary: description,
+        description,
+        installs: '0',
+        accent: '#2563eb',
+        icon,
+        version: cached?.version ?? '1.0.0',
+        author: cached?.author ?? '当前用户',
+        source: 'personal',
+        installable: true,
+        marketplacePublished: false,
+      }
+    })
+  }, [customSkills, discoveredCustomStates, personalSkills])
   const allSkills = useMemo<Skill[]>(() => {
     const published = remoteSkills?.flatMap((remote): Skill[] => {
       const slug = typeof remote.name === 'string' ? remote.name : ''
@@ -1075,7 +1090,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
         await desktopInvoke('uninstall_custom_skill', { slug })
         const next = customSkills.filter(item => item.id !== skill.id)
         setCustomSkills(next)
-        setDiscoveredCustomSkills(previous => previous.filter(item => item.id !== skill.id))
+        setDiscoveredCustomStates(previous => previous.filter(item => item.slug !== slug))
         localStorage.setItem('dsh.marketplace.custom-skills', JSON.stringify(next))
         setView('list')
         setSelectedSkill(null)
@@ -1194,7 +1209,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     }
     const next = [skill, ...customSkills.filter(item => item.id !== id)]
     setCustomSkills(next)
-    setDiscoveredCustomSkills(previous => [skill, ...previous.filter(item => item.id !== id)])
+    setDiscoveredCustomStates(previous => [installed, ...previous.filter(item => item.slug !== slug)])
     localStorage.setItem('dsh.marketplace.custom-skills', JSON.stringify(next))
     setInstallStates(previous => new Map(previous).set(id, { id, slug, version: '1.0.0', installedVersion: '1.0.0', state: 'installed' }))
     setAdding(false)
@@ -1519,10 +1534,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
           </>
         )}
         {installMessage !== null && (
-          <div className={`dsh-skill-install-message ${installMessage.kind}`} role="status">
-            {installMessage.text}
-            <button type="button" onClick={() => { setInstallMessage(null) }}>×</button>
-          </div>
+          <Toast text={installMessage.text} tone={installMessage.kind} onDone={() => { setInstallMessage(null) }} />
         )}
         {adding && (
           <div className="dsh-skill-add-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setAdding(false) }}>
@@ -1559,7 +1571,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                 </div>
               </fieldset>
               <div className="dsh-skill-add-source-field">
-                个人技能来源
+                <span className="dsh-skill-add-source-title">个人技能来源</span>
                 <span className="dsh-skill-add-source-actions">
                   <button type="button" className="dsh-skill-add-directory" onClick={() => { void selectCustomSkillDirectory() }} disabled={installing !== null}>选择目录</button>
                   <label className={`dsh-skill-add-directory${installing !== null ? ' disabled' : ''}`}>
@@ -1577,12 +1589,13 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                   </label>
                 </span>
                 {customSkillSource !== null && (
-                  <small
+                  <div
                     className="dsh-skill-add-selected"
                     title={customSkillSource.kind === 'directory' ? customSkillSource.path : customSkillSource.name}
                   >
-                    已选择：{customSkillSource.kind === 'directory' ? customSkillSource.path : customSkillSource.name}
-                  </small>
+                    <span>已选择</span>
+                    <strong>{customSkillSource.kind === 'directory' ? customSkillSource.path : customSkillSource.name}</strong>
+                  </div>
                 )}
               </div>
               <small className="dsh-skill-add-hint">请选择包含 SKILL.md 的完整目录或 ZIP。文件会安装到本机并安全上传；公开技能审核通过前不会出现在技能市场，更新已公开技能也需要再次审核。</small>

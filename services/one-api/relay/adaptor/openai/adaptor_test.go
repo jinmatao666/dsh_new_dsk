@@ -20,7 +20,7 @@ func TestConvertRequestAddsSearchOnlyForMarkedBailianRequest(t *testing.T) {
 	}{
 		{name: "marked Bailian request", channelType: channeltype.AliBailian, marked: true, wantSearch: true},
 		{name: "ordinary Bailian request", channelType: channeltype.AliBailian, marked: false, wantSearch: false},
-		{name: "marked non-Bailian request", channelType: channeltype.OpenAI, marked: true, wantSearch: false},
+		{name: "marked compatible request", channelType: channeltype.OpenAICompatible, marked: true, wantSearch: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

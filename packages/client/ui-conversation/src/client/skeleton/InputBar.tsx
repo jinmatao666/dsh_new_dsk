@@ -641,6 +641,7 @@ export function InputBar({
           key={toast.seq}
           text={toast.text}
           icon={<IconWarningOutline16 />}
+          tone="error"
           anchor={cardRef.current}
           onDone={dismissToast}
         />

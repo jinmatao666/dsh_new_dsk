@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 
-RUNTIME_VERSION = "1.0.5"
+RUNTIME_VERSION = "1.0.6"
 DEFAULT_FONT = "Microsoft YaHei"
 INVALID_FILENAME = re.compile(r'[\\/:*?"<>|]+')
 DEFAULT_MEETING_BASE_URL = "http://ac.zjugis.com:20330/v1"
@@ -789,6 +789,183 @@ def _strip_markdown(value: str) -> str:
     return value.replace("**", "").replace("`", "")
 
 
+def polish_meeting_minutes_docx(path: str | Path, meeting_title: str = "") -> None:
+    """Apply a restrained, meeting-specific Word layout without changing content."""
+    require("docx", "python-docx")
+    from docx import Document
+    from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_ROW_HEIGHT_RULE, WD_TABLE_ALIGNMENT
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Cm, Pt, RGBColor
+
+    document = Document(path)
+    section = document.sections[0]
+    section.page_width = Cm(21)
+    section.page_height = Cm(29.7)
+    section.top_margin = Cm(2.4)
+    section.bottom_margin = Cm(2.2)
+    section.left_margin = Cm(2.6)
+    section.right_margin = Cm(2.4)
+    section.header_distance = Cm(1.2)
+    section.footer_distance = Cm(1.2)
+
+    styles = document.styles
+    normal = styles["Normal"]
+    normal.font.name = DEFAULT_FONT
+    normal._element.rPr.rFonts.set(qn("w:eastAsia"), DEFAULT_FONT)
+    normal.font.size = Pt(10.5)
+    normal.font.color.rgb = RGBColor(31, 41, 55)
+    normal.paragraph_format.line_spacing = 1.45
+    normal.paragraph_format.space_after = Pt(5)
+
+    for level, size in ((1, 16), (2, 14), (3, 11.5)):
+        style = styles[f"Heading {level}"]
+        style.font.name = DEFAULT_FONT
+        style._element.rPr.rFonts.set(qn("w:eastAsia"), DEFAULT_FONT)
+        style.font.size = Pt(size)
+        style.font.bold = True
+        style.font.color.rgb = RGBColor(0, 0, 0)
+        style.paragraph_format.space_before = Pt(14 if level < 3 else 9)
+        style.paragraph_format.space_after = Pt(6)
+        style.paragraph_format.keep_with_next = True
+
+    if document.paragraphs:
+        title = document.paragraphs[0]
+        title.style = styles["Title"]
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        title.paragraph_format.space_before = Pt(0)
+        title.paragraph_format.space_after = Pt(6 if meeting_title.strip() else 18)
+        title.paragraph_format.keep_with_next = True
+        for run in title.runs:
+            run.font.name = DEFAULT_FONT
+            run._element.get_or_add_rPr().rFonts.set(qn("w:eastAsia"), DEFAULT_FONT)
+            run.font.size = Pt(22)
+            run.font.bold = True
+            run.font.color.rgb = RGBColor(0, 0, 0)
+        existing_subtitle = document.paragraphs[1].text.strip() if len(document.paragraphs) > 1 else ""
+        if (meeting_title.strip() and meeting_title.strip() not in {"会议纪要", title.text.strip()}
+                and existing_subtitle != meeting_title.strip()):
+            subtitle = OxmlElement("w:p")
+            title._p.addnext(subtitle)
+            paragraph = title._parent.add_paragraph()
+            paragraph._p.getparent().remove(paragraph._p)
+            subtitle.append(paragraph._p.get_or_add_pPr())
+            run = OxmlElement("w:r")
+            run_properties = OxmlElement("w:rPr")
+            fonts = OxmlElement("w:rFonts")
+            fonts.set(qn("w:eastAsia"), DEFAULT_FONT)
+            run_properties.append(fonts)
+            size = OxmlElement("w:sz")
+            size.set(qn("w:val"), "22")
+            run_properties.append(size)
+            color = OxmlElement("w:color")
+            color.set(qn("w:val"), "4B5563")
+            run_properties.append(color)
+            run.append(run_properties)
+            text = OxmlElement("w:t")
+            text.text = meeting_title.strip()
+            run.append(text)
+            subtitle.append(run)
+            paragraph_properties = subtitle.find(qn("w:pPr"))
+            alignment = OxmlElement("w:jc")
+            alignment.set(qn("w:val"), "center")
+            paragraph_properties.append(alignment)
+            spacing = OxmlElement("w:spacing")
+            spacing.set(qn("w:after"), "300")
+            paragraph_properties.append(spacing)
+
+    for paragraph in document.paragraphs[1:]:
+        text = paragraph.text.strip()
+        if text.startswith("•"):
+            clean = text[1:].lstrip()
+            paragraph.clear()
+            paragraph.style = styles["List Bullet"]
+            paragraph.add_run(clean)
+            paragraph.paragraph_format.left_indent = Cm(0.74)
+            paragraph.paragraph_format.first_line_indent = Cm(-0.42)
+            paragraph.paragraph_format.space_after = Pt(3)
+            paragraph.paragraph_format.line_spacing = 1.35
+        elif re.match(r"^\d+[.)]\s+", text) and paragraph.style.name == "Normal":
+            paragraph.paragraph_format.left_indent = Cm(0.74)
+            paragraph.paragraph_format.first_line_indent = Cm(-0.58)
+            paragraph.paragraph_format.space_after = Pt(4)
+            paragraph.paragraph_format.line_spacing = 1.4
+
+    def shade(cell, color: str) -> None:
+        properties = cell._tc.get_or_add_tcPr()
+        existing = properties.find(qn("w:shd"))
+        if existing is not None:
+            properties.remove(existing)
+        shading = OxmlElement("w:shd")
+        shading.set(qn("w:fill"), color)
+        properties.append(shading)
+
+    def cell_margin(cell, vertical: int = 100, horizontal: int = 110) -> None:
+        properties = cell._tc.get_or_add_tcPr()
+        existing = properties.find(qn("w:tcMar"))
+        if existing is not None:
+            properties.remove(existing)
+        margins = OxmlElement("w:tcMar")
+        for side, width in (("top", vertical), ("start", horizontal), ("bottom", vertical), ("end", horizontal)):
+            margin = OxmlElement(f"w:{side}")
+            margin.set(qn("w:w"), str(width))
+            margin.set(qn("w:type"), "dxa")
+            margins.append(margin)
+        properties.append(margins)
+
+    for table_index, table in enumerate(document.tables):
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.autofit = False
+        layout = OxmlElement("w:tblLayout")
+        layout.set(qn("w:type"), "fixed")
+        table._tbl.tblPr.append(layout)
+        table.rows[0]._tr.get_or_add_trPr().append(OxmlElement("w:tblHeader"))
+        widths = ([Cm(3.0), Cm(12.0)] if table_index == 0
+                  else [Cm(0.9), Cm(6.4), Cm(2.8), Cm(2.6), Cm(1.8)])
+        for column_index, width in enumerate(widths):
+            if column_index < len(table.columns):
+                table.columns[column_index].width = width
+        for row_index, row in enumerate(table.rows):
+            row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
+            row.height = Cm(0.72 if row_index else 0.78)
+            for column_index, cell in enumerate(row.cells):
+                if column_index < len(widths):
+                    cell.width = widths[column_index]
+                cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+                cell_margin(cell, 95 if table_index == 1 else 110)
+                if row_index == 0:
+                    shade(cell, "DCE6F1")
+                elif table_index == 0 and column_index == 0:
+                    shade(cell, "F2F5F8")
+                elif row_index % 2 == 0:
+                    shade(cell, "F8FAFC")
+                else:
+                    shade(cell, "FFFFFF")
+                for paragraph in cell.paragraphs:
+                    paragraph.paragraph_format.space_after = Pt(0)
+                    paragraph.paragraph_format.line_spacing = 1.15
+                    paragraph.alignment = (WD_ALIGN_PARAGRAPH.CENTER
+                                           if row_index == 0 or column_index in ({0} if table_index == 0 else {0, 2, 3, 4})
+                                           else WD_ALIGN_PARAGRAPH.LEFT)
+                    for run in paragraph.runs:
+                        run.font.name = DEFAULT_FONT
+                        run._element.get_or_add_rPr().rFonts.set(qn("w:eastAsia"), DEFAULT_FONT)
+                        run.font.size = Pt(9.5 if table_index == 1 else 10)
+                        run.font.color.rgb = RGBColor(17, 24, 39)
+                        run.font.bold = row_index == 0 or (table_index == 0 and column_index == 0)
+
+    footer = section.footer.paragraphs[0]
+    footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for run in footer.runs:
+        run.font.name = DEFAULT_FONT
+        run._element.get_or_add_rPr().rFonts.set(qn("w:eastAsia"), DEFAULT_FONT)
+        run.font.size = Pt(9)
+        run.font.color.rgb = RGBColor(107, 114, 128)
+    document.core_properties.subject = "会议纪要"
+    document.save(path)
+
+
 def meeting_prepare(args: argparse.Namespace) -> dict[str, Any]:
     directory = output_directory(args.output_dir)
     materials = [existing_file(item) for item in args.materials]
@@ -829,6 +1006,9 @@ def meeting_prepare(args: argparse.Namespace) -> dict[str, Any]:
         except OSError:
             # A locked transient file must not hide the primary Word result or its error.
             pass
+    for artifact in rendered["artifacts"]:
+        if artifact.get("kind") == "docx":
+            polish_meeting_minutes_docx(artifact["path"], args.meeting_title or "")
     for artifact in rendered["artifacts"]:
         artifacts.append(Artifact(**artifact))
     return {"success": True, "artifacts": [asdict(item) for item in artifacts]}

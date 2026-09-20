@@ -15,7 +15,7 @@ describe('Toast', () => {
       const banner = view.getByRole('alert')
       expect(banner.textContent).toContain('最多添加 50 张图片')
       expect(view.getByTestId('icon')).toBeTruthy()
-      vi.advanceTimersByTime(3999)
+      vi.advanceTimersByTime(3419)
       expect(onDone).not.toHaveBeenCalled()
       vi.advanceTimersByTime(1)
       expect(onDone).toHaveBeenCalledTimes(1)
@@ -50,6 +50,19 @@ describe('Toast', () => {
       view.unmount()
       vi.advanceTimersByTime(10_000)
       expect(onDone).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('uses a semantic tone and closes immediately when requested', () => {
+    vi.useFakeTimers()
+    try {
+      const onDone = vi.fn()
+      const view = render(<Toast text="保存成功" tone="success" onDone={onDone} />)
+      expect(view.getByRole('alert').dataset.tone).toBe('success')
+      fireEvent.click(view.getByRole('button', { name: '关闭通知' }))
+      expect(onDone).toHaveBeenCalledTimes(1)
     } finally {
       vi.useRealTimers()
     }

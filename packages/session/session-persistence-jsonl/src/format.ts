@@ -9,7 +9,7 @@
  */
 
 import { join } from 'node:path'
-import { decodeStorageRecord, packChunkRuns, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
+import { decodeStorageRecord, packChunkRuns, SESSION_FORMAT_VERSION, stringifyJsonValue } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader, SessionId, StorageRecord } from '@deepseek-ai/dsh-session'
 import { SessionFormatUnsupportedError, sessionFormatVersionRefusal } from '@deepseek-ai/dsh-session-persistence'
 
@@ -220,7 +220,7 @@ export function logPath(
  */
 export function eventLines(events: readonly SessionEvent[], packChunks: boolean): string {
   const records: readonly StorageRecord[] = packChunks ? packChunkRuns(events) : events
-  return records.map(record => JSON.stringify(record)).join('\n')
+  return records.map(record => stringifyJsonValue(record)).join('\n')
 }
 
 interface SessionLogScan {

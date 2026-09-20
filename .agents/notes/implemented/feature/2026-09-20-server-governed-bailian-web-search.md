@@ -10,7 +10,7 @@ Desktop Web search depended on a separate local DeepSeek credential even though 
 
 ## Decision
 
-The OneAPI Basic Settings page stores a default search model together with its exact channel id. The selector contains only enabled model sources on enabled Ali Bailian channels whose model family supports Bailian Web search. The relay repeats those checks before every marked request and pins distribution to that channel.
+The OneAPI Basic Settings page stores a default search model together with its exact channel id. The selector contains only enabled model sources whose model family supports Bailian Web search. The relay repeats those checks before every marked request and pins distribution to that channel. The channel may use the dedicated Bailian type or an OpenAI-compatible type because Bailian workspace endpoints expose the same compatible request fields.
 
 The desktop composition selects the `oneapi-bailian` search provider. It reads the public model name from `/api/status`, authenticates `/v1/chat/completions` with the existing desktop user token, and marks only that auxiliary request with `X-Dsh-Web-Search: 1`. OneAPI injects Bailian's `enable_search` and forced-search options only when this marker passed authentication and server-side route validation. Ordinary conversation requests never receive those fields and continue through normal model distribution.
 
@@ -26,4 +26,4 @@ The auxiliary request is recorded as `web/oneapi-search-request` without credent
 
 ## Consequences
 
-Administrators control search cost and availability centrally, and desktop users need only their existing login token. Search fails explicitly when the configured model, channel, or binding is unavailable. The model-family allowlist must be updated when Bailian adds or removes supported families. The existing direct DeepSeek provider remains available to non-desktop compositions.
+Administrators control search cost and availability centrally, and desktop users need only their existing login token. Search fails explicitly when the configured model, channel, or binding is unavailable. The model-family allowlist must be updated when Bailian adds or removes supported families. Selecting a compatible channel that does not accept Bailian search fields produces an upstream request failure instead of changing ordinary conversation behavior. The existing direct DeepSeek provider remains available to non-desktop compositions.

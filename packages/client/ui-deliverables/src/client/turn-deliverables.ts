@@ -130,10 +130,29 @@ function markedAnalysisViewPaths(text: string): readonly string[] {
     .filter(path => /(?:-analysis-view_|分析视图_|审查视图_)\d{8}_\d{6}_\d{3}\.json$/u.test(basename(path)))
 }
 
-function terminalDeliverablePaths(view: ToolResultNode['resultView']): readonly string[] {
-  if (view?.card !== 'terminal' || view.output === undefined) return []
-  const office = markedOfficeArtifacts(view.output)
+/** Text blocks retained in one durable tool result, including background-job output. */
+function toolResultText(message: unknown): string {
+  if (!isRecord(message) || !Array.isArray(message.content)) return ''
+  const blocks: string[] = []
+  for (const result of message.content) {
+    if (!isRecord(result) || !Array.isArray(result.content)) continue
+    for (const block of result.content) {
+      if (isRecord(block) && block.type === 'text' && typeof block.text === 'string') {
+        blocks.push(block.text)
+      }
+    }
+  }
+  return blocks.join('\n')
+}
+
+function resultDeliverablePaths(
+  message: unknown,
+  view: ToolResultNode['resultView'],
+): readonly string[] {
+  const viewOutput = view?.card === 'terminal' ? view.output ?? '' : ''
+  const office = markedOfficeArtifacts([toolResultText(message), viewOutput].join('\n'))
   if (office.recognized) return [...new Set(office.paths)]
+  if (view?.card !== 'terminal' || view.output === undefined) return []
   return [...new Set([
     ...deliverablePaths(view.output),
     ...markedAnalysisViewPaths(view.output),
@@ -232,10 +251,11 @@ export const deliverablesDefinition: ConversationNodeDefinition<DeliverablesStat
     if (result.isError === true) return context.state
     const callId = String(match.event.data.message.source.callId)
     const mutationPaths = producedPaths(context.state.calls.get(callId) ?? null)
-    const terminalPaths = match.view?.for === 'result'
-      ? terminalDeliverablePaths(match.view.view)
-      : []
-    const additions = [...mutationPaths, ...terminalPaths]
+    const resultPaths = resultDeliverablePaths(
+      match.event.data.message,
+      match.view?.for === 'result' ? match.view.view : null,
+    )
+    const additions = [...mutationPaths, ...resultPaths]
       .map(path => ({ seq: match.event.seq, path }))
     return additions.length === 0
       ? context.state

@@ -361,6 +361,37 @@ describe('produced-file Turn data', () => {
     ])
   })
 
+  it('publishes office artifacts collected through a background job result without a terminal view', () => {
+    const marker = `WANWEI_RESULT=${JSON.stringify({
+      success: true,
+      artifacts: [
+        { path: 'E:\\workspace\\录音_转写.txt', kind: 'transcript' },
+        { path: 'E:\\workspace\\会议纪要.docx', kind: 'docx' },
+      ],
+    })}`
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      call(2, 'job-output', { card: 'generic', title: 'Read background job', kind: 'read' }),
+      at(3, 'tool/result', {
+        turn: 1,
+        step: 1,
+        message: {
+          source: { type: 'tool-result', callId: 'job-output' },
+          content: [{
+            type: 'tool-result',
+            content: [{ type: 'text', text: `${marker}\n[status: completed, exit code: 0]` }],
+            isError: false,
+          }],
+        },
+      }),
+    ])
+
+    expect(producedForClosing(deliverablesOf(value))).toEqual([
+      'E:\\workspace\\录音_转写.txt',
+      'E:\\workspace\\会议纪要.docx',
+    ])
+  })
+
   it('does not reinterpret a failed office runtime marker as produced files', () => {
     const marker = `WANWEI_RESULT=${JSON.stringify({
       success: false,

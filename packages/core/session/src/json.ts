@@ -179,6 +179,61 @@ export function snapshotJsonValue<T>(value: T): T | undefined {
 }
 
 /**
+ * Serialize one lossless JSON value without invoking inherited or own
+ * `toJSON` hooks. Session persistence uses this instead of native object
+ * serialization so ambient prototype extensions cannot rewrite accepted
+ * event metadata after append-time validation.
+ *
+ * @param value - candidate value at a durable JSON boundary.
+ * @returns canonical compact JSON text preserving object key order.
+ * @throws when the candidate is not losslessly JSON-serializable.
+ */
+export function stringifyJsonValue(value: unknown): string {
+  const snapshot = snapshotJsonValue(value) as JsonValue | undefined
+  if (snapshot === undefined) throw new TypeError('value is not losslessly JSON-serializable')
+
+  const output: string[] = []
+  type StringifyTask = { kind: 'value'; value: JsonValue } | { kind: 'syntax'; text: string }
+  const tasks: StringifyTask[] = [{ kind: 'value', value: snapshot }]
+  for (let task = tasks.pop(); task !== undefined; task = tasks.pop()) {
+    if (task.kind === 'syntax') {
+      output.push(task.text)
+      continue
+    }
+    const item = task.value
+    if (item === null || typeof item === 'boolean' || typeof item === 'number' || typeof item === 'string') {
+      output.push(JSON.stringify(item))
+      continue
+    }
+    if (Array.isArray(item)) {
+      output.push('[')
+      tasks.push({ kind: 'syntax', text: ']' })
+      for (let index = item.length - 1; index >= 0; index--) {
+        const child = item[index]
+        /* v8 ignore next -- snapshotJsonValue produced every dense array slot. */
+        if (child === undefined) throw new TypeError('value is not losslessly JSON-serializable')
+        tasks.push({ kind: 'value', value: child })
+        if (index > 0) tasks.push({ kind: 'syntax', text: ',' })
+      }
+      continue
+    }
+    output.push('{')
+    const keys = Object.keys(item)
+    tasks.push({ kind: 'syntax', text: '}' })
+    for (let index = keys.length - 1; index >= 0; index--) {
+      const key = keys[index]
+      /* v8 ignore next -- index is bounded by the captured key count. */
+      if (key === undefined) throw new TypeError('value is not losslessly JSON-serializable')
+      tasks.push({ kind: 'value', value: item[key] as JsonValue })
+      tasks.push({ kind: 'syntax', text: ':' })
+      tasks.push({ kind: 'syntax', text: JSON.stringify(key) })
+      if (index > 0) tasks.push({ kind: 'syntax', text: ',' })
+    }
+  }
+  return output.join('')
+}
+
+/**
  * Test the same lossless JSON boundary as {@link snapshotJsonValue} without
  * detaching it. Only own enumerable string properties participate; `toJSON`
  * is ignored and getters run, so persistence boundaries use the snapshotter.

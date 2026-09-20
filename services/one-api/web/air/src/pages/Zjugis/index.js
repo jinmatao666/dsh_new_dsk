@@ -265,7 +265,6 @@ export function ModelConfigPage() {
           ? (model.sources || [])
               .filter(
                 (source) =>
-                  source.channel_type === 49 &&
                   source.status === 1 &&
                   source.enabled
               )
@@ -1099,7 +1098,7 @@ export function ModelConfigPage() {
               </SelectField>
             </div>
             <p className='preview-muted'>
-              未匹配到具体模型时使用默认上下文限制；默认视觉模型只列出支持图片输入的模型；默认搜索模型只列出已启用且支持联网搜索的百炼模型，并固定使用所选渠道；预扣额度会在请求完成后按实际用量多退少补。
+              未匹配到具体模型时使用默认上下文限制；默认视觉模型只列出支持图片输入的模型；默认搜索模型只列出已启用且支持联网搜索的模型，并固定使用所选渠道；预扣额度会在请求完成后按实际用量多退少补。
             </p>
             <div className='zjugis-modal-actions'>
               <button className='preview-button primary'>保存设置</button>

@@ -1,70 +1,57 @@
-/* Transient top-center banner (DeepSeek Chat toast look): contrast fill,
-   inverted label, slide-in, then hold-and-fade. The fade delay/duration MUST
-   agree with HOLD_MS/FADE_MS in Toast.tsx: the component unmounts at their
-   sum, so a mismatched sheet either cuts the fade or leaves an invisible
-   banner blocking nothing. */
-
 .toast {
   position: fixed;
-  top: 120px;
+  z-index: 2100;
+  top: 20px;
   left: 50%;
-  /* Above the 1000 the image lightbox backdrop uses: a failure reported while
-     a preview is open must stay readable. */
-  z-index: 1100;
-  /* Purely an announcement: it must never intercept clicks — in particular
-     after the CSS fade finished while a throttled background-tab timer has
-     not yet unmounted the still-hit-testable fixed element. */
-  pointer-events: none;
   display: flex;
+  width: max-content;
+  max-width: min(520px, calc(100vw - 40px));
+  min-height: 40px;
+  box-sizing: border-box;
   align-items: center;
-  gap: 10px;
-  max-width: min(560px, calc(100vw - 48px));
-  padding: 12px 16px;
-  border-radius: 14px;
-  background: var(--dsw-alias-button-contrast-fill);
-  color: var(--dsw-alias-label-primary-inverted);
-  font-size: 14px;
-  line-height: 22px;
-  box-shadow: var(--dsw-shadow-lv3);
+  gap: 9px;
+  padding: 8px 10px 8px 12px;
+  border: 1px solid rgb(148 163 184 / 22%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 92%);
+  color: #334155;
+  font-size: 13px;
+  line-height: 20px;
+  box-shadow: 0 10px 30px rgb(15 23 42 / 12%), 0 2px 8px rgb(15 23 42 / 5%);
+  backdrop-filter: blur(16px) saturate(130%);
   transform: translateX(-50%);
-  animation:
-    dsh-toast-in 160ms ease-out,
-    dsh-toast-fade 1000ms ease 3000ms forwards;
+  animation: dsh-toast-in 180ms cubic-bezier(.2, .8, .2, 1), dsh-toast-out 420ms ease 3000ms forwards;
 }
 
-.icon {
-  display: grid;
-  place-items: center;
+.toast::before {
+  width: 6px;
+  height: 6px;
   flex: none;
-  color: var(--dsw-alias-state-warn-label);
+  border-radius: 50%;
+  background: #60a5fa;
+  box-shadow: 0 0 0 4px rgb(96 165 250 / 13%);
+  content: '';
 }
 
-.text {
-  min-width: 0;
-}
+.toast[data-tone='success']::before { background: #34a36f; box-shadow: 0 0 0 4px rgb(52 163 111 / 12%); }
+.toast[data-tone='warning']::before { background: #d69a38; box-shadow: 0 0 0 4px rgb(214 154 56 / 13%); }
+.toast[data-tone='error']::before { background: #df6b70; box-shadow: 0 0 0 4px rgb(223 107 112 / 12%); }
+.toast:hover { animation-play-state: paused; }
+.icon { display: grid; flex: none; place-items: center; color: #7890ad; }
+.text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.close { display: grid; width: 24px; height: 24px; flex: none; padding: 0; border: 0; border-radius: 7px; place-items: center; background: transparent; color: #94a3b8; cursor: pointer; font: inherit; font-size: 17px; line-height: 1; }
+.close:hover { background: rgb(226 232 240 / 65%); color: #52647c; }
+.close:focus-visible { outline: 2px solid rgb(59 130 246 / 35%); outline-offset: 1px; }
 
 @keyframes dsh-toast-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -6px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }
 
-@keyframes dsh-toast-fade {
-  to {
-    opacity: 0;
-  }
+@keyframes dsh-toast-out {
+  to { opacity: 0; transform: translate(-50%, -12px); }
 }
 
-/* Reduced motion drops the slide-in; the delayed fade (an opacity change,
-   not movement) still ends the banner before the timed unmount. */
 @media (prefers-reduced-motion: reduce) {
-  .toast {
-    animation: dsh-toast-fade 1000ms ease 3000ms forwards;
-  }
+  .toast { animation: dsh-toast-out 300ms ease 3120ms forwards; }
 }

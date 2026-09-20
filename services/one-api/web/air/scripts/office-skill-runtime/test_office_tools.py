@@ -140,10 +140,24 @@ class OfficeToolsSmokeTest(unittest.TestCase):
         meeting = self.run_tool(
             "meeting-prepare", "--transcript", str(self.inputs / "transcript.txt"),
             "--materials", str(self.inputs / "new.docx"), "--skip-synthesis",
+            "--meeting-title", "项目联调会议",
             "--output-dir", str(self.outputs / "meeting"),
         )
         self.assertEqual(["docx"], [artifact["kind"] for artifact in meeting["artifacts"]])
         self.assertEqual([], list((self.outputs / "meeting").glob("*.md")))
+        from docx import Document
+        from docx.oxml.ns import qn
+
+        minutes = Document(meeting["artifacts"][0]["path"])
+        self.assertAlmostEqual(21.0, minutes.sections[0].page_width.cm, places=1)
+        self.assertAlmostEqual(29.7, minutes.sections[0].page_height.cm, places=1)
+        self.assertEqual("会议纪要", minutes.paragraphs[0].text)
+        self.assertEqual("项目联调会议", minutes.paragraphs[1].text)
+        self.assertTrue(any(paragraph.style.name == "List Bullet" for paragraph in minutes.paragraphs))
+        self.assertEqual([2, 5], [len(table.columns) for table in minutes.tables])
+        self.assertEqual([3.0, 12.0], [round(cell.width.cm, 1) for cell in minutes.tables[0].rows[0].cells])
+        header_properties = minutes.tables[1].rows[0]._tr.get_or_add_trPr()
+        self.assertIsNotNone(header_properties.find(qn("w:tblHeader")))
 
     def test_audio_is_split_and_transcribed_in_order(self) -> None:
         audio = self.inputs / "audio.wav"
