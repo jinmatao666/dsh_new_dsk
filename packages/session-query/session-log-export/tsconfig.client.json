@@ -16,6 +16,7 @@
   "references": [
     { "path": "../../../vendor/cordis" },
     { "path": "../../client/locale" },
+    { "path": "../../client/platform-actions" },
     { "path": "../../client/store" },
     { "path": "../../client/ui-commands" },
     { "path": "../../client/ui-conversation" },

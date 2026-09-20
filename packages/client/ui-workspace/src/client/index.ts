@@ -11,6 +11,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
+import type { ClientPlatformActions } from '@deepseek-ai/dsh-client-platform-actions/client'
 import type { IWorkspaces, WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the Controller service merges.
@@ -73,6 +74,7 @@ export function apply(ctx: Context): void {
   const connection = ctx.get('connection') as ConnectionHandle
   const sessions = ctx.get('sessions') as ISessions
   const workspaces = ctx.get('workspaces') as IWorkspaces
+  const platformActions: ClientPlatformActions | undefined = ctx.get('platformActions')
   const connectionGeneration = connection.generation
   const uiWorkspace = new UiWorkspaceService(
     ctx, ctx.remote.directoryPicker, workspaces, sessions)
@@ -117,6 +119,9 @@ export function apply(ctx: Context): void {
     },
     renameWorkspace: async (workspaceId, title) => { await workspaces.rename(workspaceId, title) },
     deleteWorkspace: async (workspaceId) => { await workspaces.delete(workspaceId) },
+    ...(platformActions?.canOpenDirectory() === true
+      ? { openWorkspaceDirectory: async (path: string) => { await platformActions.openDirectory(path) } }
+      : {}),
     insertWorkspaceBefore: async (workspaceId, beforeWorkspaceId) => {
       await workspaces.insertBefore(workspaceId, beforeWorkspaceId)
     },

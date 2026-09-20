@@ -102,7 +102,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-const OFFICE_RESULT_PREFIX = 'WANWEI_RESULT='
 const PROCESS_FILE_EXTENSIONS = new Set([
   'py', 'pyw', 'ps1', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'sh', 'bat', 'cmd',
 ])
@@ -113,32 +112,8 @@ function isUserDeliverable(path: string): boolean {
   return !PROCESS_FILE_EXTENSIONS.has(extension)
 }
 
-/** Extract explicit office and analysis artifacts from successful tool output. */
+/** Extract conventional generated artifact paths from successful tool output. */
 export function runtimeDeliverablePaths(text: string): readonly string[] {
-  const paths: string[] = []
-  let officeMarkerSeen = false
-  for (const line of text.split(/\r?\n/u)) {
-    const trimmed = line.trimStart()
-    if (!trimmed.startsWith(OFFICE_RESULT_PREFIX)) continue
-    try {
-      const value: unknown = JSON.parse(trimmed.slice(OFFICE_RESULT_PREFIX.length))
-      if (!isRecord(value)) continue
-      officeMarkerSeen = true
-      if (value.success === false || !Array.isArray(value.artifacts)) continue
-      for (const artifact of value.artifacts) {
-        if (!isRecord(artifact) || typeof artifact.path !== 'string') continue
-        const path = artifact.path.trim()
-        if (path !== '' && isUserDeliverable(path)) paths.push(path)
-      }
-    } catch {
-      // A malformed marker does not hide a later valid marker.
-    }
-  }
-  const analysis = [...text.matchAll(/DSH_ANALYSIS_VIEW=([^\r\n]+)/gu)]
-    .map(match => match[1]?.trim() ?? '')
-    .filter(path => /(?:-analysis-view_|分析视图_|审查视图_)\d{8}_\d{6}_\d{3}\.json$/u.test(basename(path)))
-  if (officeMarkerSeen) return [...new Set([...paths, ...analysis])]
-
   const generatedLines = text.split(/\r?\n/u)
     .filter(line => /(?:created|generated|saved|written|output|deliverable|生成|已生成|保存|写入|输出|交付)/iu.test(line))
     .join('\n')
@@ -147,7 +122,7 @@ export function runtimeDeliverablePaths(text: string): readonly string[] {
     /(?:[A-Za-z]:[\\/][^\r\n"'`<>|]*?\.(?:docx|xlsx|pptx|pdf|json|md|csv|html)|[^\s"'`<>|:]+\.(?:docx|xlsx|pptx|pdf|json|md|csv|html))/giu,
   )].map(match => match[0].replace(/[),.;:]+$/u, '').trim())
   /* oxlint-enable sonarjs/duplicates-in-character-class */
-  return [...new Set([...discovered.filter(isUserDeliverable), ...analysis])]
+  return [...new Set(discovered.filter(isUserDeliverable))]
 }
 
 function toolResultText(result: { content: readonly unknown[] }): string {
@@ -199,52 +174,60 @@ export function selectProducedFiles(owner: TurnTailOwnerProps): readonly string[
   return paths.length === 0 ? null : paths
 }
 
-/** Turn-local successful mutation accumulator; it publishes no view Node. */
-export const deliverablesDefinition: ConversationNodeDefinition<DeliverablesState> = {
-  kind: 'deliverables',
-  match: (event) => {
-    if (event.type === 'turn/start') return { id: String(event.data.turn), role: 'start' }
-    if (event.type === 'tool/call') return { id: String(event.data.turn), role: 'update' }
-    if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
-      return { id: String(event.data.turn), role: 'update' }
-    }
-    return null
-  },
-  start: (_context, match) => {
-    if (match.event.type !== 'turn/start') throw new Error('deliverables start requires turn/start')
-    return { turn: match.event.data.turn, calls: new Map(), produced: [] }
-  },
-  update: (context, match) => {
-    if (match.event.type === 'tool/call') {
-      const calls = new Map(context.state.calls)
-      calls.set(
-        String(match.event.data.callId),
-        mutationPath(match.event.data.name, match.event.data.arguments),
-      )
-      return { ...context.state, calls }
-    }
-    if (match.event.type !== 'tool/result') return context.state
-    const result = match.event.data.message.content[0]
-    if (result.isError === true) return context.state
-    const callId = String(match.event.data.message.source.callId)
-    const path = context.state.calls.get(callId)
-    const runtimePaths = runtimeDeliverablePaths(toolResultText(result))
-    const additions = [path, ...runtimePaths]
-      .filter((value): value is string => value !== null && value !== undefined)
-      .map(value => ({ seq: match.event.seq, path: value }))
-    return additions.length === 0
-      ? context.state
-      : { ...context.state, produced: [...context.state.produced, ...additions] }
-  },
-  buildLocationData: (context, scope) => scope !== 'turn' || context.state === undefined
-    ? null
-    : {
-      kind: 'turn',
-      turn: context.state.turn,
-      key: 'deliverables',
-      value: { produced: context.state.produced },
+/** Create one turn-local successful mutation accumulator. */
+export function createDeliverablesDefinition(
+  detectAdditional: (text: string) => readonly string[] = () => [],
+): ConversationNodeDefinition<DeliverablesState> {
+  return {
+    kind: 'deliverables',
+    match: (event) => {
+      if (event.type === 'turn/start') return { id: String(event.data.turn), role: 'start' }
+      if (event.type === 'tool/call') return { id: String(event.data.turn), role: 'update' }
+      if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
+        return { id: String(event.data.turn), role: 'update' }
+      }
+      return null
     },
+    start: (_context, match) => {
+      if (match.event.type !== 'turn/start') throw new Error('deliverables start requires turn/start')
+      return { turn: match.event.data.turn, calls: new Map(), produced: [] }
+    },
+    update: (context, match) => {
+      if (match.event.type === 'tool/call') {
+        const calls = new Map(context.state.calls)
+        calls.set(
+          String(match.event.data.callId),
+          mutationPath(match.event.data.name, match.event.data.arguments),
+        )
+        return { ...context.state, calls }
+      }
+      if (match.event.type !== 'tool/result') return context.state
+      const result = match.event.data.message.content[0]
+      if (result.isError === true) return context.state
+      const callId = String(match.event.data.message.source.callId)
+      const path = context.state.calls.get(callId)
+      const text = toolResultText(result)
+      const runtimePaths = [...runtimeDeliverablePaths(text), ...detectAdditional(text)]
+      const additions = [path, ...runtimePaths]
+        .filter((value): value is string => value !== null && value !== undefined)
+        .map(value => ({ seq: match.event.seq, path: value }))
+      return additions.length === 0
+        ? context.state
+        : { ...context.state, produced: [...context.state.produced, ...additions] }
+    },
+    buildLocationData: (context, scope) => scope !== 'turn' || context.state === undefined
+      ? null
+      : {
+        kind: 'turn',
+        turn: context.state.turn,
+        key: 'deliverables',
+        value: { produced: context.state.produced },
+      },
+  }
 }
+
+/** Official definition without product-specific artifact parsers. */
+export const deliverablesDefinition = createDeliverablesDefinition()
 
 /**
  * Trailing path segment, the part that identifies the file at a glance.

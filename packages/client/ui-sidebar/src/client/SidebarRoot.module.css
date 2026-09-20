@@ -129,7 +129,8 @@
 .brandIdentity {
   display: inline-flex;
   align-items: center;
-  height: 36px;
+  gap: 8px;
+  height: 24px;
   min-width: 0;
 }
 
@@ -143,9 +144,9 @@
 .brandName {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 6px;
   min-width: 0;
-  height: 36px;
+  height: 24px;
   font-size: 18px;
   font-weight: 600;
   line-height: 24px;
@@ -331,7 +332,6 @@
 
 .footerActions {
   display: flex;
-  flex-direction: column;
 }
 
 .collapsed .footArea {

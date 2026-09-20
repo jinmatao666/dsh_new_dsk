@@ -15,16 +15,6 @@ type AnalysisView = {
   tables: AnalysisTable[]
 }
 
-type NativeInvoke = (command: string, argumentsValue?: unknown) => Promise<unknown>
-type DesktopBridge = { core?: { invoke?: NativeInvoke } }
-type DesktopInternals = { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> }
-
-const desktopWindow = window as Window & {
-  __ZJUGIS_NATIVE_INVOKE__?: NativeInvoke
-  __TAURI__?: DesktopBridge
-  __TAURI_INTERNALS__?: DesktopInternals
-}
-
 function isAnalysisView(value: unknown): value is AnalysisView {
   if (value === null || typeof value !== 'object') return false
   const record = value as Partial<AnalysisView>
@@ -46,12 +36,13 @@ function Section({ section }: { section: AnalysisSection }) {
  * @returns An interactive result card with structured analysis and scrollable tables.
  */
 export function AnalysisResultCard({
-  path, openFile, excelPath, wordPath,
+  path, openFile, excelPath, wordPath, readView,
 }: {
   path: string
   openFile: (path: string) => void
   excelPath: string | undefined
   wordPath: string | undefined
+  readView: (path: string) => Promise<unknown>
 }) {
   const [view, setView] = useState<AnalysisView | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -59,17 +50,10 @@ export function AnalysisResultCard({
   const [visibleRows, setVisibleRows] = useState(100)
 
   useEffect(() => {
-    const invoke = desktopWindow.__ZJUGIS_NATIVE_INVOKE__
-      ?? desktopWindow.__TAURI__?.core?.invoke
-      ?? desktopWindow.__TAURI_INTERNALS__?.invoke
-    if (invoke === undefined) {
-      setError('当前环境不能读取本地分析视图，可直接打开 Excel 或 Word 成果。')
-      return
-    }
     let active = true
     setView(null)
     setError(null)
-    void invoke('read_analysis_view', { path })
+    void readView(path)
       .then((value) => {
         if (!active) return
         if (typeof value !== 'string') throw new Error('分析视图返回格式无效')
@@ -83,7 +67,7 @@ export function AnalysisResultCard({
         setError(reason instanceof Error ? reason.message : '分析视图加载失败')
       })
     return () => { active = false }
-  }, [path])
+  }, [path, readView])
 
   if (view === null) {
     return <section className={css.root} aria-label="分析结果"><div className={css.heading}><div><div className={css.kicker}>分析结果</div><h3>{error === null ? '正在加载分析成果…' : '分析成果未能在对话区加载'}</h3></div><div className={css.actions}>{excelPath !== undefined && <button type="button" onClick={() => { openFile(excelPath) }}>打开 Excel</button>}{wordPath !== undefined && <button type="button" onClick={() => { openFile(wordPath) }}>打开 Word</button>}</div></div>{error !== null && <p className={css.error}>{error}</p>}</section>

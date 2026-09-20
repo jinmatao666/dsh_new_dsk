@@ -17,9 +17,14 @@
   --dsw-alias-label-primary-bluish: #6d28d9;
 }
 .wanwei-product-wordmark { display:inline-flex;align-items:center;max-width:100%; }
-.wanwei-product-wordmark img { display:block;width:auto;height:36px;max-width:100%;margin:0;object-fit:contain; }
+.wanwei-product-wordmark img { display:block;width:auto;height:24px;max-width:100%;margin:0;object-fit:contain; }
+.wanwei-product-hero-identity { position:relative;display:inline-flex;align-items:center;justify-content:center; }
 .wanwei-product-hero-brand { display:block;width:min(244px,52vw);height:auto;margin:0;object-fit:contain; }
+.wanwei-product-hero-badge { position:absolute;left:calc(100% + 10px);top:2px;padding:1px 7px;border:1px solid var(--dsw-alias-interactive-bg-hover);border-radius:24px;background:var(--dsw-static-deepseek-50);color:var(--dsw-static-deepseek-600);font-size:12px;line-height:18px;white-space:nowrap; }
 .wanwei-product-file-input { display:none; }
 .wanwei-product-file-button { display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:9px;background:transparent;color:var(--dsw-alias-label-secondary);font:300 25px/1 sans-serif;cursor:pointer; }
 .wanwei-product-file-button:hover { background:var(--dsw-static-deepseek-100);color:var(--dsw-static-deepseek-600); }
 .wanwei-product-file-button:disabled { cursor:wait;opacity:.45; }
+.wanwei-product-drop-overlay { position:fixed;z-index:10000;inset:48px 16px 16px 366px;display:grid;place-items:center;border:1px dashed var(--dsw-alias-state-business-primary);border-radius:14px;background:color-mix(in srgb,var(--dsw-specific-sidebar-fill) 88%,transparent);color:var(--dsw-alias-state-business-primary);font-size:13px;font-weight:500;pointer-events:none; }
+.wanwei-product-import-status { position:fixed;z-index:10001;right:24px;bottom:24px;padding:8px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-secondary);box-shadow:0 6px 20px rgb(0 0 0 / 10%);font-size:12px; }
+.wanwei-product-import-status[data-error='true'] { color:var(--dsw-alias-state-error-primary); }

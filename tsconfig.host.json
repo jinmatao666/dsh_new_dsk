@@ -322,7 +322,7 @@
     { "path": "./packages/host/document-local" },
     { "path": "./packages/host/frontend-static" },
     { "path": "./packages/host/plugin-inventory" },
-    { "path": "./packages/host/vision" },
+    { "path": "./packages/wanwei/vision" },
     { "path": "./packages/llm/plugin-package-inventory-deepseek" },
     { "path": "./packages/host/webserver" },
     { "path": "./packages/sdk/client" },

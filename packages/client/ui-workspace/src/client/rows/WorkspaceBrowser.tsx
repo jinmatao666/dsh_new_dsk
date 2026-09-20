@@ -40,16 +40,6 @@ const SEARCH_QUERY_MAX_CODE_UNITS = 500
 /** Session rows visible per Workspace before the local overflow control. */
 const COLLAPSED_SESSION_LIMIT = 5
 
-type DesktopWindow = Window & {
-  __ZJUGIS_NATIVE_INVOKE__?: (command: string, argumentsValue?: unknown) => Promise<unknown>
-}
-
-async function desktopOpenWorkspaceDirectory(workspacePath: string): Promise<void> {
-  const invoke = (window as DesktopWindow).__ZJUGIS_NATIVE_INVOKE__
-  if (invoke === undefined) throw new Error('桌面端目录打开能力不可用')
-  await invoke('open_workspace_directory', { workspacePath })
-}
-
 /** Fold one Workspace without charging its provisional New Session against the ordinary-row limit. */
 function collapsedSessionRows(sessions: readonly SessionNode[]): {
   rows: readonly SessionNode[]
@@ -265,7 +255,7 @@ type SessionTreeProps = Pick<
   /** Open the browser-owned rename dialog for a real Workspace group. */
   onRenameRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
   /** Open the Workspace directory through the desktop shell. */
-  onOpenWorkspace: (workspacePath: string) => void
+  onOpenWorkspace?: (workspacePath: string) => void
   /** Open the browser-owned delete-confirmation dialog for a real Workspace group. */
   onDeleteRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
   /** Open the browser-owned session rename dialog. */
@@ -527,9 +517,9 @@ function SessionTree({
                 actions={group.workspaceId === undefined
                   ? undefined
                   : {
-                    open: () => {
-                      if (group.cwd !== undefined) onOpenWorkspace(group.cwd)
-                    },
+                    ...(onOpenWorkspace === undefined
+                      ? {}
+                      : { open: () => { if (group.cwd !== undefined) onOpenWorkspace(group.cwd) } }),
                     rename: () => {
                     /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                       if (group.workspaceId !== undefined) onRenameRequest(group.workspaceId, group.label)
@@ -828,6 +818,7 @@ export function WorkspaceBrowser({
   forkSession,
   renameWorkspace,
   deleteWorkspace,
+  openWorkspaceDirectory,
   insertWorkspaceBefore,
   archiveSession,
   insertSessionBefore,
@@ -842,29 +833,6 @@ export function WorkspaceBrowser({
   const [workspaceOpenError, setWorkspaceOpenError] = useState<string | null>(null)
   const home = useConnectionGeneration(generation => generation?.host.home)
   const workspaces = useWorkspaces(state => state.items)
-  const [fileDropActive, setFileDropActive] = useState(false)
-  const [fileDropStatus, setFileDropStatus] = useState<{ text: string; error: boolean } | null>(null)
-  useEffect(() => {
-    const enter = () => { setFileDropActive(true) }
-    const leave = () => { setFileDropActive(false) }
-    const drop = () => { setFileDropActive(false) }
-    const status = (event: Event) => {
-      const detail = (event as CustomEvent<{ text?: unknown; error?: unknown }>).detail
-      if (typeof detail.text === 'string') {
-        setFileDropStatus({ text: detail.text, error: detail.error === true })
-      }
-    }
-    window.addEventListener('dsh:native-file-drag-enter', enter)
-    window.addEventListener('dsh:native-file-drag-leave', leave)
-    window.addEventListener('dsh:native-file-drop', drop)
-    window.addEventListener('dsh:native-file-import-status', status)
-    return () => {
-      window.removeEventListener('dsh:native-file-drag-enter', enter)
-      window.removeEventListener('dsh:native-file-drag-leave', leave)
-      window.removeEventListener('dsh:native-file-drop', drop)
-      window.removeEventListener('dsh:native-file-import-status', status)
-    }
-  }, [])
   const workspacePhase = useWorkspaces(state => state.phase)
   const archivedSessionIds = useWorkspaces(state => state.archivedSessionIds)
   // Live occupancy of this surface's directory-flow hole (the same source the
@@ -1107,7 +1075,7 @@ export function WorkspaceBrowser({
   }
 
   return (
-    <div className={clsx(css.root, !wide && css.rail, fileDropActive && css.fileDropActive)}>
+    <div className={clsx(css.root, !wide && css.rail)}>
       <div className={css.sectionHeader}>
         {wide && (
           <span className={clsx(css.sectionLabel, css.wide, searchExpanded && css.sectionLabelHidden)}>
@@ -1240,11 +1208,6 @@ export function WorkspaceBrowser({
       {/* Always-mounted seat keeps the region's flex slot while the list
           itself is wide-only. */}
       <div className={css.listArea}>
-        {fileDropStatus !== null && (
-          <div className={clsx(css.fileDropStatus, fileDropStatus.error && css.fileDropError)} role="status">
-            {fileDropStatus.text}
-          </div>
-        )}
         {workspaceOpenError !== null && (
           <div role="status">{t('workspace.open.failed', { message: workspaceOpenError })}</div>
         )}
@@ -1299,11 +1262,13 @@ export function WorkspaceBrowser({
                 orderBy={orderBy}
                 home={home}
                 t={t}
-                onOpenWorkspace={(workspacePath) => {
-                  setWorkspaceOpenError(null)
-                  void desktopOpenWorkspaceDirectory(workspacePath).catch((reason: unknown) => {
-                    setWorkspaceOpenError(reason instanceof Error ? reason.message : String(reason))
-                  })
+                {...openWorkspaceDirectory === undefined ? {} : {
+                  onOpenWorkspace: (workspacePath: string) => {
+                    setWorkspaceOpenError(null)
+                    void openWorkspaceDirectory(workspacePath).catch((reason: unknown) => {
+                      setWorkspaceOpenError(reason instanceof Error ? reason.message : String(reason))
+                    })
+                  },
                 }}
                 onRenameRequest={(workspaceId, currentTitle) => {
                   setRenameTarget({ workspaceId, currentTitle })

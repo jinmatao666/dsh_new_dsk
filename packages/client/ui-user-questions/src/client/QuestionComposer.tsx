@@ -37,11 +37,8 @@ export function parseRecommendedLabel(label: string): { label: string; recommend
 /** Return whether a text-field key event belongs to an active IME composition. */
 function isComposing(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
   // keyCode 229 is the legacy IME-composition signal engines emit without isComposing.
+  // oxlint-disable-next-line typescript/no-deprecated
   return event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229
-}
-
-function hasChineseText(value: string | undefined): value is string {
-  return value !== undefined && /[\u3400-\u9fff]/u.test(value)
 }
 
 /** The free-text answer field shared by both question variants. */
@@ -163,9 +160,6 @@ function QuestionFlow({ pending, t, useStore, actions }: QuestionFlowProps) {
   // oxlint-disable-next-line typescript/no-non-null-assertion
   const draft = drafts[index]!
   const hasOptions = (question.options?.length ?? 0) > 0
-  const header = hasChineseText(question.header) ? question.header : t('fallback.header')
-  const questionText = hasChineseText(question.question) ? question.question : t('fallback.question')
-  const detail = hasChineseText(question.detail) ? question.detail : undefined
 
   const replaceProgress = (nextIndex: number, nextDrafts: QuestionDraftAnswer[]): void => {
     actions.replace(pending.key, { index: nextIndex, drafts: nextDrafts })
@@ -289,9 +283,9 @@ function QuestionFlow({ pending, t, useStore, actions }: QuestionFlowProps) {
       >
         <header className={css.header}>
           <div className={css.headingBlock}>
-            <div className={css.eyebrow}>{header}</div>
+            {question.header !== undefined && <div className={css.eyebrow}>{question.header}</div>}
             <h2 className={css.title} id={`question-${pending.key}-${String(index)}`}>
-              {questionText}
+              {question.question}
             </h2>
           </div>
           <div className={css.headerActions}>
@@ -318,24 +312,20 @@ function QuestionFlow({ pending, t, useStore, actions }: QuestionFlowProps) {
         {!minimized && (
           <>
             <div className={css.body} data-question-scroll>
-              {detail !== undefined && (
-                <div className={css.detail}><MarkdownText text={detail} labels={markdownLabels} /></div>
+              {question.detail !== undefined && (
+                <div className={css.detail}><MarkdownText text={question.detail} labels={markdownLabels} /></div>
               )}
               <div className={css.options} role={question.multiSelect === true ? 'group' : 'radiogroup'}>
                 {(question.options ?? []).map((option, optionIndex) => {
                   const selected = draft.selected.includes(option.label)
                   const display = parseRecommendedLabel(option.label)
-                  const optionLabel = hasChineseText(display.label)
-                    ? display.label
-                    : `${t('fallback.option')} ${String(optionIndex + 1)}`
-                  const optionDescription = hasChineseText(option.description) ? option.description : undefined
                   return (
                     <button
                       type="button" key={`${option.label}-${String(optionIndex)}`}
                       className={clsx(css.option, selected && question.multiSelect !== true && css.optionSelected)}
                       role={question.multiSelect === true ? 'checkbox' : 'radio'}
                       aria-checked={selected}
-                      aria-label={optionLabel}
+                      aria-label={display.label}
                       disabled={busy !== null}
                       onClick={() => { choose(option.label) }}
                       onKeyDown={(event) => {
@@ -353,12 +343,12 @@ function QuestionFlow({ pending, t, useStore, actions }: QuestionFlowProps) {
                         : <span className={css.number}>{optionIndex + 1}</span>}
                       <span className={css.optionCopy}>
                         <span className={css.optionLine}>
-                          <span className={css.optionLabel}>{optionLabel}</span>
+                          <span className={css.optionLabel}>{display.label}</span>
                           {display.recommended && (
                             <span className={css.badge}>{t('option.recommended')}</span>
                           )}
-                          {optionDescription !== undefined && (
-                            <span className={css.description}>{optionDescription}</span>
+                          {option.description !== undefined && (
+                            <span className={css.description}>{option.description}</span>
                           )}
                         </span>
                       </span>

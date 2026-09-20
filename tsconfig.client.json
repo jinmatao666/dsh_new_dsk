@@ -72,6 +72,7 @@
     { "path": "./packages/client/ui-deliverables" },
     { "path": "./packages/client/ui-workflow-run" },
     { "path": "./packages/client/ui-workspace" },
+    { "path": "./packages/client/platform-actions" },
     { "path": "./packages/client/ui-input-trigger" },
     { "path": "./packages/client/ui-commands" },
     { "path": "./packages/client/ui-skill" },
@@ -101,7 +102,7 @@
     { "path": "./packages/client/ui-session" },
     { "path": "./packages/client/web" },
     { "path": "./packages/wanwei/oneapi-auth/tsconfig.client.json" },
-    { "path": "./packages/client/ui-skill-marketplace" },
+    { "path": "./packages/wanwei/skill-marketplace" },
     { "path": "./packages/wanwei/product-ui" },
     { "path": "./packages/context/file-reference" },
     { "path": "./apps/web" }

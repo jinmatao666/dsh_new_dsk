@@ -31,8 +31,41 @@ env:
   DSH_TELEMETRY_DISABLED: '1'
 
 jobs:
+  verify-official:
+    name: Verify official DSH composition
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          dest: ${{ runner.temp }}/setup-pnpm-official-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify product boundaries
+        run: pnpm --dir products/wanwei-desktop run check:boundaries
+
+      - name: Build official DSH composition
+        run: pnpm run build:official
+
   build-desktop:
     name: Build ${{ matrix.name }} preview installer
+    needs: verify-official
     strategy:
       fail-fast: false
       matrix:
@@ -123,6 +156,9 @@ jobs:
 
       - name: Verify Wanwei product identity
         run: pnpm --dir products/wanwei-desktop run check:identity
+
+      - name: Verify Wanwei product boundaries
+        run: pnpm --dir products/wanwei-desktop run check:boundaries
 
       - name: Build DSH and desktop assets
         run: pnpm --dir products/wanwei-desktop run dev:prepare

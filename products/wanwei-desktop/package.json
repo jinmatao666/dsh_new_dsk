@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "check:identity": "node scripts/verify-identity.mjs",
+    "check:boundaries": "node scripts/verify-boundaries.mjs",
     "check:sidecar": "node scripts/verify-sidecar.mjs",
     "check:runtime": "node scripts/verify-sidecar.mjs --staged",
     "check:rust": "cargo check --manifest-path src-tauri/Cargo.toml",
     "check:runner": "node scripts/require-github-runner.mjs",
-    "dev:prepare": "pnpm --dir ../.. run build",
+    "dev:prepare": "pnpm run check:boundaries && node scripts/build-dsh.mjs",
     "dev": "pnpm run check:identity && pnpm run dev:prepare && tauri dev --config src-tauri/tauri.dev.conf.json",
     "prepare:runtime": "node scripts/prepare-runtime.mjs",
     "build:prepare": "pnpm run check:identity && pnpm run dev:prepare && pnpm run prepare:runtime && pnpm run check:runtime",

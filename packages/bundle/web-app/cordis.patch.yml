@@ -41,6 +41,10 @@
 # `dsh.client` rows are the browser roster the modules node half scans into
 # window.__DSH_BOOT__; the modules row is simultaneously a host row.
 - insert:
+    # Optional operations supplied by an embedding desktop or native shell.
+    - id: client-platform-actions
+      name: '@deepseek-ai/dsh-client-platform-actions'
+
     # Host-owned opt-in sampled when a new Web session receives its preset
     # delegation tools. The Plugins page edits this settings namespace.
     - id: subagent-model-selection-settings

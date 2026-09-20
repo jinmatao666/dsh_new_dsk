@@ -18,8 +18,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { ProducedFiles } from './ProducedFiles.tsx'
 import { en, NS, zh, type DeliverablesKey } from './locales.ts'
 import {
-  deliverablesDefinition, producedFileMentions, selectProducedFiles,
+  createDeliverablesDefinition, producedFileMentions, selectProducedFiles,
 } from './turn-deliverables.ts'
+import { DeliverableExtensions } from './extensions.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -30,6 +31,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 export { ProducedFiles, type ProducedFilesProps } from './ProducedFiles.tsx'
 export { producedForClosing } from './turn-deliverables.ts'
+export { DeliverableExtensions, type RuntimeDeliverableDetector } from './extensions.ts'
 
 /** Required services for the tail-slot registration and its dictionaries. */
 export const inject = ['slots', 'locale', 'uiConversation', 'connection', 'remote', 'remote.session']
@@ -39,6 +41,7 @@ export const inject = ['slots', 'locale', 'uiConversation', 'connection', 'remot
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
+  const extensions = new DeliverableExtensions(ctx)
   const connection = ctx.get('connection') as ConnectionHandle
   const workspacePathOpen = createSnapshotStore<boolean | undefined>(undefined)
   let requestedWorkspacePathOpen = false
@@ -68,7 +71,7 @@ export function apply(ctx: ClientContext): void {
     workspacePathOpen.set(undefined)
     if (requestedWorkspacePathOpen) loadWorkspacePathOpen()
   })
-  ctx.uiConversation.events.register(deliverablesDefinition)
+  ctx.uiConversation.events.register(createDeliverablesDefinition(text => extensions.detect(text)))
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-deliverables: dictionaries')
   ctx.slots.inject(
     'conversation.chat.turnTail',
@@ -77,6 +80,7 @@ export function apply(ctx: ClientContext): void {
       select: selectProducedFiles,
       locale: NS,
       inject: () => ({
+        extensions,
         isLoopback: connection.isLoopback,
         ensureWorkspacePathOpen,
         hooks: { workspacePathOpen },

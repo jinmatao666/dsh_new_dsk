@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  downloadUrl, saveArchiveInDesktop, SessionLogDownloadController, sessionLogZipFilename,
+  downloadUrl, SessionLogDownloadController, sessionLogZipFilename,
 } from '../src/client/controller.ts'
 
 const SID = 'session-export-controller' as SessionId
@@ -10,7 +10,6 @@ const SID = 'session-export-controller' as SessionId
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
-  Reflect.deleteProperty(window, '__ZJUGIS_NATIVE_INVOKE__')
 })
 
 describe('SessionLogDownloadController', () => {
@@ -134,16 +133,17 @@ describe('SessionLogDownloadController', () => {
 })
 
 describe('browser download helpers', () => {
-  it('saves archive bytes through the stable desktop bridge', async () => {
-    const invoke = vi.fn(async () => 'C:\\Users\\example\\Downloads\\archive.zip')
-    Object.defineProperty(window, '__ZJUGIS_NATIVE_INVOKE__', {
-      value: invoke, configurable: true,
-    })
+  it('passes archive bytes to an injected native save operation', async () => {
+    const nativeSave = vi.fn(async (_archive: Blob, _filename: string) => {})
+    const controller = new SessionLogDownloadController(
+      async () => new Response('zip'), vi.fn(), nativeSave,
+    )
 
-    await expect(saveArchiveInDesktop(new Blob(['zip']), 'archive.zip')).resolves.toBe(true)
-    expect(invoke).toHaveBeenCalledWith('save_session_log_archive', {
-      fileName: 'archive.zip', bytes: [122, 105, 112],
-    })
+    await controller.download(SID)
+
+    expect(nativeSave).toHaveBeenCalledOnce()
+    expect(nativeSave.mock.calls[0]?.[1]).toBe('dsh-session-session-export-controller.zip')
+    await expect(nativeSave.mock.calls[0]?.[0].text()).resolves.toBe('zip')
   })
 
   it('sanitizes the archive filename and hands the URL to a download anchor', () => {

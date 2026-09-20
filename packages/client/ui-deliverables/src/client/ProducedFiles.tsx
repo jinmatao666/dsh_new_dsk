@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { basename } from './turn-deliverables.ts'
-import { AnalysisResultCard } from './AnalysisResultCard.tsx'
+import type { DeliverableExtensions } from './extensions.ts'
 import type { NS } from './locales.ts'
 import css from './ProducedFiles.module.css'
 
@@ -55,6 +55,7 @@ export interface ProducedFilesInjected {
 /** Matched paths plus the opener, locale, and injected Host capability. */
 export type ProducedFilesProps = Pick<TurnTailOwnerProps, 'openFile'> & {
   matched: readonly string[]
+  extensions?: DeliverableExtensions
 } & PropsLocale<typeof NS> & InjectFace<ProducedFilesInjected>
 
 function moreLabel(t: ProducedFilesProps['t'], count: number): string {
@@ -67,16 +68,12 @@ function moreLabel(t: ProducedFilesProps['t'], count: number): string {
  * @returns The produced-files row.
  */
 export function ProducedFiles({
-  matched: paths, openFile, isLoopback, ensureWorkspacePathOpen, useWorkspacePathOpen, t,
+  matched: paths, openFile, extensions, isLoopback, ensureWorkspacePathOpen, useWorkspacePathOpen, t,
 }: ProducedFilesProps) {
-  const analysisViewPath = paths.find(path => /(?:-analysis-view_|分析视图_|审查视图_)\d{8}_\d{6}_\d{3}\.json$/u.test(basename(path)))
-  const displayedPaths = useMemo(() => paths.filter(path => (
-    path !== analysisViewPath
-    && !/原始数据_\d{8}_\d{6}_\d{3}\.json$/u.test(basename(path))
-    && !/底稿_\d{8}_\d{6}_\d{3}\.md$/u.test(basename(path))
-  )), [analysisViewPath, paths])
-  const excelPath = displayedPaths.find(path => /\.xlsx$/iu.test(path))
-  const wordPath = displayedPaths.find(path => /\.docx$/iu.test(path))
+  const displayedPaths = useMemo(
+    () => paths.filter(path => extensions?.isClaimed(path) !== true),
+    [extensions, paths],
+  )
   useEffect(() => { ensureWorkspacePathOpen() }, [ensureWorkspacePathOpen])
   const hostCanOpenPath = useWorkspacePathOpen(available => available === true)
   const canOpenPath = isLoopback && hostCanOpenPath
@@ -119,14 +116,7 @@ export function ProducedFiles({
   const hidden = displayedPaths.length - shown.length
   return (
     <>
-      {analysisViewPath !== undefined && (
-        <AnalysisResultCard
-          path={analysisViewPath}
-          openFile={openFile}
-          excelPath={excelPath}
-          wordPath={wordPath}
-        />
-      )}
+      {extensions?.render(paths, openFile)}
       {displayedPaths.length > 0 && (
         <div className={css.root}>
           <span className={css.label}>{t('produced.label')}</span>

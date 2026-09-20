@@ -113,7 +113,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   onToggle: () => void
   onCreate: () => void
   /** Real-Workspace actions; absent for the ungrouped bucket (no menu shown). */
-  actions?: { open: () => void; rename: () => void; delete: () => void } | undefined
+  actions?: { open?: () => void; rename: () => void; delete: () => void } | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
@@ -126,7 +126,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   const active = group.expanded && group.containsCurrent
   const [menuOpen, setMenuOpen] = useState(false)
   const workspaceMenuItems = [
-    { id: 'open', label: t('open.workspace') },
+    ...(actions?.open === undefined ? [] : [{ id: 'open', label: t('open.workspace') }]),
     { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
     { id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutline16 />, danger: true },
   ]
@@ -167,7 +167,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
               // not inherit the destructive branch as an else fallback.
               /* v8 ignore next -- Menu can emit only the rename and delete rows supplied above. */
               if (id !== 'open' && id !== 'rename' && id !== 'delete') return
-              if (id === 'open') actions.open()
+              if (id === 'open') actions.open?.()
               else if (id === 'rename') actions.rename()
               else actions.delete()
             }}
@@ -392,7 +392,6 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
     { id: 'fork', label: t('menu.fork'), icon: <IconBranchOutline16 /> },
     // 20-native glyph in the menu's 16px icon slot (Menu.module.css .itemIcon).
     { id: 'archive', label: t('menu.archiveSession'), icon: <IconArchiveOutline20 size={16} /> },
-    { id: 'delete', label: t('menu.deleteSession'), icon: <IconTrashOutline16 />, danger: true },
   ]
   // Figma session cell: pad 8, status slot 16, then a 4px title gap.
   const ownRow = (
@@ -455,8 +454,6 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
               if (id === 'rename') onRename(node.id, row.title)
               if (id === 'fork') onFork(node.id)
               if (id === 'archive') onArchive(node.id)
-              // The current DSH wire maps logical removal to recoverable archive.
-              if (id === 'delete') onArchive(node.id)
             }}
             portal
             closeOnPointerLeave

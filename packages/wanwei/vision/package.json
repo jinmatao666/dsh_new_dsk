@@ -1,6 +1,6 @@
 {
-  "name": "@deepseek-ai/dsh-vision",
-  "description": "Desktop-compatible local image recognition tool routed through the active DSH model provider",
+  "name": "@deepseek-ai/dsh-wanwei-vision",
+  "description": "Wanwei OneAPI-governed local image recognition tool",
   "version": "0.1.2-alpha.1",
   "private": true,
   "type": "module",

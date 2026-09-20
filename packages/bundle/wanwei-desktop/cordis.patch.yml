@@ -15,11 +15,11 @@
     - id: wanwei-document-local
       name: '@deepseek-ai/dsh-document-local'
     - id: wanwei-vision
-      name: '@deepseek-ai/dsh-vision'
+      name: '@deepseek-ai/dsh-wanwei-vision'
       config:
         baseURL: !!js process.env.DSH_ONEAPI_URL ?? 'http://127.0.0.1:3000'
         credentialRef: DSH_ONEAPI_TOKEN
     - id: wanwei-skill-marketplace
-      name: '@deepseek-ai/dsh-client-ui-skill-marketplace'
+      name: '@deepseek-ai/dsh-wanwei-skill-marketplace'
     - id: wanwei-product-ui
       name: '@deepseek-ai/dsh-wanwei-product-ui'

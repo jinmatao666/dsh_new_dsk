@@ -176,7 +176,7 @@ function deliverablesOf(value: ConversationNodeAssembler, turn = 1): Readonly<De
 }
 
 describe('produced-file Turn data', () => {
-  it('reads office artifacts and analysis views from runtime output', () => {
+  it('leaves product-specific runtime protocols to registered extensions', () => {
     const marker = `WANWEI_RESULT=${JSON.stringify({
       success: true,
       artifacts: [
@@ -184,11 +184,9 @@ describe('produced-file Turn data', () => {
         { path: 'E:\\workspace\\helper.py' },
       ],
     })}`
-    expect(runtimeDeliverablePaths(`${marker}\nDSH_ANALYSIS_VIEW=E:\\workspace\\city-analysis-view_20260917_120000_001.json`))
-      .toEqual([
-        'E:\\workspace\\summary.xlsx',
-        'E:\\workspace\\city-analysis-view_20260917_120000_001.json',
-      ])
+    expect(runtimeDeliverablePaths(
+      `${marker}\nDSH_ANALYSIS_VIEW=E:\\workspace\\city-analysis-view_20260917_120000_001.json`,
+    )).toEqual([])
   })
 
   it('deduplicates paths in first-seen order and stops at the closing Assistant seq', () => {

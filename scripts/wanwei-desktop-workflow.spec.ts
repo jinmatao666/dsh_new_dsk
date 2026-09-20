@@ -31,8 +31,16 @@ describe('Wanwei desktop preview workflow', () => {
       },
     })
     const jobs = workflow.jobs as Record<string, Record<string, unknown>>
+    const official = jobs['verify-official']
+    expect(official?.['runs-on']).toBe('ubuntu-22.04')
+    expect(official?.permissions).toEqual({ contents: 'read' })
+    const officialSteps = official?.steps as Array<Record<string, unknown>>
+    const officialCommands = officialSteps.filter(step => typeof step.run === 'string').map(step => step.run).join('\n')
+    expect(officialCommands).toContain('products/wanwei-desktop run check:boundaries')
+    expect(officialCommands).toContain('pnpm run build:official')
     const build = jobs['build-desktop']
     expect(build?.['runs-on']).toBe('${{ matrix.runner }}')
+    expect(build?.needs).toBe('verify-official')
     expect(build?.permissions).toEqual({ contents: 'read' })
     const strategy = build?.strategy as Record<string, unknown>
     const matrix = strategy.matrix as Record<string, unknown>
@@ -83,7 +91,7 @@ describe('Wanwei desktop preview workflow', () => {
   it('publishes only an optional preview release and contains no service deployment job', () => {
     const workflow = loadWorkflow()
     const jobs = workflow.jobs as Record<string, Record<string, unknown>>
-    expect(Object.keys(jobs)).toEqual(['build-desktop', 'release'])
+    expect(Object.keys(jobs)).toEqual(['verify-official', 'build-desktop', 'release'])
     expect(jobs.release?.if).toBe('${{ inputs.publish_github_release }}')
     expect(jobs.release?.needs).toBe('build-desktop')
     const releaseSteps = jobs.release?.steps as Array<Record<string, unknown>>

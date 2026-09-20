@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
+import type { ClientPlatformActions } from '@deepseek-ai/dsh-client-platform-actions/client'
+import type { DeliverableExtensions } from '@deepseek-ai/dsh-client-ui-deliverables/client'
+import { AnalysisResultCard } from './AnalysisResultCard.tsx'
 import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
@@ -18,6 +21,38 @@ declare global {
 function fileMention(path: string): string {
   if (/[\u0000-\u001f\u007f-\u009f"]/u.test(path)) throw new Error('导入后的文件路径包含不支持的字符')
   return /\s/u.test(path) ? `@"${path}"` : `@${path}`
+}
+
+const RESULT_PREFIX = 'WANWEI_RESULT='
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function wanweiDeliverablePaths(text: string): readonly string[] {
+  const paths: string[] = []
+  for (const line of text.split(/\r?\n/u)) {
+    const trimmed = line.trimStart()
+    if (trimmed.startsWith(RESULT_PREFIX)) {
+      try {
+        const value: unknown = JSON.parse(trimmed.slice(RESULT_PREFIX.length))
+        if (isRecord(value) && value.success !== false && Array.isArray(value.artifacts)) {
+          for (const artifact of value.artifacts) {
+            if (isRecord(artifact) && typeof artifact.path === 'string' && artifact.path.trim() !== '') {
+              paths.push(artifact.path.trim())
+            }
+          }
+        }
+      } catch {
+        // A malformed product marker does not hide later valid artifacts.
+      }
+    }
+  }
+  for (const match of text.matchAll(/DSH_ANALYSIS_VIEW=([^\r\n]+)/gu)) {
+    const path = match[1]?.trim()
+    if (path !== undefined && path !== '') paths.push(path)
+  }
+  return [...new Set(paths)]
 }
 
 function useActiveWorkspacePath(props: FileImportProps): string | undefined {
@@ -50,6 +85,8 @@ function FileImportAction(props: FileImportProps) {
   const picker = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  const [dragActive, setDragActive] = useState(false)
+  const [status, setStatus] = useState<{ text: string; error: boolean }>()
   const append = (paths: readonly string[]) => {
     const prefix = input.draft === '' || /\s$/u.test(input.draft) ? '' : ' '
     props.inputActions.setDraft(`${input.draft}${prefix}${paths.map(fileMention).join(' ')}`)
@@ -63,38 +100,43 @@ function FileImportAction(props: FileImportProps) {
     finally { setBusy(false) }
   }
   useEffect(() => {
-    const browserDrop = (event: Event) => {
-      const files = (event as CustomEvent<{ files?: readonly File[] }>).detail.files
-      if (files === undefined) return
-      void importFiles(files)
+    const browserDrop = (event: DragEvent) => {
+      const files = [...(event.dataTransfer?.files ?? [])]
+      const documents = files.filter(file => !file.type.startsWith('image/'))
+      if (documents.length === 0) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      setDragActive(false)
+      void importFiles(documents)
     }
     const drop = () => {
+      setDragActive(false)
       if (busy) return
       setBusy(true)
       setError(undefined)
-      window.dispatchEvent(new CustomEvent('dsh:native-file-import-status', {
-        detail: { text: '正在导入文件…', error: false },
-      }))
+      setStatus({ text: '正在导入文件…', error: false })
       void nativeImport('import_dropped_workspace_files', workspacePath)
         .then((paths) => {
           append(paths)
-          window.dispatchEvent(new CustomEvent('dsh:native-file-import-status', {
-            detail: { text: `已导入 ${paths.length} 个文件`, error: false },
-          }))
+          setStatus({ text: `已导入 ${paths.length} 个文件`, error: false })
         })
         .catch((reason: unknown) => {
           const message = reason instanceof Error ? reason.message : String(reason)
           setError(message)
-          window.dispatchEvent(new CustomEvent('dsh:native-file-import-status', {
-            detail: { text: `文件导入失败：${message}`, error: true },
-          }))
+          setStatus({ text: `文件导入失败：${message}`, error: true })
         })
         .finally(() => { setBusy(false) })
     }
-    window.addEventListener('dsh:browser-file-drop', browserDrop)
+    const enter = () => { setDragActive(true) }
+    const leave = () => { setDragActive(false) }
+    document.addEventListener('drop', browserDrop, { capture: true })
+    window.addEventListener('dsh:native-file-drag-enter', enter)
+    window.addEventListener('dsh:native-file-drag-leave', leave)
     window.addEventListener('dsh:native-file-drop', drop)
     return () => {
-      window.removeEventListener('dsh:browser-file-drop', browserDrop)
+      document.removeEventListener('drop', browserDrop, { capture: true })
+      window.removeEventListener('dsh:native-file-drag-enter', enter)
+      window.removeEventListener('dsh:native-file-drag-leave', leave)
       window.removeEventListener('dsh:native-file-drop', drop)
     }
   }, [busy, input.draft, workspacePath])
@@ -107,6 +149,8 @@ function FileImportAction(props: FileImportProps) {
     <>
       <input ref={picker} className="wanwei-product-file-input" type="file" multiple onChange={choose} />
       <button className="wanwei-product-file-button" type="button" disabled={busy} title={error ?? '导入文件'} aria-label="导入文件" data-error={error === undefined ? undefined : true} onClick={() => picker.current?.click()}>+</button>
+      {dragActive && <div className="wanwei-product-drop-overlay">松开鼠标，将文件导入当前工作区</div>}
+      {status !== undefined && <div className="wanwei-product-import-status" data-error={status.error}>{status.text}</div>}
     </>
   )
 }
@@ -135,20 +179,56 @@ function WanweiBrandName() {
 
 function WanweiHeroBrand() {
   return (
-    <img
-      className="wanwei-product-hero-brand"
-      src="/brand-wordmark.svg"
-      width={244}
-      height={61}
-      alt="万维 Buddy"
-    />
+    <span className="wanwei-product-hero-identity">
+      <img className="wanwei-product-hero-brand" src="/brand-wordmark.svg" width={244} height={61} alt="万维 Buddy" />
+      <span className="wanwei-product-hero-badge">专业智能助手</span>
+    </span>
   )
 }
 
-export const inject = ['slots']
+export const inject = ['slots', 'platformActions', 'deliverableExtensions']
 
 /** Installs only Wanwei-owned occupants; official DSH packages stay untouched. */
 export function apply(ctx: Context): void {
+  const platformActions = ctx.get('platformActions') as ClientPlatformActions
+  const deliverableExtensions = ctx.get('deliverableExtensions') as DeliverableExtensions
+  ctx.effect(
+    () => deliverableExtensions.registerDetector(wanweiDeliverablePaths),
+    'wanwei deliverable result protocol',
+  )
+  ctx.effect(() => deliverableExtensions.registerPresenter({
+    claims: path => /(?:-analysis-view_|分析视图_|审查视图_|原始数据_|底稿_)\d{8}_\d{6}_\d{3}\.(?:json|md)$/u.test(path),
+    render: (paths, openFile) => {
+      const path = paths.find(value => /(?:-analysis-view_|分析视图_|审查视图_)\d{8}_\d{6}_\d{3}\.json$/u.test(value))
+      if (path === undefined) return null
+      const readView = async (viewPath: string): Promise<unknown> => {
+        const invoke = window.__ZJUGIS_NATIVE_INVOKE__
+        if (invoke === undefined) throw new Error('当前环境不能读取本地分析视图')
+        return invoke('read_analysis_view', { path: viewPath })
+      }
+      return (
+        <AnalysisResultCard
+          path={path}
+          openFile={openFile}
+          excelPath={paths.find(value => /\.xlsx$/iu.test(value))}
+          wordPath={paths.find(value => /\.docx$/iu.test(value))}
+          readView={readView}
+        />
+      )
+    },
+  }), 'wanwei analysis result presenter')
+  ctx.effect(() => platformActions.register({
+    openDirectory: async (path) => {
+      const invoke = window.__ZJUGIS_NATIVE_INVOKE__
+      if (invoke === undefined) throw new Error('桌面端目录打开能力不可用')
+      await invoke('open_workspace_directory', { workspacePath: path })
+    },
+    saveFile: async ({ filename, bytes }) => {
+      const invoke = window.__ZJUGIS_NATIVE_INVOKE__
+      if (invoke === undefined) throw new Error('桌面端文件保存能力不可用')
+      await invoke('save_session_log_archive', { fileName: filename, bytes: [...bytes] })
+    },
+  }), 'wanwei product shell actions')
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.inject('sidebar.brand.name', () =>
       ctx.slots.inject('conversation.hero.brand', () =>

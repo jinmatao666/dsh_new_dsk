@@ -313,7 +313,7 @@ describe('Hero chrome', () => {
     const renderSlot = vi.fn<HeroShellProps['renderSlot']>(() => null)
     const view = render(<HeroShell t={makeTranslate(en, commonEn)} renderSlot={renderSlot} />)
     expect(view.getByText('Into the Unknown')).toBeTruthy()
-    expect(view.getByText('Professional AI Assistant')).toBeTruthy()
+    expect(view.getByText('Preview')).toBeTruthy()
     expect(renderSlot).toHaveBeenCalledTimes(2)
     expect(renderSlot.mock.calls[0]?.[0]).toBe('conversation.hero.brand')
     expect(renderSlot.mock.calls[1]?.[0]).toBe('conversation.hero.brand.mark')
@@ -442,7 +442,7 @@ describe('ConversationRoot resident composer', () => {
     expect(host).not.toBeNull()
     expect(header?.getAttribute('aria-hidden')).toBe('true')
     expect(b.view.getByText('探索未至之境')).toBeTruthy()
-    expect(b.view.getByText('专业智能助手')).toBeTruthy()
+    expect(b.view.getByText('预览版')).toBeTruthy()
     expect(b.view.queryByTestId('view-chat')).toBeNull()
     // The same machine-backed textarea is live in the hero, and the
     // persistence mirror stays bound (ConversationSession mounts chrome-hidden
