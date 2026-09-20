@@ -46,7 +46,8 @@ describe('Wanwei desktop preview workflow', () => {
     const matrix = strategy.matrix as Record<string, unknown>
     expect(matrix.include).toEqual([
       { name: 'Windows x64', platform: 'windows-x64', runner: 'windows-2025', bundles: 'nsis' },
-      { name: 'macOS arm64', platform: 'macos-arm64', runner: 'macos-15', bundles: 'dmg' },
+      { name: 'macOS arm64', platform: 'macos-arm64', runner: 'macos-15', bundles: 'app,dmg' },
+      { name: 'macOS Intel x64', platform: 'macos-x64', runner: 'macos-15-intel', bundles: 'app,dmg' },
       { name: 'Linux x64', platform: 'linux-x64', runner: 'ubuntu-22.04', bundles: 'deb,appimage' },
     ])
     const steps = build?.steps as Array<Record<string, unknown>>
@@ -123,6 +124,7 @@ describe('Wanwei desktop preview workflow', () => {
   it.each([
     ['windows-x64', 'Windows', false],
     ['macos-arm64', 'macOS', true],
+    ['macos-x64', 'macOS', true],
     ['linux-x64', 'Linux', false],
   ] as const)('prepares a validated %s runner config', (platform, runnerOs, adHocSigning) => {
     const root = mkdtempSync(join(tmpdir(), 'wanwei-runner-config-'))

@@ -6,6 +6,7 @@ const platform = process.argv[2]
 const runnerByPlatform = {
   'windows-x64': 'Windows',
   'macos-arm64': 'macOS',
+  'macos-x64': 'macOS',
   'linux-x64': 'Linux',
 }
 const expectedRunner = runnerByPlatform[platform]
@@ -32,7 +33,7 @@ if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
 }
 
 const config = { version }
-if (platform === 'macos-arm64') {
+if (platform === 'macos-arm64' || platform === 'macos-x64') {
   config.bundle = { macOS: { signingIdentity: '-' } }
 }
 
