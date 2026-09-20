@@ -120,6 +120,21 @@ describe('manifest round-trip', () => {
 })
 
 describe('resolveBundleDir', () => {
+  it('supports generic product-owned resolution anchors without launcher dependencies', () => {
+    const installationAnchor = stageInstallation({})
+    const productAnchor = stageInstallation({ 'external-bundle': { patch: '[]\n' } }, 'product-shell')
+    const profileDir = tmp()
+    const previous = process.env.DSH_BUNDLE_ANCHORS
+    try {
+      process.env.DSH_BUNDLE_ANCHORS = productAnchor
+      expect(resolveBundleDir('t', 'external-bundle', installationAnchor, profileDir))
+        .toContain('external-bundle')
+    } finally {
+      if (previous === undefined) delete process.env.DSH_BUNDLE_ANCHORS
+      else process.env.DSH_BUNDLE_ANCHORS = previous
+    }
+  })
+
   it('prefers the installation anchor, falls back to the profile, and fails loud', () => {
     const anchor = stageInstallation({ 'in-box': { patch: '[]\n' } })
     const profileDir = tmp()
@@ -191,14 +206,6 @@ describe('loadProfile', () => {
     // @deepseek-ai/* through tsconfig paths regardless of the staged anchor.
     expect(PROFILE_TEMPLATES.web?.bundles).toContain('@deepseek-ai/dsh-base')
     expect(PROFILE_TEMPLATES.web?.patchReload).toBe('live')
-    expect(PROFILE_TEMPLATES['wanwei-desktop']).toEqual({
-      bundles: [
-        '@deepseek-ai/dsh-base',
-        '@deepseek-ai/dsh-web-app',
-        '@deepseek-ai/dsh-wanwei-desktop',
-      ],
-      patchReload: 'live',
-    })
     expect(PROFILE_TEMPLATES.headless?.patchReload).toBe('startup')
     expect(PROFILE_TEMPLATES.acp).toEqual({
       bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-acp-app'],

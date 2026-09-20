@@ -312,9 +312,6 @@ importers:
       '@deepseek-ai/dsh-tool-workflow':
         specifier: workspace:^
         version: link:../../packages/workflow/tool-workflow
-      '@deepseek-ai/dsh-wanwei-desktop':
-        specifier: workspace:^
-        version: link:../../packages/bundle/wanwei-desktop
       '@deepseek-ai/dsh-web-app':
         specifier: workspace:^
         version: link:../../packages/bundle/web-app
@@ -1419,9 +1416,9 @@ importers:
 
   packages/bundle/wanwei-desktop:
     dependencies:
-      '@deepseek-ai/dsh-document-local':
+      '@deepseek-ai/dsh-wanwei-document-local':
         specifier: workspace:^
-        version: link:../../host/document-local
+        version: link:../../wanwei/document-local
       '@deepseek-ai/dsh-wanwei-oneapi-auth':
         specifier: workspace:^
         version: link:../../wanwei/oneapi-auth
@@ -5922,28 +5919,6 @@ importers:
         specifier: ^4.19.2
         version: 4.22.4
 
-  packages/host/document-local:
-    dependencies:
-      '@deepseek-ai/dsh-tools':
-        specifier: workspace:^
-        version: link:../../core/tools
-      '@deepseek-ai/schemastery':
-        specifier: link:../../../vendor/schemastery
-        version: link:../../../vendor/schemastery
-      mammoth:
-        specifier: ^1.10.0
-        version: 1.12.3
-      pdfjs-dist:
-        specifier: ^4.10.38
-        version: 4.10.38
-      xlsx:
-        specifier: ^0.18.5
-        version: 0.18.5
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: workspace:^
-        version: link:../../../vendor/cordis
-
   packages/host/frontend-static:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -9537,6 +9512,28 @@ importers:
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
 
+  packages/wanwei/document-local:
+    dependencies:
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      mammoth:
+        specifier: ^1.10.0
+        version: 1.12.3
+      pdfjs-dist:
+        specifier: ^4.10.38
+        version: 4.10.38
+      xlsx:
+        specifier: ^0.18.5
+        version: 0.18.5
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+
   packages/wanwei/oneapi-auth:
     dependencies:
       '@deepseek-ai/dsh-credentials':
@@ -10107,6 +10104,9 @@ importers:
 
   products/wanwei-desktop:
     dependencies:
+      '@deepseek-ai/dsh-wanwei-desktop':
+        specifier: workspace:^
+        version: link:../../packages/bundle/wanwei-desktop
       mammoth:
         specifier: ^1.10.0
         version: 1.12.3

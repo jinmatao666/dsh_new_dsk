@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -8,6 +8,22 @@ import * as yaml from 'js-yaml'
 const workflowPath = resolve(import.meta.dirname, '..', '.github', 'workflows', 'wanwei-desktop-preview.yml')
 const runnerConfigPath = resolve(import.meta.dirname, '..', 'products', 'wanwei-desktop', 'scripts', 'prepare-runner-config.mjs')
 const runtimeScriptPath = resolve(import.meta.dirname, '..', 'products', 'wanwei-desktop', 'scripts', 'prepare-runtime.mjs')
+const productProfilePath = resolve(
+  import.meta.dirname,
+  '..',
+  'products',
+  'wanwei-desktop',
+  'scripts',
+  'product-profile.mjs',
+)
+const platformActionsBuildConfigPath = resolve(
+  import.meta.dirname,
+  '..',
+  'packages',
+  'client',
+  'platform-actions',
+  'tsdown.config.ts',
+)
 
 function loadWorkflow(): Record<string, unknown> {
   const value: unknown = yaml.load(readFileSync(workflowPath, 'utf8'))
@@ -18,6 +34,33 @@ function loadWorkflow(): Record<string, unknown> {
 }
 
 describe('Wanwei desktop preview workflow', () => {
+  it('owns profile initialization and preserves an existing product profile', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'wanwei-product-profile-'))
+    try {
+      const { ensureProductProfile, PRODUCT_BUNDLES } = await import(productProfilePath)
+      ensureProductProfile(root)
+      const manifestPath = join(root, 'profiles', 'wanwei-desktop', 'package.json')
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+        dsh: { profile: { bundles: string[]; patchReload: string } }
+      }
+      expect(manifest.dsh.profile).toEqual({ bundles: PRODUCT_BUNDLES, patchReload: 'live' })
+      const customized = '{"name":"customer-owned"}\n'
+      writeFileSync(manifestPath, customized)
+      ensureProductProfile(root)
+      expect(readFileSync(manifestPath, 'utf8')).toBe(customized)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('builds the generic platform-action seam as one client plugin instead of recursively loading the workspace', () => {
+    const buildConfig = readFileSync(platformActionsBuildConfigPath, 'utf8')
+    expect(buildConfig).toContain(
+      "clientBundle('@deepseek-ai/dsh-client-platform-actions', ['lib/types/index.js'])",
+    )
+    expect(buildConfig).not.toContain('../../../tsdown.config.ts')
+  })
+
   it('is manual-only and builds isolated Windows, macOS, and Linux preview products', () => {
     const workflow = loadWorkflow()
     expect(Object.keys(workflow.on as Record<string, unknown>)).toEqual(['workflow_dispatch'])

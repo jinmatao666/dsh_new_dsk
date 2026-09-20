@@ -13,7 +13,7 @@
         installId: !!js process.env.DSH_INSTALL_ID
         developmentBypass: !!js process.env.DSH_DESKTOP_DEVELOPMENT === '1'
     - id: wanwei-document-local
-      name: '@deepseek-ai/dsh-document-local'
+      name: '@deepseek-ai/dsh-wanwei-document-local'
     - id: wanwei-vision
       name: '@deepseek-ai/dsh-wanwei-vision'
       config:

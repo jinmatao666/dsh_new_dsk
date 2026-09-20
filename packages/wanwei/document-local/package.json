@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-document-local",
+  "name": "@deepseek-ai/dsh-wanwei-document-local",
   "description": "Desktop-local bundled document extraction tool",
   "version": "0.1.2-alpha.1",
   "private": true,

@@ -2,20 +2,21 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { extname, join, relative, resolve } from 'node:path'
 
 const repositoryRoot = resolve(import.meta.dirname, '..', '..', '..')
-const officialRoots = [
-  'packages/client',
-  'packages/host',
-  'packages/session-query',
-  'apps/web',
+const officialRoots = ['packages', 'apps']
+const productRoots = [
+  'packages/wanwei/',
+  'packages/bundle/wanwei-desktop/',
 ]
-const forbidden = /WANWEI_RESULT|DSH_ANALYSIS_VIEW|__ZJUGIS_NATIVE_INVOKE__|\b(?:Wanwei|ZJUGIS|OneAPI)\b|万维|专业智能助手/u
+const forbidden = /WANWEI_RESULT|DSH_ANALYSIS_VIEW|__ZJUGIS_NATIVE_INVOKE__|wanwei|zjugis|oneapi|万维|专业智能助手/iu
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.mjs', '.css', '.json', '.yml', '.yaml', '.svg'])
 const violations = []
 
 for (const root of officialRoots) {
   for (const path of walk(join(repositoryRoot, root))) {
     const normalized = path.replaceAll('\\', '/')
-    if (normalized.includes('/tests/') || normalized.includes('/dist/') || normalized.includes('/lib/')) continue
+    const repositoryPath = relative(repositoryRoot, path).replaceAll('\\', '/')
+    if (productRoots.some(root => repositoryPath.startsWith(root))) continue
+    if (normalized.includes('/dist/') || normalized.includes('/lib/')) continue
     if (!sourceExtensions.has(extname(path))) continue
     const text = readFileSync(path, 'utf8')
     if (forbidden.test(text)) violations.push(relative(repositoryRoot, path))

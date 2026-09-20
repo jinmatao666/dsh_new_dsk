@@ -921,28 +921,6 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       expect(existsSync(join(home, 'profiles', 'node_modules'))).toBe(false)
     }, SPAWN_TIMEOUT_MS + 30_000)
 
-    it('initializes the Wanwei desktop profile from isolated product layers', async () => {
-      const { stdout, code, stderr } = await runBuiltBin(
-        ['--profile', 'wanwei-desktop', '--dump-default-config'],
-        { DSH_HOME: home },
-      )
-      expect(code).toBe(0)
-      expect(stderr).toBe('')
-      expect(stdout).toContain("name: '@deepseek-ai/dsh-host-webserver'")
-      const manifest = JSON.parse(readFileSync(
-        join(home, 'profiles', 'wanwei-desktop', 'package.json'),
-        'utf8',
-      )) as { dsh: { profile: { bundles: string[]; patchReload: string } } }
-      expect(manifest.dsh.profile).toEqual({
-        bundles: [
-          '@deepseek-ai/dsh-base',
-          '@deepseek-ai/dsh-web-app',
-          '@deepseek-ai/dsh-wanwei-desktop',
-        ],
-        patchReload: 'live',
-      })
-    }, SPAWN_TIMEOUT_MS + 30_000)
-
     it('prints the headless profile without Host or browser layers', async () => {
       const { stdout, code, stderr } = await runBuiltBin(
         ['--profile', 'headless', '--dump-default-config'],

@@ -723,6 +723,70 @@ fn development_harness_home(app_data_dir: &Path) -> Option<PathBuf> {
     }
 }
 
+fn product_harness_home(app_data_dir: &Path) -> Result<PathBuf, String> {
+    if let Some(home) = std::env::var_os("WANWEI_DSH_HOME") {
+        return Ok(PathBuf::from(home));
+    }
+    if let Some(home) = development_harness_home(app_data_dir) {
+        return Ok(home);
+    }
+    let user_home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .ok_or_else(|| "Unable to locate the current user directory".to_string())?;
+    Ok(PathBuf::from(user_home).join(".dsh"))
+}
+
+fn ensure_product_profile(home: &Path) -> Result<(), String> {
+    let directory = home.join("profiles").join("wanwei-desktop");
+    fs::create_dir_all(&directory).map_err(|error| {
+        format!(
+            "Unable to create product profile {}: {error}",
+            directory.display()
+        )
+    })?;
+    let manifest = directory.join("package.json");
+    if !manifest.exists() {
+        fs::write(
+            &manifest,
+            concat!(
+                "{\n",
+                "  \"name\": \"dsh-profile-wanwei-desktop\",\n",
+                "  \"private\": true,\n",
+                "  \"dependencies\": {},\n",
+                "  \"dsh\": {\n",
+                "    \"profile\": {\n",
+                "      \"bundles\": [\n",
+                "        \"@deepseek-ai/dsh-base\",\n",
+                "        \"@deepseek-ai/dsh-web-app\",\n",
+                "        \"@deepseek-ai/dsh-wanwei-desktop\"\n",
+                "      ],\n",
+                "      \"patchReload\": \"live\"\n",
+                "    }\n",
+                "  }\n",
+                "}\n"
+            ),
+        )
+        .map_err(|error| format!("Unable to create {}: {error}", manifest.display()))?;
+    }
+    let patch = directory.join("cordis.patch.yml");
+    if !patch.exists() {
+        fs::write(
+            &patch,
+            "# Product user overrides are applied after the desktop bundle.\n[]\n",
+        )
+        .map_err(|error| format!("Unable to create {}: {error}", patch.display()))?;
+    }
+    let workspace = directory.join("pnpm-workspace.yaml");
+    if !workspace.exists() {
+        fs::write(
+            &workspace,
+            "packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n",
+        )
+        .map_err(|error| format!("Unable to create {}: {error}", workspace.display()))?;
+    }
+    Ok(())
+}
+
 fn user_skills_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let app_data_dir = app
         .path()
@@ -1789,6 +1853,8 @@ fn spawn_sidecar(
     log_path: &Path,
     app_data_dir: &Path,
 ) -> Result<(Child, Url), String> {
+    let dsh_home = product_harness_home(app_data_dir)?;
+    ensure_product_profile(&dsh_home)?;
     let (program, cwd, mut args) = if cfg!(debug_assertions) {
         development_command()
     } else {
@@ -1849,10 +1915,11 @@ fn spawn_sidecar(
     let mut command = Command::new(&program);
     command
         .args(args)
-        .current_dir(cwd)
+        .current_dir(&cwd)
         .env("DSH_ONEAPI_URL", &config.one_api_url)
         .env("DSH_NODE_BINARY", &program)
         .env("DSH_DOCUMENT_TOOL", &document_tool)
+        .env("DSH_HOME", &dsh_home)
         .env("PYTHONUSERBASE", &python_userbase)
         .env("PIP_CACHE_DIR", &pip_cache)
         .env("TEMP", &python_temp)
@@ -1866,22 +1933,18 @@ fn spawn_sidecar(
         .env("DSH_DEPENDENCY_INSTALL_APPROVALS", "session-once")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    // Reuse the established DSH home by default so an upgrade keeps the
-    // existing workspaces, sessions and local configuration. Test or staging
-    // deployments can still opt into isolation explicitly.
-    if let Some(home) = std::env::var_os("WANWEI_DSH_HOME") {
-        let home = PathBuf::from(home);
-        fs::create_dir_all(&home).map_err(|error| {
-            format!(
-                "Unable to create WANWEI_DSH_HOME {}: {error}",
-                home.display()
-            )
-        })?;
-        command.env("DSH_HOME", &home);
-        append_log(log_path, format!("configured DSH_HOME: {}", home.display()));
-    } else {
-        append_log(log_path, "using existing/default DSH_HOME".to_string());
+    if cfg!(debug_assertions) {
+        command.env(
+            "DSH_BUNDLE_ANCHORS",
+            cwd.join("products")
+                .join("wanwei-desktop")
+                .join("package.json"),
+        );
     }
+    append_log(
+        log_path,
+        format!("configured product DSH_HOME: {}", dsh_home.display()),
+    );
     if cfg!(debug_assertions) && std::env::var_os("DSH_DESKTOP_REAL_AUTH").is_none() {
         command.env("DSH_DESKTOP_DEVELOPMENT", "1");
     }

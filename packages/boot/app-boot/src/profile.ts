@@ -28,7 +28,7 @@ import {
   existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, statSync,
   symlinkSync, unlinkSync, writeFileSync,
 } from 'node:fs'
-import { basename, dirname, join, relative, resolve } from 'node:path'
+import { basename, delimiter, dirname, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
@@ -141,14 +141,6 @@ export const PROFILE_TEMPLATES: Record<string, ProfileTemplate> = {
   },
   web: {
     bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
-    patchReload: 'live',
-  },
-  'wanwei-desktop': {
-    bundles: [
-      '@deepseek-ai/dsh-base',
-      '@deepseek-ai/dsh-web-app',
-      '@deepseek-ai/dsh-wanwei-desktop',
-    ],
     patchReload: 'live',
   },
   headless: {
@@ -786,7 +778,11 @@ function packageDirFromAnchor(
 export function resolveBundleDir(
   binName: string, packageName: string, installAnchor: string, profileDir: string,
 ): string {
-  for (const anchor of [installAnchor, join(profileDir, 'package.json')]) {
+  const externalAnchors = (process.env.DSH_BUNDLE_ANCHORS ?? '')
+    .split(delimiter)
+    .map(value => value.trim())
+    .filter(value => value !== '')
+  for (const anchor of [installAnchor, ...externalAnchors, join(profileDir, 'package.json')]) {
     const dir = packageDirFromAnchor(anchor, packageName)
     if (dir !== undefined) return dir
   }

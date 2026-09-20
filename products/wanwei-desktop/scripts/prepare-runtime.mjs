@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import process from 'node:process'
+import { ensureProductProfile } from './product-profile.mjs'
 
 const productRoot = resolve(import.meta.dirname, '..')
 const repositoryRoot = resolve(productRoot, '..', '..')
@@ -90,6 +91,7 @@ for (const required of [cli, productPatch, webIndex]) {
 const preflightHome = join(runtimeRoot, '.preflight-home')
 if (existsSync(preflightHome)) rmSync(preflightHome, { recursive: true, force: true })
 mkdirSync(preflightHome, { recursive: true })
+ensureProductProfile(preflightHome)
 try {
   const result = spawnSync(nodeTarget, [cli, '--profile', 'wanwei-desktop', '--dump-default-config'], {
     cwd: appRoot,

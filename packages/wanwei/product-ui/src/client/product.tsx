@@ -18,6 +18,12 @@ declare global {
   interface Window { __ZJUGIS_NATIVE_INVOKE__?: NativeInvoke }
 }
 
+function invokeDesktop(command: string, argumentsValue?: unknown): Promise<unknown> {
+  const invoke = window.__ZJUGIS_NATIVE_INVOKE__
+  if (invoke === undefined) throw new Error('Desktop native capabilities are unavailable')
+  return invoke(command, argumentsValue)
+}
+
 function fileMention(path: string): string {
   if (/[\u0000-\u001f\u007f-\u009f"]/u.test(path)) throw new Error('导入后的文件路径包含不支持的字符')
   return /\s/u.test(path) ? `@"${path}"` : `@${path}`
@@ -65,13 +71,11 @@ async function nativeImport(
   workspacePath: string | undefined,
   files?: readonly File[],
 ): Promise<readonly string[]> {
-  const invoke = window.__ZJUGIS_NATIVE_INVOKE__
-  if (invoke === undefined) throw new Error('桌面端文件服务暂时不可用')
   const payload = files === undefined ? undefined : await Promise.all(files.map(async file => ({
     name: file.name,
     bytes: [...new Uint8Array(await file.arrayBuffer())],
   })))
-  const result = await invoke(command, {
+  const result = await invokeDesktop(command, {
     workspacePath,
     ...(payload === undefined ? {} : { files: payload }),
   })
@@ -202,9 +206,7 @@ export function apply(ctx: Context): void {
       const path = paths.find(value => /(?:-analysis-view_|分析视图_|审查视图_)\d{8}_\d{6}_\d{3}\.json$/u.test(value))
       if (path === undefined) return null
       const readView = async (viewPath: string): Promise<unknown> => {
-        const invoke = window.__ZJUGIS_NATIVE_INVOKE__
-        if (invoke === undefined) throw new Error('当前环境不能读取本地分析视图')
-        return invoke('read_analysis_view', { path: viewPath })
+        return invokeDesktop('read_analysis_view', { path: viewPath })
       }
       return (
         <AnalysisResultCard
@@ -219,14 +221,10 @@ export function apply(ctx: Context): void {
   }), 'wanwei analysis result presenter')
   ctx.effect(() => platformActions.register({
     openDirectory: async (path) => {
-      const invoke = window.__ZJUGIS_NATIVE_INVOKE__
-      if (invoke === undefined) throw new Error('桌面端目录打开能力不可用')
-      await invoke('open_workspace_directory', { workspacePath: path })
+      await invokeDesktop('open_workspace_directory', { workspacePath: path })
     },
     saveFile: async ({ filename, bytes }) => {
-      const invoke = window.__ZJUGIS_NATIVE_INVOKE__
-      if (invoke === undefined) throw new Error('桌面端文件保存能力不可用')
-      await invoke('save_session_log_archive', { fileName: filename, bytes: [...bytes] })
+      await invokeDesktop('save_session_log_archive', { fileName: filename, bytes: [...bytes] })
     },
   }), 'wanwei product shell actions')
   ctx.slots.inject('sidebar.brand.mark', () =>

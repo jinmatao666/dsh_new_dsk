@@ -3,10 +3,12 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
 import process from 'node:process'
+import { ensureProductProfile } from './product-profile.mjs'
 
 const productRoot = resolve(import.meta.dirname, '..')
 const repositoryRoot = resolve(productRoot, '..', '..')
 const dshHome = await mkdtemp(join(tmpdir(), 'wanwei-desktop-sidecar-'))
+ensureProductProfile(dshHome)
 const staged = process.argv.includes('--staged')
 const releaseVersion = process.env.DSH_RELEASE_VERSION?.trim() || '0.1.0'
 if (!/^[0-9A-Za-z][0-9A-Za-z.-]*$/u.test(releaseVersion)) {
@@ -20,6 +22,7 @@ const entryArgs = staged
   ? [join(runtimeRoot, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')]
   : ['--import', 'tsx/esm', join(repositoryRoot, 'apps', 'cli', 'src', 'bin.ts')]
 const cwd = staged ? join(runtimeRoot, 'app') : repositoryRoot
+const bundleAnchors = staged ? '' : join(productRoot, 'package.json')
 const child = spawn(program, [
   ...entryArgs,
   '--profile',
@@ -31,7 +34,11 @@ const child = spawn(program, [
   '--no-open',
 ], {
   cwd,
-  env: { ...process.env, DSH_HOME: dshHome },
+  env: {
+    ...process.env,
+    DSH_HOME: dshHome,
+    ...(bundleAnchors === '' ? {} : { DSH_BUNDLE_ANCHORS: bundleAnchors }),
+  },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 

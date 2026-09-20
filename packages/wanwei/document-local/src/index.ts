@@ -19,7 +19,7 @@ export const Config: z<Config> = z.object({
   helperPath: z.string().default(''),
 })
 
-export const name = 'dsh-document-local'
+export const name = 'dsh-wanwei-document-local'
 export const inject = ['tools']
 
 type ExtractionStatus = 'ok' | 'needs_vision' | 'unavailable'

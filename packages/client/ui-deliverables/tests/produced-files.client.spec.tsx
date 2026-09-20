@@ -177,7 +177,7 @@ function deliverablesOf(value: ConversationNodeAssembler, turn = 1): Readonly<De
 
 describe('produced-file Turn data', () => {
   it('leaves product-specific runtime protocols to registered extensions', () => {
-    const marker = `WANWEI_RESULT=${JSON.stringify({
+    const marker = `PRIVATE_RESULT=${JSON.stringify({
       success: true,
       artifacts: [
         { path: 'E:\\workspace\\summary.xlsx' },
@@ -185,7 +185,7 @@ describe('produced-file Turn data', () => {
       ],
     })}`
     expect(runtimeDeliverablePaths(
-      `${marker}\nDSH_ANALYSIS_VIEW=E:\\workspace\\city-analysis-view_20260917_120000_001.json`,
+      `${marker}\nPRIVATE_ANALYSIS_VIEW=E:\\workspace\\city-analysis-view_20260917_120000_001.json`,
     )).toEqual([])
   })
 
