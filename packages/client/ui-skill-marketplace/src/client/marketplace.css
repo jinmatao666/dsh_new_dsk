@@ -654,9 +654,9 @@
 
 .dsh-skill-add-backdrop { position: fixed; z-index: 3; inset: 0; display: grid; box-sizing: border-box; padding: 24px; place-items: center; overflow: hidden; background: rgb(15 23 42 / 45%); backdrop-filter: blur(4px); animation: dsh-modal-fade-in 0.2s ease; }
 .dsh-skill-add-dialog { box-sizing: border-box; width: min(480px, calc(100vw - 48px)); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); padding: 24px; overflow-y: auto; overscroll-behavior: contain; border-radius: 18px; background: var(--dsw-alias-bg-base); box-shadow: 0 24px 60px rgb(15 23 42 / 22%); animation: dsh-modal-slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
-.dsh-skill-add-dialog > div { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.dsh-skill-add-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .dsh-skill-add-dialog h2 { margin: 0; color: #172b4d; font-size: 19px; }
-.dsh-skill-add-dialog > div button { border: 0; background: transparent; color: #6c7d94; cursor: pointer; font-size: 22px; }
+.dsh-skill-add-header > button { border: 0; background: transparent; color: #6c7d94; cursor: pointer; font-size: 22px; }
 .dsh-skill-add-dialog label { display: flex; flex-direction: column; gap: 7px; margin: 13px 0; color: #49617f; font-size: 13px; font-weight: 600; }
 .dsh-skill-add-dialog input, .dsh-skill-add-dialog select, .dsh-skill-add-dialog textarea { box-sizing: border-box; width: 100%; padding: 10px 11px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 9px; color: inherit; font: inherit; outline: none; background: var(--dsw-alias-bg-base); transition: border-color 0.2s ease, box-shadow 0.2s ease; }
 .dsh-skill-add-dialog input:focus, .dsh-skill-add-dialog select:focus, .dsh-skill-add-dialog textarea:focus { border-color: var(--dsw-alias-primary, #2563eb); box-shadow: 0 0 0 3px rgb(37 99 235 / 12%); }
@@ -709,7 +709,7 @@
 
 @media (max-height: 960px) {
   .dsh-skill-add-dialog { padding: 20px 24px; }
-  .dsh-skill-add-dialog > div { margin-bottom: 12px; }
+  .dsh-skill-add-header { margin-bottom: 12px; }
   .dsh-skill-add-dialog label { margin: 9px 0; }
   .dsh-skill-add-dialog textarea { min-height: 72px; }
   .dsh-skill-add-visibility { margin: 10px 0; }
@@ -718,7 +718,7 @@
 @media (max-height: 800px) {
   .dsh-skill-add-backdrop { padding: 20px; }
   .dsh-skill-add-dialog { width: min(470px, calc(100vw - 40px)); max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); padding: 18px 22px; }
-  .dsh-skill-add-dialog > div { margin-bottom: 8px; }
+  .dsh-skill-add-header { margin-bottom: 8px; }
   .dsh-skill-add-dialog label { gap: 5px; margin: 6px 0; }
   .dsh-skill-add-dialog input, .dsh-skill-add-dialog textarea { padding: 8px 10px; }
   .dsh-skill-add-dialog textarea { min-height: 62px; }

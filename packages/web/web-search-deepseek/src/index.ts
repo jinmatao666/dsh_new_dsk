@@ -22,6 +22,7 @@ import {
   DEEPSEEK_DEFAULT_MODEL,
 } from './provider.ts'
 import type { DeepSeekSearchProviderOptions } from './provider.ts'
+import { OneApiSearchProvider } from './oneapi-provider.ts'
 
 export {
   DeepSeekSearchProvider,
@@ -33,6 +34,8 @@ export {
   DEEPSEEK_PROVIDER_ID,
 } from './provider.ts'
 export type { DeepSeekSearchLlmRequest, DeepSeekSearchProviderOptions } from './provider.ts'
+export { OneApiSearchProvider, ONEAPI_BAILIAN_PROVIDER_ID } from './oneapi-provider.ts'
+export type { OneApiSearchProviderOptions, OneApiSearchRequestRecord } from './oneapi-provider.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'web-search-deepseek'
@@ -44,6 +47,8 @@ const DEFAULT_API_KEY_ENV = 'DEEPSEEK_API_KEY'
 
 /** Plugin config (all optional — `apply` fills env-var and constant defaults). */
 export interface Config {
+  /** Search backend. Desktop deployments use the server-governed OneAPI route. */
+  backend?: 'deepseek' | 'oneapi'
   /** Literal DeepSeek API key; prefer {@link apiKeyEnv} so no secret enters configuration files. */
   apiKey?: string
   /** Credential reference resolved for each search; defaults to `DEEPSEEK_API_KEY`. */
@@ -61,6 +66,7 @@ export interface Config {
 }
 
 export const Config: z<Config> = z.object({
+  backend: z.union(['deepseek', 'oneapi'] as const).default('deepseek'),
   apiKey: z.string().role('secret'),
   apiKeyEnv: z.string().role('credential-ref').default(DEFAULT_API_KEY_ENV),
   // Declared here rather than only at the use site: a configuration surface
@@ -134,5 +140,16 @@ export function apply(ctx: Context, config: Config): void {
     // section per search, so a committed change needs no re-registration.
     onChange: () => {},
   })
+  if (config.backend === 'oneapi') {
+    const tokenRef = credentialRef(config.apiKeyEnv ?? 'DSH_ONEAPI_TOKEN')
+    ctx.web.registerSearchProvider(new OneApiSearchProvider({
+      baseURL: config.baseURL ?? 'http://127.0.0.1:3000',
+      resolveToken: async () => (await ctx.get('credentials')?.resolve(tokenRef))?.value,
+      recordRequest: (request) => {
+        ctx.get('agents')?.currentInitiator()?.session.append('web/oneapi-search-request', request)
+      },
+    }))
+    return
+  }
   ctx.web.registerSearchProvider(new DeepSeekSearchProvider(() => resolveOptions(ctx, current())))
 }

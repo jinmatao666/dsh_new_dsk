@@ -21,6 +21,10 @@ type StreamOptions struct {
 	IncludeUsage bool `json:"include_usage,omitempty"`
 }
 
+type SearchOptions struct {
+	ForcedSearch bool `json:"forced_search,omitempty"`
+}
+
 type GeneralOpenAIRequest struct {
 	// https://platform.openai.com/docs/api-reference/chat/create
 	Messages            []Message       `json:"messages,omitempty"`
@@ -55,6 +59,8 @@ type GeneralOpenAIRequest struct {
 	FunctionCall        any             `json:"function_call,omitempty"`
 	Functions           any             `json:"functions,omitempty"`
 	ChatTemplateKwargs  map[string]any  `json:"chat_template_kwargs,omitempty"`
+	EnableSearch        bool            `json:"enable_search,omitempty"`
+	SearchOptions       *SearchOptions  `json:"search_options,omitempty"`
 	// https://platform.openai.com/docs/api-reference/embeddings/create
 	Input          any    `json:"input,omitempty"`
 	EncodingFormat string `json:"encoding_format,omitempty"`

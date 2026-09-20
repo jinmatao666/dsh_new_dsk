@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/adaptor/alibailian"
 	"github.com/songquanpeng/one-api/relay/adaptor/baiduv2"
@@ -91,6 +92,10 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 			request.StreamOptions = &model.StreamOptions{}
 		}
 		request.StreamOptions.IncludeUsage = true
+	}
+	if a.ChannelType == channeltype.AliBailian && c.GetBool(ctxkey.WebSearch) {
+		request.EnableSearch = true
+		request.SearchOptions = &model.SearchOptions{ForcedSearch: true}
 	}
 	return request, nil
 }

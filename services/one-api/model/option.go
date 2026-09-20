@@ -100,6 +100,10 @@ func InitOptionMap() {
 	// Server-selected image recognition model. The value is a model id only;
 	// all upstream credentials continue to live in OneAPI channels.
 	config.OptionMap["VisionModel"] = ""
+	// SearchModel and SearchChannelId form one server-owned route. The desktop
+	// receives only the model id; upstream credentials and channel identity stay here.
+	config.OptionMap["SearchModel"] = ""
+	config.OptionMap["SearchChannelId"] = ""
 	config.OptionMap["RelayTimingDetailEnabled"] = strconv.FormatBool(config.RelayTimingDetailEnabled)
 	config.OptionMap["RelayTimingSampleRate"] = strconv.Itoa(config.RelayTimingSampleRate)
 	config.OptionMapRWMutex.Unlock()

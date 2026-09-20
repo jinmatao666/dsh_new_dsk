@@ -10,6 +10,16 @@
 - id: llm-deepseek
   disabled: true
 
+- id: web
+  config:
+    searchProvider: oneapi-bailian
+
+- id: web-search-deepseek
+  config:
+    backend: oneapi
+    baseURL: !!js process.env.DSH_ONEAPI_URL ?? 'http://127.0.0.1:3000'
+    apiKeyEnv: DSH_ONEAPI_TOKEN
+
 # Keep deployment-specific operational guidance close to the desktop profile.
 - id: system-prompt
   config:

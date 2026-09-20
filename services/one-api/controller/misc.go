@@ -22,6 +22,7 @@ func GetStatus(c *gin.Context) {
 	config.OptionMapRWMutex.RLock()
 	defaultModel := config.OptionMap["DefaultModel"]
 	visionModel := config.OptionMap["VisionModel"]
+	searchModel := config.OptionMap["SearchModel"]
 	config.OptionMapRWMutex.RUnlock()
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -44,6 +45,7 @@ func GetStatus(c *gin.Context) {
 			"server_address":              config.ServerAddress,
 			"default_model":               defaultModel,
 			"vision_model":                visionModel,
+			"search_model":                searchModel,
 			"turnstile_check":             config.TurnstileCheckEnabled,
 			"turnstile_site_key":          config.TurnstileSiteKey,
 			"captcha_enabled":             config.CaptchaEnabled,

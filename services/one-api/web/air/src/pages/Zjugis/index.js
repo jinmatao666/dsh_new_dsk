@@ -43,6 +43,11 @@ const splitModels = (v) =>
     .map((x) => x.trim())
     .filter(Boolean);
 
+const supportsBailianWebSearch = (name) =>
+  /^(qwen3\.[5-6]-(?:plus|flash)(?:-|$)|qwen3\.7-(?:plus|flash|max)(?:-|$)|qwen3\.8-(?:flash|max)(?:-|$)|qwen3-max(?:-|$)|qwen-(?:plus|flash|turbo|max)(?:-|$)|qwq-plus(?:-|$))/i.test(
+    String(name || '')
+  );
+
 const isDevelopmentPreview = process.env.NODE_ENV === 'development';
 const previewChannelModels = [
   'qwen3.8-27b-fp8',
@@ -241,6 +246,8 @@ export function ModelConfigPage() {
     DefaultContextLimit: '',
     DefaultModel: '',
     VisionModel: '',
+    SearchModel: '',
+    SearchChannelId: '',
   });
   const [testResult, setTestResult] = useState(null);
   const [modelTest, setModelTest] = useState(null);
@@ -250,6 +257,22 @@ export function ModelConfigPage() {
   const models = useMemo(
     () => [...new Set(rows.flatMap((r) => splitModels(r.models)))],
     [rows]
+  );
+  const searchCandidates = useMemo(
+    () =>
+      definitions.flatMap((model) =>
+        model.enabled && supportsBailianWebSearch(model.name)
+          ? (model.sources || [])
+              .filter(
+                (source) =>
+                  source.channel_type === 49 &&
+                  source.status === 1 &&
+                  source.enabled
+              )
+              .map((source) => ({ model, source }))
+          : []
+      ),
+    [definitions]
   );
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   const open = (row) => {
@@ -423,7 +446,9 @@ export function ModelConfigPage() {
             x.key === 'PreConsumedQuota' ||
             x.key === 'DefaultContextLimit' ||
             x.key === 'DefaultModel' ||
-            x.key === 'VisionModel'
+            x.key === 'VisionModel' ||
+            x.key === 'SearchModel' ||
+            x.key === 'SearchChannelId'
           )
             next[x.key] = x.value;
         });
@@ -1044,9 +1069,37 @@ export function ModelConfigPage() {
                     </option>
                   ))}
               </SelectField>
+              <SelectField
+                label='默认搜索模型'
+                value={
+                  options.SearchModel && options.SearchChannelId
+                    ? `${options.SearchChannelId}:${options.SearchModel}`
+                    : ''
+                }
+                onChange={(e) => {
+                  const separator = e.target.value.indexOf(':');
+                  setOptions({
+                    ...options,
+                    SearchChannelId:
+                      separator < 0 ? '' : e.target.value.slice(0, separator),
+                    SearchModel:
+                      separator < 0 ? '' : e.target.value.slice(separator + 1),
+                  });
+                }}
+              >
+                <option value=''>不指定</option>
+                {searchCandidates.map(({ model, source }) => (
+                  <option
+                    key={`${source.channel_id}:${model.name}`}
+                    value={`${source.channel_id}:${model.name}`}
+                  >
+                    {model.display_name || model.name}（{source.channel_name}）
+                  </option>
+                ))}
+              </SelectField>
             </div>
             <p className='preview-muted'>
-              未匹配到具体模型时使用默认上下文限制；默认视觉模型只列出后台已自动识别为支持图片输入的模型，供桌面端识图工具独立调用；预扣额度会在请求完成后按实际用量多退少补。
+              未匹配到具体模型时使用默认上下文限制；默认视觉模型只列出支持图片输入的模型；默认搜索模型只列出已启用且支持联网搜索的百炼模型，并固定使用所选渠道；预扣额度会在请求完成后按实际用量多退少补。
             </p>
             <div className='zjugis-modal-actions'>
               <button className='preview-button primary'>保存设置</button>

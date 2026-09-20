@@ -824,7 +824,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   })
   const [discoveredCustomSkills, setDiscoveredCustomSkills] = useState<Skill[]>([])
   const [adding, setAdding] = useState(false)
-  const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '通用', icon: 'preset:assistant', visibility: 'private' as 'private' | 'public' })
+  const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '', icon: 'preset:assistant', visibility: 'private' as 'private' | 'public' })
   const [customSkillSource, setCustomSkillSource] = useState<CustomSkillSource | null>(null)
   const [remoteSkills, setRemoteSkills] = useState<RemoteSkill[] | null>(null)
   const [remoteCategories, setRemoteCategories] = useState<RemoteSkillCategory[] | null>(null)
@@ -943,7 +943,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       const source = remote.source === 'personal' ? 'personal' : 'official'
       const remoteTags = Array.isArray(remote.tags) ? remote.tags.filter((tag): tag is string => typeof tag === 'string') : []
       const relationCategories = publishedSkillCategories(remote.categories)
-      const legacyCategory = typeof remote.category === 'string' && remote.category.trim() !== '' ? remote.category.trim() : '通用'
+      const legacyCategory = typeof remote.category === 'string' && remote.category.trim() !== '' ? remote.category.trim() : '未分类'
       const categories = relationCategories.length > 0 ? relationCategories : [legacyCategory]
       return [{
         id: `remote-${remoteId}`,
@@ -1006,7 +1006,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   }), [personalSkills])
   const categories = useMemo(() => [
     L.all,
-    ...new Set(['通用', ...buildMarketplaceCategories(remoteCategories)]),
+    ...buildMarketplaceCategories(remoteCategories),
   ], [remoteCategories])
   useEffect(() => {
     if (!categories.includes(category)) setCategory(L.all)
@@ -1198,7 +1198,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     localStorage.setItem('dsh.marketplace.custom-skills', JSON.stringify(next))
     setInstallStates(previous => new Map(previous).set(id, { id, slug, version: '1.0.0', installedVersion: '1.0.0', state: 'installed' }))
     setAdding(false)
-    setNewSkill({ name: '', summary: '', category: categories[1] ?? '通用', icon: 'preset:assistant', visibility: 'private' })
+    setNewSkill({ name: '', summary: '', category: categories[1] ?? '', icon: 'preset:assistant', visibility: 'private' })
     setCustomSkillSource(null)
     setSelectedSkill(skill)
     setView('detail')
@@ -1527,7 +1527,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
         {adding && (
           <div className="dsh-skill-add-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setAdding(false) }}>
             <form className="dsh-skill-add-dialog" onSubmit={(event) => { event.preventDefault(); void createSkill() }}>
-              <div>
+              <div className="dsh-skill-add-header">
                 <h2>{L.createSkill}</h2>
                 <button type="button" onClick={() => { setAdding(false) }} aria-label="关闭">×</button>
               </div>
