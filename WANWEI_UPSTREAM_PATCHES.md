@@ -1,6 +1,6 @@
 # 万维上游兼容补丁清单
 
-这份清单只记录为了装配产品而保留在官方 DSH 区域的通用扩展点。万维业务实现必须位于 `packages/wanwei`、`packages/bundle/wanwei-desktop` 或 `products/wanwei-desktop`。
+这份清单只记录为了装配产品而保留在官方 DSH 区域的通用扩展点。长期边界、依赖方向和功能接入规则以 [万维产品层解耦规范](WANWEI_DECOUPLING_RULES.md) 为准。
 
 | 官方区域 | 通用扩展点 | 无产品实现时的行为 |
 | --- | --- | --- |
