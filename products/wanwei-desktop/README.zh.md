@@ -8,6 +8,8 @@
 
 Tauri 2 桌面壳会以本地回环 DSH Sidecar 的形式启动新的 `wanwei-desktop` profile，等待其输出带鉴权信息的 Web 地址，再创建主 WebView。它始终把 `DSH_HOME` 放在预览版自己的本地应用数据目录下。旧桌面端命令尚未开放。
 
+正式构建将凭据、设置、会话和技能保存在 `<预览版本地应用数据目录>/dsh-home`，不会读取、迁移或修改现有的 `~/.dsh` 数据。预览版需要重新登录；现有桌面端和 OneAPI 服务不变。
+
 | 通道 | 产品名称 | 应用标识 |
 |---|---|---|
 | 已安装预览版 | 万维 Buddy 预览版 | `com.wanwei.harness.preview` |

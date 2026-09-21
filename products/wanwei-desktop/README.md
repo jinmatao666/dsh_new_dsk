@@ -8,6 +8,8 @@ This private product directory owns the Wanwei desktop shell and installer. It d
 
 The Tauri 2 shell starts the new `wanwei-desktop` profile as a loopback DSH Sidecar, waits for its authenticated Web URL, and then creates the main WebView. It always places `DSH_HOME` under the preview application's own local-data directory. Legacy desktop commands are not exposed yet.
 
+Release builds use `<preview app local data>/dsh-home` for credentials, settings, sessions, and skills. They do not read, migrate, or modify the existing `~/.dsh` data. The preview requires a fresh sign-in; the existing desktop client and OneAPI service are unchanged.
+
 | Channel | Product name | Application identifier |
 |---|---|---|
 | Installed preview | Wanwei Buddy Preview | `com.wanwei.harness.preview` |
