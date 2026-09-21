@@ -16,6 +16,8 @@ export type AuthGateProps = PropsRuntime<'shell.overlay'>
   & InjectFace<AuthInjected>
   & PropsLocale<'wanwei.auth'>
 
+const NATIVE_AUTH_TITLE_PREFIX = '__zjugis_native_auth:'
+
 type LoginMode = 'account' | 'sms' | 'qr'
 
 /** Blocking desktop login surface; credentials are sent only to the local Host. */
@@ -35,6 +37,18 @@ export function AuthGate({ useAuth, refresh, login, fail, t }: AuthGateProps) {
   useEffect(() => {
     if ('username' in auth) setUsername(auth.username)
   }, [auth])
+
+  // The desktop shell watches the document-title marker to switch native
+  // window policy: login is fixed-size, while the authenticated app may be
+  // resized and maximized. The marker is intentionally product-owned and is
+  // ignored by ordinary browser hosts.
+  useEffect(() => {
+    if (auth.state === 'authenticated') {
+      document.title = `${NATIVE_AUTH_TITLE_PREFIX}authenticated`
+    } else {
+      document.title = `${NATIVE_AUTH_TITLE_PREFIX}login`
+    }
+  }, [auth.state])
 
   useEffect(() => {
     const controllers = new Set<AbortController>()

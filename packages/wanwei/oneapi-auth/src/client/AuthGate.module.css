@@ -94,8 +94,8 @@
 
 
 /* New DSH auth-state controls mapped onto the production login surface. */
-.textAction, .legalNotice button, .formFooter button { padding: 0; border: 0; color: var(--accent); font: inherit; font-weight: 600; background: transparent; box-shadow: none; }
-.textAction::after, .legalNotice button::after, .formFooter button::after { display: none; }
+.card button.textAction, .card .legalNotice button, .card .formFooter button { position: static; overflow: visible; margin: 0; padding: 0; border: 0; color: var(--accent); font: inherit; font-weight: 600; background: transparent; box-shadow: none; opacity: 1; }
+.card button.textAction::after, .card .legalNotice button::after, .card .formFooter button::after { display: none; }
 .primaryButton { width: 100%; }
 .retry { margin-top: -8px; color: var(--accent) !important; background: transparent !important; box-shadow: none !important; }
 .retry::after { display: none; }
