@@ -1,22 +1,22 @@
 .backdrop {
   --text: #1a1d2e;
   --muted: #6b7085;
-  --accent: #7c3aed;
+  --accent: #2563eb;
   position: fixed;
   inset: 0;
   z-index: 10000;
   overflow: hidden;
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  background: radial-gradient(ellipse 80% 60% at 15% 20%, rgb(124 58 237 / 14%), transparent 60%), radial-gradient(ellipse 60% 50% at 90% 80%, rgb(139 92 246 / 10%), transparent 55%), radial-gradient(circle at 30% 50%, #f4f6fc 0%, #e6ebf5 100%);
+  background: radial-gradient(ellipse 80% 60% at 15% 20%, rgb(37 99 235 / 14%), transparent 60%), radial-gradient(ellipse 60% 50% at 90% 80%, rgb(59 130 246 / 10%), transparent 55%), radial-gradient(circle at 30% 50%, #f4f6fc 0%, #e6ebf5 100%);
 }
 .backdrop, .backdrop * { box-sizing: border-box; }
 @property --borderAngle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
-.backdrop::before { position: fixed; inset: 0; z-index: 0; content: ""; pointer-events: none; background-image: radial-gradient(circle, rgb(124 58 237 / 5%) 1px, transparent 1px); background-position: -14px -14px; background-size: 28px 28px; mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, #000 10%, transparent 100%); }
+.backdrop::before { position: fixed; inset: 0; z-index: 0; content: ""; pointer-events: none; background-image: radial-gradient(circle, rgb(37 99 235 / 5%) 1px, transparent 1px); background-position: -14px -14px; background-size: 28px 28px; mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, #000 10%, transparent 100%); }
 .decoBlobOne, .decoBlobTwo, .decoBlobThree { position: fixed; z-index: 0; border-radius: 50%; filter: blur(90px); pointer-events: none; }
-.decoBlobOne { width: 420px; height: 420px; top: -120px; left: -100px; background: radial-gradient(circle, rgb(124 58 237 / 22%), transparent 70%); }
-.decoBlobTwo { width: 360px; height: 360px; right: -60px; bottom: -80px; background: radial-gradient(circle, rgb(139 92 246 / 18%), transparent 70%); }
-.decoBlobThree { width: 280px; height: 280px; top: 40%; left: 38%; background: radial-gradient(circle, rgb(196 181 253 / 14%), transparent 70%); }
+.decoBlobOne { width: 420px; height: 420px; top: -120px; left: -100px; background: radial-gradient(circle, rgb(37 99 235 / 22%), transparent 70%); }
+.decoBlobTwo { width: 360px; height: 360px; right: -60px; bottom: -80px; background: radial-gradient(circle, rgb(59 130 246 / 18%), transparent 70%); }
+.decoBlobThree { width: 280px; height: 280px; top: 40%; left: 38%; background: radial-gradient(circle, rgb(147 197 253 / 14%), transparent 70%); }
 
 .page { position: relative; z-index: 1; display: flex; align-items: center; gap: clamp(28px, 4vw, 64px); width: var(--login-layout-width, 100%); height: var(--login-layout-height, 100%); min-height: var(--login-layout-height, 100dvh); margin: auto; padding: clamp(18px, 3.5vh, 40px) clamp(24px, 4vw, 72px); transform: scale(var(--login-scale, 1)); transform-origin: center center; }
 .brandSide { position: relative; align-self: stretch; display: flex; flex: 1 1 auto; flex-direction: column; gap: clamp(14px, 2.4vh, 24px); min-width: 0; max-width: clamp(520px, 38vw, 680px); padding-top: 110px; }
@@ -24,7 +24,7 @@
 .logoText { display: flex; align-items: center; max-width: min(100%, 460px); }
 .fullLogo { display: block; width: 250px; height: 83px; aspect-ratio: 2172 / 724; object-fit: contain; }
 .brandHero h1 { margin: 0 0 10px; font-size: clamp(28px, 3.2vw, 38px); font-weight: 700; line-height: 1.1; letter-spacing: -0.8px; }
-.brandHero h1 span { color: transparent; background: linear-gradient(90deg, #7c3aed 0%, #8b5cf6 34%, #c4b5fd 50%, #8b5cf6 66%, #7c3aed 100%); background-size: 240% 100%; background-clip: text; animation: headlineShimmer 5s linear infinite; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.brandHero h1 span { color: transparent; background: linear-gradient(90deg, #2563eb 0%, #3b82f6 34%, #93c5fd 50%, #3b82f6 66%, #2563eb 100%); background-size: 240% 100%; background-clip: text; animation: headlineShimmer 5s linear infinite; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 @keyframes headlineShimmer { 0% { background-position: 120% 50%; } 100% { background-position: -120% 50%; } }
 .brandHero p { max-width: 540px; margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
 .featureList { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -34,10 +34,10 @@
 .capabilityCard { border: 1px solid rgb(255 255 255 / 65%); border-radius: 18px; background: rgb(255 255 255 / 52%); box-shadow: 0 8px 24px rgb(15 23 42 / 5%); backdrop-filter: blur(20px); }
 .capabilityCard { padding: 24px 20px 28px; }
 .capabilityCard h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; font-size: 16px; }
-.sectionDot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 5px rgb(124 58 237 / 12%); }
+.sectionDot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 5px rgb(37 99 235 / 12%); }
 .capabilityGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .capabilityItem { display: flex; align-items: flex-start; gap: 12px; min-width: 0; min-height: 92px; padding: 14px; border: 1px solid rgb(255 255 255 / 75%); border-radius: 14px; background: rgb(255 255 255 / 55%); }
-.capabilityIcon { display: grid; flex: 0 0 34px; place-items: center; width: 34px; height: 34px; border: 1px solid rgb(124 58 237 / 18%); border-radius: 10px; background: rgb(239 244 255 / 90%); }
+.capabilityIcon { display: grid; flex: 0 0 34px; place-items: center; width: 34px; height: 34px; border: 1px solid rgb(37 99 235 / 18%); border-radius: 10px; background: rgb(239 244 255 / 90%); }
 .capabilityItem strong, .capabilityItem small { display: block; }
 .capabilityItem strong { margin-bottom: 4px; font-size: 14px; }
 .capabilityItem small { color: var(--muted); font-size: 11px; line-height: 1.55; }
@@ -45,7 +45,7 @@
 
 .formSide { display: flex; flex: 0 1 clamp(440px, 28vw, 520px); align-self: center; align-items: center; justify-content: center; min-width: 0; }
 .card { position: relative; display: flex; width: 100%; min-height: 632px; flex-direction: column; padding: 42px 46px 34px; border: 1px solid rgb(255 255 255 / 82%); border-radius: 28px; background: rgb(255 255 255 / 62%); box-shadow: 0 24px 70px rgb(15 23 42 / 12%), inset 0 1px 0 rgb(255 255 255 / 85%); backdrop-filter: blur(24px); }
-.card::before { position: absolute; inset: -1px; z-index: -1; padding: 1px; border-radius: inherit; content: ""; background: conic-gradient(from var(--borderAngle, 0deg), transparent 0deg, transparent 250deg, rgb(124 58 237 / 0%) 260deg, rgb(196 181 253 / 95%) 290deg, rgb(255 255 255 / 95%) 315deg, rgb(124 58 237 / 0%) 345deg, transparent 360deg); animation: borderFlow 5s linear infinite; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
+.card::before { position: absolute; inset: -1px; z-index: -1; padding: 1px; border-radius: inherit; content: ""; background: conic-gradient(from var(--borderAngle, 0deg), transparent 0deg, transparent 250deg, rgb(37 99 235 / 0%) 260deg, rgb(147 197 253 / 95%) 290deg, rgb(255 255 255 / 95%) 315deg, rgb(37 99 235 / 0%) 345deg, transparent 360deg); animation: borderFlow 5s linear infinite; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
 @keyframes borderFlow { to { --borderAngle: 360deg; } }
 .cardHeader h2 { margin: 0; font-size: 28px; letter-spacing: -0.5px; }
 .cardHeader p { margin: 8px 0 24px; color: var(--muted); font-size: 15px; }
@@ -63,18 +63,18 @@
 .qrPanel { display: flex; min-height: 292px; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text); text-align: center; }
 .qrPanel strong { font-size: 17px; }
 .qrPanel p { margin: 0; color: var(--muted); font-size: 13px; }
-.qrMock { display: grid; grid-template-columns: repeat(13, 1fr); width: 156px; height: 156px; gap: 2px; padding: 10px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; box-shadow: 0 8px 24px rgb(124 58 237 / 14%); }
+.qrMock { display: grid; grid-template-columns: repeat(13, 1fr); width: 156px; height: 156px; gap: 2px; padding: 10px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; box-shadow: 0 8px 24px rgb(37 99 235 / 14%); }
 .qrMock span { min-width: 0; min-height: 0; background: #fff; }
-.qrMock .qrDark { background: #2e1065; }
+.qrMock .qrDark { background: #172554; }
 .card label { display: grid; gap: 8px; color: #656b80; font-size: 13px; font-weight: 600; }
 .card input:not([type="checkbox"]) { box-sizing: border-box; width: 100%; padding: 14px 16px; border: 1px solid rgb(255 255 255 / 80%); border-radius: 12px; outline: none; color: var(--text); font: inherit; font-size: 15px; background: rgb(255 255 255 / 72%); box-shadow: inset 0 1px 2px rgb(15 23 42 / 2%); }
 .card input:not([type="checkbox"])::placeholder { color: #a5abbd; }
-.card input:not([type="checkbox"]):focus { border-color: rgb(124 58 237 / 45%); box-shadow: 0 0 0 3px rgb(124 58 237 / 12%); }
+.card input:not([type="checkbox"]):focus { border-color: rgb(37 99 235 / 45%); box-shadow: 0 0 0 3px rgb(37 99 235 / 12%); }
 .formOptions { display: flex; align-items: center; justify-content: space-between; margin-top: -4px; }
 .formOptions a, .legalNotice a, .formFooter a { color: var(--accent); font-weight: 600; text-decoration: none; }
 .remember { display: flex !important; grid-template-columns: none !important; align-items: center; gap: 8px !important; color: var(--muted) !important; font-size: 13px !important; font-weight: 400 !important; }
 .remember input { width: 18px; height: 18px; accent-color: var(--accent); }
-.card button { position: relative; overflow: hidden; margin-top: 1px; padding: 14px 16px; border: 0; border-radius: 12px; color: #fff; font: inherit; font-weight: 700; cursor: pointer; background: linear-gradient(100deg, #7c3aed, #6d28d9); box-shadow: 0 10px 20px rgb(124 58 237 / 20%); }
+.card button { position: relative; overflow: hidden; margin-top: 1px; padding: 14px 16px; border: 0; border-radius: 12px; color: #fff; font: inherit; font-weight: 700; cursor: pointer; background: linear-gradient(100deg, #2563eb, #1d4ed8); box-shadow: 0 10px 20px rgb(37 99 235 / 20%); }
 .card button::after { position: absolute; top: -80%; left: -25%; width: 16%; height: 260%; content: ""; transform: skewX(-18deg); background: linear-gradient(90deg, transparent, rgb(255 255 255 / 70%), transparent); animation: buttonShimmer 3.2s ease-in-out infinite; }
 .card .loginMode button { position: static; overflow: visible; margin: 0; padding: 11px 6px; color: var(--muted) !important; font-size: 14px; font-weight: 400; background: transparent !important; box-shadow: none !important; }
 .card .loginMode button::after { display: none; }
@@ -102,5 +102,5 @@
 .unavailablePanel { display: flex; min-height: 292px; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text); text-align: center; }
 .unavailablePanel strong { font-size: 17px; }
 .unavailablePanel p { margin: 0; color: var(--muted); font-size: 13px; }
-.unavailableIcon, .qrPlaceholder { display: grid; width: 100px; height: 100px; place-items: center; border: 1px solid rgb(124 58 237 / 18%); border-radius: 18px; background: rgb(245 243 255 / 90%); }
+.unavailableIcon, .qrPlaceholder { display: grid; width: 100px; height: 100px; place-items: center; border: 1px solid rgb(37 99 235 / 18%); border-radius: 18px; background: rgb(239 244 255 / 90%); }
 .unavailableIcon svg, .qrPlaceholder svg { width: 42px; height: 42px; fill: none; stroke: var(--accent); }

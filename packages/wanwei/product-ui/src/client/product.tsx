@@ -159,7 +159,10 @@ function FileImportAction(props: FileImportProps) {
   )
 }
 
-function WanweiBrandMark({ size, className }: BrandMarkProps) {
+function WanweiBrandMark({ size, className, wide }: BrandMarkProps) {
+  // The production wordmark already contains the emblem. Keep the standalone
+  // mark only for the collapsed rail so the expanded lockup is not duplicated.
+  if (wide) return null
   return (
     <img
       src="/brand-mark.svg"
