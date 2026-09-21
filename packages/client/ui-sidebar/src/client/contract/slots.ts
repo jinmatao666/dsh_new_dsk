@@ -51,6 +51,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export interface SidebarBrandMarkOwnerProps {
   /** Requested square edge in pixels. */
   size: number
+  /** Whether the sidebar is expanded rather than rendered as a collapsed rail. */
+  wide?: boolean
 }
 
 /** Empty owner share for the sidebar brand-name occupant. */

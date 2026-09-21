@@ -176,6 +176,7 @@ describe('AppFrame', () => {
   it('renders three tracks from store state', () => {
     const { frame } = mountFrame()
     expect(tracks(frame)).toEqual([280, 0])
+    expect(frame.style.getPropertyValue('--dsh-sidebar-width')).toBe('280px')
   })
 
   it('renders the session pair with empty owner shares (sessionId is framework-standard)', () => {

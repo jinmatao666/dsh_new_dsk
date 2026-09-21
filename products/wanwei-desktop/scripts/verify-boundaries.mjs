@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { extname, join, relative, resolve } from 'node:path'
 
 const repositoryRoot = resolve(import.meta.dirname, '..', '..', '..')
+const policyPath = join(repositoryRoot, 'WANWEI_DECOUPLING_RULES.md')
 const officialRoots = ['packages', 'apps']
 const productRoots = [
   'packages/wanwei/',
@@ -10,6 +11,11 @@ const productRoots = [
 const forbidden = /WANWEI_RESULT|DSH_ANALYSIS_VIEW|__ZJUGIS_NATIVE_INVOKE__|wanwei|zjugis|oneapi|万维|专业智能助手/iu
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.mjs', '.css', '.json', '.yml', '.yaml', '.svg'])
 const violations = []
+
+const policy = readFileSync(policyPath, 'utf8')
+for (const requiredSection of ['## 核心原则', '## 依赖方向', '## 新功能接入流程', '## 验证要求', '## 完成标准']) {
+  if (!policy.includes(requiredSection)) violations.push(`WANWEI_DECOUPLING_RULES.md missing ${requiredSection}`)
+}
 
 for (const root of officialRoots) {
   for (const path of walk(join(repositoryRoot, root))) {
