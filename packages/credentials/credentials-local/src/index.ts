@@ -38,7 +38,9 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { watch as chokidarWatch } from 'chokidar'
-import { mkdir, readFile, stat } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, stat } from 'node:fs/promises'
+import { constants as fsConstants } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
 import { Document, parseDocument, type YAMLError } from 'yaml'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
@@ -183,6 +185,47 @@ export function parseCredentialsDocument(text: string, filename: string): Map<st
     entries.set(key, value)
   }
   return entries
+}
+
+/**
+ * Recognize the credentials wrapper shipped by the first desktop builds.
+ * Only the exact wrapper is migrated; every other invalid document still
+ * follows the strict parser above.
+ * @param text - the document text.
+ * @returns legacy credential entries, or `undefined` when this is not that format.
+ */
+function parseLegacyCredentialsDocument(text: string): Map<string, string> | undefined {
+  const document = parseDocument(text, { prettyErrors: true, uniqueKeys: true })
+  if (document.errors.length > 0) return undefined
+  const root: unknown = document.toJS()
+  if (typeof root !== 'object' || root === null || Array.isArray(root)) return undefined
+  const record = root as Record<string, unknown>
+  if (record.version !== 1 || !('refs' in record) || !('records' in record)) return undefined
+  if (Object.keys(record).some(key => key !== 'version' && key !== 'refs' && key !== 'records')) return undefined
+  if (typeof record.refs !== 'object' || record.refs === null || Array.isArray(record.refs)) return undefined
+  if (typeof record.records !== 'object' || record.records === null || Array.isArray(record.records)) return undefined
+  const entries = new Map<string, string>()
+  for (const [key, value] of Object.entries(record.refs as Record<string, unknown>)) {
+    credentialRef(key)
+    if (typeof value !== 'string' || value.length === 0) return undefined
+    entries.set(key, value)
+  }
+  return entries
+}
+
+/** Render a migrated legacy credential map as the current flat document. */
+function renderMigratedCredentials(entries: Map<string, string>): string {
+  return new Document(Object.fromEntries(entries)).toString()
+}
+
+/** Whether a filesystem error means that the migration backup already exists. */
+/** Preserve the legacy wrapper and replace it with the current flat format. */
+async function migrateLegacyCredentials(filename: string, entries: Map<string, string>): Promise<string> {
+  const backup = `${filename}.legacy-v1-${randomUUID()}.yaml`
+  await copyFile(filename, backup, fsConstants.COPYFILE_EXCL)
+  const migrated = renderMigratedCredentials(entries)
+  await writeFileAtomic(filename, migrated, { mode: 0o600, dirMode: 0o700 })
+  return migrated
 }
 
 /**
@@ -386,7 +429,7 @@ export class LocalCredentialProvider extends CredentialProvider {
         // observed yet — an external edit still inside the watcher debounce
         // window, a change the watcher missed, or another process's write —
         // so the line edit below can never resurrect a stale document.
-        await this.reconcileFromDisk()
+        await this.reconcileFromDisk(true)
         const existing = this.values.get(ref)
         if (value === undefined && existing === undefined) return
         const nextText = renderDocument(this.text, ref, value)
@@ -430,6 +473,16 @@ export class LocalCredentialProvider extends CredentialProvider {
       if (!isENOENT(error)) throw error
       return
     }
+    if (parseLegacyCredentialsDocument(text) !== undefined) {
+      await withFileLock(this.spec.filename, async () => {
+        await assertOwnerOnly(this.spec.filename)
+        const current = await readFile(this.spec.filename, 'utf8')
+        const legacy = parseLegacyCredentialsDocument(current)
+        this.text = legacy === undefined ? current : await migrateLegacyCredentials(this.spec.filename, legacy)
+        this.values = parseCredentialsDocument(this.text, this.spec.filename)
+      })
+      return
+    }
     this.values = parseCredentialsDocument(text, this.spec.filename)
     this.text = text
   }
@@ -462,7 +515,7 @@ export class LocalCredentialProvider extends CredentialProvider {
    * and keeps the last good snapshot, a write fails loud rather than
    * overwriting a document it could not understand.
    */
-  private async reconcileFromDisk(): Promise<void> {
+  private async reconcileFromDisk(allowLegacyMigration = false): Promise<void> {
     // Re-checked on every reload and before every write: an external editor or
     // a restored backup can loosen the mode after boot.
     await assertOwnerOnly(this.spec.filename)
@@ -474,6 +527,10 @@ export class LocalCredentialProvider extends CredentialProvider {
       text = undefined
     }
     if (text === this.text || this.isClosed()) return
+    if (text !== undefined && allowLegacyMigration) {
+      const legacy = parseLegacyCredentialsDocument(text)
+      if (legacy !== undefined) text = await migrateLegacyCredentials(this.spec.filename, legacy)
+    }
     const next = text === undefined ? new Map<string, string>() : parseCredentialsDocument(text, this.spec.filename)
     const changed = this.changedRefs(this.values, next)
     this.text = text

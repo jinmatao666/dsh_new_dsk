@@ -381,6 +381,12 @@ export type SurfaceOp =
  * Surface placement and cited source-event seqs for {@link Session.append}. Required on
  * message-producing events and forbidden on log-only events.
  */
+/** Optional envelope metadata for log-only events. */
+export interface LogEventIntent {
+  /** Allow older readers to skip this event when its type is unknown. */
+  ignorable?: true
+}
+
 export interface SurfaceIntent {
   surfaceOp: SurfaceOp
   /**

@@ -23,6 +23,41 @@ export function browseMarketplaceCatalog<T extends { marketplacePublished?: bool
 export type PersonalSkillUploadView = 'public' | 'private' | 'reviews'
 export type PersonalSkillReviewFilter = 'all' | 'pending' | 'rejected' | 'approved'
 
+export interface PersonalSkillReviewCounts {
+  all: number
+  pending: number
+  rejected: number
+  approved: number
+}
+
+/**
+ * Count public personal-skill review records by status.
+ * @param skills - Personal skills returned by the authenticated owner endpoint.
+ * @returns Totals for review navigation and attention badges.
+ */
+export function countPersonalSkillReviews<T extends {
+  visibility?: unknown
+  reviewStatus?: unknown
+}>(skills: readonly T[]): PersonalSkillReviewCounts {
+  const counts: PersonalSkillReviewCounts = { all: 0, pending: 0, rejected: 0, approved: 0 }
+  for (const skill of skills) {
+    if (skill.visibility !== 'public'
+      || (skill.reviewStatus !== 'pending' && skill.reviewStatus !== 'rejected' && skill.reviewStatus !== 'approved')) continue
+    counts.all += 1
+    counts[skill.reviewStatus] += 1
+  }
+  return counts
+}
+
+/**
+ * Format a compact navigation count without widening controls indefinitely.
+ * @param count - Non-negative item count.
+ * @returns A decimal count capped at `99+`.
+ */
+export function formatNavigationCount(count: number): string {
+  return count > 99 ? '99+' : String(Math.max(0, count))
+}
+
 /**
  * Select one owner-facing personal-skill collection without exposing it in public browsing.
  * @param skills - Personal skills returned by the authenticated owner endpoint.

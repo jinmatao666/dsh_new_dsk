@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
@@ -60,6 +60,31 @@ describe('resolveSpec', () => {
 })
 
 describe('layering and reads', () => {
+  it('migrates a legacy desktop wrapper before logout writes, preserving a backup', async () => {
+    const dir = await tempDir()
+    const path = join(dir, '.credentials.yaml')
+    const legacy = 'version: 1\nrefs:\n  DSH_CRED_TEST: stored\nrecords:\n  browser-session:\n    kind: grant\n'
+    await writeCredentials(path, legacy)
+    const ctx = await boot({ path, watch: false })
+    expect(await ctx.credentials.resolve(KEY)).toEqual({ value: 'stored', source: 'file' })
+    expect(await readFile(path, 'utf8')).toBe('DSH_CRED_TEST: stored\n')
+    const backup = (await readdir(dir)).find(name => name.startsWith('.credentials.yaml.legacy-v1-'))
+    expect(backup).toBeDefined()
+    expect(await readFile(join(dir, backup!), 'utf8')).toBe(legacy)
+    await ctx.credentials.unset(KEY)
+    expect(await ctx.credentials.resolve(KEY)).toBeUndefined()
+  })
+
+  it('migrates a legacy wrapper restored by another build before a credential write', async () => {
+    const dir = await tempDir()
+    const path = join(dir, '.credentials.yaml')
+    await writeCredentials(path, 'DSH_CRED_TEST: stored\n')
+    const ctx = await boot({ path, watch: false })
+    await writeCredentials(path, 'version: 1\nrefs:\n  DSH_CRED_TEST: restored\nrecords: {}\n')
+    await ctx.credentials.unset(KEY)
+    expect(await ctx.credentials.resolve(KEY)).toBeUndefined()
+    expect(await readFile(path, 'utf8')).not.toContain('version:')
+  })
   it('treats an absent file as an empty writable store', async () => {
     const dir = await tempDir()
     const ctx = await boot({ path: join(dir, '.credentials.yaml'), watch: false })

@@ -356,7 +356,7 @@ body[theme-mode='dark'] .config-footer-bar.is-dirty .config-footer-hint {
 .preview-button.primary { border-color:#347ce8; color:#fff; background:#347ce8; box-shadow:0 9px 20px rgba(52,124,232,.2); }
 .preview-button:hover { transform:translateY(-1px); }
 .preview-tabs { display:flex; gap:24px; margin:0 0 16px; border-bottom:1px solid rgba(130,155,196,.2); }
-.preview-tabs button { padding:11px 4px; border:0; border-bottom:3px solid transparent; color:#7c8fa9; background:transparent; cursor:pointer; font-size:15px; }
+.preview-tabs button { display:inline-flex; align-items:center; gap:7px; padding:11px 4px; border:0; border-bottom:3px solid transparent; color:#7c8fa9; background:transparent; cursor:pointer; font-size:15px; }
 .preview-tabs button.active { border-color:#367fea; color:#2875e9; font-weight:700; }
 .preview-stat-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-bottom:18px; }
 .preview-stat-grid>div { min-width:0; padding:20px 24px; border:1px solid rgba(255,255,255,.95); border-radius:17px; background:rgba(255,255,255,.68); box-shadow:0 14px 30px rgba(61,87,127,.07); }
@@ -2180,6 +2180,9 @@ body[theme-mode='dark'] .zjugis-page-content {
 .zjugis-sidebar-item:hover { color:#2d75e5; background:rgba(229,239,255,.72); }
 .zjugis-sidebar-item.active { color:#2d75e5; background:linear-gradient(100deg,#dfebff,#f3f7ff); box-shadow:0 10px 22px rgba(65,112,194,.12); font-weight:700; }
 .zjugis-sidebar-item-icon { width:20px; height:20px; flex:0 0 20px; stroke-width:1.8; }
+.zjugis-sidebar-count { display:inline-flex; min-width:20px; height:20px; margin-left:auto; align-items:center; justify-content:center; box-sizing:border-box; padding:0 6px; border-radius:999px; background:#fff0d9; color:#b86b12; font-size:10px; font-weight:750; line-height:1; font-variant-numeric:tabular-nums; }
+.zjugis-admin-shell.is-collapsed .zjugis-sidebar-count { position:absolute; top:5px; right:7px; min-width:17px; height:17px; padding:0 4px; font-size:9px; }
+.zjugis-admin-shell.is-collapsed .zjugis-sidebar-item { position:relative; }
 .zjugis-admin-shell.is-collapsed .zjugis-sidebar-item { justify-content:center; padding:0; }
 .zjugis-sidebar-collapse { display:flex; align-items:center; gap:11px; margin-top:auto; min-height:42px; padding:0 16px; border:0; border-radius:12px; color:#7890ad; background:transparent; cursor:pointer; font:inherit; font-size:14px; }
 .zjugis-sidebar-collapse:hover { color:#2d75e5; background:rgba(229,239,255,.72); }

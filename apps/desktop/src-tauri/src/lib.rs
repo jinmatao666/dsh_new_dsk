@@ -711,15 +711,22 @@ fn validate_marketplace_slug(slug: &str) -> Result<(), String> {
     }
 }
 
-fn development_harness_home(app_data_dir: &Path) -> Option<PathBuf> {
+fn production_harness_home(user_home: &Path) -> PathBuf {
+    user_home.join(".wanweibuddy")
+}
+
+fn desktop_harness_home(app_data_dir: &Path) -> Result<PathBuf, String> {
     #[cfg(debug_assertions)]
     {
-        Some(app_data_dir.join("development").join("dsh-home"))
+        Ok(app_data_dir.join("development").join("dsh-home"))
     }
     #[cfg(not(debug_assertions))]
     {
         let _ = app_data_dir;
-        None
+        let user_home = std::env::var_os("USERPROFILE")
+            .or_else(|| std::env::var_os("HOME"))
+            .ok_or_else(|| "无法定位当前用户目录".to_string())?;
+        Ok(production_harness_home(Path::new(&user_home)))
     }
 }
 
@@ -728,13 +735,7 @@ fn user_skills_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .path()
         .app_local_data_dir()
         .map_err(|error| format!("无法定位桌面应用数据目录：{error}"))?;
-    if let Some(home) = development_harness_home(&app_data_dir) {
-        return Ok(home.join("skills"));
-    }
-    let home = std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .ok_or_else(|| "无法定位当前用户目录".to_string())?;
-    Ok(PathBuf::from(home).join(".dsh").join("skills"))
+    Ok(desktop_harness_home(&app_data_dir)?.join("skills"))
 }
 
 fn user_downloads_root() -> Result<PathBuf, String> {
@@ -1654,60 +1655,6 @@ fn append_log(path: &Path, message: impl AsRef<str>) {
     }
 }
 
-/// Early desktop builds used a third-party agent-plane vision tool. It shares
-/// the `recognize_image` name with the bundled ZJUGIS implementation but
-/// expects a different host service (`vision`), so an old user-level preset
-/// can shadow the bundled tool after an installer upgrade. Disable only that
-/// exact obsolete entry and retain a one-time backup of the user's preset.
-fn disable_legacy_vision_tool(log_path: &Path) {
-    let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) else {
-        return;
-    };
-    let path = PathBuf::from(home)
-        .join(".dsh")
-        .join(".agent-presets")
-        .join("vision")
-        .join("agent.cordis.yml");
-    let Ok(raw) = fs::read_to_string(&path) else {
-        return;
-    };
-    if !raw.contains("@linenxi-ctrl/dsh-vision/lib/tool.js") {
-        return;
-    }
-
-    let mut changed = false;
-    let mut lines = raw.lines().peekable();
-    let mut updated = String::new();
-    while let Some(line) = lines.next() {
-        if line.trim() == "- id: tool-vision"
-            && lines
-                .peek()
-                .is_some_and(|next| next.contains("@linenxi-ctrl/dsh-vision/lib/tool.js"))
-        {
-            let _ = lines.next();
-            changed = true;
-            continue;
-        }
-        updated.push_str(line);
-        updated.push('\n');
-    }
-    if !changed {
-        return;
-    }
-
-    let backup = path.with_extension("yml.zjugis-vision-backup");
-    if !backup.exists() {
-        let _ = fs::write(&backup, &raw);
-    }
-    match fs::write(&path, updated) {
-        Ok(()) => append_log(
-            log_path,
-            "disabled obsolete @linenxi-ctrl/dsh-vision tool; bundled dsh-vision is now authoritative",
-        ),
-        Err(error) => append_log(log_path, format!("could not disable obsolete vision tool: {error}")),
-    }
-}
-
 impl Drop for Sidecar {
     fn drop(&mut self) {
         self.stop();
@@ -1877,19 +1824,20 @@ fn spawn_sidecar(
         .env("DSH_DEPENDENCY_INSTALL_APPROVALS", "session-once")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    if let Some(home) = development_harness_home(app_data_dir) {
-        fs::create_dir_all(&home).map_err(|error| {
-            format!(
-                "Unable to create desktop development home {}: {error}",
-                home.display()
-            )
-        })?;
-        command.env("DSH_HOME", &home);
+    let home = desktop_harness_home(app_data_dir)?;
+    fs::create_dir_all(&home).map_err(|error| {
+        format!(
+            "Unable to create desktop Harness home {}: {error}",
+            home.display()
+        )
+    })?;
+    command.env("DSH_HOME", &home);
+    append_log(
+        log_path,
+        format!("desktop Harness home: {}", home.display()),
+    );
+    if cfg!(debug_assertions) {
         command.env("DSH_DESKTOP_DEVELOPMENT", "1");
-        append_log(
-            log_path,
-            format!("development Harness home: {}", home.display()),
-        );
     }
     if !config.default_model.is_empty() {
         command.env("DSH_DEFAULT_MODEL", &config.default_model);
@@ -1997,7 +1945,6 @@ pub fn run() {
             let log_path = app_data_dir.join("logs").join("startup.log");
             let _ = fs::remove_file(&log_path);
             append_log(&log_path, "万维Buddy startup");
-            disable_legacy_vision_tool(&log_path);
             let config = server_config(&resource_dir).map_err(|message| {
                 append_log(&log_path, format!("[fatal] {message}"));
                 std::io::Error::new(std::io::ErrorKind::InvalidData, message)
@@ -2128,10 +2075,11 @@ pub fn run() {
 #[cfg(test)]
 mod marketplace_tests {
     use super::{
-        import_workspace_files_at, import_workspace_paths_at, install_custom_skill_directory_at,
-        install_marketplace_skill_at, install_marketplace_skill_files_at,
-        marketplace_package_sha256, read_analysis_view, save_session_log_archive_at,
-        uninstall_marketplace_skill_at, CustomSkillFile, WorkspaceImportFile,
+        desktop_harness_home, import_workspace_files_at, import_workspace_paths_at,
+        install_custom_skill_directory_at, install_marketplace_skill_at,
+        install_marketplace_skill_files_at, marketplace_package_sha256, production_harness_home,
+        read_analysis_view, save_session_log_archive_at, uninstall_marketplace_skill_at,
+        CustomSkillFile, WorkspaceImportFile,
     };
     use std::{
         fs,
@@ -2181,6 +2129,18 @@ mod marketplace_tests {
             format!(r#"{{"skills":[{manifest}]}}"#),
         )
         .expect("write catalog");
+    }
+
+    #[test]
+    fn desktop_home_does_not_resolve_to_the_shared_dsh_directory() {
+        let user_home = PathBuf::from("test-user-home");
+        let isolated = production_harness_home(&user_home);
+        assert_eq!(isolated, user_home.join(".wanweibuddy"));
+        assert_ne!(isolated, user_home.join(".dsh"));
+        assert_eq!(
+            desktop_harness_home(&user_home).expect("development home"),
+            user_home.join("development").join("dsh-home")
+        );
     }
 
     #[test]

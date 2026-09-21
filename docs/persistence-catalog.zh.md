@@ -1007,3 +1007,17 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 ```
 
 来源：[`packages/web/web-search-deepseek/src/provider.ts:83`](../packages/web/web-search-deepseek/src/provider.ts)
+
+<a id="weboneapi-search-request--log-only"></a>
+
+#### `web/oneapi-search-request` — log-only
+
+```ts persistence-catalog
+/**
+ * Secret-free server-governed web search request recorded before dispatch.
+ * @param payload - Exact endpoint, selected model, and query sent for retrieval.
+ */
+'web/oneapi-search-request': OneApiSearchRequestRecord
+```
+
+来源：[`packages/web/web-search-deepseek/src/oneapi-provider.ts:19`](../packages/web/web-search-deepseek/src/oneapi-provider.ts)

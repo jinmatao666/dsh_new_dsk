@@ -14,7 +14,6 @@ declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     /**
      * Secret-free server-governed web search request recorded before dispatch.
-     * @mode observe
      * @param payload - Exact endpoint, selected model, and query sent for retrieval.
      */
     'web/oneapi-search-request': OneApiSearchRequestRecord

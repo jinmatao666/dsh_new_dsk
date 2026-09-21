@@ -146,7 +146,7 @@ export function apply(ctx: Context, config: Config): void {
       baseURL: config.baseURL ?? 'http://127.0.0.1:3000',
       resolveToken: async () => (await ctx.get('credentials')?.resolve(tokenRef))?.value,
       recordRequest: (request) => {
-        ctx.get('agents')?.currentInitiator()?.session.append('web/oneapi-search-request', request)
+        ctx.get('agents')?.currentInitiator()?.session.append('web/oneapi-search-request', request, { ignorable: true })
       },
     }))
     return

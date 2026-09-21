@@ -14,7 +14,7 @@ The OneAPI Basic Settings page stores a default search model together with its e
 
 The desktop composition selects the `oneapi-bailian` search provider. It reads the public model name from `/api/status`, authenticates `/v1/chat/completions` with the existing desktop user token, and marks only that auxiliary request with `X-Dsh-Web-Search: 1`. OneAPI injects Bailian's `enable_search` and forced-search options only when this marker passed authentication and server-side route validation. Ordinary conversation requests never receive those fields and continue through normal model distribution.
 
-The auxiliary request is recorded as `web/oneapi-search-request` without credentials before dispatch. The response text is returned as provider content; this route does not invent source metadata that Bailian's OpenAI-compatible response did not provide.
+The auxiliary request is recorded as `web/oneapi-search-request` without credentials before dispatch. The event is registered in the generated persistence catalog and marked ignorable because older readers can reconstruct the conversation without this observational record. The response text is returned as provider content; this route does not invent source metadata that Bailian's OpenAI-compatible response did not provide.
 
 ## Alternatives considered
 

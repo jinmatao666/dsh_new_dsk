@@ -16,6 +16,8 @@
 
 release 构建中的认证层保持正常的正式行为。仅存在于源码中的 `dev/cordis.patch.yml` 覆盖层只由 Rust debug 构建选择，并且不在 Tauri 安装包资源清单中。
 
+正式安装的桌面端改用全新的 `~/.wanweibuddy` 数据目录，凭据、设置、会话、Profile 和技能均保存在这里；它不会导入或修改现有 `~/.dsh` 数据。开发版仍使用独立的应用数据目录 `development/dsh-home`。安装隔离版后需要重新登录，OneAPI 服务和数据库不变。
+
 ## 安装包
 
 把 `DSH_NODE_BINARY` 设置为目标平台的 Node 可执行文件，并可选地通过 `DSH_DESKTOP_SERVER_CONFIG` 指定正式 JSON 配置文件，然后在 Windows、macOS 或 Linux 上运行应用的 `build` 脚本。打包必须在目标平台原生执行：Windows 生成 NSIS 安装包，macOS 生成 `.app`/DMG 产物，Linux 生成 x64 `.AppImage` 和 Debian `.deb` 产物。发布工作流的 `all-platforms` 选项会在各目标对应的托管 runner 上构建。

@@ -1,11 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Input } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import SkillsTable from '../../components/SkillsTable';
 import SkillCategory from '../SkillCategory';
 import SkillReviewTable from '../../components/SkillReviewTable';
-import { isRoot } from '../../helpers';
+import { API, isRoot } from '../../helpers';
 
 const TABS = [
   ['public', '技能库'],
@@ -20,9 +20,11 @@ const Skill = () => {
   const [activeTab, setActiveTab] = useState(location.pathname === '/skill/categories' ? 'categories' : location.pathname === '/skill/reviews' && canReview ? 'reviews' : 'public');
   const [libraryKeyword, setLibraryKeyword] = useState('');
   const [categoryKeyword, setCategoryKeyword] = useState('');
+  const [pendingReviewCount, setPendingReviewCount] = useState(null);
   const libraryRef = useRef(null);
   const categoryRef = useRef(null);
   const reviewRef = useRef(null);
+  const handleReviewCountsChange = useCallback(counts => setPendingReviewCount(counts.pending), []);
 
   useEffect(() => {
     setActiveTab((prev) => {
@@ -33,6 +35,13 @@ const Skill = () => {
       return prev === 'categories' || prev === 'reviews' ? 'public' : prev;
     });
   }, [location.pathname, canReview]);
+
+  useEffect(() => {
+    if (!canReview) return;
+    void API.get('/api/personal-skill/admin/reviews', { params: { page: 1, perPage: 1, status: 'pending' } })
+      .then(response => setPendingReviewCount(Number(response.data?.totalItems || 0)))
+      .catch(() => {});
+  }, [canReview]);
 
   const handleTabChange = (key) => {
     setActiveTab(key);
@@ -102,7 +111,8 @@ const Skill = () => {
             className={activeTab === key ? 'active' : ''}
             onClick={() => handleTabChange(key)}
           >
-            {label}
+            <span>{label}</span>
+            {key === 'reviews' && pendingReviewCount !== null && pendingReviewCount > 0 && <b className='skill-count-badge pending'>{pendingReviewCount > 99 ? '99+' : pendingReviewCount}</b>}
           </button>
         ))}
       </div>
@@ -112,7 +122,7 @@ const Skill = () => {
           <SkillCategory ref={categoryRef} embedded keyword={categoryKeyword} />
         </section>
       )}
-      {activeTab === 'reviews' && <SkillReviewTable ref={reviewRef} />}
+      {activeTab === 'reviews' && <SkillReviewTable ref={reviewRef} onCountsChange={handleReviewCountsChange} />}
     </div>
   );
 };

@@ -14,7 +14,7 @@ OneAPI 的“基础设置”同时保存默认搜索模型及其准确渠道 ID�
 
 桌面端组合选用 `oneapi-bailian` 搜索提供方。它从 `/api/status` 读取公开的模型名称，使用现有桌面用户令牌请求 `/v1/chat/completions`，并且只给这次辅助请求添加 `X-Dsh-Web-Search: 1`。该标记通过身份认证及服务端路由校验后，OneAPI 才会注入百炼的 `enable_search` 和强制搜索参数。普通对话请求不会得到这些字段，仍按原有模型分发流程执行。
 
-辅助请求在发出前以 `web/oneapi-search-request` 记录，不包含凭据。响应文本作为提供方内容返回；当百炼 OpenAI 兼容响应没有提供来源结构时，该链路不会虚构来源信息。
+辅助请求在发出前以 `web/oneapi-search-request` 记录，不包含凭据。该事件登记在生成的持久化目录中，并标记为可忽略，因为旧版读取器跳过这一观察记录仍能重建对话。响应文本作为提供方内容返回；当百炼 OpenAI 兼容响应没有提供来源结构时，该链路不会虚构来源信息。
 
 ## Alternatives considered
 

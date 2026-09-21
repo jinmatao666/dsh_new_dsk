@@ -10,16 +10,33 @@ const STATUS = {
   rejected: ['已驳回', 'red']
 };
 
-const SkillReviewTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
+const REVIEW_FILTERS = ['pending', 'approved', 'rejected', 'all'];
+const formatCount = count => count > 99 ? '99+' : count;
+const fetchReviewCounts = async () => {
+  const responses = await Promise.all(REVIEW_FILTERS.map(key => API.get('/api/personal-skill/admin/reviews', {
+    params: { page: 1, perPage: 1, status: key }
+  })));
+  return Object.fromEntries(REVIEW_FILTERS.map((key, index) => [key, Number(responses[index]?.data?.totalItems || 0)]));
+};
+
+const SkillReviewTable = forwardRef(({ keyword: keywordProp = '', onCountsChange }, ref) => {
   const [items, setItems] = useState([]);
   const [keyword, setKeyword] = useState(keywordProp);
   const [status, setStatus] = useState('pending');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
   const [browse, setBrowse] = useState({ visible: false, skill: null });
   const [rejecting, setRejecting] = useState(null);
   const [reason, setReason] = useState('');
+
+  const refreshCounts = useCallback(async () => {
+    const next = await fetchReviewCounts();
+    setCounts(next);
+    onCountsChange?.(next);
+    window.dispatchEvent(new CustomEvent('personal-skill-review-counts', { detail: next }));
+  }, [onCountsChange]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -40,6 +57,15 @@ const SkillReviewTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   }, [keyword, page, status]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    void fetchReviewCounts().then(next => {
+      if (!active) return;
+      setCounts(next);
+      onCountsChange?.(next);
+    }).catch(() => { if (active) setCounts(null); });
+    return () => { active = false; };
+  }, [onCountsChange]);
   useImperativeHandle(ref, () => ({
     onKeywordChange: value => { setKeyword(value || ''); setPage(1); }
   }));
@@ -52,6 +78,7 @@ const SkillReviewTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       setRejecting(null);
       setReason('');
       await load();
+      await refreshCounts();
     } catch (error) {
       showError(error.message || '审核失败');
     }
@@ -102,8 +129,8 @@ const SkillReviewTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     <div className='skill-review-summary'>
       <div><strong>{total}</strong><span>{status === 'pending' ? '待审核投稿' : '条审核记录'}</span></div>
       <div className='skill-review-filters'>
-        {Object.entries(STATUS).map(([key, entry]) => <button key={key} type='button' className={status === key ? 'active' : ''} onClick={() => { setStatus(key); setPage(1); }}>{entry[0]}</button>)}
-        <button type='button' className={status === 'all' ? 'active' : ''} onClick={() => { setStatus('all'); setPage(1); }}>全部</button>
+        {Object.entries(STATUS).map(([key, entry]) => <button key={key} type='button' className={status === key ? 'active' : ''} onClick={() => { setStatus(key); setPage(1); }}><span>{entry[0]}</span>{counts && <b className={`skill-count-badge ${key}`}>{formatCount(counts[key])}</b>}</button>)}
+        <button type='button' className={status === 'all' ? 'active' : ''} onClick={() => { setStatus('all'); setPage(1); }}><span>全部</span>{counts && <b className='skill-count-badge'>{formatCount(counts.all)}</b>}</button>
       </div>
     </div>
     <Table

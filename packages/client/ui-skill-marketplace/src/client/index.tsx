@@ -9,7 +9,9 @@ import {
   browseMarketplaceCatalog,
   buildMarketplaceCatalog,
   buildMarketplaceCategories,
+  countPersonalSkillReviews,
   filterPersonalSkillUploads,
+  formatNavigationCount,
   publishedSkillCategories,
 } from './catalog.ts'
 import type { PersonalSkillReviewFilter, PersonalSkillUploadView } from './catalog.ts'
@@ -1019,6 +1021,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       ...(typeof remote.published_version === 'string' ? { publishedVersion: remote.published_version } : {}),
     }]
   }), [personalSkills])
+  const reviewCounts = useMemo(() => countPersonalSkillReviews(uploadedSkills), [uploadedSkills])
+  const uploadAttentionCount = reviewCounts.pending + reviewCounts.rejected
   const categories = useMemo(() => [
     L.all,
     ...buildMarketplaceCategories(remoteCategories),
@@ -1284,7 +1288,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                         }
                       }}
                     >
-                      {L.myUploads}
+                      <span>{L.myUploads}</span>
+                      {uploadAttentionCount > 0 && <span className="dsh-skill-count-badge attention">{formatNavigationCount(uploadAttentionCount)}</span>}
                     </button>
                     <button type="button" className="primary" onClick={() => {
                       setAdding(true)
@@ -1324,7 +1329,10 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                           className={uploadView === id ? 'active' : ''}
                           onClick={() => { setUploadView(id) }}
                         >
-                          {label}
+                          <span>{label}</span>
+                          {id === 'reviews' && uploadAttentionCount > 0 && (
+                            <span className="dsh-skill-count-badge attention">{formatNavigationCount(uploadAttentionCount)}</span>
+                          )}
                         </button>
                       ))}
                     </div>
@@ -1342,7 +1350,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                             className={reviewFilter === id ? 'active' : ''}
                             onClick={() => { setReviewFilter(id) }}
                           >
-                            {label}
+                            <span>{label}</span>
+                            <span className={`dsh-skill-count-badge ${id}`}>{formatNavigationCount(reviewCounts[id])}</span>
                           </button>
                         ))}
                       </div>
@@ -1630,6 +1639,20 @@ function SkillMarketplaceAction({ wide, section = 'skills' }: ActionProps & { se
     marketplaceControllers[section].subscribe,
     () => marketplaceControllers[section].isOpen(),
   )
+  const [attentionCount, setAttentionCount] = useState<number | null>(null)
+  useEffect(() => {
+    if (section !== 'skills' || loadPersonalSkills === undefined) return
+    let active = true
+    void loadPersonalSkills().then((skills) => {
+      if (!active) return
+      const counts = countPersonalSkillReviews(skills.map(skill => ({
+        visibility: skill.visibility,
+        reviewStatus: parseReviewStatus(skill.review_status),
+      })))
+      setAttentionCount(counts.rejected)
+    }).catch(() => {})
+    return () => { active = false }
+  }, [open, section])
   return (
     <button
       type="button"
@@ -1640,6 +1663,11 @@ function SkillMarketplaceAction({ wide, section = 'skills' }: ActionProps & { se
     >
       <MarketplaceSectionIcon section={section} size={wide ? 16 : 18} />
       {wide && <span>{labels[section]}</span>}
+      {section === 'skills' && attentionCount !== null && attentionCount > 0 && (
+        <span className="dsh-skill-sidebar-count" aria-label={`${attentionCount} 条未通过审核记录`}>
+          {formatNavigationCount(attentionCount)}
+        </span>
+      )}
     </button>
   )
 }

@@ -20,6 +20,8 @@ Development sessions and marketplace installations use the persistent `developme
 
 The authentication overlay uses the normal production behavior in release builds. The source-only `dev/cordis.patch.yml` overlay is selected by Rust only in debug builds and is not listed in the Tauri bundle resources.
 
+The installed desktop uses a fresh `~/.wanweibuddy` Harness home for credentials, settings, sessions, profiles, and skills. It neither imports nor modifies the existing `~/.dsh` data. The development build retains its separate application-data `development/dsh-home`. Users sign in again after installing the isolated build; the OneAPI service and database remain unchanged.
+
 ## Installers
 
 Set `DSH_NODE_BINARY` to the Node executable for the target platform and

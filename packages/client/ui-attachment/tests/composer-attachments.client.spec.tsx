@@ -132,6 +132,17 @@ describe('ComposerAttachments', () => {
     expect(onAddFiles).toHaveBeenCalledWith([file])
   })
 
+  it('accepts WebView file drops whose transfer types omit Files and imports once', () => {
+    const onAddFiles = vi.fn()
+    const onAddNativeFiles = vi.fn()
+    render(<ComposerAttachments {...props({ onAddFiles, onAddNativeFiles })} />)
+    const file = new File(['notes'], 'notes.txt', { type: 'text/plain' })
+    fireEvent.drop(document.body, { dataTransfer: { types: [], files: [file], dropEffect: 'none' } })
+    act(() => { window.dispatchEvent(new Event('dsh:native-file-drop')) })
+    expect(onAddFiles).toHaveBeenCalledWith([file])
+    expect(onAddNativeFiles).not.toHaveBeenCalled()
+  })
+
   it('consumes native desktop drops without reading browser File objects', () => {
     const onAddNativeFiles = vi.fn()
     const view = render(<ComposerAttachments {...props({ onAddNativeFiles })} />)

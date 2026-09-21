@@ -3,7 +3,9 @@ import {
   browseMarketplaceCatalog,
   buildMarketplaceCatalog,
   buildMarketplaceCategories,
+  countPersonalSkillReviews,
   filterPersonalSkillUploads,
+  formatNavigationCount,
   publishedSkillCategories,
 } from '../src/client/catalog.ts'
 
@@ -52,6 +54,16 @@ describe('personal skill uploads', () => {
       .toEqual(['pending', 'rejected', 'approved'])
     expect(filterPersonalSkillUploads(uploads, 'reviews', 'rejected').map(skill => skill.id))
       .toEqual(['rejected'])
+  })
+
+  it('counts only public review records for navigation badges', () => {
+    expect(countPersonalSkillReviews(uploads)).toEqual({ all: 3, pending: 1, rejected: 1, approved: 1 })
+  })
+
+  it('caps compact navigation counts', () => {
+    expect(formatNavigationCount(0)).toBe('0')
+    expect(formatNavigationCount(99)).toBe('99')
+    expect(formatNavigationCount(100)).toBe('99+')
   })
 })
 

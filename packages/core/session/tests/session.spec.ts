@@ -3,6 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { createUserMessage, CallId, createMessage, createToolResultMessage, MessageId, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import SessionStore, {
   adoptSessionEvent,
+  KNOWN_SESSION_EVENT_TYPES,
   SESSION_FORMAT_VERSION,
   Session,
   SessionEvent,
@@ -12,6 +13,12 @@ import SessionStore, {
 import type { CreateSessionOptions, SessionEventType, SessionHeader, SessionSurface, TodoItem } from '@deepseek-ai/dsh-session'
 
 describe('Session', () => {
+  it('records skippable informational events and recognizes the OneAPI search log', () => {
+    const session = Session.create(SessionId('search-log'))
+    const event = session.append('test/log-only', { value: 'request' }, { ignorable: true })
+    expect(event.ignorable).toBe(true)
+    expect(KNOWN_SESSION_EVENT_TYPES.has('web/oneapi-search-request')).toBe(true)
+  })
   it('exposes one stable readonly surface view', () => {
     const session = Session.create(SessionId('surface-view'))
     const surface = session.surface

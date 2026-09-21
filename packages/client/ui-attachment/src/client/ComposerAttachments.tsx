@@ -21,6 +21,7 @@ export function ComposerAttachments({
   const [preview, setPreview] = useState<ComposerAttachment | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const dragDepth = useRef(0)
+  const lastDropAt = useRef(0)
   const closePreview = useCallback(() => { setPreview(null) }, [])
 
   useEffect(() => {
@@ -30,7 +31,7 @@ export function ComposerAttachments({
   useEffect(() => {
     const fileTransfer = (event: globalThis.DragEvent): DataTransfer | null => {
       const dataTransfer = event.dataTransfer
-      if (dataTransfer === null || !dataTransfer.types.includes('Files')) return null
+      if (dataTransfer === null || (!dataTransfer.types.includes('Files') && dataTransfer.files.length === 0)) return null
       return dataTransfer
     }
     const reset = (): void => {
@@ -62,7 +63,10 @@ export function ComposerAttachments({
       if (dataTransfer === null) return
       event.preventDefault()
       reset()
-      if (canAcceptDrop) onAddFiles([...dataTransfer.files])
+      if (!canAcceptDrop || dataTransfer.files.length === 0) return
+      if (Date.now() - lastDropAt.current < 500) return
+      lastDropAt.current = Date.now()
+      onAddFiles([...dataTransfer.files])
     }
     const onNativeDragEnter = (): void => {
       setDragActive(true)
@@ -72,7 +76,9 @@ export function ComposerAttachments({
     }
     const onNativeDrop = (): void => {
       reset()
-      if (canAcceptDrop) onAddNativeFiles?.()
+      if (!canAcceptDrop || Date.now() - lastDropAt.current < 500) return
+      lastDropAt.current = Date.now()
+      onAddNativeFiles?.()
     }
     document.addEventListener('dragenter', onDragEnter)
     document.addEventListener('dragover', onDragOver)
