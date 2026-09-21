@@ -15,6 +15,7 @@ description: 会议纪要：将常见音频转换、分段转写，并结合会�
 
 1. 文字材料：`scripts/invoke.ps1 prepare --materials <文件...> --transcript <可选转写稿> --meeting-title <名称> --output-directory <目录>`。
 2. 音频材料：`scripts/invoke.ps1 prepare --audio <音频> --materials <可选文件...> --meeting-title <名称> --output-directory <目录>`。脚本依次完成转写、内容整理和 Word 渲染。
+   - `prepare` 必须作为前台命令执行并等待完成，不要设置 `run_in_background`，也不要改用 `job_output` 收集结果。这样最终的 `WANWEI_RESULT` 会直接发布唯一的会议纪要 Word 产物。
    - 非标准 WAV 的转换需要本机 `ffmpeg`。脚本会先检查；缺失时只请求一次安装或让用户安装，Windows 可使用 `winget install --id Gyan.FFmpeg -e`，安装完成后原样重试处理命令。
    - 长音频只允许逐段串行请求转写接口，不并发上传片段。任一片段失败时停止，并指出失败片段序号；不得跳过后继续生成不完整纪要。
 3. 默认服务不要求密钥。经 OneAPI 调用时，通过 `WANWEI_TRANSCRIPTION_URL`、`WANWEI_TRANSCRIPTION_MODEL` 和 `WANWEI_TRANSCRIPTION_API_KEY` 提供 `/v1/audio/transcriptions` 地址、模型名和令牌。直接使用百炼原生接口时，URL 必须是 `/api/v1/services/aigc/multimodal-generation/generation` 地址，密钥也可通过 `DASHSCOPE_API_KEY` 提供。协议只由 URL 判断，不把密钥或模型写死在技能中。纪要生成服务继续使用 `WANWEI_MEETING_BASE_URL`、`WANWEI_MEETING_MODEL` 和 `WANWEI_MEETING_API_KEY`。任何密钥都不能写入技能包、命令记录或报告。
@@ -25,7 +26,7 @@ description: 会议纪要：将常见音频转换、分段转写，并结合会�
 - 开头用信息表展示会议名称、时间、地点、参会人、记录人。
 - 决策事项使用编号列表；待办事项必须使用“事项｜责任人｜截止时间｜状态”表格；风险单独成节。
 - Word 使用 A4 纵向页面和正式会议材料版式：会议名称作为副标题，章节采用清晰的黑色层级，信息表与待办表按内容分配列宽，跨页待办表重复表头。
-- 对话中只给执行摘要和主要文件链接。音频任务交付转写 TXT 和最终 Word；已有文字材料任务只交付最终 Word。Markdown、JSON、内部材料汇总和处理报告不得作为产物保留或展示。
+- 对话中只给执行摘要和最终会议纪要链接。音频转写 TXT 仅作为内部处理文件保留，不作为产物展示；无论输入是音频还是文字材料，都只交付最终 Word。Markdown、JSON、内部材料汇总和处理报告不得作为产物展示。
 - 清楚区分“材料明确内容”和“未明确项”，不得补造会议结论。
 ## 运行依赖
 

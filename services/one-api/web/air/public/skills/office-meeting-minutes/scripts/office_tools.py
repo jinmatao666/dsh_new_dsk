@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 
-RUNTIME_VERSION = "1.0.6"
+RUNTIME_VERSION = "1.0.7"
 DEFAULT_FONT = "Microsoft YaHei"
 INVALID_FILENAME = re.compile(r'[\\/:*?"<>|]+')
 DEFAULT_MEETING_BASE_URL = "http://ac.zjugis.com:20330/v1"
@@ -974,7 +974,6 @@ def meeting_prepare(args: argparse.Namespace) -> dict[str, Any]:
     artifacts: list[Artifact] = []
     if audio_path and not transcript_path:
         transcript_path = transcribe_audio(audio_path, directory, args)
-        artifacts.append(Artifact(str(transcript_path), "transcript", "语音转写文本"))
     sections = ["# 会议材料汇总", ""]
     if transcript_path:
         sections.extend(["## 会议转写", "", extract_text(transcript_path), ""])

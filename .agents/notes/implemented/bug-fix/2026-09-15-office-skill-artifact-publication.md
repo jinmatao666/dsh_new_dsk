@@ -10,7 +10,7 @@ Office skills generated useful final files alongside extraction indexes, rollbac
 
 ## Decision
 
-The `WANWEI_RESULT` marker is the authoritative source of office-skill deliverables. The client reads it from durable tool-result text, including output collected from a background job whose result has no terminal view. A valid marker with `success: false` publishes no files, and a valid marker is never passed through the generic terminal-path fallback.
+The `WANWEI_RESULT` marker is the authoritative source of terminal office-skill deliverables. A valid marker with `success: false` publishes no files, and a valid marker is never passed through the generic terminal-path fallback.
 
 Office runtimes place only files intended for the user in `artifacts`. Temporary extraction files and recovery metadata use separate result fields and do not appear in the produced-files row. Skills choose deliverables for their task: document comparison publishes Word and HTML, document summary publishes Word, applied batch rename publishes renamed files, and image processing publishes processed images.
 
@@ -24,4 +24,4 @@ Office runtimes place only files intended for the user in `artifacts`. Temporary
 
 ## Consequences
 
-The produced-files row presents requested office output from foreground commands and background jobs without internal Markdown or JSON clutter. Each office skill remains responsible for its own artifact selection, while the client applies one generic marker rule instead of hardcoding skill names. Internal recovery files remain available to the runtime but are not advertised as user deliverables.
+The produced-files row presents the requested office output without internal Markdown or JSON clutter. Each office skill remains responsible for its own artifact selection, while the client applies one generic marker rule instead of hardcoding skill names. Internal recovery files remain available to the runtime but are not advertised as user deliverables.

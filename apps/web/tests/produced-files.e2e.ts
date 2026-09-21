@@ -1,6 +1,5 @@
 // Web e2e scenario: the single-line produced-files summary a finished turn
-// ends with. Cold-seeds ten writes and one background-job result (zero model
-// calls), then verifies the real
+// ends with. Cold-seeds ten writes (zero model calls), then verifies the real
 // assembled lane keeps a precise +N and a capability-gated folder handoff.
 // The folder request is intercepted so one real browser click can exercise
 // the full client carrier without launching a native application in CI.
@@ -20,10 +19,6 @@ const MODE = webSnapshotMode()
 const OVERLAY = fileURLToPath(new URL('./produced-files.overlay.yml', import.meta.url))
 const SEED_ID = 'produced-files-web-e2e'
 const DONE = 'PRODUCED_FILES_DONE'
-const BACKGROUND_ARTIFACTS = [
-  '会议录音_转写.txt',
-  '会议纪要.docx',
-] as const
 
 /** Short leading names plus a long third name make the narrow lane deterministically show two. */
 const PRODUCED = [
@@ -39,7 +34,7 @@ const PRODUCED = [
   'manifest.yaml',
 ] as const
 
-/** Build one settled turn with mutation locations and a background-job artifact marker. */
+/** Build one settled turn whose successful write calls carry ten locations. */
 function producedFixture(): string {
   const session = Session.create(SessionId('produced-files-source'))
   const eventTimeOrigin = new Date().setHours(12, 0, 0, 0)
@@ -61,20 +56,12 @@ function producedFixture(): string {
     turn: 1,
     step: 1,
     message: createAssistantMessage({
-      content: [
-        ...calls.map(call => ({
-          type: 'tool-call' as const,
-          id: call.callId,
-          name: 'write',
-          arguments: call.args,
-        })),
-        {
-          type: 'tool-call' as const,
-          id: CallId('produced-files-job-output'),
-          name: 'job_output',
-          arguments: JSON.stringify({ job_id: 'pwsh-1', wait: true }),
-        },
-      ],
+      content: calls.map(call => ({
+        type: 'tool-call' as const,
+        id: call.callId,
+        name: 'write',
+        arguments: call.args,
+      })),
       source: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
     }),
   }, { surfaceOp: 'append' })
@@ -92,29 +79,6 @@ function producedFixture(): string {
       }),
     }, { surfaceOp: 'append', sourceEventSeqs: [source.seq] })
   }
-  const jobCallId = CallId('produced-files-job-output')
-  const jobSource = session.append('tool/call', {
-    turn: 1,
-    step: 1,
-    callId: jobCallId,
-    name: 'job_output',
-    arguments: JSON.stringify({ job_id: 'pwsh-1', wait: true }),
-  })
-  session.append('tool/result', {
-    turn: 1,
-    step: 1,
-    message: createToolResultMessage({
-      callId: jobCallId,
-      content: [{
-        type: 'text',
-        text: `WANWEI_RESULT=${JSON.stringify({
-          success: true,
-          artifacts: BACKGROUND_ARTIFACTS.map(path => ({ path })),
-        })}\n[status: completed, exit code: 0]`,
-      }],
-      isError: false,
-    }),
-  }, { surfaceOp: 'append', sourceEventSeqs: [jobSource.seq] })
   session.append('step/start', { turn: 1, step: 2 })
   session.append('assistant/message', {
     turn: 1,
@@ -163,7 +127,7 @@ describe('web e2e: a finished turn ends with the files it produced', () => {
     await scaffold?.close()
   })
 
-  it.skipIf(MODE === 'record')('keeps a narrow twelve-file summary on one line with +10 and a folder action', async () => {
+  it.skipIf(MODE === 'record')('keeps a narrow ten-file summary on one line with +8 and a folder action', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-produced-files'))
     const groupRow = page.locator('[role="treeitem"]').first()
     await groupRow.waitFor({ timeout: 15_000 })
@@ -180,7 +144,7 @@ describe('web e2e: a finished turn ends with the files it produced', () => {
     await expect.poll(() => chips.count()).toBe(2)
     expect(await chips.nth(0).innerText()).toBe('关于我.md')
     expect(await chips.nth(1).innerText()).toBe('index.html')
-    expect(await row.getByText('+ 10 files', { exact: true }).count()).toBe(1)
+    expect(await row.getByText('+ 8 files', { exact: true }).count()).toBe(1)
     const showFolder = page.getByRole('button', { name: 'Show in folder', exact: true })
     expect(await showFolder.count()).toBe(1)
     expect(await page.getByText('Produced', { exact: true }).count()).toBe(1)
