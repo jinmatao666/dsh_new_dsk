@@ -203,39 +203,65 @@
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
 }
 
-.dsh-skill-count-badge,
-.dsh-skill-sidebar-count {
+.dsh-skill-unread-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
   display: inline-flex;
-  min-width: 18px;
-  height: 18px;
+  min-width: 17px;
+  height: 17px;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  padding: 0 5px;
+  padding: 0 4px;
+  border: 2px solid var(--dsw-alias-bg-elevated, #fff);
   border-radius: 999px;
-  background: #edf3fb;
-  color: #617895;
+  background: #3478e5;
+  color: #fff;
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
-.dsh-skill-count-badge.pending,
-.dsh-skill-count-badge.attention {
-  background: #fff2dc;
-  color: #b76a13;
+.dsh-skill-search-actions button,
+.dsh-skill-sub-tabs button {
+  position: relative;
 }
 
-.dsh-skill-count-badge.rejected,
-.dsh-skill-sidebar-count {
-  background: #ffebed;
-  color: #cf4452;
+.dsh-skill-filter-count {
+  color: var(--dsw-alias-label-tertiary, #8290a3);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
-.dsh-skill-count-badge.approved {
-  background: #eaf7ef;
-  color: #25835a;
+.dsh-skill-review-filters button { position: relative; }
+.dsh-skill-result-dot,
+.dsh-skill-sidebar-dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border: 2px solid var(--dsw-alias-bg-elevated, #fff);
+  border-radius: 50%;
+  background: #e08c61;
+}
+.dsh-skill-result-dot.approved { background: #44a87c; }
+.dsh-skill-result-dot.rejected { background: #e08c61; }
+
+.dsh-skill-sidebar-notice {
+  margin-left: auto;
+  padding: 2px 7px;
+  border: 1px solid #dce9ff;
+  border-radius: 7px;
+  background: #eff5ff;
+  color: #3972c8;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 15px;
+  white-space: nowrap;
 }
 
 .dsh-skill-sub-tabs button,
@@ -245,18 +271,10 @@
   gap: 6px;
 }
 
-.dsh-skill-market-action .dsh-skill-sidebar-count {
-  margin-left: auto;
-}
-
-.dsh-skill-market-action.rail .dsh-skill-sidebar-count {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  font-size: 9px;
+.dsh-skill-market-action.rail .dsh-skill-sidebar-dot {
+  top: 2px;
+  right: 2px;
+  background: #3478e5;
 }
 .dsh-skill-search-actions button:hover {
   background: var(--dsw-alias-interactive-bg-hover);
@@ -576,6 +594,12 @@
 .dsh-expert-tabs button.active::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--dsw-alias-primary, #2563eb); content: ''; transition: transform 0.2s ease; transform: scaleX(1); }
 .dsh-expert-tabs button:not(.active)::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--dsw-alias-primary, #2563eb); content: ''; transform: scaleX(0); transition: transform 0.2s ease; }
 .dsh-expert-tabs button:not(.active):hover::after { transform: scaleX(1); }
+.dsh-expert-open-tab { position: relative; display: inline-flex; align-items: center; gap: 4px; padding-right: 2px; }
+.dsh-expert-open-tab.active::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--dsw-alias-state-business-primary); content: ''; }
+.dsh-expert-open-tab > button:first-child { color: var(--dsw-alias-label-secondary); }
+.dsh-expert-open-tab.active > button:first-child { color: var(--dsw-alias-label-primary); }
+.dsh-expert-open-tab .dsh-expert-tab-close { padding: 3px 5px; border-radius: 5px; color: var(--dsw-alias-label-tertiary); font-size: 17px; line-height: 1; }
+.dsh-expert-open-tab .dsh-expert-tab-close:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .dsh-expert-category-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 17px; }
 .dsh-expert-category-row button { border: 1px solid transparent; border-radius: 999px; background: var(--dsw-alias-bg-elevated); color: var(--dsw-alias-label-secondary); cursor: pointer; font: inherit; font-size: 12px; padding: 6px 11px; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease; }
 .dsh-expert-category-row button:hover { border-color: var(--dsw-alias-primary, #2563eb); color: var(--dsw-alias-primary, #2563eb); }
@@ -612,6 +636,111 @@
 .dsh-expert-detail footer button { border: 1px solid transparent; border-radius: 9px; background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; cursor: pointer; font: inherit; font-size: 13px; padding: 8px 12px; transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease; box-shadow: 0 2px 8px rgb(37 99 235 / 18%); }
 .dsh-expert-detail footer button:hover { background: linear-gradient(135deg, #2563eb, #1d4ed8); box-shadow: 0 4px 12px rgb(37 99 235 / 24%); }
 .dsh-expert-detail footer button:active { transform: translateY(1px); }
+.dsh-expert-card-geology { position: relative; min-height: 235px; grid-column: span 2; padding: 22px; border-color: var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); }
+.dsh-expert-card-geology .dsh-expert-avatar { width: 54px; height: 54px; border-radius: 13px; }
+.dsh-expert-card-geology .dsh-expert-avatar svg { width: 27px; height: 27px; }
+.dsh-expert-card-geology > div { max-width: calc(100% - 70px); }
+.dsh-expert-card-geology strong { color: var(--dsw-alias-label-primary); font-size: 18px; }
+.dsh-expert-card-geology small, .dsh-expert-card-geology > p { color: var(--dsw-alias-label-secondary); }
+.dsh-expert-card-geology > p { max-width: 56ch; min-height: 0; margin: 18px 0 14px; }
+.dsh-expert-card-geology footer b { background: var(--dsw-alias-state-business-tertiary); color: var(--dsw-alias-state-business-primary); }
+.dsh-expert-card-delivery { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; padding-top: 13px; border-top: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-state-business-primary); font-size: 12px; font-weight: 650; }
+.dsh-expert-card-delivery span { font-size: 19px; line-height: 1; }
+.dsh-expert-detail-geology { width: min(100%, 680px); max-height: calc(100vh - 48px); overflow-y: auto; }
+.dsh-expert-detail-geology > header { border-bottom-color: var(--dsw-alias-border-l1); }
+.dsh-expert-detail-geology h2 { color: var(--dsw-alias-label-primary); }
+.dsh-expert-detail-geology header p, .dsh-expert-detail-geology .dsh-expert-detail-summary { color: var(--dsw-alias-label-secondary); }
+.dsh-expert-detail-geology .dsh-expert-detail-block { background: var(--dsw-alias-bg-layer-1); }
+.dsh-expert-detail-geology .dsh-expert-detail-block > span { color: var(--dsw-alias-label-tertiary); }
+.dsh-expert-detail-geology .dsh-expert-detail-block b { background: var(--dsw-alias-state-business-tertiary); color: var(--dsw-alias-state-business-primary); }
+.dsh-expert-delivery { display: grid; gap: 9px; margin: 0 22px 13px; padding: 14px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 12px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.dsh-expert-delivery strong { color: var(--dsw-alias-label-primary); font-size: 13px; }
+.dsh-expert-delivery span::before { content: '✓'; margin-right: 8px; color: var(--dsw-alias-state-business-primary); font-weight: 750; }
+.dsh-expert-detail-geology footer button { background: var(--dsw-alias-state-business-primary); color: var(--dsw-alias-label-primary-foreground); box-shadow: none; }
+.dsh-expert-detail-geology footer button:hover { background: var(--dsw-alias-button-info-hover); box-shadow: none; }
+.dsh-expert-market button:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }
+@media (max-width: 760px) { .dsh-expert-card-geology { grid-column: span 1; } .dsh-expert-detail-geology footer { flex-wrap: wrap; } }
+.dsh-expert-card-geology { min-height: 250px; overflow: hidden; }
+.dsh-expert-card-geology > :not(.dsh-expert-card-art) { position: relative; z-index: 1; }
+.dsh-expert-card-art { position: absolute; top: 0; right: 0; width: 52%; height: 100%; color: var(--dsw-alias-state-business-primary); opacity: .7; pointer-events: none; }
+.dsh-expert-card-geology > p { max-width: 49%; }
+.dsh-expert-card-geology footer { max-width: 50%; }
+.dsh-expert-card-geology .dsh-expert-card-delivery { margin-top: 23px; }
+.dsh-expert-detail-geology .dsh-expert-detail-block { margin-bottom: 8px; padding: 12px 14px; }
+.dsh-expert-detail-geology .dsh-expert-detail-block p { margin: 7px 0 0; color: var(--dsw-alias-label-secondary); font-size: 13px; line-height: 1.6; }
+.dsh-expert-detail-geology .dsh-expert-detail-summary { margin-top: 15px; margin-bottom: 13px; }
+.dsh-expert-delivery { margin-bottom: 8px; }
+@media (max-width: 850px) { .dsh-expert-card-art { width: 43%; opacity: .45; } .dsh-expert-card-geology > p, .dsh-expert-card-geology footer { max-width: 65%; } }
+@media (max-width: 590px) { .dsh-expert-card-art { width: 100%; opacity: .16; } .dsh-expert-card-geology > p, .dsh-expert-card-geology footer { max-width: 100%; } }
+
+/* Expert cards share one footprint so the catalogue can grow without featured-card gaps. */
+.dsh-expert-card-geology { grid-column: auto; min-height: 190px; padding: 17px; overflow: hidden; }
+.dsh-expert-market .dsh-expert-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.dsh-expert-card-geology .dsh-expert-avatar { width: 38px; height: 38px; border-radius: 50%; }
+.dsh-expert-card-geology .dsh-expert-avatar svg { width: 23px; height: 23px; }
+.dsh-expert-card-geology > div { max-width: calc(100% - 52px); }
+.dsh-expert-card-geology strong { font-size: 15px; }
+.dsh-expert-card-geology > p { display: -webkit-box; max-width: none; min-height: 57px; margin: 13px 0 10px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.dsh-expert-card-geology footer { max-width: none; }
+.dsh-expert-card-art,.dsh-expert-card-delivery { display: none; }
+
+.dsh-expert-detail-geology { width: min(850px,calc(100vw - 32px)); max-height: min(760px,calc(100vh - 32px)); overflow-y: auto; border-radius: 15px; }
+.dsh-expert-detail-geology > .dsh-geology-modal-hero { position: relative; min-height: 0; padding: 20px 28px; overflow: hidden; border-bottom: 1px solid #e4eaf2; background: #fff; }
+.dsh-geology-modal-hero::before { position: absolute; right: -20px; bottom: 0; width: 49%; height: 90%; clip-path: polygon(0 100%,20% 76%,32% 86%,46% 42%,55% 61%,69% 8%,88% 68%,100% 48%,100% 100%); background: linear-gradient(150deg,#e9f2ff,#a9c9fa); content: ''; opacity: .9; }
+.dsh-geology-modal-hero::after { position: absolute; right: 0; bottom: 0; width: 43%; height: 60%; clip-path: polygon(0 100%,28% 74%,40% 81%,59% 17%,76% 72%,100% 47%,100% 100%); background: linear-gradient(160deg,#d4e5ff,#86b2f4); content: ''; opacity: .65; }
+.dsh-geology-modal-hero::before,.dsh-geology-modal-hero::after { display: none; }
+.dsh-expert-detail-geology .dsh-geology-modal-title { position: relative; z-index: 1; display: flex; align-items: flex-start; gap: 18px; max-width: 72%; }
+.dsh-expert-detail-geology .dsh-geology-modal-avatar { display: grid; flex: none; width: 56px; height: 56px; place-items: center; border: 1px solid #c8dcff; border-radius: 13px; background: #e6f0ff; }
+.dsh-geology-modal-avatar > img { width: 43px; height: 43px; object-fit: contain; }
+.dsh-expert-detail-geology h2 { color: #11213f; font-size: 23px; line-height: 1.2; }
+.dsh-expert-detail-geology header p { margin: 4px 0 8px; color: #60738e; font-size: 14px; }
+.dsh-expert-detail-geology header small { display: block; color: #435c7c; font-size: 12px; line-height: 1.65; }
+.dsh-expert-detail-geology > header > button { position: relative; z-index: 2; font-size: 26px; }
+.dsh-geology-modal-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; padding: 18px 28px; }
+.dsh-geology-modal-grid section { min-height: 168px; padding: 16px 17px; border: 1px solid #dce8ff; border-radius: 13px; background: #fff; }
+.dsh-geology-modal-section-head { display: flex; align-items: center; gap: 9px; }
+.dsh-geology-modal-section-head > img:first-child { flex: none; width: 30px; height: 30px; object-fit: contain; }
+.dsh-geology-modal-section-head h3 { flex: 1; margin: 0; color: #142b50; font-size: 15px; white-space: nowrap; }
+.dsh-geology-modal-section-head > span:last-child { color: #3672d9; font-size: 11px; white-space: nowrap; }
+.dsh-geology-modal-grid p,.dsh-geology-modal-grid li { color: #425875; font-size: 12px; line-height: 1.7; }
+.dsh-geology-modal-grid p { margin: 10px 0 0; }
+.dsh-geology-modal-grid ul { margin: 9px 0 0; padding-left: 17px; }
+.dsh-geology-modal-grid li + li { margin-top: 4px; }
+.dsh-expert-detail-geology footer { margin: 0 28px; padding: 15px 0 22px; border-top: 1px solid #e3ebf8; }
+.dsh-expert-detail-geology footer small { color: #7285a5; }
+.dsh-expert-detail-geology footer > div { display: flex; gap: 10px; }
+.dsh-expert-detail-geology footer button { min-width: 95px; padding: 9px 15px; }
+.dsh-expert-detail-geology footer .dsh-geology-modal-cancel { border: 1px solid #cbdcf6; background: #fff; color: #27436e; }
+/* Compact the geology dialog: the four descriptions do not need fixed-height cards. */
+.dsh-expert-detail-geology { width: min(760px,calc(100vw - 32px)); }
+.dsh-expert-detail-geology > .dsh-geology-modal-hero { padding: 16px 22px; }
+.dsh-expert-detail-geology .dsh-geology-modal-title { gap: 12px; max-width: 88%; }
+.dsh-expert-detail-geology .dsh-geology-modal-avatar { width: 48px; height: 48px; }
+.dsh-geology-modal-avatar > img { width: 35px; height: 35px; }
+.dsh-expert-detail-geology h2 { font-size: 20px; }
+.dsh-expert-detail-geology header p { margin: 3px 0 5px; font-size: 13px; }
+.dsh-expert-detail-geology header small { font-size: 11px; line-height: 1.45; }
+.dsh-geology-modal-grid { gap: 10px; padding: 14px 22px; }
+.dsh-geology-modal-grid section { min-height: 0; padding: 12px 14px; }
+.dsh-geology-modal-section-head h3 { font-size: 14px; }
+.dsh-geology-modal-grid p,.dsh-geology-modal-grid li { font-size: 11px; line-height: 1.55; }
+.dsh-geology-modal-grid p { margin-top: 6px; }
+.dsh-geology-modal-grid ul { margin-top: 5px; }
+.dsh-geology-modal-grid li + li { margin-top: 2px; }
+.dsh-expert-detail-geology footer { margin: 0 22px; padding: 11px 0 15px; }
+@media (max-width: 700px) { .dsh-expert-detail-geology .dsh-geology-modal-title { max-width: 90%; } .dsh-geology-modal-grid { grid-template-columns: 1fr; padding: 14px; } .dsh-expert-detail-geology > .dsh-geology-modal-hero { padding: 20px; } .dsh-geology-modal-hero::before,.dsh-geology-modal-hero::after { opacity: .3; } .dsh-expert-detail-geology footer { margin: 0 14px; flex-wrap: wrap; } }
+@media (max-width: 1120px) { .dsh-expert-market .dsh-expert-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 650px) { .dsh-expert-market .dsh-expert-grid { grid-template-columns: minmax(0,1fr); } }
+
+/* The expert workspace owns vertical scrolling; the catalogue header and tab bar stay put. */
+.dsh-skill-market-panel-experts { display: flex; flex-direction: column; overflow: hidden; }
+.dsh-skill-market-panel-experts > .dsh-skill-market-header { flex: none; }
+.dsh-skill-market-panel-experts > .dsh-expert-market { flex: 1; min-height: 0; }
+.dsh-expert-market { overflow-y: auto; }
+.dsh-expert-market-open { display: flex; flex-direction: column; overflow: hidden; }
+.dsh-expert-market-open > .dsh-expert-tabs { flex: none; }
+.dsh-expert-workspace { flex: 1; min-height: 0; }
+.dsh-expert-workspace[hidden] { display: none; }
 
 .dsh-connectors-page { min-height: 520px; }
 .dsh-connectors-page { position: relative; }
@@ -1001,7 +1130,6 @@
 .dsh-skill-installed-heading h2 { margin: 0 0 4px; font-size: 18px; }
 .dsh-skill-installed-heading p { margin: 0; color: var(--dsw-alias-label-secondary); font-size: 13px; }
 .dsh-skill-card-install-action {
-  margin-top: 10px;
   padding: 5px 10px;
   border: 1px solid #fecaca;
   border-radius: 8px;
@@ -1011,6 +1139,18 @@
   font: inherit;
   font-size: 12px;
 }
+.dsh-skill-card-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.dsh-skill-card-use-action {
+  padding: 5px 11px;
+  border: 1px solid var(--dsw-alias-primary, #2563eb);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--dsw-alias-primary, #2563eb);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.dsh-skill-card-use-action:hover { background: #eff6ff; }
 .dsh-skill-card-install-action.update {
   border-color: var(--dsw-alias-primary, #2563eb);
   background: var(--dsw-alias-primary, #2563eb);
@@ -1124,6 +1264,19 @@
   box-shadow: 0 4px 12px rgb(37 99 235 / 22%);
   transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
 }
+.dsh-skill-detail-use {
+  flex: none;
+  padding: 9px 18px;
+  border: 1px solid var(--dsw-alias-primary, #2563eb);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--dsw-alias-primary, #2563eb);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+}
+.dsh-skill-detail-use:hover { background: #eff6ff; }
+.dsh-skill-card-use-action:focus-visible, .dsh-skill-detail-use:focus-visible { outline: 2px solid var(--dsw-alias-primary, #2563eb); outline-offset: 2px; }
 .dsh-skill-detail-install:hover {
   background: linear-gradient(135deg, #2563eb, #1d4ed8);
   box-shadow: 0 6px 16px rgb(37 99 235 / 28%);

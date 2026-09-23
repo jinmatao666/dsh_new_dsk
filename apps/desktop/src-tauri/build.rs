@@ -12,6 +12,7 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "set_auth_window_state",
+            "maximize_expert_window",
             "save_session_log_archive",
             "list_marketplace_skills",
             "install_marketplace_skill",
@@ -25,6 +26,7 @@ fn main() {
             "open_workspace_directory",
             "reveal_downloaded_file",
             "import_workspace_files",
+            "list_expert_output_files",
             "import_dropped_workspace_files",
         ]),
     ))

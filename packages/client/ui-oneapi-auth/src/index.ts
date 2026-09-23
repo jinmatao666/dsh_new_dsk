@@ -376,6 +376,15 @@ export function apply(ctx: Context, config: Config): void {
     return jsonBody<unknown>(response)
   }
 
+  const listPublishedExperts = async (signal?: AbortSignal): Promise<unknown> => {
+    const response = await fetch(`${baseURL}/api/expert/`, {
+      ...(signal === undefined ? {} : { signal }),
+    })
+    const result = await jsonBody<OneApiEnvelope<unknown[]>>(response)
+    if (!response.ok || result.success !== true) throw new Error(result.message ?? `专家目录暂时不可用（HTTP ${String(response.status)}）`)
+    return { items: Array.isArray(result.data) ? result.data : [] }
+  }
+
   const listPublishedSkillCategories = async (signal?: AbortSignal): Promise<unknown> => {
     const response = await fetch(`${baseURL}/api/skill-package/`, {
       ...(signal === undefined ? {} : { signal }),
@@ -531,6 +540,13 @@ export function apply(ctx: Context, config: Config): void {
   const connection = ctx.get('connection') as HostConnectionHandle | undefined
   if (connection === undefined) throw new Error('桌面认证需要 Connection 服务')
   const remove = connection.rpc.handle('/desktop-auth', async (endpoint, payload, signal) => {
+    if (endpoint === 'expert-list') {
+      try {
+        return { ok: true as const, value: await listPublishedExperts(signal) }
+      } catch (error) {
+        return internal(error instanceof Error ? error.message : String(error))
+      }
+    }
     if (endpoint === 'skill-list') {
       try {
         return { ok: true as const, value: await listPublishedSkills(signal) }

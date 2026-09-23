@@ -696,6 +696,14 @@ fn set_auth_window_state(app: tauri::AppHandle, authenticated: bool) -> Result<(
     apply_auth_window_state(&window, authenticated)
 }
 
+#[tauri::command]
+fn maximize_expert_window(app: tauri::AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window has not been created yet".to_string())?;
+    window.maximize().map_err(|error| error.to_string())
+}
+
 fn validate_marketplace_slug(slug: &str) -> Result<(), String> {
     let valid = !slug.is_empty()
         && !slug.starts_with('-')
@@ -711,23 +719,30 @@ fn validate_marketplace_slug(slug: &str) -> Result<(), String> {
     }
 }
 
-fn production_harness_home(user_home: &Path) -> PathBuf {
-    user_home.join(".wanweibuddy")
-}
-
-fn desktop_harness_home(app_data_dir: &Path) -> Result<PathBuf, String> {
+fn development_harness_home(app_data_dir: &Path) -> Option<PathBuf> {
     #[cfg(debug_assertions)]
     {
-        Ok(app_data_dir.join("development").join("dsh-home"))
+        Some(app_data_dir.join("development").join("dsh-home"))
     }
     #[cfg(not(debug_assertions))]
     {
         let _ = app_data_dir;
-        let user_home = std::env::var_os("USERPROFILE")
-            .or_else(|| std::env::var_os("HOME"))
-            .ok_or_else(|| "无法定位当前用户目录".to_string())?;
-        Ok(production_harness_home(Path::new(&user_home)))
+        None
     }
+}
+
+fn production_harness_home(user_home: &Path) -> PathBuf {
+    user_home.join(".dsh")
+}
+
+fn desktop_harness_home(app_data_dir: &Path) -> Result<PathBuf, String> {
+    if let Some(home) = development_harness_home(app_data_dir) {
+        return Ok(home);
+    }
+    let user_home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .ok_or_else(|| "无法定位当前用户目录".to_string())?;
+    Ok(production_harness_home(Path::new(&user_home)))
 }
 
 fn user_skills_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -1187,6 +1202,37 @@ fn import_workspace_files(
 ) -> Result<Vec<String>, String> {
     let root = workspace_import_root(&app, workspace_path)?;
     import_workspace_files_at(&root, files)
+}
+
+/// List office reports and the companion analysis view in one expert task directory.
+#[tauri::command]
+fn list_expert_output_files(directory: String) -> Result<Vec<String>, String> {
+    let root = fs::canonicalize(&directory)
+        .map_err(|error| format!("无法访问分析目录 {directory}：{error}"))?;
+    if !root.is_dir() {
+        return Err("分析目录不是文件夹".to_string());
+    }
+    let mut files = Vec::new();
+    for entry in fs::read_dir(&root).map_err(|error| format!("无法读取分析目录：{error}"))? {
+        let entry = entry.map_err(|error| format!("无法读取成果文件：{error}"))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        let analysis_view = extension.eq_ignore_ascii_case("json")
+            && path.file_name().and_then(|name| name.to_str()).is_some_and(|name| {
+                name.contains("-analysis-view_") || name.contains("分析视图_") || name.contains("审查视图_")
+            });
+        if !extension.eq_ignore_ascii_case("docx") && !extension.eq_ignore_ascii_case("xlsx") && !analysis_view {
+            continue;
+        }
+        files.push(path.to_string_lossy().into_owned());
+    }
+    files.sort();
+    Ok(files)
 }
 
 /// Consume the latest operating-system drop and copy it into the active directory.
@@ -2053,6 +2099,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             set_auth_window_state,
+            maximize_expert_window,
             save_session_log_archive,
             list_marketplace_skills,
             install_marketplace_skill,
@@ -2066,6 +2113,7 @@ pub fn run() {
             open_workspace_directory,
             reveal_downloaded_file,
             import_workspace_files,
+            list_expert_output_files,
             import_dropped_workspace_files,
         ])
         .run(tauri::generate_context!())
@@ -2132,15 +2180,15 @@ mod marketplace_tests {
     }
 
     #[test]
-    fn desktop_home_does_not_resolve_to_the_shared_dsh_directory() {
+    fn desktop_home_uses_the_shared_dsh_directory_in_release() {
         let user_home = PathBuf::from("test-user-home");
-        let isolated = production_harness_home(&user_home);
-        assert_eq!(isolated, user_home.join(".wanweibuddy"));
-        assert_ne!(isolated, user_home.join(".dsh"));
-        assert_eq!(
-            desktop_harness_home(&user_home).expect("development home"),
-            user_home.join("development").join("dsh-home")
-        );
+        assert_eq!(production_harness_home(&user_home), user_home.join(".dsh"));
+        if cfg!(debug_assertions) {
+            assert_eq!(
+                desktop_harness_home(&user_home).expect("development home"),
+                user_home.join("development").join("dsh-home")
+            );
+        }
     }
 
     #[test]

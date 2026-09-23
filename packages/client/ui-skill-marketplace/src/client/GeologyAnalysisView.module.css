@@ -1,0 +1,16 @@
+.root { min-width: 0; padding: 24px; border: 1px solid #d8e4ff; border-radius: 16px; background: #fff; color: #172b4d; }
+.root header span { color: #396fe1; font-size: 13px; }
+.root h3 { margin: 4px 0 16px; font-size: 20px; }
+.root p { margin: 0; color: #61718b; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit,minmax(130px,1fr)); gap: 10px; margin: 0 0 16px; }
+.metrics div { padding: 10px 12px; border: 1px solid #e4ebfa; border-radius: 9px; background: #f7faff; }
+.metrics dt { color: #667791; font-size: 12px; }
+.metrics dd { margin: 4px 0 0; font-weight: 600; }
+.tabs { display: flex; gap: 12px; overflow-x: auto; border-bottom: 1px solid #e4ebfa; }
+.tabs button { flex: none; padding: 9px 2px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #61718b; font: inherit; cursor: pointer; }
+.tabs button[aria-selected="true"] { border-bottom-color: #396fe1; color: #245cdb; font-weight: 600; }
+.tableWrap { max-height: 340px; overflow: auto; overscroll-behavior: contain; }
+.tableWrap table { min-width: 100%; width: max-content; border-collapse: collapse; font-size: 13px; }
+.tableWrap th,.tableWrap td { min-width: 110px; padding: 10px 12px; border-bottom: 1px solid #e8edf7; text-align: left; vertical-align: top; }
+.tableWrap th { position: sticky; top: 0; z-index: 1; background: #f5f8ff; }
+.more { display: block; margin: 12px auto 0; padding: 7px 12px; border: 1px solid #d8e4ff; border-radius: 7px; background: #fff; color: #245cdb; cursor: pointer; }

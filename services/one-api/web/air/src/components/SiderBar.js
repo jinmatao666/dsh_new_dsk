@@ -32,7 +32,7 @@ export default function SiderBar({ isCollapsed, onCollapseChange }) {
     <nav className="zjugis-sidebar-nav" aria-label="主导航">
       {items.map(({ label, path, Icon }) => <Link key={path} to={path} className={`zjugis-sidebar-item${selected?.path === path ? ' active' : ''}`} title={isCollapsed ? label : undefined}>
         <Icon className="zjugis-sidebar-item-icon" />{!isCollapsed && <span>{label}</span>}
-        {path === '/skill' && pendingReviewCount !== null && pendingReviewCount > 0 && <b className="zjugis-sidebar-count" aria-label={`${pendingReviewCount} 条待审核投稿`}>{pendingReviewCount > 99 ? '99+' : pendingReviewCount}</b>}
+        {path === '/skill' && pendingReviewCount !== null && pendingReviewCount > 0 && <span className="zjugis-sidebar-pending" aria-label={`${pendingReviewCount} 条待审核投稿`}>{isCollapsed ? (pendingReviewCount > 99 ? '99+' : pendingReviewCount) : `待审核 ${pendingReviewCount > 99 ? '99+' : pendingReviewCount}`}</span>}
       </Link>)}
     </nav>
     <button className="zjugis-sidebar-collapse" onClick={() => onCollapseChange(!isCollapsed)} title={isCollapsed ? '展开侧边栏' : '收起侧边栏'}>

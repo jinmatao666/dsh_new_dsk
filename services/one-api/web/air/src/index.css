@@ -2180,8 +2180,9 @@ body[theme-mode='dark'] .zjugis-page-content {
 .zjugis-sidebar-item:hover { color:#2d75e5; background:rgba(229,239,255,.72); }
 .zjugis-sidebar-item.active { color:#2d75e5; background:linear-gradient(100deg,#dfebff,#f3f7ff); box-shadow:0 10px 22px rgba(65,112,194,.12); font-weight:700; }
 .zjugis-sidebar-item-icon { width:20px; height:20px; flex:0 0 20px; stroke-width:1.8; }
-.zjugis-sidebar-count { display:inline-flex; min-width:20px; height:20px; margin-left:auto; align-items:center; justify-content:center; box-sizing:border-box; padding:0 6px; border-radius:999px; background:#fff0d9; color:#b86b12; font-size:10px; font-weight:750; line-height:1; font-variant-numeric:tabular-nums; }
-.zjugis-admin-shell.is-collapsed .zjugis-sidebar-count { position:absolute; top:5px; right:7px; min-width:17px; height:17px; padding:0 4px; font-size:9px; }
+.zjugis-sidebar-pending { display:inline-flex; margin-left:auto; align-items:center; justify-content:center; box-sizing:border-box; padding:3px 7px; border:1px solid #f2e1c7; border-radius:7px; background:#fff6e8; color:#a96b23; font-size:10px; font-weight:650; line-height:15px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.zjugis-admin-shell.is-collapsed .zjugis-sidebar-pending { position:absolute; top:4px; right:4px; min-width:17px; height:17px; padding:0 3px; border-radius:999px; font-size:9px; }
+.skill-review-pending-count { display:inline-flex; min-width:18px; height:18px; align-items:center; justify-content:center; box-sizing:border-box; padding:0 5px; border-radius:999px; background:#fff3e2; color:#a96b23; font-size:10px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; }
 .zjugis-admin-shell.is-collapsed .zjugis-sidebar-item { position:relative; }
 .zjugis-admin-shell.is-collapsed .zjugis-sidebar-item { justify-content:center; padding:0; }
 .zjugis-sidebar-collapse { display:flex; align-items:center; gap:11px; margin-top:auto; min-height:42px; padding:0 16px; border:0; border-radius:12px; color:#7890ad; background:transparent; cursor:pointer; font:inherit; font-size:14px; }

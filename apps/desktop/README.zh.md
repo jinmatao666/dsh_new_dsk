@@ -6,6 +6,21 @@
 
 ## 开发
 
+### 日常快速启动（Windows）
+
+已有一次成功的完整构建后，在 PowerShell 中运行：
+
+```powershell
+Set-Location 'E:\code\dsh\deepseek-harness-master\apps\desktop'
+pnpm exec tauri dev --config src-tauri/tauri.dev.conf.json
+```
+
+保持终端运行；Tauri 会启动开发版窗口，并自动运行前端文件监视器。开发版使用独立的应用标识和数据目录，`dev/cordis.patch.yml` 提供仅供本地开发的免登录身份。看到 `Running target\debug\dsh-desktop.exe` 后，还需等待 Sidecar 输出 `dsh web:`，窗口才会加载完成。无需另起 `node` 服务。
+
+这个命令跳过 `dev:prepare` 的整仓构建。首次检出或修改了非客户端 Host 侧 TypeScript 后，先在仓库根目录运行 `pnpm --filter @deepseek-ai/dsh-desktop-app dev` 完整构建一次。快速启动会检查客户端源码与 Host／页面插件产物的时间；发现过期产物时先重建，再由监视器处理后续 UI 修改。Rust 修改由 Tauri 增量编译。启动前检查是否已有开发版窗口，已有窗口时直接使用，避免重复启动。
+
+日常启动仍会进行 Rust 增量编译、前端打包以及 Sidecar/WebView 启动。本机一次快速启动的日志显示 Rust 约 9 秒、前端约 5 秒；这些时间会随变更和缓存情况变化。若启动失败，先看终端中 `cargo`、`vite` 或 `dsh web:` 附近的错误，不要把前端网页预览当作桌面版启动成功。
+
 1. 使用 Node 22.19 或更高版本，并安装工作区依赖。
 2. 运行一次 `corepack enable pnpm`，让 `pnpm` 使用仓库 `packageManager` 声明的版本。
 3. 在仓库根目录运行 `pnpm --filter @deepseek-ai/dsh-desktop-app dev`。
@@ -16,7 +31,9 @@
 
 release 构建中的认证层保持正常的正式行为。仅存在于源码中的 `dev/cordis.patch.yml` 覆盖层只由 Rust debug 构建选择，并且不在 Tauri 安装包资源清单中。
 
-正式安装的桌面端改用全新的 `~/.wanweibuddy` 数据目录，凭据、设置、会话、Profile 和技能均保存在这里；它不会导入或修改现有 `~/.dsh` 数据。开发版仍使用独立的应用数据目录 `development/dsh-home`。安装隔离版后需要重新登录，OneAPI 服务和数据库不变。
+Debug Tauri 的资源清单仅包含服务器配置和内置技能。它的 Sidecar 从当前检出内容运行，因此暂存的正式版 runtime 只在生成安装包时复制。
+
+正式版将 `DSH_HOME` 固定为当前用户的 `~/.dsh`，凭据、设置、会话、Profile 和技能均使用该目录，不受继承的 `DSH_HOME` 影响。Debug 构建使用独立的应用数据目录 `development/dsh-home`。
 
 ## 安装包
 

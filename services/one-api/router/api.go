@@ -380,6 +380,16 @@ func SetApiRouter(router *gin.Engine) {
 			orgRoute.GET("/:id/audit-logs", controller.GetOrgAuditLogs)
 		}
 		// Skill routes
+		expertRoute := apiRouter.Group("/expert")
+		{
+			expertRoute.GET("/", controller.ListPublishedExperts)
+			expertAdminRoute := expertRoute.Group("/admin")
+			expertAdminRoute.Use(middleware.AdminAuth())
+			{
+				expertAdminRoute.GET("/list", controller.AdminListExperts)
+				expertAdminRoute.PUT("/:key", controller.UpdateExpert)
+			}
+		}
 		skillRoute := apiRouter.Group("/skill")
 		skillRoute.Use(middleware.RequireRemoteSkills())
 		{

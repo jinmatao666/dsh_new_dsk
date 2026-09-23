@@ -5,6 +5,7 @@
   "references": [
     { "path": "../runtime" },
     { "path": "../ui-layout" },
+    { "path": "../ui-conversation" },
     { "path": "../ui-sidebar" }
   ]
 }

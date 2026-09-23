@@ -9,6 +9,7 @@
   "permissions": [
     "core:default",
     "allow-set-auth-window-state",
+    "allow-maximize-expert-window",
     "allow-save-session-log-archive",
     "allow-list-marketplace-skills",
     "allow-install-marketplace-skill",
@@ -22,6 +23,7 @@
     "allow-open-workspace-directory",
     "allow-reveal-downloaded-file",
     "allow-import-workspace-files",
+    "allow-list-expert-output-files",
     "allow-import-dropped-workspace-files"
   ]
 }

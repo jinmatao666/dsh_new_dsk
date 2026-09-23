@@ -16,9 +16,9 @@ Status: implemented
 
 只有 Rust debug 启动器提供 `DSH_DESKTOP_DEVELOPMENT=1` 时，认证插件才接受该配置。开发覆盖层不在 Tauri 资源清单中，release 构建既不选择它，也不设置该标记。旁路不会授予 OneAPI 令牌或受管模型，只允许打开本地工作区 UI，不产生服务端权限。
 
-debug 启动器把 `DSH_HOME` 设置为 Tauri 应用数据目录下持久化的 `development/dsh-home`。debug 构建中的原生技能市场命令解析同一目录。release 构建继续使用用户正常的 `~/.dsh` 位置和现有的安装包 sidecar 路径。
+debug 启动器把 `DSH_HOME` 设置为 Tauri 应用数据目录下持久化的 `development/dsh-home`。debug 构建中的原生技能市场命令解析同一目录。release 构建不受继承的 `DSH_HOME` 影响，固定使用用户的 `~/.dsh`；原生技能市场命令也使用该目录。安装包 sidecar 路径不变。
 
-客户端 UI 修改由 `pnpm run dev:web` 重新构建，并在现有 Tauri WebView 中刷新。文件操作、技能市场安装、Session 导出、托盘和窗口行为继续调用真实 Tauri 实现。Host 侧 TypeScript 修改需要重启开发命令，启动前构建会刷新这些产物。
+客户端 UI 修改由 `pnpm run dev:web` 重新构建，并在现有 Tauri WebView 中刷新。Windows 快速启动会先对比客户端源码和 Host、页面插件产物，发现过期产物就重建。文件操作、技能市场安装、Session 导出、托盘和窗口行为继续调用真实 Tauri 实现。非客户端的 Host 侧 TypeScript 修改需要重启完整开发命令，启动前构建会刷新这些产物。
 
 所有桌面专用客户端插件都在 `tsconfig.base.json` 中具有源码映射。因此源码启动和静态检查会解析当前检出内容，不会静默回退到旧的 `lib` 构建产物。
 

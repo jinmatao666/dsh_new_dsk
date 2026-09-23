@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-maximize-expert-window"
+description = "Enables the maximize_expert_window command without any pre-configured scope."
+commands.allow = ["maximize_expert_window"]
+
+[[permission]]
+identifier = "deny-maximize-expert-window"
+description = "Denies the maximize_expert_window command without any pre-configured scope."
+commands.deny = ["maximize_expert_window"]

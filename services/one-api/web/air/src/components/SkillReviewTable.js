@@ -129,8 +129,8 @@ const SkillReviewTable = forwardRef(({ keyword: keywordProp = '', onCountsChange
     <div className='skill-review-summary'>
       <div><strong>{total}</strong><span>{status === 'pending' ? '待审核投稿' : '条审核记录'}</span></div>
       <div className='skill-review-filters'>
-        {Object.entries(STATUS).map(([key, entry]) => <button key={key} type='button' className={status === key ? 'active' : ''} onClick={() => { setStatus(key); setPage(1); }}><span>{entry[0]}</span>{counts && <b className={`skill-count-badge ${key}`}>{formatCount(counts[key])}</b>}</button>)}
-        <button type='button' className={status === 'all' ? 'active' : ''} onClick={() => { setStatus('all'); setPage(1); }}><span>全部</span>{counts && <b className='skill-count-badge'>{formatCount(counts.all)}</b>}</button>
+        {Object.entries(STATUS).map(([key, entry]) => <button key={key} type='button' className={status === key ? 'active' : ''} onClick={() => { setStatus(key); setPage(1); }}><span>{entry[0]}</span>{counts && <span className='skill-review-filter-count'>{formatCount(counts[key])}</span>}</button>)}
+        <button type='button' className={status === 'all' ? 'active' : ''} onClick={() => { setStatus('all'); setPage(1); }}><span>全部</span>{counts && <span className='skill-review-filter-count'>{formatCount(counts.all)}</span>}</button>
       </div>
     </div>
     <Table

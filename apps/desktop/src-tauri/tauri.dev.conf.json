@@ -2,6 +2,10 @@
   "$schema": "https://schema.tauri.app/config/2",
   "identifier": "com.wanwei.harness.development",
   "bundle": {
-    "active": false
+    "active": false,
+    "resources": [
+      "resources/server.json",
+      "resources/skills/**/*"
+    ]
   }
 }

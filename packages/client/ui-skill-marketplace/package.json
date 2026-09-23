@@ -13,7 +13,7 @@
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
-  "dsh": { "client": { "inject": ["@deepseek-ai/dsh-client-runtime", "@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-ui-sidebar", "@deepseek-ai/dsh-client-ui-layout", "@deepseek-ai/dsh-client-ui-slots"], "platform": "web" } },
+  "dsh": { "client": { "inject": ["@deepseek-ai/dsh-client-runtime", "@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-ui-sidebar", "@deepseek-ai/dsh-client-ui-layout", "@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-slots"], "platform": "web" } },
   "scripts": { "bundle": "tsdown", "watch": "tsdown --watch" },
   "license": "MIT",
   "peerDependencies": {
@@ -21,6 +21,7 @@
     "@deepseek-ai/dsh-client-runtime": "workspace:^",
     "@deepseek-ai/dsh-client-connection": "workspace:^",
     "@deepseek-ai/dsh-client-ui-layout": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
     "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
     "@deepseek-ai/dsh-client-ui-sidebar": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^"
@@ -30,6 +31,7 @@
     "@deepseek-ai/dsh-client-runtime": "workspace:^",
     "@deepseek-ai/dsh-client-connection": "workspace:^",
     "@deepseek-ai/dsh-client-ui-layout": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
     "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
     "@deepseek-ai/dsh-client-ui-sidebar": "workspace:^",
     "@deepseek-ai/dsh-client-ui-slots": "workspace:^",

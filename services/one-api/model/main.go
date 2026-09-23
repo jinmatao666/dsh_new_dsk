@@ -278,6 +278,9 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&Skill{}); err != nil {
 		return err
 	}
+	if err = DB.AutoMigrate(&ExpertProfile{}); err != nil {
+		return err
+	}
 	if err = DB.AutoMigrate(&SkillRelease{}); err != nil {
 		return err
 	}

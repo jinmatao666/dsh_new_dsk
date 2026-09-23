@@ -28,7 +28,7 @@
  * `watch` through API-level inline config (tsdown workspace mode fills inline
  * keys under each package's file config, and no package config defines it).
  */
-import { globSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, globSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { execa } from 'execa'
@@ -199,6 +199,25 @@ function windowsClientFingerprint(): string {
     .join('\n')
 }
 
+/** A Windows watcher must not serve yesterday's bundles on its first pass. */
+function windowsClientArtifactsStale(): boolean {
+  const globalInputs = [CLIENT_TYPE_PROGRAM, 'packages/client/tsdown.client.ts']
+  for (const [dir, bundle] of [
+    ...discoverPluginDirs().flatMap(dir => [[dir, 'index.js'], [dir, 'client.js']]),
+    ...discoverLibraryDirs().map(dir => [dir, 'index.js']),
+  ]) {
+    if (dir === undefined || bundle === undefined) continue
+    const artifact = join(repoRoot, dir, 'lib', bundle)
+    if (!existsSync(artifact)) return true
+    const builtAt = statSync(artifact).mtimeMs
+    const inputs = globSync([`${dir}/src/**/*.{ts,tsx,css}`, `${dir}/tsdown.config.ts`], { cwd: repoRoot })
+    const sourceIsNewer = [...globalInputs, ...inputs]
+      .some(path => existsSync(join(repoRoot, path)) && statSync(join(repoRoot, path)).mtimeMs > builtAt)
+    if (sourceIsNewer) return true
+  }
+  return false
+}
+
 /**
  * Watch client sources on Windows without tsdown's workspace watch mode.
  *
@@ -208,6 +227,15 @@ function windowsClientFingerprint(): string {
  * `apps/web/dist` after those artifacts change.
  */
 async function watchWindowsClientArtifacts(): Promise<void> {
+  if (windowsClientArtifactsStale()) {
+    console.log('dev-web: stale client bundles detected; building before desktop preview')
+    const initial = await execa('pnpm', ['run', 'build:lib:client'], {
+      cwd: repoRoot,
+      stdio: 'inherit',
+      reject: false,
+    })
+    if (initial.exitCode !== 0) throw new Error(`dev-web: initial client build failed (code ${String(initial.exitCode)})`)
+  }
   let fingerprint = windowsClientFingerprint()
   let rebuilding = false
   let rebuildAgain = false

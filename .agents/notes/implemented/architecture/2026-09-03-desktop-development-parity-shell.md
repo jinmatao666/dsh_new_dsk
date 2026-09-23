@@ -16,9 +16,9 @@ An authentication shortcut must not introduce a second workspace implementation 
 
 The authentication plugin accepts that configuration only when the Rust debug launcher supplies `DSH_DESKTOP_DEVELOPMENT=1`. The development overlay is outside the Tauri resource list, and release builds neither select it nor set the marker. The bypass grants no OneAPI token or managed model; it opens local workspace UI without creating server authority.
 
-The debug launcher sets `DSH_HOME` to a persistent `development/dsh-home` directory beneath Tauri application data. Native marketplace commands resolve the same directory in debug builds. Release builds retain the user’s normal `~/.dsh` location and the existing packaged sidecar path.
+The debug launcher sets `DSH_HOME` to a persistent `development/dsh-home` directory beneath Tauri application data. Native marketplace commands resolve the same directory in debug builds. Release builds set `DSH_HOME` to the user’s `~/.dsh` regardless of an inherited value, and native marketplace commands use that same directory. The packaged sidecar path is unchanged.
 
-Client UI changes rebuild through `pnpm run dev:web` and reload in the existing Tauri WebView. Native file operations, marketplace installation, Session export, tray behavior, and window behavior remain the real Tauri implementations. Host-side TypeScript changes require restarting the development command, whose initial build refreshes those products.
+Client UI changes rebuild through `pnpm run dev:web` and reload in the existing Tauri WebView. On Windows, the fast startup first checks client sources against Host and page plugin bundles and rebuilds stale artifacts. Native file operations, marketplace installation, Session export, tray behavior, and window behavior remain the real Tauri implementations. Non-client Host-side TypeScript changes require restarting the full development command, whose initial build refreshes those products.
 
 Every desktop-only client plugin has a `tsconfig.base.json` source mapping. Source launches and static checks therefore resolve the current checkout instead of silently falling back to an older built `lib` product.
 

@@ -369,6 +369,14 @@ function App() {
             }
           />
           <Route
+            path="/skill/experts"
+            element={
+              <PrivateRoute>
+                <PermissionGuard permKey="skill"><Skill /></PermissionGuard>
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/skill/reviews"
             element={
               <PrivateRoute>
