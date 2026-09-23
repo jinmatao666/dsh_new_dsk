@@ -10,10 +10,19 @@ import { zh } from '../src/client/locales.ts'
 afterEach(() => { cleanup() })
 
 const t: Parameters<typeof ManagedModelsSection>[0]['t'] = makeTranslate(zh, commonZh)
+const unusedHook = (): never => { throw new Error('The read-only model section must not access session or workspace state') }
 
 function renderModels(auth: AuthView): void {
   const useAuth = <Selected,>(selector: (state: AuthView) => Selected): Selected => selector(auth)
-  render(<ManagedModelsSection useAuth={useAuth} logout={async () => ({ state: 'logged-out' })} t={t} />)
+  render(<ManagedModelsSection
+    useAuth={useAuth}
+    logout={async () => ({ state: 'logged-out' })}
+    close={() => {}}
+    useSessions={unusedHook}
+    useSessionPendingInteraction={unusedHook}
+    useWorkspaces={unusedHook}
+    t={t}
+  />)
 }
 
 describe('Wanwei managed model settings', () => {
