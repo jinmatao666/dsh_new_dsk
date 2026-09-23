@@ -8,8 +8,8 @@
 
 ## 模型体验
 
-认证后，插件使用当前 OneAPI 账户允许的模型替换万维受管 pi-ai Provider，并在服务端提供默认模型时优先选择它。模型请求继续通过标准 DSH LLM Provider 调用 OneAPI 的 OpenAI 兼容端点。
+认证后，插件仅使用当前 OneAPI 账户允许的模型替换万维受管 pi-ai Provider，并在服务端提供默认模型时优先选择它。桌面端的“模型”设置只展示服务端下发的目录，不提供 Provider 编辑入口。模型请求继续通过标准 DSH LLM Provider 调用 OneAPI 的 OpenAI 兼容端点。
 
 ## 限制
 
-第一段迁移只验证现有 Host 协议和服务集成。这个插件接入正式的 `wanwei-desktop` bundle 之前，还需要适配新版 DSH Remote API 和本地化登录界面。
+桌面端需要连接 OneAPI 服务才能发现可用模型。产品 Bundle 禁用官方可编辑的模型设置页和 DeepSeek 适配器；模型管理归服务端管理后台所有。

@@ -9,6 +9,7 @@
     "src/client/index.ts",
     "src/client/AuthGate.tsx",
     "src/client/AccountSection.tsx",
+    "src/client/ManagedModelsSection.tsx",
     "src/client/controller.ts",
     "src/client/locales.ts",
     "src/css-modules.d.ts",

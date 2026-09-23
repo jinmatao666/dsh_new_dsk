@@ -1,5 +1,11 @@
 # Wanwei-owned product layer over dsh-base and dsh-web-app. Private features
 # enter through this layer instead of editing either official bundle.
+- id: llm-deepseek
+  disabled: true
+
+- id: ui-settings-models
+  disabled: true
+
 - insert:
     - id: wanwei-oneapi-auth
       name: '@deepseek-ai/dsh-wanwei-oneapi-auth'

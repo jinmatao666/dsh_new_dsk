@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The `wanwei-desktop` profile uses this private bundle as the final product-owned layer over [`dsh-base`](../base/README.md) and [`dsh-web-app`](../web-app/README.md). The layer is the single composition point for Wanwei authentication, model governance, skills, desktop integration, and presentation packages. Its patch is intentionally empty until those feature packages are ported, so the first composition retains the official browser behavior.
+The `wanwei-desktop` profile uses this private bundle as the final product-owned layer over [`dsh-base`](../base/README.md) and [`dsh-web-app`](../web-app/README.md). The layer composes Wanwei authentication, model governance, skills, desktop integration, and presentation packages. It disables the official DeepSeek adapter and editable Models settings section so the desktop uses the OneAPI-managed catalog.
 
 ## Table of Contents
 
@@ -34,11 +34,11 @@ pnpm dsh --profile wanwei-desktop --dump-default-config
 pnpm dsh --profile wanwei-desktop
 ```
 
-The first command initializes the profile and prints its effective default tree without booting it. The second command starts the browser application with live profile-patch reload.
+The first command prints the effective default tree without booting it after the product profile has been initialized. The second command starts the browser application with live profile-patch reload.
 
 ### What you get
 
-The current layer reserves a Wanwei-owned patch position after the official Web application and changes no runtime row. Later Wanwei feature packages enter through this patch instead of modifying the official base or Web bundles.
+The layer disables `llm-deepseek` and `ui-settings-models`, then mounts the Wanwei-owned plugins. The OneAPI authentication plugin supplies the sole managed provider and a read-only Models settings section; it does not change the official base or Web bundles.
 
 -----
 
@@ -48,7 +48,7 @@ The current layer reserves a Wanwei-owned patch position after the official Web 
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-[`cordis.patch.yml`](cordis.patch.yml) is the product-owned layer and currently contains an empty patch list. [`src/index.ts`](src/index.ts) anchors the bundle package, while [`src/invariant.ts`](src/invariant.ts) reserves its package-owned invariant registration without duplicating the runtime checks of future feature packages.
+[`cordis.patch.yml`](cordis.patch.yml) owns the product-specific composition. [`src/index.ts`](src/index.ts) anchors the bundle package, while [`src/invariant.ts`](src/invariant.ts) owns its invariant registration.
 
 </details>
 
@@ -70,21 +70,21 @@ The current layer reserves a Wanwei-owned patch position after the official Web 
 
 #### What the model sees
 
-Nothing from this package. The empty `cordis.patch.yml` adds no prompt, tool, message, or result; the official base and Web bundles continue to own them.
+This composition layer adds no prompt, tool, message, or result. Its mounted packages own their model-visible behavior.
 
 #### Token effect
 
-Zero direct tokens while the product patch remains empty. Each future inserted package owns and documents its own token effect.
+Zero direct tokens from the composition layer. Each mounted package owns and documents its token effect.
 
 #### KV Cache effect
 
-This empty layer preserves the official composition's cache behavior. A future patch entry can affect reuse only through the package that owns that entry.
+The layer does not directly change cache behavior. Mounted packages document their own cache effects.
 
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **No private feature is mounted yet** — the profile currently proves the isolated product-layer boundary and behaves like the official Web composition.
+- **Server dependency** — model discovery requires the configured OneAPI service; the desktop does not offer local provider configuration as a fallback.
 
 <a id="dev-note"></a>
 ### Dev Note

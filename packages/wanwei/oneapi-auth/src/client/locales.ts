@@ -1,6 +1,11 @@
 export const zh = {
   brandMark: '万',
   accountNav: '账户',
+  modelsNav: '模型',
+  managedModelsTitle: '模型',
+  managedModelsHint: '模型由后台统一配置，桌面端可选择已开放的模型。',
+  managedProviderName: 'Model Server',
+  managedModelsAvailable: '当前可用模型',
   productName: '万维 Buddy',
   productTagline: '安全连接组织模型服务，让智能工作更简单。',
   previewBadge: '预览版',
@@ -86,6 +91,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const en: { [Key in WanweiAuthKey]: string } = {
   brandMark: 'W',
   accountNav: 'Account',
+  modelsNav: 'Models',
+  managedModelsTitle: 'Models',
+  managedModelsHint: 'Models are configured in the management console. Choose from the models available to your account.',
+  managedProviderName: 'Model Server',
+  managedModelsAvailable: 'Available models',
   productName: 'Wanwei Buddy',
   productTagline: 'Connect securely to your organization model service and work smarter.',
   previewBadge: 'Preview',

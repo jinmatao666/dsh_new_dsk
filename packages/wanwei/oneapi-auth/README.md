@@ -8,8 +8,8 @@ The browser login surface is deliberately separate. This package keeps passwords
 
 ## Model experience
 
-After authentication, the plugin replaces the Wanwei-managed pi-ai provider with the models allowed for the current OneAPI account and selects the server default when available. Model requests continue through the standard DSH LLM provider to OneAPI's OpenAI-compatible endpoint.
+After authentication, the plugin replaces the Wanwei-managed pi-ai provider with only the models allowed for the current OneAPI account and selects the server default when available. The desktop Models section lists this server-managed catalog without provider-editing controls. Model requests continue through the standard DSH LLM provider to OneAPI's OpenAI-compatible endpoint.
 
 ## Limitations
 
-The first migration slice validates the existing Host protocol and service integration. The new DSH Remote API and localized login UI are follow-up work before this plugin is enabled in the shipped `wanwei-desktop` bundle.
+The desktop requires a reachable OneAPI service to discover models. The product bundle disables the official editable Models section and DeepSeek adapter; model administration belongs to the server management console.

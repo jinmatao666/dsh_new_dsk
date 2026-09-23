@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 概述
 
-`wanwei-desktop` profile 将此私有 bundle 作为 [`dsh-base`](../base/README.zh.md) 与 [`dsh-web-app`](../web-app/README.zh.md) 之后最后一个由产品方持有的配置层。万维认证、模型治理、技能、桌面集成与界面包都通过这一处完成组装。在这些功能包完成迁移前，patch 刻意保持为空，因此首个组装版本保留官方浏览器行为。
+`wanwei-desktop` profile 将此私有 bundle 作为 [`dsh-base`](../base/README.zh.md) 与 [`dsh-web-app`](../web-app/README.zh.md) 之后最后一个由产品方持有的配置层。此层组装万维认证、模型治理、技能、桌面集成与界面包，并禁用官方 DeepSeek 适配器和可编辑的模型设置页，使桌面端使用 OneAPI 受管模型目录。
 
 ## 目录
 
@@ -34,11 +34,11 @@ pnpm dsh --profile wanwei-desktop --dump-default-config
 pnpm dsh --profile wanwei-desktop
 ```
 
-第一条命令初始化 profile 并在不启动应用的情况下打印默认生效配置树。第二条命令启动浏览器应用，并实时重载 profile patch。
+产品 Profile 初始化后，第一条命令在不启动应用的情况下打印默认生效配置树。第二条命令启动浏览器应用，并实时重载 profile patch。
 
 ### 可获得的能力
 
-当前配置层在官方 Web 应用之后预留一处由万维持有的 patch 位置，不修改任何运行时配置项。后续万维功能包都通过此 patch 接入，而不修改官方 base 或 Web bundle。
+此层禁用 `llm-deepseek` 和 `ui-settings-models`，再挂载万维自有插件。OneAPI 认证插件提供唯一受管 Provider 和只读的“模型”设置页；官方 base 与 Web bundle 不承载这些私有配置。
 
 -----
 
@@ -48,7 +48,7 @@ pnpm dsh --profile wanwei-desktop
 <details>
 <summary>实现内部结构——点击展开</summary>
 
-[`cordis.patch.yml`](cordis.patch.yml) 是产品方持有的配置层，目前只包含空 patch 列表。[`src/index.ts`](src/index.ts) 锚定 bundle 包；[`src/invariant.ts`](src/invariant.ts) 预留包自有的 invariant 注册，但不会重复未来各功能包持有的运行时检查。
+[`cordis.patch.yml`](cordis.patch.yml) 持有产品配置；[`src/index.ts`](src/index.ts) 锚定 bundle 包；[`src/invariant.ts`](src/invariant.ts) 持有本包的 invariant 注册。
 
 </details>
 
@@ -70,21 +70,21 @@ pnpm dsh --profile wanwei-desktop
 
 #### 模型看到的内容
 
-此包不提供任何模型可见内容。空的 `cordis.patch.yml` 不会添加提示词、工具、消息或结果，这些内容仍由官方 base 和 Web bundle 持有。
+此组装层不添加提示词、工具、消息或结果。所挂载的功能包各自持有模型可见行为。
 
 #### Token 影响
 
-产品 patch 为空时直接 token 影响为零。未来插入的每个包分别持有并记录自身 token 影响。
+组装层直接 token 影响为零。所挂载的功能包各自记录 token 影响。
 
 #### KV Cache 影响
 
-此空配置层保留官方组装的缓存行为。未来 patch 配置项只能通过其所有者包影响缓存复用。
+此层不直接改变缓存行为。所挂载的功能包分别记录自身缓存影响。
 
 ## 已知限制与后续工作
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **尚未挂载私有功能**——当前 profile 只验证独立产品层边界，行为与官方 Web 组装一致。
+- **服务端依赖**——模型发现需要连接已配置的 OneAPI 服务；桌面端不提供本地 Provider 配置作为回退。
 
 <a id="dev-note"></a>
 ### 开发备注

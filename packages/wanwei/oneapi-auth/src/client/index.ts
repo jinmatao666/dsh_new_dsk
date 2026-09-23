@@ -6,6 +6,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { AccountSection, type AccountInjected } from './AccountSection.tsx'
+import { ManagedModelsSection } from './ManagedModelsSection.tsx'
 import { AuthGate, type AuthInjected } from './AuthGate.tsx'
 import { AuthController } from './controller.ts'
 import { en, zh } from './locales.ts'
@@ -35,6 +36,10 @@ export function apply(ctx: Context): void {
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay', id: 'wanwei-auth', order: -1000, locale: NS, inject: authInject,
   }, AuthGate))
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section', id: 'wanwei-managed-models', order: 10, label: () => t('modelsNav'), locale: NS,
+    inject: accountInject,
+  }, ManagedModelsSection))
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'wanwei-account', order: 40, label: () => t('accountNav'), locale: NS, inject: accountInject,
   }, AccountSection))
