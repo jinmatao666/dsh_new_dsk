@@ -17,6 +17,8 @@ use tauri::{
 };
 use url::Url;
 
+mod migration;
+
 const NATIVE_SKILLS_CHANGED_SCRIPT: &str = "window.dispatchEvent(new Event('dsh:skills-changed'));";
 const NATIVE_FILE_DRAG_ENTER_SCRIPT: &str =
     "window.dispatchEvent(new Event('dsh:native-file-drag-enter'));";
@@ -1792,6 +1794,16 @@ fn spawn_sidecar(
     app_data_dir: &Path,
 ) -> Result<(Child, Url), String> {
     let dsh_home = product_harness_home(app_data_dir)?;
+    if !cfg!(debug_assertions) {
+        match migration::migrate_legacy_home(&dsh_home) {
+            Ok(true) => append_log(
+                log_path,
+                "imported legacy user data into the isolated preview home",
+            ),
+            Ok(false) => {}
+            Err(error) => append_log(log_path, format!("legacy data import skipped: {error}")),
+        }
+    }
     ensure_product_profile(&dsh_home)?;
     let (program, cwd, mut args) = if cfg!(debug_assertions) {
         development_command()
