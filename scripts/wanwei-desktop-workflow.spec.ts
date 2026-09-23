@@ -16,6 +16,8 @@ const productProfilePath = resolve(
   'scripts',
   'product-profile.mjs',
 )
+const productManifestPath = resolve(import.meta.dirname, '..', 'products', 'wanwei-desktop', 'package.json')
+const cliEntryPath = resolve(import.meta.dirname, '..', 'apps', 'cli', 'src', 'bin.ts')
 const platformActionsBuildConfigPath = resolve(
   import.meta.dirname,
   '..',
@@ -37,7 +39,10 @@ describe('Wanwei desktop preview workflow', () => {
   it('owns profile initialization and preserves an existing product profile', async () => {
     const root = mkdtempSync(join(tmpdir(), 'wanwei-product-profile-'))
     try {
-      const { ensureProductProfile, PRODUCT_BUNDLES } = await import(productProfilePath)
+      const { ensureProductProfile, PRODUCT_BUNDLES } = await import(productProfilePath) as {
+        ensureProductProfile: (home: string) => void
+        PRODUCT_BUNDLES: string[]
+      }
       ensureProductProfile(root)
       const manifestPath = join(root, 'profiles', 'wanwei-desktop', 'package.json')
       const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
@@ -48,6 +53,29 @@ describe('Wanwei desktop preview workflow', () => {
       writeFileSync(manifestPath, customized)
       ensureProductProfile(root)
       expect(readFileSync(manifestPath, 'utf8')).toBe(customized)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('composes only the server-managed model route and the Wanwei settings plugin', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'wanwei-managed-model-profile-'))
+    try {
+      const { ensureProductProfile } = await import(productProfilePath) as {
+        ensureProductProfile: (home: string) => void
+      }
+      ensureProductProfile(root)
+      const result = spawnSync(process.execPath, [
+        '--import', 'tsx/esm', cliEntryPath, '--profile', 'wanwei-desktop', '--dump-default-config',
+      ], {
+        encoding: 'utf8',
+        env: { ...process.env, DSH_HOME: root, DSH_BUNDLE_ANCHORS: productManifestPath },
+      })
+      expect(result.status, result.stderr).toBe(0)
+      expect(result.stdout).toMatch(/- id: llm-deepseek\n\s+name: .*\n\s+disabled: true/u)
+      expect(result.stdout).toMatch(/- id: ui-settings-models\n\s+name: .*\n\s+disabled: true/u)
+      expect(result.stdout).toMatch(/- id: llm-pi-ai\n\s+name: /u)
+      expect(result.stdout).toMatch(/- id: wanwei-oneapi-auth\n\s+name: /u)
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
@@ -89,8 +117,8 @@ describe('Wanwei desktop preview workflow', () => {
     const matrix = strategy.matrix as Record<string, unknown>
     expect(matrix.include).toEqual([
       { name: 'Windows x64', platform: 'windows-x64', runner: 'windows-2025', bundles: 'nsis' },
-      { name: 'macOS arm64', platform: 'macos-arm64', runner: 'macos-15', bundles: 'app,dmg' },
-      { name: 'macOS Intel x64', platform: 'macos-x64', runner: 'macos-15-intel', bundles: 'app,dmg' },
+      { name: 'macOS arm64', platform: 'macos-arm64', runner: 'macos-15', bundles: 'app' },
+      { name: 'macOS Intel x64', platform: 'macos-x64', runner: 'macos-15-intel', bundles: 'app' },
       { name: 'Linux x64', platform: 'linux-x64', runner: 'ubuntu-22.04', bundles: 'deb,appimage' },
     ])
     const steps = build?.steps as Array<Record<string, unknown>>
@@ -116,6 +144,7 @@ describe('Wanwei desktop preview workflow', () => {
       'Verify staged runtime and sidecar',
       'Clear stale installer outputs',
       'Build platform installer',
+      'Package macOS DMG',
     ]))
     const stageIndex = steps.findIndex(step => step.name === 'Stage self-contained runtime')
     const restoreIndex = steps.findIndex(step => step.name === 'Restore installer build dependencies')
@@ -128,6 +157,8 @@ describe('Wanwei desktop preview workflow', () => {
     expect(clearIndex).toBeLessThan(installerIndex)
     expect(JSON.stringify(steps)).toContain('bundle/nsis/*.exe')
     expect(JSON.stringify(steps)).toContain('bundle/dmg/*.dmg')
+    expect(commands).toContain('hdiutil create -srcfolder')
+    expect(commands).toContain('hdiutil verify')
     expect(JSON.stringify(steps)).toContain('bundle/deb/*.deb')
     expect(JSON.stringify(steps)).toContain('bundle/appimage/*.AppImage')
   })

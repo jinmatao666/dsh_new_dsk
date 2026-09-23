@@ -77,11 +77,11 @@ jobs:
           - name: macOS arm64
             platform: macos-arm64
             runner: macos-15
-            bundles: app,dmg
+            bundles: app
           - name: macOS Intel x64
             platform: macos-x64
             runner: macos-15-intel
-            bundles: app,dmg
+            bundles: app
           - name: Linux x64
             platform: linux-x64
             runner: ubuntu-22.04
@@ -190,6 +190,25 @@ jobs:
           NO_STRIP: ${{ matrix.platform == 'linux-x64' && '1' || '' }}
           RUST_LOG: ${{ matrix.platform == 'linux-x64' && 'tauri_bundler=debug' || '' }}
         run: pnpm --dir products/wanwei-desktop run build:runner:bundle --bundles ${{ matrix.bundles }} --config "${{ runner.temp }}/wanwei-preview-${{ matrix.platform }}.json"
+
+      # Tauri's DMG helper customizes Finder via AppleScript, which is
+      # unreliable on hosted macOS runners. Package the already signed .app
+      # with Apple's disk-image utility without requiring Finder automation.
+      - name: Package macOS DMG
+        if: ${{ startsWith(matrix.platform, 'macos-') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_dir="products/wanwei-desktop/src-tauri/target/release/bundle"
+          app="$bundle_dir/macos/万维 Buddy 预览版.app"
+          test -d "$app"
+          stage="${RUNNER_TEMP}/wanwei-preview-dmg-${{ matrix.platform }}"
+          mkdir -p "$stage" "$bundle_dir/dmg"
+          ditto "$app" "$stage/$(basename "$app")"
+          ln -s /Applications "$stage/Applications"
+          dmg="$bundle_dir/dmg/万维 Buddy 预览版_${{ inputs.version }}_${{ matrix.platform }}.dmg"
+          hdiutil create -srcfolder "$stage" -volname "万维 Buddy 预览版" -format UDZO -ov "$dmg"
+          hdiutil verify "$dmg"
 
       - name: Diagnose Linux AppImage bundler
         if: ${{ failure() && matrix.platform == 'linux-x64' }}
