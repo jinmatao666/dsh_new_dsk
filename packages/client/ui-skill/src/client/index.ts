@@ -42,6 +42,13 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { SkillRow } from './SkillRow.tsx'
 import { en, NS, zh, type SkillKey } from './locales.ts'
 
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /** A host integration changed the available skill catalog. @mode emit */
+    'skills/catalog-invalidated'(): void
+  }
+}
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** The dedicated skill tool row's copy. */
@@ -184,6 +191,7 @@ export function apply(ctx: ClientContext): void {
   // A preset decides which skill providers an agent reads, so a switched
   // session's cached catalog belongs to the composition it no longer runs.
   ctx.remote.$on('agent-preset/selected', invalidate)
+  ctx.on('skills/catalog-invalidated', clearAll)
   ctx.on('connection/reset', clearAll)
   ctx.effect(() => {
     const unregister = inputTriggers.registerSource(source)

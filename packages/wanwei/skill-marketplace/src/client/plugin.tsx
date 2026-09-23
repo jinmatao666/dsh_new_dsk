@@ -16,6 +16,8 @@ import {
 import type { PersonalSkillReviewFilter, PersonalSkillUploadView } from './catalog.ts'
 import { marketplaceInstallAction } from './install-action.ts'
 import type { MarketplaceInstallState } from './install-action.ts'
+import { registerNativeSkillCatalogBridge } from './skill-catalog-bridge.ts'
+import { Toast, type WanweiNotice } from './Toast.tsx'
 import './marketplace.css'
 
 type SkillParam = { name: string; type: string; required: boolean; description: string; defaultValue?: string }
@@ -717,12 +719,11 @@ function Connectors() {
   </section>
 }
 
-function Automations() {
+function Automations({ notify }: { notify: (text: string) => void }) {
   const [tab, setTab] = useState<'configured' | 'history' | 'templates'>('configured')
   const [selected, setSelected] = useState<AutomationTemplate | null>(null)
   const [draft, setDraft] = useState<AutomationDraft | null>(null)
   const [configured, setConfigured] = useState<AutomationDraft[]>([])
-  const [notice, setNotice] = useState<string | null>(null)
   const openManual = () =>{  setDraft({ id: `manual-${Date.now()}`, name: '', cadence: '每个工作日', time: '09:00', prompt: '', source: '手动' }) }
   const openTemplate = (template: AutomationTemplate) => {
     setSelected(template)
@@ -734,9 +735,9 @@ function Automations() {
     setDraft(null)
     setSelected(null)
     setTab('configured')
-    setNotice('自动化任务已保存到本地演示列表，当前不会实际执行。')
+    notify('自动化任务已保存到本地演示列表，当前不会实际执行。')
   }
-  const startConversation = () =>{  setNotice('已准备自动化创建草稿；正式接入后将新建对话并自动填入任务内容。') }
+  const startConversation = () =>{  notify('已准备自动化创建草稿；正式接入后将新建对话并自动填入任务内容。') }
   return <section className="dsh-automation-page">
     <div className="dsh-automation-actions">
       <button type="button" onClick={openManual}>手动新建</button>
@@ -747,7 +748,6 @@ function Automations() {
       <button type="button" className={tab === 'history' ? 'active' : ''} onClick={() =>{  setTab('history') }}>执行历史</button>
       <button type="button" className={tab === 'templates' ? 'active' : ''} onClick={() =>{  setTab('templates') }}>任务模板</button>
     </nav>
-    {notice !== null && <div className="dsh-automation-notice">{notice}<button type="button" onClick={() =>{  setNotice(null) }}>×</button></div>}
     {tab === 'configured' && (configured.length === 0 ? <div className="dsh-automation-empty"><div><MarketplaceSectionIcon section="automations" size={30} /></div><h2>尚未配置自动化</h2><p>从工作模板开始，建立适合当前工作区的周期任务。</p><button type="button" onClick={() =>{  setTab('templates') }}>从模板创建</button></div> : <div className="dsh-automation-configured">{configured.map(item => <article key={item.id}><div className="dsh-automation-configured-icon"><MarketplaceSectionIcon section="automations" size={19} /></div><div><h2>{item.name}</h2><p>{item.cadence} · {item.time} · {item.source}创建</p><small>{item.prompt}</small></div><span>演示模式</span></article>)}</div>)}
     {tab === 'history' && <div className="dsh-automation-history">{AUTOMATION_HISTORY.map(item => <article key={item.id}><div><strong>{item.name}</strong><span>{item.time}</span></div><p>{item.detail}</p><b className={item.status === '需关注' ? 'attention' : ''}>{item.status}</b></article>)}</div>}
     {tab === 'templates' && <div className="dsh-automation-template-grid">{AUTOMATION_TEMPLATES.map(item => <button type="button" className="dsh-automation-template" key={item.id} onClick={() =>{  openTemplate(item) }}><div className="dsh-automation-template-icon" style={{ background: item.accent }}><MarketplaceSectionIcon section="automations" size={20} /></div><strong>{item.name}</strong><span>{item.trigger}</span><p>{item.summary}</p><small>{item.scope}</small></button>)}</div>}
@@ -816,7 +816,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   const [uploadView, setUploadView] = useState<PersonalSkillUploadView>('public')
   const [reviewFilter, setReviewFilter] = useState<PersonalSkillReviewFilter>('all')
   const [installing, setInstalling] = useState<string | null>(null)
-  const [installMessage, setInstallMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const [installMessage, setInstallMessage] = useState<WanweiNotice | null>(null)
   const [customSkills, setCustomSkills] = useState<Skill[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('dsh.marketplace.custom-skills') ?? '[]') as Skill[]
@@ -833,11 +833,6 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   const [personalSkills, setPersonalSkills] = useState<RemotePersonalSkill[]>([])
 
   const [installStates, setInstallStates] = useState<Map<string, MarketplaceSkillState>>(new Map())
-  useEffect(() => {
-    if (installMessage === null) return undefined
-    const timer = window.setTimeout(() => { setInstallMessage(null) }, 5_000)
-    return () => { window.clearTimeout(timer) }
-  }, [installMessage])
   const refreshInstallStates = async () => {
     try {
       const [value, customValue] = await Promise.all([
@@ -1112,9 +1107,9 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     }
     await refreshInstallStates()
     setInstallMessage(action === 'update'
-      ? { kind: 'success', text: '技能已更新，当前会话下一次输入 / 即可使用。' }
+      ? { kind: 'success', text: '技能已更新，可在当前会话输入 / 使用。' }
       : action === 'install'
-        ? { kind: 'success', text: '技能已安装，当前会话下一次输入 / 即可使用。' }
+        ? { kind: 'success', text: '技能已安装，可在当前会话输入 / 使用。' }
         : { kind: 'success', text: '技能已从本机移除。' })
   }
 
@@ -1249,7 +1244,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
           <>
             {section === 'experts' && <ExpertMarket />}
             {section === 'connectors' && <Connectors />}
-            {section === 'automations' && <Automations />}
+            {section === 'automations' && <Automations notify={(text) => { setInstallMessage({ kind: 'info', text }) }} />}
             {section === 'skills' && <>
               <div className="dsh-skill-toolbar">
                 <div className="dsh-skill-search-row">
@@ -1526,12 +1521,6 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
             </>}
           </>
         )}
-        {installMessage !== null && (
-          <div className={`dsh-skill-install-message ${installMessage.kind}`} role="status">
-            {installMessage.text}
-            <button type="button" onClick={() => { setInstallMessage(null) }}>×</button>
-          </div>
-        )}
         {adding && (
           <div className="dsh-skill-add-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setAdding(false) }}>
             <form className="dsh-skill-add-dialog" onSubmit={(event) => { event.preventDefault(); void createSkill() }}>
@@ -1608,6 +1597,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
           </div>
         )}
       </div>
+      <Toast notice={installMessage} setNotice={setInstallMessage} />
     </div>
   )
 }
@@ -1641,6 +1631,7 @@ function SkillMarketplaceAction({ wide, section = 'skills' }: ActionProps & { se
 
 export const inject = ['slots', 'connection', 'remote', 'remote.directoryPicker']
 export function apply(ctx: Context): void {
+  registerNativeSkillCatalogBridge(ctx)
   const connection = ctx.get('connection') as unknown as ConnectionHandle
   loadRemoteSkills = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'skill-list', {})) as { items?: unknown }

@@ -292,6 +292,19 @@ describe('catalog cache', () => {
     await source.candidates(proj('s2'), req(''))
     expect(payloads).toHaveLength(4)
   })
+
+  it('re-reads installed skills in existing sessions after a catalog invalidation', async () => {
+    let catalog = CATALOG
+    const list = vi.fn(() => listOk(catalog)({}))
+    const { ctx, source } = await bench(list)
+    expect((await source.candidates(proj('s1'), req('new')))).toEqual([])
+    catalog = [...CATALOG, { name: 'new-skill', description: 'new', modelInvocable: true }]
+    ctx.emit('skills/catalog-invalidated')
+    expect(await source.candidates(proj('s1'), req('new'))).toEqual([
+      { name: 'new-skill', description: 'new' },
+    ])
+    expect(list).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('lexicon', () => {

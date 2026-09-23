@@ -625,8 +625,6 @@
 .dsh-automation-empty p { margin: 0 0 10px; font-size: 13px; }
 .dsh-automation-empty button { transition: transform 0.1s ease, box-shadow 0.15s ease; }
 .dsh-automation-empty button:active { transform: translateY(1px); }
-.dsh-automation-notice { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: -10px 0 18px; padding: 10px 13px; border: 1px solid #cfe1ff; border-radius: 10px; background: #f1f6ff; color: #275aab; font-size: 13px; }
-.dsh-automation-notice button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 18px; }
 .dsh-automation-template-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .dsh-automation-template { display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 12px; align-items: center; min-height: 150px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 15px; background: var(--dsw-alias-bg-elevated); color: inherit; cursor: pointer; padding: 18px; text-align: left; transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
 .dsh-automation-template:hover { border-color: var(--dsw-alias-border-l2); box-shadow: 0 10px 26px rgb(15 23 42 / 10%); transform: translateY(-3px); }
@@ -732,9 +730,6 @@
   .dsh-skill-add-hint { line-height: 1.4; }
   .dsh-skill-add-dialog footer { margin-top: 10px; }
 }
-.dsh-skill-install-message { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; padding: 11px 13px; border-radius: 10px; background: #ecfdf3; color: #166534; font-size: 13px; }
-.dsh-skill-install-message.error { background: #fff1f2; color: #be123c; }
-.dsh-skill-install-message button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 18px; }
 .dsh-skill-source { display: inline-flex; align-items: center; width: fit-content; padding: 2px 7px; border-radius: 999px; background: #eef3f9; color: #60758f; font-size: 11px; font-weight: 600; line-height: 18px; }
 .dsh-skill-source.personal { background: #fff5e6; color: #a86612; }
 .dsh-skill-review-status { display: inline-flex; width: fit-content; padding: 2px 7px; border-radius: 999px; background: #eef3f9; color: #60758f; font-size: 11px; font-weight: 600; line-height: 18px; }
