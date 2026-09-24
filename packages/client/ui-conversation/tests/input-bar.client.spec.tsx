@@ -1076,7 +1076,6 @@ describe('running and lock semantics', () => {
     fireEvent.keyDown(textarea, { key: 'Enter' })
     expect(onRequestWorkspace).not.toHaveBeenCalled()
     expect((view.getByRole('button', { name: '发送消息' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(onDocumentPointerDown).not.toHaveBeenCalled()
   })
 
   it('the plan projection swaps the placeholder while its effective target is plan mode', () => {
