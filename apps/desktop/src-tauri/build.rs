@@ -27,6 +27,7 @@ fn main() {
             "reveal_downloaded_file",
             "import_workspace_files",
             "list_expert_output_files",
+            "read_expert_text_file",
             "import_dropped_workspace_files",
         ]),
     ))

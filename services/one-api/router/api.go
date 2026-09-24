@@ -387,7 +387,12 @@ func SetApiRouter(router *gin.Engine) {
 			expertAdminRoute.Use(middleware.AdminAuth())
 			{
 				expertAdminRoute.GET("/list", controller.AdminListExperts)
+				expertAdminRoute.PUT("/:key/publish", controller.SetExpertPublished)
 				expertAdminRoute.PUT("/:key", controller.UpdateExpert)
+				expertAdminRoute.GET("/categories", controller.ListExpertCategories)
+				expertAdminRoute.POST("/categories", controller.CreateExpertCategory)
+				expertAdminRoute.PUT("/categories/:id", controller.UpdateExpertCategory)
+				expertAdminRoute.DELETE("/categories/:id", controller.DeleteExpertCategory)
 			}
 		}
 		skillRoute := apiRouter.Group("/skill")

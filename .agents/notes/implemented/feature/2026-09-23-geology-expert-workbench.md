@@ -10,7 +10,7 @@ A chat-oriented skill can perform geology analysis, but a user who expects a gui
 
 ## Decision
 
-The OneAPI expert roster contains only workbenches shipped with the desktop client. Administrators edit presentation metadata and publication state; the optional related-skills list is descriptive and never changes execution. The geology expert's desktop tab has fixed intake, history, and results components. Before execution it installs `market-gis-geology-analysis` from the published skill catalog when necessary. Each run creates a dedicated directory and archived Host session, invokes that skill, and displays that session's answer and actual Word and Excel files. The task index is local to the authenticated username on one device.
+The OneAPI expert roster contains only workbenches shipped with the desktop client. Administrators edit presentation metadata and publication state; the optional related-skills list is descriptive and never changes execution. The geology, third-survey current land use, and land-use plan review desktop tabs each have fixed intake, history, and results components. Before execution each workbench installs its fixed published skill when necessary: `market-gis-geology-analysis`, `market-gis-third-survey-analysis`, or `market-gis-land-use-plan-review`. Each run creates a dedicated directory and archived Host session, invokes only that expert's skill, and displays that session's answer, analysis-view data, and actual Word and Excel files. Every expert uses a separate per-user local task index.
 
 The workbench renders running, completed, and failed states from the archived session and files. History reads each task's result; deliverables enumerate only files returned for that task. The design leaves maps, numeric statistics, progress percentages, and stage logs absent because this execution path does not provide verified values for them.
 
@@ -24,4 +24,8 @@ The workbench renders running, completed, and failed states from the archived se
 
 ## Consequences
 
-Publication and card text can change on the server without a desktop release, while a new workbench still needs a desktop implementation. Local history does not sync across devices and depends on the task directory and Host session remaining available. Completion requires both actual output files; a model answer alone cannot mark a task successful.
+Publication and card text can change on the server without a desktop release, while a new workbench still needs a desktop implementation. Local history does not sync across devices and depends on the task directory and Host session remaining available. Completion requires both actual output files; a model answer alone cannot mark a task successful. The third-survey and planning workbenches reuse the geology interaction structure while keeping skill parameters, task directories, sessions, history, results, and publication entries independent.
+
+## Office file expert extension
+
+The file conversion and PDF expert fixes five official skills in its workbench: Word to PDF, PDF to images, PDF organizer, images to PDF, and image optimizer. The document intelligence expert independently fixes the document summary and document comparison skills. Both reuse a small task shell for file intake, archived sessions, real status evaluation, local history, and artifact opening, while retaining separate task indexes, directories, tabs, server roster entries, and skill choices. Uploaded source files are excluded from deliverables, and batch completion depends on the expected number of generated files. A document intelligence icon remains a centrally replaceable server-side presentation field until the formal asset arrives.

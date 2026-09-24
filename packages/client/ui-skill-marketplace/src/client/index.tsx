@@ -23,6 +23,17 @@ import type { MarketplaceInstallState } from './install-action.ts'
 import { markReviewsSeen, recordReviewList, reviewAttentionSnapshot, subscribeReviewAttention } from './review-attention.ts'
 import { GeologyWorkbench, GeologyIcon } from './GeologyWorkbench.tsx'
 import { createGeologyTaskService, type GeologyTaskService } from './geology-task.ts'
+import { MeetingMinutesWorkbench } from './MeetingMinutesWorkbench.tsx'
+import { createMeetingTaskService, type MeetingTaskService } from './meeting-task.ts'
+import { meetingIconImages } from './MeetingIconData.ts'
+import { geologyIconImages } from './GeologyIconData.ts'
+import { ThirdSurveyWorkbench } from './ThirdSurveyWorkbench.tsx'
+import { createThirdSurveyTaskService, type ThirdSurveyTaskService } from './third-survey-task.ts'
+import { LandUsePlanReviewWorkbench } from './LandUsePlanReviewWorkbench.tsx'
+import { createLandUsePlanReviewTaskService, type LandUsePlanReviewTaskService } from './land-use-plan-review-task.ts'
+import { FileConversionWorkbench } from './FileConversionWorkbench.tsx'
+import { DocumentIntelligenceWorkbench } from './DocumentIntelligenceWorkbench.tsx'
+import { createOfficeTaskService, type OfficeTaskService } from './office-task.ts'
 import './marketplace.css'
 
 type SkillParam = { name: string; type: string; required: boolean; description: string; defaultValue?: string }
@@ -83,10 +94,12 @@ type Expert = {
   tags: readonly string[]
   examples: readonly string[]
   accent: string
-  icon: 'planning' | 'policy' | 'gis' | 'survey' | 'ecology' | 'property' | 'writing'
+  icon: string
   scenario?: string
   materials?: string
+  detailSections?: readonly ExpertDetailSection[]
 }
+type ExpertDetailSection = { title: string; subtitle: string; content: string }
 type RemoteExpert = {
   key?: unknown
   name?: unknown
@@ -97,6 +110,7 @@ type RemoteExpert = {
   tags?: unknown
   scenario?: unknown
   materials?: unknown
+  detail_sections?: unknown
 }
 
 type Connector = {
@@ -197,6 +211,11 @@ function reviewStatusLabel(status: Skill['reviewStatus']): string {
 let loadRemoteSkills: (() => Promise<RemoteSkill[]>) | undefined
 let loadRemoteExperts: (() => Promise<RemoteExpert[]>) | undefined
 let geologyTaskService: GeologyTaskService | undefined
+let meetingTaskService: MeetingTaskService | undefined
+let thirdSurveyTaskService: ThirdSurveyTaskService | undefined
+let landUsePlanReviewTaskService: LandUsePlanReviewTaskService | undefined
+let fileConversionTaskService: OfficeTaskService | undefined
+let documentIntelligenceTaskService: OfficeTaskService | undefined
 let expertLayout: ILayout | undefined
 let loadRemoteCategories: (() => Promise<RemoteSkillCategory[]>) | undefined
 let loadRemoteSkillBundle: ((id: number) => Promise<unknown>) | undefined
@@ -316,6 +335,11 @@ const EXPERT_TEAMS: readonly ExpertTeam[] = [
 
 const EXPERTS: readonly Expert[] = [
   { id: 'geology-analysis', name: '地质条件分析专家', role: '地质环境与灾害易发性分析', category: '空间分析', summary: '提交项目地块范围，分析地质环境条件与地质灾害易发性，查看 Excel 明细和 Word 专业报告。', tags: ['地质环境', '灾害易发性', '专业报告'], examples: ['分析这个地块的地质环境条件', '查看项目范围涉及的地质灾害易发分区'], accent: '#2563eb', icon: 'gis' },
+  { id: 'third-survey-analysis', name: '三调土地利用现状分析专家', role: '三调地类、面积与权属现状分析', category: '空间分析', summary: '提交项目地块范围，分析三调土地利用现状、主要地类构成及耕地保护相关情况，查看专业报告和明细。', tags: ['三调现状', '地类构成', '耕地保护'], examples: ['分析项目范围内三调地类构成', '核查耕地、永久基本农田与权属现状'], accent: '#059669', icon: 'survey' },
+  { id: 'land-use-plan-review', name: '土地利用规划审查专家', role: '规划符合性与用途管制审查', category: '空间分析', summary: '提交项目地块范围，审查项目与规划管控要求的空间关系，识别冲突范围、风险事项和需进一步核实内容。', tags: ['规划审查', '用途管制', '合规风险'], examples: ['审查项目范围与规划管控要求的关系', '识别永久基本农田和建设分区风险'], accent: '#2563eb', icon: 'planning' },
+  { id: 'file-conversion-pdf', name: '文件转换与 PDF 工具专家', role: '常用文档、PDF 与图片批量处理', category: '办公工具', summary: '提供 Word 转 PDF、PDF 转图片、PDF 合并拆分、图片转 PDF，以及图片压缩与格式转换能力。', tags: ['文件转换','PDF 工具','图片处理'], examples: [], accent: '#2563eb', icon: 'writing' },
+  { id: 'document-intelligence', name: '文档智能处理专家', role: '摘要提炼与版本差异分析', category: '办公工具', summary: '读取办公文档，提取摘要、重点、风险、时间节点和待办事项，或比较两份材料的文本变化。', tags: ['文档摘要','要点提取','文档对比'], examples: [], accent: '#2563eb', icon: 'writing' },
+  { id: 'meeting-minutes', name: '会议纪要专家', role: '录音转写与结构化纪要', category: '办公工具', summary: '提交会议录音、已有转写稿和相关文字材料，生成结构清晰的 Word 会议纪要。', tags: ['录音转写', '会议纪要', '行动事项'], examples: ['根据会议录音生成正式纪要', '根据转写稿和项目材料整理待办事项'], accent: '#2563eb', icon: 'meeting' },
   { id: 'spatial-planning', name: '国土空间规划编制专家', role: '总体规划与详细规划顾问', category: '规划编制', summary: '协助梳理规划目标、空间格局、用地安排与成果章节，形成结构清晰的规划材料。', tags: ['规划编制', '空间布局', '成果框架'], examples: ['根据现有资料梳理国土空间总体规划的章节框架', '对这份详细规划文本提取主要管控要求'], accent: '#2563eb', icon: 'planning' },
   { id: 'land-approval', name: '建设用地报批专家', role: '用地合规与材料审查顾问', category: '用地报批', summary: '聚焦项目选址、用地审批要件与材料完整性，帮助识别报批前需补充的内容。', tags: ['用地报批', '合规核验', '材料清单'], examples: ['根据项目资料列出用地报批材料清单', '核查这份项目说明中可能影响报批的风险点'], accent: '#7c3aed', icon: 'policy' },
   { id: 'natural-resource-policy', name: '自然资源政策解读专家', role: '政策条款与执行口径顾问', category: '政策法规', summary: '将自然资源、规划、生态保护相关政策拆解为适用条件、责任事项和时间节点。', tags: ['政策解读', '条款比对', '执行口径'], examples: ['概述这份政策中与项目建设有关的约束', '对比两份通知的适用范围与新增要求'], accent: '#dc2626', icon: 'policy' },
@@ -640,21 +664,53 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall,
 /* oxlint-disable @stylistic/arrow-parens, @stylistic/max-len -- compact local-only interaction trees keep cards and dialogs together. */
 function ExpertAvatar({ expert }: { expert: Pick<Expert, 'icon'> }) {
   const shared = { width: 28, height: 28, viewBox: '0 0 28 28', fill: 'none', 'aria-hidden': true }
-  if (expert.icon === 'planning') return <svg {...shared}><path d="M5 22V9l9-4 9 4v13" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><path d="M9 22v-6h10v6M10 10h.1M14 10h.1M18 10h.1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+  if (expert.icon.startsWith('data:image/')) return <img src={expert.icon} alt="" aria-hidden="true" />
+  if (expert.icon === 'gis') return <img src={geologyIconImages.mountain} alt="" aria-hidden="true" />
+  if (expert.icon === 'survey') return <img src={geologyIconImages.layers} alt="" aria-hidden="true" />
+  if (expert.icon === 'planning') return <img src={geologyIconImages.coordinate} alt="" aria-hidden="true" />
   if (expert.icon === 'policy') return <svg {...shared}><path d="M8 4h10l4 4v15H8z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><path d="M18 4v5h4M11 14h8M11 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-  if (expert.icon === 'gis') return <svg {...shared}><path d="m5 8 7-3 5 3 6-3v15l-6 3-5-3-7 3V8Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><path d="M12 5v15M17 8v15" stroke="currentColor" strokeWidth="2" /></svg>
-  if (expert.icon === 'survey') return <svg {...shared}><circle cx="14" cy="14" r="8" stroke="currentColor" strokeWidth="2" /><path d="M14 6v3M14 19v3M6 14h3M19 14h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
   if (expert.icon === 'ecology') return <svg {...shared}><path d="M21 5c-9 .4-14 5-14 12 0 3.4 2.5 5.8 5.6 5.8C19 22.8 22 15.7 21 5Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><path d="M8 20c3-3.8 6.1-6.3 10.4-8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
   if (expert.icon === 'property') return <svg {...shared}><path d="m5 13 9-8 9 8v10H5V13Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><path d="M11 23v-6h6v6" stroke="currentColor" strokeWidth="2" /></svg>
+  if (expert.icon === 'meeting') return <img src={meetingIconImages.expert} alt="" aria-hidden="true" />
   return <svg {...shared}><path d="M7 5h14v18H7z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><path d="M10 10h8M10 14h8M10 18h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
 }
 
-type ExpertMarketDetail = { id: string; name: string; role: string; summary: string; tags: readonly string[]; examples: readonly string[]; accent: string; icon?: Expert['icon']; scenario?: string; materials?: string; members?: readonly string[]; skills?: readonly string[] }
+type ExpertMarketDetail = { id: string; name: string; role: string; summary: string; tags: readonly string[]; examples: readonly string[]; accent: string; icon?: Expert['icon']; scenario?: string; materials?: string; detailSections?: readonly ExpertDetailSection[]; members?: readonly string[]; skills?: readonly string[] }
+
+function parseExpertDetailSections(value: unknown): readonly ExpertDetailSection[] | undefined {
+  if (typeof value !== 'string' || value.trim() === '') return undefined
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!Array.isArray(parsed) || parsed.length !== 4) return undefined
+    const sections = parsed.flatMap((section): ExpertDetailSection[] => {
+      if (typeof section !== 'object' || section === null) return []
+      const record = section as Record<string, unknown>
+      if (typeof record.title !== 'string' || typeof record.subtitle !== 'string' || typeof record.content !== 'string') return []
+      return [{ title: record.title, subtitle: record.subtitle, content: record.content }]
+    })
+    return sections.length === 4 ? sections : undefined
+  } catch { return undefined }
+}
+
+function ConfiguredExpertSections({ sections, meeting = false }: { sections: readonly ExpertDetailSection[]; meeting?: boolean }) {
+  const geologyIcons = ['workspace', 'files', 'result', 'layers'] as const
+  const meetingIcons = [meetingIconImages.scenario, meetingIconImages.materials, meetingIconImages.delivery, meetingIconImages.direction]
+  return <>{sections.map((section, index) => <section key={`${section.title}-${index}`}>
+    <div className={meeting ? 'dsh-meeting-modal-section-head' : 'dsh-geology-modal-section-head'}>
+      {meeting ? <img src={meetingIcons[index] ?? meetingIconImages.scenario} alt="" /> : <GeologyIcon name={geologyIcons[index] ?? 'workspace'} />}
+      <h3>{section.title}</h3><span>{section.subtitle}</span>
+    </div>
+    {section.content.includes('\n') ? <ul>{section.content.split('\n').map(line => line.trim()).filter(Boolean).map((line, lineIndex) => <li key={`${line}-${lineIndex}`}>{line}</li>)}</ul> : <p>{section.content}</p>}
+  </section>)}</>
+}
 
 function ExpertMarket() {
   const startGeology = () => {
     setOpenedGeology(true)
     setGeologyActive(true)
+    setMeetingActive(false)
+    setThirdSurveyActive(false)
+    setPlanReviewActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false)
     setSelected(null)
     void desktopInvoke('maximize_expert_window', {}).catch(() => undefined).finally(() => {
       window.setTimeout(() => {
@@ -662,6 +718,27 @@ function ExpertMarket() {
       }, 120)
     })
   }
+  const startMeeting = () => {
+    setOpenedMeeting(true)
+    setMeetingActive(true)
+    setGeologyActive(false)
+    setThirdSurveyActive(false)
+    setPlanReviewActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false)
+    setSelected(null)
+    void desktopInvoke('maximize_expert_window', {}).catch(() => undefined).finally(() => {
+      window.setTimeout(() => { if (document.querySelector('[data-sidebar-collapsed]') === null) expertLayout?.toggleSidebar() }, 120)
+    })
+  }
+  const startThirdSurvey = () => {
+    setOpenedThirdSurvey(true); setThirdSurveyActive(true); setGeologyActive(false); setMeetingActive(false); setPlanReviewActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false); setSelected(null)
+    void desktopInvoke('maximize_expert_window', {}).catch(() => undefined).finally(() => { window.setTimeout(() => { if (document.querySelector('[data-sidebar-collapsed]') === null) expertLayout?.toggleSidebar() }, 120) })
+  }
+  const startPlanReview = () => {
+    setOpenedPlanReview(true); setPlanReviewActive(true); setGeologyActive(false); setMeetingActive(false); setThirdSurveyActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false); setSelected(null)
+    void desktopInvoke('maximize_expert_window', {}).catch(() => undefined).finally(() => { window.setTimeout(() => { if (document.querySelector('[data-sidebar-collapsed]') === null) expertLayout?.toggleSidebar() }, 120) })
+  }
+  const startFileConversion = () => { setOpenedFileConversion(true); setFileConversionActive(true); setDocumentIntelligenceActive(false); setGeologyActive(false); setMeetingActive(false); setThirdSurveyActive(false); setPlanReviewActive(false); setSelected(null); void desktopInvoke('maximize_expert_window', {}).catch(() => undefined) }
+  const startDocumentIntelligence = () => { setOpenedDocumentIntelligence(true); setDocumentIntelligenceActive(true); setFileConversionActive(false); setGeologyActive(false); setMeetingActive(false); setThirdSurveyActive(false); setPlanReviewActive(false); setSelected(null); void desktopInvoke('maximize_expert_window', {}).catch(() => undefined) }
   const [publishedExperts, setPublishedExperts] = useState<Expert[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   useEffect(() => {
@@ -673,15 +750,17 @@ function ExpertMarket() {
         if (template === undefined) return []
         let tags: string[] = []
         try { const parsed: unknown = JSON.parse(typeof item.tags === 'string' ? item.tags : '[]'); if (Array.isArray(parsed)) tags = parsed.filter((tag): tag is string => typeof tag === 'string') } catch { /* Invalid metadata cannot add tags. */ }
+        const detailSections = parseExpertDetailSections(item.detail_sections)
         return [{ ...template,
           name: typeof item.name === 'string' ? item.name : template.name,
           role: typeof item.subtitle === 'string' ? item.subtitle : template.role,
           category: typeof item.category === 'string' ? item.category : template.category,
           summary: typeof item.summary === 'string' ? item.summary : template.summary,
-          icon: item.icon === 'gis' || item.icon === 'survey' || item.icon === 'planning' ? item.icon : template.icon,
+          icon: typeof item.icon === 'string' && item.icon.trim() !== '' ? item.icon : template.icon,
           tags,
           scenario: typeof item.scenario === 'string' ? item.scenario : '',
           materials: typeof item.materials === 'string' ? item.materials : '',
+          ...(detailSections === undefined ? {} : { detailSections }),
         }]
       }))
       setLoadError(null)
@@ -691,29 +770,85 @@ function ExpertMarket() {
   const [tab, setTab] = useState<'experts' | 'teams'>('experts')
   const [openedGeology, setOpenedGeology] = useState(false)
   const [geologyActive, setGeologyActive] = useState(false)
+  const [openedMeeting, setOpenedMeeting] = useState(false)
+  const [meetingActive, setMeetingActive] = useState(false)
+  const [openedThirdSurvey, setOpenedThirdSurvey] = useState(false)
+  const [thirdSurveyActive, setThirdSurveyActive] = useState(false)
+  const [openedPlanReview, setOpenedPlanReview] = useState(false)
+  const [planReviewActive, setPlanReviewActive] = useState(false)
+  const [openedFileConversion, setOpenedFileConversion] = useState(false)
+  const [fileConversionActive, setFileConversionActive] = useState(false)
+  const [openedDocumentIntelligence, setOpenedDocumentIntelligence] = useState(false)
+  const [documentIntelligenceActive, setDocumentIntelligenceActive] = useState(false)
   const [category, setCategory] = useState('全部')
   const [selected, setSelected] = useState<ExpertMarketDetail | null>(null)
   const categories = ['全部', ...new Set(publishedExperts.map(expert => expert.category))]
   const visibleExperts = category === '全部' ? publishedExperts : publishedExperts.filter(expert => expert.category === category)
-  const openExpert = (expert: Expert) => setSelected({ id: expert.id, name: expert.name, role: expert.role, summary: expert.summary, tags: expert.tags, examples: expert.examples, accent: expert.accent, icon: expert.icon, ...(expert.scenario === undefined ? {} : { scenario: expert.scenario }), ...(expert.materials === undefined ? {} : { materials: expert.materials }) })
+  const openExpert = (expert: Expert) => setSelected({ id: expert.id, name: expert.name, role: expert.role, summary: expert.summary, tags: expert.tags, examples: expert.examples, accent: expert.accent, icon: expert.icon, ...(expert.scenario === undefined ? {} : { scenario: expert.scenario }), ...(expert.materials === undefined ? {} : { materials: expert.materials }), ...(expert.detailSections === undefined ? {} : { detailSections: expert.detailSections }) })
   const openTeam = (team: ExpertTeam) => setSelected({ id: team.id, name: team.name, role: '多角色协同工作流', summary: team.summary, tags: team.members, examples: ['根据当前工作区资料启动该专家团审查', '为该专家团补充本项目的交付要求'], accent: team.accent, members: team.members, skills: team.skills })
-  return <section className={`dsh-expert-market${geologyActive ? ' dsh-expert-market-open' : ''}`}>
-    <nav className="dsh-expert-tabs" aria-label="专家库内容"><button type="button" className={!geologyActive && tab === 'experts' ? 'active' : ''} onClick={() => { setTab('experts'); setGeologyActive(false) }}>专家</button><button type="button" className={!geologyActive && tab === 'teams' ? 'active' : ''} onClick={() => { setTab('teams'); setGeologyActive(false) }}>专家团</button>{openedGeology && <span className={`dsh-expert-open-tab${geologyActive ? ' active' : ''}`}><button type="button" onClick={() => setGeologyActive(true)}>地质条件分析专家</button><button type="button" className="dsh-expert-tab-close" aria-label="关闭地质条件分析专家" onClick={() => { setOpenedGeology(false); setGeologyActive(false); setTab('experts') }}>×</button></span>}</nav>
-    {openedGeology && <div className="dsh-expert-workspace" hidden={!geologyActive}><GeologyWorkbench {...(geologyTaskService === undefined ? {} : { service: geologyTaskService })} /></div>}
-    {!geologyActive && <>
-      {tab === 'experts' && <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div>{loadError !== null && <p role="alert">专家目录加载失败：{loadError}</p>}{loadError === null && visibleExperts.length === 0 && <p>当前暂无已上架的专家。</p>}<div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className={`dsh-expert-card${expert.id === 'geology-analysis' ? ' dsh-expert-card-geology' : ''}`} key={expert.id} onClick={() => openExpert(expert)}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>}
+  const workspaceActive = geologyActive || meetingActive || thirdSurveyActive || planReviewActive || fileConversionActive || documentIntelligenceActive
+  return <section className={`dsh-expert-market${workspaceActive ? ' dsh-expert-market-open' : ''}`}>
+    <nav className="dsh-expert-tabs" aria-label="专家库内容">
+      <button type="button" className={!workspaceActive && tab === 'experts' ? 'active' : ''} onClick={() => { setTab('experts'); setGeologyActive(false); setMeetingActive(false); setThirdSurveyActive(false); setPlanReviewActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false) }}>专家</button>
+      <button type="button" className={!workspaceActive && tab === 'teams' ? 'active' : ''} onClick={() => { setTab('teams'); setGeologyActive(false); setMeetingActive(false); setThirdSurveyActive(false); setPlanReviewActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false) }}>专家团</button>
+      {openedGeology && <span className={`dsh-expert-open-tab${geologyActive ? ' active' : ''}`}><button type="button" onClick={() => { setGeologyActive(true); setMeetingActive(false); setThirdSurveyActive(false); setPlanReviewActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false) }}>地质条件分析专家</button><button type="button" className="dsh-expert-tab-close" aria-label="关闭地质条件分析专家" onClick={() => { setOpenedGeology(false); setGeologyActive(false); setTab('experts') }}>×</button></span>}
+      {openedThirdSurvey && <span className={`dsh-expert-open-tab${thirdSurveyActive ? ' active' : ''}`}><button type="button" onClick={() => { setThirdSurveyActive(true); setGeologyActive(false); setMeetingActive(false); setPlanReviewActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false) }}>三调土地利用现状分析专家</button><button type="button" className="dsh-expert-tab-close" aria-label="关闭三调土地利用现状分析专家" onClick={() => { setOpenedThirdSurvey(false); setThirdSurveyActive(false); setTab('experts') }}>×</button></span>}
+      {openedPlanReview && <span className={`dsh-expert-open-tab${planReviewActive ? ' active' : ''}`}><button type="button" onClick={() => { setPlanReviewActive(true); setGeologyActive(false); setMeetingActive(false); setThirdSurveyActive(false) }}>土地利用规划审查专家</button><button type="button" className="dsh-expert-tab-close" aria-label="关闭土地利用规划审查专家" onClick={() => { setOpenedPlanReview(false); setPlanReviewActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false); setTab('experts') }}>×</button></span>}
+      {openedMeeting && <span className={`dsh-expert-open-tab${meetingActive ? ' active' : ''}`}><button type="button" onClick={() => { setMeetingActive(true); setGeologyActive(false); setThirdSurveyActive(false); setPlanReviewActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false) }}>会议纪要专家</button><button type="button" className="dsh-expert-tab-close" aria-label="关闭会议纪要专家" onClick={() => { setOpenedMeeting(false); setMeetingActive(false); setTab('experts') }}>×</button></span>}
+      {openedFileConversion && <span className={`dsh-expert-open-tab${fileConversionActive ? ' active' : ''}`}><button type="button" onClick={() => { setFileConversionActive(true); setDocumentIntelligenceActive(false); setGeologyActive(false); setMeetingActive(false); setThirdSurveyActive(false); setPlanReviewActive(false) }}>文件转换与 PDF 工具专家</button><button type="button" className="dsh-expert-tab-close" onClick={() => { setOpenedFileConversion(false); setFileConversionActive(false); setTab('experts') }}>×</button></span>}
+      {openedDocumentIntelligence && <span className={`dsh-expert-open-tab${documentIntelligenceActive ? ' active' : ''}`}><button type="button" onClick={() => { setDocumentIntelligenceActive(true); setFileConversionActive(false); setGeologyActive(false); setMeetingActive(false); setThirdSurveyActive(false); setPlanReviewActive(false) }}>文档智能处理专家</button><button type="button" className="dsh-expert-tab-close" onClick={() => { setOpenedDocumentIntelligence(false); setDocumentIntelligenceActive(false); setTab('experts') }}>×</button></span>}
+    </nav>
+    {openedGeology && <div className="dsh-expert-workspace" hidden={!geologyActive}><GeologyWorkbench expertIcon={publishedExperts.find(expert => expert.id === 'geology-analysis')?.icon} expertName={publishedExperts.find(expert => expert.id === 'geology-analysis')?.name} expertSubtitle={publishedExperts.find(expert => expert.id === 'geology-analysis')?.role} {...(geologyTaskService === undefined ? {} : { service: geologyTaskService })} /></div>}
+    {openedThirdSurvey && <div className="dsh-expert-workspace" hidden={!thirdSurveyActive}><ThirdSurveyWorkbench expertIcon={publishedExperts.find(expert => expert.id === 'third-survey-analysis')?.icon} expertName={publishedExperts.find(expert => expert.id === 'third-survey-analysis')?.name} expertSubtitle={publishedExperts.find(expert => expert.id === 'third-survey-analysis')?.role} {...(thirdSurveyTaskService === undefined ? {} : { service: thirdSurveyTaskService })} /></div>}
+    {openedPlanReview && <div className="dsh-expert-workspace" hidden={!planReviewActive}><LandUsePlanReviewWorkbench expertIcon={publishedExperts.find(expert => expert.id === 'land-use-plan-review')?.icon} expertName={publishedExperts.find(expert => expert.id === 'land-use-plan-review')?.name} expertSubtitle={publishedExperts.find(expert => expert.id === 'land-use-plan-review')?.role} {...(landUsePlanReviewTaskService === undefined ? {} : { service: landUsePlanReviewTaskService })} /></div>}
+    {openedMeeting && <div className="dsh-expert-workspace" hidden={!meetingActive}><MeetingMinutesWorkbench expertIcon={publishedExperts.find(expert => expert.id === 'meeting-minutes')?.icon} expertName={publishedExperts.find(expert => expert.id === 'meeting-minutes')?.name} expertSubtitle={publishedExperts.find(expert => expert.id === 'meeting-minutes')?.role} {...(meetingTaskService === undefined ? {} : { service: meetingTaskService })} /></div>}
+    {openedFileConversion && <div className="dsh-expert-workspace" hidden={!fileConversionActive}><FileConversionWorkbench expertIcon={publishedExperts.find(expert => expert.id === 'file-conversion-pdf')?.icon} expertName={publishedExperts.find(expert => expert.id === 'file-conversion-pdf')?.name} expertSubtitle={publishedExperts.find(expert => expert.id === 'file-conversion-pdf')?.role} service={fileConversionTaskService} /></div>}
+    {openedDocumentIntelligence && <div className="dsh-expert-workspace" hidden={!documentIntelligenceActive}><DocumentIntelligenceWorkbench expertIcon={publishedExperts.find(expert => expert.id === 'document-intelligence')?.icon} expertName={publishedExperts.find(expert => expert.id === 'document-intelligence')?.name} expertSubtitle={publishedExperts.find(expert => expert.id === 'document-intelligence')?.role} service={documentIntelligenceTaskService} /></div>}
+    {!workspaceActive && <>
+      {tab === 'experts' && <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div>{loadError !== null && <p role="alert">专家目录加载失败：{loadError}</p>}{loadError === null && visibleExperts.length === 0 && <p>当前暂无已上架的专家。</p>}<div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className={`dsh-expert-card${expert.id === 'geology-analysis' ? ' dsh-expert-card-geology' : expert.id === 'meeting-minutes' ? ' dsh-expert-card-meeting' : ''}`} key={expert.id} onClick={() => openExpert(expert)}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>}
       {tab === 'teams' && <div className="dsh-expert-grid teams">{EXPERT_TEAMS.map(team => <button type="button" className="dsh-expert-card" key={team.id} onClick={() => openTeam(team)}><span className="dsh-expert-avatar" style={{ background: `${team.accent}18`, color: team.accent }}><MarketplaceSectionIcon section="experts" size={25} /></span><div><strong>{team.name}</strong><small>多角色协同工作流</small></div><p>{team.summary}</p><footer>{team.members.slice(0, 3).map(member => <b key={member}>{member}</b>)}<b>+{team.members.length}</b></footer></button>)}</div>}
     </>}
     {selected !== null && <div className="dsh-expert-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}>
       {selected.id === 'geology-analysis' ? <section className="dsh-expert-detail dsh-expert-detail-geology" role="dialog" aria-modal="true" aria-label={`${selected.name}详情`}>
-        <header className="dsh-geology-modal-hero"><div className="dsh-geology-modal-title"><span className="dsh-geology-modal-avatar"><GeologyIcon name="mountain" /></span><div><h2>{selected.name}</h2><p>{selected.role}</p><small>{selected.summary}</small></div></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header>
+        <header className="dsh-geology-modal-hero"><div className="dsh-geology-modal-title"><span className="dsh-geology-modal-avatar"><ExpertAvatar expert={{ icon: selected.icon ?? 'gis' }} /></span><div><h2>{selected.name}</h2><p>{selected.role}</p><small>{selected.summary}</small></div></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header>
         <div className="dsh-geology-modal-grid">
-          <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="workspace" /><h3>适用场景</h3><span>场景应用</span></div><p>{selected.scenario || '适用于项目选址、规划前期研判及地质环境与灾害易发性分析。'}</p></section>
-          <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="files" /><h3>需要准备的材料</h3><span>数据要求</span></div><ul><li>项目地块的面范围数据，支持 GeoJSON、完整 Shape ZIP，或同名的 .shp / .shx / .dbf 文件。</li><li>文件无法识别坐标系时，请提供坐标系说明。</li><li>如果有分区名称字段，可在工作台中填写。</li></ul></section>
-          <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="result" /><h3>交付成果</h3><span>输出内容</span></div><ul><li>地质环境与地质灾害易发性分析结论</li><li>本次任务实际生成的 Word 专业报告</li><li>本次任务实际生成的 Excel 明细</li></ul></section>
-          <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="layers" /><h3>专业方向</h3><span>能力范围</span></div><ul>{selected.tags.map(tag => <li key={tag}>{tag}</li>)}</ul></section>
+          {selected.detailSections !== undefined ? <ConfiguredExpertSections sections={selected.detailSections} /> : <>
+            <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="workspace" /><h3>适用场景</h3><span>场景应用</span></div><p>{selected.scenario || '适用于项目选址、规划前期研判及地质环境与灾害易发性分析。'}</p></section>
+            <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="files" /><h3>需要准备的材料</h3><span>数据要求</span></div><ul><li>项目地块的面范围数据，支持 GeoJSON、完整 Shape ZIP，或同名的 .shp / .shx / .dbf 文件。</li><li>文件无法识别坐标系时，请提供坐标系说明。</li><li>如果有分区名称字段，可在工作台中填写。</li></ul></section>
+            <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="result" /><h3>交付成果</h3><span>输出内容</span></div><ul><li>地质环境与地质灾害易发性分析结论</li><li>本次任务实际生成的 Word 专业报告</li><li>本次任务实际生成的 Excel 明细</li></ul></section>
+            <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="layers" /><h3>专业方向</h3><span>能力范围</span></div><ul>{selected.tags.map(tag => <li key={tag}>{tag}</li>)}</ul></section>
+          </>}
         </div>
         <footer><small>基于您提交的真实地块数据进行分析</small><div><button type="button" className="dsh-geology-modal-cancel" onClick={() => setSelected(null)}>取消</button><button type="button" onClick={startGeology}>开始使用</button></div></footer>
+      </section> : selected.id === 'third-survey-analysis' ? <section className="dsh-expert-detail dsh-expert-detail-geology" role="dialog" aria-modal="true" aria-label={`${selected.name}详情`}>
+        <header className="dsh-geology-modal-hero"><div className="dsh-geology-modal-title"><span className="dsh-geology-modal-avatar"><ExpertAvatar expert={{ icon: selected.icon ?? 'survey' }} /></span><div><h2>{selected.name}</h2><p>{selected.role}</p><small>{selected.summary}</small></div></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header>
+        <div className="dsh-geology-modal-grid">{selected.detailSections !== undefined ? <ConfiguredExpertSections sections={selected.detailSections} /> : <><section><div className="dsh-geology-modal-section-head"><GeologyIcon name="workspace" /><h3>适用场景</h3><span>现状研判</span></div><p>{selected.scenario || '适用于项目选址、用地现状研判和前期资料核验。'}</p></section><section><div className="dsh-geology-modal-section-head"><GeologyIcon name="files" /><h3>需要准备的材料</h3><span>数据要求</span></div><ul><li>GeoJSON、完整 Shape ZIP，或同名的 .shp / .shx / .dbf 文件。</li><li>如果有 .prj 文件，请一并提供。</li><li>坐标系无法识别时，请提供明确说明。</li></ul></section><section><div className="dsh-geology-modal-section-head"><GeologyIcon name="result" /><h3>交付成果</h3><span>真实产物</span></div><ul><li>三调土地利用现状分析结论</li><li>Word 专业分析报告</li><li>Excel 分析明细</li></ul></section><section><div className="dsh-geology-modal-section-head"><GeologyIcon name="layers" /><h3>专业方向</h3><span>能力范围</span></div><ul>{selected.tags.map(tag => <li key={tag}>{tag}</li>)}</ul></section></>}</div>
+        <footer><small>基于本次范围和指定三调年度开展真实分析</small><div><button type="button" className="dsh-geology-modal-cancel" onClick={() => setSelected(null)}>取消</button><button type="button" onClick={startThirdSurvey}>开始使用</button></div></footer>
+      </section> : selected.id === 'land-use-plan-review' ? <section className="dsh-expert-detail dsh-expert-detail-geology" role="dialog" aria-modal="true" aria-label={`${selected.name}详情`}>
+        <header className="dsh-geology-modal-hero"><div className="dsh-geology-modal-title"><span className="dsh-geology-modal-avatar"><ExpertAvatar expert={{ icon: selected.icon ?? 'planning' }} /></span><div><h2>{selected.name}</h2><p>{selected.role}</p><small>{selected.summary}</small></div></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header>
+        <div className="dsh-geology-modal-grid">{selected.detailSections !== undefined ? <ConfiguredExpertSections sections={selected.detailSections} /> : <><section><div className="dsh-geology-modal-section-head"><GeologyIcon name="workspace" /><h3>适用场景</h3><span>规划审查</span></div><p>{selected.scenario || '适用于项目选址、规划前置审查和用地合规研判。'}</p></section><section><div className="dsh-geology-modal-section-head"><GeologyIcon name="files" /><h3>需要准备的材料</h3><span>数据要求</span></div><ul><li>GeoJSON、完整 Shape ZIP，或同名的 .shp / .shx / .dbf 文件。</li><li>如果有 .prj 文件，请一并提供。</li><li>坐标系无法识别时，请提供明确说明。</li></ul></section><section><div className="dsh-geology-modal-section-head"><GeologyIcon name="result" /><h3>交付成果</h3><span>真实产物</span></div><ul><li>规划符合性与用途管制审查说明</li><li>Word 专业分析报告</li><li>Excel 分析明细</li></ul></section><section><div className="dsh-geology-modal-section-head"><GeologyIcon name="layers" /><h3>专业方向</h3><span>能力范围</span></div><ul>{selected.tags.map(tag => <li key={tag}>{tag}</li>)}</ul></section></>}</div>
+        <footer><small>结果用于规划合规研判，不等同于行政审批决定</small><div><button type="button" className="dsh-geology-modal-cancel" onClick={() => setSelected(null)}>取消</button><button type="button" onClick={startPlanReview}>开始使用</button></div></footer>
+      </section> : selected.id === 'file-conversion-pdf' || selected.id === 'document-intelligence' ? <section className="dsh-expert-detail dsh-expert-detail-geology" role="dialog" aria-modal="true" aria-label={`${selected.name}详情`}>
+        <header className="dsh-geology-modal-hero"><div className="dsh-geology-modal-title"><span className="dsh-geology-modal-avatar"><ExpertAvatar expert={{ icon: selected.icon ?? 'writing' }} /></span><div><h2>{selected.name}</h2><p>{selected.role}</p><small>{selected.summary}</small></div></div><button type="button" onClick={() => setSelected(null)}>×</button></header>
+        <div className="dsh-geology-modal-grid">
+          {selected.detailSections !== undefined ? <ConfiguredExpertSections sections={selected.detailSections} /> : <>
+            <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="workspace" /><h3>适用场景</h3><span>场景应用</span></div><p>{selected.scenario}</p></section>
+            <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="files" /><h3>需要准备的材料</h3><span>材料要求</span></div><p>{selected.materials}</p></section>
+            <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="result" /><h3>交付成果</h3><span>输出内容</span></div><p>{selected.id === 'file-conversion-pdf' ? '只展示本次任务真实生成的 PDF 或图片文件。' : '摘要交付 Word 与 Markdown；对比交付 Markdown、HTML、JSON 和文本差异。'}</p></section>
+            <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="layers" /><h3>处理原则</h3><span>能力范围</span></div><p>结果以真实技能产物为准，不显示假进度、假统计或不存在的文件。</p></section>
+          </>}
+        </div>
+        <footer><small>{selected.id === 'document-intelligence' ? '重要内容请结合原文复核' : '原文件不会被修改或覆盖'}</small><div><button type="button" className="dsh-geology-modal-cancel" onClick={() => setSelected(null)}>取消</button><button type="button" onClick={selected.id === 'file-conversion-pdf' ? startFileConversion : startDocumentIntelligence}>开始使用</button></div></footer>
+      </section> : selected.id === 'meeting-minutes' ? <section className="dsh-expert-detail dsh-expert-detail-meeting" role="dialog" aria-modal="true" aria-label={`${selected.name}详情`}>
+        <header className="dsh-meeting-modal-hero"><div className="dsh-meeting-modal-title"><span className="dsh-meeting-modal-avatar"><ExpertAvatar expert={{ icon: selected.icon ?? 'meeting' }} /></span><div><h2>{selected.name}</h2><p>{selected.role}</p><small>{selected.summary}</small></div></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header>
+        <div className="dsh-meeting-modal-grid">
+          {selected.detailSections !== undefined ? <ConfiguredExpertSections sections={selected.detailSections} /> : <>
+            <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="workspace" /><h3>适用场景</h3><span>场景应用</span></div><p>{selected.scenario || '适用于例会、项目沟通、评审会及访谈材料整理。'}</p></section>
+            <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="files" /><h3>需要准备的材料</h3><span>材料要求</span></div><p>最多一个 WAV、M4A 或 MP3 录音，可同时提供 TXT、Markdown、CSV、JSON、YAML、Word、PDF 或 Excel 材料；也支持仅使用文字材料。</p></section>
+            <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="result" /><h3>本专家交付</h3><span>输出内容</span></div><p>一个本次任务实际生成的 Word 会议纪要，包含决策、待办和未决问题。</p></section>
+            <section><div className="dsh-geology-modal-section-head"><GeologyIcon name="layers" /><h3>处理原则</h3><span>内容规则</span></div><p>材料未明确的参会人、责任人和时间会标记为“未明确”，不会补造内容。</p></section></>}
+        </div>
+        <footer><small>录音转写和材料整理完成后生成正式纪要</small><div><button type="button" onClick={() => setSelected(null)}>取消</button><button type="button" onClick={startMeeting}>开始使用</button></div></footer>
       </section> : <section className="dsh-expert-detail" role="dialog" aria-modal="true" aria-label={`${selected.name}详情`}><header><div><span style={{ background: `${selected.accent}18`, color: selected.accent }}>{selected.icon !== undefined ? <ExpertAvatar expert={{ icon: selected.icon }} /> : <MarketplaceSectionIcon section="experts" size={24} />}</span><div><h2>{selected.name}</h2><p>{selected.role}</p></div></div><button type="button" onClick={() => setSelected(null)} aria-label="关闭">×</button></header><p className="dsh-expert-detail-summary">{selected.summary}</p><div className="dsh-expert-detail-block"><span>专业方向</span><div>{selected.tags.map(tag => <b key={tag}>{tag}</b>)}</div></div>{selected.scenario && <div className="dsh-expert-detail-block"><span>适用场景</span><p>{selected.scenario}</p></div>}{selected.materials && <div className="dsh-expert-detail-block"><span>准备材料</span><p>{selected.materials}</p></div>}<footer><small>专家团工作台将在后续版本开放。</small><button type="button" disabled>开始使用</button></footer></section>}
     </div>}
   </section>
@@ -1795,6 +1930,11 @@ export function apply(ctx: ClientContext): void {
     })
   }
   geologyTaskService = createGeologyTaskService(connection, workspaces)
+  meetingTaskService = createMeetingTaskService(connection, workspaces)
+  thirdSurveyTaskService = createThirdSurveyTaskService(connection, workspaces)
+  landUsePlanReviewTaskService = createLandUsePlanReviewTaskService(connection, workspaces)
+  fileConversionTaskService = createOfficeTaskService(connection, workspaces, 'file-conversion-pdf', '文件转换')
+  documentIntelligenceTaskService = createOfficeTaskService(connection, workspaces, 'document-intelligence', '文档智能处理')
   loadRemoteSkills = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'skill-list', {})) as { items?: unknown }
     return Array.isArray(raw?.items) ? raw.items.filter((item): item is RemoteSkill => typeof item === 'object' && item !== null) : []

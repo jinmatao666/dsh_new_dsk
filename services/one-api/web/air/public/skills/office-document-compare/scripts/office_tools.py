@@ -476,18 +476,40 @@ def document_compare(args: argparse.Namespace) -> dict[str, Any]:
         "- 本报告用于快速定位文本变化，重要条款、数字、日期和责任分工应由经办人员复核。",
         "- 对比范围不包括版式、图片、批注、修订痕迹等视觉差异。",
     ])
-    with tempfile.TemporaryDirectory(prefix="wanwei-document-compare-") as temporary:
-        summary = Path(temporary) / "文档差异对比报告.md"
-        summary.write_text("\n".join(lines), encoding="utf-8")
-        rendered = render_markdown_docx(argparse.Namespace(
+    summary = unique_path(directory, "文档差异对比摘要.md", args.overwrite)
+    summary.write_text("\n".join(lines), encoding="utf-8")
+    structured = unique_path(directory, "文档差异明细.json", args.overwrite)
+    write_json(structured, {
+        "schemaVersion": 1,
+        "original": {"name": old_path.name, "path": str(old_path)},
+        "revised": {"name": new_path.name, "path": str(new_path)},
+        "counts": counts,
+        "changes": changes,
+        "limitations": ["仅比较可提取文本", "不比较版式、图片、批注和修订痕迹"],
+    })
+    unified = unique_path(directory, "文档文本差异.diff", args.overwrite)
+    unified.write_text("\n".join(difflib.unified_diff(
+        old_lines,
+        new_lines,
+        fromfile=old_path.name,
+        tofile=new_path.name,
+        lineterm="",
+    )), encoding="utf-8")
+    rendered = render_markdown_docx(argparse.Namespace(
             input=str(summary),
             output_name="文档差异对比报告.docx",
             title="文档差异对比报告",
             output_dir=str(directory),
             overwrite=args.overwrite,
-        ))
+    ))
     docx_path = rendered["artifacts"][0]["path"]
-    artifacts = [Artifact(docx_path, "docx", "文档差异对比报告"), Artifact(str(html_path), "html", "可视化逐行对比")]
+    artifacts = [
+        Artifact(docx_path, "docx", "文档差异对比报告"),
+        Artifact(str(summary), "md", "文档差异摘要"),
+        Artifact(str(html_path), "html", "可视化逐行对比"),
+        Artifact(str(structured), "json", "结构化差异明细"),
+        Artifact(str(unified), "diff", "统一文本差异"),
+    ]
     return {"success": True, "counts": counts, "artifacts": [asdict(item) for item in artifacts]}
 
 

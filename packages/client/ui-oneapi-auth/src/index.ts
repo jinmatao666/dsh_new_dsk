@@ -285,6 +285,15 @@ function boundedText(value: unknown, max: number): string | undefined {
   return text === '' ? undefined : text.slice(0, max)
 }
 
+const developmentExperts = [
+  { key: 'geology-analysis', name: '地质条件分析专家', subtitle: '地质环境与灾害易发性分析', category: '空间分析', summary: '提交项目地块范围，分析地质环境条件与地质灾害易发性，查看 Excel 明细和 Word 专业报告。', icon: 'gis', tags: '["地质环境","灾害易发性","专业报告"]', scenario: '适用于项目选址、规划前期资料研判及地质灾害易发性分析。', materials: '提供面或多面的 GeoJSON、完整 Shape 文件或 Shape ZIP；坐标系无法从文件识别时需人工确认。' },
+  { key: 'third-survey-analysis', name: '三调土地利用现状分析专家', subtitle: '三调地类、面积与权属现状分析', category: '空间分析', summary: '提交项目地块范围，分析三调土地利用现状、主要地类构成及耕地保护相关情况，查看专业报告和明细。', icon: 'survey', tags: '["三调现状","地类构成","耕地保护"]', scenario: '项目选址、用地现状研判、前期资料核验。', materials: 'GeoJSON、完整 Shape 文件或 Shape ZIP；坐标系无法识别时需人工确认。' },
+  { key: 'land-use-plan-review', name: '土地利用规划审查专家', subtitle: '规划符合性与用途管制审查', category: '空间分析', summary: '提交项目地块范围，审查项目与规划管控要求的空间关系，识别冲突范围、风险事项和需进一步核实内容。', icon: 'planning', tags: '["规划审查","用途管制","合规风险"]', scenario: '项目选址、规划前置审查、用地合规研判。', materials: 'GeoJSON、完整 Shape 文件或 Shape ZIP；坐标系无法识别时需人工确认。' },
+  { key: 'file-conversion-pdf', name: '文件转换与 PDF 工具专家', subtitle: '常用文档、PDF 与图片批量处理', category: '办公工具', summary: '提供 Word 转 PDF、PDF 转图片、PDF 合并拆分、图片转 PDF，以及图片压缩与格式转换能力。', icon: 'writing', tags: '["文件转换","PDF 工具","图片处理"]', scenario: '办公文件转换、PDF 页面整理、图片归档和批量图片优化。', materials: '根据所选工具提供 Word、PDF 或 JPG、JPEG、PNG、WebP 图片文件。' },
+  { key: 'document-intelligence', name: '文档智能处理专家', subtitle: '摘要提炼与版本差异分析', category: '办公工具', summary: '读取办公文档，提取摘要、重点、风险、时间节点和待办事项，或比较两份材料的新增、删除及关键变化。', icon: 'writing', tags: '["文档摘要","要点提取","文档对比"]', scenario: '政策文件、项目报告、合同、制度和会议材料的快速阅读及版本变化核对。', materials: '摘要任务提供一份或多份可读取文档；对比任务提供原始版本和新版本各一份。' },
+  { key: 'meeting-minutes', name: '会议纪要专家', subtitle: '录音转写与结构化纪要', category: '办公工具', summary: '提交会议录音、已有转写稿和相关文字材料，生成结构清晰的 Word 会议纪要。', icon: 'meeting', tags: '["录音转写","会议纪要","行动事项"]', scenario: '适用于例会、项目沟通、评审会及访谈材料整理。', materials: '最多一个 WAV、M4A 或 MP3 录音，可同时提供多个可读取的文字材料；也支持仅使用文字材料。' },
+] as const
+
 /** Services required by the Host half. */
 export const inject = ['connection', 'credentials', 'settings', 'agentDefaultModel']
 
@@ -544,6 +553,7 @@ export function apply(ctx: Context, config: Config): void {
       try {
         return { ok: true as const, value: await listPublishedExperts(signal) }
       } catch (error) {
+        if (config.developmentBypass === true) return { ok: true as const, value: { items: developmentExperts } }
         return internal(error instanceof Error ? error.message : String(error))
       }
     }

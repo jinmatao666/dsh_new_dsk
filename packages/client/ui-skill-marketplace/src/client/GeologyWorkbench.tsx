@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import css from './GeologyWorkbench.module.css'
+import { ExpertProfileIcon } from './ExpertProfileIcon.tsx'
 import type { GeologyResult, GeologyTask, GeologyTaskService } from './geology-task.ts'
 import { TerrainIllustration } from './TerrainIllustration.tsx'
 import { geologyIconImages } from './GeologyIconData.ts'
 import { GeologyAnalysisView } from './GeologyAnalysisView.tsx'
+import { geologyHero } from './LandExpertHeroImages.ts'
 
 type GeologyIconName = 'mountain' | 'new' | 'workspace' | 'history' | 'files' | 'guide' | 'upload' | 'back' | 'layers' | 'geojson' | 'zip' | 'word' | 'excel' | 'result' | 'success' | 'failed' | 'running' | 'info' | 'help' | 'empty'
 export function GeologyIcon({ name, className = '' }: { name: GeologyIconName; className?: string }) {
@@ -56,7 +58,12 @@ function ResultStatus({ result }: { result: GeologyResult | undefined }) {
 }
 
 /** Geology expert workspace; its service executes the shipped skill through an archived session. */
-export function GeologyWorkbench({ service }: { service?: GeologyTaskService }) {
+export function GeologyWorkbench({ service, expertIcon, expertName, expertSubtitle }: {
+  service?: GeologyTaskService
+  expertIcon?: string | undefined
+  expertName?: string | undefined
+  expertSubtitle?: string | undefined
+}) {
   const [section, setSection] = useState<Section>('workbench')
   const [step, setStep] = useState<Step>('home')
   const [projectName, setProjectName] = useState('')
@@ -168,8 +175,8 @@ export function GeologyWorkbench({ service }: { service?: GeologyTaskService }) 
   return <div className={css.shell}>
     <aside className={css.sidebar} aria-label="地质条件分析专家功能">
       <div className={css.identity}>
-        <span className={css.identityMark}><GeologyIcon name="mountain" /></span>
-        <div><strong>地质条件分析</strong><small>项目范围研判工作台</small></div>
+        <span className={css.identityMark}><ExpertProfileIcon icon={expertIcon ?? 'gis'} /></span>
+        <div><strong>{expertName || '地质条件分析专家'}</strong><small>{expertSubtitle || '项目范围研判工作台'}</small></div>
       </div>
       <button type="button" className={css.newButton} onClick={startNew}>＋ 新建分析</button>
       <nav className={css.sideNav} aria-label="专家页面">
@@ -236,6 +243,7 @@ function HomeView({ onAction }: { onAction: () => void }) {
   return <div className={css.homeLayout}>
     <div className={css.homeMain}>
       <section className={css.homeHero}>
+        <img className={css.homeHeroImage} src={geologyHero} alt="" aria-hidden="true" />
         <span className={css.kicker}>地质条件分析专家</span>
         <h2>地质条件分析专家</h2>
         <p className={css.homeSubhead}>地质环境与灾害易发性分析</p>

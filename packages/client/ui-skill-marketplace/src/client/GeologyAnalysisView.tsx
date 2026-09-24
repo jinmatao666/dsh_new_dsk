@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import css from './GeologyAnalysisView.module.css'
-import type { GeologyTaskService } from './geology-task.ts'
+type AnalysisViewReader = { readAnalysisView(path: string): Promise<unknown> }
 
 type AnalysisTable = { id: string; title: string; columns: string[]; rows: string[][] }
 type AnalysisView = { title: string; tables: AnalysisTable[]; metrics?: { label: string; value: string }[] }
@@ -15,7 +15,7 @@ function parseView(value: unknown): AnalysisView {
   return view as AnalysisView
 }
 
-export function GeologyAnalysisView({ path, service }: { path: string; service: GeologyTaskService }) {
+export function GeologyAnalysisView({ path, service }: { path: string; service: AnalysisViewReader }) {
   const [view, setView] = useState<AnalysisView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)

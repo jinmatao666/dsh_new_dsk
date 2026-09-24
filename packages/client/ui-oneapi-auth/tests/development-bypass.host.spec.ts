@@ -1,5 +1,5 @@
 import { Context } from '@deepseek-ai/cordis'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apply, type Config } from '../src/index.ts'
 
 const config: Config = {
@@ -14,6 +14,7 @@ const config: Config = {
 const previousDevelopment = process.env.DSH_DESKTOP_DEVELOPMENT
 
 afterEach(() => {
+  vi.restoreAllMocks()
   if (previousDevelopment === undefined) delete process.env.DSH_DESKTOP_DEVELOPMENT
   else process.env.DSH_DESKTOP_DEVELOPMENT = previousDevelopment
 })
@@ -46,5 +47,20 @@ describe('desktop development authentication', () => {
       ok: true,
       value: { state: 'authenticated', models: [], username: '本地开发' },
     })
+  })
+
+  it('uses the shipped expert roster when the development server is unavailable', async () => {
+    process.env.DSH_DESKTOP_DEVELOPMENT = '1'
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('fetch failed'))
+    const ctx = new Context()
+    type Handler = (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>
+    let handler: Handler | undefined
+    ctx.provide('connection', { rpc: { handle(_path: string, next: Handler) { handler = next; return async () => {} } } } as never)
+    apply(ctx, config)
+
+    const response = await handler?.('expert-list', {}, new AbortController().signal) as { ok: boolean; value?: { items?: Array<{ key?: string }> } }
+    expect(response.ok).toBe(true)
+    expect(response.value?.items?.map(item => item.key)).toContain('file-conversion-pdf')
+    expect(response.value?.items?.map(item => item.key)).toContain('document-intelligence')
   })
 })

@@ -610,6 +610,7 @@
 .dsh-expert-card:hover { border-color: var(--dsw-alias-border-l2); box-shadow: 0 10px 26px rgb(15 23 42 / 10%); transform: translateY(-3px); }
 .dsh-expert-card:active { transform: translateY(-1px); }
 .dsh-expert-avatar { display: inline-grid; width: 38px; height: 38px; margin-right: 10px; border-radius: 50%; place-items: center; vertical-align: middle; }
+.dsh-expert-avatar > img { width: 28px; height: 28px; object-fit: contain; }
 .dsh-expert-card > div { display: inline-flex; max-width: calc(100% - 52px); flex-direction: column; justify-content: center; vertical-align: middle; }
 .dsh-expert-card strong { overflow: hidden; color: #1b3558; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
 .dsh-expert-card small { margin-top: 4px; overflow: hidden; color: #7a8da8; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
@@ -729,6 +730,28 @@
 .dsh-geology-modal-grid li + li { margin-top: 2px; }
 .dsh-expert-detail-geology footer { margin: 0 22px; padding: 11px 0 15px; }
 @media (max-width: 700px) { .dsh-expert-detail-geology .dsh-geology-modal-title { max-width: 90%; } .dsh-geology-modal-grid { grid-template-columns: 1fr; padding: 14px; } .dsh-expert-detail-geology > .dsh-geology-modal-hero { padding: 20px; } .dsh-geology-modal-hero::before,.dsh-geology-modal-hero::after { opacity: .3; } .dsh-expert-detail-geology footer { margin: 0 14px; flex-wrap: wrap; } }
+
+.dsh-expert-card-meeting { position: relative; overflow: hidden; }
+.dsh-expert-card-meeting::after { position: absolute; right: 18px; bottom: 17px; width: 88px; height: 25px; background: repeating-linear-gradient(90deg,var(--dsw-alias-state-business-primary) 0 2px,transparent 2px 7px); clip-path: polygon(0 45%,10% 30%,20% 60%,30% 10%,40% 80%,50% 35%,60% 65%,70% 15%,80% 72%,90% 38%,100% 50%,100% 58%,90% 48%,80% 85%,70% 28%,60% 78%,50% 48%,40% 92%,30% 22%,20% 72%,10% 42%,0 58%); content: ''; opacity: .18; pointer-events: none; }
+.dsh-expert-detail-meeting { width: min(760px,calc(100vw - 32px)); max-height: min(720px,calc(100vh - 32px)); overflow-y: auto; border-radius: 15px; }
+.dsh-expert-detail-meeting > .dsh-meeting-modal-hero { padding: 16px 22px; border-bottom: 1px solid #e4eaf2; background: #fff; }
+.dsh-meeting-modal-title { display: flex; align-items: flex-start; gap: 12px; max-width: 88%; }
+.dsh-meeting-modal-avatar { display: grid; flex: none; width: 48px; height: 48px; place-items: center; border: 1px solid #c8dcff; border-radius: 13px; background: #e9f2ff; }
+.dsh-meeting-modal-avatar img { width: 36px; height: 36px; object-fit: contain; }
+.dsh-expert-detail-meeting h2 { color: #11213f; font-size: 20px; line-height: 1.2; }
+.dsh-expert-detail-meeting header p { margin: 3px 0 5px; color: #60738e; font-size: 13px; }
+.dsh-expert-detail-meeting header small { display: block; max-width: 62ch; color: #435c7c; font-size: 11px; line-height: 1.45; }
+.dsh-meeting-modal-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; padding: 14px 22px; }
+.dsh-meeting-modal-grid section { min-height: 0; padding: 12px 14px; border: 1px solid #dce8ff; border-radius: 13px; background: #fbfdff; }
+.dsh-meeting-modal-section-head { display: flex; align-items: center; gap: 9px; }
+.dsh-meeting-modal-section-head img { flex: none; width: 30px; height: 30px; object-fit: contain; }
+.dsh-meeting-modal-section-head h3 { flex: 1; margin: 0; color: #142b50; font-size: 14px; white-space: nowrap; }
+.dsh-meeting-modal-section-head span { color: #3672d9; font-size: 11px; white-space: nowrap; }
+.dsh-meeting-modal-grid p { margin: 6px 0 0; color: #425875; font-size: 11px; line-height: 1.55; }
+.dsh-expert-detail-meeting > footer { margin: 0 22px 15px; padding-top: 11px; border-top: 1px solid #e3ebf8; }
+.dsh-expert-detail-meeting > footer > div { display: flex; gap: 9px; }
+.dsh-expert-detail-meeting > footer > div > button:first-child { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); }
+@media (max-width: 680px) { .dsh-meeting-modal-title { max-width: 90%; } .dsh-meeting-modal-grid { grid-template-columns: 1fr; padding: 14px; } .dsh-expert-detail-meeting > footer { margin: 0 14px 14px; flex-wrap: wrap; } }
 @media (max-width: 1120px) { .dsh-expert-market .dsh-expert-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 650px) { .dsh-expert-market .dsh-expert-grid { grid-template-columns: minmax(0,1fr); } }
 

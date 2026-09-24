@@ -27,14 +27,14 @@ function New-OutputPath([string] $baseName) {
   }
 }
 
-function Invoke-ComExport([string] $programId, [System.IO.FileInfo] $input, [string] $target) {
+function Invoke-ComExport([string] $programId, [System.IO.FileInfo] $sourceFile, [string] $target) {
   $application = $null
   $document = $null
   try {
     $application = New-Object -ComObject $programId
     $application.Visible = $false
     $application.DisplayAlerts = 0
-    $document = $application.Documents.Open($input.FullName, $false, $true)
+    $document = $application.Documents.Open($sourceFile.FullName, $false, $true)
     $document.ExportAsFixedFormat($target, 17)
     if (-not (Test-Path -LiteralPath $target)) { throw "$programId 未生成 PDF" }
   } finally {
@@ -57,13 +57,13 @@ function Invoke-ComExport([string] $programId, [System.IO.FileInfo] $input, [str
   }
 }
 
-function Invoke-LibreOfficeExport([System.IO.FileInfo] $input, [string] $target, $soffice) {
+function Invoke-LibreOfficeExport([System.IO.FileInfo] $sourceFile, [string] $target, $soffice) {
   $temporary = Join-Path $outputRoot ('.convert-' + [guid]::NewGuid().ToString('N'))
   [System.IO.Directory]::CreateDirectory($temporary) | Out-Null
   try {
-    & $soffice.Source --headless --convert-to pdf --outdir $temporary $input.FullName | Out-Null
+    & $soffice.Source --headless --convert-to pdf --outdir $temporary $sourceFile.FullName | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "LibreOffice 返回退出码 $LASTEXITCODE" }
-    $converted = Join-Path $temporary ($input.BaseName + '.pdf')
+    $converted = Join-Path $temporary ($sourceFile.BaseName + '.pdf')
     if (-not (Test-Path -LiteralPath $converted)) { throw 'LibreOffice 未生成 PDF' }
     Move-Item -LiteralPath $converted -Destination $target
   } finally {

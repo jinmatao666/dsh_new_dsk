@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-23-geology-expert-workbench.md
-2026-09-23-geology-expert-workbench.md: 4fac11b5dab52d75a3cc5da2e09e154f6b6e6598
-2026-09-23-geology-expert-workbench.zh.md: 510cb8cc9a9ddd4acf22b4239f5874700f3f4d99
+2026-09-23-geology-expert-workbench.md: ce72cf62b397a8d9f2da948405d0380c06260874
+2026-09-23-geology-expert-workbench.zh.md: dee22157d48c5057c9495f2a023ca418dcc6b0b2

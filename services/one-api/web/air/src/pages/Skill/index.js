@@ -5,13 +5,11 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import SkillsTable from '../../components/SkillsTable';
 import SkillCategory from '../SkillCategory';
 import SkillReviewTable from '../../components/SkillReviewTable';
-import ExpertTable from '../../components/ExpertTable';
 import { API, isRoot } from '../../helpers';
 
 const TABS = [
   ['public', '技能库'],
   ['categories', '分类管理'],
-  ['experts', '专家管理'],
   ['reviews', '技能审核']
 ];
 
@@ -19,7 +17,7 @@ const Skill = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const canReview = isRoot();
-  const [activeTab, setActiveTab] = useState(location.pathname === '/skill/categories' ? 'categories' : location.pathname === '/skill/experts' ? 'experts' : location.pathname === '/skill/reviews' && canReview ? 'reviews' : 'public');
+  const [activeTab, setActiveTab] = useState(location.pathname === '/skill/categories' ? 'categories' : location.pathname === '/skill/reviews' && canReview ? 'reviews' : 'public');
   const [libraryKeyword, setLibraryKeyword] = useState('');
   const [categoryKeyword, setCategoryKeyword] = useState('');
   const [pendingReviewCount, setPendingReviewCount] = useState(null);
@@ -33,9 +31,8 @@ const Skill = () => {
       if (location.pathname === '/skill/categories') {
         return 'categories';
       }
-      if (location.pathname === '/skill/experts') return 'experts';
       if (location.pathname === '/skill/reviews' && canReview) return 'reviews';
-      return prev === 'categories' || prev === 'experts' || prev === 'reviews' ? 'public' : prev;
+      return prev === 'categories' || prev === 'reviews' ? 'public' : prev;
     });
   }, [location.pathname, canReview]);
 
@@ -48,10 +45,10 @@ const Skill = () => {
 
   const handleTabChange = (key) => {
     setActiveTab(key);
-    navigate(key === 'categories' ? '/skill/categories' : key === 'experts' ? '/skill/experts' : key === 'reviews' ? '/skill/reviews' : '/skill');
+    navigate(key === 'categories' ? '/skill/categories' : key === 'reviews' ? '/skill/reviews' : '/skill');
   };
 
-  const toolbar = activeTab === 'experts' ? null : activeTab === 'reviews' ? (
+  const toolbar = activeTab === 'reviews' ? (
     <Input
       className='skill-page-search'
       prefix={<IconSearch />}
@@ -120,7 +117,6 @@ const Skill = () => {
         ))}
       </div>
       {activeTab === 'public' && <SkillsTable ref={libraryRef} keyword={libraryKeyword} />}
-      {activeTab === 'experts' && <ExpertTable />}
       {activeTab === 'categories' && (
         <section className='preview-surface skill-admin-surface'>
           <SkillCategory ref={categoryRef} embedded keyword={categoryKeyword} />

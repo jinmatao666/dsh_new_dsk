@@ -1213,7 +1213,8 @@ fn list_expert_output_files(directory: String) -> Result<Vec<String>, String> {
         return Err("分析目录不是文件夹".to_string());
     }
     let mut files = Vec::new();
-    for entry in fs::read_dir(&root).map_err(|error| format!("无法读取分析目录：{error}"))? {
+    for entry in fs::read_dir(&root).map_err(|error| format!("无法读取分析目录：{error}"))?
+    {
         let entry = entry.map_err(|error| format!("无法读取成果文件：{error}"))?;
         let path = entry.path();
         if !path.is_file() {
@@ -1223,16 +1224,56 @@ fn list_expert_output_files(directory: String) -> Result<Vec<String>, String> {
             continue;
         };
         let analysis_view = extension.eq_ignore_ascii_case("json")
-            && path.file_name().and_then(|name| name.to_str()).is_some_and(|name| {
-                name.contains("-analysis-view_") || name.contains("分析视图_") || name.contains("审查视图_")
-            });
-        if !extension.eq_ignore_ascii_case("docx") && !extension.eq_ignore_ascii_case("xlsx") && !analysis_view {
+            && path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    name.contains("-analysis-view_")
+                        || name.contains("分析视图_")
+                        || name.contains("审查视图_")
+                });
+        let expert_output = [
+            "docx", "xlsx", "pdf", "png", "jpg", "jpeg", "webp", "md", "html", "json", "txt",
+            "diff",
+        ]
+        .iter()
+        .any(|allowed| extension.eq_ignore_ascii_case(allowed));
+        if !expert_output && !analysis_view {
             continue;
         }
         files.push(path.to_string_lossy().into_owned());
     }
     files.sort();
     Ok(files)
+}
+
+/// Read a small text artifact from inside one expert task directory.
+#[tauri::command]
+fn read_expert_text_file(directory: String, path: String) -> Result<String, String> {
+    let root = fs::canonicalize(&directory)
+        .map_err(|error| format!("无法访问任务目录 {directory}：{error}"))?;
+    let target =
+        fs::canonicalize(&path).map_err(|error| format!("无法访问成果文件 {path}：{error}"))?;
+    if !target.starts_with(&root) || !target.is_file() {
+        return Err("成果文件不在当前任务目录中".to_string());
+    }
+    let allowed = ["md", "json", "txt", "diff"];
+    let extension = target
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    if !allowed
+        .iter()
+        .any(|value| extension.eq_ignore_ascii_case(value))
+    {
+        return Err("该成果文件不是可读取的文本格式".to_string());
+    }
+    let metadata =
+        fs::metadata(&target).map_err(|error| format!("无法读取成果文件信息：{error}"))?;
+    if metadata.len() > 2 * 1024 * 1024 {
+        return Err("成果文本超过 2 MB，请直接打开文件查看".to_string());
+    }
+    fs::read_to_string(&target).map_err(|error| format!("无法读取成果文本：{error}"))
 }
 
 /// Consume the latest operating-system drop and copy it into the active directory.
@@ -2114,6 +2155,7 @@ pub fn run() {
             reveal_downloaded_file,
             import_workspace_files,
             list_expert_output_files,
+            read_expert_text_file,
             import_dropped_workspace_files,
         ])
         .run(tauri::generate_context!())

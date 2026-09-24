@@ -26,6 +26,7 @@ import EditOrganization from './pages/Organization/EditOrganization';
 import OrgMembers from './pages/Organization/OrgMembers';
 import ParvisDashboard from './pages/ParvisDashboard';
 import Skill from './pages/Skill';
+import Expert from './pages/Expert';
 import Config from './pages/Config';
 import ModelConfigPage from './pages/ModelConfig';
 import MonitorBoard from './pages/MonitorBoard';
@@ -369,13 +370,14 @@ function App() {
             }
           />
           <Route
-            path="/skill/experts"
+            path="/expert"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="skill"><Skill /></PermissionGuard>
+                <PermissionGuard permKey="skill"><Expert /></PermissionGuard>
               </PrivateRoute>
             }
           />
+          <Route path="/skill/experts" element={<Navigate to="/expert" replace />} />
           <Route
             path="/skill/reviews"
             element={
