@@ -6,6 +6,7 @@ import type {
   OfficeTaskService,
 } from './office-task.ts'
 import { ExpertProfileIcon } from './ExpertProfileIcon.tsx'
+import { geologyIconImages } from './GeologyIconData.ts'
 
 export type ToolDef = {
   id: string
@@ -402,7 +403,7 @@ export function OfficeExpertWorkbench({
             className={section === 'home' ? css.active : ''}
             onClick={() => setSection('home')}
           >
-            <img src={visuals.home} alt="" />
+            <img src={geologyIconImages.workspace} alt="" />
             工具工作台
           </button>
           <button
@@ -412,7 +413,7 @@ export function OfficeExpertWorkbench({
               void load()
             }}
           >
-            <img src={visuals.history} alt="" />
+            <img src={geologyIconImages.history} alt="" />
             我的处理记录
           </button>
           <button
@@ -422,14 +423,14 @@ export function OfficeExpertWorkbench({
               void load()
             }}
           >
-            <img src={visuals.files} alt="" />
+            <img src={geologyIconImages.files} alt="" />
             我的成果文件
           </button>
           <button
             className={section === 'guide' ? css.active : ''}
             onClick={() => setSection('guide')}
           >
-            <img src={visuals.guide} alt="" />
+            <img src={geologyIconImages.guide} alt="" />
             使用说明
           </button>
         </nav>

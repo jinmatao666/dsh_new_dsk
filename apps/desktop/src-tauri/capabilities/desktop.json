@@ -23,7 +23,9 @@
     "allow-open-workspace-directory",
     "allow-reveal-downloaded-file",
     "allow-import-workspace-files",
+    "allow-create-expert-task-directory",
     "allow-list-expert-output-files",
+    "allow-read-expert-text-file",
     "allow-import-dropped-workspace-files"
   ]
 }

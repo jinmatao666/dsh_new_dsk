@@ -15,6 +15,7 @@
 .sidebar nav button { display: flex; align-items: center; gap: 11px; padding: 11px 12px; border: 0; border-left: 3px solid transparent; border-radius: 4px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; font: inherit; font-size: 13px; text-align: left; }
 .sidebar nav button:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .sidebar nav .active { border-left-color: var(--dsw-alias-state-business-primary); background: var(--dsw-alias-state-business-tertiary); color: var(--dsw-alias-state-business-primary); font-weight: 650; }
+.sidebar nav .icon { width: 30px; height: 30px; }
 .sideNote { margin-top: auto; padding: 16px 10px 0; border-top: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 18px; }
 .main { min-width: 0; min-height: 0; padding: 32px clamp(28px,4vw,64px) 40px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .error { margin: 0 0 18px; padding: 10px 12px; border: 1px solid var(--dsw-alias-state-danger-border); border-radius: 8px; background: var(--dsw-alias-state-danger-tertiary); color: var(--dsw-alias-state-danger-label); font-size: 12px; }

@@ -21,3 +21,4 @@
 .dashboard>.recent .empty{min-height:145px}
 @media(max-width:1050px){.dashboard{grid-template-columns:1fr}.welcomeCapabilities,.welcomeSteps,.dashboard>.hero,.dashboard>.toolSection,.dashboard>.recent{grid-column:1;grid-row:auto}}
 @media(max-width:650px){.dashboard>.hero>div:first-child{max-width:100%}.welcomeSteps>div{grid-template-columns:1fr}}
+.side nav button img{width:30px;height:30px;filter:none}

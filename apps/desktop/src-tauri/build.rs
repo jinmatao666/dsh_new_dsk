@@ -26,6 +26,7 @@ fn main() {
             "open_workspace_directory",
             "reveal_downloaded_file",
             "import_workspace_files",
+            "create_expert_task_directory",
             "list_expert_output_files",
             "read_expert_text_file",
             "import_dropped_workspace_files",

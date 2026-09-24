@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-create-expert-task-directory"
+description = "Enables the create_expert_task_directory command without any pre-configured scope."
+commands.allow = ["create_expert_task_directory"]
+
+[[permission]]
+identifier = "deny-create-expert-task-directory"
+description = "Denies the create_expert_task_directory command without any pre-configured scope."
+commands.deny = ["create_expert_task_directory"]

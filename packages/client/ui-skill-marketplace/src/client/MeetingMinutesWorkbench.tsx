@@ -3,6 +3,7 @@ import css from './MeetingMinutesWorkbench.module.css'
 import { ExpertProfileIcon } from './ExpertProfileIcon.tsx'
 import type { MeetingResult, MeetingTask, MeetingTaskService } from './meeting-task.ts'
 import { meetingIconImages } from './MeetingIconData.ts'
+import { geologyIconImages } from './GeologyIconData.ts'
 
 type Section = 'workbench' | 'history' | 'files' | 'guide'
 type Step = 'home' | 'prepare' | 'review'
@@ -135,7 +136,7 @@ export function MeetingMinutesWorkbench({ service, expertIcon, expertName, exper
     { id: 'workbench', label: '纪要工作台', icon: 'workbench' }, { id: 'history', label: '我的纪要记录', icon: 'history' }, { id: 'files', label: '我的成果文件', icon: 'file' }, { id: 'guide', label: '使用说明', icon: 'guide' },
   ]
   return <div className={css.shell}>
-    <aside className={css.sidebar} aria-label="会议纪要专家功能"><div className={css.identity}><span><ExpertProfileIcon icon={expertIcon ?? 'meeting'} /></span><div><strong>{expertName || '会议纪要专家'}</strong><small>{expertSubtitle || '录音转写与结构化纪要'}</small></div></div><button type="button" className={css.newButton} onClick={startNew}><Icon name="new" />新建纪要</button><nav>{nav.map(item => <button type="button" key={item.id} className={section === item.id ? css.active : ''} onClick={() => setSection(item.id)}><Icon name={item.icon} />{item.label}</button>)}</nav><p className={css.sideNote}>每个任务只交付一个 Word 会议纪要</p></aside>
+    <aside className={css.sidebar} aria-label="会议纪要专家功能"><div className={css.identity}><span><ExpertProfileIcon icon={expertIcon ?? 'meeting'} /></span><div><strong>{expertName || '会议纪要专家'}</strong><small>{expertSubtitle || '录音转写与结构化纪要'}</small></div></div><button type="button" className={css.newButton} onClick={startNew}><Icon name="new" />新建纪要</button><nav>{nav.map(item => <button type="button" key={item.id} className={section === item.id ? css.active : ''} onClick={() => setSection(item.id)}><img className={css.icon} src={geologyIconImages[item.id === 'workbench' ? 'workspace' : item.id]} alt="" aria-hidden="true" />{item.label}</button>)}</nav><p className={css.sideNote}>每个任务只交付一个 Word 会议纪要</p></aside>
     <main className={css.main}>
       {error && <p className={css.error} role="alert">{error}</p>}
       {section === 'workbench' && activeTask && <TaskResult task={activeTask} result={result} {...(service ? { service } : {})} onHistory={() => setSection('history')} onRetry={startNew} />}
