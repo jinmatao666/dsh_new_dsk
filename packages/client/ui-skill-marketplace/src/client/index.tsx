@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { ClientContext, ISessions, IWorkspaces } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { startSkillUse } from './skill-use.ts'
 import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connection/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -18,7 +19,6 @@ import {
 } from './catalog.ts'
 import type { PersonalSkillReviewFilter, PersonalSkillUploadView } from './catalog.ts'
 import { marketplaceInstallAction } from './install-action.ts'
-import { startSkillUse } from './skill-use.ts'
 import type { MarketplaceInstallState } from './install-action.ts'
 import { markReviewsSeen, recordReviewList, reviewAttentionSnapshot, subscribeReviewAttention } from './review-attention.ts'
 import { GeologyWorkbench, GeologyIcon } from './GeologyWorkbench.tsx'
@@ -1108,6 +1108,7 @@ function SkillMarketplace({ section, chooseDirectory, useSkill }: OverlayProps &
     if (!next.open) {
       setView('list')
       setSelectedSkill(null)
+      setInstallMessage(null)
     }
   }), [])
 
@@ -1121,7 +1122,7 @@ function SkillMarketplace({ section, chooseDirectory, useSkill }: OverlayProps &
     const closeForSidebarAction = (event: PointerEvent) => {
       const target = event.target
       if (!(target instanceof Element)) return
-      if (target.closest('.dsh-skill-market-panel') !== null) return
+      if (target.closest('[data-dsh-sidebar]') === null) return
       if (target.closest('.dsh-skill-market-action') !== null) return
       marketplaceControllers[section].close()
     }
@@ -1914,20 +1915,10 @@ export function apply(ctx: ClientContext): void {
   const workspaces = ctx.get('workspaces') as unknown as IWorkspaces
   const sessions = ctx.get('sessions') as ISessions
   expertLayout = ctx.get('layout') as ILayout
-  let cancelPendingUse: (() => void) | undefined
-  ctx.effect(() => () => cancelPendingUse?.(), 'skill-marketplace: pending skill use')
   const useSkill = (slug: string) => {
-    cancelPendingUse?.()
-    cancelPendingUse = startSkillUse(sessions, slug, (sessionId, skillSlugValue) => {
-      const scoped = sessions.scope(sessionId)
-      if (scoped === undefined) return
-      const conversation = scoped.get('conversation')
-      if (conversation === undefined) throw new Error('skill-marketplace: conversation service unavailable')
-      void conversation.send(`/${skillSlugValue} 请先加载这个技能。如果执行需要任务说明、文件或参数，请先询问我。`)
-        .catch((error: unknown) => {
-          conversation.input.for(scoped).notify('error', error instanceof Error ? error.message : String(error))
-        })
-    })
+    const conversation = ctx.get('conversation')
+    if (conversation === undefined) throw new Error('skill-marketplace: conversation service unavailable')
+    startSkillUse(sessions, conversation, slug)
   }
   geologyTaskService = createGeologyTaskService(connection, workspaces)
   meetingTaskService = createMeetingTaskService(connection, workspaces)

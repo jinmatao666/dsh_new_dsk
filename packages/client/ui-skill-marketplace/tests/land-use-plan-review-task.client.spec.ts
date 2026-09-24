@@ -9,13 +9,15 @@ afterEach(() => {
 
 describe('land use plan review expert execution', () => {
   it('starts a fresh archived skill session and reads only its actual answer and output files', async () => {
-    const invoke = vi.fn(async (command: string) => command === 'import_workspace_files'
-      ? ['parcel.geojson']
-      : command === 'list_marketplace_skills'
-        ? [{ slug: 'market-gis-land-use-plan-review' }]
-        : command === 'read_analysis_view'
-          ? '{"title":"本次分析","tables":[]}'
-          : ['C:\\analysis\\规划报告.docx', 'C:\\analysis\\规划明细.xlsx', 'C:\\analysis\\地块_土地利用规划分析视图_20260923_120000_000.json'])
+    const invoke = vi.fn(async (command: string) => command === 'create_expert_task_directory'
+      ? 'C:\\analysis\\new-task'
+      : command === 'import_workspace_files'
+        ? ['parcel.geojson']
+        : command === 'list_marketplace_skills'
+          ? [{ slug: 'market-gis-land-use-plan-review' }]
+          : command === 'read_analysis_view'
+            ? '{"title":"本次分析","tables":[]}'
+            : ['C:\\analysis\\规划报告.docx', 'C:\\analysis\\规划明细.xlsx', 'C:\\analysis\\地块_土地利用规划分析视图_20260923_120000_000.json'])
     Object.assign(window, { __ZJUGIS_NATIVE_INVOKE__: invoke })
     const archiveSession = vi.fn(async () => ({ result: { ok: true, value: {} } }))
     const prompt = vi.fn(async (_input: { content: { text: string }[] }) => ({ result: { ok: true, value: {} } }))
@@ -40,6 +42,8 @@ describe('land use plan review expert execution', () => {
     const service = createLandUsePlanReviewTaskService(connection as never, workspaces as never)
     const source = { name: 'parcel.geojson', arrayBuffer: async () => new Uint8Array([123, 125]).buffer } as File
     const task = await service.start({ name: '测试地块', files: [source], reviewCategory: 4, coordinateSystem: '' })
+    expect(invoke).toHaveBeenCalledWith('create_expert_task_directory', { parent: 'C:\\analysis', name: expect.stringMatching(/^规划审查-/) })
+    expect(workspaces.createDirectory).not.toHaveBeenCalled()
     expect(task.sessionId).toBe('fresh-session')
     expect(archiveSession).toHaveBeenCalledWith({ sessionId: 'fresh-session' })
     expect(prompt.mock.calls[0]?.[0].content[0]?.text).toContain('/market-gis-land-use-plan-review')

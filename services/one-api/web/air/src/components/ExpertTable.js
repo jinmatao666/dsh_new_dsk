@@ -65,9 +65,25 @@ export default function ExpertTable() {
     event.target.value = '';
     if (!file) return;
     if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) { showError('请选择 PNG、JPEG、WebP 或 GIF 图片'); return; }
-    if (file.size > 2 * 1024 * 1024) { showError('图标文件不能超过 2 MB'); return; }
+    if (file.size > 8 * 1024 * 1024) { showError('图标文件不能超过 8 MB'); return; }
     const reader = new FileReader();
-    reader.onload = () => setEditing(current => current ? { ...current, icon: String(reader.result || '') } : current);
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const width = image.naturalWidth || image.width;
+        const height = image.naturalHeight || image.height;
+        const scale = Math.min(1, 256 / Math.max(width, height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(width * scale));
+        canvas.height = Math.max(1, Math.round(height * scale));
+        canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const compressed = canvas.toDataURL('image/webp', 0.82);
+        if (compressed.length > 700 * 1024) { showError('图标压缩后仍然过大，请选择更简单的图片'); return; }
+        setEditing(current => current ? { ...current, icon: compressed } : current);
+      };
+      image.onerror = () => showError('读取图标失败');
+      image.src = String(reader.result || '');
+    };
     reader.onerror = () => showError('读取图标失败');
     reader.readAsDataURL(file);
   };

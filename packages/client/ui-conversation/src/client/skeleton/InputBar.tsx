@@ -39,9 +39,8 @@ export type InputBarProps = ComposerBarProps
 export function InputBar({
   useSession, useInput, inputActions, keyboard, addFiles, addDroppedFiles, addImages, removeImage, draftImages,
   resolveSubmitMode, toggleCommandMenu, stop, command, t,
-  renderSlot, useNotices, useLexicon, useMenuLauncher,
+  renderSlot, useNotices, useLexicon, useMenuLauncher, usePendingDraft, setPendingDraft,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
-  workspacePickerOpen = false, onRequestWorkspace,
   placeholder, accessory, overlay, leftItems, rightItems, footer,
 }: InputBarProps) {
   const input = useInput(s => s)
@@ -60,7 +59,8 @@ export function InputBar({
   // Session-maybe: the machine faces are absent together while no session is
   // current; the bar renders the same DOM inert instead of a parallel tree.
   const live = input !== undefined && keyboard !== undefined && inputActions !== undefined
-  const draft = input?.draft ?? ''
+  const pendingDraft = usePendingDraft(value => value)
+  const draft = input?.draft ?? pendingDraft
   const attachments = useMemo(
     () => input === undefined || draftImages === undefined ? [] : draftImages(input.imageIds),
     [draftImages, input?.imageIds],
@@ -137,8 +137,7 @@ export function InputBar({
   // existing picker trigger. Message controls stay locked until a Session
   // exists; the trigger itself is read-only rather than disabled so pointer
   // and keyboard users can reach the recovery action.
-  const workspaceTrigger = inert && !removed && onRequestWorkspace !== undefined
-  const textareaDisabled = removed || (locked && !workspaceTrigger)
+  const textareaDisabled = removed || (locked && !inert)
   const canSteerQueue = !locked && !machineBusy && !commandMenuOpen && empty && running && subagent === null
     && input.queue.some(row => row.placement === 'queued')
 
@@ -278,11 +277,8 @@ export function InputBar({
   /* oxlint-enable typescript/no-unnecessary-condition */
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (workspaceTrigger) {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault()
-        onRequestWorkspace()
-      }
+    if (inert) {
+      if (e.key === 'Enter' && !e.shiftKey) e.preventDefault()
       return
     }
     // Absent machine without a Workspace recovery action stays disabled; the
@@ -368,6 +364,11 @@ export function InputBar({
   }
 
   const onChange = (e: ChangeEvent<HTMLTextAreaElement>): void => {
+    if (inert) {
+      if (keyboard === undefined) setPendingDraft(e.target.value)
+      else keyboard.setDraft(e.target.value)
+      return
+    }
     if (keyboard === undefined || locked) return // disabled/read-only states cannot edit the draft
     if (machineBusy) return // submitting is the read-only span; adjudicating holds the pending lock
     const next = e.target.value
@@ -658,10 +659,8 @@ export function InputBar({
           click's reopen (close-then-open flickers the chip's open echo). */}
       <div
         ref={cardRef}
-        className={clsx(css.card, workspaceTrigger && css.cardWorkspaceTrigger)}
+        className={css.card}
         data-composer-card
-        onClick={workspaceTrigger ? onRequestWorkspace : undefined}
-        onPointerDown={workspaceTrigger ? (e) => { e.stopPropagation() } : undefined}
       >
         {overlay !== undefined && <div className={css.overlayAnchor}>{overlay}</div>}
         {accessory !== undefined && <div className={css.accessory}>{accessory}</div>}
@@ -731,10 +730,7 @@ export function InputBar({
               className={css.input}
               value={draft}
               disabled={textareaDisabled}
-              readOnly={machineBusy || workspaceTrigger}
-              aria-label={workspaceTrigger ? t('hero.chooseWorkspace') : undefined}
-              aria-haspopup={workspaceTrigger ? 'menu' : undefined}
-              aria-expanded={workspaceTrigger ? workspacePickerOpen : undefined}
+              readOnly={machineBusy}
               data-phase={input?.phase ?? 'inert'}
               placeholder={placeholder ?? (parentOffline
                 ? t('placeholder.parentOffline')

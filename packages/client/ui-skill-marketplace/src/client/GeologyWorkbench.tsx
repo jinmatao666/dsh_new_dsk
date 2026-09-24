@@ -205,7 +205,7 @@ export function GeologyWorkbench({ service, expertIcon, expertName, expertSubtit
         </div>
       </>}
       {section === 'workbench' && activeTask === null && <>
-        {step === 'home' ? <HomeView onAction={startNew} /> : <>
+        {step === 'home' ? <HomeView onAction={startNew} onGuide={() => setSection('guide')} onHistory={() => setSection('history')} tasks={tasks} /> : <>
           <div className={css.heading}><div><span className={css.kicker}>地质条件分析专家</span><h2>{step === 'prepare' ? '从项目范围开始' : '确认本次分析'}</h2><p>上传项目地块范围并填写项目信息，系统将基于专业模型进行地质条件分析。</p></div></div>
           <div className={css.steps} aria-label="分析步骤"><span className={css.stepCurrent}><b>1</b> 填写资料</span><i /><span className={step === 'review' ? css.stepCurrent : ''}><b>2</b> 确认信息</span><i /><span><b>3</b> 分析交付</span></div>
           {step === 'prepare' ? <div className={css.columns}>
@@ -239,7 +239,12 @@ export function GeologyWorkbench({ service, expertIcon, expertName, expertSubtit
   </div>
 }
 
-function HomeView({ onAction }: { onAction: () => void }) {
+function HomeView({ onAction, onGuide, onHistory, tasks }: {
+  onAction: () => void
+  onGuide: () => void
+  onHistory: () => void
+  tasks: readonly GeologyTask[]
+}) {
   return <div className={css.homeLayout}>
     <div className={css.homeMain}>
       <section className={css.homeHero}>
@@ -257,7 +262,7 @@ function HomeView({ onAction }: { onAction: () => void }) {
             </div>
           </div>
         </div>
-        <button type="button" className={css.primaryButton} onClick={onAction}>＋ 新建分析</button>
+        <div className={css.homeActions}><button type="button" className={css.primaryButton} onClick={onAction}>＋ 新建分析</button><button type="button" className={css.secondaryButton} onClick={onGuide}>查看使用说明</button></div>
       </section>
       <section className={css.homeNext}>
         <h3>接下来可以做什么？</h3>
@@ -268,7 +273,13 @@ function HomeView({ onAction }: { onAction: () => void }) {
         </div>
       </section>
     </div>
-    <aside className={css.homeAside}><section className={css.homeInfo}><GeologyIcon name="info" /><h3>工作台说明</h3><p>从「新建分析」提交任务后，系统将执行地质数据处理与分析，并在这里展示运行状态。您可以打开分析记录，查看结果和打开本次实际生成的文件。</p></section><section className={css.homeInfo}><GeologyIcon name="result" /><h3>任务出现后可查看内容</h3><ul><li>任务运行状态</li><li>模型分析结果</li><li>本次任务的成果文件</li><li>任务详情与输入信息</li></ul></section></aside>
+    <aside className={css.homeAside}><section className={css.homeInfo}>
+      <h3>能力说明</h3>
+      <p>✓ 支持 GeoJSON 和完整 Shape 范围数据</p>
+      <p>✓ 识别地质环境与灾害易发性</p>
+      <p>✓ 查看本次任务实际生成的 Word 报告和 Excel 明细</p>
+    </section></aside>
+    <section className={css.homeRecent}><header><div><h3>最近的分析记录</h3><p>这里展示本专家在当前设备上的任务。</p></div>{tasks.length > 0 && <button type="button" onClick={onHistory}>查看全部</button>}</header>{tasks[0] ? <button type="button" onClick={onHistory}><strong>{tasks[0].name}</strong><small>{new Date(tasks[0].createdAt).toLocaleString('zh-CN')}</small></button> : <div className={css.homeRecentEmpty}><GeologyIcon name="history" /><strong>暂无分析记录</strong><small>点击“新建分析”开始第一次分析。</small></div>}</section>
   </div>
 }
 

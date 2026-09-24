@@ -186,6 +186,8 @@ function bench(over?: BenchOptions) {
     useNotices: bindSnapshotSelector(shell.notices),
     useLexicon: bindSnapshotSelector(shell.lexicon),
     useMenuLauncher: bindSnapshotSelector(menuLauncher),
+    usePendingDraft: bindSnapshotSelector(createSnapshotStore('')),
+    setPendingDraft: vi.fn(),
     stop,
     command: over?.command ?? (() => Promise.resolve(true)),
     // Mirrors the real lookup chain (conversation namespace, then common).
@@ -1059,7 +1061,7 @@ describe('running and lock semantics', () => {
     expect(custom.textarea.placeholder).toBe('Custom placeholder')
   })
 
-  it('the inert textarea opens the Workspace picker by pointer or keyboard', () => {
+  it('the inert textarea remains editable but cannot send without a workspace', () => {
     const onRequestWorkspace = vi.fn()
     const { view, textarea } = bench({
       inert: true,
@@ -1068,28 +1070,12 @@ describe('running and lock semantics', () => {
       placeholder: '选择一个工作区开始',
     })
     expect(textarea.disabled).toBe(false)
-    expect(textarea.readOnly).toBe(true)
-    expect(textarea.getAttribute('aria-haspopup')).toBe('menu')
-    expect(textarea.getAttribute('aria-expanded')).toBe('false')
+    expect(textarea.readOnly).toBe(false)
     expect((view.getByLabelText('命令') as HTMLButtonElement).disabled).toBe(true)
 
-    fireEvent.click(textarea)
     fireEvent.keyDown(textarea, { key: 'Enter' })
-    fireEvent.keyDown(textarea, { key: ' ' })
-    expect(onRequestWorkspace).toHaveBeenCalledTimes(3)
-
-    // The WHOLE capsule is the pick target, and its pointerdown never reaches
-    // the document — the open picker's outside-close must not race the reopen.
-    const card = view.container.querySelector('[data-composer-card]') as HTMLElement
-    fireEvent.click(card)
-    expect(onRequestWorkspace).toHaveBeenCalledTimes(4)
-    const onDocumentPointerDown = vi.fn()
-    document.addEventListener('pointerdown', onDocumentPointerDown)
-    try {
-      fireEvent.pointerDown(card)
-    } finally {
-      document.removeEventListener('pointerdown', onDocumentPointerDown)
-    }
+    expect(onRequestWorkspace).not.toHaveBeenCalled()
+    expect((view.getByRole('button', { name: '发送消息' }) as HTMLButtonElement).disabled).toBe(true)
     expect(onDocumentPointerDown).not.toHaveBeenCalled()
   })
 

@@ -1,6 +1,7 @@
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { IWorkspaces } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
+import { createExpertTaskDirectory } from './expert-task-directory.ts'
 
 export type MeetingInputFile = { name: string; size: number; kind: 'audio' | 'material' }
 export type MeetingTask = {
@@ -105,7 +106,7 @@ export function createMeetingTaskService(connection: ConnectionHandle, workspace
       const parent = workspaces.list.getSnapshot().items.find(item => item.workspaceId === recent)?.path ?? await workspaces.pickDirectory()
       if (parent === null) return null
       const safeName = name.trim().replace(/[<>:"/\\|?*]/g, '-').slice(0, 36) || '未命名会议'
-      return workspaces.createDirectory(parent, `会议纪要-${safeName}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`)
+      return createExpertTaskDirectory(native, parent, `会议纪要-${safeName}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}-${crypto.randomUUID().slice(0, 6)}`)
     },
     async start(input) {
       await ensureSkill()

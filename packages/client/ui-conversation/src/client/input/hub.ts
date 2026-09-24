@@ -8,7 +8,7 @@
  * bail events) and owns the default-sink choreography: every session is a
  * real host entity, so the sink is one unconditional prompt path.
  */
-import type { ClientContext, ISessions, SessionBinding, SessionFace, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore, type ClientContext, type ISessions, type SessionBinding, type SessionFace, type SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerController, SubmitImageAttachment, SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import { queueReadFaceOf } from '../queue/store.ts'
@@ -38,6 +38,15 @@ interface ConversationAttachmentFace {
 /** Session-addressed input facade registry (SessionInputResolver face + composer-layer extras). */
 export class InputHub implements SessionInputResolver {
   private readonly shells = new Map<SessionId, SessionInputShell>()
+  readonly pendingDraft = createSnapshotStore('')
+
+  setPendingDraft(text: string): void { this.pendingDraft.set(text) }
+
+  takePendingDraft(): string {
+    const draft = this.pendingDraft.getSnapshot()
+    this.pendingDraft.set('')
+    return draft
+  }
 
   /**
    * @param ctx - client root context (services resolved lazily per call — boot order stays free).

@@ -6,7 +6,7 @@ afterEach(() => { localStorage.clear(); vi.unstubAllGlobals() })
 
 describe('meeting minutes execution', () => {
   it('archives a dedicated session and completes only with a real Word file', async () => {
-    const invoke = vi.fn(async (command: string) => command === 'list_marketplace_skills' ? [{ slug: 'office-meeting-minutes' }] : command === 'import_workspace_files' ? ['录音.mp3', '议程.docx'] : ['C:\\meeting\\内部转写.txt', 'C:\\meeting\\会议纪要.docx'])
+    const invoke = vi.fn(async (command: string) => command === 'list_marketplace_skills' ? [{ slug: 'office-meeting-minutes' }] : command === 'create_expert_task_directory' ? 'C:\\meeting\\task' : command === 'import_workspace_files' ? ['录音.mp3', '议程.docx'] : ['C:\\meeting\\内部转写.txt', 'C:\\meeting\\会议纪要.docx'])
     Object.assign(window, { __ZJUGIS_NATIVE_INVOKE__: invoke })
     const archiveSession = vi.fn(async () => ({ result: { ok: true, value: {} } }))
     const prompt = vi.fn(async () => ({ result: { ok: true, value: {} } }))

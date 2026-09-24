@@ -272,6 +272,10 @@ export function apply(ctx: Context): void {
       hooks: { composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId) },
       selectWorkspace: async (workspaceId) => {
         const nextId = await workspaces.connectWorkspace(workspaceId)
+        if (sessionId === undefined) {
+          const draft = inputHub.takePendingDraft()
+          if (draft !== '') inputHub.shell(nextId).setDraft(draft)
+        }
         if (sessionId !== undefined && nextId !== sessionId) {
           const from = inputHub.shell(sessionId)
           const draft = from.snapshot.draft
@@ -348,6 +352,7 @@ export function apply(ctx: Context): void {
     inject: (sessionId: SessionId | undefined): ComposerBarInjected => {
       if (sessionId === undefined) {
         return {
+          setPendingDraft: (text) => { inputHub.setPendingDraft(text) },
           keyboard: undefined,
           addFiles: undefined,
           addImages: undefined,
@@ -358,13 +363,19 @@ export function apply(ctx: Context): void {
           toggleCommandMenu: undefined,
           stop: undefined,
           command: undefined,
-          hooks: { notices: ABSENT_NOTICES, lexicon: ABSENT_LEXICON, menuLauncher: ABSENT_MENU_LAUNCHER },
+          hooks: {
+            pendingDraft: inputHub.pendingDraft,
+            notices: ABSENT_NOTICES,
+            lexicon: ABSENT_LEXICON,
+            menuLauncher: ABSENT_MENU_LAUNCHER,
+          },
         }
       }
       const conversation = concreteConversation(ctx)
       const shell = inputHub.shell(sessionId)
       const inputTriggers = inputHub.inputTriggers(sessionId)
       return {
+        setPendingDraft: (text) => { inputHub.setPendingDraft(text) },
         keyboard: shell,
         addFiles: async (files) => {
           const target = sessions.list.getSnapshot().byId[sessionId]?.cwd
@@ -424,6 +435,7 @@ export function apply(ctx: Context): void {
           return result.ok && result.value.matched
         },
         hooks: {
+          pendingDraft: inputHub.pendingDraft,
           notices: shell.notices,
           lexicon: shell.lexicon,
           menuLauncher: inputTriggers?.launcher ?? ABSENT_MENU_LAUNCHER,

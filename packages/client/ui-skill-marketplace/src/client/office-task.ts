@@ -1,6 +1,7 @@
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { IWorkspaces } from '@deepseek-ai/dsh-client-runtime/client'
+import { createExpertTaskDirectory } from './expert-task-directory.ts'
 
 export type OfficeTaskStatus = 'running' | 'completed' | 'partial' | 'failed'
 export type OfficeTask = {
@@ -167,7 +168,7 @@ export function createOfficeTaskService(
       if (parent === null) return null
       const safeName = name.trim().replace(/[<>:"/\\|?*]/g, '-').slice(0, 36) || '未命名任务'
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-      return workspaces.createDirectory(parent, `${directoryPrefix}-${safeName}-${timestamp}`)
+      return createExpertTaskDirectory(native, parent, `${directoryPrefix}-${safeName}-${timestamp}-${crypto.randomUUID().slice(0, 6)}`)
     },
     async start(input) {
       await ensureSkill(input.skill)

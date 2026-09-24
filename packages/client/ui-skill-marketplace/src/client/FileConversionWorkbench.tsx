@@ -4,6 +4,7 @@ import {
 } from './OfficeExpertWorkbench.tsx'
 import type { OfficeTaskService } from './office-task.ts'
 import { meetingIconImages } from './MeetingIconData.ts'
+import { fileHero } from './OfficeExpertHeroImages.ts'
 import {
   fileHome,
   fileHistory,
@@ -178,6 +179,7 @@ export function FileConversionWorkbench({
         heroTitle: '选择一个工具，开始处理文件',
         heroText: '覆盖常用 Word、PDF 与图片处理场景，原文件始终保留。',
         heroPoints: ['真实文件处理', '独立任务目录', '成果随时打开'],
+        heroBackground: fileHero,
       }}
       guide={[
         {

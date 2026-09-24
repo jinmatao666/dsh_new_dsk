@@ -62,6 +62,10 @@ export interface SessionInput extends InputTarget {
 export interface SessionInputResolver {
   /** Resolve the facade for one session-scope ctx. */
   for(actx: ClientContext): SessionInput
+  /** Editable draft while no workspace/session is selected. */
+  readonly pendingDraft: SnapshotStore<string>
+  setPendingDraft(text: string): void
+  takePendingDraft(): string
 }
 
 /**

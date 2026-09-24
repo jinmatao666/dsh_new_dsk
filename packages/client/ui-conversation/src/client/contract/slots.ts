@@ -537,6 +537,8 @@ export interface ComposerBarOwnerProps {
 
 /** Injected share of the composer-bar entry (package-internal faces). */
 export interface ComposerBarInjected {
+  /** Session-less editable draft, transferred when a workspace is selected. */
+  setPendingDraft: (text: string) => void
   /** The InputBar-exclusive keyboard/DOM command face (private plane); absent with the session. */
   keyboard: ComposerKeyboard | undefined
   /** Create previews and append image ids to the session input. */
@@ -572,6 +574,7 @@ export interface ComposerBarInjected {
    * order stays constant).
    */
   hooks: {
+    pendingDraft: ObservableSnapshot<string>
     /** Latest surfaced notice (null after none; seq keys re-render of repeats). */
     notices: ObservableSnapshot<InputNotice | null>
     /** Hot plain-text reference lexicon for the decoration scan (plain-text-reference decision;

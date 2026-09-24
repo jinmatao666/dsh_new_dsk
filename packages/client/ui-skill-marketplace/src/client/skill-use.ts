@@ -1,19 +1,12 @@
-import type { ISessions, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ISessions } from '@deepseek-ai/dsh-client-runtime/client'
+import type { IConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
 
-/** Wait for a new blank conversation after clearing the current workspace selection. */
+/** Open the no-workspace composer with an editable skill token; never submit it. */
 export function startSkillUse(
-  sessions: Pick<ISessions, 'clear' | 'list'>,
+  sessions: Pick<ISessions, 'clear'>,
+  conversation: Pick<IConversation, 'input'>,
   slug: string,
-  invoke: (sessionId: SessionId, slug: string) => void,
-): () => void {
+): void {
+  conversation.input.setPendingDraft(`/${slug}`)
   sessions.clear()
-  let active = true
-  const unsubscribe = sessions.list.subscribe(() => {
-    const { current, byId } = sessions.list.getSnapshot()
-    if (!active || current === undefined) return
-    active = false
-    unsubscribe()
-    if (byId[current]?.blank) invoke(current, slug)
-  })
-  return () => { active = false; unsubscribe() }
 }

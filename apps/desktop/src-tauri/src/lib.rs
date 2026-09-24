@@ -1204,6 +1204,29 @@ fn import_workspace_files(
     import_workspace_files_at(&root, files)
 }
 
+/// Create an isolated expert task folder beneath an existing user workspace.
+fn create_expert_task_directory_at(parent: &Path, name: &str) -> Result<String, String> {
+    if name.trim().is_empty() || name == "." || name == ".."
+        || name.contains(['/', '\\']) || name.chars().any(char::is_control)
+    {
+        return Err("专家任务目录名称无效".to_string());
+    }
+    let root = fs::canonicalize(parent)
+        .map_err(|error| format!("无法访问任务保存目录 {}：{error}", parent.display()))?;
+    if !root.is_dir() {
+        return Err("任务保存路径不是文件夹".to_string());
+    }
+    let directory = root.join(name);
+    fs::create_dir(&directory)
+        .map_err(|error| format!("无法创建专家任务目录 {}：{error}", directory.display()))?;
+    Ok(parent.join(name).to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn create_expert_task_directory(parent: String, name: String) -> Result<String, String> {
+    create_expert_task_directory_at(Path::new(&parent), &name)
+}
+
 /// List office reports and the companion analysis view in one expert task directory.
 #[tauri::command]
 fn list_expert_output_files(directory: String) -> Result<Vec<String>, String> {
@@ -2154,6 +2177,7 @@ pub fn run() {
             open_workspace_directory,
             reveal_downloaded_file,
             import_workspace_files,
+            create_expert_task_directory,
             list_expert_output_files,
             read_expert_text_file,
             import_dropped_workspace_files,
@@ -2165,7 +2189,7 @@ pub fn run() {
 #[cfg(test)]
 mod marketplace_tests {
     use super::{
-        desktop_harness_home, import_workspace_files_at, import_workspace_paths_at,
+        create_expert_task_directory_at, desktop_harness_home, import_workspace_files_at, import_workspace_paths_at,
         install_custom_skill_directory_at, install_marketplace_skill_at,
         install_marketplace_skill_files_at, marketplace_package_sha256, production_harness_home,
         read_analysis_view, save_session_log_archive_at, uninstall_marketplace_skill_at,
@@ -2178,6 +2202,17 @@ mod marketplace_tests {
     };
 
     struct TestDirectory(PathBuf);
+
+    #[test]
+    fn expert_task_directory_is_created_under_selected_parent() {
+        let parent = TestDirectory::new();
+        let directory = create_expert_task_directory_at(&parent.0, "地质分析-123")
+            .expect("create expert task directory");
+        assert!(PathBuf::from(&directory).is_dir());
+        assert_eq!(PathBuf::from(directory).parent(), Some(parent.0.as_path()));
+        assert!(create_expert_task_directory_at(&parent.0, "../outside").is_err());
+        assert!(create_expert_task_directory_at(&parent.0, "地质分析-123").is_err());
+    }
 
     impl TestDirectory {
         fn new() -> Self {

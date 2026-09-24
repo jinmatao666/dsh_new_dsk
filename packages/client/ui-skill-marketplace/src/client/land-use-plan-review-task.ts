@@ -1,6 +1,7 @@
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { IWorkspaces } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
+import { createExpertTaskDirectory } from './expert-task-directory.ts'
 
 export type LandUsePlanReviewTask = {
   id: string
@@ -109,7 +110,7 @@ export function createLandUsePlanReviewTaskService(connection: ConnectionHandle,
       const parent = workspaces.list.getSnapshot().items.find(item => item.workspaceId === recent)?.path ?? await workspaces.pickDirectory()
       if (parent === null) throw new Error('请选择用于保存分析成果的文件夹。')
       const id = crypto.randomUUID()
-      const directory = await workspaces.createDirectory(parent, `规划审查-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}-${id.slice(0, 6)}`)
+      const directory = await createExpertTaskDirectory(native, parent, `规划审查-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}-${id.slice(0, 6)}`)
       const payload = await Promise.all(input.files.map(async file => ({
         name: file.name,
         bytes: [...new Uint8Array(await file.arrayBuffer())],

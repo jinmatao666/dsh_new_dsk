@@ -211,6 +211,8 @@ function mount(
           useNotices={bindSnapshotSelector(wiring.notices)}
           useLexicon={bindSnapshotSelector(wiring.lexicon)}
           useMenuLauncher={bindSnapshotSelector(createSnapshotStore<string | null>(null))}
+          usePendingDraft={bindSnapshotSelector(createSnapshotStore(''))}
+          setPendingDraft={vi.fn()}
           stop={stop}
           command={() => Promise.resolve(true)}
           t={t}
@@ -311,8 +313,7 @@ describe('ConversationRoot resident composer', () => {
     })
     const box = b.view.getByRole('textbox') as HTMLTextAreaElement
     expect(box.disabled).toBe(false)
-    expect(box.readOnly).toBe(true)
-    expect(box.getAttribute('aria-haspopup')).toBe('menu')
+    expect(box.readOnly).toBe(false)
     expect(box.placeholder).not.toBe('select a model first')
     const modelSeat = b.seatOwners.filter(call => call.key === 'conversation.input.model').at(-1)?.owner
     expect(modelSeat).toEqual({ locked: true })

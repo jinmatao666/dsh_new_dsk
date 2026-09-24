@@ -3,6 +3,7 @@ import {
   type ToolDef,
 } from './OfficeExpertWorkbench.tsx'
 import type { OfficeTaskService } from './office-task.ts'
+import { documentHero } from './OfficeExpertHeroImages.ts'
 import {
   docExpert,
   docSummary,
@@ -95,6 +96,7 @@ export function DocumentIntelligenceWorkbench({
         heroText:
           '从多份材料中提炼摘要与行动项，或清晰呈现两个版本之间的文字变化。',
         heroPoints: ['结构化摘要', '关键风险提取', '版本差异分析'],
+        heroBackground: documentHero,
       }}
       guide={[
         {

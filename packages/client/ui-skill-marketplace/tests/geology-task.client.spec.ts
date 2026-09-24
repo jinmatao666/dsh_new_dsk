@@ -9,13 +9,15 @@ afterEach(() => {
 
 describe('geology expert execution', () => {
   it('starts a fresh archived skill session and reads only its actual answer and output files', async () => {
-    const invoke = vi.fn(async (command: string) => command === 'import_workspace_files'
-      ? ['parcel.geojson']
-      : command === 'list_marketplace_skills'
-        ? [{ slug: 'market-gis-geology-analysis' }]
-        : command === 'read_analysis_view'
-          ? '{"title":"本次分析","tables":[]}'
-          : ['C:\\analysis\\地质报告.docx', 'C:\\analysis\\地质明细.xlsx', 'C:\\analysis\\地块-地质-analysis-view_20260923_120000_000.json'])
+    const invoke = vi.fn(async (command: string) => command === 'create_expert_task_directory'
+      ? 'C:\\analysis\\new-task'
+      : command === 'import_workspace_files'
+        ? ['parcel.geojson']
+        : command === 'list_marketplace_skills'
+          ? [{ slug: 'market-gis-geology-analysis' }]
+          : command === 'read_analysis_view'
+            ? '{"title":"本次分析","tables":[]}'
+            : ['C:\\analysis\\地质报告.docx', 'C:\\analysis\\地质明细.xlsx', 'C:\\analysis\\地块-地质-analysis-view_20260923_120000_000.json'])
     Object.assign(window, { __ZJUGIS_NATIVE_INVOKE__: invoke })
     const archiveSession = vi.fn(async () => ({ result: { ok: true, value: {} } }))
     const prompt = vi.fn(async (_input: { content: { text: string }[] }) => ({ result: { ok: true, value: {} } }))
@@ -40,6 +42,8 @@ describe('geology expert execution', () => {
     const service = createGeologyTaskService(connection as never, workspaces as never)
     const source = { name: 'parcel.geojson', arrayBuffer: async () => new Uint8Array([123, 125]).buffer } as File
     const task = await service.start({ name: '测试地块', files: [source], fieldName: '分区名称', coordinateSystem: '' })
+    expect(invoke).toHaveBeenCalledWith('create_expert_task_directory', { parent: 'C:\\analysis', name: expect.stringMatching(/^地质分析-/) })
+    expect(workspaces.createDirectory).not.toHaveBeenCalled()
     expect(task.sessionId).toBe('fresh-session')
     expect(archiveSession).toHaveBeenCalledWith({ sessionId: 'fresh-session' })
     expect(prompt.mock.calls[0]?.[0].content[0]?.text).toContain('/market-gis-geology-analysis')

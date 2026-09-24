@@ -36,6 +36,7 @@ export type OfficeVisuals = {
   heroTitle: string
   heroText: string
   heroPoints: readonly string[]
+  heroBackground: string
 }
 type Section = 'home' | 'history' | 'files' | 'guide'
 const statusText = (status: OfficeResult['status']) =>
@@ -442,7 +443,7 @@ export function OfficeExpertWorkbench({
         )}
         {section === 'home' && !tool && !active && (
           <div className={css.dashboard}>
-            <section className={css.hero}>
+            <section className={css.hero} style={{ backgroundImage: `url(${visuals.heroBackground})` }}>
               <div>
                 <span>{title}</span>
                 <h2>{visuals.heroTitle}</h2>
@@ -454,20 +455,17 @@ export function OfficeExpertWorkbench({
                   ＋ 开始新任务
                 </button>
               </div>
-              <div className={css.heroArt}>
-                {tools.slice(0, 3).map((item, index) => (
-                  <img
-                    key={item.id}
-                    className={css[`art${index}`]}
-                    src={visuals.toolIcons[item.id]}
-                    alt=""
-                  />
-                ))}
-              </div>
-              <div className={css.heroPoints}>
-                {visuals.heroPoints.map(point => (
-                  <span key={point}>✓ {point}</span>
-                ))}
+            </section>
+            <aside className={css.welcomeCapabilities}>
+              <h3>能力说明</h3>
+              {visuals.heroPoints.map((point, index) => <p key={point}><span aria-hidden="true">✓</span><strong>{point}</strong><small>{tools[index]?.description ?? '结果保存在本次任务目录中'}</small></p>)}
+            </aside>
+            <section className={css.welcomeSteps}>
+              <h3>完成一次处理</h3>
+              <div>
+                <span><b>1</b><strong>选择工具</strong><small>按下方任务类型开始</small></span>
+                <span><b>2</b><strong>准备材料</strong><small>添加文件并核对参数</small></span>
+                <span><b>3</b><strong>查看结果</strong><small>打开真实生成的成果</small></span>
               </div>
             </section>
             <section className={css.toolSection}>
