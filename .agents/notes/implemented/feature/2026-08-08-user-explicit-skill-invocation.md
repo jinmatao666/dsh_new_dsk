@@ -30,7 +30,7 @@ Peer-product survey (Pi, OpenCode, Claude Code, Kimi Code, Codex, DeepSeek-Reaso
 
 ## Consequences
 
-- The plain-text reference is now the whole client story: the draft carries plain text, chip visuals derive from the lexicon, and the sent text is judged by the host boundary — a hand-typed gesture, a menu pick, and a TUI prompt are indistinguishable and equally deterministic.
+- The draft carries plain text and the sent text is judged by the host boundary — a hand-typed gesture, a menu pick, and a TUI prompt are indistinguishable and equally deterministic. For a recognized leading skill token, the composer renders its cached display name in an inline label beside a native textarea that edits the remaining text; this keeps the caret aligned with the visible body while preserving `/name` in the submitted draft. Other skill mentions retain plain-text highlighting.
 - Every user-invocable skill invocation costs its full rendered body unconditionally — the price of determinism the peer survey showed everyone pays. Mentioning a known skill name mid-sentence loads it; that is the Codex mention semantic, accepted deliberately.
 - The `skill-invocation` source rides `user/message`, so Model-visible ⟺ logged holds with no new event type, and replay/UI read metadata rather than text markers.
 - Accepted residual of dropping the per-injection preamble: the no-reload framing rides only the catalog, and a workspace whose skills are all user-only never publishes a first catalog — an injection can arrive with no framing at all, and the model may redundantly try the `skill` tool once (the replacement catalog's empty arm carries the sentence; the never-published case does not). Publishing a catalog for framing alone was judged worse than that one recoverable error.

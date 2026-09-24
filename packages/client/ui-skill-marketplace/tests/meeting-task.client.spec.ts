@@ -42,4 +42,18 @@ describe('meeting minutes execution', () => {
     const task = { id: '1', sessionId: 's', name: '会议', directory: 'C:\\meeting', createdAt: 1, inputs: [] } as never
     expect(await service.read(task)).toMatchObject({ status: 'failed', error: expect.stringContaining('没有找到会议纪要 Word') })
   })
+
+  it('does not mistake an uploaded Word material for the generated minutes', async () => {
+    const output = ['C:\\meeting\\答复书 (4).docx', 'C:\\meeting\\内部转写.txt']
+    Object.assign(window, { __ZJUGIS_NATIVE_INVOKE__: vi.fn(async () => output) })
+    const connection = { api: { sessions: { history: vi.fn(async () => ({ result: { ok: true, value: { events: [{ event: { type: 'turn/end', data: { reason: { kind: 'completed' } } } }] } } })) } } }
+    const service = createMeetingTaskService(connection as never, {} as never)
+    const task = { id: '1', sessionId: 's', name: '会议', directory: 'C:\\meeting', createdAt: 1, inputs: [{ name: '答复书 (4).docx', size: 10, kind: 'material' }] } as never
+    expect(await service.read(task)).toMatchObject({ status: 'failed', error: expect.stringContaining('没有找到会议纪要 Word') })
+    output.push('C:\\meeting\\会议纪要.docx')
+    expect(await service.read(task)).toMatchObject({ status: 'completed', wordPath: 'C:\\meeting\\会议纪要.docx' })
+    output.pop()
+    output.push('C:\\meeting\\会议纪要_2.docx')
+    expect(await service.read(task)).toMatchObject({ status: 'completed', wordPath: 'C:\\meeting\\会议纪要_2.docx' })
+  })
 })

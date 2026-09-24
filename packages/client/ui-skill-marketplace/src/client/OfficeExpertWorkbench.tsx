@@ -54,6 +54,33 @@ const formatSize = (size: number) =>
     : size < 1048576
       ? `${(size / 1024).toFixed(1)} KB`
       : `${(size / 1048576).toFixed(1)} MB`
+function reviewParameters(tool: ToolDef, params: Record<string, string>): string {
+  const descriptions = tool.params?.flatMap((parameter) => {
+    const value = params[parameter.key]?.trim()
+    if (!value || (parameter.key === 'pages' && tool.id === 'pdf-organize' && params.mode !== '按范围拆分')) return []
+    const label = parameter.label.replace(/（.*?）/g, '')
+    if (parameter.key === 'pages') return [`${label}：${value}`]
+    if (parameter.key === 'margin') return [`页边距：${value} 毫米`]
+    if (parameter.key === 'dpi') return [`图片清晰度：${value} DPI`]
+    if (parameter.key === 'quality') return [`图片质量：${value}`]
+    if (parameter.key === 'maxWidth' || parameter.key === 'maxHeight') return [`${label}：${value} 像素`]
+    if (parameter.key === 'format') return [`输出格式：${value.toUpperCase() === 'JPG' ? 'JPG' : value.toUpperCase() === 'PNG' ? 'PNG' : value.toUpperCase() === 'WEBP' ? 'WebP' : value}`]
+    return [`${label}：${value}`]
+  }) ?? []
+  return descriptions.join('；') || '无需额外设置'
+}
+function reviewDeliverable(tool: ToolDef, params: Record<string, string>, fileCount: number): string {
+  switch (tool.id) {
+    case 'word-pdf': return `${fileCount} 个 PDF 文件（每份 Word 对应一个）`
+    case 'pdf-images': return `${params.format === 'jpg' ? 'JPG' : 'PNG'} 图片（按所选页码逐页生成）`
+    case 'pdf-organize': return params.mode === '合并' ? '1 个合并后的 PDF 文件' : '拆分后的 PDF 文件'
+    case 'images-pdf': return '1 个 PDF 文件'
+    case 'image-optimize': return `${fileCount} 张${params.format === '保持原格式' ? '优化后的图片' : ` ${params.format?.toUpperCase() ?? 'WEBP'} 图片`}`
+    case 'summary': return 'Word 摘要和 Markdown 摘要'
+    case 'compare': return 'Markdown、HTML、JSON 和文本差异文件'
+    default: return '处理完成后显示实际生成的文件'
+  }
+}
 function MarkdownResult({ text }: { text: string }) {
   const lines = text.split(/\r?\n/)
   return (
@@ -229,6 +256,7 @@ export function OfficeExpertWorkbench({
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false)
   const input = useRef<HTMLInputElement>(null)
+  const toolSection = useRef<HTMLElement>(null)
   const load = async () => {
     if (!service) return
     try {
@@ -451,7 +479,7 @@ export function OfficeExpertWorkbench({
                 <p>{visuals.heroText}</p>
                 <button
                   className={css.heroButton}
-                  onClick={() => { const first = tools[0]; if (first) begin(first) }}
+                  onClick={() => toolSection.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
                 >
                   ＋ 开始新任务
                 </button>
@@ -469,7 +497,7 @@ export function OfficeExpertWorkbench({
                 <span><b>3</b><strong>查看结果</strong><small>打开真实生成的成果</small></span>
               </div>
             </section>
-            <section className={css.toolSection}>
+            <section className={css.toolSection} ref={toolSection}>
               <div className={css.sectionTitle}>
                 <div>
                   <h3>选择处理工具</h3>
@@ -658,15 +686,11 @@ export function OfficeExpertWorkbench({
                   <dt>处理类型</dt>
                   <dd>{tool.name}</dd>
                   <dt>输入文件</dt>
-                  <dd>{files.map(f => f.name).join('；')}</dd>
-                  <dt>用户参数</dt>
-                  <dd>
-                    {Object.entries(params)
-                      .map(([k, v]) => `${k}=${v}`)
-                      .join('；') || '使用技能默认值'}
-                  </dd>
+                  <dd>{files.map(f => f.name).join('、')}</dd>
+                  <dt>处理设置</dt>
+                  <dd>{reviewParameters(tool, params)}</dd>
                   <dt>预计成果</dt>
-                  <dd>{tool.expected.join('、')}</dd>
+                  <dd>{reviewDeliverable(tool, params, files.length)}<small>实际成果以任务完成后生成的文件为准。</small></dd>
                 </dl>
               </div>
             )}

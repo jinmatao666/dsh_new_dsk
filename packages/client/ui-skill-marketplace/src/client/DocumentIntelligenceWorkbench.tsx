@@ -3,6 +3,7 @@ import {
   type ToolDef,
 } from './OfficeExpertWorkbench.tsx'
 import type { OfficeTaskService } from './office-task.ts'
+import { geologyIconImages } from './GeologyIconData.ts'
 import { documentHero } from './OfficeExpertHeroImages.ts'
 import {
   docExpert,
@@ -10,7 +11,6 @@ import {
   docCompare,
   docInfo,
   docFile,
-  docEmpty,
   docHome,
   docHistory,
 } from './office-icons.ts'
@@ -89,8 +89,8 @@ export function DocumentIntelligenceWorkbench({
         files: docFile,
         guide: docInfo,
         info: docInfo,
-        emptyHistory: docHistory,
-        emptyFiles: docEmpty,
+        emptyHistory: geologyIconImages.history ?? docHistory,
+        emptyFiles: geologyIconImages.files ?? docFile,
         toolIcons: { summary: docSummary, compare: docCompare },
         heroTitle: '读懂文档，提炼真正重要的信息',
         heroText:
@@ -101,11 +101,11 @@ export function DocumentIntelligenceWorkbench({
       guide={[
         {
           title: '摘要任务',
-          text: '支持多来源材料并保留来源边界；扫描 PDF 无文字时需要先做 OCR。',
+          text: '可添加一份或多份 DOCX、PDF、XLSX、XLSM 或常见文本材料，选择摘要详略并填写关注重点。结果提炼核心内容、风险、时间节点和待办事项，同时保留来源边界；扫描 PDF 无文字时需先做 OCR。',
         },
         {
           title: '对比任务',
-          text: '第一份为原始版本，第二份为新版本；仅比较可提取文本。',
+          text: '按选择顺序添加两份材料：第一份为原始版本，第二份为新版本。工具比较可提取文本的新增、删除、修改及数字、日期、主体等关键变化；文件顺序放反会改变差异方向。',
         },
         {
           title: '能力边界',
@@ -113,7 +113,7 @@ export function DocumentIntelligenceWorkbench({
         },
         {
           title: '复核要求',
-          text: '重要数字、日期、责任主体和结论需要结合原文复核，原文件不会被修改。',
+          text: '成果只依据成功读取的材料生成。重要数字、日期、责任主体、风险和结论请回到原文逐项复核；处理不会修改原文件，也不代替专业审查。',
         },
       ]}
     />

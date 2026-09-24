@@ -36,7 +36,7 @@ describe('geology expert workbench', () => {
     const task = { id: 'task-1', sessionId: 'session-1', name: '东侧地块', directory: 'C:\\analysis\\task-1', createdAt: 1 } as GeologyTask
     const openFile = vi.fn(async () => undefined)
     const readAnalysisView = vi.fn(async () => JSON.stringify({ title: '真实地质分析', tables: [
-      { id: 'overview', title: '地质条件', columns: ['分区', '条件'], rows: [['东区', '稳定']] },
+      { id: 'overview', title: '地质条件', columns: ['分区', '条件', '面积'], rows: [['东区', '稳定', 0.1672]] },
       { id: 'risk', title: '灾害易发性', columns: ['分区', '易发性'], rows: [['东区', '低']] },
     ] }))
     const service: GeologyTaskService = {
@@ -62,6 +62,7 @@ describe('geology expert workbench', () => {
     expect(screen.getByText('范围材料已完成核查。')).toBeTruthy()
     expect(await screen.findByRole('heading', { name: '真实地质分析' })).toBeTruthy()
     expect(screen.getByText('稳定')).toBeTruthy()
+    expect(screen.getByText('0.1672')).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: '灾害易发性' }))
     expect(screen.getByText('低')).toBeTruthy()
     expect(readAnalysisView).toHaveBeenCalledWith('C:\\analysis\\task-1\\地块-地质-analysis-view_20260923_120000_000.json')

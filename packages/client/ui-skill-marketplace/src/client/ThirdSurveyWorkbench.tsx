@@ -5,6 +5,7 @@ import type { ThirdSurveyResult, ThirdSurveyTask, ThirdSurveyTaskService } from 
 import { TerrainIllustration } from './TerrainIllustration.tsx'
 import { geologyIconImages } from './GeologyIconData.ts'
 import { GeologyAnalysisView } from './GeologyAnalysisView.tsx'
+import { SpatialAnalysisAnswer, SpatialAnalysisProgress } from './SpatialAnalysisResult.tsx'
 import { thirdSurveyHero } from './LandExpertHeroImages.ts'
 
 type ThirdSurveyIconName = 'mountain' | 'new' | 'workspace' | 'history' | 'files' | 'guide' | 'upload' | 'back' | 'layers' | 'geojson' | 'zip' | 'word' | 'excel' | 'result' | 'success' | 'failed' | 'running' | 'info' | 'help' | 'empty'
@@ -39,19 +40,8 @@ function checkFiles(files: readonly File[]): string | null {
   return null
 }
 
-function AnswerView({ text }: { text: string }) {
-  return <div className={css.answer}>{text.split(/\r?\n/).map((line, index) => {
-    const content = line.trim().replace(/\*\*/g, '')
-    if (content.startsWith('### ')) return <h4 key={index}>{content.slice(4)}</h4>
-    if (content.startsWith('## ')) return <h3 key={index}>{content.slice(3)}</h3>
-    if (content.startsWith('# ')) return <h3 key={index}>{content.slice(2)}</h3>
-    if (/^(?:[-•*]|\d+\.)\s/.test(content)) return <p className={css.answerPoint} key={index}>{content.replace(/^(?:[-•*]|\d+\.)\s/, '')}</p>
-    return content === '' ? <div className={css.answerGap} key={index} /> : <p key={index}>{content}</p>
-  })}</div>
-}
-
 function outputFiles(result: ThirdSurveyResult | undefined): readonly string[] {
-  return result?.files.filter(path => /\.(?:docx|xlsx)$/i.test(path)) ?? []
+  return result?.files.filter(path => /\.(?:docx|xlsx)$/i.test(path) && !/^~\$/u.test(path.split(/[\\/]/u).at(-1) ?? '')) ?? []
 }
 
 function ResultStatus({ result }: { result: ThirdSurveyResult | undefined }) {
@@ -196,11 +186,11 @@ export function ThirdSurveyWorkbench({ service, expertIcon, expertName, expertSu
           <div className={css.resultBody}>
             <section className={`${css.resultBanner} ${results[activeTask.id]?.status === 'failed' ? css.resultBannerFailed : results[activeTask.id]?.status === 'completed' ? css.resultBannerComplete : css.resultBannerRunning}`}>
               <ThirdSurveyIcon name={results[activeTask.id]?.status === 'failed' ? 'failed' : results[activeTask.id]?.status === 'completed' ? 'success' : 'running'} />
-              <div><h3>{results[activeTask.id]?.status === 'failed' ? '分析未完成' : results[activeTask.id]?.status === 'completed' ? '分析已完成' : '正在分析地块条件'}</h3><p>{results[activeTask.id]?.status === 'failed' ? '请根据下方实际回答核对材料，然后新建一次分析。' : results[activeTask.id]?.status === 'completed' ? '本次会话已结束，Word 报告和 Excel 明细均已在任务目录中找到。' : '任务已提交。完成后会在这里展示模型回答和实际生成的成果文件。'}</p></div>
+              <div><h3>{results[activeTask.id]?.status === 'failed' ? '分析未完成' : results[activeTask.id]?.status === 'completed' ? '分析已完成' : '正在分析地块条件'}</h3><p>{results[activeTask.id]?.status === 'failed' ? '请根据下方实际回答核对材料，然后新建一次分析。' : results[activeTask.id]?.status === 'completed' ? '本次会话已结束，Word 报告和 Excel 明细均已在任务目录中找到。' : '任务已提交。完成后会在这里展示模型回答和实际生成的成果文件。'}</p>{results[activeTask.id]?.status !== 'completed' && results[activeTask.id]?.status !== 'failed' && <SpatialAnalysisProgress createdAt={activeTask.createdAt} />}</div>
             </section>
             {error !== null && <p className={css.error} role="alert">{error}</p>}
             {results[activeTask.id]?.status === 'failed' && <section className={css.failurePanel}><h3>未完成的原因</h3><p>{results[activeTask.id]?.error ?? '本次分析未正常完成。'}</p><button type="button" className={css.secondaryButton} onClick={startNew}>修改材料并新建分析</button></section>}
-            {results[activeTask.id]?.answer ? <section className={css.answerPanel}><h3>本次模型回答</h3><AnswerView text={results[activeTask.id]?.answer ?? ''} /></section> : <section className={css.pendingPanel}><h3>{results[activeTask.id]?.status === 'running' || results[activeTask.id] === undefined ? '等待分析结果' : '本次没有可展示的模型回答'}</h3><p>{results[activeTask.id]?.status === 'running' || results[activeTask.id] === undefined ? '可以切换到分析记录；任务会继续在后台运行。返回记录后可重新读取结果。' : '请核对本次任务状态和成果文件。'}</p></section>}
+            {results[activeTask.id]?.answer ? <SpatialAnalysisAnswer text={results[activeTask.id]?.answer ?? ''} /> : <section className={css.pendingPanel}><h3>{results[activeTask.id]?.status === 'running' || results[activeTask.id] === undefined ? '等待分析结果' : '本次没有可展示的模型回答'}</h3><p>{results[activeTask.id]?.status === 'running' || results[activeTask.id] === undefined ? '正在持续检查任务状态；可切换到分析记录，任务会继续运行。' : '请核对本次任务状态和成果文件。'}</p></section>}
             {results[activeTask.id]?.analysisViewPath && service && <GeologyAnalysisView path={results[activeTask.id]?.analysisViewPath ?? ''} service={service} />}
             {results[activeTask.id] !== undefined && <section className={css.outputs}><h3>本次成果文件 <small>{outputFiles(results[activeTask.id]).length} 个</small></h3>{outputFiles(results[activeTask.id]).length === 0 ? <p>任务目录中尚未找到 Word 报告或 Excel 明细。</p> : <div className={css.outputGrid}>{outputFiles(results[activeTask.id]).map(path => <button type="button" key={path} onClick={() => void service?.openFile(path)}><span className={css.fileGlyph} aria-hidden="true">{/\.docx$/i.test(path) ? 'W' : 'X'}</span><span><strong>{path.split(/[\\/]/).at(-1)}</strong><small>{/\.docx$/i.test(path) ? 'Word 报告' : 'Excel 明细'} · 打开文件</small></span></button>)}</div>}</section>}
           </div>

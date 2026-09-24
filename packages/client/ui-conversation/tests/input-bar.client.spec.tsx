@@ -135,6 +135,9 @@ function bench(over?: BenchOptions) {
       ? {
         inputTriggers: (() => ({
           lexicon: { getSnapshot: () => lex, subscribe: () => () => {} },
+          track: () => {},
+          arbitrate: () => 'pass',
+          adjudicate: () => Promise.resolve(undefined),
         })) as unknown as NonNullable<ShellDeps['inputTriggers']>,
       }
       : {}),
@@ -216,6 +219,39 @@ function bench(over?: BenchOptions) {
     steerQueue: over?.steerQueue,
   }
 }
+
+describe('inline skill label', () => {
+  it('shows the Chinese name while preserving the slash token and editable body', async () => {
+    localStorage.setItem('dsh.skill-display-names', JSON.stringify({ 'office-meeting-minutes': '会议纪要' }))
+    const { view, textarea, shell, sink } = bench({ draft: '/office-meeting-minutes', lexicon: new Map([['/', ['office-meeting-minutes']]]) })
+    expect(view.getByLabelText('已选技能：会议纪要').textContent).toContain('会议纪要')
+    expect(textarea.value).toBe('')
+    fireEvent.change(textarea, { target: { value: '你好' } })
+    expect(shell.snapshot.draft).toBe('/office-meeting-minutes 你好')
+    expect(textarea.value).toBe('你好')
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    await vi.waitFor(() => { expect(sink).toHaveBeenCalledWith('/office-meeting-minutes 你好', [], 'queue', expect.any(AbortSignal)) })
+    localStorage.removeItem('dsh.skill-display-names')
+  })
+
+  it('backspace at the body start removes the whole skill label', () => {
+    const { view, textarea, shell } = bench({ draft: '/office-meeting-minutes hello', lexicon: new Map([['/', ['office-meeting-minutes']]]) })
+    textarea.setSelectionRange(0, 0)
+    fireEvent.keyDown(textarea, { key: 'Backspace' })
+    expect(shell.snapshot.draft).toBe('hello')
+    expect(view.queryByLabelText('已选技能：office-meeting-minutes')).toBeNull()
+  })
+
+  it('recognizes a manually typed skill but leaves an unknown slash token as text', () => {
+    const { view, textarea, shell } = bench({ lexicon: new Map([['/', ['office-meeting-minutes']]]) })
+    fireEvent.change(textarea, { target: { value: '/unknown' } })
+    expect(view.queryByLabelText(/已选技能/)).toBeNull()
+    fireEvent.change(textarea, { target: { value: '/office-meeting-minutes' } })
+    expect(shell.snapshot.draft).toBe('/office-meeting-minutes')
+    expect(view.getByLabelText('已选技能：office-meeting-minutes')).toBeTruthy()
+    expect(textarea.value).toBe('')
+  })
+})
 
 function attachmentOwner(slotCalls: readonly { key: string; owner: unknown }[]): ComposerAttachmentsOwnerProps {
   for (let i = slotCalls.length - 1; i >= 0; i -= 1) {

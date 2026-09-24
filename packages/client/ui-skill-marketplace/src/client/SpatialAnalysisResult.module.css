@@ -1,0 +1,12 @@
+.progress { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: #245cdb; font-size: 13px; }
+.progress small { flex-basis: 100%; margin-left: 22px; color: #61718b; font-size: 11px; }
+.spinner { width: 14px; height: 14px; border: 2px solid #bad0ff; border-top-color: #2467e8; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.answer { padding: 21px 23px; border: 1px solid #e4eaf4; border-radius: 12px; background: #fff; min-width: 0; }
+.answer > h3 { margin: 0 0 14px; font-size: 16px; }
+.section { padding: 14px 0; border-top: 1px solid #e8edf7; }
+.section h4 { margin: 0 0 9px; font-size: 14px; }
+.section p { margin: 0 0 8px; line-height: 1.75; color: #41536f; white-space: pre-wrap; }
+.answer details { padding-top: 14px; border-top: 1px solid #e8edf7; }
+.answer summary { color: #245cdb; cursor: pointer; }
+.answer pre { max-height: 350px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 12px; line-height: 1.65; }

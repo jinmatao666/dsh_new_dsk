@@ -3,14 +3,13 @@ import {
   type ToolDef,
 } from './OfficeExpertWorkbench.tsx'
 import type { OfficeTaskService } from './office-task.ts'
-import { meetingIconImages } from './MeetingIconData.ts'
+import { geologyIconImages } from './GeologyIconData.ts'
 import { fileHero } from './OfficeExpertHeroImages.ts'
 import {
   fileHome,
   fileHistory,
   fileFolder,
   fileGuide,
-  fileUpload,
   wordPdf,
   pdfImages,
   pdfOrganize,
@@ -167,8 +166,8 @@ export function FileConversionWorkbench({
         files: fileFolder,
         guide: fileGuide,
         info: fileGuide,
-        emptyHistory: meetingIconImages.history,
-        emptyFiles: fileUpload,
+        emptyHistory: geologyIconImages.history ?? fileHistory,
+        emptyFiles: geologyIconImages.files ?? fileFolder,
         toolIcons: {
           'word-pdf': wordPdf,
           'pdf-images': pdfImages,
@@ -184,16 +183,19 @@ export function FileConversionWorkbench({
       guide={[
         {
           title: 'Word 转 PDF',
-          text: '依赖本机 Word、WPS 或 LibreOffice。尽可能保持排版，最终效果以真实结果为准。',
+          text: '添加 DOC、DOCX 或 DOCM，可一次选择多个文件。转换依赖本机可用的 Word、WPS 或 LibreOffice；请在成果页打开生成的 PDF，核对字体、分页和图表。原文件不会被覆盖。',
         },
         {
-          title: 'PDF 页码',
-          text: '页码从 1 开始；非法、重复、倒序和越界范围会失败。',
+          title: 'PDF 转图片与合并拆分',
+          text: 'PDF 转图片可选择 PNG 或 JPG、页码范围和清晰度；合并时按所选文件顺序处理，拆分时填写合法页码范围或逐页拆分。页码从 1 开始，非法、重复、倒序和越界范围会失败。',
         },
-        { title: '图片转 PDF', text: '保持宽高比、不裁切；透明区域转白底。' },
+        {
+          title: '图片转 PDF',
+          text: '支持 JPG、PNG、WebP 图片，按所选顺序合成一个 PDF。可选择页面尺寸、方向与页边距；图片保持宽高比、不裁切，透明区域转为白底。',
+        },
         {
           title: '图片优化',
-          text: 'PNG 不承诺通过质量参数有损压缩，也不保证输出一定更小。',
+          text: '可批量处理 JPG、PNG、WebP，选择输出格式、质量和最大尺寸；保持图片比例且不放大。PNG 不使用有损质量参数，也不保证优化后文件一定更小。',
         },
       ]}
     />

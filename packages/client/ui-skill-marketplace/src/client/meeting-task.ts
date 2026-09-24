@@ -90,7 +90,12 @@ export function createMeetingTaskService(connection: ConnectionHandle, workspace
     const finalMessage = events.findLast(event => event.type === 'assistant/message')
     const answer = finalMessage?.type === 'assistant/message' ? finalMessage.data.message.content.filter(block => block.type === 'text').map(block => block.text).join('\n') : ''
     const output = await native('list_expert_output_files', { directory: task.directory })
-    const wordPath = Array.isArray(output) ? output.filter((path): path is string => typeof path === 'string' && /\.docx$/i.test(path)).at(-1) : undefined
+    const inputNames = new Set(task.inputs.map(file => file.name.toLowerCase()))
+    const wordPath = Array.isArray(output) ? output.filter((path): path is string => {
+      if (typeof path !== 'string') return false
+      const filename = path.split(/[\\/]/).at(-1) ?? ''
+      return /^会议纪要(?:_\d+)?\.docx$/i.test(filename) && !inputNames.has(filename.toLowerCase())
+    }).at(-1) : undefined
     const normalEnd = completed?.data.reason.kind === 'completed'
     const status = completed === undefined ? 'running' : normalEnd && wordPath !== undefined ? 'completed' : 'failed'
     return {

@@ -219,6 +219,38 @@
   position: relative;
 }
 
+.skillLine {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.skillText {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.skillTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 48%;
+  margin: 4px 0 0 16px;
+  padding: 0 6px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.skillLine .skillText :is(.input, .mirror, .backdrop) {
+  padding-left: 0;
+}
+
 /* Decoration backdrop: same metrics as the transparent-text textarea. It owns
    every visible glyph plus the range colors and ghost hint; the textarea above
    retains the native selection and caret. */

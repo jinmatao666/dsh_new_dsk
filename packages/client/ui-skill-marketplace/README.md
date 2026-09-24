@@ -6,6 +6,8 @@ This client plugin places the skill marketplace, Expert Library, connectors, and
 
 Installed skill cards and detail pages expose a Use action. It opens the new conversation screen without a selected workspace; after the user picks a workspace, the client sends a prompt beginning with the installed skill's slash name. The prompt asks for missing task details before the skill proceeds.
 
+The Use action also caches the skill's display name for the composer. The composer shows a compact inline label while retaining the slash identifier in the editable draft sent to the host.
+
 The geology-analysis expert opens a workbench tab inside the Expert Library. Its left navigation exposes material intake, review, personal history, deliverables, and guidance. The form accepts GeoJSON, Shape ZIP, or a selected Shape component set and checks file extensions and the `.shp`/`.shx`/`.dbf` combination; the analysis skill checks polygon geometry and coordinate reference information. The workbench retains a draft while its tab stays open and discards it when the tab closes or the overlay unmounts.
 
 The workbench distinguishes a running task, a completed task, and a failed task using the archived session result. History refreshes each listed task's status and supports local search and status filtering. Deliverables list only Word and Excel paths found in each task directory, with local open-file actions and filename/type filtering; the UI does not infer a percentage, area, map, or structured statistics from the model answer.

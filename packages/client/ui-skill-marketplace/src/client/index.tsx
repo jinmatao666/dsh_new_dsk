@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { ClientContext, ISessions, IWorkspaces } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { startSkillUse } from './skill-use.ts'
+import { rememberSkillDisplayNames, startSkillUse } from './skill-use.ts'
 import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connection/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -568,7 +568,7 @@ const marketplaceControllers: Record<MarketplaceSection, Controller> = {
 type OverlayProps = PropsRuntime<'shell.overlay'> & {
   marketplaceUrl: string
   chooseDirectory: () => Promise<string | null>
-  useSkill: (slug: string) => void
+  useSkill: (slug: string, displayName: string) => void
 }
 type CustomSkillSource =
   | { kind: 'directory'; path: string }
@@ -692,12 +692,20 @@ function parseExpertDetailSections(value: unknown): readonly ExpertDetailSection
   } catch { return undefined }
 }
 
-function ConfiguredExpertSections({ sections, meeting = false }: { sections: readonly ExpertDetailSection[]; meeting?: boolean }) {
+function ConfiguredExpertSections({ sections }: { sections: readonly ExpertDetailSection[] }) {
   const geologyIcons = ['workspace', 'files', 'result', 'layers'] as const
-  const meetingIcons = [meetingIconImages.scenario, meetingIconImages.materials, meetingIconImages.delivery, meetingIconImages.direction]
-  return <>{sections.map((section, index) => <section key={`${section.title}-${index}`}>
-    <div className={meeting ? 'dsh-meeting-modal-section-head' : 'dsh-geology-modal-section-head'}>
-      {meeting ? <img src={meetingIcons[index] ?? meetingIconImages.scenario} alt="" /> : <GeologyIcon name={geologyIcons[index] ?? 'workspace'} />}
+  const displaySections = sections.map((section, index) => {
+    if (index === 2 && section.title === '本专家交付' && section.content.trim() === '') {
+      return { ...section, content: '每个成功任务交付一份结构化 Word 会议纪要；未在材料中明确的参会人、时间、责任人和截止时间会标注为“未明确”。' }
+    }
+    if (index === 3 && section.title === '处理原则' && section.content.trim() === '录音转写\n会议纪要\n行动事项') {
+      return { ...section, content: '依据实际录音与材料整理议题、结论和行动事项，不凭空补出决议或责任人；正式使用前请对照原始材料复核。' }
+    }
+    return section
+  })
+  return <>{displaySections.map((section, index) => <section key={`${section.title}-${index}`}>
+    <div className="dsh-geology-modal-section-head">
+      <GeologyIcon name={geologyIcons[index] ?? 'workspace'} />
       <h3>{section.title}</h3><span>{section.subtitle}</span>
     </div>
     {section.content.includes('\n') ? <ul>{section.content.split('\n').map(line => line.trim()).filter(Boolean).map((line, lineIndex) => <li key={`${line}-${lineIndex}`}>{line}</li>)}</ul> : <p>{section.content}</p>}
@@ -793,7 +801,7 @@ function ExpertMarket() {
       <button type="button" className={!workspaceActive && tab === 'teams' ? 'active' : ''} onClick={() => { setTab('teams'); setGeologyActive(false); setMeetingActive(false); setThirdSurveyActive(false); setPlanReviewActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false) }}>专家团</button>
       {openedGeology && <span className={`dsh-expert-open-tab${geologyActive ? ' active' : ''}`}><button type="button" onClick={() => { setGeologyActive(true); setMeetingActive(false); setThirdSurveyActive(false); setPlanReviewActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false) }}>地质条件分析专家</button><button type="button" className="dsh-expert-tab-close" aria-label="关闭地质条件分析专家" onClick={() => { setOpenedGeology(false); setGeologyActive(false); setTab('experts') }}>×</button></span>}
       {openedThirdSurvey && <span className={`dsh-expert-open-tab${thirdSurveyActive ? ' active' : ''}`}><button type="button" onClick={() => { setThirdSurveyActive(true); setGeologyActive(false); setMeetingActive(false); setPlanReviewActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false) }}>三调土地利用现状分析专家</button><button type="button" className="dsh-expert-tab-close" aria-label="关闭三调土地利用现状分析专家" onClick={() => { setOpenedThirdSurvey(false); setThirdSurveyActive(false); setTab('experts') }}>×</button></span>}
-      {openedPlanReview && <span className={`dsh-expert-open-tab${planReviewActive ? ' active' : ''}`}><button type="button" onClick={() => { setPlanReviewActive(true); setGeologyActive(false); setMeetingActive(false); setThirdSurveyActive(false) }}>土地利用规划审查专家</button><button type="button" className="dsh-expert-tab-close" aria-label="关闭土地利用规划审查专家" onClick={() => { setOpenedPlanReview(false); setPlanReviewActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false); setTab('experts') }}>×</button></span>}
+      {openedPlanReview && <span className={`dsh-expert-open-tab${planReviewActive ? ' active' : ''}`}><button type="button" onClick={() => { setPlanReviewActive(true); setGeologyActive(false); setMeetingActive(false); setThirdSurveyActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false) }}>土地利用规划审查专家</button><button type="button" className="dsh-expert-tab-close" aria-label="关闭土地利用规划审查专家" onClick={() => { setOpenedPlanReview(false); setPlanReviewActive(false); if (planReviewActive) setTab('experts') }}>×</button></span>}
       {openedMeeting && <span className={`dsh-expert-open-tab${meetingActive ? ' active' : ''}`}><button type="button" onClick={() => { setMeetingActive(true); setGeologyActive(false); setThirdSurveyActive(false); setPlanReviewActive(false); setFileConversionActive(false); setDocumentIntelligenceActive(false) }}>会议纪要专家</button><button type="button" className="dsh-expert-tab-close" aria-label="关闭会议纪要专家" onClick={() => { setOpenedMeeting(false); setMeetingActive(false); setTab('experts') }}>×</button></span>}
       {openedFileConversion && <span className={`dsh-expert-open-tab${fileConversionActive ? ' active' : ''}`}><button type="button" onClick={() => { setFileConversionActive(true); setDocumentIntelligenceActive(false); setGeologyActive(false); setMeetingActive(false); setThirdSurveyActive(false); setPlanReviewActive(false) }}>文件转换与 PDF 工具专家</button><button type="button" className="dsh-expert-tab-close" onClick={() => { setOpenedFileConversion(false); setFileConversionActive(false); setTab('experts') }}>×</button></span>}
       {openedDocumentIntelligence && <span className={`dsh-expert-open-tab${documentIntelligenceActive ? ' active' : ''}`}><button type="button" onClick={() => { setDocumentIntelligenceActive(true); setFileConversionActive(false); setGeologyActive(false); setMeetingActive(false); setThirdSurveyActive(false); setPlanReviewActive(false) }}>文档智能处理专家</button><button type="button" className="dsh-expert-tab-close" onClick={() => { setOpenedDocumentIntelligence(false); setDocumentIntelligenceActive(false); setTab('experts') }}>×</button></span>}
@@ -1305,7 +1313,7 @@ function SkillMarketplace({ section, chooseDirectory, useSkill }: OverlayProps &
 
   const openSkillConversation = (skill: Skill) => {
     closeMarket()
-    useSkill(skillSlug(skill))
+    useSkill(skillSlug(skill), skill.name)
   }
 
   const toggleInstall = async (skill: Skill) => {
@@ -1915,10 +1923,10 @@ export function apply(ctx: ClientContext): void {
   const workspaces = ctx.get('workspaces') as unknown as IWorkspaces
   const sessions = ctx.get('sessions') as ISessions
   expertLayout = ctx.get('layout') as ILayout
-  const useSkill = (slug: string) => {
+  const useSkill = (slug: string, displayName: string) => {
     const conversation = ctx.get('conversation')
     if (conversation === undefined) throw new Error('skill-marketplace: conversation service unavailable')
-    startSkillUse(sessions, conversation, slug)
+    startSkillUse(sessions, conversation, slug, displayName)
   }
   geologyTaskService = createGeologyTaskService(connection, workspaces)
   meetingTaskService = createMeetingTaskService(connection, workspaces)
@@ -1928,7 +1936,13 @@ export function apply(ctx: ClientContext): void {
   documentIntelligenceTaskService = createOfficeTaskService(connection, workspaces, 'document-intelligence', '文档智能处理')
   loadRemoteSkills = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'skill-list', {})) as { items?: unknown }
-    return Array.isArray(raw?.items) ? raw.items.filter((item): item is RemoteSkill => typeof item === 'object' && item !== null) : []
+    const items = Array.isArray(raw.items)
+      ? raw.items.filter((item): item is RemoteSkill => typeof item === 'object' && item !== null)
+      : []
+    rememberSkillDisplayNames(items.flatMap(item => typeof item.name === 'string' && typeof item.display_name === 'string'
+      ? [{ slug: item.name, displayName: item.display_name }]
+      : []))
+    return items
   }
   loadRemoteExperts = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'expert-list', {})) as { items?: unknown }
@@ -1944,6 +1958,9 @@ export function apply(ctx: ClientContext): void {
   loadPersonalSkills = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'personal-skill-list', {})) as { items?: unknown }
     const items = Array.isArray(raw.items) ? raw.items as RemotePersonalSkill[] : []
+    rememberSkillDisplayNames(items.flatMap(item => typeof item.name === 'string' && typeof item.display_name === 'string'
+      ? [{ slug: item.name, displayName: item.display_name }]
+      : []))
     if (Array.isArray(raw.items)) recordReviewList(items)
     return items
   }

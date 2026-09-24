@@ -22,3 +22,19 @@
 @media(max-width:1050px){.dashboard{grid-template-columns:1fr}.welcomeCapabilities,.welcomeSteps,.dashboard>.hero,.dashboard>.toolSection,.dashboard>.recent{grid-column:1;grid-row:auto}}
 @media(max-width:650px){.dashboard>.hero>div:first-child{max-width:100%}.welcomeSteps>div{grid-template-columns:1fr}}
 .side nav button img{width:30px;height:30px;filter:none}
+.review dd small{display:block;margin-top:5px;color:#71819a;font-size:12px}
+
+/* Match the shared expert sidebar geometry. */
+.shell{grid-template-columns:238px minmax(0,1fr)}
+.side{padding:24px 16px 18px;border-right-color:#e8eef7;background:linear-gradient(160deg,#fff 50%,#f4f8ff 100%)}
+.brand{box-sizing:border-box;height:88px;min-height:88px;gap:11px;margin-bottom:0;padding:0 7px 14px}
+.brand>span{flex:0 0 48px;width:48px;height:48px;border-radius:10px}
+.brand img{width:44px;height:44px}
+.brand>div{min-width:0}
+.brand strong{font-size:13px;line-height:18px;overflow-wrap:anywhere}
+.brand small{font-size:11px;line-height:16px}
+.new{box-sizing:border-box;height:42px;padding:0 12px;border-radius:8px;font-size:13px}
+.side nav{gap:3px;margin-top:24px}
+.side nav button{box-sizing:border-box;min-height:48px;gap:11px;padding:8px 12px;border-radius:4px;font-size:13px}
+.side nav button img{flex:0 0 30px;width:30px;height:30px}
+@media(max-width:850px){.shell{grid-template-columns:1fr}}

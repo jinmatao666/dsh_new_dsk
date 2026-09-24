@@ -61,6 +61,16 @@ export function InputBar({
   const live = input !== undefined && keyboard !== undefined && inputActions !== undefined
   const pendingDraft = usePendingDraft(value => value)
   const draft = input?.draft ?? pendingDraft
+  const skillNames = useMemo<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem('dsh.skill-display-names') ?? '{}') as Record<string, string> }
+    catch { return {} }
+  }, [draft])
+  const skillMatch = /^\/([\w-]+)(?=\s|$)/u.exec(draft)
+  const skillSlug = skillMatch?.[1]
+  const skillActive = skillSlug !== undefined && input?.claim === undefined
+    && (skillNames[skillSlug] !== undefined || lexicon.get('/')?.includes(skillSlug) === true)
+  const skillPrefix = skillActive && skillMatch !== null ? skillMatch[0] + (draft[skillMatch[0].length] === ' ' ? ' ' : '') : ''
+  const visibleDraft = skillPrefix === '' ? draft : draft.slice(skillPrefix.length)
   const attachments = useMemo(
     () => input === undefined || draftImages === undefined ? [] : draftImages(input.imageIds),
     [draftImages, input?.imageIds],
@@ -175,7 +185,7 @@ export function InputBar({
     // A box that cannot scroll has nothing to reveal: the draft fits, so every
     // caret is already in view and the assignment below would clamp to itself.
     if (scrollEl.scrollHeight <= scrollEl.clientHeight) return
-    const at = Math.min(caret, text.data.length)
+    const at = Math.max(0, Math.min(caret - skillPrefix.length, text.data.length))
     // A caret straight after a newline sits on a line with nothing on it to
     // measure — the shape a trailing-newline draft ends in — and the engines
     // disagree there: chromium returns NO client rects at all (an all-zero box,
@@ -241,7 +251,7 @@ export function InputBar({
   // browser; these two have to ask for it, so they share one restore.
   const restoreCaret = (el: HTMLTextAreaElement, caret: number): void => {
     requestAnimationFrame(() => {
-      el.setSelectionRange(caret, caret)
+      el.setSelectionRange(Math.max(0, caret - skillPrefix.length), Math.max(0, caret - skillPrefix.length))
       revealCaret(caret)
     })
   }
@@ -271,19 +281,31 @@ export function InputBar({
   // selectionStart/End are number|null in lib.dom; the type-aware lint program narrows them.
   /* oxlint-disable typescript/no-unnecessary-condition */
   const selectionOf = (el: HTMLTextAreaElement) => ({
-    start: el.selectionStart ?? 0,
-    end: el.selectionEnd ?? el.selectionStart ?? 0,
+    start: (el.selectionStart ?? 0) + skillPrefix.length,
+    end: (el.selectionEnd ?? el.selectionStart ?? 0) + skillPrefix.length,
   })
   /* oxlint-enable typescript/no-unnecessary-condition */
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (inert) {
       if (e.key === 'Enter' && !e.shiftKey) e.preventDefault()
+      if (skillPrefix !== '' && e.key === 'Backspace'
+        && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0) {
+        e.preventDefault()
+        setPendingDraft(visibleDraft)
+      }
       return
     }
     // Absent machine without a Workspace recovery action stays disabled; the
     // guard narrows the faces for the paths below.
     if (input === undefined || keyboard === undefined || inputActions === undefined) return
+    if (skillPrefix !== '' && !locked && !machineBusy && e.key === 'Backspace'
+      && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0) {
+      e.preventDefault()
+      keyboard.setDraft(visibleDraft)
+      restoreCaret(e.currentTarget, 0)
+      return
+    }
     // Shift+Enter is the native newline UNCONDITIONALLY — decided before the
     // IME guard so a composition-closing Shift+Enter still breaks the line.
     if (e.key === 'Enter' && e.shiftKey) return
@@ -365,18 +387,19 @@ export function InputBar({
 
   const onChange = (e: ChangeEvent<HTMLTextAreaElement>): void => {
     if (inert) {
-      if (keyboard === undefined) setPendingDraft(e.target.value)
-      else keyboard.setDraft(e.target.value)
+      const next = skillPrefix === '' ? e.target.value : `${skillPrefix.endsWith(' ') ? skillPrefix : `${skillPrefix} `}${e.target.value}`
+      if (keyboard === undefined) setPendingDraft(next)
+      else keyboard.setDraft(next)
       return
     }
     if (keyboard === undefined || locked) return // disabled/read-only states cannot edit the draft
     if (machineBusy) return // submitting is the read-only span; adjudicating holds the pending lock
-    const next = e.target.value
+    const next = skillPrefix === '' ? e.target.value : `${skillPrefix.endsWith(' ') ? skillPrefix : `${skillPrefix} `}${e.target.value}`
     safariNativeShrinkRef.current = safari && next.length < draft.length
     keyboard.setDraft(next)
     // selectionStart is number|null in lib.dom; the type-aware lint program narrows it.
     // oxlint-disable-next-line typescript/no-unnecessary-condition
-    keyboard.track(next, e.target.selectionStart ?? next.length)
+    keyboard.track(next, (e.target.selectionStart ?? e.target.value.length) + (next.length - e.target.value.length))
   }
 
   const onCopyOrCut = (e: React.ClipboardEvent<HTMLTextAreaElement>, cut: boolean): void => {
@@ -531,7 +554,13 @@ export function InputBar({
   // Mirror-layer decorations: a visible backdrop with transparent textarea
   // text. Inline references retain the draft's glyph metrics; file and folder
   // references occupy invisible tokens because the cards above own their presentation.
-  const deco = input === undefined ? INERT_DECORATIONS : deriveDecorations(input, lexicon)
+  const deco = input === undefined ? INERT_DECORATIONS : deriveDecorations({
+    ...input,
+    draft: visibleDraft,
+    occurrences: input.occurrences
+      .filter(occurrence => occurrence.offset >= skillPrefix.length)
+      .map(occurrence => ({ ...occurrence, offset: occurrence.offset - skillPrefix.length })),
+  }, lexicon)
   const fileReferences = deco.chips.filter(chip => chip.appearance === 'file' || chip.appearance === 'folder')
   const removeFileReference = (occurrenceId: number): void => {
     if (input === undefined || keyboard === undefined || locked || machineBusy) return
@@ -551,13 +580,13 @@ export function InputBar({
     // claim token only leads).
     let cursor = 0
     const pushPlain = (upTo: number): void => {
-      if (upTo > cursor) backdrop.push(draft.slice(cursor, upTo))
+      if (upTo > cursor) backdrop.push(visibleDraft.slice(cursor, upTo))
       cursor = upTo
     }
     if (deco.token !== null) {
       backdrop.push(
         <mark key="token" className={css.hlToken} data-decoration="token">
-          {draft.slice(deco.token.start, deco.token.end)}
+          {visibleDraft.slice(deco.token.start, deco.token.end)}
         </mark>,
       )
       cursor = deco.token.end
@@ -603,7 +632,7 @@ export function InputBar({
       } else {
         // Plain-range highlight: the glyphs stay the
         // textarea's (advance untouched); the mark paints the chip look.
-        const text = draft.slice(b.ref.start, b.ref.end)
+        const text = visibleDraft.slice(b.ref.start, b.ref.end)
         backdrop.push(
           <mark key={`ref-${b.ref.start}`} className={css.textRef} data-decoration="text-ref">
             {b.ref.appearance === 'folder'
@@ -622,7 +651,7 @@ export function InputBar({
         cursor = b.ref.end
       }
     }
-    pushPlain(draft.length)
+    pushPlain(visibleDraft.length)
     if (deco.hint !== null) {
       // Claim tokens have the `/name ` format (trailing space); trim to the bare name.
       const commandName = input?.claim?.token.slice(1).trim() ?? ''
@@ -716,43 +745,58 @@ export function InputBar({
             offset the browser applies to both layers at once, never a JS mirror between two boxes,
             which a compositor-driven gesture outruns and leaves the words trailing the caret. */}
         <div ref={scrollRef} className={css.scroll} data-input-scroll>
-          <div className={css.grow}>
-            <div
-              aria-hidden
-              className={clsx(css.backdrop, textareaDisabled && css.backdropDisabled)}
-              data-input-backdrop
-              data-disabled={textareaDisabled || undefined}
-            >
-              {backdrop}
+          <div className={clsx(css.grow, skillPrefix !== '' && css.skillLine)}>
+            {skillPrefix !== '' && (
+              <span
+                className={css.skillTag}
+                aria-label={`已选技能：${skillNames[skillSlug ?? ''] ?? skillSlug}`}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  inputRef.current?.focus()
+                  inputRef.current?.setSelectionRange(0, 0)
+                }}
+              >
+                <span aria-hidden="true">⚒︎</span>{skillNames[skillSlug ?? ''] ?? skillSlug}
+              </span>
+            )}
+            <div className={css.skillText}>
+              <div
+                aria-hidden
+                className={clsx(css.backdrop, textareaDisabled && css.backdropDisabled)}
+                data-input-backdrop
+                data-disabled={textareaDisabled || undefined}
+              >
+                {backdrop}
+              </div>
+              <textarea
+                ref={inputRef}
+                className={css.input}
+                value={visibleDraft}
+                disabled={textareaDisabled}
+                readOnly={machineBusy}
+                data-phase={input?.phase ?? 'inert'}
+                placeholder={placeholder ?? (parentOffline
+                  ? t('placeholder.parentOffline')
+                  : disabled
+                    ? t('placeholder.unavailable')
+                    // The steer hint deliberately outranks the plan placeholder:
+                    // while it shows, the whole-queue gesture is genuinely available
+                    // (the gate never consults plan mode), so the actionable hint wins.
+                    : canSteerQueue
+                      ? t('placeholder.steerQueue')
+                      : planActive ? t('placeholder.plan') : t('placeholder.default'))}
+                rows={2}
+                onChange={onChange}
+                onKeyDown={onKeyDown}
+                onSelect={onSelect}
+                onCopy={(e) => { onCopyOrCut(e, false) }}
+                onCut={(e) => { onCopyOrCut(e, true) }}
+                onPaste={onPaste}
+                onCompositionStart={onCompositionStart}
+                onCompositionEnd={onCompositionEnd}
+              />
+              <div ref={mirrorRef} aria-hidden className={css.mirror} data-input-mirror>{`${visibleDraft}\n`}</div>
             </div>
-            <textarea
-              ref={inputRef}
-              className={css.input}
-              value={draft}
-              disabled={textareaDisabled}
-              readOnly={machineBusy}
-              data-phase={input?.phase ?? 'inert'}
-              placeholder={placeholder ?? (parentOffline
-                ? t('placeholder.parentOffline')
-                : disabled
-                  ? t('placeholder.unavailable')
-                  // The steer hint deliberately outranks the plan placeholder:
-                  // while it shows, the whole-queue gesture is genuinely available
-                  // (the gate never consults plan mode), so the actionable hint wins.
-                  : canSteerQueue
-                    ? t('placeholder.steerQueue')
-                    : planActive ? t('placeholder.plan') : t('placeholder.default'))}
-              rows={2}
-              onChange={onChange}
-              onKeyDown={onKeyDown}
-              onSelect={onSelect}
-              onCopy={(e) => { onCopyOrCut(e, false) }}
-              onCut={(e) => { onCopyOrCut(e, true) }}
-              onPaste={onPaste}
-              onCompositionStart={onCompositionStart}
-              onCompositionEnd={onCompositionEnd}
-            />
-            <div ref={mirrorRef} aria-hidden className={css.mirror} data-input-mirror>{`${draft}\n`}</div>
           </div>
         </div>
         <div className={css.row}>

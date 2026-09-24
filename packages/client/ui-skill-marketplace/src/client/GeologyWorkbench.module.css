@@ -444,3 +444,14 @@ button:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary
 .homeRecentEmpty .spriteIcon { width: 32px; height: 32px; }
 .homeRecentEmpty strong { font-size: 12px; }
 @media (max-width: 1100px) { .homeLayout { grid-template-columns: 1fr; } .homeAside { grid-row: auto; } .homeHero { min-height: 230px; } }
+
+/* Keep the expert sidebar anchored while switching between workbench tabs. */
+.shell { grid-template-columns: 238px minmax(0,1fr); }
+.sidebar { padding: 24px 16px 18px; }
+.identity { box-sizing: border-box; height: 88px; min-height: 88px; padding: 0 7px 14px; }
+.identityMark { flex: 0 0 48px; width: 48px; height: 48px; }
+.newButton { box-sizing: border-box; height: 42px; padding: 0 12px; }
+.sideNav { gap: 3px; margin-top: 24px; }
+.sideNav button { box-sizing: border-box; min-height: 48px; padding: 8px 12px; }
+.sideNav button .spriteIcon { flex: 0 0 30px; width: 30px; height: 30px; margin: 0; }
+@media (max-width: 730px) { .shell { grid-template-columns: 1fr; } }

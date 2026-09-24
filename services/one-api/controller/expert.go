@@ -76,6 +76,60 @@ func defaultExpertProfile(key string) model.ExpertProfile {
 	}
 }
 
+// These are presentation defaults only. Saved administrator copy always wins.
+func defaultExpertSections(key string) string {
+	type section struct {
+		Title    string `json:"title"`
+		Subtitle string `json:"subtitle"`
+		Content  string `json:"content"`
+	}
+	var rows []section
+	switch key {
+	case "geology-analysis":
+		rows = []section{{"适用场景", "前期资料研判", "适合项目选址和规划前期了解地块的地质环境、地质灾害易发性及需要进一步核实的问题。结果供资料研判参考，不替代现场勘察、专项评估或工程设计。"}, {"需要准备的材料", "项目范围数据", "提供面或多面的 GeoJSON、完整 Shape ZIP，或同名的 .shp、.shx、.dbf 文件；有 .prj 请一并提供。坐标系无法识别时需明确说明，分区名称字段与源数据不同时可在高级选项中修改。"}, {"交付成果", "以实际任务为准", "完成后可在任务中查看地质环境与灾害易发性分析结论，并打开实际生成的 Word 专业报告和 Excel 明细；未成功生成的文件不会作为成果展示。"}, {"专业方向", "分析边界", "围绕项目范围与相关地质资料进行空间研判，提示易发分区、主要关注点与后续核实方向；不自动作出建设适宜性审批结论。"}}
+	case "third-survey-analysis":
+		rows = []section{{"适用场景", "用地现状研判", "适合项目选址、前期用地摸底和三调地类构成核对，帮助了解项目范围内主要地类、面积及耕地保护相关情况。分析不替代权属调查或正式审批。"}, {"需要准备的材料", "范围与年度", "提供面或多面的 GeoJSON、完整 Shape ZIP，或同名的 .shp、.shx、.dbf 文件；有 .prj 请一并提供。核对坐标系及三调年度，默认年度为 2024。"}, {"交付成果", "以实际任务为准", "完成后可查看三调土地利用现状分析结论，以及本次任务实际生成的 Word 报告和 Excel 明细；面积、地类等关键数据请结合原始资料复核。"}, {"专业方向", "分析边界", "关注三调地类与面积构成、耕地相关情况及需要进一步核实的差异；不能据此直接认定土地权属、审批结果或最新土地现状。"}}
+	case "land-use-plan-review":
+		rows = []section{{"适用场景", "规划前置审查", "适合项目选址和方案前期核对项目范围与规划管控要求的空间关系，识别可能的冲突范围、风险事项和后续核实重点。结果不等同于主管部门审查意见。"}, {"需要准备的材料", "范围与审查类别", "提供面或多面的 GeoJSON、完整 Shape ZIP，或同名的 .shp、.shx、.dbf 文件；有 .prj 请一并提供。坐标系无法识别时需说明；审查类别默认为 4，仅在有明确业务依据时修改。"}, {"交付成果", "以实际任务为准", "完成后可查看规划审查分析结论，并打开本次任务实际生成的 Word 报告和 Excel 明细；冲突和风险提示应结合现行规划资料人工复核。"}, {"专业方向", "分析边界", "围绕规划符合性、用途管制和空间冲突进行资料研判，不替代行政审批、法定规划核验或最终合规认定。"}}
+	case "meeting-minutes":
+		rows = []section{{"适用场景", "会议内容整理", "适合例会、项目沟通、评审会等需要将录音或已有文字材料整理为正式纪要的场景。材料可以只有转写稿或文字文件，不要求必须上传录音。"}, {"需要准备的材料", "录音与补充资料", "最多提供一个 WAV、M4A 或 MP3 录音，可同时添加多个可读取的文本、Word、PDF 或表格材料。扫描 PDF 无可提取文字时请先做 OCR；议程和转写稿有助于核对发言内容。"}, {"本专家交付", "一份 Word 纪要", "每个成功任务交付一份结构化 Word 会议纪要；转写文本属于处理过程，不在成果页单独交付。时间、参会人、责任人等未在材料中明确的信息会标注为“未明确”。"}, {"处理原则", "忠于会议来源", "依据实际录音和材料整理议题、结论与行动事项，不凭空补出决议、负责人或截止日期；正式对外使用前请结合原始材料复核。"}}
+	case "file-conversion-pdf":
+		rows = []section{{"适用场景", "常用文件处理", "适合将 Word 转为 PDF、导出 PDF 页面图片、合并或拆分 PDF、将图片整理成 PDF，以及批量压缩和转换图片格式。一次任务选择一种工具，原文件不会被覆盖。"}, {"需要准备的材料", "按工具选择文件", "Word 转 PDF 接收 DOC、DOCX、DOCM；PDF 工具接收 PDF；图片工具接收 JPG、JPEG、PNG、WebP。请检查页码范围、图片顺序和输出参数，Word 转 PDF 还依赖本机可用的转换器。"}, {"交付成果", "真实处理文件", "任务完成后在成果页查看本次实际生成的 PDF 或图片。转换后的排版、清晰度与文件内容取决于输入质量和本机转换环境，重要文件请打开结果复核。"}, {"处理原则", "只做选定操作", "不会替您修改文档内容或推断缺失页。非法页码、损坏文件或缺少转换依赖会如实报错，不会把未生成的文件显示为成功成果。"}}
+	case "document-intelligence":
+		rows = []section{{"适用场景", "阅读与版本核对", "适合快速阅读政策、报告、合同和项目材料，提炼摘要、重点、风险、时间节点及待办事项；也可比较原始版与新版可提取文本的变化。"}, {"需要准备的材料", "可读取文档", "摘要任务可提供一份或多份 DOCX、PDF、XLSX、XLSM 或常见文本材料；对比任务按顺序提供原始版和新版各一份。扫描 PDF 没有可提取文字时需先做 OCR。"}, {"交付成果", "摘要或差异结果", "摘要任务交付结构化摘要与来源说明；对比任务交付可提取文本的新增、删除、修改及重点变化结果。请以任务中实际生成的文件为准，并回到原文核对关键数字和结论。"}, {"处理原则", "不比较视觉排版", "版本对比不识别版式、图片、批注或修订痕迹，也不支持旧版 DOC、XLS 和 PPT；不修改原文件，不将推断内容当成已证实事实。"}}
+	}
+	data, _ := json.Marshal(rows)
+	return string(data)
+}
+
+type expertSection struct {
+	Title    string `json:"title"`
+	Subtitle string `json:"subtitle"`
+	Content  string `json:"content"`
+}
+
+// Upgrade only the recognizable old editor template. User-authored blocks stay intact.
+func displayExpertSections(profile model.ExpertProfile) string {
+	if strings.TrimSpace(profile.DetailSections) == "" || profile.DetailSections == "[]" {
+		return defaultExpertSections(profile.Key)
+	}
+	var existing, defaults []expertSection
+	if json.Unmarshal([]byte(profile.DetailSections), &existing) != nil || len(existing) != 4 ||
+		json.Unmarshal([]byte(defaultExpertSections(profile.Key)), &defaults) != nil || len(defaults) != 4 {
+		return profile.DetailSections
+	}
+	if existing[2].Title == defaults[2].Title && strings.TrimSpace(existing[2].Content) == "" {
+		existing[2].Content = defaults[2].Content
+	}
+	var tags []string
+	_ = json.Unmarshal([]byte(profile.Tags), &tags)
+	if existing[3].Title == defaults[3].Title && strings.TrimSpace(existing[3].Content) == strings.Join(tags, "\n") {
+		existing[3].Content = defaults[3].Content
+	}
+	data, _ := json.Marshal(existing)
+	return string(data)
+}
+
 func expertProfiles() ([]model.ExpertProfile, error) {
 	stored := make([]model.ExpertProfile, 0)
 	if err := model.DB.Find(&stored).Error; err != nil {
@@ -89,10 +143,12 @@ func expertProfiles() ([]model.ExpertProfile, error) {
 	for _, shipped := range shippedExperts {
 		if profile, ok := byKey[shipped.Key]; ok {
 			profile.RelatedSkills = encodedStrings(shipped.SkillKeys)
+			profile.DetailSections = displayExpertSections(profile)
 			result = append(result, profile)
 		} else {
 			profile := defaultExpertProfile(shipped.Key)
 			profile.RelatedSkills = encodedStrings(shipped.SkillKeys)
+			profile.DetailSections = defaultExpertSections(shipped.Key)
 			result = append(result, profile)
 		}
 	}
