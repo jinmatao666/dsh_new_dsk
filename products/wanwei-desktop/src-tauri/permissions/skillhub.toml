@@ -1,0 +1,14 @@
+[[permission]]
+identifier = "allow-install-skillhub-skill"
+description = "Allows the trusted desktop market to install a bounded SkillHub archive."
+commands.allow = ["install_skillhub_skill"]
+
+[[permission]]
+identifier = "allow-list-skillhub-skills"
+description = "Allows the trusted desktop market to list local SkillHub receipts."
+commands.allow = ["list_skillhub_skills"]
+
+[[permission]]
+identifier = "allow-uninstall-skillhub-skill"
+description = "Allows the trusted desktop market to remove a matching SkillHub installation."
+commands.allow = ["uninstall_skillhub_skill"]

@@ -8,6 +8,7 @@
  * real host entity, so the sink is one unconditional prompt path.
  */
 import type { Context } from '@deepseek-ai/cordis'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
   ISessions, SessionBinding, SessionFace,
 } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -49,6 +50,23 @@ interface ConversationAttachmentFace {
 /** Session-addressed input facade registry (SessionInputResolver face + composer-layer extras). */
 export class InputHub implements SessionInputResolver {
   private readonly shells = new Map<SessionId, SessionInputShell>()
+  readonly stagedDraft = createSnapshotStore('')
+
+  setStagedDraft(text: string): void { this.stagedDraft.set(text) }
+
+  takeStagedDraft(): string {
+    const text = this.stagedDraft.getSnapshot()
+    this.stagedDraft.set('')
+    return text
+  }
+
+  /** Move the pending pre-Session text into a connected Session without submitting it. */
+  moveStagedDraftTo(sessionId: SessionId): void {
+    const text = this.stagedDraft.getSnapshot()
+    if (text === '') return
+    this.shell(sessionId).setDraft(text)
+    this.stagedDraft.set('')
+  }
 
   /**
    * @param ctx - client root context (services resolved lazily per call — boot order stays free).

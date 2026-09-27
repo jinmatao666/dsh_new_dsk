@@ -1428,6 +1428,9 @@ importers:
       '@deepseek-ai/dsh-wanwei-skill-marketplace':
         specifier: workspace:^
         version: link:../../wanwei/skill-marketplace
+      '@deepseek-ai/dsh-wanwei-skillhub':
+        specifier: workspace:^
+        version: link:../../wanwei/skillhub
       '@deepseek-ai/dsh-wanwei-vision':
         specifier: workspace:^
         version: link:../../wanwei/vision
@@ -9624,9 +9627,15 @@ importers:
       '@deepseek-ai/dsh-api-remotes':
         specifier: workspace:^
         version: link:../../api/remotes
+      '@deepseek-ai/dsh-api-session-controller':
+        specifier: workspace:^
+        version: link:../../api/session-controller
       '@deepseek-ai/dsh-client-connection':
         specifier: workspace:^
         version: link:../../client/connection
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: workspace:^
+        version: link:../../client/ui-conversation
       '@deepseek-ai/dsh-client-ui-layout':
         specifier: workspace:^
         version: link:../../client/ui-layout
@@ -9654,6 +9663,22 @@ importers:
       react:
         specifier: ^18.2.0
         version: 18.3.1
+
+  packages/wanwei/skillhub:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:^
+        version: link:../../client/connection
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
 
   packages/wanwei/vision:
     dependencies:

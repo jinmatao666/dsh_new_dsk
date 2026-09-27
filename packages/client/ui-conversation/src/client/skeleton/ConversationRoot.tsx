@@ -130,8 +130,8 @@ function WidthHandle(props: {
 
 export function ConversationRoot({
   sessionId, useSession, useSessions, useSessionPendingInteraction,
-  useWorkspaces, useConversation, useInput, useComposerBlock,
-  renderSlot, renderSlotChain, selectWorkspace, t,
+  useWorkspaces, useConversation, useInput, useComposerBlock, useStagedDraft,
+  renderSlot, renderSlotChain, selectWorkspace, setStagedDraft, t,
 }: ConversationRootProps) {
   const session = useSession(s => s)
   const pendingInteraction = useSessionPendingInteraction(snapshot =>
@@ -142,6 +142,7 @@ export function ConversationRoot({
     : conversationPhase(session, conversation)
   const openState = session?.openState
   const inputState = useInput(s => s)
+  const stagedDraft = useStagedDraft(text => text)
   const cwd = useSessions(s => sessionId === undefined ? undefined : s.byId[sessionId]?.cwd)
   const summaryBlank = useSessions(s => sessionId === undefined ? undefined : s.byId[sessionId]?.blank)
   const workspaces = useWorkspaces(s => s)
@@ -332,6 +333,8 @@ export function ConversationRoot({
       ? {
         disabled: true,
         placeholder: t('placeholder.workspace'),
+        stagedDraft,
+        onStageDraft: setStagedDraft,
         workspacePickerOpen: pickerOpen,
         onRequestWorkspace: () => { setPickerOpen(true) },
       }

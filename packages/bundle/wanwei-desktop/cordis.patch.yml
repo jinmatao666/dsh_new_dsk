@@ -29,3 +29,11 @@
       name: '@deepseek-ai/dsh-wanwei-skill-marketplace'
     - id: wanwei-product-ui
       name: '@deepseek-ai/dsh-wanwei-product-ui'
+    - id: wanwei-skillhub
+      name: '@deepseek-ai/dsh-wanwei-skillhub'
+      config:
+        baseURL: https://api.skillhub.cn
+        timeoutMs: 45000
+        maxJsonBytes: 2097152
+        maxArchiveBytes: 16777216
+        downloadHosts: [skillhub-1388575217.cos.accelerate.myqcloud.com]

@@ -22,6 +22,9 @@
     "allow-open-workspace-directory",
     "allow-reveal-downloaded-file",
     "allow-import-workspace-files",
-    "allow-import-dropped-workspace-files"
+    "allow-import-dropped-workspace-files",
+    "allow-install-skillhub-skill",
+    "allow-list-skillhub-skills",
+    "allow-uninstall-skillhub-skill"
   ]
 }

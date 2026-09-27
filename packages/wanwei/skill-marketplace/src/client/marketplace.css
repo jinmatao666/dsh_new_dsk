@@ -1230,3 +1230,8 @@
 .dsh-skill-empty-icon { display: grid; width: 56px; height: 56px; border-radius: 18px; place-items: center; background: rgb(37 99 235 / 10%); color: var(--dsw-alias-primary, #2563eb); }
 .dsh-skill-refresh svg { transition: transform 0.45s ease; }
 .dsh-skill-refresh:active svg { transform: rotate(240deg); }
+
+.dsh-skill-detail-use { align-self: flex-start; margin: 0 0 18px 82px; padding: 9px 18px; border: 1px solid var(--dsw-alias-primary, #2563eb); border-radius: 10px; background: #fff; color: var(--dsw-alias-primary, #2563eb); cursor: pointer; font: inherit; font-size: 14px; }
+.dsh-skill-detail-use:hover { background: #eff6ff; }
+.dsh-skill-draft-prefix { display: inline-flex; align-items: center; gap: 4px; max-width: calc(100% - 24px); margin: 4px 0 2px 10px; padding: 3px 7px; border: 0; border-radius: 6px; background: var(--dsw-alias-interactive-bg-hover, #eef4ff); color: var(--dsw-alias-label-primary, #1d3658); cursor: pointer; font: inherit; font-size: 13px; }
+.dsh-skill-draft-prefix span:last-child { margin-left: 3px; color: var(--dsw-alias-label-secondary, #789); }

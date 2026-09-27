@@ -45,7 +45,7 @@ export function InputBar({
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
-  placeholder, accessory, overlay, leftItems, rightItems, footer,
+  stagedDraft, onStageDraft, placeholder, accessory, overlay, leftItems, rightItems, footer,
 }: InputBarProps) {
   const input = useInput(s => s)
   const notice = useNotices(s => s)
@@ -63,7 +63,8 @@ export function InputBar({
   // Session-maybe: the machine faces are absent together while no session is
   // current; the bar renders the same DOM inert instead of a parallel tree.
   const live = input !== undefined && keyboard !== undefined && inputActions !== undefined
-  const draft = input?.draft ?? ''
+  const staging = inert && input === undefined && onStageDraft !== undefined
+  const draft = input?.draft ?? (staging ? stagedDraft ?? '' : '')
   const editor = keyboard?.editor ?? null
   const attachments = useMemo(
     () => input === undefined || draftImages === undefined ? [] : draftImages(input.imageIds),
@@ -126,9 +127,9 @@ export function InputBar({
   // existing picker trigger. Message controls stay locked until a Session
   // exists; the trigger itself is read-only rather than disabled so pointer
   // and keyboard users can reach the recovery action.
-  const workspaceTrigger = inert && !removed && onRequestWorkspace !== undefined
-  const editorDisabled = removed || (locked && !workspaceTrigger)
-  const editable = live && !locked && !machineBusy
+  const workspaceTrigger = inert && !staging && !removed && onRequestWorkspace !== undefined
+  const editorDisabled = removed || (locked && !workspaceTrigger && !staging)
+  const editable = (live && !locked && !machineBusy) || (staging && !removed)
   const canSteerQueue = !locked && !machineBusy && !commandMenuOpen && empty && running && subagent === null
     && input.queue.some(row => row.placement === 'queued')
 
@@ -401,6 +402,14 @@ export function InputBar({
             size: imageSizeText(imageLimits.maxImageBytes),
           },
         })}
+        {renderSlot('conversation.input.draft-prefix', {
+          draft,
+          removePrefix: (length) => {
+            const next = draft.slice(length).trimStart()
+            if (staging) onStageDraft?.(next)
+            else inputActions?.setDraft(next)
+          },
+        })}
         {/* One scrollport, one text surface: the contenteditable grows with
             its content and .scroll — capped at 14 lines in CSS — is the only
             thing that scrolls. Chips are decorator portals inside the same
@@ -411,6 +420,8 @@ export function InputBar({
             <ComposerContentEditable
               editor={workspaceTrigger ? null : editor}
               editable={editable}
+              standaloneText={staging ? draft : undefined}
+              onStandaloneInput={staging ? onStageDraft : undefined}
               className={clsx(css.input, editorDisabled && css.inputDisabled)}
               data-phase={input?.phase ?? 'inert'}
               aria-disabled={editorDisabled || undefined}

@@ -137,6 +137,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.input.right': { kind: 'list'; scope: 'session'; owner: InputZone }
     /** Resident composer body, including the no-Session inert state. */
     'conversation.composer.bar': { kind: 'single'; scope: 'session-maybe'; owner: ComposerBarOwnerProps }
+    /** Optional presentation of a recognized prefix in the editable draft. */
+    'conversation.input.draft-prefix': { kind: 'single'; scope: 'session-maybe'; owner: DraftPrefixOwnerProps }
     /** Optional draft-image rail and drop target. */
     'conversation.input.attachments': {
       kind: 'single'
@@ -218,8 +220,13 @@ export type ConvViewProps = PropsRuntime<'conversation.view'>
 export interface ConversationInjected {
   /** Connect and open a blank Session in the selected Workspace. */
   selectWorkspace: (workspaceId: WorkspaceId) => Promise<void>
+  /** Stage editable text until a Workspace supplies its Session. */
+  setStagedDraft: (text: string) => void
   /** Session-addressed composer block source, or the stable absent source. */
-  hooks: { composerBlock: ObservableSnapshot<ComposerBlock | undefined> }
+  hooks: {
+    composerBlock: ObservableSnapshot<ComposerBlock | undefined>
+    stagedDraft: ObservableSnapshot<string>
+  }
 }
 
 /** Business callbacks injected into the strict Session body. */
@@ -250,6 +257,10 @@ export interface ComposerBarOwnerProps {
   workspacePickerOpen?: boolean
   /** Open the Workspace picker from the inert composer surface. */
   onRequestWorkspace?: () => void
+  /** Text staged while no Session exists. */
+  stagedDraft?: string
+  /** Update the pre-Session text without sending it. */
+  onStageDraft?: (text: string) => void
   placeholder?: string
   /** Optional content rendered above the composer surface. */
   accessory?: ReactNode
@@ -261,6 +272,12 @@ export interface ComposerBarOwnerProps {
   rightItems?: ReactNode
   /** Ambient content below the card. */
   footer?: ReactNode
+}
+
+/** Current draft and generic edit action for an optional prefix presenter. */
+export interface DraftPrefixOwnerProps {
+  draft: string
+  removePrefix: (length: number) => void
 }
 
 /** Package-private operations injected into the resident composer bar. */
@@ -294,7 +311,7 @@ export interface InputControlOwnerProps {
 export type ComposerBarProps =
   PropsRuntime<'conversation.composer.bar'>
   & PropsRenderSlots<
-    'conversation.input.attachments' | 'conversation.input.plan' | 'conversation.input.model'
+    'conversation.input.attachments' | 'conversation.input.draft-prefix' | 'conversation.input.plan' | 'conversation.input.model'
   >
   & InjectFace<ComposerBarInjected>
   & PropsLocale<'conversation'>

@@ -1,0 +1,22 @@
+.wanwei-skillhub { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--dsw-alias-border-main, #e5e7eb); color: var(--dsw-alias-label-primary); }
+.wanwei-skillhub .wanwei-skillhub-source, .wanwei-skillhub .wanwei-skillhub-card-meta { color: var(--dsw-alias-label-secondary, #64748b); font-size: 12px; }
+.wanwei-skillhub .wanwei-skillhub-filters, .wanwei-skillhub .wanwei-skillhub-actions, .wanwei-skillhub .wanwei-skillhub-pagination, .wanwei-skillhub .wanwei-skillhub-card-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.wanwei-skillhub .wanwei-skillhub-filters { margin: 16px 0; }
+.wanwei-skillhub input, .wanwei-skillhub select, .wanwei-skillhub button { font: inherit; color: inherit; border: 1px solid var(--dsw-alias-border-main, #e5e7eb); background: var(--dsw-alias-bg-base, #fff); border-radius: 8px; padding: 8px 12px; }
+.wanwei-skillhub input { flex: 1; min-width: 160px; }
+.wanwei-skillhub button { cursor: pointer; }
+.wanwei-skillhub button:disabled { opacity: .55; cursor: not-allowed; }
+.wanwei-skillhub button:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover, #f1f5f9); }
+.wanwei-skillhub :is(button, input, select):focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.wanwei-skillhub .wanwei-skillhub-card-title { padding: 0; border: 0; background: transparent; text-align: left; font-weight: 600; font-size: 15px; overflow-wrap: anywhere; }
+.wanwei-skillhub .wanwei-skillhub-card-summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; line-height: 1.6; color: var(--dsw-alias-label-secondary, #64748b); }
+.wanwei-skillhub .wanwei-skillhub-actions { margin-top: 12px; }
+.wanwei-skillhub .dsh-skill-card { flex-direction: column; min-width: 0; cursor: default; }
+.wanwei-skillhub .wanwei-skillhub-card-meta { margin-top: auto; }
+@media (max-width: 1000px) { .wanwei-skillhub .dsh-skill-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .wanwei-skillhub .dsh-skill-grid { grid-template-columns: minmax(0, 1fr); } }
+.wanwei-skillhub .wanwei-skillhub-pagination { justify-content: center; margin-top: 20px; }
+.wanwei-skillhub .wanwei-skillhub-status { padding: 12px; overflow-wrap: anywhere; background: var(--dsw-alias-interactive-bg-hover, #f1f5f9); border-radius: 8px; }
+.wanwei-skillhub .wanwei-skillhub-summary { white-space: pre-wrap; line-height: 1.7; overflow-wrap: anywhere; max-width: 75ch; }
+.wanwei-skillhub dl { display: grid; grid-template-columns: 60px 1fr; gap: 8px; }
+.wanwei-skillhub dd { margin: 0; overflow-wrap: anywhere; }

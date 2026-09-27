@@ -16,6 +16,10 @@ export interface ComposerContentEditableProps extends HTMLAttributes<HTMLDivElem
   readonly editor: LexicalEditor | null
   /** Whether the user may edit (readOnly/disabled states fold in here). */
   readonly editable: boolean
+  /** Plain text displayed before an editor-backed Session exists. */
+  readonly standaloneText?: string | undefined
+  /** Notify the owner about edits to the pre-Session text. */
+  readonly onStandaloneInput?: ((text: string) => void) | undefined
 }
 
 /**
@@ -23,8 +27,16 @@ export interface ComposerContentEditableProps extends HTMLAttributes<HTMLDivElem
  * @param props - editor binding, editability, and div passthroughs.
  * @returns the resident contenteditable div.
  */
-export function ComposerContentEditable({ editor, editable, ...rest }: ComposerContentEditableProps): ReactNode {
+export function ComposerContentEditable({
+  editor, editable, standaloneText, onStandaloneInput, ...rest
+}: ComposerContentEditableProps): ReactNode {
   const ref = useRef<HTMLDivElement | null>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (editor === null && el !== null && standaloneText !== undefined && el.textContent !== standaloneText) {
+      el.textContent = standaloneText
+    }
+  }, [editor, standaloneText])
   useLayoutEffect(() => {
     const el = ref.current
     if (editor === null || el === null) return
@@ -39,7 +51,10 @@ export function ComposerContentEditable({ editor, editable, ...rest }: ComposerC
       ref={ref}
       // Lexical's setRootElement never touches contenteditable; the binding
       // renders it, and setEditable above keeps the editor's own gate in step.
-      contentEditable={editor !== null && editable}
+      contentEditable={editable}
+      onInput={editor === null && onStandaloneInput !== undefined
+        ? (event) => { onStandaloneInput(event.currentTarget.textContent ?? '') }
+        : undefined}
       suppressContentEditableWarning
       role="textbox"
       aria-multiline="true"

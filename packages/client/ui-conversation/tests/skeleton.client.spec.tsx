@@ -293,11 +293,13 @@ function mount(
     useWorkspaces: bindSnapshotSelector(workspaces),
     useProjection: (() => undefined),
     useComposerBlock: select => select(options.composerBlock),
+    useStagedDraft: bindSnapshotSelector(createSnapshotStore('')),
     useInput,
     inputActions,
     renderSlot,
     renderSlotChain,
     selectWorkspace: retargetWorkspace,
+    setStagedDraft: vi.fn(),
     t,
   }
   const view = render(<ConversationRoot {...props} />)

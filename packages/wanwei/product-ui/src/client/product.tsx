@@ -234,10 +234,10 @@ export function apply(ctx: Context): void {
     ctx.slots.inject('sidebar.brand.name', () =>
       ctx.slots.inject('conversation.hero.brand', () =>
         ctx.slots.inject('conversation.hero.brand.mark', function* () {
-          yield ctx.slots.register({ name: 'sidebar.brand.mark' }, WanweiBrandMark)
-          yield ctx.slots.register({ name: 'sidebar.brand.name' }, WanweiBrandName)
-          yield ctx.slots.register({ name: 'conversation.hero.brand' }, WanweiHeroBrand)
-          yield ctx.slots.register({ name: 'conversation.hero.brand.mark' }, WanweiBrandMark)
+          yield ctx.slots.register({ name: 'sidebar.brand.mark', priority: -100 }, WanweiBrandMark)
+          yield ctx.slots.register({ name: 'sidebar.brand.name', priority: -100 }, WanweiBrandName)
+          yield ctx.slots.register({ name: 'conversation.hero.brand', priority: -100 }, WanweiHeroBrand)
+          yield ctx.slots.register({ name: 'conversation.hero.brand.mark', priority: -100 }, WanweiBrandMark)
         }))))
   ctx.slots.inject('conversation.input.left', () =>
     ctx.slots.register({ name: 'conversation.input.left', id: 'wanwei-file-import', order: -100 }, FileImportAction))

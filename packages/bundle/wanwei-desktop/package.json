@@ -43,7 +43,8 @@
     "@deepseek-ai/dsh-wanwei-document-local": "workspace:^",
     "@deepseek-ai/dsh-wanwei-vision": "workspace:^",
     "@deepseek-ai/dsh-wanwei-oneapi-auth": "workspace:^",
-    "@deepseek-ai/dsh-wanwei-product-ui": "workspace:^"
+    "@deepseek-ai/dsh-wanwei-product-ui": "workspace:^",
+    "@deepseek-ai/dsh-wanwei-skillhub": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",

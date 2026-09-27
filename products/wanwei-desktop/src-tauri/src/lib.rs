@@ -18,6 +18,7 @@ use tauri::{
 use url::Url;
 
 mod migration;
+mod skillhub;
 
 const NATIVE_SKILLS_CHANGED_SCRIPT: &str = "window.dispatchEvent(new Event('dsh:skills-changed'));";
 const NATIVE_FILE_DRAG_ENTER_SCRIPT: &str =
@@ -376,7 +377,7 @@ fn install_custom_skill_archive_at(
         }
         let mut total_size = 0u64;
         for index in 0..archive.len() {
-            let mut entry = archive
+            let entry = archive
                 .by_index(index)
                 .map_err(|error| format!("无法读取个人技能 ZIP：{error}"))?;
             let relative = entry
@@ -412,8 +413,12 @@ fn install_custom_skill_archive_at(
             }
             let mut output = fs::File::create(&destination)
                 .map_err(|error| format!("无法写入 ZIP 文件 {}：{error}", destination.display()))?;
-            std::io::copy(&mut entry, &mut output)
+            let declared_size = entry.size();
+            let copied = std::io::copy(&mut entry.take(declared_size + 1), &mut output)
                 .map_err(|error| format!("无法解压 ZIP 文件 {}：{error}", destination.display()))?;
+            if copied != declared_size {
+                return Err("ZIP 文件实际大小与声明不符".to_string());
+            }
         }
         let source = if extraction.join("SKILL.md").is_file() {
             extraction.clone()
@@ -1307,6 +1312,9 @@ fn is_legacy_marketplace_skill(directory: &Path, slug: &str) -> bool {
 }
 
 fn installed_manifest(directory: &Path, slug: &str) -> Result<Option<MarketplaceManifest>, String> {
+    if directory.join(".wanwei-skillhub.json").exists() {
+        return Err("SkillHub 技能不能由平台技能覆盖或删除".into());
+    }
     let manifest_path = directory.join("manifest.json");
     if manifest_path.exists() {
         let manifest = read_marketplace_manifest(directory)?;
@@ -1616,6 +1624,7 @@ fn list_marketplace_skills(app: tauri::AppHandle) -> Result<Vec<MarketplaceSkill
             if metadata.is_symlink()
                 || !metadata.is_dir()
                 || entry.path().join(".dsh-custom-skill").is_file()
+                || entry.path().join(".wanwei-skillhub.json").exists()
             {
                 return None;
             }
@@ -2119,6 +2128,9 @@ pub fn run() {
             install_custom_skill,
             install_custom_skill_directory,
             install_custom_skill_archive,
+            skillhub::install_skillhub_skill,
+            skillhub::list_skillhub_skills,
+            skillhub::uninstall_skillhub_skill,
             uninstall_custom_skill,
             list_custom_skills,
             read_analysis_view,

@@ -210,6 +210,12 @@ export interface SessionInput extends InputTarget {
 export interface SessionInputResolver {
   /** Resolve the facade for one session-scope ctx. */
   for(actx: Context): SessionInput
+  /** Editable text staged before a Session or Workspace has been selected. */
+  readonly stagedDraft: SnapshotStore<string>
+  /** Replace staged text without submitting it. */
+  setStagedDraft(text: string): void
+  /** Consume staged text after a Session is ready to own it. */
+  takeStagedDraft(): string
 }
 
 /**

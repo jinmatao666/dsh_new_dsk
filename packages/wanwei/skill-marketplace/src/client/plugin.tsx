@@ -5,6 +5,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connection/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import type { IConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import {
   browseMarketplaceCatalog,
@@ -17,8 +19,10 @@ import type { PersonalSkillReviewFilter, PersonalSkillUploadView } from './catal
 import { marketplaceInstallAction } from './install-action.ts'
 import type { MarketplaceInstallState } from './install-action.ts'
 import { registerNativeSkillCatalogBridge } from './skill-catalog-bridge.ts'
+import { rememberSkillDisplayNames, skillDisplayName, startSkillUse } from './skill-use.ts'
 import { Toast, type WanweiNotice } from './Toast.tsx'
 import './marketplace.css'
+import { SkillHubSection } from './SkillHubSection.tsx'
 
 type SkillParam = { name: string; type: string; required: boolean; description: string; defaultValue?: string }
 type Skill = {
@@ -176,7 +180,9 @@ function reviewStatusLabel(status: Skill['reviewStatus']): string {
   return '未提交'
 }
 
+let skillhubRequest: (operation: string, payload: unknown) => Promise<unknown> = async () => { throw new Error('SkillHub 服务未连接') }
 let loadRemoteSkills: (() => Promise<RemoteSkill[]>) | undefined
+let startSkillConversation: ((slug: string, displayName: string) => void) | undefined
 let loadRemoteCategories: (() => Promise<RemoteSkillCategory[]>) | undefined
 let loadRemoteSkillBundle: ((id: number) => Promise<unknown>) | undefined
 let recordRemoteSkillInstall: ((id: number) => Promise<unknown>) | undefined
@@ -253,7 +259,7 @@ const L = {
   addSkill: '添加技能',
   all: '全部',
   featured: '推荐技能',
-  allSkills: '全部技能',
+  allSkills: '平台技能',
   refresh: '换一批',
   installed: '已安装',
   install: '安装',
@@ -528,12 +534,13 @@ type CustomSkillSource =
   | { kind: 'archive'; name: string; bytes: number[] }
 type ActionProps = PropsRuntime<'sidebar.footer.action'> & SidebarFooterActionOwnerProps
 
-function SkillDetail({ skill, onBack, installState, installing, onToggleInstall, showReview = false }: {
+function SkillDetail({ skill, onBack, installState, installing, onToggleInstall, onUse, showReview = false }: {
   skill: Skill
   onBack: () => void
   installState: MarketplaceInstallState
   installing: boolean
   onToggleInstall: () => void
+  onUse: () => void
   showReview?: boolean
 }) {
   const installed = installState === 'installed' || installState === 'updateAvailable'
@@ -575,6 +582,7 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall,
           {installing ? '处理中…' : installLabel}
         </button>
       </div>
+      {installed && <button type="button" className="dsh-skill-detail-use" onClick={onUse}>使用技能</button>}
       {showReview && skill.reviewStatus === 'rejected' && skill.reviewReason && (
         <div className="dsh-skill-review-notice">审核意见：{skill.reviewReason}</div>
       )}
@@ -812,6 +820,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   const [category, setCategory] = useState(L.all)
   const [view, setView] = useState<'list' | 'detail'>('list')
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
+  const [skillhubCount, setSkillhubCount] = useState(0)
   const [libraryView, setLibraryView] = useState<'market' | 'installed' | 'uploads'>('market')
   const [uploadView, setUploadView] = useState<PersonalSkillUploadView>('public')
   const [reviewFilter, setReviewFilter] = useState<PersonalSkillReviewFilter>('all')
@@ -1239,6 +1248,14 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
             installing={installing === selectedSkill.id}
             showReview={libraryView === 'uploads'}
             onToggleInstall={() => void toggleInstall(selectedSkill)}
+            onUse={() => {
+              if (startSkillConversation === undefined) {
+                setInstallMessage({ kind: 'error', text: '对话服务尚未准备好，请稍后重试。' })
+                return
+              }
+              startSkillConversation(skillSlug(selectedSkill), selectedSkill.name)
+              closeMarket()
+            }}
           />
         ) : (
           <>
@@ -1251,7 +1268,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                   <input
                     value={query}
                     onChange={(event) => { setQuery(event.target.value) }}
-                    placeholder={L.search}
+                    placeholder={libraryView === 'market' ? '搜索平台技能' : L.search}
                   />
                   <div className="dsh-skill-search-actions">
                     <button
@@ -1504,7 +1521,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                 </div>
               )}
 
-              {visible.length === 0 && (
+              {visible.length === 0 && (libraryView !== 'installed' || skillhubCount === 0) && (
                 <div className="dsh-skill-empty">
                   <div className="dsh-skill-empty-icon"><CategoryGlyph category={category} size={24} /></div>
                   <span>{libraryView === 'installed'
@@ -1518,6 +1535,11 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                       : L.empty}</span>
                 </div>
               )}
+              {libraryView !== 'uploads' && <SkillHubSection
+                active={open && section === 'skills'} installedOnly={libraryView === 'installed'} installedQuery={query}
+                request={skillhubRequest} invoke={desktopInvoke} onCount={setSkillhubCount}
+                onUse={(slug, name) => { startSkillConversation?.(slug, name); closeMarket() }}
+              />}
             </>}
           </>
         )}
@@ -1629,13 +1651,32 @@ function SkillMarketplaceAction({ wide, section = 'skills' }: ActionProps & { se
   )
 }
 
-export const inject = ['slots', 'connection', 'remote', 'remote.directoryPicker']
+function SkillDraftPrefix({ draft, removePrefix }: PropsRuntime<'conversation.input.draft-prefix'>) {
+  const match = /^\/([\w-]+)(?=\s|$)/u.exec(draft)
+  const slug = match?.[1]
+  const displayName = slug === undefined ? undefined : skillDisplayName(slug)
+  if (match === null || displayName === undefined) return null
+  return <button type="button" className="dsh-skill-draft-prefix" aria-label={`已选技能：${displayName}`} onClick={() => { removePrefix(match[0].length) }}><span aria-hidden="true">⚒︎</span>{displayName}<span aria-hidden="true">×</span></button>
+}
+
+export const inject = ['slots', 'connection', 'conversation', 'sessions', 'remote', 'remote.directoryPicker']
 export function apply(ctx: Context): void {
   registerNativeSkillCatalogBridge(ctx)
   const connection = ctx.get('connection') as unknown as ConnectionHandle
+  const requestSkillHub = async (operation: string, payload: unknown) => rpcValue(await connection.rpc.call('/wanwei-skillhub', operation, payload))
+  ctx.effect(() => {
+    skillhubRequest = requestSkillHub
+    return () => { if (skillhubRequest === requestSkillHub) skillhubRequest = async () => { throw new Error('SkillHub 服务未连接') } }
+  }, 'wanwei-skillhub: client RPC')
+  const conversation = ctx.get('conversation') as IConversation
+  const sessions = ctx.get('sessions') as ISessions
+  startSkillConversation = (slug, displayName) => { startSkillUse(sessions, conversation.input, slug, displayName) }
   loadRemoteSkills = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'skill-list', {})) as { items?: unknown }
-    return Array.isArray(raw.items) ? raw.items.filter((item): item is RemoteSkill => typeof item === 'object' && item !== null) : []
+    const items = Array.isArray(raw.items) ? raw.items.filter((item): item is RemoteSkill => typeof item === 'object' && item !== null) : []
+    rememberSkillDisplayNames(items.flatMap(item => typeof item.name === 'string' && typeof item.display_name === 'string'
+      ? [{ slug: item.name, displayName: item.display_name }] : []))
+    return items
   }
   loadRemoteCategories = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'skill-categories', {})) as { items?: unknown }
@@ -1646,7 +1687,10 @@ export function apply(ctx: Context): void {
   submitPersonalSkill = async (payload: unknown) => rpcValue(await connection.rpc.call('/desktop-auth', 'personal-skill-submit', payload))
   loadPersonalSkills = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'personal-skill-list', {})) as { items?: unknown }
-    return Array.isArray(raw.items) ? raw.items as RemotePersonalSkill[] : []
+    const items = Array.isArray(raw.items) ? raw.items as RemotePersonalSkill[] : []
+    rememberSkillDisplayNames(items.flatMap(item => typeof item.name === 'string' && typeof item.display_name === 'string'
+      ? [{ slug: item.name, displayName: item.display_name }] : []))
+    return items
   }
   const marketplaceUrl = (process.env.DSH_CLIENT_SKILL_MARKETPLACE_URL ?? 'https://skills.zjugis.com/').trim()
   const chooseDirectory = async (): Promise<string | null> => {
@@ -1654,6 +1698,9 @@ export function apply(ctx: Context): void {
     if (!result.ok) throw new Error(result.error.message)
     return result.value
   }
+  ctx.slots.inject('conversation.input.draft-prefix', () =>
+    ctx.slots.register({ name: 'conversation.input.draft-prefix' }, SkillDraftPrefix),
+  )
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(
       { name: 'sidebar.footer.action', id: 'skill-automations', order: 10, inject: () => ({ section: 'automations' as const }) },
