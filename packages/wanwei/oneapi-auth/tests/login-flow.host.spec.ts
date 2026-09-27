@@ -84,11 +84,11 @@ describe('OneAPI login flow', () => {
     }))
 
     apply(ctx, {
-      baseURL,
+      ...(baseURL === undefined ? {} : { baseURL }),
       provider: config.provider,
       credentialRef: config.credentialRef,
       tokenName: config.tokenName,
-      defaultInput: config.defaultInput,
+      ...(config.defaultInput === undefined ? {} : { defaultInput: config.defaultInput }),
     })
     const result = await handler?.('login', { username: ' tester ', password: 'secret' }, new AbortController().signal)
 
