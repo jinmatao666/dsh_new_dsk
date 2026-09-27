@@ -13,11 +13,14 @@ use std::{
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent},
-    DragDropEvent, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+    DragDropEvent, LogicalPosition, LogicalSize, Manager, State, WebviewBuilder, WebviewUrl,
+    WebviewWindowBuilder, Window, WindowEvent,
 };
 use url::Url;
 
+mod expert_artifacts;
 mod migration;
+mod sidecar_output;
 mod skillhub;
 
 const NATIVE_SKILLS_CHANGED_SCRIPT: &str = "window.dispatchEvent(new Event('dsh:skills-changed'));";
@@ -874,6 +877,30 @@ fn save_session_log_archive(file_name: String, bytes: Vec<u8>) -> Result<String,
     Ok(destination.display().to_string())
 }
 
+/// Save an authenticated expert website's output in Downloads without overwriting existing files.
+#[tauri::command]
+async fn save_expert_artifact(
+    webview: tauri::Webview,
+    file_name: String,
+    bytes_base64: String,
+) -> Result<String, String> {
+    if !webview.label().starts_with("expert-") {
+        return Err("仅专家工作台可保存专家成果".into());
+    }
+    if bytes_base64.len() > (expert_artifacts::MAX_BYTES / 3 + 1) * 4 {
+        return Err("成果文件超过 128 MB".into());
+    }
+    let root = user_downloads_root()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = BASE64_STANDARD
+            .decode(bytes_base64)
+            .map_err(|_| "成果文件编码无效".to_string())?;
+        expert_artifacts::save_at(&root, &file_name, &bytes).map(|path| path.display().to_string())
+    })
+    .await
+    .map_err(|_| "成果文件保存任务中断".to_string())?
+}
+
 fn open_workspace_directory_at(workspace_path: &Path) -> Result<(), String> {
     let metadata = fs::metadata(workspace_path)
         .map_err(|error| format!("无法访问工作区目录 {}：{error}", workspace_path.display()))?;
@@ -907,6 +934,176 @@ fn open_workspace_directory_at(workspace_path: &Path) -> Result<(), String> {
 #[tauri::command]
 fn open_workspace_directory(workspace_path: String) -> Result<(), String> {
     open_workspace_directory_at(Path::new(&workspace_path))
+}
+
+fn expert_webview_label(key: &str, ticket: &str) -> Result<String, String> {
+    if key.len() < 3
+        || key.len() > 80
+        || !key.starts_with(|ch: char| ch.is_ascii_lowercase())
+        || !key
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        return Err("专家编号无效".to_string());
+    }
+    if ticket.len() != 64 || !ticket.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("专家票据无效".to_string());
+    }
+    Ok(format!("expert-{key}-{}", &ticket[..16]))
+}
+
+fn validate_expert_webview_label(label: &str) -> Result<(), String> {
+    let Some((key, ticket_prefix)) = label
+        .strip_prefix("expert-")
+        .and_then(|value| value.rsplit_once('-'))
+    else {
+        return Err("专家视图标识无效".to_string());
+    };
+    if ticket_prefix.len() != 16 || !ticket_prefix.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("专家视图标识无效".to_string());
+    }
+    expert_webview_label(key, &format!("{ticket_prefix}{}", "0".repeat(48)))?;
+    Ok(())
+}
+
+fn expert_webview_url(raw: &str, ticket: &str) -> Result<(Url, Url), String> {
+    let mut url = Url::parse(raw).map_err(|_| "专家网页地址无效".to_string())?;
+    if url.scheme() != "https"
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+        || ticket.len() != 64
+        || !ticket.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err("专家网页地址或票据无效".to_string());
+    }
+    let allowed = url.clone();
+    url.set_fragment(Some(&format!("ticket={ticket}")));
+    Ok((url, allowed))
+}
+
+#[tauri::command]
+async fn open_expert_webview(
+    window: Window,
+    key: String,
+    url: String,
+    ticket: String,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> Result<String, String> {
+    if window.label() != "main" {
+        return Err("只能从主窗口打开专家".to_string());
+    }
+    let label = expert_webview_label(&key, &ticket)?;
+    let (launch_url, allowed_url) = expert_webview_url(&url, &ticket)?;
+    if width < 200.0
+        || height < 200.0
+        || ![x, y, width, height].iter().all(|value| value.is_finite())
+    {
+        return Err("专家视图尺寸无效".to_string());
+    }
+    if window.app_handle().get_webview(&label).is_some() {
+        return Err("专家视图已打开".to_string());
+    }
+    let origin = allowed_url.origin().ascii_serialization();
+    let mut capability = tauri::ipc::CapabilityBuilder::new(format!("published-{label}"))
+        .webview(&label)
+        .remote(format!("{origin}/*"))
+        .local(false);
+    for permission in [
+        "core:default",
+        "allow-save-session-log-archive",
+        "allow-save-expert-artifact",
+        "allow-list-marketplace-skills",
+        "allow-install-marketplace-skill",
+        "allow-uninstall-marketplace-skill",
+        "allow-install-custom-skill",
+        "allow-install-custom-skill-directory",
+        "allow-install-custom-skill-archive",
+        "allow-uninstall-custom-skill",
+        "allow-list-custom-skills",
+        "allow-read-analysis-view",
+        "allow-open-workspace-directory",
+        "allow-reveal-downloaded-file",
+        "allow-import-workspace-files",
+    ] {
+        capability = capability.permission(permission);
+    }
+    window
+        .app_handle()
+        .add_capability(capability)
+        .map_err(|error| format!("专家权限初始化失败：{error}"))?;
+    let builder = WebviewBuilder::new(&label, WebviewUrl::External(launch_url))
+        .disable_drag_drop_handler()
+        .initialization_script(NATIVE_BRIDGE_INITIALIZATION_SCRIPT)
+        .on_navigation(move |target| target.origin() == allowed_url.origin());
+    window
+        .add_child(
+            builder,
+            LogicalPosition::new(x, y),
+            LogicalSize::new(width, height),
+        )
+        .map_err(|error| format!("无法打开专家网页：{error}"))?;
+    Ok(label)
+}
+
+#[tauri::command]
+fn set_expert_webview_bounds(
+    window: Window,
+    label: String,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    if window.label() != "main"
+        || width < 200.0
+        || height < 200.0
+        || ![x, y, width, height].iter().all(|value| value.is_finite())
+    {
+        return Err("专家视图尺寸无效".to_string());
+    }
+    validate_expert_webview_label(&label)?;
+    let view = window
+        .app_handle()
+        .get_webview(&label)
+        .ok_or("专家视图不存在")?;
+    view.set_position(LogicalPosition::new(x, y))
+        .map_err(|error| error.to_string())?;
+    view.set_size(LogicalSize::new(width, height))
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn close_expert_webview(window: Window, label: String) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("只能从主窗口关闭专家".to_string());
+    }
+    validate_expert_webview_label(&label)?;
+    if let Some(view) = window.app_handle().get_webview(&label) {
+        view.close().map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn set_expert_webview_visible(window: Window, label: String, visible: bool) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("只能从主窗口切换专家视图".to_string());
+    }
+    validate_expert_webview_label(&label)?;
+    let view = window
+        .app_handle()
+        .get_webview(&label)
+        .ok_or("专家视图不存在")?;
+    if visible {
+        view.show().map_err(|error| error.to_string())
+    } else {
+        view.hide().map_err(|error| error.to_string())
+    }
 }
 
 /// Reveal a downloaded file in the desktop file manager.
@@ -1057,6 +1254,7 @@ fn import_workspace_files_at(
             .open(&destination)
             .map_err(|error| format!("无法创建工作区文件 {}：{error}", destination.display()))?;
         if let Err(error) = output.write_all(&file.bytes) {
+            drop(output);
             let _ = fs::remove_file(&destination);
             return Err(format!(
                 "无法写入工作区文件 {}：{error}",
@@ -1119,7 +1317,15 @@ fn copy_imported_workspace_file(
             WORKSPACE_IMPORT_MAX_TOTAL_BYTES / 1024 / 1024
         ));
     }
-    if let Err(error) = fs::copy(source, destination) {
+    let mut input = fs::File::open(source)
+        .map_err(|error| format!("无法读取拖入的文件 {}：{error}", source.display()))?;
+    let mut output = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(destination)
+        .map_err(|error| format!("无法创建导入文件 {}：{error}", destination.display()))?;
+    if let Err(error) = std::io::copy(&mut input, &mut output) {
+        drop(output);
         let _ = fs::remove_file(destination);
         return Err(format!("无法复制拖入的文件 {}：{error}", source.display()));
     }
@@ -1134,44 +1340,51 @@ fn copy_imported_workspace_directory(
 ) -> Result<(), String> {
     fs::create_dir(destination)
         .map_err(|error| format!("无法创建工作区文件夹 {}：{error}", destination.display()))?;
-    let entries = fs::read_dir(source)
-        .map_err(|error| format!("无法读取拖入的文件夹 {}：{error}", source.display()))?;
-    for entry in entries {
-        let entry = entry.map_err(|error| format!("无法读取拖入的文件夹条目：{error}"))?;
-        let entry_source = entry.path();
-        let metadata = fs::symlink_metadata(&entry_source)
-            .map_err(|error| format!("无法读取拖入路径 {}：{error}", entry_source.display()))?;
-        if metadata.file_type().is_symlink() {
-            return Err(format!(
-                "不支持拖入包含符号链接的文件夹：{}",
-                entry_source.display()
-            ));
+    let copied = (|| -> Result<(), String> {
+        let entries = fs::read_dir(source)
+            .map_err(|error| format!("无法读取拖入的文件夹 {}：{error}", source.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|error| format!("无法读取拖入的文件夹条目：{error}"))?;
+            let entry_source = entry.path();
+            let metadata = fs::symlink_metadata(&entry_source)
+                .map_err(|error| format!("无法读取拖入路径 {}：{error}", entry_source.display()))?;
+            if metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "不支持拖入包含符号链接的文件夹：{}",
+                    entry_source.display()
+                ));
+            }
+            let name = entry
+                .file_name()
+                .into_string()
+                .map_err(|_| format!("拖入路径包含无效名称：{}", entry_source.display()))?;
+            workspace_import_file_name(&name)?;
+            let entry_destination = destination.join(name);
+            if metadata.is_dir() {
+                copy_imported_workspace_directory(
+                    &entry_source,
+                    &entry_destination,
+                    file_count,
+                    total_bytes,
+                )?;
+            } else if metadata.is_file() {
+                copy_imported_workspace_file(
+                    &entry_source,
+                    &entry_destination,
+                    file_count,
+                    total_bytes,
+                )?;
+            } else {
+                return Err(format!("不支持拖入此类路径：{}", entry_source.display()));
+            }
         }
-        let name = entry
-            .file_name()
-            .into_string()
-            .map_err(|_| format!("拖入路径包含无效名称：{}", entry_source.display()))?;
-        workspace_import_file_name(&name)?;
-        let entry_destination = destination.join(name);
-        if metadata.is_dir() {
-            copy_imported_workspace_directory(
-                &entry_source,
-                &entry_destination,
-                file_count,
-                total_bytes,
-            )?;
-        } else if metadata.is_file() {
-            copy_imported_workspace_file(
-                &entry_source,
-                &entry_destination,
-                file_count,
-                total_bytes,
-            )?;
-        } else {
-            return Err(format!("不支持拖入此类路径：{}", entry_source.display()));
-        }
+        Ok(())
+    })();
+    if copied.is_err() {
+        // Only this invocation's exclusively created directory may be removed.
+        let _ = fs::remove_dir_all(destination);
     }
-    Ok(())
+    copied
 }
 
 fn import_workspace_paths_at(
@@ -1225,15 +1438,12 @@ fn import_workspace_paths_at(
             ));
         }
         let destination = workspace_import_directory_destination(&root, name)?;
-        if let Err(error) = copy_imported_workspace_directory(
+        copy_imported_workspace_directory(
             &source,
             &destination,
             &mut file_count,
             &mut total_bytes,
-        ) {
-            let _ = fs::remove_dir_all(&destination);
-            return Err(error);
-        }
+        )?;
         imported.push(imported_workspace_reference(&destination, true)?);
     }
     Ok(imported)
@@ -1929,69 +2139,70 @@ fn spawn_sidecar(
         .spawn()
         .map_err(|error| format!("无法启动本地 DSH Sidecar（{}）：{error}", program.display()))?;
 
-    let stdout = child.stdout.take().ok_or("无法读取 DSH Sidecar 输出")?;
-    let stderr = child.stderr.take().ok_or("无法读取 DSH Sidecar 错误输出")?;
-    let (sender, receiver) = mpsc::channel();
-    let stdout_log = log_path.to_path_buf();
-    std::thread::spawn(move || {
-        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-            append_log(&stdout_log, format!("[stdout] {line}"));
-            eprintln!("[dsh] {line}");
-            if let Some(raw) = line.strip_prefix("dsh web: ") {
-                let candidate = raw.split_whitespace().next().unwrap_or(raw);
-                if let Ok(url) = Url::parse(candidate) {
-                    let _ = sender.send(url);
-                    break;
+    let ready = (|| -> Result<Url, String> {
+        let stdout = child.stdout.take().ok_or("无法读取 DSH Sidecar 输出")?;
+        let stderr = child.stderr.take().ok_or("无法读取 DSH Sidecar 错误输出")?;
+        let (sender, receiver) = mpsc::channel();
+        let stdout_log = log_path.to_path_buf();
+        std::thread::spawn(move || {
+            sidecar_output::drain(BufReader::new(stdout), sender, |line| {
+                append_log(&stdout_log, format!("[stdout] {line}"));
+                eprintln!("[dsh] {line}");
+            });
+        });
+        let stderr_log = log_path.to_path_buf();
+        std::thread::spawn(move || {
+            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                append_log(&stderr_log, format!("[stderr] {line}"));
+                eprintln!("[dsh:error] {line}");
+            }
+        });
+        let url = if let Some(port) = dev_port {
+            // In local Windows development stdout can be delayed while the
+            // Node/tsx loader is warming up. Probe the fixed loopback port as a
+            // reliable readiness signal, then use the normal printed URL if it
+            // arrives first.
+            let deadline = std::time::Instant::now() + Duration::from_secs(120);
+            loop {
+                if let Ok(url) = receiver.try_recv() {
+                    break url;
                 }
-            }
-        }
-    });
-    let stderr_log = log_path.to_path_buf();
-    std::thread::spawn(move || {
-        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-            append_log(&stderr_log, format!("[stderr] {line}"));
-            eprintln!("[dsh:error] {line}");
-        }
-    });
-    let url = if let Some(port) = dev_port {
-        // In local Windows development stdout can be delayed while the
-        // Node/tsx loader is warming up. Probe the fixed loopback port as a
-        // reliable readiness signal, then use the normal printed URL if it
-        // arrives first.
-        let deadline = std::time::Instant::now() + Duration::from_secs(120);
-        loop {
-            if let Ok(url) = receiver.try_recv() {
-                break url;
-            }
-            if let Ok(mut stream) = TcpStream::connect_timeout(
-                &format!("127.0.0.1:{port}")
-                    .parse()
-                    .map_err(|_| "本地端口无效")?,
-                Duration::from_millis(250),
-            ) {
-                let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
-                let ready_request = format!(
-                    "GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
-                );
-                let mut response = [0u8; 256];
-                if stream.write_all(ready_request.as_bytes()).is_ok()
-                    && stream.read(&mut response).is_ok()
-                    && response.starts_with(b"HTTP/1.1 200")
-                {
-                    break Url::parse(&format!("http://127.0.0.1:{port}"))
-                        .map_err(|e| e.to_string())?;
+                if let Ok(mut stream) = TcpStream::connect_timeout(
+                    &format!("127.0.0.1:{port}")
+                        .parse()
+                        .map_err(|_| "本地端口无效")?,
+                    Duration::from_millis(250),
+                ) {
+                    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+                    let ready_request = format!(
+                        "GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+                    );
+                    let mut response = [0u8; 256];
+                    if stream.write_all(ready_request.as_bytes()).is_ok()
+                        && stream.read(&mut response).is_ok()
+                        && response.starts_with(b"HTTP/1.1 200")
+                    {
+                        break Url::parse(&format!("http://127.0.0.1:{port}"))
+                            .map_err(|e| e.to_string())?;
+                    }
                 }
+                if std::time::Instant::now() >= deadline {
+                    return Err(
+                        "DSH Sidecar 在 120 秒内未就绪，请检查日志和 server.json".to_string()
+                    );
+                }
+                std::thread::sleep(Duration::from_millis(150));
             }
-            if std::time::Instant::now() >= deadline {
-                return Err("DSH Sidecar 在 120 秒内未就绪，请检查日志和 server.json".to_string());
-            }
-            std::thread::sleep(Duration::from_millis(150));
-        }
-    } else {
-        receiver
-            .recv_timeout(Duration::from_secs(120))
-            .map_err(|_| "DSH Sidecar 在 120 秒内未就绪，请检查日志和 server.json".to_string())?
-    };
+        } else {
+            receiver
+                .recv_timeout(Duration::from_secs(120))
+                .map_err(|_| {
+                    "DSH Sidecar 在 120 秒内未就绪，请检查日志和 server.json".to_string()
+                })?
+        };
+        Ok(url)
+    })();
+    let url = sidecar_output::finish_startup(&mut child, ready)?;
     Ok((child, url))
 }
 
@@ -2086,6 +2297,13 @@ pub fn run() {
                         Some("login") => false,
                         _ => return,
                     };
+                    if !authenticated {
+                        for (label, view) in window.app_handle().webviews() {
+                            if label.starts_with("expert-") {
+                                let _ = view.close();
+                            }
+                        }
+                    }
                     let _ = apply_auth_window_state(&window, authenticated);
                     let _ = window.set_title("万维Buddy");
                 })
@@ -2122,6 +2340,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             set_auth_window_state,
             save_session_log_archive,
+            save_expert_artifact,
             list_marketplace_skills,
             install_marketplace_skill,
             uninstall_marketplace_skill,
@@ -2138,18 +2357,78 @@ pub fn run() {
             reveal_downloaded_file,
             import_workspace_files,
             import_dropped_workspace_files,
+            open_expert_webview,
+            set_expert_webview_bounds,
+            close_expert_webview,
+            set_expert_webview_visible,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running DSH Desktop");
+        .build(tauri::generate_context!())
+        .expect("error while building DSH Desktop")
+        .run(|app, event| match event {
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { .. } => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            tauri::RunEvent::Exit => {
+                if let Some(sidecar) = app.try_state::<Sidecar>() {
+                    sidecar.stop();
+                }
+            }
+            _ => {}
+        });
+}
+
+#[cfg(test)]
+mod expert_web_tests {
+    use super::{expert_webview_label, expert_webview_url, validate_expert_webview_label};
+
+    #[test]
+    fn launch_url_is_https_and_ticket_stays_in_fragment() {
+        let ticket = "a".repeat(64);
+        let (url, allowed) =
+            expert_webview_url("https://expert.example.com/workbench", &ticket).unwrap();
+        assert_eq!(url.fragment(), Some(format!("ticket={ticket}").as_str()));
+        assert_eq!(url.origin(), allowed.origin());
+        assert_eq!(allowed.fragment(), None);
+        assert_ne!(
+            allowed.origin(),
+            url::Url::parse("https://other.example.com/")
+                .unwrap()
+                .origin()
+        );
+    }
+
+    #[test]
+    fn rejects_untrusted_launch_inputs() {
+        let ticket = "a".repeat(64);
+        for address in [
+            "http://expert.example.com",
+            "https://user:pass@expert.example.com",
+            "https://expert.example.com/#old",
+        ] {
+            assert!(expert_webview_url(address, &ticket).is_err());
+        }
+        assert!(expert_webview_url("https://expert.example.com", "short").is_err());
+        assert!(expert_webview_label("Geology", &ticket).is_err());
+        let label = expert_webview_label("geology-analysis", &ticket).unwrap();
+        assert_eq!(label, "expert-geology-analysis-aaaaaaaaaaaaaaaa");
+        assert!(validate_expert_webview_label(&label).is_ok());
+        assert!(validate_expert_webview_label("main").is_err());
+    }
 }
 
 #[cfg(test)]
 mod marketplace_tests {
     use super::{
-        import_workspace_files_at, import_workspace_paths_at, install_custom_skill_directory_at,
-        install_marketplace_skill_at, install_marketplace_skill_files_at, isolated_harness_home,
-        marketplace_package_sha256, read_analysis_view, save_session_log_archive_at,
-        uninstall_marketplace_skill_at, CustomSkillFile, WorkspaceImportFile,
+        copy_imported_workspace_directory, copy_imported_workspace_file, import_workspace_files_at,
+        import_workspace_paths_at, install_custom_skill_directory_at, install_marketplace_skill_at,
+        install_marketplace_skill_files_at, isolated_harness_home, marketplace_package_sha256,
+        read_analysis_view, save_session_log_archive_at, uninstall_marketplace_skill_at,
+        CustomSkillFile, WorkspaceImportFile,
     };
     use std::{
         fs,
@@ -2488,6 +2767,42 @@ mod marketplace_tests {
         .expect_err("reject traversal");
         assert!(error.contains("文件名无效"));
         assert!(!workspace.0.join("outside.txt").exists());
+    }
+
+    #[test]
+    fn native_copy_refuses_a_destination_created_after_name_selection() {
+        let source = TestDirectory::new();
+        let workspace = TestDirectory::new();
+        let source_file = source.0.join("中文 空格.txt");
+        let destination = workspace.0.join("中文 空格.txt");
+        fs::write(&source_file, b"incoming").unwrap();
+        fs::write(&destination, b"keep existing").unwrap();
+        assert!(copy_imported_workspace_file(&source_file, &destination, &mut 0, &mut 0).is_err());
+        assert_eq!(fs::read(&destination).unwrap(), b"keep existing");
+
+        let folder = workspace.0.join("已有目录");
+        fs::create_dir(&folder).unwrap();
+        fs::write(folder.join("保留.txt"), b"keep directory").unwrap();
+        assert!(copy_imported_workspace_directory(&source.0, &folder, &mut 0, &mut 0).is_err());
+        assert_eq!(
+            fs::read(folder.join("保留.txt")).unwrap(),
+            b"keep directory"
+        );
+    }
+
+    #[test]
+    fn failed_native_directory_copy_removes_only_its_own_partial_directory() {
+        let workspace = TestDirectory::new();
+        let destination = workspace.0.join("partial");
+        assert!(copy_imported_workspace_directory(
+            &workspace.0.join("missing source"),
+            &destination,
+            &mut 0,
+            &mut 0,
+        )
+        .is_err());
+        assert!(!destination.exists());
+        assert!(workspace.0.is_dir());
     }
 
     #[test]

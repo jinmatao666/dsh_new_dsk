@@ -1,3 +1,4 @@
+/** Chinese authentication copy. */
 export const zh = {
   brandMark: '万',
   accountNav: '账户',
@@ -80,6 +81,7 @@ export const zh = {
   signingOut: '正在退出…',
 } as const
 
+/** Keys shared by authentication dictionaries. */
 export type WanweiAuthKey = keyof typeof zh
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -88,6 +90,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
+/** English authentication copy. */
 export const en: { [Key in WanweiAuthKey]: string } = {
   brandMark: 'W',
   accountNav: 'Account',

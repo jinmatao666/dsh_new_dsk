@@ -1,0 +1,50 @@
+{
+  "purpose": "Versioned legacy asset copies; no runtime dependency on the original repository",
+  "assets": [
+    {
+      "filename": "expert.png",
+      "source": "MeetingIconData.ts:expert",
+      "sha256": "017a57be82c6b8eb6d3965913b2596eaf5b59cd8d500b66415d069e770f4ba71"
+    },
+    {
+      "filename": "hero.png",
+      "source": "MeetingIconData.ts:hero",
+      "sha256": "227779a2ec5508f17aeee94ac6c9c574807cb6163e80e902cd16372d944fb2a8"
+    },
+    {
+      "filename": "home.png",
+      "source": "MeetingIconData.ts:workbench",
+      "sha256": "14fa5a577ea6293c460af66c775ade3dcdf7920e4be00b5735b5fe5fa20d7ee1"
+    },
+    {
+      "filename": "history.png",
+      "source": "MeetingIconData.ts:history",
+      "sha256": "1930b1e2a696083537f5aa66b5f15da1e634b7847016a93d167d82a8c73de423"
+    },
+    {
+      "filename": "files.png",
+      "source": "MeetingIconData.ts:files",
+      "sha256": "82cb9bb16aa98363dd1f58c428a9069434553d5eca49ae72e846536f1b8e4c2b"
+    },
+    {
+      "filename": "guide.png",
+      "source": "MeetingIconData.ts:guide",
+      "sha256": "b8a1b875057e9cb038cf603e9971fc15e9416040b09d0173f38dc6c7744cbec3"
+    },
+    {
+      "filename": "audio.png",
+      "source": "MeetingIconData.ts:audio",
+      "sha256": "3a3cb9d78d819d93e435f80d0ee0e105291a88712f76d6d122c4c4bc1275ab24"
+    },
+    {
+      "filename": "material.png",
+      "source": "MeetingIconData.ts:supplement",
+      "sha256": "014344ba2d33d6b4c21a5dab74462de4cb13083dbfbd07962969a7927d487bd2"
+    },
+    {
+      "filename": "new.png",
+      "source": "MeetingIconData.ts:upload",
+      "sha256": "3778c607a8e27df58d64cb12d163235d2a384691177befc6f6e49ebfcbe7d9d6"
+    }
+  ]
+}

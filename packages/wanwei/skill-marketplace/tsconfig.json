@@ -40,6 +40,9 @@
     },
     {
       "path": "../../client/ui-primitives"
+    },
+    {
+      "path": "../../runtime-diagnostics/invariants"
     }
   ]
 }

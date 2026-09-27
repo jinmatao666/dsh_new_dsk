@@ -718,16 +718,6 @@
         "tests/**/*.ts"
       ]
     },
-    "packages/test-support/loader-smoke": {
-      "entry": [
-        "tests/**/*.spec.ts",
-        "tests/fixtures/*.ts"
-      ],
-      "project": [
-        "src/**/*.ts",
-        "tests/**/*.ts"
-      ]
-    },
     "packages/experimental/agent-team-profile": {
       "ignoreDependencies": [
         "@deepseek-ai/dsh-experimental-agent-team",
@@ -773,6 +763,75 @@
     "packages/bundle/web-app": {
       "ignoreDependencies": [
         "@deepseek-ai/.+"
+      ]
+    },
+    "products/wanwei-desktop": {
+      "entry": [
+        "scripts/*.mjs"
+      ],
+      "project": [
+        "scripts/*.mjs"
+      ],
+      "ignoreDependencies": [
+        "@deepseek-ai/dsh-wanwei-desktop"
+      ]
+    },
+    "packages/bundle/wanwei-desktop": {
+      "entry": [],
+      "project": [
+        "src/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@deepseek-ai/dsh-wanwei-.+"
+      ]
+    },
+    "packages/wanwei/product-ui": {
+      "entry": [],
+      "project": [
+        "src/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/wanwei/document-local": {
+      "entry": [],
+      "project": [
+        "src/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "mammoth",
+        "pdfjs-dist",
+        "xlsx"
+      ]
+    },
+    "packages/wanwei/vision": {
+      "entry": [],
+      "project": [
+        "src/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@deepseek-ai/dsh-credentials",
+        "@deepseek-ai/dsh-tools"
+      ]
+    },
+    "packages/wanwei/oneapi-auth": {
+      "entry": [
+        "tests/**/*.spec.{ts,tsx}"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "tests/**/*.{ts,tsx}"
+      ],
+      "ignoreDependencies": [
+        "@deepseek-ai/dsh-agent-default-model",
+        "@deepseek-ai/dsh-llm-pi-ai"
+      ]
+    },
+    "packages/wanwei/skill-marketplace": {
+      "entry": [
+        "tests/**/*.spec.{ts,tsx}"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "tests/**/*.{ts,tsx}"
       ]
     }
   }

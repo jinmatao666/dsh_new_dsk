@@ -1,0 +1,22 @@
+# Put limit_req_zone in the nginx http block, once per server installation.
+limit_req_zone $binary_remote_addr zone=document_requests:10m rate=3r/s;
+limit_conn_zone $binary_remote_addr zone=document_connections:10m;
+
+server {
+    listen 443 ssl;
+    server_name documents.example.com;
+    ssl_certificate /etc/letsencrypt/live/documents.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/documents.example.com/privkey.pem;
+    client_max_body_size 45m;
+    client_body_timeout 30s;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    location / {
+        limit_req zone=document_requests burst=10 nodelay;
+        limit_conn document_connections 4;
+        proxy_pass http://127.0.0.1:4302;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 40s;
+        # Ticket is passed in a fragment, never logged by nginx.
+    }
+}

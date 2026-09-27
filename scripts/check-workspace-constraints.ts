@@ -90,6 +90,7 @@ export interface PackageManifest {
   dependencies?: Record<string, string>
   optionalDependencies?: Record<string, string>
   dsh?: {
+    release?: false
     bundle?: {
       patch?: string
     }
@@ -294,6 +295,9 @@ export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): st
       || manifest.repository.directory !== expectedDirectory) {
       errors.push(`${label}: published Landlock package repository must use ${repositoryUrl} with directory ${expectedDirectory} for trusted publishing`)
     }
+  } else if (manifest.dsh?.release === false) {
+    if (manifest.private !== true) errors.push(`${label}: non-release package must set "private": true`)
+    if (manifest.publishConfig !== undefined) errors.push(`${label}: non-release package must omit publishConfig`)
   } else if (releaseMemberDirectory.test(dir)) {
     // Release members state that they are publishable: npm refuses a private
     // package, and the repository field is how a consumer finds the source of
@@ -445,11 +449,12 @@ const runtimeDependencySections = ['dependencies', 'optionalDependencies', 'peer
  */
 export function checkExperimentalDependencyIsolation(manifests: readonly WorkspaceManifest[]): string[] {
   const experimentalNames = new Set(manifests
-    .filter(entry => experimentalPackageDirectory.test(entry.dir))
+    .filter(entry => experimentalPackageDirectory.test(entry.dir) || entry.manifest.dsh?.release === false)
     .map(entry => entry.manifest.name)
     .filter(name => name !== undefined))
   const errors: string[] = []
   for (const { dir, manifest } of manifests) {
+    if (manifest.dsh?.release === false) continue
     if (!releaseMemberDirectory.test(dir) && dir !== 'python/sdk-runtime') continue
     for (const section of runtimeDependencySections) {
       for (const name of Object.keys(manifest[section] ?? {})) {

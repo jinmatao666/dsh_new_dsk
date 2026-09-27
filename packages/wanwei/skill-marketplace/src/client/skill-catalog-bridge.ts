@@ -1,7 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-skill/client'
 
-/** Translate the desktop installer's notification into the generic client catalog event. */
+/** Translate desktop installer notifications into the generic catalog event.
+ * @param ctx - Client context owning the listener lifetime.
+ */
 export function registerNativeSkillCatalogBridge(ctx: Context): void {
   ctx.effect(() => {
     const onChanged = () => { ctx.emit('skills/catalog-invalidated') }

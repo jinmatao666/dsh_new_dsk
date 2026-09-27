@@ -1,0 +1,55 @@
+{
+  "purpose": "Versioned legacy asset copies; no runtime dependency on the original repository",
+  "assets": [
+    {
+      "filename": "expert.png",
+      "source": "GeologyIconData.ts:coordinate",
+      "sha256": "370e2046c13ee0d0ce258fbc68c965ee5a540308ebd23a96b714826357b08729"
+    },
+    {
+      "filename": "home.png",
+      "source": "GeologyIconData.ts:workspace",
+      "sha256": "473d3039f43ac5412c3149ad7719df1dd8a28ddb39509335cb10b75351d7fbe2"
+    },
+    {
+      "filename": "history.png",
+      "source": "GeologyIconData.ts:history",
+      "sha256": "32e4d994795bd336ccc0a9809e3c61e1d3a119aa40503c1bc526a8560c680be4"
+    },
+    {
+      "filename": "files.png",
+      "source": "GeologyIconData.ts:files",
+      "sha256": "1f9a5c0a2e2f9b3180485827d8146beb51458a035d365cfb2963e95c02f6e639"
+    },
+    {
+      "filename": "guide.png",
+      "source": "GeologyIconData.ts:guide",
+      "sha256": "1e531b5af67aca480b8004441871eb4601b89ab4446b356addfe5392fff92ff2"
+    },
+    {
+      "filename": "upload.png",
+      "source": "GeologyIconData.ts:upload",
+      "sha256": "e8830ccb53e1c5fa7fe32fe6fc89ca5723151e29c90f2e30600e0a5e01286c17"
+    },
+    {
+      "filename": "hero.webp",
+      "source": "LandExpertHeroImages.ts:planReviewHero",
+      "sha256": "51c274df26c0157d4271c0af2fae2fbf65889a59558b7877ce38306899c9ba0d"
+    },
+    {
+      "filename": "success.png",
+      "source": "GeologyIconData.ts:success",
+      "sha256": "c6ffc7b439343f20d662c54358f391523a00f647d67405608cdccdffbe67a18f"
+    },
+    {
+      "filename": "failed.png",
+      "source": "GeologyIconData.ts:failed",
+      "sha256": "26f09a29a9a025b4a7d058d6645e4a46d4f6e1040dff5096fb8662e4aee891cd"
+    },
+    {
+      "filename": "running.png",
+      "source": "GeologyIconData.ts:running",
+      "sha256": "8a5112b2811e8d0f23b332df1d829115f4da00d9c3d2591e8e5c05cd8dc629c1"
+    }
+  ]
+}

@@ -15,6 +15,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import process from 'node:process'
 import { ensureProductProfile } from './product-profile.mjs'
+import { removeStagedEntry } from './runtime-files.mjs'
 
 const productRoot = resolve(import.meta.dirname, '..')
 const repositoryRoot = resolve(productRoot, '..', '..')
@@ -169,7 +170,7 @@ function restoreWorkspaceClosure(entryManifests) {
       restored.add(manifest.name)
       const source = workspace.get(manifest.name)
       const destination = join(appRoot, 'node_modules', manifest.name)
-      rmSync(destination, { recursive: true, force: true })
+      removeStagedEntry(destination)
       mkdirSync(dirname(destination), { recursive: true })
       copyTreeWithoutDependencies(source, destination)
     }
@@ -217,7 +218,7 @@ function materializeLinks(directory) {
       continue
     }
     const source = realpathSync(linked)
-    rmSync(linked, { recursive: true, force: true })
+    removeStagedEntry(linked)
     mkdirSync(dirname(linked), { recursive: true })
     copyTreeWithoutDependencies(source, linked)
   }

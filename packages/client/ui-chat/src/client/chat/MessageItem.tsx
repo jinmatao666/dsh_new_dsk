@@ -4,7 +4,7 @@ import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/
 import type { MessageImageSource } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { JsonBlock, projectUserText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps } from '../contract/slots.ts'
-import type { ModelRetryNode, TurnErrorNode, UserMessageNode } from '../contract/snapshot.ts'
+import type { ModelRetryNode, TurnErrorNode, UserMessageNode } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { CompactionItem } from './CompactionItem.tsx'
 import { ContextInjectionRow } from './ContextInjectionRow.tsx'
 import { MessageIconActions } from './MessageIconActions.tsx'

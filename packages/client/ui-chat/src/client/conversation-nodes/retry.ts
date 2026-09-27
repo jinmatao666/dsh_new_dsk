@@ -4,7 +4,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-llm-retry/types'
 import type { RetryChatData } from '../contract/chat-nodes.ts'
-import type { ModelRetryNode } from '../contract/snapshot.ts'
+import type { ModelRetryNode } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { chatNode } from './common.ts'
 
 declare module '../contract/chat-nodes.ts' {

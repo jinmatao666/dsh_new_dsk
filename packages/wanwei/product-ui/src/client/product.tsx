@@ -1,3 +1,4 @@
+import { productText } from './locales/product.ts'
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
@@ -118,16 +119,16 @@ function FileImportAction(props: FileImportProps) {
       if (busy) return
       setBusy(true)
       setError(undefined)
-      setStatus({ text: '正在导入文件…', error: false })
+      setStatus({ text: productText('正在导入文件…'), error: false })
       void nativeImport('import_dropped_workspace_files', workspacePath)
         .then((paths) => {
           append(paths)
-          setStatus({ text: `已导入 ${paths.length} 个文件`, error: false })
+          setStatus({ text: productText('已导入 {0} 个文件', [paths.length]), error: false })
         })
         .catch((reason: unknown) => {
           const message = reason instanceof Error ? reason.message : String(reason)
           setError(message)
-          setStatus({ text: `文件导入失败：${message}`, error: true })
+          setStatus({ text: productText('文件导入失败：{0}', [message]), error: true })
         })
         .finally(() => { setBusy(false) })
     }
@@ -152,8 +153,8 @@ function FileImportAction(props: FileImportProps) {
   return (
     <>
       <input ref={picker} className="wanwei-product-file-input" type="file" multiple onChange={choose} />
-      <button className="wanwei-product-file-button" type="button" disabled={busy} title={error ?? '导入文件'} aria-label="导入文件" data-error={error === undefined ? undefined : true} onClick={() => picker.current?.click()}>+</button>
-      {dragActive && <div className="wanwei-product-drop-overlay">松开鼠标，将文件导入当前工作区</div>}
+      <button className="wanwei-product-file-button" type="button" disabled={busy} title={error ?? productText('导入文件')} aria-label={productText('导入文件')} data-error={error === undefined ? undefined : true} onClick={() => picker.current?.click()}>+</button>
+      {dragActive && <div className="wanwei-product-drop-overlay">{productText('松开鼠标，将文件导入当前工作区')}</div>}
       {status !== undefined && <div className="wanwei-product-import-status" data-error={status.error}>{status.text}</div>}
     </>
   )
@@ -187,8 +188,8 @@ function WanweiBrandName() {
 function WanweiHeroBrand() {
   return (
     <span className="wanwei-product-hero-identity">
-      <img className="wanwei-product-hero-brand" src="/brand-wordmark.svg" width={244} height={61} alt="万维 Buddy" />
-      <span className="wanwei-product-hero-badge">专业智能助手</span>
+      <img className="wanwei-product-hero-brand" src="/brand-wordmark.svg" width={244} height={61} alt={productText('万维 Buddy')} />
+      <span className="wanwei-product-hero-badge">{productText('专业智能助手')}</span>
     </span>
   )
 }

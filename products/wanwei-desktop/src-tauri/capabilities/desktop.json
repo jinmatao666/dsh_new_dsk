@@ -2,9 +2,13 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "desktop-loopback-ui",
   "description": "Allows the loopback DSH UI in the main desktop window to use the desktop shell commands.",
-  "windows": ["main"],
+  "webviews": [
+    "main"
+  ],
   "remote": {
-    "urls": ["http://127.0.0.1:*"]
+    "urls": [
+      "http://127.0.0.1:*"
+    ]
   },
   "permissions": [
     "core:default",
@@ -23,6 +27,10 @@
     "allow-reveal-downloaded-file",
     "allow-import-workspace-files",
     "allow-import-dropped-workspace-files",
+    "allow-open-expert-webview",
+    "allow-set-expert-webview-bounds",
+    "allow-close-expert-webview",
+    "allow-set-expert-webview-visible",
     "allow-install-skillhub-skill",
     "allow-list-skillhub-skills",
     "allow-uninstall-skillhub-skill"

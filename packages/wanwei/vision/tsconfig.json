@@ -4,12 +4,28 @@
     "rootDir": "src",
     "outDir": "lib/types"
   },
-  "include": ["src"],
+  "include": [
+    "src"
+  ],
   "references": [
-    { "path": "../../../vendor/cordis" },
-    { "path": "../../../vendor/schemastery" },
-    { "path": "../../credentials/credentials" },
-    { "path": "../../fs/fs" },
-    { "path": "../../core/tools" }
+    { "path": "../../util/launch-environment" },
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../credentials/credentials"
+    },
+    {
+      "path": "../../fs/fs"
+    },
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../runtime-diagnostics/invariants"
+    }
   ]
 }

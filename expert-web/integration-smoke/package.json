@@ -1,0 +1,10 @@
+{
+  "name": "wanwei-expert-integration-smoke",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  }
+}

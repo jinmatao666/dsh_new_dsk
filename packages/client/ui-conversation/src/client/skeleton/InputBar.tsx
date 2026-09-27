@@ -406,7 +406,7 @@ export function InputBar({
           draft,
           removePrefix: (length) => {
             const next = draft.slice(length).trimStart()
-            if (staging) onStageDraft?.(next)
+            if (staging) onStageDraft(next)
             else inputActions?.setDraft(next)
           },
         })}

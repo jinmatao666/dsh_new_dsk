@@ -11,8 +11,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
-import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
+import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
+import type {} from '@deepseek-ai/dsh-web'
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type { AuthState } from './contract.ts'
+import { launchExpertWebsite, listPublishedExperts } from './expert-catalog.ts'
+import { OneApiSearchProvider } from './search-provider.ts'
 
 export type { AuthState } from './contract.ts'
 
@@ -21,8 +25,8 @@ const MAX_RESPONSE_BYTES = 1024 * 1024
 
 /** Desktop OneAPI authentication configuration. */
 export interface Config {
-  /** OneAPI origin, without the OpenAI-compatible `/v1` suffix. */
-  baseURL: string
+  /** Explicit origin overrides launch-environment DSH_ONEAPI_URL, then loopback port 3000; excludes `/v1`. */
+  baseURL?: string
   /** DSH provider route managed by this login plugin. */
   provider: string
   /** Credential reference containing the generated OneAPI token. */
@@ -50,7 +54,7 @@ export interface Config {
 
 /** Runtime schema for {@link Config}. */
 export const Config: z<Config> = z.object({
-  baseURL: z.string().required(),
+  baseURL: z.string(),
   provider: z.string().default('dsh-server'),
   credentialRef: z.string().default('DSH_ONEAPI_TOKEN'),
   tokenName: z.string().default('DSH Desktop Auto Token'),
@@ -184,7 +188,7 @@ function personalSkillSubmission(payload: unknown): PersonalSkillSubmission {
     const file = entry as Record<string, unknown>
     if (typeof file.path !== 'string' || file.path === '' || file.path.length > 512) throw new Error('个人技能文件路径无效')
     if (typeof file.contentBase64 !== 'string' || file.contentBase64.length > 24 * 1024 * 1024) {
-      throw new Error(`个人技能文件 ${String(file.path)} 内容无效`)
+      throw new Error(`个人技能文件 ${file.path} 内容无效`)
     }
     return { path: file.path, contentBase64: file.contentBase64 }
   })
@@ -286,17 +290,21 @@ function boundedText(value: unknown, max: number): string | undefined {
 }
 
 /** Services required by the Host half. */
-export const inject = ['connection', 'credentials', 'settings', 'agentDefaultModel']
+export const inject = ['connection', 'credentials', 'settings', 'agentDefaultModel', 'web']
 
 /** Mount loopback-only authentication RPC and managed-provider synchronization. */
 export function apply(ctx: Context, config: Config): void {
   if (config.developmentBypass === true && process.env.DSH_DESKTOP_DEVELOPMENT !== '1') {
     throw new Error('桌面开发认证旁路只能由 Tauri debug shell 启用')
   }
-  const baseURL = normalizedOrigin(config.baseURL)
+  const baseURL = normalizedOrigin(config.baseURL ?? launchEnvironmentOf(ctx).get('DSH_ONEAPI_URL')?.value ?? 'http://127.0.0.1:3000')
   const ref = credentialRef(config.credentialRef)
   const usernameRef = credentialRef('DSH_LOGIN_USERNAME')
   const installMarkerRef = credentialRef('DSH_DESKTOP_INSTALL_MARKER')
+  ctx.web.registerSearchProvider(new OneApiSearchProvider({
+    baseURL,
+    resolveToken: async () => (await ctx.credentials.resolve(ref))?.value,
+  }))
 
   const syncProvider = async (models: ManagedModel[], serverDefaultModel?: string): Promise<void> => {
     const managed: ManagedProvider = {
@@ -381,14 +389,15 @@ export function apply(ctx: Context, config: Config): void {
       ...(signal === undefined ? {} : { signal }),
     })
     const result = await jsonBody<OneApiEnvelope<unknown[]>>(response)
-    if (!response.ok || result.success !== true) {
+    if (!response.ok || ! result.success) {
       throw new Error(result.message ?? `技能分类暂时不可用（HTTP ${String(response.status)}）`)
     }
     return { items: Array.isArray(result.data) ? result.data : [] }
   }
 
   const downloadPublishedSkillBundle = async (payload: unknown, signal?: AbortSignal): Promise<unknown> => {
-    const id = typeof (payload as { id?: unknown })?.id === 'number' ? (payload as { id: number }).id : Number.NaN
+    const id = typeof payload === 'object' && payload !== null && 'id' in payload && typeof payload.id === 'number'
+      ? payload.id : Number.NaN
     if (!Number.isInteger(id) || id < 1) throw new Error('技能标识无效')
     const token = (await ctx.credentials.resolve(ref))?.value
     if (token === undefined) throw new Error('请先登录后再安装技能')
@@ -397,21 +406,22 @@ export function apply(ctx: Context, config: Config): void {
       ...(signal === undefined ? {} : { signal }),
     })
     const result = await jsonBody<OneApiEnvelope<unknown>>(response)
-    if (!response.ok || result.success !== true || result.data === undefined) {
+    if (!response.ok || ! result.success || result.data === undefined) {
       throw new Error(result.message ?? `技能包下载失败（HTTP ${String(response.status)}）`)
     }
     return result.data
   }
 
   const recordPublishedSkillInstall = async (payload: unknown, signal?: AbortSignal): Promise<unknown> => {
-    const id = typeof (payload as { id?: unknown })?.id === 'number' ? (payload as { id: number }).id : Number.NaN
+    const id = typeof payload === 'object' && payload !== null && 'id' in payload && typeof payload.id === 'number'
+      ? payload.id : Number.NaN
     if (!Number.isInteger(id) || id < 1) throw new Error('技能标识无效')
     const response = await fetch(`${baseURL}/api/skill/${String(id)}/download`, {
       method: 'POST',
       ...(signal === undefined ? {} : { signal }),
     })
     const result = await jsonBody<OneApiEnvelope<unknown>>(response)
-    if (!response.ok || result.success !== true) throw new Error(result.message ?? `技能安装计数失败（HTTP ${String(response.status)}）`)
+    if (!response.ok || ! result.success) throw new Error(result.message ?? `技能安装计数失败（HTTP ${String(response.status)}）`)
     return result.data
   }
 
@@ -436,7 +446,7 @@ export function apply(ctx: Context, config: Config): void {
       ...(signal === undefined ? {} : { signal }),
     })
     const result = await jsonBody<OneApiEnvelope<unknown>>(response)
-    if (!response.ok || result.success !== true) {
+    if (!response.ok || ! result.success) {
       throw new Error(result.message ?? `个人技能上传失败（HTTP ${String(response.status)}）`)
     }
     return result.data
@@ -530,9 +540,27 @@ export function apply(ctx: Context, config: Config): void {
     }
   }
 
-  const connection = ctx.get('connection') as HostConnectionHandle | undefined
+  const connection = ctx.get('connection')
   if (connection === undefined) throw new Error('桌面认证需要 Connection 服务')
   const remove = connection.rpc.handle('/desktop-auth', async (endpoint, payload, signal) => {
+    if (endpoint === 'expert-list') {
+      try {
+        return { ok: true as const, value: await listPublishedExperts(baseURL, signal) }
+      } catch (error) {
+        return internal(error instanceof Error ? error.message : String(error))
+      }
+    }
+    if (endpoint === 'expert-launch') {
+      try {
+        const key = (payload as { key?: unknown } | null)?.key
+        if (typeof key !== 'string') throw new Error('专家编号无效')
+        const token = (await ctx.credentials.resolve(ref))?.value
+        if (token === undefined) throw new Error('请先登录后再打开专家工作台')
+        return { ok: true as const, value: await launchExpertWebsite(baseURL, key, token, signal) }
+      } catch (error) {
+        return internal(error instanceof Error ? error.message : String(error))
+      }
+    }
     if (endpoint === 'skill-list') {
       try {
         return { ok: true as const, value: await listPublishedSkills(signal) }

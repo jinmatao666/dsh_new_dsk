@@ -128,6 +128,14 @@ export abstract class ReleaseFamily {
     for (const manifestPath of manifestPaths) {
       const normalized = manifestPath.replaceAll('\\', '/')
       const manifest = readManifest(resolve(root, manifestPath))
+      const distribution = manifest.dsh
+      if (typeof distribution === 'object' && distribution !== null
+        && 'release' in distribution && distribution.release === false) {
+        if (manifest.private !== true || manifest.publishConfig !== undefined) {
+          throw new Error(`${normalized}: non-release package must be private and omit publishConfig`)
+        }
+        continue
+      }
       const name = requireString(manifest, 'name', normalized)
       const version = requireString(manifest, 'version', normalized)
       if (name === WORKSPACE_ROOT_PACKAGE) throw new Error(`${normalized} selected the workspace root`)

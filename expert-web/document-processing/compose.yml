@@ -1,0 +1,27 @@
+services:
+  conversion:
+    build: .
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "4302"
+      EXPERT_DATA_DIR: /data
+    ports:
+      - "127.0.0.1:4302:4302"
+    volumes:
+      - document-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1536m
+    cpus: 2
+    pids_limit: 96
+    stop_grace_period: 190s
+volumes:
+  document-data:

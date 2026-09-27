@@ -38,7 +38,7 @@ The first command prints the effective default tree without booting it after the
 
 ### What you get
 
-The layer disables `llm-deepseek` and `ui-settings-models`, then mounts the Wanwei-owned plugins. The OneAPI authentication plugin supplies the sole managed provider and a read-only Models settings section; it does not change the official base or Web bundles.
+The layer disables `llm-deepseek` and `ui-settings-models`, selects the Wanwei `oneapi-bailian` web-search provider, then mounts the Wanwei-owned plugins. The OneAPI authentication plugin supplies the sole managed model provider, a read-only Models settings section, and server-governed search; it does not change the official base or Web bundles.
 
 -----
 
@@ -70,7 +70,7 @@ The layer disables `llm-deepseek` and `ui-settings-models`, then mounts the Wanw
 
 #### What the model sees
 
-This composition layer adds no prompt, tool, message, or result. Its mounted packages own their model-visible behavior.
+This composition layer adds no prompt, tool, message, or result. Its `cordis.patch.yml` mounts the packages that own their model-visible behavior.
 
 #### Token effect
 

@@ -42,6 +42,19 @@ afterEach(() => {
 })
 
 describe('release families', () => {
+  it('excludes explicitly private distributions and rejects contradictory publication metadata', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-private-release-'))
+    roots.push(root)
+    const manifestPath = join(root, 'packages/product/example/package.json')
+    const manifest = { name: '@deepseek-ai/dsh-example', version: '0.0.1', private: true, dsh: { release: false } }
+    write(manifestPath, JSON.stringify(manifest))
+    expect(releaseFamily('dsh').members(root)).toEqual([])
+    write(manifestPath, JSON.stringify({ ...manifest, private: false }))
+    expect(() => releaseFamily('dsh').members(root)).toThrow('non-release package must be private')
+    write(manifestPath, JSON.stringify({ ...manifest, publishConfig: { access: 'public' } }))
+    expect(() => releaseFamily('dsh').members(root)).toThrow('omit publishConfig')
+  })
+
   it('excludes private experimental packages from the dsh release', () => {
     const members = releaseFamily('dsh').members(resolve(import.meta.dirname, '../..'))
 

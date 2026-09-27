@@ -1,3 +1,4 @@
+import { productText } from './locales/product.ts'
 import { useEffect } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import css from './Toast.module.css'
@@ -28,7 +29,7 @@ export function Toast({ notice, setNotice }: {
       <button
         className={css.close}
         type="button"
-        aria-label="关闭提示"
+        aria-label={productText('关闭提示')}
         onClick={() => { setNotice(current => current === notice ? null : current) }}
       >×</button>
     </div>

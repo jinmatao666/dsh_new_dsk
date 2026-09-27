@@ -1,4 +1,4 @@
-import type { ConversationNode } from '../contract/snapshot.ts'
+import type { ConversationNode } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ConversationPromptSnapshot } from '@deepseek-ai/dsh-client-ui-conversation/client'
 
 /** Operation that started a new append-only model context. */

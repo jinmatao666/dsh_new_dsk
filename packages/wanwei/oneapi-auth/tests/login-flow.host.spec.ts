@@ -1,4 +1,5 @@
 import { Context } from '@deepseek-ai/cordis'
+import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apply, type Config } from '../src/index.ts'
 
@@ -17,12 +18,20 @@ afterEach(() => {
 })
 
 describe('OneAPI login flow', () => {
-  it('reuses the server login, token, model-detail, and default-model protocol', async () => {
+  it.each([
+    { baseURL: config.baseURL, environment: 'https://ignored.example.test', expected: config.baseURL },
+    { baseURL: undefined, environment: 'https://launch.example.test/api-root', expected: 'https://launch.example.test/api-root' },
+    { baseURL: undefined, environment: undefined, expected: 'http://127.0.0.1:3000' },
+  ])('resolves $expected and preserves the login/token/model protocol', async ({ baseURL, environment, expected }) => {
     const credentials = new Map<string, string>()
     const replace = vi.fn(() => Promise.resolve())
     const saveSelection = vi.fn(() => Promise.resolve())
     let handler: Handler | undefined
     const ctx = new Context()
+    ctx.provide('launchEnvironment', createLaunchEnvironmentSnapshot([{
+      source: 'process', values: environment === undefined ? {} : { DSH_ONEAPI_URL: environment },
+    }]))
+    ctx.provide('web', { registerSearchProvider: vi.fn() } as never)
     ctx.provide('connection', {
       rpc: {
         handle(path: string, next: Handler) {
@@ -74,7 +83,13 @@ describe('OneAPI login flow', () => {
       throw new Error(`unexpected request: ${url}`)
     }))
 
-    apply(ctx, config)
+    apply(ctx, {
+      baseURL,
+      provider: config.provider,
+      credentialRef: config.credentialRef,
+      tokenName: config.tokenName,
+      defaultInput: config.defaultInput,
+    })
     const result = await handler?.('login', { username: ' tester ', password: 'secret' }, new AbortController().signal)
 
     expect(result).toEqual({
@@ -82,10 +97,10 @@ describe('OneAPI login flow', () => {
       value: { state: 'authenticated', models: ['model-text', 'model-vision'], username: 'tester' },
     })
     expect(requests).toEqual([
-      'https://oneapi.example.test/dsh-api/api/user/login',
-      'https://oneapi.example.test/dsh-api/api/token/',
-      'https://oneapi.example.test/dsh-api/api/user/available_models/detail',
-      'https://oneapi.example.test/dsh-api/api/status',
+      `${expected}/api/user/login`,
+      `${expected}/api/token/`,
+      `${expected}/api/user/available_models/detail`,
+      `${expected}/api/status`,
     ])
     expect(credentials.get('DSH_ONEAPI_TOKEN')).toBe('oneapi-token')
     expect(credentials.get('DSH_LOGIN_USERNAME')).toBe('tester')
@@ -93,12 +108,12 @@ describe('OneAPI login flow', () => {
       providers: {
         'dsh-server': expect.objectContaining({
           apiKeyEnv: 'DSH_ONEAPI_TOKEN',
-          baseURL: 'https://oneapi.example.test/dsh-api/v1',
+          baseURL: `${expected}/v1`,
           models: [
             { id: 'model-text', name: '文本模型', input: ['text'] },
             { id: 'model-vision', name: '视觉模型', input: ['text', 'image'] },
           ],
-        }),
+        }) as unknown,
       },
     })
     expect(saveSelection).toHaveBeenCalledWith({ provider: 'dsh-server', model: 'model-vision' })

@@ -5,8 +5,9 @@
     "outDir": "lib/types",
     "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
   },
-  "files": ["src/index.ts", "src/invariant.ts", "src/contract.ts"],
+  "files": ["src/index.ts", "src/invariant.ts", "src/contract.ts", "src/expert-catalog.ts", "src/search-provider.ts"],
   "references": [
+    { "path": "../../util/launch-environment" },
     { "path": "../../../vendor/cordis" },
     { "path": "../../../vendor/schemastery" },
     { "path": "../../client/connection/tsconfig.host.json" },
@@ -14,6 +15,7 @@
     { "path": "../../credentials/credentials" },
     { "path": "../../llm/llm-pi-ai" },
     { "path": "../../runtime-diagnostics/invariants" },
-    { "path": "../../settings/settings" }
+    { "path": "../../settings/settings" },
+    { "path": "../../web/web" }
   ]
 }

@@ -65,4 +65,15 @@ describe('Wanwei authentication gate', () => {
     fireEvent.click(screen.getByRole('button', { name: zh.signIn }))
     await waitFor(() => { expect(subject.login).toHaveBeenCalledWith('wanwei', 'secret') })
   })
+
+  it('notifies product-owned expert views when login state changes', () => {
+    const listener = vi.fn()
+    window.addEventListener('wanwei:auth-state', listener)
+    renderGate({ state: 'logged-out' })
+    expect((listener.mock.lastCall?.[0] as CustomEvent<{ authenticated: boolean }>).detail.authenticated).toBe(false)
+    cleanup()
+    renderGate({ state: 'authenticated', username: 'wanwei', models: [] })
+    expect((listener.mock.lastCall?.[0] as CustomEvent<{ authenticated: boolean }>).detail.authenticated).toBe(true)
+    window.removeEventListener('wanwei:auth-state', listener)
+  })
 })

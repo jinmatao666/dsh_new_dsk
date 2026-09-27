@@ -36,5 +36,8 @@
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-client-connection": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^"
+  },
+  "dsh": {
+    "release": false
   }
 }

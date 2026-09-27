@@ -15,6 +15,38 @@ const USER_DIRECTORIES: &[&str] = &[
     ".agent-presets",
 ];
 
+/// Publish a complete copied file without replacing a concurrently created target.
+fn copy_file_missing(source: &Path, destination: &Path) -> Result<(), String> {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_nanos();
+    let temporary = destination.with_file_name(format!(
+        ".wanwei-migration-{}-{nonce}.tmp",
+        std::process::id()
+    ));
+    let mut output = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|error| format!("无法创建迁移临时文件：{error}"))?;
+    let result = (|| -> std::io::Result<()> {
+        let mut input = fs::File::open(source)?;
+        std::io::copy(&mut input, &mut output)?;
+        #[cfg(unix)]
+        output.set_permissions(input.metadata()?.permissions())?;
+        output.sync_all()?;
+        // Hard-link publication is same-volume, atomic and never replaces a target.
+        match fs::hard_link(&temporary, destination) {
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+            result => result,
+        }
+    })();
+    drop(output);
+    let _ = fs::remove_file(&temporary);
+    result.map_err(|error| format!("无法复制旧版数据 {}：{error}", source.display()))
+}
+
 fn copy_missing(source: &Path, destination: &Path) -> Result<(), String> {
     let metadata = fs::symlink_metadata(source)
         .map_err(|error| format!("无法检查旧版数据 {}：{error}", source.display()))?;
@@ -56,8 +88,7 @@ fn copy_missing(source: &Path, destination: &Path) -> Result<(), String> {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(format!("无法检查新版数据目标：{error}")),
         }
-        fs::copy(source, destination)
-            .map_err(|error| format!("无法复制旧版数据 {}：{error}", source.display()))?;
+        copy_file_missing(source, destination)?;
     }
     Ok(())
 }
@@ -108,12 +139,39 @@ fn migrate_from(old_home: &Path, new_home: &Path) -> Result<bool, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::migrate_from;
+    use super::{copy_file_missing, migrate_from};
     use std::{
         fs,
         path::PathBuf,
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    #[test]
+    fn file_publication_preserves_existing_data_and_cleans_failed_copies() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "wanwei-migration-publish-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir(&root).unwrap();
+        let source = root.join("旧数据 中文.txt");
+        let target = root.join("新数据 中文.txt");
+        fs::write(&source, b"legacy data").unwrap();
+        fs::write(&target, b"newer data").unwrap();
+        copy_file_missing(&source, &target).unwrap();
+        assert_eq!(fs::read(&target).unwrap(), b"newer data");
+        let fresh = root.join("fresh.txt");
+        copy_file_missing(&source, &fresh).unwrap();
+        assert_eq!(fs::read(&fresh).unwrap(), b"legacy data");
+        let failed = root.join("failed.txt");
+        assert!(copy_file_missing(&root.join("missing.txt"), &failed).is_err());
+        assert!(!failed.exists());
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 3);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn migration_copies_user_data_once_without_touching_old_or_existing_preview_data() {

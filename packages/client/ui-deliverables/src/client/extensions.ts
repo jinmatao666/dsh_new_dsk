@@ -23,7 +23,10 @@ export class DeliverableExtensions extends Service {
   /** @param ctx - client root context that owns the registry. */
   constructor(ctx: Context) { super(ctx, 'deliverableExtensions') }
 
-  /** @param detector - product artifact parser. @returns disposer for this parser. */
+  /** Register an artifact parser.
+ * @param detector - Product artifact parser.
+ * @returns Parser disposer.
+ */
   registerDetector(detector: RuntimeDeliverableDetector): () => void {
     this.detectors.push(detector)
     return () => {
@@ -32,12 +35,18 @@ export class DeliverableExtensions extends Service {
     }
   }
 
-  /** @param text - textual tool result. @returns contributed artifact paths. */
+  /** Collect distinct contributed paths.
+ * @param text - Textual tool result.
+ * @returns Paths in registration order.
+ */
   detect(text: string): readonly string[] {
     return [...new Set(this.detectors.flatMap(detector => [...detector(text)]))]
   }
 
-  /** @param presenter - product artifact presenter. @returns disposer for this presenter. */
+  /** Register an artifact presenter.
+ * @param presenter - Product presenter.
+ * @returns Presenter disposer.
+ */
   registerPresenter(presenter: DeliverablePresenter): () => void {
     this.presenters.push(presenter)
     return () => {
@@ -46,12 +55,19 @@ export class DeliverableExtensions extends Service {
     }
   }
 
-  /** @param path - artifact path. @returns whether a product presenter owns its ordinary chip. */
+  /** Check whether a presenter replaces the ordinary file chip.
+ * @param path - Artifact path.
+ * @returns Whether a registered presenter claims the path.
+ */
   isClaimed(path: string): boolean {
     return this.presenters.some(presenter => presenter.claims(path))
   }
 
-  /** @returns product result nodes for this turn. */
+  /** Render contributions for a turn.
+ * @param paths - Produced artifact paths.
+ * @param openFile - Caller-owned file opening action.
+ * @returns Product result nodes for this turn.
+ */
   render(paths: readonly string[], openFile: (path: string) => void): readonly ReactNode[] {
     return this.presenters.map(presenter => presenter.render(paths, openFile))
   }

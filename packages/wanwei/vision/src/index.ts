@@ -10,6 +10,7 @@ import { basename } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
+import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import type { FsInfo, FsTarget } from '@deepseek-ai/dsh-fs'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView, ToolExecution } from '@deepseek-ai/dsh-tools'
@@ -26,14 +27,14 @@ const IMAGE_MEDIA_TYPES: Readonly<Record<string, string>> = {
 
 /** Configuration for the server-governed image-recognition service. */
 export interface Config {
-  /** OneAPI origin without `/v1`; same endpoint used by desktop sign-in. */
-  baseURL: string
+  /** Explicit origin overrides launch-environment DSH_ONEAPI_URL, then loopback port 3000; excludes `/v1`. */
+  baseURL?: string
   /** Per-user OneAPI token held by the local credentials service. */
   credentialRef: string
 }
 
 export const Config: z<Config> = z.object({
-  baseURL: z.string().required(),
+  baseURL: z.string(),
   credentialRef: z.string().default('DSH_ONEAPI_TOKEN'),
 })
 
@@ -116,7 +117,7 @@ async function selectedVisionModel(baseURL: string, token: string, signal: Abort
 
 /** Register the server-selected vision operation. */
 export function apply(ctx: Context, config: Config): void {
-  const baseURL = normalizedOrigin(config.baseURL)
+  const baseURL = normalizedOrigin(config.baseURL ?? launchEnvironmentOf(ctx).get('DSH_ONEAPI_URL')?.value ?? 'http://127.0.0.1:3000')
   const tokenRef = credentialRef(config.credentialRef)
   ctx.tools.register(defineTool({
     name: 'recognize_image',

@@ -1,0 +1,55 @@
+{
+  "purpose": "Versioned legacy asset copies; no runtime dependency on the original repository",
+  "assets": [
+    {
+      "filename": "home.png",
+      "source": "office-icons.ts:fileHome",
+      "sha256": "93cbd1d8d5b249ce76c0b674cf7559b559f05925efb0bc046abf7be6e9ac4cb0"
+    },
+    {
+      "filename": "history.png",
+      "source": "office-icons.ts:fileHistory",
+      "sha256": "b610cf865f11832d64b95112bc3280150102b8da802ccf8b03d4b9437b60ba5a"
+    },
+    {
+      "filename": "files.png",
+      "source": "office-icons.ts:fileFolder",
+      "sha256": "40bfb948b4594bdeac1fa6b36269ee274ea7bf5cb9482ebaebb47174f94cd50a"
+    },
+    {
+      "filename": "guide.png",
+      "source": "office-icons.ts:fileGuide",
+      "sha256": "0e6424b39960ae1423aa4d2b58e6e1142de7180660f0ed27172fa6cd2b298195"
+    },
+    {
+      "filename": "word-pdf.png",
+      "source": "office-icons.ts:wordPdf",
+      "sha256": "5ec3538e983fc2f9d62dcabf7d278ccd22d19e604384f0262fe14dcd3bce893a"
+    },
+    {
+      "filename": "pdf-images.png",
+      "source": "office-icons.ts:pdfImages",
+      "sha256": "0584207d18ca3a46c6cb1cd66b919d7f4724c479c83ed7e42eda7105912a7fb1"
+    },
+    {
+      "filename": "pdf-organize.png",
+      "source": "office-icons.ts:pdfOrganize",
+      "sha256": "6d981a6785400099f257f524dc2c58b2646df10bcbe43c0c5970644ad93d221f"
+    },
+    {
+      "filename": "images-pdf.png",
+      "source": "office-icons.ts:imagesPdf",
+      "sha256": "06bd8a982e1adc7d7d236a558a48b63320d48665b4abf07a889a21d25a13a458"
+    },
+    {
+      "filename": "image-optimize.png",
+      "source": "office-icons.ts:imageOptimize",
+      "sha256": "6fae7471b7c53acd14a48a84e3c148356c86afdada2ec3102b1558f3b549d670"
+    },
+    {
+      "filename": "hero.webp",
+      "source": "OfficeExpertHeroImages.ts:fileHero",
+      "sha256": "d3c273a142a59376637647a85a7aaf9f2eb8f5432fc609e02671b38b480486de"
+    }
+  ]
+}

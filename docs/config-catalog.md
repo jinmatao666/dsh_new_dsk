@@ -3199,6 +3199,108 @@ export type ApprovalPolicy = 'ask' | 'never'
 
 Source: [`packages/interaction/user-approval/src/index.ts:142`](../packages/interaction/user-approval/src/index.ts)
 
+<a id="deepseek-aidsh-wanwei-document-local"></a>
+
+## `@deepseek-ai/dsh-wanwei-document-local`
+
+Requires: `tools`
+
+```ts config-catalog
+/** Configuration for the packaged document-extraction helper. */
+export interface Config {
+  /** Absolute path to the packaged Node executable that runs the document helper. */
+  nodeBinary?: string
+  /** Absolute path to the document extraction helper module. */
+  helperPath?: string
+}
+```
+
+Source: [`packages/wanwei/document-local/src/index.ts:10`](../packages/wanwei/document-local/src/index.ts)
+
+<a id="deepseek-aidsh-wanwei-oneapi-auth"></a>
+
+## `@deepseek-ai/dsh-wanwei-oneapi-auth`
+
+Requires: `connection` · `credentials` · `settings` · `agentDefaultModel` · `web`
+
+```ts config-catalog
+/** Desktop OneAPI authentication configuration. */
+export interface Config {
+  /** Explicit origin overrides launch-environment DSH_ONEAPI_URL, then loopback port 3000; excludes `/v1`. */
+  baseURL?: string
+  /** DSH provider route managed by this login plugin. */
+  provider: string
+  /** Credential reference containing the generated OneAPI token. */
+  credentialRef: string
+  /** Name assigned to automatically created OneAPI tokens. */
+  tokenName: string
+  /** Optional preferred default model id. */
+  defaultModel?: string
+  /**
+   * Input modalities advertised for models returned by OneAPI.
+   *
+   * OneAPI's `/v1/models` response only contains model ids, so the DSH
+   * runtime cannot discover vision support from that endpoint.  The newer DSH
+   * image pipeline deliberately refuses images for hand-declared models until
+   * this capability is declared.  Keep the deployment choice here (rather
+   * than making every desktop user edit settings); a text-only upstream must
+   * leave `image` out.
+   */
+  defaultInput?: Array<'text' | 'image'>
+  /** Build-specific marker used to require login once after a new install. */
+  installId?: string
+  /** Skip the login overlay inside the source-only Tauri development shell. */
+  developmentBypass?: boolean
+}
+```
+
+Source: [`packages/wanwei/oneapi-auth/src/index.ts:27`](../packages/wanwei/oneapi-auth/src/index.ts)
+
+<a id="deepseek-aidsh-wanwei-skillhub"></a>
+
+## `@deepseek-ai/dsh-wanwei-skillhub`
+
+Requires: `connection`
+
+```ts config-catalog
+/** All upstream deployment choices are configured by the product bundle. */
+export type Config = ApiConfig
+
+/** Deployment-owned network and resource limits. */
+export interface ApiConfig {
+  /** HTTPS origin of the upstream API. */
+  baseURL: string
+  /** Maximum request duration in milliseconds. */
+  timeoutMs: number
+  /** Maximum streamed JSON response size in bytes. */
+  maxJsonBytes: number
+  /** Maximum compressed archive size in bytes. */
+  maxArchiveBytes: number
+  /** Exact hostnames allowed for HTTPS download redirects. */
+  downloadHosts: string[]
+}
+```
+
+Source: [`packages/wanwei/skillhub/src/index.ts:8`](../packages/wanwei/skillhub/src/index.ts)
+
+<a id="deepseek-aidsh-wanwei-vision"></a>
+
+## `@deepseek-ai/dsh-wanwei-vision`
+
+Requires: `tools` · `fs` · `credentials`
+
+```ts config-catalog
+/** Configuration for the server-governed image-recognition service. */
+export interface Config {
+  /** Explicit origin overrides launch-environment DSH_ONEAPI_URL, then loopback port 3000; excludes `/v1`. */
+  baseURL?: string
+  /** Per-user OneAPI token held by the local credentials service. */
+  credentialRef: string
+}
+```
+
+Source: [`packages/wanwei/vision/src/index.ts:29`](../packages/wanwei/vision/src/index.ts)
+
 <a id="deepseek-aidsh-web"></a>
 
 ## `@deepseek-ai/dsh-web`
@@ -3476,6 +3578,8 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-tool-cordis` — requires `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect` ([`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts))
 - `@deepseek-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))
 - `@deepseek-ai/dsh-user-questions` ([`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts))
+- `@deepseek-ai/dsh-wanwei-product-ui` ([`packages/wanwei/product-ui/src/index.ts`](../packages/wanwei/product-ui/src/index.ts))
+- `@deepseek-ai/dsh-wanwei-skill-marketplace` ([`packages/wanwei/skill-marketplace/src/index.ts`](../packages/wanwei/skill-marketplace/src/index.ts))
 - `@deepseek-ai/dsh-webhook` — requires `agents` · `agentDefaultModel` · `agentPresets` · `permissionPresets` · `sessionTitle` · `workspaceRegistry` ([`packages/webhook/webhook/src/index.ts`](../packages/webhook/webhook/src/index.ts))
 - `@deepseek-ai/dsh-workspace` — requires `storageDomain` · `sessionPersistence` ([`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts))
 
@@ -3510,6 +3614,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@deepseek-ai/dsh-atomic-write` ([`packages/util/atomic-write/src/index.ts`](../packages/util/atomic-write/src/index.ts))
 - `@deepseek-ai/dsh-base` ([`packages/bundle/base/src/index.ts`](../packages/bundle/base/src/index.ts))
 - `@deepseek-ai/dsh-brand` ([`packages/util/brand/src/index.ts`](../packages/util/brand/src/index.ts))
+- `@deepseek-ai/dsh-client-platform-actions` ([`packages/client/platform-actions/src/index.ts`](../packages/client/platform-actions/src/index.ts))
 - `@deepseek-ai/dsh-client-store` ([`packages/client/store/src/index.ts`](../packages/client/store/src/index.ts))
 - `@deepseek-ai/dsh-client-test-runtime` ([`packages/test-support/client-runtime/src/index.ts`](../packages/test-support/client-runtime/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-primitives` ([`packages/client/ui-primitives/src/index.ts`](../packages/client/ui-primitives/src/index.ts))
@@ -3543,4 +3648,5 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@deepseek-ai/dsh-typert-registry` ([`packages/typert/registry/src/index.ts`](../packages/typert/registry/src/index.ts))
 - `@deepseek-ai/dsh-util-crypto` ([`packages/util/crypto/src/index.ts`](../packages/util/crypto/src/index.ts))
 - `@deepseek-ai/dsh-util-workspace-path` ([`packages/util/workspace-path/src/index.ts`](../packages/util/workspace-path/src/index.ts))
+- `@deepseek-ai/dsh-wanwei-desktop` ([`packages/bundle/wanwei-desktop/src/index.ts`](../packages/bundle/wanwei-desktop/src/index.ts))
 - `@deepseek-ai/dsh-win32-process` ([`packages/subprocess/win32-process/src/index.ts`](../packages/subprocess/win32-process/src/index.ts))

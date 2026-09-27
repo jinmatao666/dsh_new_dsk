@@ -6,11 +6,14 @@
 - id: ui-settings-models
   disabled: true
 
+- id: web
+  config:
+    searchProvider: oneapi-bailian
+
 - insert:
     - id: wanwei-oneapi-auth
       name: '@deepseek-ai/dsh-wanwei-oneapi-auth'
       config:
-        baseURL: !!js process.env.DSH_ONEAPI_URL ?? 'http://127.0.0.1:3000'
         provider: dsh-server
         credentialRef: DSH_ONEAPI_TOKEN
         tokenName: DSH Desktop Auto Token
@@ -23,7 +26,6 @@
     - id: wanwei-vision
       name: '@deepseek-ai/dsh-wanwei-vision'
       config:
-        baseURL: !!js process.env.DSH_ONEAPI_URL ?? 'http://127.0.0.1:3000'
         credentialRef: DSH_ONEAPI_TOKEN
     - id: wanwei-skill-marketplace
       name: '@deepseek-ai/dsh-wanwei-skill-marketplace'

@@ -1,3 +1,4 @@
+import { productText } from './locales/product.ts'
 import { useEffect, useState } from 'react'
 import css from './AnalysisResultCard.module.css'
 
@@ -70,25 +71,25 @@ export function AnalysisResultCard({
   }, [path, readView])
 
   if (view === null) {
-    return <section className={css.root} aria-label="分析结果"><div className={css.heading}><div><div className={css.kicker}>分析结果</div><h3>{error === null ? '正在加载分析成果…' : '分析成果未能在对话区加载'}</h3></div><div className={css.actions}>{excelPath !== undefined && <button type="button" onClick={() => { openFile(excelPath) }}>打开 Excel</button>}{wordPath !== undefined && <button type="button" onClick={() => { openFile(wordPath) }}>打开 Word</button>}</div></div>{error !== null && <p className={css.error}>{error}</p>}</section>
+    return <section className={css.root} aria-label={productText('分析结果')}><div className={css.heading}><div><div className={css.kicker}>{productText('分析结果')}</div><h3>{error === null ? productText('正在加载分析成果…') : productText('分析成果未能在对话区加载')}</h3></div><div className={css.actions}>{excelPath !== undefined && <button type="button" onClick={() => { openFile(excelPath) }}>{productText('打开 Excel')}</button>}{wordPath !== undefined && <button type="button" onClick={() => { openFile(wordPath) }}>{productText('打开 Word')}</button>}</div></div>{error !== null && <p className={css.error}>{error}</p>}</section>
   }
 
   const selected = view.tables.find(table => table.id === selectedId) ?? view.tables[0]
   if (selected === undefined) {
-    return <section className={css.root} aria-label="分析结果"><p className={css.error}>分析视图未提供可展示的结果表。</p></section>
+    return <section className={css.root} aria-label={productText('分析结果')}><p className={css.error}>{productText('分析视图未提供可展示的结果表。')}</p></section>
   }
   const rows = selected.rows.slice(0, visibleRows)
   return (
-    <section className={css.root} aria-label={`${view.title}结果表格`}>
-      <div className={css.heading}><div><div className={css.kicker}>空间分析成果</div><h3>{view.title}</h3></div><div className={css.actions}>{excelPath !== undefined && <button type="button" onClick={() => { openFile(excelPath) }}>打开 Excel</button>}{wordPath !== undefined && <button type="button" onClick={() => { openFile(wordPath) }}>打开 Word</button>}</div></div>
+    <section className={css.root} aria-label={productText('{0}结果表格', [view.title])}>
+      <div className={css.heading}><div><div className={css.kicker}>{productText('空间分析成果')}</div><h3>{view.title}</h3></div><div className={css.actions}>{excelPath !== undefined && <button type="button" onClick={() => { openFile(excelPath) }}>{productText('打开 Excel')}</button>}{wordPath !== undefined && <button type="button" onClick={() => { openFile(wordPath) }}>{productText('打开 Word')}</button>}</div></div>
       {view.metrics !== undefined && view.metrics.length > 0 && (
         <dl className={css.metrics}>
           {view.metrics.map(metric => <div key={metric.label}><dt>{metric.label}</dt><dd>{metric.value}</dd></div>)}
         </dl>
       )}
-      <div className={css.tabs} role="tablist" aria-label="分析数据分类">{view.tables.map(table => <button key={table.id} type="button" role="tab" aria-selected={selected.id === table.id} className={selected.id === table.id ? css.tabActive : css.tab} onClick={() => { setSelectedId(table.id); setVisibleRows(100) }}>{table.title}</button>)}</div>
+      <div className={css.tabs} role="tablist" aria-label={productText('分析数据分类')}>{view.tables.map(table => <button key={table.id} type="button" role="tab" aria-selected={selected.id === table.id} className={selected.id === table.id ? css.tabActive : css.tab} onClick={() => { setSelectedId(table.id); setVisibleRows(100) }}>{table.title}</button>)}</div>
       <div className={css.tableWrap}><table><thead><tr>{selected.columns.map((column, index) => <th key={`${column}-${index}`}>{column}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${selected.id}-${index}`}>{selected.columns.map((column, columnIndex) => <td key={`${column}-${columnIndex}`}>{row[columnIndex] ?? '—'}</td>)}</tr>)}</tbody></table></div>
-      {selected.rows.length > visibleRows && <button type="button" className={css.expand} onClick={() => { setVisibleRows(count => count + 100) }}>加载更多（已显示 {visibleRows} / {selected.rows.length} 条）</button>}
+      {selected.rows.length > visibleRows && <button type="button" className={css.expand} onClick={() => { setVisibleRows(count => count + 100) }}>{productText('加载更多（已显示')}{visibleRows} / {selected.rows.length} {productText(' 条）')}</button>}
       {view.sections !== undefined && view.sections.length > 0 && (
         <div className={css.sections}>{view.sections.map(section => <Section key={section.title} section={section} />)}</div>
       )}

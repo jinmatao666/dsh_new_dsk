@@ -74,8 +74,8 @@ function runHelper(
     let stderr = ''
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
-    child.stdout.on('data', (chunk) => { stdout += chunk })
-    child.stderr.on('data', (chunk) => { stderr += chunk })
+    child.stdout.on('data', (chunk: string) => { stdout += chunk })
+    child.stderr.on('data', (chunk: string) => { stderr += chunk })
     child.once('error', reject)
     child.once('close', (code) => {
       try {
@@ -86,7 +86,7 @@ function runHelper(
         const end = stdout.lastIndexOf('}')
         const payload = start >= 0 && end >= start ? stdout.slice(start, end + 1) : stdout
         const parsed = JSON.parse(payload) as HelperResult
-        if (code === 0 || parsed.ok === false) return resolveResult(parsed)
+        if (code === 0 || parsed.ok === false) {  resolveResult(parsed); return }
       } catch {
         // Report the process failure below with the captured diagnostic.
       }

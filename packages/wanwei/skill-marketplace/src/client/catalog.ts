@@ -19,7 +19,9 @@ export function browseMarketplaceCatalog<T extends { marketplacePublished?: bool
   return skills.filter(skill => skill.marketplacePublished === true)
 }
 
+/** Personal upload category selected by the user. */
 export type PersonalSkillUploadView = 'public' | 'private' | 'reviews'
+/** Review-status filter applied to personal uploads. */
 export type PersonalSkillReviewFilter = 'all' | 'pending' | 'rejected' | 'approved'
 
 /**

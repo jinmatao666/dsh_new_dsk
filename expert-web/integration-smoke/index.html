@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>专家网页接入验证</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div class="brand"><span class="brand-mark">W</span><strong>万维 Buddy</strong></div>
+      <div class="expert-name">接入验证专家</div>
+      <nav aria-label="工作台导航"><button type="button" class="active" data-view="work">分析工作台</button><button type="button" data-view="records">我的分析记录</button><button type="button" data-view="guide">使用说明</button></nav>
+      <p class="rail-note">此站仅用于验证身份、文件和成果链路，不是正式专家。</p>
+    </aside>
+    <main>
+      <header class="top"><span id="identity">正在确认身份…</span><span class="status" id="connection-state">连接中</span></header>
+      <section id="work" class="view">
+        <div class="heading"><span>分析工作台</span><h1>检查一份文本文件</h1><p>选择 UTF-8 文本，生成可下载的行数、大小与 SHA-256 校验报告。</p></div>
+        <div class="panel"><label for="file">选择文件</label><input id="file" type="file" accept=".txt,.md,.csv,.json,.yaml,.yml,text/plain"><p>最多 5 MB；原文件不会修改。</p><button id="run" class="primary" type="button" disabled>生成检查报告</button></div>
+        <div id="result" class="result" aria-live="polite"></div>
+      </section>
+      <section id="records" class="view" hidden><div class="heading"><span>任务记录</span><h1>我的分析记录</h1><p>仅展示当前用户在本专家站生成的报告。</p></div><div id="task-list" class="records"></div></section>
+      <section id="guide" class="view" hidden><div class="heading"><span>使用说明</span><h1>接入验证说明</h1></div><div class="panel"><h2>当前验证范围</h2><p>平台一次性票据换取网页会话、用户记录隔离、文件上传、真实处理和报告下载。</p><p>这是独立部署的网站。正式六个专家会分别实现自己的业务与页面，不共用此站的任务数据。</p><button id="check-native" class="primary" type="button">检测桌面原生桥</button><p id="native-result" role="status">尚未检测</p></div></section>
+      <p id="message" role="alert" hidden></p>
+    </main>
+  </div>
+</body>
+</html>

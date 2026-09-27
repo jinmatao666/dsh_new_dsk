@@ -2,7 +2,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import type { Context } from '@deepseek-ai/cordis'
-import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import { InputHub } from '../src/client/input/hub.ts'
 import type { SessionInputShell } from '../src/client/input/facade.ts'
 import { ComposerContentEditable } from '../src/client/input/editor/ComposerContentEditable.tsx'
@@ -11,7 +10,7 @@ afterEach(cleanup)
 
 describe('pre-Session draft', () => {
   it('moves the pending text to a Session once without submitting it', () => {
-    const hub = new InputHub({} as Context, (() => '') as TranslateNS<'conversation'>)
+    const hub = new InputHub({} as Context, (() => ''))
     const setDraft = vi.fn()
     vi.spyOn(hub, 'shell').mockReturnValue({ setDraft } as unknown as SessionInputShell)
     hub.setStagedDraft('/meeting-minutes 请分析这份录音')

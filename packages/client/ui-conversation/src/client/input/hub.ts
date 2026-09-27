@@ -60,7 +60,9 @@ export class InputHub implements SessionInputResolver {
     return text
   }
 
-  /** Move the pending pre-Session text into a connected Session without submitting it. */
+  /** Move pending pre-Session text into a connected Session without submitting it.
+ * @param sessionId - Connected Session receiving the draft.
+ */
   moveStagedDraftTo(sessionId: SessionId): void {
     const text = this.stagedDraft.getSnapshot()
     if (text === '') return

@@ -37,24 +37,32 @@ export class ClientPlatformActions extends Service {
     }
   }
 
-  /** @returns whether a shell currently provides directory opening. */
+  /** Report directory-opening availability.
+ * @returns Whether a provider is registered.
+ */
   canOpenDirectory(): boolean {
     return this.provider?.openDirectory !== undefined
   }
 
-  /** @param path - absolute host directory path to open. */
+  /** Open a directory, rejecting if unavailable.
+ * @param path - Absolute host directory.
+ */
   async openDirectory(path: string): Promise<void> {
     const action = this.provider?.openDirectory
     if (action === undefined) throw new Error('directory opening is unavailable in this application')
     await action(path)
   }
 
-  /** @returns whether a shell currently provides native file saving. */
+  /** Report native file-saving availability.
+ * @returns Whether a provider is registered.
+ */
   canSaveFile(): boolean {
     return this.provider?.saveFile !== undefined
   }
 
-  /** @param input - filename and bytes passed to the product shell. */
+  /** Save bytes, rejecting if unavailable.
+ * @param input - Filename and bytes passed to the shell.
+ */
   async saveFile(input: { filename: string; bytes: Uint8Array }): Promise<void> {
     const action = this.provider?.saveFile
     if (action === undefined) throw new Error('native file saving is unavailable in this application')

@@ -9,8 +9,11 @@
 | `packages/client/ui-workspace` | Workspace 菜单按能力显示通用“打开目录”动作 | 不显示该动作 |
 | `packages/session-query/session-log-export` | 可注入通用文件保存函数 | 使用浏览器下载 |
 | `packages/client/ui-deliverables` | 注册额外成果 Detector 和 Presenter | 只识别并展示官方通用成果 |
-| `packages/client/ui-conversation` | Hero 品牌 Slot | 使用官方图标、标题和预览标识 |
+| `packages/client/ui-conversation` | Hero 品牌 Slot；无会话可编辑草稿与通用草稿前缀 Slot | 使用官方图标和标题；未选工作区的草稿在选择后进入会话，前缀 Slot 为空 |
 | `packages/bundle/web-app` | 装载通用客户端平台动作注册表 | 注册表为空，不改变官方页面 |
+| `scripts/check-workspace-constraints.ts`、`scripts/release/families.ts` | 通用 `dsh.release: false` 标记：产品包必须私有且不参与官方 npm 发布；官方包不得反向依赖这些包 | 未标记的官方包继续遵守原发布规则 |
+
+类型目录所需的显式类型注解和跨包类型导入位于 `ui-approval`、`ui-chat`；只影响静态契约，不改变会话渲染。Windows 检查脚本使用目录 junction，ACP 测试直接引用规范快照配置，不依赖检出时能否创建符号链接。
 
 ## 已从官方区域移出的实现
 

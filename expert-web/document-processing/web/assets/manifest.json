@@ -1,0 +1,45 @@
+{
+  "purpose": "Versioned legacy asset copies; no runtime dependency on the original repository",
+  "assets": [
+    {
+      "filename": "expert.png",
+      "source": "office-icons.ts:docExpert",
+      "sha256": "e74be6135ed22ddede6391e1b151ce5c1a9d0dab905c10a9f682f7e092c781e0"
+    },
+    {
+      "filename": "home.png",
+      "source": "office-icons.ts:docHome",
+      "sha256": "4851f4f0f03883e3b00efeb1bc1e97d2726970be2dfcb2a2638c56b968b1ac0e"
+    },
+    {
+      "filename": "history.png",
+      "source": "office-icons.ts:docHistory",
+      "sha256": "813a71f24d3a6a5e75de9e9f788df3849bde0cacce9d0a173d5eda53977b7079"
+    },
+    {
+      "filename": "files.png",
+      "source": "office-icons.ts:docFile",
+      "sha256": "1c62d8e39aa70c291e88f803ade6f3cd467355573e6c706d4aaa5ca3e70fec7d"
+    },
+    {
+      "filename": "guide.png",
+      "source": "office-icons.ts:docInfo",
+      "sha256": "9289defc4535bf16aa6864d15604ba2e45a5f955c9f52d69bcb7d83d503899df"
+    },
+    {
+      "filename": "summary.png",
+      "source": "office-icons.ts:docSummary",
+      "sha256": "7c7390dd750624283dd5c01c45367b71a5800a34e541fbd2ddac1b952fcd3773"
+    },
+    {
+      "filename": "compare.png",
+      "source": "office-icons.ts:docCompare",
+      "sha256": "7e99a4d21e5631f86d0a5de1fc438aa88cd58767631a5ea02485332150d097e6"
+    },
+    {
+      "filename": "hero.webp",
+      "source": "OfficeExpertHeroImages.ts:documentHero",
+      "sha256": "9aac7c4647d7c26ca195ef50f6271e49fd919608abd8fe4ee6451a97a68501f7"
+    }
+  ]
+}

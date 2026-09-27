@@ -144,6 +144,8 @@ export const SERVICE_PAGE: Record<string, string> = {
  * to a model as `cordis_runtime_inspect what:"client"`).
  */
 export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
+  platformActions: 'client-face optional shell operations — packages/client/platform-actions/README.md owns the API',
+  deliverableExtensions: 'client-face artifact parser and presenter registry — packages/client/ui-deliverables/README.md owns the API',
   agent: 'not a service: the DX accessor field on Agent.ctx (root accessor defaulting to undefined) — docs/subsystems/core.md owns the Agent handle',
   appReady: 'not a service: launcher-provided successful-startup signal — packages/boot/cmdline/README.md owns the launcher contract',
   appExit: 'not a service: launcher-provided bounded process-exit callback — packages/boot/cmdline/README.md owns the launcher contract',
@@ -219,6 +221,7 @@ export const EVENT_SCOPE_PAGE: Record<string, string> = {
  * exemption cannot mask another declaration in that scope.
  */
 export const EVENT_WALK_EXEMPTIONS: Record<string, string> = {
+  'skills/catalog-invalidated': 'client-face skill refresh signal — packages/client/ui-skill/README.md owns the API',
   'command/executed': 'client-face local command acknowledgment — packages/client/ui-commands/README.md owns the API',
   'connection/reset': 'client-face transport signal — packages/api/session-controller/README.md owns the API',
   'locale/change': 'client-face locale switch signal — packages/client/locale/README.md owns the API',

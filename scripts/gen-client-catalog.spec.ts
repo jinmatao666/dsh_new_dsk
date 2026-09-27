@@ -8,6 +8,9 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { collectSlotEntries, oversizedSlotReports, resolveSlotEntries, validateSlotContracts } from './gen-client-catalog.ts'
 import type { SlotDeclaration, SlotRegistration, TypeDeclaration } from './slot-walk.ts'
 
@@ -197,6 +200,22 @@ describe('the per-slot report budget', () => {
 })
 
 describe('the real workspace surface', () => {
+  it('excludes explicitly private product occupants without hiding unmarked invalid registrations', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-slot-catalog-'))
+    try {
+      const directory = join(root, 'packages', 'product', 'demo')
+      mkdirSync(join(directory, 'src'), { recursive: true })
+      const manifest = join(directory, 'package.json')
+      writeFileSync(manifest, JSON.stringify({ name: '@example/product', private: true, dsh: { release: false } }))
+      writeFileSync(join(directory, 'src', 'index.ts'), "ctx.slots.register({ name: 'missing.seat' }, ProductSeat)\n")
+      expect(collectSlotEntries(root)).toEqual([])
+      writeFileSync(manifest, JSON.stringify({ name: '@example/product' }))
+      expect(() => collectSlotEntries(root)).toThrow('blind spot')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('collects every declared slot with a teachable contract', { timeout: 30_000 }, () => {
     const entries = collectSlotEntries(process.cwd())
     expect(entries.length).toBeGreaterThan(30)

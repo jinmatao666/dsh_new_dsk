@@ -2,9 +2,7 @@
   "name": "@deepseek-ai/dsh-wanwei-oneapi-auth",
   "description": "Wanwei desktop authentication and managed-model synchronization for the existing OneAPI service",
   "version": "0.1.2-alpha.1",
-  "publishConfig": {
-    "access": "public"
-  },
+  "private": true,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
@@ -38,7 +36,8 @@
         "@deepseek-ai/dsh-client-ui-settings"
       ],
       "platform": "web"
-    }
+    },
+    "release": false
   },
   "scripts": {
     "bundle": "tsdown",
@@ -52,6 +51,7 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@deepseek-ai/dsh-launch-environment": "workspace:^",
     "@deepseek-ai/dsh-credentials": "workspace:^",
     "@deepseek-ai/dsh-settings": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^"
@@ -64,7 +64,8 @@
     "@deepseek-ai/dsh-client-ui-layout": "workspace:^",
     "@deepseek-ai/dsh-client-ui-settings": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-llm-pi-ai": "workspace:^"
+    "@deepseek-ai/dsh-llm-pi-ai": "workspace:^",
+    "@deepseek-ai/dsh-web": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
@@ -77,6 +78,7 @@
     "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-llm-pi-ai": "workspace:^",
+    "@deepseek-ai/dsh-web": "workspace:^",
     "@testing-library/react": "^16.1.0",
     "@types/react": "~18.3.1",
     "react": "^18.2.0",

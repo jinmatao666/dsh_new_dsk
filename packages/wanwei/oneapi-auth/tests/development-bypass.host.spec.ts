@@ -1,5 +1,5 @@
 import { Context } from '@deepseek-ai/cordis'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apply, type Config } from '../src/index.ts'
 
 const config: Config = {
@@ -28,6 +28,7 @@ describe('desktop development authentication', () => {
   it('keeps the real authentication RPC mounted while returning the development identity', async () => {
     process.env.DSH_DESKTOP_DEVELOPMENT = '1'
     const ctx = new Context()
+    ctx.provide('web', { registerSearchProvider: vi.fn() } as never)
     type Handler = (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>
     let handler: Handler | undefined
     ctx.provide('connection', {

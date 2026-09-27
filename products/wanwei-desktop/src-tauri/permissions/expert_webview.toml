@@ -1,0 +1,24 @@
+[[permission]]
+identifier = "allow-open-expert-webview"
+description = "Allows the trusted main webview to open a published expert website as a child webview."
+commands.allow = ["open_expert_webview"]
+
+[[permission]]
+identifier = "allow-save-expert-artifact"
+description = "Allows a published expert webview to save bounded output bytes in Downloads without overwriting files."
+commands.allow = ["save_expert_artifact"]
+
+[[permission]]
+identifier = "allow-set-expert-webview-bounds"
+description = "Allows the trusted main webview to position an expert child webview."
+commands.allow = ["set_expert_webview_bounds"]
+
+[[permission]]
+identifier = "allow-close-expert-webview"
+description = "Allows the trusted main webview to close an expert child webview."
+commands.allow = ["close_expert_webview"]
+
+[[permission]]
+identifier = "allow-set-expert-webview-visible"
+description = "Allows the trusted main webview to switch an expert child webview with its tab."
+commands.allow = ["set_expert_webview_visible"]

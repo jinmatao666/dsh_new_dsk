@@ -53,7 +53,7 @@ export function ComposerContentEditable({
       // renders it, and setEditable above keeps the editor's own gate in step.
       contentEditable={editable}
       onInput={editor === null && onStandaloneInput !== undefined
-        ? (event) => { onStandaloneInput(event.currentTarget.textContent ?? '') }
+        ? (event) => { onStandaloneInput(event.currentTarget.textContent) }
         : undefined}
       suppressContentEditableWarning
       role="textbox"

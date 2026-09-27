@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   checkExperimentalDependencyIsolation,
   checkExperimentalManifest,
+  checkWorkspaceManifest,
   expectedDshPackageFiles,
   type WorkspaceManifest,
 } from './check-workspace-constraints.ts'
@@ -77,6 +78,35 @@ describe('experimental workspace constraints', () => {
 })
 
 describe('package payload constraints', () => {
+  it('requires explicit non-release packages to remain private', () => {
+    const pkg: WorkspaceManifest = {
+      dir: 'packages/product/example',
+      manifest: { name: 'private-example', private: true, dsh: { release: false } },
+    }
+    expect(checkWorkspaceManifest(pkg)).toEqual([])
+    expect(checkWorkspaceManifest({ ...pkg, manifest: { ...pkg.manifest, private: false } })).toEqual([
+      expect.stringContaining('non-release package must set'),
+    ])
+    expect(checkWorkspaceManifest({ ...pkg, manifest: { ...pkg.manifest, publishConfig: { access: 'public' } } })).toEqual([
+      expect.stringContaining('non-release package must omit publishConfig'),
+    ])
+  })
+
+  it('rejects official runtime dependencies on non-release product packages', () => {
+    const product: WorkspaceManifest = {
+      dir: 'packages/product/example',
+      manifest: { name: 'private-example', private: true, dsh: { release: false } },
+    }
+    const consumer: WorkspaceManifest = {
+      dir: 'packages/core/consumer',
+      manifest: { name: 'consumer', dependencies: { 'private-example': 'workspace:^' } },
+    }
+    expect(checkExperimentalDependencyIsolation([product, consumer])).toHaveLength(1)
+    expect(checkExperimentalDependencyIsolation([product, {
+      ...consumer, manifest: { ...consumer.manifest, private: true, dsh: { release: false } },
+    }])).toEqual([])
+  })
+
   it('includes a declared profile patch without a package-name allowlist', () => {
     expect(expectedDshPackageFiles({
       name: '@deepseek-ai/dsh-private-profile',

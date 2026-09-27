@@ -16,7 +16,7 @@ export type AuthGateProps = PropsRuntime<'shell.overlay'>
   & InjectFace<AuthInjected>
   & PropsLocale<'wanwei.auth'>
 
-const NATIVE_AUTH_TITLE_PREFIX = '__zjugis_native_auth:'
+const NATIVE_AUTH_SIGNAL_PREFIX = '__zjugis_native_auth:'
 
 type LoginMode = 'account' | 'sms' | 'qr'
 
@@ -43,10 +43,11 @@ export function AuthGate({ useAuth, refresh, login, fail, t }: AuthGateProps) {
   // resized and maximized. The marker is intentionally product-owned and is
   // ignored by ordinary browser hosts.
   useEffect(() => {
+    window.dispatchEvent(new CustomEvent('wanwei:auth-state', { detail: { authenticated: auth.state === 'authenticated' } }))
     if (auth.state === 'authenticated') {
-      document.title = `${NATIVE_AUTH_TITLE_PREFIX}authenticated`
+      document.title = `${NATIVE_AUTH_SIGNAL_PREFIX}authenticated`
     } else {
-      document.title = `${NATIVE_AUTH_TITLE_PREFIX}login`
+      document.title = `${NATIVE_AUTH_SIGNAL_PREFIX}login`
     }
   }, [auth.state])
 

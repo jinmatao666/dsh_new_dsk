@@ -20,6 +20,7 @@ export interface SessionLogDownloadState {
 
 type Fetch = (input: string | URL, init?: RequestInit) => Promise<Response>
 type Save = (url: string, filename: string) => void
+/** Optional shell-owned archive saving operation. */
 export type NativeArchiveSave = (archive: Blob, filename: string) => Promise<void>
 
 const INITIAL: SessionLogDownloadState = { bySession: {} }

@@ -12,8 +12,8 @@
  * `--check` verifies the committed artifact is fresh.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { globSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, resolve, sep } from 'node:path'
 import {
   declaredTypes,
   indexExportedTypes,
@@ -28,8 +28,15 @@ import type { ScannedFile, SlotDeclaration, SlotRegistration, TypeDeclaration } 
 const root = resolve(import.meta.dirname, '..')
 const OUT = 'packages/extensions/cordis-client-runner/src/client/slot-catalog.ts'
 
-/** Source globs: every workspace package's sources, `.tsx` included (a contract may live in one). */
-const SOURCE_GLOBS = ['packages/*/*/src/**/*.ts', 'packages/*/*/src/**/*.tsx']
+/** Private product compositions do not describe occupants shipped in the official web bundle. */
+function sourceGlobs(scanRoot: string): string[] {
+  return globSync('packages/*/*/package.json', { cwd: scanRoot }).sort().flatMap((file) => {
+    const manifest = JSON.parse(readFileSync(resolve(scanRoot, file), 'utf8')) as { dsh?: { release?: false } }
+    if (manifest.dsh?.release === false) return []
+    const directory = dirname(file).split(sep).join('/')
+    return [`${directory}/src/**/*.ts`, `${directory}/src/**/*.tsx`]
+  })
+}
 
 /** Slot cardinalities the contract allows. */
 const KINDS = ['single', 'list', 'keyed', 'chain'] as const
@@ -130,10 +137,11 @@ export interface SlotEntry {
  * @throws when any declared slot is unteachable or the scan contradicts itself.
  */
 export function collectSlotEntries(scanRoot: string): SlotEntry[] {
-  const files = scanSlotFiles(scanRoot, SOURCE_GLOBS)
+  const patterns = sourceGlobs(scanRoot)
+  const files = scanSlotFiles(scanRoot, patterns)
   const declarations = files.flatMap(file => slotDeclarations(file))
   const registrations = files.flatMap(file => slotRegistrations(file))
-  const types = indexExportedTypes(scanRoot, SOURCE_GLOBS)
+  const types = indexExportedTypes(scanRoot, patterns)
   const problems = validateSlotContracts(declarations, registrations, types)
   if (problems.length > 0) {
     throw new Error(`gen-client-catalog: ${String(problems.length)} contract violation(s):\n${problems.map(problem => `  ${problem}`).join('\n')}`)

@@ -47,7 +47,7 @@ Brand occupants register at priority -100 so the product can coexist with the of
 ## Further Exploration
 
 - [Product bundle](../../bundle/wanwei-desktop/README.md) — composition order.
-- [Generic platform actions](../../client/platform-actions/src/client/index.ts) — shell-owned operation contract.
+- [Generic platform actions](../../client/platform-actions/README.md) — shell-owned operation contract.
 
 -----
 

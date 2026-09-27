@@ -2,9 +2,7 @@
   "name": "@deepseek-ai/dsh-wanwei-desktop",
   "description": "Private Wanwei desktop profile layer over the official dsh base and web application bundles",
   "version": "0.1.2-alpha.1",
-  "publishConfig": {
-    "access": "public"
-  },
+  "private": true,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
@@ -36,7 +34,8 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
-    }
+    },
+    "release": false
   },
   "dependencies": {
     "@deepseek-ai/dsh-wanwei-skill-marketplace": "workspace:^",

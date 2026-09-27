@@ -68,7 +68,9 @@ let nextApprovalKey = 0
 /** One answerable Client presentation of a pending Host waterfall. */
 export class PendingApproval {
   /** Domain discriminator used by Session pending-interaction consumers. */
-  readonly kind = 'approval' as const
+  // The public catalog requires a declared type, not an inferred initializer.
+  // eslint-disable-next-line @typescript-eslint/prefer-as-const
+  readonly kind: 'approval' = 'approval'
   /** Opaque render identity and one-shot remount axis. */
   readonly key: string
   /** Tool requesting the decision. */

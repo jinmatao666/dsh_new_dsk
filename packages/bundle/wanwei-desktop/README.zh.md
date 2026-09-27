@@ -38,7 +38,7 @@ pnpm dsh --profile wanwei-desktop
 
 ### 可获得的能力
 
-此层禁用 `llm-deepseek` 和 `ui-settings-models`，再挂载万维自有插件。OneAPI 认证插件提供唯一受管 Provider 和只读的“模型”设置页；官方 base 与 Web bundle 不承载这些私有配置。
+此层禁用 `llm-deepseek` 和 `ui-settings-models`，选择万维 `oneapi-bailian` 联网搜索 Provider，再挂载万维自有插件。OneAPI 认证插件提供唯一受管模型 Provider、只读的“模型”设置页和服务端管理的联网搜索；官方 base 与 Web bundle 不承载这些私有配置。
 
 -----
 
@@ -70,7 +70,7 @@ pnpm dsh --profile wanwei-desktop
 
 #### 模型看到的内容
 
-此组装层不添加提示词、工具、消息或结果。所挂载的功能包各自持有模型可见行为。
+此组装层不添加提示词、工具、消息或结果。`cordis.patch.yml` 所挂载的功能包各自持有模型可见行为。
 
 #### Token 影响
 

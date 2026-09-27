@@ -112,7 +112,10 @@ function isUserDeliverable(path: string): boolean {
   return !PROCESS_FILE_EXTENSIONS.has(extension)
 }
 
-/** Extract conventional generated artifact paths from successful tool output. */
+/** Extract conventional artifact paths from successful tool output.
+ * @param text - Successful textual tool output.
+ * @returns Distinct user-deliverable paths in discovery order.
+ */
 export function runtimeDeliverablePaths(text: string): readonly string[] {
   const generatedLines = text.split(/\r?\n/u)
     .filter(line => /(?:created|generated|saved|written|output|deliverable|生成|已生成|保存|写入|输出|交付)/iu.test(line))
@@ -174,7 +177,10 @@ export function selectProducedFiles(owner: TurnTailOwnerProps): readonly string[
   return paths.length === 0 ? null : paths
 }
 
-/** Create one turn-local successful mutation accumulator. */
+/** Create a turn-local successful mutation accumulator.
+ * @param detectAdditional - Optional parser for additional paths.
+ * @returns Conversation definition tracking produced files.
+ */
 export function createDeliverablesDefinition(
   detectAdditional: (text: string) => readonly string[] = () => [],
 ): ConversationNodeDefinition<DeliverablesState> {

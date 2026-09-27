@@ -47,7 +47,7 @@ kind: "package-reference"
 ## 延伸阅读
 
 - [产品 Bundle](../../bundle/wanwei-desktop/README.zh.md)——组装顺序。
-- [通用平台操作](../../client/platform-actions/src/client/index.ts)——外壳操作契约。
+- [通用平台操作](../../client/platform-actions/README.zh.md)——外壳操作契约。
 
 -----
 
