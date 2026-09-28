@@ -55,11 +55,13 @@ The Web bundle mounts the package with Connection, `dsh-commands`, `dsh-client-u
 
 ### What to expect
 
-The dialog reports three phases: preparing, download started, or failed. Closing the dialog does not cancel an in-flight download, and the dialog does not reopen when that operation later settles. One session admits one active download at a time; repeated gestures share that operation. The export includes the live session's newest events: the host endpoint flushes a live root session before reading, so a slash-triggered ZIP includes the `command/run` and `command/done` pair that started the download; cold persisted sessions need no flush.
+The dialog reports preparing, browser download started, native file saved, or failed. Closing the dialog does not cancel an in-flight download, and the dialog does not reopen when that operation later settles. One session admits one active download at a time; repeated gestures share that operation. The export includes the live session's newest events: the host endpoint flushes a live root session before reading, so a slash-triggered ZIP includes the `command/run` and `command/done` pair that started the download; cold persisted sessions need no flush.
 
 ### Failures
 
-The dialog shows a preparation error when the preflight fails before ZIP streaming starts — for example an unreachable or misconfigured host endpoint. A descendant or attachment read failure after the browser accepts the GET is reported by the browser download manager, not by the dialog.
+With a native provider, availability is checked per request and the plugin fetches the complete ZIP before saving it. The dialog waits for persistence before reporting completion and displays the returned path. HTTP, stream-reading and native-save failures appear in the dialog; a saved file's directory-opening warning does not turn a successful save into a download failure.
+
+Without a native provider, the dialog shows a preparation error when the preflight fails before ZIP streaming starts — for example an unreachable or misconfigured host endpoint. A descendant or attachment read failure after the browser accepts the GET is reported by the browser download manager, not by the dialog.
 
 -----
 

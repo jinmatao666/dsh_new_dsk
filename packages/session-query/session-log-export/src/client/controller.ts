@@ -11,6 +11,9 @@ export interface SessionLogDownloadEntry {
   readonly open: boolean
   readonly status: SessionLogDownloadStatus
   readonly error: string | null
+  readonly savedPath?: string
+  readonly nativeSaved?: boolean
+  readonly warning?: string
 }
 
 /** Download states keyed by the Session whose Header owns the dialog. */
@@ -21,7 +24,7 @@ export interface SessionLogDownloadState {
 type Fetch = (input: string | URL, init?: RequestInit) => Promise<Response>
 type Save = (url: string, filename: string) => void
 /** Optional shell-owned archive saving operation. */
-export type NativeArchiveSave = (archive: Blob, filename: string) => Promise<void>
+export type NativeArchiveSave = (archive: Blob, filename: string) => Promise<void | { path: string; warning?: string }>
 
 const INITIAL: SessionLogDownloadState = { bySession: {} }
 
@@ -72,6 +75,7 @@ export class SessionLogDownloadController {
     private readonly fetcher: Fetch = (input, init) => fetch(input, init),
     private readonly save: Save = downloadUrl,
     private readonly nativeSave?: NativeArchiveSave,
+    private readonly canNativeSave: () => boolean = () => nativeSave !== undefined,
   ) {}
 
   /**
@@ -118,20 +122,24 @@ export class SessionLogDownloadController {
       const url = new URL('/api/session.export', hostBase())
       url.searchParams.set('sessionId', sessionId)
       url.searchParams.set('includeDescendants', 'true')
-      const native = this.nativeSave !== undefined
+      const native = this.nativeSave !== undefined && this.canNativeSave()
       const response = await this.fetcher(url, { method: native ? 'GET' : 'HEAD', signal })
       if (!response.ok) {
         const detail = await response.text().catch(() => '')
         throw new Error(`Export failed: HTTP ${response.status}${detail === '' ? '' : ` ${detail}`}`)
       }
       const filename = sessionLogZipFilename(sessionId)
-      if (this.nativeSave === undefined) {
+      let saved: void | { path: string; warning?: string } = undefined
+      if (!native) {
         this.save(url.toString(), filename)
       } else {
-        await this.nativeSave(await response.blob(), filename)
+        saved = await this.nativeSave(await response.blob(), filename)
       }
       const open = this.store.getSnapshot().bySession[String(sessionId)]?.open ?? true
-      this.publish(sessionId, { open, status: 'success', error: null })
+      this.publish(sessionId, { open, status: 'success', error: null,
+        ...(native ? { nativeSaved: true } : {}),
+        ...(saved === undefined ? {} : { savedPath: saved.path, ...(saved.warning === undefined ? {} : { warning: saved.warning }) }),
+      })
     } catch (error: unknown) {
       if (signal.aborted) return
       const open = this.store.getSnapshot().bySession[String(sessionId)]?.open ?? true

@@ -13,8 +13,8 @@ use std::{
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent},
-    DragDropEvent, LogicalPosition, LogicalSize, Manager, State, WebviewBuilder, WebviewUrl,
-    WebviewWindowBuilder, Window, WindowEvent,
+    DragDropEvent, LogicalPosition, LogicalSize, Manager, State, WebviewBuilder, WebviewEvent,
+    WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent,
 };
 use url::Url;
 
@@ -99,6 +99,26 @@ struct WorkspaceImportFile {
 
 /// One operating-system drop that the renderer may consume exactly once.
 struct PendingWorkspaceDrop(Mutex<Option<Vec<PathBuf>>>);
+
+/// Window-content views emit window events; child views emit webview events.
+/// Handle both routes, evaluating only in the trusted main renderer.
+fn forward_workspace_drop(window: &WebviewWindow, event: &DragDropEvent) {
+    let script = match event {
+        DragDropEvent::Enter { .. } => NATIVE_FILE_DRAG_ENTER_SCRIPT,
+        DragDropEvent::Drop { paths, .. } => {
+            let state = window.app_handle().state::<PendingWorkspaceDrop>();
+            if let Ok(mut pending) = state.0.lock() {
+                *pending = Some(paths.clone());
+            }
+            NATIVE_FILE_DROP_SCRIPT
+        }
+        DragDropEvent::Leave => NATIVE_FILE_DRAG_LEAVE_SCRIPT,
+        _ => return,
+    };
+    if let Err(error) = window.eval(script) {
+        eprintln!("无法向主页面转发文件拖放事件：{error}");
+    }
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -848,13 +868,15 @@ fn save_session_log_archive_at(
             .open(&destination)
         {
             Ok(mut file) => {
-                file.write_all(bytes).map_err(|error| {
-                    let _ = fs::remove_file(&destination);
-                    format!(
-                        "无法写入 Session 导出文件 {}：{error}",
-                        destination.display()
-                    )
-                })?;
+                file.write_all(bytes)
+                    .and_then(|()| file.sync_all())
+                    .map_err(|error| {
+                        let _ = fs::remove_file(&destination);
+                        format!(
+                            "无法写入 Session 导出文件 {}：{error}",
+                            destination.display()
+                        )
+                    })?;
                 return Ok(destination);
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
@@ -968,7 +990,7 @@ fn validate_expert_webview_label(label: &str) -> Result<(), String> {
 
 fn expert_webview_url(raw: &str, ticket: &str) -> Result<(Url, Url), String> {
     let mut url = Url::parse(raw).map_err(|_| "专家网页地址无效".to_string())?;
-    if url.scheme() != "https"
+    if !matches!(url.scheme(), "http" | "https")
         || url.host_str().is_none()
         || !url.username().is_empty()
         || url.password().is_some()
@@ -2314,25 +2336,14 @@ pub fn run() {
                     api.prevent_close();
                     let _ = window_for_events.hide();
                 }
-                WindowEvent::DragDrop(event) => match event {
-                    DragDropEvent::Enter { .. } => {
-                        let _ = window_for_events.eval(NATIVE_FILE_DRAG_ENTER_SCRIPT);
-                    }
-                    DragDropEvent::Drop { paths, .. } => {
-                        let state = window_for_events
-                            .app_handle()
-                            .state::<PendingWorkspaceDrop>();
-                        if let Ok(mut pending) = state.0.lock() {
-                            *pending = Some(paths.clone());
-                        }
-                        let _ = window_for_events.eval(NATIVE_FILE_DROP_SCRIPT);
-                    }
-                    DragDropEvent::Leave => {
-                        let _ = window_for_events.eval(NATIVE_FILE_DRAG_LEAVE_SCRIPT);
-                    }
-                    DragDropEvent::Over { .. } => {}
-                    _ => {}
-                },
+                WindowEvent::DragDrop(event) => forward_workspace_drop(&window_for_events, event),
+                _ => {}
+            });
+            let window_for_webview_events = window.clone();
+            window.on_webview_event(move |event| match event {
+                WebviewEvent::DragDrop(event) => {
+                    forward_workspace_drop(&window_for_webview_events, event);
+                }
                 _ => {}
             });
             Ok(())
@@ -2406,7 +2417,7 @@ mod expert_web_tests {
     fn rejects_untrusted_launch_inputs() {
         let ticket = "a".repeat(64);
         for address in [
-            "http://expert.example.com",
+            "file:///expert.html",
             "https://user:pass@expert.example.com",
             "https://expert.example.com/#old",
         ] {
@@ -2418,6 +2429,21 @@ mod expert_web_tests {
         assert_eq!(label, "expert-geology-analysis-aaaaaaaaaaaaaaaa");
         assert!(validate_expert_webview_label(&label).is_ok());
         assert!(validate_expert_webview_label("main").is_err());
+    }
+
+    #[test]
+    fn http_launch_keeps_the_registered_port_and_scheme() {
+        let (launch, allowed) =
+            expert_webview_url("http://ac.zjugis.com:3301/", &"a".repeat(64)).unwrap();
+        assert_eq!(launch.scheme(), "http");
+        assert_eq!(launch.port(), Some(3301));
+        assert_eq!(launch.origin(), allowed.origin());
+        assert_ne!(
+            allowed.origin(),
+            url::Url::parse("http://ac.zjugis.com:3300/")
+                .unwrap()
+                .origin()
+        );
     }
 }
 

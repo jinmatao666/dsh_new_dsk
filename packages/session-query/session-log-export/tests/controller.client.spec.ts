@@ -133,6 +133,19 @@ describe('SessionLogDownloadController', () => {
 })
 
 describe('browser download helpers', () => {
+  it('does not report completion until the native write finishes and preserves save failures', async () => {
+    const pending = Promise.withResolvers<{ path: string; warning?: string }>()
+    const controller = new SessionLogDownloadController(async () => new Response('zip'), vi.fn(), () => pending.promise)
+    const download = controller.download(SID)
+    await vi.waitFor(() => { expect(controller.store.getSnapshot().bySession[SID]?.status).toBe('downloading') })
+    pending.resolve({ path: 'Downloads/session.zip', warning: 'Folder could not be opened' })
+    await download
+    expect(controller.store.getSnapshot().bySession[SID]).toMatchObject({ status: 'success', nativeSaved: true, savedPath: 'Downloads/session.zip', warning: 'Folder could not be opened' })
+    const failing = new SessionLogDownloadController(async () => new Response('zip'), vi.fn(), async () => { throw new Error('Disk full') })
+    await failing.download(SID)
+    expect(failing.store.getSnapshot().bySession[SID]).toMatchObject({ status: 'error', error: 'Disk full' })
+  })
+
   it('passes archive bytes to an injected native save operation', async () => {
     const nativeSave = vi.fn(async (_archive: Blob, _filename: string) => {})
     const controller = new SessionLogDownloadController(

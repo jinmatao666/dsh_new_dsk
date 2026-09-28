@@ -31,9 +31,13 @@ The Wanwei desktop bundle mounts this Client plugin after the official browser U
 
 Use the Wanwei product profile when the desktop needs the OneAPI-backed catalog and local skill installation. Official DSH skill packages still discover and run installed skills. An independent expert requires a published catalog entry, a working identity endpoint and an approved HTTPS website.
 
-The market contains official-platform-only recommendations, all published platform skills and a separate SkillHub section. Each catalog has its own search; platform search hides recommendations and does not filter SkillHub. SkillHub cards follow the platform card layout, and details open at page level while preserving the list position. My installations includes local SkillHub receipts and supports offline use, removal and manual updates. [The SkillHub adapter](../skillhub/README.md) owns upstream requests and limits.
+The market contains official-platform-only recommendations, all published platform skills and a separate SkillHub section. Each catalog owns its Enter-submitted search, category, sort and twelve-card pagination in a compact toolbar; platform search hides recommendations and does not filter SkillHub. Popular sorting uses download counts; platform latest-update sorting requires backend timestamps and keeps undated entries in server order after dated entries. SkillHub cards share the platform download glyph without a repeated source badge, and details open at page level while preserving list position. My installations includes local SkillHub receipts and supports offline use, removal and manual updates. [The SkillHub adapter](../skillhub/README.md) owns upstream requests and limits.
+
+My installations combines platform/local skills and SkillHub receipts into one twelve-card list. Its toolbar contains Enter-submitted search, a single source selector and pagination; filtering resets to page one, and removal clamps the page to the remaining results. This view reads local receipts without requesting the upstream catalog.
 
 ### Composition
+
+Platform and SkillHub operations share restrained, top-centered notices. SkillHub progress remains visible until completion; installation, update and removal results appear as soon as the native operation succeeds, before refreshing local receipts. A failed refresh reports that the operation completed but the list could not refresh.
 
 Starting an installed skill stages its slash token and friendly name. The composer displays a compact inline skill chip beside the editable question; Session-backed chips serialize to the same slash token. Product styling remains in the Wanwei UI packages.
 

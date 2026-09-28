@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import { ClientPlatformActions } from '@deepseek-ai/dsh-client-platform-actions/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { SessionLogDownloadHeaderAction } from '../src/client/HeaderAction.tsx'
 import { apply, inject } from '../src/client/index.ts'
@@ -27,16 +28,31 @@ async function bench() {
   const slots = ctx.get('slots') as SlotRegistry
   const declaration = declare(slots)
   ctx.provide('locale', new LocaleRuntime(ctx))
+  await ctx.plugin(ClientPlatformActions).await()
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   return { ctx, slots, declaration, fiber, controller: ctx.sessionLogDownload }
 }
 
 describe('session-log-download browser plugin', () => {
+  it('uses native saving when the product registers after the export plugin', async () => {
+    const fetcher = vi.fn(async () => new Response('zip'))
+    vi.stubGlobal('fetch', fetcher)
+    const b = await bench()
+    const saveFile = vi.fn(async () => ({ path: 'Downloads/session.zip' }))
+    const dispose = b.ctx.platformActions.register({ saveFile })
+    await b.controller.download(SID)
+    expect(fetcher).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({ method: 'GET' }))
+    expect(saveFile).toHaveBeenCalledWith({ filename: `dsh-session-${SID}.zip`, bytes: new Uint8Array([122, 105, 112]) })
+    expect(b.controller.store.getSnapshot().bySession[SID]).toMatchObject({ status: 'success', nativeSaved: true, savedPath: 'Downloads/session.zip' })
+    dispose()
+    await b.fiber.dispose()
+  })
+
   it('provides one controller and removes its Header contribution on disposal', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 500 })))
     const b = await bench()
-    expect(inject).toEqual(['slots', 'locale'])
+    expect(inject).toEqual(['slots', 'locale', 'platformActions'])
     expect(b.ctx.sessionLogDownload).toBeDefined()
     expect(b.slots.entries('conversation.session.header.actions')).toHaveLength(0)
     const entry = b.slots.entries('conversation.session.header.utilities')[0]

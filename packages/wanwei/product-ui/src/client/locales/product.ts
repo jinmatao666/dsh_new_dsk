@@ -1,5 +1,7 @@
 /** Chinese product copy. Source-message keys preserve the current UI while translations are maintained here. */
 const zh = {
+  '下载未返回有效的文件路径': '下载未返回有效的文件路径',
+  '文件已保存，但无法打开目录：{0}': '文件已保存，但无法打开目录：{0}',
   '分析结果': '分析结果',
   '正在加载分析成果…': '正在加载分析成果…',
   '分析成果未能在对话区加载': '分析成果未能在对话区加载',

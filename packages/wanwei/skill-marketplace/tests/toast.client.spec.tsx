@@ -10,6 +10,7 @@ function Harness() {
     <>
       <button type="button" onClick={() => { setNotice({ kind: 'success', text: '技能已安装' }) }}>成功</button>
       <button type="button" onClick={() => { setNotice({ kind: 'error', text: '安装失败' }) }}>失败</button>
+      <button type="button" onClick={() => { setNotice({ kind: 'info', pending: true, text: '正在安装' }) }}>处理中</button>
       <Toast notice={notice} setNotice={setNotice} />
     </>
   )
@@ -19,6 +20,15 @@ beforeEach(() => { vi.useFakeTimers() })
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
 describe('Wanwei transient feedback', () => {
+  it('keeps operation progress visible until a result replaces it', () => {
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: '处理中' }))
+    act(() => { vi.advanceTimersByTime(30_000) })
+    expect(screen.getByRole('status').textContent).toContain('正在安装')
+    fireEvent.click(screen.getByRole('button', { name: '成功' }))
+    act(() => { vi.advanceTimersByTime(4_500) })
+    expect(screen.queryByRole('status')).toBeNull()
+  })
   it('keeps success visible briefly and dismisses it without moving page content', () => {
     render(<Harness />)
     fireEvent.click(screen.getByRole('button', { name: '成功' }))

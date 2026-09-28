@@ -16,6 +16,7 @@ import {
   buildMarketplaceCategories,
   filterPersonalSkillUploads,
   publishedSkillCategories,
+  pagePlatformCatalog,
 } from './catalog.ts'
 import type { PersonalSkillReviewFilter, PersonalSkillUploadView } from './catalog.ts'
 import { marketplaceInstallAction } from './install-action.ts'
@@ -29,6 +30,7 @@ import { rememberSkillDisplayNames, skillDisplayName, startSkillUse } from './sk
 import { Toast, isNoticeTarget, type WanweiNotice } from './Toast.tsx'
 import './marketplace.css'
 import { SkillHubSection } from './SkillHubSection.tsx'
+import { CatalogToolbar, CatalogDownloadIcon, CatalogBackIcon as ArrowLeftIcon } from './CatalogToolbar.tsx'
 
 type SkillParam = { name: string; type: string; required: boolean; description: string; defaultValue?: string }
 type Skill = {
@@ -40,6 +42,7 @@ type Skill = {
   summary: string
   description: string
   installs: string
+  updatedAt?: string | number
   accent: string
   icon: string
   version: string
@@ -120,6 +123,7 @@ type RemoteSkill = {
   description?: unknown
   scenario?: unknown
   downloads?: unknown
+  updated_at?: unknown
   version?: unknown
   submitter?: unknown
   tags?: unknown
@@ -448,15 +452,7 @@ function SkillVisual({ skill, size = 20 }: { skill: Skill; size?: number }) {
   return <span className="dsh-skill-text-icon" style={{ fontSize: Math.max(13, size - 2) }}>{skill.icon || productText('技')}</span>
 }
 
-function DownloadIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <path d="m7 10 5 5 5-5" />
-      <path d="M12 15V3" />
-    </svg>
-  )
-}
+const DownloadIcon = CatalogDownloadIcon
 
 /** Visual identity for each marketplace capability in the sidebar and cards. */
 function MarketplaceSectionIcon({ section, size = 18 }: { section: MarketplaceSection; size?: number }) {
@@ -484,14 +480,6 @@ function MarketplaceSectionIcon({ section, size = 18 }: { section: MarketplaceSe
   return <SparkleIcon size={size} />
 }
 
-function ArrowLeftIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M19 12H5" />
-      <path d="m12 19-7-7 7-7" />
-    </svg>
-  )
-}
 
 type Controller = {
   open(): void
@@ -588,30 +576,26 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall,
         <div className="dsh-skill-review-notice">{productText('审核意见：')}{skill.reviewReason}</div>
       )}
       <div className="dsh-skill-detail-body">
-        <div className="dsh-skill-detail-section">
+        {skill.params && skill.params.length > 0 && <div className="dsh-skill-detail-section">
           <h3>{L.params}</h3>
-          {skill.params && skill.params.length > 0 ? (
-            <div className="dsh-skill-detail-params">
-              {skill.params.map((param, idx) => (
-                <div key={idx} className="dsh-skill-detail-param">
-                  <div className="dsh-skill-detail-param-name">
-                    {param.name}
-                    {param.required && <span className="required">*</span>}
-                    <span className="type">{param.type}</span>
-                  </div>
-                  <div className="dsh-skill-detail-param-desc">{param.description}</div>
-                  {param.defaultValue && (
-                    <div className="dsh-skill-detail-param-default">
-                      {productText('默认值: ')}{param.defaultValue}
-                    </div>
-                  )}
+          <div className="dsh-skill-detail-params">
+            {skill.params.map((param, idx) => (
+              <div key={idx} className="dsh-skill-detail-param">
+                <div className="dsh-skill-detail-param-name">
+                  {param.name}
+                  {param.required && <span className="required">*</span>}
+                  <span className="type">{param.type}</span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="dsh-skill-detail-no-params">{L.noParams}</p>
-          )}
-        </div>
+                <div className="dsh-skill-detail-param-desc">{param.description}</div>
+                {param.defaultValue && (
+                  <div className="dsh-skill-detail-param-default">
+                    {productText('默认值: ')}{param.defaultValue}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>}
         <div className="dsh-skill-detail-section">
           <h3>{productText('详细描述')}</h3>
           <p>{skill.description}</p>
@@ -899,9 +883,12 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState(L.all)
+  const [platformKeyword, setPlatformKeyword] = useState('')
+  const [platformQuery, setPlatformQuery] = useState('')
+  const [platformSort, setPlatformSort] = useState('downloads')
+  const [platformPage, setPlatformPage] = useState(1)
   const [view, setView] = useState<'list' | 'detail'>('list')
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
-  const [skillhubCount, setSkillhubCount] = useState(0)
   const [libraryView, setLibraryView] = useState<'market' | 'installed' | 'uploads'>('market')
   const [uploadView, setUploadView] = useState<PersonalSkillUploadView>('public')
   const [reviewFilter, setReviewFilter] = useState<PersonalSkillReviewFilter>('all')
@@ -1042,6 +1029,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       const relationCategories = publishedSkillCategories(remote.categories)
       const legacyCategory = typeof remote.category === 'string' && remote.category.trim() !== '' ? remote.category.trim() : '通用'
       const categories = relationCategories.length > 0 ? relationCategories : [legacyCategory]
+      const updatedAt = parseReviewTime(remote.updated_at)
       return [{
         id: `remote-${remoteId}`,
         ...(typeof remote.id === 'number' ? { remoteId: remote.id } : {}),
@@ -1053,6 +1041,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
         summary: typeof remote.description === 'string' ? remote.description : '',
         description: typeof remote.scenario === 'string' && remote.scenario !== '' ? remote.scenario : (typeof remote.description === 'string' ? remote.description : ''),
         installs: String(typeof remote.downloads === 'number' ? remote.downloads : 0),
+        ...(updatedAt === undefined ? {} : { updatedAt }),
         accent: '#2563eb', icon: typeof remote.icon === 'string' && remote.icon.trim() !== '' ? remote.icon : 'preset:assistant', version: typeof remote.version === 'string' ? remote.version : '1.0.0',
         author: typeof remote.submitter === 'string' ? remote.submitter : '平台管理员',
         source,
@@ -1150,13 +1139,18 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     if (libraryView === 'market' && category !== L.all) {
       skills = skills.filter(s => (s.categories ?? [s.category]).includes(category))
     }
-    if (query.trim() !== '') {
-      const q = query.trim().toLowerCase()
+    const search = libraryView === 'market' ? platformQuery : query
+    if (search.trim() !== '') {
+      const q = search.trim().toLowerCase()
       skills = skills.filter(s => `${s.name} ${s.summary} ${s.category}`.toLowerCase().includes(q))
     }
     if (libraryView === 'installed') skills = skills.filter(isInstalled)
     return skills
-  }, [allSkills, category, query, libraryView, uploadView, reviewFilter, uploadedSkills, installStates])
+  }, [allSkills, category, query, platformQuery, libraryView, uploadView, reviewFilter, uploadedSkills, installStates])
+
+  const platform = useMemo(() => pagePlatformCatalog(visible, platformSort, platformPage), [visible, platformSort, platformPage])
+  const displayedSkills = libraryView === 'market' ? platform.items : visible
+  useEffect(() => { setPlatformPage(1) }, [category, platformQuery, platformSort])
 
   if (!open) return null
 
@@ -1207,10 +1201,10 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     }
     await refreshInstallStates()
     setInstallMessage(action === 'update'
-      ? { kind: 'success', text: productText('技能已更新，可在当前会话输入 / 使用。') }
+      ? { kind: 'success', text: productText('更新成功') }
       : action === 'install'
-        ? { kind: 'success', text: productText('技能已安装，可在当前会话输入 / 使用。') }
-        : { kind: 'success', text: productText('技能已从本机移除。') })
+        ? { kind: 'success', text: productText('安装成功') }
+        : { kind: 'success', text: productText('卸载成功') })
   }
 
   const selectCustomSkillDirectory = async () => {
@@ -1325,8 +1319,9 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
               <h1>{SECTION_COPY[section].title}</h1>
               <p>{SECTION_COPY[section].subtitle}</p>
             </div>
-            <div className="dsh-skill-market-header-controls">
-              {section === 'skills' && <div className="dsh-skill-search-actions">
+            <button type="button" className="dsh-skill-close" aria-label={L.close} onClick={closeMarket}><ArrowLeftIcon /></button>
+            {section === 'skills' && <div className="dsh-skill-market-header-controls">
+              <div className="dsh-skill-search-actions">
                 <button type="button" className={libraryView === 'installed' ? 'active' : ''} onClick={() => { setLibraryView(current => current === 'installed' ? 'market' : 'installed'); setQuery('') }}>{L.myInstalled}</button>
                 <button type="button" className={libraryView === 'uploads' ? 'active' : ''} onClick={() => {
                   setLibraryView(current => current === 'uploads' ? 'market' : 'uploads'); setQuery('')
@@ -1343,9 +1338,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                     void loadRemoteCategories().then(setRemoteCategories).catch(() => { setRemoteCategories(null) })
                   }
                 }}>{L.addSkill}</button>
-              </div>}
-              <button type="button" className="dsh-skill-close" aria-label={L.close} onClick={closeMarket}><ArrowLeftIcon /></button>
-            </div>
+              </div>
+            </div>}
           </header>
         )}
 
@@ -1378,7 +1372,6 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                   <button type="button" className="dsh-skill-browse-market" onClick={() => { setLibraryView('market') }}>
                     {productText('浏览技能市场 ')}<span aria-hidden="true">→</span>
                   </button>
-                  <div className="dsh-skill-search-row dsh-skill-library-search"><input aria-label={L.search} value={query} onChange={(event) => { setQuery(event.target.value) }} placeholder={L.search} /></div>
                 </div>
               ) : libraryView === 'uploads' ? (
                 <div className="dsh-skill-upload-management">
@@ -1428,9 +1421,8 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                       </div>
                     )}
                   </div>
-                  <div className="dsh-skill-search-row dsh-skill-library-search"><input aria-label={L.search} value={query} onChange={(event) => { setQuery(event.target.value) }} placeholder={L.search} /></div>
                 </div>
-              ) : query.trim() === '' && featuredSkills.length > 0 && (
+              ) : platformQuery.trim() === '' && featuredSkills.length > 0 && (
                 <div className="dsh-skill-featured-section">
                   <div className="dsh-skill-section-header">
                     <h2>{L.featured}</h2>
@@ -1449,8 +1441,11 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                         className="dsh-skill-featured-card"
                         onClick={() => { openDetail(skill) }}
                       >
-                        <div className="dsh-skill-featured-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
-                          <SkillVisual skill={skill} />
+                        <div className="dsh-skill-card-visual">
+                          <div className="dsh-skill-featured-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
+                            <SkillVisual skill={skill} />
+                          </div>
+                          {isInstalled(skill) && <span className="dsh-skill-installed-badge">{productText('已安装')}</span>}
                         </div>
                         <div className="dsh-skill-featured-body">
                           <h3>{skill.name}</h3>
@@ -1476,27 +1471,13 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                   <div className="dsh-skill-section-header">
                     <h2>{L.allSkills}</h2>
                   </div>
-                  <div className="dsh-skill-categories">
-                    {categories.map(item => (
-                      <button
-                        key={item}
-                        type="button"
-                        className={item === category ? 'active' : ''}
-                        onClick={() => {
-                          setCategory(item)
-                          if (loadRemoteSkills !== undefined) {
-                            void loadRemoteSkills().then(setRemoteSkills).catch(() => { setRemoteSkills(null) })
-                          }
-                          if (loadRemoteCategories !== undefined) {
-                            void loadRemoteCategories().then(setRemoteCategories).catch(() => { setRemoteCategories(null) })
-                          }
-                        }}
-                      >
-                        {item}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="dsh-skill-search-row dsh-skill-section-search"><input aria-label={productText('搜索平台技能')} value={query} onChange={(event) => { setQuery(event.target.value) }} placeholder={productText('搜索平台技能')} /></div>
+                  <CatalogToolbar searchLabel={productText('搜索平台技能')}
+                    keyword={platformKeyword} onKeyword={setPlatformKeyword}
+                    onSearch={() => { setPlatformQuery(platformKeyword.trim()); setPlatformPage(1) }}
+                    categories={categories.filter(item => item !== L.all).map(item => ({ key: item, name: item }))}
+                    category={category === L.all ? '' : category} onCategory={(value) => { setCategory(value || L.all); setPlatformPage(1) }}
+                    sort={platformSort} onSort={(value) => { setPlatformSort(value); setPlatformPage(1) }}
+                    page={platform.page} pages={platform.pages} onPage={setPlatformPage} />
                 </section>
               )}
 
@@ -1548,16 +1529,19 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                     </article>
                   ))}
                 </div>
-              ) : (
+              ) : libraryView === 'installed' ? null : (
                 <div className="dsh-skill-grid">
-                  {visible.map(skill => (
+                  {displayedSkills.map(skill => (
                     <article
                       key={skill.id}
                       className="dsh-skill-card"
                       onClick={() => { openDetail(skill) }}
                     >
-                      <div className="dsh-skill-card-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
-                        <SkillVisual skill={skill} />
+                      <div className="dsh-skill-card-visual">
+                        <div className="dsh-skill-card-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
+                          <SkillVisual skill={skill} />
+                        </div>
+                        {isInstalled(skill) && <span className="dsh-skill-installed-badge">{productText('已安装')}</span>}
                       </div>
                       <div className="dsh-skill-card-body">
                         <div className="dsh-skill-card-meta">
@@ -1579,41 +1563,54 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                         </div>
                         <h2>{skill.name}</h2>
                         <p>{skill.summary}</p>
-                        {libraryView === 'installed' && (
-                          <button
-                            type="button"
-                            className={resolveInstallState(skill) === 'updateAvailable'
-                              ? 'dsh-skill-card-install-action update'
-                              : 'dsh-skill-card-install-action uninstall'}
-                            onClick={(event) => { event.stopPropagation(); void toggleInstall(skill) }}
-                            disabled={installing === skill.id}
-                          >
-                            {resolveInstallState(skill) === 'updateAvailable' ? productText('更新') : productText('卸载')}
-                          </button>
-                        )}
                       </div>
                     </article>
                   ))}
                 </div>
               )}
 
-              {visible.length === 0 && (libraryView !== 'installed' || skillhubCount === 0) && (
+              {visible.length === 0 && libraryView !== 'installed' && (
                 <div className={libraryView === 'market' ? 'dsh-skill-empty dsh-skill-empty-compact' : 'dsh-skill-empty'}>
                   <div className="dsh-skill-empty-icon"><CategoryGlyph category={category} size={24} /></div>
-                  <span>{libraryView === 'installed'
-                    ? productText('暂未安装技能')
-                    : libraryView === 'uploads'
-                      ? uploadView === 'public'
-                        ? productText('暂无审核通过的公开技能')
-                        : uploadView === 'private'
-                          ? productText('暂无私人技能')
-                          : productText('暂无符合条件的审核记录')
-                      : productText('平台技能没有匹配结果')}</span>
+                  <span>{libraryView === 'uploads'
+                    ? uploadView === 'public'
+                      ? productText('暂无审核通过的公开技能')
+                      : uploadView === 'private'
+                        ? productText('暂无私人技能')
+                        : productText('暂无符合条件的审核记录')
+                    : productText('平台技能没有匹配结果')}</span>
                 </div>
               )}
               {libraryView !== 'uploads' && <SkillHubSection
                 active installedOnly={libraryView === 'installed'} installedQuery={query}
-                request={skillhubRequest} invoke={desktopInvoke} onCount={setSkillhubCount}
+                {...(libraryView === 'installed' ? { installedPlatforms: visible.map(skill => ({
+                  id: skill.id, searchText: `${skill.name} ${skill.summary} ${skill.category}`,
+                  card: <article key={`platform:${skill.id}`} className="dsh-skill-card" onClick={() => { openDetail(skill) }}>
+                    <div className="dsh-skill-card-visual">
+                      <div className="dsh-skill-card-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
+                        <SkillVisual skill={skill} />
+                      </div>
+                      <span className="dsh-skill-installed-badge">{productText('已安装')}</span>
+                    </div>
+                    <div className="dsh-skill-card-body">
+                      <div className="dsh-skill-card-meta">
+                        <span className="dsh-skill-card-category" style={{ background: skill.accent + '14', color: skill.accent }}>
+                          {skill.category}
+                        </span>
+                        <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>
+                          {skill.source === 'personal' ? productText('个人') : productText('官方')}
+                        </span>
+                        {hasVerifiedInstallCount(skill) && <small><DownloadIcon />{skill.installs}</small>}
+                      </div>
+                      <h2>{skill.name}</h2><p>{skill.summary}</p>
+                      <button type="button" className="dsh-skill-card-install-action uninstall" disabled={installing === skill.id}
+                        onClick={(event) => { event.stopPropagation(); void toggleInstall(skill) }}>
+                        {resolveInstallState(skill) === 'updateAvailable' ? productText('更新') : productText('卸载')}
+                      </button>
+                    </div>
+                  </article>,
+                })) } : {})}
+                request={skillhubRequest} invoke={desktopInvoke} onCount={() => {}} onNotice={setInstallMessage}
                 onUse={(slug, name) => {
                   if (startSkillConversation === undefined) {
                     setInstallMessage({ kind: 'error', text: productText('对话服务尚未准备好，请稍后重试。') })

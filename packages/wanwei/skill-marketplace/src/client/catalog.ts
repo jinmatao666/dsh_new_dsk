@@ -19,6 +19,25 @@ export function browseMarketplaceCatalog<T extends { marketplacePublished?: bool
   return skills.filter(skill => skill.marketplacePublished === true)
 }
 
+/** Sort a filtered platform catalog using server facts and return one twelve-card page.
+ * Missing timestamps sort after dated entries; ties preserve the server's order.
+ */
+export function pagePlatformCatalog<T extends { installs: string; updatedAt?: string | number }>(
+  skills: readonly T[], sort: string, requestedPage: number,
+): { items: T[]; page: number; pages: number } {
+  const time = (value: string | number | undefined) => {
+    if (typeof value === 'number') return value < 1e12 ? value * 1000 : value
+    const parsed = typeof value === 'string' ? Date.parse(value) : 0
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  const sorted = [...skills].sort((a, b) => sort === 'downloads'
+    ? (Number(b.installs) || 0) - (Number(a.installs) || 0)
+    : time(b.updatedAt) - time(a.updatedAt))
+  const pages = Math.max(1, Math.ceil(sorted.length / 12))
+  const page = Math.max(1, Math.min(requestedPage, pages))
+  return { items: sorted.slice((page - 1) * 12, page * 12), page, pages }
+}
+
 /** Personal upload category selected by the user. */
 export type PersonalSkillUploadView = 'public' | 'private' | 'reviews'
 /** Review-status filter applied to personal uploads. */

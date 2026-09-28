@@ -12,6 +12,8 @@ Desktop imports replace the composer draft with path text. Quoted filenames can 
 
 The generic conversation action `appendReferences` appends structured references to the live editor. The product plugin owns filename labels, path mentions, native commands and drop listeners. File and folder references use the existing reference codec and chip renderer.
 
+The desktop forwards window-level and main-WebView-level drag events to the trusted renderer. Tauri's `unstable` multi-WebView runtime creates the main view as a child and delivers its drag events through `WebviewEvent`, not `WindowEvent`.
+
 ## Alternatives considered
 
 **Replace the full draft with mentions.** This loses structured references and depends on automatic token recognition for display.

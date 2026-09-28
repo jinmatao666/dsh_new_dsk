@@ -33,6 +33,8 @@ kind: "package-reference"
 
 文件选择与原生拖入通过 `inputActions.appendReferences` 追加文件或目录标签；标签显示名称，序列化保留路径引用。导入不会覆盖现有文字和引用。
 
+会话归档保存等待原生持久化完成，再请求文件管理器定位实际保存路径。打开目录失败时保留保存路径并返回警告，不报告下载失败。
+
 <a id="understand-the-implementation"></a>
 ## 实现方式
 

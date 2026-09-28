@@ -6,6 +6,8 @@ import css from './Toast.module.css'
 export interface WanweiNotice {
   kind: 'success' | 'error' | 'info'
   text: string
+  /** Keep operation progress visible until a result replaces it. */
+  pending?: boolean
 }
 
 /** Keep notice interactions from being treated as clicks outside the marketplace. */
@@ -19,7 +21,7 @@ export function Toast({ notice, setNotice }: {
   setNotice: Dispatch<SetStateAction<WanweiNotice | null>>
 }) {
   useEffect(() => {
-    if (notice === null) return undefined
+    if (notice === null || notice.pending) return undefined
     const timer = window.setTimeout(() => {
       setNotice(current => current === notice ? null : current)
     }, notice.kind === 'error' ? 7_000 : 4_500)
@@ -29,7 +31,10 @@ export function Toast({ notice, setNotice }: {
   if (notice === null) return null
   return (
     <div className={css.toast} data-wanwei-notice data-kind={notice.kind} role={notice.kind === 'error' ? 'alert' : 'status'}>
-      <span className={css.icon} aria-hidden="true">{notice.kind === 'error' ? '!' : '✓'}</span>
+      <svg className={css.icon} aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9" />
+        {notice.kind === 'success' ? <path d="m8 12 3 3 5-6" /> : <><path d="M12 8v5" /><circle cx="12" cy="16" r=".6" fill="currentColor" stroke="none" /></>}
+      </svg>
       <span className={css.message}>{notice.text}</span>
       <button
         className={css.close}

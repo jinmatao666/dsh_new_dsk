@@ -27,7 +27,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 export type { SessionLogDownloadEntry, SessionLogDownloadState } from './controller.ts'
 
-export const inject = ['slots', 'locale']
+export const inject = ['slots', 'locale', 'platformActions']
 
 /**
  * Provide the download controller and mount its modal into the Session Header.
@@ -35,12 +35,11 @@ export const inject = ['slots', 'locale']
  */
 export function apply(ctx: ClientContext): void {
   const platformActions: ClientPlatformActions | undefined = ctx.get('platformActions')
-  const nativeSave = platformActions?.canSaveFile() === true
-    ? async (archive: Blob, filename: string): Promise<void> => {
-      await platformActions.saveFile({ filename, bytes: new Uint8Array(await archive.arrayBuffer()) })
-    }
-    : undefined
-  const controller = new SessionLogDownloadController(undefined, undefined, nativeSave)
+  const controller = new SessionLogDownloadController(undefined, undefined,
+    async (archive, filename) => {
+      if (platformActions === undefined) throw new Error('Native file saving is unavailable')
+      return platformActions.saveFile({ filename, bytes: new Uint8Array(await archive.arrayBuffer()) })
+    }, () => platformActions?.canSaveFile() === true)
   ctx.provide('sessionLogDownload', controller)
   ctx.effect(() => async () => { await controller.dispose() }, 'session-log-download: browser download lifecycle')
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'session-log-download: browser dictionaries')

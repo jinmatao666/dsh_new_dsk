@@ -21,7 +21,12 @@ export interface ReferenceIconProps {
 export function ReferenceIcon({ kind, size = 16, className }: ReferenceIconProps): ReactNode {
   switch (kind) {
     case 'skill':
-      return <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" aria-hidden><path d="m3 13 7-7 2 2-7 7-2-2ZM9 2v2M8 3h2M13 1v3M11.5 2.5h3M13 10v3M11.5 11.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      return <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" aria-hidden>
+        <path d="M6.5 3.5C7.1 6.4 8.1 7.4 11 8C8.1 8.6 7.1 9.6 6.5 12.5C5.9 9.6 4.9 8.6 2 8C4.9 7.4 5.9 6.4 6.5 3.5Z"
+          stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+        <path d="M12 1.5C12.3 3.1 12.9 3.7 14.5 4C12.9 4.3 12.3 4.9 12 6.5C11.7 4.9 11.1 4.3 9.5 4C11.1 3.7 11.7 3.1 12 1.5Z"
+          fill="currentColor" />
+      </svg>
     case 'session':
       return (
         <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" aria-hidden>

@@ -33,6 +33,8 @@ Brand occupants register at priority -100 so the product can coexist with the of
 
 Picker imports and native drops append file or folder chips through `inputActions.appendReferences`; the labels show filenames while serialization retains path mentions. Imports preserve existing text and references.
 
+Session archive saving waits for native persistence, then requests the file manager to reveal the actual saved path. A reveal failure retains the saved path and returns a warning rather than reporting a failed download.
+
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 

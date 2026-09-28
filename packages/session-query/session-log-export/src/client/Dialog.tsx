@@ -32,10 +32,10 @@ export function SessionLogDownloadDialog({
   const error = status === 'error' ? entry?.error || t('dialog.commandFailed') : null
   const title = status === 'downloading'
     ? t('dialog.preparingTitle')
-    : status === 'success' ? t('dialog.successTitle') : t('dialog.errorTitle')
+    : status === 'success' ? t(entry?.nativeSaved === true ? 'dialog.savedTitle' : 'dialog.successTitle') : t('dialog.errorTitle')
   const description = status === 'downloading'
     ? t('dialog.preparingDescription')
-    : status === 'success' ? t('dialog.successDescription') : error ?? t('dialog.commandFailed')
+    : status === 'success' ? [entry?.warning ?? t(entry?.nativeSaved === true ? 'dialog.savedDescription' : 'dialog.successDescription'), entry?.savedPath].filter(Boolean).join('\n') : error ?? t('dialog.commandFailed')
 
   return (
     <Modal

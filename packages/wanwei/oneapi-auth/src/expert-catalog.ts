@@ -25,7 +25,7 @@ export async function listPublishedExperts(baseURL: string, signal?: AbortSignal
  * @param key - Published expert identifier.
  * @param token - User credential, never forwarded to the website.
  * @param signal - Optional request cancellation.
- * @returns HTTPS address and single-use ticket.
+ * @returns HTTP or HTTPS address and single-use ticket.
  */
 export async function launchExpertWebsite(
   baseURL: string, key: string, token: string, signal?: AbortSignal,
@@ -43,6 +43,6 @@ export async function launchExpertWebsite(
     throw new Error(typeof result?.message === 'string' ? result.message : '无法打开专家工作台')
   }
   const url = new URL(result.url)
-  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '' || url.hash !== '') throw new Error('专家网页地址无效')
+  if (!['http:', 'https:'].includes(url.protocol) || url.username !== '' || url.password !== '' || url.hash !== '') throw new Error('专家网页地址无效')
   return { url: url.href, ticket: result.ticket }
 }

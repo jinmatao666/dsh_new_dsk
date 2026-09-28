@@ -25,6 +25,13 @@ describe('Wanwei published expert projection', () => {
     expect(projectPublishedExperts([], templates)).toEqual([])
   })
 
+  it('retains a registered HTTP workbench and rejects non-web URLs', () => {
+    expect(projectPublishedExperts([{ key: 'meeting-minutes', name: '会议纪要', workbench_url: 'http://ac.zjugis.com:3301/' }], []))
+      .toEqual([expect.objectContaining({ workbenchUrl: 'http://ac.zjugis.com:3301/' })])
+    expect(projectPublishedExperts([{ key: 'meeting-minutes', name: '会议纪要', workbench_url: 'file:///expert.html' }], []))
+      .toEqual([])
+  })
+
   it.each(['', 'ab', 'Uppercase', '../expert', 'expert_name', `a${'b'.repeat(80)}`])(
     'omits expert id %j rejected by the launch interface', (key) => {
       expect(projectPublishedExperts([{ key, name: '专家', workbench_url: 'https://expert.example.com/' }], [])).toEqual([])

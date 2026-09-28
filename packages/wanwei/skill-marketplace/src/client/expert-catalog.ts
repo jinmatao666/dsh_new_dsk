@@ -70,7 +70,7 @@ export function projectPublishedExperts(
     let workbenchUrl: URL
     try { workbenchUrl = new URL(entry.workbench_url) }
     catch { return [] }
-    if (workbenchUrl.protocol !== 'https:' || workbenchUrl.username !== '' || workbenchUrl.password !== '' || workbenchUrl.hash !== '') return []
+    if (!['http:', 'https:'].includes(workbenchUrl.protocol) || workbenchUrl.username !== '' || workbenchUrl.password !== '' || workbenchUrl.hash !== '') return []
     const template = templates.find(item => item.id === entry.key)
     let tags: string[] = []
     try {

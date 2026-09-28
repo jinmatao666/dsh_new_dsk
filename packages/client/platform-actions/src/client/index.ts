@@ -6,7 +6,7 @@ export interface ClientPlatformActionProvider {
   /** Open one host directory in the operating system's file manager. */
   openDirectory?: (path: string) => Promise<void>
   /** Save bytes through a native product shell. */
-  saveFile?: (input: { filename: string; bytes: Uint8Array }) => Promise<void>
+  saveFile?: (input: { filename: string; bytes: Uint8Array }) => Promise<void | { path: string; warning?: string }>
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -62,11 +62,12 @@ export class ClientPlatformActions extends Service {
 
   /** Save bytes, rejecting if unavailable.
  * @param input - Filename and bytes passed to the shell.
+ * @returns After persistence completes, an optional saved path and non-fatal follow-up warning.
  */
-  async saveFile(input: { filename: string; bytes: Uint8Array }): Promise<void> {
+  async saveFile(input: { filename: string; bytes: Uint8Array }): Promise<void | { path: string; warning?: string }> {
     const action = this.provider?.saveFile
     if (action === undefined) throw new Error('native file saving is unavailable in this application')
-    await action(input)
+    return action(input)
   }
 }
 

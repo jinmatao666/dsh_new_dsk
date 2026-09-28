@@ -31,6 +31,15 @@ function bench(
 afterEach(cleanup)
 
 describe('SessionLogDownloadDialog', () => {
+  it('reports a completed native save and shows the actual path', async () => {
+    const b = bench()
+    act(() => {
+      b.controller.store.set({ bySession: { [SID]: { open: true, status: 'success', error: null, nativeSaved: true, savedPath: 'Downloads/session.zip' } } })
+    })
+    const dialog = await b.view.findByRole('dialog', { name: 'Session log saved' })
+    expect(dialog.textContent).toContain('Downloads/session.zip')
+  })
+
   it('shows a controller failure and closes it without reading Session history', async () => {
     const b = bench()
     act(() => {

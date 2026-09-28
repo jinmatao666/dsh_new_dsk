@@ -24,7 +24,13 @@ describe('Wanwei published expert catalog', () => {
   })
 
   it('rejects an unsafe server-provided launch URL', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, url: 'http://expert.test', ticket: 'once' }))))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, url: 'file:///expert.html', ticket: 'once' }))))
     await expect(launchExpertWebsite('https://oneapi.test', 'geology-analysis', 'private-token')).rejects.toThrow('地址无效')
+  })
+
+  it('opens the configured HTTP deployment without upgrading or changing its port', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, url: 'http://ac.zjugis.com:3301/', ticket: 'once' }))))
+    await expect(launchExpertWebsite('http://ac.zjugis.com:3300', 'meeting-minutes', 'private-token'))
+      .resolves.toEqual({ url: 'http://ac.zjugis.com:3301/', ticket: 'once' })
   })
 })
