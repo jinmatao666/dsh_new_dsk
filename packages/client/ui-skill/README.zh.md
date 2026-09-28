@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-client-ui-skill` 让用户通过在编辑器中键入 `/name` 来调用 skill：建议菜单从 `skills/list` Remote 提供用户可调用的 skill 候选，选择一项会落下字面文本 `/name `，宿主随后将其加载为 skill 的指令。加载是确定性的：宿主的 pre-step 边界（`dsh-tool-skill`）识别发出消息中以空白为界的 `/name` token，并为每个入口注入渲染后的 `<skill_content>`，因此菜单 pick、手动键入的 token 与 TUI/ACP 提示词都以同一种方式加载 skill。已结算的 skill 调用在对话中渲染为可展开的 `Instructions` 卡片，只从冻结的调用/结果切片派生。
+`dsh-client-ui-skill` 让用户通过在编辑器中键入 `/name` 调用技能。建议菜单从 `skills/list` Remote 提供用户可调用的技能；选择后插入行内技能标签，提交时输出字面 token `/name`。宿主的 pre-step 边界（`dsh-tool-skill`）识别以空白为界的 token，为每个入口注入渲染后的 `<skill_content>`，因此菜单选择、手动 token 和 TUI/ACP 提示词以相同方式加载技能。已结算的调用渲染为可展开的 `Instructions` 卡片，只从冻结的调用/结果切片派生。
 
 ## 目录
 
@@ -43,7 +43,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-source 不实现任何裁决钩子，也没有引用 codec：pick 落下字面文本，发出的提示词中也是同一段字面文本，因此确定性在宿主侧（[slash 流水线笔记](../../../.agents/notes/implemented/architecture/2026-07-25-web-input-machine-and-slash-pipeline.zh.md)）。
+source 不实现任何裁决钩子。菜单选择插入技能引用标签；其 codec 向剪贴板和提交内容输出字面文本 `/name`。手动键入的 token 保持可编辑文字。宿主使用序列化后的 slash token 加载技能（[slash 流水线笔记](../../../.agents/notes/implemented/architecture/2026-07-25-web-input-machine-and-slash-pipeline.zh.md)）。
 
 ### 候选流程
 
@@ -94,7 +94,7 @@ source 不实现任何裁决钩子，也没有引用 codec：pick 落下字面�
 这些限制定义引用与工具行何时回退到通用行为；它们是当前包约束。
 
 - **仅含工具结果的 history 页使用通用行**：键控分派要求配对的工具调用位于运行时窗口内；分页将工具调用留在窗口外时，工具结果没有工具身份。这项客户端呈现功能不会为了恢复该身份而扩展 history 协议约定。
-- **文本是唯一依据**：引用是普通的草稿文本；手动键入的相同 token 就是同一个引用，宿主手势边界评判的是发出的文本，而不是菜单交互。chip 视觉由 lexicon 扫描派生；提示词协议上没有 occurrence 身份、位置跟踪或结构化引用载荷。
+- **序列化文字是唯一依据**：菜单选择在编辑器内具有引用身份，手动 token 保持普通文字。两者都提交 `/name`；宿主评判发出的文字，而非菜单状态。提示词协议没有结构化引用载荷。
 - **预热落定之前打开的菜单**：在那次击键下不显示 skill 候选；下一次击键会重新轮询已落定的缓存。
 
 <a id="dev-note"></a>

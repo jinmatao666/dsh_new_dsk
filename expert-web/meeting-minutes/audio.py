@@ -8,17 +8,17 @@ import shutil
 import subprocess
 import tempfile
 import urllib.request
-from urllib.parse import urlsplit
 import wave
 
 from extract import DocumentError
+from deployment import local_asr_url, valid_asr_url
 from model import NoRedirect
 
 
 def transcribe_chunk(path):
     endpoint, model, key = [os.environ.get(name, "") for name in ("EXPERT_ASR_URL", "EXPERT_ASR_MODEL", "EXPERT_ASR_KEY")]
     protocol = os.environ.get("EXPERT_ASR_PROTOCOL", "multipart")
-    if urlsplit(endpoint).scheme != "https" or not model or not key:
+    if not valid_asr_url(endpoint) or not model or (not key and not local_asr_url(endpoint)):
         raise DocumentError("专家服务端尚未配置录音转写服务")
     data = Path(path).read_bytes()
     if protocol == "dashscope":
@@ -33,8 +33,10 @@ def transcribe_chunk(path):
         content_type = f"multipart/form-data; boundary={boundary}"
     else:
         raise DocumentError("转写协议必须为 multipart 或 dashscope")
-    request = urllib.request.Request(endpoint, data=payload, headers={"Content-Type": content_type,
-                                      "Authorization": f"Bearer {key}", "X-DashScope-SSE": "disable"})
+    headers = {"Content-Type": content_type, "X-DashScope-SSE": "disable"}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    request = urllib.request.Request(endpoint, data=payload, headers=headers)
     try:
         with urllib.request.build_opener(NoRedirect).open(request, timeout=90) as response:
             raw = response.read(1024 * 1024 + 1)

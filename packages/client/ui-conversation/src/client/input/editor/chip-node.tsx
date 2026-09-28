@@ -178,6 +178,11 @@ export class ReferenceChipNode extends DecoratorNode<JSX.Element> {
     return this.getLatest().__label
   }
 
+  /** Update the display label without changing the reference or its serialized text. */
+  setLabel(label: string): void {
+    this.getWritable().__label = label
+  }
+
   /** Optional domain glyph. */
   getAppearance(): ReferenceInsert['appearance'] {
     return this.getLatest().__appearance

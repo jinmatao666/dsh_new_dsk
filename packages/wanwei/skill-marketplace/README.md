@@ -31,9 +31,11 @@ The Wanwei desktop bundle mounts this Client plugin after the official browser U
 
 Use the Wanwei product profile when the desktop needs the OneAPI-backed catalog and local skill installation. Official DSH skill packages still discover and run installed skills. An independent expert requires a published catalog entry, a working identity endpoint and an approved HTTPS website.
 
-The market contains platform-only recommendations, platform skills and a separate SkillHub section. SkillHub search, categories and pagination are independent of platform filters. My installations includes local SkillHub receipts and supports offline use and removal. [The SkillHub adapter](../skillhub/README.md) owns upstream requests and limits.
+The market contains official-platform-only recommendations, all published platform skills and a separate SkillHub section. Each catalog has its own search; platform search hides recommendations and does not filter SkillHub. SkillHub cards follow the platform card layout, and details open at page level while preserving the list position. My installations includes local SkillHub receipts and supports offline use, removal and manual updates. [The SkillHub adapter](../skillhub/README.md) owns upstream requests and limits.
 
 ### Composition
+
+Starting an installed skill stages its slash token and friendly name. The composer displays a compact inline skill chip beside the editable question; Session-backed chips serialize to the same slash token. Product styling remains in the Wanwei UI packages.
 
 The product bundle owns the `wanwei-skill-marketplace` row in [its patch](../../bundle/wanwei-desktop/cordis.patch.yml). Product installations must configure the OneAPI Host and native bridge; this package does not ask a user to enter a provider secret in the browser.
 

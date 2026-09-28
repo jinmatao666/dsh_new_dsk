@@ -88,7 +88,17 @@
 
 @media (prefers-reduced-motion: reduce) { .brandHero h1 span, .card::before, .card button::after { animation: none; } }
 @media (min-width: 961px) and (max-width: 1200px) { .page { gap: 30px; padding-inline: 32px; } .brandSide { min-width: 0; max-width: none; } .formSide { flex-basis: min(430px, 44vw); } .card { padding-inline: 34px; } }
-@media (min-width: 961px) and (max-height: 900px) { .page { padding-top: 18px; padding-bottom: 26px; } .brandSide { gap: 14px; } .brandHero h1 { margin-bottom: 10px; font-size: 38px; } .brandHero p { line-height: 1.6; } .capabilityCard { padding: 24px 20px 28px; } .capabilityItem { min-height: 92px; padding: 14px; } .card { padding-block: 30px 26px; } }
+@media (min-width: 961px) and (max-height: 900px) {
+  .page { padding-top: 18px; padding-bottom: 26px; }
+  .brandSide { gap: 14px; padding-top: 130px; }
+  .brandHero { margin-bottom: 24px; padding-left: 20px; }
+  .brandHero h1 { margin-bottom: 10px; font-size: 38px; }
+  .brandHero p { line-height: 1.6; }
+  .featureList { margin-bottom: 10px; padding-left: 20px; }
+  .capabilityCard { min-height: 292px; padding: 24px 20px 28px; }
+  .capabilityItem { min-height: 92px; padding: 14px; }
+  .card { padding-block: 30px 26px; }
+}
 @media (max-width: 960px) { .backdrop { overflow: auto; } .page { flex-direction: column; align-items: stretch; gap: 28px; } .brandSide { max-width: 100%; padding-top: 0; } .brandHeader { position: static; } .fullLogo { width: min(100%, 360px); } .brandHero p { max-width: 680px; } .formSide { flex-basis: auto; align-self: center; width: min(100%, 480px); } }
 @media (max-width: 520px) { .page { padding: 24px 16px 36px; } .fullLogo { width: min(100%, 360px); } .brandHero h1 { font-size: 28px; } .capabilityGrid { grid-template-columns: 1fr; } .card { padding: 30px 22px 26px; border-radius: 22px; } .cardHeader h2 { font-size: 25px; } }
 

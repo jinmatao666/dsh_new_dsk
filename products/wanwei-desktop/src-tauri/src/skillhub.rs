@@ -14,6 +14,8 @@ pub struct InstalledSkill {
     pub name: String,
     pub summary: String,
     pub sha256: String,
+    #[serde(default)]
+    pub icon_url: Option<String>,
 }
 
 fn safe_root(root: &Path) -> Result<(), String> {
@@ -98,14 +100,22 @@ fn install_at(
     let temporary_root = workspace.join("skills");
     let result = (|| {
         let imported = install_custom_skill_archive_at(&temporary_root, archive)?;
+        let requested_local_slug = record.local_slug.clone();
         record.source = "skillhub".into();
         record.local_slug = imported.slug;
         let target = root.join(&record.local_slug);
-        if fs::symlink_metadata(&target).is_ok() {
-            return Err(format!(
-                "本地已有同名技能 {}，未覆盖，请先处理冲突",
-                record.local_slug
-            ));
+        let updating = !requested_local_slug.is_empty();
+        if updating {
+            validate_marketplace_slug(&requested_local_slug)?;
+            if requested_local_slug != record.local_slug {
+                return Err("更新包中的技能目录与原安装不一致".into());
+            }
+            let previous = receipt_at(&target)?;
+            if previous.slug != record.slug {
+                return Err("技能来源不匹配，拒绝更新".into());
+            }
+        } else if fs::symlink_metadata(&target).is_ok() {
+            return Err(format!("本地已有同名技能 {}，未覆盖，请先处理冲突", record.local_slug));
         }
         let source = temporary_root.join(&record.local_slug);
         fs::remove_file(source.join(".dsh-custom-skill")).map_err(|e| e.to_string())?;
@@ -115,10 +125,20 @@ fn install_at(
         )
         .map_err(|e| e.to_string())?;
         fs::create_dir_all(root).map_err(|e| e.to_string())?;
-        fs::rename(source, &target).map_err(|e| format!("安装失败，原有技能未改变：{e}"))?;
+        if updating {
+            let backup = workspace.join("previous");
+            fs::rename(&target, &backup).map_err(|e| format!("备份原技能失败：{e}"))?;
+            if let Err(error) = fs::rename(&source, &target) {
+                fs::rename(&backup, &target).map_err(|restore| format!("更新失败：{error}；恢复原技能失败：{restore}；旧版本保留在 {}", backup.display()))?;
+                return Err(format!("更新失败，原有技能已恢复：{error}"));
+            }
+        } else {
+            fs::rename(source, &target).map_err(|e| format!("安装失败，原有技能未改变：{e}"))?;
+        }
         Ok(record)
     })();
-    if workspace.is_dir() {
+    // A failed restore must retain the previous skill for manual recovery.
+    if workspace.is_dir() && (result.is_ok() || !workspace.join("previous").exists()) {
         let _ = fs::remove_dir_all(workspace);
     }
     result
@@ -235,6 +255,7 @@ mod tests {
             name: "Test skill".into(),
             summary: "Test".into(),
             sha256: format!("{:x}", Sha256::digest(bytes)),
+            icon_url: None,
         }
     }
     #[test]
@@ -274,6 +295,28 @@ mod tests {
             fs::read_to_string(skills.join("local-skill/SKILL.md")).unwrap(),
             "original"
         );
+    }
+    #[test]
+    fn updates_only_the_same_skillhub_receipt_and_keeps_old_version_on_invalid_archive() {
+        let root = TestRoot::new();
+        let skills = root.0.join("skills");
+        let first = archive(&[("SKILL.md", "---\nname: local-skill\ndescription: first\n---\nFirst")]);
+        let installed = install_at(&skills, first.clone(), record(&first)).unwrap();
+        let next = archive(&[("SKILL.md", "---\nname: local-skill\ndescription: next\n---\nNext")]);
+        let mut update = record(&next);
+        update.local_slug = installed.local_slug.clone();
+        update.version = "2.0".into();
+        let mut invalid = update.clone();
+        invalid.sha256 = "bad".into();
+        assert!(install_at(&skills, next.clone(), invalid).is_err());
+        assert_eq!(list_at(&skills).unwrap()[0].version, "1.0");
+        let mut wrong_source = update.clone();
+        wrong_source.slug = "another-remote".into();
+        assert!(install_at(&skills, next.clone(), wrong_source).is_err());
+        assert_eq!(list_at(&skills).unwrap()[0].version, "1.0");
+        let result = install_at(&skills, next, update).unwrap();
+        assert_eq!(result.version, "2.0");
+        assert!(fs::read_to_string(skills.join("local-skill/SKILL.md")).unwrap().contains("Next"));
     }
     #[test]
     fn rejects_traversal_receipts_and_corrupted_downloads() {

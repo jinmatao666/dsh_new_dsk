@@ -209,6 +209,7 @@ function standaloneProps(
   })
   const inputActions: InputActions = {
     setDraft: () => {},
+    appendReferences: () => true,
     addImages: () => false,
     removeImage: () => {},
     pruneImages: () => {},
@@ -330,6 +331,7 @@ function mount(fixture: Awaited<ReturnType<typeof bench>>) {
   }))
   const inputActions: InputActions = {
     setDraft: vi.fn(),
+    appendReferences: () => true,
     addImages: vi.fn(() => false),
     removeImage: vi.fn(),
     pruneImages: vi.fn(),

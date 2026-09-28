@@ -3,7 +3,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-from deployment import checks, configured, ready, valid_url
+from deployment import checks, configured, local_asr_url, ready, valid_asr_url, valid_url
 
 
 class DeploymentTests(unittest.TestCase):
@@ -19,6 +19,30 @@ class DeploymentTests(unittest.TestCase):
                       "https://expert.test#secret", "https://expert.test:bad", "https://x.example.com"):
             self.assertFalse(valid_url(value))
         self.assertFalse(valid_url("https://expert.test/path", origin=True))
+
+    def test_local_xinference_asr_only_accepts_loopback_transcription_endpoint(self):
+        endpoint = "http://127.0.0.1:20330/v1/audio/transcriptions"
+        self.assertTrue(local_asr_url(endpoint))
+        self.assertTrue(valid_asr_url(endpoint))
+        self.assertTrue(valid_asr_url("https://asr.test/v1/audio/transcriptions"))
+        for value in ("http://host.docker.internal:20330/v1/audio/transcriptions",
+                      "http://127.0.0.1:20330/v1/models", "http://127.0.0.1:20330/v1/audio/transcriptions?token=x",
+                      "http://user:secret@127.0.0.1:20330/v1/audio/transcriptions"):
+            self.assertFalse(valid_asr_url(value))
+        with patch.dict(os.environ, {"EXPERT_ASR_URL": endpoint, "EXPERT_ASR_MODEL": "Qwen3-ASR-1.7B"}, clear=True):
+            self.assertTrue(checks()["asr_url"])
+            self.assertTrue(checks()["asr_id"])
+            self.assertTrue(checks()["asr_key"])
+
+    def test_same_host_compose_does_not_publish_ports(self):
+        root = Path(__file__).parent
+        compose = (root / "compose.local-xinference.yml").read_text(encoding="utf-8")
+        example = (root / ".env.xinference-local.example").read_text(encoding="utf-8")
+        self.assertIn("network_mode: host", compose)
+        self.assertIn("HOST: 127.0.0.1", compose)
+        self.assertNotIn("ports:", compose)
+        self.assertIn("EXPERT_ASR_URL=http://127.0.0.1:20330/v1/audio/transcriptions", example)
+        self.assertIn("EXPERT_ASR_MODEL=Qwen3-ASR-1.7B", example)
 
     def test_unconfigured_is_not_ready_and_checks_do_not_disclose_values(self):
         with patch.dict(os.environ, {"EXPERT_PROVIDER_CREDENTIAL": "private-secret-value"}, clear=True):

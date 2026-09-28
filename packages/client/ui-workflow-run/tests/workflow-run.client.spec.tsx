@@ -319,6 +319,7 @@ function panelProps(data: WorkflowRunChatData, sessions = listState(), openSessi
     useInput: () => { throw new Error('unused') },
     inputActions: {
       setDraft: () => {},
+      appendReferences: () => true,
       addImages: () => false,
       removeImage: () => {},
       pruneImages: () => {},

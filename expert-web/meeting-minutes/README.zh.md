@@ -10,6 +10,24 @@
 
 Compose 固定容器监听端口，使其与仅绑定本机的端口映射一致；修改 `.env` 中的 `PORT` 不会改变该端口。如需其他本机代理端口，修改 `ports` 的宿主机端口；公网 HTTPS 地址通过 `EXPERT_PUBLIC_URL` 配置。
 
+### 同机 Xinference 语音模型（Linux）
+
+如果服务器本机 `127.0.0.1:20330` 运行 Xinference、模型 UID 为 `Qwen3-ASR-1.7B`，使用 `.env.xinference-local.example` 作为 `.env` 模板，填写平台票据核验、提供方凭据及独立的纪要文本模型配置。模板已设置 `EXPERT_ASR_URL=http://127.0.0.1:20330/v1/audio/transcriptions`、`EXPERT_ASR_MODEL=Qwen3-ASR-1.7B` 和 `EXPERT_ASR_PROTOCOL=multipart`。本机 Xinference 无认证时 `EXPERT_ASR_KEY` 可留空；若启用了认证，填入真实密钥，不要提交 `.env`。
+
+这个场景必须用 `compose.local-xinference.yml`：Linux host network 使容器内的 `127.0.0.1` 指向同一台服务器，专家网页自身仍只监听 `127.0.0.1:4303`，由 HTTPS 代理公开。普通 `compose.yml` 使用桥接网络，不能直接访问宿主机仅绑定回环地址的 `20330`。
+
+```bash
+cp .env.xinference-local.example .env
+chmod 600 .env
+docker compose -f compose.local-xinference.yml config -q
+docker compose -f compose.local-xinference.yml up --build -d
+docker compose -f compose.local-xinference.yml exec -T meeting python deployment.py
+curl -fsS http://127.0.0.1:4303/healthz
+curl -fsS http://127.0.0.1:4303/readyz
+```
+
+`/readyz` 仅检查配置，不证明 Xinference 可达或模型可以转写。实际录音任务仍须联调；纪要文本生成还需要单独配置 `EXPERT_MODEL_*`。如果 Xinference 不在同一台 Linux 主机上，不要套用此模板或把无认证的 `20330` 暴露到公网。
+
 ## 独立迁出验证
 
 运维可执行 `python deployment.py` 检查配置和本地处理依赖；只输出检查名及通过状态，不打印密钥或接口地址。`/healthz` 验证 HTTP 与数据库可用，`/readyz` 检查所有已提供功能的必要配置，未配置返回 503；后者不是远程服务真实连通性测试。Dockerfile 配置了存活检查。
@@ -38,7 +56,7 @@ Compose 固定容器监听端口，使其与仅绑定本机的端口映射一致
 
 Python 3.13，安装 requirements.txt 后执行 `python -m unittest -v test_minutes test_server`。音频测试实际调用 FFmpeg，但转写与纪要正文使用明确注入的测试替身，不能证明真实模型质量。缺少模型配置的 HTTP 任务明确失败，不生成演示成果。
 
-服务由进程管理器注入 `.env.example` 所列配置后运行 `python server.py`，不自动加载 `.env`。纪要模型使用 HTTPS chat completions；ASR 可选 multipart 音频转写接口或 dashscope 原生协议，必须显式设置 endpoint、model、key。所有密钥仅服务端持有；FFmpeg 子进程不继承模型或平台凭据。
+服务由进程管理器注入 `.env.example` 所列配置后运行 `python server.py`，不自动加载 `.env`。纪要模型使用 HTTPS chat completions；ASR 可选 multipart 音频转写接口或 dashscope 原生协议，必须显式设置 endpoint 和 model。远程 HTTPS ASR 必须配置 key；仅上述同机回环 Xinference 无认证时可留空。所有密钥仅服务端持有；FFmpeg 子进程不继承模型或平台凭据。
 
 容器部署使用独立 Dockerfile/compose.yml，把示例复制为 `.env` 并配置后执行 `docker compose up --build -d`。默认端口 4303 仅绑定本机，使用 nginx.conf.example HTTPS 代理；本机未安装 Docker，尚未构建实跑。任务最长 3600 秒；超时时回收整个转换进程组。运维须配置磁盘容量、速率限制、备份并审核镜像 digest，不得多实例同时打开同一数据目录。
 

@@ -27,6 +27,7 @@ import type {
 import type { DraftAttachmentId } from '../src/client/contract/input.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
+import type { DraftPrefixOwnerProps } from '../src/client/contract/slots.ts'
 import { zh } from '../src/client/locales.ts'
 
 afterEach(cleanup)
@@ -50,6 +51,7 @@ interface BenchOptions {
   /** The `plan` projection value the standard-kit useProjection serves. */
   plan?: { active: boolean; pending: boolean }
   modelEntry?: React.ReactNode
+  draftPrefix?: (owner: DraftPrefixOwnerProps) => React.ReactNode
   /** Hot text-ref lexicon (injects a minimal slash stub exposing only lexicon()). */
   lexicon?: ReadonlyMap<'/' | '@', readonly string[]>
   permissions?: { options: { value: string; name: string; description?: string }[]; currentValue: string }
@@ -130,6 +132,8 @@ function bench(over?: BenchOptions) {
       ? {
         inputTriggers: (() => ({
           track: () => {},
+          serializeReference: (_source: string, ref: string) => Promise.resolve(ref),
+          adjudicate: () => Promise.resolve(undefined),
           lexicon: { getSnapshot: () => lex, subscribe: () => () => {} },
         })) as unknown as NonNullable<ShellDeps['inputTriggers']>,
       }
@@ -145,6 +149,7 @@ function bench(over?: BenchOptions) {
     slotCalls.push({ key, owner })
     if (key === 'conversation.input.plan') return over?.planEntry ?? null
     if (key === 'conversation.input.model') return over?.modelEntry ?? null
+    if (key === 'conversation.input.draft-prefix') return over?.draftPrefix?.(owner as DraftPrefixOwnerProps) ?? null
     return null
   }) as never
   const props: InputBarProps = {
@@ -238,6 +243,74 @@ function editableOf(input: HTMLElement): boolean {
 function writeDraft(shell: SessionInputShell, text: string): void {
   act(() => { shell.setDraft(text) })
 }
+
+describe('programmatic reference append', () => {
+  const file = (name: string) => ({ source: 'reference', ref: `@"${name}"`, label: name, appearance: 'file' as const, clipboardText: `@"${name}"` })
+
+  it('renders file chips for empty drafts and preserves chips across subsequent imports', () => {
+    const { shell, view } = bench()
+    act(() => { expect(shell.actions.appendReferences([file('3 (1).txt')])).toBe(true) })
+    act(() => { expect(shell.actions.appendReferences([file('修正.xlsx')])).toBe(true) })
+    expect(view.container.querySelectorAll('[data-composer-chip="reference"]')).toHaveLength(2)
+    expect(shell.snapshot.draft).toBe('@"3 (1).txt" @"修正.xlsx" ')
+    expect(view.getByText('3 (1).txt')).toBeTruthy()
+  })
+
+  it('appends to the live multiline draft instead of replacing text typed during an import', () => {
+    const { shell } = bench({ draft: '最初的文字' })
+    act(() => { shell.actions.setDraft('后来输入\n请分析') })
+    act(() => { expect(shell.actions.appendReferences([file('报告.docx')])).toBe(true) })
+    expect(shell.snapshot.draft).toBe('后来输入\n请分析 @"报告.docx" ')
+  })
+
+  it('serializes file paths, not display labels, into the submitted message', async () => {
+    const { shell, sink } = bench({ draft: '读取', lexicon: new Map() })
+    act(() => { shell.actions.appendReferences([{ ...file('报告.docx'), ref: '@"资料/报告.docx"', clipboardText: '@"资料/报告.docx"' }]) })
+    await act(async () => { shell.submit() })
+    expect(sink).toHaveBeenCalledWith('读取 @"资料/报告.docx"', [], 'queue', expect.any(AbortSignal))
+  })
+
+  it('refuses locked or disposed sessions without changing the draft', () => {
+    const { shell } = bench({ draft: '/goal 内容' })
+    act(() => {
+      shell.beginCommand({ token: '/goal ', submit: () => new Promise<never>(() => {}) }, { start: 0, end: 6, draftRev: shell.snapshot.draftRev })
+      shell.submit()
+    })
+    expect(shell.snapshot.phase).toBe('submitting')
+    expect(shell.actions.appendReferences([file('报告.docx')])).toBe(false)
+    expect(shell.snapshot.draft).toBe('/goal 内容')
+    shell.dispose()
+    expect(shell.actions.appendReferences([])).toBe(false)
+  })
+})
+
+describe('inline draft prefix', () => {
+  it('settles only the leading plain text and preserves the question and model token', async () => {
+    let owner: DraftPrefixOwnerProps | undefined
+    const { shell, view, sink } = bench({ draft: '/helper 你好', lexicon: new Map(), draftPrefix: (props) => { owner = props; return props.renderInput() } })
+    act(() => { expect(owner?.settlePrefix(7, { source: 'skill', ref: '/helper', clipboardText: '/helper', label: '助手', appearance: 'skill' })).toBe(true) })
+    expect(view.getByText('助手')).toBeTruthy()
+    expect(view.container.querySelector('[data-composer-input]')?.textContent).toBe('助手 你好')
+    expect(shell.snapshot.draft).toBe('/helper 你好')
+    expect(owner?.settlePrefix(7, { source: 'skill', ref: '/helper', clipboardText: '/helper', label: '助手', appearance: 'skill' })).toBe(false)
+    await act(async () => { shell.submit() })
+    expect(sink).toHaveBeenCalledWith('/helper 你好', [], 'queue', expect.any(AbortSignal))
+  })
+
+  it('edits staged question text beside a prefix while preserving its serialized token', () => {
+    const { props, view } = bench()
+    const stage = vi.fn()
+    const prefix = (owner: DraftPrefixOwnerProps) => owner.renderInput(7, <span>助手</span>)
+    const renderSlot = ((key: string, owner: object) => key === 'conversation.input.draft-prefix' ? prefix(owner as DraftPrefixOwnerProps) : null) as never
+    view.unmount()
+    const staged = render(<InputBar {...props} useInput={() => undefined} inputActions={undefined} keyboard={undefined} disabled stagedDraft="/helper 你好" onStageDraft={stage} renderSlot={renderSlot} />)
+    const editor = staged.container.querySelector<HTMLElement>('[data-composer-input]')!
+    expect(editor.textContent).toBe('你好')
+    editor.textContent = '请转换文件'
+    fireEvent.input(editor)
+    expect(stage).toHaveBeenCalledWith('/helper 请转换文件')
+  })
+})
 
 describe('image draft rail', () => {
   it('collects clipboard files while preserving text from a mixed paste', async () => {

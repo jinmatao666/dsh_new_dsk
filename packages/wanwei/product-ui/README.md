@@ -31,6 +31,8 @@ Mount it through the Wanwei desktop bundle after the client platform-action regi
 
 Brand occupants register at priority -100 so the product can coexist with the official brand plugin at its default priority.
 
+Picker imports and native drops append file or folder chips through `inputActions.appendReferences`; the labels show filenames while serialization retains path mentions. Imports preserve existing text and references.
+
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 

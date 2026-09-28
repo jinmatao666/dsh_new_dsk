@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SkillHubApi } from '../src/api.ts'
 
 const config = { baseURL: 'https://api.skillhub.cn', timeoutMs: 1000, maxJsonBytes: 4096, maxArchiveBytes: 100, downloadHosts: ['downloads.example.com'] }
-const entry = { slug: 'sample', name: 'Sample', description_zh: '说明', version: '1.0', labels: null }
+const entry = { slug: 'sample', name: 'Sample', description_zh: '说明', version: '1.0', labels: null, iconUrl: 'https://cloudcache.tencent-cloud.com/sample.png', downloads: 42 }
 const detail = { skill: entry, latestVersion: { version: '1.0' }, owner: { handle: 'author' } }
 const json = (value: unknown) => new Response(JSON.stringify(value))
 afterEach(() => { vi.unstubAllGlobals() })
@@ -12,7 +12,7 @@ describe('SkillHub upstream adapter', () => {
     const fetcher = vi.fn(async (_url: URL) => json({ code: 0, data: { skills: [entry], total: 17 } }))
     vi.stubGlobal('fetch', fetcher)
     const page = await new SkillHubApi(config).list({ keyword: 'pdf', page: 2, category: 'office-efficiency' })
-    expect(page).toMatchObject({ total: 17, page: 2, items: [{ slug: 'sample', summary: '说明', paid: false }] })
+    expect(page).toMatchObject({ total: 17, page: 2, items: [{ slug: 'sample', summary: '说明', paid: false, iconUrl: entry.iconUrl, downloads: 42 }] })
     const url = new URL(String(fetcher.mock.calls[0]?.[0]))
     expect(url.searchParams.get('keyword')).toBe('pdf')
     expect(url.searchParams.get('page')).toBe('2')
@@ -51,6 +51,15 @@ describe('SkillHub upstream adapter', () => {
     await expect(api.detail({ slug: '../private' })).rejects.toThrow('标识')
     expect(fetcher).not.toHaveBeenCalled()
     await expect(api.download({ slug: 'sample', version: '1' })).rejects.toThrow('购买')
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+  it('proxies bounded image bytes only from the approved Tencent icon host', async () => {
+    const fetcher = vi.fn(async () => new Response(new Uint8Array([137, 80, 78, 71]), { headers: { 'content-type': 'image/png' } }))
+    vi.stubGlobal('fetch', fetcher)
+    const api = new SkillHubApi(config)
+    await expect(api.icon({ url: entry.iconUrl })).resolves.toEqual({ dataUrl: 'data:image/png;base64,iVBORw==' })
+    await expect(api.icon({ url: 'https://localhost/icon.png' })).rejects.toThrow('允许范围')
+    await expect(api.icon({ url: 'http://cloudcache.tencent-cloud.com/icon.png' })).rejects.toThrow('允许范围')
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 })

@@ -14,6 +14,14 @@ const loadExperts = async () => experts
 const launch = { url: 'https://expert.example.com/', ticket: 'a'.repeat(64) }
 
 describe('published expert launch ownership', () => {
+  it('shows only published experts without an expert-team entry', async () => {
+    render(<ExpertMarket loadExperts={loadExperts} />)
+    expect(await screen.findByRole('button', { name: '动态专家' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '专家团' })).toBeNull()
+    expect(screen.queryByText('国土空间规划审查专家团')).toBeNull()
+    expect(screen.getByRole('button', { name: '全部' })).toBeTruthy()
+  })
+
   it('opens an unknown published expert in the native Tab', async () => {
     const launchExpert = vi.fn(async () => launch)
     render(<ExpertMarket loadExperts={loadExperts} launchExpert={launchExpert} />)

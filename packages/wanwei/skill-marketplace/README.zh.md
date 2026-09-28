@@ -31,9 +31,11 @@ kind: "package-reference"
 
 桌面需要 OneAPI 提供的目录和本地技能安装时，使用万维产品 profile。官方 DSH 技能包仍负责发现和运行已安装技能。独立专家需要已上架的目录资料、可用的身份接口和已批准的 HTTPS 网站。
 
-市场包含仅由平台技能组成的推荐区、平台技能区以及独立的 SkillHub 区。SkillHub 搜索、分类和分页独立于平台筛选。我的安装包含本机 SkillHub 记录，支持离线使用和卸载。[SkillHub 适配器](../skillhub/README.zh.md) 负责上游请求与限制。
+市场包含仅由平台官方技能组成的推荐区、所有已发布的平台技能以及独立的 SkillHub 区。两个目录各有独立搜索；搜索平台技能时收起推荐区，不筛选 SkillHub。SkillHub 卡片沿用平台布局，详情以完整页面显示，返回时保留列表位置。我的安装包含本机 SkillHub 记录，支持离线使用、卸载和手动更新。[SkillHub 适配器](../skillhub/README.zh.md) 负责上游请求与限制。
 
 ### 组合方式
+
+开始使用已安装技能会暂存其 slash token 和友好名称。输入框在可编辑问题旁显示紧凑的行内技能标签；会话标签序列化为同一 slash token。产品样式留在万维 UI 包中。
 
 产品组合包在[补丁文件](../../bundle/wanwei-desktop/cordis.patch.yml)中持有 `wanwei-skill-marketplace` 配置项。产品安装需要配置 OneAPI Host 和原生桥；本包不要求用户在浏览器输入提供方秘密。
 

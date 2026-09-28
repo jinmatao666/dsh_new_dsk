@@ -135,6 +135,7 @@ export class SessionInputShell implements SessionInput {
   /** The public provide-channel action face (one stable identity per session). */
   readonly actions: InputActions = {
     setDraft: (text) => { this.setDraft(text) },
+    appendReferences: references => this.appendReferences(references),
     addImages: ids => this.addImages(ids),
     removeImage: (id) => { this.removeImage(id) },
     pruneImages: (ids) => { this.pruneImages(ids) },
@@ -279,6 +280,24 @@ export class SessionInputShell implements SessionInput {
       }
       root.selectEnd()
     }, { discrete: true, tag: HISTORY_MERGE_TAG })
+  }
+
+  /** Append reference chips to the live draft, preserving content typed during asynchronous imports. */
+  appendReferences(references: readonly ReferenceInsert[]): boolean {
+    if (this.disposed || (this.core.state.phase !== 'plain' && this.core.state.phase !== 'claimed')) return false
+    if (references.length === 0) return true
+    let applied = false
+    this.applyEdit(() => {
+      if ($getRoot().getChildrenSize() === 0) $getRoot().append($createParagraphNode())
+      const projection = $projectComposer(key => this.occurrenceIdOf(key))
+      const end = projection.detectText.length
+      const prefix = end > 0 && !/\s$/u.test(projection.detectText) ? [$createTextNode(' ')] : []
+      applied = $replaceDetectSpanWithNodes({ start: end, end }, [
+        ...prefix,
+        ...references.flatMap(reference => [$createReferenceChipNode(reference), $createTextNode(' ')]),
+      ])
+    })
+    return applied
   }
 
   /** Append ordered image ids unless an admission transaction is locked. */

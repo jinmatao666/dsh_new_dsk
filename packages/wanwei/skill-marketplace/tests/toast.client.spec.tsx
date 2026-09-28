@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Toast, type WanweiNotice } from '../src/client/Toast.tsx'
+import { Toast, isNoticeTarget, type WanweiNotice } from '../src/client/Toast.tsx'
 
 function Harness() {
   const [notice, setNotice] = useState<WanweiNotice | null>(null)
@@ -38,5 +38,17 @@ describe('Wanwei transient feedback', () => {
     expect(screen.getByRole('alert').textContent).toContain('安装失败')
     fireEvent.click(screen.getByRole('button', { name: '关闭提示' }))
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('treats the notice and its dismiss button as marketplace interactions', () => {
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: '成功' }))
+    const notice = screen.getByRole('status')
+    const dismiss = screen.getByRole('button', { name: '关闭提示' })
+    expect(isNoticeTarget(notice)).toBe(true)
+    expect(isNoticeTarget(dismiss)).toBe(true)
+    expect(isNoticeTarget(document.body)).toBe(false)
+    fireEvent.click(dismiss)
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })

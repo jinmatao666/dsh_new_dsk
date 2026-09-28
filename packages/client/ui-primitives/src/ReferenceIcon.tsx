@@ -4,7 +4,7 @@ import {
 } from './icons/index.tsx'
 
 /** Reference domains with distinct composer and transcript glyphs. */
-export type ReferenceIconKind = 'session' | 'file' | 'folder'
+export type ReferenceIconKind = 'session' | 'file' | 'folder' | 'skill'
 
 /** Props shared by inline reference glyphs. */
 export interface ReferenceIconProps {
@@ -20,6 +20,8 @@ export interface ReferenceIconProps {
  */
 export function ReferenceIcon({ kind, size = 16, className }: ReferenceIconProps): ReactNode {
   switch (kind) {
+    case 'skill':
+      return <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" aria-hidden><path d="m3 13 7-7 2 2-7 7-2-2ZM9 2v2M8 3h2M13 1v3M11.5 2.5h3M13 10v3M11.5 11.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
     case 'session':
       return (
         <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" aria-hidden>

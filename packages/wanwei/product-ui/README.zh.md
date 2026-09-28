@@ -31,6 +31,8 @@ kind: "package-reference"
 
 品牌组件使用 -100 优先级注册，与默认优先级的官方品牌插件共存。
 
+文件选择与原生拖入通过 `inputActions.appendReferences` 追加文件或目录标签；标签显示名称，序列化保留路径引用。导入不会覆盖现有文字和引用。
+
 <a id="understand-the-implementation"></a>
 ## 实现方式
 

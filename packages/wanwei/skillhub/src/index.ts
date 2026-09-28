@@ -24,8 +24,9 @@ export function apply(ctx: Context, config: Config): void {
       const value = endpoint === 'list' ? await api.list(payload, signal)
         : endpoint === 'categories' ? await api.categories(signal)
           : endpoint === 'detail' ? await api.detail(payload, signal)
-            : endpoint === 'download' ? await api.download(payload, signal)
-              : undefined
+            : endpoint === 'icon' ? await api.icon(payload, signal)
+              : endpoint === 'download' ? await api.download(payload, signal)
+                : undefined
       if (value === undefined) throw new Error('未知 SkillHub 操作')
       return { ok: true as const, value }
     } catch (error) {

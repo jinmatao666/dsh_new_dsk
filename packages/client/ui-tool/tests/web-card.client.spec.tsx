@@ -243,6 +243,7 @@ describe('DetailsPanel web Output section', () => {
         useInput={(() => { throw new Error('unused') })}
         inputActions={{
           setDraft: () => {},
+          appendReferences: () => true,
           addImages: () => true,
           removeImage: () => {},
           pruneImages: () => {},

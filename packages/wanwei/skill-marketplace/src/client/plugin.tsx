@@ -7,6 +7,7 @@ import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connec
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { IConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { ReferenceIcon } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import {
@@ -25,7 +26,7 @@ import { ExpertWebview, type ExpertLaunch } from './expert-webview.tsx'
 import { markReviewsSeen, recordReviewList, reviewAttentionSnapshot, subscribeReviewAttention } from './review-attention.ts'
 import { registerNativeSkillCatalogBridge } from './skill-catalog-bridge.ts'
 import { rememberSkillDisplayNames, skillDisplayName, startSkillUse } from './skill-use.ts'
-import { Toast, type WanweiNotice } from './Toast.tsx'
+import { Toast, isNoticeTarget, type WanweiNotice } from './Toast.tsx'
 import './marketplace.css'
 import { SkillHubSection } from './SkillHubSection.tsx'
 
@@ -68,15 +69,6 @@ type MarketplaceSkillState = {
 }
 
 type MarketplaceSection = 'skills' | 'experts' | 'connectors' | 'automations'
-
-type ExpertTeam = {
-  id: string
-  name: string
-  summary: string
-  members: readonly string[]
-  skills: readonly string[]
-  accent: string
-}
 
 type Expert = {
   id: string
@@ -299,16 +291,6 @@ const SECTION_COPY: Record<MarketplaceSection, { title: string; subtitle: string
   automations: { title: L.automations, subtitle: productText('配置定时执行、事件触发和自动交付流程') },
 }
 
-const EXPERT_TEAMS: readonly ExpertTeam[] = [
-  { id: 'planning-review', name: '国土空间规划审查专家团', summary: productText('由政策解读、GIS 制图、文本审查与报告交付技能协同完成规划材料审查。'), members: ['规划主理人', '政策分析师', 'GIS 工程师', '报告审核员'], skills: ['政策文件解析', 'GIS 制图导出', '咨询报告生成器'], accent: '#2563eb' },
-  { id: 'land-approval', name: '建设项目用地报批专家团', summary: productText('围绕选址、用地合规、报批材料与风险核验组织分工，帮助完善项目用地报批材料。'), members: ['用地顾问', '政策专员', '材料审核员'], skills: ['政策文件解析', '文本结构化提取', '公文写作助手'], accent: '#7c3aed' },
-  { id: 'survey-quality', name: '国土调查成果质检专家团', summary: productText('由空间分析、数据质检和成果编制角色协同核查调查成果，形成问题清单和交付说明。'), members: ['调查工程师', 'GIS 分析师', '成果质检员'], skills: ['GIS 图层合并', '数据清洗诊断', 'GIS 制图导出'], accent: '#059669' },
-  { id: 'ecology-review', name: '生态保护修复论证专家团', summary: productText('将生态底图分析、政策约束识别与论证材料整理串联为项目论证工作流。'), members: ['生态规划师', '空间分析师', '论证撰稿人'], skills: ['政策文件解析', '空间计量经济学', '咨询报告生成器'], accent: '#0ea5e9' },
-  { id: 'farmland-review', name: '耕地保护合规审查专家团', summary: productText('围绕耕地保有量、永久基本农田占用与补划平衡，组织底图核对、政策比对与审查意见输出。'), members: ['耕地保护专员', 'GIS 工程师', '执法督察员'], skills: ['GIS图层合并', '政策文件解析', 'GIS制图导出'], accent: '#65a30d' },
-  { id: 'geohazard-assess', name: '地质灾害风险评估专家团', summary: productText('串联地质底图分析、隐患点叠加与风险评估报告编制，服务选址与防灾审查场景。'), members: ['地质工程师', '空间分析师', '报告撰稿人'], skills: ['空间计量经济学', 'GIS制图导出', '咨询报告生成器'], accent: '#d97706' },
-  { id: 'land-supply', name: '土地供应与利用协同专家团', summary: productText('覆盖储备整理、供地方案、批后监管与闲置处置，帮助形成供地全链条材料。'), members: ['储备整理专员', '用地顾问', '政务撰稿人'], skills: ['公文写作助手', '政策文件解析', '文本结构化提取'], accent: '#0891b2' },
-  { id: 'urban-renewal', name: '城市更新项目推进专家团', summary: productText('从更新单元划定、政策适用到实施方案与汇报材料，组织多角色协同推进。'), members: ['更新规划师', '政策分析师', '政企协调员'], skills: ['咨询报告生成器', '政策文件解析', '规划案例比较分析'], accent: '#0d9488' },
-]
 
 const EXPERTS: readonly Expert[] = [
   { id: 'geology-analysis', name: '地质条件分析专家', role: '地质环境与灾害易发性分析', category: '空间分析', summary: productText('提交项目地块范围，分析地质环境条件与地质灾害易发性，查看 Excel 明细和 Word 专业报告。'), tags: ['地质环境', '灾害易发性', '专业报告'], examples: ['分析这个地块的地质环境条件', '查看项目范围涉及的地质灾害易发分区'], accent: '#2563eb', icon: 'gis' },
@@ -590,16 +572,18 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall,
             {hasVerifiedInstallCount(skill) && <span>{skill.installs} {L.count}</span>}
           </div>
         </div>
-        <button
-          type="button"
-          className={`dsh-skill-detail-install${installed ? ' installed' : ''}`}
-          onClick={onToggleInstall}
-          disabled={installing || skill.installable !== true || installState === 'conflict'}
-        >
-          {installing ? productText('处理中…') : installLabel}
-        </button>
+        <div className="dsh-skill-detail-actions">
+          {installed && <button type="button" className="dsh-skill-detail-use" onClick={onUse}>{productText('使用技能')}</button>}
+          <button
+            type="button"
+            className={`dsh-skill-detail-install${installed ? ' installed' : ''}`}
+            onClick={onToggleInstall}
+            disabled={installing || skill.installable !== true || installState === 'conflict'}
+          >
+            {installing ? productText('处理中…') : installLabel}
+          </button>
+        </div>
       </div>
-      {installed && <button type="button" className="dsh-skill-detail-use" onClick={onUse}>{productText('使用技能')}</button>}
       {showReview && skill.reviewStatus === 'rejected' && skill.reviewReason && (
         <div className="dsh-skill-review-notice">{productText('审核意见：')}{skill.reviewReason}</div>
       )}
@@ -650,7 +634,7 @@ function ExpertAvatar({ expert }: { expert: Expert }) {
   return <svg {...shared}><path d="M7 5h14v18H7z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><path d="M10 10h8M10 14h8M10 18h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
 }
 
-type ExpertMarketDetail = { id: string; name: string; role: string; summary: string; tags: readonly string[]; examples: readonly string[]; accent: string; scenario?: string; materials?: string; detailSections?: readonly ExpertDetailSection[]; members?: readonly string[]; skills?: readonly string[] }
+type ExpertMarketDetail = { id: string; name: string; role: string; summary: string; tags: readonly string[]; examples: readonly string[]; accent: string; scenario?: string; materials?: string; detailSections?: readonly ExpertDetailSection[] }
 
 /**
  * Render the published expert catalog and its owned native Tab.
@@ -661,7 +645,6 @@ export function ExpertMarket({ loadExperts = loadRemoteExperts, launchExpert = l
   loadExperts?: () => Promise<readonly RemoteExpert[]>
   launchExpert?: (key: string) => Promise<{ url: string; ticket: string }>
 } = {}) {
-  const [tab, setTab] = useState<'experts' | 'teams'>('experts')
   const [category, setCategory] = useState('全部')
   const [selected, setSelected] = useState<ExpertMarketDetail | null>(null)
   const [publishedExperts, setPublishedExperts] = useState<readonly Expert[]>([])
@@ -709,7 +692,6 @@ export function ExpertMarket({ loadExperts = loadRemoteExperts, launchExpert = l
   const categories = ['全部', ...new Set(publishedExperts.map(expert => expert.category))]
   const visibleExperts = category === '全部' ? publishedExperts : publishedExperts.filter(expert => expert.category === category)
   const openExpert = (expert: Expert) =>{  setSelected({ id: expert.id, name: expert.name, role: expert.role, summary: expert.summary, tags: expert.tags, examples: expert.examples, accent: expert.accent, ...(expert.scenario === undefined ? {} : { scenario: expert.scenario }), ...(expert.materials === undefined ? {} : { materials: expert.materials }), ...(expert.detailSections === undefined ? {} : { detailSections: expert.detailSections }) }) }
-  const openTeam = (team: ExpertTeam) =>{  setSelected({ id: team.id, name: team.name, role: '多角色协同工作流', summary: team.summary, tags: team.members, examples: ['根据当前工作区资料启动该专家团审查', '为该专家团补充本项目的交付要求'], accent: team.accent, members: team.members, skills: team.skills }) }
   const startExpert = async () => {
     if (selected === null || launchExpert === undefined || launchPending.current) return
     const revision = ++launchRevision.current
@@ -732,10 +714,9 @@ export function ExpertMarket({ loadExperts = loadRemoteExperts, launchExpert = l
     }
   }
   const catalog = <section className="dsh-expert-market">
-    <nav className="dsh-expert-tabs" aria-label={productText('专家库内容')}><button type="button" className={tab === 'experts' ? 'active' : ''} onClick={() =>{  setTab('experts') }}>{productText('专家')}</button><button type="button" className={tab === 'teams' ? 'active' : ''} onClick={() =>{  setTab('teams') }}>{productText('专家团')}</button></nav>
-    {tab === 'experts' && <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() =>{  setCategory(item) }}>{item}</button>)}</div>{loadError !== null && <p role="alert">{productText('专家目录加载失败：')}{loadError} <button type="button" onClick={() => { setCatalogRevision(value => value + 1) }}>{productText('重试')}</button></p>}{loadError === null && visibleExperts.length === 0 && <p>{productText('当前暂无已上架的专家。')}</p>}<div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} onClick={() =>{  openExpert(expert) }}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>}
-    {tab === 'teams' && <div className="dsh-expert-grid teams">{EXPERT_TEAMS.map(team => <button type="button" className="dsh-expert-card" key={team.id} onClick={() =>{  openTeam(team) }}><span className="dsh-expert-avatar" style={{ background: `${team.accent}18`, color: team.accent }}><MarketplaceSectionIcon section="experts" size={25} /></span><div><strong>{team.name}</strong><small>{productText('多角色协同工作流')}</small></div><p>{team.summary}</p><footer>{team.members.slice(0, 3).map(member => <b key={member}>{member}</b>)}<b>+{team.members.length}</b></footer></button>)}</div>}
-    {selected !== null && <div className="dsh-expert-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}><section className="dsh-expert-detail" role="dialog" aria-modal="true" aria-label={productText('{0}详情', [selected.name])}><header><div><span style={{ background: `${selected.accent}18`, color: selected.accent }}><MarketplaceSectionIcon section="experts" size={24} /></span><div><h2>{selected.name}</h2><p>{selected.role}</p></div></div><button type="button" onClick={() =>{  setSelected(null) }} aria-label={productText('关闭')}>×</button></header><p className="dsh-expert-detail-summary">{selected.summary}</p>{selected.detailSections?.map((section) => <div className="dsh-expert-detail-block" key={section.title}><span>{section.title}</span><small>{section.subtitle}</small><p>{section.content}</p></div>)}{selected.scenario && <div className="dsh-expert-detail-block"><span>{productText('适用场景')}</span><p>{selected.scenario}</p></div>}{selected.materials && <div className="dsh-expert-detail-block"><span>{productText('准备材料')}</span><p>{selected.materials}</p></div>}{selected.tags.length > 0 && <div className="dsh-expert-detail-block"><span>{selected.members === undefined ? productText('专业方向') : productText('协作角色')}</span><div>{selected.tags.map(tag => <b key={tag}>{tag}</b>)}</div></div>}{selected.skills !== undefined && <div className="dsh-expert-detail-block"><span>{productText('编排技能')}</span><div>{selected.skills.map(skill => <b key={skill}>{skill}</b>)}</div></div>}{selected.examples.length > 0 && <div className="dsh-expert-detail-block examples"><span>{productText('可以这样开始')}</span>{selected.examples.map(example => <p key={example}>“{example}”</p>)}</div>}<footer><small>{launchError ?? productText('将在桌面端打开独立专家网页。')}</small><button type="button" disabled={launching || selected.members !== undefined} onClick={() => { void startExpert() }}>{launching ? productText('正在打开…') : productText('开始使用')}</button></footer></section></div>}
+    <nav className="dsh-expert-tabs" aria-label={productText('专家库内容')}><button type="button" className="active" aria-current="page">{productText('专家')}</button></nav>
+    <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() =>{  setCategory(item) }}>{item}</button>)}</div>{loadError !== null && <p role="alert">{productText('专家目录加载失败：')}{loadError} <button type="button" onClick={() => { setCatalogRevision(value => value + 1) }}>{productText('重试')}</button></p>}{loadError === null && visibleExperts.length === 0 && <p>{productText('当前暂无已上架的专家。')}</p>}<div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} onClick={() =>{  openExpert(expert) }}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>
+    {selected !== null && <div className="dsh-expert-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}><section className="dsh-expert-detail" role="dialog" aria-modal="true" aria-label={productText('{0}详情', [selected.name])}><header><div><span style={{ background: `${selected.accent}18`, color: selected.accent }}><MarketplaceSectionIcon section="experts" size={24} /></span><div><h2>{selected.name}</h2><p>{selected.role}</p></div></div><button type="button" onClick={() =>{  setSelected(null) }} aria-label={productText('关闭')}>×</button></header><p className="dsh-expert-detail-summary">{selected.summary}</p>{selected.detailSections?.map((section) => <div className="dsh-expert-detail-block" key={section.title}><span>{section.title}</span><small>{section.subtitle}</small><p>{section.content}</p></div>)}{selected.scenario && <div className="dsh-expert-detail-block"><span>{productText('适用场景')}</span><p>{selected.scenario}</p></div>}{selected.materials && <div className="dsh-expert-detail-block"><span>{productText('准备材料')}</span><p>{selected.materials}</p></div>}{selected.tags.length > 0 && <div className="dsh-expert-detail-block"><span>{productText('专业方向')}</span><div>{selected.tags.map(tag => <b key={tag}>{tag}</b>)}</div></div>}{selected.examples.length > 0 && <div className="dsh-expert-detail-block examples"><span>{productText('可以这样开始')}</span>{selected.examples.map(example => <p key={example}>“{example}”</p>)}</div>}<footer><small>{launchError ?? productText('将在桌面端打开独立专家网页。')}</small><button type="button" disabled={launching} onClick={() => { void startExpert() }}>{launching ? productText('正在打开…') : productText('开始使用')}</button></footer></section></div>}
   </section>
   if (activeExpert === null) return catalog
   return <section className="dsh-expert-active">
@@ -1043,6 +1024,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       const target = event.target
       if (!(target instanceof Element)) return
       if (target.closest('.dsh-skill-market-panel') !== null) return
+      if (isNoticeTarget(target)) return
       if (target.closest('.dsh-skill-market-action') !== null) return
       marketplaceControllers[section].close()
     }
@@ -1146,7 +1128,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
     const state = resolveInstallState(skill)
     return state === 'installed' || state === 'updateAvailable'
   }
-  const featuredPool = useMemo(() => browseMarketplaceCatalog(allSkills), [allSkills])
+  const featuredPool = useMemo(() => browseMarketplaceCatalog(allSkills).filter(skill => skill.source === 'official'), [allSkills])
   const [featuredOffset, setFeaturedOffset] = useState(() => Math.floor(Math.random() * 10_000))
   const featuredSkills = useMemo(() => {
     if (featuredPool.length <= 3) return featuredPool
@@ -1343,9 +1325,27 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
               <h1>{SECTION_COPY[section].title}</h1>
               <p>{SECTION_COPY[section].subtitle}</p>
             </div>
-            <button type="button" className="dsh-skill-close" aria-label={L.close} onClick={closeMarket}>
-              <ArrowLeftIcon />
-            </button>
+            <div className="dsh-skill-market-header-controls">
+              {section === 'skills' && <div className="dsh-skill-search-actions">
+                <button type="button" className={libraryView === 'installed' ? 'active' : ''} onClick={() => { setLibraryView(current => current === 'installed' ? 'market' : 'installed'); setQuery('') }}>{L.myInstalled}</button>
+                <button type="button" className={libraryView === 'uploads' ? 'active' : ''} onClick={() => {
+                  setLibraryView(current => current === 'uploads' ? 'market' : 'uploads'); setQuery('')
+                  if (loadPersonalSkills !== undefined) {
+                    void loadPersonalSkills().then((items) => {
+                      setPersonalSkills(items)
+                      setPersonalSkillsLoaded(true)
+                    }).catch(() => { setPersonalSkillsLoaded(false) })
+                  }
+                }}>{L.myUploads}{uploadAttentionCount > 0 && <span className="dsh-skill-unread-count">{uploadAttentionCount > 99 ? '99+' : uploadAttentionCount}</span>}</button>
+                <button type="button" className="primary" onClick={() => {
+                  setAdding(true)
+                  if (loadRemoteCategories !== undefined) {
+                    void loadRemoteCategories().then(setRemoteCategories).catch(() => { setRemoteCategories(null) })
+                  }
+                }}>{L.addSkill}</button>
+              </div>}
+              <button type="button" className="dsh-skill-close" aria-label={L.close} onClick={closeMarket}><ArrowLeftIcon /></button>
+            </div>
           </header>
         )}
 
@@ -1372,51 +1372,13 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
             {section === 'connectors' && <Connectors />}
             {section === 'automations' && <Automations notify={(text) => { setInstallMessage({ kind: 'info', text }) }} />}
             {section === 'skills' && <>
-              <div className="dsh-skill-toolbar">
-                <div className="dsh-skill-search-row">
-                  <input
-                    value={query}
-                    onChange={(event) => { setQuery(event.target.value) }}
-                    placeholder={libraryView === 'market' ? productText('搜索平台技能') : L.search}
-                  />
-                  <div className="dsh-skill-search-actions">
-                    <button
-                      type="button"
-                      className={libraryView === 'installed' ? 'active' : ''}
-                      onClick={() => { setLibraryView(current => current === 'installed' ? 'market' : 'installed'); setQuery('') }}
-                    >
-                      {L.myInstalled}
-                    </button>
-                    <button
-                      type="button"
-                      className={libraryView === 'uploads' ? 'active' : ''}
-                      onClick={() => {
-                        setLibraryView(current => current === 'uploads' ? 'market' : 'uploads')
-                        setQuery('')
-                        if (loadPersonalSkills !== undefined) {
-                          void loadPersonalSkills().then((items) => { setPersonalSkills(items); setPersonalSkillsLoaded(true) })
-                            .catch(() => { setPersonalSkillsLoaded(false) })
-                        }
-                      }}
-                    >
-                      {L.myUploads}{uploadAttentionCount > 0 && <span className="dsh-skill-unread-count">{uploadAttentionCount > 99 ? '99+' : uploadAttentionCount}</span>}
-                    </button>
-                    <button type="button" className="primary" onClick={() => {
-                      setAdding(true)
-                      if (loadRemoteCategories !== undefined) {
-                        void loadRemoteCategories().then(setRemoteCategories).catch(() =>{  setRemoteCategories(null) })
-                      }
-                    }}>{L.addSkill}</button>
-                  </div>
-                </div>
-              </div>
-
               {libraryView === 'installed' ? (
                 <div className="dsh-skill-installed-heading">
                   <div><h2>{productText('我的安装')}</h2><p>{productText('当前电脑已安装的技能，包括个人技能和从技能市场添加的技能。')}</p></div>
                   <button type="button" className="dsh-skill-browse-market" onClick={() => { setLibraryView('market') }}>
                     {productText('浏览技能市场 ')}<span aria-hidden="true">→</span>
                   </button>
+                  <div className="dsh-skill-search-row dsh-skill-library-search"><input aria-label={L.search} value={query} onChange={(event) => { setQuery(event.target.value) }} placeholder={L.search} /></div>
                 </div>
               ) : libraryView === 'uploads' ? (
                 <div className="dsh-skill-upload-management">
@@ -1466,8 +1428,9 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                       </div>
                     )}
                   </div>
+                  <div className="dsh-skill-search-row dsh-skill-library-search"><input aria-label={L.search} value={query} onChange={(event) => { setQuery(event.target.value) }} placeholder={L.search} /></div>
                 </div>
-              ) : featuredSkills.length > 0 && (
+              ) : query.trim() === '' && featuredSkills.length > 0 && (
                 <div className="dsh-skill-featured-section">
                   <div className="dsh-skill-section-header">
                     <h2>{L.featured}</h2>
@@ -1533,6 +1496,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                       </button>
                     ))}
                   </div>
+                  <div className="dsh-skill-search-row dsh-skill-section-search"><input aria-label={productText('搜索平台技能')} value={query} onChange={(event) => { setQuery(event.target.value) }} placeholder={productText('搜索平台技能')} /></div>
                 </section>
               )}
 
@@ -1634,7 +1598,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
               )}
 
               {visible.length === 0 && (libraryView !== 'installed' || skillhubCount === 0) && (
-                <div className="dsh-skill-empty">
+                <div className={libraryView === 'market' ? 'dsh-skill-empty dsh-skill-empty-compact' : 'dsh-skill-empty'}>
                   <div className="dsh-skill-empty-icon"><CategoryGlyph category={category} size={24} /></div>
                   <span>{libraryView === 'installed'
                     ? productText('暂未安装技能')
@@ -1644,13 +1608,19 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                         : uploadView === 'private'
                           ? productText('暂无私人技能')
                           : productText('暂无符合条件的审核记录')
-                      : L.empty}</span>
+                      : productText('平台技能没有匹配结果')}</span>
                 </div>
               )}
               {libraryView !== 'uploads' && <SkillHubSection
                 active installedOnly={libraryView === 'installed'} installedQuery={query}
                 request={skillhubRequest} invoke={desktopInvoke} onCount={setSkillhubCount}
-                onUse={(slug, name) => { startSkillConversation?.(slug, name); closeMarket() }}
+                onUse={(slug, name) => {
+                  if (startSkillConversation === undefined) {
+                    setInstallMessage({ kind: 'error', text: productText('对话服务尚未准备好，请稍后重试。') })
+                    return
+                  }
+                  startSkillConversation(slug, name); closeMarket()
+                }}
               />}
             </>}
           </>
@@ -1771,12 +1741,17 @@ function SkillMarketplaceAction({ wide, section = 'skills' }: ActionProps & { se
   )
 }
 
-function SkillDraftPrefix({ draft, removePrefix }: PropsRuntime<'conversation.input.draft-prefix'>) {
+export function SkillDraftPrefix({ draft, removePrefix, renderInput, settlePrefix, sessionReady }: PropsRuntime<'conversation.input.draft-prefix'>) {
   const match = /^\/([\w-]+)(?=\s|$)/u.exec(draft)
   const slug = match?.[1]
   const displayName = slug === undefined ? undefined : skillDisplayName(slug)
-  if (match === null || displayName === undefined) return null
-  return <button type="button" className="dsh-skill-draft-prefix" aria-label={productText('已选技能：{0}', [displayName])} onClick={() => { removePrefix(match[0].length) }}><span aria-hidden="true">⚒︎</span>{displayName}<span aria-hidden="true">×</span></button>
+  const token = match?.[0]
+  useEffect(() => {
+    if (token === undefined || displayName === undefined) return
+    settlePrefix(token.length, { source: 'skill', ref: token, clipboardText: token, label: displayName, appearance: 'skill' })
+  }, [token, displayName, settlePrefix])
+  if (sessionReady || token === undefined || displayName === undefined) return renderInput()
+  return renderInput(token.length, <button type="button" className="dsh-skill-draft-prefix" aria-label={productText('已选技能：{0}', [displayName])} onPointerDown={(event) => { event.stopPropagation() }} onClick={(event) => { event.stopPropagation(); removePrefix(token.length) }}><ReferenceIcon kind="skill" size={15} /><span>{displayName}</span><span aria-hidden="true">×</span></button>)
 }
 
 export const inject = ['slots', 'connection', 'conversation', 'sessions', 'remote', 'remote.directoryPicker']

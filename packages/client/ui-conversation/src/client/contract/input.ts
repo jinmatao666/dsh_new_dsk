@@ -53,7 +53,7 @@ export interface ReferenceInsert {
   readonly source: string
   readonly ref: string
   readonly label: string
-  readonly appearance?: 'session' | 'file' | 'folder'
+  readonly appearance?: 'session' | 'file' | 'folder' | 'skill'
   readonly clipboardText: string
 }
 
@@ -181,6 +181,8 @@ export interface InputTarget {
 export interface SessionInput extends InputTarget {
   /** Replace the whole draft (persisted-draft seed and programmatic writes). */
   setDraft(text: string): void
+  /** Append structured references without replacing existing text or chips; busy phases refuse. */
+  appendReferences(references: readonly ReferenceInsert[]): boolean
   /** Append ordered browser-owned image ids; busy admission phases refuse. */
   addImages(ids: readonly DraftAttachmentId[]): boolean
   /** Remove one browser-owned image id; busy admission phases refuse. */
@@ -227,6 +229,8 @@ export interface SessionInputResolver {
 export interface InputActions {
   /** Replace the whole draft (persisted-draft seed and programmatic writes). */
   setDraft(text: string): void
+  /** Append structured references without replacing text or chips; returns false while busy or disposed. */
+  appendReferences(references: readonly ReferenceInsert[]): boolean
   /** Append ordered browser-owned image ids; busy admission phases refuse. */
   addImages(ids: readonly DraftAttachmentId[]): boolean
   /** Remove one browser-owned image id; busy admission phases refuse. */

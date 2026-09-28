@@ -39,7 +39,7 @@ The [Wanwei bundle](../../bundle/wanwei-desktop/cordis.patch.yml) mounts this pl
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The Host validates upstream responses and maps them into product data. Downloads follow a bounded redirect chain and return base64 bytes with a transport SHA-256 digest through authenticated RPC. This digest detects transfer changes; it is not a publisher signature. The desktop stages installation before publishing a directory and records remote slug, remote version, actual local skill name and source. Uninstall requires a matching local receipt. Platform installation and removal reject SkillHub-owned directories.
+The Host validates upstream responses and maps them into product data, including the public download count and icon URL. Raster icons are proxied only from Tencent's `cloudcache.tencent-cloud.com` host, without redirects and with a 256 KiB limit; unsupported icons fall back to a local glyph. Downloads follow a bounded redirect chain and return base64 bytes with a transport SHA-256 digest through authenticated RPC. This digest detects transfer changes; it is not a publisher signature. The desktop stages installation before publishing a directory and records remote slug, remote version, actual local skill name and source. Manual updates replace only a matching SkillHub receipt and retain the previous directory until the new version is published. Uninstall requires a matching local receipt. Platform installation and removal reject SkillHub-owned directories.
 
 Local receipts remain usable offline. Selecting Use stages the actual installed skill name in the existing conversation draft. The marketplace owns presentation; this plugin never imports Client UI or modifies the agent loop.
 
@@ -74,9 +74,9 @@ Catalog operations do not alter model context. Loading a skill may change the su
 <a id="known-limitations-and-deferred-work"></a>
 
 - Public API availability, commercial terms and future team-key requirements belong to SkillHub; no embedded shared credential is shipped.
-- Paid downloads, private skills and automatic version updates are not supported. Extra runtimes, tools and credentials required by a skill remain user-managed.
+- Paid downloads, private skills and automatic version updates are not supported; users can manually update when SkillHub reports a newer version. Extra runtimes, tools and credentials required by a skill remain user-managed.
 - Native imports retain the existing 128-entry, 16 MiB expanded-size and 16-level directory limits. Name conflicts are rejected rather than renamed or overwritten.
-- A change in the upstream storage hostname requires a product configuration update. Remote descriptions are displayed through the existing controlled Markdown renderer.
+- A change in the upstream storage or icon hostname requires an adapter update. Remote descriptions are displayed through the existing controlled Markdown renderer.
 
 <a id="dev-note"></a>
 ### Dev Note

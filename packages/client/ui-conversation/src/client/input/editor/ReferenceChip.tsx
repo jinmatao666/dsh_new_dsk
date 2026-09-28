@@ -25,7 +25,7 @@ export interface ReferenceChipProps {
  */
 export function ReferenceChip({ label, appearance, invalid }: ReferenceChipProps): ReactNode {
   return (
-    <span className={clsx(css.chip, invalid && css.invalid)} title={label}>
+    <span className={clsx(css.chip, invalid && css.invalid)} title={label} data-reference-kind={appearance}>
       {appearance === undefined
         ? <span className={css.marker} aria-hidden>@</span>
         : <ReferenceIcon kind={appearance} size={14} className={css.icon} />}

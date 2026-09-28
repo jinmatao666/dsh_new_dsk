@@ -10,6 +10,22 @@ Original upload names label model materials and the Word report's source list. F
 
 Compose pins the container's listening port to match its loopback-only port mapping; a different `PORT` in `.env` does not change it. Change the host side of `ports` for a different local proxy port, and configure the public HTTPS origin through `EXPERT_PUBLIC_URL`.
 
+### Same-host Xinference ASR (Linux)
+
+When Xinference listens at `127.0.0.1:20330` on the deployment host with model UID `Qwen3-ASR-1.7B`, copy `.env.xinference-local.example` to `.env` and fill in the platform ticket exchange, provider credential, public HTTPS origin, and separate minutes text-model configuration. The template selects `http://127.0.0.1:20330/v1/audio/transcriptions` with the multipart protocol. Leave `EXPERT_ASR_KEY` empty only if this local Xinference endpoint has no authentication; keep any real key out of Git.
+
+Use `docker compose -f compose.local-xinference.yml up --build -d` on Linux. This host-network variant lets the container reach a loopback-only Xinference service while binding the workbench itself to `127.0.0.1:4303` for the HTTPS reverse proxy. The ordinary bridge-network `compose.yml` cannot reach a host service bound only to loopback. Run `docker compose -f compose.local-xinference.yml exec -T meeting python deployment.py`, then check `/healthz` and `/readyz`. Readiness validates configuration, not real ASR or text-model calls; exercise an actual recording before acceptance. Do not expose an unauthenticated Xinference port to the public network.
+
+```bash
+cp .env.xinference-local.example .env
+chmod 600 .env
+docker compose -f compose.local-xinference.yml config -q
+docker compose -f compose.local-xinference.yml up --build -d
+docker compose -f compose.local-xinference.yml exec -T meeting python deployment.py
+curl -fsS http://127.0.0.1:4303/healthz
+curl -fsS http://127.0.0.1:4303/readyz
+```
+
 ## Standalone verification
 
 Operators can run `python deployment.py` to check configuration and local processing dependencies. It prints check names and pass states, not secrets or endpoint addresses. `/healthz` checks HTTP and database availability; `/readyz` checks required configuration and returns 503 when it is missing. Readiness does not prove live remote connectivity. The Dockerfile includes a liveness check.
@@ -38,7 +54,7 @@ Identity exchange accepts only an object containing a nonempty string `user_id` 
 
 Use Python 3.13, install requirements.txt, then run `python -m unittest -v test_minutes test_server`. Audio tests invoke FFmpeg, while transcription and minutes text use explicit test substitutes; they do not prove live model quality. HTTP tasks fail explicitly without model configuration and do not create demo artifacts.
 
-Inject variables listed in `.env.example` through a process manager and run `python server.py`; it does not load `.env` automatically. The minutes model uses HTTPS chat completions. ASR supports a multipart audio-transcription endpoint or native dashscope protocol; endpoint, model and key must be explicitly configured. All keys remain server-side. The FFmpeg subprocess does not inherit model or platform credentials.
+Inject variables listed in `.env.example` through a process manager and run `python server.py`; it does not load `.env` automatically. The minutes model uses HTTPS chat completions. ASR supports a multipart audio-transcription endpoint or native dashscope protocol; endpoint and model must be explicitly configured. Remote HTTPS ASR requires a key; only the same-host loopback Xinference deployment above may omit it when authentication is disabled. All keys remain server-side. The FFmpeg subprocess does not inherit model or platform credentials.
 
 Container deployment uses the independent Dockerfile/compose.yml: copy the example to `.env`, configure it, and run `docker compose up --build -d`. Port 4303 binds locally by default; expose it through the HTTPS proxy in nginx.conf.example. Docker is unavailable locally and the container has not been built and run. Tasks have a 3,600-second deadline; timeout cleanup stops the whole process group. Operators must configure disk capacity, rate limits and backups, review the base-image digest and avoid multiple instances sharing the same data directory.
 

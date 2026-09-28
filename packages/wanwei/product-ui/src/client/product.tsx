@@ -5,6 +5,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ClientPlatformActions } from '@deepseek-ai/dsh-client-platform-actions/client'
 import type { DeliverableExtensions } from '@deepseek-ai/dsh-client-ui-deliverables/client'
 import { AnalysisResultCard } from './AnalysisResultCard.tsx'
+import { importedFileReference } from './imported-file-reference.ts'
 import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
@@ -15,19 +16,10 @@ type BrandMarkProps = HeroBrandMarkOwnerProps & SidebarBrandMarkOwnerProps
 type FileImportProps = PropsRuntime<'conversation.input.left'>
 type NativeInvoke = (command: string, argumentsValue?: unknown) => Promise<unknown>
 
-declare global {
-  interface Window { __ZJUGIS_NATIVE_INVOKE__?: NativeInvoke }
-}
-
 function invokeDesktop(command: string, argumentsValue?: unknown): Promise<unknown> {
-  const invoke = window.__ZJUGIS_NATIVE_INVOKE__
+  const invoke = (window as Window & { __ZJUGIS_NATIVE_INVOKE__?: NativeInvoke }).__ZJUGIS_NATIVE_INVOKE__
   if (invoke === undefined) throw new Error('Desktop native capabilities are unavailable')
   return invoke(command, argumentsValue)
-}
-
-function fileMention(path: string): string {
-  if (/[\u0000-\u001f\u007f-\u009f"]/u.test(path)) throw new Error('导入后的文件路径包含不支持的字符')
-  return /\s/u.test(path) ? `@"${path}"` : `@${path}`
 }
 
 const RESULT_PREFIX = 'WANWEI_RESULT='
@@ -84,8 +76,8 @@ async function nativeImport(
   return result
 }
 
-function FileImportAction(props: FileImportProps) {
-  const input = props.useInput(value => value)
+/** Imports desktop files into the session composer as structured references. */
+export function FileImportAction(props: FileImportProps) {
   const workspacePath = useActiveWorkspacePath(props)
   const picker = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -93,8 +85,9 @@ function FileImportAction(props: FileImportProps) {
   const [dragActive, setDragActive] = useState(false)
   const [status, setStatus] = useState<{ text: string; error: boolean }>()
   const append = (paths: readonly string[]) => {
-    const prefix = input.draft === '' || /\s$/u.test(input.draft) ? '' : ' '
-    props.inputActions.setDraft(`${input.draft}${prefix}${paths.map(fileMention).join(' ')}`)
+    if (!props.inputActions.appendReferences(paths.map(importedFileReference))) {
+      throw new Error(productText('文件已导入，但输入框正在发送，请稍后重新添加文件'))
+    }
   }
   const importFiles = async (files: readonly File[]) => {
     if (files.length === 0 || busy) return
@@ -105,6 +98,11 @@ function FileImportAction(props: FileImportProps) {
     finally { setBusy(false) }
   }
   useEffect(() => {
+    const browserDragOver = (event: DragEvent) => {
+      if (!event.dataTransfer?.types.includes('Files')) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'copy'
+    }
     const browserDrop = (event: DragEvent) => {
       const files = [...(event.dataTransfer?.files ?? [])]
       const documents = files.filter(file => !file.type.startsWith('image/'))
@@ -135,16 +133,18 @@ function FileImportAction(props: FileImportProps) {
     const enter = () => { setDragActive(true) }
     const leave = () => { setDragActive(false) }
     document.addEventListener('drop', browserDrop, { capture: true })
+    document.addEventListener('dragover', browserDragOver, { capture: true })
     window.addEventListener('dsh:native-file-drag-enter', enter)
     window.addEventListener('dsh:native-file-drag-leave', leave)
     window.addEventListener('dsh:native-file-drop', drop)
     return () => {
       document.removeEventListener('drop', browserDrop, { capture: true })
+      document.removeEventListener('dragover', browserDragOver, { capture: true })
       window.removeEventListener('dsh:native-file-drag-enter', enter)
       window.removeEventListener('dsh:native-file-drag-leave', leave)
       window.removeEventListener('dsh:native-file-drop', drop)
     }
-  }, [busy, input.draft, workspacePath])
+  }, [busy, props.inputActions, workspacePath])
   const choose = (event: ChangeEvent<HTMLInputElement>) => {
     const files = [...(event.currentTarget.files ?? [])]
     event.currentTarget.value = ''

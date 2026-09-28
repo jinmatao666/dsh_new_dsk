@@ -62,6 +62,7 @@ function projectSkill(value: unknown) {
     slug: skillSlug(item.slug), name: text(item.name) || text(item.displayName) || text(item.slug),
     summary: text(item.description_zh) || text(item.summary_zh) || text(item.description) || text(item.summary),
     version: text(item.version), category: text(item.category), author: text(item.ownerName),
+    iconUrl: text(item.iconUrl), downloads: typeof item.downloads === 'number' && Number.isSafeInteger(item.downloads) && item.downloads >= 0 ? item.downloads : null,
     requiresApiKey: labels.requires_api_key === 'true', paid: labels.pricing_type === 'paid',
   }
 }
@@ -133,6 +134,23 @@ export class SkillHubApi {
       ...skill, version: skillVersion(object(body.latestVersion).version),
       author: text(object(body.owner).displayName) || text(object(body.owner).handle),
     }
+  }
+
+  /** Proxy only the public catalog's bounded raster icons from Tencent's image host. */
+  async icon(payload: unknown, signal?: AbortSignal): Promise<{ dataUrl: string }> {
+    const raw = object(payload).url
+    if (typeof raw !== 'string' || raw.length > 2048) throw new Error('SkillHub 图标地址无效')
+    const url = new URL(raw)
+    if (url.protocol !== 'https:' || url.hostname !== 'cloudcache.tencent-cloud.com' || url.username || url.password || url.port || url.hash) throw new Error('SkillHub 图标地址不在允许范围内')
+    const combined = AbortSignal.any([AbortSignal.timeout(this.config.timeoutMs), ...(signal === undefined ? [] : [signal])])
+    const response = await fetch(url, { signal: combined, redirect: 'error' })
+    const mime = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase()
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(mime ?? '')) {
+      await response.body?.cancel()
+      throw new Error('SkillHub 图标格式无效')
+    }
+    const bytes = await boundedBody(response, 256 * 1024)
+    return { dataUrl: `data:${mime};base64,${Buffer.from(bytes).toString('base64')}` }
   }
 
   /** Return a bounded archive through the authenticated loopback RPC.

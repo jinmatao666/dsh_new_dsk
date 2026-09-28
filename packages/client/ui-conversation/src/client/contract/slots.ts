@@ -277,7 +277,13 @@ export interface ComposerBarOwnerProps {
 /** Current draft and generic edit action for an optional prefix presenter. */
 export interface DraftPrefixOwnerProps {
   draft: string
+  /** Whether this draft is owned by a Session editor. */
+  sessionReady: boolean
   removePrefix: (length: number) => void
+  /** Render the draft, optionally showing an inline presenter instead of its leading text before a Session exists. */
+  renderInput: (prefixLength?: number, prefix?: ReactNode) => ReactNode
+  /** Convert leading plain text to a reference in an unlocked Session; false before Session creation. */
+  settlePrefix: (length: number, reference: import('./input.ts').ReferenceInsert) => boolean
 }
 
 /** Package-private operations injected into the resident composer bar. */

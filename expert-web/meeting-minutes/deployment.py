@@ -20,6 +20,23 @@ def valid_url(value, internal=False, origin=False):
         return False
 
 
+def local_asr_url(value):
+    """Only the explicitly configured loopback transcription endpoint may use HTTP."""
+    try:
+        parsed = urlsplit(value)
+        parsed.port
+        return (parsed.scheme == "http" and parsed.hostname in ("127.0.0.1", "::1")
+                and parsed.path == "/v1/audio/transcriptions"
+                and not parsed.username and not parsed.password
+                and not parsed.query and not parsed.fragment)
+    except ValueError:
+        return False
+
+
+def valid_asr_url(value):
+    return valid_url(value) or local_asr_url(value)
+
+
 def configured(name):
     value = os.environ.get(name, "").strip()
     return bool(value) and not value.startswith("replace-with-")
@@ -42,9 +59,10 @@ def checks():
     result["model_url"] = valid_url(os.environ.get("EXPERT_MODEL_URL", ""))
     result["model_id"] = configured("EXPERT_MODEL")
     result["model_key"] = configured("EXPERT_MODEL_KEY")
-    result["asr_url"] = valid_url(os.environ.get("EXPERT_ASR_URL", ""))
+    asr_url = os.environ.get("EXPERT_ASR_URL", "")
+    result["asr_url"] = valid_asr_url(asr_url)
     result["asr_id"] = configured("EXPERT_ASR_MODEL")
-    result["asr_key"] = configured("EXPERT_ASR_KEY")
+    result["asr_key"] = local_asr_url(asr_url) or configured("EXPERT_ASR_KEY")
     result["asr_protocol"] = os.environ.get("EXPERT_ASR_PROTOCOL", "multipart") in ("multipart", "dashscope")
     result["ffmpeg"] = bool(shutil.which("ffmpeg"))
     return result

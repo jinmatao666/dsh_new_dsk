@@ -16,6 +16,8 @@ The OneAPI administrator registers HTTPS workbench URLs dynamically. The desktop
 
 The Wanwei product owns native commands and origin-specific capabilities. Official DSH packages receive only generic extension points when necessary. Publishing an expert grants privileged desktop access, so operators must review the deployed origin and scripts before publishing it. Navigation remains on the approved origin, and website CSP blocks third-party scripts and frames.
 
+The meeting-minutes website may use an unauthenticated Xinference transcription endpoint only when it is bound to loopback on the same Linux host. Its separate host-network Compose configuration binds the workbench itself to loopback for an HTTPS reverse proxy; external ASR endpoints retain HTTPS and server-side credentials. The text-generation model remains separately configured.
+
 ## Alternatives considered
 
 **Keep six built-in workbenches.** This preserves familiar pages but binds expert updates and dependencies to desktop releases. The user requires independently movable websites and dynamically registered experts.
@@ -25,6 +27,8 @@ The Wanwei product owns native commands and origin-specific capabilities. Offici
 **Use a standalone expert window.** This avoids some child-Webview constraints but violates the required same-main-window Tab interaction. It is not an accepted fallback.
 
 **Embed websites in the privileged main page as iframes.** This does not establish the required isolation from the main page's native capabilities, especially across Linux Webview implementations.
+
+**Use Docker bridge networking for a loopback-only host ASR service.** A bridge container's loopback is not the host's loopback. Publishing Xinference beyond the host would widen access to an endpoint that may have no authentication; the Linux-only host-network variant instead keeps both listeners on loopback, at the cost of weaker network isolation for this container.
 
 ## Acceptance criteria
 
@@ -49,5 +53,7 @@ Logout and catalog disposal invalidate outstanding launch requests before accept
 The current local checks do not establish production readiness. Live model, ASR and GIS endpoints, container execution, actual LibreOffice conversion, complete visual comparison and cross-platform native interaction still require acceptance. SQLite identity tests do not prove behavior on a different production database.
 
 Independent deployment adds ownership of TLS, secrets, quotas, backups, dependency licensing and operational monitoring to every expert. Website-owned task history is intentionally not a platform-wide task dashboard.
+
+The host-network variant requires Linux and gives the meeting container the host network namespace. The deployment must review the image and verify the workbench binds only to loopback before use. Local configuration checks do not prove that the specified Xinference model is running or that transcription succeeds.
 
 The user authorizes default desktop capabilities for published experts. An approved origin is consequently a privileged trust decision, not merely catalog metadata. No automatic deployment, commit, push or old-expert cutoff is authorized by this proposal.

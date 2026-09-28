@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-skill` lets users invoke skills by typing `/name` in the composer: the suggestion menu offers user-invocable skills from the `skills/list` Remote, and a pick lands the literal `/name ` text that the host then loads as the skill's instructions. Loading is deterministic: the host's pre-step boundary (`dsh-tool-skill`) recognizes the whitespace-bounded `/name` token in the sent message and injects the rendered `<skill_content>` for every entry point, so a menu pick, a hand-typed token, and a TUI/ACP prompt all load the skill the same way. Settled skill calls render in the conversation as an expandable `Instructions` card, derived only from the frozen call/result slice.
+`dsh-client-ui-skill` lets users invoke skills by typing `/name` in the composer. The suggestion menu offers user-invocable skills from the `skills/list` Remote; a pick inserts an inline skill chip that submits the literal `/name` token. The host's pre-step boundary (`dsh-tool-skill`) recognizes the whitespace-bounded token and injects the rendered `<skill_content>` for every entry point, so menu picks, hand-typed tokens and TUI/ACP prompts load the skill identically. Settled skill calls render as an expandable `Instructions` card derived only from the frozen call/result slice.
 
 ## Table of Contents
 
@@ -43,7 +43,7 @@ A collapsed row renders the skill glyph, `Skill` title, and requested skill name
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The source implements no adjudication hooks and no reference codec: the pick lands literal text and the prompt ships the same literal, so determinism lives host-side ([slash pipeline note](../../../.agents/notes/implemented/architecture/2026-07-25-web-input-machine-and-slash-pipeline.md)).
+The source implements no adjudication hooks. A menu pick inserts a skill reference chip; its codec emits the literal `/name` for clipboard and submission. Hand-typed tokens remain editable text. Host-side loading uses the serialized slash token ([slash pipeline note](../../../.agents/notes/implemented/architecture/2026-07-25-web-input-machine-and-slash-pipeline.md)).
 
 ### Candidate flow
 
@@ -94,7 +94,7 @@ Append-only: the injected message lands after the reusable history prefix. This 
 These limits define where the reference and the row fall back to generic behavior; they are current package constraints.
 
 - **Result-only history pages use the generic row** — keyed dispatch needs the paired call in the runtime window; pagination that leaves the call outside has no tool identity. This client presentation feature does not extend the history wire contract to recover it.
-- **Text is the truth** — the reference is plain draft text; a hand-typed identical token is the same reference, and the host gesture boundary judges the sent text, not the menu interaction. Chip visuals derive from the lexicon scan; no occurrence identity, position tracking, or structured reference payload exists on the prompt wire.
+- **Serialized text is the authority** — menu picks carry editor-local reference identity, while hand-typed tokens remain plain text. Both submit `/name`; the host judges the sent text, not menu state. The prompt wire contains no structured reference payload.
 - **A menu opened before the prewarm settles** shows no skill candidates for that keystroke; the next keystroke re-polls the settled cache.
 
 <a id="dev-note"></a>

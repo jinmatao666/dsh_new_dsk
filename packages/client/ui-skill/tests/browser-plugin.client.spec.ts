@@ -6,9 +6,7 @@
  * real ClientSessionContext projections — sessionId addressing, the
  * session-keyed catalog cache (single-flight per key, scope-birth warm
  * prewarm, connection/reset clear), startsWith filtering, RPC-failure
- * rejection, pick → plain-text outcome (the plain-text-reference decision:
- * .agents/notes/implemented/architecture/2026-07-25-web-input-machine-and-slash-pipeline.md),
- * the synchronous
+ * rejection, pick → inline reference with literal slash serialization, and synchronous
  * lexicon reads over the settled cache, and the reference codec's two
  * projections. Direct driving is deliberate: this spec owns only the
  * source's own contract.
@@ -355,8 +353,8 @@ describe('lexicon', () => {
   })
 })
 
-describe('pick lands plain text', () => {
-  it('onPick returns the literal /name text with a closing space', async () => {
+describe('pick lands an inline reference', () => {
+  it('onPick returns a skill chip carrying the literal /name', async () => {
     const { source } = await bench(listOk(CATALOG))
     const outcome = source.onPick({
       candidate: { name: 'commit-helper', description: 'commit flow' },
@@ -366,14 +364,13 @@ describe('pick lands plain text', () => {
       action: 'pick',
       span: { start: 0, end: 4, draftRev: 7 },
     })
-    expect(outcome).toEqual({ text: '/commit-helper ' })
+    expect(outcome).toEqual({ insert: { source: 'skill', ref: '/commit-helper', clipboardText: '/commit-helper', label: 'commit-helper', appearance: 'skill' } })
   })
 
-  it('keeps the legacy reference codec removed and stays out of adjudication', async () => {
+  it('serializes the unchanged slash token and stays out of adjudication', async () => {
     const { source } = await bench(listOk(CATALOG))
-    // Determinism lives host-side (the pre-step gesture boundary), so the
-    // source neither claims lines nor serializes reference markup.
-    expect(source.codec).toBeUndefined()
+    expect(source.codec?.clipboardText('/commit-helper')).toBe('/commit-helper')
+    expect(await source.codec?.serialize('/commit-helper', new AbortController().signal)).toBe('/commit-helper')
     expect(typeof source.matchSpace).toBe('undefined')
     expect(typeof source.matchEnter).toBe('undefined')
   })

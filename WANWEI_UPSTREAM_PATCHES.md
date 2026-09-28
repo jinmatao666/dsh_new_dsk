@@ -7,10 +7,14 @@
 | `packages/boot/app-boot` | 通过 `DSH_BUNDLE_ANCHORS` 接受产品持有的额外包解析锚点 | 未设置时仍只从 DSH 安装目录和用户 profile 解析 |
 | `packages/client/platform-actions` | 注册可选的目录打开和原生文件保存动作 | 能力不可用；官方浏览器继续使用原有行为 |
 | `packages/client/ui-workspace` | Workspace 菜单按能力显示通用“打开目录”动作 | 不显示该动作 |
+| `packages/client/ui-workspace` | 目录打开动作显示通用文件夹图标；Session 菜单提供复用归档操作的逻辑删除入口 | 不依赖产品插件，保留会话日志；不提供永久删除 |
 | `packages/session-query/session-log-export` | 可注入通用文件保存函数 | 使用浏览器下载 |
 | `packages/client/ui-deliverables` | 注册额外成果 Detector 和 Presenter | 只识别并展示官方通用成果 |
 | `packages/client/ui-conversation` | Hero 品牌 Slot；无会话可编辑草稿与通用草稿前缀 Slot | 使用官方图标和标题；未选工作区的草稿在选择后进入会话，前缀 Slot 为空 |
 | `packages/bundle/web-app` | 装载通用客户端平台动作注册表 | 注册表为空，不改变官方页面 |
+| `packages/client/ui-conversation` | `InputActions.appendReferences` 追加通用结构化引用，保留现有草稿和标签 | 未调用时不改变官方输入行为；不包含产品路径或桌面实现 |
+| `packages/client/ui-conversation` | 草稿前缀 Slot 可渲染行内前缀并将前导文字转换成通用引用 | 无插件时渲染完整输入框；不包含技能市场或产品样式 |
+| `packages/client/ui-skill`、`packages/client/ui-primitives` | 技能菜单选择插入通用技能引用，序列化为原有 slash token；共享技能 SVG 图标 | 官方技能仍按原有宿主规则加载；胶囊产品样式由万维层提供 |
 | `scripts/check-workspace-constraints.ts`、`scripts/release/families.ts` | 通用 `dsh.release: false` 标记：产品包必须私有且不参与官方 npm 发布；官方包不得反向依赖这些包 | 未标记的官方包继续遵守原发布规则 |
 
 类型目录所需的显式类型注解和跨包类型导入位于 `ui-approval`、`ui-chat`；只影响静态契约，不改变会话渲染。Windows 检查脚本使用目录 junction，ACP 测试直接引用规范快照配置，不依赖检出时能否创建符号链接。

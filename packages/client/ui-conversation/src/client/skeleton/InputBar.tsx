@@ -32,6 +32,11 @@ import type { ComposerBarProps } from '../contract/slots.ts'
 import { ComposerContentEditable } from '../input/editor/ComposerContentEditable.tsx'
 import { DecoratorPortals } from '../input/editor/DecoratorPortals.tsx'
 import { registerComposerKeymap } from '../input/editor/keymap.ts'
+import { $getRoot } from 'lexical'
+import { $createReferenceChipNode, $isReferenceChipNode } from '../input/editor/chip-node.tsx'
+import { $replaceDetectSpanWithNodes } from '../input/editor/span-map.ts'
+import { $composerLayout } from '../input/editor/projection.ts'
+import type { ReferenceInsert } from '../contract/input.ts'
 import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
@@ -362,6 +367,56 @@ export function InputBar({
         ? t('placeholder.steerQueue')
         : planActive ? t('placeholder.plan') : t('placeholder.default'))
 
+  const renderInput = (prefixLength = 0, prefix?: ReactNode): ReactNode => (
+    <div ref={scrollRef} className={css.scroll} data-input-scroll>
+      <div className={clsx(css.grow, prefix !== undefined && css.inlinePrefix)}>
+        {prefix}
+        <ComposerContentEditable
+          editor={workspaceTrigger ? null : editor}
+          editable={editable}
+          standaloneText={staging ? (prefixLength > 0 ? draft.slice(prefixLength).trimStart() : draft) : undefined}
+          onStandaloneInput={staging ? text => onStageDraft(`${draft.slice(0, prefixLength)}${prefixLength > 0 ? ' ' : ''}${text}`) : undefined}
+          className={clsx(css.input, editorDisabled && css.inputDisabled)}
+          data-phase={input?.phase ?? 'inert'}
+          aria-disabled={editorDisabled || undefined}
+          data-placeholder={placeholderText}
+          aria-label={workspaceTrigger ? t('hero.chooseWorkspace') : placeholderText}
+          aria-haspopup={workspaceTrigger ? 'menu' : undefined}
+          aria-expanded={workspaceTrigger ? workspacePickerOpen : undefined}
+          tabIndex={workspaceTrigger ? 0 : undefined}
+          onKeyDown={workspaceTrigger ? onWorkspaceKeyDown : undefined}
+          style={hint === null ? undefined : { '--dsh-composer-hint': JSON.stringify(hint) } as CSSProperties}
+        />
+        {empty && !claimActive && <div aria-hidden className={css.placeholder} data-composer-placeholder>{placeholderText}</div>}
+        <DecoratorPortals editor={workspaceTrigger ? null : editor} />
+      </div>
+    </div>
+  )
+  const settlePrefix = (length: number, reference: ReferenceInsert): boolean => {
+    if (editor === null || input?.phase !== 'plain' || length <= 0) return false
+    const needsLabel = editor.getEditorState().read(() => {
+      const first = $getRoot().getFirstDescendant()
+      return $isReferenceChipNode(first)
+        && first.getSource() === reference.source
+        && first.getReference() === reference.ref
+        && first.getLabel() !== reference.label
+    })
+    if (needsLabel) {
+      editor.update(() => {
+        const first = $getRoot().getFirstDescendant()
+        if ($isReferenceChipNode(first)) first.setLabel(reference.label)
+      }, { discrete: true })
+      return true
+    }
+    if (!editor.getEditorState().read(() => $composerLayout().detectText.slice(0, length) === draft.slice(0, length))) return false
+    let applied = false
+    editor.update(() => {
+      if ($composerLayout().detectText.slice(0, length) !== draft.slice(0, length)) return
+      applied = $replaceDetectSpanWithNodes({ start: 0, end: length }, [$createReferenceChipNode(reference)])
+    }, { discrete: true })
+    return applied
+  }
+
   return (
     <div className={clsx(css.root, variant === 'hero' && css.hero)}>
       {toast !== null && (
@@ -404,45 +459,15 @@ export function InputBar({
         })}
         {renderSlot('conversation.input.draft-prefix', {
           draft,
+          renderInput,
+          settlePrefix,
+          sessionReady: live,
           removePrefix: (length) => {
             const next = draft.slice(length).trimStart()
             if (staging) onStageDraft(next)
             else inputActions?.setDraft(next)
           },
-        })}
-        {/* One scrollport, one text surface: the contenteditable grows with
-            its content and .scroll — capped at 14 lines in CSS — is the only
-            thing that scrolls. Chips are decorator portals inside the same
-            surface, so wrapping, caret geometry, and scrolling are the
-            browser's own. */}
-        <div ref={scrollRef} className={css.scroll} data-input-scroll>
-          <div className={css.grow}>
-            <ComposerContentEditable
-              editor={workspaceTrigger ? null : editor}
-              editable={editable}
-              standaloneText={staging ? draft : undefined}
-              onStandaloneInput={staging ? onStageDraft : undefined}
-              className={clsx(css.input, editorDisabled && css.inputDisabled)}
-              data-phase={input?.phase ?? 'inert'}
-              aria-disabled={editorDisabled || undefined}
-              data-placeholder={placeholderText}
-              // The placeholder was the textarea's accessible name; a div's
-              // data attribute is not, so the label restores it.
-              aria-label={workspaceTrigger ? t('hero.chooseWorkspace') : placeholderText}
-              aria-haspopup={workspaceTrigger ? 'menu' : undefined}
-              aria-expanded={workspaceTrigger ? workspacePickerOpen : undefined}
-              tabIndex={workspaceTrigger ? 0 : undefined}
-              onKeyDown={workspaceTrigger ? onWorkspaceKeyDown : undefined}
-              style={hint === null ? undefined : { '--dsh-composer-hint': JSON.stringify(hint) } as CSSProperties}
-            />
-            {empty && !claimActive && (
-              <div aria-hidden className={css.placeholder} data-composer-placeholder>
-                {placeholderText}
-              </div>
-            )}
-            <DecoratorPortals editor={workspaceTrigger ? null : editor} />
-          </div>
-        </div>
+        }, { fallback: renderInput() }) ?? renderInput()}
         <div className={css.row}>
           <div className={css.tools}>
             <Tooltip label={t('input.commands')} side="top" delayMs={500}>

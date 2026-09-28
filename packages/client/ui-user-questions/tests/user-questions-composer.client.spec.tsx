@@ -112,6 +112,7 @@ const kitBase: Omit<QuestionComposerProps, 'matched' | 'useStore' | 'actions'> =
   useInput: selector => selector(inputState),
   inputActions: {
     setDraft: () => { throw new Error('unused') },
+    appendReferences: () => true,
     addImages: () => { throw new Error('unused') },
     removeImage: () => { throw new Error('unused') },
     pruneImages: () => { throw new Error('unused') },

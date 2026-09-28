@@ -8,6 +8,11 @@ export interface WanweiNotice {
   text: string
 }
 
+/** Keep notice interactions from being treated as clicks outside the marketplace. */
+export function isNoticeTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('[data-wanwei-notice]') !== null
+}
+
 /** Product-owned transient feedback, outside the marketplace scroll area. */
 export function Toast({ notice, setNotice }: {
   notice: WanweiNotice | null
@@ -23,7 +28,7 @@ export function Toast({ notice, setNotice }: {
 
   if (notice === null) return null
   return (
-    <div className={css.toast} data-kind={notice.kind} role={notice.kind === 'error' ? 'alert' : 'status'}>
+    <div className={css.toast} data-wanwei-notice data-kind={notice.kind} role={notice.kind === 'error' ? 'alert' : 'status'}>
       <span className={css.icon} aria-hidden="true">{notice.kind === 'error' ? '!' : '✓'}</span>
       <span className={css.message}>{notice.text}</span>
       <button

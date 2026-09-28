@@ -18,7 +18,7 @@ describe('SkillHub marketplace workflow', () => {
     })
     const onUse = vi.fn()
     const view = render(<SkillHubSection active installedOnly={false} request={request} invoke={invoke} onUse={onUse} onCount={() => {}} />)
-    fireEvent.click(await screen.findByRole('button', { name: '查看详情' }))
+    fireEvent.click(await screen.findByRole('button', { name: /PDF 助手/ }))
     fireEvent.click(await screen.findByRole('button', { name: '安装' }))
     await screen.findByText('技能已安装，可以开始使用')
     expect(invoke).toHaveBeenCalledWith('install_skillhub_skill', expect.objectContaining({ archive: 'zip', record: expect.objectContaining({ slug: 'remote-pdf', version: '1.2' }) as unknown }))
@@ -31,7 +31,7 @@ describe('SkillHub marketplace workflow', () => {
     const invoke = vi.fn(async (command: string) => { if (command === 'uninstall_skillhub_skill') records = []; return records })
     const request = vi.fn(async () => { throw new Error('offline') })
     render(<SkillHubSection active installedOnly request={request} invoke={invoke} onUse={() => {}} onCount={() => {}} />)
-    fireEvent.click(await screen.findByRole('button', { name: '查看详情' }))
+    fireEvent.click(await screen.findByRole('button', { name: /PDF 助手/ }))
     fireEvent.click(screen.getByRole('button', { name: '卸载' }))
     await screen.findByText('技能已卸载')
     expect(request).not.toHaveBeenCalled()
@@ -49,5 +49,25 @@ describe('SkillHub marketplace workflow', () => {
     request.mockRejectedValue(new Error('网络异常'))
     fireEvent.click(screen.getByRole('button', { name: '搜索' }))
     expect((await screen.findByRole('alert')).textContent).toContain('网络异常')
+  })
+  it('updates the owned receipt and preserves pagination, search and scroll on return', async () => {
+    let records = [{ ...record, version: '1.0' }]
+    const request = vi.fn(async (operation: string) => operation === 'categories' ? { items: [] } : operation === 'list' ? page : operation === 'detail' ? skill : { archive: 'zip', slug: skill.slug, version: skill.version, sha256: 'hash' })
+    const invoke = vi.fn(async (command: string) => {
+      if (command === 'install_skillhub_skill') { records = [record]; return record }
+      return records
+    })
+    const view = render(<div className="dsh-skill-market-panel"><SkillHubSection active installedOnly={false} request={request} invoke={invoke} onUse={() => {}} onCount={() => {}} /></div>)
+    fireEvent.click(await screen.findByRole('button', { name: '下一页' }))
+    await waitFor(() => { expect(request).toHaveBeenCalledWith('list', expect.objectContaining({ page: 2 })) })
+    const panel = view.container.firstElementChild as HTMLElement
+    panel.scrollTop = 420
+    fireEvent.click(await screen.findByRole('button', { name: /PDF 助手/ }))
+    fireEvent.click(await screen.findByRole('button', { name: '更新技能' }))
+    await screen.findByText('技能已更新')
+    expect(invoke).toHaveBeenCalledWith('install_skillhub_skill', expect.objectContaining({ record: expect.objectContaining({ localSlug: 'pdf-helper', version: '1.2' }) as unknown }))
+    fireEvent.click(screen.getByRole('button', { name: /返回 SkillHub 列表/ }))
+    await waitFor(() => { expect(panel.scrollTop).toBe(420) })
+    expect(screen.getByText('第2 页')).toBeTruthy()
   })
 })
