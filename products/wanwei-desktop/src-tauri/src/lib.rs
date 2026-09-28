@@ -16,6 +16,7 @@ use tauri::{
     DragDropEvent, LogicalPosition, LogicalSize, Manager, State, WebviewBuilder, WebviewEvent,
     WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent,
 };
+use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
 mod expert_artifacts;
@@ -154,6 +155,10 @@ fn notify_skill_catalog_changed(app: &tauri::AppHandle) {
 /// telling the current page to request it again.
 fn wait_for_skill_catalog_observation() {
     std::thread::sleep(Duration::from_millis(400));
+}
+
+fn may_open_in_browser(url: &Url) -> bool {
+    matches!(url.scheme(), "http" | "https")
 }
 
 fn custom_skill_front_matter_value(text: &str, key: &str) -> Option<String> {
@@ -2230,6 +2235,7 @@ fn spawn_sidecar(
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         // A second launch only restores the existing window. Most
         // importantly, it never starts another Node sidecar that could keep
         // bundled runtime DLLs locked during the next installer upgrade.
@@ -2299,6 +2305,7 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            let browser_opener = app.handle().clone();
             let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
                 .title("万维Buddy")
                 .inner_size(1120.0, 720.0)
@@ -2306,6 +2313,17 @@ pub fn run() {
                 .resizable(false)
                 .maximizable(false)
                 .center()
+                .on_new_window(move |target, _features| {
+                    if may_open_in_browser(&target) {
+                        if let Err(error) = browser_opener
+                            .opener()
+                            .open_url(target.as_str(), None::<&str>)
+                        {
+                            eprintln!("无法在系统浏览器打开外部链接：{error}");
+                        }
+                    }
+                    tauri::webview::NewWindowResponse::Deny
+                })
                 // External pages may replace their document during login or
                 // navigation. Reinstall the small bridge on each document so
                 // client features do not fall back to WebView browser downloads.
@@ -2444,6 +2462,29 @@ mod expert_web_tests {
                 .unwrap()
                 .origin()
         );
+    }
+}
+
+#[cfg(test)]
+mod external_link_tests {
+    use super::may_open_in_browser;
+    use url::Url;
+
+    #[test]
+    fn opens_only_web_links_in_the_system_browser() {
+        for address in [
+            "https://docs.qq.com/scenario/open-claw.html?authType=1",
+            "http://example.com/",
+        ] {
+            assert!(may_open_in_browser(&Url::parse(address).unwrap()));
+        }
+        for address in [
+            "file:///private.txt",
+            "javascript:alert(1)",
+            "mailto:test@example.com",
+        ] {
+            assert!(!may_open_in_browser(&Url::parse(address).unwrap()));
+        }
     }
 }
 
