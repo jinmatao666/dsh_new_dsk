@@ -1,0 +1,47 @@
+.trigger {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-elevated);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.trigger:hover { border-color: var(--dsw-alias-primary); }
+.trigger:focus-visible { outline: 2px solid var(--dsw-alias-primary); outline-offset: 2px; }
+.trigger:disabled { cursor: default; opacity: .6; }
+.value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chevron { flex: none; width: 14px; height: 14px; color: var(--dsw-alias-label-secondary); }
+.trigger[aria-expanded='true'] .chevron { transform: rotate(180deg); }
+.list {
+  box-sizing: border-box;
+  position: fixed;
+  z-index: 1100;
+  max-height: min(280px, calc(100vh - 24px));
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-elevated);
+  box-shadow: 0 10px 28px rgb(15 23 42 / 13%);
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+.option {
+  overflow: hidden;
+  padding: 7px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.option.active { background: var(--dsw-alias-interactive-bg-hover); }
+.option[aria-selected='true'] { color: var(--dsw-alias-primary); }

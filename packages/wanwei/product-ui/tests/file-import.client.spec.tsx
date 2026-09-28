@@ -7,7 +7,7 @@ import { FileImportAction } from '../src/client/product.tsx'
 const desktopWindow = window as Window & { __ZJUGIS_NATIVE_INVOKE__?: (command: string, args?: unknown) => Promise<unknown> }
 afterEach(() => { cleanup(); delete desktopWindow.__ZJUGIS_NATIVE_INVOKE__ })
 
-function bench() {
+function bench(inCard = false) {
   const appendReferences = vi.fn(() => true)
   const setDraft = vi.fn()
   const invoke = vi.fn(async () => ['3 (1).txt'])
@@ -17,10 +17,20 @@ function bench() {
     useWorkspaces: (select: (state: unknown) => unknown) => select({ items: [{ path: 'workspace', sessionIds: ['session'] }] }),
     inputActions: { appendReferences, setDraft },
   } as unknown as ComponentProps<typeof FileImportAction>
-  return { ...render(<FileImportAction {...props} />), appendReferences, setDraft, invoke }
+  return { ...render(inCard ? <div data-composer-card><FileImportAction {...props} /></div>
+    : <FileImportAction {...props} />), appendReferences, setDraft, invoke }
 }
 
 describe('desktop file import', () => {
+  it('anchors the drag invitation to the composer card and clears it on leave', () => {
+    const view = bench(true)
+    fireEvent(window, new Event('dsh:native-file-drag-enter'))
+    const overlay = view.getByRole('status')
+    expect(overlay.closest('[data-composer-card]')).toBe(view.container.firstElementChild)
+    expect(overlay.parentElement).toBe(view.container.firstElementChild)
+    fireEvent(window, new Event('dsh:native-file-drag-leave'))
+    expect(view.queryByRole('status')).toBeNull()
+  })
   it('uses structured chips for picker imports', async () => {
     const view = bench()
     const file = new File(['text'], '3 (1).txt')

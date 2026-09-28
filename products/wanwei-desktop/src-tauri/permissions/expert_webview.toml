@@ -1,4 +1,9 @@
 [[permission]]
+identifier = "allow-maximize-expert-window"
+description = "Allows the trusted main webview to maximize the window before opening an expert workspace."
+commands.allow = ["maximize_expert_window"]
+
+[[permission]]
 identifier = "allow-open-expert-webview"
 description = "Allows the trusted main webview to open a published expert website as a child webview."
 commands.allow = ["open_expert_webview"]

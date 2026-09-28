@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-27-wanwei-skillhub-market.md
-2026-09-27-wanwei-skillhub-market.md: e6931ddb482bada9ef6d1f26bcb8b370ef8cb68f
-2026-09-27-wanwei-skillhub-market.zh.md: 23050f144a7d922f27e12fdc5a70810fc1467443
+2026-09-27-wanwei-skillhub-market.md: 248eda0a01fcfeb47c2fe8ae4259d891c609e82e
+2026-09-27-wanwei-skillhub-market.zh.md: d141233796c2904a4eb282f45dc783e650038710

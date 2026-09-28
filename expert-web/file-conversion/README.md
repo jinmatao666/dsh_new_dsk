@@ -10,6 +10,8 @@ Compose pins the container's listening port to match its loopback-only port mapp
 
 ## Standalone verification
 
+The public website origin and platform redemption endpoint support HTTP and HTTPS. HTTPS remains recommended: HTTP exposes tickets, provider credentials, cookies and task data to interception or modification. Origin checks still include scheme, hostname and port; redemption refuses redirects. Upgrading from HTTPS-only code requires rebuilding the platform image and desktop package as well as redeploying this website. Existing HTTPS proxy examples remain usable; prior HTTPS-only wording is superseded by this support policy, not by a claim of encrypted HTTP.
+
 Operators can run `python deployment.py` to check configuration and local processing dependencies. It prints check names and pass states, not secrets or endpoint addresses. `/healthz` checks HTTP and database availability; `/readyz` checks configuration and returns 503 when it is missing. Readiness does not prove live remote connectivity. The Dockerfile includes a liveness check.
 
 In an updated desktop expert Tab, artifact downloads use the native `save_expert_artifact` command to write to the user's Downloads directory. The limit is 128 MB; it accepts no local destination path and does not overwrite a same-name file. Normal browsers retain browser downloading. Byte forwarding and native saving have tests, but actual desktop clicks across platforms still require acceptance.
@@ -71,4 +73,4 @@ Copy `.env.example` to `.env`, configure real HTTPS addresses and server-side cr
 Only the server may call `processors.convert` with its owned upload paths and a new task output directory; the browser cannot supply local paths. A failed conversion may leave partial files; the task service marks the task failed and publishes only successful outputs. Never return underlying exceptions, server paths or provider keys to the browser.
 
 Word-to-PDF conversion uses LibreOffice on the independent server, not Word/WPS on the user's computer. The webpage and deployment instructions must disclose this difference. Review PyMuPDF licensing and commercial deployment rights before production use.
-Navigation and record icons use the same site-owned SVG set. The usage guide uses an introduction banner and four instruction cards, retaining this expert’s input limits and review requirements. No runtime assets or styles are imported from another expert.
+The four navigation icons are site-owned copies of the original expert PNG artwork. The usage guide uses an introduction banner and four instruction cards, retaining this expert’s input limits and review requirements. No runtime assets or styles are imported from another expert.

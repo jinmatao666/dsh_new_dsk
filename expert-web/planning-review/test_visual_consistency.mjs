@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import test from 'node:test'
 
-test('guide uses four instruction cards and navigation uses consistent vector icons', () => {
+test('guide uses four instruction cards and navigation uses original expert icons', () => {
   const main = { innerHTML: '', querySelectorAll: () => [], classList: { toggle() {} } }
   const context = vm.createContext({
     document: { querySelector: () => main, querySelectorAll: () => [] },
@@ -23,5 +23,5 @@ test('guide uses four instruction cards and navigation uses consistent vector ic
   const nav = html.match(/<nav>(.*?)<\/nav>/s)[1]
   assert.equal((nav.match(/class="ui-icon"/g) || []).length, 4)
   assert.equal((nav.match(/aria-hidden="true"/g) || []).length, 4)
-  assert.doesNotMatch(nav, /<img/)
+  assert.equal((nav.match(/<img /g) || []).length, 4)
 })

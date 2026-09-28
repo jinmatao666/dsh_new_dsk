@@ -25,7 +25,7 @@ export interface SkillHubSectionProps {
   active: boolean
   installedOnly: boolean
   installedQuery?: string
-  installedPlatforms?: readonly { id: string; searchText: string; card: ReactNode }[]
+  installedPlatforms?: readonly { id: string; slug: string; name: string; summary: string; searchText: string; card: ReactNode }[]
   request: (operation: string, payload: unknown) => Promise<unknown>
   invoke: (command: string, args: Record<string, unknown>) => Promise<unknown>
   onUse: (slug: string, name: string) => void
@@ -240,8 +240,14 @@ export function SkillHubSection({
     new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }).compare(selected.version, selectedRecord.version) > 0
 
   const integrated = installedOnly && installedPlatforms !== undefined
+  const sameSkill = (platform: NonNullable<typeof installedPlatforms>[number], receipt: Installed) =>
+    platform.slug === receipt.slug || platform.slug === receipt.localSlug
+    || (platform.name.trim().toLocaleLowerCase() === receipt.name.trim().toLocaleLowerCase()
+      && platform.summary.trim() === receipt.summary.trim())
   const installedCards: { key: string; text: string; source: string; card?: ReactNode; skill?: Skill }[] = [
-    ...(installedPlatforms ?? []).map(item => ({ key: `platform:${item.id}`, text: item.searchText, source: 'platform', card: item.card })),
+    ...(installedPlatforms ?? []).filter(item => installedSource === 'platform'
+      || !installed.some(receipt => sameSkill(item, receipt)))
+      .map(item => ({ key: `platform:${item.id}`, text: item.searchText, source: 'platform', card: item.card })),
     ...cards.map(skill => ({ key: `skillhub:${skill.slug}`, text: `${skill.name} ${skill.summary}`, source: 'skillhub', skill })),
   ].filter(item => (installedSource === '' || item.source === installedSource)
     && item.text.toLowerCase().includes(installedSearch.toLowerCase()))
@@ -282,10 +288,11 @@ export function SkillHubSection({
         categories={categories} category={category} onCategory={(value) => { setCategory(value); setPage(1) }}
         sort={sort} onSort={(value) => { setSort(value); setPage(1) }}
         page={page} pages={Math.max(page, Math.ceil(data.total / 12))} loading={loading} onPage={setPage} />}
-      {!installedOnly && loading ? <p role="status">{productText('正在加载 SkillHub 技能…')}</p> : !installedOnly && error ? <div role="alert"><p>{error}</p><button type="button" onClick={() => { setRetry(v => v + 1) }}>{productText('重试')}</button></div> : <>
+      {!installedOnly && error ? <div role="alert"><p>{error}</p><button type="button" onClick={() => { setRetry(v => v + 1) }}>{productText('重试')}</button></div> : <div className="wanwei-skillhub-results" aria-busy={loading}>
+        {loading && <p role="status" className="wanwei-skillhub-loading">{productText('正在加载 SkillHub 技能…')}</p>}
         <div className="dsh-skill-grid">{visibleCards.map(item => item.skill ? renderHubCard(item.skill) : item.card)}</div>
-        {visibleCards.length === 0 && <p>{integrated ? productText('没有匹配的技能') : installedOnly ? productText('暂未安装 SkillHub 技能') : productText('没有找到相关技能，试试其他关键词或分类。')}</p>}
-      </>}
+        {!loading && visibleCards.length === 0 && <p>{integrated ? productText('没有匹配的技能') : installedOnly ? productText('暂未安装 SkillHub 技能') : productText('没有找到相关技能，试试其他关键词或分类。')}</p>}
+      </div>}
     </>
     {selected && <div className="wanwei-skillhub-detail-page" role="region" aria-label={selected.name}>
       <div className="dsh-skill-detail">

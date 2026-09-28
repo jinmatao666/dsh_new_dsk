@@ -24,13 +24,35 @@ describe('published expert launch ownership', () => {
 
   it('opens an unknown published expert in the native Tab', async () => {
     const launchExpert = vi.fn(async () => launch)
-    render(<ExpertMarket loadExperts={loadExperts} launchExpert={launchExpert} />)
+    const prepareExpertWorkspace = vi.fn(async () => {})
+    render(<ExpertMarket loadExperts={loadExperts} launchExpert={launchExpert} prepareExpertWorkspace={prepareExpertWorkspace} />)
     fireEvent.click(await screen.findByRole('button', { name: '动态专家' }))
     fireEvent.click(screen.getByRole('button', { name: '开始使用' }))
     expect(await screen.findByTestId('native-expert')).toBeTruthy()
     expect(launchExpert).toHaveBeenCalledWith('brand-new-expert')
+    expect(prepareExpertWorkspace).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '动态专家' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '关闭动态专家标签' }))
     expect(screen.queryByTestId('native-expert')).toBeNull()
+    expect(screen.getByRole('button', { name: '动态专家' })).toBeTruthy()
+  })
+
+  it('keeps a launched expert usable if window maximization fails', async () => {
+    const prepareExpertWorkspace = vi.fn(async () => { throw new Error('window unavailable') })
+    render(<ExpertMarket loadExperts={loadExperts} launchExpert={async () => launch} prepareExpertWorkspace={prepareExpertWorkspace} />)
+    fireEvent.click(await screen.findByRole('button', { name: '动态专家' }))
+    fireEvent.click(screen.getByRole('button', { name: '开始使用' }))
+    expect(await screen.findByTestId('native-expert')).toBeTruthy()
+    expect(prepareExpertWorkspace).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not change the window layout when the expert launch fails', async () => {
+    const prepareExpertWorkspace = vi.fn(async () => {})
+    render(<ExpertMarket loadExperts={loadExperts} launchExpert={async () => { throw new Error('launch failed') }} prepareExpertWorkspace={prepareExpertWorkspace} />)
+    fireEvent.click(await screen.findByRole('button', { name: '动态专家' }))
+    fireEvent.click(screen.getByRole('button', { name: '开始使用' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('launch failed')
+    expect(prepareExpertWorkspace).not.toHaveBeenCalled()
   })
 
   it.each(['resolve', 'reject'] as const)('ignores a %s arriving after logout', async (settlement) => {

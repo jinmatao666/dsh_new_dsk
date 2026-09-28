@@ -20,6 +20,16 @@ def valid_url(value, internal=False, origin=False):
         return False
 
 
+def local_model_url(value):
+    try:
+        parsed = urlsplit(value)
+        return (parsed.scheme == "http" and parsed.hostname in ("127.0.0.1", "::1")
+                and parsed.port == 20330 and parsed.path == "/v1/chat/completions"
+                and not parsed.username and not parsed.password and not parsed.query and not parsed.fragment)
+    except ValueError:
+        return False
+
+
 def configured(name):
     value = os.environ.get(name, "").strip()
     return bool(value) and not value.startswith("replace-with-")
@@ -35,14 +45,15 @@ def executable(variable, fallback):
 
 def checks():
     result = {
-        "public_origin": valid_url(os.environ.get("EXPERT_PUBLIC_URL", ""), origin=True),
-        "identity_endpoint": valid_url(os.environ.get("EXPERT_PLATFORM_REDEEM_URL", "")),
+        "public_origin": valid_url(os.environ.get("EXPERT_PUBLIC_URL", ""), internal=True, origin=True),
+        "identity_endpoint": valid_url(os.environ.get("EXPERT_PLATFORM_REDEEM_URL", ""), internal=True),
         "provider_credential": configured("EXPERT_PROVIDER_CREDENTIAL"),
     }
     result["gis_url"] = valid_url(os.environ.get("EXPERT_GIS_URL", ""), internal=True)
-    result["model_url"] = valid_url(os.environ.get("EXPERT_MODEL_URL", ""))
+    model_url = os.environ.get("EXPERT_MODEL_URL", "")
+    result["model_url"] = valid_url(model_url) or local_model_url(model_url)
     result["model_id"] = configured("EXPERT_MODEL")
-    result["model_key"] = configured("EXPERT_MODEL_KEY")
+    result["model_key"] = local_model_url(model_url) or configured("EXPERT_MODEL_KEY")
     return result
 
 

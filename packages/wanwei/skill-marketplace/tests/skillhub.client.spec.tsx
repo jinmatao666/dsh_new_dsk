@@ -55,7 +55,8 @@ describe('SkillHub marketplace workflow', () => {
 
   it('combines installations into twelve-card pages with source selection and scoped search', async () => {
     const platforms = Array.from({ length: 13 }, (_, index) => ({
-      id: `p-${index}`, searchText: `平台 ${index}`, card: <article key={`p-${index}`} data-platform>{`平台 ${index}`}</article>,
+      id: `p-${index}`, slug: `p-${index}`, name: `平台 ${index}`, summary: '',
+      searchText: `平台 ${index}`, card: <article key={`p-${index}`} data-platform>{`平台 ${index}`}</article>,
     }))
     const request = vi.fn(async () => { throw new Error('offline') })
     const view = render(<SkillHubSection active installedOnly installedPlatforms={platforms} request={request}
@@ -66,10 +67,12 @@ describe('SkillHub marketplace workflow', () => {
     expect(screen.getByText('平台 12')).toBeTruthy()
     expect(await screen.findByRole('button', { name: /PDF 助手/ })).toBeTruthy()
     expect(view.container.querySelector('.dsh-skill-grid')?.children).toHaveLength(2)
-    fireEvent.change(screen.getByLabelText('搜索技能 / 全部技能'), { target: { value: 'skillhub' } })
+    fireEvent.click(screen.getByRole('combobox', { name: '搜索技能 / 全部技能' }))
+    fireEvent.click(screen.getByRole('option', { name: 'SkillHub技能' }))
     expect(screen.getByText('第1 页 / 1')).toBeTruthy()
     expect(view.container.querySelectorAll('[data-platform]')).toHaveLength(0)
-    fireEvent.change(screen.getByLabelText('搜索技能 / 全部技能'), { target: { value: 'platform' } })
+    fireEvent.click(screen.getByRole('combobox', { name: '搜索技能 / 全部技能' }))
+    fireEvent.click(screen.getByRole('option', { name: '平台技能' }))
     expect(view.container.querySelectorAll('[data-platform]')).toHaveLength(12)
     fireEvent.change(screen.getByLabelText('搜索技能'), { target: { value: '平台 12' } })
     fireEvent.submit(screen.getByLabelText('搜索技能').closest('form')!)
@@ -81,7 +84,8 @@ describe('SkillHub marketplace workflow', () => {
 
   it('clamps the unified page after uninstalling its last receipt', async () => {
     const platforms = Array.from({ length: 12 }, (_, index) => ({
-      id: `p-${index}`, searchText: `平台 ${index}`, card: <article key={`p-${index}`}>{`平台 ${index}`}</article>,
+      id: `p-${index}`, slug: `p-${index}`, name: `平台 ${index}`, summary: '',
+      searchText: `平台 ${index}`, card: <article key={`p-${index}`}>{`平台 ${index}`}</article>,
     }))
     let records = [record]
     const invoke = vi.fn(async (command: string) => { if (command === 'uninstall_skillhub_skill') records = []; return records })
@@ -96,6 +100,32 @@ describe('SkillHub marketplace workflow', () => {
     expect(screen.getByText('平台 0')).toBeTruthy()
   })
 
+  it('shows one card for the same installed skill from both sources and keeps the other installation after removal', async () => {
+    const platform = {
+      id: 'published-pdf', slug: 'published-pdf', name: skill.name, summary: skill.summary,
+      searchText: skill.name, card: <article data-platform>{skill.name}</article>,
+    }
+    let records = [record]
+    const invoke = vi.fn(async (command: string) => {
+      if (command === 'uninstall_skillhub_skill') records = []
+      return records
+    })
+    const view = render(<SkillHubSection active installedOnly installedPlatforms={[platform]}
+      request={vi.fn()} invoke={invoke} onUse={() => {}} onCount={() => {}} />)
+    await screen.findByRole('button', { name: /PDF 助手/ })
+    expect(view.container.querySelector('.dsh-skill-grid')?.children).toHaveLength(1)
+    expect(view.container.querySelector('[data-platform]')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /PDF 助手/ }))
+    fireEvent.click(screen.getByRole('button', { name: '卸载' }))
+    await screen.findByText('卸载成功')
+    expect(view.container.querySelectorAll('[data-platform]')).toHaveLength(1)
+    expect(screen.queryByText('没有匹配的技能')).toBeNull()
+    view.rerender(<SkillHubSection active installedOnly installedPlatforms={[]}
+      request={vi.fn()} invoke={invoke} onUse={() => {}} onCount={() => {}} />)
+    expect(view.container.querySelector('.dsh-skill-grid')?.children).toHaveLength(0)
+    expect(screen.getByText('没有匹配的技能')).toBeTruthy()
+  })
+
   it('keeps twelve remote cards and local page controls, without source badges', async () => {
     const items = Array.from({ length: 12 }, (_, index) => ({ ...skill, slug: `skill-${index}`, name: `技能 ${index}`, downloads: index }))
     const request = vi.fn(async (operation: string) => operation === 'categories'
@@ -106,12 +136,46 @@ describe('SkillHub marketplace workflow', () => {
     expect(view.container.querySelectorAll('.wanwei-skillhub-card')).toHaveLength(12)
     expect(view.container.querySelector('.wanwei-skillhub-card .dsh-skill-source')).toBeNull()
     expect(view.container.querySelector('.wanwei-skillhub-card small svg')).not.toBeNull()
-    expect(screen.getByRole('button', { name: '下一页' }).closest('form')).not.toBeNull()
+    expect(screen.getByRole('button', { name: '下一页' }).closest('.dsh-skill-catalog-toolbar')).not.toBeNull()
     expect(screen.queryByRole('button', { name: '搜索' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '下一页' }))
     await waitFor(() => { expect(request).toHaveBeenCalledWith('list', expect.objectContaining({ page: 2 })) })
-    fireEvent.change(screen.getByLabelText('搜索 SkillHub 技能 / 热门下载'), { target: { value: 'updated_at' } })
+    fireEvent.click(screen.getByRole('combobox', { name: '搜索 SkillHub 技能 / 热门下载' }))
+    fireEvent.click(screen.getByRole('option', { name: '最近更新' }))
     await waitFor(() => { expect(request).toHaveBeenCalledWith('list', expect.objectContaining({ page: 1, sort: 'updated_at' })) })
+  })
+  it('requests the chosen SkillHub page directly', async () => {
+    const request = vi.fn(async (operation: string) => operation === 'categories' ? { items: [] }
+      : { items: [skill], total: 120, pageSize: 12 })
+    render(<SkillHubSection active installedOnly={false} request={request}
+      invoke={async () => []} onUse={() => {}} onCount={() => {}} />)
+    await screen.findByRole('button', { name: /PDF 助手/ })
+    fireEvent.change(screen.getByRole('textbox', { name: '跳转页码' }), { target: { value: '7' } })
+    fireEvent.submit(screen.getByRole('textbox', { name: '跳转页码' }).closest('form')!)
+    await waitFor(() => { expect(request).toHaveBeenCalledWith('list', expect.objectContaining({ page: 7 })) })
+    expect(screen.getByRole('button', { name: '第7 页' }).getAttribute('aria-current')).toBe('page')
+  })
+  it('keeps the previous grid in place while the next SkillHub page loads', async () => {
+    let finishPage: (value: unknown) => void = () => {}
+    const nextPage = new Promise<unknown>((resolve) => { finishPage = resolve })
+    const request = vi.fn(async (operation: string, payload: unknown) => {
+      if (operation === 'categories') return { items: [] }
+      if (operation === 'list') return (payload as { page: number }).page === 1
+        ? { items: [skill], total: 24, pageSize: 12 } : nextPage
+      return skill
+    })
+    const view = render(<div className="dsh-skill-market-panel"><SkillHubSection active installedOnly={false}
+      request={request} invoke={async () => []} onUse={() => {}} onCount={() => {}} /></div>)
+    await screen.findByRole('button', { name: /PDF 助手/ })
+    const panel = view.container.firstElementChild as HTMLElement
+    panel.scrollTop = 420
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+    await screen.findByText('正在加载 SkillHub 技能…')
+    expect(screen.getByRole('button', { name: /PDF 助手/ })).toBeTruthy()
+    expect(panel.scrollTop).toBe(420)
+    finishPage({ items: [{ ...skill, slug: 'next-pdf', name: '下一页技能' }], total: 24, pageSize: 12 })
+    await screen.findByRole('button', { name: /下一页技能/ })
+    expect(panel.scrollTop).toBe(420)
   })
   it('downloads, installs and uses the actual local name; details cannot inject styles', async () => {
     let records: unknown[] = []

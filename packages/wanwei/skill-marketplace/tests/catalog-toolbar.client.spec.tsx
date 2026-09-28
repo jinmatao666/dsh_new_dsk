@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { useState } from 'react'
 import { CatalogToolbar } from '../src/client/CatalogToolbar.tsx'
 import { pagePlatformCatalog } from '../src/client/catalog.ts'
 
@@ -14,12 +15,40 @@ describe('catalog-local controls', () => {
       onSearch={onSearch} categories={[]} category="" onCategory={vi.fn()} sort="downloads" onSort={vi.fn()}
       page={1} pages={2} onPage={onPage} />)
     expect(screen.queryByRole('button', { name: '搜索' })).toBeNull()
-    fireEvent.submit(screen.getByRole('textbox').closest('form')!)
+    fireEvent.submit(screen.getByRole('textbox', { name: '搜索平台技能' }).closest('form')!)
     expect(onSearch).toHaveBeenCalledOnce()
     expect(screen.getByRole('button', { name: '上一页' }).hasAttribute('disabled')).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: '下一页' }))
     expect(onPage).toHaveBeenCalledWith(2)
-    expect(view.container.querySelector('form')?.contains(screen.getByText('第1 页 / 2'))).toBe(true)
+    expect(view.container.querySelector('.dsh-skill-catalog-toolbar')?.contains(screen.getByText('第1 页 / 2'))).toBe(true)
+  })
+
+  it('offers direct page selection and a validated jump without changing the market scroll position', () => {
+    const onPage = vi.fn()
+    function Harness() {
+      const [page, setPage] = useState(6)
+      return <div className="dsh-skill-market-panel"><CatalogToolbar searchLabel="搜索平台技能"
+        keyword="" onKeyword={vi.fn()} onSearch={vi.fn()} categories={[]} category="" onCategory={vi.fn()}
+        page={page} pages={14280} onPage={(value) => {
+          document.querySelector<HTMLElement>('.dsh-skill-market-panel')!.scrollTop = 0
+          setPage(value)
+          onPage(value)
+        }} /></div>
+    }
+    const view = render(<Harness />)
+    const panel = view.container.firstElementChild!
+    panel.scrollTop = 420
+    expect(screen.getByRole('button', { name: '第6 页' }).getAttribute('aria-current')).toBe('page')
+    fireEvent.click(screen.getByRole('button', { name: '第7 页' }))
+    expect(onPage).toHaveBeenCalledWith(7)
+    expect(panel.scrollTop).toBe(420)
+    fireEvent.change(screen.getByRole('textbox', { name: '跳转页码' }), { target: { value: '125' } })
+    fireEvent.submit(screen.getByRole('textbox', { name: '跳转页码' }).closest('form')!)
+    expect(onPage).toHaveBeenCalledWith(125)
+    expect(panel.scrollTop).toBe(420)
+    fireEvent.change(screen.getByRole('textbox', { name: '跳转页码' }), { target: { value: '14281' } })
+    fireEvent.submit(screen.getByRole('textbox', { name: '跳转页码' }).closest('form')!)
+    expect(onPage).toHaveBeenCalledTimes(2)
   })
 
   it('pages twelve platform skills without mutating the source or displaying the next page', () => {

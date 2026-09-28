@@ -25,7 +25,22 @@
 .wanwei-product-file-button { display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:9px;background:transparent;color:var(--dsw-alias-label-secondary);font:300 25px/1 sans-serif;cursor:pointer; }
 .wanwei-product-file-button:hover { background:var(--dsw-static-deepseek-100);color:var(--dsw-static-deepseek-600); }
 .wanwei-product-file-button:disabled { cursor:wait;opacity:.45; }
-.wanwei-product-drop-overlay { position:fixed;z-index:10000;inset:48px 16px 16px 366px;display:grid;place-items:center;border:1px dashed var(--dsw-alias-state-business-primary);border-radius:14px;background:color-mix(in srgb,var(--dsw-specific-sidebar-fill) 88%,transparent);color:var(--dsw-alias-state-business-primary);font-size:13px;font-weight:500;pointer-events:none; }
+.wanwei-product-drop-overlay {
+  position: absolute;
+  z-index: 2;
+  inset: -1px;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  border: 1px dashed var(--dsw-alias-state-business-primary);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--dsw-specific-input-major) 94%, transparent);
+  color: var(--dsw-alias-state-business-primary);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  pointer-events: none;
+}
 .wanwei-product-import-status { position:fixed;z-index:10001;right:24px;bottom:24px;padding:8px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-secondary);box-shadow:0 6px 20px rgb(0 0 0 / 10%);font-size:12px; }
 .wanwei-product-import-status[data-error='true'] { color:var(--dsw-alias-state-error-primary); }
 [data-composer-chip] [data-reference-kind="skill"] {

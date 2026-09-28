@@ -13,23 +13,23 @@
     },
     {
       "filename": "home.png",
-      "source": "MeetingIconData.ts:workbench",
-      "sha256": "14fa5a577ea6293c460af66c775ade3dcdf7920e4be00b5735b5fe5fa20d7ee1"
+      "source": "GeologyIconData.ts:workspace",
+      "sha256": "473d3039f43ac5412c3149ad7719df1dd8a28ddb39509335cb10b75351d7fbe2"
     },
     {
       "filename": "history.png",
-      "source": "MeetingIconData.ts:history",
-      "sha256": "1930b1e2a696083537f5aa66b5f15da1e634b7847016a93d167d82a8c73de423"
+      "source": "GeologyIconData.ts:history",
+      "sha256": "32e4d994795bd336ccc0a9809e3c61e1d3a119aa40503c1bc526a8560c680be4"
     },
     {
       "filename": "files.png",
-      "source": "MeetingIconData.ts:files",
-      "sha256": "82cb9bb16aa98363dd1f58c428a9069434553d5eca49ae72e846536f1b8e4c2b"
+      "source": "GeologyIconData.ts:files",
+      "sha256": "1f9a5c0a2e2f9b3180485827d8146beb51458a035d365cfb2963e95c02f6e639"
     },
     {
       "filename": "guide.png",
-      "source": "MeetingIconData.ts:guide",
-      "sha256": "b8a1b875057e9cb038cf603e9971fc15e9416040b09d0173f38dc6c7744cbec3"
+      "source": "GeologyIconData.ts:guide",
+      "sha256": "1e531b5af67aca480b8004441871eb4601b89ab4446b356addfe5392fff92ff2"
     },
     {
       "filename": "audio.png",

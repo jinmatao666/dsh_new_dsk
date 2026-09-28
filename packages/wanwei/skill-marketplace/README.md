@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
 
 The Wanwei desktop can browse published skills, manage its local installations and review personal uploads through this plugin. It can also discover any published independent expert website from OneAPI and open its workbench in a main-window Tab. The plugin does not own an expert's task history or result files; each website stores those records.
 
+Published expert cards use administrator-configured names, subtitles, summaries, tags, and uploaded images. The detail dialog uses the same image plus the configured detail panels and footer note; older records without panels retain their fallback presentation.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)
@@ -33,7 +35,11 @@ Use the Wanwei product profile when the desktop needs the OneAPI-backed catalog 
 
 The market contains official-platform-only recommendations, all published platform skills and a separate SkillHub section. Each catalog owns its Enter-submitted search, category, sort and twelve-card pagination in a compact toolbar; platform search hides recommendations and does not filter SkillHub. Popular sorting uses download counts; platform latest-update sorting requires backend timestamps and keeps undated entries in server order after dated entries. SkillHub cards share the platform download glyph without a repeated source badge, and details open at page level while preserving list position. My installations includes local SkillHub receipts and supports offline use, removal and manual updates. [The SkillHub adapter](../skillhub/README.md) owns upstream requests and limits.
 
-My installations combines platform/local skills and SkillHub receipts into one twelve-card list. Its toolbar contains Enter-submitted search, a single source selector and pagination; filtering resets to page one, and removal clamps the page to the remaining results. This view reads local receipts without requesting the upstream catalog.
+Platform and SkillHub toolbars show nearby page numbers, the first and last page, and a bounded page-number jump. Paging, search and filters preserve the market panel's scroll position. SkillHub keeps the previous cards visible while the requested page loads so the panel does not collapse between requests.
+
+Catalog and installation filters share the rounded dropdown control with desktop settings fields. The list is positioned above or below its trigger according to available space, without the operating system's square native popup.
+
+My installations combines platform/local skills and SkillHub receipts into one twelve-card list. Matching cross-source installations appear as one card in the combined view; the source selector still exposes each installation separately. Its toolbar contains Enter-submitted search, a single source selector and pagination; filtering resets to page one, and removal clamps the page to the remaining results. Native skill-catalog changes refresh platform installation states alongside SkillHub receipts, so removal does not leave a stale installed card. Cards open skill details; removal and updates are available there instead of on the cards. This view reads local receipts without requesting the upstream catalog.
 
 ### Composition
 

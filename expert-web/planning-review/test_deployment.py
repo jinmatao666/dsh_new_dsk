@@ -3,10 +3,15 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-from deployment import checks, configured, ready, valid_url
+from deployment import checks, configured, local_model_url, ready, valid_url
 
 
 class DeploymentTests(unittest.TestCase):
+    def test_local_xinference_is_the_only_http_model_exception(self):
+        self.assertTrue(local_model_url("http://127.0.0.1:20330/v1/chat/completions"))
+        self.assertFalse(local_model_url("http://example.org:20330/v1/chat/completions"))
+        self.assertFalse(local_model_url("http://127.0.0.1:20331/v1/chat/completions"))
+
     def test_compose_pins_the_port_used_by_its_loopback_mapping(self):
         compose = Path(__file__).with_name("compose.yml").read_text(encoding="utf-8")
         self.assertIn('      PORT: "4306"', compose)

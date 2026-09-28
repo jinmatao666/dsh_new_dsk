@@ -7,6 +7,18 @@ from deployment import checks, configured, local_asr_url, ready, valid_asr_url, 
 
 
 class DeploymentTests(unittest.TestCase):
+    def test_build_downloads_use_overridable_mirrors_without_disabling_verification(self):
+        dockerfile = Path(__file__).with_name("Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("ARG PYTHON_IMAGE=m.daocloud.io/docker.io/library/python:3.13-slim-bookworm", dockerfile)
+        self.assertIn("FROM ${PYTHON_IMAGE}", dockerfile)
+        self.assertIn("ARG DEBIAN_MIRROR=https://mirrors.tuna.tsinghua.edu.cn", dockerfile)
+        self.assertIn("/etc/apt/sources.list.d/debian.sources", dockerfile)
+        self.assertIn("ARG PIP_INDEX_URL=https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple", dockerfile)
+        self.assertIn('--index-url "${PIP_INDEX_URL}"', dockerfile)
+        for bypass in ("--trusted-host", "--allow-unauthenticated", "Verify-Peer=false"):
+            self.assertNotIn(bypass, dockerfile)
+        self.assertLess(dockerfile.index("COPY requirements.txt"), dockerfile.index("COPY extract.py"))
+
     def test_compose_pins_the_port_used_by_its_loopback_mapping(self):
         compose = Path(__file__).with_name("compose.yml").read_text(encoding="utf-8")
         self.assertIn('      PORT: "4303"', compose)

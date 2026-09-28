@@ -12,11 +12,11 @@ Expert workbenches embedded in the desktop source require a desktop release for 
 
 Keep each expert's frontend, task backend, history, files, dependencies, tests and deployment configuration in its own child of `expert-web/`. Copy eligible legacy artwork into that child. No expert imports DSH, OneAPI or another expert's source. The platform owns only the published catalog and identity exchange; websites own task records and results.
 
-The OneAPI administrator registers HTTPS workbench URLs dynamically. The desktop opens a published expert in a child Webview within the main-window Tab. The platform exchanges a short-lived, one-use ticket for a user ID through the website backend; it does not send the desktop token, model credentials or installation identity to the website.
+The OneAPI administrator registers HTTP or HTTPS workbench URLs dynamically. The desktop opens a published expert in a child Webview within the main-window Tab. The platform exchanges a short-lived, one-use ticket for a user ID through the website backend; it does not send the desktop token, model credentials or installation identity to the website. HTTP support is an explicit deployment compromise: scheme, hostname and port remain part of the approved origin, and redemption does not follow redirects. HTTPS remains recommended.
 
 The Wanwei product owns native commands and origin-specific capabilities. Official DSH packages receive only generic extension points when necessary. Publishing an expert grants privileged desktop access, so operators must review the deployed origin and scripts before publishing it. Navigation remains on the approved origin, and website CSP blocks third-party scripts and frames.
 
-The meeting-minutes website may use an unauthenticated Xinference transcription endpoint only when it is bound to loopback on the same Linux host. Its separate host-network Compose configuration binds the workbench itself to loopback for an HTTPS reverse proxy; external ASR endpoints retain HTTPS and server-side credentials. The text-generation model remains separately configured.
+The meeting-minutes website may use unauthenticated Xinference transcription and text-generation endpoints only on loopback on the same Linux host. Its separate host-network Compose configuration binds the workbench itself to loopback, defaulting to port 3301, for an HTTP or HTTPS reverse proxy or SSH forwarding. External model and ASR endpoints retain HTTPS and server-side credentials. The deployment template uses the public platform redemption endpoint at `http://ac.zjugis.com:3300/api/expert-web/redeem`; the provider credential must be supplied separately.
 
 ## Alternatives considered
 
@@ -49,6 +49,8 @@ Presentation rerenders preserve the expert website session rather than redeeming
 Logout and catalog disposal invalidate outstanding launch requests before accepting their responses. A late response must not resurrect a privileged expert view or replace a current error notice. Component tests exercise successful dynamic discovery and both delayed success and failure after logout; native and Loader acceptance remain separate.
 
 ## Risks
+
+Public HTTP exposes tickets, provider credentials, session cookies and task data to interception or modification in transit. Single-use tickets and origin checks do not remove that risk, especially because approved expert origins receive native capabilities. Use only for the explicitly accepted HTTP deployment, avoid redirects, and move to HTTPS when available. Configuration and local HTTP tests do not establish public connectivity or cross-platform Webview acceptance.
 
 The current local checks do not establish production readiness. Live model, ASR and GIS endpoints, container execution, actual LibreOffice conversion, complete visual comparison and cross-platform native interaction still require acceptance. SQLite identity tests do not prove behavior on a different production database.
 

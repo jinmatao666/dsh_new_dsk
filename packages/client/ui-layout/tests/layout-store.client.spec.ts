@@ -61,6 +61,22 @@ describe('createLayoutStore', () => {
     expect(store.getSnapshot().sidebar).toBe(400)
   })
 
+  it('closeSidebar is idempotent in wide and narrow layouts', () => {
+    const { store, actions } = createLayoutStore().create()
+    actions.setSidebar(400)
+    actions.closeSidebar()
+    actions.closeSidebar()
+    expect(store.getSnapshot().sidebar).toBe(0)
+    actions.setSidebar(400)
+    actions.setNarrow(true)
+    actions.toggleSidebar()
+    actions.closeSidebar()
+    actions.closeSidebar()
+    expect(store.getSnapshot()).toMatchObject({ sidebar: 0, narrowExpanded: false })
+    actions.setNarrow(false)
+    expect(store.getSnapshot().sidebar).toBe(0)
+  })
+
   it('crossing the breakpoint drops the override; a same-value setNarrow keeps it', () => {
     const { store, actions } = createLayoutStore().create()
     actions.setNarrow(true)

@@ -35,8 +35,8 @@ def executable(variable, fallback):
 
 def checks():
     result = {
-        "public_origin": valid_url(os.environ.get("EXPERT_PUBLIC_URL", ""), origin=True),
-        "identity_endpoint": valid_url(os.environ.get("EXPERT_PLATFORM_REDEEM_URL", "")),
+        "public_origin": valid_url(os.environ.get("EXPERT_PUBLIC_URL", ""), internal=True, origin=True),
+        "identity_endpoint": valid_url(os.environ.get("EXPERT_PLATFORM_REDEEM_URL", ""), internal=True),
         "provider_credential": configured("EXPERT_PROVIDER_CREDENTIAL"),
     }
     result["libreoffice"] = executable("LIBREOFFICE_BIN", "soffice")

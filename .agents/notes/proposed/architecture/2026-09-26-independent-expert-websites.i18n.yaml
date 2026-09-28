@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-09-26-independent-expert-websites.md
-2026-09-26-independent-expert-websites.md: e2351bfacd72bbfd3abdc418cc75f9e84ede1ca6
-2026-09-26-independent-expert-websites.zh.md: 8eb65894affd9650211ced2f96ce01523f28c67a
+2026-09-26-independent-expert-websites.md: 5cde316d27052899e06ca7dc487ab70fb5cbf967
+2026-09-26-independent-expert-websites.zh.md: 43170946beecd29257e3985f099525ab8c7d7e3b

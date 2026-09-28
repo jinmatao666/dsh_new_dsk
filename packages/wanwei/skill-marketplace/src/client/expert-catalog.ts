@@ -10,6 +10,7 @@ export type RemoteExpert = {
   scenario?: unknown
   materials?: unknown
   detail_sections?: unknown
+  footer_note?: unknown
   workbench_url?: unknown
 }
 
@@ -21,6 +22,7 @@ export type PublishedExpert = ExpertTemplate & {
   scenario?: string
   materials?: string
   detailSections?: readonly ExpertDetailSection[]
+  footerNote?: string
   workbenchUrl: string
 }
 
@@ -91,6 +93,7 @@ export function projectPublishedExperts(
       workbenchUrl: workbenchUrl.href,
       scenario: typeof entry.scenario === 'string' ? entry.scenario : '',
       materials: typeof entry.materials === 'string' ? entry.materials : '',
+      footerNote: typeof entry.footer_note === 'string' ? entry.footer_note : '',
       ...(detailSections === undefined ? {} : { detailSections }),
     }]
   })

@@ -1,5 +1,6 @@
 import { productText } from './locales/product.ts'
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { ChangeEvent } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ClientPlatformActions } from '@deepseek-ai/dsh-client-platform-actions/client'
@@ -80,6 +81,7 @@ async function nativeImport(
 export function FileImportAction(props: FileImportProps) {
   const workspacePath = useActiveWorkspacePath(props)
   const picker = useRef<HTMLInputElement>(null)
+  const dropCard = picker.current?.closest<HTMLElement>('[data-composer-card]')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const [dragActive, setDragActive] = useState(false)
@@ -154,7 +156,10 @@ export function FileImportAction(props: FileImportProps) {
     <>
       <input ref={picker} className="wanwei-product-file-input" type="file" multiple onChange={choose} />
       <button className="wanwei-product-file-button" type="button" disabled={busy} title={error ?? productText('导入文件')} aria-label={productText('导入文件')} data-error={error === undefined ? undefined : true} onClick={() => picker.current?.click()}>+</button>
-      {dragActive && <div className="wanwei-product-drop-overlay">{productText('松开鼠标，将文件导入当前工作区')}</div>}
+      {dragActive && dropCard && createPortal(
+        <div className="wanwei-product-drop-overlay" role="status">{productText('松开鼠标，将文件导入当前工作区')}</div>,
+        dropCard,
+      )}
       {status !== undefined && <div className="wanwei-product-import-status" data-error={status.error}>{status.text}</div>}
     </>
   )

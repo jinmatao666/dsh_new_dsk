@@ -1,4 +1,4 @@
-"""Independent conversion website; run behind an HTTPS reverse proxy."""
+"""Independent expert website; run behind a reviewed HTTP/HTTPS reverse proxy."""
 import base64
 import binascii
 from http.cookies import SimpleCookie
@@ -38,8 +38,9 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def redeem(ticket):
     endpoint = os.environ["EXPERT_PLATFORM_REDEEM_URL"]
     credential = os.environ["EXPERT_PROVIDER_CREDENTIAL"]
-    if urlsplit(endpoint).scheme != "https":
-        raise ValueError("票据核验地址必须使用 HTTPS")
+    parsed = urlsplit(endpoint)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password or parsed.fragment or parsed.query:
+        raise ValueError("票据核验地址必须使用有效的 HTTP 或 HTTPS 地址")
     request = urllib.request.Request(endpoint, data=json.dumps({"ticket": ticket}).encode(),
                                      headers={"Content-Type": "application/json", "Authorization": f"Bearer {credential}"})
     with urllib.request.build_opener(NoRedirect).open(request, timeout=10) as response:

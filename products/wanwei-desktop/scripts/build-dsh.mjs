@@ -8,7 +8,7 @@ const repositoryRoot = resolve(productRoot, '..', '..')
 const sourceRoot = join(productRoot, 'assets', 'web')
 const publicRoot = join(repositoryRoot, 'apps', 'web', 'public')
 const files = ['brand-mark.svg', 'brand-wordmark.svg']
-const directories = ['connector-icons', 'skill-icons']
+const directories = ['connector-icons', 'skill-icons', 'expert-icons', 'expert-avatars']
 const targets = [...files, ...directories].map(name => join(publicRoot, name))
 
 for (const target of targets) {

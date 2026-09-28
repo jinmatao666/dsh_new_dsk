@@ -1,0 +1,27 @@
+# Linux same-host deployment. The service and Xinference both use loopback.
+services:
+  expert:
+    build: .
+    init: true
+    restart: unless-stopped
+    network_mode: host
+    env_file: .env
+    environment:
+      HOST: 127.0.0.1
+      PORT: "${PORT:-3306}"
+      EXPERT_DATA_DIR: /data
+    volumes:
+      - planning-review-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1536m
+    cpus: 2
+    pids_limit: 96
+    stop_grace_period: 190s
+volumes:
+  planning-review-data:

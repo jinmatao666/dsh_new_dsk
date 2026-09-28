@@ -14,6 +14,8 @@ The generic conversation action `appendReferences` appends structured references
 
 The desktop forwards window-level and main-WebView-level drag events to the trusted renderer. Tauri's `unstable` multi-WebView runtime creates the main view as a child and delivers its drag events through `WebviewEvent`, not `WindowEvent`.
 
+The product drag invitation renders inside the positioned composer card, not across the window. Folder chips omit a display-only trailing slash, but retain it in the serialized reference; collision suffixes remain visible because they identify the actual copied destination.
+
 ## Alternatives considered
 
 **Replace the full draft with mentions.** This loses structured references and depends on automatic token recognition for display.

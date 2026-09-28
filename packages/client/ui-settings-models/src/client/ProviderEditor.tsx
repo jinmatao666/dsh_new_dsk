@@ -26,6 +26,7 @@ import type { ReactNode } from 'react'
 import type {
   CredentialInfo, JsonValue, SettingsNamespaceView, SettingsPathOpView,
 } from '@deepseek-ai/dsh-api-remotes/client'
+import { Select } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
   DeepSeekModelsEditor, modelDrafts, validateDeepSeekModels,
 } from './DeepSeekModelsEditor.tsx'
@@ -442,22 +443,18 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
               ? (
                 <div className={styles['field']}>
                   <span className={styles['fieldLabel']}>{t('customApi')}</span>
-                  <select
-                    className={`${styles['input']} ${styles['selectInput']}`}
+                  {/* A profile naming no protocol selects an explicit unset choice. */}
+                  <Select
+                    className={styles['selectInput']}
                     value={probeApi ?? ''}
-                    aria-label={t('customApi')}
+                    label={t('customApi')}
                     disabled={disabled}
-                    onChange={(event) => { setField('api', event.target.value) }}
-                  >
-                    {/* A profile naming no protocol — hand-written into
-                        settings.yaml with no model to need one — selects
-                        nothing rather than reading as if it had picked the
-                        first choice. The option is named because a screen
-                        reader announces it either way, and an empty one is
-                        announced as a choice with no identity. */}
-                    {probeApi === undefined ? <option value="">{t('customApiUnset')}</option> : null}
-                    {protocols.map(choice => <option key={choice} value={choice}>{choice}</option>)}
-                  </select>
+                    onChange={(value) => { setField('api', value) }}
+                    options={[
+                      ...(probeApi === undefined ? [{ value: '', label: t('customApiUnset') }] : []),
+                      ...protocols.map(choice => ({ value: choice, label: choice })),
+                    ]}
+                  />
                 </div>
               )
               : null}

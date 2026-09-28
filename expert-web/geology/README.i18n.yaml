@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write expert-web/geology/README.md
-README.md: ab0b87a6125664c97e37cfb8534bfc3f3a44baec
-README.zh.md: 12313bcb9958845a7f1a7d400252a7c659af3e8d
+README.md: 2793f16b407e82d0f81fd16831cd7c033cb44e89
+README.zh.md: 9c0ab3c9a312bd84867125b7ee8ffacd63c55a2c

@@ -28,6 +28,7 @@
     "allow-import-workspace-files",
     "allow-import-dropped-workspace-files",
     "allow-open-expert-webview",
+    "allow-maximize-expert-window",
     "allow-set-expert-webview-bounds",
     "allow-close-expert-webview",
     "allow-set-expert-webview-visible",

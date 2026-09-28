@@ -5,6 +5,7 @@ import urllib.request
 from urllib.parse import urlsplit
 
 from geometry import SpatialError
+from deployment import local_model_url
 
 
 RULES = "分析三调现状、地类构成、耕地、永久基本农田、权属与数据限制。现状统计不是规划违法或规划不符合的证明。"
@@ -25,8 +26,9 @@ def interpret(title, project, options, datasets):
         parsed.port
     except ValueError:
         raise SpatialError("专家服务端模型地址无效") from None
-    if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
-            or parsed.fragment or parsed.query or not model or not key):
+    if ((parsed.scheme != "https" and not local_model_url(endpoint)) or not parsed.hostname
+            or parsed.username or parsed.password or parsed.fragment or parsed.query
+            or not model or (not key and not local_model_url(endpoint))):
         raise SpatialError("专家服务端尚未配置有效的 GIS 解读模型")
     evidence = json.dumps({"analysis": title, "project": project, "parameters": options,
                            "datasets": datasets}, ensure_ascii=False)
@@ -39,7 +41,7 @@ def interpret(title, project, options, datasets):
          "每个判断引用对应图层和字段。区分数据事实与建议，明确数据不足。以下是本次完整数据：\n" + evidence},
     ]}
     request = urllib.request.Request(endpoint, data=json.dumps(payload, ensure_ascii=False).encode(),
-                                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
+                                    headers={"Content-Type": "application/json", **({"Authorization": f"Bearer {key}"} if key else {})})
     try:
         with urllib.request.build_opener(NoRedirect).open(request, timeout=120) as response:
             raw = response.read(2 * 1024 * 1024 + 1)

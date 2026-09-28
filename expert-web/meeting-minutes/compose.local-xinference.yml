@@ -1,5 +1,5 @@
 # Linux only: host networking reaches a Xinference server bound to 127.0.0.1:20330.
-# The workbench itself remains bound to 127.0.0.1:4303 for the HTTPS reverse proxy.
+# The workbench remains on loopback for an HTTP/HTTPS proxy or SSH forwarding.
 services:
   meeting:
     build: .
@@ -9,7 +9,7 @@ services:
     env_file: .env
     environment:
       HOST: 127.0.0.1
-      PORT: "4303"
+      PORT: "${PORT:-3301}"
       EXPERT_DATA_DIR: /data
     volumes:
       - meeting-data:/data

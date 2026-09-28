@@ -7,9 +7,9 @@ import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connec
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { IConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { ReferenceIcon } from '@deepseek-ai/dsh-client-ui-primitives'
+import { ReferenceIcon, Select } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
-import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import {
   browseMarketplaceCatalog,
   buildMarketplaceCatalog,
@@ -24,6 +24,7 @@ import type { MarketplaceInstallState } from './install-action.ts'
 import { projectPublishedExperts } from './expert-catalog.ts'
 import type { ExpertDetailSection, RemoteExpert } from './expert-catalog.ts'
 import { ExpertWebview, type ExpertLaunch } from './expert-webview.tsx'
+import { ExpertDetailDialog } from './ExpertDetailDialog.tsx'
 import { markReviewsSeen, recordReviewList, reviewAttentionSnapshot, subscribeReviewAttention } from './review-attention.ts'
 import { registerNativeSkillCatalogBridge } from './skill-catalog-bridge.ts'
 import { rememberSkillDisplayNames, skillDisplayName, startSkillUse } from './skill-use.ts'
@@ -86,6 +87,7 @@ type Expert = {
   scenario?: string
   materials?: string
   detailSections?: readonly ExpertDetailSection[]
+  footerNote?: string
 }
 
 type Connector = {
@@ -515,6 +517,7 @@ const marketplaceControllers: Record<MarketplaceSection, Controller> = {
 type OverlayProps = PropsRuntime<'shell.overlay'> & {
   marketplaceUrl: string
   chooseDirectory: () => Promise<string | null>
+  prepareExpertWorkspace: () => Promise<void>
 }
 type CustomSkillSource =
   | { kind: 'directory'; path: string }
@@ -606,9 +609,20 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall,
 }
 
 /* oxlint-disable @stylistic/arrow-parens, @stylistic/max-len -- compact local-only interaction trees keep cards and dialogs together. */
+const LEGACY_EXPERT_AVATARS: Record<string, string> = {
+  'geology-analysis': 'geology',
+  'third-survey-analysis': 'third-survey',
+  'land-use-plan-review': 'planning-review',
+  'file-conversion-pdf': 'file-conversion',
+  'document-intelligence': 'document-processing',
+  'meeting-minutes': 'meeting-minutes',
+}
+
 function ExpertAvatar({ expert }: { expert: Expert }) {
   const shared = { width: 28, height: 28, viewBox: '0 0 28 28', fill: 'none', 'aria-hidden': true }
   if (expert.icon.startsWith('data:image/')) return <img src={expert.icon} alt="" aria-hidden="true" />
+  const legacyAvatar = LEGACY_EXPERT_AVATARS[expert.id]
+  if (legacyAvatar !== undefined) return <img src={`/expert-avatars/${legacyAvatar}.png`} alt="" aria-hidden="true" />
   if (expert.icon === 'planning') return <svg {...shared}><path d="M5 22V9l9-4 9 4v13" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><path d="M9 22v-6h10v6M10 10h.1M14 10h.1M18 10h.1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
   if (expert.icon === 'policy') return <svg {...shared}><path d="M8 4h10l4 4v15H8z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><path d="M18 4v5h4M11 14h8M11 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
   if (expert.icon === 'gis') return <svg {...shared}><path d="m5 8 7-3 5 3 6-3v15l-6 3-5-3-7 3V8Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><path d="M12 5v15M17 8v15" stroke="currentColor" strokeWidth="2" /></svg>
@@ -618,16 +632,17 @@ function ExpertAvatar({ expert }: { expert: Expert }) {
   return <svg {...shared}><path d="M7 5h14v18H7z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><path d="M10 10h8M10 14h8M10 18h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
 }
 
-type ExpertMarketDetail = { id: string; name: string; role: string; summary: string; tags: readonly string[]; examples: readonly string[]; accent: string; scenario?: string; materials?: string; detailSections?: readonly ExpertDetailSection[] }
+type ExpertMarketDetail = { id: string; name: string; role: string; summary: string; icon: string; tags: readonly string[]; examples: readonly string[]; accent: string; scenario?: string; materials?: string; detailSections?: readonly ExpertDetailSection[]; footerNote?: string }
 
 /**
  * Render the published expert catalog and its owned native Tab.
  * @param props - Product directory and launch operations; defaults use the configured Host remotes.
  * @returns The catalog or active expert Tab, with pending launches invalidated on logout and disposal.
  */
-export function ExpertMarket({ loadExperts = loadRemoteExperts, launchExpert = launchRemoteExpert }: {
+export function ExpertMarket({ loadExperts = loadRemoteExperts, launchExpert = launchRemoteExpert, prepareExpertWorkspace }: {
   loadExperts?: () => Promise<readonly RemoteExpert[]>
   launchExpert?: (key: string) => Promise<{ url: string; ticket: string }>
+  prepareExpertWorkspace?: () => Promise<void>
 } = {}) {
   const [category, setCategory] = useState('全部')
   const [selected, setSelected] = useState<ExpertMarketDetail | null>(null)
@@ -675,7 +690,7 @@ export function ExpertMarket({ loadExperts = loadRemoteExperts, launchExpert = l
   }, [catalogRevision, loadExperts])
   const categories = ['全部', ...new Set(publishedExperts.map(expert => expert.category))]
   const visibleExperts = category === '全部' ? publishedExperts : publishedExperts.filter(expert => expert.category === category)
-  const openExpert = (expert: Expert) =>{  setSelected({ id: expert.id, name: expert.name, role: expert.role, summary: expert.summary, tags: expert.tags, examples: expert.examples, accent: expert.accent, ...(expert.scenario === undefined ? {} : { scenario: expert.scenario }), ...(expert.materials === undefined ? {} : { materials: expert.materials }), ...(expert.detailSections === undefined ? {} : { detailSections: expert.detailSections }) }) }
+  const openExpert = (expert: Expert) =>{  setSelected({ id: expert.id, name: expert.name, role: expert.role, summary: expert.summary, icon: expert.icon, tags: expert.tags, examples: expert.examples, accent: expert.accent, ...(expert.scenario === undefined ? {} : { scenario: expert.scenario }), ...(expert.materials === undefined ? {} : { materials: expert.materials }), ...(expert.detailSections === undefined ? {} : { detailSections: expert.detailSections }), ...(expert.footerNote === undefined ? {} : { footerNote: expert.footerNote }) }) }
   const startExpert = async () => {
     if (selected === null || launchExpert === undefined || launchPending.current) return
     const revision = ++launchRevision.current
@@ -685,6 +700,12 @@ export function ExpertMarket({ loadExperts = loadRemoteExperts, launchExpert = l
     try {
       const { url, ticket } = await launchExpert(selected.id)
       if (revision !== launchRevision.current) return
+      // Layout and native window changes are presentation-only; a failed maximize
+      // must never discard an otherwise valid expert launch ticket.
+      if (prepareExpertWorkspace !== undefined) {
+        try { await prepareExpertWorkspace() } catch { /* keep opening the expert */ }
+        if (revision !== launchRevision.current) return
+      }
       setActiveExpert({ id: selected.id, name: selected.name, url, ticket })
       setActiveExpertTab('expert')
       setSelected(null)
@@ -700,14 +721,16 @@ export function ExpertMarket({ loadExperts = loadRemoteExperts, launchExpert = l
   const catalog = <section className="dsh-expert-market">
     <nav className="dsh-expert-tabs" aria-label={productText('专家库内容')}><button type="button" className="active" aria-current="page">{productText('专家')}</button></nav>
     <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() =>{  setCategory(item) }}>{item}</button>)}</div>{loadError !== null && <p role="alert">{productText('专家目录加载失败：')}{loadError} <button type="button" onClick={() => { setCatalogRevision(value => value + 1) }}>{productText('重试')}</button></p>}{loadError === null && visibleExperts.length === 0 && <p>{productText('当前暂无已上架的专家。')}</p>}<div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} onClick={() =>{  openExpert(expert) }}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>
-    {selected !== null && <div className="dsh-expert-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}><section className="dsh-expert-detail" role="dialog" aria-modal="true" aria-label={productText('{0}详情', [selected.name])}><header><div><span style={{ background: `${selected.accent}18`, color: selected.accent }}><MarketplaceSectionIcon section="experts" size={24} /></span><div><h2>{selected.name}</h2><p>{selected.role}</p></div></div><button type="button" onClick={() =>{  setSelected(null) }} aria-label={productText('关闭')}>×</button></header><p className="dsh-expert-detail-summary">{selected.summary}</p>{selected.detailSections?.map((section) => <div className="dsh-expert-detail-block" key={section.title}><span>{section.title}</span><small>{section.subtitle}</small><p>{section.content}</p></div>)}{selected.scenario && <div className="dsh-expert-detail-block"><span>{productText('适用场景')}</span><p>{selected.scenario}</p></div>}{selected.materials && <div className="dsh-expert-detail-block"><span>{productText('准备材料')}</span><p>{selected.materials}</p></div>}{selected.tags.length > 0 && <div className="dsh-expert-detail-block"><span>{productText('专业方向')}</span><div>{selected.tags.map(tag => <b key={tag}>{tag}</b>)}</div></div>}{selected.examples.length > 0 && <div className="dsh-expert-detail-block examples"><span>{productText('可以这样开始')}</span>{selected.examples.map(example => <p key={example}>“{example}”</p>)}</div>}<footer><small>{launchError ?? productText('将在桌面端打开独立专家网页。')}</small><button type="button" disabled={launching} onClick={() => { void startExpert() }}>{launching ? productText('正在打开…') : productText('开始使用')}</button></footer></section></div>}
+    {selected !== null && <ExpertDetailDialog expert={selected} launching={launching} launchError={launchError} onClose={() => { setSelected(null) }} onStart={() => { void startExpert() }} />}
   </section>
   if (activeExpert === null) return catalog
   return <section className="dsh-expert-active">
     <nav className="dsh-expert-workspace-tabs" aria-label={productText('专家工作台标签')}>
       <button type="button" className={activeExpertTab === 'catalog' ? 'active' : ''} onClick={() => { setActiveExpertTab('catalog') }}>{productText('专家库')}</button>
-      <button type="button" className={activeExpertTab === 'expert' ? 'active' : ''} onClick={() => { setActiveExpertTab('expert') }}>{activeExpert.name}</button>
-      <button type="button" aria-label={productText('关闭{0}标签', [activeExpert.name])} onClick={() => { setActiveExpert(null); setActiveExpertTab('catalog') }}>×</button>
+      <span className={`dsh-expert-workspace-tab${activeExpertTab === 'expert' ? ' active' : ''}`}>
+        <button type="button" className="dsh-expert-workspace-tab-label" onClick={() => { setActiveExpertTab('expert') }}>{activeExpert.name}</button>
+        <button type="button" className="dsh-expert-workspace-tab-close" aria-label={productText('关闭{0}标签', [activeExpert.name])} title={productText('关闭{0}标签', [activeExpert.name])} onClick={() => { setActiveExpert(null); setActiveExpertTab('catalog') }}>×</button>
+      </span>
     </nav>
     {launchError !== null && <p role="alert">{launchError}</p>}
     {activeExpertTab === 'catalog' && catalog}
@@ -788,7 +811,7 @@ function Connectors() {
       </button>)}
     </div>
     {selected !== null && <div className="dsh-connector-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}><section className="dsh-connector-detail" aria-label={productText('{0}连接器详情', [selected.name])}><header><div><ConnectorBrandIcon icon={selected.icon} accent={selected.accent} /><div><h2>{selected.name}</h2><p>{selected.scope} {productText(' · 本地演示目录')}</p></div></div><button type="button" onClick={() =>{  setSelected(null) }} aria-label={productText('关闭')}>×</button></header><p className="dsh-connector-detail-summary">{selected.summary}</p><div className="dsh-connector-detail-block"><span>{productText('可协助完成')}</span><div>{selected.capabilities.map(item => <b key={item}>{item}</b>)}</div></div><div className="dsh-connector-detail-block"><span>{productText('接入说明')}</span><p>{selected.access}</p></div><footer><small>{productText('接入后仅在授权范围内访问数据。')}</small><button type="button" className={requested.has(selected.id) ? 'requested' : ''} onClick={() =>{  requestAccess(selected) }}>{requested.has(selected.id) ? productText('已提交申请') : productText('申请接入')}</button></footer></section></div>}
-    {showCustom && <div className="dsh-connector-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setShowCustom(false) }}><form className="dsh-connector-custom" onSubmit={event => { event.preventDefault(); saveCustomConnector() }}><header><div><h2>{productText('自定义连接器')}</h2><p>{productText('添加团队内部服务说明，当前仅保存在本机演示列表。')}</p></div><button type="button" onClick={() =>{  setShowCustom(false) }} aria-label={productText('关闭')}>×</button></header><label>{productText('连接器名称')}<input autoFocus value={customName} onChange={event =>{  setCustomName(event.target.value) }} placeholder={productText('例如：项目资料共享库')} /></label><label>{productText('服务类型')}<select value={customCategory} onChange={event =>{  setCustomCategory(event.target.value) }}><option>{productText('协同办公')}</option><option>{productText('文档服务')}</option><option>{productText('邮箱服务')}</option><option>{productText('内部数据')}</option></select></label><label>{productText('用途说明')}<textarea value={customDescription} onChange={event =>{  setCustomDescription(event.target.value) }} placeholder={productText('说明它能帮助处理哪些资料或协作事项')} /></label><div className="dsh-connector-custom-tip">{productText('暂不要求填写地址、密钥或账户信息；正式接入时将由管理员统一配置。')}</div><footer><button type="button" onClick={() =>{  setShowCustom(false) }}>{productText('取消')}</button><button type="submit" disabled={customName.trim() === ''}>{productText('添加到演示列表')}</button></footer></form></div>}
+    {showCustom && <div className="dsh-connector-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setShowCustom(false) }}><form className="dsh-connector-custom" onSubmit={event => { event.preventDefault(); saveCustomConnector() }}><header><div><h2>{productText('自定义连接器')}</h2><p>{productText('添加团队内部服务说明，当前仅保存在本机演示列表。')}</p></div><button type="button" onClick={() =>{  setShowCustom(false) }} aria-label={productText('关闭')}>×</button></header><label>{productText('连接器名称')}<input autoFocus value={customName} onChange={event =>{  setCustomName(event.target.value) }} placeholder={productText('例如：项目资料共享库')} /></label><label>{productText('服务类型')}<Select label={productText('服务类型')} value={customCategory} onChange={setCustomCategory} options={[{ value: productText('协同办公'), label: productText('协同办公') }, { value: productText('文档服务'), label: productText('文档服务') }, { value: productText('邮箱服务'), label: productText('邮箱服务') }, { value: productText('内部数据'), label: productText('内部数据') }]} /></label><label>{productText('用途说明')}<textarea value={customDescription} onChange={event =>{  setCustomDescription(event.target.value) }} placeholder={productText('说明它能帮助处理哪些资料或协作事项')} /></label><div className="dsh-connector-custom-tip">{productText('暂不要求填写地址、密钥或账户信息；正式接入时将由管理员统一配置。')}</div><footer><button type="button" onClick={() =>{  setShowCustom(false) }}>{productText('取消')}</button><button type="submit" disabled={customName.trim() === ''}>{productText('添加到演示列表')}</button></footer></form></div>}
   </section>
 }
 
@@ -824,7 +847,7 @@ function Automations({ notify }: { notify: (text: string) => void }) {
     {tab === 'configured' && (configured.length === 0 ? <div className="dsh-automation-empty"><div><MarketplaceSectionIcon section="automations" size={30} /></div><h2>{productText('尚未配置自动化')}</h2><p>{productText('从工作模板开始，建立适合当前工作区的周期任务。')}</p><button type="button" onClick={() =>{  setTab('templates') }}>{productText('从模板创建')}</button></div> : <div className="dsh-automation-configured">{configured.map(item => <article key={item.id}><div className="dsh-automation-configured-icon"><MarketplaceSectionIcon section="automations" size={19} /></div><div><h2>{item.name}</h2><p>{item.cadence} · {item.time} · {item.source}{productText('创建')}</p><small>{item.prompt}</small></div><span>{productText('演示模式')}</span></article>)}</div>)}
     {tab === 'history' && <div className="dsh-automation-history">{AUTOMATION_HISTORY.map(item => <article key={item.id}><div><strong>{item.name}</strong><span>{item.time}</span></div><p>{item.detail}</p><b className={item.status === '需关注' ? 'attention' : ''}>{item.status}</b></article>)}</div>}
     {tab === 'templates' && <div className="dsh-automation-template-grid">{AUTOMATION_TEMPLATES.map(item => <button type="button" className="dsh-automation-template" key={item.id} onClick={() =>{  openTemplate(item) }}><div className="dsh-automation-template-icon" style={{ background: item.accent }}><MarketplaceSectionIcon section="automations" size={20} /></div><strong>{item.name}</strong><span>{item.trigger}</span><p>{item.summary}</p><small>{item.scope}</small></button>)}</div>}
-    {draft !== null && <div className="dsh-automation-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) { setDraft(null); setSelected(null) } }}><form className="dsh-automation-modal" onSubmit={event => { event.preventDefault(); saveDraft() }}><header><div><span>{selected === null ? productText('新建自动化任务') : productText('从任务模板创建')}</span><small>{selected === null ? productText('配置一个仅保存在本机演示列表中的任务。') : selected.summary}</small></div><button type="button" onClick={() => { setDraft(null); setSelected(null) }} aria-label={productText('关闭')}>×</button></header><label>{productText('任务名称')}<input autoFocus value={draft.name} onChange={event =>{  setDraft({ ...draft, name: event.target.value }) }} placeholder={productText('例如：项目周报汇总')} /></label><div className="dsh-automation-schedule"><label>{productText('触发频率')}<select value={draft.cadence} onChange={event =>{  setDraft({ ...draft, cadence: event.target.value }) }}><option>{productText('每个工作日')}</option><option>{productText('每天')}</option><option>{productText('每周')}</option><option>{productText('文件变更时')}</option></select></label><label>{productText('执行时间')}<input type="time" value={draft.time} onChange={event =>{  setDraft({ ...draft, time: event.target.value }) }} disabled={draft.cadence === '文件变更时'} /></label></div><label>{productText('任务说明')}<textarea value={draft.prompt} onChange={event =>{  setDraft({ ...draft, prompt: event.target.value }) }} placeholder={productText('描述希望智能体按计划完成的工作')} /></label><div className="dsh-automation-modal-tip">{productText('演示阶段仅展示配置流程，不会创建定时任务或调用外部连接器。')}</div><footer><button type="button" onClick={() => { setDraft(null); setSelected(null) }}>{productText('取消')}</button><button type="submit" disabled={draft.name.trim() === '' || draft.prompt.trim() === ''}>{productText('保存任务')}</button></footer></form></div>}
+    {draft !== null && <div className="dsh-automation-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) { setDraft(null); setSelected(null) } }}><form className="dsh-automation-modal" onSubmit={event => { event.preventDefault(); saveDraft() }}><header><div><span>{selected === null ? productText('新建自动化任务') : productText('从任务模板创建')}</span><small>{selected === null ? productText('配置一个仅保存在本机演示列表中的任务。') : selected.summary}</small></div><button type="button" onClick={() => { setDraft(null); setSelected(null) }} aria-label={productText('关闭')}>×</button></header><label>{productText('任务名称')}<input autoFocus value={draft.name} onChange={event =>{  setDraft({ ...draft, name: event.target.value }) }} placeholder={productText('例如：项目周报汇总')} /></label><div className="dsh-automation-schedule"><label>{productText('触发频率')}<Select label={productText('触发频率')} value={draft.cadence} onChange={value => { setDraft({ ...draft, cadence: value }) }} options={[{ value: productText('每个工作日'), label: productText('每个工作日') }, { value: productText('每天'), label: productText('每天') }, { value: productText('每周'), label: productText('每周') }, { value: productText('文件变更时'), label: productText('文件变更时') }]} /></label><label>{productText('执行时间')}<input type="time" value={draft.time} onChange={event =>{  setDraft({ ...draft, time: event.target.value }) }} disabled={draft.cadence === '文件变更时'} /></label></div><label>{productText('任务说明')}<textarea value={draft.prompt} onChange={event =>{  setDraft({ ...draft, prompt: event.target.value }) }} placeholder={productText('描述希望智能体按计划完成的工作')} /></label><div className="dsh-automation-modal-tip">{productText('演示阶段仅展示配置流程，不会创建定时任务或调用外部连接器。')}</div><footer><button type="button" onClick={() => { setDraft(null); setSelected(null) }}>{productText('取消')}</button><button type="submit" disabled={draft.name.trim() === '' || draft.prompt.trim() === ''}>{productText('保存任务')}</button></footer></form></div>}
   </section>
 }
 /* oxlint-enable @stylistic/arrow-parens, @stylistic/max-len */
@@ -838,48 +861,12 @@ function SkillCategorySelect({
   value: string
   onChange: (value: string) => void
 }) {
-  const [open, setOpen] = useState(false)
-  const disabled = options.length === 0
-
-  return (
-    <span
-      className={`dsh-skill-add-select-shell${open ? ' open' : ''}`}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
-      }}
-    >
-      <button
-        type="button"
-        className="dsh-skill-add-select-trigger"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        disabled={disabled}
-        onClick={() => { setOpen(current => !current) }}
-      >
-        <span>{disabled ? productText('暂无可用分类') : value}</span>
-        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg>
-      </button>
-      {open && (
-        <span className="dsh-skill-add-select-options" role="listbox" aria-label={productText('技能分类')}>
-          {options.map(option => (
-            <button
-              key={option}
-              type="button"
-              role="option"
-              aria-selected={option === value}
-              className={option === value ? 'active' : ''}
-              onClick={() => { onChange(option); setOpen(false) }}
-            >
-              {option}
-            </button>
-          ))}
-        </span>
-      )}
-    </span>
-  )
+  return <Select label={productText('技能分类')} emptyLabel={productText('暂无可用分类')} value={value}
+    options={options.map(option => ({ value: option, label: option }))}
+    onChange={onChange} className="dsh-skill-add-select-trigger" />
 }
 
-function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section: MarketplaceSection }) {
+function SkillMarketplace({ section, chooseDirectory, prepareExpertWorkspace }: OverlayProps & { section: MarketplaceSection }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState(L.all)
@@ -912,12 +899,15 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
   const reviewAttention = useSyncExternalStore(subscribeReviewAttention, reviewAttentionSnapshot)
 
   const [installStates, setInstallStates] = useState<Map<string, MarketplaceSkillState>>(new Map())
+  const installRefreshGeneration = useRef(0)
   const refreshInstallStates = async () => {
+    const generation = ++installRefreshGeneration.current
     try {
       const [value, customValue] = await Promise.all([
         desktopInvoke('list_marketplace_skills', {}),
         desktopInvoke('list_custom_skills', {}),
       ])
+      if (generation !== installRefreshGeneration.current) return
       if (!Array.isArray(value)) return
       const states = value.filter((item): item is MarketplaceSkillState => {
         if (typeof item !== 'object' || item === null) return false
@@ -965,6 +955,14 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
       // Browser previews have no native bridge; installation remains unavailable there.
     }
   }
+  const refreshInstallStatesRef = useRef(refreshInstallStates)
+  refreshInstallStatesRef.current = refreshInstallStates
+  useEffect(() => {
+    if (!open || section !== 'skills') return
+    const refresh = () => { void refreshInstallStatesRef.current() }
+    window.addEventListener('dsh:skills-changed', refresh)
+    return () => { window.removeEventListener('dsh:skills-changed', refresh) }
+  }, [open, section])
 
   useEffect(() => marketplaceControllers[section].subscribe((next) => {
     setOpen(next.open)
@@ -1362,7 +1360,7 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
           />
         ) : (
           <>
-            {section === 'experts' && <ExpertMarket />}
+            {section === 'experts' && <ExpertMarket prepareExpertWorkspace={prepareExpertWorkspace} />}
             {section === 'connectors' && <Connectors />}
             {section === 'automations' && <Automations notify={(text) => { setInstallMessage({ kind: 'info', text }) }} />}
             {section === 'skills' && <>
@@ -1584,8 +1582,16 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
               {libraryView !== 'uploads' && <SkillHubSection
                 active installedOnly={libraryView === 'installed'} installedQuery={query}
                 {...(libraryView === 'installed' ? { installedPlatforms: visible.map(skill => ({
-                  id: skill.id, searchText: `${skill.name} ${skill.summary} ${skill.category}`,
-                  card: <article key={`platform:${skill.id}`} className="dsh-skill-card" onClick={() => { openDetail(skill) }}>
+                  id: skill.id, slug: skillSlug(skill), name: skill.name, summary: skill.summary,
+                  searchText: `${skill.name} ${skill.summary} ${skill.category}`,
+                  card: <article key={`platform:${skill.id}`} className="dsh-skill-card" role="button" tabIndex={0}
+                    onClick={() => { openDetail(skill) }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        openDetail(skill)
+                      }
+                    }}>
                     <div className="dsh-skill-card-visual">
                       <div className="dsh-skill-card-icon" style={{ background: skill.accent + '1f', color: skill.accent }}>
                         <SkillVisual skill={skill} />
@@ -1603,10 +1609,6 @@ function SkillMarketplace({ section, chooseDirectory }: OverlayProps & { section
                         {hasVerifiedInstallCount(skill) && <small><DownloadIcon />{skill.installs}</small>}
                       </div>
                       <h2>{skill.name}</h2><p>{skill.summary}</p>
-                      <button type="button" className="dsh-skill-card-install-action uninstall" disabled={installing === skill.id}
-                        onClick={(event) => { event.stopPropagation(); void toggleInstall(skill) }}>
-                        {resolveInstallState(skill) === 'updateAvailable' ? productText('更新') : productText('卸载')}
-                      </button>
                     </div>
                   </article>,
                 })) } : {})}
@@ -1751,7 +1753,7 @@ export function SkillDraftPrefix({ draft, removePrefix, renderInput, settlePrefi
   return renderInput(token.length, <button type="button" className="dsh-skill-draft-prefix" aria-label={productText('已选技能：{0}', [displayName])} onPointerDown={(event) => { event.stopPropagation() }} onClick={(event) => { event.stopPropagation(); removePrefix(token.length) }}><ReferenceIcon kind="skill" size={15} /><span>{displayName}</span><span aria-hidden="true">×</span></button>)
 }
 
-export const inject = ['slots', 'connection', 'conversation', 'sessions', 'remote', 'remote.directoryPicker']
+export const inject = ['slots', 'connection', 'conversation', 'sessions', 'layout', 'remote', 'remote.directoryPicker']
 export function apply(ctx: Context): void {
   registerNativeSkillCatalogBridge(ctx)
   const connection = ctx.get('connection') as unknown as ConnectionHandle
@@ -1804,6 +1806,13 @@ export function apply(ctx: Context): void {
     if (!result.ok) throw new Error(result.error.message)
     return result.value
   }
+  const layout = ctx.get('layout') as ILayout
+  const prepareExpertWorkspace = async (): Promise<void> => {
+    layout.closeSidebar()
+    const desktopWindow = window as Window & { __TAURI__?: DesktopBridge; __TAURI_INTERNALS__?: DesktopInternals }
+    const invoke = desktopWindow.__TAURI__?.core?.invoke ?? desktopWindow.__TAURI_INTERNALS__?.invoke
+    if (typeof invoke === 'function') await invoke('maximize_expert_window', {})
+  }
   ctx.slots.inject('conversation.input.draft-prefix', () =>
     ctx.slots.register({ name: 'conversation.input.draft-prefix' }, SkillDraftPrefix),
   )
@@ -1834,7 +1843,7 @@ export function apply(ctx: Context): void {
   for (const [index, section] of (['skills', 'experts', 'connectors', 'automations'] as const).entries()) {
     ctx.slots.inject('shell.overlay', () =>
       ctx.slots.register(
-        { name: 'shell.overlay', id: `skill-marketplace-${section}`, order: 100 + index, inject: () => ({ marketplaceUrl, section, chooseDirectory }) },
+        { name: 'shell.overlay', id: `skill-marketplace-${section}`, order: 100 + index, inject: () => ({ marketplaceUrl, section, chooseDirectory, prepareExpertWorkspace }) },
         SkillMarketplace,
       ),
     )

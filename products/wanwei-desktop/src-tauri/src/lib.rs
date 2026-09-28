@@ -1011,6 +1011,22 @@ fn expert_webview_url(raw: &str, ticket: &str) -> Result<(Url, Url), String> {
 }
 
 #[tauri::command]
+fn maximize_expert_window(window: Window) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("只能从主窗口调整专家工作台".to_string());
+    }
+    if !window
+        .is_maximized()
+        .map_err(|error| format!("无法读取窗口状态：{error}"))?
+    {
+        window
+            .maximize()
+            .map_err(|error| format!("无法最大化窗口：{error}"))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 async fn open_expert_webview(
     window: Window,
     key: String,
@@ -2386,6 +2402,7 @@ pub fn run() {
             reveal_downloaded_file,
             import_workspace_files,
             import_dropped_workspace_files,
+            maximize_expert_window,
             open_expert_webview,
             set_expert_webview_bounds,
             close_expert_webview,

@@ -8,13 +8,17 @@ An HTTP 401 from task, preview or artifact requests locks the workbench and clea
 
 Original upload names label model materials and the Word report's source list. File reads and audio processing use numbered internal paths, never display labels. Task rows without original names retain their stored names; invalid source-label lists fail before document generation.
 
-Compose pins the container's listening port to match its loopback-only port mapping; a different `PORT` in `.env` does not change it. Change the host side of `ports` for a different local proxy port, and configure the public HTTPS origin through `EXPERT_PUBLIC_URL`.
+The ordinary `compose.yml` pins the container's listening port to match its loopback-only port mapping; a different `PORT` in `.env` does not change that variant. Change the host side of `ports` for a different local proxy port, and configure the public HTTP/HTTPS origin through `EXPERT_PUBLIC_URL`.
 
 ### Same-host Xinference ASR (Linux)
 
-When Xinference listens at `127.0.0.1:20330` on the deployment host with model UID `Qwen3-ASR-1.7B`, copy `.env.xinference-local.example` to `.env` and fill in the platform ticket exchange, provider credential, public HTTPS origin, and separate minutes text-model configuration. The template selects `http://127.0.0.1:20330/v1/audio/transcriptions` with the multipart protocol. Leave `EXPERT_ASR_KEY` empty only if this local Xinference endpoint has no authentication; keep any real key out of Git.
+Build downloads default to the DaoCloud Python-image proxy and TUNA Debian/PyPI mirrors. Docker build arguments `PYTHON_IMAGE`, `DEBIAN_MIRROR` and `PIP_INDEX_URL` override them without modifying the host's Docker, apt or pip configuration. Debian suite/signature checks and HTTPS certificate checks remain enabled; security mirrors can lag upstream. Python dependencies remain version-pinned, and their install layer precedes application code for cache reuse. Download speed and package availability depend on the deployment network. Stop an active build before replacing its Dockerfile; keep `.env`, the Compose project name and the data volume unchanged.
 
-Use `docker compose -f compose.local-xinference.yml up --build -d` on Linux. This host-network variant lets the container reach a loopback-only Xinference service while binding the workbench itself to `127.0.0.1:4303` for the HTTPS reverse proxy. The ordinary bridge-network `compose.yml` cannot reach a host service bound only to loopback. Run `docker compose -f compose.local-xinference.yml exec -T meeting python deployment.py`, then check `/healthz` and `/readyz`. Readiness validates configuration, not real ASR or text-model calls; exercise an actual recording before acceptance. Do not expose an unauthenticated Xinference port to the public network.
+The same-host template selects `http://127.0.0.1:20330/v1/chat/completions` with text model UID `qwen3.8-27b-fp8`. Both text and ASR keys may be empty when local authentication is disabled. This Compose variant reads the web port from `.env` through `PORT`, defaulting to `3301`; the ordinary Compose file retains its fixed `4303` port. The same-host probes below use `3301`.
+
+When Xinference listens at `127.0.0.1:20330` on the deployment host with model UID `Qwen3-ASR-1.7B`, use `.env.xinference-local.example` as the `.env` template. It already sets the public origin to `http://ac.zjugis.com:3301`, redemption to `http://ac.zjugis.com:3300/api/expert-web/redeem`, and both local model endpoints. Supply the provider credential returned once by the platform administrator's create/reset action. Do not overwrite an existing `.env` containing credentials; edit its settings instead. Leave model keys empty only if local Xinference has no authentication; keep real keys out of Git.
+
+Use `docker compose -f compose.local-xinference.yml up --build -d` on Linux. This host-network variant reaches loopback-only Xinference while binding the workbench to `127.0.0.1:3301` by default for an HTTP/HTTPS reverse proxy or SSH forwarding. A router mapping alone cannot reach a loopback listener; use a host-side proxy. The ordinary bridge-network variant cannot reach host loopback. Run the configuration check and health probes below, then exercise an actual recording: readiness does not test live models. Never expose unauthenticated Xinference publicly. Keep the same Compose project name during upgrades to retain the named data volume; do not use `down -v`.
 
 ```bash
 cp .env.xinference-local.example .env
@@ -22,11 +26,13 @@ chmod 600 .env
 docker compose -f compose.local-xinference.yml config -q
 docker compose -f compose.local-xinference.yml up --build -d
 docker compose -f compose.local-xinference.yml exec -T meeting python deployment.py
-curl -fsS http://127.0.0.1:4303/healthz
-curl -fsS http://127.0.0.1:4303/readyz
+curl -fsS http://127.0.0.1:3301/healthz
+curl -fsS http://127.0.0.1:3301/readyz
 ```
 
 ## Standalone verification
+
+HTTP is supported by the website, platform registration and updated desktop. Scheme, host and port still define an approved origin, and ticket redemption refuses redirects. HTTP transmits tickets, provider credentials, session cookies and uploaded data without encryption; these checks do not eliminate interception or tampering. HTTPS remains recommended. Rebuild the OneAPI image and desktop package as well as this website when upgrading from HTTPS-only code. For redeployment, edit the existing `.env`, run the same Compose command above and register the exact public workbench URL in the platform. SSH testing requires the registered URL and the desktop-reachable URL to match; a public URL does not become reachable merely by starting a local tunnel.
 
 Operators can run `python deployment.py` to check configuration and local processing dependencies. It prints check names and pass states, not secrets or endpoint addresses. `/healthz` checks HTTP and database availability; `/readyz` checks required configuration and returns 503 when it is missing. Readiness does not prove live remote connectivity. The Dockerfile includes a liveness check.
 
@@ -54,9 +60,9 @@ Identity exchange accepts only an object containing a nonempty string `user_id` 
 
 Use Python 3.13, install requirements.txt, then run `python -m unittest -v test_minutes test_server`. Audio tests invoke FFmpeg, while transcription and minutes text use explicit test substitutes; they do not prove live model quality. HTTP tasks fail explicitly without model configuration and do not create demo artifacts.
 
-Inject variables listed in `.env.example` through a process manager and run `python server.py`; it does not load `.env` automatically. The minutes model uses HTTPS chat completions. ASR supports a multipart audio-transcription endpoint or native dashscope protocol; endpoint and model must be explicitly configured. Remote HTTPS ASR requires a key; only the same-host loopback Xinference deployment above may omit it when authentication is disabled. All keys remain server-side. The FFmpeg subprocess does not inherit model or platform credentials.
+Inject variables listed in `.env.example` through a process manager and run `python server.py`; it does not load `.env` automatically. The minutes model uses HTTPS chat completions or the same-host HTTP Xinference endpoint described above. ASR supports a multipart audio-transcription endpoint or native dashscope protocol; endpoint and model must be explicitly configured. Remote HTTPS ASR requires a key; only the same-host loopback Xinference deployment above may omit it when authentication is disabled. All keys remain server-side. The FFmpeg subprocess does not inherit model or platform credentials.
 
 Container deployment uses the independent Dockerfile/compose.yml: copy the example to `.env`, configure it, and run `docker compose up --build -d`. Port 4303 binds locally by default; expose it through the HTTPS proxy in nginx.conf.example. Docker is unavailable locally and the container has not been built and run. Tasks have a 3,600-second deadline; timeout cleanup stops the whole process group. Operators must configure disk capacity, rate limits and backups, review the base-image digest and avoid multiple instances sharing the same data directory.
 
 Cancellation now stops the local worker process tree without publishing partial minutes; remote ASR or model work already accepted may still continue on its server. Still missing: a real ASR/model end-to-end task, rendered Chinese Word review, full legacy icon/background and specialized-page comparison, user storage quotas and three-platform desktop Tab integration.
-Navigation and record icons use the same site-owned SVG set. The usage guide uses an introduction banner and four instruction cards, retaining this expert’s input limits and review requirements. No runtime assets or styles are imported from another expert.
+The four navigation icons are site-owned copies of the original expert PNG artwork. The usage guide uses an introduction banner and four instruction cards, retaining this expert’s input limits and review requirements. No runtime assets or styles are imported from another expert.

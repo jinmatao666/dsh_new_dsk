@@ -20,17 +20,25 @@ def valid_url(value, internal=False, origin=False):
         return False
 
 
-def local_asr_url(value):
-    """Only the explicitly configured loopback transcription endpoint may use HTTP."""
+def local_inference_url(value, path):
+    """Allow HTTP only for a loopback inference endpoint with the expected path."""
     try:
         parsed = urlsplit(value)
         parsed.port
         return (parsed.scheme == "http" and parsed.hostname in ("127.0.0.1", "::1")
-                and parsed.path == "/v1/audio/transcriptions"
+                and parsed.path == path
                 and not parsed.username and not parsed.password
                 and not parsed.query and not parsed.fragment)
     except ValueError:
         return False
+
+
+def local_asr_url(value):
+    return local_inference_url(value, "/v1/audio/transcriptions")
+
+
+def local_model_url(value):
+    return local_inference_url(value, "/v1/chat/completions")
 
 
 def valid_asr_url(value):
@@ -52,13 +60,14 @@ def executable(variable, fallback):
 
 def checks():
     result = {
-        "public_origin": valid_url(os.environ.get("EXPERT_PUBLIC_URL", ""), origin=True),
-        "identity_endpoint": valid_url(os.environ.get("EXPERT_PLATFORM_REDEEM_URL", "")),
+        "public_origin": valid_url(os.environ.get("EXPERT_PUBLIC_URL", ""), internal=True, origin=True),
+        "identity_endpoint": valid_url(os.environ.get("EXPERT_PLATFORM_REDEEM_URL", ""), internal=True),
         "provider_credential": configured("EXPERT_PROVIDER_CREDENTIAL"),
     }
-    result["model_url"] = valid_url(os.environ.get("EXPERT_MODEL_URL", ""))
+    model_url = os.environ.get("EXPERT_MODEL_URL", "")
+    result["model_url"] = valid_url(model_url) or local_model_url(model_url)
     result["model_id"] = configured("EXPERT_MODEL")
-    result["model_key"] = configured("EXPERT_MODEL_KEY")
+    result["model_key"] = local_model_url(model_url) or configured("EXPERT_MODEL_KEY")
     asr_url = os.environ.get("EXPERT_ASR_URL", "")
     result["asr_url"] = valid_asr_url(asr_url)
     result["asr_id"] = configured("EXPERT_ASR_MODEL")

@@ -1,4 +1,18 @@
 import { productText } from './locales/product.ts'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { Select } from '@deepseek-ai/dsh-client-ui-primitives'
+
+function visiblePages(page: number, pages: number): (number | 'gap')[] {
+  if (pages <= 7) return Array.from({ length: pages }, (_, index) => index + 1)
+  const nearby = new Set([1, pages, page - 1, page, page + 1])
+  const numbers = [...nearby].filter(value => value >= 1 && value <= pages).sort((a, b) => a - b)
+  const result: (number | 'gap')[] = []
+  numbers.forEach((value, index) => {
+    if (index > 0 && value - (numbers[index - 1] ?? value) > 1) result.push('gap')
+    result.push(value)
+  })
+  return result
+}
 
 /** Search, filters and pagination belong to one catalog, not the surrounding page. */
 export function CatalogToolbar({
@@ -20,25 +34,58 @@ export function CatalogToolbar({
   loading?: boolean
   onPage: (value: number) => void
 }) {
-  return <form className="dsh-skill-catalog-toolbar" onSubmit={(event) => { event.preventDefault(); onSearch() }}>
-    <div className="dsh-skill-search-row"><input aria-label={searchLabel} placeholder={searchLabel} value={keyword}
-      maxLength={200} onChange={(event) => { onKeyword(event.target.value) }} /></div>
-    <select aria-label={`${searchLabel} / ${categoryLabel}`} value={category}
-      onChange={(event) => { onCategory(event.target.value) }}>
-      <option value="">{categoryLabel}</option>
-      {categories.map(item => <option key={item.key} value={item.key}>{item.name}</option>)}
-    </select>
-    {onSort && <select aria-label={`${searchLabel} / ${productText('热门下载')}`} value={sort}
-      onChange={(event) => { onSort(event.target.value) }}>
-      <option value="downloads">{productText('热门下载')}</option>
-      <option value="updated_at">{productText('最近更新')}</option>
-    </select>}
+  const [jump, setJump] = useState('')
+  const toolbarRef = useRef<HTMLDivElement>(null)
+  const pendingScroll = useRef<{ panel: HTMLElement; top: number } | null>(null)
+  useLayoutEffect(() => {
+    if (!pendingScroll.current) return
+    pendingScroll.current.panel.scrollTop = pendingScroll.current.top
+    pendingScroll.current = null
+  })
+  const preservePosition = (action: () => void) => {
+    const panel = toolbarRef.current?.closest<HTMLElement>('.dsh-skill-market-panel')
+    const saved = panel ? { panel, top: panel.scrollTop } : null
+    pendingScroll.current = saved
+    action()
+    queueMicrotask(() => { if (pendingScroll.current === saved) pendingScroll.current = null })
+  }
+  return <div ref={toolbarRef} className="dsh-skill-catalog-toolbar">
+    <form className="dsh-skill-search-row" onSubmit={(event) => { event.preventDefault(); preservePosition(onSearch) }}>
+      <input aria-label={searchLabel} placeholder={searchLabel} value={keyword}
+        maxLength={200} onChange={(event) => { onKeyword(event.target.value) }} />
+    </form>
+    <Select label={`${searchLabel} / ${categoryLabel}`} value={category}
+      options={[{ value: '', label: categoryLabel }, ...categories.map(item => ({ value: item.key, label: item.name }))]}
+      onChange={(value) => { preservePosition(() => { onCategory(value) }) }} />
+    {onSort && <Select label={`${searchLabel} / ${productText('热门下载')}`} value={sort ?? 'downloads'}
+      options={[{ value: 'downloads', label: productText('热门下载') }, { value: 'updated_at', label: productText('最近更新') }]}
+      onChange={(value) => { preservePosition(() => { onSort(value) }) }} />}
     <div className="dsh-skill-catalog-pagination">
-      <button type="button" disabled={loading || page <= 1} onClick={() => { onPage(page - 1) }}>{productText('上一页')}</button>
-      <span aria-live="polite">{productText('第')}{page}{productText(' 页')} / {pages}</span>
-      <button type="button" disabled={loading || page >= pages} onClick={() => { onPage(page + 1) }}>{productText('下一页')}</button>
+      <button type="button" disabled={loading || page <= 1} onClick={() => { preservePosition(() => { onPage(page - 1) }) }}>{productText('上一页')}</button>
+      <span className="dsh-skill-page-count" aria-live="polite">{productText('第')}{page}{productText(' 页')} / {pages}</span>
+      <span className="dsh-skill-page-choices" aria-label={productText('选择页码')}>
+        {visiblePages(page, pages).map((value, index) => value === 'gap'
+          ? <span className="dsh-skill-page-gap" key={`gap-${index}`} aria-hidden="true">…</span>
+          : <button className="dsh-skill-page-number" type="button" key={value}
+            aria-label={`${productText('第')}${value}${productText(' 页')}`}
+            aria-current={value === page ? 'page' : undefined}
+            disabled={loading || value === page} onClick={() => { preservePosition(() => { onPage(value) }) }}>{value}</button>)}
+      </span>
+      <button type="button" disabled={loading || page >= pages} onClick={() => { preservePosition(() => { onPage(page + 1) }) }}>{productText('下一页')}</button>
+      <form className="dsh-skill-page-jump" onSubmit={(event) => {
+        event.preventDefault()
+        const target = Number(jump)
+        if (!loading && /^[1-9]\d*$/.test(jump) && Number.isSafeInteger(target) && target <= pages) {
+          preservePosition(() => { onPage(target) })
+          setJump('')
+        }
+      }}>
+        <input type="text" inputMode="numeric" aria-label={productText('跳转页码')}
+          placeholder={productText('页码')} value={jump} onChange={(event) => { setJump(event.target.value) }} />
+        <button type="submit" disabled={loading || jump === ''}>{productText('跳转')}</button>
+      </form>
     </div>
-  </form>
+  </div>
 }
 
 /** Shared card download-count glyph for both catalog sources. */

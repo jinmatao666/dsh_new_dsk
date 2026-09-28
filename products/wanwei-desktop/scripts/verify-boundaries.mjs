@@ -30,7 +30,7 @@ for (const root of officialRoots) {
 }
 
 const publicRoot = join(repositoryRoot, 'apps', 'web', 'public')
-for (const productAsset of ['brand-mark.svg', 'brand-wordmark.svg', 'connector-icons', 'skill-icons']) {
+for (const productAsset of ['brand-mark.svg', 'brand-wordmark.svg', 'connector-icons', 'skill-icons', 'expert-icons']) {
   try {
     statSync(join(publicRoot, productAsset))
     violations.push(`apps/web/public/${productAsset}`)

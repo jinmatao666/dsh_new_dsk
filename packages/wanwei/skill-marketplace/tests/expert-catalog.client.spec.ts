@@ -10,13 +10,13 @@ describe('Wanwei published expert projection', () => {
   it('uses the live published roster and administrator-configured detail panels', () => {
     const entries = [{
       key: 'geology-analysis', name: '地质条件研判', subtitle: '专业分析', category: '自然资源',
-      summary: '后台摘要', tags: '["地质","选址"]', scenario: '项目选址', materials: '地块范围',
+      summary: '后台摘要', tags: '["地质","选址"]', scenario: '项目选址', materials: '地块范围', footer_note: '后台弹窗说明',
       workbench_url: 'https://geology.example.com/',
       detail_sections: JSON.stringify(Array.from({ length: 4 }, (_, index) => ({ title: `部分${index}`, subtitle: '说明', content: '内容' }))),
     }, { key: 'unknown-expert', name: '新增专家', workbench_url: 'https://new.example.com/' }]
     expect(projectPublishedExperts(entries, templates)).toEqual([expect.objectContaining({
       id: 'geology-analysis', name: '地质条件研判', role: '专业分析', tags: ['地质', '选址'],
-      scenario: '项目选址', materials: '地块范围',
+      scenario: '项目选址', materials: '地块范围', footerNote: '后台弹窗说明',
       detailSections: Array.from({ length: 4 }, (_, index) => ({ title: `部分${index}`, subtitle: '说明', content: '内容' })),
     }), expect.objectContaining({ id: 'unknown-expert', name: '新增专家', workbenchUrl: 'https://new.example.com/' })])
   })

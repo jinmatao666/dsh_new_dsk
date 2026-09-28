@@ -14,7 +14,9 @@ The Wanwei SkillHub plugin owns public catalog, icon and pinned archive requests
 
 Each catalog has independent search, category, sort and twelve-card pages. Pagination stays beside that catalog's filters rather than below the combined market, so users do not mistake it for whole-page navigation. A shared toolbar and download glyph keep both sources visually consistent; the section heading identifies SkillHub without repeating its name on every card. Platform update ordering uses server timestamps, not inferred version dates.
 
-My installations uses one source-filtered twelve-card page across platform/local entries and SkillHub receipts. One toolbar owns search and page state, so choosing all skills does not render two independently paginated lists. Native receipt refreshes recalculate the page count after uninstall without querying SkillHub.
+The shared toolbar exposes first, last and nearby page choices plus a validated direct jump. It restores the market panel's scroll offset during filter or page changes; SkillHub retains the previous grid while the next remote page loads so transient height loss does not move the viewport.
+
+My installations uses one source-filtered twelve-card page across platform/local entries and SkillHub receipts. One toolbar owns search and page state, so choosing all skills does not render two independently paginated lists. A matching platform entry and SkillHub receipt collapse into one card in the combined view; source filtering still exposes each installation. Native catalog changes refresh both installation sources, and receipt refreshes recalculate the page count after uninstall without querying SkillHub.
 
 ## Alternatives considered
 

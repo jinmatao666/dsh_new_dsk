@@ -10,7 +10,7 @@ export function importedFileReference(path: string): ReferenceInsert {
     source: 'reference',
     ref: mention,
     clipboardText: mention,
-    label: directory ? `${name}/` : name,
+    label: name,
     appearance: directory ? 'folder' : 'file',
   }
 }

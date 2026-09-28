@@ -14,6 +14,7 @@
 | `packages/bundle/web-app` | 装载通用客户端平台动作注册表 | 注册表为空，不改变官方页面 |
 | `packages/client/ui-conversation` | `InputActions.appendReferences` 追加通用结构化引用，保留现有草稿和标签 | 未调用时不改变官方输入行为；不包含产品路径或桌面实现 |
 | `packages/client/ui-conversation` | 草稿前缀 Slot 可渲染行内前缀并将前导文字转换成通用引用 | 无插件时渲染完整输入框；不包含技能市场或产品样式 |
+| `packages/client/ui-layout` | `ctx.layout.closeSidebar()` 提供幂等的通用侧栏收起动作，兼容窄屏自动折叠 | 无插件调用时布局行为不变；不包含专家或桌面窗口逻辑 |
 | `packages/client/ui-skill`、`packages/client/ui-primitives` | 技能菜单选择插入通用技能引用，序列化为原有 slash token；共享技能 SVG 图标 | 官方技能仍按原有宿主规则加载；胶囊产品样式由万维层提供 |
 | `scripts/check-workspace-constraints.ts`、`scripts/release/families.ts` | 通用 `dsh.release: false` 标记：产品包必须私有且不参与官方 npm 发布；官方包不得反向依赖这些包 | 未标记的官方包继续遵守原发布规则 |
 

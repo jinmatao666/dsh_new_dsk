@@ -11,7 +11,12 @@ describe('imported file reference', () => {
     expect(reference.source).toBe('reference')
   })
   it('presents a folder with its original reference', () => {
-    expect(importedFileReference('资料/输入/')).toEqual({ source: 'reference', ref: '@资料/输入/', clipboardText: '@资料/输入/', label: '输入/', appearance: 'folder' })
+    expect(importedFileReference('资料/输入/')).toEqual({ source: 'reference', ref: '@资料/输入/', clipboardText: '@资料/输入/', label: '输入', appearance: 'folder' })
+  })
+  it('keeps a collision-renamed folder identifiable without a display-only slash', () => {
+    expect(importedFileReference('技能团测试文件 (2)/')).toMatchObject({
+      label: '技能团测试文件 (2)', appearance: 'folder', ref: '@"技能团测试文件 (2)/"',
+    })
   })
   it.each(['', 'bad"name.txt', 'bad\nname.txt'])('rejects an unrepresentable path %j', (path) => {
     expect(() => importedFileReference(path)).toThrow()

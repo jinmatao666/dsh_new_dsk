@@ -16,6 +16,8 @@ Compose pins the container's listening port to match its loopback-only port mapp
 
 ## Standalone verification
 
+The public website origin and platform redemption endpoint support HTTP and HTTPS. HTTPS remains recommended: HTTP exposes tickets, provider credentials, cookies and task data to interception or modification. Origin checks still include scheme, hostname and port; redemption refuses redirects. Upgrading from HTTPS-only code requires rebuilding the platform image and desktop package as well as redeploying this website. Existing HTTPS proxy examples remain usable; prior HTTPS-only wording is superseded by this support policy, not by a claim of encrypted HTTP.
+
 Refreshing the same result task preserves the expanded input details and reading position. Opening another task resets the details to collapsed.
 
 Preparation places advanced options below the input-file list, with separate data requirements and delivery guidance beside the form. Guidance does not imply successful output creation or coordinate conversion.
@@ -57,4 +59,4 @@ Inject variables from .env.example through a process manager and run `python ser
 Run `python -m unittest -v test_geometry test_analysis test_server`. HTTP tests start a separate local protocol service and exercise real network requests, processing subprocesses and file downloads to verify Word artifacts. This is not a production GIS connection. Tasks fail explicitly without an endpoint and do not generate demonstration results. Website requests cannot choose the service address.
 
 Each task allows up to 30 files totaling 32 MB. Terminal tasks are retained for 30 days by default. Cancellation publishes no artifacts and stops the local worker process tree; an already accepted remote GIS request may still continue on its server. Linux timeout cleanup also stops the entire process group. Deployment requires disk monitoring, capacity limits, backups and request-rate limits.
-Navigation and record icons use the same site-owned SVG set. The usage guide uses an introduction banner and four instruction cards, retaining this expert’s input limits and review requirements. No runtime assets or styles are imported from another expert.
+The four navigation icons are site-owned copies of the original expert PNG artwork. The usage guide uses an introduction banner and four instruction cards, retaining this expert’s input limits and review requirements. No runtime assets or styles are imported from another expert.

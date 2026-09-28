@@ -3,23 +3,23 @@
   "assets": [
     {
       "filename": "home.png",
-      "source": "office-icons.ts:fileHome",
-      "sha256": "93cbd1d8d5b249ce76c0b674cf7559b559f05925efb0bc046abf7be6e9ac4cb0"
+      "source": "GeologyIconData.ts:workspace",
+      "sha256": "473d3039f43ac5412c3149ad7719df1dd8a28ddb39509335cb10b75351d7fbe2"
     },
     {
       "filename": "history.png",
-      "source": "office-icons.ts:fileHistory",
-      "sha256": "b610cf865f11832d64b95112bc3280150102b8da802ccf8b03d4b9437b60ba5a"
+      "source": "GeologyIconData.ts:history",
+      "sha256": "32e4d994795bd336ccc0a9809e3c61e1d3a119aa40503c1bc526a8560c680be4"
     },
     {
       "filename": "files.png",
-      "source": "office-icons.ts:fileFolder",
-      "sha256": "40bfb948b4594bdeac1fa6b36269ee274ea7bf5cb9482ebaebb47174f94cd50a"
+      "source": "GeologyIconData.ts:files",
+      "sha256": "1f9a5c0a2e2f9b3180485827d8146beb51458a035d365cfb2963e95c02f6e639"
     },
     {
       "filename": "guide.png",
-      "source": "office-icons.ts:fileGuide",
-      "sha256": "0e6424b39960ae1423aa4d2b58e6e1142de7180660f0ed27172fa6cd2b298195"
+      "source": "GeologyIconData.ts:guide",
+      "sha256": "1e531b5af67aca480b8004441871eb4601b89ab4446b356addfe5392fff92ff2"
     },
     {
       "filename": "word-pdf.png",
