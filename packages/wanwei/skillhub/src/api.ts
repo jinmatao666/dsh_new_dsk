@@ -94,7 +94,7 @@ export class SkillHubApi {
   }> {
     const input = object(payload)
     const page = input.page ?? 1
-    if (typeof page !== 'number' || !Number.isSafeInteger(page) || page < 1 || page > 10000) throw new Error('页码无效')
+    if (typeof page !== 'number' || !Number.isSafeInteger(page) || page < 1) throw new Error('页码无效')
     const keyword = text(input.keyword).trim()
     const category = text(input.category)
     const sort = input.sort ?? 'downloads'

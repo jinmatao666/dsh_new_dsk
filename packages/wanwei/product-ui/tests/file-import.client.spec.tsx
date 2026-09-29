@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { FileImportAction } from '../src/client/product.tsx'
 
 const desktopWindow = window as Window & { __ZJUGIS_NATIVE_INVOKE__?: (command: string, args?: unknown) => Promise<unknown> }
-afterEach(() => { cleanup(); delete desktopWindow.__ZJUGIS_NATIVE_INVOKE__ })
+afterEach(() => { cleanup(); vi.useRealTimers(); delete desktopWindow.__ZJUGIS_NATIVE_INVOKE__ })
 
 function bench(inCard = false) {
   const appendReferences = vi.fn(() => true)
@@ -22,6 +22,32 @@ function bench(inCard = false) {
 }
 
 describe('desktop file import', () => {
+  it('dismisses completion after three seconds and preserves progress for a slow subsequent import', async () => {
+    vi.useFakeTimers()
+    const view = bench()
+    await act(async () => { fireEvent(window, new Event('dsh:native-file-drop')) })
+    expect(view.getByRole('status').textContent).toBe('已导入 1 个文件')
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+    expect(view.queryByRole('status')).toBeNull()
+    let finish: (paths: string[]) => void = () => {}
+    view.invoke.mockImplementationOnce(() => new Promise<string[]>((resolve) => { finish = resolve }))
+    await act(async () => { fireEvent(window, new Event('dsh:native-file-drop')) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000) })
+    expect(view.getByRole('status').textContent).toBe('正在导入文件…')
+    await act(async () => { finish(['another.txt']) })
+    expect(view.getByRole('status').textContent).toBe('已导入 1 个文件')
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+    expect(view.queryByRole('status')).toBeNull()
+  })
+  it('dismisses an import failure after allowing time to read it', async () => {
+    vi.useFakeTimers()
+    const view = bench()
+    view.invoke.mockRejectedValueOnce(new Error('无法复制文件'))
+    await act(async () => { fireEvent(window, new Event('dsh:native-file-drop')) })
+    expect(view.getByRole('alert').textContent).toContain('无法复制文件')
+    await act(async () => { await vi.advanceTimersByTimeAsync(6000) })
+    expect(view.queryByRole('alert')).toBeNull()
+  })
   it('anchors the drag invitation to the composer card and clears it on leave', () => {
     const view = bench(true)
     fireEvent(window, new Event('dsh:native-file-drag-enter'))

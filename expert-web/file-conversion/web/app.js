@@ -126,7 +126,7 @@ function bind() {
       event.preventDefault()
       if (link.dataset.saving === 'true') return
       link.dataset.saving = 'true'
-      try { await saveArtifact(link); toast('成果已保存到下载目录') }
+      try { const path = await saveArtifact(link); if (path) toast(`成果已保存：${path}`) }
       catch (error) { toast(error.message || '成果保存失败，请重试') }
       finally { link.dataset.saving = 'false' }
     }
@@ -166,7 +166,7 @@ async function saveArtifact(link) {
     file.readAsDataURL(new Blob(chunks))
   })
   if (sessionExpired) throw new Error('登录已失效，请重新打开工作台')
-  await window.__ZJUGIS_NATIVE_INVOKE__('save_expert_artifact', { fileName, bytesBase64 })
+  return await window.__ZJUGIS_NATIVE_INVOKE__('save_expert_artifact', { fileName, bytesBase64 })
 }
 function form(tool, preserve = false) {
   if (sessionExpired) { showExpiredSession(); return }

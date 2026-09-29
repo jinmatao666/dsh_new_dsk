@@ -80,7 +80,7 @@ export function SkillHubSection({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<Skill | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailReady, setDetailReady] = useState(false)
   const [busy, setBusy] = useState(false)
   const pending = useRef(false)
   const generation = useRef(0)
@@ -140,7 +140,7 @@ export function SkillHubSection({
   useEffect(() => {
     detailGeneration.current++
     setSelected(null)
-    setDetailLoading(false)
+    setDetailReady(false)
     return () => { detailGeneration.current++ }
   }, [active, installedOnly])
 
@@ -160,28 +160,23 @@ export function SkillHubSection({
   const openDetail = async (skill: Skill) => {
     returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const current = ++detailGeneration.current
-    if (installedOnly) {
-      const panel = sectionRef.current?.closest<HTMLElement>('.dsh-skill-market-panel')
-      savedScroll.current = panel?.scrollTop ?? 0
-      if (panel) panel.scrollTop = 0
-      setSelected(skill)
-      return
-    }
-    setDetailLoading(true)
+    const panel = sectionRef.current?.closest<HTMLElement>('.dsh-skill-market-panel')
+    savedScroll.current = panel?.scrollTop ?? 0
+    if (panel) panel.scrollTop = 0
+    setSelected(skill)
+    setDetailReady(installedOnly)
+    if (installedOnly) return
     try {
       const value = await request('detail', { slug: skill.slug })
       if (current === detailGeneration.current) {
-        savedScroll.current = sectionRef.current?.closest<HTMLElement>('.dsh-skill-market-panel')?.scrollTop ?? 0
-        const panel = sectionRef.current?.closest<HTMLElement>('.dsh-skill-market-panel')
-        if (panel) panel.scrollTop = 0
         setSelected(value as Skill)
+        setDetailReady(true)
       }
     } catch (e) {
       if (current === detailGeneration.current) {
         latest.current.onNotice({ kind: 'error', text: errorText(e) })
       }
     }
-    finally { if (current === detailGeneration.current) setDetailLoading(false) }
   }
 
   const closeDetail = () => {
@@ -256,9 +251,9 @@ export function SkillHubSection({
   useEffect(() => { setInstalledPage(currentInstalledPage) }, [currentInstalledPage])
   const visibleCards = integrated
     ? installedCards.slice((currentInstalledPage - 1) * 12, currentInstalledPage * 12)
-    : cards.map(skill => ({ key: skill.slug, skill, card: undefined }))
-  const renderHubCard = (skill: Skill) => <button type="button" className="dsh-skill-card wanwei-skillhub-card"
-    key={`skillhub:${skill.slug}`} onClick={() => { void openDetail(skill) }}>
+    : cards.map((skill, index) => ({ key: `${skill.slug}:${index}`, skill, card: undefined }))
+  const renderHubCard = (skill: Skill, key: string) => <button type="button" className="dsh-skill-card wanwei-skillhub-card"
+    key={key} onClick={() => { void openDetail(skill) }}>
     <span className="dsh-skill-card-visual">
       <span className="dsh-skill-card-icon wanwei-skillhub-icon"><SkillHubIcon skill={skill} request={request} /></span>
       {ownRecord(skill) && <span className="dsh-skill-installed-badge">{productText('已安装')}</span>}
@@ -281,7 +276,6 @@ export function SkillHubSection({
       ]} category={installedSource} onCategory={(value) => { setInstalledSource(value); setInstalledPage(1) }}
       page={currentInstalledPage} pages={installedPages} onPage={setInstalledPage} />}
     {localError && <div role="status" className="wanwei-skillhub-status">{productText('本地安装状态暂不可用：')}{localError}<button type="button" onClick={() => { setRetry(v => v + 1) }}>{productText('重试')}</button></div>}
-    {detailLoading && <p role="status">{productText('正在读取技能详情…')}</p>}
     <>
       {!installedOnly && <CatalogToolbar searchLabel={productText('搜索 SkillHub 技能')}
         keyword={keyword} onKeyword={setKeyword} onSearch={() => { setQuery(keyword.trim()); setPage(1); setRetry(v => v + 1) }}
@@ -290,7 +284,7 @@ export function SkillHubSection({
         page={page} pages={Math.max(page, Math.ceil(data.total / 12))} loading={loading} onPage={setPage} />}
       {!installedOnly && error ? <div role="alert"><p>{error}</p><button type="button" onClick={() => { setRetry(v => v + 1) }}>{productText('重试')}</button></div> : <div className="wanwei-skillhub-results" aria-busy={loading}>
         {loading && <p role="status" className="wanwei-skillhub-loading">{productText('正在加载 SkillHub 技能…')}</p>}
-        <div className="dsh-skill-grid">{visibleCards.map(item => item.skill ? renderHubCard(item.skill) : item.card)}</div>
+        <div key={installedOnly ? 'installed' : 'market'} className="dsh-skill-grid">{visibleCards.map(item => item.skill ? renderHubCard(item.skill, item.key) : item.card)}</div>
         {!loading && visibleCards.length === 0 && <p>{integrated ? productText('没有匹配的技能') : installedOnly ? productText('暂未安装 SkillHub 技能') : productText('没有找到相关技能，试试其他关键词或分类。')}</p>}
       </div>}
     </>
@@ -303,11 +297,11 @@ export function SkillHubSection({
           <div className="dsh-skill-detail-icon wanwei-skillhub-icon"><SkillHubIcon skill={selected} request={request} /></div>
           <div className="dsh-skill-detail-info"><h1>{selected.name}</h1><p>{selected.summary}</p><div className="dsh-skill-detail-meta"><span className="dsh-skill-source official">{productText('SkillHub')}</span><span>{productText('版本')}: {selected.version}</span><span>{productText('作者')}: {selected.author || productText('未提供')}</span>{typeof selected.downloads === 'number' && <span>↓ {selected.downloads}</span>}</div></div>
           <div className="dsh-skill-detail-actions">
-            {!selectedRecord && <button type="button" className="dsh-skill-detail-install" disabled={busy || !localReady || selected.paid} onClick={() => { void operate(selected, 'install') }}>{busy ? productText('处理中…') : productText('安装')}</button>}
+            {!selectedRecord && <button type="button" className="dsh-skill-detail-install" disabled={busy || !detailReady || !localReady || selected.paid} onClick={() => { void operate(selected, 'install') }}>{busy ? productText('处理中…') : productText('安装')}</button>}
             {selectedRecord && <>
               <button type="button" className="dsh-skill-detail-use" disabled={busy}
                 onClick={() => { latest.current.onUse(selectedRecord.localSlug, selectedRecord.name) }}>{productText('使用技能')}</button>
-              {updateAvailable && <button type="button" className="dsh-skill-detail-install" disabled={busy || selected.paid}
+              {updateAvailable && <button type="button" className="dsh-skill-detail-install" disabled={busy || !detailReady || selected.paid}
                 onClick={() => { void operate(selected, 'update', selectedRecord) }}>{busy ? productText('处理中…') : productText('更新技能')}</button>}
               <button type="button" className="dsh-skill-detail-install installed" disabled={busy}
                 onClick={() => { void operate(selected, 'uninstall', selectedRecord) }}>{productText('卸载')}</button>

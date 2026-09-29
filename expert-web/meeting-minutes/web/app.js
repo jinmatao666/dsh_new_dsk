@@ -6,7 +6,23 @@ const main = document.querySelector('#main')
 let currentPage = 'home', selectedTool, selectedFiles = [], options = {}, tasks = [], timer, toastTimer, busy = false
 const escape = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]))
 let sessionExpired = false
+let waitingTimer
+function waitingElapsed(created, now = Date.now()) {
+  const seconds = Math.max(0, Math.floor((now - Number(created) * 1000) / 1000))
+  if (!Number.isFinite(seconds)) return '正在等待处理'
+  const minutes = Math.floor(seconds / 60)
+  return `已等待 ${minutes ? `${minutes} 分 ` : ''}${seconds % 60} 秒`
+}
+function syncWaitingClock() {
+  clearInterval(waitingTimer)
+  const nodes = main.querySelectorAll('[data-meeting-created]')
+  if (!nodes.length) return
+  const update = () => nodes.forEach(node => { node.textContent = waitingElapsed(node.dataset.meetingCreated) })
+  update()
+  waitingTimer = setInterval(update, 1000)
+}
 function showExpiredSession() {
+  clearInterval(waitingTimer)
   main.innerHTML = '<section class="panel"><h1>登录已失效</h1><p>请关闭当前 Tab，从桌面专家库重新打开。</p></section>'
 }
 function expireSession() {
@@ -71,7 +87,7 @@ function taskMarkup() {
   const completed = task.state === 'succeeded'
   const heading = completed ? '会议纪要已生成' : task.state === 'cancelled' ? '会议纪要已取消' : active ? '正在处理会议材料' : '本次纪要未完成'
   const detail = completed ? '任务正常结束，可下载本次生成的 Word 文件。' : active ? '任务已提交，可以切换到记录页，处理会继续进行。' : task.error || '这次任务没有生成成果，请检查材料后重试。'
-  const waiting = '<section class="meeting-waiting"><span class="meeting-wave" aria-hidden="true"></span><h3>正在生成纪要</h3><p>录音转写和纪要整理所需时间取决于材料长度。</p><small>当前服务不提供逐步骤进度；页面仅展示服务端返回的任务状态。</small></section>'
+  const waiting = `<section class="meeting-waiting meeting-waiting-active" aria-busy="true"><span class="meeting-wave" aria-hidden="true">${'<i></i>'.repeat(7)}</span><h3>${task.state === 'queued' ? '等待开始处理' : '正在生成纪要'}</h3><p>${task.state === 'queued' ? '任务已进入队列，开始处理后页面会自动更新。' : '正在处理会议材料，请稍候。'}</p><strong class="meeting-elapsed" data-meeting-created="${escape(task.created)}">${waitingElapsed(task.created)}</strong><p class="meeting-waiting-note">录音较长或材料较多时，处理可能需要几分钟。<br>你可以切换到其他页面，稍后在纪要记录中查看结果。</p><small>当前服务不提供逐步骤进度，完成后页面会自动更新。</small></section>`
   const files = completed ? task.outputs.map((name, index) => `<section class="meeting-deliverable"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3Z"/></svg><div><strong>${escape(name)}</strong><small>本次任务正式成果文件</small></div><a class="primary" href="/api/tasks/${escape(task.id)}/files/${index}" download>下载成果文件</a></section>`).join('') : ''
   return `<div class="meeting-flow"><header class="meeting-task-heading"><span>会议纪要任务</span><h1>${title}</h1><p>创建于 ${escape(new Date(task.created * 1000).toLocaleString())}</p></header><section class="meeting-status" data-status="${escape(task.state)}"><span aria-hidden="true">${completed ? '✓' : active ? '◷' : '!'}</span><div><h3>${heading}</h3><p>${escape(detail)}</p></div></section><div class="meeting-result-grid"><div>${active ? waiting : summaryMarkup(task) || '<section class="meeting-waiting"><h3>没有可展示的执行摘要</h3><p>请根据任务状态检查材料。</p></section>'}${files}</div><aside class="meeting-task-info"><h3>本次来源</h3>${inputs.map(name => `<p><img src="${/\.(wav|m4a|mp3)$/i.test(name) ? '/assets/audio.png' : '/assets/material.png'}" alt=""><span title="${escape(name)}">${escape(name)}</span></p>`).join('')}<small>成果文件由本专家服务保存，可从结果页下载。</small><button class="secondary" data-page="history">查看我的纪要记录</button>${active ? `<button class="secondary" data-cancel="${escape(task.id)}">取消任务</button>` : completed ? '' : '<button class="secondary" data-tool="minutes">修改材料后重新创建</button>'}</aside></div></div>`
 }
@@ -143,6 +159,7 @@ function render() {
   if (currentPage === 'result') { main.innerHTML = taskMarkup(); void loadSummary(tasks.find(task => task.id === selectedTask)) }
   if (currentPage === 'guide') main.innerHTML = `<div class="meeting-flow guide-page"><button class="text-action" data-page="home">← 返回首页</button><section class="guide-hero"><span class="eyebrow">使用指南</span><h1>让每场会议，都有清晰的记录</h1><p>准备录音或文字材料，核对提交信息，获得可复核的 Word 会议纪要。</p><button class="primary" data-tool="minutes">＋ 新建纪要</button></section><div class="guide-grid"><section class="panel"><span>01 / 材料准备</span><h2>上传会议内容</h2><p>支持一个 WAV、MP3、M4A 录音和多份 DOCX、PDF、Excel 或文字材料；也可仅使用文字。最多 30 个文件，总大小不超过 100 MB，录音不超过 60 分钟。</p></section><section class="panel"><span>02 / 提交确认</span><h2>核对文件与名称</h2><p>提交前检查所选材料和会议名称。扫描 PDF 请先 OCR；图片、PPT 和旧版 Word/Excel 暂不支持。</p></section><section class="panel"><span>03 / 系统处理</span><h2>等待完整结果</h2><p>录音会先转写，再与其他材料一起整理。任何转写段失败时，不会发布不完整的成果。</p></section><section class="panel"><span>04 / 结果复核</span><h2>下载并检查纪要</h2><p>仅最终 Word 文件作为成果。会议时间、地点、人员、决策、数字和责任主体都应回到原始材料核对。</p></section></div></div>`
   bind()
+  syncWaitingClock()
 }
 function bind() {
   main.querySelectorAll('a[download]').forEach(link => {
@@ -151,7 +168,7 @@ function bind() {
       event.preventDefault()
       if (link.dataset.saving === 'true') return
       link.dataset.saving = 'true'
-      try { await saveArtifact(link); toast('成果已保存到下载目录') }
+      try { const path = await saveArtifact(link); if (path) toast(`成果已保存：${path}`) }
       catch (error) { toast(error.message || '成果保存失败，请重试') }
       finally { link.dataset.saving = 'false' }
     }
@@ -194,9 +211,10 @@ async function saveArtifact(link) {
     file.readAsDataURL(new Blob(chunks))
   })
   if (sessionExpired) throw new Error('登录已失效，请重新打开工作台')
-  await window.__ZJUGIS_NATIVE_INVOKE__('save_expert_artifact', { fileName, bytesBase64 })
+  return await window.__ZJUGIS_NATIVE_INVOKE__('save_expert_artifact', { fileName, bytesBase64 })
 }
 function form(tool, preserve = false) {
+  clearInterval(waitingTimer)
   if (sessionExpired) { showExpiredSession(); return }
   selectedTool = tool
   if (!preserve) {
@@ -314,5 +332,5 @@ async function boot() {
     timer = setInterval(() => { refresh().catch(error => { clearInterval(timer); toast(error.message) }) }, 2500)
   } catch (error) { main.innerHTML = `<section class="panel"><h1>无法打开工作台</h1><p class="error">${escape(error.message)}</p><p class="muted">请关闭当前 Tab，从桌面专家库重新打开。</p></section>` }
 }
-window.addEventListener('pagehide', () => clearInterval(timer))
+window.addEventListener('pagehide', () => { clearInterval(timer); clearInterval(waitingTimer) })
 boot()

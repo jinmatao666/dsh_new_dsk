@@ -3,6 +3,7 @@ import difflib
 import hashlib
 import html
 import json
+import re
 from pathlib import Path
 import zipfile
 
@@ -100,13 +101,48 @@ def compare_text(old, new):
 
 def write_docx(lines, target):
     document = Document()
-    for line in lines:
-        if line.startswith("# "):
-            document.add_heading(line[2:], level=1)
-        elif line.startswith("## "):
-            document.add_heading(line[3:], level=2)
-        else:
-            document.add_paragraph(line)
+    def clean(text):
+        text = re.sub(r'<sup>([\d,，\s]+)</sup>', r'[\1]', text, flags=re.I)
+        text = re.sub(r'<source\s+index="(\d+)"\s+name="([^"]*)"\s*>', r'来源 \1：\2', text, flags=re.I)
+        return re.sub(r'</source>', '', text, flags=re.I)
+
+    def add_inline(paragraph, text):
+        for part in re.split(r'(\*\*[^*]+\*\*)', clean(text)):
+            run = paragraph.add_run(part[2:-2] if part.startswith('**') and part.endswith('**') else part)
+            run.bold = part.startswith('**') and part.endswith('**')
+
+    def cells(line):
+        return [cell.strip().replace(r'\|', '|') for cell in re.split(r'(?<!\\)\|', line.strip().strip('|'))]
+
+    lines = list(lines)
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if '|' in line and index + 1 < len(lines) and all(re.fullmatch(r':?-{3,}:?', cell) for cell in cells(lines[index + 1])):
+            headers = cells(line)
+            table = document.add_table(rows=1, cols=len(headers))
+            table.style = 'Table Grid'
+            for cell, text in zip(table.rows[0].cells, headers):
+                add_inline(cell.paragraphs[0], text)
+                for run in cell.paragraphs[0].runs:
+                    run.bold = True
+            index += 2
+            while index < len(lines) and '|' in lines[index] and lines[index].strip():
+                values = cells(lines[index])
+                for column, cell in enumerate(table.add_row().cells):
+                    add_inline(cell.paragraphs[0], values[column] if column < len(values) else '')
+                index += 1
+            continue
+        heading = re.match(r'^(#{1,4})\s+(.+)', line)
+        if heading:
+            document.add_heading(clean(heading[2]).replace('**', ''), level=len(heading[1]))
+        elif re.match(r'^\s*[-*]\s+', line):
+            add_inline(document.add_paragraph(style='List Bullet'), re.sub(r'^\s*[-*]\s+', '', line))
+        elif re.match(r'^\s*\d+[.)]\s+', line):
+            add_inline(document.add_paragraph(style='List Number'), re.sub(r'^\s*\d+[.)]\s+', '', line))
+        elif line.strip():
+            add_inline(document.add_paragraph(), line)
+        index += 1
     document.save(target)
 
 

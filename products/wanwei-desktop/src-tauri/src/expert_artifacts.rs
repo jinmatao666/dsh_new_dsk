@@ -1,13 +1,14 @@
 //! Save expert-owned output bytes without trusting a remote site's local path.
+#[cfg(test)]
+use std::io::Write;
 use std::{
     fs,
-    io::Write,
     path::{Path, PathBuf},
 };
 
 pub(crate) const MAX_BYTES: usize = 128 * 1024 * 1024;
 
-pub(crate) fn save_at(root: &Path, name: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+pub(crate) fn validate(name: &str, bytes: &[u8]) -> Result<(), String> {
     let path = Path::new(name);
     let extension = path
         .extension()
@@ -42,6 +43,47 @@ pub(crate) fn save_at(root: &Path, name: &str, bytes: &[u8]) -> Result<PathBuf, 
     if bytes.is_empty() || bytes.len() > MAX_BYTES {
         return Err("成果文件为空或超过 128 MB".into());
     }
+    Ok(())
+}
+
+/// Destination comes exclusively from the OS save dialog, which confirms replacement.
+pub(crate) fn save_selected_at(
+    destination: &Path,
+    original: &str,
+    bytes: &[u8],
+) -> Result<PathBuf, String> {
+    validate(original, bytes)?;
+    let name = destination
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or("成果文件名无效")?;
+    validate(name, bytes)?;
+    if destination
+        .extension()
+        .map(|value| value.to_ascii_lowercase())
+        != Path::new(original)
+            .extension()
+            .map(|value| value.to_ascii_lowercase())
+    {
+        return Err("请保留成果文件的原始扩展名".into());
+    }
+    fs::write(destination, bytes)
+        .map_err(|_| "无法保存成果文件，请检查目录权限和剩余空间".to_string())?;
+    Ok(destination.to_owned())
+}
+
+#[cfg(test)]
+pub(crate) fn save_at(root: &Path, name: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+    validate(name, bytes)?;
+    let path = Path::new(name);
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("");
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("");
     fs::create_dir_all(root).map_err(|_| "无法创建成果下载目录")?;
     for index in 0..10_000 {
         let filename = if index == 0 {
@@ -88,6 +130,14 @@ mod tests {
         assert_ne!(first, second);
         assert_eq!(fs::read(first).unwrap(), b"first");
         assert_eq!(fs::read(second).unwrap(), b"second");
+        let selected = root.join("自行选择的成果.pdf");
+        assert_eq!(
+            save_selected_at(&selected, "成果报告.pdf", b"chosen").unwrap(),
+            selected
+        );
+        assert_eq!(fs::read(&selected).unwrap(), b"chosen");
+        assert!(save_selected_at(&root.join("wrong.exe"), "成果报告.pdf", b"data").is_err());
+        assert!(save_selected_at(&root.join("wrong.txt"), "成果报告.pdf", b"data").is_err());
         assert_eq!(root.parent(), Some(temporary.as_path()));
         // Only the exclusively created test directory is removed.
         fs::remove_dir_all(root).unwrap();

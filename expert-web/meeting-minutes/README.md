@@ -4,6 +4,8 @@ Automatic task polling redraws the page only on the first response or changed ta
 
 English | [中文](README.zh.md)
 
+Running tasks show an animated waiting indicator and elapsed time since submission, not estimated completion or stage progress. Queued tasks have distinct wording. The clock updates without replacing page content and stops on navigation, session expiry or terminal state. Reduced-motion preferences disable the animation. Source filenames wrap in the readable side panel; result controls use matching text sizing.
+
 An HTTP 401 from task, preview or artifact requests locks the workbench and clears task/material caches. Late responses cannot restore the page; an artifact stream interrupted by expired login is cancelled before native saving. Close the Tab and reopen it from the desktop catalog to exchange a fresh ticket. These frontend checks do not revoke a provider-side job already submitted.
 
 Original upload names label model materials and the Word report's source list. File reads and audio processing use numbered internal paths, never display labels. Task rows without original names retain their stored names; invalid source-label lists fail before document generation.
@@ -36,7 +38,7 @@ HTTP is supported by the website, platform registration and updated desktop. Sch
 
 Operators can run `python deployment.py` to check configuration and local processing dependencies. It prints check names and pass states, not secrets or endpoint addresses. `/healthz` checks HTTP and database availability; `/readyz` checks required configuration and returns 503 when it is missing. Readiness does not prove live remote connectivity. The Dockerfile includes a liveness check.
 
-In an updated desktop expert Tab, artifact downloads use the native `save_expert_artifact` command to write to the user's Downloads directory. The limit is 128 MB; it accepts no local destination path and does not overwrite a same-name file. Normal browsers retain browser downloading. Byte forwarding and native saving have tests, but actual desktop clicks across platforms still require acceptance.
+In an updated desktop expert Tab, artifact downloads open the native Save As dialog through `save_expert_artifact`. Only the user selects the destination and confirms replacement. Websites cannot supply local paths. The command validates bounded bytes (128 MB), filenames and unchanged supported extensions, returning the saved path or null on cancellation. Normal browsers use browser downloads; desktop interaction across platforms still requires acceptance.
 
 Run `python verify_portability.py` from this directory. It copies only this expert into a temporary location, excludes local data and credentials, creates a fresh virtual environment, installs its own dependencies and runs Python/Node tests. It reads no DSH root or other expert source. Node.js is required.
 

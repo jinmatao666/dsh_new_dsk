@@ -4,10 +4,41 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { CatalogToolbar } from '../src/client/CatalogToolbar.tsx'
 import { pagePlatformCatalog } from '../src/client/catalog.ts'
+import { isMarketInteraction } from '../src/client/market-interaction.ts'
 
 afterEach(cleanup)
 
 describe('catalog-local controls', () => {
+  it('treats portaled filter choices as internal interactions while sidebar clicks remain external', () => {
+    const closeMarket = vi.fn()
+    const onCategory = vi.fn()
+    const dismiss = (event: Event) => {
+      if (event.target instanceof Element && !isMarketInteraction(event.target)) closeMarket()
+    }
+    document.addEventListener('pointerdown', dismiss, true)
+    try {
+      render(<><div className="dsh-skill-market-panel"><CatalogToolbar searchLabel="搜索技能"
+        keyword="" onKeyword={vi.fn()} onSearch={vi.fn()} categoryLabel="全部技能"
+        categories={[{ key: 'platform', name: '平台技能' }, { key: 'skillhub', name: 'SkillHub技能' }]}
+        category="" onCategory={onCategory} page={1} pages={1} onPage={vi.fn()} /></div>
+      <button type="button">工作区</button></>)
+      for (const [name, value] of [['平台技能', 'platform'], ['SkillHub技能', 'skillhub'], ['全部技能', '']] as const) {
+        fireEvent.pointerDown(screen.getByRole('combobox'))
+        fireEvent.click(screen.getByRole('combobox'))
+        const list = screen.getByRole('listbox')
+        expect(list.closest('.dsh-skill-market-panel')).toBeNull()
+        fireEvent.pointerDown(list)
+        const option = screen.getByRole('option', { name })
+        fireEvent.pointerDown(option)
+        fireEvent.click(option)
+        expect(onCategory).toHaveBeenLastCalledWith(value)
+      }
+      expect(onCategory).toHaveBeenCalledTimes(3)
+      expect(closeMarket).not.toHaveBeenCalled()
+      fireEvent.pointerDown(screen.getByRole('button', { name: '工作区' }))
+      expect(closeMarket).toHaveBeenCalledOnce()
+    } finally { document.removeEventListener('pointerdown', dismiss, true) }
+  })
   it('submits search through the input form and keeps pagination alongside filters', () => {
     const onSearch = vi.fn()
     const onPage = vi.fn()

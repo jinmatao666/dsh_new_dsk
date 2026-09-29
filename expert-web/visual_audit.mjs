@@ -198,9 +198,11 @@ try {
     if (await evaluate("!document.querySelector('#main').textContent.includes('重点变化分析（模型生成）') || !document.querySelector('.doc-diff-stats')")) throw new Error('Model analysis replaced exact comparison statistics')
     await narrowScreenshots('14b-compare-analysis')
     await screenshot('14c-compare-analysis-body', "Array.from(document.querySelectorAll('.doc-result-body h2')).find(node=>node.textContent==='重点变化分析（模型生成）').scrollIntoView({block:'start'})")
-    const summaryPreview = { text: ['# 文档摘要与要点', '## 综合摘要', '这是仅用于视觉检查的测试正文。', '## 核心观点', '检查实际标题的分块布局。', '## 风险与问题', '不提供生产任务结论。'].join('\n'), truncated: false }
+    const summaryPreview = { text: ['# 文档摘要与要点', '## 综合摘要', '这是**仅用于视觉检查**的测试正文，不是实际业务结论。<sup>1</sup>', '## 核心观点', '- 核对材料中的重要数字、日期和责任主体。', '- 未明确的信息需要回到原文核实。', '| 时间 | 事件 | 材料来源 |', '| --- | --- | --- |', '| 2026年9月 | 项目材料审查（视觉测试） | <sup>1</sup> |', '## 风险与问题', '不提供生产任务结论。', '<source index="1" name="方案.docx">'].join('\n'), truncated: false }
     await screenshot('15-summary-result', `tasks[0].tool = 'summary'; tasks[0].outputs = ['文档摘要与要点.md']; resultPreviews.set(tasks[0].id, ${JSON.stringify(summaryPreview)}); render()`)
     if (await evaluate("document.querySelectorAll('.doc-summary-sections > section').length") !== 4) throw new Error('Summary fixture did not retain the legacy title block and three level-two sections')
+    if (!await evaluate("getComputedStyle(document.querySelector('.doc-summary-sections')).display==='block' && !!document.querySelector('.doc-markdown table') && !!document.querySelector('.doc-source')")) throw new Error('Readable single-column summary/table/source rendering is missing')
+    await narrowScreenshots('15-summary-result')
   }
   if (site === 'file-conversion') {
     for (const [id, names] of [['pdf-images',['材料.pdf']],['pdf-organize',['第一份.pdf','第二份.pdf']],['images-pdf',['图片1.jpg','图片2.png']],['image-optimize',['图片.jpg']]]) {

@@ -34,23 +34,28 @@ export function Select({ label, value, options, onChange, disabled = false, clas
       const menu = listRef.current
       if (button === null || menu === null) return
       const trigger = button.getBoundingClientRect()
+      const width = Math.min(Math.max(trigger.width, 160), Math.max(0, window.innerWidth - 16))
       const menuHeight = menu.offsetHeight
       const spaceBelow = window.innerHeight - trigger.bottom
       const above = spaceBelow < menuHeight + 12 && trigger.top > spaceBelow
       setPosition({
-        left: Math.max(8, Math.min(trigger.left, window.innerWidth - trigger.width - 8)),
+        left: Math.max(8, Math.min(trigger.left, window.innerWidth - width - 8)),
         top: above ? Math.max(8, trigger.top - menuHeight - 4) : trigger.bottom + 4,
-        width: trigger.width,
+        width,
         maxWidth: Math.max(0, window.innerWidth - 16),
         fontSize: window.getComputedStyle(button).fontSize,
       })
     }
+    const dismissOnScroll = (event: Event) => {
+      if (event.target instanceof Node && listRef.current?.contains(event.target)) return
+      setOpen(false)
+    }
     place()
     window.addEventListener('resize', place)
-    window.addEventListener('scroll', place, true)
+    window.addEventListener('scroll', dismissOnScroll, true)
     return () => {
       window.removeEventListener('resize', place)
-      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('scroll', dismissOnScroll, true)
     }
   }, [open, options.length])
 
@@ -74,7 +79,7 @@ export function Select({ label, value, options, onChange, disabled = false, clas
   }
 
   return <>
-    <button ref={triggerRef} type="button" role="combobox" aria-label={label}
+    <button ref={triggerRef} id={`${listId}-trigger`} type="button" role="combobox" aria-label={label}
       aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? listId : undefined}
       aria-activedescendant={open ? `${listId}-${active}` : undefined}
       disabled={disabled || options.length === 0}
@@ -103,7 +108,7 @@ export function Select({ label, value, options, onChange, disabled = false, clas
       </svg>
     </button>
     {open && createPortal(<div ref={listRef} id={listId} className={css.list}
-      role="listbox" aria-label={label} style={position}>
+      role="listbox" aria-label={label} style={position} data-dsh-select-owner={`${listId}-trigger`}>
       {options.map((option, index) => <div key={option.value} id={`${listId}-${index}`}
         role="option" aria-selected={option.value === value}
         className={`${css.option}${index === active ? ` ${css.active}` : ''}`}

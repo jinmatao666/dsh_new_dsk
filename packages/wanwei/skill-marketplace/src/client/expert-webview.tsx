@@ -44,11 +44,6 @@ export function ExpertWebview({ launch, visible, onError }: {
   onErrorRef.current = onError
   const { id, url, ticket } = launch
   useEffect(() => {
-    const panel = holder.current?.closest('.dsh-skill-market-panel')
-    panel?.classList.toggle('dsh-expert-view-open', visible)
-    return () => { panel?.classList.remove('dsh-expert-view-open') }
-  }, [visible])
-  useEffect(() => {
     let cancelled = false
     viewLabel.current = undefined
     nativeVisible.current = undefined

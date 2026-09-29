@@ -13,6 +13,32 @@ afterEach(() => {
 })
 
 describe('same-window expert webview lifecycle', () => {
+  it('switches independent native children without recreating or closing background experts', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ x: 20, y: 100, width: 800, height: 560 } as DOMRect)
+    const second = { ...launch, id: 'second-expert', ticket: 'b'.repeat(64) }
+    const invoke = vi.fn(async (command: string, args: Record<string, unknown>) =>
+      command === 'open_expert_webview' ? `view-${String(args.key)}` : undefined)
+    ;(window as Window & { __ZJUGIS_NATIVE_INVOKE__?: typeof invoke }).__ZJUGIS_NATIVE_INVOKE__ = invoke
+    const onError = vi.fn()
+    const view = render(<>
+      <ExpertWebview launch={launch} visible onError={onError} />
+      <ExpertWebview launch={second} visible={false} onError={onError} />
+    </>)
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('set_expert_webview_visible', { label: 'view-second-expert', visible: false })
+    })
+    view.rerender(<>
+      <ExpertWebview launch={launch} visible={false} onError={onError} />
+      <ExpertWebview launch={second} visible onError={onError} />
+    </>)
+    expect(invoke).toHaveBeenCalledWith('set_expert_webview_visible', { label: 'view-geology-analysis', visible: false })
+    expect(invoke).toHaveBeenCalledWith('set_expert_webview_visible', { label: 'view-second-expert', visible: true })
+    expect(invoke.mock.calls.filter(([command]) => command === 'open_expert_webview')).toHaveLength(2)
+    expect(invoke.mock.calls.filter(([command]) => command === 'close_expert_webview')).toHaveLength(0)
+    view.unmount()
+    expect(invoke).toHaveBeenCalledWith('close_expert_webview', { label: 'view-geology-analysis' })
+    expect(invoke).toHaveBeenCalledWith('close_expert_webview', { label: 'view-second-expert' })
+  })
   it('preserves the native session across equivalent launch objects and new error callbacks', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ x: 20, y: 100, width: 800, height: 560 } as DOMRect)
     let failBounds = false
@@ -127,10 +153,8 @@ describe('same-window expert webview lifecycle', () => {
     try {
       const view = render(<ExpertWebview launch={launch} visible onError={vi.fn()} />, { container: dialog })
       await waitFor(() => { expect(invoke).toHaveBeenCalledWith('set_expert_webview_visible', { label: 'expert-geology-analysis-aaaaaaaaaaaaaaaa', visible: true }) })
-      expect(dialog.classList.contains('dsh-expert-view-open')).toBe(true)
       expect(invoke).not.toHaveBeenCalledWith('set_expert_webview_visible', { label: 'expert-geology-analysis-aaaaaaaaaaaaaaaa', visible: false })
       view.rerender(<ExpertWebview launch={launch} visible={false} onError={vi.fn()} />)
-      expect(dialog.classList.contains('dsh-expert-view-open')).toBe(false)
       view.unmount()
     } finally {
       dialog.remove()

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Users browse and search public SkillHub skills inside the Wanwei market. Downloads select an explicit remote version. The desktop owns local installation and source receipts. Platform recommendations continue to contain only platform skills.
+Users browse and search public SkillHub skills inside the Wanwei market. Catalog requests accept positive safe-integer page numbers, including pages above 10,000; the marketplace derives the available page count from the upstream total. Downloads select an explicit remote version. The desktop owns local installation and source receipts. Platform recommendations continue to contain only platform skills.
 
 ## Table of Contents
 

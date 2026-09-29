@@ -8,6 +8,24 @@ from processors import DocumentError
 
 
 class SummaryTests(unittest.TestCase):
+    def test_word_export_renders_tables_lists_and_source_markers(self):
+        from docx import Document
+        from processors import write_docx
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / '成果.docx'
+            write_docx(['# 综合摘要', '**重要结论** <sup>1</sup>', '- 核对原文',
+                        '| 时间 | 事件 |', '| --- | --- |', '| 2026年 | 审查 |',
+                        '<source index="1" name="材料.docx">'], target)
+            document = Document(target)
+            self.assertEqual(len(document.tables), 1)
+            self.assertEqual(document.tables[0].cell(1, 1).text, '审查')
+            self.assertTrue(document.paragraphs[1].runs[1].bold)
+            text = '\n'.join(paragraph.text for paragraph in document.paragraphs)
+            self.assertIn('[1]', text)
+            self.assertIn('来源 1：材料.docx', text)
+            self.assertNotIn('<sup>', text)
+            self.assertNotIn('**', text)
+
     def test_comparison_uses_both_versions_and_requested_focus(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

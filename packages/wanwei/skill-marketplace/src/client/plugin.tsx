@@ -28,7 +28,8 @@ import { ExpertDetailDialog } from './ExpertDetailDialog.tsx'
 import { markReviewsSeen, recordReviewList, reviewAttentionSnapshot, subscribeReviewAttention } from './review-attention.ts'
 import { registerNativeSkillCatalogBridge } from './skill-catalog-bridge.ts'
 import { rememberSkillDisplayNames, skillDisplayName, startSkillUse } from './skill-use.ts'
-import { Toast, isNoticeTarget, type WanweiNotice } from './Toast.tsx'
+import { Toast, type WanweiNotice } from './Toast.tsx'
+import { isMarketInteraction } from './market-interaction.ts'
 import './marketplace.css'
 import { SkillHubSection } from './SkillHubSection.tsx'
 import { CatalogToolbar, CatalogDownloadIcon, CatalogBackIcon as ArrowLeftIcon } from './CatalogToolbar.tsx'
@@ -635,9 +636,9 @@ function ExpertAvatar({ expert }: { expert: Expert }) {
 type ExpertMarketDetail = { id: string; name: string; role: string; summary: string; icon: string; tags: readonly string[]; examples: readonly string[]; accent: string; scenario?: string; materials?: string; detailSections?: readonly ExpertDetailSection[]; footerNote?: string }
 
 /**
- * Render the published expert catalog and its owned native Tab.
+ * Render the published expert catalog and its independently owned native tabs.
  * @param props - Product directory and launch operations; defaults use the configured Host remotes.
- * @returns The catalog or active expert Tab, with pending launches invalidated on logout and disposal.
+ * @returns One in-page tab row with preserved workbenches; logout and disposal invalidate pending launches.
  */
 export function ExpertMarket({ loadExperts = loadRemoteExperts, launchExpert = launchRemoteExpert, prepareExpertWorkspace }: {
   loadExperts?: () => Promise<readonly RemoteExpert[]>
@@ -648,8 +649,14 @@ export function ExpertMarket({ loadExperts = loadRemoteExperts, launchExpert = l
   const [selected, setSelected] = useState<ExpertMarketDetail | null>(null)
   const [publishedExperts, setPublishedExperts] = useState<readonly Expert[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [activeExpert, setActiveExpert] = useState<ExpertLaunch | null>(null)
-  const [activeExpertTab, setActiveExpertTab] = useState<'catalog' | 'expert'>('catalog')
+  const [expertTabs, setExpertTabs] = useState<readonly ExpertLaunch[]>([])
+  const [activeExpertTab, setActiveExpertTab] = useState<string | null>(null)
+  const workspaceRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const panel = workspaceRef.current?.closest('.dsh-skill-market-panel')
+    panel?.classList.toggle('dsh-expert-view-open', activeExpertTab !== null)
+    return () => { panel?.classList.remove('dsh-expert-view-open') }
+  }, [activeExpertTab])
   const [launching, setLaunching] = useState(false)
   const [launchError, setLaunchError] = useState<string | null>(null)
   const [catalogRevision, setCatalogRevision] = useState(0)
@@ -662,7 +669,8 @@ export function ExpertMarket({ loadExperts = loadRemoteExperts, launchExpert = l
         launchPending.current = false
         setLaunching(false)
         setLaunchError(null)
-        setActiveExpert(null)
+        setExpertTabs([])
+        setActiveExpertTab(null)
         setSelected(null)
       }
     }
@@ -693,6 +701,11 @@ export function ExpertMarket({ loadExperts = loadRemoteExperts, launchExpert = l
   const openExpert = (expert: Expert) =>{  setSelected({ id: expert.id, name: expert.name, role: expert.role, summary: expert.summary, icon: expert.icon, tags: expert.tags, examples: expert.examples, accent: expert.accent, ...(expert.scenario === undefined ? {} : { scenario: expert.scenario }), ...(expert.materials === undefined ? {} : { materials: expert.materials }), ...(expert.detailSections === undefined ? {} : { detailSections: expert.detailSections }), ...(expert.footerNote === undefined ? {} : { footerNote: expert.footerNote }) }) }
   const startExpert = async () => {
     if (selected === null || launchExpert === undefined || launchPending.current) return
+    if (expertTabs.some(tab => tab.id === selected.id)) {
+      setActiveExpertTab(selected.id)
+      setSelected(null)
+      return
+    }
     const revision = ++launchRevision.current
     launchPending.current = true
     setLaunching(true)
@@ -706,8 +719,8 @@ export function ExpertMarket({ loadExperts = loadRemoteExperts, launchExpert = l
         try { await prepareExpertWorkspace() } catch { /* keep opening the expert */ }
         if (revision !== launchRevision.current) return
       }
-      setActiveExpert({ id: selected.id, name: selected.name, url, ticket })
-      setActiveExpertTab('expert')
+      setExpertTabs(tabs => [...tabs, { id: selected.id, name: selected.name, url, ticket }])
+      setActiveExpertTab(selected.id)
       setSelected(null)
     } catch (error) {
       if (revision === launchRevision.current) setLaunchError(error instanceof Error ? error.message : String(error))
@@ -719,22 +732,27 @@ export function ExpertMarket({ loadExperts = loadRemoteExperts, launchExpert = l
     }
   }
   const catalog = <section className="dsh-expert-market">
-    <nav className="dsh-expert-tabs" aria-label={productText('专家库内容')}><button type="button" className="active" aria-current="page">{productText('专家')}</button></nav>
     <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() =>{  setCategory(item) }}>{item}</button>)}</div>{loadError !== null && <p role="alert">{productText('专家目录加载失败：')}{loadError} <button type="button" onClick={() => { setCatalogRevision(value => value + 1) }}>{productText('重试')}</button></p>}{loadError === null && visibleExperts.length === 0 && <p>{productText('当前暂无已上架的专家。')}</p>}<div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} onClick={() =>{  openExpert(expert) }}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>
     {selected !== null && <ExpertDetailDialog expert={selected} launching={launching} launchError={launchError} onClose={() => { setSelected(null) }} onStart={() => { void startExpert() }} />}
   </section>
-  if (activeExpert === null) return catalog
-  return <section className="dsh-expert-active">
+  return <section ref={workspaceRef} className="dsh-expert-active">
     <nav className="dsh-expert-workspace-tabs" aria-label={productText('专家工作台标签')}>
-      <button type="button" className={activeExpertTab === 'catalog' ? 'active' : ''} onClick={() => { setActiveExpertTab('catalog') }}>{productText('专家库')}</button>
-      <span className={`dsh-expert-workspace-tab${activeExpertTab === 'expert' ? ' active' : ''}`}>
-        <button type="button" className="dsh-expert-workspace-tab-label" onClick={() => { setActiveExpertTab('expert') }}>{activeExpert.name}</button>
-        <button type="button" className="dsh-expert-workspace-tab-close" aria-label={productText('关闭{0}标签', [activeExpert.name])} title={productText('关闭{0}标签', [activeExpert.name])} onClick={() => { setActiveExpert(null); setActiveExpertTab('catalog') }}>×</button>
-      </span>
+      <button type="button" className={activeExpertTab === null ? 'active' : ''} aria-current={activeExpertTab === null ? 'page' : undefined} onClick={() => { setActiveExpertTab(null) }}>{productText('专家')}</button>
+      {expertTabs.map(tab => <span key={tab.id} className={`dsh-expert-workspace-tab${activeExpertTab === tab.id ? ' active' : ''}`}>
+        <button type="button" className="dsh-expert-workspace-tab-label" aria-current={activeExpertTab === tab.id ? 'page' : undefined} onClick={() => { setActiveExpertTab(tab.id) }}>{tab.name}</button>
+        <button type="button" className="dsh-expert-workspace-tab-close" aria-label={productText('关闭{0}标签', [tab.name])} title={productText('关闭{0}标签', [tab.name])} onClick={() => {
+          const remaining = expertTabs.filter(item => item.id !== tab.id)
+          setExpertTabs(remaining)
+          if (activeExpertTab === tab.id) {
+            const index = expertTabs.findIndex(item => item.id === tab.id)
+            setActiveExpertTab(remaining[Math.min(index, remaining.length - 1)]?.id ?? null)
+          }
+        }}>×</button>
+      </span>)}
     </nav>
-    {launchError !== null && <p role="alert">{launchError}</p>}
-    {activeExpertTab === 'catalog' && catalog}
-    <ExpertWebview launch={activeExpert} visible={activeExpertTab === 'expert'} onError={setLaunchError} />
+    {launchError !== null && selected === null && <p role="alert">{launchError}</p>}
+    {activeExpertTab === null && catalog}
+    {expertTabs.map(tab => <ExpertWebview key={tab.id} launch={tab} visible={activeExpertTab === tab.id} onError={setLaunchError} />)}
   </section>
 }
 
@@ -1008,9 +1026,7 @@ function SkillMarketplace({ section, chooseDirectory, prepareExpertWorkspace }: 
     const closeForSidebarAction = (event: PointerEvent) => {
       const target = event.target
       if (!(target instanceof Element)) return
-      if (target.closest('.dsh-skill-market-panel') !== null) return
-      if (isNoticeTarget(target)) return
-      if (target.closest('.dsh-skill-market-action') !== null) return
+      if (isMarketInteraction(target)) return
       marketplaceControllers[section].close()
     }
     document.addEventListener('pointerdown', closeForSidebarAction, true)
@@ -1627,10 +1643,10 @@ function SkillMarketplace({ section, chooseDirectory, prepareExpertWorkspace }: 
         {adding && (
           <div className="dsh-skill-add-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setAdding(false) }}>
             <form className="dsh-skill-add-dialog" onSubmit={(event) => { event.preventDefault(); void createSkill() }}>
-              <div>
+              <header className="dsh-skill-add-header">
                 <h2>{L.createSkill}</h2>
                 <button type="button" onClick={() => { setAdding(false) }} aria-label={productText('关闭')}>×</button>
-              </div>
+              </header>
               <label>{productText('中文显示名称')}<input autoFocus value={newSkill.name} onChange={(event) => { setNewSkill({ ...newSkill, name: event.target.value }) }} placeholder={productText('例如：会议纪要整理')} /></label>
               <label className="dsh-skill-add-field">
                 <span className="dsh-skill-add-field-label">{productText('分类')}</span>
@@ -1657,8 +1673,9 @@ function SkillMarketplace({ section, chooseDirectory, prepareExpertWorkspace }: 
                   <button type="button" className={newSkill.visibility === 'public' ? 'active' : ''} onClick={() => { setNewSkill({ ...newSkill, visibility: 'public' }) }}><strong>{productText('公开')}</strong><span>{productText('提交管理员审核')}</span></button>
                 </div>
               </fieldset>
-              <div className="dsh-skill-add-source-field">
-                {productText('个人技能来源')}<span className="dsh-skill-add-source-actions">
+              <fieldset className="dsh-skill-add-source-field">
+                <legend>{productText('个人技能来源')}</legend>
+                <div className="dsh-skill-add-source-actions">
                   <button type="button" className="dsh-skill-add-directory" onClick={() => { void selectCustomSkillDirectory() }} disabled={installing !== null}>{productText('选择目录')}</button>
                   <label className={`dsh-skill-add-directory${installing !== null ? ' disabled' : ''}`}>
                     {productText('选择 ZIP')}<input
@@ -1672,7 +1689,7 @@ function SkillMarketplace({ section, chooseDirectory, prepareExpertWorkspace }: 
                       }}
                     />
                   </label>
-                </span>
+                </div>
                 {customSkillSource !== null && (
                   <small
                     className="dsh-skill-add-selected"
@@ -1681,7 +1698,7 @@ function SkillMarketplace({ section, chooseDirectory, prepareExpertWorkspace }: 
                     {productText('已选择：')}{customSkillSource.kind === 'directory' ? customSkillSource.path : customSkillSource.name}
                   </small>
                 )}
-              </div>
+              </fieldset>
               <small className="dsh-skill-add-hint">{productText('请选择包含 SKILL.md 的完整目录或 ZIP。文件会安装到本机并安全上传；公开技能审核通过前不会出现在技能市场，更新已公开技能也需要再次审核。')}</small>
               <footer>
                 <button type="button" onClick={() => { setAdding(false) }}>{productText('取消')}</button>

@@ -12,6 +12,19 @@ const options = [
 ]
 
 describe('Select', () => {
+  it('keeps internal scrolling open but dismisses on page scrolling', () => {
+    render(<div><Select label="技能来源" value="all" options={options} onChange={vi.fn()} /></div>)
+    const trigger = screen.getByRole('combobox')
+    fireEvent.click(trigger)
+    fireEvent.scroll(screen.getByRole('listbox'))
+    expect(screen.getByRole('listbox')).toBeTruthy()
+    fireEvent.scroll(trigger.parentElement as HTMLElement)
+    expect(screen.queryByRole('listbox')).toBeNull()
+    fireEvent.click(trigger)
+    fireEvent.scroll(window)
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
   it('opens a listbox and passes the chosen value to its owner', () => {
     const onChange = vi.fn()
     render(<Select label="技能来源" value="all" options={options} onChange={onChange} />)

@@ -31,7 +31,7 @@ Mount it through the Wanwei desktop bundle after the client platform-action regi
 
 Brand occupants register at priority -100 so the product can coexist with the official brand plugin at its default priority.
 
-Picker imports and native drops append file or folder chips through `inputActions.appendReferences`; the labels show filenames while serialization retains path mentions. Imports preserve existing text and references.
+Picker imports and native drops append file or folder chips through `inputActions.appendReferences`; the labels show filenames while serialization retains path mentions. Imports preserve existing text and references. Native-drop progress stays visible while importing; completion notices disappear after three seconds and failure notices after six seconds. A new import resets the notice timer.
 
 The native drag invitation covers only the composer card. Folder chips use a folder icon without a display-only trailing slash; their serialized references retain the slash. When a same-named destination already exists, desktop import copies into a numbered sibling, and the chip shows that actual destination name.
 

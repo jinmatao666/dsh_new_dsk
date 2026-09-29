@@ -16,6 +16,7 @@ use tauri::{
     DragDropEvent, LogicalPosition, LogicalSize, Manager, State, WebviewBuilder, WebviewEvent,
     WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent,
 };
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
@@ -904,13 +905,13 @@ fn save_session_log_archive(file_name: String, bytes: Vec<u8>) -> Result<String,
     Ok(destination.display().to_string())
 }
 
-/// Save an authenticated expert website's output in Downloads without overwriting existing files.
+/// Only the native save dialog, never a remote website, chooses the destination.
 #[tauri::command]
 async fn save_expert_artifact(
     webview: tauri::Webview,
     file_name: String,
     bytes_base64: String,
-) -> Result<String, String> {
+) -> Result<Option<String>, String> {
     if !webview.label().starts_with("expert-") {
         return Err("仅专家工作台可保存专家成果".into());
     }
@@ -918,11 +919,32 @@ async fn save_expert_artifact(
         return Err("成果文件超过 128 MB".into());
     }
     let root = user_downloads_root()?;
+    let app = webview.app_handle().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let bytes = BASE64_STANDARD
             .decode(bytes_base64)
             .map_err(|_| "成果文件编码无效".to_string())?;
-        expert_artifacts::save_at(&root, &file_name, &bytes).map(|path| path.display().to_string())
+        expert_artifacts::validate(&file_name, &bytes)?;
+        let extension = Path::new(&file_name)
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("");
+        let selected = app
+            .dialog()
+            .file()
+            .set_title("保存专家成果")
+            .set_directory(root)
+            .set_file_name(&file_name)
+            .add_filter("成果文件", &[extension])
+            .blocking_save_file();
+        let Some(selected) = selected else {
+            return Ok(None);
+        };
+        let destination = selected
+            .into_path()
+            .map_err(|_| "请选择本地文件路径".to_string())?;
+        expert_artifacts::save_selected_at(&destination, &file_name, &bytes)
+            .map(|path| Some(path.display().to_string()))
     })
     .await
     .map_err(|_| "成果文件保存任务中断".to_string())?
@@ -2252,6 +2274,7 @@ fn spawn_sidecar(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         // A second launch only restores the existing window. Most
         // importantly, it never starts another Node sidecar that could keep
         // bundled runtime DLLs locked during the next installer upgrade.

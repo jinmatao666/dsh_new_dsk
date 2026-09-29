@@ -86,6 +86,11 @@ export function FileImportAction(props: FileImportProps) {
   const [error, setError] = useState<string>()
   const [dragActive, setDragActive] = useState(false)
   const [status, setStatus] = useState<{ text: string; error: boolean }>()
+  useEffect(() => {
+    if (status === undefined || busy) return
+    const timer = window.setTimeout(() => { setStatus(undefined) }, status.error ? 6000 : 3000)
+    return () => { window.clearTimeout(timer) }
+  }, [status, busy])
   const append = (paths: readonly string[]) => {
     if (!props.inputActions.appendReferences(paths.map(importedFileReference))) {
       throw new Error(productText('文件已导入，但输入框正在发送，请稍后重新添加文件'))
@@ -160,7 +165,7 @@ export function FileImportAction(props: FileImportProps) {
         <div className="wanwei-product-drop-overlay" role="status">{productText('松开鼠标，将文件导入当前工作区')}</div>,
         dropCard,
       )}
-      {status !== undefined && <div className="wanwei-product-import-status" data-error={status.error}>{status.text}</div>}
+      {status !== undefined && <div className="wanwei-product-import-status" role={status.error ? 'alert' : 'status'} data-error={status.error}>{status.text}</div>}
     </>
   )
 }

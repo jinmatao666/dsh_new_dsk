@@ -24,6 +24,8 @@ class InterpretationTests(unittest.TestCase):
         self.assertIn(RULES, payload["messages"][0]["content"])
         self.assertIn("12.5", payload["messages"][1]["content"])
         self.assertIn("本次项目", payload["messages"][1]["content"])
+        self.assertIn('"terminology"', payload["messages"][1]["content"])
+        self.assertIn("不得自行解释", payload["messages"][1]["content"])
         self.assertIn("综合结论", text)
         self.assertNotIn("test-key", received[0].data.decode())
 

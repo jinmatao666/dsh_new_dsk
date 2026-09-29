@@ -66,7 +66,7 @@ def summarize_documents(inputs, output, options=None, generator=generate, input_
             raise DocumentError("摘要材料超过 6 万字符，请拆分后提交；不会静默截断材料")
         sources.append({"name": names[number - 1], "characters": len(text), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
         sections.append(f"<source index=\"{number}\" name={json.dumps(names[number - 1], ensure_ascii=False)}>\n{text}\n</source>")
-    prompt = f"详细程度：{detail}\n关注内容：{focus}\n补充要求：{requirements}\n输出 Markdown。逐项注明来源，不要将建议当作原文事实。\n以下为待分析的原始材料：\n" + "\n\n".join(sections)
+    prompt = f"详细程度：{detail}\n关注内容：{focus}\n补充要求：{requirements}\n输出 Markdown，以二级标题分章节，列表和表格保持简洁。逐项注明来源，用 [1]、[2] 对应材料编号；不要输出 HTML 标签、sup 标签或 source 标签。不要将建议当作原文事实。\n以下为待分析的原始材料：\n" + "\n\n".join(sections)
     result = generator(prompt)
     if not isinstance(result, str) or not result.strip():
         raise DocumentError("摘要服务未返回有效正文")

@@ -48,16 +48,44 @@ let selectedTask
 const stateLabels = { queued: '等待处理', running: '正在处理', succeeded: '已完成', failed: '处理失败', cancelled: '已取消' }
 const resultPreviews = new Map()
 function markdownMarkup(text) {
-  return `<div class="doc-markdown">${text.split(/\r?\n/).map(line => {
+  const inline = value => escape(value.replace(/<source\s+index="(\d+)"\s+name="([^"]*)"\s*>/gi, '来源 $1：$2').replace(/<\/source>/gi, ''))
+    .replace(/&lt;sup&gt;([\d,，\s]+)&lt;\/sup&gt;/gi, '<sup class="doc-source">[$1]</sup>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+  const lines = text.split(/\r?\n/), output = []
+  const cells = line => line.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/).map(cell => cell.trim().replace(/\\\|/g, '|'))
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]
+    if (line.includes('|') && index + 1 < lines.length && cells(lines[index + 1]).every(cell => /^:?-{3,}:?$/.test(cell))) {
+      const headers = cells(line), rows = []
+      index += 2
+      while (index < lines.length && lines[index].includes('|') && lines[index].trim()) {
+        const row = cells(lines[index++])
+        rows.push(`<tr>${headers.map((_, column) => `<td>${inline(row[column] || '')}</td>`).join('')}</tr>`)
+      }
+      index--
+      output.push(`<div class="doc-table-wrap"><table><thead><tr>${headers.map(cell => `<th scope="col">${inline(cell)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`)
+      continue
+    }
     const heading = /^(#{1,3})\s+(.+)$/.exec(line)
     if (heading) {
       const level = heading[1].length + 1
-      return `<h${level}>${escape(heading[2])}</h${level}>`
+      output.push(`<h${level}>${inline(heading[2])}</h${level}>`)
+      continue
     }
-    if (/^[-*]\s+/.test(line)) return `<div class="doc-bullet">• ${escape(line.replace(/^[-*]\s+/, '').replace(/\*\*/g, ''))}</div>`
-    if (/^\d+[.)]\s+/.test(line)) return `<div class="doc-bullet">${escape(line.replace(/\*\*/g, ''))}</div>`
-    return line.trim() ? `<p>${escape(line.replace(/\*\*/g, ''))}</p>` : ''
-  }).join('')}</div>`
+    const item = /^\s*(?:([-*])|\d+[.)])\s+(.+)$/.exec(line)
+    if (item) {
+      const tag = item[1] ? 'ul' : 'ol', items = []
+      const pattern = tag === 'ul' ? /^\s*[-*]\s+(.+)$/ : /^\s*\d+[.)]\s+(.+)$/
+      while (index < lines.length && pattern.test(lines[index])) items.push(`<li>${inline(pattern.exec(lines[index++])[1])}</li>`)
+      index--
+      output.push(`<${tag}>${items.join('')}</${tag}>`)
+      continue
+    }
+    if (/^\s*---+\s*$/.test(line)) output.push('<hr>')
+    else if (line.trim()) output.push(`<p>${inline(line)}</p>`)
+  }
+  return `<div class="doc-markdown">${output.join('')}</div>`
 }
 function summarySectionsMarkup(preview) {
   const chunks = preview.text.split(/^##\s+/m).filter(Boolean)
@@ -149,7 +177,7 @@ function bind() {
       event.preventDefault()
       if (link.dataset.saving === 'true') return
       link.dataset.saving = 'true'
-      try { await saveArtifact(link); toast('成果已保存到下载目录') }
+      try { const path = await saveArtifact(link); if (path) toast(`成果已保存：${path}`) }
       catch (error) { toast(error.message || '成果保存失败，请重试') }
       finally { link.dataset.saving = 'false' }
     }
@@ -189,7 +217,7 @@ async function saveArtifact(link) {
     file.readAsDataURL(new Blob(chunks))
   })
   if (sessionExpired) throw new Error('登录已失效，请重新打开工作台')
-  await window.__ZJUGIS_NATIVE_INVOKE__('save_expert_artifact', { fileName, bytesBase64 })
+  return await window.__ZJUGIS_NATIVE_INVOKE__('save_expert_artifact', { fileName, bytesBase64 })
 }
 const focusChoices = ['综合摘要', '核心观点', '关键事实', '风险与问题', '时间节点', '待办事项', '来源说明']
 let comparisonFiles = [null, null]

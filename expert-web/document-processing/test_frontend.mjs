@@ -97,12 +97,18 @@ test('prepare, history and bounded desktop downloads retain user data', async ()
   const richSections = vm.runInContext('summarySectionsMarkup(richSummary)', context)
   assert.equal((richSections.match(/<section>/g) || []).length, 2)
   assert.match(richSections, /<h3>报告<\/h3>/)
-  assert.match(richSections, /<p>普通重点正文<\/p>/)
-  assert.match(richSections, /class="doc-bullet">• 一项/)
-  assert.match(richSections, /class="doc-bullet">1\. 顺序项/)
+  assert.match(richSections, /<p>普通<strong>重点<\/strong>正文<\/p>/)
+  assert.match(richSections, /<ul><li><strong>一项<\/strong><\/li><\/ul>/)
+  assert.match(richSections, /<ol><li>顺序项<\/li><\/ol>/)
   assert.match(richSections, /<h4>局部标题<\/h4>/)
   assert.match(richSections, /&lt;script&gt;仅是文字&lt;\/script&gt;/)
   assert.doesNotMatch(richSections, /<pre>|<script>|\*\*/)
+  context.tableText = '| 时间 | 事件 |\n| --- | --- |\n| 2026年 | **审查** <sup>1</sup> |\n\n<source index="1" name="材料.docx">\n<script>alert(1)</script>'
+  const tableMarkup = vm.runInContext('markdownMarkup(tableText)', context)
+  assert.match(tableMarkup, /<table><thead>/)
+  assert.match(tableMarkup, /<td><strong>审查<\/strong> <sup class="doc-source">\[1\]<\/sup><\/td>/)
+  assert.match(tableMarkup, /来源 1：材料.docx/)
+  assert.doesNotMatch(tableMarkup, /<script>|&lt;sup&gt;|&lt;source/)
   assert.match(sections, /请下载完整成果/)
   vm.runInContext('form(tools[0])', context)
   assert.match(node('#main').innerHTML, /data-focus="核心观点"/)
@@ -238,6 +244,10 @@ test('prepare, history and bounded desktop downloads retain user data', async ()
   assert.equal(saved[0].command, 'save_expert_artifact')
   assert.equal(saved[0].args.fileName, '成果报告.pdf')
   assert.equal(Buffer.from(saved[0].args.bytesBase64, 'base64').toString(), 'real-output')
+  context.window.__ZJUGIS_NATIVE_INVOKE__ = async () => 'C:\\Users\\test\\Desktop\\成果报告.pdf'
+  assert.equal(await vm.runInContext('saveArtifact(testLink)', context), 'C:\\Users\\test\\Desktop\\成果报告.pdf')
+  context.window.__ZJUGIS_NATIVE_INVOKE__ = async () => null
+  assert.equal(await vm.runInContext('saveArtifact(testLink)', context), null)
   context.fetch = async () => new Response('small-body', { headers: {
     'content-disposition': "attachment; filename*=UTF-8''report.pdf",
     'content-length': String(129 * 1024 * 1024),

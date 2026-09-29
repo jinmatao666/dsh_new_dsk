@@ -14,7 +14,7 @@ The public website origin and platform redemption endpoint support HTTP and HTTP
 
 Operators can run `python deployment.py` to check configuration and local processing dependencies. It prints check names and pass states, not secrets or endpoint addresses. `/healthz` checks HTTP and database availability; `/readyz` checks required configuration and returns 503 when it is missing. Readiness does not prove live remote connectivity. The Dockerfile includes a liveness check.
 
-In an updated desktop expert Tab, artifact downloads use the native `save_expert_artifact` command to write to the user's Downloads directory. The limit is 128 MB; it accepts no local destination path and does not overwrite a same-name file. Normal browsers retain browser downloading. Byte forwarding and native saving have tests, but actual desktop clicks across platforms still require acceptance.
+In an updated desktop expert Tab, artifact downloads open the native Save As dialog through `save_expert_artifact`. Only the user selects the destination and confirms replacement. Websites cannot supply local paths. The command validates bounded bytes (128 MB), filenames and unchanged supported extensions, returning the saved path or null on cancellation. Normal browsers use browser downloads; desktop interaction across platforms still requires acceptance.
 
 Run `python verify_portability.py` from this directory. It copies only this expert into a temporary location, excludes local data and credentials, creates a fresh virtual environment, installs its own dependencies and runs Python/Node tests. It reads no DSH root or other expert source. Node.js is required.
 
@@ -48,7 +48,7 @@ Summary tests inject explicit model responses. They verify prompting, source ref
 
 Task result pages use the legacy workbench's single state-and-output container, workflow steps and task heading. Comparison statistics and color-coded added/deleted/modified paragraphs remain inside it, with at most 100 changes previewed; the full files remain downloadable. New model analysis stays separate from deterministic counts. Parameters are retained in collapsible details below the result, and unfinished or failed tasks publish no download links. A remote server task directory is not exposed as a local desktop path.
 
-Summary previews use the legacy level-two-heading sections and line rendering for paragraphs, headings and bullets. A level-three heading stays within its section. Raw HTML is escaped and Markdown links are not activated; downloaded files preserve the full generated content. Previews are limited to 30,000 characters and disclose truncation.
+Summary previews use single-column sections with paragraphs, bold emphasis, lists and Markdown tables. Source superscripts and source-file markers become readable references; other HTML is escaped and links are not activated. Word export renders headings, emphasis, lists and tables. Existing Word files need task regeneration for these formats; existing Markdown previews use the current renderer. Previews are limited to 30,000 characters and disclose truncation.
 
 History rows identify the task type as well as its name, time, input count and state. Empty history and output pages offer a new-task button that opens document summary preparation, matching the first-tool entry in the legacy workbench.
 

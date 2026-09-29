@@ -95,6 +95,22 @@ function taskMarkup() {
   const outputs = success ? `<section class="panel gis-result-outputs"><h2>本次成果文件 <small>${task.outputs.length} 个</small></h2><div>${task.outputs.map((file,index) => `<a href="/api/tasks/${escape(task.id)}/files/${index}" download><span class="gis-file-glyph" aria-hidden="true">${/\.docx$/i.test(file) ? 'W' : /\.xlsx$/i.test(file) ? 'X' : 'J'}</span><span><strong>${escape(file)}</strong><small>${/\.docx$/i.test(file) ? 'Word 报告' : /\.xlsx$/i.test(file) ? 'Excel 明细' : '数据文件'} · 下载文件</small></span></a>`).join('') || '<p class="muted">本次没有发布成果文件。</p>'}</div></section>` : ''
   return `<header class="gis-result-heading"><div><span>${escape(tool?.name || task.tool)} · 分析任务</span><h1>${name}</h1><p class="muted">创建于 ${escape(new Date(task.created * 1000).toLocaleString())}，结果和文件均来自本次任务。</p></div><div class="gis-result-heading-actions"><button class="secondary" data-refresh-result ${resultRefreshing ? 'disabled' : ''}>${resultRefreshing ? '正在刷新…' : '刷新结果'}</button><button class="secondary" data-page="history">返回分析记录</button></div></header><div class="stepbar"><span>✓ 准备材料</span><span>✓ 核对信息</span><span class="current">3 分析与交付</span></div><div class="gis-result-layout"><div class="gis-result-body">${banner}${task.error ? `<section class="panel gis-result-error"><h2>未完成的原因</h2><p class="error">${escape(task.error)}</p></section>` : ''}${success ? summaryMarkup(task) : `<section class="panel"><h2>${active ? '等待分析结果' : '本次没有可展示的分析结果'}</h2><p class="muted">${active ? '仅显示真实服务状态，不展示示例结论。' : '任务已经结束，请核对状态和原因后重新创建分析。'}</p></section>`}${outputs}${active ? `<div class="actions"><button class="secondary" data-cancel="${escape(task.id)}">取消任务</button></div>` : !success && tool ? `<div class="actions"><button class="primary" data-tool="${escape(tool.id)}">重新创建分析</button></div>` : ''}</div><aside class="gis-result-aside"><section class="panel"><h2>任务信息</h2><dl class="review"><dt>项目名称</dt><dd>${name}</dd><dt>当前状态</dt><dd>${escape(stateLabels[task.state] || task.state)}</dd></dl></section><details class="panel task-details"><summary>任务详情与输入参数</summary><dl class="review"><dt>创建时间</dt><dd>${escape(new Date(task.created * 1000).toLocaleString())}</dd><dt>输入文件</dt><dd>${(task.input_names?.length ? task.input_names : task.inputs).map(name => escape(name)).join('<br>')}</dd>${(tool?.params || []).map(([key, label]) => `<dt>${escape(label)}</dt><dd>${escape(task.options[key] || '未填写')}</dd>`).join('')}</dl></details><section class="panel"><h2>查看与继续</h2><p class="muted">任务及成果保存在当前专家服务中，仅当前用户可访问。</p><button class="secondary" data-page="history">查看我的分析记录</button></section></aside></div>`
 }
+function readableGisText(text, value) {
+  const names = { YZT_DZHJTJ_LIST: '地质环境条件列表', YZT_DZZHYFQK_LIST: '地质灾害易发区列表', DZHJTJ: '地质环境条件', FQMC: '易发分区名称', DJ: '分区等级', ZYMJ: '重叠面积', ...(value.terminology || {}) }
+  return text.replace(/\b[A-Z][A-Z0-9_]*\b/g, code => typeof names[code] === 'string' ? names[code] : code)
+}
+function gisParagraphMarkup(line, value) {
+  const plain = readableGisText(line.replace(/^(?:[-*•]|\d+\.)\s+/, ''), value)
+  const label = /^(数据事实|含义|解读|建议|注意|单位核实|等级编码标准|数据时效性|坐标系统)[：:]/.exec(plain)
+  const inline = text => escape(text).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+  return label ? `<p class="gis-evidence-line"><strong class="gis-evidence-label">${escape(label[1])}</strong><span>${inline(plain.slice(label[0].length).trim())}</span></p>` : `<p>${inline(plain)}</p>`
+}
+function gisRecordMarkup(fields, index) {
+  const technical = field => /^(记录编号|要素标识码|GIS 对象编号|分析实例编号|地块地类面积记录编号)$/.test(field.label)
+  const visible = fields.filter(field => !technical(field)), hidden = fields.filter(technical)
+  const rows = items => items.map(field => `<dt>${escape(field.label)}</dt><dd>${escape(field.value)}</dd>`).join('')
+  return `<div class="analysis-record"><strong>记录 ${index + 1}</strong>${visible.length ? `<dl>${rows(visible)}</dl>` : '<p class="muted">本条记录仅包含技术标识，请展开详情核对。</p>'}${hidden.length ? `<details class="gis-technical"><summary>技术标识与追溯信息</summary><dl>${rows(hidden)}</dl></details>` : ''}</div>`
+}
 function interpretationMarkup(value) {
   if (typeof value.interpretation?.text !== 'string') return ''
   const text = value.interpretation.text
@@ -109,7 +125,7 @@ function interpretationMarkup(value) {
     } else if (current && line && !/^\|(?:\s*[-:]+\s*\|)+$/.test(line)) current.body.push(line)
   }
   const useful = sections.filter(section => section.body.length && !/原始返回|原始数据|生成文件|交付文件|成果文件/.test(section.heading))
-  const body = useful.length ? useful.map(section => `<div class="gis-answer-section"><h4>${escape(section.heading)}</h4>${section.body.filter(line => !/^\|/.test(line) && !/[A-Z]:\\.*\.(?:json|md|docx|xlsx)/i.test(line)).map(line => `<p>${escape(line.replace(/^(?:[-*•]|\d+\.)\s+/, '').replace(/\*\*/g, ''))}</p>`).join('')}</div>`).join('')
+  const body = useful.length ? useful.map(section => `<div class="gis-answer-section ${/核实|限制|风险/.test(section.heading) ? 'gis-caution' : /结论/.test(section.heading) ? 'gis-conclusion' : ''}"><h4>${escape(section.heading)}</h4>${section.body.filter(line => !/^\|/.test(line) && !/[A-Z]:\\.*\.(?:json|md|docx|xlsx)/i.test(line)).map(line => gisParagraphMarkup(line, value)).join('')}</div>`).join('')
     : '<p>本次回答没有可单独提取的结论，请展开原始回答核对。</p>'
   return `<section class="gis-answer"><h3>综合解读（模型生成）</h3>${body}<details><summary>查看完整模型回答（含原始数据与文件清单）</summary><pre>${escape(text)}</pre></details><p class="muted">解读依据本次服务数据生成，不改变接口统计；重要判断请由专业人员核对。</p></section>`
 }
@@ -117,7 +133,7 @@ function summaryMarkup(task) {
   const value = analysisSummaries.get(task.id)
   if (value === undefined) return '<section class="panel analysis-summary"><h2>分析结果</h2><p class="muted">正在读取本次任务生成的数据…</p></section>'
   if (value === null) return '<section class="panel analysis-summary"><h2>分析结果</h2><p class="error">无法读取结构化结果，请下载实际生成的报告与 JSON 核对。</p></section>'
-  return `${interpretationMarkup(value)}<section class="panel analysis-summary"><h2>${escape(value.title || '分析结果')}</h2><p class="muted">仅展示服务返回的数据，不根据空数据集推断不存在风险。面积单位沿用服务原值，需向提供方核对。</p>${value.datasets.map(dataset => `<div class="analysis-dataset"><h3>${escape(dataset.name)} <small>${dataset.records.length} 条</small></h3>${dataset.records.length ? dataset.records.slice(0, 100).map((fields, index) => `<div class="analysis-record"><strong>记录 ${index + 1}</strong><dl>${fields.map(field => `<dt>${escape(field.label)}</dt><dd>${escape(field.value)}</dd>`).join('')}</dl></div>`).join('') : '<p class="muted">当前数据集未返回记录。</p>'}${dataset.records.length > 100 ? '<p class="muted">这里只显示前 100 条；完整内容请下载 Excel 或 JSON 成果。</p>' : ''}</div>`).join('')}</section>`
+  return `${interpretationMarkup(value)}<section class="panel analysis-summary"><h2>${escape(value.title || '分析结果')}</h2><p class="muted">仅展示服务返回的数据，不根据空数据集推断不存在风险。面积单位沿用服务原值，需向提供方核对。</p>${value.datasets.map(dataset => `<div class="analysis-dataset"><h3>${escape(dataset.name)} <small>${dataset.records.length} 条</small></h3>${dataset.records.length ? dataset.records.slice(0, 100).map(gisRecordMarkup).join('') : '<p class="muted">当前数据集未返回记录。</p>'}${dataset.records.length > 100 ? '<p class="muted">这里只显示前 100 条；完整内容请下载 Excel 或 JSON 成果。</p>' : ''}</div>`).join('')}</section>`
 }
 async function loadSummary(task) {
   if (task?.state !== 'succeeded' || analysisSummaries.has(task.id)) return
@@ -190,7 +206,7 @@ function bind() {
       event.preventDefault()
       if (link.dataset.saving === 'true') return
       link.dataset.saving = 'true'
-      try { await saveArtifact(link); toast('成果已保存到下载目录') }
+      try { const path = await saveArtifact(link); if (path) toast(`成果已保存：${path}`) }
       catch (error) { toast(error.message || '成果保存失败，请重试') }
       finally { link.dataset.saving = 'false' }
     }
@@ -233,7 +249,7 @@ async function saveArtifact(link) {
     file.readAsDataURL(new Blob(chunks))
   })
   if (sessionExpired) throw new Error('登录已失效，请重新打开工作台')
-  await window.__ZJUGIS_NATIVE_INVOKE__('save_expert_artifact', { fileName, bytesBase64 })
+  return await window.__ZJUGIS_NATIVE_INVOKE__('save_expert_artifact', { fileName, bytesBase64 })
 }
 // Legacy TerrainIllustration.tsx copy: decorative, not uploaded parcel or result data.
 function terrainMarkup() {

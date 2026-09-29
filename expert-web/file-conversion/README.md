@@ -14,7 +14,7 @@ The public website origin and platform redemption endpoint support HTTP and HTTP
 
 Operators can run `python deployment.py` to check configuration and local processing dependencies. It prints check names and pass states, not secrets or endpoint addresses. `/healthz` checks HTTP and database availability; `/readyz` checks configuration and returns 503 when it is missing. Readiness does not prove live remote connectivity. The Dockerfile includes a liveness check.
 
-In an updated desktop expert Tab, artifact downloads use the native `save_expert_artifact` command to write to the user's Downloads directory. The limit is 128 MB; it accepts no local destination path and does not overwrite a same-name file. Normal browsers retain browser downloading. Byte forwarding and native saving have tests, but actual desktop clicks across platforms still require acceptance.
+In an updated desktop expert Tab, artifact downloads open the native Save As dialog through `save_expert_artifact`. Only the user selects the destination and confirms replacement. Websites cannot supply local paths. The command validates bounded bytes (128 MB), filenames and unchanged supported extensions, returning the saved path or null on cancellation. Normal browsers use browser downloads; desktop interaction across platforms still requires acceptance.
 
 Run `python verify_portability.py` from this directory. It copies only this expert into a temporary location, excludes local data and credentials, creates a fresh virtual environment, installs its own dependencies and runs Python/Node tests. It reads no DSH root or other expert source. Node.js is required.
 

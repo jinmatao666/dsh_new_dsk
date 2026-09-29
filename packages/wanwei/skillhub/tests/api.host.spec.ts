@@ -8,6 +8,22 @@ const json = (value: unknown) => new Response(JSON.stringify(value))
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('SkillHub upstream adapter', () => {
+  it.each([10001, 13000, 14422])('requests catalog page %s without an arbitrary upper limit', async (requestedPage) => {
+    const fetcher = vi.fn(async (_url: URL) => json({ code: 0, data: { skills: [entry], total: 173064 } }))
+    vi.stubGlobal('fetch', fetcher)
+    const result = await new SkillHubApi(config).list({ page: requestedPage })
+    expect(result.page).toBe(requestedPage)
+    expect(result.items).toHaveLength(1)
+    const url = new URL(String(fetcher.mock.calls[0]?.[0]))
+    expect(url.searchParams.get('page')).toBe(String(requestedPage))
+    expect(url.searchParams.get('pageSize')).toBe('12')
+  })
+  it.each([0, -1, 1.5, '13000', Number.MAX_SAFE_INTEGER + 1])('rejects invalid page %s before requesting upstream', async (page) => {
+    const fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
+    await expect(new SkillHubApi(config).list({ page })).rejects.toThrow('页码无效')
+    expect(fetcher).not.toHaveBeenCalled()
+  })
   it('projects real envelope fields and scopes pagination and searches', async () => {
     const fetcher = vi.fn(async (_url: URL) => json({ code: 0, data: { skills: [entry], total: 17 } }))
     vi.stubGlobal('fetch', fetcher)

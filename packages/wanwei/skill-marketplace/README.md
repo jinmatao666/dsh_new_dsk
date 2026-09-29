@@ -13,6 +13,8 @@ The Wanwei desktop can browse published skills, manage its local installations a
 
 Published expert cards use administrator-configured names, subtitles, summaries, tags, and uploaded images. The detail dialog uses the same image plus the configured detail panels and footer note; older records without panels retain their fallback presentation.
 
+Expert cards contain uploaded images within a 42-pixel square inside a 48-pixel avatar, preserving the complete artwork and reserving title space beside it.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)
@@ -43,6 +45,10 @@ My installations combines platform/local skills and SkillHub receipts into one t
 
 ### Composition
 
+The expert library uses a single in-page tab row: the fixed Experts catalog tab is followed by independently closable expert workbenches. Multiple experts remain mounted while switching; reopening the same expert focuses its existing tab without requesting another launch ticket. Closing the active tab selects a neighboring expert or returns to the catalog, and logout disposes all workbenches. The row scrolls horizontally when needed.
+
+The personal-skill import dialog presents visibility and skill source as peer fieldsets. Directory and ZIP controls share compact button styling; the selected path occupies a separate full-width row, with overflow truncation and a full-path tooltip. Header-only styles do not apply to source controls, and short windows use tighter spacing.
+
 Platform and SkillHub operations share restrained, top-centered notices. SkillHub progress remains visible until completion; installation, update and removal results appear as soon as the native operation succeeds, before refreshing local receipts. A failed refresh reports that the operation completed but the list could not refresh.
 
 Starting an installed skill stages its slash token and friendly name. The composer displays a compact inline skill chip beside the editable question; Session-backed chips serialize to the same slash token. Product styling remains in the Wanwei UI packages.
@@ -58,6 +64,8 @@ The product bundle owns the `wanwei-skill-marketplace` row in [its patch](../../
 <summary>Implementation internals — click to expand</summary>
 
 The Client reads the published skill and expert catalogs from product remotes. Expert IDs must match the launch interface: 3–80 lowercase ASCII letters, digits or hyphens, beginning with a letter. Invalid entries are omitted. A skill installation refreshes the official browser skill catalog. A selected expert obtains a one-use launch ticket from the Host, then opens an origin-limited native child Webview inside the main-window Tab. A separate modal hides the native view until the modal closes. The expert website owns its own tasks and results.
+
+SkillHub returns can contain repeated slugs. Card identity includes the row position so replacing a page removes every old row, including repeated entries; rendering is bounded to twelve cards. Market and installation grids have separate identities so remote catalog cards cannot survive a switch to local installations. Page-jump inputs share compact rounded styling across catalogs. Selecting a card immediately opens details from its list data, then refreshes remote fields without inserting a loading hint into the list. Installation and updates wait for those fields; returning discards late responses.
 
 Equivalent launch values and presentation callback changes preserve the native website session. Changing the expert ID, URL or ticket replaces the view; closing a Tab suppresses late visibility and bounds errors.
 

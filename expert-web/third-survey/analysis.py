@@ -109,7 +109,7 @@ def analyze(inputs, output, options=None, requester=service_request, interpreter
     document.add_paragraph("坐标说明：" + (coordinate or source_crs) + "；输入坐标未进行转换。")
     document.add_paragraph("分析结果仅依据提交范围与服务返回数据。各图层面积口径独立，不可跨图层相加；面积单位沿用服务原值，须与服务提供方核对。空数据集不自动解释为没有风险。")
     unknown = 0
-    view = {"title": TITLE, "project": title, "datasets": []}
+    view = {"title": TITLE, "project": title, "datasets": [], "terminology": {**DATASETS, **FIELDS}}
     if interpretation is not None:
         view["interpretation"] = {"text": interpretation, "model_generated": True}
         document.add_heading("综合解读（模型生成）", 1)

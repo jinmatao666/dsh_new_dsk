@@ -17,6 +17,58 @@ const record = { ...skill, source: 'skillhub', localSlug: 'pdf-helper', sha256: 
 const page = { items: [skill], total: 13, pageSize: 12 }
 
 describe('SkillHub marketplace workflow', () => {
+  it('never carries uninstalled remote cards into my installations after browsing duplicate slugs', async () => {
+    const repeated = { ...skill, slug: 'dev-expert', name: '编程专家.Skill' }
+    const request = vi.fn(async (operation: string) => operation === 'categories' ? { items: [] }
+      : { items: [repeated, { ...repeated, downloads: 42 }, skill], total: 24, pageSize: 12 })
+    const invoke = vi.fn(async () => [])
+    const props = { active: true, request, invoke, onUse: () => {}, onCount: () => {} }
+    const view = render(<SkillHubSection {...props} installedOnly={false} />)
+    await waitFor(() => { expect(view.container.querySelectorAll('.wanwei-skillhub-card')).toHaveLength(3) })
+    fireEvent.click(view.getByRole('button', { name: '下一页' }))
+    await waitFor(() => { expect(request).toHaveBeenCalledWith('list', expect.objectContaining({ page: 2 })) })
+    view.rerender(<SkillHubSection {...props} installedOnly installedPlatforms={[]} />)
+    await waitFor(() => { expect(view.container.querySelectorAll('.wanwei-skillhub-card')).toHaveLength(0) })
+    expect(view.queryByText('编程专家.Skill')).toBeNull()
+    expect(view.getByText('没有匹配的技能')).toBeTruthy()
+  })
+  it('opens details immediately without a list hint and ignores a response after returning', async () => {
+    let finishDetail: (value: unknown) => void = () => {}
+    const detail = new Promise<unknown>((resolve) => { finishDetail = resolve })
+    const request = vi.fn(async (operation: string) => operation === 'categories'
+      ? { items: [] } : operation === 'detail' ? detail : page)
+    render(<SkillHubSection active installedOnly={false} request={request}
+      invoke={async () => []} onUse={() => {}} onCount={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: /PDF 助手/ }))
+    expect(screen.getByRole('region', { name: skill.name })).toBeTruthy()
+    expect(screen.queryByText('正在读取技能详情…')).toBeNull()
+    expect(screen.getByRole('button', { name: '安装' }).hasAttribute('disabled')).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: '返回' }))
+    finishDetail({ ...skill, name: '迟到的详情' })
+    await waitFor(() => { expect(screen.queryByRole('region', { name: '迟到的详情' })).toBeNull() })
+    expect(screen.queryByRole('button', { name: '返回' })).toBeNull()
+  })
+  it('replaces every card across pages even when upstream slugs repeat', async () => {
+    const request = vi.fn(async (operation: string, payload: unknown) => {
+      if (operation === 'categories') return { items: [] }
+      const current = (payload as { page: number }).page
+      const items = Array.from({ length: 13 }, (_, index) => ({ ...skill,
+        slug: current <= 2 && index < 2 ? 'duplicate' : `page-${current}-${index}`,
+        name: `页面 ${current} 技能 ${index}`,
+      }))
+      return { items, total: 120, pageSize: 12 }
+    })
+    const view = render(<SkillHubSection active installedOnly={false} request={request}
+      invoke={async () => []} onUse={() => {}} onCount={() => {}} />)
+    for (const current of [1, 2, 3]) {
+      await screen.findByText(`页面 ${current} 技能 11`)
+      const cards = view.container.querySelectorAll('.wanwei-skillhub-card')
+      expect(cards).toHaveLength(12)
+      expect([...cards].every(card => card.textContent?.includes(`页面 ${current} 技能`))).toBe(true)
+      expect(screen.queryByText(`页面 ${current} 技能 12`)).toBeNull()
+      if (current < 3) fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+    }
+  })
   it('shows installation success before a slow receipt refresh finishes', async () => {
     let installed = false
     let finishRefresh: (value: unknown[]) => void = () => {}
@@ -146,14 +198,15 @@ describe('SkillHub marketplace workflow', () => {
   })
   it('requests the chosen SkillHub page directly', async () => {
     const request = vi.fn(async (operation: string) => operation === 'categories' ? { items: [] }
-      : { items: [skill], total: 120, pageSize: 12 })
+      : { items: [skill], total: 173064, pageSize: 12 })
     render(<SkillHubSection active installedOnly={false} request={request}
       invoke={async () => []} onUse={() => {}} onCount={() => {}} />)
     await screen.findByRole('button', { name: /PDF 助手/ })
-    fireEvent.change(screen.getByRole('textbox', { name: '跳转页码' }), { target: { value: '7' } })
+    fireEvent.change(screen.getByRole('textbox', { name: '跳转页码' }), { target: { value: '13000' } })
     fireEvent.submit(screen.getByRole('textbox', { name: '跳转页码' }).closest('form')!)
-    await waitFor(() => { expect(request).toHaveBeenCalledWith('list', expect.objectContaining({ page: 7 })) })
-    expect(screen.getByRole('button', { name: '第7 页' }).getAttribute('aria-current')).toBe('page')
+    await waitFor(() => { expect(request).toHaveBeenCalledWith('list', expect.objectContaining({ page: 13000 })) })
+    await screen.findByText('第13000 页 / 14422')
+    expect(screen.getByRole('button', { name: '第13000 页' }).getAttribute('aria-current')).toBe('page')
   })
   it('keeps the previous grid in place while the next SkillHub page loads', async () => {
     let finishPage: (value: unknown) => void = () => {}

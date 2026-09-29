@@ -84,6 +84,15 @@ try {
   ]
   for (const [name, expression] of shots) {
     await evaluate(expression)
+    if (name === '05-running') {
+      await evaluate('tasks[0].created=Date.now()/1000-65; render()')
+      const before = await evaluate("document.querySelector('[data-meeting-created]').textContent")
+      await delay(1200)
+      const live = await evaluate("({text:document.querySelector('[data-meeting-created]').textContent, animation:getComputedStyle(document.querySelector('.meeting-wave i')).animationName, font:getComputedStyle(document.querySelector('.meeting-task-info p')).fontSize})")
+      if (live.text === before || live.animation !== 'meeting-wave-pulse' || live.font !== '16px') throw new Error('Meeting waiting clock, animation or source typography is incorrect')
+      const balance = await evaluate("Math.abs(document.querySelector('.meeting-waiting-active').getBoundingClientRect().bottom-document.querySelector('.meeting-task-info').getBoundingClientRect().bottom)")
+      if (balance > 1) throw new Error('Active meeting cards do not share the same bottom alignment')
+    }
     await delay(180)
     const { data } = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
     await writeFile(join(outputDirectory, `${name}.png`), Buffer.from(data, 'base64'))

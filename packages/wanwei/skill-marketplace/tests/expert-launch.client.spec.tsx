@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { ExpertMarket } from '../src/client/plugin.tsx'
 
 vi.mock('../src/client/expert-webview.tsx', () => ({
-  ExpertWebview: () => <div data-testid="native-expert">专家网站</div>,
+  ExpertWebview: ({ launch, visible }: { launch: { id: string }; visible: boolean }) => <div data-testid="native-expert" data-expert={launch.id} hidden={!visible}>专家网站</div>,
 }))
 
 afterEach(cleanup)
@@ -14,6 +14,37 @@ const loadExperts = async () => experts
 const launch = { url: 'https://expert.example.com/', ticket: 'a'.repeat(64) }
 
 describe('published expert launch ownership', () => {
+  it('keeps multiple experts in the catalog tab row and reuses their mounted workbenches', async () => {
+    const launchExpert = vi.fn(async () => launch)
+    const view = render(<div className="dsh-skill-market-panel"><ExpertMarket
+      loadExperts={async () => [...experts, { key: 'second-expert', name: '第二专家', workbench_url: launch.url }]}
+      launchExpert={launchExpert} /></div>)
+    fireEvent.click(await screen.findByRole('button', { name: '动态专家' }))
+    fireEvent.click(screen.getByRole('button', { name: '开始使用' }))
+    const firstView = await screen.findByTestId('native-expert')
+    expect(view.container.firstElementChild?.classList.contains('dsh-expert-view-open')).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: '专家' }))
+    expect(firstView.hidden).toBe(true)
+    expect(view.container.firstElementChild?.classList.contains('dsh-expert-view-open')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '第二专家' }))
+    fireEvent.click(screen.getByRole('button', { name: '开始使用' }))
+    await screen.findByRole('button', { name: '关闭第二专家标签' })
+    expect(screen.getAllByTestId('native-expert')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: '动态专家' }))
+    expect(firstView.hidden).toBe(false)
+    expect(screen.getAllByTestId('native-expert')[0]).toBe(firstView)
+    // Opening an already-open expert from the catalog focuses it without a new ticket.
+    fireEvent.click(screen.getByRole('button', { name: '专家' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '动态专家' }).at(-1)!)
+    fireEvent.click(screen.getByRole('button', { name: '开始使用' }))
+    expect(launchExpert).toHaveBeenCalledTimes(2)
+    expect(firstView.hidden).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '关闭第二专家标签' }))
+    expect(firstView.hidden).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '关闭动态专家标签' }))
+    expect(screen.queryByTestId('native-expert')).toBeNull()
+    expect(screen.getByRole('button', { name: '专家' }).getAttribute('aria-current')).toBe('page')
+  })
   it('shows only published experts without an expert-team entry', async () => {
     render(<ExpertMarket loadExperts={loadExperts} />)
     expect(await screen.findByRole('button', { name: '动态专家' })).toBeTruthy()
