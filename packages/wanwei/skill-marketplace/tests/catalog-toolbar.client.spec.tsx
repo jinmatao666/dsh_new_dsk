@@ -15,9 +15,9 @@ describe('catalog-local controls', () => {
       categories={categories.map(name => ({ key: name, name }))} category="" onCategory={vi.fn()}
       page={1} pages={1} onPage={vi.fn()} />)
     fireEvent.click(screen.getByRole('combobox'))
-    expect(screen.queryByRole('option', { name: '通用', exact: true })).toBeNull()
-    expect(screen.getByRole('option', { name: '通用类', exact: true })).toBeTruthy()
-    expect(screen.getAllByRole('option', { name: '空间制图', exact: true })).toHaveLength(1)
+    expect(screen.queryByRole('option', { name: '通用' })).toBeNull()
+    expect(screen.getByRole('option', { name: '通用类' })).toBeTruthy()
+    expect(screen.getAllByRole('option', { name: '空间制图' })).toHaveLength(1)
     expect(buildMarketplaceCategories(null)).toEqual([])
     expect(buildMarketplaceCategories([{ name: '通用' }])).toEqual(['通用'])
   })
