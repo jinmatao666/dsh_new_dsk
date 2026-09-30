@@ -1027,7 +1027,8 @@ function SkillMarketplace({ section, chooseDirectory, prepareExpertWorkspace, us
   // sidebar command other than this section's own toggle should therefore
   // also leave this overlay immediately; operators should not have to find
   // the return arrow first.  The own entry toggles the panel instead, so its
-  // pointerdown must not force a close here.
+  // pointerdown must not force a close here. Layout handles also preserve this
+  // panel: resizing is not navigation, even though the handle is outside it.
   useEffect(() => {
     if (!open) return
     const closeForSidebarAction = (event: PointerEvent) => {
@@ -1119,7 +1120,7 @@ function SkillMarketplace({ section, chooseDirectory, prepareExpertWorkspace, us
   }, [open, personalSkillsLoaded, libraryView, uploadView, reviewFilter, personalSkills])
   const categories = useMemo(() => [
     L.all,
-    ...new Set(['通用', ...buildMarketplaceCategories(remoteCategories)]),
+    ...buildMarketplaceCategories(remoteCategories),
   ], [remoteCategories])
   useEffect(() => {
     if (!categories.includes(category)) setCategory(L.all)

@@ -12,6 +12,8 @@ The desktop needs Chinese-first communication and localized interaction labels w
 
 The product bundle mounts the independent [Chinese plugin](../../../../packages/wanwei/chinese/README.md). It registers a prompt section and a selectable language with official Chinese fallback. Official permission, command-menu and reasoning-level views pass only their interaction labels through the existing locale translator. Missing translations return the original text, preserving the application without the plugin. The plugin owns all new Chinese wording and selection cleanup.
 
+The default policy covers intermediate communication as well as final answers: candidate-file confirmations, clarification questions and options, and environment-readiness updates use Simplified Chinese. English skill instructions, file contents and history do not imply a user language request. The section follows first-party tool guidance and precedes structured-output instructions, retaining explicit user language requests, original filenames, paths, tool results and machine values.
+
 ## Alternatives considered
 
 **DOM replacement:** discarded because it depends on markup and can overwrite conversation content or collide with React updates. Runtime dictionaries participate in the existing locale revision notifications.
@@ -25,3 +27,5 @@ The product defaults to the Chinese pack. Disabling its Loader row removes both 
 ## Testing
 
 Host tests pin the policy text and verify persona preservation, complete-persona isolation and disposal. Client tests verify official fallback, translated interaction labels, unknown-text fallback and language restoration. A product-profile smoke checks that the desktop loads with the plugin enabled and disabled. Existing permission, command and model-selector tests verify unchanged execution behavior.
+
+Host tests also pin section ordering and explicit deployment-instruction preservation. These checks validate prompt assembly, not live model compliance; the policy does not rewrite historical responses or guarantee the language of every model output.

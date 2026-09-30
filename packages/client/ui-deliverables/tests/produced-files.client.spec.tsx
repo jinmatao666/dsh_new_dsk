@@ -117,7 +117,7 @@ function at(
     type: 'event',
     event: {
       seq, time: seq * 1_000, type, data,
-      ...(type === 'tool/result' ? { surfaceOp: 'append' } : {}),
+      ...(type === 'tool/result' || type === 'assistant/message' ? { surfaceOp: 'append' } : {}),
     } as SessionEvent,
   }
 }
@@ -176,6 +176,72 @@ function deliverablesOf(value: ConversationNodeAssembler, turn = 1): Readonly<De
 }
 
 describe('produced-file Turn data', () => {
+  it('shows only the final DOCX while retaining intermediate paths as recorded facts', () => {
+    const data: DeliverablesTurnData = {
+      ...produced([3, '地块 5/_draft.txt'], [5, '地块 5/摘要.md'], [7, '地块 5/摘要.docx']),
+      responses: [{ seq: 8, text: '正式交付物：[摘要.docx](<地块 5/摘要.docx>)' }],
+    }
+    expect(selectProducedFiles(tailOwner(data, 8))).toEqual(['地块 5/摘要.docx'])
+    expect(producedForClosing(data, 8)).toHaveLength(3)
+  })
+
+  it('orders multiple final outputs by delivery references, not creation order', () => {
+    const data: DeliverablesTurnData = {
+      ...produced([3, 'out/preview.png'], [4, 'out/data.xlsx'], [5, 'out/report.pdf']),
+      responses: [{ seq: 6, text: '主要报告 `report.pdf`，配套数据 `data.xlsx`，再次引用 `report.pdf`。' }],
+    }
+    expect(selectProducedFiles(tailOwner(data, 6))).toEqual(['out/report.pdf', 'out/data.xlsx'])
+  })
+
+  it('keeps explicitly delivered source and Markdown files and does not invent unknown outputs', () => {
+    const data: DeliverablesTurnData = {
+      ...produced([3, 'out/helper.py'], [4, 'out/README.md'], [5, 'out/_draft.txt']),
+      responses: [{ seq: 6, text: '`README.md` 与 `helper.py`；[不存在](missing.docx)' }],
+    }
+    expect(selectProducedFiles(tailOwner(data, 6))).toEqual(['out/README.md', 'out/helper.py'])
+  })
+
+  it('uses document fallback without displaying scratch files when the response omits links', () => {
+    const data = produced([3, 'out/_draft.txt'], [4, 'out/intermediate/notes.md'], [5, 'out/report.md'], [6, 'out/report.docx'])
+    expect(selectProducedFiles(tailOwner(data, 7))).toEqual(['out/report.docx'])
+    expect(selectProducedFiles(tailOwner(produced([3, 'out/_draft.txt']), 4))).toBeNull()
+    expect(selectProducedFiles(tailOwner(produced([3, 'out/report.md']), 4))).toEqual(['out/report.md'])
+  })
+
+  it('does not guess ambiguous basenames or use future closing references', () => {
+    const data: DeliverablesTurnData = {
+      ...produced([3, 'a/report.docx'], [4, 'b/report.docx']),
+      responses: [{ seq: 5, text: '`report.docx`' }, { seq: 9, text: '`b/report.docx`' }],
+    }
+    expect(selectProducedFiles(tailOwner(data, 5))).toEqual(['a/report.docx', 'b/report.docx'])
+    expect(selectProducedFiles(tailOwner(data, 9))).toEqual(['b/report.docx'])
+  })
+
+  it('derives the same delivery selection after replay, live append and older-page loading', () => {
+    const events = [
+      at(1, 'turn/start', { turn: 1 }),
+      call(2, 'draft', 'write', { file_path: 'out/_draft.txt', content: 'scratch' }),
+      result(3, 'draft'),
+      call(4, 'final', 'write', { file_path: 'out/report.docx', content: 'report' }),
+      result(5, 'final'),
+      at(6, 'assistant/message', { turn: 1, step: 1, message: { content: [{ type: 'text', text: '交付 `out/report.docx`' }] } }),
+    ]
+    const replay = assembler(events)
+    const live = assembler(events.slice(0, -1))
+    live.append(events[5]!)
+    live.flush()
+    const paged = assembler(events.slice(3), true)
+    paged.prepend(events.slice(0, 3), false)
+    paged.flush()
+    for (const value of [replay, live, paged]) {
+      expect(selectProducedFiles(tailOwner(deliverablesOf(value), 6))).toMatchInlineSnapshot(`
+        [
+          "out/report.docx",
+        ]
+      `)
+    }
+  })
+
   it('leaves product-specific runtime protocols to registered extensions', () => {
     const marker = `PRIVATE_RESULT=${JSON.stringify({
       success: true,

@@ -1,7 +1,7 @@
 /**
  * Turn-scoped produced-file Definition and readers. Client-only and
  * model-free: the vocabulary comes from successful first-party mutation
- * calls, never presentation data or the closing prose.
+ * calls. Closing prose selects delivery order without inventing file paths.
  */
 import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-chat/client'
@@ -16,6 +16,8 @@ interface ProducedPath {
 /** Immutable produced-file facts published against one Turn. */
 export interface DeliverablesTurnData {
   readonly produced: readonly ProducedPath[]
+  /** Settled response text used only to select and order recorded delivery paths. */
+  readonly responses?: readonly { readonly seq: number; readonly text: string }[]
 }
 
 declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
@@ -28,6 +30,7 @@ declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
 interface DeliverablesState extends DeliverablesTurnData {
   readonly turn: number
   readonly calls: ReadonlyMap<string, string | null>
+  readonly responses: NonNullable<DeliverablesTurnData['responses']>
 }
 
 /**
@@ -168,13 +171,53 @@ export function producedForClosing(
 }
 
 /**
- * Claim the turn-tail chain only when its closing turn produced files.
+ * Claim the turn-tail chain only when its closing turn has visible delivery files.
  * @param owner - Turn-tail owner currency for the closing assistant.
- * @returns Produced paths as the component's match, or null to decline before mount.
+ * @returns Selected delivery paths in closing-reference order, or null to decline before mount.
  */
 export function selectProducedFiles(owner: TurnTailOwnerProps): readonly string[] | null {
-  const paths = producedForClosing(owner.turn.data.get('deliverables'), owner.seq)
+  const paths = deliveryPaths(owner.turn.data.get('deliverables'), owner.seq)
   return paths.length === 0 ? null : paths
+}
+
+/** Resolve a closing reference against recorded paths without guessing ambiguous names. */
+function recordedReference(paths: readonly string[], value: string): string | undefined {
+  const destination = localDestinationPath(value)
+  if (destination !== undefined) return paths.find(path => path === destination)
+  let decoded = value
+  try { decoded = decodeURIComponent(value) } catch { /* Keep literal paths with invalid URI escapes. */ }
+  return paths.find(path => path === value || path === decoded)
+    ?? onlyPathWithBasename(paths, decoded)
+}
+
+/** Paths named as links or inline code in a response, in the model's delivery order. */
+function referencedPaths(text: string, paths: readonly string[]): readonly string[] {
+  const references = text.matchAll(/`+([^`\n]+)`+|(?<!!)\[[^\]\n]*\]\((<[^>\n]+>|[^)\n]+)\)/gu)
+  const selected = new Set<string>()
+  for (const match of references) {
+    const value = (match[1] ?? match[2] ?? '').replace(/^<|>$/gu, '').trim()
+    const path = recordedReference(paths, value)
+    if (path !== undefined) selected.add(path)
+  }
+  return [...selected]
+}
+
+/** Known scratch paths are omitted only from delivery presentation, never removed from disk. */
+function isProcessPath(path: string): boolean {
+  const processName = /^(?:_draft(?:[._-]|$)|_?tmp(?:[._-]|$)|_?temp(?:[._-]|$)|__pycache__|\.cache|intermediate|scratch)/iu
+  return path.split(/[\\/]/u).some(name => processName.test(name))
+    || /\.(?:tmp|temp|log|pyc)$/iu.test(path)
+}
+
+/** Select final references; without them, prefer document outputs over unclassified changed files. */
+function deliveryPaths(data: Readonly<DeliverablesTurnData> | undefined, seq: number): readonly string[] {
+  const recorded = producedForClosing(data, seq)
+  const response = data?.responses?.findLast(value => value.seq <= seq)
+  const named = response === undefined ? [] : referencedPaths(response.text, recorded)
+  if (named.length > 0) return named.filter(path => !isProcessPath(path))
+  const paths = recorded.filter(path => !isProcessPath(path))
+  const documents = paths.filter(path => /\.(?:docx|xlsx|pptx|pdf)$/iu.test(path))
+  return documents.length > 0 ? documents : paths
 }
 
 /** Create a turn-local successful mutation accumulator.
@@ -192,13 +235,21 @@ export function createDeliverablesDefinition(
       if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
         return { id: String(event.data.turn), role: 'update' }
       }
+      if (event.type === 'assistant/message' && isAppendSurfaceEvent(event)) {
+        return { id: String(event.data.turn), role: 'update' }
+      }
       return null
     },
     start: (_context, match) => {
       if (match.event.type !== 'turn/start') throw new Error('deliverables start requires turn/start')
-      return { turn: match.event.data.turn, calls: new Map(), produced: [] }
+      return { turn: match.event.data.turn, calls: new Map(), produced: [], responses: [] }
     },
     update: (context, match) => {
+      if (match.event.type === 'assistant/message') {
+        const text = match.event.data.message.content
+          .flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
+        return { ...context.state, responses: [...context.state.responses, { seq: match.event.seq, text }] }
+      }
       if (match.event.type === 'tool/call') {
         const calls = new Map(context.state.calls)
         calls.set(
@@ -227,7 +278,7 @@ export function createDeliverablesDefinition(
         kind: 'turn',
         turn: context.state.turn,
         key: 'deliverables',
-        value: { produced: context.state.produced },
+        value: { produced: context.state.produced, responses: context.state.responses },
       },
   }
 }

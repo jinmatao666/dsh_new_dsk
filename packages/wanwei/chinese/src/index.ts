@@ -1,6 +1,6 @@
 /** Host language policy, contributed through the official prompt-section registry. */
 import type { Context } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-system-prompt'
+import { FIRST_PARTY_SECTION_ORDER } from '@deepseek-ai/dsh-system-prompt'
 import type { Config } from './config.ts'
 
 export { Config } from './config.ts'
@@ -16,6 +16,10 @@ export const inject = ['systemPrompt']
  */
 export function apply(ctx: Context, config: Config): void {
   ctx.effect(() => ctx.systemPrompt.section({
-    name: 'wanwei:conversation-language', order: -50, text: config.instruction,
+    name: 'wanwei:conversation-language',
+    // Reassert the communication language after tool guidance, before output schemas.
+    // Ordering does not replace personas or bypass complete-persona isolation.
+    order: FIRST_PARTY_SECTION_ORDER.DELIVERABLE_FILE_REFERENCES + 100,
+    text: config.instruction,
   }), 'wanwei-chinese: language policy')
 }

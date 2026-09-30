@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-29-chinese-conversation-plugin.md
-2026-09-29-chinese-conversation-plugin.md: b1f13f93ae3ea94b38f53987a73d4e8a3c3fe083
-2026-09-29-chinese-conversation-plugin.zh.md: 8a9214287b612b8ef63270e2832a130d7851adf5
+2026-09-29-chinese-conversation-plugin.md: c9dd9b900c2afb9eca0ac40541b01b073aae3637
+2026-09-29-chinese-conversation-plugin.zh.md: f176ca8bc869aa145714a1e332ba60574af61626

@@ -18,7 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { ProducedFiles } from './ProducedFiles.tsx'
 import { en, NS, zh, type DeliverablesKey } from './locales.ts'
 import {
-  createDeliverablesDefinition, producedFileMentions, selectProducedFiles,
+  createDeliverablesDefinition, producedFileMentions, producedForClosing, selectProducedFiles,
 } from './turn-deliverables.ts'
 import { DeliverableExtensions } from './extensions.ts'
 
@@ -92,10 +92,9 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   const mentions: ChatFileMentions = {
     forClosing(owner) {
-      // Same claim test the turn-tail chain entry runs: no produced files,
-      // no vocabulary — the two surfaces agree by construction.
-      const paths = selectProducedFiles(owner)
-      if (paths === null) return undefined
+      // Keep the complete recorded vocabulary for prose links, independently of delivery filtering.
+      const paths = producedForClosing(owner.turn.data.get('deliverables'), owner.seq)
+      if (paths.length === 0) return undefined
       return producedFileMentions(paths, owner.openFile, path => t('produced.open', { name: path }))
     },
   }

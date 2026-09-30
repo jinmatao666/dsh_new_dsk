@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package renders the deliverables row a finished turn ends with — the files the mutation tools created or modified — and links matching inline-code references in the closing prose, so a mentioned file opens in the Host. The vocabulary comes from the mutation tools' own `locations`, never from the closing prose — a produced file is listed whether or not the model remembered to name it. The shipped Web patch is the only composition that loads this package; removing its cordis.yml entry removes the guidance, row, and prose links together.
+This package lists final deliverables at the end of a finished turn and opens recorded files referenced in the closing prose. Successful mutation calls and recognized tool results supply the recorded paths; closing references select delivery order without inventing paths. Intermediate files remain in the workspace and execution history but do not compete with final deliverables. The shipped Web patch loads this package; removing its cordis.yml entry removes the guidance, row, and prose links together.
 
 ## Table of Contents
 
@@ -30,6 +30,8 @@ Mount this plugin alongside `ui-conversation`; a finished turn then ends with th
 ### The row
 
 The row shows the largest leading prefix that fits — up to six chips, basename text with the full path as the title — reserving the exact localized `+ N files` width, so the remainder stays visible without wrapping or horizontal scrolling.
+
+Recorded files referenced by Markdown links or inline code in the closing response appear in reference order. If no references resolve, DOCX, XLSX, PPTX and PDF outputs take precedence over other changed files; without those documents, other recorded files remain eligible. Known scratch paths such as `_draft.txt`, temporary directories and intermediate folders are excluded from the row, not deleted. Explicit references can deliver Markdown or source files; ambiguous basenames and unrecorded paths never create entries. Prose links retain access to the complete recorded path list.
 
 ### Inline-code links
 
@@ -88,7 +90,7 @@ The section is static at first-party order 9000 for the lifetime of the package 
 These limits define the current deliverables vocabulary. They are current package constraints, not a general file-linking comparison or a task backlog.
 
 - **Mention matching is exact path or unique basename only** — a suffix mention stays inert; widening the matcher is deferred until a real closing-message shape needs it.
-- **Files created indirectly by terminal commands remain outside the matching vocabulary** — naming such a file in inline code does not make it clickable unless a successful mutation location also records that path.
+- **Terminal output recognition is limited** — only recognized successful output paths or registered runtime detectors contribute files; merely naming an unrecorded file in the response cannot make it a deliverable.
 - **Native folder handoff targets the Host desktop** — a browser reached through a non-loopback authority omits the action, as does a deployment reporting no native opener; SSH forwarding that makes a remote Host look loopback-local must set the Session Controller's `nativeOpen: false`.
 
 <a id="dev-note"></a>

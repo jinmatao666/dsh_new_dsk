@@ -41,6 +41,10 @@ Platform and SkillHub toolbars show nearby page numbers, the first and last page
 
 Catalog and installation filters share the rounded dropdown control with desktop settings fields. The list is positioned above or below its trigger according to available space, without the operating system's square native popup.
 
+Platform category choices come exclusively from backend category management. The client does not insert a fixed generic category; administrator-configured categories remain available under their actual names.
+
+Dragging either column-width handle preserves the active skill market, expert, connector or automation panel and its local state. Selecting a sidebar navigation action still leaves the panel; changing layout geometry does not select a conversation.
+
 My installations combines platform/local skills and SkillHub receipts into one twelve-card list. Matching cross-source installations appear as one card in the combined view; the source selector still exposes each installation separately. Its toolbar contains Enter-submitted search, a single source selector and pagination; filtering resets to page one, and removal clamps the page to the remaining results. Native skill-catalog changes refresh platform installation states alongside SkillHub receipts, so removal does not leave a stale installed card. Cards open skill details; removal and updates are available there instead of on the cards. This view reads local receipts without requesting the upstream catalog.
 
 ### Composition

@@ -9,9 +9,9 @@
 }
 
 .refChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  display: inline;
+  font-size: inherit;
+  line-height: inherit;
   margin: 0 2px;
   color: var(--dsw-alias-state-business-primary);
   font-weight: 500;
@@ -22,7 +22,9 @@
 /* Inline reference glyphs (always ReferenceIcon svgs) ride the consumer's text
    size: the 16px svg edge moves by the same px delta as the surrounding font. */
 .refIcon {
-  flex: none;
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: -0.2em;
   width: calc(16px + var(--dsh-content-font-delta, 0px));
   height: calc(16px + var(--dsh-content-font-delta, 0px));
 }

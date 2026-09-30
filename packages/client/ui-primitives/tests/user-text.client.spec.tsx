@@ -12,6 +12,23 @@ const project = (text: string, labels: readonly string[] = []) =>
   render(<div data-host>{projectUserText(text, labels)}</div>).container.querySelector('[data-host]')!
 
 describe('projectUserText', () => {
+  it('keeps file, skill and adjacent question text as sibling inline runs', () => {
+    const host = project('@3.txt /community-1你好')
+    expect([...host.children].map(child => [child.tagName, child.getAttribute('data-ref-chip'), child.textContent]))
+      .toEqual([
+        ['SPAN', 'file', '3.txt'],
+        ['SPAN', null, ' '],
+        ['SPAN', 'skill', '/community-1'],
+        ['SPAN', null, '你好'],
+      ])
+    expect(host.querySelectorAll('[data-ref-chip="file"] svg')).toHaveLength(1)
+  })
+
+  it('preserves intentional question paragraphs after inline references', () => {
+    const host = project('@3.txt /community-1 请分析\n并说明原因')
+    expect(host.textContent).toBe('3.txt /community-1 请分析\n并说明原因')
+  })
+
   it('keeps a decorated single-line message on one line: every part is inline', () => {
     const host = project('反反复复 /dsh-acp-test @执行几个命令测试', ['执行几个命令测试'])
     expect(host.querySelectorAll('div').length).toBe(0)

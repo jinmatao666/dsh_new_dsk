@@ -1,14 +1,59 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CatalogToolbar } from '../src/client/CatalogToolbar.tsx'
-import { pagePlatformCatalog } from '../src/client/catalog.ts'
+import { buildMarketplaceCategories, pagePlatformCatalog } from '../src/client/catalog.ts'
 import { isMarketInteraction } from '../src/client/market-interaction.ts'
 
 afterEach(cleanup)
 
 describe('catalog-local controls', () => {
+  it('shows only backend-managed categories without injecting a generic category', () => {
+    const categories = buildMarketplaceCategories([{ name: '通用类' }, { name: '空间制图' }, { name: '空间制图' }])
+    render(<CatalogToolbar searchLabel="搜索平台技能" keyword="" onKeyword={vi.fn()} onSearch={vi.fn()}
+      categories={categories.map(name => ({ key: name, name }))} category="" onCategory={vi.fn()}
+      page={1} pages={1} onPage={vi.fn()} />)
+    fireEvent.click(screen.getByRole('combobox'))
+    expect(screen.queryByRole('option', { name: '通用', exact: true })).toBeNull()
+    expect(screen.getByRole('option', { name: '通用类', exact: true })).toBeTruthy()
+    expect(screen.getAllByRole('option', { name: '空间制图', exact: true })).toHaveLength(1)
+    expect(buildMarketplaceCategories(null)).toEqual([])
+    expect(buildMarketplaceCategories([{ name: '通用' }])).toEqual(['通用'])
+  })
+  it('keeps the selected panel and its content during either column resize', () => {
+    function Harness() {
+      const [open, setOpen] = useState(true)
+      return <><div data-side="sidebar"><span>sidebar resize</span></div>
+        <div data-side="details"><span>details resize</span></div>
+        <button type="button">工作区</button>
+        {open && <div className="dsh-skill-market-panel"><input aria-label="保留筛选" defaultValue="PDF" /></div>}
+        <CloseListener close={() => { setOpen(false) }} /></>
+    }
+    function CloseListener({ close }: { close: () => void }) {
+      useEffect(() => {
+        const dismiss = (event: Event) => {
+          if (event.target instanceof Element && !isMarketInteraction(event.target)) close()
+        }
+        document.addEventListener('pointerdown', dismiss, true)
+        return () => { document.removeEventListener('pointerdown', dismiss, true) }
+      }, [close])
+      return null
+    }
+    render(<Harness />)
+    const filter = screen.getByRole('textbox', { name: '保留筛选' })
+    fireEvent.change(filter, { target: { value: 'DOCX' } })
+    for (const name of ['sidebar resize', 'details resize']) {
+      const handle = screen.getByText(name)
+      fireEvent.pointerDown(handle, { clientX: 280 })
+      fireEvent.pointerMove(handle, { clientX: 320 })
+      fireEvent.pointerUp(handle, { clientX: 320 })
+      expect(screen.getByRole('textbox', { name: '保留筛选' })).toBe(filter)
+      expect((filter as HTMLInputElement).value).toBe('DOCX')
+    }
+    fireEvent.pointerDown(screen.getByRole('button', { name: '工作区' }))
+    expect(screen.queryByRole('textbox', { name: '保留筛选' })).toBeNull()
+  })
   it('treats portaled filter choices as internal interactions while sidebar clicks remain external', () => {
     const closeMarket = vi.fn()
     const onCategory = vi.fn()

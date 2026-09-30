@@ -17,10 +17,10 @@ The product-owned profile can opt out with this `cordis.patch.yml` row:
 
 ## Model Experience
 
-**Model-visible effect:** the language policy requests Simplified Chinese answers, plans, progress, summaries and natural-language tool arguments while preserving machine identifiers and explicit language requests. Expert personas and tool schemas are unchanged. The official prompt assembly records the contributed text through its normal request logging.
+**Model-visible effect:** the language policy requests Simplified Chinese throughout each turn, including candidate-file confirmations, clarification questions and option labels, progress, summaries and natural-language tool arguments. English skill instructions, file contents and earlier messages do not imply an English language request. Explicit user language requests still take precedence; machine identifiers, filenames, paths and raw tool results remain unchanged. The section follows tool guidance and precedes structured-output instructions. Expert personas and tool schemas are unchanged. The official prompt assembly records the contributed text through its normal request logging.
 
 **Token and KV-cache effect:** one short constant section adds prompt tokens while enabled. Switching or disabling the policy changes the prompt prefix and may reduce prefix-cache reuse. Interface translations do not add model calls or tokens.
 
 ## Known Limitations and Deferred Work
 
-Complete personas intentionally exclude additional system sections under the official assembly rules. This plugin does not override that protection or guarantee a model's internal reasoning language. Unknown provider labels and command descriptions remain verbatim. Market content and broad application localization are outside this package.
+Complete personas intentionally exclude additional system sections under the official assembly rules. This plugin does not override that protection or guarantee model compliance or internal reasoning language. A deployment's explicit `instruction` replaces the default policy. Historical messages are not rewritten. Unknown provider labels and command descriptions remain verbatim. Market content and broad application localization are outside this package.
