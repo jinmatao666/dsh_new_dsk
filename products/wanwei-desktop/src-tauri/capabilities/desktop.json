@@ -13,6 +13,7 @@
   "permissions": [
     "core:default",
     "allow-set-auth-window-state",
+    "allow-set-network-environment",
     "allow-save-session-log-archive",
     "allow-list-marketplace-skills",
     "allow-install-marketplace-skill",

@@ -89,13 +89,18 @@ describe('Wanwei authentication gate', () => {
     const subject = render(element())
     const account = screen.getByLabelText(zh.username)
     const card = screen.getByRole('heading', { name: zh.loginTitle }).parentElement?.parentElement
-    expect(account).toHaveProperty('disabled', true)
+    expect(account).toHaveProperty('disabled', false)
+    expect(screen.getByLabelText(zh.password)).toHaveProperty('disabled', false)
+    fireEvent.change(account, { target: { value: 'draft-account' } })
+    fireEvent.change(screen.getByLabelText(zh.password), { target: { value: 'draft-password' } })
     expect(screen.getByRole('button', { name: zh.checking })).toHaveProperty('disabled', true)
 
     view = { state: 'logged-out' }
     subject.rerender(element())
     expect(screen.getByLabelText(zh.username)).toBe(account)
     expect(account).toHaveProperty('disabled', false)
+    expect(account).toHaveProperty('value', 'draft-account')
+    expect(screen.getByLabelText(zh.password)).toHaveProperty('value', 'draft-password')
     expect(screen.getByRole('heading', { name: zh.loginTitle }).parentElement?.parentElement).toBe(card)
   })
 
@@ -124,5 +129,26 @@ describe('Wanwei authentication gate', () => {
     page.style.removeProperty('--login-scale')
     fireEvent(window, new Event('resize'))
     expect(page.style.getPropertyValue('--login-scale')).toBe(scale)
+  })
+
+  it('keeps a fixed desktop canvas when native titlebars change the available height', () => {
+    const originalWidth = window.innerWidth
+    const originalHeight = window.innerHeight
+    try {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1120 })
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: 697 })
+      renderGate()
+      const page = screen.getByRole('main')
+      expect(page.style.getPropertyValue('--login-layout-width')).toBe('1120px')
+      expect(page.style.getPropertyValue('--login-layout-height')).toBe('720px')
+      expect(page.style.getPropertyValue('--login-scale')).toBe('0.9681')
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: 720 })
+      fireEvent(window, new Event('resize'))
+      expect(page.style.getPropertyValue('--login-scale')).toBe('1.0000')
+      expect(page.style.getPropertyValue('--login-layout-width')).toBe('1120px')
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth })
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: originalHeight })
+    }
   })
 })

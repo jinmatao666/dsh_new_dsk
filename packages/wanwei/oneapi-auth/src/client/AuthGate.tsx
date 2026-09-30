@@ -22,7 +22,7 @@ const NATIVE_AUTH_SIGNAL_PREFIX = '__zjugis_native_auth:'
 
 type LoginMode = 'account' | 'sms' | 'qr'
 
-/** Blocking desktop login surface; credentials are sent only to the local Host. */
+/** Blocking login surface; desktop viewports scale one centered 1120×720 layout, and credentials go only to the local Host. */
 export function AuthGate({ useAuth, useNetwork, setNetworkEnvironment, refresh, login, fail, t }: AuthGateProps) {
   const auth = useAuth(view => view)
   const networkEnvironment = useNetwork(view => view.mode)
@@ -101,10 +101,10 @@ export function AuthGate({ useAuth, useNetwork, setNetworkEnvironment, refresh, 
         page.style.removeProperty('--login-layout-height')
         return
       }
-      const scale = Math.max(0.82, Math.min(window.innerWidth / 1120, window.innerHeight / 720, 1.4))
+      const scale = Math.min(window.innerWidth / 1120, window.innerHeight / 720, 1.4)
       page.style.setProperty('--login-scale', scale.toFixed(4))
-      page.style.setProperty('--login-layout-width', `${window.innerWidth / scale}px`)
-      page.style.setProperty('--login-layout-height', `${window.innerHeight / scale}px`)
+      page.style.setProperty('--login-layout-width', '1120px')
+      page.style.setProperty('--login-layout-height', '720px')
     }
     update()
     window.addEventListener('resize', update)
@@ -194,16 +194,22 @@ export function AuthGate({ useAuth, useNetwork, setNetworkEnvironment, refresh, 
             <div className={css.loginContent}>
               {loginMode === 'account'
                 ? (
-                  <form onSubmit={(event) => { void submit(event) }}>
-                    <label>{t('username')}<input autoFocus autoComplete="username" disabled={checking || busy} value={username} onChange={(event) => { setUsername(event.target.value) }} placeholder={t('usernamePlaceholder')} required /></label>
-                    <label>{t('password')}<input type="password" autoComplete="current-password" disabled={checking || busy} value={password} onChange={(event) => { setPassword(event.target.value) }} placeholder={t('passwordPlaceholder')} required /></label>
+                  <form className={serviceError === undefined ? undefined : css.accountFormError}
+                    onSubmit={(event) => { void submit(event) }}>
+                    <label>{t('username')}<input autoFocus autoComplete="username" disabled={busy} value={username} onChange={(event) => { setUsername(event.target.value) }} placeholder={t('usernamePlaceholder')} required /></label>
+                    <label>{t('password')}<input type="password" autoComplete="current-password" disabled={busy} value={password} onChange={(event) => { setPassword(event.target.value) }} placeholder={t('passwordPlaceholder')} required /></label>
                     <div className={css.formOptions}>
                       <label className={css.remember}><input type="checkbox" /> <span>{t('rememberMe')}</span></label>
                       <button className={css.textAction} type="button" disabled>{t('forgotPassword')}</button>
                     </div>
-                    {serviceError !== undefined ? <p className={css.error} role="alert">{serviceError}</p> : null}
+                    {serviceError !== undefined ? (
+                      <div className={css.accountFeedback}>
+                        <p className={css.error} role="alert" title={serviceError}>{serviceError}</p>
+                        {auth.state === 'offline'
+                          ? <button className={css.textAction} type="button" onClick={retry}>{t('retry')}</button> : null}
+                      </div>
+                    ) : null}
                     <button className={css.primaryButton} type="submit" disabled={checking || busy || networkBusy || username.trim() === '' || password === ''}>{checking ? t('checking') : busy ? t('signingIn') : t('signIn')}</button>
-                    {auth.state === 'offline' ? <button className={css.retry} type="button" onClick={retry}>{t('retry')}</button> : null}
                   </form>
                 )
                 : loginMode === 'sms'

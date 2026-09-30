@@ -63,6 +63,10 @@
 .loginModeActive { color: var(--accent) !important; font-weight: 700; background: rgb(255 255 255 / 95%); box-shadow: 0 4px 12px rgb(15 23 42 / 7%); }
 .loginContent { flex: 0 0 292px; height: 292px; overflow: auto; }
 .card form { display: grid; min-height: 292px; gap: 17px; }
+.card form.accountFormError { gap: 8px; }
+.accountFeedback { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.accountFeedback .error { display: -webkit-box; flex: 1; margin: 0; overflow: hidden; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.accountFeedback button { flex-shrink: 0; }
 .smsCodeRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px; }
 .smsCodeButton { min-width: 112px; padding-inline: 12px !important; color: var(--accent) !important; font-size: 13px !important; white-space: nowrap; background: rgb(219 231 255 / 78%) !important; box-shadow: none !important; }
 .smsCodeButton::after { display: none; }
@@ -105,18 +109,6 @@
 .formFooter { margin: 18px 0 0; color: var(--muted); font-size: 13px; line-height: 17px; text-align: center; }
 
 @media (prefers-reduced-motion: reduce) { .brandHero h1 span, .card::before, .card button::after { animation: none; } }
-@media (min-width: 961px) and (max-width: 1200px) { .page { gap: 30px; padding-inline: 32px; } .brandSide { min-width: 0; max-width: none; } .formSide { flex-basis: min(430px, 44vw); } .card { padding-inline: 34px; } }
-@media (min-width: 961px) and (max-height: 900px) {
-  .page { padding-top: 18px; padding-bottom: 26px; }
-  .brandSide { gap: 14px; padding-top: 130px; }
-  .brandHero { margin-bottom: 24px; padding-left: 20px; }
-  .brandHero h1 { margin-bottom: 10px; font-size: 38px; }
-  .brandHero p { line-height: 1.6; }
-  .featureList { margin-bottom: 10px; padding-left: 20px; }
-  .capabilityCard { min-height: 292px; padding: 24px 20px 28px; }
-  .capabilityItem { min-height: 92px; padding: 14px; }
-  .card { padding-block: 30px 26px; }
-}
 @media (max-width: 960px) { .backdrop { overflow: auto; } .page { flex-direction: column; align-items: stretch; gap: 28px; } .brandSide { max-width: 100%; padding-top: 0; } .brandHeader { position: static; } .fullLogo { width: min(100%, 360px); } .brandHero p { max-width: 680px; } .formSide { flex-basis: auto; align-self: center; width: min(100%, 480px); } }
 @media (max-width: 520px) { .page { padding: 24px 16px 36px; } .fullLogo { width: min(100%, 360px); } .brandHero h1 { font-size: 28px; } .capabilityGrid { grid-template-columns: 1fr; } .card { padding: 30px 22px 26px; border-radius: 22px; } .cardHeader h2 { font-size: 25px; } }
 
@@ -130,14 +122,13 @@
 .card .loginMode button { line-height: 19px; }
 .card input:not([type="checkbox"]):not([type="radio"]) { line-height: 20px; }
 .card label.networkChoice { line-height: 1.9; }
-@media (min-width: 961px) and (max-width: 1200px) {
-  .brandSide { flex-basis: 714px; }
-}
 .featurePill { -webkit-backdrop-filter: blur(16px); }
 .capabilityCard { -webkit-backdrop-filter: blur(20px); }
 .card { -webkit-backdrop-filter: blur(24px); }
 .card button.textAction, .card .legalNotice button, .card .formFooter button { position: static; overflow: visible; margin: 0; padding: 0; border: 0; color: var(--accent); font: inherit; font-weight: 600; background: transparent; box-shadow: none; opacity: 1; }
 .card button.textAction::after, .card .legalNotice button::after, .card .formFooter button::after { display: none; }
+.card .formOptions button.textAction { font-size: 13px; line-height: 17px; font-weight: 500; }
+.card .accountFeedback button.textAction { font-size: 12px; line-height: 17px; font-weight: 500; }
 .primaryButton { width: 100%; }
 .retry { margin-top: -8px; color: var(--accent) !important; background: transparent !important; box-shadow: none !important; }
 .retry::after { display: none; }
@@ -146,3 +137,16 @@
 .unavailablePanel p { margin: 0; color: var(--muted); font-size: 13px; }
 .unavailableIcon, .qrPlaceholder { display: grid; width: 100px; height: 100px; place-items: center; border: 1px solid rgb(37 99 235 / 18%); border-radius: 18px; background: rgb(239 244 255 / 90%); }
 .unavailableIcon svg, .qrPlaceholder svg { width: 42px; height: 42px; fill: none; stroke: var(--accent); }
+
+/* Desktop content uses one Windows-reference canvas, independent of OS chrome and viewport breakpoints. */
+@media (min-width: 961px) {
+  .page { position: absolute; top: 50%; left: 50%; width: var(--login-layout-width, 1120px); height: var(--login-layout-height, 720px); min-height: 720px; margin: 0; padding: 18px 32px 26px; gap: 30px; transform: translate(-50%, -50%) scale(var(--login-scale, 1)); }
+  .brandSide { flex-basis: 714px; max-width: none; gap: 14px; padding-top: 130px; }
+  .brandHero { margin-bottom: 24px; padding-left: 20px; }
+  .brandHero h1 { margin-bottom: 10px; font-size: 38px; }
+  .brandHero p { line-height: 1.6; }
+  .featureList { margin-bottom: 10px; padding-left: 20px; }
+  .capabilityCard { min-height: 292px; padding: 24px 20px 28px; }
+  .formSide { flex-basis: 430px; }
+  .card { padding: 30px 34px 26px; }
+}

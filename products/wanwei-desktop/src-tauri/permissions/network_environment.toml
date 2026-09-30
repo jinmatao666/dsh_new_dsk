@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-set-network-environment"
+description = "Allows the main desktop UI to synchronize its selected network environment."
+commands.allow = ["set_network_environment"]

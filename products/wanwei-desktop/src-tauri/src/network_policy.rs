@@ -39,6 +39,16 @@ mod tests {
     use super::internal_link;
     use url::Url;
     #[test]
+    fn main_window_can_synchronize_network_environment() {
+        let capability: serde_json::Value = serde_json::from_str(include_str!("../capabilities/desktop.json")).unwrap();
+        let permissions = capability["permissions"].as_array().unwrap();
+        assert!(permissions.iter().any(|permission| permission == "allow-set-network-environment"));
+        assert_eq!(capability["webviews"], serde_json::json!(["main"]));
+        let permission = include_str!("../permissions/network_environment.toml");
+        assert!(permission.contains("identifier = \"allow-set-network-environment\""));
+        assert!(permission.contains("commands.allow = [\"set_network_environment\"]"));
+    }
+    #[test]
     fn distinguishes_public_and_internal_links() {
         for link in ["http://10.1.2.3/", "https://192.168.2.3/", "http://172.20.0.2/", "http://[::1]/", "http://server.lan/"] {
             assert!(internal_link(&Url::parse(link).unwrap(), &[]));
