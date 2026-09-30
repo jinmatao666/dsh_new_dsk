@@ -33,7 +33,11 @@ if (Number(process.versions.node.split('.')[0]) < 22) {
   throw new Error(`Wanwei desktop runtime requires Node 22+, got ${process.version}`)
 }
 for (const entry of readdirSync(resourcesRoot, { withFileTypes: true })) {
-  if (entry.isDirectory() && (entry.name === 'runtime' || entry.name.startsWith('runtime-'))) {
+  if (entry.isDirectory() && entry.name === 'runtime') {
+    for (const oldEntry of readdirSync(join(resourcesRoot, entry.name))) {
+      if (oldEntry !== '.gitkeep') rmSync(join(resourcesRoot, entry.name, oldEntry), { recursive: true, force: true })
+    }
+  } else if (entry.isDirectory() && entry.name.startsWith('runtime-')) {
     rmSync(join(resourcesRoot, entry.name), { recursive: true, force: true })
   }
 }
@@ -47,14 +51,14 @@ run('corepack', [
   '--config.confirmModulesPurge=false',
   '--config.node-linker=hoisted',
   '--filter',
-  'dsh-python-runtime-closure',
+  '@wanwei/dsh-desktop-runtime-closure',
   'deploy',
   '--legacy',
   '--prod',
   appRoot,
 ])
 
-// The dependency-only Python deploy root carries repository documentation and
+// The dependency-only deploy roots carry repository documentation and
 // build metadata that the desktop Node runtime never reads. Keep the staged
 // resource tree executable-only so docs gates and installers do not absorb it.
 for (const file of [

@@ -23,6 +23,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
+import type { ModelKey } from './locales.ts'
 import css from './ModelSelect.module.css'
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
@@ -85,8 +86,8 @@ export function ModelSelect(
     ? undefined
     : effectiveEffort === undefined
       ? t('effort.providerDefault')
-      : reasoning.efforts.find(level => level.id === effectiveEffort)?.name ?? effectiveEffort
-  const effortChoices = useMemo<readonly EffortChoice[]>(() => reasoning === undefined
+      : t((reasoning.efforts.find(level => level.id === effectiveEffort)?.name ?? effectiveEffort) as ModelKey)
+  const effortChoices: readonly EffortChoice[] = reasoning === undefined
     ? []
     : [
       ...reasoning.defaultEffort === undefined
@@ -95,9 +96,9 @@ export function ModelSelect(
       ...reasoning.efforts.map((effort: ModelReasoningEffort) => ({
         key: `effort:${effort.id}`,
         effort: effort.id,
-        label: effort.name,
+        label: t(effort.name as ModelKey),
       })),
-    ], [reasoning, t])
+    ]
   const busy = state.status === 'selecting'
 
   const reload = (): void => {

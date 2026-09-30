@@ -33,6 +33,8 @@ The row shows the largest leading prefix that fits — up to six chips, basename
 
 ### Inline-code links
 
+URI-shaped local references resolve only when their decoded full path exactly matches a recorded artifact. The resolver never guesses from a URI's label or basename; ambiguous basenames in inline code remain inert.
+
 The closing prose carries the same vocabulary: an inline-code token resolves by exact path, or by being exactly the basename of exactly one produced path — a basename two paths share stays inert rather than guessing, so a mention can never open the wrong file. A resolved mention keeps its code chip and takes the markdown sheet's link language, with the full path as its title.
 
 -----

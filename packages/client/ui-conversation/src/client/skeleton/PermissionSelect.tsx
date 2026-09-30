@@ -5,6 +5,7 @@ import type { PermissionSelect as PermissionSelectValue } from '@deepseek-ai/dsh
 import { IconChevronDownOutline14, Menu, RiskConfirmation } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ComposerBarProps } from '../contract/slots.ts'
+import type { ConversationKey } from '../locales.ts'
 import css from './PermissionSelect.module.css'
 
 const FULL_ACCESS = 'danger-full-access'
@@ -61,7 +62,8 @@ function optionLabel(
   option: PermissionSelectValue['options'][number],
   t: ComposerBarProps['t'],
 ): string {
-  return option.value === FULL_ACCESS ? t('access.fullLabel') : displayName(option.name)
+  // External language packs may translate host labels; missing keys stay verbatim.
+  return option.value === FULL_ACCESS ? t('access.fullLabel') : t(displayName(option.name) as ConversationKey)
 }
 
 export interface PermissionSelectProps {
@@ -142,7 +144,7 @@ export function PermissionSelect({ value, locked, command, t }: PermissionSelect
             type="button"
             className={css.trigger}
             aria-label={t('input.accessMode', { name: current === undefined ? displayName(currentValue) : optionLabel(current, t) })}
-            title={current?.description}
+            title={current?.description === undefined ? undefined : t(current.description as ConversationKey)}
             disabled={locked || busy}
             onClick={() => { setOpen(!open) }}
           >

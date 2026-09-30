@@ -6,11 +6,13 @@
 
 ## 当前边界
 
+macOS 保留继承的系统临时目录，将随包 Node 的目录放到 Sidecar PATH 首位，保留现有工具路径并补充 Homebrew 目录。Python 用户依赖及 pip 下载使用宿主临时目录下按产品隔离的私有目录，该区域已在工作区写入模式的允许范围内。缓存可跨启动复用，但可能被系统清理，不属于持久用户数据。只读限制和扩大访问范围的审批保持有效。Windows 和 Linux 保持既有启动环境；Mac 安装版行为仍需实机验证。
+
 Tauri 2 桌面壳会以本地回环 DSH Sidecar 的形式启动新的 `wanwei-desktop` profile，等待其输出带鉴权信息的 Web 地址，再创建主 WebView。它始终把 `DSH_HOME` 放在预览版自己的本地应用数据目录下。万维自有桌面命令通过明确的 WebView 权限提供。
 
 主 WebView 的新窗口请求会在系统默认浏览器打开 HTTP(S) 链接。其他 URL 协议不会启动外部程序，对话链接也不会创建第二个应用内 WebView。
 
-独立专家网页仍在实施。已上架专家拟在主窗口内的独立子 WebView 打开；桌面壳按每次打开的具体 HTTPS 来源和视图标签登记权限，不采用静态的全站 HTTPS 授权。目录、一次性身份票据、桌面桥与视图关闭/定位还须在 Windows、macOS、Linux 实机验证后才能发布。专家网站是高权限代码，上架前必须审核其 iframe 与跳转行为。六个正式网站及一次性切换尚未完成，详见 `WANWEI_EXPERT_WEB_INTEGRATION_PLAN.md`。
+独立专家网页仍在实施。已上架专家在主窗口内的独立子 WebView 打开；桌面壳按每次打开的具体 HTTP 或 HTTPS 来源和视图标签登记权限。macOS 安装包仅允许 `ac.zjugis.com` 通过不安全的 HTTP 加载，以便当前 HTTP 网关能在 WKWebView 中显示；此例外不会加密传输，网关改用 HTTPS 后应移除。目录、一次性身份票据、桌面桥与视图关闭/定位还须在 Windows、macOS、Linux 实机验证后才能发布。专家网站是高权限代码，上架前必须审核其 iframe 与跳转行为。六个正式网站及一次性切换尚未完成，详见 `WANWEI_EXPERT_WEB_INTEGRATION_PLAN.md`。
 
 正式构建将凭据、设置、会话和技能保存在 `<预览版本地应用数据目录>/dsh-home`。首次启动时，如果存在旧版 `~/.dsh`，预览版会将设置、会话、存储、附件、技能、兼容的智能体预设和匿名用户 ID 复制到独立目录，不覆盖预览版已有文件，也不写入旧目录。凭据不会迁移：每次安装新构建仍需重新登录。旧目录不存在或复制失败时，预览版继续使用自己的数据启动。新版产品 Profile 始终单独生成；迁移标记避免重复导入。不兼容的旧会话仍可能需要人工处理。
 
@@ -30,7 +32,7 @@ pnpm --filter @wanwei/dsh-desktop-preview check:sidecar
 pnpm --filter @wanwei/dsh-desktop-preview check:rust
 ```
 
-源码开发模式直接运行当前 checkout 中的 TypeScript CLI。`prepare:runtime` 会在 `src-tauri/resources/runtime` 中创建自包含生产运行时：部署经过评审的 DSH 生产依赖闭包，把所需 workspace 对等包恢复为普通文件，复制 Node 22，并预检暂存后的 `wanwei-desktop` profile。生成的运行时文件由 Git 忽略，每次制作安装包时重新构建。
+源码开发模式直接运行当前 checkout 中的 TypeScript CLI。`prepare:runtime` 会在 `src-tauri/resources/runtime` 中创建自包含生产运行时：部署万维专用生产依赖闭包（既有 DSH 运行时加上 PDF、DOCX、XLSX 解析器），把所需 workspace 对等包恢复为普通文件，复制 Node 22，并预检暂存后的 `wanwei-desktop` profile。`check:runtime` 还会用随包 Node 启动暂存的文档辅助程序，缺少解析依赖时会在制作安装包之前失败。官方 Python 运行时清单保持不变。生成的运行时文件由 Git 忽略，每次制作安装包时重新构建。
 
 ```sh
 pnpm --filter @wanwei/dsh-desktop-preview prepare:runtime

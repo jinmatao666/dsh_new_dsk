@@ -21,7 +21,7 @@ function expireSession() {
 }
 async function authenticatedFetch(path, options) {
   if (sessionExpired) throw new Error('登录已失效，请重新打开工作台')
-  const response = await fetch(path, options)
+  const response = await fetch(path.startsWith('/api/') ? path.slice(1) : path, options)
   if (response.status === 401) expireSession()
   if (sessionExpired) throw new Error('登录已失效，请重新打开工作台')
   return response
@@ -42,7 +42,7 @@ function toast(message) {
 }
 function taskCards(items) {
   const states = { queued: '等待处理', running: '正在处理', succeeded: '已完成', failed: '处理失败', cancelled: '已取消' }
-  return items.length ? items.map(task => `<article class="task"><h3>${escape(tools.find(tool => tool.id === task.tool)?.name || task.tool)}</h3><small class="muted">${escape(new Date(task.created * 1000).toLocaleString())}</small><p class="${escape(task.state)}">${escape(states[task.state] || task.state)}</p>${task.error ? `<p class="error">${escape(task.error)}</p>` : ''}${task.state === 'succeeded' ? task.outputs.map((name, index) => `<a href="/api/tasks/${task.id}/files/${index}" download>${escape(name)}</a>`).join('') : ''}${['queued', 'running'].includes(task.state) ? `<button class="secondary" data-cancel="${task.id}">取消任务</button>` : ''}</article>`).join('') : '<p class="empty">暂无任务，选择一个工具开始处理。</p>'
+  return items.length ? items.map(task => `<article class="task"><h3>${escape(tools.find(tool => tool.id === task.tool)?.name || task.tool)}</h3><small class="muted">${escape(new Date(task.created * 1000).toLocaleString())}</small><p class="${escape(task.state)}">${escape(states[task.state] || task.state)}</p>${task.error ? `<p class="error">${escape(task.error)}</p>` : ''}${task.state === 'succeeded' ? task.outputs.map((name, index) => `<a href="api/tasks/${task.id}/files/${index}" download>${escape(name)}</a>`).join('') : ''}${['queued', 'running'].includes(task.state) ? `<button class="secondary" data-cancel="${task.id}">取消任务</button>` : ''}</article>`).join('') : '<p class="empty">暂无任务，选择一个工具开始处理。</p>'
 }
 let selectedTask
 const stateLabels = { queued: '等待处理', running: '正在处理', succeeded: '已完成', failed: '处理失败', cancelled: '已取消' }
@@ -95,18 +95,18 @@ function summarySectionsMarkup(preview) {
   }).join('')}</div>${preview.truncated ? '<p class="muted">网页仅预览前 3 万字符，请下载完整成果。</p>' : ''}`
 }
 function toolIcon(id) {
-  return `/assets/${['summary', 'compare'].includes(id) ? id : 'history'}.png`
+  return `assets/${['summary', 'compare'].includes(id) ? id : 'history'}.png`
 }
 function emptyMarkup(kind) {
   const records = kind === 'history'
-  return `<div class="doc-empty"><img src="/assets/${records ? 'history' : 'files'}.png" alt=""><strong>${records ? '暂无处理记录' : '暂无成果文件'}</strong><p>${records ? '新建任务后，处理状态和结果会显示在这里。' : '完成任务后，可在这里下载当前用户的实际成果。'}</p><button class="primary" data-tool="summary">新建处理</button></div>`
+  return `<div class="doc-empty"><img src="assets/${records ? 'history' : 'files'}.png" alt=""><strong>${records ? '暂无处理记录' : '暂无成果文件'}</strong><p>${records ? '新建任务后，处理状态和结果会显示在这里。' : '完成任务后，可在这里下载当前用户的实际成果。'}</p><button class="primary" data-tool="summary">新建处理</button></div>`
 }
 function historyMarkup() {
   return tasks.length ? `<div class="history-list">${tasks.map(task => `<button class="history-row" data-task="${escape(task.id)}"><img src="${toolIcon(task.tool)}" alt=""><span><strong>${escape(task.options.taskName || task.options.title || tools.find(tool => tool.id === task.tool)?.name || task.tool)}</strong><small>${escape(new Date(task.created * 1000).toLocaleString())} · ${task.inputs.length} 个文件 · ${escape(tools.find(tool => tool.id === task.tool)?.name || task.tool)}</small></span><em class="${escape(task.state)}">${escape(stateLabels[task.state] || task.state)}</em></button>`).join('')}</div>` : emptyMarkup('history')
 }
 function filesMarkup() {
   const files = tasks.filter(task => task.state === 'succeeded').flatMap(task => task.outputs.map((name, index) => ({ task, name, index })))
-  return files.length ? `<div class="outputs">${files.map(({ task, name, index }) => `<div><span><strong>${escape(name)}</strong><small>${escape(task.options.taskName || task.options.title || tools.find(tool => tool.id === task.tool)?.name || task.tool)}</small></span><a class="primary" href="/api/tasks/${escape(task.id)}/files/${index}" download>下载文件</a></div>`).join('')}</div>` : emptyMarkup('files')
+  return files.length ? `<div class="outputs">${files.map(({ task, name, index }) => `<div><span><strong>${escape(name)}</strong><small>${escape(task.options.taskName || task.options.title || tools.find(tool => tool.id === task.tool)?.name || task.tool)}</small></span><a class="primary" href="api/tasks/${escape(task.id)}/files/${index}" download>下载文件</a></div>`).join('')}</div>` : emptyMarkup('files')
 }
 function taskMarkup() {
   const task = tasks.find(item => item.id === selectedTask)
@@ -119,7 +119,7 @@ function taskMarkup() {
   const back = '<button class="doc-back" data-page="history">← 返回处理记录</button>'
   const active = task.state === 'queued' || task.state === 'running'
   const success = task.state === 'succeeded'
-  const frame = body => `<div class="doc-flow">${back}<div class="stepbar"><span>1 准备材料</span><span>2 核对信息</span><span class="current">3 处理与交付</span></div><header class="doc-result-head"><span>${escape(tool?.name || task.tool)}</span><h2>${title}</h2><p>${escape(new Date(task.created * 1000).toLocaleString())} · ${inputs.length} 个输入文件</p></header><section class="doc-result ${escape(task.state)}"><header class="doc-result-status"><div><small>真实任务状态</small><h3>${escape(stateLabels[task.state] || task.state)}</h3></div></header>${task.error ? `<p class="error doc-result-error">${escape(task.error)}</p>` : ''}${body}<h3>真实成果文件</h3><div class="doc-result-files">${success && task.outputs.length ? task.outputs.map((name, index) => `<div><span>${escape(name)}</span><a class="primary" href="/api/tasks/${escape(task.id)}/files/${index}" download>下载文件</a></div>`).join('') : '<p class="muted">尚未找到符合本任务要求的成果文件。</p>'}</div>${isCompare ? '<p class="doc-result-limit">文本内容对比不等同于视觉版式或 Word 修订比较。</p>' : ''}</section><details class="doc-task-details"><summary>任务详情</summary>${details}</details><div class="actions">${active ? `<button class="secondary" data-cancel="${escape(task.id)}">取消任务</button>` : !success ? `<button class="primary" data-tool="${isCompare ? 'compare' : 'summary'}">重新创建任务</button>` : ''}<button class="secondary" data-page="history">查看处理记录</button></div></div>`
+  const frame = body => `<div class="doc-flow">${back}<div class="stepbar"><span>1 准备材料</span><span>2 核对信息</span><span class="current">3 处理与交付</span></div><header class="doc-result-head"><span>${escape(tool?.name || task.tool)}</span><h2>${title}</h2><p>${escape(new Date(task.created * 1000).toLocaleString())} · ${inputs.length} 个输入文件</p></header><section class="doc-result ${escape(task.state)}"><header class="doc-result-status"><div><small>真实任务状态</small><h3>${escape(stateLabels[task.state] || task.state)}</h3></div></header>${task.error ? `<p class="error doc-result-error">${escape(task.error)}</p>` : ''}${body}<h3>真实成果文件</h3><div class="doc-result-files">${success && task.outputs.length ? task.outputs.map((name, index) => `<div><span>${escape(name)}</span><a class="primary" href="api/tasks/${escape(task.id)}/files/${index}" download>下载文件</a></div>`).join('') : '<p class="muted">尚未找到符合本任务要求的成果文件。</p>'}</div>${isCompare ? '<p class="doc-result-limit">文本内容对比不等同于视觉版式或 Word 修订比较。</p>' : ''}</section><details class="doc-task-details"><summary>任务详情</summary>${details}</details><div class="actions">${active ? `<button class="secondary" data-cancel="${escape(task.id)}">取消任务</button>` : !success ? `<button class="primary" data-tool="${isCompare ? 'compare' : 'summary'}">重新创建任务</button>` : ''}<button class="secondary" data-page="history">查看处理记录</button></div></div>`
   if (!success) return frame('')
   const preview = resultPreviews.get(task.id)
   const summaryMarkup = preview && !isCompare ? summarySectionsMarkup(preview) : undefined
@@ -222,7 +222,7 @@ async function saveArtifact(link) {
 const focusChoices = ['综合摘要', '核心观点', '关键事实', '风险与问题', '时间节点', '待办事项', '来源说明']
 let comparisonFiles = [null, null]
 function comparisonUploadMarkup() {
-  return ['基准版本', '对比版本'].map((label, index) => `<div class="version-upload"><strong>${index + 1} ${label}</strong><span>${index === 0 ? '原始文件' : '新版本文件'}</span><input id="version-file-${index}" type="file" hidden data-version="${index}" accept="${formats}"><button type="button" class="version-pick" data-version-pick="${index}"><img src="/assets/compare.png" alt="">选择${label}文件</button><small id="version-name-${index}">${escape(comparisonFiles[index]?.name || '点击选择文件，或拖入此区域')}</small></div>`).join('') + '<button type="button" class="secondary" id="swap-versions">⇄ 交换版本</button>'
+  return ['基准版本', '对比版本'].map((label, index) => `<div class="version-upload"><strong>${index + 1} ${label}</strong><span>${index === 0 ? '原始文件' : '新版本文件'}</span><input id="version-file-${index}" type="file" hidden data-version="${index}" accept="${formats}"><button type="button" class="version-pick" data-version-pick="${index}"><img src="assets/compare.png" alt="">选择${label}文件</button><small id="version-name-${index}">${escape(comparisonFiles[index]?.name || '点击选择文件，或拖入此区域')}</small></div>`).join('') + '<button type="button" class="secondary" id="swap-versions">⇄ 交换版本</button>'
 }
 function setComparisonFile(index, incoming) {
   const files = Array.from(incoming || [])
@@ -254,7 +254,7 @@ function form(tool, preserve = false) {
   }
   currentPage = 'form'
   updateNavigation()
-  main.innerHTML = `<div class="doc-flow doc-prepare"><h1>${escape(tool.name)}</h1><p class="muted">${escape(tool.description)}</p><div class="stepbar"><span class="current">1 准备材料</span><span>2 核对信息</span><span>3 处理与交付</span></div><div class="formgrid"><section class="panel"><h2>${tool.id === 'compare' ? '上传两个版本' : '准备材料'}</h2><label>任务名称<input id="task-name" maxlength="180" value="${escape(options.taskName || '')}" placeholder="例如：项目评审材料摘要"></label>${tool.id === 'compare' ? '<div class="version-order"><span><b>1 基准版本</b><small>原始文件在前</small></span><span><b>2 对比版本</b><small>新版本在后</small></span></div>' : ''}<input id="upload" type="file" hidden accept="${tool.accept}" ${tool.multiple ? 'multiple' : ''}><button type="button" id="dropzone" class="dropzone doc-upload"><img src="/assets/summary.png" alt=""><strong>点击选择或拖入文档</strong><small>选择本次摘要需要分析的材料</small></button><button type="button" class="secondary" id="append-files">追加文件</button><input type="file" id="append-upload" hidden accept="${tool.accept}" ${tool.multiple ? 'multiple' : ''}><p class="muted">${tool.id === 'compare' ? '必须选择两份文件，基准版本在前、新版本在后。' : '摘要最多 10 份材料。'}总大小不超过 32 MB。</p><h3>已上传文件</h3><div id="filelist" class="filelist"></div></section><section class="panel"><h2>${tool.id === 'compare' ? '对比范围' : '分析要求'}</h2>${parameterMarkup(tool)}</section></div><div class="actions"><button class="secondary" id="back">返回工作台</button><button class="primary" id="review">核对任务信息</button></div></div>`
+  main.innerHTML = `<div class="doc-flow doc-prepare"><h1>${escape(tool.name)}</h1><p class="muted">${escape(tool.description)}</p><div class="stepbar"><span class="current">1 准备材料</span><span>2 核对信息</span><span>3 处理与交付</span></div><div class="formgrid"><section class="panel"><h2>${tool.id === 'compare' ? '上传两个版本' : '准备材料'}</h2><label>任务名称<input id="task-name" maxlength="180" value="${escape(options.taskName || '')}" placeholder="例如：项目评审材料摘要"></label>${tool.id === 'compare' ? '<div class="version-order"><span><b>1 基准版本</b><small>原始文件在前</small></span><span><b>2 对比版本</b><small>新版本在后</small></span></div>' : ''}<input id="upload" type="file" hidden accept="${tool.accept}" ${tool.multiple ? 'multiple' : ''}><button type="button" id="dropzone" class="dropzone doc-upload"><img src="assets/summary.png" alt=""><strong>点击选择或拖入文档</strong><small>选择本次摘要需要分析的材料</small></button><button type="button" class="secondary" id="append-files">追加文件</button><input type="file" id="append-upload" hidden accept="${tool.accept}" ${tool.multiple ? 'multiple' : ''}><p class="muted">${tool.id === 'compare' ? '必须选择两份文件，基准版本在前、新版本在后。' : '摘要最多 10 份材料。'}总大小不超过 32 MB。</p><h3>已上传文件</h3><div id="filelist" class="filelist"></div></section><section class="panel"><h2>${tool.id === 'compare' ? '对比范围' : '分析要求'}</h2>${parameterMarkup(tool)}</section></div><div class="actions"><button class="secondary" id="back">返回工作台</button><button class="primary" id="review">核对任务信息</button></div></div>`
   document.querySelectorAll('[data-param]').forEach(node => { node.value = options[node.dataset.param] ?? '' })
   if (tool.id === 'compare') {
     document.querySelector('.version-order').innerHTML = comparisonUploadMarkup()

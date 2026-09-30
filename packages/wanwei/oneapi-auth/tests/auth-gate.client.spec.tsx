@@ -22,6 +22,8 @@ type AttentionSnapshot = Parameters<Parameters<AuthGateProps['useSessionPendingI
 const noAttention: AttentionSnapshot = new Map()
 const useSessionPendingInteraction: AuthGateProps['useSessionPendingInteraction'] = selector => selector(noAttention)
 const kit = {
+  useNetwork: ((selector: (value: { mode: 'internet'; internalOrigins: string[] }) => unknown) => selector({ mode: 'internet', internalOrigins: [] })) as AuthGateProps['useNetwork'],
+  setNetworkEnvironment: vi.fn(async (mode: 'internet' | 'intranet') => ({ mode, internalOrigins: [] })),
   useSessions: unusedHook,
   useSessionPendingInteraction,
   useWorkspaces: unusedHook,
@@ -75,5 +77,52 @@ describe('Wanwei authentication gate', () => {
     renderGate({ state: 'authenticated', username: 'wanwei', models: [] })
     expect((listener.mock.lastCall?.[0] as CustomEvent<{ authenticated: boolean }>).detail.authenticated).toBe(true)
     window.removeEventListener('wanwei:auth-state', listener)
+  })
+
+  it('keeps the same form mounted while the initial authentication check settles', () => {
+    let view: AuthView = { state: 'checking' }
+    const useAuth: AuthGateProps['useAuth'] = selector => selector(view)
+    const refresh = vi.fn(() => Promise.resolve({ state: 'logged-out' as const }))
+    const login = vi.fn()
+    const fail = vi.fn()
+    const element = () => <AuthGate {...kit} useAuth={useAuth} refresh={refresh} login={login} fail={fail} t={t} />
+    const subject = render(element())
+    const account = screen.getByLabelText(zh.username)
+    const card = screen.getByRole('heading', { name: zh.loginTitle }).parentElement?.parentElement
+    expect(account).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: zh.checking })).toHaveProperty('disabled', true)
+
+    view = { state: 'logged-out' }
+    subject.rerender(element())
+    expect(screen.getByLabelText(zh.username)).toBe(account)
+    expect(account).toHaveProperty('disabled', false)
+    expect(screen.getByRole('heading', { name: zh.loginTitle }).parentElement?.parentElement).toBe(card)
+  })
+
+  it('rebinds layout scaling to the new login page after leaving the workspace', () => {
+    let view: AuthView = { state: 'logged-out' }
+    const useAuth: AuthGateProps['useAuth'] = selector => selector(view)
+    const refresh = vi.fn(() => Promise.resolve({ state: 'logged-out' as const }))
+    const login = vi.fn()
+    const fail = vi.fn()
+    const element = () => <AuthGate {...kit} useAuth={useAuth} refresh={refresh} login={login} fail={fail} t={t} />
+    const subject = render(element())
+    const initialStyle = screen.getByRole('main').getAttribute('style')
+    expect(initialStyle).toContain('--login-scale')
+    fireEvent.click(screen.getByRole('tab', { name: zh.smsLogin }))
+
+    view = { state: 'authenticated', username: 'wanwei', models: [] }
+    subject.rerender(element())
+    expect(screen.queryByRole('main')).toBeNull()
+    view = { state: 'logged-out' }
+    subject.rerender(element())
+    const page = screen.getByRole('main')
+    expect(page.getAttribute('style')).toBe(initialStyle)
+    expect(screen.getByRole('tab', { name: zh.accountLogin }).getAttribute('aria-selected')).toBe('true')
+
+    const scale = page.style.getPropertyValue('--login-scale')
+    page.style.removeProperty('--login-scale')
+    fireEvent(window, new Event('resize'))
+    expect(page.style.getPropertyValue('--login-scale')).toBe(scale)
   })
 })

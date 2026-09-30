@@ -39,6 +39,8 @@ Compose feature UI from these atoms whenever the web client needs a standard con
 
 ### Localizing copy
 
+Settled non-web Markdown links can use the optional file-mention resolver to open a known file through an explicit button. Without a resolved file they remain subject to the URL allowlist; streaming renders and ordinary HTTP(S) links retain their existing behavior.
+
 The atoms cannot read the application locale, so every piece of user-facing copy arrives through required label props. `HoverCard`, `TerminalBlock`, `JsonTree`, `CodeBlock`, `MarkdownText`, `JsonBlock`, `ConnectionBanner`, `Modal`, `DiffBlock`, `ReadBlock`, `SearchBlock`, and `WebBlock` accept complete localized labels. The package owns no language fallback; omission fails typechecking, and each feature maps its typed `t` seat into the primitive's label interface.
 
 -----

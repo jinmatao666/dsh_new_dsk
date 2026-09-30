@@ -107,16 +107,16 @@ export function collectReferenceTargets(
 }
 
 /**
- * File-mention affordance for inline code: the owner resolves an authored
+ * File-mention affordance for inline code and non-web links: the owner resolves an authored
  * token to the file it names, using its own vocabulary of real files — the
  * renderer never guesses at what looks like a path.
  */
 export interface MarkdownFileMentions {
   /**
-   * Resolve one inline-code token.
+   * Resolve one inline-code token or a non-web link destination.
    * @param value - The authored token, exactly as written.
    * @returns The opener with its accessible label and full-path title, or
-   * undefined when the token names no known file — it then stays inert code.
+   * undefined when the token names no known file — normal URL/code rules then apply.
    */
   resolve(value: string): { open: () => void; label: string; title: string } | undefined
 }
@@ -287,7 +287,7 @@ function renderNode(node: Md.RootContent, key: Key, context: MarkdownRenderConte
     case 'table':
       return renderTable(node, key, context)
     case 'link':
-      return renderAnchor(node.url, renderChildren(node.children, { ...context, inLink: true }), key)
+      return renderOwnedAnchor(node.url, renderChildren(node.children, { ...context, inLink: true }), key, context)
     case 'linkReference':
       return renderLinkReference(node, key, context)
     case 'image':
@@ -486,6 +486,18 @@ function renderAnchor(url: string, children: ReactNode[], key: Key): ReactNode {
   return renderSafeLink(normalizeUri(url), children, key)
 }
 
+/** Known files use the owner's opener; unknown destinations retain the URL allowlist. */
+function renderOwnedAnchor(url: string, children: ReactNode[], key: Key, context: MarkdownRenderContext): ReactNode {
+  const mention = sanitizeUrl(normalizeUri(url)) === '' ? context.fileMentions?.resolve(url) : undefined
+  if (mention === undefined) return renderAnchor(url, children, key)
+  return (
+    <button key={key} type="button" className={css.fileMention} title={mention.title}
+      aria-label={mention.label} onClick={mention.open}>
+      {children}
+    </button>
+  )
+}
+
 /**
  * The complete inline-code value when it is exactly an absolute HTTP(S) URL
  * (no surrounding whitespace); anything else stays inert code.
@@ -539,7 +551,7 @@ function renderLinkReference(
     // not an anchor, so mentions inside it stay live.
     return <Fragment key={key}>{'['}{renderChildren(node.children, context)}{referenceSuffix(node)}</Fragment>
   }
-  return renderAnchor(definition.url, renderChildren(node.children, { ...context, inLink: true }), key)
+  return renderOwnedAnchor(definition.url, renderChildren(node.children, { ...context, inLink: true }), key, context)
 }
 
 function renderImageReference(

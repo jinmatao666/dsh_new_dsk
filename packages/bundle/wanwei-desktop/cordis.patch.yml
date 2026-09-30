@@ -11,6 +11,8 @@
     searchProvider: oneapi-bailian
 
 - insert:
+    - id: wanwei-chinese
+      name: '@deepseek-ai/dsh-wanwei-chinese'
     - id: wanwei-oneapi-auth
       name: '@deepseek-ai/dsh-wanwei-oneapi-auth'
       config:

@@ -37,6 +37,8 @@ The native drag invitation covers only the composer card. Folder chips use a fol
 
 Session archive saving waits for native persistence, then requests the file manager to reveal the actual saved path. A reveal failure retains the saved path and returns a warning rather than reporting a failed download.
 
+Skill artifact detection accepts the product result marker and explicit analysis-view, Word and Excel path markers without splitting spaces or Chinese filenames. Output reporting a nonzero shell exit contributes no product artifacts. Declared paths are not proof that files exist; opening still uses the workspace file service.
+
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 

@@ -2,11 +2,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AuthState } from '../contract.ts'
+import type { NetworkEnvironment, NetworkState } from '../network-contract.ts'
 import type { AuthView } from './controller.ts'
 import css from './AuthGate.module.css'
 
 export interface AuthInjected {
-  hooks: { auth: HostObservable<AuthView> }
+  hooks: { auth: HostObservable<AuthView>; network: HostObservable<NetworkState> }
+  setNetworkEnvironment: (mode: NetworkEnvironment) => Promise<NetworkState>
   refresh: (signal?: AbortSignal) => Promise<AuthState>
   login: (username: string, password: string, signal?: AbortSignal) => Promise<AuthState>
   fail: (error: unknown) => void
@@ -21,8 +23,12 @@ const NATIVE_AUTH_SIGNAL_PREFIX = '__zjugis_native_auth:'
 type LoginMode = 'account' | 'sms' | 'qr'
 
 /** Blocking desktop login surface; credentials are sent only to the local Host. */
-export function AuthGate({ useAuth, refresh, login, fail, t }: AuthGateProps) {
+export function AuthGate({ useAuth, useNetwork, setNetworkEnvironment, refresh, login, fail, t }: AuthGateProps) {
   const auth = useAuth(view => view)
+  const networkEnvironment = useNetwork(view => view.mode)
+  const [networkBusy, setNetworkBusy] = useState(false)
+  const authenticated = auth.state === 'authenticated'
+  const checking = auth.state === 'checking'
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -37,6 +43,14 @@ export function AuthGate({ useAuth, refresh, login, fail, t }: AuthGateProps) {
   useEffect(() => {
     if ('username' in auth) setUsername(auth.username)
   }, [auth])
+
+  useEffect(() => {
+    if (!authenticated) return
+    setLoginMode('account')
+    setPassword('')
+    setError(undefined)
+    setSmsSent(false)
+  }, [authenticated])
 
   // The desktop shell watches the document-title marker to switch native
   // window policy: login is fixed-size, while the authenticated app may be
@@ -95,7 +109,7 @@ export function AuthGate({ useAuth, refresh, login, fail, t }: AuthGateProps) {
     update()
     window.addEventListener('resize', update)
     return () => { window.removeEventListener('resize', update) }
-  }, [])
+  }, [authenticated])
 
   if (auth.state === 'authenticated') return null
 
@@ -161,19 +175,34 @@ export function AuthGate({ useAuth, refresh, login, fail, t }: AuthGateProps) {
                 </button>
               ))}
             </div>
-            {auth.state === 'checking'
-              ? <p className={css.status}>{t('checking')}</p>
-              : loginMode === 'account'
+            <div className={css.networkEnvironment} role="radiogroup" aria-label={t('networkEnvironment')}>
+              <span className={css.networkLabel}>{t('networkEnvironment')}</span>
+              <div className={css.networkChoices}>
+                {(['internet', 'intranet'] as const).map(environment => (
+                  <label key={environment} className={css.networkChoice}>
+                    <input type="radio" name="network-environment" value={environment} checked={networkEnvironment === environment} disabled={checking || busy || networkBusy} onChange={() => {
+                      setNetworkBusy(true)
+                      void setNetworkEnvironment(environment).catch((cause: unknown) => {
+                        setError(cause instanceof Error ? cause.message : String(cause))
+                      }).finally(() => { setNetworkBusy(false) })
+                    }} />
+                    <span>{t(environment === 'internet' ? 'internetEnvironment' : 'intranetEnvironment')}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className={css.loginContent}>
+              {loginMode === 'account'
                 ? (
                   <form onSubmit={(event) => { void submit(event) }}>
-                    <label>{t('username')}<input autoFocus autoComplete="username" value={username} onChange={(event) => { setUsername(event.target.value) }} placeholder={t('usernamePlaceholder')} required /></label>
-                    <label>{t('password')}<input type="password" autoComplete="current-password" value={password} onChange={(event) => { setPassword(event.target.value) }} placeholder={t('passwordPlaceholder')} required /></label>
+                    <label>{t('username')}<input autoFocus autoComplete="username" disabled={checking || busy} value={username} onChange={(event) => { setUsername(event.target.value) }} placeholder={t('usernamePlaceholder')} required /></label>
+                    <label>{t('password')}<input type="password" autoComplete="current-password" disabled={checking || busy} value={password} onChange={(event) => { setPassword(event.target.value) }} placeholder={t('passwordPlaceholder')} required /></label>
                     <div className={css.formOptions}>
                       <label className={css.remember}><input type="checkbox" /> <span>{t('rememberMe')}</span></label>
                       <button className={css.textAction} type="button" disabled>{t('forgotPassword')}</button>
                     </div>
                     {serviceError !== undefined ? <p className={css.error} role="alert">{serviceError}</p> : null}
-                    <button className={css.primaryButton} type="submit" disabled={busy || username.trim() === '' || password === ''}>{busy ? t('signingIn') : t('signIn')}</button>
+                    <button className={css.primaryButton} type="submit" disabled={checking || busy || networkBusy || username.trim() === '' || password === ''}>{checking ? t('checking') : busy ? t('signingIn') : t('signIn')}</button>
                     {auth.state === 'offline' ? <button className={css.retry} type="button" onClick={retry}>{t('retry')}</button> : null}
                   </form>
                 )
@@ -211,7 +240,8 @@ export function AuthGate({ useAuth, refresh, login, fail, t }: AuthGateProps) {
                       <button type="button" onClick={() => { setQrNonce(value => value + 1) }}>{t('refreshQr')}</button>
                     </div>
                   )}
-            <p className={css.legalNotice}>{t('legalPrefix')}<button type="button" disabled>{t('userAgreement')}</button>{t('legalJoin')}<button type="button" disabled>{t('privacyPolicy')}</button><br />{t('mobileRegistrationNotice')}</p>
+            </div>
+            <p className={css.legalNotice}>{t('legalPrefix')}<button type="button" disabled>{t('userAgreement')}</button>{t('legalJoin')}<button type="button" disabled>{t('privacyPolicy')}</button></p>
             <p className={css.formFooter}>{t('noAccount')}<button type="button" disabled>{t('requestAccess')}</button></p>
           </div>
         </section>

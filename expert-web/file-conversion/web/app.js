@@ -43,7 +43,7 @@ function expireSession() {
 }
 async function authenticatedFetch(path, options) {
   if (sessionExpired) throw new Error('登录已失效，请重新打开工作台')
-  const response = await fetch(path, options)
+  const response = await fetch(path.startsWith('/api/') ? path.slice(1) : path, options)
   if (response.status === 401) expireSession()
   if (sessionExpired) throw new Error('登录已失效，请重新打开工作台')
   return response
@@ -64,23 +64,23 @@ function toast(message) {
 }
 function taskCards(items) {
   const states = { queued: '等待处理', running: '正在处理', succeeded: '已完成', failed: '处理失败', cancelled: '已取消' }
-  return items.length ? items.map(task => `<article class="task"><h3>${escape(tools.find(tool => tool.id === task.tool)?.name || task.tool)}</h3><small class="muted">${escape(new Date(task.created * 1000).toLocaleString())}</small><p class="${escape(task.state)}">${escape(states[task.state] || task.state)}</p>${task.error ? `<p class="error">${escape(task.error)}</p>` : ''}${task.state === 'succeeded' ? task.outputs.map((name, index) => `<a href="/api/tasks/${task.id}/files/${index}" download>${escape(name)}</a>`).join('') : ''}${['queued', 'running'].includes(task.state) ? `<button class="secondary" data-cancel="${task.id}">取消任务</button>` : ''}</article>`).join('') : '<p class="empty">暂无任务，选择一个工具开始处理。</p>'
+  return items.length ? items.map(task => `<article class="task"><h3>${escape(tools.find(tool => tool.id === task.tool)?.name || task.tool)}</h3><small class="muted">${escape(new Date(task.created * 1000).toLocaleString())}</small><p class="${escape(task.state)}">${escape(states[task.state] || task.state)}</p>${task.error ? `<p class="error">${escape(task.error)}</p>` : ''}${task.state === 'succeeded' ? task.outputs.map((name, index) => `<a href="api/tasks/${task.id}/files/${index}" download>${escape(name)}</a>`).join('') : ''}${['queued', 'running'].includes(task.state) ? `<button class="secondary" data-cancel="${task.id}">取消任务</button>` : ''}</article>`).join('') : '<p class="empty">暂无任务，选择一个工具开始处理。</p>'
 }
 let selectedTask
 const stateLabels = { queued: '等待处理', running: '正在处理', succeeded: '已完成', failed: '处理失败', cancelled: '已取消' }
 function emptyMarkup(kind) {
   const records = kind === 'history'
-  return `<div class="conversion-empty"><img src="/assets/${records ? 'history' : 'files'}.png" alt=""><strong>${records ? '暂无处理记录' : '暂无成果文件'}</strong><p>${records ? '新建任务后，处理状态和结果会显示在这里。' : '处理完成后，可在这里下载当前用户的实际成果。'}</p><button class="primary" data-tool="word-pdf">新建处理</button></div>`
+  return `<div class="conversion-empty"><img src="assets/${records ? 'history' : 'files'}.png" alt=""><strong>${records ? '暂无处理记录' : '暂无成果文件'}</strong><p>${records ? '新建任务后，处理状态和结果会显示在这里。' : '处理完成后，可在这里下载当前用户的实际成果。'}</p><button class="primary" data-tool="word-pdf">新建处理</button></div>`
 }
 function toolIcon(id) {
-  return `/assets/${['word-pdf', 'pdf-images', 'pdf-organize', 'images-pdf', 'image-optimize'].includes(id) ? id : 'history'}.png`
+  return `assets/${['word-pdf', 'pdf-images', 'pdf-organize', 'images-pdf', 'image-optimize'].includes(id) ? id : 'history'}.png`
 }
 function historyMarkup() {
   return tasks.length ? `<div class="history-list">${tasks.map(task => `<button class="history-row" data-task="${escape(task.id)}"><img src="${toolIcon(task.tool)}" alt=""><span><strong>${escape(task.options.taskName || task.options.title || tools.find(tool => tool.id === task.tool)?.name || task.tool)}</strong><small>${escape(new Date(task.created * 1000).toLocaleString())} · ${task.inputs.length} 个文件 · ${escape(tools.find(tool => tool.id === task.tool)?.name || task.tool)}</small></span><em class="${escape(task.state)}">${escape(stateLabels[task.state] || task.state)}</em></button>`).join('')}</div>` : emptyMarkup('history')
 }
 function filesMarkup() {
   const files = tasks.filter(task => task.state === 'succeeded').flatMap(task => task.outputs.map((name, index) => ({ task, name, index })))
-  return files.length ? `<div class="outputs">${files.map(({ task, name, index }) => `<div><span><strong>${escape(name)}</strong><small>${escape(task.options.taskName || task.options.title || tools.find(tool => tool.id === task.tool)?.name || task.tool)}</small></span><a class="primary" href="/api/tasks/${escape(task.id)}/files/${index}" download>下载文件</a></div>`).join('')}</div>` : emptyMarkup('files')
+  return files.length ? `<div class="outputs">${files.map(({ task, name, index }) => `<div><span><strong>${escape(name)}</strong><small>${escape(task.options.taskName || task.options.title || tools.find(tool => tool.id === task.tool)?.name || task.tool)}</small></span><a class="primary" href="api/tasks/${escape(task.id)}/files/${index}" download>下载文件</a></div>`).join('')}</div>` : emptyMarkup('files')
 }
 function taskMarkup() {
   const task = tasks.find(item => item.id === selectedTask)
@@ -89,7 +89,7 @@ function taskMarkup() {
   const active = ['queued', 'running'].includes(task.state)
   const success = task.state === 'succeeded'
   const taskHeader = `<div class="stepbar"><span>1 准备材料</span><span>2 核对信息</span><span class="current">3 处理与交付</span></div><header class="conversion-task-heading"><span>${escape(tool?.name || task.tool)}</span><h2>${escape(task.options.taskName || task.options.title || tool?.name || task.tool)}</h2><p class="muted">${escape(new Date(task.created * 1000).toLocaleString())} · ${task.inputs.length} 个输入文件</p></header>`
-  const outputFiles = `<h3>真实成果文件</h3><div class="conversion-result-files">${success && task.outputs.length ? task.outputs.map((name, index) => `<div><span>${escape(name)}</span><a class="primary" href="/api/tasks/${escape(task.id)}/files/${index}" download>下载文件</a></div>`).join('') : '<p class="muted">尚未找到符合本任务要求的成果文件。</p>'}</div>`
+  const outputFiles = `<h3>真实成果文件</h3><div class="conversion-result-files">${success && task.outputs.length ? task.outputs.map((name, index) => `<div><span>${escape(name)}</span><a class="primary" href="api/tasks/${escape(task.id)}/files/${index}" download>下载文件</a></div>`).join('') : '<p class="muted">尚未找到符合本任务要求的成果文件。</p>'}</div>`
   const details = `<dl class="conversion-details"><dt>任务名称</dt><dd>${escape(task.options.taskName || task.options.title || tool?.name || task.tool)}</dd><dt>所选工具</dt><dd>${escape(tool?.name || task.tool)}</dd><dt>创建时间</dt><dd>${escape(new Date(task.created * 1000).toLocaleString())}</dd><dt>输入文件</dt><dd>${(task.input_names?.length ? task.input_names : task.inputs).map(name => escape(name)).join('<br>')}</dd>${(tool?.params || []).map(([key, label, values]) => { return `<dt>${escape(label)}</dt><dd>${escape(parameterText(tool, key, values, task.options[key]))}</dd>` }).join('')}</dl>`
   return `<div class="conversion-flow"><button class="text-action" data-page="history">← 返回处理记录</button>${taskHeader}<section class="conversion-result ${escape(task.state)}"><header class="conversion-result-head"><div><small>真实任务状态</small><h3>${escape(stateLabels[task.state] || task.state)}</h3></div></header>${task.error ? `<p class="error conversion-result-error">${escape(task.error)}</p>` : ''}${outputFiles}</section><details class="conversion-task-details"><summary>任务详情</summary>${details}</details><div class="actions">${active ? `<button class="secondary" data-cancel="${escape(task.id)}">取消任务</button>` : !success && tool ? `<button class="primary" data-tool="${escape(tool.id)}">重新创建处理</button>` : ''}<button class="secondary" data-page="history">查看处理记录</button></div></div>`
 }

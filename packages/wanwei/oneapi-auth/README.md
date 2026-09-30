@@ -9,6 +9,12 @@ English | [中文](README.zh.md)
 
 ## Summary
 
+Successful logout from the account section closes the settings panel and reveals the login page. A failed logout keeps the panel open and displays the error.
+
+The login surface uses the same form and fixed-height content area during authentication checks and after logout. It recalculates scaling whenever the login page becomes visible, independently of workspace typography.
+
+The desktop login layout uses Windows-reference column sizing and explicit text line heights. Checkbox and radio styling is shared across platforms; system fonts remain local, so glyph rendering can differ. WebKit receives prefixed backdrop-filter rules.
+
 Client authentication ignores obsolete status replies and refreshes overlapping a login or logout. Cancelled refreshes do not publish offline state. This orders Client state updates; it does not cancel authentication work already accepted by the Host.
 
 Users sign in to the configured OneAPI service and use the models permitted for their account. The desktop reads a server-managed model catalog rather than exposing local provider editing. The Host also requests published expert entries and one-use website tickets while keeping the OneAPI token outside the Client.
@@ -30,6 +36,10 @@ Users sign in to the configured OneAPI service and use the models permitted for 
 The Wanwei product bundle mounts the Host and Client halves. The browser receives authentication state and model identifiers, not passwords or generated tokens.
 
 ### Configuration
+
+The login page saves the selected Internet or private-network environment on this computer through `wanwei-network.mode`. Internet is the default. Private-network mode retains configured login, models, platform skills and local operations, but disables SkillHub access and installed SkillHub execution, experts, connectors and public web search. Public HTTP(S) links are blocked; private literal addresses, local DNS names and the configured OneAPI origin remain available. Additional internal domains require explicit classification changes.
+
+This is an application policy, not a firewall or shell sandbox. Existing conversation instructions are not rewritten; start a fresh conversation after changing environments.
 
 [The product patch](../../bundle/wanwei-desktop/cordis.patch.yml) supplies the provider route and generated-token reference. The Host resolves an explicit OneAPI origin first, then `DSH_ONEAPI_URL` from the launch environment, then the local development origin.
 
@@ -53,6 +63,8 @@ The Wanwei product bundle mounts the Host and Client halves. The browser receive
 <summary>Implementation internals — click to expand</summary>
 
 The loopback Host exchanges credentials with OneAPI, delegates the generated token to the DSH credentials provider, reads the allowed models, and configures the managed pi-ai provider. The Client renders the login gate, account section and read-only model section through slots. The Host uses the same signed-in token for the configured `oneapi-bailian` search provider and for a one-use expert launch ticket. Only the selected website URL and short-lived ticket cross to the Client.
+
+The Host also reports skill references resolved by the official injector and each model-issued `skill` tool call to OneAPI. The server stores their `user_explicit` or `model_auto` invocation type while the administrator's totals combine both types. Stable event IDs deduplicate delivery retries, not separate calls. Delivery retries remain in memory while the desktop process is running; events not delivered before exit are not replayed after restart.
 
 </details>
 

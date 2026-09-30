@@ -8,6 +8,7 @@
     "src"
   ],
   "references": [
+    { "path": "../oneapi-auth/tsconfig.client.json" },
     {
       "path": "../../../vendor/cordis"
     },

@@ -169,6 +169,8 @@ interface ToolRestriction {
 
 ## Execution: extensible waterfalls plus monotonic policy
 
+`ctx.tools.registerAvailability(predicate)` installs a deployment-wide name filter over tool presentation, lookup and dispatch in every scope, including a scope's own registrations. Filters intersect; the reserved code transport remains visible. Registration and disposal emit `tools/change`; the disposer lifts only that predicate. Without filters, registry behavior is unchanged. Filters prevent new dispatches, not tool bodies already executing.
+
 `ctx.tools.execute()` accepts a caller-owned `ToolExecutionInput` with a required readonly `signal`, materializes its parsed JSON arguments once into a pipeline-owned `ToolExecution`, and runs that call through `tools/pre-execute` (the reorderable allow/deny/ask waterfall) → registered monotonic guards → `tools/execute` (around-dispatch wrappers) → `tools/post-execute` (inspect/replace the result) → optional definition-owned `finalizeContent` → `tools/result` (the immutable authoritative outcome). Only the `tools/execute` view may replace the required signal. The outcome is a `ToolExecutionResult`.
 
 ```ts type-equiv

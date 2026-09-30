@@ -58,8 +58,9 @@ export function PermissionRow({ load, select, usePermission, t }: PermissionRowP
   if (state.status === 'unavailable') return null
   const selected = state.options.find(option => option.id === state.currentValue)
   const busy = state.status === 'loading' || state.status === 'saving' || confirmingFullAccess
-  const label = selected?.label
-    ?? (busy ? t('loading') : t('unavailable'))
+  const label = selected === undefined
+    ? (busy ? t('loading') : t('unavailable'))
+    : t(selected.label as PermissionSettingsKey)
   const description: string = state.error ?? t('description')
 
   return (
@@ -72,7 +73,7 @@ export function PermissionRow({ load, select, usePermission, t }: PermissionRowP
         <Menu
           open={open}
           onClose={() => { setOpen(false) }}
-          items={state.options.map(option => ({ id: option.id, label: option.label }))}
+          items={state.options.map(option => ({ id: option.id, label: t(option.label as PermissionSettingsKey) }))}
           selectedId={state.currentValue}
           onSelect={(id) => {
             setOpen(false)

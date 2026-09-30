@@ -367,6 +367,16 @@ export class SkillRegistry extends Service {
   private readonly collectCache = new Map<string, Map<string, IndexedCandidate>>()
   private revision = 0
   private nextProviderOrder = 0
+  private readonly filters = new Set<(skill: SkillCandidate | SkillDefinition) => boolean>()
+
+  /** Install a deployment availability filter, applied even to cached reads. */
+  registerFilter(filter: (skill: SkillCandidate | SkillDefinition) => boolean): () => void {
+    return this.ctx.effect(() => {
+      this.filters.add(filter)
+      this.invalidateCache()
+      return () => { this.filters.delete(filter); this.invalidateCache() }
+    }, 'skills.registerFilter()')
+  }
   /** Stable identities for cache keys; scope keys are opaque identity-compared objects. */
   private readonly scopeIds = new WeakMap<ScopeKey, number>()
   private nextScopeId = 1
@@ -483,6 +493,7 @@ export class SkillRegistry extends Service {
     const collected = await this.collect(options)
     return {
       skills: [...collected.entries.values()]
+        .filter(entry => [...this.filters].every(filter => filter(entry.candidate)))
         .map(entry => toSummary(entry.candidate))
         .sort(compareSkillSummary),
       complete: collected.cacheable,
@@ -504,12 +515,14 @@ export class SkillRegistry extends Service {
     throwIfAborted(options.signal)
     const match = collected.entries.get(name)
     if (match === undefined) return undefined
+    if (![...this.filters].every(filter => filter(match.candidate))) return undefined
     const definition = await waitWithAbort(
       match.provider.get(match.candidate, options),
       options.signal,
     )
     if (definition === undefined) return undefined
     validateDefinition(definition)
+    if (![...this.filters].every(filter => filter(definition))) return undefined
     if (definition.name !== match.candidate.name) {
       this.invalidateEntry(match)
       return undefined

@@ -24,11 +24,13 @@ export class OneApiSearchProvider implements WebSearchProvider {
   constructor(private readonly options: {
     baseURL: string
     resolveToken: () => Promise<string | undefined>
+    allowed?: () => boolean
   }) {}
 
-  available(): boolean { return URL.canParse(this.options.baseURL) }
+  available(): boolean { return this.options.allowed?.() !== false && URL.canParse(this.options.baseURL) }
 
   async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
+    if (this.options.allowed?.() === false) throw new WebError('纯内网环境不可用', 'WEB_PROVIDER_UNAVAILABLE')
     const token = await this.options.resolveToken()
     if (token === undefined || token === '') throw new WebError('Sign in before using server-managed web search', 'WEB_PROVIDER_UNAVAILABLE')
     const origin = this.options.baseURL.replace(/\/+$/, '')

@@ -6,6 +6,8 @@ This private product directory owns the Wanwei desktop shell and installer. It d
 
 ## Current boundary
 
+macOS preserves the inherited system temporary directory and prepends bundled Node to the sidecar PATH, retaining existing tool paths and adding Homebrew locations. Python user packages and pip downloads use a private, product-specific directory under the host temporary directory, which workspace-write already permits. The cache is reused across launches but can be cleared by the OS; it is not durable user data. Read-only restrictions and approval for wider access remain in force. Windows and Linux retain their existing launch environment. Installed Mac behavior requires real-device verification.
+
 Runtime staging unlinks dependency symlinks and Windows junctions without recursively deleting their targets. Legacy file migration writes and syncs a temporary file before non-replacing hard-link publication; the target filesystem must support hard links. A failed copy leaves no partial final file, while a force interruption may leave an unreferenced temporary file.
 
 Closing the main window hides it. macOS Dock reopen restores and focuses the existing window. Normal application exit stops the direct sidecar, including exits outside the tray menu; force termination is outside this guarantee.
@@ -18,7 +20,7 @@ The Tauri 2 shell starts the new `wanwei-desktop` profile as a loopback DSH Side
 
 New-window requests from the main WebView open HTTP(S) links in the system default browser. Other URL schemes do not launch an external application, and no second in-app WebView is created for a conversation link.
 
-Independent expert websites are an implementation-in-progress. A published expert opens in a separate child WebView within the main window; the shell registers a per-launch capability for that view's exact HTTPS origin, not a static all-HTTPS grant. The desktop catalog, one-use identity ticket, bridge behavior, and close/reposition lifecycle require real Windows, macOS, and Linux verification before release. Expert websites are privileged code: their iframe and navigation behavior must be reviewed before publication. The six production websites and one-time cutover are not yet complete; see `WANWEI_EXPERT_WEB_INTEGRATION_PLAN.md`.
+Independent expert websites are an implementation-in-progress. A published expert opens in a separate child WebView within the main window; the shell registers a per-launch capability for that view's exact HTTP or HTTPS origin. The macOS bundle permits insecure HTTP loads for `ac.zjugis.com` only, so the current HTTP gateway can load in WKWebView; this exception does not encrypt traffic and should be removed when the gateway uses HTTPS. The desktop catalog, one-use identity ticket, bridge behavior, and close/reposition lifecycle require real Windows, macOS, and Linux verification before release. Expert websites are privileged code: their iframe and navigation behavior must be reviewed before publication. The six production websites and one-time cutover are not yet complete; see `WANWEI_EXPERT_WEB_INTEGRATION_PLAN.md`.
 
 Release builds use `<preview app local data>/dsh-home` for credentials, settings, sessions, and skills. On the first launch, if the existing `~/.dsh` directory exists, the preview copies its settings, sessions, storage, attachments, skills, compatible agent presets, and anonymous user ID into the isolated home without overwriting preview files. It never writes to the old directory. Credentials are deliberately not imported: each installer build requires a fresh sign-in. If the old directory is absent or import fails, preview startup continues with its own data. The preview's product profile is always generated separately. A migration marker prevents repeated imports; an incompatible old session may still require manual recovery.
 
@@ -38,7 +40,7 @@ pnpm --filter @wanwei/dsh-desktop-preview check:sidecar
 pnpm --filter @wanwei/dsh-desktop-preview check:rust
 ```
 
-Source development runs the TypeScript CLI from the current checkout. `prepare:runtime` creates a self-contained production runtime under `src-tauri/resources/runtime`: it deploys the reviewed DSH production dependency closure, restores required workspace peer packages as ordinary files, copies Node 22, and preflights the staged `wanwei-desktop` profile. Generated runtime files are ignored by Git and are rebuilt for each installer.
+Source development runs the TypeScript CLI from the current checkout. `prepare:runtime` creates a self-contained production runtime under `src-tauri/resources/runtime`: it deploys the Wanwei-only production closure (the existing DSH runtime plus the PDF, DOCX, and XLSX parsers), restores required workspace peer packages as ordinary files, copies Node 22, and preflights the staged `wanwei-desktop` profile. `check:runtime` also runs the copied document helper with that bundled Node executable, so missing parser dependencies fail before an installer is built. The upstream Python runtime manifest is unchanged. Generated runtime files are ignored by Git and are rebuilt for each installer.
 
 ```sh
 pnpm --filter @wanwei/dsh-desktop-preview prepare:runtime

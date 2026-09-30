@@ -17,6 +17,10 @@ import { math } from 'micromark-extension-math'
 import { cjkFriendlyStrong } from './cjkFriendlyStrong.ts'
 import { mathCompatibility } from './mathCompatibility.ts'
 
+// pnpm can resolve micromark's extension types from different patch releases.
+// They are runtime-compatible, but their augmented token maps differ to TypeScript.
+type MarkdownOptions = NonNullable<Parameters<typeof fromMarkdown>[1]>
+
 /**
  * Parse GFM markdown (the streaming arm's grammar: no math, so incomplete
  * TeX never flashes KaTeX errors mid-stream).
@@ -27,7 +31,7 @@ export function parseGfm(text: string): Root {
   return fromMarkdown(text, {
     extensions: [gfm(), cjkFriendlyStrong()],
     mdastExtensions: [gfmFromMarkdown()],
-  })
+  } as unknown as MarkdownOptions)
 }
 
 /**
@@ -40,5 +44,5 @@ export function parseGfmWithMath(text: string): Root {
   return fromMarkdown(text, {
     extensions: [gfm(), cjkFriendlyStrong(), mathCompatibility(), math()],
     mdastExtensions: [gfmFromMarkdown(), mathFromMarkdown()],
-  })
+  } as unknown as MarkdownOptions)
 }

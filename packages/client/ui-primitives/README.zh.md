@@ -39,6 +39,8 @@ kind: "package-library"
 
 ### 本地化文案
 
+已结束输出中的非 Web Markdown 链接可通过可选的文件提及解析器，以显式按钮打开已知文件。未解析到文件时仍受 URL 白名单限制；流式渲染和普通 HTTP(S) 链接保持原有行为。
+
 这些原子组件无法读取应用 locale，因此每段面向用户的文案都必须通过 label prop 提供。`HoverCard`、`TerminalBlock`、`JsonTree`、`CodeBlock`、`MarkdownText`、`JsonBlock`、`ConnectionBanner`、`Modal`、`DiffBlock`、`ReadBlock`、`SearchBlock` 与 `WebBlock` 接收完整的本地化 label。本包不拥有语言回退；遗漏会导致类型检查失败，各功能会把带类型的 `t` 席位映射到 primitive 的 label 接口。
 
 -----

@@ -17,6 +17,9 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type { AuthState } from './contract.ts'
 import { launchExpertWebsite, listPublishedExperts } from './expert-catalog.ts'
 import { OneApiSearchProvider } from './search-provider.ts'
+import { registerSkillUsage } from './usage.ts'
+import { installNetworkPolicy } from './network.ts'
+export type { NetworkPolicy } from './network.ts'
 
 export type { AuthState } from './contract.ts'
 
@@ -299,9 +302,12 @@ export function apply(ctx: Context, config: Config): void {
   }
   const baseURL = normalizedOrigin(config.baseURL ?? launchEnvironmentOf(ctx).get('DSH_ONEAPI_URL')?.value ?? 'http://127.0.0.1:3000')
   const ref = credentialRef(config.credentialRef)
+  const network = installNetworkPolicy(ctx, baseURL)
   const usernameRef = credentialRef('DSH_LOGIN_USERNAME')
   const installMarkerRef = credentialRef('DSH_DESKTOP_INSTALL_MARKER')
+  registerSkillUsage(ctx, baseURL, async () => (await ctx.credentials.resolve(ref))?.value)
   ctx.web.registerSearchProvider(new OneApiSearchProvider({
+    allowed: () => network.getSnapshot().mode === 'internet',
     baseURL,
     resolveToken: async () => (await ctx.credentials.resolve(ref))?.value,
   }))
@@ -543,6 +549,14 @@ export function apply(ctx: Context, config: Config): void {
   const connection = ctx.get('connection')
   if (connection === undefined) throw new Error('桌面认证需要 Connection 服务')
   const remove = connection.rpc.handle('/desktop-auth', async (endpoint, payload, signal) => {
+    if (endpoint === 'network-get') return { ok: true as const, value: network.getSnapshot() }
+    if (endpoint === 'network-set') {
+      try { return { ok: true as const, value: await network.setMode((payload as { mode?: unknown } | null)?.mode) } }
+      catch (error) { return internal(error instanceof Error ? error.message : String(error)) }
+    }
+    if (network.getSnapshot().mode === 'intranet' && (endpoint === 'expert-list' || endpoint === 'expert-launch')) {
+      return internal('纯内网环境不可用')
+    }
     if (endpoint === 'expert-list') {
       try {
         return { ok: true as const, value: await listPublishedExperts(baseURL, signal) }

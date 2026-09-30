@@ -28,6 +28,7 @@ describe('desktop development authentication', () => {
   it('keeps the real authentication RPC mounted while returning the development identity', async () => {
     process.env.DSH_DESKTOP_DEVELOPMENT = '1'
     const ctx = new Context()
+    ctx.provide('settings', { register: () => ({ get: () => ({ mode: 'internet' }), watch: () => () => {}, update: vi.fn() }) } as never)
     ctx.provide('web', { registerSearchProvider: vi.fn() } as never)
     type Handler = (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>
     let handler: Handler | undefined

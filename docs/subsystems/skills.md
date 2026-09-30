@@ -8,6 +8,8 @@ Source: [`packages/skill/skill/src/index.ts`](../../packages/skill/skill/src/ind
 
 ## Provider registry
 
+`ctx.skills.registerFilter(predicate)` installs a registry-wide availability predicate over candidate catalogs and loaded definitions, including cached reads. Every predicate must permit an entry. Registration and disposal invalidate catalogs and notify consumers; the disposer removes only that predicate. Providers and files remain intact, and a filtered load returns `undefined`. Without filters, discovery and loading are unchanged.
+
 `ctx.skills` combines local, embedded, remote, or other providers. Registration is synchronous; remote initialization and discovery belong in awaited `list()`. Provider objects, options, and candidates are borrowed readonly, while semantic fields are validated.
 
 The registry is host+per-scope layered, the shape the [tools registry](tools.md) established over [dsh-scope](../../packages/core/scope): a registration files into the layer of its calling context's scope, so host rows and repository plugins land in the global layer while a plugin mounted by an agent preset's standing composition lands in that preset's layer, and provider names are unique per layer rather than process-wide. A read merges the global layer with the viewing scope's chain — the nearest layer's entry wins a duplicate skill name outright, and the rank order below decides duplicates only within one layer. Discovery caches are keyed by the resolved scope chain, so re-parenting a scope (a blank-session recompose) is visible to the next read without a registry mutation.

@@ -1,10 +1,11 @@
 import { productText } from './locales/product.ts'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
+import type { NetworkState } from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connection/client'
-import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsRuntime, HostObservable, InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { IConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { ReferenceIcon, Select } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -515,7 +516,8 @@ const marketplaceControllers: Record<MarketplaceSection, Controller> = {
   automations: createController(),
 }
 
-type OverlayProps = PropsRuntime<'shell.overlay'> & {
+type NetworkInjected = { hooks: { network: HostObservable<NetworkState> } }
+type OverlayProps = PropsRuntime<'shell.overlay'> & InjectFace<NetworkInjected> & {
   marketplaceUrl: string
   chooseDirectory: () => Promise<string | null>
   prepareExpertWorkspace: () => Promise<void>
@@ -523,7 +525,7 @@ type OverlayProps = PropsRuntime<'shell.overlay'> & {
 type CustomSkillSource =
   | { kind: 'directory'; path: string }
   | { kind: 'archive'; name: string; bytes: number[] }
-type ActionProps = PropsRuntime<'sidebar.footer.action'> & SidebarFooterActionOwnerProps
+type ActionProps = PropsRuntime<'sidebar.footer.action'> & SidebarFooterActionOwnerProps & InjectFace<NetworkInjected>
 
 function SkillDetail({ skill, onBack, installState, installing, onToggleInstall, onUse, showReview = false }: {
   skill: Skill
@@ -884,7 +886,12 @@ function SkillCategorySelect({
     onChange={onChange} className="dsh-skill-add-select-trigger" />
 }
 
-function SkillMarketplace({ section, chooseDirectory, prepareExpertWorkspace }: OverlayProps & { section: MarketplaceSection }) {
+function SkillMarketplace({ section, chooseDirectory, prepareExpertWorkspace, useNetwork }:
+  OverlayProps & { section: MarketplaceSection }) {
+  const intranet = useNetwork(value => value.mode === 'intranet')
+  useEffect(() => {
+    if (intranet && (section === 'experts' || section === 'connectors')) marketplaceControllers[section].close()
+  }, [intranet, section])
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState(L.all)
@@ -1323,6 +1330,7 @@ function SkillMarketplace({ section, chooseDirectory, prepareExpertWorkspace }: 
     setView('detail')
   }
 
+  if (intranet && (section === 'experts' || section === 'connectors')) return null
   return (
     <div className="dsh-skill-market-overlay" role="dialog" aria-modal="true" aria-label={L.title}>
       <div className="dsh-skill-market-panel">
@@ -1596,6 +1604,7 @@ function SkillMarketplace({ section, chooseDirectory, prepareExpertWorkspace }: 
                 </div>
               )}
               {libraryView !== 'uploads' && <SkillHubSection
+                unavailable={intranet}
                 active installedOnly={libraryView === 'installed'} installedQuery={query}
                 {...(libraryView === 'installed' ? { installedPlatforms: visible.map(skill => ({
                   id: skill.id, slug: skillSlug(skill), name: skill.name, summary: skill.summary,
@@ -1719,7 +1728,8 @@ function SkillMarketplace({ section, chooseDirectory, prepareExpertWorkspace }: 
   )
 }
 
-function SkillMarketplaceAction({ wide, section = 'skills' }: ActionProps & { section?: MarketplaceSection }) {
+function SkillMarketplaceAction({ wide, section = 'skills', useNetwork }: ActionProps & { section?: MarketplaceSection }) {
+  const unavailable = useNetwork(value => value.mode === 'intranet') && (section === 'experts' || section === 'connectors')
   const labels: Record<MarketplaceSection, string> = {
     skills: L.action,
     experts: L.experts,
@@ -1748,10 +1758,14 @@ function SkillMarketplaceAction({ wide, section = 'skills' }: ActionProps & { se
       className={`dsh-skill-market-action${wide ? '' : ' rail'}${open ? ' active' : ''}`}
       aria-label={labels[section]}
       aria-expanded={open}
+      disabled={unavailable}
+      title={unavailable ? productText('纯内网环境不可用') : labels[section]}
+      style={unavailable ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
       onClick={() => { marketplaceControllers[section].toggle() }}
     >
       <MarketplaceSectionIcon section={section} size={wide ? 16 : 18} />
       {wide && <span>{labels[section]}</span>}
+      {wide && unavailable && <small style={{ marginLeft: 'auto', fontSize: 11 }}>{productText('不可用')}</small>}
       {section === 'skills' && attentionCount > 0 && <span className="dsh-skill-unread-count">{attentionCount > 99 ? '99+' : attentionCount}</span>}
     </button>
   )
@@ -1770,8 +1784,10 @@ export function SkillDraftPrefix({ draft, removePrefix, renderInput, settlePrefi
   return renderInput(token.length, <button type="button" className="dsh-skill-draft-prefix" aria-label={productText('已选技能：{0}', [displayName])} onPointerDown={(event) => { event.stopPropagation() }} onClick={(event) => { event.stopPropagation(); removePrefix(token.length) }}><ReferenceIcon kind="skill" size={15} /><span>{displayName}</span><span aria-hidden="true">×</span></button>)
 }
 
-export const inject = ['slots', 'connection', 'conversation', 'sessions', 'layout', 'remote', 'remote.directoryPicker']
+export const inject = ['slots', 'connection', 'conversation', 'sessions', 'layout', 'remote', 'remote.directoryPicker', 'wanweiNetwork']
 export function apply(ctx: Context): void {
+  const network = ctx.wanweiNetwork
+  const networkHooks = { network }
   registerNativeSkillCatalogBridge(ctx)
   const connection = ctx.get('connection') as unknown as ConnectionHandle
   const requestSkillHub = async (operation: string, payload: unknown) => rpcValue(await connection.rpc.call('/wanwei-skillhub', operation, payload))
@@ -1835,32 +1851,32 @@ export function apply(ctx: Context): void {
   )
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(
-      { name: 'sidebar.footer.action', id: 'skill-automations', order: 10, inject: () => ({ section: 'automations' as const }) },
+      { name: 'sidebar.footer.action', id: 'skill-automations', order: 10, inject: () => ({ section: 'automations' as const, hooks: networkHooks }) },
       SkillMarketplaceAction,
     ),
   )
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(
-      { name: 'sidebar.footer.action', id: 'skill-connectors', order: 20, inject: () => ({ section: 'connectors' as const }) },
+      { name: 'sidebar.footer.action', id: 'skill-connectors', order: 20, inject: () => ({ section: 'connectors' as const, hooks: networkHooks }) },
       SkillMarketplaceAction,
     ),
   )
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(
-      { name: 'sidebar.footer.action', id: 'skill-experts', order: 30, inject: () => ({ section: 'experts' as const }) },
+      { name: 'sidebar.footer.action', id: 'skill-experts', order: 30, inject: () => ({ section: 'experts' as const, hooks: networkHooks }) },
       SkillMarketplaceAction,
     ),
   )
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(
-      { name: 'sidebar.footer.action', id: 'skill-marketplace', order: 40 },
+      { name: 'sidebar.footer.action', id: 'skill-marketplace', order: 40, inject: () => ({ hooks: networkHooks }) },
       SkillMarketplaceAction,
     ),
   )
   for (const [index, section] of (['skills', 'experts', 'connectors', 'automations'] as const).entries()) {
     ctx.slots.inject('shell.overlay', () =>
       ctx.slots.register(
-        { name: 'shell.overlay', id: `skill-marketplace-${section}`, order: 100 + index, inject: () => ({ marketplaceUrl, section, chooseDirectory, prepareExpertWorkspace }) },
+        { name: 'shell.overlay', id: `skill-marketplace-${section}`, order: 100 + index, inject: () => ({ marketplaceUrl, section, chooseDirectory, prepareExpertWorkspace, hooks: networkHooks }) },
         SkillMarketplace,
       ),
     )

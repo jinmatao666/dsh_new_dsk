@@ -30,6 +30,26 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def report_usage(user, task_id):
+    """Report a started task; a stable event ID makes delivery retries idempotent."""
+    endpoint = os.environ.get("EXPERT_PLATFORM_REDEEM_URL", "")
+    credential = os.environ.get("EXPERT_PROVIDER_CREDENTIAL", "")
+    if not endpoint.endswith("/redeem") or not credential:
+        return
+    request = urllib.request.Request(
+        endpoint[:-len("/redeem")] + "/usage",
+        data=json.dumps({"event_id": "expert-task-" + task_id, "user_id": int(user)}).encode(),
+        headers={"Content-Type": "application/json", "Authorization":
+                 "Bearer " + credential},
+    )
+    for _ in range(3):
+        try:
+            with urllib.request.build_opener(NoRedirect).open(request, timeout=5):
+                return
+        except (OSError, urllib.error.HTTPError, ValueError):
+            continue
+
+
 def redeem(ticket):
     endpoint = os.environ["EXPERT_PLATFORM_REDEEM_URL"]
     credential = os.environ["EXPERT_PROVIDER_CREDENTIAL"]
@@ -209,6 +229,7 @@ def create_server(root, address=("127.0.0.1", 4305), redeem_ticket=redeem, publi
                             shutil.rmtree(directory.parent)
                         raise
                     worker.submit(user, task_id)
+                    threading.Thread(target=report_usage, args=(user, task_id), daemon=True).start()
                     return self.reply(201, {"id": task_id})
                 match = re.fullmatch(r"/api/tasks/([a-f0-9]{32})/(cancel|files/([0-9]+))", path)
                 if match:

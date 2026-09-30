@@ -13,15 +13,22 @@ export type AccountSectionProps = PropsRuntime<'settings.section'>
   & InjectFace<AccountInjected>
   & PropsLocale<'wanwei.auth'>
 
-/** Account status and logout page inside the standard settings shell. */
-export function AccountSection({ useAuth, logout, t }: AccountSectionProps) {
+/** Account status page; successful logout closes the settings shell. */
+export function AccountSection({ useAuth, logout, close, t }: AccountSectionProps) {
   const auth = useAuth(view => view)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const signOut = async (): Promise<void> => {
     setBusy(true)
     setError(undefined)
-    try { await logout() } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) } finally { setBusy(false) }
+    try {
+      await logout()
+      close()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(false)
+    }
   }
   return (
     <section className={css.section}>

@@ -4,6 +4,8 @@ Automatic task polling redraws the page only on the first response or changed ta
 
 English | [中文](README.zh.md)
 
+After a task is submitted to the worker, this site reports its stable task ID and redeemed user ID to the platform usage endpoint using its provider credential. Reporting retries do not duplicate a task; a telemetry failure does not stop the accepted task.
+
 Running tasks show an animated waiting indicator and elapsed time since submission, not estimated completion or stage progress. Queued tasks have distinct wording. The clock updates without replacing page content and stops on navigation, session expiry or terminal state. Reduced-motion preferences disable the animation. Source filenames wrap in the readable side panel; result controls use matching text sizing.
 
 An HTTP 401 from task, preview or artifact requests locks the workbench and clears task/material caches. Late responses cannot restore the page; an artifact stream interrupted by expired login is cancelled before native saving. Close the Tab and reopen it from the desktop catalog to exchange a fresh ticket. These frontend checks do not revoke a provider-side job already submitted.

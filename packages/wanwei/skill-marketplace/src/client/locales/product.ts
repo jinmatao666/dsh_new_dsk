@@ -1,5 +1,8 @@
 /** Chinese product copy. Source-message keys preserve the current UI while translations are maintained here. */
 const zh = {
+  '纯内网环境不可用': '纯内网环境不可用',
+  '不可用': '不可用',
+  '内网不可用': '内网不可用',
   '返回': '返回',
   '正在卸载…': '正在卸载…',
   '正在下载…': '正在下载…',

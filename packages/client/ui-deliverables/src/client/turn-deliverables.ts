@@ -264,10 +264,27 @@ export function producedFileMentions(
 ): MarkdownFileMentions {
   return {
     resolve(value) {
-      const path = paths.includes(value) ? value : onlyPathWithBasename(paths, value)
+      const destination = localDestinationPath(value)
+      const path = paths.includes(value) ? value
+        : destination !== undefined ? paths.find(path => path === destination)
+          : onlyPathWithBasename(paths, value)
       if (path === undefined) return undefined
       return { open: () => { openFile(path) }, label: label(path), title: path }
     },
+  }
+}
+
+/** URI-like references only resolve by exact recorded path, never by their label or basename. */
+function localDestinationPath(value: string): string | undefined {
+  const match = /^[^:/?#]+:\/\/(.*)$/u.exec(value)
+  if (match === null) return undefined
+  try {
+    const decoded = decodeURIComponent(match[1] ?? '')
+    const path = decoded.startsWith('/') ? decoded : `/${decoded}`
+    return /^\/[A-Za-z]:[\\/]/u.test(path) ? path.slice(1) : path
+  } catch {
+    // Invalid URI escaping cannot identify a recorded file.
+    return ''
   }
 }
 

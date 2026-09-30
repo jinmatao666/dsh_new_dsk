@@ -104,6 +104,7 @@
     { "path": "./packages/wanwei/oneapi-auth/tsconfig.client.json" },
     { "path": "./packages/wanwei/skill-marketplace" },
     { "path": "./packages/wanwei/product-ui" },
+    { "path": "./packages/wanwei/chinese/tsconfig.client.json" },
     { "path": "./packages/context/file-reference" },
     { "path": "./apps/web" }
   ]

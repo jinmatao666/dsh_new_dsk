@@ -9,6 +9,13 @@ import { AccountSection, type AccountInjected } from './AccountSection.tsx'
 import { ManagedModelsSection } from './ManagedModelsSection.tsx'
 import { AuthGate, type AuthInjected } from './AuthGate.tsx'
 import { AuthController } from './controller.ts'
+import { NetworkController } from './network-controller.ts'
+import { NetworkGuard } from './NetworkGuard.tsx'
+export type { NetworkController } from './network-controller.ts'
+export type { NetworkState, NetworkEnvironment } from '../network-contract.ts'
+declare module '@deepseek-ai/cordis' {
+  interface Context { wanweiNetwork: NetworkController }
+}
 import { en, zh } from './locales.ts'
 
 export type { WanweiAuthKey } from './locales.ts'
@@ -22,9 +29,12 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'wanwei-auth: dictionaries')
   const connection = ctx.get('connection') as ConnectionHandle
   const controller = new AuthController(connection)
+  const network = new NetworkController(connection)
+  ctx.provide('wanweiNetwork', network)
   const authInject = (): AuthInjected => ({
-    hooks: { auth: controller },
-    refresh: signal => controller.refresh(signal),
+    hooks: { auth: controller, network },
+    setNetworkEnvironment: mode => network.setMode(mode),
+    refresh: async (signal) => { await network.refresh(signal); return controller.refresh(signal) },
     login: (username, password, signal) => controller.login(username, password, signal),
     fail: (error) => { controller.fail(error) },
   })
@@ -33,6 +43,9 @@ export function apply(ctx: Context): void {
     logout: () => controller.logout(),
   })
   const t = ctx.locale.bind(NS)
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay', id: 'wanwei-network-guard', order: -999, locale: NS, inject: () => ({ hooks: { network } }),
+  }, NetworkGuard))
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay', id: 'wanwei-auth', order: -1000, locale: NS, inject: authInject,
   }, AuthGate))

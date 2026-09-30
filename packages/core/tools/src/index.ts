@@ -1188,7 +1188,21 @@ export class ToolRuntime extends Service {
     if (this.modeFor(scope) !== 'native') {
       visible.set(RUN_CODE_NAME, this.requireCodeTransport())
     }
+    for (const name of visible.keys()) {
+      if (name !== RUN_CODE_NAME && ![...this.availability].every(filter => filter(name))) visible.delete(name)
+    }
     return { visible, knownNames, restrictableNames }
+  }
+
+  private readonly availability = new Set<(name: string) => boolean>()
+
+  /** Product deployment availability applies to every scope and dispatch path. */
+  registerAvailability(filter: (name: string) => boolean): () => void {
+    return this.ctx.effect(() => {
+      this.availability.add(filter)
+      this.ctx.emit('tools/change')
+      return () => { this.availability.delete(filter); this.ctx.emit('tools/change') }
+    }, 'tools.registerAvailability()')
   }
 
   /**

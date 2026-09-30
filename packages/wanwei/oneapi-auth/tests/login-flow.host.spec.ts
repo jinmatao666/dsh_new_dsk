@@ -52,7 +52,7 @@ describe('OneAPI login flow', () => {
         return Promise.resolve()
       },
     } as never)
-    ctx.provide('settings', { replace } as never)
+    ctx.provide('settings', { replace, register: () => ({ get: () => ({ mode: 'internet' }), watch: () => () => {}, update: vi.fn() }) } as never)
     ctx.provide('agentDefaultModel', { saveSelection } as never)
 
     const requests: string[] = []

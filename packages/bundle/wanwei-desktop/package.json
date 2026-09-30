@@ -38,6 +38,7 @@
     "release": false
   },
   "dependencies": {
+    "@deepseek-ai/dsh-wanwei-chinese": "workspace:^",
     "@deepseek-ai/dsh-wanwei-skill-marketplace": "workspace:^",
     "@deepseek-ai/dsh-wanwei-document-local": "workspace:^",
     "@deepseek-ai/dsh-wanwei-vision": "workspace:^",

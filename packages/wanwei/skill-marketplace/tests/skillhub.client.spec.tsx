@@ -17,6 +17,28 @@ const record = { ...skill, source: 'skillhub', localSlug: 'pdf-helper', sha256: 
 const page = { items: [skill], total: 13, pageSize: 12 }
 
 describe('SkillHub marketplace workflow', () => {
+  it('does not request the public catalog in intranet mode and resumes it in internet mode', async () => {
+    const request = vi.fn(async (operation: string) => operation === 'categories' ? { items: [] } : page)
+    const props = { active: true, installedOnly: false, request, invoke: async () => [], onUse: vi.fn(), onCount: vi.fn() }
+    const view = render(<SkillHubSection {...props} unavailable />)
+    expect(screen.getByText('纯内网环境不可用')).toBeTruthy()
+    expect(request).not.toHaveBeenCalled()
+    view.rerender(<SkillHubSection {...props} unavailable={false} />)
+    await screen.findByText(skill.name)
+    expect(request).toHaveBeenCalledWith('list', expect.anything())
+  })
+  it('disables installed SkillHub use but retains local uninstall in intranet mode', async () => {
+    const request = vi.fn()
+    const onUse = vi.fn()
+    const invoke = vi.fn(async (command: string) => command === 'list_skillhub_skills' ? [record] : undefined)
+    render(<SkillHubSection active installedOnly unavailable request={request} invoke={invoke} onUse={onUse} onCount={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: /PDF 助手/ }))
+    expect(screen.getByRole('button', { name: '使用技能' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: '卸载' }).hasAttribute('disabled')).toBe(false)
+    expect(request).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '使用技能' }))
+    expect(onUse).not.toHaveBeenCalled()
+  })
   it('never carries uninstalled remote cards into my installations after browsing duplicate slugs', async () => {
     const repeated = { ...skill, slug: 'dev-expert', name: '编程专家.Skill' }
     const request = vi.fn(async (operation: string) => operation === 'categories' ? { items: [] }

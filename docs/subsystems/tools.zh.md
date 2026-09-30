@@ -169,6 +169,8 @@ interface ToolRestriction {
 
 ## 执行：可扩展的 waterfall（瀑布式事件）加单调策略
 
+`ctx.tools.registerAvailability(predicate)` 安装按工具名称判断的部署级过滤器，覆盖所有作用域的工具展示、查找与分发，包含作用域自身注册的工具。过滤器取交集，保留的代码传输工具仍可见。注册与释放发出 `tools/change`；释放函数只移除对应谓词。不注册过滤器时注册表行为不变。过滤器阻止新的分发，不中止已经执行的工具主体。
+
 `ctx.tools.execute()` 接受由调用方拥有且包含必需 readonly `signal` 的 `ToolExecutionInput`，将其解析后的 JSON 参数一次性物化为流水线拥有的 `ToolExecution`，然后让调用依次经过 `tools/pre-execute`（可重排的 allow/deny/ask waterfall）→ 已注册的单调 guard → `tools/execute`（环绕分派包装层）→ `tools/post-execute`（检查/替换结果）→ 可选且由定义拥有的 `finalizeContent` → `tools/result`（不可变的权威结果）。只有 `tools/execute` 视图可以替换必需的 signal。最终产出为 `ToolExecutionResult`。
 
 ```ts type-equiv

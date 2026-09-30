@@ -1,0 +1,13 @@
+{
+  "name": "@wanwei/dsh-desktop-runtime-closure",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Production-only deployment root for the Wanwei desktop sidecar and document helper.",
+  "dependencies": {
+    "dsh-python-runtime-closure": "workspace:^",
+    "mammoth": "^1.10.0",
+    "pdfjs-dist": "^4.10.38",
+    "xlsx": "^0.18.5"
+  }
+}

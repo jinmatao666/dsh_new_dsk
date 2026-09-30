@@ -152,7 +152,7 @@ export function MenuView({ menu, headers, onPick, onCrumb, onHover, onDismiss, t
                           </span>
                         )}
                         <span className={css.itemName}>{item.name}</span>
-                        {item.description !== undefined && <span className={css.itemDescription}>{item.description}</span>}
+                        {item.description !== undefined && <span className={css.itemDescription}>{group.source === 'command' ? t(item.description as MenuKey) : item.description}</span>}
                         {item.drill === true && (
                           <span className={css.trailing}>
                             {/* Visual hint only: Tab drills the highlighted row (the

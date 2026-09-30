@@ -17,6 +17,25 @@ describe('MessageText', () => {
 })
 
 describe('MarkdownText', () => {
+  it('opens known non-web destinations without enabling arbitrary URL protocols', () => {
+    const opened: string[] = []
+    const fileMentions = {
+      resolve: (value: string) => value === 'local-resource:///report.docx'
+        ? { open: () => { opened.push(value) }, label: 'Open report', title: '/report.docx' } : undefined,
+    }
+    const text = '[Report](local-resource:///report.docx) [Unknown](file:///unknown.docx) [Web](https://example.com)'
+    const { container } = render(<MarkdownText text={text} fileMentions={fileMentions} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open report' }))
+    expect(opened).toEqual(['local-resource:///report.docx'])
+    expect(screen.getByText('Unknown').closest('button, a')).toBeNull()
+    expect(screen.getByText('Web').closest('a')?.getAttribute('href')).toBe('https://example.com')
+    expect(container.querySelector('a button')).toBeNull()
+    const inert = render(<MarkdownText text={text} />)
+    expect(inert.container.querySelector('button')).toBeNull()
+    const streaming = render(<MarkdownText text={text} streaming fileMentions={fileMentions} />)
+    expect(streaming.container.querySelector('button')).toBeNull()
+  })
+
   it('renders CommonMark and GFM elements as semantic DOM', () => {
     const markdown = [
       '# Heading',

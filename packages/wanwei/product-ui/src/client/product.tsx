@@ -7,6 +7,7 @@ import type { ClientPlatformActions } from '@deepseek-ai/dsh-client-platform-act
 import type { DeliverableExtensions } from '@deepseek-ai/dsh-client-ui-deliverables/client'
 import { AnalysisResultCard } from './AnalysisResultCard.tsx'
 import { importedFileReference } from './imported-file-reference.ts'
+import { wanweiDeliverablePaths } from './deliverable-paths.ts'
 import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
@@ -21,38 +22,6 @@ function invokeDesktop(command: string, argumentsValue?: unknown): Promise<unkno
   const invoke = (window as Window & { __ZJUGIS_NATIVE_INVOKE__?: NativeInvoke }).__ZJUGIS_NATIVE_INVOKE__
   if (invoke === undefined) throw new Error('Desktop native capabilities are unavailable')
   return invoke(command, argumentsValue)
-}
-
-const RESULT_PREFIX = 'WANWEI_RESULT='
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function wanweiDeliverablePaths(text: string): readonly string[] {
-  const paths: string[] = []
-  for (const line of text.split(/\r?\n/u)) {
-    const trimmed = line.trimStart()
-    if (trimmed.startsWith(RESULT_PREFIX)) {
-      try {
-        const value: unknown = JSON.parse(trimmed.slice(RESULT_PREFIX.length))
-        if (isRecord(value) && value.success !== false && Array.isArray(value.artifacts)) {
-          for (const artifact of value.artifacts) {
-            if (isRecord(artifact) && typeof artifact.path === 'string' && artifact.path.trim() !== '') {
-              paths.push(artifact.path.trim())
-            }
-          }
-        }
-      } catch {
-        // A malformed product marker does not hide later valid artifacts.
-      }
-    }
-  }
-  for (const match of text.matchAll(/DSH_ANALYSIS_VIEW=([^\r\n]+)/gu)) {
-    const path = match[1]?.trim()
-    if (path !== undefined && path !== '') paths.push(path)
-  }
-  return [...new Set(paths)]
 }
 
 function useActiveWorkspacePath(props: FileImportProps): string | undefined {

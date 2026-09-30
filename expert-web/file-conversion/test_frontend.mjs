@@ -81,7 +81,7 @@ test('prepare, history and bounded desktop downloads retain user data', async ()
   for (const id of ['word-pdf', 'pdf-images', 'pdf-organize', 'images-pdf', 'image-optimize']) {
     vm.runInContext(`form(tools.find(tool => tool.id === '${id}'))`, context)
     assert.match(node('#main').innerHTML, /id="upload" type="file" hidden/)
-    assert.ok(node('#main').innerHTML.includes(`/assets/${id}.png`))
+    assert.ok(node('#main').innerHTML.includes(`assets/${id}.png`))
     let opened = false
     node('#upload').click = () => { opened = true }
     node('#dropzone').onclick()

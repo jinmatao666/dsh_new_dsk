@@ -7,7 +7,7 @@
     "check:identity": "node scripts/verify-identity.mjs",
     "check:boundaries": "node scripts/verify-boundaries.mjs",
     "check:sidecar": "node scripts/verify-sidecar.mjs",
-    "check:runtime": "node scripts/verify-sidecar.mjs --staged",
+    "check:runtime": "node scripts/verify-document-runtime.mjs && node scripts/verify-sidecar.mjs --staged",
     "check:rust": "cargo check --manifest-path src-tauri/Cargo.toml",
     "check:runner": "node scripts/require-github-runner.mjs",
     "dev:prepare": "pnpm run check:boundaries && node scripts/build-dsh.mjs",

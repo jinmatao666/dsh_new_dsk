@@ -1,5 +1,6 @@
 /** Chinese authentication copy. */
 export const zh = {
+  networkUnavailable: '纯内网环境不可用',
   brandMark: '万',
   accountNav: '账户',
   modelsNav: '模型',
@@ -35,6 +36,9 @@ export const zh = {
   accountLogin: '账号登录',
   smsLogin: '短信登录',
   qrLogin: '扫码登录',
+  networkEnvironment: '网络环境',
+  internetEnvironment: '互联网',
+  intranetEnvironment: '纯内网',
   username: '账号',
   usernamePlaceholder: '请输入单位账号或用户名',
   password: '密码',
@@ -92,6 +96,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** English authentication copy. */
 export const en: { [Key in WanweiAuthKey]: string } = {
+  networkUnavailable: 'Unavailable in private-network mode',
   brandMark: 'W',
   accountNav: 'Account',
   modelsNav: 'Models',
@@ -127,6 +132,9 @@ export const en: { [Key in WanweiAuthKey]: string } = {
   accountLogin: 'Account',
   smsLogin: 'SMS',
   qrLogin: 'QR code',
+  networkEnvironment: 'Network environment',
+  internetEnvironment: 'Internet',
+  intranetEnvironment: 'Private network',
   username: 'Account',
   usernamePlaceholder: 'Enter your organization account or username',
   password: 'Password',

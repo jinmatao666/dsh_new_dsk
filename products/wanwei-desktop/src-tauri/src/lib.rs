@@ -22,8 +22,10 @@ use url::Url;
 
 mod expert_artifacts;
 mod migration;
+mod sidecar_environment;
 mod sidecar_output;
 mod skillhub;
+mod network_policy;
 
 const NATIVE_SKILLS_CHANGED_SCRIPT: &str = "window.dispatchEvent(new Event('dsh:skills-changed'));";
 const NATIVE_FILE_DRAG_ENTER_SCRIPT: &str =
@@ -1061,6 +1063,9 @@ async fn open_expert_webview(
 ) -> Result<String, String> {
     if window.label() != "main" {
         return Err("只能从主窗口打开专家".to_string());
+    }
+    if !network_policy::internet_enabled(window.app_handle()) {
+        return Err("纯内网环境不可用".into());
     }
     let label = expert_webview_label(&key, &ticket)?;
     let (launch_url, allowed_url) = expert_webview_url(&url, &ticket)?;
@@ -2156,17 +2161,19 @@ fn spawn_sidecar(
         .env("DSH_HOME", &dsh_home)
         .env("PYTHONUSERBASE", &python_userbase)
         .env("PIP_CACHE_DIR", &pip_cache)
-        .env("TEMP", &python_temp)
-        .env("TMP", &python_temp)
-        .env("TMPDIR", &python_temp)
         .env("PYTHONUTF8", "1")
         .env("PYTHONIOENCODING", "utf-8")
         .env("PIP_DISABLE_PIP_VERSION_CHECK", "1")
-        // Workspace Write users approve the first package-manager download in
-        // a session. Later dependency installs reuse that explicit session grant.
-        .env("DSH_DEPENDENCY_INSTALL_APPROVALS", "session-once")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if !cfg!(target_os = "macos") {
+        command
+            .env("TEMP", &python_temp)
+            .env("TMP", &python_temp)
+            .env("TMPDIR", &python_temp)
+            .env("DSH_DEPENDENCY_INSTALL_APPROVALS", "session-once");
+    }
+    sidecar_environment::configure(&mut command, &program, app_data_dir)?;
     if cfg!(debug_assertions) {
         command.env(
             "DSH_BUNDLE_ANCHORS",
@@ -2302,6 +2309,7 @@ pub fn run() {
                 })?;
             app.manage(Sidecar(Arc::new(Mutex::new(Some(child)))));
             app.manage(PendingWorkspaceDrop(Mutex::new(None)));
+            app.manage(network_policy::NetworkPolicy::default());
 
             // Keep the sidecar alive when the user closes the window. The
             // application is controlled from the system tray and only exits
@@ -2353,12 +2361,16 @@ pub fn run() {
                 .maximizable(false)
                 .center()
                 .on_new_window(move |target, _features| {
-                    if may_open_in_browser(&target) {
+                    if may_open_in_browser(&target) && network_policy::may_open(&browser_opener, &target) {
                         if let Err(error) = browser_opener
                             .opener()
                             .open_url(target.as_str(), None::<&str>)
                         {
                             eprintln!("无法在系统浏览器打开外部链接：{error}");
+                        }
+                    } else if may_open_in_browser(&target) {
+                        if let Some(main) = browser_opener.get_webview_window("main") {
+                            let _ = main.eval("window.dispatchEvent(new Event('wanwei:network-blocked'));");
                         }
                     }
                     tauri::webview::NewWindowResponse::Deny
@@ -2406,6 +2418,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            network_policy::set_network_environment,
             set_auth_window_state,
             save_session_log_archive,
             save_expert_artifact,

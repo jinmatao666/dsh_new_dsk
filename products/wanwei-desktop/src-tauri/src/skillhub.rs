@@ -186,6 +186,7 @@ pub async fn install_skillhub_skill(
     archive: String,
     record: InstalledSkill,
 ) -> Result<InstalledSkill, String> {
+    if !crate::network_policy::internet_enabled(&app) { return Err("纯内网环境不可用".into()); }
     if archive.len() > 24 * 1024 * 1024 {
         return Err("SkillHub 下载包过大".into());
     }

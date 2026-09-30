@@ -9,6 +9,7 @@ packages:
   - apps/*
   # Private Wanwei deliverables stay outside the upstream package and app tiers.
   - products/*
+  - products/wanwei-desktop/runtime-closure
   - website
   # Deploy root of the single-exe build: a pure dependency manifest whose
   # closure is what the exe bundles and what the Python runtime distributes.
