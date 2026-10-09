@@ -26,6 +26,8 @@ Tauri 2 桌面壳会以本地回环 DSH Sidecar 的形式启动新的 `wanwei-de
 
 ## 验证
 
+手动触发的[桌面预览版工作流](../../.github/workflows/wanwei-desktop-preview.yml)包含 Linux x64 和 ARM64 的原生 Ubuntu 22.04 构建，按架构分别保存安装包产物。每个 Linux 任务请求生成 DEB 和 AppImage，并暂存当前架构的 Node 运行时和依赖。生成安装包不代表已经兼容 UOS 系统库；安装和启动需要在目标 UOS 版本上测试。
+
 ```sh
 pnpm --filter @wanwei/dsh-desktop-preview check:identity
 pnpm --filter @wanwei/dsh-desktop-preview check:sidecar

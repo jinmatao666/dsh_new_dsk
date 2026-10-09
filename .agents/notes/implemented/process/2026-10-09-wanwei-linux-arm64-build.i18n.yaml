@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-10-09-wanwei-linux-arm64-build.md
+2026-10-09-wanwei-linux-arm64-build.md: 3eae96fa0a32bdd12ed041dce93efad6aaba5adf
+2026-10-09-wanwei-linux-arm64-build.zh.md: 0244bbddb2bacc17b73daac5f0bf085b0d16234d

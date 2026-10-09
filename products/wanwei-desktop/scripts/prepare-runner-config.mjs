@@ -8,6 +8,7 @@ const runnerByPlatform = {
   'macos-arm64': 'macOS',
   'macos-x64': 'macOS',
   'linux-x64': 'Linux',
+  'linux-arm64': 'Linux',
 }
 const expectedRunner = runnerByPlatform[platform]
 
@@ -19,6 +20,12 @@ if (expectedRunner === undefined) {
 }
 if (process.env.RUNNER_OS !== expectedRunner) {
   throw new Error(`${platform} 必须在 ${expectedRunner} Runner 上构建，当前为 ${process.env.RUNNER_OS ?? '(missing)'}`)
+}
+if (platform.startsWith('linux-')) {
+  const expectedArch = platform === 'linux-arm64' ? 'ARM64' : 'X64'
+  if (process.env.RUNNER_ARCH !== expectedArch) {
+    throw new Error(`${platform} 必须在 ${expectedArch} Runner 上构建，当前为 ${process.env.RUNNER_ARCH ?? '(missing)'}`)
+  }
 }
 
 const version = process.env.DSH_RELEASE_VERSION?.trim() ?? ''

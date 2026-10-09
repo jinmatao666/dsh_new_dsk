@@ -34,6 +34,8 @@ The distinct identifiers separate the single-instance lock, WebView profile, pla
 
 ## Verify
 
+The manual [desktop preview workflow](../../.github/workflows/wanwei-desktop-preview.yml) includes native Ubuntu 22.04 builds for Linux x64 and ARM64, with separate installer artifacts for each architecture. Each Linux job requests DEB and AppImage bundles and stages its own Node runtime and dependencies. Installer generation does not establish compatibility with UOS system libraries; installation and startup require testing on the target UOS release.
+
 ```sh
 pnpm --filter @wanwei/dsh-desktop-preview check:identity
 pnpm --filter @wanwei/dsh-desktop-preview check:sidecar

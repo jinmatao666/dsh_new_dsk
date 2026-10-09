@@ -86,6 +86,10 @@ jobs:
             platform: linux-x64
             runner: ubuntu-22.04
             bundles: deb,appimage
+          - name: Linux ARM64
+            platform: linux-arm64
+            runner: ubuntu-22.04-arm
+            bundles: deb,appimage
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     permissions:
@@ -110,7 +114,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install Linux desktop dependencies
-        if: ${{ matrix.platform == 'linux-x64' }}
+        if: ${{ startsWith(matrix.platform, 'linux-') }}
         shell: bash
         run: |
           sudo apt-get update
@@ -138,7 +142,13 @@ jobs:
           # The staged runtime contains a static musl launcher. linuxdeploy
           # looks up its interpreter marker as a shared-library SONAME, while
           # Ubuntu exposes musl under the loader path below.
-          sudo ln -sf /lib/ld-musl-x86_64.so.1 /usr/lib/x86_64-linux-gnu/libc.musl-x86_64.so.1
+          case "$(uname -m)" in
+            x86_64) musl_arch=x86_64; library_arch=x86_64-linux-gnu ;;
+            aarch64) musl_arch=aarch64; library_arch=aarch64-linux-gnu ;;
+            *) echo 'Unsupported Linux desktop architecture' >&2; exit 1 ;;
+          esac
+          test -f "/lib/ld-musl-$musl_arch.so.1"
+          sudo ln -sf "/lib/ld-musl-$musl_arch.so.1" "/usr/lib/$library_arch/libc.musl-$musl_arch.so.1"
           sudo ldconfig
 
       - name: Cache Rust and Tauri output
@@ -186,9 +196,9 @@ jobs:
 
       - name: Build platform installer
         env:
-          APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.platform == 'linux-x64' && '1' || '' }}
-          NO_STRIP: ${{ matrix.platform == 'linux-x64' && '1' || '' }}
-          RUST_LOG: ${{ matrix.platform == 'linux-x64' && 'tauri_bundler=debug' || '' }}
+          APPIMAGE_EXTRACT_AND_RUN: ${{ startsWith(matrix.platform, 'linux-') && '1' || '' }}
+          NO_STRIP: ${{ startsWith(matrix.platform, 'linux-') && '1' || '' }}
+          RUST_LOG: ${{ startsWith(matrix.platform, 'linux-') && 'tauri_bundler=debug' || '' }}
         run: pnpm --dir products/wanwei-desktop run build:runner:bundle --bundles ${{ matrix.bundles }} --config "${{ runner.temp }}/wanwei-preview-${{ matrix.platform }}.json"
 
       # Tauri's DMG helper customizes Finder via AppleScript, which is
@@ -211,7 +221,7 @@ jobs:
           hdiutil verify "$dmg"
 
       - name: Diagnose Linux AppImage bundler
-        if: ${{ failure() && matrix.platform == 'linux-x64' }}
+        if: ${{ failure() && startsWith(matrix.platform, 'linux-') }}
         shell: bash
         env:
           APPIMAGE_EXTRACT_AND_RUN: '1'
@@ -219,7 +229,7 @@ jobs:
         run: |
           bundle_dir="products/wanwei-desktop/src-tauri/target/release/bundle"
           app_dir="$(find "$bundle_dir/appimage" -maxdepth 1 -type d -name '*.AppDir' -print -quit 2>/dev/null || true)"
-          linuxdeploy="$(find "$HOME/.cache/tauri" -maxdepth 1 -type f -name 'linuxdeploy-x86_64.AppImage' -print -quit 2>/dev/null || true)"
+          linuxdeploy="$(find "$HOME/.cache/tauri" -maxdepth 1 -type f -name "linuxdeploy-$(uname -m).AppImage" -print -quit 2>/dev/null || true)"
           echo "::group::Linux AppImage environment"
           command -v desktop-file-validate || true
           command -v mksquashfs || true
@@ -254,10 +264,10 @@ jobs:
           retention-days: 14
 
       - name: Upload Linux preview installers
-        if: ${{ matrix.platform == 'linux-x64' }}
+        if: ${{ startsWith(matrix.platform, 'linux-') }}
         uses: actions/upload-artifact@v7
         with:
-          name: wanwei-buddy-preview-${{ inputs.version }}-linux-x64
+          name: wanwei-buddy-preview-${{ inputs.version }}-${{ matrix.platform }}
           path: |
             products/wanwei-desktop/src-tauri/target/release/bundle/deb/*.deb
             products/wanwei-desktop/src-tauri/target/release/bundle/appimage/*.AppImage
