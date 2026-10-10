@@ -99,7 +99,7 @@ async function loadComposition(): Promise<{ ctx: Context; settingsPath: string }
 describe('llm-pi-ai real dormant composition', () => {
   it('boots with zero routes and registers one the moment settings supply a profile', async () => {
     vi.stubEnv('PI_COMPOSITION_KEY', '')
-    const server = await mockServer([{ events: textEvents }])
+    const server = await mockServer([{ events: textEvents }, { events: textEvents }, { events: textEvents }])
     const { ctx, settingsPath } = await loadComposition()
 
     // The shipped posture: the adapter exists, no route does.
@@ -118,9 +118,19 @@ describe('llm-pi-ai real dormant composition', () => {
       expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['deepseek'])
     }, { timeout: 5000 })
 
-    const result = await assemble(ctx, { provider: 'deepseek', model: 'deepseek-v4-flash', messages: [] })
+    const request = {
+      provider: 'deepseek', model: 'deepseek-v4-flash',
+      messages: [createUserMessage({ content: [{ type: 'text', text: 'translate this document' }], source: { kind: 'plugin', plugin: 'test' } })],
+      sessionId: 'desktop-session-a' as never,
+    }
+    const result = await assemble(ctx, request)
     expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
     expect(server.headers[0]?.authorization).toBe('Bearer key-from-store')
+    await assemble(ctx, request)
+    await assemble(ctx, { ...request, sessionId: 'desktop-session-b' as never })
+    expect(server.headers.map(headers => headers['x-deepseek-harness-session-id'])).toEqual([
+      'desktop-session-a', 'desktop-session-a', 'desktop-session-b',
+    ])
   })
 
   it('continues natively after max-token assembly drops a tool call, with pruned replay metadata', async () => {

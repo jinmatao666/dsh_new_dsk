@@ -100,6 +100,10 @@ A profile's `models` list replaces the route's installed catalog rather than ext
 
 `reasoningEfforts` declares a model's selectable thinking levels: each key is a level selectors offer, its value the spelling dispatch sends on the wire, so `max: ultra` renames a level for a gateway with its own vocabulary. Omitting the field keeps the installed catalog entry's capability; `false` declares a non-reasoning model. `compat` switches reshape the request for endpoints pi-ai cannot recognize — which role carries the system prompt, which field caps output, how a thinking level travels — configurable per route and per model. A model neither the entry nor the installed catalog sizes takes the route's `defaultContextWindow` and `defaultMaxTokens` fallbacks.
 
+### Gateway audit attribution
+
+Requests with `GenerateOptions.sessionId` carry `x-deepseek-harness-session-id` for gateway audit grouping, matching the direct DeepSeek adapter. The runtime marker overrides case-insensitive profile header collisions and is omitted when no session is supplied. The marker does not add conversation content to the request body.
+
 ### Change configuration at runtime
 
 Profiles are re-read once per operation through the optional settings seam: the base and the user's `llm-pi-ai:` settings section merge per provider, so a user can add a route, override one field of a composition route, or point a route at another proxy, all effective on the next request with no restart. A section the adapter could not serve is refused where it is written — `settings.mutate` answers `settings-rejected` — and a stored section that later fails keeps the namespace's last good value. When the route set or a route's retry policy changes, the plugin re-registers atomically: a conflicting route leaves the previous routes serving.

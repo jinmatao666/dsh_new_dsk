@@ -114,13 +114,16 @@ describe('PiAiAdapter provider routing', () => {
   })
 
   it('merges profile headers with Harness attribution winning', async () => {
-    const server = await mockServer([{ events: textEvents }])
+    const server = await mockServer([{ events: textEvents }, { events: textEvents }])
     const ctx = await harness(server.url, {
-      headers: { 'x-company': 'private', 'User-Agent': 'wrong' },
+      headers: { 'x-company': 'private', 'User-Agent': 'wrong', 'X-DeepSeek-Harness-Session-Id': 'wrong' },
     })
-    await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
+    await assemble(ctx, { model: 'deepseek-v4-flash', messages: [], sessionId: 'real-session' as never })
     expect(server.headers[0]?.['x-company']).toBe('private')
     expect(server.headers[0]?.['user-agent']).toBe(userAgent())
+    expect(server.headers[0]?.['x-deepseek-harness-session-id']).toBe('real-session')
+    await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
+    expect(server.headers[1]).not.toHaveProperty('x-deepseek-harness-session-id')
   })
 
   it('forwards common stream options and profile reasoning', async () => {
