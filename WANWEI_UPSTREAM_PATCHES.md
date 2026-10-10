@@ -36,4 +36,6 @@
 
 升级官方 DSH 时逐项确认：通用扩展点仍可编译；空实现仍保持官方行为；产品 Bundle 能注册实现；相关测试仍通过。不得把 OneAPI 协议、Tauri 命令、万维文案、品牌资源或业务 Presenter 加回官方文件。
 
+技能显示名称由官方文件系统读取通用 `.dsh-skill-display.json` 和 `manifest.json`；万维安装器负责写入通用记录，专用安装收据不进入官方发现逻辑。目录生成器保留私有服务的维护文档，但通过运行时服务排除策略将万维网络策略移出官方 `tool-cordis` API 目录。
+
 边界检查由 `products/wanwei-desktop/scripts/verify-boundaries.mjs` 扫描完整 `packages` 和 `apps`，只放行万维包与产品 Bundle。

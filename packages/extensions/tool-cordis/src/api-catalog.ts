@@ -2657,25 +2657,6 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
-    key: 'wanweiNetworkPolicy',
-    summary: 'Host-owned durable network mode and administrator-provided internal origins.',
-    description: 'Host-owned durable network mode and administrator-provided internal origins.',
-    methods: [
-      {
-        signature: 'getSnapshot(): NetworkState',
-        description: 'Read the current committed mode and internal origins.',
-        parameters: [],
-        returns: 'Current deployment network state.',
-      },
-      {
-        signature: 'setMode(mode: unknown): Promise<NetworkState>',
-        description: 'Persist a validated environment selection.',
-        parameters: [{ name: 'mode', description: 'Requested internet or intranet mode, validated before persistence.' }],
-        returns: 'Committed deployment network state.',
-      },
-    ],
-  },
-  {
     key: 'web',
     summary: 'The web access service.',
     description: 'The web access service. Registered as `ctx.web` (one instance per context).\n\nSelection semantics (resolved at execution time, never order-dependent):\n\n- A configured id that is registered and `available()` → that provider.\n- A configured id not registered → `WEB_PROVIDER_CONFIGURED_MISSING`.\n- A configured id registered but unavailable → `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`.\n- No id configured, exactly one registered usable provider → that provider.\n- No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.\n- No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.',
@@ -4500,14 +4481,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ModelReasoningEffort',
     declaration: 'export interface ModelReasoningEffort {\n    readonly id: string;\n    readonly name: string;\n    readonly description?: string;\n}',
-  },
-  {
-    name: 'NetworkEnvironment',
-    declaration: 'export type NetworkEnvironment = \'internet\' | \'intranet\';',
-  },
-  {
-    name: 'NetworkState',
-    declaration: 'export interface NetworkState {\n    mode: NetworkEnvironment;\n    internalOrigins: readonly string[];\n}',
   },
   {
     name: 'ObjectJsonSchema',

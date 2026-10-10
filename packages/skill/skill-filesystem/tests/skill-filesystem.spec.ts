@@ -155,14 +155,14 @@ it('reads durable Chinese display names without a marketplace client and keeps i
   const root = join(home, '.dsh', 'skills')
   await writeSkill(root, 'community-12', 'meeting')
   await writeFile(join(root, 'community-12', '.dsh-skill-display.json'), JSON.stringify({ displayName: '会议纪要' }))
-  await writeSkill(root, 'skillhub-demo', 'hub')
-  await writeFile(join(root, 'skillhub-demo', '.wanwei-skillhub.json'), JSON.stringify({ name: '公文检查' }))
+  await writeSkill(root, 'imported-demo', 'imported')
+  await writeFile(join(root, 'imported-demo', '.dsh-skill-display.json'), JSON.stringify({ displayName: '公文检查' }))
   await writeSkill(root, 'community-13', 'policy')
   await writeFile(join(root, 'community-13', 'manifest.json'), JSON.stringify({ displayName: '政策摘要' }))
   const ctx = await setupLocal(home)
   expect(await ctx.skills.list()).toEqual(expect.arrayContaining([
     expect.objectContaining({ name: 'community-12', displayName: '会议纪要' }),
-    expect.objectContaining({ name: 'skillhub-demo', displayName: '公文检查' }),
+    expect.objectContaining({ name: 'imported-demo', displayName: '公文检查' }),
     expect.objectContaining({ name: 'community-13', displayName: '政策摘要' }),
   ]))
   expect(await ctx.skills.get('community-12')).toMatchObject({ name: 'community-12', displayName: '会议纪要' })
@@ -177,6 +177,20 @@ async function waitFor<T>(read: () => Promise<T>, accept: (value: T) => boolean)
     await new Promise(resolve => setTimeout(resolve, 20))
   }
 }
+
+it('refreshes a Chinese display name when its generic display record changes', { timeout: 20_000 }, async () => {
+  const home = await tempDir('skill-display-watch')
+  const root = join(home, '.dsh', 'skills')
+  await writeSkill(root, 'imported-demo', 'imported')
+  const record = join(root, 'imported-demo', '.dsh-skill-display.json')
+  await writeFile(record, JSON.stringify({ displayName: '公文检查' }))
+  const ctx = await setupLocal(home, { watch: true })
+  expect(await ctx.skills.list()).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: 'imported-demo', displayName: '公文检查' }),
+  ]))
+  await writeFile(record, JSON.stringify({ displayName: '公文审查' }))
+  await waitFor(() => ctx.skills.list(), skills => skills.some(skill => skill.displayName === '公文审查'))
+})
 
 describe('dsh-skill-filesystem plugin exports', () => {
   it('declares stable plugin metadata', () => {

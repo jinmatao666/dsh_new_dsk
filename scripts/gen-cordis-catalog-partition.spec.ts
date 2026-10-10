@@ -12,10 +12,18 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import ts from 'typescript'
 import { contextKeyMap, contextMergeFiles, eventNameList } from './cordis-walk.ts'
-import { walkPartitionProblems } from './gen-cordis-catalog.ts'
+import { computeOutputs, walkPartitionProblems } from './gen-cordis-catalog.ts'
 import type { WalkPartitionInput, WalkPartitionMaps } from './gen-cordis-catalog.ts'
 
 const roots: string[] = []
+it('keeps private deployment policy documented but out of the official runtime catalog', () => {
+  const outputs = new Map(computeOutputs())
+  const runtime = outputs.get('packages/extensions/tool-cordis/src/api-catalog.ts')
+  expect(runtime).toBeDefined()
+  expect(runtime).not.toMatch(/wanwei|zjugis|oneapi/iu)
+  expect([...outputs.values()].some(content => content.includes('wanweiNetworkPolicy'))).toBe(true)
+}, 120_000)
+
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })

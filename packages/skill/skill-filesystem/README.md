@@ -33,7 +33,7 @@ Use this provider when skills live on disk — in the repository, a custom direc
 
 ### Skill format
 
-An optional `display-name` provides a human-facing label without changing the required kebab-case `name`. Directory bundles also read display metadata from `.dsh-skill-display.json`, `.wanwei-skillhub.json`, or `manifest.json`, in that priority order; frontmatter is the fallback. These metadata files trigger catalog invalidation when watched. A missing display name falls back to the identifier, without automatic translation.
+An optional `display-name` provides a human-facing label without changing the required kebab-case `name`. Directory bundles also read display metadata from `.dsh-skill-display.json` or `manifest.json`, in that priority order; frontmatter is the fallback. Importers convert source-specific labels into the generic display record. These metadata files trigger catalog invalidation when watched. A missing display name falls back to the identifier, without automatic translation.
 
 A skill is either a directory bundle `<name>/SKILL.md` or a flat file `<name>.md` at the top level of a scanned root; nested `**/SKILL.md` files are deliberately not discovered. The file starts with YAML frontmatter: required `name` and `description`, plus optional `whenToUse`, `metadata`, `disable-model-invocation`, and `user-invocable`.
 

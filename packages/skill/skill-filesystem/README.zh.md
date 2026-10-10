@@ -33,7 +33,7 @@ agent（智能体）可以使用来自仓库、自定义目录或用户 agent �
 
 ### skill 格式
 
-可选 `display-name` 提供面向用户的名称，不改变必填的 kebab-case `name`。目录包也按优先级读取 `.dsh-skill-display.json`、`.wanwei-skillhub.json` 或 `manifest.json` 中的显示元数据，frontmatter 为回退来源。监视这些元数据文件的变化会使目录失效。缺少显示名时回退到标识，不会自动翻译。
+可选 `display-name` 提供面向用户的名称，不改变必填的 kebab-case `name`。目录包也按优先级读取 `.dsh-skill-display.json` 或 `manifest.json` 中的显示元数据，frontmatter 为回退来源。导入器将各来源名称转换为通用显示记录。监视这些元数据文件的变化会使目录失效。缺少显示名时回退到标识，不会自动翻译。
 
 skill 可以是被扫描根目录顶层的目录 bundle `<name>/SKILL.md`，也可以是平铺文件 `<name>.md`；刻意不支持发现嵌套的 `**/SKILL.md`。文件以 YAML frontmatter 开头：必填 `name` 与 `description`，另有可选 `whenToUse`、`metadata`、`disable-model-invocation` 与 `user-invocable`。
 

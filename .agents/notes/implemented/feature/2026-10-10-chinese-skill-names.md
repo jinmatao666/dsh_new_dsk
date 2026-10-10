@@ -10,7 +10,7 @@ The slash menu exposed internal identifiers instead of market names. Personal im
 
 ## Decision
 
-Keep `name` as the stable identifier and propagate optional `displayName` through filesystem discovery, the registry, the session RPC, and the slash menu. Installed receipts and platform manifests supply labels without requiring a marketplace visit. Chips display Chinese labels while submitting canonical identifiers; direct unique display-name aliases resolve at the user invocation boundary.
+Keep `name` as the stable identifier and propagate optional `displayName` through filesystem discovery, the registry, the session RPC, and the slash menu. Generic installed display records and platform manifests supply labels without requiring a marketplace visit; product-specific receipts stay in the desktop installer. Chips display Chinese labels while submitting canonical identifiers; direct unique display-name aliases resolve at the user invocation boundary.
 
 The desktop installer serializes platform, SkillHub, and personal installation checks through one lock. It rejects duplicate display names across the installed user skill root, comparing collapsed whitespace and lowercase text. A platform or SkillHub update may retain its own target identity; personal imports never replace existing targets. New display records persist alongside installed files.
 

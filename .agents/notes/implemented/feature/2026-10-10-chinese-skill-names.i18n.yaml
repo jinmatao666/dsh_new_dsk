@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-10-chinese-skill-names.md
-2026-10-10-chinese-skill-names.md: 9aa9911bf45e0a5bbec7f14de764f28d7701f9a6
-2026-10-10-chinese-skill-names.zh.md: 15ea1cfeb3ddaac7b3f28112c21610204c4772da
+2026-10-10-chinese-skill-names.md: 0ef33901a29093d074f74ff1ef8a4a36377e655f
+2026-10-10-chinese-skill-names.zh.md: 819fbf1c75d60ac340002686e020b95f23bca952

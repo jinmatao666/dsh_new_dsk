@@ -671,7 +671,7 @@ function isRelevantWatchEvent(
     return segments[0]?.endsWith('.md') === true
   }
   return segments.length === 2
-    && ['SKILL.md', '.dsh-skill-display.json', '.wanwei-skillhub.json', 'manifest.json'].some(name => name === segments[1])
+    && ['SKILL.md', '.dsh-skill-display.json', 'manifest.json'].some(name => name === segments[1])
     && event !== 'addDir'
     && event !== 'unlinkDir'
 }
@@ -682,7 +682,7 @@ function isPotentialSkillPath(root: SkillRoot, path: string): boolean {
   if (root.skipSystem === true && segments[0] === '.system') return false
   return segments.length === 1
     ? segments[0]?.endsWith('.md') === true
-    : ['SKILL.md', '.dsh-skill-display.json', '.wanwei-skillhub.json', 'manifest.json'].some(name => name === segments[1])
+    : ['SKILL.md', '.dsh-skill-display.json', 'manifest.json'].some(name => name === segments[1])
 }
 
 function containedSegments(root: string, path: string): string[] | undefined {
@@ -845,7 +845,7 @@ async function installedDisplayName(
   if (basename(locator.path) !== 'SKILL.md') {
     return parsed.displayName === undefined ? {} : { displayName: parsed.displayName }
   }
-  for (const [file, key] of [['.dsh-skill-display.json', 'displayName'], ['.wanwei-skillhub.json', 'name'], ['manifest.json', 'displayName']] as const) {
+  for (const [file, key] of [['.dsh-skill-display.json', 'displayName'], ['manifest.json', 'displayName']] as const) {
     const raw = await readSkillText(ctx, join(locator.directory, file), undefined, trustedHost)
     if (raw === undefined) continue
     const value: unknown = JSON.parse(raw)

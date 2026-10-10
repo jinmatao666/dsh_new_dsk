@@ -736,7 +736,8 @@ export const CORDIS_CATALOG_POLICY: CordisCatalogPolicy = {
   linkedTypePages: LINK_MAP,
   foundationTypeNames: FOUNDATION_TYPE_NAMES,
   typeLinkExemptions: TYPE_LINK_EXEMPTIONS,
-  runtimeServiceExclusions: new Set(['cordisInspect', 'dynamicCordisRunner']),
+  // Private deployment policy belongs to the product composition, not the official model-facing API.
+  runtimeServiceExclusions: new Set(['cordisInspect', 'dynamicCordisRunner', 'wanweiNetworkPolicy']),
   runtimeServices: [{
     key: 'timer',
     type: 'TimerService',
