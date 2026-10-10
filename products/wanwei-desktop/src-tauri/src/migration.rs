@@ -33,7 +33,7 @@ fn copy_file_missing(source: &Path, destination: &Path) -> Result<(), String> {
         .write(true)
         .create_new(true)
         .open(&temporary)
-        .map_err(|error| format!("无法创建迁移临时文件：{error}"))?;
+        .map_err(|error| format!("无法创建迁移临时文件 {}：{error}", temporary.display()))?;
     let result = (|| -> std::io::Result<()> {
         let mut input = fs::File::open(source)?;
         std::io::copy(&mut input, &mut output)?;
@@ -207,6 +207,8 @@ fn migrate_sources(
     let mut workspace: Option<Value> = None;
     for (name, source) in &found {
         let snapshot = recovery.join(name);
+        fs::create_dir_all(&snapshot)
+            .map_err(|e| format!("无法创建迁移备份目录 {}：{e}", snapshot.display()))?;
         for entry in USER_FILES.iter().chain(USER_DIRECTORIES.iter()) {
             let path = source.join(entry);
             if path.exists() {
@@ -665,6 +667,39 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ))
+    }
+
+    #[test]
+    fn migration_snapshots_root_files_before_any_user_directories_exist() {
+        for source_name in ["current", "previous", "legacy"] {
+            let root = test_root(source_name);
+            let app = root.join("app");
+            let new = app.join("dsh-home");
+            let source = if source_name == "current" {
+                new.clone()
+            } else {
+                root.join(source_name)
+            };
+            fs::create_dir_all(&source).unwrap();
+            fs::write(source.join("settings.yaml"), b"user settings").unwrap();
+            fs::write(source.join(".anonymous-user-id"), b"existing identity").unwrap();
+            let sources = [(source_name, source.clone())];
+            assert!(migrate_sources(&app, &new, &sources).unwrap());
+            let report: Value =
+                serde_json::from_slice(&fs::read(new.join(FORMAL_MARKER)).unwrap()).unwrap();
+            let snapshot =
+                PathBuf::from(report["backupDirectory"].as_str().unwrap()).join(source_name);
+            for (name, content) in [
+                ("settings.yaml", b"user settings".as_slice()),
+                (".anonymous-user-id", b"existing identity".as_slice()),
+            ] {
+                assert_eq!(fs::read(new.join(name)).unwrap(), content);
+                assert_eq!(fs::read(snapshot.join(name)).unwrap(), content);
+                assert_eq!(fs::read(source.join(name)).unwrap(), content);
+            }
+            assert!(!migrate_sources(&app, &new, &sources).unwrap());
+            fs::remove_dir_all(root).unwrap();
+        }
     }
 
     fn registry(id: &str, path: &str, sessions: &[&str]) -> Value {

@@ -8,7 +8,7 @@ This private product directory owns the Wanwei desktop shell and installer. It d
 
 macOS preserves the inherited system temporary directory and prepends bundled Node to the sidecar PATH, retaining existing tool paths and adding Homebrew locations. Python user packages and pip downloads use a private, product-specific directory under the host temporary directory, which workspace-write already permits. The cache is reused across launches but can be cleared by the OS; it is not durable user data. Read-only restrictions and approval for wider access remain in force. Windows and Linux retain their existing launch environment. Installed Mac behavior requires real-device verification.
 
-Runtime staging unlinks dependency symlinks and Windows junctions without recursively deleting their targets. Legacy file migration writes and syncs a temporary file before non-replacing hard-link publication; the target filesystem must support hard links. A failed copy leaves no partial final file, while a force interruption may leave an unreferenced temporary file.
+Runtime staging unlinks dependency symlinks and Windows junctions without recursively deleting their targets. Legacy file migration creates each source backup directory before copying root-level settings and identity files, then writes and syncs a temporary file before non-replacing hard-link publication; the target filesystem must support hard links. A failed copy leaves no partial final file, while a force interruption may leave an unreferenced temporary file.
 
 Closing the main window hides it. macOS Dock reopen restores and focuses the existing window. Normal application exit stops the direct sidecar, including exits outside the tray menu; force termination is outside this guarantee.
 
