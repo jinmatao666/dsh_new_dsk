@@ -71,6 +71,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   credentials: 'credentials.md',
   credentialsController: 'credentials.md',
   settingsController: 'settings.md',
+  wanweiNetworkPolicy: 'settings.md',
   directoryPicker: 'workspace.md',
   deepseekLlmApiExtensions: 'llm-streaming.md',
   dynamicCordisRunner: 'extensions.md',
@@ -144,6 +145,7 @@ export const SERVICE_PAGE: Record<string, string> = {
  * to a model as `cordis_runtime_inspect what:"client"`).
  */
 export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
+  wanweiNetwork: 'client-face deployment policy mirror — packages/wanwei/oneapi-auth/README.md owns the API',
   platformActions: 'client-face optional shell operations — packages/client/platform-actions/README.md owns the API',
   deliverableExtensions: 'client-face artifact parser and presenter registry — packages/client/ui-deliverables/README.md owns the API',
   agent: 'not a service: the DX accessor field on Agent.ctx (root accessor defaulting to undefined) — docs/subsystems/core.md owns the Agent handle',
@@ -465,6 +467,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   SessionTitleSnapshot: 'session-title.md',
   SkillCatalogSnapshot: 'skills.md',
   SkillDefinition: 'skills.md',
+  SkillCandidate: 'skills.md',
   SkillLookupOptions: 'skills.md',
   SkillProvider: 'skills.md',
   SkillProviderObservation: 'skills.md',
@@ -650,6 +653,7 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
+  NetworkState: 'private desktop deployment policy is owned by packages/wanwei/oneapi-auth/src/network-contract.ts',
   z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',
   BeginCommandRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   InsertReferenceRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',

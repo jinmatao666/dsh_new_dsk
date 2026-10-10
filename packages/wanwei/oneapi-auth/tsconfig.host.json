@@ -5,8 +5,9 @@
     "outDir": "lib/types",
     "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
   },
-  "files": ["src/index.ts", "src/invariant.ts", "src/contract.ts", "src/expert-catalog.ts", "src/search-provider.ts", "src/usage.ts", "src/network.ts", "src/network-contract.ts"],
+  "files": ["src/index.ts", "src/invariant.ts", "src/contract.ts", "src/expert-catalog.ts", "src/search-provider.ts", "src/usage.ts", "src/network.ts", "src/network-contract.ts", "src/deployment.ts", "src/dependency-policy.ts"],
   "references": [
+    { "path": "../../core/system-prompt" },
     { "path": "../../skill/skill" },
     { "path": "../../core/tools" },
     { "path": "../../util/launch-environment" },

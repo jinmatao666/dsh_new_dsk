@@ -21,6 +21,10 @@ export function browseMarketplaceCatalog<T extends { marketplacePublished?: bool
 
 /** Sort a filtered platform catalog using server facts and return one twelve-card page.
  * Missing timestamps sort after dated entries; ties preserve the server's order.
+ * @param skills - Filtered platform skill entries.
+ * @param sort - Downloads ordering, or updated-time ordering otherwise.
+ * @param requestedPage - One-based page clamped to the available range.
+ * @returns Current page entries, page number and total page count.
  */
 export function pagePlatformCatalog<T extends { installs: string; updatedAt?: string | number }>(
   skills: readonly T[], sort: string, requestedPage: number,

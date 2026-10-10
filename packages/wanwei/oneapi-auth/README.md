@@ -13,7 +13,7 @@ Successful logout from the account section closes the settings panel and reveals
 
 The login surface uses the same form and fixed-height content area during authentication checks and after logout. It recalculates scaling whenever the login page becomes visible, independently of workspace typography.
 
-The desktop login layout uses Windows-reference column sizing and explicit text line heights. Checkbox and radio styling is shared across platforms; system fonts remain local, so glyph rendering can differ. WebKit receives prefixed backdrop-filter rules.
+The desktop login layout uses Windows-reference column sizing and explicit text line heights. System fonts remain local, so glyph rendering can differ. WebKit receives prefixed backdrop-filter rules.
 
 Client authentication ignores obsolete status replies and refreshes overlapping a login or logout. Cancelled refreshes do not publish offline state. This orders Client state updates; it does not cancel authentication work already accepted by the Host.
 
@@ -37,9 +37,13 @@ The Wanwei product bundle mounts the Host and Client halves. The browser receive
 
 ### Configuration
 
-The login page saves the selected Internet or private-network environment on this computer through `wanwei-network.mode`. Internet is the default. Private-network mode retains configured login, models, platform skills and local operations, but disables SkillHub access and installed SkillHub execution, experts, connectors and public web search. Public HTTP(S) links are blocked; private literal addresses, local DNS names and the configured OneAPI origin remain available. Additional internal domains require explicit classification changes.
+The configured backend's System Settings owns the network environment and independent automation/connector entry visibility for each environment. The Host reads `/api/desktop-config` before login and during authentication refresh, then caches the confirmed policy in `wanwei-network.mode`. Refresh also occurs on focus, visibility and the existing five-minute authentication timer. Missing feature settings default to automation enabled in both environments and connectors enabled only on Internet; explicit malformed flags reject the refresh without replacing committed Client state. A failed configuration lookup blocks login rather than assuming Internet mode. Private-network mode retains configured login, models, platform skills and local operations, but disables SkillHub access and installed SkillHub execution, experts and public web search. Public HTTP(S) links are blocked; enabling a connector entry does not override that restriction. Private literal addresses, local DNS names and the configured OneAPI origin remain available. Additional internal domains require explicit classification changes.
 
-This is an application policy, not a firewall or shell sandbox. Existing conversation instructions are not rewritten; start a fresh conversation after changing environments.
+Forgot password reads the backend's maintenance contact into a separate dialog. SMS and QR login display an unavailable notice without replacing account login. The login card keeps its existing sizing; no registration or simulated authentication controls are provided.
+
+In private-network mode, recognized direct package-manager commands targeting public dependency sources are denied. Installed dependencies, offline options and explicitly internal mirrors remain available. Commands using configuration files or unresolved source variables are left to the package manager to resolve. Missing-dependency and dependency-download failures retain their original tool output and receive Chinese guidance in the tool result. The model is instructed to explain the blocked task only when essential dependencies have no available offline alternative, and not claim completion.
+
+This is an application policy, not a firewall or shell sandbox; nested scripts and arbitrary download commands are not comprehensively recognized. The dependency prompt section follows the confirmed mode for future prompt assembly; historical messages are not rewritten. Internet mode adds no dependency prompt section, denial or feedback.
 
 [The product patch](../../bundle/wanwei-desktop/cordis.patch.yml) supplies the provider route and generated-token reference. The Host resolves an explicit OneAPI origin first, then `DSH_ONEAPI_URL` from the launch environment, then the local development origin.
 
@@ -108,6 +112,20 @@ Search requests use the configured OneAPI service. Any tool-result tokens enter 
 #### KV Cache effect
 
 Different search results may change subsequent prompt content and cache reuse; this package does not manage the model cache.
+
+### Private-network dependency feedback
+
+#### What the model sees
+
+Only private-network mode adds dependency guidance to the system prompt. Denied downloads and recognized missing-dependency failures return Chinese guidance through ordinary tool results, visible to both the model and the conversation UI. No separate popup or fabricated assistant message is inserted.
+
+#### Token effect
+
+The private-network guidance and appended tool feedback consume normal context tokens. Internet mode adds neither.
+
+#### KV Cache effect
+
+Changing the confirmed environment changes the dependency prompt section and can affect prefix-cache reuse. This package does not manage model caches.
 
 ## Known Limitations and Deferred Work
 

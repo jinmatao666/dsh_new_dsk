@@ -136,7 +136,11 @@ export class SkillHubApi {
     }
   }
 
-  /** Proxy only the public catalog's bounded raster icons from Tencent's image host. */
+  /** Proxy only the public catalog's bounded raster icons from Tencent's image host.
+   * @param payload - Catalog icon URL validated against the permitted image host.
+   * @param signal - Optional request cancellation.
+   * @returns Bounded raster image encoded as a data URL.
+   */
   async icon(payload: unknown, signal?: AbortSignal): Promise<{ dataUrl: string }> {
     const raw = object(payload).url
     if (typeof raw !== 'string' || raw.length > 2048) throw new Error('SkillHub 图标地址无效')

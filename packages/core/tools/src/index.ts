@@ -1196,7 +1196,10 @@ export class ToolRuntime extends Service {
 
   private readonly availability = new Set<(name: string) => boolean>()
 
-  /** Product deployment availability applies to every scope and dispatch path. */
+  /** Product deployment availability applies to every scope and dispatch path.
+   * @param filter - Predicate allowing a tool name to remain available.
+   * @returns Disposer removing the filter and notifying consumers.
+   */
   registerAvailability(filter: (name: string) => boolean): () => void {
     return this.ctx.effect(() => {
       this.availability.add(filter)

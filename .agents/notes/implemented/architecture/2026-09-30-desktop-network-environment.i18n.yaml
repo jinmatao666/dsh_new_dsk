@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-30-desktop-network-environment.md
-2026-09-30-desktop-network-environment.md: 31c8c97431f936b69dda95dfd12eb81efc3d9238
-2026-09-30-desktop-network-environment.zh.md: 0919c966c7e0fc4b28b841a27e419f14192b6c7a
+2026-09-30-desktop-network-environment.md: 7a3b8cc0d9e4d0f5784b05031d054f11c84876b4
+2026-09-30-desktop-network-environment.zh.md: 807e8d858b71faefc1bb628466100a8fdb4e8111

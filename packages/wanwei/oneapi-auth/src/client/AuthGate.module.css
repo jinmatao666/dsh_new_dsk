@@ -61,8 +61,8 @@
 .loginMode button::after { display: none; }
 .loginMode button:hover { color: var(--accent); }
 .loginModeActive { color: var(--accent) !important; font-weight: 700; background: rgb(255 255 255 / 95%); box-shadow: 0 4px 12px rgb(15 23 42 / 7%); }
-.loginContent { flex: 0 0 292px; height: 292px; overflow: auto; }
-.card form { display: grid; min-height: 292px; gap: 17px; }
+.loginContent { flex: 0 0 322px; height: 322px; overflow: auto; }
+.card form { display: grid; min-height: 322px; gap: 27px; }
 .card form.accountFormError { gap: 8px; }
 .accountFeedback { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .accountFeedback .error { display: -webkit-box; flex: 1; margin: 0; overflow: hidden; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
@@ -85,13 +85,32 @@
 /* Reuse the two removed legal-copy lines without changing the card's geometry. */
 .networkEnvironment { display: flex; flex: 0 0 3.8em; align-items: center; justify-content: space-between; height: 3.8em; margin: -14px 0 14px; color: #656b80; font-size: 12px; line-height: 1.9; }
 .networkLabel { font-size: 13px; font-weight: 600; }
+.methodNotice { flex: 0 0 15.6px; height: 15.6px; margin: -14px 0 14px; display: flex; align-items: center; color: var(--muted); font-size: 12px; line-height: 1.9; }
+.methodToast { position: fixed; top: 56px; left: 50%; z-index: 1; display: flex; align-items: center; gap: 10px; transform: translateX(-50%); max-width: calc(100vw - 32px); padding: 10px 16px 10px 12px; border: 1px solid #d7e5fc; border-radius: 10px; background: #fff; color: #34435d; box-shadow: 0 4px 16px rgb(37 70 120 / 8%); font-size: 14px; line-height: 20px; text-align: left; pointer-events: none; }
+.methodToastIcon { display: grid; flex: 0 0 28px; width: 28px; height: 28px; place-items: center; border-radius: 8px; background: #edf4ff; color: var(--accent); }
+.methodToastIcon svg { display: block; width: 19px; height: 19px; }
+.methodToast { opacity: 1; transition: transform 240ms ease-out, opacity 240ms ease-out; }
+.methodToast[data-exiting='true'] { opacity: 0; transform: translate(-50%, -12px); }
+@media (prefers-reduced-motion: reduce) { .methodToast { transition: none; } .methodToast[data-exiting='true'] { transform: translateX(-50%); } }
+.supportDialog { width: min(420px, calc(100vw - 40px)); padding: 22px 28px 14px; border: 1px solid #dce6f5; border-radius: 20px; color: var(--text); background: #fff; box-shadow: 0 24px 70px rgb(15 23 42 / 20%); }
+.supportDialog::backdrop { background: rgb(25 40 64 / 35%); }
+.supportDialog h2 { margin: 0 0 14px; font-size: 22px; line-height: 30px; }
+.supportDialog p { margin: 8px 0 14px; font-size: 14px; line-height: 1.7; color: var(--muted); }
+.supportDialog dl { margin: 0; }
+.supportDialog dl > div { display: grid; grid-template-columns: 80px 1fr; gap: 16px; margin: 12px 0; font-size: 14px; }
+.supportDialog dl > div:last-child { margin-bottom: 0; }
+.supportDialog dt { color: var(--muted); }
+.supportDialog dd { margin: 0; overflow-wrap: anywhere; }
+.supportDialog button { display: block; height: 28px; margin: 8px 0 0 auto; padding: 0 12px; border: 1px solid #dce6f5; border-radius: 6px; background: #f8faff; color: var(--muted); cursor: pointer; font: inherit; font-size: 13px; line-height: 18px; }
+.supportDialog button:hover { border-color: #b8c9e5; background: #eef3fb; color: var(--text); }
+.supportDialog button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .networkChoices { display: flex; align-items: center; gap: 22px; }
 .card label.networkChoice { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13px; font-weight: 400; cursor: pointer; white-space: nowrap; }
 .networkChoice input[type="radio"] { flex: 0 0 15px; width: 15px; height: 15px; margin: 0; border: 1px solid #767676; border-radius: 50%; background: #fff; cursor: pointer; }
 .networkChoice input[type="radio"]:checked { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 0 4px, #fff 4.5px); }
 .networkChoice:has(input:checked) { color: var(--accent) !important; }
 .networkChoice input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.formOptions { display: flex; align-items: center; justify-content: space-between; margin-top: -4px; }
+.formOptions { display: flex; align-items: center; justify-content: space-between; min-height: 24px; margin-top: -4px; }
 .formOptions a, .legalNotice a, .formFooter a { color: var(--accent); font-weight: 600; text-decoration: none; }
 .remember { display: flex !important; grid-template-columns: none !important; align-items: center; gap: 8px !important; color: var(--muted) !important; font-size: 13px !important; font-weight: 400 !important; }
 .remember input { flex: 0 0 18px; width: 18px; height: 18px; margin: 3px 3px 3px 4px; border: 1px solid #767676; border-radius: 3px; background: #fff; }
@@ -107,6 +126,7 @@
 .error { margin: -4px 0 0; color: #b42336; font-size: 13px; line-height: 1.45; }
 .legalNotice { margin: auto 0 0; padding-top: 20px; color: var(--muted); font-size: 12px; line-height: 1.9; text-align: center; }
 .formFooter { margin: 18px 0 0; color: var(--muted); font-size: 13px; line-height: 17px; text-align: center; }
+.footerSpace { flex: 0 0 17px; height: 17px; margin: 18px 0 0; color: var(--muted); font-size: 11px; line-height: 17px; text-align: center; }
 
 @media (prefers-reduced-motion: reduce) { .brandHero h1 span, .card::before, .card button::after { animation: none; } }
 @media (max-width: 960px) { .backdrop { overflow: auto; } .page { flex-direction: column; align-items: stretch; gap: 28px; } .brandSide { max-width: 100%; padding-top: 0; } .brandHeader { position: static; } .fullLogo { width: min(100%, 360px); } .brandHero p { max-width: 680px; } .formSide { flex-basis: auto; align-self: center; width: min(100%, 480px); } }

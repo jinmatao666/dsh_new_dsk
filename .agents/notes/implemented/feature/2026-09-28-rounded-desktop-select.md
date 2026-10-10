@@ -14,6 +14,10 @@ The shared UI primitives package owns a token-styled single-choice `Select` with
 
 The trigger retains focus for arrow-key navigation, Home/End, Enter, Space and Escape. The popup uses the theme's opaque menu surface and a minimum width that keeps short category labels readable. It chooses the side with room when opened and repositions on resize. Surrounding-page scrolling dismisses it instead of flipping its placement; scrolling options inside the popup keeps it open. A popup identifies its trigger through `data-dsh-select-owner`; marketplace dismissal resolves that owner before treating a portaled option as an outside click. Product plugins still own localized labels and choices.
 
-## Verification
+## Alternatives considered
+
+**Native HTML selects:** retain system accessibility behavior but let each operating system draw popup corners independently of the desktop theme.
+
+## Consequences
 
 Component tests exercise pointer and keyboard selection, outside dismissal and disabled state. Marketplace and model-setting tests exercise the migrated callers. A Windows desktop visual pass is still needed to confirm scale and overlap in the packaged shell.

@@ -99,6 +99,14 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+    key: 'wanweiNetworkPolicy',
+    pkg: 'wanwei-oneapi-auth',
+    title: 'Desktop deployment network policy',
+    mode: 'core',
+    consumers: ['wanwei-skillhub'],
+    note: 'Persists the server-confirmed environment and controls deployment availability without replacing OS network isolation.',
+  },
+  {
     key: 'attachments',
     pkg: 'attachment',
     title: 'Durable binary attachment storage',

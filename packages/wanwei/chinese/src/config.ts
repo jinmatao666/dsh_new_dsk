@@ -3,6 +3,7 @@ import z from '@deepseek-ai/schemastery'
 
 /** Optional deployment controls; disabling removes both faces' contributions. */
 export interface Config {
+  /** Model-visible Chinese-first language policy contributed by this deployment. */
   instruction: string
 }
 

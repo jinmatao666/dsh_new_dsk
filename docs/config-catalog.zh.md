@@ -2143,7 +2143,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/skill/skill/src/index.ts:279`](../packages/skill/skill/src/index.ts)
+来源：[`packages/skill/skill/src/index.ts:281`](../packages/skill/skill/src/index.ts)
 
 <a id="deepseek-aidsh-skill-filesystem"></a>
 
@@ -3201,6 +3201,42 @@ export type ApprovalPolicy = 'ask' | 'never'
 
 来源：[`packages/interaction/user-approval/src/index.ts:142`](../packages/interaction/user-approval/src/index.ts)
 
+<a id="deepseek-aidsh-wanwei-browser-use"></a>
+
+## `@deepseek-ai/dsh-wanwei-browser-use`
+
+需要：`agents` · `tools` · `systemPrompt` · `settings`
+
+```ts config-catalog
+/** Explicit desktop launch configuration; no automatic browser download or attachment. */
+export interface Config {
+  /** Enable browser tools and initialization for the desktop deployment. */
+  enabled: boolean
+  /** Launch the configured browser without a visible window. */
+  headless: boolean
+  /** Absolute path to an installed browser; no browser download is performed. */
+  executablePath?: string
+}
+```
+
+来源：[`packages/wanwei/browser-use/src/index.ts:14`](../packages/wanwei/browser-use/src/index.ts)
+
+<a id="deepseek-aidsh-wanwei-chinese"></a>
+
+## `@deepseek-ai/dsh-wanwei-chinese`
+
+需要：`systemPrompt`
+
+```ts config-catalog
+/** Optional deployment controls; disabling removes both faces' contributions. */
+export interface Config {
+  /** Model-visible Chinese-first language policy contributed by this deployment. */
+  instruction: string
+}
+```
+
+来源：[`packages/wanwei/chinese/src/config.ts:5`](../packages/wanwei/chinese/src/config.ts)
+
 <a id="deepseek-aidsh-wanwei-document-local"></a>
 
 ## `@deepseek-ai/dsh-wanwei-document-local`
@@ -3256,13 +3292,13 @@ export interface Config {
 }
 ```
 
-来源：[`packages/wanwei/oneapi-auth/src/index.ts:27`](../packages/wanwei/oneapi-auth/src/index.ts)
+来源：[`packages/wanwei/oneapi-auth/src/index.ts:31`](../packages/wanwei/oneapi-auth/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-skillhub"></a>
 
 ## `@deepseek-ai/dsh-wanwei-skillhub`
 
-需要：`connection`
+需要：`connection` · `wanweiNetworkPolicy`
 
 ```ts config-catalog
 /** All upstream deployment choices are configured by the product bundle. */
@@ -3283,7 +3319,7 @@ export interface ApiConfig {
 }
 ```
 
-来源：[`packages/wanwei/skillhub/src/index.ts:8`](../packages/wanwei/skillhub/src/index.ts)
+来源：[`packages/wanwei/skillhub/src/index.ts:9`](../packages/wanwei/skillhub/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-vision"></a>
 
@@ -3580,6 +3616,10 @@ export interface Config {
 - `@deepseek-ai/dsh-tool-cordis` — 需要 `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect`（[`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts)）
 - `@deepseek-ai/dsh-tool-subagent-control` — 需要 `tools` · `subagents`（[`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts)）
 - `@deepseek-ai/dsh-user-questions`（[`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts)）
+- `@deepseek-ai/dsh-wanwei-automations`（[`packages/wanwei/automations/src/index.ts`](../packages/wanwei/automations/src/index.ts)）
+- `@deepseek-ai/dsh-wanwei-connectors`（[`packages/wanwei/connectors/src/index.ts`](../packages/wanwei/connectors/src/index.ts)）
+- `@deepseek-ai/dsh-wanwei-expert-library`（[`packages/wanwei/expert-library/src/index.ts`](../packages/wanwei/expert-library/src/index.ts)）
+- `@deepseek-ai/dsh-wanwei-feature-panels`（[`packages/wanwei/feature-panels/src/index.ts`](../packages/wanwei/feature-panels/src/index.ts)）
 - `@deepseek-ai/dsh-wanwei-product-ui`（[`packages/wanwei/product-ui/src/index.ts`](../packages/wanwei/product-ui/src/index.ts)）
 - `@deepseek-ai/dsh-wanwei-skill-marketplace`（[`packages/wanwei/skill-marketplace/src/index.ts`](../packages/wanwei/skill-marketplace/src/index.ts)）
 - `@deepseek-ai/dsh-webhook` — 需要 `agents` · `agentDefaultModel` · `agentPresets` · `permissionPresets` · `sessionTitle` · `workspaceRegistry`（[`packages/webhook/webhook/src/index.ts`](../packages/webhook/webhook/src/index.ts)）

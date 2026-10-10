@@ -32,10 +32,14 @@ export function apply(ctx: Context): void {
   const network = new NetworkController(connection)
   ctx.provide('wanweiNetwork', network)
   const authInject = (): AuthInjected => ({
-    hooks: { auth: controller, network },
-    setNetworkEnvironment: mode => network.setMode(mode),
+    hooks: { auth: controller },
+    getSupportContact: async () => {
+      const result = await connection.rpc.call('/desktop-auth', 'deployment-get', {})
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value as import('../deployment.ts').DeploymentSettings
+    },
     refresh: async (signal) => { await network.refresh(signal); return controller.refresh(signal) },
-    login: (username, password, signal) => controller.login(username, password, signal),
+    login: async (username, password, signal) => { await network.refresh(signal); return controller.login(username, password, signal) },
     fail: (error) => { controller.fail(error) },
   })
   const accountInject = (): AccountInjected => ({

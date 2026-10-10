@@ -15,7 +15,11 @@ function eventId(session: Session, event: SessionEvent, name: string): string {
   return createHash('sha256').update(`${session.id}\0${event.seq}\0${name}`).digest('hex')
 }
 
-/** Count only skill references resolved by the official skill injector. */
+/** Count only skill references resolved by the official skill injector.
+ * @param session - Session owning the durable event.
+ * @param event - Persisted event to project.
+ * @returns Usage reports with stable event identities.
+ */
 export function skillUsages(session: Session, event: SessionEvent): SkillUsage[] {
   if (event.type === 'user/message') {
     const source = event.data.source as { kind: string; name?: unknown }
@@ -33,7 +37,11 @@ export function skillUsages(session: Session, event: SessionEvent): SkillUsage[]
     item_name: name, invocation_type: 'model_auto' }]
 }
 
-/** Deliver events with stable IDs so server retries cannot create duplicates. */
+/** Deliver events with stable IDs so server retries cannot create duplicates.
+ * @param ctx - Scope owning event subscriptions and disposal.
+ * @param baseURL - Usage-reporting platform URL.
+ * @param resolveToken - Resolve the credential active when an event occurs.
+ */
 export function registerSkillUsage(ctx: Context, baseURL: string, resolveToken: () => Promise<string | undefined>): void {
   // Bind each event to the credential active when it occurred. A later login
   // must never attribute an earlier user's event to the new account.

@@ -2,13 +2,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AuthState } from '../contract.ts'
-import type { NetworkEnvironment, NetworkState } from '../network-contract.ts'
+import type { DeploymentSettings } from '../deployment.ts'
 import type { AuthView } from './controller.ts'
 import css from './AuthGate.module.css'
 
 export interface AuthInjected {
-  hooks: { auth: HostObservable<AuthView>; network: HostObservable<NetworkState> }
-  setNetworkEnvironment: (mode: NetworkEnvironment) => Promise<NetworkState>
+  hooks: { auth: HostObservable<AuthView> }
+  getSupportContact: () => Promise<DeploymentSettings>
   refresh: (signal?: AbortSignal) => Promise<AuthState>
   login: (username: string, password: string, signal?: AbortSignal) => Promise<AuthState>
   fail: (error: unknown) => void
@@ -19,26 +19,42 @@ export type AuthGateProps = PropsRuntime<'shell.overlay'>
   & PropsLocale<'wanwei.auth'>
 
 const NATIVE_AUTH_SIGNAL_PREFIX = '__zjugis_native_auth:'
+const REMEMBERED_ACCOUNT_KEY = 'wanwei.auth.remembered-account'
+
+function readRememberedAccount(): string {
+  try { return window.localStorage.getItem(REMEMBERED_ACCOUNT_KEY) ?? '' }
+  catch { return '' }
+}
 
 type LoginMode = 'account' | 'sms' | 'qr'
 
 /** Blocking login surface; desktop viewports scale one centered 1120×720 layout, and credentials go only to the local Host. */
-export function AuthGate({ useAuth, useNetwork, setNetworkEnvironment, refresh, login, fail, t }: AuthGateProps) {
+export function AuthGate({ useAuth, getSupportContact, refresh, login, fail, t }: AuthGateProps) {
   const auth = useAuth(view => view)
-  const networkEnvironment = useNetwork(view => view.mode)
-  const [networkBusy, setNetworkBusy] = useState(false)
   const authenticated = auth.state === 'authenticated'
   const checking = auth.state === 'checking'
-  const [username, setUsername] = useState('')
+  const [username, setUsername] = useState(readRememberedAccount)
+  const [rememberMe, setRememberMe] = useState(() => readRememberedAccount() !== '')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
-  const [loginMode, setLoginMode] = useState<LoginMode>('account')
-  const [phone, setPhone] = useState('')
-  const [smsCode, setSmsCode] = useState('')
-  const [smsSent, setSmsSent] = useState(false)
-  const [qrNonce, setQrNonce] = useState(0)
+  const [notice, setNotice] = useState<{ text: string }>()
+  const [noticeExiting, setNoticeExiting] = useState(false)
+  const [supportOpen, setSupportOpen] = useState(false)
+  const [support, setSupport] = useState<DeploymentSettings>()
+  const [supportError, setSupportError] = useState<string>()
+  const [supportBusy, setSupportBusy] = useState(false)
+  const supportTrigger = useRef<HTMLButtonElement | null>(null)
+  const dialogRef = useRef<HTMLDialogElement | null>(null)
   const pageRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    setNoticeExiting(false)
+    if (notice === undefined) return
+    const fadeTimer = window.setTimeout(() => { setNoticeExiting(true) }, 3000)
+    const removeTimer = window.setTimeout(() => { setNotice(undefined) }, 3240)
+    return () => { window.clearTimeout(fadeTimer); window.clearTimeout(removeTimer) }
+  }, [notice])
 
   useEffect(() => {
     if ('username' in auth) setUsername(auth.username)
@@ -46,11 +62,16 @@ export function AuthGate({ useAuth, useNetwork, setNetworkEnvironment, refresh, 
 
   useEffect(() => {
     if (!authenticated) return
-    setLoginMode('account')
     setPassword('')
     setError(undefined)
-    setSmsSent(false)
+    setNotice(undefined)
+    setSupportOpen(false)
   }, [authenticated])
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (supportOpen && dialog !== null && !dialog.open) dialog.showModal()
+  }, [supportOpen])
 
   // The desktop shell watches the document-title marker to switch native
   // window policy: login is fixed-size, while the authenticated app may be
@@ -119,6 +140,10 @@ export function AuthGate({ useAuth, useNetwork, setNetworkEnvironment, refresh, 
     setError(undefined)
     try {
       await login(username, password)
+      try {
+        if (rememberMe) window.localStorage.setItem(REMEMBERED_ACCOUNT_KEY, username)
+        else window.localStorage.removeItem(REMEMBERED_ACCOUNT_KEY)
+      } catch { /* Remembering the account must not block successful authentication. */ }
       setPassword('')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -129,7 +154,17 @@ export function AuthGate({ useAuth, useNetwork, setNetworkEnvironment, refresh, 
 
   const retry = (): void => { setError(undefined); void refresh().catch(fail) }
   const serviceError = error ?? (auth.state === 'offline' ? auth.message || t('offline') : undefined)
-  const changeMode = (mode: LoginMode): void => { setLoginMode(mode); setError(undefined) }
+  const changeMode = (mode: LoginMode): void => {
+    setNotice(mode === 'account' ? undefined : { text: t(mode === 'sms' ? 'smsUnavailableTitle' : 'qrUnavailableTitle') })
+  }
+  const openSupport = async (trigger: HTMLButtonElement): Promise<void> => {
+    supportTrigger.current = trigger
+    setSupportOpen(true); setSupportBusy(true); setSupportError(undefined); setSupport(undefined)
+    try { setSupport(await getSupportContact()) }
+    catch { setSupportError(t('supportLoadError')) }
+    finally { setSupportBusy(false) }
+  }
+  const closeSupport = (): void => { dialogRef.current?.close(); setSupportOpen(false); supportTrigger.current?.focus() }
 
   return (
     <div className={css.backdrop}>
@@ -170,88 +205,56 @@ export function AuthGate({ useAuth, useNetwork, setNetworkEnvironment, refresh, 
             <div className={css.cardHeader}><h2>{t('loginTitle')}</h2><p>{t('loginIntro')}</p></div>
             <div className={css.loginMode} role="tablist" aria-label={t('loginMethods')}>
               {(['account', 'sms', 'qr'] as const).map(mode => (
-                <button key={mode} type="button" className={loginMode === mode ? css.loginModeActive : undefined} role="tab" aria-selected={loginMode === mode} onClick={() => { changeMode(mode) }}>
+                <button key={mode} type="button" className={mode === 'account' ? css.loginModeActive : undefined} role="tab" aria-selected={mode === 'account'} onClick={() => { changeMode(mode) }}>
                   {t(mode === 'account' ? 'accountLogin' : mode === 'sms' ? 'smsLogin' : 'qrLogin')}
                 </button>
               ))}
             </div>
-            <div className={css.networkEnvironment} role="radiogroup" aria-label={t('networkEnvironment')}>
-              <span className={css.networkLabel}>{t('networkEnvironment')}</span>
-              <div className={css.networkChoices}>
-                {(['internet', 'intranet'] as const).map(environment => (
-                  <label key={environment} className={css.networkChoice}>
-                    <input type="radio" name="network-environment" value={environment} checked={networkEnvironment === environment} disabled={checking || busy || networkBusy} onChange={() => {
-                      setNetworkBusy(true)
-                      void setNetworkEnvironment(environment).catch((cause: unknown) => {
-                        setError(cause instanceof Error ? cause.message : String(cause))
-                      }).finally(() => { setNetworkBusy(false) })
-                    }} />
-                    <span>{t(environment === 'internet' ? 'internetEnvironment' : 'intranetEnvironment')}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+            <div className={css.methodNotice} aria-hidden='true' />
             <div className={css.loginContent}>
-              {loginMode === 'account'
-                ? (
-                  <form className={serviceError === undefined ? undefined : css.accountFormError}
-                    onSubmit={(event) => { void submit(event) }}>
-                    <label>{t('username')}<input autoFocus autoComplete="username" disabled={busy} value={username} onChange={(event) => { setUsername(event.target.value) }} placeholder={t('usernamePlaceholder')} required /></label>
-                    <label>{t('password')}<input type="password" autoComplete="current-password" disabled={busy} value={password} onChange={(event) => { setPassword(event.target.value) }} placeholder={t('passwordPlaceholder')} required /></label>
-                    <div className={css.formOptions}>
-                      <label className={css.remember}><input type="checkbox" /> <span>{t('rememberMe')}</span></label>
-                      <button className={css.textAction} type="button" disabled>{t('forgotPassword')}</button>
-                    </div>
-                    {serviceError !== undefined ? (
-                      <div className={css.accountFeedback}>
-                        <p className={css.error} role="alert" title={serviceError}>{serviceError}</p>
-                        {auth.state === 'offline'
-                          ? <button className={css.textAction} type="button" onClick={retry}>{t('retry')}</button> : null}
-                      </div>
-                    ) : null}
-                    <button className={css.primaryButton} type="submit" disabled={checking || busy || networkBusy || username.trim() === '' || password === ''}>{checking ? t('checking') : busy ? t('signingIn') : t('signIn')}</button>
-                  </form>
-                )
-                : loginMode === 'sms'
-                  ? (
-                    <form className={css.mockForm} onSubmit={(event) => { event.preventDefault(); setError(t('smsMockError')) }}>
-                      <label>{t('phone')}<input type="tel" autoComplete="tel" value={phone} onChange={(event) => { setPhone(event.target.value); setSmsSent(false) }} placeholder={t('phonePlaceholder')} /></label>
-                      <div className={css.smsCodeRow}>
-                        <label>{t('verificationCode')}<input inputMode="numeric" value={smsCode} onChange={(event) => { setSmsCode(event.target.value) }} placeholder={t('codePlaceholder')} /></label>
-                        <button className={css.smsCodeButton} type="button" disabled={phone.trim() === ''} onClick={() => { setSmsSent(true) }}>{smsSent ? t('codeSentMock') : t('getCode')}</button>
-                      </div>
-                      {error === undefined ? null : <p className={css.error} role="alert">{error}</p>}
-                      <p className={css.mockNotice}>{t('smsMockNotice')}</p>
-                      <button className={css.primaryButton} type="submit">{t('signIn')}</button>
-                    </form>
-                  )
-                  : (
-                    <div className={css.qrPanel}>
-                      <div className={css.qrMock} key={qrNonce} aria-label={t('qrCodeLabel')}>
-                        {Array.from({ length: 169 }, (_, index) => {
-                          const x = index % 13
-                          const y = Math.floor(index / 13)
-                          const finder = (ox: number, oy: number): boolean => {
-                            const inSquare = x >= ox && x < ox + 5 && y >= oy && y < oy + 5
-                            const border = x === ox || x === ox + 4 || y === oy || y === oy + 4
-                            const center = x >= ox + 1 && x <= ox + 3 && y >= oy + 1 && y <= oy + 3
-                            return inSquare && (border || center)
-                          }
-                          const dark = finder(0, 0) || finder(8, 0) || finder(0, 8) || ((x * 17 + y * 11 + qrNonce * 7) % 7 < 3)
-                          return <span key={`${qrNonce}-${index}`} className={dark ? css.qrDark : undefined} />
-                        })}
-                      </div>
-                      <strong>{t('qrLogin')}</strong>
-                      <p>{t('qrInstruction')}</p>
-                      <button type="button" onClick={() => { setQrNonce(value => value + 1) }}>{t('refreshQr')}</button>
-                    </div>
-                  )}
+              <form className={serviceError === undefined ? undefined : css.accountFormError}
+                onSubmit={(event) => { void submit(event) }}>
+                <label>{t('username')}<input autoFocus autoComplete="username" disabled={busy} value={username} onChange={(event) => { setUsername(event.target.value) }} placeholder={t('usernamePlaceholder')} required /></label>
+                <label>{t('password')}<input type="password" autoComplete="current-password" disabled={busy} value={password} onChange={(event) => { setPassword(event.target.value) }} placeholder={t('passwordPlaceholder')} required /></label>
+                <div className={css.formOptions}>
+                  <label className={css.remember}><input type="checkbox" checked={rememberMe} disabled={busy} onChange={(event) => {
+                    setRememberMe(event.target.checked)
+                    if (!event.target.checked) {
+                      try { window.localStorage.removeItem(REMEMBERED_ACCOUNT_KEY) } catch { /* Storage may be unavailable. */ }
+                    }
+                  }} />{t('rememberMe')}</label>
+                  <button className={css.textAction} type="button" onClick={(event) => { void openSupport(event.currentTarget) }}>{t('forgotPassword')}</button>
+                </div>
+                {serviceError !== undefined ? (
+                  <div className={css.accountFeedback}>
+                    <p className={css.error} role="alert" title={serviceError}>{serviceError}</p>
+                    {auth.state === 'offline'
+                      ? <button className={css.textAction} type="button" onClick={retry}>{t('retry')}</button> : null}
+                  </div>
+                ) : null}
+                <button className={css.primaryButton} type="submit" disabled={checking || busy || username.trim() === '' || password === ''}>{checking ? t('checking') : busy ? t('signingIn') : t('signIn')}</button>
+              </form>
             </div>
-            <p className={css.legalNotice}>{t('legalPrefix')}<button type="button" disabled>{t('userAgreement')}</button>{t('legalJoin')}<button type="button" disabled>{t('privacyPolicy')}</button></p>
-            <p className={css.formFooter}>{t('noAccount')}<button type="button" disabled>{t('requestAccess')}</button></p>
+            <p className={css.legalNotice}>{t('legalPrefix')}{t('userAgreement')}{t('legalJoin')}{t('privacyPolicy')}</p>
+            <p className={css.footerSpace}>{t('accountHelpPrefix')}<button className={css.textAction} type="button" onClick={(event) => { void openSupport(event.currentTarget) }}>{t('administrator')}</button>{t('accountHelpSuffix')}</p>
           </div>
         </section>
       </main>
+      {notice !== undefined && <div className={css.methodToast} data-exiting={noticeExiting ? 'true' : undefined} role='status' aria-live='polite'>
+        <span className={css.methodToastIcon} aria-hidden='true'>
+          <svg viewBox='0 0 24 24' focusable='false'><circle cx='12' cy='12' r='9' fill='currentColor' /><path d='M12 11v6' stroke='#fff' strokeWidth='2' strokeLinecap='round' /><circle cx='12' cy='7.5' r='1.2' fill='#fff' /></svg>
+        </span>
+        <span>{notice.text}</span>
+      </div>}
+      {supportOpen && <dialog ref={dialogRef} className={css.supportDialog} aria-labelledby='wanwei-support-title' onCancel={() => { setSupportOpen(false); supportTrigger.current?.focus() }} onClose={() => { setSupportOpen(false); supportTrigger.current?.focus() }}>
+        <h2 id='wanwei-support-title'>{t('supportTitle')}</h2>
+        <p>{t('supportHint')}</p>
+        {supportBusy ? <p role='status'>{t('supportLoading')}</p> : supportError !== undefined ? <p role='alert'>{supportError}</p> : support !== undefined ? <dl>
+          <div><dt>{t('supportOperator')}</dt><dd>{support.operator || t('supportNotConfigured')}</dd></div>
+          <div><dt>{t('supportPhone')}</dt><dd>{support.phone || t('supportNotConfigured')}</dd></div>
+        </dl> : null}
+        <button type='button' onClick={closeSupport} autoFocus>{t('supportClose')}</button>
+      </dialog>}
     </div>
   )
 }

@@ -1,15 +1,19 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { AuthView } from '../src/client/controller.ts'
 import { AuthGate, type AuthGateProps } from '../src/client/AuthGate.tsx'
 import { zh } from '../src/client/locales.ts'
+import { resolveDeploymentFeatures } from '../src/deployment.ts'
 
-afterEach(() => { cleanup() })
+afterEach(() => { cleanup(); vi.useRealTimers() })
 
 beforeEach(() => {
+  window.localStorage.clear()
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+  HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
     value: vi.fn(() => ({ matches: true })),
@@ -22,8 +26,8 @@ type AttentionSnapshot = Parameters<Parameters<AuthGateProps['useSessionPendingI
 const noAttention: AttentionSnapshot = new Map()
 const useSessionPendingInteraction: AuthGateProps['useSessionPendingInteraction'] = selector => selector(noAttention)
 const kit = {
-  useNetwork: ((selector: (value: { mode: 'internet'; internalOrigins: string[] }) => unknown) => selector({ mode: 'internet', internalOrigins: [] })) as AuthGateProps['useNetwork'],
-  setNetworkEnvironment: vi.fn(async (mode: 'internet' | 'intranet') => ({ mode, internalOrigins: [] })),
+  getSupportContact: vi.fn(async () => ({ network: 'internet' as const, operator: '张运维', phone: '0571-12345678',
+    features: resolveDeploymentFeatures(undefined) })),
   useSessions: unusedHook,
   useSessionPendingInteraction,
   useWorkspaces: unusedHook,
@@ -50,14 +54,52 @@ describe('Wanwei authentication gate', () => {
     await waitFor(() => { expect(subject.refresh).toHaveBeenCalledOnce() })
   })
 
-  it('keeps the production SMS and QR demonstration entry points visible without authenticating', async () => {
+  it('keeps account inputs mounted and shows unavailable notices for SMS and QR', async () => {
     renderGate()
     fireEvent.click(screen.getByRole('tab', { name: zh.smsLogin }))
-    expect(screen.getByPlaceholderText(zh.phonePlaceholder)).toBeTruthy()
-    expect(screen.getByText(zh.smsMockNotice)).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toBe(zh.smsUnavailableTitle)
+    expect(screen.getByRole('status').querySelector('[aria-hidden="true"] svg')).not.toBeNull()
+    expect(screen.queryByPlaceholderText(zh.phonePlaceholder)).toBeNull()
+    const account = screen.getByLabelText(zh.username)
     fireEvent.click(screen.getByRole('tab', { name: zh.qrLogin }))
-    expect(screen.getByLabelText(zh.qrCodeLabel)).toBeTruthy()
-    expect(screen.getByText(zh.qrInstruction)).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toBe(zh.qrUnavailableTitle)
+    expect(screen.queryByLabelText(zh.qrCodeLabel)).toBeNull()
+    expect(screen.getByLabelText(zh.username)).toBe(account)
+    expect(screen.getByRole('tab', { name: zh.accountLogin }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.queryByRole('radiogroup')).toBeNull()
+    expect(screen.queryByText(zh.requestAccess)).toBeNull()
+  })
+
+  it('dismisses the floating notice after three seconds and restarts its timer on repeated clicks', () => {
+    vi.useFakeTimers()
+    renderGate()
+    const sms = screen.getByRole('tab', { name: zh.smsLogin })
+    fireEvent.click(sms)
+    act(() => { vi.advanceTimersByTime(2000) })
+    fireEvent.click(sms)
+    act(() => { vi.advanceTimersByTime(2000) })
+    expect(screen.getByRole('status').textContent).toBe(zh.smsUnavailableTitle)
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(screen.getByRole('status').getAttribute('data-exiting')).toBe('true')
+    fireEvent.click(sms)
+    expect(screen.getByRole('status').getAttribute('data-exiting')).toBeNull()
+    act(() => { vi.advanceTimersByTime(3000) })
+    expect(screen.getByRole('status').getAttribute('data-exiting')).toBe('true')
+    act(() => { vi.advanceTimersByTime(240) })
+    expect(screen.queryByRole('status')).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: zh.qrLogin }))
+    fireEvent.click(screen.getByRole('tab', { name: zh.accountLogin }))
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('reads the configured operator and contact number in a separate password-help dialog', async () => {
+    renderGate()
+    fireEvent.click(screen.getByRole('button', { name: zh.forgotPassword }))
+    await waitFor(() => { expect(screen.getByText('张运维')).toBeTruthy() })
+    expect(screen.getByText('0571-12345678')).toBeTruthy()
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: zh.supportClose }))
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('submits credentials only through the live account login action', async () => {
@@ -66,6 +108,34 @@ describe('Wanwei authentication gate', () => {
     fireEvent.change(screen.getByLabelText(zh.password), { target: { value: 'secret' } })
     fireEvent.click(screen.getByRole('button', { name: zh.signIn }))
     await waitFor(() => { expect(subject.login).toHaveBeenCalledWith('wanwei', 'secret') })
+  })
+
+  it('remembers only the account after successful login and removes it when unchecked', async () => {
+    renderGate()
+    fireEvent.change(screen.getByLabelText(zh.username), { target: { value: 'remembered-user' } })
+    fireEvent.change(screen.getByLabelText(zh.password), { target: { value: 'never-store-this-password' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: zh.rememberMe }))
+    fireEvent.click(screen.getByRole('button', { name: zh.signIn }))
+    await waitFor(() => { expect(window.localStorage.getItem('wanwei.auth.remembered-account')).toBe('remembered-user') })
+    expect(JSON.stringify(window.localStorage)).not.toContain('never-store-this-password')
+    cleanup()
+    renderGate()
+    expect(screen.getByLabelText(zh.username)).toHaveProperty('value', 'remembered-user')
+    expect(screen.getByLabelText(zh.password)).toHaveProperty('value', '')
+    expect(screen.getByRole('checkbox', { name: zh.rememberMe })).toHaveProperty('checked', true)
+    fireEvent.click(screen.getByRole('checkbox', { name: zh.rememberMe }))
+    expect(window.localStorage.getItem('wanwei.auth.remembered-account')).toBeNull()
+  })
+
+  it('opens the same contact dialog from the administrator link and restores its focus', async () => {
+    renderGate()
+    const administrator = screen.getByRole('button', { name: zh.administrator })
+    fireEvent.click(administrator)
+    await waitFor(() => { expect(screen.getByText('张运维')).toBeTruthy() })
+    expect(screen.getByText('0571-12345678')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: zh.supportClose }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(administrator)
   })
 
   it('notifies product-owned expert views when login state changes', () => {

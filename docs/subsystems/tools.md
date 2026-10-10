@@ -526,6 +526,12 @@ restrict(filter: ToolRestriction): () => void
  */
 guard(guard: ToolGuard): () => void
 
+/** Product deployment availability applies to every scope and dispatch path.
+ * @param filter - Predicate allowing a tool name to remain available.
+ * @returns Disposer removing the filter and notifying consumers.
+ */
+registerAvailability(filter: (name: string) => boolean): () => void
+
 /**
  * Look up a tool as one scope sees it (scoped
  * shadows global; a restricted-away global reads as absent). Presenters pass

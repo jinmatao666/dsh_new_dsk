@@ -19,7 +19,7 @@ afterEach(() => {
 
 describe('OneAPI login flow', () => {
   it.each([
-    { baseURL: config.baseURL, environment: 'https://ignored.example.test', expected: config.baseURL },
+    { baseURL: config.baseURL, environment: 'https://ignored.example.test', expected: 'https://oneapi.example.test/dsh-api' },
     { baseURL: undefined, environment: 'https://launch.example.test/api-root', expected: 'https://launch.example.test/api-root' },
     { baseURL: undefined, environment: undefined, expected: 'http://127.0.0.1:3000' },
   ])('resolves $expected and preserves the login/token/model protocol', async ({ baseURL, environment, expected }) => {
@@ -52,13 +52,29 @@ describe('OneAPI login flow', () => {
         return Promise.resolve()
       },
     } as never)
-    ctx.provide('settings', { replace, register: () => ({ get: () => ({ mode: 'internet' }), watch: () => () => {}, update: vi.fn() }) } as never)
+    let networkMode = 'internet'
+    const networkListeners = new Set<() => void>()
+    ctx.provide('settings', { replace, register: () => ({
+      get: () => ({ mode: networkMode }),
+      watch: (listener: () => void) => { networkListeners.add(listener); return () => networkListeners.delete(listener) },
+      update: async ({ mode }: { mode: string }) => { networkMode = mode; for (const listener of networkListeners) listener() },
+    }) } as never)
     ctx.provide('agentDefaultModel', { saveSelection } as never)
 
     const requests: string[] = []
-    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+    let failDownloadReport = false
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       requests.push(url)
+      if (url.endsWith('/api/skill/7/download')) {
+        expect(init?.method).toBe('POST')
+        expect(new Headers(init?.headers).get('authorization')).toBe('Bearer oneapi-token')
+        if (failDownloadReport) return Promise.resolve(Response.json({ success: false, message: '下载量上报失败' }, { status: 500 }))
+        return Promise.resolve(Response.json({ success: true }))
+      }
+      if (url.endsWith('/api/desktop-config')) {
+        return Promise.resolve(Response.json({ success: true, data: { network: 'intranet', operator: '张运维', phone: '0571-12345678' } }))
+      }
       if (url.endsWith('/api/user/login')) {
         return Promise.resolve(new Response(JSON.stringify({ success: true, data: { username: 'tester' } }), {
           status: 200,
@@ -117,5 +133,30 @@ describe('OneAPI login flow', () => {
       },
     })
     expect(saveSelection).toHaveBeenCalledWith({ provider: 'dsh-server', model: 'model-vision' })
+    requests.length = 0
+    expect(await handler?.('network-get', {}, new AbortController().signal)).toEqual({
+      ok: true, value: {
+        mode: 'intranet', internalOrigins: [new URL(expected).origin],
+        features: { internet: { automations: true, connectors: true }, intranet: { automations: true, connectors: false } },
+      },
+    })
+    expect(await handler?.('deployment-get', {}, new AbortController().signal)).toEqual({
+      ok: true, value: {
+        network: 'intranet', operator: '张运维', phone: '0571-12345678',
+        features: { internet: { automations: true, connectors: true }, intranet: { automations: true, connectors: false } },
+      },
+    })
+    expect(requests).toEqual([`${expected}/api/desktop-config`, `${expected}/api/desktop-config`])
+    requests.length = 0
+    for (let installation = 0; installation < 2; installation++) {
+      expect(await handler?.('skill-download', { id: 7 }, new AbortController().signal)).toMatchObject({ ok: true })
+    }
+    expect(requests).toEqual([`${expected}/api/skill/7/download`, `${expected}/api/skill/7/download`])
+    failDownloadReport = true
+    expect(await handler?.('skill-download', { id: 7 }, new AbortController().signal)).toMatchObject({ ok: false })
+    credentials.delete('DSH_ONEAPI_TOKEN')
+    requests.length = 0
+    expect(await handler?.('skill-download', { id: 7 }, new AbortController().signal)).toMatchObject({ ok: false })
+    expect(requests).toEqual([])
   })
 })

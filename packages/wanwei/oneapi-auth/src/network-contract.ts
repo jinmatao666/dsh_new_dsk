@@ -1,10 +1,15 @@
 /** Product-owned deployment policy; this does not replace a network firewall. */
 export type NetworkEnvironment = 'internet' | 'intranet'
+/** Committed network mode with deployment-owned internal origins. */
 export interface NetworkState {
   mode: NetworkEnvironment
   internalOrigins: readonly string[]
 }
-/** Classify literal private addresses, local DNS names and configured service origins. */
+/** Classify literal private addresses, local DNS names and configured service origins.
+ * @param address - HTTP or HTTPS address to classify.
+ * @param origins - Configured internal service origins.
+ * @returns Whether the address belongs to an internal destination.
+ */
 export function internalLink(address: string, origins: readonly string[]): boolean {
   let url: URL
   try { url = new URL(address) } catch { return false }

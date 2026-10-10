@@ -25,7 +25,25 @@ overrides:
 
 peerDependencyRules:
   allowedVersions:
+    # The browser adapter supplies the legacy lifecycle and working-directory differences.
+    '@deepseek-ai/cordis': '4.0.1'
+    '@deepseek-ai/dsh-agent': '0.1.2-alpha.1'
+    '@deepseek-ai/dsh-brand': '0.1.2-alpha.1'
+    '@deepseek-ai/dsh-mcp-client': '0.1.2-alpha.1'
+    '@deepseek-ai/dsh-scope': '0.1.2-alpha.1'
+    '@deepseek-ai/dsh-tools': '0.1.2-alpha.1'
+    '@deepseek-ai/dsh-system-prompt': '0.1.2-alpha.1'
     typescript: '>=5 <7'
+
+packageExtensions:
+  '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp@0.2.1-alpha.2':
+    peerDependenciesMeta:
+      '@deepseek-ai/dsh-working-directory':
+        optional: true
+  '@deepseek-ai/dsh-experimental-browser-use-runtime@0.2.1-alpha.2':
+    peerDependenciesMeta:
+      '@deepseek-ai/dsh-working-directory':
+        optional: true
 
 # pnpm 10+ blocks any dependency shipping an install/build script until it is
 # explicitly reviewed here (strictDepBuilds defaults to true: an unlisted script
@@ -50,6 +68,10 @@ allowBuilds:
   '@deepseek-ai/dsh-subprocess-local@file:packages/subprocess/subprocess-local': true
 
 minimumReleaseAgeExclude:
+  # Official browser packages reviewed and pinned by the Wanwei integration.
+  - '@deepseek-ai/dsh-browser-use@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-experimental-browser-use-runtime@0.2.1-alpha.2'
   # Fresh pi-ai releases carry the model catalog updates that are the whole
   # point of bumping it; waiting out the release age would defeat that.
   - '@earendil-works/pi-ai@0.84.2'

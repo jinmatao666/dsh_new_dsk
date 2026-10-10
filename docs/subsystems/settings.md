@@ -331,6 +331,27 @@ Host service backing the generated `ctx.remote.settings` namespace. Every remote
 
 Source: [`packages/api/settings-controller/src/index.ts`](../../packages/api/settings-controller/src/index.ts)
 
+<a id="ctxwanweinetworkpolicy--networkpolicy"></a>
+
+### `ctx.wanweiNetworkPolicy` — `NetworkPolicy`
+
+Host-owned durable network mode and administrator-provided internal origins.
+
+```ts cordis-catalog
+/** Read the current committed mode and internal origins.
+ * @returns Current deployment network state.
+ */
+getSnapshot(): NetworkState
+
+/** Persist a validated environment selection.
+ * @param mode - Requested internet or intranet mode, validated before persistence.
+ * @returns Committed deployment network state.
+ */
+setMode(mode: unknown): Promise<NetworkState>
+```
+
+Source: [`packages/wanwei/oneapi-auth/src/network.ts`](../../packages/wanwei/oneapi-auth/src/network.ts)
+
 <a id="settings-events"></a>
 
 ### `settings/*` events

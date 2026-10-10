@@ -11,6 +11,12 @@
     searchProvider: oneapi-bailian
 
 - insert:
+    - id: wanwei-browser-use
+      name: '@deepseek-ai/dsh-wanwei-browser-use'
+      config:
+        enabled: !!js process.env.DSH_BROWSER_USE_ENABLED !== '0'
+        headless: false
+        executablePath: !!js process.env.DSH_BROWSER_EXECUTABLE
     - id: wanwei-chinese
       name: '@deepseek-ai/dsh-wanwei-chinese'
     - id: wanwei-oneapi-auth
@@ -29,6 +35,14 @@
       name: '@deepseek-ai/dsh-wanwei-vision'
       config:
         credentialRef: DSH_ONEAPI_TOKEN
+    - id: wanwei-feature-panels
+      name: '@deepseek-ai/dsh-wanwei-feature-panels'
+    - id: wanwei-expert-library
+      name: '@deepseek-ai/dsh-wanwei-expert-library'
+    - id: wanwei-connectors
+      name: '@deepseek-ai/dsh-wanwei-connectors'
+    - id: wanwei-automations
+      name: '@deepseek-ai/dsh-wanwei-automations'
     - id: wanwei-skill-marketplace
       name: '@deepseek-ai/dsh-wanwei-skill-marketplace'
     - id: wanwei-product-ui

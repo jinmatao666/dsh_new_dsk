@@ -10,11 +10,13 @@ Private-network deployments need internal login and model access without present
 
 ## Decision
 
-The authentication Host owns durable `wanwei-network.mode`, defaulting to Internet. Client slot hooks share one observable mirror and synchronize native URL opening with committed policy. Administrator-configured login and model endpoints are not rewritten.
+The authentication Host owns durable `wanwei-network.mode`, initialized to Internet and updated from the backend under [server-owned login settings](2026-10-10-server-owned-login-settings.md). That decision partially supersedes local mode selection; this note retains ownership of restrictions and restoration. Client slot hooks share one observable mirror and synchronize native URL opening with committed policy. Administrator-configured login and model endpoints are not rewritten.
 
 SkillHub RPC is rejected before upstream I/O. Installed SkillHub definitions are filtered by installation receipt, including cached reads. Generic availability/filter registration is the only change to official tool and skill registries. Public search is removed from all scopes; public web fetch is denied before execution. Experts and connectors have disabled entries; Host expert RPC is independently denied. Local uninstall remains available.
 
 Captured link clicks and native new-window handling block public HTTP(S). The configured OneAPI origin, private literal addresses and local DNS names are internal. Classification does not resolve DNS; additional internal domains need explicit adaptation.
+
+The unavailable SkillHub catalog uses a large, centered cloud-and-lock SVG illustration with a network explanation and a reminder that platform and local skills remain usable. The illustration is bundled inline and requires no network fetch. The placeholder has no enclosing border or card background; its illustration uses half opacity and its heading uses secondary text styling for a quieter unavailable state. Platform catalog no-results uses a skill-card-and-magnifier illustration with the same dimensions, muted styling and spacing, without changing filtering or upload empty states. Installed-skill management keeps its existing local removal controls instead of displaying this placeholder.
 
 ## Alternatives considered
 

@@ -6,6 +6,7 @@
     "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
   },
   "files": [
+    "src/deployment.ts",
     "src/client/network-controller.ts",
     "src/client/NetworkGuard.tsx",
     "src/network-contract.ts",

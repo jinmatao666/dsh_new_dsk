@@ -2,19 +2,37 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { createServer } from 'node:http'
 import { ensureProductProfile } from '../../../../products/wanwei-desktop/scripts/product-profile.mjs'
 
 const root = resolve(import.meta.dirname, '../../../..')
 const { chromium } = createRequire(join(root, 'apps/web/package.json'))('playwright')
 const home = await mkdtemp(join(tmpdir(), 'wanwei-resize-smoke-'))
 ensureProductProfile(home)
+const featureIds = { 技能市场: 'wanwei-skill-marketplace', 专家库: 'wanwei-expert-library',
+  连接器: 'wanwei-connectors', 自动化: 'wanwei-automations' }
+const disabled = process.argv.find(argument => argument.startsWith('--disable='))?.slice('--disable='.length)
+if (disabled) {
+  assert.ok(Object.values(featureIds).includes(disabled))
+  await writeFile(join(home, 'profiles/wanwei-desktop/cordis.patch.yml'), `- id: ${disabled}\n  disabled: true\n`)
+}
+// Server-owned policy must be deterministic; never depend on a developer's live backend.
+const backend = createServer((request, response) => {
+  response.setHeader('Content-Type', 'application/json')
+  const data = request.url === '/api/desktop-config'
+    ? { network: 'internet', operator: 'fixture', phone: '' } : []
+  response.end(JSON.stringify({ success: true, data }))
+})
+await new Promise(done => backend.listen(0, '127.0.0.1', done))
+const backendOrigin = `http://127.0.0.1:${backend.address().port}`
 const child = spawn(process.execPath, ['--import', 'tsx/esm', 'apps/cli/src/bin.ts',
   '--profile', 'wanwei-desktop', '--host', '127.0.0.1', '--port', '0', '--no-open'], {
   cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
   env: { ...process.env, DSH_HOME: home, DSH_DESKTOP_DEVELOPMENT: '1',
+    DSH_ONEAPI_URL: backendOrigin,
     DSH_BUNDLE_ANCHORS: join(root, 'products/wanwei-desktop/package.json') },
 })
 let output = ''
@@ -36,10 +54,16 @@ try {
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(match[0])
   await page.getByText('专业智能助手', { exact: true }).waitFor({ timeout: 30000 })
-  for (const name of ['技能市场', '专家库', '连接器', '自动化']) {
+  assert.equal(await page.locator('.dsh-skill-market-action').count(), disabled ? 3 : 4)
+  for (const [name, id] of Object.entries(featureIds)) {
+    if (id === disabled) {
+      assert.equal(await page.locator('.dsh-skill-market-action').filter({ hasText: name }).count(), 0)
+      continue
+    }
     await page.locator('.dsh-skill-market-action').filter({ hasText: name }).click()
     const panel = page.locator('.dsh-skill-market-panel:visible')
     await panel.waitFor()
+    assert.equal(await page.locator('.dsh-skill-market-panel:visible').count(), 1)
     const originalPanel = await panel.elementHandle()
     const filter = panel.locator('input[type="search"], input[type="text"]').first()
     const hasFilter = await filter.count() > 0
@@ -60,12 +84,18 @@ try {
     if (hasFilter) assert.equal(await filter.inputValue(), 'PDF', `${name}: filter reset`)
     console.log(`${name}: resizing preserves the active panel and filter`)
   }
+  if (process.argv.includes('--screenshot')) {
+    await page.screenshot({ path: join(tmpdir(), 'wanwei-independent-plugins.png') })
+  }
   await page.getByRole('button', { name: '新建会话', exact: true }).first().click()
   assert.equal(await page.locator('.dsh-skill-market-panel:visible').count(), 0)
   assert.equal(errors.length, 0, errors.join('\n'))
   console.log('Sidebar navigation still closes the capability panel')
+  if (disabled) console.log(`${disabled}: independently disabled; other three remain usable`)
 } finally {
   await browser?.close()
+  backend.closeAllConnections()
+  await new Promise(done => backend.close(done))
   child.kill()
   await Promise.race([exited, new Promise(done => setTimeout(done, 3000))])
   assert.ok(home.startsWith(join(tmpdir(), 'wanwei-resize-smoke-')))

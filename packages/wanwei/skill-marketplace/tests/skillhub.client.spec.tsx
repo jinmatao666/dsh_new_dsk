@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { useState } from 'react'
 import type { SkillHubSectionProps } from '../src/client/SkillHubSection.tsx'
 import { SkillHubSection as CatalogSection } from '../src/client/SkillHubSection.tsx'
-import { Toast, type WanweiNotice } from '../src/client/Toast.tsx'
+import { Toast, type WanweiNotice } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 
 function SkillHubSection(props: Omit<SkillHubSectionProps, 'onNotice'>) {
   const [notice, setNotice] = useState<WanweiNotice | null>(null)
@@ -21,10 +21,14 @@ describe('SkillHub marketplace workflow', () => {
     const request = vi.fn(async (operation: string) => operation === 'categories' ? { items: [] } : page)
     const props = { active: true, installedOnly: false, request, invoke: async () => [], onUse: vi.fn(), onCount: vi.fn() }
     const view = render(<SkillHubSection {...props} unavailable />)
-    expect(screen.getByText('纯内网环境不可用')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'SkillHub 暂不可用' })).toBeTruthy()
+    expect(screen.getByText('您仍可使用平台技能和本地技能')).toBeTruthy()
+    expect(screen.getByRole('status').querySelector('svg')).not.toBeNull()
+    expect(view.container.querySelector('img')).toBeNull()
     expect(request).not.toHaveBeenCalled()
     view.rerender(<SkillHubSection {...props} unavailable={false} />)
     await screen.findByText(skill.name)
+    expect(screen.queryByRole('heading', { name: 'SkillHub 暂不可用' })).toBeNull()
     expect(request).toHaveBeenCalledWith('list', expect.anything())
   })
   it('disables installed SkillHub use but retains local uninstall in intranet mode', async () => {
@@ -35,6 +39,8 @@ describe('SkillHub marketplace workflow', () => {
     fireEvent.click(await screen.findByRole('button', { name: /PDF 助手/ }))
     expect(screen.getByRole('button', { name: '使用技能' }).hasAttribute('disabled')).toBe(true)
     expect(screen.getByRole('button', { name: '卸载' }).hasAttribute('disabled')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '打开目录' }))
+    expect(invoke).toHaveBeenCalledWith('open_skill_directory', { slug: record.localSlug })
     expect(request).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '使用技能' }))
     expect(onUse).not.toHaveBeenCalled()
@@ -104,6 +110,7 @@ describe('SkillHub marketplace workflow', () => {
     })
     render(<SkillHubSection active installedOnly={false} request={request} invoke={invoke} onUse={() => {}} onCount={() => {}} />)
     fireEvent.click(await screen.findByRole('button', { name: /PDF 助手/ }))
+    expect(screen.queryByRole('button', { name: '打开目录' })).toBeNull()
     fireEvent.click(await screen.findByRole('button', { name: '安装' }))
     expect((await screen.findByText('安装成功')).closest('[data-wanwei-notice]')).not.toBeNull()
     finishRefresh([record])

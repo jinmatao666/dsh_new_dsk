@@ -19,6 +19,7 @@ import { launchExpertWebsite, listPublishedExperts } from './expert-catalog.ts'
 import { OneApiSearchProvider } from './search-provider.ts'
 import { registerSkillUsage } from './usage.ts'
 import { installNetworkPolicy } from './network.ts'
+import { fetchDeploymentSettings } from './deployment.ts'
 export type { NetworkPolicy } from './network.ts'
 
 export type { AuthState } from './contract.ts'
@@ -422,8 +423,11 @@ export function apply(ctx: Context, config: Config): void {
     const id = typeof payload === 'object' && payload !== null && 'id' in payload && typeof payload.id === 'number'
       ? payload.id : Number.NaN
     if (!Number.isInteger(id) || id < 1) throw new Error('技能标识无效')
+    const token = (await ctx.credentials.resolve(ref))?.value
+    if (token === undefined) throw new Error('请先登录后再记录技能安装')
     const response = await fetch(`${baseURL}/api/skill/${String(id)}/download`, {
       method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
       ...(signal === undefined ? {} : { signal }),
     })
     const result = await jsonBody<OneApiEnvelope<unknown>>(response)
@@ -549,9 +553,12 @@ export function apply(ctx: Context, config: Config): void {
   const connection = ctx.get('connection')
   if (connection === undefined) throw new Error('桌面认证需要 Connection 服务')
   const remove = connection.rpc.handle('/desktop-auth', async (endpoint, payload, signal) => {
-    if (endpoint === 'network-get') return { ok: true as const, value: network.getSnapshot() }
-    if (endpoint === 'network-set') {
-      try { return { ok: true as const, value: await network.setMode((payload as { mode?: unknown } | null)?.mode) } }
+    if (endpoint === 'network-get' || endpoint === 'deployment-get') {
+      try {
+        const settings = await fetchDeploymentSettings(baseURL, signal)
+        if (endpoint === 'network-get') await network.setMode(settings.network)
+        return { ok: true as const, value: endpoint === 'network-get' ? { ...network.getSnapshot(), features: settings.features } : settings }
+      }
       catch (error) { return internal(error instanceof Error ? error.message : String(error)) }
     }
     if (network.getSnapshot().mode === 'intranet' && (endpoint === 'expert-list' || endpoint === 'expert-launch')) {

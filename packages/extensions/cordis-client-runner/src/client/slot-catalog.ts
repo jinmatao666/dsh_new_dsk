@@ -783,9 +783,11 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     doc: 'Optional presentation of a recognized prefix in the editable draft.',
     registerOptions: [],
     ownerProps: [
-      '/** Current draft and generic edit action for an optional prefix presenter. */\nexport interface DraftPrefixOwnerProps {\n  draft: string\n  removePrefix: (length: number) => void\n}',
+      '/** Current draft and generic edit action for an optional prefix presenter. */\nexport interface DraftPrefixOwnerProps {\n  draft: string\n  /** Whether this draft is owned by a Session editor. */\n  sessionReady: boolean\n  removePrefix: (length: number) => void\n  /** Render the draft, optionally showing an inline presenter instead of its leading text before a Session exists. */\n  renderInput: (prefixLength?: number, prefix?: ReactNode) => ReactNode\n  /** Convert leading plain text to a reference in an unlocked Session; false before Session creation. */\n  settlePrefix: (length: number, reference: import(\'./input.ts\').ReferenceInsert) => boolean\n}',
     ],
-    ownerPropsReferences: [],
+    ownerPropsReferences: [
+      'ReferenceInsert',
+    ],
     standardProps: [
       'useWorkspaces: SnapshotSelectorHook<WorkspaceSnapshot>',
       'useSessions: UseSessions',

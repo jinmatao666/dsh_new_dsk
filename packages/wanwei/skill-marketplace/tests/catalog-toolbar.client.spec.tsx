@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useEffect, useState } from 'react'
 import { CatalogToolbar } from '../src/client/CatalogToolbar.tsx'
 import { buildMarketplaceCategories, pagePlatformCatalog } from '../src/client/catalog.ts'
-import { isMarketInteraction } from '../src/client/market-interaction.ts'
+import { isMarketInteraction } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 
 afterEach(cleanup)
 

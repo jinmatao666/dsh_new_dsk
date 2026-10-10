@@ -1,6 +1,9 @@
 import type { ReferenceInsert } from '@deepseek-ai/dsh-client-ui-conversation/client'
 
-/** Keep the model's path reference while presenting only the imported file or folder name. */
+/** Keep the model's path reference while presenting only the imported file or folder name.
+ * @param path - Imported filesystem path.
+ * @returns Reference metadata displaying the basename while retaining the full path.
+ */
 export function importedFileReference(path: string): ReferenceInsert {
   if (path === '' || /[\u0000-\u001f\u007f-\u009f"]/u.test(path)) throw new Error('导入后的文件路径包含不支持的字符')
   const mention = /\s/u.test(path) ? `@"${path}"` : `@${path}`

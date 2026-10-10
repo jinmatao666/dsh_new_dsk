@@ -38,13 +38,18 @@
     "release": false
   },
   "dependencies": {
+    "@deepseek-ai/dsh-wanwei-browser-use": "workspace:^",
     "@deepseek-ai/dsh-wanwei-chinese": "workspace:^",
     "@deepseek-ai/dsh-wanwei-skill-marketplace": "workspace:^",
     "@deepseek-ai/dsh-wanwei-document-local": "workspace:^",
     "@deepseek-ai/dsh-wanwei-vision": "workspace:^",
     "@deepseek-ai/dsh-wanwei-oneapi-auth": "workspace:^",
     "@deepseek-ai/dsh-wanwei-product-ui": "workspace:^",
-    "@deepseek-ai/dsh-wanwei-skillhub": "workspace:^"
+    "@deepseek-ai/dsh-wanwei-skillhub": "workspace:^",
+    "@deepseek-ai/dsh-wanwei-feature-panels": "workspace:^",
+    "@deepseek-ai/dsh-wanwei-expert-library": "workspace:^",
+    "@deepseek-ai/dsh-wanwei-connectors": "workspace:^",
+    "@deepseek-ai/dsh-wanwei-automations": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",

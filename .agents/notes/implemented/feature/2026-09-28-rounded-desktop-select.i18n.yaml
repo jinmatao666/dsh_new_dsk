@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-28-rounded-desktop-select.md
-2026-09-28-rounded-desktop-select.md: feb64cc87f54a7f0bb74a7f67b8f4e1feda680b4
-2026-09-28-rounded-desktop-select.zh.md: 60b51f7194406f9b12a78ad39273398d63294cfd
+2026-09-28-rounded-desktop-select.md: 7abf7ae579bcdef1eb52eaa898ef89c3a269e3a3
+2026-09-28-rounded-desktop-select.zh.md: 7fe827357a8cdd8781ba0d1c9752e34e10892690

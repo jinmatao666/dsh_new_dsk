@@ -26,6 +26,8 @@ My installations uses one source-filtered twelve-card page across platform/local
 
 ## Consequences
 
+Every installed platform, personal or SkillHub skill exposes Open directory beside Use skill; uninstalled entries omit it. The native command accepts only an installation slug, resolves it beneath the desktop skills root, rejects missing skill files and paths escaping the root, then opens Explorer, Finder or the Linux file manager. API-key discovery and configuration edits remain outside this action; directory opening remains available for installed SkillHub skills in private-network mode.
+
 SkillHub result feedback does not wait for receipt refresh. Progress notices stay visible until a result replaces them, while success and error notices expire. Both sources use neutral white notices with OS sans-serif text and concise result labels; only the status icon carries a semantic color. Receipt refresh failure remains distinct from installation or removal failure.
 
 The official agent loop remains unchanged. The delivery includes the generic staged-draft and draft-prefix client extension needed by skill invocation; no SkillHub business logic enters those contracts. Root workspace metadata registers the new product package. Platform installer ownership checks now reject SkillHub receipts, including the legacy name-only path. Paid skills, automatic updates and automatic dependency provisioning remain outside this feature. Icons from other hosts use a fallback glyph. API commercial terms and future credential requirements must be confirmed before production rollout.
