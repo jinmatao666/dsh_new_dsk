@@ -150,6 +150,24 @@ async function setupLocal(home: string, config: Partial<SkillFileSystem.Config> 
   return ctx
 }
 
+it('reads durable Chinese display names without a marketplace client and keeps internal ids', async () => {
+  const home = await tempDir('skill-display-name')
+  const root = join(home, '.dsh', 'skills')
+  await writeSkill(root, 'community-12', 'meeting')
+  await writeFile(join(root, 'community-12', '.dsh-skill-display.json'), JSON.stringify({ displayName: '会议纪要' }))
+  await writeSkill(root, 'skillhub-demo', 'hub')
+  await writeFile(join(root, 'skillhub-demo', '.wanwei-skillhub.json'), JSON.stringify({ name: '公文检查' }))
+  await writeSkill(root, 'community-13', 'policy')
+  await writeFile(join(root, 'community-13', 'manifest.json'), JSON.stringify({ displayName: '政策摘要' }))
+  const ctx = await setupLocal(home)
+  expect(await ctx.skills.list()).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: 'community-12', displayName: '会议纪要' }),
+    expect.objectContaining({ name: 'skillhub-demo', displayName: '公文检查' }),
+    expect.objectContaining({ name: 'community-13', displayName: '政策摘要' }),
+  ]))
+  expect(await ctx.skills.get('community-12')).toMatchObject({ name: 'community-12', displayName: '会议纪要' })
+})
+
 async function waitFor<T>(read: () => Promise<T>, accept: (value: T) => boolean): Promise<T> {
   const deadline = Date.now() + 5000
   while (true) {

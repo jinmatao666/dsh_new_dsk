@@ -180,10 +180,21 @@ export function apply(ctx: Context, config: Config = {}): void {
   ): Promise<PreStepDecision> => {
     const decision = await next()
     if (decision.kind === 'reject') return decision
-    const names = invokedSkillNames(messages)
-    if (names.length === 0) return decision
+    if (!messages.some(message => message.content.some(block => block.type === 'text' && block.text.includes('/')))) return decision
     signal.throwIfAborted()
     const lookup = { cwd: agent.session.header.cwd, signal, scope: agent }
+    const catalog = (await ctx.skills.list(lookup)).filter(isUserInvocable)
+    const names = invokedSkillNames(messages)
+    for (const skill of catalog) {
+      if (skill.displayName === undefined) continue
+      // Ambiguous legacy aliases never choose a skill by precedence.
+      if (catalog.filter(other => other.displayName === skill.displayName).length !== 1) continue
+      const escaped = skill.displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const gesture = new RegExp(`(^|\\s)/${escaped}(?=\\s|$)`, 'u')
+      if (messages.some(message => message.source.kind === 'user'
+        && message.content.some(block => block.type === 'text' && gesture.test(block.text)))
+        && !names.includes(skill.name)) names.push(skill.name)
+    }
     const injections: UserMessage[] = []
     for (const name of names) {
       const skill = await ctx.skills.get(name, lookup)

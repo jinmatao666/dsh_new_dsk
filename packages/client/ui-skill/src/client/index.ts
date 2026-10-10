@@ -148,9 +148,11 @@ export function apply(ctx: ClientContext): void {
       // Superseded keystroke: the shared fetch stays warm, this caller yields.
       if (signal.aborted) return []
       return skills
-        .filter(skill => skill.name.startsWith(query))
+        .filter(skill => (skill.displayName ?? skill.name).toLocaleLowerCase().includes(query.toLocaleLowerCase())
+          || skill.name.startsWith(query))
         .map(skill => ({
-          name: skill.name,
+          name: skill.displayName ?? skill.name,
+          ...skill.displayName === undefined ? {} : { value: skill.name },
           // The user-only marker rides the description (the menu's only
           // secondary text); `hint` is the claim-state ghost text, not a badge.
           description: skill.modelInvocable ? skill.description : `${t('menu.userOnly')} · ${skill.description}`,
@@ -162,7 +164,8 @@ export function apply(ctx: ClientContext): void {
       fetchCatalog(session.sessionId).catch(() => {})
     },
     lexicon(session) {
-      return fetches.get(session.sessionId)?.settled?.map(skill => skill.name)
+      return fetches.get(session.sessionId)?.settled?.flatMap(skill => skill.displayName === undefined
+        ? [skill.name] : [skill.displayName, skill.name])
     },
     subscribeLexicon(session, listener) {
       const key = session.sessionId
@@ -180,7 +183,7 @@ export function apply(ctx: ClientContext): void {
       // injects the rendered body for every entry point. A name shared with a
       // host command still resolves to the command: adjudication claims the
       // line client-side before it ever becomes a prompt.
-      return { insert: { source: 'skill', ref: `/${candidate.name}`, clipboardText: `/${candidate.name}`, label: candidate.name, appearance: 'skill' } }
+      return { insert: { source: 'skill', ref: `/${candidate.value ?? candidate.name}`, clipboardText: `/${candidate.name}`, label: candidate.name, appearance: 'skill' } }
     },
     codec: {
       clipboardText: ref => ref,
@@ -193,6 +196,12 @@ export function apply(ctx: ClientContext): void {
   ctx.remote.$on('agent-preset/selected', invalidate)
   ctx.on('skills/catalog-invalidated', clearAll)
   ctx.on('connection/reset', clearAll)
+  ctx.effect(() => {
+    // Native installers can invalidate references even while the market page is disabled.
+    if (typeof window === 'undefined') return () => {}
+    window.addEventListener('dsh:skills-changed', clearAll)
+    return () => { window.removeEventListener('dsh:skills-changed', clearAll) }
+  }, 'ui-skill: native install notifications')
   ctx.effect(() => {
     const unregister = inputTriggers.registerSource(source)
     return () => {

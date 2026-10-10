@@ -11,7 +11,7 @@
 
 import { access, lstat, readdir, readFile, stat } from 'node:fs/promises'
 import { unwatchFile, watchFile, type Stats } from 'node:fs'
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
 import chokidar from 'chokidar'
@@ -105,6 +105,7 @@ interface SkillRootEntry {
 
 interface ParsedSkill {
   name: string
+  displayName?: string
   description: string
   whenToUse?: string
   invocation: SkillInvocationPolicy
@@ -209,6 +210,7 @@ export class FileSystemSkillProvider implements SkillProvider {
     if (parsed === undefined) return undefined
     return {
       name: parsed.name,
+      ...candidate.displayName === undefined ? {} : { displayName: candidate.displayName },
       description: parsed.description,
       ...parsed.whenToUse !== undefined ? { whenToUse: parsed.whenToUse } : {},
       invocation: parsed.invocation,
@@ -669,7 +671,7 @@ function isRelevantWatchEvent(
     return segments[0]?.endsWith('.md') === true
   }
   return segments.length === 2
-    && segments[1] === 'SKILL.md'
+    && ['SKILL.md', '.dsh-skill-display.json', '.wanwei-skillhub.json', 'manifest.json'].some(name => name === segments[1])
     && event !== 'addDir'
     && event !== 'unlinkDir'
 }
@@ -680,7 +682,7 @@ function isPotentialSkillPath(root: SkillRoot, path: string): boolean {
   if (root.skipSystem === true && segments[0] === '.system') return false
   return segments.length === 1
     ? segments[0]?.endsWith('.md') === true
-    : segments[1] === 'SKILL.md'
+    : ['SKILL.md', '.dsh-skill-display.json', '.wanwei-skillhub.json', 'manifest.json'].some(name => name === segments[1])
 }
 
 function containedSegments(root: string, path: string): string[] | undefined {
@@ -731,6 +733,7 @@ async function discoverRoot(root: SkillRoot, ctx: Context, provider: string): Pr
     if (parsed === undefined) continue
     skills.push({
       name: parsed.name,
+      ...await installedDisplayName(locator, parsed, ctx, root.trustedHost === true),
       description: parsed.description,
       ...parsed.whenToUse !== undefined ? { whenToUse: parsed.whenToUse } : {},
       invocation: parsed.invocation,
@@ -809,6 +812,7 @@ async function parseSkillFile(path: string, ctx: Context, signal?: AbortSignal, 
   }
   const name = stringField(parsed.data, 'name')
   const description = stringField(parsed.data, 'description')
+  const displayName = stringField(parsed.data, 'display-name')
   if (name === undefined || description === undefined) {
     ctx.logger.warn(`skill file ${path} ignored: frontmatter requires name and description`)
     return undefined
@@ -827,11 +831,32 @@ async function parseSkillFile(path: string, ctx: Context, signal?: AbortSignal, 
   return {
     name,
     description,
+    ...displayName === undefined ? {} : { displayName },
     ...optionalString(parsed.data, 'whenToUse'),
     invocation,
     ...optionalMetadata(parsed.data),
     content: parsed.body.trim(),
   }
+}
+
+async function installedDisplayName(
+  locator: LocalLocator, parsed: ParsedSkill, ctx: Context, trustedHost: boolean,
+): Promise<{ displayName?: string }> {
+  if (basename(locator.path) !== 'SKILL.md') {
+    return parsed.displayName === undefined ? {} : { displayName: parsed.displayName }
+  }
+  for (const [file, key] of [['.dsh-skill-display.json', 'displayName'], ['.wanwei-skillhub.json', 'name'], ['manifest.json', 'displayName']] as const) {
+    const raw = await readSkillText(ctx, join(locator.directory, file), undefined, trustedHost)
+    if (raw === undefined) continue
+    const value: unknown = JSON.parse(raw)
+    if (typeof value !== 'object' || value === null) throw new TypeError(`Invalid skill display record: ${file}`)
+    const label = (value as Record<string, unknown>)[key]
+    if (file === 'manifest.json' && (typeof label !== 'string' || label.trim() === '')) continue
+    if (typeof label !== 'string' || label.trim() === '') throw new TypeError(`Invalid skill display name: ${file}`)
+    return { displayName: label.trim() }
+  }
+  if (parsed.displayName !== undefined) return { displayName: parsed.displayName }
+  return {}
 }
 
 function optionalFileSystem(ctx: Context): FileSystem | undefined {

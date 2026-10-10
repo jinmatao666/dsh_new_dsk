@@ -110,6 +110,8 @@ interface SkillInvocationPolicy {
 interface SkillSummary {
   /** Kebab-case identifier used to address the skill. */
   readonly name: string
+  /** Human-facing name retained independently of the stable identifier. */
+  readonly displayName?: string
   /** Short routing description shown by discovery consumers. */
   readonly description: string
   /** Optional extra routing guidance. */
@@ -274,6 +276,12 @@ Source: [`packages/api/session-controller/src/skill-catalog.ts`](../../packages/
 Layered registry of skill providers, the host+per-scope shape the tools registry established. A registration files into the layer of its calling context's scope (scopeOf): host rows and repository plugins land in the global layer, while a plugin mounted by an agent preset's standing composition lands in that preset's layer. A read merges the global layer with the viewing scope's chain — the nearest layer's entry wins a duplicate name outright, and the rank order decides duplicates only within one layer. It exposes sorted invocation-neutral summaries and loads full skill bodies on demand.
 
 ```ts cordis-catalog
+/** Install a deployment availability filter, applied even to cached reads.
+ * @param filter - Predicate allowing a skill to remain available.
+ * @returns Disposer removing the filter and invalidating cached reads.
+ */
+registerFilter(filter: (skill: SkillCandidate | SkillDefinition) => boolean): () => void
+
 /**
  * Register a borrowed same-process provider synchronously during plugin
  * apply, into the calling context's layer: a scoped context (an agent

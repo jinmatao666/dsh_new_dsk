@@ -29,6 +29,8 @@ kind: "package-reference"
 
 ### source 提供什么
 
+建议优先使用已安装的 `displayName`，包括市场中文名称；未提供时使用稳定标识。搜索支持不区分大小写的显示名匹配或标识前缀匹配。选中的标签显示和复制显示名，但提交稳定标识；手动键入 `/displayName` 时，仅在该别名唯一对应一个用户可调用技能时解析。显示元数据来自宿主目录，不需要先打开技能市场。
+
 普通会话的候选来自 `skills/list` Remote；宿主提供每一个用户可调用的 skill，`modelInvocable: false` 的条目（即 `disable-model-invocation` skill，此路径是其唯一入口）会以当前语言把仅限用户标记作为描述前缀带上。结果按 `startsWith(query)` 过滤。`skills/list` 调用失败时会被记录并静默丢弃该菜单组——菜单只显示 pending/ready 状态。
 
 ### skill 工具行
@@ -43,7 +45,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-source 不实现任何裁决钩子。菜单选择插入技能引用标签；其 codec 向剪贴板和提交内容输出字面文本 `/name`。手动键入的 token 保持可编辑文字。宿主使用序列化后的 slash token 加载技能（[slash 流水线笔记](../../../.agents/notes/implemented/architecture/2026-07-25-web-input-machine-and-slash-pipeline.zh.md)）。
+source 不实现任何裁决钩子。菜单选择插入技能引用标签；提交内容序列化稳定标识，剪贴板文字使用显示名。手动键入的 token 保持可编辑文字。宿主使用序列化后的 slash token 加载技能（[slash 流水线笔记](../../../.agents/notes/implemented/architecture/2026-07-25-web-input-machine-and-slash-pipeline.zh.md)）。
 
 ### 候选流程
 

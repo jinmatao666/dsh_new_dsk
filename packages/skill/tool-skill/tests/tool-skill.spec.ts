@@ -1005,6 +1005,18 @@ describe('user-explicit invocation injection', () => {
       && (message.source as { name?: string }).name === 'shared-skill')).toBe(true)
   })
 
+  it('resolves a typed Chinese display name to one stable skill id, but never an ambiguous alias', async () => {
+    const { ctx, agent } = await invokeHarness()
+    ctx.skills.register({ name: 'meeting-cn', displayName: '会议纪要', description: '会议整理', source: 'runtime', content: 'Chinese meeting instructions.' })
+    const decision = await proposeStep(ctx, agent, [gesture('/会议纪要 请整理')])
+    if (decision.kind !== 'enter') throw new Error('expected enter')
+    expect(decision.messages.at(-1)?.source).toMatchObject({ kind: 'skill-invocation', name: 'meeting-cn' })
+    ctx.skills.register({ name: 'meeting-other', displayName: '会议纪要', description: '另一份', source: 'runtime', content: 'Other.' })
+    const ambiguous = await proposeStep(ctx, agent, [gesture('/会议纪要 请整理')])
+    if (ambiguous.kind !== 'enter') throw new Error('expected enter')
+    expect(ambiguous.messages.some(message => message.source.kind === 'skill-invocation')).toBe(false)
+  })
+
   it('recognizes a mid-sentence gesture but not paths, fractions, or broken boundaries', async () => {
     const { ctx, agent } = await invokeHarness()
     const decision = await proposeStep(ctx, agent, [

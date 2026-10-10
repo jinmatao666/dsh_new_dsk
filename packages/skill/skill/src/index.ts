@@ -56,6 +56,8 @@ export interface SkillInvocationPolicy {
 export interface SkillSummary {
   /** Kebab-case identifier used to address the skill. */
   readonly name: string
+  /** Human-facing name retained independently of the stable identifier. */
+  readonly displayName?: string
   /** Short routing description shown by discovery consumers. */
   readonly description: string
   /** Optional extra routing guidance. */
@@ -369,7 +371,10 @@ export class SkillRegistry extends Service {
   private nextProviderOrder = 0
   private readonly filters = new Set<(skill: SkillCandidate | SkillDefinition) => boolean>()
 
-  /** Install a deployment availability filter, applied even to cached reads. */
+  /** Install a deployment availability filter, applied even to cached reads.
+   * @param filter - Predicate allowing a skill to remain available.
+   * @returns Disposer removing the filter and invalidating cached reads.
+   */
   registerFilter(filter: (skill: SkillCandidate | SkillDefinition) => boolean): () => void {
     return this.ctx.effect(() => {
       this.filters.add(filter)
@@ -705,6 +710,7 @@ const RUNTIME_SKILL_PROVIDER: SkillProvider = {
 function runtimeCandidate(skill: SkillDefinition): SkillCandidate {
   return {
     name: skill.name,
+    ...skill.displayName === undefined ? {} : { displayName: skill.displayName },
     description: skill.description,
     ...skill.whenToUse !== undefined ? { whenToUse: skill.whenToUse } : {},
     invocation: skill.invocation,
@@ -781,9 +787,10 @@ function validateDefinition(skill: SkillDefinition): void {
 }
 
 function toSummary(skill: SkillDefinition | SkillCandidate): SkillSummary {
-  const { name, description, whenToUse, invocation, source, provider, resourceBase } = skill
+  const { name, displayName, description, whenToUse, invocation, source, provider, resourceBase } = skill
   return {
     name,
+    ...displayName !== undefined ? { displayName } : {},
     description,
     ...whenToUse !== undefined ? { whenToUse } : {},
     invocation,

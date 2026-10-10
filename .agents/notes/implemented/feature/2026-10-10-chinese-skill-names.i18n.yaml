@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-10-chinese-skill-names.md
+2026-10-10-chinese-skill-names.md: 9aa9911bf45e0a5bbec7f14de764f28d7701f9a6
+2026-10-10-chinese-skill-names.zh.md: 15ea1cfeb3ddaac7b3f28112c21610204c4772da

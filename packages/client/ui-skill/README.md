@@ -29,6 +29,8 @@ Type `/` in the composer and pick a skill from the suggestions, or type `/name` 
 
 ### What the source offers
 
+Suggestions use the installed `displayName` when provided, including Chinese market names, and otherwise use the stable identifier. Search matches the display name without case sensitivity or the identifier prefix. A picked chip shows and copies the display name but submits the stable identifier; a hand-typed `/displayName` resolves only when that alias identifies one user-invocable skill. Display metadata comes from the host catalog, so opening the marketplace is not required.
+
 Ordinary-session candidates come from the `skills/list` Remote; the host serves every user-invocable skill, and a `modelInvocable: false` entry (a `disable-model-invocation` skill, whose only entry point is this path) wears the user-only marker as a description prefix in the active language. Results filter by `startsWith(query)`. A failed `skills/list` call is logged and folded into a silent menu-group drop — the menu shows only pending/ready states.
 
 ### The skill tool row
@@ -43,7 +45,7 @@ A collapsed row renders the skill glyph, `Skill` title, and requested skill name
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The source implements no adjudication hooks. A menu pick inserts a skill reference chip; its codec emits the literal `/name` for clipboard and submission. Hand-typed tokens remain editable text. Host-side loading uses the serialized slash token ([slash pipeline note](../../../.agents/notes/implemented/architecture/2026-07-25-web-input-machine-and-slash-pipeline.md)).
+The source implements no adjudication hooks. A menu pick inserts a skill reference chip; submission serializes its stable identifier and clipboard text uses its display name. Hand-typed tokens remain editable text. Host-side loading uses the serialized slash token ([slash pipeline note](../../../.agents/notes/implemented/architecture/2026-07-25-web-input-machine-and-slash-pipeline.md)).
 
 ### Candidate flow
 

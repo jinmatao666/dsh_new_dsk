@@ -21,7 +21,7 @@ import type { ClientSessionContext, InputTriggerSource } from '@deepseek-ai/dsh-
 import { apply, inject } from '../src/client/index.ts'
 import { SkillRow as SkillToolRow } from '../src/client/SkillRow.tsx'
 
-type SkillRow = { name: string; description: string; whenToUse?: string; modelInvocable?: boolean }
+type SkillRow = { name: string; displayName?: string; description: string; whenToUse?: string; modelInvocable?: boolean }
 type ListResult =
   | { ok: true; value: { skills: SkillRow[] } }
   | { ok: false; error: { code: string; message: string; details: object } }
@@ -167,6 +167,14 @@ describe('apply', () => {
 })
 
 describe('candidates: sessionId addressing', () => {
+  it('shows and searches installed Chinese names while picks keep the stable identifier', async () => {
+    const { source } = await bench(listOk([{ name: 'community-12', displayName: '会议纪要', description: '整理会议', modelInvocable: true }]))
+    const items = await source.candidates(proj('s1'), req('纪要'))
+    expect(items).toEqual([{ name: '会议纪要', value: 'community-12', description: '整理会议' }])
+    expect(source.lexicon!(proj('s1'))).toEqual(['会议纪要', 'community-12'])
+    const pick = await source.onPick!({ candidate: items[0]! } as never)
+    expect(pick).toMatchObject({ insert: { ref: '/community-12', label: '会议纪要', clipboardText: '/会议纪要' } })
+  })
   it('lists via {sessionId} and filters by startsWith(query)', async () => {
     const { list, payloads } = countingList()
     const { source } = await bench(list)
@@ -302,6 +310,25 @@ describe('catalog cache', () => {
       { name: 'new-skill', description: 'new' },
     ])
     expect(list).toHaveBeenCalledTimes(2)
+  })
+
+  it('refreshes native installations without a mounted marketplace page', async () => {
+    const nativeEvents = new EventTarget()
+    vi.stubGlobal('window', nativeEvents)
+    try {
+      let catalog = CATALOG
+      const list = vi.fn(() => listOk(catalog)({}))
+      const { source } = await bench(list)
+      expect(await source.candidates(proj('s1'), req('纪要'))).toEqual([])
+      catalog = [...CATALOG, { name: 'meeting', displayName: '会议纪要', description: 'new', modelInvocable: true }]
+      nativeEvents.dispatchEvent(new Event('dsh:skills-changed'))
+      expect(await source.candidates(proj('s1'), req('纪要'))).toEqual([
+        { name: '会议纪要', value: 'meeting', description: 'new' },
+      ])
+      expect(list).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 
