@@ -5,6 +5,12 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { removeStagedEntry } from './runtime-files.mjs'
 
+test('the production deploy root includes the product bundle and its registry dependencies', () => {
+  const product = new URL('../runtime-closure/package.json', import.meta.url)
+  const manifest = JSON.parse(readFileSync(product, 'utf8'))
+  assert.equal(manifest.dependencies['@deepseek-ai/dsh-wanwei-desktop'], 'workspace:^')
+})
+
 test('removing a staged dependency link preserves the original package', () => {
   const root = mkdtempSync(join(tmpdir(), 'wanwei-staged-link-'))
   const source = join(root, '源代码 有空格')

@@ -24,4 +24,6 @@ The shared Agent registry and loop stay unchanged. Fixed published packages requ
 
 ## Verification
 
+The desktop production deploy root depends on the Wanwei bundle so the pinned browser packages and their transitive npm dependencies are staged by pnpm. Workspace restoration alone supplies no registry packages. The packaged-profile startup check uses bundled Node without workspace resolver anchors.
+
 Focused tests exercise startup readiness, schema recollection, canceled waits, failed startup, deferred initialization, persisted permission and intranet direct-call denial. Card tests cover disable writes, intranet state and save failures. A real Loader composition starts the pinned MCP and installed Chromium, denies navigation while disabled, re-enables navigation to `about:blank`, verifies file persistence and checks scope cleanup. This is tool-executor validation, not a paid model-driven conversation.

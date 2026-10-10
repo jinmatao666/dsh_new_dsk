@@ -41,7 +41,7 @@ pnpm --filter @wanwei/dsh-desktop check:sidecar
 pnpm --filter @wanwei/dsh-desktop check:rust
 ```
 
-Source development runs the TypeScript CLI from the current checkout. `prepare:runtime` creates a self-contained production runtime under `src-tauri/resources/runtime`: it deploys the Wanwei-only production closure (the existing DSH runtime plus the PDF, DOCX, and XLSX parsers), restores required workspace peer packages as ordinary files, copies Node 22, and preflights the staged `wanwei-desktop` profile. `check:runtime` also runs the copied document helper with that bundled Node executable, so missing parser dependencies fail before an installer is built. The upstream Python runtime manifest is unchanged. Generated runtime files are ignored by Git and are rebuilt for each installer.
+Source development runs the TypeScript CLI from the current checkout. `prepare:runtime` creates a self-contained production runtime under `src-tauri/resources/runtime-<version>`: it deploys the Wanwei-only production closure (the DSH runtime, the Wanwei product bundle and its transitive npm dependencies, plus the PDF, DOCX, and XLSX parsers), restores required workspace peer packages as ordinary files, copies Node 22, and preflights the staged `wanwei-desktop` profile. `check:runtime` runs the copied document helper and boots the product profile with that bundled Node executable, so missing parser or plugin dependencies fail before an installer is built. The upstream Python runtime manifest is unchanged. Generated runtime files are ignored by Git and are rebuilt for each installer.
 
 ```sh
 pnpm --filter @wanwei/dsh-desktop prepare:runtime

@@ -10452,6 +10452,9 @@ importers:
 
   products/wanwei-desktop/runtime-closure:
     dependencies:
+      '@deepseek-ai/dsh-wanwei-desktop':
+        specifier: workspace:^
+        version: link:../../../packages/bundle/wanwei-desktop
       dsh-python-runtime-closure:
         specifier: workspace:^
         version: link:../../../python/sdk-runtime

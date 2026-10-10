@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Production-only deployment root for the Wanwei desktop sidecar and document helper.",
   "dependencies": {
+    "@deepseek-ai/dsh-wanwei-desktop": "workspace:^",
     "dsh-python-runtime-closure": "workspace:^",
     "mammoth": "^1.10.0",
     "pdfjs-dist": "^4.10.38",
