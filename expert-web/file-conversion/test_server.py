@@ -56,7 +56,9 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.request("/api/session", {"ticket": "a" * 64}, origin="https://evil.test")[0], 403)
         status, data, headers = self.request("/")
         self.assertEqual(status, 200)
-        self.assertIn("文件转换".encode(), data)
+        self.assertIn("<title>文件格式转换专家</title>".encode(), data)
+        self.assertIn("<strong>文件格式转换专家</strong>".encode(), data)
+        self.assertNotIn("文件转换与 PDF 工具专家".encode(), data)
         self.assertIn("frame-src 'none'", headers["Content-Security-Policy"])
 
     def test_upload_path_names_rejected(self):

@@ -1,4 +1,4 @@
-# File conversion expert (in development)
+# File format conversion expert (in development)
 
 Automatic task polling redraws the page only on the first response or changed task data. It updates cached tasks without replacing an active preparation form. Responses from older requests cannot replace data from a newer successful request; manual result refresh uses the same ordering.
 
