@@ -80,6 +80,23 @@ describe('tierExternalDeps', () => {
 })
 
 describe('virtualManifest', () => {
+  it('ignores uninstalled optional package directories and still resolves installed versions', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-notices-optional-'))
+    try {
+      const name = '@scope/pkg'
+      const store = join(root, 'store')
+      mkdirSync(join(store, '@scope+pkg@1.0.0', 'node_modules'), { recursive: true })
+      expect(virtualManifest(store, name)).toBeUndefined()
+      const installed = join(store, '@scope+pkg@2.0.0', 'node_modules', name)
+      mkdirSync(installed, { recursive: true })
+      writeFileSync(join(installed, 'package.json'), JSON.stringify({ name, version: '2.0.0', license: 'MIT' }))
+      expect(virtualManifest(store, name, '2.0.0')).toMatchObject({ name, version: '2.0.0', license: 'MIT' })
+      expect(virtualManifest(store, name, '1.0.0')).toBeUndefined()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('resolves a manifest from an ordinary prefix-matching store directory', () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-notices-prefix-'))
     try {
