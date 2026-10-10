@@ -9,9 +9,9 @@ const rustMain = readFileSync(resolve(productRoot, 'src-tauri', 'src', 'main.rs'
 const rustLib = readFileSync(resolve(productRoot, 'src-tauri', 'src', 'lib.rs'), 'utf8')
 
 const expected = {
-  productName: '万维 Buddy 预览版',
-  releaseIdentifier: 'com.wanwei.harness.preview',
-  developmentIdentifier: 'com.wanwei.harness.preview.development',
+  productName: '万维Buddy',
+  releaseIdentifier: 'com.wanwei.harness',
+  developmentIdentifier: 'com.wanwei.harness.development',
   bundleIcons: [
     'icons/32x32.png',
     'icons/128x128.png',
@@ -21,12 +21,11 @@ const expected = {
   ],
 }
 
-assertEqual(release.productName, expected.productName, 'preview product name')
-assertEqual(release.identifier, expected.releaseIdentifier, 'preview release identifier')
-assertEqual(development.identifier, expected.developmentIdentifier, 'preview development identifier')
-assertEqual(JSON.stringify(release.bundle?.icon), JSON.stringify(expected.bundleIcons), 'preview bundle icons')
+assertEqual(release.productName, expected.productName, 'product name')
+assertEqual(release.identifier, expected.releaseIdentifier, 'release identifier')
+assertEqual(development.identifier, expected.developmentIdentifier, 'development identifier')
+assertEqual(JSON.stringify(release.bundle?.icon), JSON.stringify(expected.bundleIcons), 'bundle icons')
 if (release.identifier === development.identifier) fail('release and development identifiers must differ')
-if (release.identifier === 'com.wanwei.harness') fail('preview must not reuse the installed production identifier')
 if (!rustMain.includes('#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]')) {
   fail('Windows release executable must use the GUI subsystem so it does not open a console window')
 }
@@ -34,7 +33,7 @@ if (!rustLib.includes('command.creation_flags(0x08000000)')) {
   fail('Windows release sidecar must use CREATE_NO_WINDOW')
 }
 
-process.stdout.write('Wanwei desktop preview identity is isolated from the installed production app.\n')
+process.stdout.write('Wanwei Buddy uses the stable installer identity; development data stays isolated.\n')
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'))

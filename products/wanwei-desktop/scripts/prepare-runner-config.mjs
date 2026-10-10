@@ -46,6 +46,6 @@ if (platform === 'macos-arm64' || platform === 'macos-x64') {
 
 const runnerTemp = process.env.RUNNER_TEMP
 if (runnerTemp === undefined) throw new Error('GitHub Actions 未提供 RUNNER_TEMP')
-const configPath = join(runnerTemp, `wanwei-preview-${platform}.json`)
+const configPath = join(runnerTemp, `wanwei-${platform}.json`)
 writeFileSync(configPath, `${JSON.stringify(config)}\n`)
-process.stdout.write(`已准备 ${platform} 预览版配置：${configPath}\n`)
+process.stdout.write(`已准备 ${platform} 万维Buddy配置：${configPath}\n`)

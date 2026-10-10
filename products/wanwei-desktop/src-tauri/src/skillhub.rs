@@ -2,7 +2,6 @@
 use super::*;
 
 const RECEIPT: &str = ".wanwei-skillhub.json";
-static INSTALL_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,7 +53,7 @@ fn install_at(
     archive: Vec<u8>,
     mut record: InstalledSkill,
 ) -> Result<InstalledSkill, String> {
-    let _guard = INSTALL_LOCK.lock().map_err(|e| e.to_string())?;
+    let _guard = skill_names::INSTALL_LOCK.lock().map_err(|e| e.to_string())?;
     safe_root(root)?;
     if record.slug.is_empty()
         || record.slug.len() > 128
@@ -120,7 +119,9 @@ fn install_at(
                 record.local_slug
             ));
         }
+        skill_names::ensure_available(root, &target, &record.name, updating)?;
         let source = temporary_root.join(&record.local_slug);
+        skill_names::persist(&source, &record.name)?;
         fs::remove_file(source.join(".dsh-custom-skill")).map_err(|e| e.to_string())?;
         fs::write(
             source.join(RECEIPT),
@@ -169,7 +170,7 @@ fn list_at(root: &Path) -> Result<Vec<InstalledSkill>, String> {
 }
 
 fn uninstall_at(root: &Path, slug: &str, local_slug: &str) -> Result<(), String> {
-    let _guard = INSTALL_LOCK.lock().map_err(|e| e.to_string())?;
+    let _guard = skill_names::INSTALL_LOCK.lock().map_err(|e| e.to_string())?;
     safe_root(root)?;
     validate_marketplace_slug(local_slug)?;
     let directory = root.join(local_slug);

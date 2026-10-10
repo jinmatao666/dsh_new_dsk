@@ -1,4 +1,4 @@
-# Wanwei Buddy preview desktop
+# Wanwei Buddy desktop
 
 English | [中文](README.zh.md)
 
@@ -16,38 +16,37 @@ Native file imports exclusively create destination files and directories. If a s
 
 The native shell drains sidecar stdout after the readiness URL is received. A failed startup kills and waits for the direct sidecar process before returning its error. This cleanup does not promise termination of every descendant spawned by user tasks.
 
-The Tauri 2 shell starts the new `wanwei-desktop` profile as a loopback DSH Sidecar, waits for its authenticated Web URL, and then creates the main WebView. It always places `DSH_HOME` under the preview application's own local-data directory. Wanwei-owned desktop commands are exposed through explicit WebView capabilities.
+The Tauri 2 shell starts the `wanwei-desktop` profile as a loopback DSH Sidecar, waits for its authenticated Web URL, and then creates the main WebView. It places `DSH_HOME` under the application's local-data directory. Wanwei-owned desktop commands are exposed through explicit WebView capabilities.
 
 New-window requests from the main WebView open HTTP(S) links in the system default browser. Other URL schemes do not launch an external application, and no second in-app WebView is created for a conversation link.
 
 Independent expert websites are an implementation-in-progress. A published expert opens in a separate child WebView within the main window; the shell registers a per-launch capability for that view's exact HTTP or HTTPS origin. The macOS bundle permits insecure HTTP loads for `ac.zjugis.com` only, so the current HTTP gateway can load in WKWebView; this exception does not encrypt traffic and should be removed when the gateway uses HTTPS. The desktop catalog, one-use identity ticket, bridge behavior, and close/reposition lifecycle require real Windows, macOS, and Linux verification before release. Expert websites are privileged code: their iframe and navigation behavior must be reviewed before publication. The six production websites and one-time cutover are not yet complete; see `WANWEI_EXPERT_WEB_INTEGRATION_PLAN.md`.
 
-Release builds use `<preview app local data>/dsh-home` for credentials, settings, sessions, and skills. On the first launch, if the existing `~/.dsh` directory exists, the preview copies its settings, sessions, storage, attachments, skills, compatible agent presets, and anonymous user ID into the isolated home without overwriting preview files. It never writes to the old directory. Credentials are deliberately not imported: each installer build requires a fresh sign-in. If the old directory is absent or import fails, preview startup continues with its own data. The preview's product profile is always generated separately. A migration marker prevents repeated imports; an incompatible old session may still require manual recovery.
+Release builds use `<com.wanwei.harness local data>/dsh-home`. Before the first sidecar launch, migration imports the old `~/.dsh` and the previous separate application's `com.wanwei.harness.preview/dsh-home`. Priority is existing formal data, previous separate data, then legacy data. Originals and recovery snapshots remain intact. Workspace v2 registries merge by filesystem path and union session IDs; identical logs deduplicate, byte-prefix continuations retain the longer log. Divergent logs and conflicting skills remain in source snapshots with paths recorded in `.wanwei-formal-migration-v2.json`; only the preferred variant is active, not two displayed conversations. Skills never combine scripts from different versions. Credentials and executable profile patches are not imported from historical homes. Original workspace files and absolute references are not relocated. Missing external files and unsupported session formats still require recovery; migration does not reinterpret session events. A fully staged home is published before startup, interrupted publication resumes, and incompatible workspace registries stop migration rather than start with missing history. Close both old applications before upgrading.
 
 | Channel | Product name | Application identifier |
 |---|---|---|
-| Installed preview | Wanwei Buddy Preview | `com.wanwei.harness.preview` |
-| Local development | Wanwei Buddy Preview | `com.wanwei.harness.preview.development` |
-| Existing production | Wanwei Buddy | `com.wanwei.harness` |
+| Installed release | 万维Buddy | `com.wanwei.harness` |
+| Local development | 万维Buddy | `com.wanwei.harness.development` |
 
-The distinct identifiers separate the single-instance lock, WebView profile, platform application-data directory, cache, and installer identity from the existing production client.
+The release shares the original product's installer identity; development retains a separate single-instance lock, WebView profile and data directory. Development data and Mock configuration are never migration sources.
 
 ## Verify
 
-The manual [desktop preview workflow](../../.github/workflows/wanwei-desktop-preview.yml) includes native Ubuntu 22.04 builds for Linux x64 and ARM64, with separate installer artifacts for each architecture. Each Linux job requests DEB and AppImage bundles and stages its own Node runtime and dependencies. Installer generation does not establish compatibility with UOS system libraries; installation and startup require testing on the target UOS release.
+The manual [desktop workflow](../../.github/workflows/wanwei-desktop-preview.yml) includes native Ubuntu 22.04 builds for Linux x64 and ARM64, with separate installer artifacts for each architecture. Each Linux job requests DEB and AppImage bundles and stages its own Node runtime and dependencies. Installer generation does not establish compatibility with UOS system libraries; installation and startup require testing on the target UOS release.
 
 ```sh
-pnpm --filter @wanwei/dsh-desktop-preview check:identity
-pnpm --filter @wanwei/dsh-desktop-preview check:sidecar
-pnpm --filter @wanwei/dsh-desktop-preview check:rust
+pnpm --filter @wanwei/dsh-desktop check:identity
+pnpm --filter @wanwei/dsh-desktop check:sidecar
+pnpm --filter @wanwei/dsh-desktop check:rust
 ```
 
 Source development runs the TypeScript CLI from the current checkout. `prepare:runtime` creates a self-contained production runtime under `src-tauri/resources/runtime`: it deploys the Wanwei-only production closure (the existing DSH runtime plus the PDF, DOCX, and XLSX parsers), restores required workspace peer packages as ordinary files, copies Node 22, and preflights the staged `wanwei-desktop` profile. `check:runtime` also runs the copied document helper with that bundled Node executable, so missing parser dependencies fail before an installer is built. The upstream Python runtime manifest is unchanged. Generated runtime files are ignored by Git and are rebuilt for each installer.
 
 ```sh
-pnpm --filter @wanwei/dsh-desktop-preview prepare:runtime
-pnpm --filter @wanwei/dsh-desktop-preview check:runtime
-pnpm --filter @wanwei/dsh-desktop-preview build
+pnpm --filter @wanwei/dsh-desktop prepare:runtime
+pnpm --filter @wanwei/dsh-desktop check:runtime
+pnpm --filter @wanwei/dsh-desktop build
 ```
 
 The default `build` command rebuilds official DSH artifacts, stages and verifies the runtime, and runs `tauri build --no-bundle` to produce a local release binary without an installer. GitHub Actions uses `build:runner`, guarded by `GITHUB_ACTIONS=true`, to create the platform installer; local invocation fails immediately. File import, skill management, login window behavior, and other legacy commands remain separate follow-up migrations.

@@ -1,6 +1,6 @@
-# Build the isolated Wanwei desktop preview. This workflow is manual-only and
+# Build the Wanwei Buddy desktop. This workflow is manual-only and
 # has no image, registry, OneAPI deployment, or database steps.
-name: Wanwei desktop preview
+name: Wanwei Buddy desktop
 
 on:
   workflow_dispatch:
@@ -11,17 +11,17 @@ on:
         default: new-version
         type: string
       version:
-        description: Preview version without the v prefix (for example 0.2.0-preview.1)
+        description: Release version without the v prefix (for example 2.1.0)
         required: true
         type: string
       publish_github_release:
-        description: Publish the generated installers as a preview GitHub Release
+        description: Publish the generated installers as a GitHub Release
         required: true
         default: false
         type: boolean
 
 concurrency:
-  group: wanwei-desktop-preview-${{ inputs.source_ref }}
+  group: wanwei-desktop-${{ inputs.source_ref }}
   cancel-in-progress: false
 
 env:
@@ -64,7 +64,7 @@ jobs:
         run: pnpm run build:official
 
   build-desktop:
-    name: Build ${{ matrix.name }} preview installer
+    name: Build ${{ matrix.name }} installer
     needs: verify-official
     strategy:
       fail-fast: false
@@ -158,9 +158,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             products/wanwei-desktop/src-tauri/target
-          key: ${{ matrix.platform }}-wanwei-preview-${{ hashFiles('products/wanwei-desktop/src-tauri/Cargo.lock', 'products/wanwei-desktop/src-tauri/Cargo.toml') }}
+          key: ${{ matrix.platform }}-wanwei-${{ hashFiles('products/wanwei-desktop/src-tauri/Cargo.lock', 'products/wanwei-desktop/src-tauri/Cargo.toml') }}
           restore-keys: |
-            ${{ matrix.platform }}-wanwei-preview-
+            ${{ matrix.platform }}-wanwei-
 
       - name: Validate inputs and prepare platform config
         run: node products/wanwei-desktop/scripts/prepare-runner-config.mjs ${{ matrix.platform }}
@@ -199,7 +199,7 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: ${{ startsWith(matrix.platform, 'linux-') && '1' || '' }}
           NO_STRIP: ${{ startsWith(matrix.platform, 'linux-') && '1' || '' }}
           RUST_LOG: ${{ startsWith(matrix.platform, 'linux-') && 'tauri_bundler=debug' || '' }}
-        run: pnpm --dir products/wanwei-desktop run build:runner:bundle --bundles ${{ matrix.bundles }} --config "${{ runner.temp }}/wanwei-preview-${{ matrix.platform }}.json"
+        run: pnpm --dir products/wanwei-desktop run build:runner:bundle --bundles ${{ matrix.bundles }} --config "${{ runner.temp }}/wanwei-${{ matrix.platform }}.json"
 
       # Tauri's DMG helper customizes Finder via AppleScript, which is
       # unreliable on hosted macOS runners. Package the already signed .app
@@ -210,14 +210,14 @@ jobs:
         run: |
           set -euo pipefail
           bundle_dir="products/wanwei-desktop/src-tauri/target/release/bundle"
-          app="$bundle_dir/macos/万维 Buddy 预览版.app"
+          app="$bundle_dir/macos/万维Buddy.app"
           test -d "$app"
-          stage="${RUNNER_TEMP}/wanwei-preview-dmg-${{ matrix.platform }}"
+          stage="${RUNNER_TEMP}/wanwei-dmg-${{ matrix.platform }}"
           mkdir -p "$stage" "$bundle_dir/dmg"
           ditto "$app" "$stage/$(basename "$app")"
           ln -s /Applications "$stage/Applications"
-          dmg="$bundle_dir/dmg/万维 Buddy 预览版_${{ inputs.version }}_${{ matrix.platform }}.dmg"
-          hdiutil create -srcfolder "$stage" -volname "万维 Buddy 预览版" -format UDZO -ov "$dmg"
+          dmg="$bundle_dir/dmg/万维Buddy_${{ inputs.version }}_${{ matrix.platform }}.dmg"
+          hdiutil create -srcfolder "$stage" -volname "万维Buddy" -format UDZO -ov "$dmg"
           hdiutil verify "$dmg"
 
       - name: Diagnose Linux AppImage bundler
@@ -245,29 +245,29 @@ jobs:
             --appdir "$app_dir" --plugin gtk --output appimage || true
           echo "::endgroup::"
 
-      - name: Upload Windows preview installer
+      - name: Upload Windows installer
         if: ${{ matrix.platform == 'windows-x64' }}
         uses: actions/upload-artifact@v7
         with:
-          name: wanwei-buddy-preview-${{ inputs.version }}-windows-x64
+          name: wanwei-buddy-${{ inputs.version }}-windows-x64
           path: products/wanwei-desktop/src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload macOS preview installer
+      - name: Upload macOS installer
         if: ${{ startsWith(matrix.platform, 'macos-') }}
         uses: actions/upload-artifact@v7
         with:
-          name: wanwei-buddy-preview-${{ inputs.version }}-${{ matrix.platform }}
+          name: wanwei-buddy-${{ inputs.version }}-${{ matrix.platform }}
           path: products/wanwei-desktop/src-tauri/target/release/bundle/dmg/*.dmg
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload Linux preview installers
+      - name: Upload Linux installers
         if: ${{ startsWith(matrix.platform, 'linux-') }}
         uses: actions/upload-artifact@v7
         with:
-          name: wanwei-buddy-preview-${{ inputs.version }}-${{ matrix.platform }}
+          name: wanwei-buddy-${{ inputs.version }}-${{ matrix.platform }}
           path: |
             products/wanwei-desktop/src-tauri/target/release/bundle/deb/*.deb
             products/wanwei-desktop/src-tauri/target/release/bundle/appimage/*.AppImage
@@ -275,7 +275,7 @@ jobs:
           retention-days: 14
 
   release:
-    name: Publish preview release
+    name: Publish release
     if: ${{ inputs.publish_github_release }}
     needs: build-desktop
     runs-on: ubuntu-24.04
@@ -284,13 +284,13 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: wanwei-buddy-preview-${{ inputs.version }}-*
+          pattern: wanwei-buddy-${{ inputs.version }}-*
           path: release-assets
           merge-multiple: true
 
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: wanwei-preview-v${{ inputs.version }}
-          name: 万维 Buddy 预览版 v${{ inputs.version }}
-          prerelease: true
+          tag_name: wanwei-v${{ inputs.version }}
+          name: 万维Buddy v${{ inputs.version }}
+          prerelease: false
           files: release-assets/*

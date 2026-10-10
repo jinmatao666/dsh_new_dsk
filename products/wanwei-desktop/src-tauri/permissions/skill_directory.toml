@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-open-skill-directory"
+description = "Open a validated installed skill directory in the local file manager."
+commands.allow = ["open_skill_directory"]

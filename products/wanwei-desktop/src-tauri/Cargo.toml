@@ -1,12 +1,12 @@
 [package]
-name = "wanwei-buddy-preview"
+name = "wanwei-buddy"
 version = "0.1.0"
-description = "Wanwei Buddy preview desktop shell"
+description = "Wanwei Buddy desktop shell"
 authors = ["Wanwei"]
 edition = "2021"
 
 [lib]
-name = "wanwei_buddy_preview_lib"
+name = "wanwei_buddy_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

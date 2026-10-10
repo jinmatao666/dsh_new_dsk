@@ -1,4 +1,4 @@
-# 万维 Buddy 预览版桌面端
+# 万维Buddy桌面端
 
 [English](README.md) | 中文
 
@@ -8,38 +8,37 @@
 
 macOS 保留继承的系统临时目录，将随包 Node 的目录放到 Sidecar PATH 首位，保留现有工具路径并补充 Homebrew 目录。Python 用户依赖及 pip 下载使用宿主临时目录下按产品隔离的私有目录，该区域已在工作区写入模式的允许范围内。缓存可跨启动复用，但可能被系统清理，不属于持久用户数据。只读限制和扩大访问范围的审批保持有效。Windows 和 Linux 保持既有启动环境；Mac 安装版行为仍需实机验证。
 
-Tauri 2 桌面壳会以本地回环 DSH Sidecar 的形式启动新的 `wanwei-desktop` profile，等待其输出带鉴权信息的 Web 地址，再创建主 WebView。它始终把 `DSH_HOME` 放在预览版自己的本地应用数据目录下。万维自有桌面命令通过明确的 WebView 权限提供。
+Tauri 2 桌面壳会以本地回环 DSH Sidecar 的形式启动 `wanwei-desktop` profile，等待其输出带鉴权信息的 Web 地址，再创建主 WebView。它把 `DSH_HOME` 放在应用的本地数据目录下。万维自有桌面命令通过明确的 WebView 权限提供。
 
 主 WebView 的新窗口请求会在系统默认浏览器打开 HTTP(S) 链接。其他 URL 协议不会启动外部程序，对话链接也不会创建第二个应用内 WebView。
 
 独立专家网页仍在实施。已上架专家在主窗口内的独立子 WebView 打开；桌面壳按每次打开的具体 HTTP 或 HTTPS 来源和视图标签登记权限。macOS 安装包仅允许 `ac.zjugis.com` 通过不安全的 HTTP 加载，以便当前 HTTP 网关能在 WKWebView 中显示；此例外不会加密传输，网关改用 HTTPS 后应移除。目录、一次性身份票据、桌面桥与视图关闭/定位还须在 Windows、macOS、Linux 实机验证后才能发布。专家网站是高权限代码，上架前必须审核其 iframe 与跳转行为。六个正式网站及一次性切换尚未完成，详见 `WANWEI_EXPERT_WEB_INTEGRATION_PLAN.md`。
 
-正式构建将凭据、设置、会话和技能保存在 `<预览版本地应用数据目录>/dsh-home`。首次启动时，如果存在旧版 `~/.dsh`，预览版会将设置、会话、存储、附件、技能、兼容的智能体预设和匿名用户 ID 复制到独立目录，不覆盖预览版已有文件，也不写入旧目录。凭据不会迁移：每次安装新构建仍需重新登录。旧目录不存在或复制失败时，预览版继续使用自己的数据启动。新版产品 Profile 始终单独生成；迁移标记避免重复导入。不兼容的旧会话仍可能需要人工处理。
+正式构建使用 `<com.wanwei.harness 本地数据目录>/dsh-home`。首次启动 Sidecar 前，迁移旧版 `~/.dsh` 和此前独立应用的 `com.wanwei.harness.preview/dsh-home`；优先级为正式目录已有数据、此前独立应用数据、旧版数据。原始目录与恢复副本均保留。工作区 v2 索引按文件系统路径合并，会话 ID 去重；相同日志去重，字节前缀相同的续写日志保留较长版本。分叉日志和冲突技能完整保留在来源副本中，路径写入 `.wanwei-formal-migration-v2.json`；只有优先版本处于使用状态，不会展示为两条会话。不同版本的技能脚本不混合。历史登录凭据与可执行 Profile 补丁不导入。原始工作区文件及绝对路径引用不搬动；外部文件缺失与不支持的会话格式仍需恢复，迁移不重新解释会话事件。完整暂存目录发布后才启动，中断发布可恢复；工作区索引不兼容时停止迁移，不以缺失历史的状态启动。升级前请关闭两个旧应用。
 
 | 通道 | 产品名称 | 应用标识 |
 |---|---|---|
-| 已安装预览版 | 万维 Buddy 预览版 | `com.wanwei.harness.preview` |
-| 本地开发版 | 万维 Buddy 预览版 | `com.wanwei.harness.preview.development` |
-| 现有正式版 | 万维 Buddy | `com.wanwei.harness` |
+| 已安装正式版 | 万维Buddy | `com.wanwei.harness` |
+| 本地开发版 | 万维Buddy | `com.wanwei.harness.development` |
 
-不同应用标识会把单实例锁、WebView profile、平台应用数据目录、缓存和安装器身份与现有正式客户端隔离开来。
+正式版沿用原产品的安装身份；开发版的单实例锁、WebView profile 和数据目录继续隔离。开发数据与 Mock 配置不作为迁移来源。
 
 ## 验证
 
-手动触发的[桌面预览版工作流](../../.github/workflows/wanwei-desktop-preview.yml)包含 Linux x64 和 ARM64 的原生 Ubuntu 22.04 构建，按架构分别保存安装包产物。每个 Linux 任务请求生成 DEB 和 AppImage，并暂存当前架构的 Node 运行时和依赖。生成安装包不代表已经兼容 UOS 系统库；安装和启动需要在目标 UOS 版本上测试。
+手动触发的[桌面工作流](../../.github/workflows/wanwei-desktop-preview.yml)包含 Linux x64 和 ARM64 的原生 Ubuntu 22.04 构建，按架构分别保存安装包产物。每个 Linux 任务请求生成 DEB 和 AppImage，并暂存当前架构的 Node 运行时和依赖。生成安装包不代表已经兼容 UOS 系统库；安装和启动需要在目标 UOS 版本上测试。
 
 ```sh
-pnpm --filter @wanwei/dsh-desktop-preview check:identity
-pnpm --filter @wanwei/dsh-desktop-preview check:sidecar
-pnpm --filter @wanwei/dsh-desktop-preview check:rust
+pnpm --filter @wanwei/dsh-desktop check:identity
+pnpm --filter @wanwei/dsh-desktop check:sidecar
+pnpm --filter @wanwei/dsh-desktop check:rust
 ```
 
 源码开发模式直接运行当前 checkout 中的 TypeScript CLI。`prepare:runtime` 会在 `src-tauri/resources/runtime` 中创建自包含生产运行时：部署万维专用生产依赖闭包（既有 DSH 运行时加上 PDF、DOCX、XLSX 解析器），把所需 workspace 对等包恢复为普通文件，复制 Node 22，并预检暂存后的 `wanwei-desktop` profile。`check:runtime` 还会用随包 Node 启动暂存的文档辅助程序，缺少解析依赖时会在制作安装包之前失败。官方 Python 运行时清单保持不变。生成的运行时文件由 Git 忽略，每次制作安装包时重新构建。
 
 ```sh
-pnpm --filter @wanwei/dsh-desktop-preview prepare:runtime
-pnpm --filter @wanwei/dsh-desktop-preview check:runtime
-pnpm --filter @wanwei/dsh-desktop-preview build
+pnpm --filter @wanwei/dsh-desktop prepare:runtime
+pnpm --filter @wanwei/dsh-desktop check:runtime
+pnpm --filter @wanwei/dsh-desktop build
 ```
 
 默认 `build` 会重新构建官方 DSH 产物、暂存并验证运行时，再通过 `tauri build --no-bundle` 生成本地 release 二进制，不制作安装包。GitHub Actions 使用受 `GITHUB_ACTIONS=true` 保护的 `build:runner` 制作对应平台的安装包；本地调用会立即失败。文件导入、技能管理、登录窗口行为和其他旧版命令分别在后续步骤迁移。
