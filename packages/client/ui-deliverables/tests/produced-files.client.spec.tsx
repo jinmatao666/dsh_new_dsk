@@ -208,6 +208,16 @@ describe('produced-file Turn data', () => {
     expect(selectProducedFiles(tailOwner(produced([3, 'out/report.md']), 4))).toEqual(['out/report.md'])
   })
 
+  it('omits dot-prefixed diagnostic scripts even when named in the closing response', () => {
+    const data: DeliverablesTurnData = {
+      ...produced([3, '.tmp-tmpcheck.py'], [4, 'out/.temp/check.py'], [5, 'out/helper.py']),
+      responses: [{ seq: 6, text: '排查 `.tmp-tmpcheck.py`、`out/.temp/check.py`；交付 `out/helper.py`。' }],
+    }
+    expect(selectProducedFiles(tailOwner(data, 6))).toEqual(['out/helper.py'])
+    expect(producedForClosing(data, 6)).toHaveLength(3)
+    expect(selectProducedFiles(tailOwner(produced([3, '.tmp-venvbuild.py']), 4))).toBeNull()
+  })
+
   it('does not guess ambiguous basenames or use future closing references', () => {
     const data: DeliverablesTurnData = {
       ...produced([3, 'a/report.docx'], [4, 'b/report.docx']),

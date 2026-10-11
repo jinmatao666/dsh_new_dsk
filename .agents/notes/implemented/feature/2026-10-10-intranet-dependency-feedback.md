@@ -12,7 +12,7 @@ Private-network users can edit and run scripts, but unavailable dependencies can
 
 Keep this policy in the Wanwei authentication/network plugin. A private-network-only system-prompt section tells the model to inspect installed dependencies, prefer offline packages and internal mirrors, and explain a blocked task in Chinese only when an essential dependency has no alternative. Confirmed mode changes replace the section through the existing settings scope; plugin disposal removes it.
 
-The existing tool pre-execution waterfall denies recognized direct package-manager commands with public sources. Explicit offline options and internal sources remain usable. Configuration files and unresolved variables are deferred to the package manager rather than guessed. The post-execution waterfall preserves original shell output and appends Chinese guidance for recognized missing dependencies or dependency-download failures. Ordinary tool results carry the reason into conversation records and model context; there is no separate popup or fabricated assistant message. Internet mode remains unchanged.
+The prompt ownership and ordinary tool-result feedback remain current. [Failure-driven dependency feedback](2026-10-11-failure-driven-dependency-feedback.md) supersedes the download-denial decision: configured private-network mode permits actual downloads, and post-execution diagnostics determine failure guidance. Ordinary tool results carry the reason into conversation records and model context; there is no separate popup or fabricated assistant message. Internet mode remains unchanged.
 
 ## Alternatives considered
 
@@ -24,4 +24,4 @@ The existing tool pre-execution waterfall denies recognized direct package-manag
 
 ## Consequences
 
-The policy is best-effort application feedback, not a firewall. Local configuration may resolve to a public source; such commands are not comprehensively prevented. Model wording follows prompt guidance rather than deterministic UI text. Seventeen dependency-policy tests, fifteen existing network tests and one real Loader composition test passed, together with the Host TypeScript build and package bundle. Tests do not perform real dependency downloads or establish live-model response wording.
+The policy is best-effort application feedback, not a firewall. Model wording follows prompt guidance rather than deterministic UI text. Current failure categories and focused verification are owned by the [failure-driven feedback decision](2026-10-11-failure-driven-dependency-feedback.md). Tests do not establish live-model response wording.

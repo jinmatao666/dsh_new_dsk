@@ -41,9 +41,9 @@ The configured backend's System Settings owns the network environment and indepe
 
 Forgot password reads the backend's maintenance contact into a separate dialog. SMS and QR login display an unavailable notice without replacing account login. The login card keeps its existing sizing; no registration or simulated authentication controls are provided.
 
-In private-network mode, recognized direct package-manager commands targeting public dependency sources are denied. Installed dependencies, offline options and explicitly internal mirrors remain available. Commands using configuration files or unresolved source variables are left to the package manager to resolve. Missing-dependency and dependency-download failures retain their original tool output and receive Chinese guidance in the tool result. The model is instructed to explain the blocked task only when essential dependencies have no available offline alternative, and not claim completion.
+Private-network mode permits dependency downloads when connectivity allows them. Recognized Bash, PowerShell and terminal results distinguish missing modules, connection failures and unavailable package versions, retain original output and append Chinese guidance. The model is instructed to explain the dependency, actual cause and administrator-assisted recovery concisely, and stop dependent steps only when an essential dependency remains unavailable. Permission and syntax errors are not classified as network failures.
 
-This is an application policy, not a firewall or shell sandbox; nested scripts and arbitrary download commands are not comprehensively recognized. The dependency prompt section follows the confirmed mode for future prompt assembly; historical messages are not rewritten. Internet mode adds no dependency prompt section, denial or feedback.
+This is diagnostic feedback, not a firewall or shell sandbox. Unrecognized diagnostics receive no automatic dependency feedback. The dependency prompt section follows the confirmed mode for future prompt assembly; historical messages are not rewritten. Internet mode adds no dependency prompt section or feedback. Assistant headings, brevity and retry decisions follow model guidance rather than a deterministic response template.
 
 [The product patch](../../bundle/wanwei-desktop/cordis.patch.yml) supplies the provider route and generated-token reference. The Host resolves an explicit OneAPI origin first, then `DSH_ONEAPI_URL` from the launch environment, then the local development origin.
 
@@ -117,7 +117,7 @@ Different search results may change subsequent prompt content and cache reuse; t
 
 #### What the model sees
 
-Only private-network mode adds dependency guidance to the system prompt. Denied downloads and recognized missing-dependency failures return Chinese guidance through ordinary tool results, visible to both the model and the conversation UI. No separate popup or fabricated assistant message is inserted.
+Only private-network mode adds dependency guidance to the system prompt. Recognized missing-dependency and download failures return Chinese guidance through ordinary tool results, visible to both the model and the conversation UI. Successful downloads receive no failure feedback. No separate popup or fabricated assistant message is inserted.
 
 #### Token effect
 

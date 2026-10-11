@@ -204,7 +204,7 @@ function referencedPaths(text: string, paths: readonly string[]): readonly strin
 
 /** Known scratch paths are omitted only from delivery presentation, never removed from disk. */
 function isProcessPath(path: string): boolean {
-  const processName = /^(?:_draft(?:[._-]|$)|_?tmp(?:[._-]|$)|_?temp(?:[._-]|$)|__pycache__|\.cache|intermediate|scratch)/iu
+  const processName = /^(?:_draft(?:[._-]|$)|[._]?tmp(?:[._-]|$)|[._]?temp(?:[._-]|$)|__pycache__|\.cache|intermediate|scratch)/iu
   return path.split(/[\\/]/u).some(name => processName.test(name))
     || /\.(?:tmp|temp|log|pyc)$/iu.test(path)
 }

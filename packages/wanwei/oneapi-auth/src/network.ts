@@ -6,7 +6,7 @@ import type {} from '@deepseek-ai/dsh-skill'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { internalLink, type NetworkState } from './network-contract.ts'
-import { DEPENDENCY_BLOCKED, INTRANET_DEPENDENCY_GUIDANCE, shellInput, requiresPublicDependencies, dependencyFailure } from './dependency-policy.ts'
+import { DEPENDENCY_FEEDBACK, INTRANET_DEPENDENCY_GUIDANCE, dependencyFailure } from './dependency-policy.ts'
 import { FIRST_PARTY_SECTION_ORDER } from '@deepseek-ai/dsh-system-prompt'
 
 /** Host-owned durable network mode and administrator-provided internal origins. */
@@ -71,11 +71,6 @@ export function installNetworkPolicy(ctx: Context, baseURL: string): NetworkPoli
     tctx.on('tools/pre-execute', async (exec, next) => {
       if (scope.get().mode === 'intranet') {
         const args = typeof exec.arguments === 'object' && exec.arguments !== null ? exec.arguments as Record<string, unknown> : {}
-        const command = shellInput(exec.name, args)
-        const workdir = typeof args.workdir === 'string' ? args.workdir : exec.agent?.session.header.cwd
-        if (command !== undefined && requiresPublicDependencies(command, policy.getSnapshot().internalOrigins, workdir)) {
-          return { kind: 'deny' as const, reason: DEPENDENCY_BLOCKED }
-        }
         if (exec.name === 'web_search' || (exec.name === 'web_fetch'
           && (typeof args.url !== 'string' || !internalLink(args.url, policy.getSnapshot().internalOrigins)))) {
           return { kind: 'deny' as const, reason: '纯内网环境不可用' }
@@ -85,12 +80,13 @@ export function installNetworkPolicy(ctx: Context, baseURL: string): NetworkPoli
     })
     tctx.on('tools/post-execute', async (exec, result, next) => {
       const decision = await next()
-      if (scope.get().mode !== 'intranet' || !['bash', 'terminal_send', 'terminal_read', 'job_output'].includes(exec.name)
+      if (scope.get().mode !== 'intranet' || !['bash', 'pwsh', 'terminal_send', 'terminal_read', 'job_output'].includes(exec.name)
         || decision.kind !== 'accept' || decision.value !== undefined) return decision
       const content = decision.content ?? result.content
       const text = content.filter(block => block.type === 'text').map(block => block.text).join('\n')
-      if (!dependencyFailure(text)) return decision
-      return { ...decision, content: [...content, { type: 'text' as const, text: `\n${DEPENDENCY_BLOCKED}` }] }
+      const failure = dependencyFailure(text)
+      if (failure === undefined) return decision
+      return { ...decision, content: [...content, { type: 'text' as const, text: `\n${DEPENDENCY_FEEDBACK[failure]}` }] }
     })
   })
   return policy
