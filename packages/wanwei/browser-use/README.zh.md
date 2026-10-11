@@ -25,14 +25,13 @@ Agent 可以通过固定版本的官方 Playwright 提供方查看和操作 Chro
 <a id="use-this-package"></a>
 ## 使用本包
 
-在创建会话前挂载此插件。当上游发现机制无法找到浏览器时，指定已安装的 Chrome 或 Chromium 可执行文件。
+在创建会话前挂载此插件。不指定 `executablePath` 时，Windows/macOS 按 Chrome、Edge 顺序检查标准安装目录；Linux 在 PATH 中查找 Chrome、Chromium 和 Edge 命令。自定义绝对可执行文件路径优先，必须是可访问的可执行文件。找不到浏览器时返回中文工具说明，不自动下载。安装浏览器或修改路径后需要重启桌面端并新建会话。
 
 ```yaml
 - name: '@deepseek-ai/dsh-wanwei-browser-use'
   config:
     enabled: true
     headless: false
-    executablePath: /usr/bin/chromium
 ```
 
 “浏览器助手”卡片位于设置 → 插件 → 插件配置的首位。开关默认启用，通过主机设置文档自动保存 `wanwei-browser-use.enabled`。停用会隐藏浏览器工具定义，并拒绝后续调用，包括已有会话已知的工具；不会强制终止正在执行的操作或会话资源。重新启用后恢复后续调用，无需重装。纯内网模式将开关置灰并拒绝浏览器工具，不覆盖已保存的偏好。桌面层支持通过 `DSH_BROWSER_USE_ENABLED=0` 设置组装层默认值，并通过 `DSH_BROWSER_EXECUTABLE` 接收可执行文件路径；已保存的偏好优先于默认值。修改可执行文件路径需要创建新会话。
@@ -67,7 +66,7 @@ Agent 可以通过固定版本的官方 Playwright 提供方查看和操作 Chro
 
 #### 模型可见内容
 
-官方提供方贡献 `mcp__playwright-mcp__` 工具和 MCP 指引。快照文件链接以会话工作目录为基准解析。纯内网模式隐藏浏览器工具定义，并以 `纯内网环境暂不开放浏览器自动化` 拒绝直接执行。
+官方提供方贡献 `mcp__playwright-mcp__` 工具和 MCP 指引。快照文件链接以会话工作目录为基准解析。纯内网模式隐藏浏览器工具定义，并以 `纯内网环境暂不开放浏览器自动化` 拒绝直接执行。浏览器指引要求模型在启动失败后停止，不下载浏览器或改用 Shell/CDP 脚本；可识别的启动错误在工具结果中先返回中文处理说明，再保留原始诊断。这是模型行为指引，不是全面禁止 Shell 执行。验证码需要用户手动处理。
 
 #### Token 影响
 
@@ -85,7 +84,7 @@ Agent 可以通过固定版本的官方 Playwright 提供方查看和操作 Chro
 
 - 官方提供方是实验功能，固定为 `0.2.1-alpha.2`；其 peer 版本与本运行时不同，需要集成测试。
 - 在完成浏览器网络约束之前，纯内网模式禁用浏览器自动化；本插件不是防火墙。
-- 本包不提供自动可执行文件发现或内置 Chromium；设置卡片展示权限状态，不代表浏览器连接就绪。
+- 非标准安装位置需要设置 `executablePath` 或 `DSH_BROWSER_EXECUTABLE`；本包不内置 Chromium，不提供 Firefox/WebKit 选择，也不保证第三方 Chromium 浏览器兼容。设置卡片展示权限状态，不代表浏览器连接就绪。
 - 跨平台安装包和实际模型驱动的问答验证仍然必需。
 
 <a id="dev-note"></a>

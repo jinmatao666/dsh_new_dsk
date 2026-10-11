@@ -3214,12 +3214,12 @@ export interface Config {
   enabled: boolean
   /** Launch the configured browser without a visible window. */
   headless: boolean
-  /** Absolute path to an installed browser; no browser download is performed. */
+  /** Custom absolute browser path; omitted paths discover installed Chrome/Edge, without downloads. */
   executablePath?: string
 }
 ```
 
-来源：[`packages/wanwei/browser-use/src/index.ts:14`](../packages/wanwei/browser-use/src/index.ts)
+来源：[`packages/wanwei/browser-use/src/index.ts:16`](../packages/wanwei/browser-use/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-chinese"></a>
 

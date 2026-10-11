@@ -36,7 +36,8 @@ it.skipIf(!existsSync(chromium))('boots the official provider through Loader, na
     '- name: test-prompt', '- name: test-tools', '- name: test-agents',
     '- name: test-settings', '  config:', `    path: ${JSON.stringify(join(root, 'settings.yaml'))}`, '    watch: false',
     "- name: '@deepseek-ai/dsh-wanwei-browser-use'", '  config:',
-    '    enabled: true', '    headless: true', `    executablePath: ${JSON.stringify(chromium)}`, '',
+    '    enabled: true', `    headless: ${process.env.DSH_BROWSER_TEST_HEADED !== '1'}`,
+    ...process.env.DSH_BROWSER_TEST_EXECUTABLE === undefined ? [] : [`    executablePath: ${JSON.stringify(chromium)}`], '',
   ].join('\n'))
   ctx = new Context()
   ctx.baseUrl = pathToFileURL(root).href + '/'
@@ -81,6 +82,29 @@ it.skipIf(!existsSync(chromium))('boots the official provider through Loader, na
   const snapshot = text.match(/\[Snapshot\]\(([^)]+)\)/)
   const visible = snapshot === null ? text : `${text}\n${await readFile(resolve(root, snapshot[1]!), 'utf8')}`
   expect(visible).toContain('about:blank')
+  const form = '<html><body><label>测试输入<input id="name"></label><button onclick="document.getElementById(\'out\').textContent=document.getElementById(\'name\').value">确认</button><p id="out"></p></body></html>'
+  const navigate = await ctx.tools.execute({ name: 'mcp__playwright-mcp__browser_navigate',
+    arguments: { url: `data:text/html;charset=utf-8,${encodeURIComponent(form)}` },
+    callId: ToolCallId('browser-form'), agent, signal: new AbortController().signal })
+  expect(navigate.isError).toBe(false)
+  const navigateText = navigate.content.filter(block => block.type === 'text').map(block => block.text).join('\n')
+  const formLink = navigateText.match(/\[Snapshot\]\(([^)]+)\)/)
+  const formSnapshot = formLink === null ? navigateText : await readFile(resolve(root, formLink[1]!), 'utf8')
+  const inputRef = formSnapshot.match(/textbox[^\n]*\[ref=([^\]]+)\]/)?.[1]
+  const buttonRef = formSnapshot.match(/button[^\n]*\[ref=([^\]]+)\]/)?.[1]
+  expect(inputRef).toBeDefined(); expect(buttonRef).toBeDefined()
+  const fill = await ctx.tools.execute({ name: 'mcp__playwright-mcp__browser_fill_form',
+    arguments: { fields: [{ name: '测试输入', type: 'textbox', target: inputRef, value: '浏览器操作正常' }] },
+    callId: ToolCallId('browser-fill'), agent, signal: new AbortController().signal })
+  expect(fill.isError, JSON.stringify(fill.content)).toBe(false)
+  const click = await ctx.tools.execute({ name: 'mcp__playwright-mcp__browser_click',
+    arguments: { target: buttonRef },
+    callId: ToolCallId('browser-click'), agent, signal: new AbortController().signal })
+  expect(click.isError, JSON.stringify(click.content)).toBe(false)
+  const clickText = click.content.filter(block => block.type === 'text').map(block => block.text).join('\n')
+  const clickLink = clickText.match(/\[Snapshot\]\(([^)]+)\)/)
+  const clickSnapshot = clickLink === null ? clickText : await readFile(resolve(root, clickLink[1]!), 'utf8')
+  expect(clickSnapshot).toMatch(/paragraph[^\n]*浏览器操作正常/)
   await scope.dispose()
   unregister()
   expect(ctx.tools.schemas().some(tool => tool.name.startsWith('mcp__playwright-mcp__'))).toBe(false)

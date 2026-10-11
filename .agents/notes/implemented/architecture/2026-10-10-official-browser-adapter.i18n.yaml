@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-10-official-browser-adapter.md
-2026-10-10-official-browser-adapter.md: 1a1e1454ae0829bca812824fbdcd271679103f39
-2026-10-10-official-browser-adapter.zh.md: af47d40f1f0dc15c5077fed963cf6edbd04e8228
+2026-10-10-official-browser-adapter.md: 7151084ac7deae928e0de6bab72be6cbf9be3f53
+2026-10-10-official-browser-adapter.zh.md: 56f9e84c4d7204e42d771002e07e5a9f6334a40b

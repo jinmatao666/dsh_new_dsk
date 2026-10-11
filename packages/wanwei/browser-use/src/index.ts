@@ -9,6 +9,8 @@ import z from '@deepseek-ai/schemastery'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { stat } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
+import { FIRST_PARTY_SECTION_ORDER } from '@deepseek-ai/dsh-system-prompt'
+import { BROWSER_GUIDANCE, BROWSER_UNAVAILABLE, browserStartupFailure, resolveBrowserExecutable } from './browser-executable.ts'
 
 /** Explicit desktop launch configuration; no automatic browser download or attachment. */
 export interface Config {
@@ -16,7 +18,7 @@ export interface Config {
   enabled: boolean
   /** Launch the configured browser without a visible window. */
   headless: boolean
-  /** Absolute path to an installed browser; no browser download is performed. */
+  /** Custom absolute browser path; omitted paths discover installed Chrome/Edge, without downloads. */
   executablePath?: string
 }
 /** Validate product-owned browser settings. */
@@ -132,6 +134,12 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     return policy?.getSnapshot().mode
   }
   const prefix = 'mcp__playwright-mcp__'
+  const executablePath = await resolveBrowserExecutable(config.executablePath)
+  ctx.effect(() => ctx.systemPrompt.section({
+    name: 'wanwei:browser-operation',
+    order: FIRST_PARTY_SECTION_ORDER.DELIVERABLE_FILE_REFERENCES + 120,
+    text: BROWSER_GUIDANCE,
+  }))
   ctx.effect(() => ctx.tools.registerAvailability(tool =>
     !tool.startsWith(prefix) || (preference.get().enabled && networkMode() !== 'intranet')))
   ctx.on('tools/pre-execute', async (exec, next) => {
@@ -141,11 +149,26 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     if (exec.name.startsWith(prefix) && !preference.get().enabled) {
       return { kind: 'deny', reason: '浏览器助手已停用，请在设置的插件配置中启用' }
     }
+    if (exec.name.startsWith(prefix) && executablePath === undefined) {
+      return { kind: 'deny', reason: BROWSER_UNAVAILABLE }
+    }
     return next()
   }, { prepend: true })
+  ctx.on('tools/post-execute', async (exec, result, next) => {
+    const decision = await next()
+    if (!exec.name.startsWith(prefix) || decision.kind !== 'accept' || decision.value !== undefined) return decision
+    const content = decision.content ?? result.content
+    const text = content.filter(block => block.type === 'text').map(block => block.text).join('\n')
+    if (!browserStartupFailure(text)) return decision
+    const additionalContexts = [...result.additionalContexts ?? [], ...decision.additionalContexts ?? []]
+    return { kind: 'block', ...additionalContexts.length === 0 ? {} : { additionalContexts }, feedback: [
+      { type: 'text', text: '浏览器启动失败，当前浏览器任务无法继续。请检查浏览器安装和可执行文件路径，处理后重启桌面端并新建对话。不要自动下载浏览器或用脚本绕过，请如实向用户说明失败原因。' },
+      ...content,
+    ] }
+  })
   OfficialProvider.apply(browserCompatibilityContext(ctx,
     () => preference.get().enabled && networkMode() !== 'intranet'), {
     mode: 'launch', headless: config.headless,
-    ...config.executablePath === undefined ? {} : { executablePath: config.executablePath },
+    ...executablePath === undefined ? {} : { executablePath },
   })
 }

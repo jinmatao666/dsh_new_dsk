@@ -25,14 +25,13 @@ Agents can inspect and operate a Chromium browser through the pinned official Pl
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount this plugin before creating Sessions. Supply an installed Chrome or Chromium executable when upstream discovery cannot find one.
+Mount this plugin before creating Sessions. Without `executablePath`, the plugin searches standard Chrome then Edge installation locations on Windows/macOS; Linux searches Chrome, Chromium and Edge commands on PATH. A custom absolute executable path takes precedence and must be an accessible executable file. Missing browsers cause Chinese tool feedback instead of automatic downloads. Installing a browser or changing its path requires restarting the desktop and creating a new Session.
 
 ```yaml
 - name: '@deepseek-ai/dsh-wanwei-browser-use'
   config:
     enabled: true
     headless: false
-    executablePath: /usr/bin/chromium
 ```
 
 The Browser assistant card appears first in Settings → Plugins → Plugin configuration. Its switch defaults to enabled and automatically persists `wanwei-browser-use.enabled` through the Host settings document. Disabling hides browser schemas and denies subsequent calls, including tools already known to an existing Session; running operations and Session resources are not forcibly terminated. Re-enabling restores subsequent calls without reinstallation. Pure intranet mode disables the switch and browser tools without overwriting the saved preference. The desktop layer accepts `DSH_BROWSER_USE_ENABLED=0` as the composition default and `DSH_BROWSER_EXECUTABLE` for its executable path; the persisted preference takes precedence over the default. Changing the executable path requires new Sessions.
@@ -67,7 +66,7 @@ The provider-local Context supplies a validated Session working directory and a 
 
 #### What the model sees
 
-The official provider contributes `mcp__playwright-mcp__` tools and MCP instructions. Snapshot file links resolve from the Session working directory. Pure intranet mode hides browser schemas and denies direct browser execution with `纯内网环境暂不开放浏览器自动化`.
+The official provider contributes `mcp__playwright-mcp__` tools and MCP instructions. Snapshot file links resolve from the Session working directory. Pure intranet mode hides browser schemas and denies direct browser execution with `纯内网环境暂不开放浏览器自动化`. Browser guidance tells the model to stop on startup failure rather than download browsers or substitute shell/CDP scripts; recognized startup errors retain the original diagnostics after Chinese corrective feedback in the tool result. This guides model behavior, not a blanket shell-execution prohibition. Captchas require manual user handling.
 
 #### Token effect
 
@@ -85,7 +84,7 @@ The current integration has explicit deployment limits.
 
 - The official provider is experimental and pinned to `0.2.1-alpha.2`; its peer versions differ from this runtime and require integration tests.
 - Browser automation is disabled in pure intranet mode until browser-network confinement is implemented; this plugin is not a firewall.
-- No automatic executable discovery or bundled Chromium is supplied by this package; the settings card reports permission state, not browser connection readiness.
+- Nonstandard browser locations need `executablePath` or `DSH_BROWSER_EXECUTABLE`; no bundled Chromium, Firefox/WebKit selection or compatibility guarantee for third-party Chromium browsers is supplied. The settings card reports permission state, not browser connection readiness.
 - Cross-platform installer and real model-driven conversation validation remain required.
 
 <a id="dev-note"></a>
