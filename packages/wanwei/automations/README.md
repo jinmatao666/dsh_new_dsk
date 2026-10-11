@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Users can browse the existing task templates, history and creation demonstrations. System Settings controls its entry independently for Internet and intranet deployments; both default to enabled. Desktop startup or login refresh applies the setting. Mounting it does not require the skills marketplace, expert library or connectors plugin.
+Users can browse the existing task templates, history and creation demonstrations in Internet mode. In intranet mode, the entry is disabled and its page cannot open, matching the expert library. System Settings controls entry visibility independently for Internet and intranet deployments; both default to visible, but visibility does not override intranet unavailability. Desktop startup or login refresh applies the setting. Mounting it does not require the skills marketplace, expert library or connectors plugin.
 
 ## Table of Contents
 

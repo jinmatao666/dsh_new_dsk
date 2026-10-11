@@ -15,6 +15,7 @@ ensureProductProfile(home)
 const featureIds = { 技能市场: 'wanwei-skill-marketplace', 专家库: 'wanwei-expert-library',
   连接器: 'wanwei-connectors', 自动化: 'wanwei-automations' }
 const disabled = process.argv.find(argument => argument.startsWith('--disable='))?.slice('--disable='.length)
+const network = process.argv.includes('--intranet') ? 'intranet' : 'internet'
 if (disabled) {
   assert.ok(Object.values(featureIds).includes(disabled))
   await writeFile(join(home, 'profiles/wanwei-desktop/cordis.patch.yml'), `- id: ${disabled}\n  disabled: true\n`)
@@ -23,7 +24,7 @@ if (disabled) {
 const backend = createServer((request, response) => {
   response.setHeader('Content-Type', 'application/json')
   const data = request.url === '/api/desktop-config'
-    ? { network: 'internet', operator: 'fixture', phone: '' } : []
+    ? { network, operator: 'fixture', phone: '' } : []
   response.end(JSON.stringify({ success: true, data }))
 })
 await new Promise(done => backend.listen(0, '127.0.0.1', done))
@@ -54,10 +55,26 @@ try {
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(match[0])
   await page.getByText('专业智能助手', { exact: true }).waitFor({ timeout: 30000 })
-  assert.equal(await page.locator('.dsh-skill-market-action').count(), disabled ? 3 : 4)
+  if (network === 'intranet') {
+    await page.locator('.dsh-skill-market-action').filter({ hasText: '自动化' })
+      .locator('small').getByText('不可用', { exact: true }).waitFor({ timeout: 30000 })
+  }
+  const hidden = Object.entries(featureIds).filter(([name, id]) =>
+    id === disabled || (network === 'intranet' && name === '连接器'))
+  assert.equal(await page.locator('.dsh-skill-market-action').count(), 4 - hidden.length)
   for (const [name, id] of Object.entries(featureIds)) {
-    if (id === disabled) {
+    if (hidden.some(([, hiddenId]) => hiddenId === id)) {
       assert.equal(await page.locator('.dsh-skill-market-action').filter({ hasText: name }).count(), 0)
+      continue
+    }
+    const action = page.locator('.dsh-skill-market-action').filter({ hasText: name })
+    if (network === 'intranet' && ['专家库', '自动化'].includes(name)) {
+      assert.equal(await action.isDisabled(), true, `${name}: intranet entry remains disabled`)
+      assert.equal(await action.getAttribute('title'), '纯内网环境不可用')
+      assert.equal(await action.locator('small').textContent(), '不可用')
+      await action.evaluate(button => button.click())
+      assert.equal(await page.getByRole('dialog', { name, exact: true }).count(), 0)
+      console.log(`${name}: intranet entry disabled; no page opens`)
       continue
     }
     await page.locator('.dsh-skill-market-action').filter({ hasText: name }).click()

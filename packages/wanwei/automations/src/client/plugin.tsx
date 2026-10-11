@@ -97,7 +97,7 @@ export const inject = ['slots', 'wanweiNetwork']
 export function apply(ctx: Context): void {
   const controller = createPanelController(ctx, 'wanwei-automations')
   registerFeaturePanel(ctx, 'skill-automations', 10, { controller, title: productText('自动化'),
-    subtitle: productText('配置定时执行、事件触发和自动交付流程'), blockedIntranet: false, visibility: ctx.wanweiNetwork.visibility('automations'), Icon: AutomationsIcon,
+    subtitle: productText('配置定时执行、事件触发和自动交付流程'), blockedIntranet: true, visibility: ctx.wanweiNetwork.visibility('automations'), Icon: AutomationsIcon,
     hooks: { network: ctx.wanweiNetwork }, renderContent: () => <AutomationPage />,
   })
 }
