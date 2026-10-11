@@ -17,6 +17,20 @@ class MemorySettings extends SettingsProvider {
 }
 
 describe('Intranet dependency feedback', () => {
+  it('guides concise mode-specific replies without a fixed dependency name or recovery suggestions', () => {
+    for (const text of [INTRANET_DEPENDENCY_GUIDANCE, ...Object.values(DEPENDENCY_FEEDBACK)]) {
+      expect(text).toContain('当前为纯内网模式')
+      expect(text).toContain('任务暂时无法继续')
+      expect(text).toContain('本次命令和失败日志')
+      expect(text).toContain('无法确认')
+      expect(text).toContain('不要输出处理建议')
+      expect(text).not.toContain('humanize')
+      expect(text).not.toContain('处理建议：')
+    }
+    expect(DEPENDENCY_FEEDBACK.unavailable).toContain('不能断定源已响应或网络不可达')
+    expect(DEPENDENCY_FEEDBACK.download).toContain('⚠ 所需依赖下载失败')
+  })
+
   it.each([
     ["ModuleNotFoundError: No module named 'humanize'", 'missing'],
     ['ERR_MODULE_NOT_FOUND: Cannot find package humanize', 'missing'],
@@ -34,7 +48,7 @@ describe('Intranet dependency feedback', () => {
     ['Successfully installed humanize-4.15.0', undefined],
     ['HTTP request: ECONNREFUSED', undefined],
   ])('classifies actual diagnostics: %s', (text, kind) => {
-    expect(dependencyFailure(text!)).toBe(kind)
+    expect(dependencyFailure(text)).toBe(kind)
   })
 
   it.each(['bash', 'pwsh', 'terminal_send', 'terminal_read', 'job_output'])('allows downloads and adds failure feedback for %s', async (name) => {
@@ -60,6 +74,8 @@ describe('Intranet dependency feedback', () => {
         ["ModuleNotFoundError: No module named 'humanize'", 'missing'],
         ['pip: Connection refused', 'download'],
         ['No matching distribution found for humanize', 'unavailable'],
+        ['No matching distribution found for openpyxl', 'unavailable'],
+        ['npm error code E404: @example/unavailable-package', 'unavailable'],
       ] as const) {
         execute.mockResolvedValue(text)
         expect((await call()).content).toEqual([{ type: 'text', text }, { type: 'text', text: `\n${DEPENDENCY_FEEDBACK[kind]}` }])
