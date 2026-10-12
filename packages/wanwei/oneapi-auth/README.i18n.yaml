@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/wanwei/oneapi-auth/README.md
-README.md: 7e36f444f1e9771d216e9565d1a653399e735e98
-README.zh.md: 0d49ed29372ba0f060ebaf2595b37be6359737d5
+README.md: a09d80fa25bc9bbe67117e2780d6ca164c28f500
+README.zh.md: 7272f1e29d7f153756fdad097de3e30155469587

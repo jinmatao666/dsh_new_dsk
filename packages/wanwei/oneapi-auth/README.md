@@ -103,9 +103,7 @@ Authentication alone does not change a prompt or cache key. Model selection and 
 
 #### What the model sees
 
-HTTP 400 failures show a bounded error code and explain recognized endpoint or streaming mismatches without replaying raw upstream diagnostics. The tool asks the model to stop repeated searches and report a backend configuration issue; this is guidance, not a deterministic retry lock.
-
-The `oneapi-bailian` search provider returns structured retrieval sources through the existing DSH web tool path. The model receives real HTTP(S) URLs and instructions to cite them beside relevant claims; the search card also exposes clickable sources. Missing sources produce an explicit verification warning, never synthesized source metadata. The server-selected search model and token do not appear as prompt text.
+The `oneapi-bailian` search provider returns structured retrieval sources through the existing DSH web tool path. The model receives real HTTP(S) URLs and instructions to cite them beside relevant claims; the search card also exposes clickable sources. Missing sources produce an explicit verification warning, never synthesized source metadata. The server-selected search model and token do not appear as prompt text. HTTP 400 failures show a bounded error code and explain recognized endpoint or streaming mismatches without replaying raw upstream diagnostics. The tool asks the model to stop repeated searches and report a backend configuration issue; this is guidance, not a deterministic retry lock.
 
 #### Token effect
 
