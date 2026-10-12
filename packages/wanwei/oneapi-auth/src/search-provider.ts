@@ -9,6 +9,7 @@ interface StatusEnvelope { data?: { search_model?: unknown } }
 interface CompletionEnvelope {
   choices?: Array<{ message?: { content?: unknown } }>
   search_info?: { search_results?: unknown }
+  error?: { code?: unknown; message?: unknown }
 }
 
 function searchSources(value: unknown): WebSearchSource[] {
@@ -81,7 +82,15 @@ export class OneApiSearchProvider implements WebSearchProvider {
       ...signalInit,
     })
     const result = await readJson(response) as CompletionEnvelope
-    if (!response.ok) throw new WebError(`Web search failed (HTTP ${String(response.status)})`, 'WEB_PROVIDER_REQUEST_FAILED')
+    if (!response.ok) {
+      const rawCode = result.error?.code
+      const code = typeof rawCode === 'string' && /^[\w.-]{1,80}$/.test(rawCode) ? `，错误代码：${rawCode}` : ''
+      const upstreamMessage = typeof result.error?.message === 'string' ? result.error.message : ''
+      const reason = upstreamMessage.includes('url error') ? '模型与搜索接口不匹配。'
+        : upstreamMessage.includes('Non-streaming mode does not support Web Search') ? '搜索模型要求使用流式接口。' : ''
+      const guidance = response.status === 400 ? '请求被拒绝，请停止重复搜索并告知用户检查后台搜索模型与渠道配置；更换关键词不能解决接口错误。' : ''
+      throw new WebError(`网页搜索失败（HTTP ${String(response.status)}${code}）。${reason}${guidance}`, 'WEB_PROVIDER_REQUEST_FAILED')
+    }
     const answer = result.choices?.[0]?.message?.content
     if (typeof answer !== 'string' || answer.trim() === '') throw new WebError('The web search model returned no usable content', 'WEB_PROVIDER_RESPONSE_INVALID')
     const sources = searchSources(result.search_info?.search_results)

@@ -8,6 +8,25 @@ function jsonResponse(body: unknown): Response {
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('Wanwei OneAPI web search', () => {
+  it('explains endpoint rejection without exposing the raw upstream response or credentials', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ data: { search_model: 'qwen3.6-plus' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: {
+        code: 'InvalidParameter', message: 'url error, please check url; Bearer secret-key',
+      } }), { status: 400 })))
+    const provider = new OneApiSearchProvider({ baseURL: 'https://oneapi.test', resolveToken: async () => 'token' })
+    await expect(provider.search({ query: '新闻' })).rejects.toThrowErrorMatchingInlineSnapshot('[WebError: 网页搜索失败（HTTP 400，错误代码：InvalidParameter）。模型与搜索接口不匹配。请求被拒绝，请停止重复搜索并告知用户检查后台搜索模型与渠道配置；更换关键词不能解决接口错误。]')
+  })
+
+  it('explains the streaming requirement and keeps malformed error codes out of diagnostics', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ data: { search_model: 'qwen3.6-plus' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: {
+        code: 'Bearer secret', message: 'Non-streaming mode does not support Web Search',
+      } }), { status: 400 })))
+    const provider = new OneApiSearchProvider({ baseURL: 'https://oneapi.test', resolveToken: async () => 'token' })
+    await expect(provider.search({ query: '新闻' })).rejects.toThrowErrorMatchingInlineSnapshot('[WebError: 网页搜索失败（HTTP 400）。搜索模型要求使用流式接口。请求被拒绝，请停止重复搜索并告知用户检查后台搜索模型与渠道配置；更换关键词不能解决接口错误。]')
+  })
   it('uses the administrator-selected model and the authenticated token', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ data: { search_model: 'qwen3.6-plus' } }))
