@@ -21,7 +21,7 @@ async function withComposition(run: (ctx: Context) => Promise<void>, config: Con
   try {
     await writeFile(join(root, 'cordis.yml'), [
       '- name: test-spine', '- name: test-loop', '  config:', '    agents: []',
-      '- name: test-guard', `  config: ${JSON.stringify({ failureRecovery: true, ...config })}`, '',
+      '- name: test-guard', `  config: ${JSON.stringify(Object.assign({ failureRecovery: true }, config))}`, '',
     ].join('\n'))
     ctx.baseUrl = `${pathToFileURL(root).href}/`
     await ctx.plugin(Loader)

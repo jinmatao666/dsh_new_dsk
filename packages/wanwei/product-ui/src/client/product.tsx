@@ -115,8 +115,8 @@ export function FileImportAction(props: FileImportProps) {
       if (relayedPastes.has(event) || !composerTarget(event.target)) return
       const clipboard = event.clipboardData
       if (clipboard === null) return
-      const listed = Array.from(clipboard.files ?? [])
-      const files = listed.length > 0 ? listed : Array.from(clipboard.items ?? [])
+      const listed = Array.from(clipboard.files)
+      const files = listed.length > 0 ? listed : Array.from(clipboard.items)
         .filter(item => item.kind === 'file').map(item => item.getAsFile())
         .filter((file): file is File => file !== null)
       const text = clipboard.getData('text/plain')
