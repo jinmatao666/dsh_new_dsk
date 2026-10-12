@@ -101,7 +101,7 @@ kind: "package-reference"
 
 #### What the model sees
 
-`oneapi-bailian` 搜索提供方通过现有 DSH 网页工具路径返回结果；后台选择的搜索模型和令牌不作为提示词文本出现。
+`oneapi-bailian` 搜索提供方通过现有 DSH 网页工具路径返回结构化检索来源。模型收到真实 HTTP(S) 网址和在相关事实旁引用的指引；搜索卡片也提供可点击来源。没有来源时明确提示无法核验，不合成来源元数据。后台选择的搜索模型和令牌不作为提示词文本出现。
 
 #### Token effect
 
@@ -130,6 +130,7 @@ kind: "package-reference"
 <a id="known-limitations-and-deferred-work"></a>
 
 - 模型发现、受管理搜索和专家目录需要可访问的 OneAPI 服务。桌面没有本地编辑提供方的兜底方式。
+- 搜索来源需要更新后的 OneAPI 转发层及公开百炼原生生成端点的渠道，不能只有兼容对话端点。模型是否遵守引用指引仍需真实服务验收；有链接并不代表事实已经核实。
 - 独立专家打开需要另行部署 OneAPI `/api/expert-web` 接口和数据库表；普通登录接口不包含该能力。
 - 网站票据和子 Webview 权限仍需真实服务与跨平台桌面验收。
 

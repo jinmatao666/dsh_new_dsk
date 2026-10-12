@@ -1,12 +1,35 @@
 /** Administrator-governed OneAPI web search for the Wanwei desktop profile. */
 import { WebError } from '@deepseek-ai/dsh-web'
-import type { WebSearchProvider, WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web'
+import type { WebSearchProvider, WebSearchRequest, WebSearchResult, WebSearchSource } from '@deepseek-ai/dsh-web'
 
 /** Search provider ID selected by the Wanwei desktop bundle. */
 export const ONEAPI_BAILIAN_PROVIDER_ID = 'oneapi-bailian'
 
 interface StatusEnvelope { data?: { search_model?: unknown } }
-interface CompletionEnvelope { choices?: Array<{ message?: { content?: unknown } }> }
+interface CompletionEnvelope {
+  choices?: Array<{ message?: { content?: unknown } }>
+  search_info?: { search_results?: unknown }
+}
+
+function searchSources(value: unknown): WebSearchSource[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new WebError('Invalid web search sources', 'WEB_PROVIDER_RESPONSE_INVALID')
+  const sources: WebSearchSource[] = []
+  const seen = new Set<string>()
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
+    const source = entry as Record<string, unknown>
+    if (typeof source.url !== 'string' || !URL.canParse(source.url)) continue
+    const url = new URL(source.url)
+    if (!['https:', 'http:'].includes(url.protocol) || url.username !== '' || url.password !== '') continue
+    if (seen.has(url.href)) continue
+    seen.add(url.href)
+    sources.push({ url: url.href,
+      ...typeof source.title === 'string' && source.title.trim() !== '' ? { title: source.title.trim() } : {},
+    })
+  }
+  return sources
+}
 
 async function readJson(response: Response): Promise<unknown> {
   const text = await response.text()
@@ -53,7 +76,7 @@ export class OneApiSearchProvider implements WebSearchProvider {
       body: JSON.stringify({
         model,
         stream: false,
-        messages: [{ role: 'user', content: `Search the web and summarize this query: ${request.query}` }],
+        messages: [{ role: 'user', content: `搜索网页并整理以下问题：${request.query}。只依据检索到的资料作答，区分事件日期与发布日期。` }],
       }),
       ...signalInit,
     })
@@ -61,6 +84,10 @@ export class OneApiSearchProvider implements WebSearchProvider {
     if (!response.ok) throw new WebError(`Web search failed (HTTP ${String(response.status)})`, 'WEB_PROVIDER_REQUEST_FAILED')
     const answer = result.choices?.[0]?.message?.content
     if (typeof answer !== 'string' || answer.trim() === '') throw new WebError('The web search model returned no usable content', 'WEB_PROVIDER_RESPONSE_INVALID')
-    return { content: answer.trim(), sources: [], truncated: false }
+    const sources = searchSources(result.search_info?.search_results)
+    const citationInstruction = sources.length > 0
+      ? '回答时在每条相关事实或结论旁引用下方 Sources 中对应的真实网址，使用 Markdown 链接。不要编造网址或把无来源支持的内容当成已核实事实；不要仅使用 [1] 等没有链接的编号。'
+      : '本次搜索未返回可核验的来源链接。请向用户明确说明这一点，不要编造来源网址，也不要把这些内容称为已核实的新闻或事实。'
+    return { content: `${answer.trim()}\n\n${citationInstruction}`, sources, truncated: false }
   }
 }

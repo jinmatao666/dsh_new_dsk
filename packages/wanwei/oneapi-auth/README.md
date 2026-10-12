@@ -103,7 +103,7 @@ Authentication alone does not change a prompt or cache key. Model selection and 
 
 #### What the model sees
 
-The `oneapi-bailian` search provider returns results through the existing DSH web tool path; its server-selected search model and token do not appear as prompt text.
+The `oneapi-bailian` search provider returns structured retrieval sources through the existing DSH web tool path. The model receives real HTTP(S) URLs and instructions to cite them beside relevant claims; the search card also exposes clickable sources. Missing sources produce an explicit verification warning, never synthesized source metadata. The server-selected search model and token do not appear as prompt text.
 
 #### Token effect
 
@@ -132,6 +132,7 @@ Changing the confirmed environment changes the dependency prompt section and can
 <a id="known-limitations-and-deferred-work"></a>
 
 - Model discovery, managed search and the expert catalog require a reachable OneAPI service. The desktop has no local provider-editing fallback.
+- Search sources require the updated OneAPI relay and a channel exposing Bailian's native generation endpoint, not only its compatible chat endpoint. Model compliance with citation instructions still needs live acceptance; links alone do not establish factual accuracy.
 - Independent expert launch requires the separate OneAPI `/api/expert-web` deployment and database tables; the ordinary login endpoint alone does not provide it.
 - Website tickets and child Webview permissions still require live service and cross-platform desktop acceptance.
 
