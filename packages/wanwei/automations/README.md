@@ -1,5 +1,5 @@
 ---
-description: "Display the independent Wanwei automation page without starting a scheduler."
+description: "Configure persistent local Wanwei tasks, execute them through ordinary Sessions, and inspect their real run records."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Users can browse the existing task templates, history and creation demonstrations in Internet mode. In intranet mode, the entry is disabled and its page cannot open, matching the expert library. System Settings controls entry visibility independently for Internet and intranet deployments; both default to visible, but visibility does not override intranet unavailability. Desktop startup or login refresh applies the setting. Mounting it does not require the skills marketplace, expert library or connectors plugin.
+Users can create local tasks, pause them, run them immediately and open their execution Sessions. Tasks and run records survive page closure and desktop restart. The desktop must remain running and logged in; missed schedules are not replayed. Existing entry visibility and intranet restrictions remain provider-owned; this package does not enable cloud scheduling.
 
 ## Table of Contents
 
@@ -25,9 +25,11 @@ Users can browse the existing task templates, history and creation demonstration
 <a id="use-this-package"></a>
 ## Use this package
 
-The Wanwei desktop product mounts this plugin through its [composition patch](../../bundle/wanwei-desktop/cordis.patch.yml). It has no per-plugin configuration fields.
+The Wanwei desktop product mounts this plugin through its [composition patch](../../bundle/wanwei-desktop/cordis.patch.yml). Its [Host configuration](src/runtime.ts) controls storage, scheduler interval, lateness tolerance, execution timeout and retention limits.
 
-The desktop shows task cards with enabled/paused filters, editing and batch actions. Changes stay in the mounted page and reset when it closes; the history tab has no real records. Opening this page does not schedule tasks or call models.
+The desktop shows only Host-saved tasks, with enabled/paused filters, editing and batch actions. Create a task with an existing absolute working directory and a local execution time. Enabling permits scheduled execution using the default model; immediate execution also works for paused tasks. Each run creates a fresh ordinary Session with workspace-write permissions; operations requiring approval still require human confirmation.
+
+The default task file is automations.json inside the Harness home. Reads are account-filtered; mutations use a file lock and atomic replacement. Invalid storage causes an explicit error instead of resetting tasks. Stop the desktop before repairing a damaged file or an abandoned sibling lock file; retain a copy before repair.
 
 Disable this plugin's row to remove its entry; do not disable another business plugin as a substitute. Shared authentication, renderer and sidebar services remain provider-owned.
 
@@ -39,9 +41,9 @@ Disable this plugin's row to remove its entry; do not disable another business p
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The Client owns template tabs, selections and notices. It uses feature-panels only for presentation and navigation. Its instance controller closes on sidebar navigation or logout and detaches listeners on disposal.
+The Client owns selections and notices, retrieves committed state through authenticated local RPC, and rejects obsolete polling responses after edits. It uses feature-panels for presentation and navigation. Its controller closes on sidebar navigation or logout.
 
-The [Client entry](src/client/index.ts) supplies the implementation. The [Host entry](src/index.ts) anchors module discovery without registering a business service.
+The [Host runtime](src/runtime.ts) claims due slots durably before invoking the existing Session Controller. It advances the next occurrence before launch and prevents overlapping runs of the same task. Completed-turn records, not idle status alone, determine success; timeout, interruption and execution failures are recorded. Disposal stops the scheduler and cancels owned executions.
 
 </details>
 
@@ -59,17 +61,21 @@ The [Client entry](src/client/index.ts) supplies the implementation. The [Host e
 <a id="model-experience"></a>
 ## Model Experience
 
-None, as this Client presentation registers no prompt or tools; website execution and Host model providers own downstream requests and token use.
+Indirectly, through the ordinary Session Controller, the scheduler submits the user-authored task description while existing Agent and model providers own request assembly, tools and token consumption.
 
 #### KV Cache effect
 
-No direct changes to model context or cache reuse.
+Each execution starts a fresh Session; this package does not reuse earlier task conversations or change the provider's cache policy.
 
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- Durable task configuration, scheduling and real execution history are not implemented by this page.
+- Only daily, Monday–Friday and Friday recurrences are offered; public holidays are not interpreted.
+- No cloud execution or missed-slot recovery exists. Logout stops admission; timeout defaults to ten minutes, including waits for approval.
+- Records retain Session links, not independent artifact copies. Task deletion does not delete Sessions or working files.
+- Account isolation uses the local login username; separate deployments require separate Harness homes.
+- Real-model and native UOS/macOS/Windows acceptance remain deployment checks; automated integration tests script the external model response.
 
 <a id="dev-note"></a>
 ### Dev Note

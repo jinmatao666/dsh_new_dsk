@@ -43,3 +43,10 @@
 .automation-card-dialog .automation-draft-switch input { width: 16px; height: 16px; margin: 0; accent-color: var(--dsw-alias-primary, #2563eb); }
 .dsh-automation-cards button:focus-visible, .dsh-automation-cards summary:focus-visible, .dsh-automation-cards input:focus-visible { outline: 2px solid var(--dsw-alias-primary, #2563eb); outline-offset: 3px; }
 @media (max-width: 700px) { .automation-card-tools { flex-wrap: wrap; } .automation-task-card { padding: 20px; } .automation-card-toolbar { gap: 16px; } }
+.automation-content { border: 0; padding: 0; margin: 0; min-width: 0; }
+.automation-error { color: #b42318; overflow-wrap: anywhere; }
+.automation-run-list { display: grid; gap: 14px; }
+.automation-run-list article { padding: 20px 24px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 16px; }
+.automation-run-list header { display: flex; justify-content: space-between; gap: 16px; }
+.automation-run-list p { font-size: 13px; color: var(--dsw-alias-label-secondary); }
+.automation-run-list button { margin-right: 10px; }

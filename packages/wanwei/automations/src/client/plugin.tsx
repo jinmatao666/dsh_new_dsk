@@ -1,9 +1,13 @@
 import { createPanelController, registerFeaturePanel, Toast, type WanweiNotice } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 import type { Context } from '@deepseek-ai/cordis'
 import { useState } from 'react'
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
+import { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { AutomationSnapshot } from '../contract.ts'
 import './page.css'
 import './task-cards.css'
-import { AutomationCards } from './task-cards.tsx'
+import { AutomationCards, type AutomationApi } from './task-cards.tsx'
 import { productText } from './locales/product.ts'
 
 function AutomationsIcon({ size = 18 }: { size?: number }) {
@@ -13,22 +17,31 @@ function AutomationsIcon({ size = 18 }: { size?: number }) {
   </svg>
 }
 
-function AutomationPage() {
+function AutomationPage({ api }: { api: AutomationApi }) {
   const [notice, setNotice] = useState<WanweiNotice | null>(null)
-  return <><AutomationCards notify={(text) => { setNotice({ kind: 'info', text }) }} />
+  return <><AutomationCards api={api} notify={(text) => { setNotice({ kind: 'info', text }) }} />
     <Toast notice={notice} setNotice={setNotice} /></>
 }
 
-export const inject = ['slots', 'wanweiNetwork']
-/** Mount the desktop card preview without starting a scheduler.
+export const inject = ['slots', 'wanweiNetwork', 'connection', 'sessions']
+/** Mount the persistent local scheduler UI.
  * @param ctx - Product Client context.
  */
 export function apply(ctx: Context): void {
   const controller = createPanelController(ctx, 'wanwei-automations')
+  const connection = ctx.get('connection') as ConnectionHandle
+  const api: AutomationApi = {
+    async call(operation, payload, signal) {
+      const result = await connection.rpc.call('/desktop-automations', operation, payload, signal)
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value as AutomationSnapshot
+    },
+    openSession(id) { controller.close(); ctx.sessions.open(SessionId(id)) },
+  }
   registerFeaturePanel(ctx, 'skill-automations', 10, {
     controller, title: productText('自动化'),
     subtitle: productText('配置本机定时任务，查看执行记录'), blockedIntranet: true,
     visibility: ctx.wanweiNetwork.visibility('automations'), Icon: AutomationsIcon,
-    hooks: { network: ctx.wanweiNetwork }, renderContent: () => <AutomationPage />,
+    hooks: { network: ctx.wanweiNetwork }, renderContent: () => <AutomationPage api={api} />,
   })
 }

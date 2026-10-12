@@ -45,7 +45,7 @@ const NO_MODEL_EXPERIENCE_SECTION: Readonly<Record<string, string>> = {
 const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/wanwei/expert-library': { kind: 'none', reason: 'Client presentation registers no model context; downstream execution remains provider-owned.' },
   'packages/wanwei/connectors': { kind: 'none', reason: 'Client presentation registers no model context; downstream execution remains provider-owned.' },
-  'packages/wanwei/automations': { kind: 'none', reason: 'Client presentation registers no model context; downstream execution remains provider-owned.' },
+  'packages/wanwei/automations': { kind: 'indirect', reason: 'Local scheduling delegates task prompts and model requests to the ordinary Session Controller and Agent.' },
   'packages/wanwei/feature-panels': { kind: 'none', reason: 'Client presentation registers no model context; downstream execution remains provider-owned.' },
   'packages/attachment/attachment': { kind: 'indirect', reason: 'The storage seam delegates model request rendering to provider adapters.' },
   'packages/attachment/attachment-local': { kind: 'indirect', reason: 'The local backend delegates model request rendering to provider adapters.' },

@@ -106,7 +106,7 @@
     { "path": "./packages/wanwei/feature-panels" },
     { "path": "./packages/wanwei/expert-library" },
     { "path": "./packages/wanwei/connectors" },
-    { "path": "./packages/wanwei/automations" },
+    { "path": "./packages/wanwei/automations/tsconfig.client.json" },
     { "path": "./packages/wanwei/skill-marketplace" },
     { "path": "./packages/wanwei/product-ui" },
     { "path": "./packages/wanwei/chinese/tsconfig.client.json" },

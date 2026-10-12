@@ -7,7 +7,7 @@ const PACKAGE_NAME = '@deepseek-ai/dsh-wanwei-automations'
 export const name = 'automations-invariant'
 /** Registry required to reserve package ownership. */
 export const inject = ['invariants']
-/** No runtime invariant: automations owns reversible Client presentation; remote data and execution remain provider-owned. */
+/** Durable task validation is enforced at storage and RPC writes; Agent invariants remain provider-owned. */
 const install: InvariantInstaller = () => {}
 /**
  * Reserve package ownership until the companion is disposed.

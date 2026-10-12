@@ -1,44 +1,43 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { AutomationCards } from '../src/client/task-cards.tsx'
+import { afterEach, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { AutomationCards, type AutomationApi } from '../src/client/task-cards.tsx'
+import type { AutomationSnapshot } from '../src/contract.ts'
 
 afterEach(cleanup)
+const empty: AutomationSnapshot = { tasks: [], runs: [] }
 
-describe('desktop automation cards', () => {
-  it('toggles a task independently and filters paused cards', () => {
-    render(<AutomationCards notify={vi.fn()} />)
-    const toggle = screen.getByRole('switch', { name: '启用任务 项目周报汇总' })
-    expect(toggle.getAttribute('aria-checked')).toBe('true')
-    fireEvent.click(toggle)
-    expect(toggle.getAttribute('aria-checked')).toBe('false')
-    expect(screen.queryByRole('dialog')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '已暂停 (2)' }))
-    expect(screen.queryByRole('button', { name: '会议纪要待办整理' })).toBeNull()
-    expect(screen.getByRole('button', { name: '项目周报汇总' })).toBeTruthy()
-  })
+it('shows no built-in sample tasks when the Host has no data', async () => {
+  const api: AutomationApi = { call: vi.fn().mockResolvedValue(empty), openSession: vi.fn() }
+  render(<AutomationCards api={api} notify={vi.fn()} />)
+  expect(await screen.findByText('尚未配置自动化')).toBeTruthy()
+  expect(screen.queryByRole('switch')).toBeNull()
+})
 
-  it('edits the mounted demo without creating fake execution records', () => {
-    const notify = vi.fn()
-    render(<AutomationCards notify={notify} />)
-    fireEvent.click(screen.getByRole('button', { name: '项目周报汇总' }))
-    fireEvent.change(screen.getByRole('textbox', { name: '任务名称' }), { target: { value: '客户周报' } })
-    fireEvent.click(screen.getByRole('button', { name: '保存任务' }))
-    expect(screen.getByRole('button', { name: '客户周报' })).toBeTruthy()
-    expect(screen.queryByRole('dialog')).toBeNull()
-    expect(notify).toHaveBeenCalledOnce()
-    fireEvent.click(screen.getByRole('button', { name: '运行记录' }))
-    expect(screen.getByRole('heading', { name: '暂无真实运行记录' })).toBeTruthy()
-  })
+it('saves the real task through RPC and does not publish a failed write', async () => {
+  const call = vi.fn().mockResolvedValueOnce(empty).mockRejectedValueOnce(new Error('磁盘写入失败'))
+  render(<AutomationCards api={{ call, openSession: vi.fn() }} notify={vi.fn()} />)
+  await screen.findByText('尚未配置自动化')
+  fireEvent.click(screen.getByText('＋ 新建'))
+  fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '真实任务' } })
+  fireEvent.change(screen.getByLabelText('任务说明'), { target: { value: '汇总文件' } })
+  fireEvent.change(screen.getByLabelText('工作目录'), { target: { value: 'C:\\work' } })
+  fireEvent.click(screen.getByText('保存任务'))
+  await waitFor(() => { expect(screen.getAllByText('磁盘写入失败')).toHaveLength(2) })
+  expect(call.mock.calls[1]?.[0]).toBe('save')
+  expect(call.mock.calls[1]?.[1]).toMatchObject({ task: { name: '真实任务', cwd: 'C:\\work', prompt: '汇总文件' } })
+  expect(screen.getByRole('dialog')).toBeTruthy()
+})
 
-  it('pauses selected tasks and resets the demo when remounted', () => {
-    const view = render(<AutomationCards notify={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: '批量管理' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: '全选当前任务' }))
-    fireEvent.click(screen.getByRole('button', { name: '暂停' }))
-    expect(screen.getAllByRole('switch').every(toggle => toggle.getAttribute('aria-checked') === 'false')).toBe(true)
-    view.unmount()
-    render(<AutomationCards notify={vi.fn()} />)
-    expect(screen.getByRole('button', { name: '已启用 (2)' })).toBeTruthy()
-  })
+it('opens the Session associated with an actual Host run record', async () => {
+  const openSession = vi.fn()
+  const api: AutomationApi = { openSession, call: vi.fn().mockResolvedValue({
+    tasks: [], runs: [{ id: 'run', taskId: 'task', taskName: '真实任务', status: 'success',
+      trigger: 'manual', startedAt: 1, sessionId: 'session' }],
+  }) }
+  render(<AutomationCards api={api} notify={vi.fn()} />)
+  await screen.findByText('尚未配置自动化')
+  fireEvent.click(screen.getByText('运行记录'))
+  fireEvent.click(screen.getByText('查看会话与产物'))
+  expect(openSession).toHaveBeenCalledWith('session')
 })

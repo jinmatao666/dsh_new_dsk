@@ -1,2 +1,2 @@
-/** Host half for this presentation-only Client plugin. */
-export function apply(): void {}
+/** Local scheduler and authenticated desktop RPC; never a cloud scheduler. */
+export { apply, Config, inject, name } from './runtime.ts'

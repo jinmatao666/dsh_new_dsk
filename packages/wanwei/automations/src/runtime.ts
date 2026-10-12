@@ -1,0 +1,243 @@
+/** Account-scoped local execution through the ordinary Session Controller. */
+import type { Context } from '@deepseek-ai/cordis'
+import schema from '@deepseek-ai/schemastery'
+import { credentialRef } from '@deepseek-ai/dsh-credentials'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import type {} from '@deepseek-ai/dsh-client-connection'
+import type {} from '@deepseek-ai/dsh-api-session-controller'
+import type {} from '@deepseek-ai/dsh-permission-presets'
+import type {} from '@deepseek-ai/dsh-workspace'
+import type {} from '@deepseek-ai/dsh-wanwei-oneapi-auth'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { randomUUID } from 'node:crypto'
+import { stat } from 'node:fs/promises'
+import { join, isAbsolute } from 'node:path'
+import { z } from 'zod'
+import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
+import { AutomationStore, taskInput } from './store.ts'
+import { nextOccurrence } from './schedule.ts'
+import type { AutomationTask, AutomationRun } from './contract.ts'
+
+/** Deployment limits and local storage location. */
+export interface Config {
+  dataFile?: string
+  credentialRef: string
+  tickMs: number
+  lateToleranceMs: number
+  runTimeoutMs: number
+  maxTasks: number
+  maxRecords: number
+}
+/** Deployment tunables validated by the Loader. */
+export const Config: schema<Config> = schema.object({
+  dataFile: schema.string(), credentialRef: schema.string().default('DSH_ONEAPI_TOKEN'),
+  tickMs: schema.natural().min(250).default(1000), lateToleranceMs: schema.natural().min(1000).default(60000),
+  runTimeoutMs: schema.natural().min(1000).default(600000),
+  maxTasks: schema.natural().min(1).default(100), maxRecords: schema.natural().min(1).default(500),
+})
+/** Host services; no Agent-loop changes. */
+export const inject = ['connection', 'credentials', 'sessionController', 'sessions', 'agents', 'workspaceRegistry', 'permissionPresets', 'wanweiNetworkPolicy']
+/** Stable plugin identity. */
+export const name = 'wanwei-automations'
+
+/** Install persistent CRUD and local due-slot claiming.
+ * @param ctx - Host context owning timers and execution intervals.
+ * @param config - Validated deployment settings.
+ */
+export async function apply(ctx: Context, config: Config): Promise<void> {
+  const store = new AutomationStore(config.dataFile ?? join(resolveDshHome(), 'automations.json'))
+  const lifetime = new AbortController()
+  const active = new Map<string, { promise: Promise<void>; owner: string; agent?: Agent }>()
+  const account = async (): Promise<string | undefined> => {
+    const token = await ctx.credentials.resolve(credentialRef(config.credentialRef))
+    const username = await ctx.credentials.resolve(credentialRef('DSH_LOGIN_USERNAME'))
+    return token?.value && username?.value ? username.value : undefined
+  }
+  const owner = async (): Promise<string> => {
+    const value = await account()
+    if (value === undefined) throw new Error('请先登录后管理定时任务')
+    if (ctx.wanweiNetworkPolicy.getSnapshot().mode === 'intranet') throw new Error('纯内网环境暂未开放自动化')
+    return value
+  }
+  await store.update((state) => {
+    for (const task of state.tasks) if (task.nextRunAt <= Date.now()) task.nextRunAt = nextOccurrence(task, Date.now())
+    for (const run of state.runs) {
+      if (run.status !== 'running') continue
+      if (run.pid === process.pid) {
+        run.status = 'interrupted'; run.endedAt = Date.now(); run.error = '自动化插件重新加载，任务未自动重跑'
+        continue
+      }
+      try { process.kill(run.pid, 0) }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+        run.status = 'interrupted'; run.endedAt = Date.now(); run.error = '桌面进程中断，任务未自动重跑'
+      }
+    }
+  })
+  const finish = async (id: string, status: AutomationRun['status'], error?: string) => {
+    await store.update((state) => {
+      const run = state.runs.find(item => item.id === id)
+      if (run !== undefined) {
+        run.status = status; run.endedAt = Date.now()
+        if (error !== undefined) run.error = error.slice(0, 8000)
+      }
+    })
+  }
+  const execute = async (task: AutomationTask, run: AutomationRun, username: string): Promise<void> => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let timedOut = false
+    const hasTimedOut = (): boolean => timedOut
+    let agent: Agent | undefined
+    try {
+      timer = setTimeout(() => { timedOut = true; agent?.cancel({ kind: 'hook', reason: '定时任务执行超时' }) }, config.runTimeoutMs)
+      lifetime.signal.throwIfAborted()
+      if (await owner() !== username) throw new Error('登录账号已变化，执行已停止')
+      if (!(await stat(task.cwd)).isDirectory()) throw new Error('任务工作目录不可用')
+      const workspace = await ctx.workspaceRegistry.create(task.cwd)
+      lifetime.signal.throwIfAborted()
+      const created = await ctx.sessionController.create({ workspaceId: workspace.id })
+      agent = ctx.agents.get(created.sessionId)
+      if (agent === undefined) throw new Error('任务会话创建失败')
+      const tracked = active.get(run.id)
+      if (tracked !== undefined) tracked.agent = agent
+      lifetime.signal.throwIfAborted()
+      await store.update((state) => {
+        const record = state.runs.find(item => item.id === run.id)
+        if (record === undefined) throw new Error('运行记录不存在')
+        record.sessionId = created.sessionId
+      })
+      ctx.permissionPresets.set(agent.session, 'workspace-write')
+      await ctx.sessionController.rename({ sessionId: created.sessionId, title: `定时任务：${task.name}` })
+      if (await owner() !== username) throw new Error('登录账号已变化，执行已停止')
+      lifetime.signal.throwIfAborted()
+      if (hasTimedOut()) throw new Error('任务初始化超时')
+      await ctx.sessionController.prompt({
+        sessionId: created.sessionId, requestId: run.id as SessionRequestId, mode: 'queue',
+        content: [{ type: 'text', text: task.prompt }], clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }, lifetime.signal)
+      // This fresh Session owns the whole interval; idle alone does not prove success.
+      await agent.whenIdle()
+      await ctx.sessions.flush(agent.session)
+      const end = agent.session.events.findLast(event => event.type === 'turn/end')
+      if (lifetime.signal.aborted) await finish(run.id, 'interrupted', '自动化插件关闭，执行已停止')
+      else if (hasTimedOut()) await finish(run.id, 'failed', '执行超时；需确认操作的任务请打开会话处理')
+      else if (end?.type === 'turn/end' && end.data.reason.kind === 'completed') await finish(run.id, 'success')
+      else await finish(run.id, 'failed', end?.type === 'turn/end' && end.data.reason.kind === 'error'
+        ? end.data.reason.error.message : `执行未完成：${end?.type === 'turn/end' ? end.data.reason.kind : '没有结束记录'}`)
+    } catch (error) {
+      agent?.cancel({ kind: 'hook', reason: '定时任务停止' })
+      if (agent !== undefined) await agent.whenIdle()
+      await finish(run.id, lifetime.signal.aborted ? 'interrupted' : 'failed', error instanceof Error ? error.message : String(error))
+    } finally { if (timer !== undefined) clearTimeout(timer) }
+  }
+  const launch = (task: AutomationTask, run: AutomationRun, username: string) => {
+    const tracked: { promise: Promise<void>; owner: string; agent?: Agent } = { promise: Promise.resolve(), owner: username }
+    active.set(run.id, tracked)
+    tracked.promise = execute(task, run, username).catch((error: unknown) => {
+      ctx.logger.error(`自动化运行记录保存失败：${String(error)}`)
+    }).finally(() => { active.delete(run.id) })
+  }
+  const claim = async (id: string | undefined, username: string, now: number): Promise<void> => {
+    lifetime.signal.throwIfAborted()
+    const claims = await store.update((state) => {
+      const claimed: { task: AutomationTask; run: AutomationRun }[] = []
+      for (const task of state.tasks) {
+        if (task.owner !== username || (id !== undefined && task.id !== id)) continue
+        if (id === undefined && (!task.enabled || task.nextRunAt > now)) continue
+        if (id === undefined) {
+          const overdue = now - task.nextRunAt > config.lateToleranceMs
+          task.nextRunAt = nextOccurrence(task, now)
+          if (overdue) continue
+        }
+        if (state.runs.some(run => run.taskId === task.id && run.status === 'running')) {
+          if (id !== undefined) throw new Error('这个任务正在执行，请勿重复启动')
+          continue
+        }
+        const run = { id: randomUUID(), owner: username, pid: process.pid, taskId: task.id, taskName: task.name,
+          startedAt: now, status: 'running' as const, trigger: id === undefined ? 'scheduled' as const : 'manual' as const }
+        state.runs.push(run); claimed.push({ task: { ...task }, run })
+      }
+      if (id !== undefined && claimed.length === 0) throw new Error('任务不存在')
+      const completed = state.runs.filter(run => run.status !== 'running')
+      const keep = new Set(completed.slice(-config.maxRecords).map(run => run.id))
+      state.runs = state.runs.filter(run => run.status === 'running' || keep.has(run.id))
+      return claimed
+    })
+    for (const { task, run } of claims) launch(task, run, username)
+  }
+  let lastOwner: string | undefined
+  let ticking: Promise<void> | undefined
+  const tick = async () => {
+    const username = await account()
+    for (const tracked of active.values()) if (username !== tracked.owner) tracked.agent?.cancel({ kind: 'hook', reason: '登录账号变化' })
+    if (username !== lastOwner) {
+      await store.update((state) => {
+        for (const task of state.tasks) if (task.nextRunAt <= Date.now()) task.nextRunAt = nextOccurrence(task, Date.now())
+      })
+      lastOwner = username
+    }
+    if (username === undefined || ctx.wanweiNetworkPolicy.getSnapshot().mode === 'intranet') return
+    const state = await store.read()
+    if (!state.tasks.some(task => task.owner === username && task.enabled && task.nextRunAt <= Date.now())) return
+    await claim(undefined, username, Date.now())
+  }
+  const remove = ctx.connection.rpc.handle('/desktop-automations', async (endpoint, payload) => {
+    try {
+      lifetime.signal.throwIfAborted()
+      const username = await owner()
+      if (endpoint === 'save') {
+        const input = z.object({ id: z.string().optional(), task: taskInput }).strict().parse(payload)
+        if (!isAbsolute(input.task.cwd) || !(await stat(input.task.cwd)).isDirectory()) throw new Error('请选择有效的绝对工作目录')
+        await store.update((state) => {
+          const existing = input.id === undefined ? undefined : state.tasks.find(task => task.id === input.id && task.owner === username)
+          if (input.id !== undefined && existing === undefined) throw new Error('任务不存在')
+          if (existing === undefined && state.tasks.filter(task => task.owner === username).length >= config.maxTasks) {
+            throw new Error('任务数量已达上限')
+          }
+          const value = { ...input.task, id: existing?.id ?? randomUUID(), owner: username,
+            nextRunAt: nextOccurrence(input.task, Date.now()) }
+          if (existing === undefined) state.tasks.push(value)
+          else Object.assign(existing, value)
+        })
+      } else if (endpoint === 'enable' || endpoint === 'delete') {
+        const input = z.object({ ids: z.array(z.string()).min(1), enabled: z.boolean().optional() }).strict().parse(payload)
+        await store.update((state) => {
+          const tasks = state.tasks.filter(task => input.ids.includes(task.id) && task.owner === username)
+          if (new Set(input.ids).size !== tasks.length) throw new Error('部分任务不存在，请刷新')
+          if (endpoint === 'delete') {
+            if (state.runs.some(run => input.ids.includes(run.taskId) && run.status === 'running')) throw new Error('请先停止正在执行的任务')
+            state.tasks = state.tasks.filter(task => !input.ids.includes(task.id))
+          } else {
+            const enabled = input.enabled
+            if (enabled === undefined) throw new Error('缺少启停状态')
+            tasks.forEach((task) => { task.enabled = enabled; task.nextRunAt = nextOccurrence(task, Date.now()) })
+          }
+        })
+      } else if (endpoint === 'run') {
+        const input = z.object({ id: z.string() }).strict().parse(payload)
+        await claim(input.id, username, Date.now())
+      } else if (endpoint === 'stop') {
+        const input = z.object({ id: z.string() }).strict().parse(payload)
+        const run = (await store.read()).runs.find(run => run.id === input.id && run.owner === username)
+        if (run === undefined) throw new Error('运行记录不存在')
+        const tracked = active.get(input.id)
+        if (tracked?.agent === undefined) throw new Error('任务尚未开始或由另一个桌面进程执行')
+        tracked.agent.cancel({ kind: 'user' })
+      } else if (endpoint !== 'list') throw new Error('未知自动化操作')
+      return { ok: true, value: await store.snapshot(username) }
+    } catch (error) {
+      return { ok: false, error: { code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} } }
+    }
+  })
+  ctx.effect(() => {
+    const interval = setInterval(() => {
+      if (ticking !== undefined) return
+      ticking = tick().catch((error: unknown) => { ctx.logger.error(`自动化调度失败：${String(error)}`) }).finally(() => { ticking = undefined })
+    }, config.tickMs)
+    return async () => {
+      clearInterval(interval); lifetime.abort(); await remove(); await ticking
+      for (const tracked of active.values()) tracked.agent?.cancel({ kind: 'disposed' })
+      await Promise.all([...active.values()].map(tracked => tracked.promise))
+    }
+  }, 'wanwei-automations: local scheduler')
+}

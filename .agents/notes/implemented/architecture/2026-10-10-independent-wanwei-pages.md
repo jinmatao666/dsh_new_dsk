@@ -14,9 +14,9 @@ The product composes four independent business packages: skill-marketplace, expe
 
 The shared feature-panels module owns presentation helpers, not business registrations. Consumers declare its Client export in dsh.client.external and keep its provider row mounted. Opening a page broadcasts a browser-local navigation event; each independent controller closes itself when another page opens. Context disposal closes the page, clears subscribers and removes event listeners. Logout closes all live pages. Resizing and owned dropdowns do not change navigation.
 
-Expert workbenches retain their native tab lifecycle and ticket validation. Intranet mode disables experts; the marketplace preserves platform/local skills while disabling SkillHub. [Environment-specific feature settings](../feature/2026-10-10-environment-feature-visibility.md) independently control connector and automation entry visibility. Connector and automation interactions remain demonstrations, not new integrations or scheduling.
+Expert workbenches retain their native tab lifecycle and ticket validation. Intranet mode disables experts; the marketplace preserves platform/local skills while disabling SkillHub. [Environment-specific feature settings](../feature/2026-10-10-environment-feature-visibility.md) independently control connector and automation entry visibility. Connector interactions remain demonstrations; [local automation execution](../feature/2026-10-12-local-automation-execution.md) owns real scheduling.
 
-Automation task cards own their mock editing, filtering and batch state inside the mounted Client page. They reuse the desktop shell and theme rather than a standalone HTML preview. Closing the page resets the samples; task switches neither start scheduling nor fabricate history. The focused card tests verify toggles, editing, batch pause and reset on remount.
+Automation task cards reuse the desktop shell and theme rather than a standalone HTML preview. The automations Host owns committed task data and execution records; the Client owns only filtering and transient selections.
 
 ## Alternatives considered
 
