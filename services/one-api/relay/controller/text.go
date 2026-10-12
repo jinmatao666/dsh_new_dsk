@@ -187,7 +187,7 @@ func getRequestBody(c *gin.Context, meta *meta.Meta, textRequest *model.GeneralO
 	// 故不能走下方 openai 直通分支。仅限 apitype.OpenAI，避免误伤 Ali 原生/Anthropic 格式。
 	needCacheInject := meta.APIType == apitype.OpenAI && dbmodel.ModelSupportsExplicitCache(meta.OriginModelName)
 
-	if !needCacheInject &&
+	if !c.GetBool(ctxkey.WebSearch) && !needCacheInject &&
 		!needsPrivateModelDefaults &&
 		!config.EnforceIncludeUsage &&
 		meta.APIType == apitype.OpenAI &&

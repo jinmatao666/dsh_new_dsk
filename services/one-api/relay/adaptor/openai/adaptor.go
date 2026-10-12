@@ -86,16 +86,15 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
+	if c.GetBool(ctxkey.WebSearch) {
+		return convertSearchRequest(relayMode, request)
+	}
 	if request.Stream {
 		// always return usage in stream mode
 		if request.StreamOptions == nil {
 			request.StreamOptions = &model.StreamOptions{}
 		}
 		request.StreamOptions.IncludeUsage = true
-	}
-	if c.GetBool(ctxkey.WebSearch) {
-		request.EnableSearch = true
-		request.SearchOptions = &model.SearchOptions{ForcedSearch: true}
 	}
 	return request, nil
 }
@@ -108,10 +107,17 @@ func (a *Adaptor) ConvertImageRequest(request *model.ImageRequest) (any, error) 
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	if c.GetBool(ctxkey.WebSearch) {
+		return a.doSearchRequest(c, meta, requestBody)
+	}
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	if c.GetBool(ctxkey.WebSearch) {
+		err, usage = searchResponse(c, resp, meta.ActualModelName)
+		return
+	}
 	if meta.IsStream {
 		var responseText string
 		err, responseText, usage = StreamHandler(c, resp, meta.Mode)

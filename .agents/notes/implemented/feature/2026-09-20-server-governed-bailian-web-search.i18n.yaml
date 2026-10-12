@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-20-server-governed-bailian-web-search.md
-2026-09-20-server-governed-bailian-web-search.md: 353d11ea0453483d40d645ad39974d951045ee36
-2026-09-20-server-governed-bailian-web-search.zh.md: 0f484bd26145935a36f27303a4e01c22958a2110
+2026-09-20-server-governed-bailian-web-search.md: fa340f2cf7ee3e778d80aab67466f6f7bc4fc6d0
+2026-09-20-server-governed-bailian-web-search.zh.md: 3c3f7aa39309b308a7e192bd4897e30d39b37755

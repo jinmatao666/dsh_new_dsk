@@ -32,12 +32,14 @@ func TestConvertRequestAddsSearchOnlyForMarkedBailianRequest(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ConvertRequest returned error: %v", err)
 			}
-			got := converted.(*model.GeneralOpenAIRequest)
-			if got.EnableSearch != tt.wantSearch {
-				t.Fatalf("EnableSearch = %v, want %v", got.EnableSearch, tt.wantSearch)
-			}
-			if tt.wantSearch != (got.SearchOptions != nil && got.SearchOptions.ForcedSearch) {
-				t.Fatalf("SearchOptions = %#v, want forced search %v", got.SearchOptions, tt.wantSearch)
+			if tt.wantSearch {
+				parameters := converted.(map[string]any)["parameters"].(map[string]any)
+				options := parameters["search_options"].(map[string]any)
+				if parameters["enable_search"] != true || options["enable_source"] != true || options["forced_search"] != true {
+					t.Fatalf("search parameters = %#v", parameters)
+				}
+			} else if converted != request || request.EnableSearch || request.SearchOptions != nil {
+				t.Fatal("ordinary request was changed")
 			}
 		})
 	}
