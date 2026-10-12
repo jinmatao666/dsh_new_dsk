@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -60,6 +61,11 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	// inject skill content as user message
 	if skillPrompt := c.GetString(ctxkey.SkillUserPrompt); skillPrompt != "" {
 		injectSkillUserMessage(textRequest, skillPrompt)
+	}
+	if needsWebDateContext(c, meta.Mode, textRequest) {
+		instruction := webDateInstruction(time.Now())
+		textRequest.Messages = appendWebDateContext(textRequest.Messages, instruction)
+		c.Set(webDateContextKey, instruction)
 	}
 	// get model ratio & group ratio
 	modelRatio := billingratio.GetModelRatio(textRequest.Model, meta.ChannelType)
@@ -195,6 +201,9 @@ func getRequestBody(c *gin.Context, meta *meta.Meta, textRequest *model.GeneralO
 		meta.ChannelType != channeltype.Baichuan &&
 		meta.ForcedSystemPrompt == "" {
 		// no need to convert request for openai
+		if instruction := c.GetString(webDateContextKey); instruction != "" {
+			return patchWebDateBody(c.Request.Body, instruction)
+		}
 		return c.Request.Body, nil
 	}
 

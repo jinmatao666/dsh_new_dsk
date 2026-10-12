@@ -98,18 +98,20 @@ func (a *Adaptor) doSearchRequest(c *gin.Context, metadata *meta.Meta, body io.R
 
 func searchResponse(c *gin.Context, resp *http.Response, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
 	defer resp.Body.Close()
-	const maxBytes = 1024 * 1024
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
-	if err != nil {
-		return ErrorWrapper(err, "read_search_response_failed", http.StatusBadGateway), nil
-	}
-	if len(body) > maxBytes {
-		return ErrorWrapper(errors.New("search response exceeded 1 MiB"), "search_response_invalid", http.StatusBadGateway), nil
-	}
+	var body []byte
+	var err error
 	if resp.StatusCode == http.StatusOK && strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
-		body, err = aggregateSearchStream(body)
+		body, err = aggregateSearchStream(resp.Body)
 		if err != nil {
 			return ErrorWrapper(err, "search_stream_invalid", http.StatusBadGateway), nil
+		}
+	} else {
+		body, err = io.ReadAll(io.LimitReader(resp.Body, maxSearchResponseBytes+1))
+		if err != nil {
+			return ErrorWrapper(err, "read_search_response_failed", http.StatusBadGateway), nil
+		}
+		if len(body) > maxSearchResponseBytes {
+			return ErrorWrapper(errors.New("search response exceeded 1 MiB"), "search_response_invalid", http.StatusBadGateway), nil
 		}
 	}
 	var result struct {
@@ -150,10 +152,14 @@ func searchResponse(c *gin.Context, resp *http.Response, modelName string) (*mod
 	if usage.TotalTokens == 0 {
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
-	c.JSON(http.StatusOK, struct {
+	response, err := json.Marshal(struct {
 		TextResponse
 		SearchInfo json.RawMessage `json:"search_info,omitempty"`
 	}{TextResponse: TextResponse{Id: result.RequestID, Model: modelName, Object: "chat.completion", Created: time.Now().Unix(), Choices: result.Output.Choices, Usage: usage}, SearchInfo: result.Output.SearchInfo})
+	if err != nil || len(response) > maxSearchResponseBytes {
+		return ErrorWrapper(errors.New("normalized search response exceeded 1 MiB or could not be encoded"), "search_response_invalid", http.StatusBadGateway), nil
+	}
+	c.Data(http.StatusOK, "application/json; charset=utf-8", response)
 	return nil, &usage
 }
 
@@ -181,14 +187,25 @@ func searchContentText(content any) (string, error) {
 	return text.String(), nil
 }
 
+// Repeated source metadata counts toward wire traffic, not the final answer budget.
+const (
+	maxSearchResponseBytes = 1024 * 1024
+	maxSearchWireBytes     = 32 * 1024 * 1024
+	maxSearchFrameBytes    = 256 * 1024
+	maxSearchAnswerBytes   = 128 * 1024
+	maxSearchSourceBytes   = 128 * 1024
+	maxSearchSources       = 64
+)
+
 // Accumulate incremental text, cumulative usage and sources from every SSE frame.
 // Never return a partial answer after an upstream error or an unfinished stream.
-func aggregateSearchStream(body []byte) ([]byte, error) {
+func aggregateSearchStream(reader io.Reader) ([]byte, error) {
 	var answer strings.Builder
 	var requestID, finishReason string
 	var usage map[string]any
 	sources := []any{}
 	seen := map[string]bool{}
+	sourceBytes := 0
 	consume := func(data string) error {
 		if data == "" || data == "[DONE]" {
 			return nil
@@ -223,6 +240,9 @@ func aggregateSearchStream(body []byte) ([]byte, error) {
 			if err != nil {
 				return err
 			}
+			if len(text) > maxSearchAnswerBytes-answer.Len() {
+				return errors.New("search answer exceeded 128 KiB")
+			}
 			answer.WriteString(text)
 			if choice.FinishReason != "" && choice.FinishReason != "null" {
 				finishReason = choice.FinishReason
@@ -234,29 +254,51 @@ func aggregateSearchStream(body []byte) ([]byte, error) {
 				return err
 			}
 			key := string(encoded)
+			if item, ok := source.(map[string]any); ok {
+				if url, ok := item["url"].(string); ok && url != "" {
+					key = "url:" + url
+				}
+			}
 			if !seen[key] {
+				if len(sources) >= maxSearchSources || len(encoded) > maxSearchSourceBytes-sourceBytes {
+					return errors.New("search sources exceeded 64 entries or 128 KiB")
+				}
 				sources = append(sources, source)
 				seen[key] = true
+				sourceBytes += len(encoded)
 			}
 		}
 		return nil
 	}
-	scanner := bufio.NewScanner(strings.NewReader(string(body)))
-	scanner.Buffer(make([]byte, 4096), 1024*1024)
+	limited := &io.LimitedReader{R: reader, N: maxSearchWireBytes + 1}
+	scanner := bufio.NewScanner(limited)
+	scanner.Buffer(make([]byte, 4096), maxSearchFrameBytes+1)
 	var data []string
+	frameBytes := 0
 	for scanner.Scan() {
 		line := scanner.Text()
+		if limited.N == 0 {
+			return nil, errors.New("search stream exceeded 32 MiB")
+		}
+		frameBytes += len(line) + 1
+		if frameBytes > maxSearchFrameBytes {
+			return nil, errors.New("search SSE frame exceeded 256 KiB")
+		}
 		if line == "" {
 			if err := consume(strings.Join(data, "\n")); err != nil {
 				return nil, err
 			}
 			data = nil
+			frameBytes = 0
 		} else if strings.HasPrefix(line, "data:") {
 			data = append(data, strings.TrimPrefix(strings.TrimPrefix(line, "data:"), " "))
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
+	}
+	if limited.N == 0 {
+		return nil, errors.New("search stream exceeded 32 MiB")
 	}
 	if err := consume(strings.Join(data, "\n")); err != nil {
 		return nil, err

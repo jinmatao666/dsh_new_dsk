@@ -2,6 +2,7 @@ package openai
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -195,5 +196,90 @@ func TestSearchStreamRejectsPartialAndErrors(t *testing.T) {
 		if err == nil || usage != nil {
 			t.Fatal("returned partial or invalid stream")
 		}
+	}
+}
+
+func TestSearchStreamLargeRepeatedMetadata(t *testing.T) {
+	// Real streams repeat cumulative source metadata; wire size is not answer size.
+	frame := `{"output":{"search_info":{"search_results":[{"url":"https://news.example.com/release","title":"` + strings.Repeat("x", 16000) + `"}]}}}`
+	body := strings.Repeat("data: "+frame+"\n\n", 100) + searchTestAnswer("完成", "stop")
+	if len(body) <= maxSearchResponseBytes {
+		t.Fatal("fixture must exceed the old wire limit")
+	}
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	err, usage := searchResponse(c, &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(body))}, "qwen3.6-plus")
+	if err != nil || usage == nil {
+		t.Fatalf("large stream rejected: %v", err)
+	}
+	var result struct {
+		Choices    []TextResponseChoice `json:"choices"`
+		SearchInfo struct {
+			Results []any `json:"search_results"`
+		} `json:"search_info"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Choices[0].Content != "完成" || len(result.SearchInfo.Results) != 1 || w.Body.Len() > maxSearchResponseBytes {
+		t.Fatalf("incorrect aggregation: %s", w.Body.String())
+	}
+}
+
+func searchTestAnswer(text, finish string) string {
+	content, _ := json.Marshal(text)
+	return fmt.Sprintf("data: {\"output\":{\"choices\":[{\"message\":{\"content\":%s},\"finish_reason\":%q}]},\"usage\":{\"input_tokens\":12,\"output_tokens\":5}}\n\n", content, finish)
+}
+
+func TestSearchStreamBudgetsAndLateFailures(t *testing.T) {
+	completed := searchTestAnswer("answer", "stop")
+	var sourceFrames strings.Builder
+	for i := 0; i <= maxSearchSources; i++ {
+		fmt.Fprintf(&sourceFrames, "data: {\"output\":{\"search_info\":{\"search_results\":[{\"url\":\"https://example.com/%d\"}]}}}\n\n", i)
+	}
+	cases := map[string]string{
+		"answer":          searchTestAnswer(strings.Repeat("x", maxSearchAnswerBytes+1), "stop"),
+		"line":            "data: " + strings.Repeat("x", maxSearchFrameBytes+1) + "\n\n",
+		"multiline frame": strings.Repeat(": comment\n", maxSearchFrameBytes/10+1) + "\n",
+		"wire":            strings.Repeat(": heartbeat\n\n", maxSearchWireBytes/13+1) + completed,
+		"source count":    sourceFrames.String() + completed,
+		"source bytes":    `data: {"output":{"search_info":{"search_results":[{"title":"` + strings.Repeat("x", maxSearchSourceBytes+1) + `"}]}}}` + "\n\n" + completed,
+		"late error":      completed + "data: [DONE]\n\ndata: {\"code\":\"UpstreamError\",\"message\":\"failed\"}\n\n",
+		"late malformed":  completed + "data: broken\n\n",
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			err, usage := searchResponse(c, &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(body))}, "qwen3.6-plus")
+			if err == nil || usage != nil || w.Body.Len() != 0 {
+				t.Fatalf("invalid stream returned an answer: %v", err)
+			}
+		})
+	}
+}
+
+func TestSearchStreamDeduplicatesURLsAndUsesFinalUsage(t *testing.T) {
+	body := "data: {\"output\":{\"search_info\":{\"search_results\":[{\"index\":1,\"url\":\"https://example.com/a\"}]}},\"usage\":{\"input_tokens\":12,\"output_tokens\":1}}\n\n" +
+		"data: {\"output\":{\"search_info\":{\"search_results\":[{\"index\":2,\"url\":\"https://example.com/a\"}]}}}\n\n" + searchTestAnswer("answer", "stop")
+	result, err := aggregateSearchStream(strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct {
+		Output struct {
+			SearchInfo struct {
+				Results []any `json:"search_results"`
+			} `json:"search_info"`
+		} `json:"output"`
+		Usage struct {
+			Output int `json:"output_tokens"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed.Output.SearchInfo.Results) != 1 || parsed.Usage.Output != 5 {
+		t.Fatalf("duplicate sources or summed cumulative usage: %s", result)
 	}
 }
