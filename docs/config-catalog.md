@@ -3199,6 +3199,34 @@ export type ApprovalPolicy = 'ask' | 'never'
 
 Source: [`packages/interaction/user-approval/src/index.ts:142`](../packages/interaction/user-approval/src/index.ts)
 
+<a id="deepseek-aidsh-wanwei-automations"></a>
+
+## `@deepseek-ai/dsh-wanwei-automations`
+
+Requires: `connection` · `credentials` · `sessionController` · `sessions` · `agents` · `workspaceRegistry` · `permissionPresets` · `wanweiNetworkPolicy`
+
+```ts config-catalog
+/** Deployment limits and local storage location. */
+export interface Config {
+  /** Local task document; defaults to automations.json in the Harness home. */
+  dataFile?: string
+  /** Credential reference identifying the authenticated account's model token. */
+  credentialRef: string
+  /** Scheduler polling interval in milliseconds. */
+  tickMs: number
+  /** Maximum due-slot lateness before skipping, in milliseconds. */
+  lateToleranceMs: number
+  /** Execution timeout, including approval waits, in milliseconds. */
+  runTimeoutMs: number
+  /** Maximum saved tasks per account. */
+  maxTasks: number
+  /** Maximum retained completed execution records. */
+  maxRecords: number
+}
+```
+
+Source: [`packages/wanwei/automations/src/index.ts:7`](../packages/wanwei/automations/src/index.ts)
+
 <a id="deepseek-aidsh-wanwei-browser-use"></a>
 
 ## `@deepseek-ai/dsh-wanwei-browser-use`
@@ -3614,7 +3642,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-tool-cordis` — requires `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect` ([`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts))
 - `@deepseek-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))
 - `@deepseek-ai/dsh-user-questions` ([`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts))
-- `@deepseek-ai/dsh-wanwei-automations` ([`packages/wanwei/automations/src/index.ts`](../packages/wanwei/automations/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-connectors` ([`packages/wanwei/connectors/src/index.ts`](../packages/wanwei/connectors/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-expert-library` ([`packages/wanwei/expert-library/src/index.ts`](../packages/wanwei/expert-library/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-feature-panels` ([`packages/wanwei/feature-panels/src/index.ts`](../packages/wanwei/feature-panels/src/index.ts))

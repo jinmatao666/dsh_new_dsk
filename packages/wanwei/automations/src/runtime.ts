@@ -1,6 +1,6 @@
 /** Account-scoped local execution through the ordinary Session Controller. */
 import type { Context } from '@deepseek-ai/cordis'
-import schema from '@deepseek-ai/schemastery'
+import type { Config } from './index.ts'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type {} from '@deepseek-ai/dsh-client-connection'
@@ -17,28 +17,6 @@ import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { AutomationStore, taskInput } from './store.ts'
 import { nextOccurrence } from './schedule.ts'
 import type { AutomationTask, AutomationRun } from './contract.ts'
-
-/** Deployment limits and local storage location. */
-export interface Config {
-  dataFile?: string
-  credentialRef: string
-  tickMs: number
-  lateToleranceMs: number
-  runTimeoutMs: number
-  maxTasks: number
-  maxRecords: number
-}
-/** Deployment tunables validated by the Loader. */
-export const Config: schema<Config> = schema.object({
-  dataFile: schema.string(), credentialRef: schema.string().default('DSH_ONEAPI_TOKEN'),
-  tickMs: schema.natural().min(250).default(1000), lateToleranceMs: schema.natural().min(1000).default(60000),
-  runTimeoutMs: schema.natural().min(1000).default(600000),
-  maxTasks: schema.natural().min(1).default(100), maxRecords: schema.natural().min(1).default(500),
-})
-/** Host services; no Agent-loop changes. */
-export const inject = ['connection', 'credentials', 'sessionController', 'sessions', 'agents', 'workspaceRegistry', 'permissionPresets', 'wanweiNetworkPolicy']
-/** Stable plugin identity. */
-export const name = 'wanwei-automations'
 
 /** Install persistent CRUD and local due-slot claiming.
  * @param ctx - Host context owning timers and execution intervals.
