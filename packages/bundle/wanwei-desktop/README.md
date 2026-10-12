@@ -38,6 +38,8 @@ The first command prints the effective default tree without booting it after the
 
 ### What you get
 
+The desktop product disables the browser-assistant plugin, including its settings card and browser tools. Existing saved enablement does not activate a disabled plugin; its implementation remains available for a later product release.
+
 The layer disables `llm-deepseek` and `ui-settings-models`, selects the Wanwei `oneapi-bailian` web-search provider, then mounts the Wanwei-owned plugins. The OneAPI authentication plugin supplies the sole managed model provider, a read-only Models settings section, and server-governed search; it does not change the official base or Web bundles.
 
 -----

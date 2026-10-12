@@ -13,8 +13,9 @@
 - insert:
     - id: wanwei-browser-use
       name: '@deepseek-ai/dsh-wanwei-browser-use'
+      disabled: true
       config:
-        enabled: !!js process.env.DSH_BROWSER_USE_ENABLED !== '0'
+        enabled: false
         headless: false
         executablePath: !!js process.env.DSH_BROWSER_EXECUTABLE
     - id: wanwei-chinese
