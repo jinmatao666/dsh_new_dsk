@@ -16,6 +16,8 @@ The desktop composition selects the `oneapi-bailian` search provider. It reads t
 
 The auxiliary request is recorded as `web/oneapi-search-request` without credentials before dispatch. The event is registered in the generated persistence catalog and marked ignorable because older readers can reconstruct the conversation without this observational record. Native `output.search_info` is preserved as `search_info` beside the compatible answer and token usage. Redirects are rejected and responses are bounded to 1 MiB. Only upstream retrieval metadata supplies sources, never generated prose.
 
+The adapter follows [Bailian's search protocol](https://help.aliyun.com/zh/model-studio/web-search): multimodal Qwen families such as `qwen3.6-plus` use multimodal generation with text-content arrays and upstream SSE enabled; text-only families retain text generation. SSE answers, retrieval sources and cumulative usage are aggregated into the existing non-streaming desktop response. Invalid, interrupted or error streams fail instead of returning partial answers as successful search results.
+
 ## Alternatives considered
 
 **Give every desktop installation a search API key.** Rejected because it repeats secret distribution and recreates the machine-specific failure this route removes.

@@ -107,3 +107,93 @@ func TestSearchInvalidResponses(t *testing.T) {
 		}
 	}
 }
+
+func TestMultimodalSearchRoundTrip(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/services/aigc/multimodal-generation/generation" || r.Header.Get("X-DashScope-SSE") != "enable" {
+			t.Error("multimodal search must request the streaming multimodal endpoint")
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		parameters := body["parameters"].(map[string]any)
+		if parameters["incremental_output"] != true || parameters["enable_thinking"] != false || parameters["enable_search"] != true {
+			t.Error("incorrect streaming parameters")
+		}
+		message := body["input"].(map[string]any)["messages"].([]any)[0].(map[string]any)
+		if message["content"].([]any)[0].(map[string]any)["text"] != "新闻" {
+			t.Error("incorrect multimodal message")
+		}
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		io.WriteString(w, ": keepalive\r\nevent: result\r\ndata: {\"request_id\":\"stream-1\",\"output\":{\"choices\":[{\"message\":{\"content\":[{\"text\":\"搜索\"}]},\"finish_reason\":\"null\"}],\"search_info\":{\"search_results\":[{\"title\":\"公告\",\"url\":\"https://news.example.com/release\"}]}},\"usage\":{\"input_tokens\":12,\"output_tokens\":1}}\r\n\r\n")
+		io.WriteString(w, "data: {\"request_id\":\"stream-1\",\"output\":{\"choices\":[{\"message\":{\"content\":[{\"text\":\"答案\"}]},\"finish_reason\":\"stop\"}]},\"usage\":{\"input_tokens\":12,\"output_tokens\":5}}\n\ndata: [DONE]\n\n")
+	}))
+	defer upstream.Close()
+	saved := client.HTTPClient
+	client.HTTPClient = upstream.Client()
+	defer func() { client.HTTPClient = saved }()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader("{}"))
+	c.Set(ctxkey.WebSearch, true)
+	a := &Adaptor{}
+	converted, err := a.ConvertRequest(c, relaymode.ChatCompletions, &model.GeneralOpenAIRequest{Model: "qwen3.6-plus", Messages: []model.Message{{Role: "user", Content: "新闻"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(converted)
+	metadata := &meta.Meta{BaseURL: upstream.URL + "/compatible-mode/v1", ActualModelName: "qwen3.6-plus"}
+	resp, err := a.DoRequest(c, metadata, strings.NewReader(string(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	usage, responseErr := a.DoResponse(c, resp, metadata)
+	if responseErr != nil || usage == nil || usage.TotalTokens != 17 {
+		t.Fatalf("response: %v, %v", usage, responseErr)
+	}
+	var result struct {
+		Choices    []TextResponseChoice `json:"choices"`
+		SearchInfo struct {
+			Results []any `json:"search_results"`
+		} `json:"search_info"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Choices[0].Content != "搜索答案" || len(result.SearchInfo.Results) != 1 {
+		t.Fatalf("lost text or earlier sources: %s", w.Body.String())
+	}
+}
+
+func TestSearchModelProtocols(t *testing.T) {
+	for _, name := range []string{"qwen3.5-plus", "qwen3.6-plus", "qwen3.6-plus-2026-04-02", "qwen3.7-plus", "qwen3.7-flash", "qwen3.8-max", "qwen3.8-flash", "qwen3.7-max-2026-06-08"} {
+		if !multimodalSearch(name) {
+			t.Errorf("expected multimodal: %s", name)
+		}
+	}
+	for _, name := range []string{"qwen-plus", "qwen-max", "qwq-plus", "qwen3-max", "qwen3.7-max-2026-05-20"} {
+		if multimodalSearch(name) {
+			t.Errorf("expected text: %s", name)
+		}
+	}
+	_, err := convertSearchRequest(relaymode.ChatCompletions, &model.GeneralOpenAIRequest{Model: "qwen3.6-plus", Messages: []model.Message{{Content: []any{}}}})
+	if err == nil {
+		t.Fatal("accepted non-text search request")
+	}
+}
+
+func TestSearchStreamRejectsPartialAndErrors(t *testing.T) {
+	for _, body := range []string{
+		"data: not json\n\n",
+		"data: {\"output\":{\"choices\":[{\"message\":{\"content\":[{\"text\":\"partial\"}]}}]}}\n\n",
+		"data: {\"code\":\"InvalidParameter\",\"message\":\"wrong endpoint\"}\n\n",
+		"data: [DONE]\n\n",
+	} {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		err, usage := searchResponse(c, &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(body))}, "qwen3.6-plus")
+		if err == nil || usage != nil {
+			t.Fatal("returned partial or invalid stream")
+		}
+	}
+}
