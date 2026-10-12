@@ -33,6 +33,8 @@ Brand occupants register at priority -100 so the product can coexist with the of
 
 Picker imports and native drops append file or folder chips through `inputActions.appendReferences`; the labels show filenames while serialization retains path mentions. Imports preserve existing text and references. Native-drop progress stays visible while importing; completion notices disappear after three seconds and failure notices after six seconds. A new import resets the notice timer.
 
+Pasting copied files into the editable composer imports documents through the same workspace/reference path, including Word, PDF and Excel without an extension allowlist. Mixed pastes relay images and plain text to the existing editor; image-only and text-only pastes retain their normal handling. When an OS file list produces no DOM payload, the desktop bridge reads that explicit format after a composer paste gesture. It never interprets arbitrary pasted text as a file path. Other inputs and inactive composers do not trigger imports. Empty native lists add no references; failures preserve the draft and show an error.
+
 The native drag invitation covers only the composer card. Folder chips use a folder icon without a display-only trailing slash; their serialized references retain the slash. When a same-named destination already exists, desktop import copies into a numbered sibling, and the chip shows that actual destination name.
 
 Session archive saving waits for native persistence, then requests the file manager to reveal the actual saved path. A reveal failure retains the saved path and returns a warning rather than reporting a failed download.

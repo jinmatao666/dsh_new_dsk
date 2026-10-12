@@ -30,7 +30,7 @@ function useActiveWorkspacePath(props: FileImportProps): string | undefined {
 }
 
 async function nativeImport(
-  command: 'import_workspace_files' | 'import_dropped_workspace_files',
+  command: 'import_workspace_files' | 'import_dropped_workspace_files' | 'import_clipboard_workspace_files',
   workspacePath: string | undefined,
   files?: readonly File[],
 ): Promise<readonly string[]> {
@@ -50,6 +50,7 @@ async function nativeImport(
 export function FileImportAction(props: FileImportProps) {
   const workspacePath = useActiveWorkspacePath(props)
   const picker = useRef<HTMLInputElement>(null)
+  const importing = useRef(false)
   const dropCard = picker.current?.closest<HTMLElement>('[data-composer-card]')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
@@ -66,14 +67,94 @@ export function FileImportAction(props: FileImportProps) {
     }
   }
   const importFiles = async (files: readonly File[]) => {
-    if (files.length === 0 || busy) return
+    if (files.length === 0 || importing.current) return
+    importing.current = true
     setBusy(true)
     setError(undefined)
-    try { append(await nativeImport('import_workspace_files', workspacePath, files)) }
-    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
-    finally { setBusy(false) }
+    setStatus({ text: productText('正在导入文件…'), error: false })
+    try {
+      const paths = await nativeImport('import_workspace_files', workspacePath, files)
+      append(paths)
+      setStatus({ text: productText('已导入 {0} 个文件', [paths.length]), error: false })
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason)
+      setError(message)
+      setStatus({ text: productText('文件导入失败：{0}', [message]), error: true })
+    }
+    finally { importing.current = false; setBusy(false) }
   }
   useEffect(() => {
+    const relayedPastes = new WeakSet<Event>()
+    let nativePasteTimer: number | undefined
+    let pasteClaimed = false
+    const composerTarget = (target: EventTarget | null): target is HTMLElement => {
+      const card = picker.current?.closest('[data-composer-card]')
+      return card != null && target instanceof HTMLElement && target.closest('[data-composer-card]') === card
+        && target.closest('[contenteditable="true"]') !== null
+    }
+    const importNative = (command: 'import_dropped_workspace_files' | 'import_clipboard_workspace_files') => {
+      if (importing.current) return
+      importing.current = true
+      setBusy(true)
+      setError(undefined)
+      setStatus({ text: productText('正在导入文件…'), error: false })
+      void nativeImport(command, workspacePath)
+        .then((paths) => {
+          if (paths.length === 0) { setStatus(undefined); return }
+          append(paths)
+          setStatus({ text: productText('已导入 {0} 个文件', [paths.length]), error: false })
+        })
+        .catch((reason: unknown) => {
+          const message = reason instanceof Error ? reason.message : String(reason)
+          setError(message)
+          setStatus({ text: productText('文件导入失败：{0}', [message]), error: true })
+        })
+        .finally(() => { importing.current = false; setBusy(false) })
+    }
+    const paste = (event: ClipboardEvent) => {
+      if (relayedPastes.has(event) || !composerTarget(event.target)) return
+      const clipboard = event.clipboardData
+      if (clipboard === null) return
+      const listed = Array.from(clipboard.files ?? [])
+      const files = listed.length > 0 ? listed : Array.from(clipboard.items ?? [])
+        .filter(item => item.kind === 'file').map(item => item.getAsFile())
+        .filter((file): file is File => file !== null)
+      const text = clipboard.getData('text/plain')
+      pasteClaimed = files.length > 0 || text !== ''
+      if (!pasteClaimed && (window as Window & { __ZJUGIS_NATIVE_INVOKE__?: NativeInvoke }).__ZJUGIS_NATIVE_INVOKE__) {
+        pasteClaimed = true
+        importNative('import_clipboard_workspace_files')
+        return
+      }
+      const documents = files.filter(file => !file.type.startsWith('image/'))
+      if (documents.length === 0) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      void importFiles(documents)
+      // Relay only images/text to the existing editor so document bytes never enter image validation.
+      const images = files.filter(file => file.type.startsWith('image/'))
+      if (images.length === 0 && text === '') return
+      const relay = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(relay, 'clipboardData', { value: {
+        files: images,
+        items: images.map(file => ({ kind: 'file', type: file.type, getAsFile: () => file })),
+        getData: (format: string) => format === 'text/plain' ? text : '',
+      } })
+      relayedPastes.add(relay)
+      event.target.dispatchEvent(relay)
+    }
+    const keydown = (event: KeyboardEvent) => {
+      if (!composerTarget(event.target) || !(event.ctrlKey || event.metaKey) || event.altKey
+        || event.shiftKey || event.repeat || event.isComposing || event.key.toLowerCase() !== 'v') return
+      if ((window as Window & { __ZJUGIS_NATIVE_INVOKE__?: NativeInvoke }).__ZJUGIS_NATIVE_INVOKE__ === undefined) return
+      pasteClaimed = false
+      if (nativePasteTimer !== undefined) window.clearTimeout(nativePasteTimer)
+      // OS file-list formats can produce no DOM paste payload; let ordinary paste run first.
+      nativePasteTimer = window.setTimeout(() => {
+        nativePasteTimer = undefined
+        if (!pasteClaimed && composerTarget(document.activeElement)) importNative('import_clipboard_workspace_files')
+      }, 0)
+    }
     const browserDragOver = (event: DragEvent) => {
       if (!event.dataTransfer?.types.includes('Files')) return
       event.preventDefault()
@@ -90,37 +171,28 @@ export function FileImportAction(props: FileImportProps) {
     }
     const drop = () => {
       setDragActive(false)
-      if (busy) return
-      setBusy(true)
-      setError(undefined)
-      setStatus({ text: productText('正在导入文件…'), error: false })
-      void nativeImport('import_dropped_workspace_files', workspacePath)
-        .then((paths) => {
-          append(paths)
-          setStatus({ text: productText('已导入 {0} 个文件', [paths.length]), error: false })
-        })
-        .catch((reason: unknown) => {
-          const message = reason instanceof Error ? reason.message : String(reason)
-          setError(message)
-          setStatus({ text: productText('文件导入失败：{0}', [message]), error: true })
-        })
-        .finally(() => { setBusy(false) })
+      importNative('import_dropped_workspace_files')
     }
     const enter = () => { setDragActive(true) }
     const leave = () => { setDragActive(false) }
     document.addEventListener('drop', browserDrop, { capture: true })
+    document.addEventListener('paste', paste, { capture: true })
+    document.addEventListener('keydown', keydown, { capture: true })
     document.addEventListener('dragover', browserDragOver, { capture: true })
     window.addEventListener('dsh:native-file-drag-enter', enter)
     window.addEventListener('dsh:native-file-drag-leave', leave)
     window.addEventListener('dsh:native-file-drop', drop)
     return () => {
       document.removeEventListener('drop', browserDrop, { capture: true })
+      document.removeEventListener('paste', paste, { capture: true })
+      document.removeEventListener('keydown', keydown, { capture: true })
+      if (nativePasteTimer !== undefined) window.clearTimeout(nativePasteTimer)
       document.removeEventListener('dragover', browserDragOver, { capture: true })
       window.removeEventListener('dsh:native-file-drag-enter', enter)
       window.removeEventListener('dsh:native-file-drag-leave', leave)
       window.removeEventListener('dsh:native-file-drop', drop)
     }
-  }, [busy, props.inputActions, workspacePath])
+  }, [props.inputActions, workspacePath])
   const choose = (event: ChangeEvent<HTMLInputElement>) => {
     const files = [...(event.currentTarget.files ?? [])]
     event.currentTarget.value = ''

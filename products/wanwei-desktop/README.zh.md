@@ -10,6 +10,8 @@ macOS 保留继承的系统临时目录，将随包 Node 的目录放到 Sidecar
 
 Tauri 2 桌面壳会以本地回环 DSH Sidecar 的形式启动 `wanwei-desktop` profile，等待其输出带鉴权信息的 Web 地址，再创建主 WebView。它把 `DSH_HOME` 放在应用的本地数据目录下。万维自有桌面命令通过明确的 WebView 权限提供。
 
+聊天框文件粘贴复用有容量限制的工作区导入器。仅限主窗口的 `import_clipboard_workspace_files` 命令通过禁用图片特性的 [clipboard-rs](https://github.com/ChurchTao/clipboard-rs) 读取系统剪贴板文件列表，接受绝对路径或本地文件 URL。不读取剪贴板纯文本、不移动源文件，也不向专家 WebView 授予剪贴板权限。原有同名处理、符号链接拒绝和大小限制保持有效。Windows 编译及路径测试已自动化，Windows 和 macOS 安装版复制粘贴仍需发布前实机验证。
+
 主 WebView 的新窗口请求会在系统默认浏览器打开 HTTP(S) 链接。其他 URL 协议不会启动外部程序，对话链接也不会创建第二个应用内 WebView。
 
 独立专家网页仍在实施。已上架专家在主窗口内的独立子 WebView 打开；桌面壳按每次打开的具体 HTTP 或 HTTPS 来源和视图标签登记权限。macOS 安装包仅允许 `ac.zjugis.com` 通过不安全的 HTTP 加载，以便当前 HTTP 网关能在 WKWebView 中显示；此例外不会加密传输，网关改用 HTTPS 后应移除。目录、一次性身份票据、桌面桥与视图关闭/定位还须在 Windows、macOS、Linux 实机验证后才能发布。专家网站是高权限代码，上架前必须审核其 iframe 与跳转行为。六个正式网站及一次性切换尚未完成，详见 `WANWEI_EXPERT_WEB_INTEGRATION_PLAN.md`。

@@ -20,6 +20,7 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
+mod clipboard_files;
 mod expert_artifacts;
 mod migration;
 mod sidecar_environment;
@@ -1557,6 +1558,23 @@ fn import_dropped_workspace_files(
     import_workspace_paths_at(&root, paths)
 }
 
+/// Copy an explicitly pasted OS file list through the existing bounded workspace importer.
+#[tauri::command]
+fn import_clipboard_workspace_files(
+    window: Window,
+    workspace_path: Option<String>,
+) -> Result<Vec<String>, String> {
+    if window.label() != "main" {
+        return Err("只能从主窗口粘贴文件".to_string());
+    }
+    let paths = clipboard_files::read_paths()?;
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    let root = workspace_import_root(window.app_handle(), workspace_path)?;
+    import_workspace_paths_at(&root, paths)
+}
+
 fn marketplace_resource_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let resource_dir = app
         .path()
@@ -2472,6 +2490,7 @@ pub fn run() {
             reveal_downloaded_file,
             import_workspace_files,
             import_dropped_workspace_files,
+            import_clipboard_workspace_files,
             maximize_expert_window,
             open_expert_webview,
             set_expert_webview_bounds,

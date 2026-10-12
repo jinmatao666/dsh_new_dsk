@@ -29,6 +29,7 @@
     "allow-reveal-downloaded-file",
     "allow-import-workspace-files",
     "allow-import-dropped-workspace-files",
+    "allow-import-clipboard-workspace-files",
     "allow-open-expert-webview",
     "allow-maximize-expert-window",
     "allow-set-expert-webview-bounds",

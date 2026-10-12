@@ -21,7 +21,132 @@ function bench(inCard = false) {
     : <FileImportAction {...props} />), appendReferences, setDraft, invoke }
 }
 
+function composer(view: ReturnType<typeof bench>) {
+  const editable = document.createElement('div')
+  editable.setAttribute('contenteditable', 'true')
+  view.container.querySelector('[data-composer-card]')!.append(editable)
+  return editable
+}
+
+function clipboardPaste(target: HTMLElement, files: File[], text = '') {
+  const event = new Event('paste', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'clipboardData', { value: {
+    files, items: files.map(file => ({ kind: 'file', getAsFile: () => file })),
+    getData: (format: string) => format === 'text/plain' ? text : '',
+  } })
+  fireEvent(target, event)
+  return event
+}
+
 describe('desktop file import', () => {
+  it.each(['report.doc', 'report.docx', 'report.pdf', 'report.xls', 'report.xlsx'])
+  ('imports copied %s through the same file/reference route as dropping', async (name) => {
+    const view = bench(true)
+    const file = new File(['document'], name, { type: 'application/octet-stream' })
+    Object.defineProperty(file, 'arrayBuffer', { value: async () => new ArrayBuffer(4) })
+    const event = clipboardPaste(composer(view), [file])
+    expect(event.defaultPrevented).toBe(true)
+    await waitFor(() => { expect(view.invoke).toHaveBeenCalledWith('import_workspace_files', {
+      workspacePath: 'workspace', files: [{ name, bytes: [0, 0, 0, 0] }],
+    }) })
+    await waitFor(() => { expect(view.appendReferences).toHaveBeenCalledTimes(1) })
+    expect(view.setDraft).not.toHaveBeenCalled()
+  })
+
+  it('relays images and text from mixed pastes without sending documents into image validation', async () => {
+    const view = bench(true)
+    const editor = composer(view)
+    const file = new File(['pdf'], 'report.pdf', { type: 'application/pdf' })
+    Object.defineProperty(file, 'arrayBuffer', { value: async () => new ArrayBuffer(3) })
+    const image = new File(['png'], 'shot.png', { type: 'image/png' })
+    const receive = vi.fn((event: Event) => {
+      const data = (event as ClipboardEvent).clipboardData!
+      expect(Array.from(data.files)).toEqual([image])
+      expect(data.getData('text/plain')).toBe('请整理资料')
+    })
+    editor.addEventListener('paste', receive)
+    clipboardPaste(editor, [file, image], '请整理资料')
+    expect(receive).toHaveBeenCalledOnce()
+    await waitFor(() => { expect(view.appendReferences).toHaveBeenCalledOnce() })
+    expect(view.invoke).toHaveBeenCalledOnce()
+  })
+
+  it('preserves ordinary text, screenshots and paste in other fields', async () => {
+    const view = bench(true)
+    const editor = composer(view)
+    const text = clipboardPaste(editor, [], '正常文字')
+    expect(text.defaultPrevented).toBe(false)
+    const image = clipboardPaste(editor, [new File(['png'], 'shot.png', { type: 'image/png' })])
+    expect(image.defaultPrevented).toBe(false)
+    const other = document.createElement('div')
+    other.setAttribute('contenteditable', 'true')
+    document.body.append(other)
+    try {
+      expect(clipboardPaste(other, [new File(['pdf'], 'other.pdf')]).defaultPrevented).toBe(false)
+      fireEvent.keyDown(other, { key: 'v', ctrlKey: true })
+      await new Promise(resolve => window.setTimeout(resolve, 5))
+      expect(view.invoke).not.toHaveBeenCalled()
+    } finally { other.remove() }
+  })
+
+  it('uses native clipboard files when the OS exposes no DOM paste payload, without duplicating DOM imports', async () => {
+    const view = bench(true)
+    const editor = composer(view)
+    editor.focus()
+    fireEvent.keyDown(editor, { key: 'v', ctrlKey: true })
+    clipboardPaste(editor, [])
+    await waitFor(() => { expect(view.invoke).toHaveBeenCalledWith('import_clipboard_workspace_files', {
+      workspacePath: 'workspace',
+    }) })
+    await waitFor(() => { expect(view.appendReferences).toHaveBeenCalledOnce() })
+    await new Promise(resolve => window.setTimeout(resolve, 5))
+    expect(view.invoke).toHaveBeenCalledOnce()
+  })
+
+  it('supports OS file paste when no paste event is dispatched', async () => {
+    const view = bench(true)
+    const editor = composer(view)
+    editor.focus()
+    fireEvent.keyDown(editor, { key: 'v', metaKey: true })
+    await waitFor(() => { expect(view.invoke).toHaveBeenCalledWith('import_clipboard_workspace_files', {
+      workspacePath: 'workspace',
+    }) })
+  })
+
+  it('does not import twice when Ctrl+V also supplies DOM files, and ignores an empty native file list', async () => {
+    const view = bench(true)
+    const editor = composer(view)
+    editor.focus()
+    const file = new File(['pdf'], 'report.pdf', { type: 'application/pdf' })
+    Object.defineProperty(file, 'arrayBuffer', { value: async () => new ArrayBuffer(3) })
+    fireEvent.keyDown(editor, { key: 'v', ctrlKey: true })
+    clipboardPaste(editor, [file])
+    await waitFor(() => { expect(view.appendReferences).toHaveBeenCalledOnce() })
+    await new Promise(resolve => window.setTimeout(resolve, 5))
+    expect(view.invoke).toHaveBeenCalledOnce()
+    view.invoke.mockResolvedValue([])
+    clipboardPaste(editor, [])
+    await waitFor(() => { expect(view.queryByRole('status')).toBeNull() })
+    expect(view.appendReferences).toHaveBeenCalledOnce()
+  })
+
+  it('cancels the pending native read on unmount', async () => {
+    const view = bench(true)
+    const editor = composer(view)
+    editor.focus()
+    fireEvent.keyDown(editor, { key: 'v', ctrlKey: true })
+    view.unmount()
+    await new Promise(resolve => window.setTimeout(resolve, 5))
+    expect(view.invoke).not.toHaveBeenCalled()
+  })
+
+  it('keeps failed imports visible and does not insert a file reference', async () => {
+    const view = bench(true)
+    view.invoke.mockRejectedValue(new Error('文件不可读取'))
+    clipboardPaste(composer(view), [])
+    await waitFor(() => { expect(view.getByRole('alert').textContent).toContain('文件不可读取') })
+    expect(view.appendReferences).not.toHaveBeenCalled()
+  })
   it('dismisses completion after three seconds and preserves progress for a slow subsequent import', async () => {
     vi.useFakeTimers()
     const view = bench()

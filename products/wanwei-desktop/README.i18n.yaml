@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write products/wanwei-desktop/README.md
-README.md: 2aa07ed1dad9c14497fd091d98720143c80d3caa
-README.zh.md: af9e799818b43fc2144b2be0a5b8476c47ea8905
+README.md: 6f5d7c2442c10557cea69002cb8297e71a84130d
+README.zh.md: 66159a9ec0759695a02930bf4aac96d3761164fb

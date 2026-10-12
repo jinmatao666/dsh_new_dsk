@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "allow-import-clipboard-workspace-files"
+description = "Allows importing an explicit OS clipboard file list into the selected workspace."
+commands.allow = ["import_clipboard_workspace_files"]
+
+[[permission]]
+identifier = "deny-import-clipboard-workspace-files"
+description = "Denies importing OS clipboard files."
+commands.deny = ["import_clipboard_workspace_files"]
