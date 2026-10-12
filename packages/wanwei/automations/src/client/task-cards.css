@@ -1,0 +1,45 @@
+.dsh-automation-cards { color: var(--dsw-alias-label-primary); }
+.automation-card-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin: 12px 0 16px; }
+.automation-card-toolbar nav { display: flex; align-items: center; gap: 24px; }
+.automation-card-toolbar nav button, .automation-card-toolbar nav > span { border: 0; padding: 0; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 19px; font-weight: 600; cursor: pointer; }
+.automation-card-toolbar nav .selected { color: var(--dsw-alias-label-primary); }
+.automation-card-tools { display: flex; align-items: center; gap: 10px; }
+.automation-card-tools > button, .automation-new-group > button, .automation-batch-bar button { padding: 8px 13px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 9px; background: var(--dsw-alias-bg-base); color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+.automation-card-tools .icon-button { display: grid; place-items: center; border: 0; padding: 7px; }
+.automation-new-group { display: flex; gap: 2px; }
+.automation-new-group > .primary, .automation-new-group > details > summary { border: 0; color: #fff; background: var(--dsw-alias-primary, #2563eb); }
+.automation-new-group > details > summary { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.automation-new-group details, .automation-task-more { position: relative; }
+.automation-new-group summary, .automation-task-more summary { list-style: none; }
+.automation-new-group summary::-webkit-details-marker, .automation-task-more summary::-webkit-details-marker { display: none; }
+.automation-demo-label, .automation-card-footnote { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.6; margin: 0 0 20px; }
+.automation-card-footnote { margin-top: 22px; }
+.automation-card-filters { display: flex; gap: 9px; margin-bottom: 23px; }
+.automation-card-filters button { border: 0; border-radius: 8px; background: none; padding: 8px 13px; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 14px; cursor: pointer; }
+.automation-card-filters .selected { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); font-weight: 600; }
+.automation-task-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 18px; }
+.automation-task-card { padding: 23px 24px 18px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 17px; background: var(--dsw-alias-bg-base); min-width: 0; }
+.automation-task-heading { display: flex; align-items: center; gap: 10px; }
+.automation-task-name { min-width: 0; flex: 1; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: 17px; line-height: 1.5; font-weight: 600; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; }
+.automation-task-card > p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 48px; margin: 8px 0 16px; font-size: 14px; line-height: 1.75; color: var(--dsw-alias-label-secondary); }
+.automation-task-card > footer { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 14px; color: var(--dsw-alias-label-secondary); font-size: 12px; flex-wrap: wrap; }
+.automation-task-card.paused > p, .automation-task-card.paused .automation-task-name, .automation-task-card.paused > footer { opacity: .55; }
+.automation-task-switch { position: relative; width: 30px; height: 17px; flex: none; border: 0; border-radius: 12px; background: var(--dsw-alias-border-l2); padding: 0; cursor: pointer; }
+.automation-task-switch::after { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; background: #fff; border-radius: 50%; content: ''; }
+.automation-task-switch.on { background: var(--dsw-alias-primary, #2563eb); }
+.automation-task-switch.on::after { left: 15px; }
+.automation-task-more summary { color: var(--dsw-alias-label-secondary); cursor: pointer; padding: 0 2px; }
+.automation-dropdown { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 130px; padding: 5px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 9px; background: var(--dsw-alias-bg-base); box-shadow: 0 6px 22px rgb(15 23 42 / 12%); }
+.automation-dropdown button { display: block; width: 100%; background: none; border: 0; padding: 8px 12px; text-align: left; color: inherit; font: inherit; font-size: 13px; cursor: pointer; border-radius: 6px; }
+.automation-dropdown button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.automation-search { width: min(300px, 100%); margin-bottom: 16px; padding: 9px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; font: inherit; color: inherit; background: var(--dsw-alias-bg-base); }
+.automation-batch-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 10px 12px; margin-bottom: 18px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 9px; color: var(--dsw-alias-label-secondary); font-size: 13px; }
+.automation-batch-bar label { display: flex; align-items: center; gap: 7px; }
+.automation-batch-bar > span { margin-right: auto; }
+.automation-batch-bar input, .automation-task-heading > input { accent-color: var(--dsw-alias-primary, #2563eb); }
+.automation-batch-bar button:disabled { opacity: .45; cursor: not-allowed; }
+.automation-card-dialog { max-height: calc(100dvh - 40px); overflow-y: auto; }
+.automation-card-dialog label.automation-draft-switch { flex-direction: row; align-items: center; }
+.automation-card-dialog .automation-draft-switch input { width: 16px; height: 16px; margin: 0; accent-color: var(--dsw-alias-primary, #2563eb); }
+.dsh-automation-cards button:focus-visible, .dsh-automation-cards summary:focus-visible, .dsh-automation-cards input:focus-visible { outline: 2px solid var(--dsw-alias-primary, #2563eb); outline-offset: 3px; }
+@media (max-width: 700px) { .automation-card-tools { flex-wrap: wrap; } .automation-task-card { padding: 20px; } .automation-card-toolbar { gap: 16px; } }

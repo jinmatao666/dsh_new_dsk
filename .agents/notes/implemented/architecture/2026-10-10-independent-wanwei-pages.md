@@ -16,6 +16,8 @@ The shared feature-panels module owns presentation helpers, not business registr
 
 Expert workbenches retain their native tab lifecycle and ticket validation. Intranet mode disables experts; the marketplace preserves platform/local skills while disabling SkillHub. [Environment-specific feature settings](../feature/2026-10-10-environment-feature-visibility.md) independently control connector and automation entry visibility. Connector and automation interactions remain demonstrations, not new integrations or scheduling.
 
+Automation task cards own their mock editing, filtering and batch state inside the mounted Client page. They reuse the desktop shell and theme rather than a standalone HTML preview. Closing the page resets the samples; task switches neither start scheduling nor fabricate history. The focused card tests verify toggles, editing, batch pause and reset on remount.
+
 ## Alternatives considered
 
 **Keep four controllers in one plugin:** independent UI state cannot provide independent plugin enablement or unload, so this retains the ownership problem.

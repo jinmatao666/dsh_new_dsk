@@ -27,7 +27,7 @@ Users can browse the existing task templates, history and creation demonstration
 
 The Wanwei desktop product mounts this plugin through its [composition patch](../../bundle/wanwei-desktop/cordis.patch.yml). It has no per-plugin configuration fields.
 
-Creation and deletion actions show demonstration feedback. Opening this page does not schedule background tasks or execute templates.
+The desktop shows task cards with enabled/paused filters, editing and batch actions. Changes stay in the mounted page and reset when it closes; the history tab has no real records. Opening this page does not schedule tasks or call models.
 
 Disable this plugin's row to remove its entry; do not disable another business plugin as a substitute. Shared authentication, renderer and sidebar services remain provider-owned.
 
