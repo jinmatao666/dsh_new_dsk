@@ -1,0 +1,10 @@
+- id: tool-bash
+  disabled: true
+- id: tool-pwsh
+  disabled: true
+
+- id: repeat-tool-reminder
+  config:
+    failureRecovery: true
+    invalidRetryLimit: 3
+    failureMemorySize: 128

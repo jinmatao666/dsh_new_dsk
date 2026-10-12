@@ -77,6 +77,8 @@ describe('Wanwei desktop preview workflow', () => {
       expect(result.stdout).toMatch(/- id: llm-pi-ai\n\s+name: /u)
       expect(result.stdout).toMatch(/- id: wanwei-oneapi-auth\n\s+name: /u)
       expect(result.stdout).toMatch(/- id: wanwei-browser-use\n\s+name: .*\n\s+disabled: true\n\s+config:\n\s+enabled: false/u)
+      expect(result.stdout).toMatch(/failureRecovery: true/u)
+      expect(result.stdout).toMatch(/invalidRetryLimit: 3/u)
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

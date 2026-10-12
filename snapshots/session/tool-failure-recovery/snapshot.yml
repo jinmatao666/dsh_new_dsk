@@ -1,0 +1,10 @@
+version: 1
+scenario: tool-failure-recovery
+profile: headless
+composition: tool-failure-recovery
+recording: authored
+header:
+  class: tool-failure-recovery
+  pin: true
+workspace:
+  final: true

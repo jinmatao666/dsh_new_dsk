@@ -367,6 +367,18 @@ describe('fold onto the downstream decision', () => {
 })
 
 describe('config validation fails loud', () => {
+  it('rejects invalid recovery retry and memory bounds', async () => {
+    for (const config of [{ invalidRetryLimit: 1 }, { invalidRetryLimit: 2.5 },
+      { failureMemorySize: 0 }, { failureMemorySize: 1.5 }]) {
+      const ctx = new Context()
+      await mountAgentLoopTestDependencies(ctx)
+      try {
+        await expect(ctx.plugin(RepeatToolGuard, config)).rejects.toThrow(/invalid/)
+      } finally {
+        await ctx.fiber.dispose()
+      }
+    }
+  })
   async function spine(): Promise<Context> {
     const ctx = new Context()
     await mountAgentLoopTestDependencies(ctx)

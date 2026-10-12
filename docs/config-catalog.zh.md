@@ -1706,10 +1706,16 @@ export interface Config {
    * always compares the FULL canonical string).
    */
   argumentsPreviewChars?: number
+  /** Enable cross-step failure coaching and unchanged invalid-input suppression. Default false. */
+  failureRecovery?: boolean
+  /** Identical invalid-input failures allowed before suppressing another unchanged attempt. Default 3. */
+  invalidRetryLimit?: number
+  /** Maximum failed call identities retained per agent; oldest entries are evicted. Default 128. */
+  failureMemorySize?: number
 }
 ```
 
-来源：[`packages/guard/repeat-tool-reminder/src/index.ts:28`](../packages/guard/repeat-tool-reminder/src/index.ts)
+来源：[`packages/guard/repeat-tool-reminder/src/index.ts:29`](../packages/guard/repeat-tool-reminder/src/index.ts)
 
 <a id="deepseek-aidsh-sandbox-local"></a>
 

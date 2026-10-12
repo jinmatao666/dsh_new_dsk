@@ -42,6 +42,9 @@ kind: "package-reference"
     include: []                  # track every tool; list patterns to track only some
     exclude: [todo_write]        # never track these tools
     argumentsPreviewChars: 500   # cap on arguments shown in the detailed reminder
+    failureRecovery: true        # cross-step recovery; default false
+    invalidRetryLimit: 3         # unchanged invalid attempts allowed
+    failureMemorySize: 128       # bounded failed-call identities per agent
 ```
 
 | 字段 | 默认值 | 含义 |
@@ -50,10 +53,15 @@ kind: "package-reference"
 | `include` | `[]` | 只跟踪这些工具；空表示所有工具 |
 | `exclude` | `[]` | 绝不跟踪这些工具；对它们的调用既不计数也不重置 |
 | `argumentsPreviewChars` | `500` | 详细提醒中显示多少字符的重复参数 |
+| `failureRecovery` | `false` | 跨步骤失败纠错与无效参数限制；万维桌面端启用 |
+| `invalidRetryLimit` | `3` | 允许的参数错误次数，此后拒绝相同调用；整数且至少 2 |
+| `failureMemorySize` | `128` | 每个 agent 最多记录的失败调用身份；整数且至少 1 |
 
 无效配置会在启动时以清晰错误失败——空的 `thresholds` 列表、小于 2 的重复次数或重复值——绝不会静默改变行为。生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-repeat-tool-reminder)记录每个受支持的值。
 
 ### 你会得到什么
+
+启用 `failureRecovery: true` 后，失败工具及结构化前台进程非零退出或超时会收到纠错上下文，原始结果保持不变。中间插入读取不会清除失败记录。只有已确认属于 `INVALID_ARGS` 或新旧编辑文本相同的精确调用，在失败达到 `invalidRetryLimit` 后才会拒绝再次原样执行。修正参数、临时错误、成功轮询及其他操作仍可执行，插件绝不结束整个回合。指引要求模型核对证据、修正必要输入、继续独立工作，仅在必需操作确实无法推进时报告阻塞。相同调用成功、新用户消息和空闲会清除失败状态，容量满时淘汰最旧记录。私有状态仅保存哈希，不复制参数或错误。其他 profile 保留仅提醒的默认行为。详见[纠错决策](../../../.agents/notes/implemented/feature/2026-10-12-tool-failure-recovery.zh.md)。
 
 按默认值，以相同参数重复同一调用的模型会在第三次重复时收到简短提醒——先分析上一次结果再调用——并在第五次和第八次收到详细提醒，列出工具与重复参数，使其决定改变方法、收集更多证据还是结束任务。新的用户消息会清零计数，因此全新指令绝不会被当作循环。提醒出现在重复调用的结果之后、归属于插件，模型像阅读任何其他消息一样阅读它。
 
@@ -71,7 +79,7 @@ kind: "package-reference"
 
 guard 建立在四项承诺之上：
 
-- **仅建议，不否决。** guard 用模型上下文丰富 post-execute 决策；它从不阻止或改写调用，因此 `PostToolDecision` 阻止仍是后续监听器的事。
+- **默认仅建议。** 连续提醒不阻止或改写调用；可选纠错仅在执行前拒绝重复的无效参数。
 - **在 post-execute 中计数。** 检测运行在 `tools/post-execute` 上，被拒绝的调用同样会经过它；在那里计数让一个监听器即可覆盖所有尝试，无需跨事件状态。
 - **精确匹配规范化。** 参数以循环的 `JSON.parse` 输出（或畸形参数 JSON 的原始字符串回退）到达 guard，因此 JSON 的值域就是全部输入域，深度键排序加 `JSON.stringify` 是完整、确定性的同一性判定——不存在 bigint、循环引用或 `undefined` 处理，因为没有输入路径能产生它们。
 - **加载时快速失败。** `thresholds` 与 `argumentsPreviewChars` 在 `apply` 中校验并抛出错误，绝不回退到默认值。
@@ -95,6 +103,7 @@ guard 建立在四项承诺之上：
 | 文件 | 职责 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：`Config` schema、快速失败校验、链监听器 |
+| [`src/failure-recovery.ts`](src/failure-recovery.ts) | 可选的有容量限制的失败记录、纠错和无效参数限制 |
 | [`src/invariant.ts`](src/invariant.ts) | 不变式伴生插件（无运行时不变式：链私有于一个 post-execute 监听器） |
 
 </details>
@@ -159,6 +168,50 @@ The repeated calls are not making progress. Do not call this tool with these exa
 
 仅追加；新出现的内容位于可复用请求前缀之后，不会使现有 KV Cache 条目失效。
 
+### 失败纠错反馈
+
+#### 模型看到什么
+
+启用纠错后，失败调用收到以下通用提示；新旧文本相同、精确重复失败和相关参数变化失败会追加对应提示。被限制的相同无效重试收到最后的拒绝反馈，之前的原始错误仍保留在历史中。
+
+##### 通用纠错提示
+
+```markdown
+工具执行失败不等于整个任务失败。先依据本次原始错误核对参数、路径、前置条件或执行结果，再选择一个针对原因的修正；不要把猜测当成事实。允许有依据的有限重试，但不要原样重复已确认无效的操作，也不要只改变无关参数。权限或安全策略拒绝时不得换工具绕过。已经正确的内容不要为了“修正”而改写；先比较实际内容，必要时只读取相关片段。继续能独立完成的工作，只有必需步骤确实无法推进时才说明具体阻塞和已完成部分，不得声称未验证的内容成功。
+```
+
+##### 相同文本编辑提示
+
+```markdown
+本次修改的新旧文本完全相同，文件没有因此发生修改。先逐字比较实际原文和目标文本；若内容本来正确，跳过修改继续任务；若确有差异，只提交包含真实差异的替换。不要凭显示效果猜测空格或字符，也不要重新抄写整个文件。
+```
+
+##### 精确重复失败提示
+
+```markdown
+这次调用与此前失败调用的参数和错误相同，中间的其他调用不代表问题已经解决。下一步应针对错误改变必要条件或有效参数，而不是再次原样尝试。网络或服务临时故障可在有恢复依据时重试；不要为了避免报错而提前放弃整个任务。
+```
+
+##### 相关操作失败提示
+
+```markdown
+同一工具的相关操作已反复报告相同错误，虽然参数不同，也需要核对是否真正修正了失败原因。先检查共同的前置条件或实际内容，再作针对性修正；不要只换无关参数，也不要仅凭错误次数判断整个任务无法完成。
+```
+
+##### 无效重试拒绝反馈
+
+```markdown
+相同参数已多次被工具确认无效，本次未执行。请依据此前错误修正参数，或核对是否确实需要这一步。不要换工具重复同一无效操作。其他步骤仍可继续，不要仅因这一步被拦截就结束整个任务。
+```
+
+#### Token 影响
+
+纠错提示只在失败后增加历史，成功调用不新增提示。提示不复制原始参数或错误。
+
+#### KV Cache 影响
+
+反馈以追加方式保留可复用的请求前缀。
+
 ## 已知限制与延期工作
 
 <a id="known-limitations-and-deferred-work"></a>
@@ -168,10 +221,10 @@ The repeated calls are not making progress. Do not call this tool with these exa
 
 - **仅精确匹配检测**——规范化是深度键排序，因此近似变体（稍作修改的路径、值内多余的空白）会绕过链；在没有需求证据前，不采用模糊匹配。
 - **压缩（compaction）不会重置链**——跨越压缩检查点的链会继续计数。
-- **仅提供建议**——尚未实现高阈值时升级为阻止形式，但 `PostToolDecision` 已支持阻止。
+- **不设置通用失败截止次数**——临时错误仍可重试；插件无法判断每个必需操作是否都能继续。
 - **subagent 之间不共享链**——链始终按 agent 隔离；父 agent 与其 subagent 重复相同调用也绝不合并。
 - **合理的幂等轮询超过阈值后仍会收到提醒**——可通过 `thresholds`／`exclude` 配置释放压力。
-- **超过最高阈值后链不再提醒**——提醒只在精确达到所配置的次数时触发，超过后不会继续发送。
+- **超过最高连续阈值后链不再提醒**——可选纠错会独立地跨步骤记录失败调用，直到 agent 空闲。
 
 <a id="dev-note"></a>
 ### 开发备注

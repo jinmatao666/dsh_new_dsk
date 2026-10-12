@@ -1,6 +1,6 @@
 /**
- * Advisory per-agent repeat-call detector. It enriches post-execute decisions
- * with logged model context without vetoing or rewriting calls. Configuration
+ * Per-agent repeat-call reminders with optional cross-step failure recovery.
+ * Recovery suppresses only unchanged, repeatedly invalid inputs. Configuration
  * and chain semantics live in the package README; rationale lives in the
  * repeat-tool-reminder Agent Note.
  * @module @deepseek-ai/dsh-repeat-tool-reminder
@@ -13,6 +13,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { MessageSource } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import type { PostToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
+import { installFailureRecovery } from './failure-recovery.ts'
 
 export const name = 'repeat-tool-reminder'
 
@@ -40,6 +41,12 @@ export interface Config {
    * always compares the FULL canonical string).
    */
   argumentsPreviewChars?: number
+  /** Enable cross-step failure coaching and unchanged invalid-input suppression. Default false. */
+  failureRecovery?: boolean
+  /** Identical invalid-input failures allowed before suppressing another unchanged attempt. Default 3. */
+  invalidRetryLimit?: number
+  /** Maximum failed call identities retained per agent; oldest entries are evicted. Default 128. */
+  failureMemorySize?: number
 }
 
 export const Config: z<Config> = z.object({
@@ -47,6 +54,9 @@ export const Config: z<Config> = z.object({
   include: z.array(z.string()).default([]),
   exclude: z.array(z.string()).default([]),
   argumentsPreviewChars: z.number().default(500),
+  failureRecovery: z.boolean().default(false),
+  invalidRetryLimit: z.number().default(3),
+  failureMemorySize: z.number().default(128),
 })
 
 /**
@@ -171,11 +181,26 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   const chains = new WeakMap<Agent, Chain>()
+  for (const field of ['invalidRetryLimit', 'failureMemorySize'] as const) {
+    const value = config[field] as number
+    if (!Number.isInteger(value) || value < (field === 'invalidRetryLimit' ? 2 : 1)) {
+      throw new Error(`repeat-tool-reminder: invalid ${field} ${value}`)
+    }
+  }
 
   /** Whether a tool participates in the chain (untracked calls are transparent: they neither count nor reset). */
   function tracked(toolName: string): boolean {
     if (includePatterns.length > 0 && !includePatterns.some(pattern => pattern.test(toolName))) return false
     return !excludePatterns.some(pattern => pattern.test(toolName))
+  }
+
+  if (config.failureRecovery) {
+    installFailureRecovery(ctx, {
+      invalidRetryLimit: config.invalidRetryLimit as number,
+      failureMemorySize: config.failureMemorySize as number,
+      canonicalize,
+      tracked,
+    })
   }
 
   /**
@@ -211,7 +236,9 @@ export function apply(ctx: Context, config: Config): void {
   // replace, then fold the reminder onto whatever came back — additionalContexts
   // rides both decision variants, so a blocked call still gets the nudge.
   ctx.on('tools/post-execute', async (exec, _result, next): Promise<PostToolDecision> => {
-    const reminder = observe(exec)
+    // Recovery owns failed calls; do not duplicate its notice or quote invalid arguments.
+    if (config.failureRecovery && _result.isError && exec.agent) chains.delete(exec.agent)
+    const reminder = config.failureRecovery && _result.isError ? undefined : observe(exec)
     const downstream = await next()
     if (!reminder) return downstream
     if (downstream.kind === 'block') {

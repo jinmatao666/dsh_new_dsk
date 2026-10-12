@@ -40,6 +40,8 @@ pnpm dsh --profile wanwei-desktop
 
 桌面产品停用浏览器助手插件，包括设置卡片和浏览器工具。已有的启用偏好不会激活被停用的插件；实现代码保留，供后续产品版本使用。
 
+产品启用[跨步骤失败纠错](../../guard/repeat-tool-reminder/README.zh.md)，允许三次参数错误尝试并记录最多 128 个失败调用身份。它引导模型纠错，仅限制已确认无效的相同参数，不结束整个任务，也不阻止临时网络故障重试。
+
 此层禁用 `llm-deepseek` 和 `ui-settings-models`，选择万维 `oneapi-bailian` 联网搜索 Provider，再挂载万维自有插件。OneAPI 认证插件提供唯一受管模型 Provider、只读的“模型”设置页和服务端管理的联网搜索；官方 base 与 Web bundle 不承载这些私有配置。
 
 -----

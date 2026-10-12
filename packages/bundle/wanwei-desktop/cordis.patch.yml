@@ -6,6 +6,12 @@
 - id: ui-settings-models
   disabled: true
 
+- id: repeat-tool-reminder
+  config:
+    failureRecovery: true
+    invalidRetryLimit: 3
+    failureMemorySize: 128
+
 - id: web
   config:
     searchProvider: oneapi-bailian
