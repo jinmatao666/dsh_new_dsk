@@ -1330,14 +1330,12 @@ export function apply(ctx: Context): void {
   const sessions = ctx.get('sessions') as ISessions
   const workspaces: IWorkspaces = ctx.workspaces
   const startSkillConversation = (slug: string, displayName: string) => {
-    const current = sessions.list.getSnapshot().current
-    const selected = current === undefined ? undefined : workspaces.list.getSnapshot().items.find(item => item.sessionIds.includes(current))
     startSkillUse(sessions, conversation.input, slug, displayName,
       skillSessionPreparation(workspaces, sessions, async (name) => {
         const path = await desktopInvoke('create_automatic_workspace', { name })
         if (typeof path !== 'string') throw new Error(productText('无法创建默认工作区，请稍后重试。'))
         return path
-      }, selected?.workspaceId))
+      }))
   }
   const loadRemoteSkills = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'skill-list', {})) as { items?: unknown }

@@ -23,14 +23,24 @@ describe('marketplace skill handoff', () => {
     expect(createSession).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace' })
   })
 
-  it('retains an existing selected Workspace without allocating or registering another one', async () => {
-    const allocate = vi.fn(async () => 'unused')
-    const createWorkspace = vi.fn()
-    const createSession = vi.fn(async () => 'session' as SessionId)
-    await skillSessionPreparation({ create: createWorkspace }, { create: createSession }, allocate, 'selected' as WorkspaceId)()
+  it('leaves the previous conversation and never inherits its Workspace for the new skill draft', async () => {
+    let current: string | undefined = 'old-session'
+    const sessions = {
+      clear: vi.fn(() => { current = undefined }),
+      list: { getSnapshot: vi.fn(() => ({ current, byId: { 'old-session': { cwd: '/dshskills' } } })) },
+      create: vi.fn(async () => 'new-session' as SessionId),
+    }
+    const allocate = vi.fn(async () => '/persistent/202610130930')
+    const create = vi.fn(async () => ({ workspaceId: 'new-workspace' as WorkspaceId } as WorkspaceView))
+    const input = { setStagedDraft: vi.fn() }
+    const prepare = skillSessionPreparation({ create }, sessions, allocate)
+    startSkillUse(sessions, input, 'images-to-pdf', '图片转 PDF', prepare)
+    expect(current).toBeUndefined()
     expect(allocate).not.toHaveBeenCalled()
-    expect(createWorkspace).not.toHaveBeenCalled()
-    expect(createSession).toHaveBeenCalledWith({ workspaceId: 'selected' })
+    await prepare()
+    expect(sessions.list.getSnapshot).not.toHaveBeenCalled()
+    expect(create).toHaveBeenCalledWith({ path: '/persistent/202610130930' })
+    expect(sessions.create).toHaveBeenCalledWith({ workspaceId: 'new-workspace' })
   })
 
   it('retries registration against its original directory instead of creating another empty directory', async () => {

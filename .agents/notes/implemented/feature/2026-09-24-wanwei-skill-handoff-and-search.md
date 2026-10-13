@@ -10,7 +10,7 @@ The Wanwei desktop product needs a skill selected in its marketplace to become a
 
 ## Decision
 
-The staged input accepts an optional first-send Session factory. Only explicit Send or Enter invokes it; staging and editing create no Workspace. The marketplace keeps timestamp naming, native allocation and Workspace registration outside the generic composer. The factory retains the selected Workspace or allocates under the persistent product Harness home's `workspaces` directory; exclusive creation numbers same-minute collisions. Normal registry persistence publishes the Workspace. Preparation is single-flight and freezes editing; failure retains the draft. Manual Workspace selection removes the factory without sending.
+The staged input accepts an optional first-send Session factory. Only explicit Send or Enter invokes it; staging and editing create no Workspace. The marketplace keeps timestamp naming, native allocation and Workspace registration outside the generic composer. The factory does not inherit the previous conversation's Workspace; it allocates under the persistent product Harness home's `workspaces` directory, and exclusive creation numbers same-minute collisions. Normal registry persistence publishes the Workspace. Preparation is single-flight and freezes editing; failure retains the draft. Manual Workspace selection after launching the skill removes the factory without sending.
 
 The official Conversation input resolver holds one pre-Session text draft and transfers it to a connected Workspace Session without submitting it. Its optional draft-prefix Slot receives the current text and a generic remove-prefix action. The official implementation has no skill or Wanwei knowledge and renders no prefix by default.
 

@@ -1,5 +1,5 @@
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
-import type { IWorkspaces, WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { IWorkspaces } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 /**
@@ -54,20 +54,17 @@ export function startSkillUse(
  * @param workspaces - Normal persisted Workspace creation API.
  * @param sessions - Normal Session creation API.
  * @param allocate - Desktop directory allocator receiving local year/month/day/hour/minute digits.
- * @param selected - Existing Workspace selected when the skill is launched, if any.
  * @returns First-send preparation, with one successful Session retained across repeated calls.
  */
 export function skillSessionPreparation(
   workspaces: Pick<IWorkspaces, 'create'>,
   sessions: Pick<ISessions, 'create'>,
   allocate: (name: string) => Promise<string>,
-  selected?: WorkspaceId,
 ): () => Promise<SessionId> {
   let prepared: Promise<SessionId> | undefined
   let automaticPath: string | undefined
   return () => {
     prepared ??= (async () => {
-      if (selected !== undefined) return sessions.create({ workspaceId: selected })
       const now = new Date()
       const name = [now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes()]
         .map((value, index) => String(value).padStart(index === 0 ? 4 : 2, '0')).join('')

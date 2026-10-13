@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use skill stages an editable draft without creating a directory. Its first send reuses the Workspace selected when the skill was launched, or allocates a persistent timestamped directory through the desktop shell. The normal Workspace registry and Session controller publish the resulting Workspace in the sidebar and execute the skill there. Choosing a Workspace manually before sending bypasses automatic allocation. Failed creation keeps the draft and reuses any directory already allocated on retry.
+Use skill stages an editable draft without creating a directory or inheriting the previous conversation's Workspace. Its first send allocates a persistent timestamped directory through the desktop shell. The normal Workspace registry and Session controller publish the resulting Workspace in the sidebar and execute the skill there. Choosing a Workspace manually after launching the skill and before sending bypasses automatic allocation. Failed creation keeps the draft and reuses any directory already allocated on retry.
 
 Installed platform, personal and SkillHub skill details offer Open directory beside Use skill. The desktop resolves the installation slug within its local skills root and opens the operating-system file manager; uninstalled skills do not show this action. The action does not inspect API keys or create or modify configuration files.
 
