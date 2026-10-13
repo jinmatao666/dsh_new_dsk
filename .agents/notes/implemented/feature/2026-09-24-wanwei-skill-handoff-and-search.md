@@ -10,6 +10,8 @@ The Wanwei desktop product needs a skill selected in its marketplace to become a
 
 ## Decision
 
+The staged input accepts an optional first-send Session factory. Only explicit Send or Enter invokes it; staging and editing create no Workspace. The marketplace keeps timestamp naming, native allocation and Workspace registration outside the generic composer. The factory retains the selected Workspace or allocates under the persistent product Harness home's `workspaces` directory; exclusive creation numbers same-minute collisions. Normal registry persistence publishes the Workspace. Preparation is single-flight and freezes editing; failure retains the draft. Manual Workspace selection removes the factory without sending.
+
 The official Conversation input resolver holds one pre-Session text draft and transfers it to a connected Workspace Session without submitting it. Its optional draft-prefix Slot receives the current text and a generic remove-prefix action. The official implementation has no skill or Wanwei knowledge and renders no prefix by default.
 
 The Wanwei marketplace stages a selected skill's slash token, remembers its display name, and contributes its prefix presenter. It records review-result changes from successful owner-list fetches and clears attention when the matching approved or rejected filter is opened. The Wanwei OneAPI Host plugin registers the `oneapi-bailian` provider; the product bundle selects it over the official search provider. Each search reads the server's selected model and resolves the signed-in user's token at request time.
@@ -28,4 +30,4 @@ Structured Bailian search results now become validated, deduplicated HTTP(S) sou
 
 ## Consequences
 
-The product keeps the marketplace and OneAPI implementation outside the official packages. The upstream compatibility list gains one generic draft store and one optional presentation Slot. A pre-Session draft remains local until the user selects a Workspace; it is never sent merely by choosing a skill. Search requires a reachable OneAPI service and an authenticated token.
+The product keeps the marketplace and OneAPI implementation outside the official packages. Generic draft state, first-send preparation and an optional presentation Slot remain target-neutral. A pre-Session draft remains local until Workspace selection or explicit first send; choosing a skill never sends it. Search requires a reachable OneAPI service and an authenticated token.

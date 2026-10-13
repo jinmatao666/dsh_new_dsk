@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "allow-create-automatic-workspace"
+description = "Allows allocating a timestamped workspace under the persistent product home."
+commands.allow = ["create_automatic_workspace"]
+
+[[permission]]
+identifier = "deny-create-automatic-workspace"
+description = "Denies automatic workspace allocation."
+commands.deny = ["create_automatic_workspace"]

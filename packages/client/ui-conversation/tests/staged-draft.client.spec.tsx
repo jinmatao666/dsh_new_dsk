@@ -9,6 +9,44 @@ import { ComposerContentEditable } from '../src/client/input/editor/ComposerCont
 afterEach(cleanup)
 
 describe('pre-Session draft', () => {
+  it('creates nothing until send, deduplicates pending sends, and submits into the prepared Session', async () => {
+    const open = vi.fn()
+    const sessions = { list: { getSnapshot: () => ({ current: undefined }) }, open }
+    const hub = new InputHub({ get: () => sessions } as unknown as Context, (() => ''))
+    const setDraft = vi.fn()
+    const submit = vi.fn()
+    vi.spyOn(hub, 'shell').mockReturnValue({ setDraft, submit } as unknown as SessionInputShell)
+    type Id = Parameters<InputHub['moveStagedDraftTo']>[0]
+    let resolve!: (id: Id) => void
+    const prepare = vi.fn(() => new Promise<Id>((done) => { resolve = done }))
+    hub.setStagedDraft('/convert', prepare)
+    hub.setStagedDraft('/convert 转成 PDF')
+    expect(prepare).not.toHaveBeenCalled()
+    const first = hub.submitStagedDraft()
+    await hub.submitStagedDraft()
+    expect(prepare).toHaveBeenCalledOnce()
+    expect(hub.stagedSubmission.getSnapshot().busy).toBe(true)
+    resolve('prepared' as Id)
+    await first
+    expect(setDraft).toHaveBeenCalledExactlyOnceWith('/convert 转成 PDF')
+    expect(open).toHaveBeenCalledExactlyOnceWith('prepared')
+    expect(submit).toHaveBeenCalledExactlyOnceWith('queue')
+    expect(hub.stagedDraft.getSnapshot()).toBe('')
+    expect(hub.stagedSubmission.getSnapshot()).toEqual({ available: false, busy: false })
+  })
+
+  it('preserves a failed preparation draft and clears preparation on manual workspace handoff', async () => {
+    const hub = new InputHub({} as Context, (() => ''))
+    const prepare = vi.fn(async () => { throw new Error('cannot create') })
+    hub.setStagedDraft('/convert 任务', prepare)
+    await expect(hub.submitStagedDraft()).rejects.toThrow('cannot create')
+    expect(hub.stagedDraft.getSnapshot()).toBe('/convert 任务')
+    expect(hub.stagedSubmission.getSnapshot()).toEqual({ available: true, busy: false })
+    vi.spyOn(hub, 'shell').mockReturnValue({ setDraft: vi.fn() } as unknown as SessionInputShell)
+    hub.moveStagedDraftTo('manual' as Parameters<InputHub['moveStagedDraftTo']>[0])
+    await hub.submitStagedDraft()
+    expect(prepare).toHaveBeenCalledOnce()
+  })
   it('moves the pending text to a Session once without submitting it', () => {
     const hub = new InputHub({} as Context, (() => ''))
     const setDraft = vi.fn()

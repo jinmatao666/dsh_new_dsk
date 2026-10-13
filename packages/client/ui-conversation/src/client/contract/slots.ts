@@ -222,10 +222,13 @@ export interface ConversationInjected {
   selectWorkspace: (workspaceId: WorkspaceId) => Promise<void>
   /** Stage editable text until a Workspace supplies its Session. */
   setStagedDraft: (text: string) => void
+  /** Submit through an optional feature-supplied Session factory. */
+  submitStagedDraft: () => Promise<void>
   /** Session-addressed composer block source, or the stable absent source. */
   hooks: {
     composerBlock: ObservableSnapshot<ComposerBlock | undefined>
     stagedDraft: ObservableSnapshot<string>
+    stagedSubmission: ObservableSnapshot<{ available: boolean; busy: boolean }>
   }
 }
 
@@ -261,6 +264,10 @@ export interface ComposerBarOwnerProps {
   stagedDraft?: string
   /** Update the pre-Session text without sending it. */
   onStageDraft?: (text: string) => void
+  /** First-send factory supplied by the staged draft's feature owner. */
+  onSubmitStagedDraft?: () => Promise<void>
+  /** Disable staged editing and duplicate sends during Session preparation. */
+  stagedSubmitting?: boolean
   placeholder?: string
   /** Optional content rendered above the composer surface. */
   accessory?: ReactNode

@@ -1,3 +1,7 @@
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { IWorkspaces, WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+
 /**
  * Keep friendly skill names for the Wanwei draft prefix.
  * @param entries - Skill slug and display-name pairs.
@@ -30,14 +34,47 @@ export function skillDisplayName(slug: string): string | undefined {
  * @param input - Generic pre-Session draft control.
  * @param slug - Installed skill identifier.
  * @param displayName - Friendly skill name shown in the draft prefix.
+ * @param prepareSession - Optional first-send preparation; never called while staging.
  */
 export function startSkillUse(
   sessions: { clear(): void },
-  input: { setStagedDraft(text: string): void },
+  input: { setStagedDraft(text: string, prepareSession?: () => Promise<SessionId>): void },
   slug: string,
   displayName: string,
+  prepareSession?: () => Promise<SessionId>,
 ): void {
   rememberSkillDisplayNames([{ slug, displayName }])
-  input.setStagedDraft(`/${slug}`)
+  if (prepareSession === undefined) input.setStagedDraft(`/${slug}`)
+  else input.setStagedDraft(`/${slug}`, prepareSession)
   sessions.clear()
+}
+
+/**
+ * Prepare a normal Workspace Session lazily; retain allocated paths across retryable registration failures.
+ * @param workspaces - Normal persisted Workspace creation API.
+ * @param sessions - Normal Session creation API.
+ * @param allocate - Desktop directory allocator receiving local year/month/day/hour/minute digits.
+ * @param selected - Existing Workspace selected when the skill is launched, if any.
+ * @returns First-send preparation, with one successful Session retained across repeated calls.
+ */
+export function skillSessionPreparation(
+  workspaces: Pick<IWorkspaces, 'create'>,
+  sessions: Pick<ISessions, 'create'>,
+  allocate: (name: string) => Promise<string>,
+  selected?: WorkspaceId,
+): () => Promise<SessionId> {
+  let prepared: Promise<SessionId> | undefined
+  let automaticPath: string | undefined
+  return () => {
+    prepared ??= (async () => {
+      if (selected !== undefined) return sessions.create({ workspaceId: selected })
+      const now = new Date()
+      const name = [now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes()]
+        .map((value, index) => String(value).padStart(index === 0 ? 4 : 2, '0')).join('')
+      automaticPath ??= await allocate(name)
+      const workspace = await workspaces.create({ path: automaticPath })
+      return sessions.create({ workspaceId: workspace.workspaceId })
+    })().catch((error: unknown) => { prepared = undefined; throw error })
+    return prepared
+  }
 }

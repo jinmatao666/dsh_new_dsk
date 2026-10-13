@@ -78,7 +78,42 @@ async function bench(opts?: { blank?: boolean }) {
 }
 
 describe('resident composer', () => {
-  it('renders the locked view state while no session exists at all', async () => {
+  it('prepares a Workspace on Send and forwards the staged skill through the assembled Session input', async () => {
+    const runtime = await SlotTestRuntime.create()
+    runtime.ctx.provide('uiWorkspace', { connectWorkspace: vi.fn(async () => SID) } as never)
+    runtime.ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
+    const locale = new LocaleRuntime(runtime.ctx)
+    runtime.ctx.provide('locale', locale)
+    runtime.slots.installLocale(locale)
+    await runtime.root.declare(LAYOUT_CHILDREN, AppRoot)
+    await runtime.mount({ inject: [...inject], apply })
+    const prompt = vi.fn<ISession['prompt']>(async () => ({ ok: true, value: { accepted: true } }))
+    const prepare = vi.fn(async () => {
+      await runtime.workspaces.update((draft) => {
+        draft.items = [{ workspaceId: 'automatic', title: '202610122015', path: '/persistent/202610122015', sessionIds: [SID] }] as never
+      })
+      await runtime.sessions.add({ id: SID, summary: { cwd: '/persistent/202610122015' },
+        session: { prompt, loadOlder: vi.fn<ISession['loadOlder']>() } }, { current: false })
+      return SID
+    })
+    const input = runtime.ctx.conversation.input
+    act(() => { input.setStagedDraft('/images-to-pdf 请转换图片', prepare) })
+    const view = runtime.renderRoot()
+    expect(runtime.workspaces.list.getSnapshot().items).toHaveLength(0)
+    expect(prepare).not.toHaveBeenCalled()
+    const send = vi.spyOn(input, 'submitStagedDraft')
+    await act(async () => {
+      fireEvent.click(view.getByRole('button', { name: '发送消息', exact: true }))
+      await send.mock.results[0]?.value
+    })
+    await waitFor(() => { expect(prompt).toHaveBeenCalledOnce() })
+    expect(prepare).toHaveBeenCalledOnce()
+    expect(runtime.sessions.list.getSnapshot().current).toBe(SID)
+    expect(runtime.workspaces.list.getSnapshot().items[0]?.title).toBe('202610122015')
+    expect(prompt.mock.calls[0]?.[0]).toEqual([{ type: 'text', text: '/images-to-pdf 请转换图片' }])
+    await runtime.dispose()
+  })
+  it('allows staging without a Session while ordinary send still requires a Workspace', async () => {
     const runtime = await SlotTestRuntime.create()
     runtime.ctx.provide('uiWorkspace', { connectWorkspace: vi.fn(async () => SID) } as never)
     runtime.ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
@@ -92,12 +127,12 @@ describe('resident composer', () => {
     const textarea = view.container.querySelector<HTMLDivElement>('[data-composer-input]')
     expect(textarea).not.toBeNull()
     expect(textarea!.getAttribute('aria-disabled')).not.toBe('true')
-    expect(textarea!.getAttribute('contenteditable')).not.toBe('true')
-    expect(textarea!.getAttribute('aria-haspopup')).toBe('menu')
+    expect(textarea!.getAttribute('contenteditable')).toBe('true')
+    expect(textarea!.getAttribute('aria-haspopup')).toBeNull()
     expect(view.getByTestId('workspace-probe').textContent).toBe('false:0')
     fireEvent.click(textarea!)
-    expect(view.getByTestId('workspace-probe').textContent).toBe('true:0')
-    expect(textarea!.getAttribute('aria-expanded')).toBe('true')
+    expect(view.getByTestId('workspace-probe').textContent).toBe('false:0')
+    expect(view.getByRole('button', { name: '发送消息', exact: true }).hasAttribute('disabled')).toBe(true)
     fireEvent.click(view.getByRole('button', { name: '选择工作区' }))
     fireEvent.keyDown(textarea!, { key: 'Enter' })
     expect(view.getByTestId('workspace-probe').textContent).toBe('true:0')
@@ -127,7 +162,7 @@ describe('resident composer', () => {
     const workspaceChip = view.getByRole('button', { name: '选择工作区' })
     const workspaceProbe = view.getByTestId('workspace-probe')
     expect(textarea.getAttribute('aria-disabled')).not.toBe('true')
-    expect(textarea.getAttribute('contenteditable')).not.toBe('true')
+    expect(textarea.getAttribute('contenteditable')).toBe('true')
 
     fireEvent.click(workspaceChip)
     fireEvent.click(workspaceProbe)

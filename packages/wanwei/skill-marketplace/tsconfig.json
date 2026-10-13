@@ -8,6 +8,8 @@
     "src"
   ],
   "references": [
+    { "path": "../../api/workspace-controller/tsconfig.client.json" },
+    { "path": "../../core/session" },
     { "path": "../../client/ui-layout" },
     {
       "path": "../oneapi-auth/tsconfig.client.json"

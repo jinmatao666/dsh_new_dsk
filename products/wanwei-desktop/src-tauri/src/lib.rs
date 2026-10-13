@@ -20,6 +20,7 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
+mod automatic_workspace;
 mod clipboard_files;
 mod expert_artifacts;
 mod migration;
@@ -1558,6 +1559,17 @@ fn import_dropped_workspace_files(
     import_workspace_paths_at(&root, paths)
 }
 
+/// Allocate one first-send workspace in the persistent product home.
+#[tauri::command]
+fn create_automatic_workspace(window: Window, name: String) -> Result<String, String> {
+    if window.label() != "main" {
+        return Err("只能从主窗口创建工作区".to_string());
+    }
+    let app_data = window.app_handle().path().app_local_data_dir().map_err(|error| error.to_string())?;
+    let home = product_harness_home(&app_data)?;
+    Ok(automatic_workspace::create(&home, &name)?.to_string_lossy().into_owned())
+}
+
 /// Copy an explicitly pasted OS file list through the existing bounded workspace importer.
 #[tauri::command]
 fn import_clipboard_workspace_files(
@@ -2491,6 +2503,7 @@ pub fn run() {
             import_workspace_files,
             import_dropped_workspace_files,
             import_clipboard_workspace_files,
+            create_automatic_workspace,
             maximize_expert_window,
             open_expert_webview,
             set_expert_webview_bounds,

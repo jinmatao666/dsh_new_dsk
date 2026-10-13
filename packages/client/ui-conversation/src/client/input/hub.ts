@@ -51,12 +51,38 @@ interface ConversationAttachmentFace {
 export class InputHub implements SessionInputResolver {
   private readonly shells = new Map<SessionId, SessionInputShell>()
   readonly stagedDraft = createSnapshotStore('')
+  readonly stagedSubmission = createSnapshotStore({ available: false, busy: false })
+  private prepareStagedSession: (() => Promise<SessionId>) | undefined
 
-  setStagedDraft(text: string): void { this.stagedDraft.set(text) }
+  setStagedDraft(text: string, prepareSession?: () => Promise<SessionId>): void {
+    if (this.stagedSubmission.getSnapshot().busy) return
+    if (prepareSession !== undefined) this.prepareStagedSession = prepareSession
+    if (text === '') this.prepareStagedSession = undefined
+    this.stagedDraft.set(text)
+    this.stagedSubmission.set({ available: this.prepareStagedSession !== undefined, busy: false })
+  }
+
+  async submitStagedDraft(): Promise<void> {
+    const prepare = this.prepareStagedSession
+    if (prepare === undefined || this.stagedSubmission.getSnapshot().busy || this.stagedDraft.getSnapshot().trim() === '') return
+    this.stagedSubmission.set({ available: true, busy: true })
+    try {
+      const id = await prepare()
+      // Navigation during preparation must not send into a different conversation.
+      if (this.sessions().list.getSnapshot().current !== undefined) return
+      this.moveStagedDraftTo(id)
+      this.sessions().open(id)
+      this.shell(id).submit('queue')
+    } finally {
+      this.stagedSubmission.set({ available: this.prepareStagedSession !== undefined, busy: false })
+    }
+  }
 
   takeStagedDraft(): string {
     const text = this.stagedDraft.getSnapshot()
     this.stagedDraft.set('')
+    this.prepareStagedSession = undefined
+    this.stagedSubmission.set({ available: false, busy: false })
     return text
   }
 
@@ -67,7 +93,7 @@ export class InputHub implements SessionInputResolver {
     const text = this.stagedDraft.getSnapshot()
     if (text === '') return
     this.shell(sessionId).setDraft(text)
-    this.stagedDraft.set('')
+    this.takeStagedDraft()
   }
 
   /**

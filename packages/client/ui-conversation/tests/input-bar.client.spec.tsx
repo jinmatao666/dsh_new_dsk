@@ -297,6 +297,21 @@ describe('inline draft prefix', () => {
     expect(sink).toHaveBeenCalledWith('/helper 你好', [], 'queue', expect.any(AbortSignal))
   })
 
+  it('offers first-send preparation in the staged composer and accepts Enter or Send', async () => {
+    const { props, view } = bench()
+    view.unmount()
+    const send = vi.fn(async () => {})
+    const staged = render(<InputBar {...props} useInput={() => undefined} inputActions={undefined} keyboard={undefined} disabled stagedDraft="/helper 你好" onStageDraft={vi.fn()} onSubmitStagedDraft={send} />)
+    const editor = staged.container.querySelector<HTMLElement>('[data-composer-input]')!
+    fireEvent.keyDown(editor, { key: 'Enter' })
+    expect(send).toHaveBeenCalledOnce()
+    fireEvent.click(staged.getByRole('button', { name: props.t('input.send') }))
+    expect(send).toHaveBeenCalledTimes(2)
+    staged.rerender(<InputBar {...props} useInput={() => undefined} inputActions={undefined} keyboard={undefined} disabled stagedDraft="/helper 你好" onStageDraft={vi.fn()} onSubmitStagedDraft={send} stagedSubmitting />)
+    expect(staged.getByRole('button', { name: props.t('input.send') }).hasAttribute('disabled')).toBe(true)
+    expect(editor.getAttribute('contenteditable')).toBe('false')
+  })
+
   it('edits staged question text beside a prefix while preserving its serialized token', () => {
     const { props, view } = bench()
     const stage = vi.fn()

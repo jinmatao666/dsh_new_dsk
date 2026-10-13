@@ -7,6 +7,7 @@
  * here is the submit plane (phase, claim, attempt) alone.
  */
 import type { Context } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ObservableSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { LexicalEditor } from 'lexical'
@@ -215,7 +216,11 @@ export interface SessionInputResolver {
   /** Editable text staged before a Session or Workspace has been selected. */
   readonly stagedDraft: SnapshotStore<string>
   /** Replace staged text without submitting it. */
-  setStagedDraft(text: string): void
+  setStagedDraft(text: string, prepareSession?: () => Promise<SessionId>): void
+  /** Availability and progress of a feature-supplied first-send Session factory. */
+  readonly stagedSubmission: SnapshotStore<{ available: boolean; busy: boolean }>
+  /** Prepare a Session only on explicit send, transfer the draft, and submit it. */
+  submitStagedDraft(): Promise<void>
   /** Consume staged text after a Session is ready to own it. */
   takeStagedDraft(): string
 }

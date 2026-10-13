@@ -131,7 +131,7 @@ function WidthHandle(props: {
 export function ConversationRoot({
   sessionId, useSession, useSessions, useSessionPendingInteraction,
   useWorkspaces, useConversation, useInput, useComposerBlock, useStagedDraft,
-  renderSlot, renderSlotChain, selectWorkspace, setStagedDraft, t,
+  renderSlot, renderSlotChain, selectWorkspace, setStagedDraft, submitStagedDraft, useStagedSubmission, t,
 }: ConversationRootProps) {
   const session = useSession(s => s)
   const pendingInteraction = useSessionPendingInteraction(snapshot =>
@@ -143,6 +143,7 @@ export function ConversationRoot({
   const openState = session?.openState
   const inputState = useInput(s => s)
   const stagedDraft = useStagedDraft(text => text)
+  const stagedSubmission = useStagedSubmission(state => state)
   const cwd = useSessions(s => sessionId === undefined ? undefined : s.byId[sessionId]?.cwd)
   const summaryBlank = useSessions(s => sessionId === undefined ? undefined : s.byId[sessionId]?.blank)
   const workspaces = useWorkspaces(s => s)
@@ -332,9 +333,10 @@ export function ConversationRoot({
     ...(inert
       ? {
         disabled: true,
-        placeholder: t('placeholder.workspace'),
+        placeholder: stagedSubmission.available ? t('placeholder.hero') : t('placeholder.workspace'),
         stagedDraft,
         onStageDraft: setStagedDraft,
+        ...(stagedSubmission.available ? { onSubmitStagedDraft: submitStagedDraft, stagedSubmitting: stagedSubmission.busy } : {}),
         workspacePickerOpen: pickerOpen,
         onRequestWorkspace: () => { setPickerOpen(true) },
       }

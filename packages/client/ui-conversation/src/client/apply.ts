@@ -191,8 +191,10 @@ export function apply(ctx: Context): void {
       hooks: {
         composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
         stagedDraft: inputHub.stagedDraft,
+        stagedSubmission: inputHub.stagedSubmission,
       },
       setStagedDraft: (text) => { inputHub.setStagedDraft(text) },
+      submitStagedDraft: () => inputHub.submitStagedDraft(),
       selectWorkspace: async (workspaceId) => {
         const nextId = await workspaceNavigation.connectWorkspace(workspaceId)
         if (sessionId === undefined) inputHub.moveStagedDraftTo(nextId)

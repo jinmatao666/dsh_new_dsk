@@ -6,6 +6,8 @@ This private product directory owns the Wanwei desktop shell and installer. It d
 
 ## Current boundary
 
+Automatic skill workspaces live under the product Harness home's `workspaces` directory, outside installer/runtime and temporary directories. The main-window-only `create_automatic_workspace` command accepts a twelve-digit local `YYYYMMDDHHmm` name and exclusively creates a directory; collisions receive ` (2)`, ` (3)` suffixes without modifying existing contents. The normal Workspace registry persists their sidebar membership. Replacing the installation keeps this user-data location; explicitly deleting user data is not an update-preservation guarantee.
+
 macOS preserves the inherited system temporary directory and prepends bundled Node to the sidecar PATH, retaining existing tool paths and adding Homebrew locations. Python user packages and pip downloads use a private, product-specific directory under the host temporary directory, which workspace-write already permits. The cache is reused across launches but can be cleared by the OS; it is not durable user data. Read-only restrictions and approval for wider access remain in force. Windows and Linux retain their existing launch environment. Installed Mac behavior requires real-device verification.
 
 Runtime staging unlinks dependency symlinks and Windows junctions without recursively deleting their targets. Legacy file migration creates each source backup directory before copying root-level settings and identity files, then writes and syncs a temporary file before non-replacing hard-link publication; the target filesystem must support hard links. A failed copy leaves no partial final file, while a force interruption may leave an unreferenced temporary file.

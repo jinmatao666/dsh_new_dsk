@@ -50,7 +50,7 @@ export function InputBar({
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
-  stagedDraft, onStageDraft, placeholder, accessory, overlay, leftItems, rightItems, footer,
+  stagedDraft, onStageDraft, onSubmitStagedDraft, stagedSubmitting = false, placeholder, accessory, overlay, leftItems, rightItems, footer,
 }: InputBarProps) {
   const input = useInput(s => s)
   const notice = useNotices(s => s)
@@ -134,7 +134,7 @@ export function InputBar({
   // and keyboard users can reach the recovery action.
   const workspaceTrigger = inert && !staging && !removed && onRequestWorkspace !== undefined
   const editorDisabled = removed || (locked && !workspaceTrigger && !staging)
-  const editable = (live && !locked && !machineBusy) || (staging && !removed)
+  const editable = (live && !locked && !machineBusy) || (staging && !removed && !stagedSubmitting)
   const canSteerQueue = !locked && !machineBusy && !commandMenuOpen && empty && running && subagent === null
     && input.queue.some(row => row.placement === 'queued')
 
@@ -320,6 +320,10 @@ export function InputBar({
   const interruptible = running && continuable
   const primaryLabel = primaryStops ? t('input.stop') : t('input.send')
   const onPrimary = (): void => {
+    if (staging && onSubmitStagedDraft !== undefined && !stagedSubmitting && !empty) {
+      void onSubmitStagedDraft().catch((error: unknown) => { showToast(error instanceof Error ? error.message : String(error)) })
+      return
+    }
     if (primaryStops) {
       stop?.()
       return
@@ -375,7 +379,7 @@ export function InputBar({
           editor={workspaceTrigger ? null : editor}
           editable={editable}
           standaloneText={staging ? (prefixLength > 0 ? draft.slice(prefixLength).trimStart() : draft) : undefined}
-          onStandaloneInput={staging ? text => onStageDraft(`${draft.slice(0, prefixLength)}${prefixLength > 0 ? ' ' : ''}${text}`) : undefined}
+          onStandaloneInput={staging ? (text) => { onStageDraft(`${draft.slice(0, prefixLength)}${prefixLength > 0 ? ' ' : ''}${text}`) } : undefined}
           className={clsx(css.input, editorDisabled && css.inputDisabled)}
           data-phase={input?.phase ?? 'inert'}
           aria-disabled={editorDisabled || undefined}
@@ -384,7 +388,9 @@ export function InputBar({
           aria-haspopup={workspaceTrigger ? 'menu' : undefined}
           aria-expanded={workspaceTrigger ? workspacePickerOpen : undefined}
           tabIndex={workspaceTrigger ? 0 : undefined}
-          onKeyDown={workspaceTrigger ? onWorkspaceKeyDown : undefined}
+          onKeyDown={workspaceTrigger ? onWorkspaceKeyDown : staging && onSubmitStagedDraft !== undefined ? (event) => {
+            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); onPrimary() }
+          } : undefined}
           style={hint === null ? undefined : { '--dsh-composer-hint': JSON.stringify(hint) } as CSSProperties}
         />
         {empty && !claimActive && <div aria-hidden className={css.placeholder} data-composer-placeholder>{placeholderText}</div>}
@@ -515,7 +521,8 @@ export function InputBar({
                 type="button"
                 className={css.primary}
                 aria-label={primaryLabel}
-                disabled={primaryStops ? stop === undefined : empty || disabled || machineBusy}
+                disabled={primaryStops ? stop === undefined : empty
+                  || (staging && onSubmitStagedDraft !== undefined ? stagedSubmitting : disabled || machineBusy)}
                 onMouseDown={keepFocus}
                 onClick={onPrimary}
               >

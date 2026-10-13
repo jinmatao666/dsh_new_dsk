@@ -10,6 +10,7 @@ import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-s
 import type { IConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { ReferenceIcon, Select } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { IWorkspaces } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import {
   browseMarketplaceCatalog,
   buildMarketplaceCatalog,
@@ -23,7 +24,7 @@ import { marketplaceInstallAction } from './install-action.ts'
 import type { MarketplaceInstallState } from './install-action.ts'
 import { markReviewsSeen, recordReviewList, reviewAttentionSnapshot, subscribeReviewAttention } from './review-attention.ts'
 import { registerNativeSkillCatalogBridge } from './skill-catalog-bridge.ts'
-import { rememberSkillDisplayNames, skillDisplayName, startSkillUse } from './skill-use.ts'
+import { rememberSkillDisplayNames, skillDisplayName, skillSessionPreparation, startSkillUse } from './skill-use.ts'
 import { Toast, createPanelController, usePanelNavigation, type PanelController, type WanweiNotice } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import './marketplace.css'
@@ -1317,7 +1318,7 @@ export function SkillDraftPrefix({ draft, removePrefix, renderInput, settlePrefi
   return renderInput(token.length, <button type="button" className="dsh-skill-draft-prefix" aria-label={productText('已选技能：{0}', [displayName])} onPointerDown={(event) => { event.stopPropagation() }} onClick={(event) => { event.stopPropagation(); removePrefix(token.length) }}><ReferenceIcon kind="skill" size={15} /><span>{displayName}</span><span aria-hidden="true">×</span></button>)
 }
 
-export const inject = ['slots', 'connection', 'conversation', 'sessions', 'remote', 'remote.directoryPicker', 'wanweiNetwork']
+export const inject = ['slots', 'connection', 'conversation', 'sessions', 'workspaces', 'remote', 'remote.directoryPicker', 'wanweiNetwork']
 export function apply(ctx: Context): void {
   const network = ctx.wanweiNetwork
   const controller = createPanelController(ctx, 'wanwei-skill-marketplace')
@@ -1327,7 +1328,17 @@ export function apply(ctx: Context): void {
   const skillhubRequest = async (operation: string, payload: unknown) => rpcValue(await connection.rpc.call('/wanwei-skillhub', operation, payload))
   const conversation = ctx.get('conversation') as IConversation
   const sessions = ctx.get('sessions') as ISessions
-  const startSkillConversation = (slug: string, displayName: string) => { startSkillUse(sessions, conversation.input, slug, displayName) }
+  const workspaces: IWorkspaces = ctx.workspaces
+  const startSkillConversation = (slug: string, displayName: string) => {
+    const current = sessions.list.getSnapshot().current
+    const selected = current === undefined ? undefined : workspaces.list.getSnapshot().items.find(item => item.sessionIds.includes(current))
+    startSkillUse(sessions, conversation.input, slug, displayName,
+      skillSessionPreparation(workspaces, sessions, async (name) => {
+        const path = await desktopInvoke('create_automatic_workspace', { name })
+        if (typeof path !== 'string') throw new Error(productText('无法创建默认工作区，请稍后重试。'))
+        return path
+      }, selected?.workspaceId))
+  }
   const loadRemoteSkills = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'skill-list', {})) as { items?: unknown }
     const items = Array.isArray(raw.items) ? raw.items.filter((item): item is RemoteSkill => typeof item === 'object' && item !== null) : []
