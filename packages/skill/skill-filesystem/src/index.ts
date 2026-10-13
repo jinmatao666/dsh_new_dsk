@@ -17,7 +17,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import chokidar from 'chokidar'
 import z from '@deepseek-ai/schemastery'
 import type Schema from '@deepseek-ai/schemastery'
-import { parse as parseYaml } from 'yaml'
+import { isScalar, parse as parseYaml } from 'yaml'
 import type { FileSystem, FsDirEntry, FsTarget } from '@deepseek-ai/dsh-fs'
 import { canonicalizeWatchPath, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import {
@@ -940,7 +940,11 @@ function parseFrontmatter(raw: string): { data: Record<string, unknown>; body: s
   const closing = findClosingFrontmatter(raw, start)
   if (closing === undefined) return undefined
   const yaml = raw.slice(start, closing.start)
-  const parsed = parseYaml(yaml) as unknown
+  // Version is descriptive only; duplicate identity and invocation keys still fail closed.
+  const parsed = parseYaml(yaml, { uniqueKeys: (left, right) => {
+    if (isScalar(left) && isScalar(right)) return left.value === right.value && left.value !== 'version'
+    return left === right
+  } }) as unknown
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined
   return { data: parsed as Record<string, unknown>, body: raw.slice(closing.bodyStart) }
 }

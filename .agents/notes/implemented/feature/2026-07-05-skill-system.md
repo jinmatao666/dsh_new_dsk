@@ -30,7 +30,11 @@ The registry's `list()` returns every winning summary, while model and user cons
 
 The data structures and catalog/tool contract are documented in [skills.md](../../../../docs/subsystems/skills.md), with service signatures in the generated [services catalog](../../../../docs/subsystems/skills.md#cordis-surface).
 
+Descriptive `version` fields may repeat, taking the last value, because external skill packages can carry both author and distribution versions. Version does not control identity, precedence or invocation. The YAML parser still rejects every other duplicate key, rather than accepting ambiguous names or permission declarations. Installed files are not rewritten. The recorded `skill-load` scenario seeds duplicate versions and verifies unchanged catalog disclosure and body loading; focused provider tests reject repeated identity and invocation keys.
+
 ## Alternatives considered
+
+**Disable YAML key uniqueness globally or edit each installed package.** Both are rejected: globally accepting duplicates makes identity and invocation declarations ambiguous, while editing individual installations does not repair loading on other desktops. The parser permits only descriptive version duplicates.
 
 **Inject full skill bodies into every system prompt.** Rejected because it destroys progressive disclosure and makes every request pay for instructions that may not apply.
 

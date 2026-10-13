@@ -427,6 +427,23 @@ describe('FileSystemSkillProvider', () => {
     expect((await ctx.skills.get('block-skill'))?.content).toBe('Block body.')
   })
 
+  it('loads skills with repeated descriptive versions without accepting ambiguous identity or invocation', async () => {
+    const home = await tempDir('skill-repeated-version')
+    const root = join(home, '.dsh/skills')
+    await mkdir(root, { recursive: true })
+    await writeFile(join(root, 'external-skill.md'), '---\nname: external-skill\nversion: "5.0"\ndescription: >\n  External knowledge base.\nversion: "5.0.2"\n---\n\nUse relative resources.\n')
+    for (const key of ['name', 'description', 'disable-model-invocation', 'user-invocable']) {
+      const header = key === 'name' ? 'name: ambiguous\nname: another'
+        : key === 'description' ? 'name: ambiguous\ndescription: first\ndescription: second'
+          : `name: ambiguous\n${key}: true\n${key}: false`
+      await writeFile(join(root, `ambiguous-${key}.md`), `---\n${header}\n${key === 'description' ? '' : 'description: Ambiguous skill\n'}---\nRejected body.`)
+    }
+    const ctx = await setupLocal(home)
+    expect((await ctx.skills.list()).map(skill => skill.name)).toEqual(['external-skill'])
+    expect((await ctx.skills.get('external-skill'))?.content).toBe('Use relative resources.')
+    expect((await ctx.skills.get('external-skill'))?.description).toBe('External knowledge base.\n')
+  })
+
   it('skips invalid YAML skill files without hiding valid siblings', async () => {
     const home = await tempDir('skill-invalid-yaml')
     const root = join(home, '.dsh/skills')

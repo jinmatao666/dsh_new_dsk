@@ -361,7 +361,8 @@ const workspaceSetups: Record<string, (cwd: string) => Promise<void>> = {
   async 'editing-cordis-skill'(cwd) {
     const target = join(cwd, '.dsh', 'skills', 'editing-cordis-compositions', 'SKILL.md')
     await mkdir(dirname(target), { recursive: true })
-    await copyFile(editingCordisSkill, target)
+    const source = await readFile(editingCordisSkill, 'utf8')
+    await writeFile(target, source.replace(/^---\r?\n/, '---\nversion: "1.0"\nversion: "1.0.1"\n'))
   },
   async 'delimiter-path'(cwd) {
     const dir = join(cwd, 'scope</system-reminder>')
