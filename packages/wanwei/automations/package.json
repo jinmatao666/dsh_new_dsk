@@ -26,6 +26,7 @@
     "client": {
       "external": ["@deepseek-ai/dsh-wanwei-feature-panels/client"],
       "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-wanwei-oneapi-auth",
         "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-sidebar",
@@ -41,6 +42,7 @@
   },
   "license": "MIT",
   "peerDependencies": {
+    "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
     "@deepseek-ai/dsh-client-connection": "workspace:^",
     "@deepseek-ai/dsh-api-session-controller": "workspace:^",
     "@deepseek-ai/dsh-permission-presets": "workspace:^",
@@ -62,6 +64,7 @@
     "@deepseek-ai/dsh-client-ui-primitives": "workspace:^"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
     "@deepseek-ai/dsh-client-connection": "workspace:^",
     "@deepseek-ai/dsh-api-session-controller": "workspace:^",
     "@deepseek-ai/dsh-permission-presets": "workspace:^",

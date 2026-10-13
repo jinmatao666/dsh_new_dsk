@@ -5,10 +5,12 @@ import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client
 import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { AutomationSnapshot } from '../contract.ts'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import './page.css'
 import './task-cards.css'
 import { AutomationCards, type AutomationApi } from './task-cards.tsx'
 import { productText } from './locales/product.ts'
+import { startAutomationConversation } from './task-draft.ts'
 
 function AutomationsIcon({ size = 18 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -23,7 +25,7 @@ function AutomationPage({ api }: { api: AutomationApi }) {
     <Toast notice={notice} setNotice={setNotice} /></>
 }
 
-export const inject = ['slots', 'wanweiNetwork', 'connection', 'sessions']
+export const inject = ['slots', 'wanweiNetwork', 'connection', 'sessions', 'conversation']
 /** Mount the persistent local scheduler UI.
  * @param ctx - Product Client context.
  */
@@ -37,6 +39,9 @@ export function apply(ctx: Context): void {
       return result.value as AutomationSnapshot
     },
     openSession(id) { controller.close(); ctx.sessions.open(SessionId(id)) },
+    fromTask() {
+      startAutomationConversation(ctx.conversation.input, ctx.sessions, () => { controller.close() })
+    },
   }
   registerFeaturePanel(ctx, 'skill-automations', 10, {
     controller, title: productText('自动化'),

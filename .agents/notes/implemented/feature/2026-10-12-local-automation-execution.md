@@ -16,6 +16,8 @@ The scheduler commits the next occurrence and a running record before execution.
 
 The [independent page decision](../architecture/2026-10-10-independent-wanwei-pages.md) remains active for package ownership and presentation. This note supersedes only its demonstration-only automation behavior; connectors remain separate.
 
+Creation entries remain client-owned. Templates stage paused drafts for explicit review, not stored examples. Creation from a task clears the current selection and stages a new-conversation prefix without sending or saving. This navigation entry does not itself expose a conversational scheduling tool.
+
 ## Alternatives considered
 
 **Keep the demonstration:** this cannot satisfy the requested real scheduling and hides the distinction between configured work and executed work.
