@@ -29,6 +29,8 @@ Tauri 2 桌面壳会以本地回环 DSH Sidecar 的形式启动 `wanwei-desktop`
 
 ## 验证
 
+本地及 SkillHub 技能 ZIP 最多接受 4096 个条目，包括显式目录条目；本地目录及文件列表导入最多接受 4096 个文件。压缩和解压后的大小限制各为 16 MB，目录深度限制为 16 层，不安全路径及符号链接仍被拒绝。SkillHub 导入错误标明来源，条目超限时报告压缩包的实际数量。这些原生校验需要更新桌面二进制，服务器技能包限制单独管理。
+
 手动触发的[桌面工作流](../../.github/workflows/wanwei-desktop-preview.yml)包含 Linux x64 和 ARM64 的原生 Ubuntu 22.04 构建，按架构分别保存安装包产物。每个 Linux 任务请求生成 DEB 和 AppImage，并暂存当前架构的 Node 运行时和依赖。生成安装包不代表已经兼容 UOS 系统库；安装和启动需要在目标 UOS 版本上测试。
 
 ```sh

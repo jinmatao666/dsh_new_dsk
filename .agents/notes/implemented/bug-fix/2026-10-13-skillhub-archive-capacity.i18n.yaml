@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-13-skillhub-archive-capacity.md
+2026-10-13-skillhub-archive-capacity.md: e136b0d16557f3f2d940e8202982da5caaaf62a2
+2026-10-13-skillhub-archive-capacity.zh.md: 628dcf0011b07e813bdfde371a30fcd4f324c628

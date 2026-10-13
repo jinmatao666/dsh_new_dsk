@@ -37,6 +37,8 @@ The release shares the original product's installer identity; development retain
 
 ## Verify
 
+Local and SkillHub skill ZIPs accept at most 4096 entries, including explicit directory entries; local directory and file-list imports accept at most 4096 files. Compressed and expanded byte limits remain 16 MB each, directory depth remains 16, and unsafe paths and symbolic links are rejected. SkillHub importer failures identify the source and report the archive's entry count when it exceeds the limit. These native checks require an updated desktop binary; server skill-package limits are separate.
+
 The manual [desktop workflow](../../.github/workflows/wanwei-desktop-preview.yml) includes native Ubuntu 22.04 builds for Linux x64 and ARM64, with separate installer artifacts for each architecture. Each Linux job requests DEB and AppImage bundles and stages its own Node runtime and dependencies. Installer generation does not establish compatibility with UOS system libraries; installation and startup require testing on the target UOS release.
 
 ```sh

@@ -98,7 +98,8 @@ fn install_at(
         skill_staging_root(root)?.join(format!("skillhub-{}-{nonce}", std::process::id()));
     let temporary_root = workspace.join("skills");
     let result = (|| {
-        let imported = install_custom_skill_archive_at(&temporary_root, archive)?;
+        let imported = install_custom_skill_archive_at(&temporary_root, archive)
+            .map_err(|error| format!("SkillHub 技能包安装失败：{}", error.replace("个人技能", "技能").replace("自定义技能", "技能")))?;
         let requested_local_slug = record.local_slug.clone();
         record.source = "skillhub".into();
         record.local_slug = imported.slug;
@@ -267,6 +268,52 @@ mod tests {
             sha256: format!("{:x}", Sha256::digest(bytes)),
             icon_url: None,
         }
+    }
+    fn archive_with_entries(count: usize) -> Vec<u8> {
+        let files: Vec<(String, String)> = (1..count)
+            .map(|i| (format!("references/help-{i}.md"), "reference".into()))
+            .chain(std::iter::once(("SKILL.md".into(), "---\nname: local-skill\ndescription: test\n---".into())))
+            .collect();
+        archive(&files.iter().map(|(p, c)| (p.as_str(), c.as_str())).collect::<Vec<_>>())
+    }
+    #[test]
+    fn installs_archive_at_entry_limit_through_directory_validation() {
+        let root = TestRoot::new();
+        let skills = root.0.join("skills");
+        let bytes = archive_with_entries(LOCAL_SKILL_MAX_ENTRIES);
+        let installed = install_at(&skills, bytes.clone(), record(&bytes)).unwrap();
+        assert_eq!(installed.local_slug, "local-skill");
+        assert!(skills.join("local-skill/references/help-4095.md").is_file());
+        assert_eq!(list_at(&skills).unwrap().len(), 1);
+    }
+    #[test]
+    fn rejects_archive_above_entry_limit_without_installing() {
+        let root = TestRoot::new();
+        let skills = root.0.join("skills");
+        let bytes = archive_with_entries(LOCAL_SKILL_MAX_ENTRIES + 1);
+        let error = install_at(&skills, bytes.clone(), record(&bytes)).unwrap_err();
+        assert!(error.contains("SkillHub 技能包安装失败"));
+        assert!(error.contains("4096"));
+        assert!(error.contains("4097"));
+        assert!(!error.contains("个人技能"));
+        assert!(!skills.join("local-skill").exists());
+        assert_eq!(fs::read_dir(root.0.join(".dsh-skill-staging")).unwrap().count(), 0);
+    }
+    #[test]
+    fn rejects_expanded_archive_above_byte_limit() {
+        let root = TestRoot::new();
+        let skills = root.0.join("skills");
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        writer.start_file("SKILL.md", options).unwrap();
+        writer.write_all(b"---\nname: local-skill\ndescription: test\n---").unwrap();
+        writer.start_file("references/large.txt", options).unwrap();
+        writer.write_all(&vec![b'x'; 16 * 1024 * 1024]).unwrap();
+        let bytes = writer.finish().unwrap().into_inner();
+        let error = install_at(&skills, bytes.clone(), record(&bytes)).unwrap_err();
+        assert!(error.contains("解压后不能超过 16 MB"));
+        assert!(!skills.join("local-skill").exists());
     }
     #[test]
     fn install_discover_and_uninstall_preserve_source_and_local_name() {

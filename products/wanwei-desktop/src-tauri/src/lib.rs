@@ -39,6 +39,8 @@ const NATIVE_FILE_DROP_SCRIPT: &str = "window.dispatchEvent(new Event('dsh:nativ
 const WORKSPACE_IMPORT_MAX_FILES: usize = 64;
 const WORKSPACE_IMPORT_MAX_FILE_BYTES: usize = 64 * 1024 * 1024;
 const WORKSPACE_IMPORT_MAX_TOTAL_BYTES: usize = 256 * 1024 * 1024;
+// Shared local/SkillHub package bound; byte, depth and path checks remain separate.
+const LOCAL_SKILL_MAX_ENTRIES: usize = 4096;
 const NATIVE_BRIDGE_INITIALIZATION_SCRIPT: &str = r#"
 (() => {
   const invoke = (command, argumentsValue) => {
@@ -221,8 +223,8 @@ fn install_custom_skill_at(
     files: Vec<CustomSkillFile>,
 ) -> Result<String, String> {
     validate_marketplace_slug(slug)?;
-    if files.is_empty() || files.len() > 128 {
-        return Err("自定义技能必须包含 1 至 128 个文件".to_string());
+    if files.is_empty() || files.len() > LOCAL_SKILL_MAX_ENTRIES {
+        return Err(format!("自定义技能必须包含 1 至 {LOCAL_SKILL_MAX_ENTRIES} 个文件，实际 {} 个", files.len()));
     }
     let mut total = 0usize;
     let mut normalized = Vec::with_capacity(files.len());
@@ -395,8 +397,8 @@ fn install_custom_skill_archive_named_at(
             .map_err(|error| format!("无法创建 ZIP 解压目录 {}：{error}", extraction.display()))?;
         let mut archive = zip::ZipArchive::new(Cursor::new(archive_bytes))
             .map_err(|error| format!("个人技能 ZIP 无效：{error}"))?;
-        if archive.len() > 128 {
-            return Err("个人技能 ZIP 最多包含 128 个条目".to_string());
+        if archive.len() > LOCAL_SKILL_MAX_ENTRIES {
+            return Err(format!("个人技能 ZIP 最多包含 {LOCAL_SKILL_MAX_ENTRIES} 个条目，实际 {} 个（含文件和目录）", archive.len()));
         }
         let mut total_size = 0u64;
         for index in 0..archive.len() {
@@ -535,8 +537,8 @@ fn validate_custom_skill_directory_tree(
             validate_custom_skill_directory_tree(&entry.path(), depth + 1, file_count, total_size)?;
         } else if metadata.is_file() {
             *file_count += 1;
-            if *file_count > 128 {
-                return Err("自定义技能必须包含 1 至 128 个文件".to_string());
+            if *file_count > LOCAL_SKILL_MAX_ENTRIES {
+                return Err(format!("自定义技能最多包含 {LOCAL_SKILL_MAX_ENTRIES} 个文件，实际至少 {} 个", *file_count));
             }
             let size = fs::metadata(entry.path())
                 .map_err(|error| {
