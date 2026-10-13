@@ -103,7 +103,7 @@ describe('resident composer', () => {
     expect(prepare).not.toHaveBeenCalled()
     const send = vi.spyOn(input, 'submitStagedDraft')
     await act(async () => {
-      fireEvent.click(view.getByRole('button', { name: '发送消息', exact: true }))
+      fireEvent.click(view.getByRole('button', { name: '发送消息' }))
       await send.mock.results[0]?.value
     })
     await waitFor(() => { expect(prompt).toHaveBeenCalledOnce() })
@@ -132,7 +132,7 @@ describe('resident composer', () => {
     expect(view.getByTestId('workspace-probe').textContent).toBe('false:0')
     fireEvent.click(textarea!)
     expect(view.getByTestId('workspace-probe').textContent).toBe('false:0')
-    expect(view.getByRole('button', { name: '发送消息', exact: true }).hasAttribute('disabled')).toBe(true)
+    expect(view.getByRole('button', { name: '发送消息' }).hasAttribute('disabled')).toBe(true)
     fireEvent.click(view.getByRole('button', { name: '选择工作区' }))
     fireEvent.keyDown(textarea!, { key: 'Enter' })
     expect(view.getByTestId('workspace-probe').textContent).toBe('true:0')
