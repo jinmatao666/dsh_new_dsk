@@ -17,9 +17,9 @@ it('opens office templates and selects a draft without saving or running it', as
   expect(screen.getByRole('heading', { name: '从模板添加' })).toBeTruthy()
   expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(6)
   fireEvent.click(screen.getByRole('button', { name: /项目周报汇总/ }))
-  expect((screen.getByLabelText('任务名称')).value).toBe('项目周报汇总')
-  expect((screen.getByLabelText('工作目录')).value).toBe('')
-  expect((screen.getByLabelText('保存后启用')).checked).toBe(false)
+  expect(screen.getByLabelText<HTMLInputElement>('任务名称').value).toBe('项目周报汇总')
+  expect(screen.getByLabelText<HTMLInputElement>('工作目录').value).toBe('')
+  expect(screen.getByLabelText<HTMLInputElement>('保存后启用').checked).toBe(false)
   expect(call.mock.calls.every(args => args[0] === 'list')).toBe(true)
 })
 
