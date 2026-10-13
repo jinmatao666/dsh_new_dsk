@@ -4,13 +4,60 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { AutomationCards, type AutomationApi } from '../src/client/task-cards.tsx'
 import type { AutomationSnapshot } from '../src/contract.ts'
 import { startAutomationConversation } from '../src/client/task-draft.ts'
+import { RunHistory } from '../src/client/run-history.tsx'
 
 afterEach(cleanup)
 const empty: AutomationSnapshot = { tasks: [], runs: [] }
+const directories = { listWorkspaces: async () => [], chooseDirectory: async () => null }
+
+it('selects an existing workspace or local folder without saving a task', async () => {
+  const call = vi.fn().mockResolvedValue(empty)
+  const chooseDirectory = vi.fn().mockResolvedValue('C:\\local-output')
+  render(<AutomationCards api={{ ...directories, call, openSession: vi.fn(), fromTask: vi.fn(),
+    listWorkspaces: async () => [{ title: '项目资料', path: 'C:\\project' }], chooseDirectory }} notify={vi.fn()} />)
+  await screen.findByText('尚未配置自动化')
+  fireEvent.click(screen.getByText('＋ 新建'))
+  const workspaceButton = await screen.findByText('▱ 项目资料')
+  fireEvent.click(workspaceButton)
+  expect(screen.getByLabelText<HTMLInputElement>('工作目录').value).toBe('C:\\project')
+  fireEvent.click(screen.getByText('打开本地文件夹'))
+  await waitFor(() => { expect(screen.getByLabelText<HTMLInputElement>('工作目录').value).toBe('C:\\local-output') })
+  expect(call.mock.calls.every(args => args[0] === 'list')).toBe(true)
+  expect(screen.queryByText(/消息推送/)).toBeNull()
+})
+
+it('preserves the draft after directory cancellation or failure', async () => {
+  const chooseDirectory = vi.fn().mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('选择目录失败'))
+  render(<AutomationCards api={{ ...directories, call: vi.fn().mockResolvedValue(empty),
+    openSession: vi.fn(), fromTask: vi.fn(), chooseDirectory }} notify={vi.fn()} />)
+  await screen.findByText('尚未配置自动化')
+  fireEvent.click(screen.getByText('＋ 新建'))
+  fireEvent.change(screen.getByLabelText('工作目录'), { target: { value: 'C:\\original' } })
+  fireEvent.click(screen.getByText('打开本地文件夹'))
+  await waitFor(() => { expect(screen.getByText('打开本地文件夹').hasAttribute('disabled')).toBe(false) })
+  expect(screen.getByLabelText<HTMLInputElement>('工作目录').value).toBe('C:\\original')
+  fireEvent.click(screen.getByText('打开本地文件夹'))
+  await screen.findByText('Error: 选择目录失败')
+  expect(screen.getByLabelText<HTMLInputElement>('工作目录').value).toBe('C:\\original')
+})
+
+it('shows real elapsed time and filters ledger rows by task name', () => {
+  render(<RunHistory openSession={vi.fn()} stop={vi.fn()} runs={[
+    { id: 'one', taskId: 'a', taskName: '周报', startedAt: 1000, endedAt: 54000, status: 'success', trigger: 'scheduled' },
+    { id: 'two', taskId: 'b', taskName: '检查', startedAt: 1000, endedAt: 2000, status: 'failed', trigger: 'manual', error: '模型不可用' },
+  ]} />)
+  expect(screen.getByRole('columnheader', { name: '耗时' })).toBeTruthy()
+  expect(screen.getByText('53 秒')).toBeTruthy()
+  fireEvent.click(screen.getByText('查看失败原因'))
+  expect(screen.getByText('模型不可用')).toBeTruthy()
+  fireEvent.change(screen.getByLabelText('搜索运行记录'), { target: { value: '周报' } })
+  expect(screen.queryByText('检查')).toBeNull()
+  expect(screen.getByText('周报')).toBeTruthy()
+})
 
 it('opens office templates and selects a draft without saving or running it', async () => {
   const call = vi.fn().mockResolvedValue(empty)
-  render(<AutomationCards api={{ call, openSession: vi.fn(), fromTask: vi.fn() }} notify={vi.fn()} />)
+  render(<AutomationCards api={{ ...directories, call, openSession: vi.fn(), fromTask: vi.fn() }} notify={vi.fn()} />)
   await screen.findByText('尚未配置自动化')
   fireEvent.click(screen.getByLabelText('新建方式'))
   fireEvent.click(screen.getByText(/从模板新建/))
@@ -25,7 +72,8 @@ it('opens office templates and selects a draft without saving or running it', as
 
 it('routes from-task creation to a staged conversation without sending', async () => {
   const fromTask = vi.fn()
-  render(<AutomationCards api={{ call: vi.fn().mockResolvedValue(empty), openSession: vi.fn(), fromTask }} notify={vi.fn()} />)
+  render(<AutomationCards api={{ ...directories, call: vi.fn().mockResolvedValue(empty),
+    openSession: vi.fn(), fromTask }} notify={vi.fn()} />)
   await screen.findByText('尚未配置自动化')
   fireEvent.click(screen.getByLabelText('新建方式'))
   fireEvent.click(screen.getByText(/从任务新建/))
@@ -40,7 +88,7 @@ it('routes from-task creation to a staged conversation without sending', async (
 })
 
 it('shows no built-in sample tasks when the Host has no data', async () => {
-  const api: AutomationApi = { call: vi.fn().mockResolvedValue(empty), openSession: vi.fn(), fromTask: vi.fn() }
+  const api: AutomationApi = { ...directories, call: vi.fn().mockResolvedValue(empty), openSession: vi.fn(), fromTask: vi.fn() }
   render(<AutomationCards api={api} notify={vi.fn()} />)
   expect(await screen.findByText('尚未配置自动化')).toBeTruthy()
   expect(screen.queryByRole('switch')).toBeNull()
@@ -51,7 +99,7 @@ it('shows no built-in sample tasks when the Host has no data', async () => {
 })
 
 it('places batch actions after the task area and hides them on execution history', async () => {
-  const api: AutomationApi = { call: vi.fn().mockResolvedValue(empty), openSession: vi.fn(), fromTask: vi.fn() }
+  const api: AutomationApi = { ...directories, call: vi.fn().mockResolvedValue(empty), openSession: vi.fn(), fromTask: vi.fn() }
   render(<AutomationCards api={api} notify={vi.fn()} />)
   const emptyState = await screen.findByText('尚未配置自动化')
   fireEvent.click(screen.getByRole('button', { name: '批量管理' }))
@@ -65,7 +113,7 @@ it('places batch actions after the task area and hides them on execution history
 
 it('saves the real task through RPC and does not publish a failed write', async () => {
   const call = vi.fn().mockResolvedValueOnce(empty).mockRejectedValueOnce(new Error('磁盘写入失败'))
-  render(<AutomationCards api={{ call, openSession: vi.fn(), fromTask: vi.fn() }} notify={vi.fn()} />)
+  render(<AutomationCards api={{ ...directories, call, openSession: vi.fn(), fromTask: vi.fn() }} notify={vi.fn()} />)
   await screen.findByText('尚未配置自动化')
   fireEvent.click(screen.getByText('＋ 新建'))
   fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '真实任务' } })
@@ -80,7 +128,7 @@ it('saves the real task through RPC and does not publish a failed write', async 
 
 it('opens the Session associated with an actual Host run record', async () => {
   const openSession = vi.fn()
-  const api: AutomationApi = { openSession, fromTask: vi.fn(), call: vi.fn().mockResolvedValue({
+  const api: AutomationApi = { ...directories, openSession, fromTask: vi.fn(), call: vi.fn().mockResolvedValue({
     tasks: [], runs: [{ id: 'run', taskId: 'task', taskName: '真实任务', status: 'success',
       trigger: 'manual', startedAt: 1, sessionId: 'session' }],
   }) }

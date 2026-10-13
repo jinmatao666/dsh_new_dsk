@@ -6,6 +6,8 @@ import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { AutomationSnapshot } from '../contract.ts'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import './page.css'
 import './task-cards.css'
 import { AutomationCards, type AutomationApi } from './task-cards.tsx'
@@ -25,7 +27,7 @@ function AutomationPage({ api }: { api: AutomationApi }) {
     <Toast notice={notice} setNotice={setNotice} /></>
 }
 
-export const inject = ['slots', 'wanweiNetwork', 'connection', 'sessions', 'conversation']
+export const inject = ['slots', 'wanweiNetwork', 'connection', 'sessions', 'conversation', 'workspaces', 'remote', 'remote.directoryPicker']
 /** Mount the persistent local scheduler UI.
  * @param ctx - Product Client context.
  */
@@ -41,6 +43,14 @@ export function apply(ctx: Context): void {
     openSession(id) { controller.close(); ctx.sessions.open(SessionId(id)) },
     fromTask() {
       startAutomationConversation(ctx.conversation.input, ctx.sessions, () => { controller.close() })
+    },
+    listWorkspaces() {
+      return Promise.resolve(ctx.workspaces.list.getSnapshot().items.map(item => ({ title: item.title, path: item.path })))
+    },
+    async chooseDirectory() {
+      const result = await ctx.remote.directoryPicker.pick()
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
     },
   }
   registerFeaturePanel(ctx, 'skill-automations', 10, {

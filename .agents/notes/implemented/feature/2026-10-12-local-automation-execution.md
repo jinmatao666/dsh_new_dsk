@@ -18,6 +18,8 @@ The [independent page decision](../architecture/2026-10-10-independent-wanwei-pa
 
 Creation entries remain client-owned. Templates stage paused drafts for explicit review, not stored examples. Creation from a task clears the current selection and stages a new-conversation prefix without sending or saving. This navigation entry does not itself expose a conversational scheduling tool.
 
+Workspace selection uses the Workspace Controller and shared directory picker. The editor stores the selected path without navigating or registering a Workspace; cancellation and failure preserve the draft. The run ledger derives elapsed time from committed timestamps rather than claiming successful artifacts. Presentation does not add a full-access preset, finite validity or notification delivery to the execution contract.
+
 ## Alternatives considered
 
 **Keep the demonstration:** this cannot satisfy the requested real scheduling and hides the distinction between configured work and executed work.

@@ -11,6 +11,8 @@
     "src/contract.ts"
   ],
   "references": [
+    { "path": "../../api/remotes/tsconfig.client.json" },
+    { "path": "../../api/workspace-controller/tsconfig.client.json" },
     { "path": "../../client/ui-conversation" },
     {
       "path": "../../../vendor/cordis"
