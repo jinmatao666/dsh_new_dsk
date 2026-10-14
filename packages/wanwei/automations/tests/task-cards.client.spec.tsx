@@ -14,7 +14,7 @@ it('keeps creation names readable while decorative SVG icons do not enter access
   render(<AutomationCards api={{ ...directories, call: vi.fn().mockResolvedValue(empty),
     openSession: vi.fn(), fromTask: vi.fn() }} notify={vi.fn()} />)
   await screen.findByText('尚未配置自动化')
-  const create = screen.getByRole('button', { name: '新建', exact: true })
+  const create = screen.getByRole('button', { name: '新建' })
   expect(create.textContent).toBe('新建')
   expect(create.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
   const picker = screen.getByLabelText('新建方式')
@@ -24,7 +24,7 @@ it('keeps creation names readable while decorative SVG icons do not enter access
   const menu = picker.closest('details')
   if (menu === null) throw new Error('Creation picker requires its owning details menu')
   for (const name of ['手动新建', '从任务新建', '从模板新建']) {
-    const action = within(menu).getByRole('button', { name, exact: true })
+    const action = within(menu).getByRole('button', { name })
     expect(action.textContent).toBe(name)
     expect(action.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
   }
