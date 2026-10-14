@@ -34,7 +34,9 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
-    const adapter = new MockAdapter([textResponse('真实执行链路结果'), textResponse('定时执行结果'), 'hang'])
+    const adapter = new MockAdapter([
+      textResponse('真实执行链路结果'), textResponse('定时执行结果'), 'hang', textResponse('单次完成'), textResponse('手动单次完成'),
+    ])
     ctx.llm.registerAdapter(['mock'], adapter)
     new SessionTitleService(ctx, { fallbackMaxWords: 10, fallbackMaxBytes: 120, maxTitleBytes: 200 })
     const workspace = { id: 'test-workspace', path: dir, attachSession: async () => {} }
@@ -53,7 +55,8 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     ctx.provide('approval', { config: { policy: 'ask' } } as never)
     await ctx.plugin(PermissionPresets).await()
     const setPermission = vi.spyOn(ctx.permissionPresets, 'set')
-    createSessionTestController(ctx, { cwd: dir, defaultModelSelection: () => ({ provider: 'mock', model: 'mock' }) })
+    const saveDefault = vi.fn()
+    createSessionTestController(ctx, { cwd: dir, defaultModelSelection: () => ({ provider: 'mock', model: 'mock' }), saveDefaultModelSelection: saveDefault })
     const historical = ctx.sessions.create(SessionId('historical-automation'))
     await new AutomationStore(join(dir, 'tasks.json')).update((state) => {
       state.runs.push({ id: 'historical-run', taskId: 'removed-task', taskName: '旧任务', owner: 'account-a',
@@ -78,7 +81,7 @@ it('loads the plugin, persists a task, executes a real Session and records its c
       return result.value
     }
     const saved = await call('save', { task: { name: '测试任务', prompt: '只回复完成', cwd: dir,
-      cadence: 'daily', time: '09:00', enabled: false } })
+      cadence: 'daily', time: '09:00', enabled: false, model: { provider: 'mock', model: 'task-model' } } })
     expect(saved.tasks).toHaveLength(1)
     expect((await new AutomationStore(join(dir, 'tasks.json')).snapshot('account-a')).tasks).toHaveLength(1)
     await call('run', { id: saved.tasks[0]!.id })
@@ -87,6 +90,8 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     expect(run.sessionId).toBeTruthy()
     expect(archived.has(run.sessionId!)).toBe(true)
     expect(adapter.requests).toHaveLength(1)
+    expect(adapter.requests[0]).toMatchObject({ model: 'task-model' })
+    expect(saveDefault).not.toHaveBeenCalled()
     expect(setPermission).toHaveBeenCalledWith(ctx.sessions.get(SessionId(run.sessionId!)), 'danger-full-access')
     const events = ctx.sessions.get(SessionId(run.sessionId!))!.events
     expect(events.filter(event => event.type === 'sandbox/mode').at(-1)?.data).toEqual({ mode: 'danger-full-access' })
@@ -103,12 +108,34 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     expect(setPermission.mock.calls.every(([, preset]) => preset === 'danger-full-access')).toBe(true)
     expect((await call('list', {})).runs[0]?.trigger).toBe('scheduled')
     expect((await call('list', {})).runs.every(item => item.sessionId !== undefined && archived.has(item.sessionId))).toBe(true)
+    await call('save', { id: saved.tasks[0]!.id, task: { name: '测试任务', prompt: '只回复完成', cwd: dir,
+      cadence: 'daily', time: '09:00', enabled: false, fullAccess: false } })
+    expect((await call('list', {})).tasks[0]?.model).toBeUndefined()
     await call('run', { id: saved.tasks[0]!.id })
     await expect(call('run', { id: saved.tasks[0]!.id })).rejects.toThrow('正在执行')
     const running = (await call('list', {})).runs[0]!
+    await expect.poll(() => setPermission.mock.calls.at(-1)?.[1]).toBe('workspace-write')
     await expect(call('delete-run', { id: running.id })).rejects.toThrow('执行中的记录暂不可删除')
     await expect.poll(async () => (await call('list', {})).runs[0]?.status).toBe('failed')
     expect((await call('list', {})).runs[0]?.error).toContain('超时')
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    await call('save', { id: saved.tasks[0]!.id, task: { name: '单次任务', prompt: '只回复完成', cwd: dir,
+      cadence: 'once', startDate: today, time, enabled: false } })
+    await store.update((state) => { state.tasks[0]!.enabled = true; state.tasks[0]!.nextRunAt = Date.now() - 1 })
+    await expect.poll(async () => (await call('list', {})).runs[0]?.status).toBe('success')
+    await expect.poll(() => adapter.requests.length).toBe(4)
+    expect((await call('list', {})).tasks[0]).toMatchObject({ enabled: false, nextRunAt: 0 })
+    await expect(call('enable', { ids: [saved.tasks[0]!.id], enabled: true })).rejects.toThrow('有效期已结束')
+    await call('save', { id: saved.tasks[0]!.id, task: { name: '手动单次任务', prompt: '只回复完成', cwd: dir,
+      cadence: 'once', startDate: `${now.getFullYear() + 1}-12-20`, time: '09:00', enabled: true } })
+    const previousRuns = (await call('list', {})).runs.length
+    await call('run', { id: saved.tasks[0]!.id })
+    await expect.poll(() => adapter.requests.length).toBe(5)
+    await expect.poll(async () => (await call('list', {})).runs[0]?.status).toBe('success')
+    expect((await call('list', {})).runs).toHaveLength(previousRuns + 1)
+    expect((await call('list', {})).tasks[0]).toMatchObject({ enabled: false, nextRunAt: 0 })
     await store.update((state) => { state.runs.push({ ...state.runs[0]!, id: 'other-account-run', owner: 'account-b' }) })
     await expect(call('delete-run', { id: 'other-account-run' })).rejects.toThrow('运行记录不存在')
     const removed = await call('delete-run', { id: run.id })

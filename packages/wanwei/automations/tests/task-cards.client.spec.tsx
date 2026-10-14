@@ -8,7 +8,9 @@ import { RunHistory } from '../src/client/run-history.tsx'
 
 afterEach(cleanup)
 const empty: AutomationSnapshot = { tasks: [], runs: [] }
-const directories = { listWorkspaces: async () => [], chooseDirectory: async () => null }
+const directories = { listWorkspaces: async () => [], chooseDirectory: async () => null,
+  listModels: async () => ({ default: { provider: 'mock', model: 'mock' }, routableProviders: ['mock'],
+    groups: [{ id: 'mock', name: '测试模型', models: [{ id: 'mock', name: '模型 A' }, { id: 'other', name: '模型 B' }] }], failures: [] }) }
 
 it('keeps creation names readable while decorative SVG icons do not enter accessible labels', async () => {
   render(<AutomationCards api={{ ...directories, call: vi.fn().mockResolvedValue(empty),
@@ -39,14 +41,18 @@ it('selects an existing workspace or local folder without saving a task', async 
     listWorkspaces: async () => [{ title: '项目资料', path: 'C:\\project' }], chooseDirectory }} notify={vi.fn()} />)
   await screen.findByText('尚未配置自动化')
   fireEvent.click(screen.getByRole('button', { name: '新建' }))
-  expect(screen.getByText('完全权限')).toBeTruthy()
-  expect(screen.getByText('任务将以完全权限自动执行，请仅使用可信的任务和工作目录。')).toBeTruthy()
+  expect(screen.getByText('允许完全访问')).toBeTruthy()
+  expect(screen.queryByText('保存后启用')).toBeNull()
   expect(screen.queryByText('工作区写入')).toBeNull()
-  const workspaceButton = await screen.findByText('▱ 项目资料')
+  expect(screen.queryByLabelText('工作目录')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '选择工作空间' }))
+  const workspaceButton = await screen.findByRole('button', { name: '项目资料' })
+  expect(workspaceButton.querySelector('svg')).not.toBeNull()
   fireEvent.click(workspaceButton)
-  expect(screen.getByLabelText<HTMLInputElement>('工作目录').value).toBe('C:\\project')
+  expect(screen.getByRole('button', { name: '选择工作空间' }).title).toBe('C:\\project')
+  fireEvent.click(screen.getByRole('button', { name: '选择工作空间' }))
   fireEvent.click(screen.getByText('打开本地文件夹'))
-  await waitFor(() => { expect(screen.getByLabelText<HTMLInputElement>('工作目录').value).toBe('C:\\local-output') })
+  await waitFor(() => { expect(screen.getByRole('button', { name: '选择工作空间' }).title).toBe('C:\\local-output') })
   expect(call.mock.calls.every(args => args[0] === 'list')).toBe(true)
   expect(screen.queryByText(/消息推送/)).toBeNull()
 })
@@ -54,16 +60,19 @@ it('selects an existing workspace or local folder without saving a task', async 
 it('preserves the draft after directory cancellation or failure', async () => {
   const chooseDirectory = vi.fn().mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('选择目录失败'))
   render(<AutomationCards api={{ ...directories, call: vi.fn().mockResolvedValue(empty),
-    openSession: vi.fn(), fromTask: vi.fn(), chooseDirectory }} notify={vi.fn()} />)
+    openSession: vi.fn(), fromTask: vi.fn(), chooseDirectory,
+    listWorkspaces: async () => [{ title: '原目录', path: 'C:\\original' }] }} notify={vi.fn()} />)
   await screen.findByText('尚未配置自动化')
   fireEvent.click(screen.getByRole('button', { name: '新建' }))
-  fireEvent.change(screen.getByLabelText('工作目录'), { target: { value: 'C:\\original' } })
+  fireEvent.click(screen.getByRole('button', { name: '选择工作空间' }))
+  fireEvent.click(await screen.findByRole('button', { name: '原目录' }))
+  fireEvent.click(screen.getByRole('button', { name: '选择工作空间' }))
   fireEvent.click(screen.getByText('打开本地文件夹'))
   await waitFor(() => { expect(screen.getByText('打开本地文件夹').hasAttribute('disabled')).toBe(false) })
-  expect(screen.getByLabelText<HTMLInputElement>('工作目录').value).toBe('C:\\original')
+  expect(screen.getByRole('button', { name: '选择工作空间' }).title).toBe('C:\\original')
   fireEvent.click(screen.getByText('打开本地文件夹'))
   await screen.findByText('Error: 选择目录失败')
-  expect(screen.getByLabelText<HTMLInputElement>('工作目录').value).toBe('C:\\original')
+  expect(screen.getByRole('button', { name: '选择工作空间' }).title).toBe('C:\\original')
 })
 
 it('shows real elapsed time and filters ledger rows by task name', () => {
@@ -91,8 +100,8 @@ it('opens office templates and selects a draft without saving or running it', as
   expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(6)
   fireEvent.click(screen.getByRole('button', { name: /项目周报汇总/ }))
   expect(screen.getByLabelText<HTMLInputElement>('任务名称').value).toBe('项目周报汇总')
-  expect(screen.getByLabelText<HTMLInputElement>('工作目录').value).toBe('')
-  expect(screen.getByLabelText<HTMLInputElement>('保存后启用').checked).toBe(false)
+  expect(screen.getByRole('button', { name: '选择工作空间' }).title).toBe('')
+  expect(screen.queryByLabelText('保存后启用')).toBeNull()
   expect(call.mock.calls.every(args => args[0] === 'list')).toBe(true)
 })
 
@@ -139,17 +148,68 @@ it('places batch actions after the task area and hides them on execution history
 
 it('saves the real task through RPC and does not publish a failed write', async () => {
   const call = vi.fn().mockResolvedValueOnce(empty).mockRejectedValueOnce(new Error('磁盘写入失败'))
-  render(<AutomationCards api={{ ...directories, call, openSession: vi.fn(), fromTask: vi.fn() }} notify={vi.fn()} />)
+  render(<AutomationCards api={{ ...directories, call, openSession: vi.fn(), fromTask: vi.fn(), chooseDirectory: async () => 'C:\\work' }} notify={vi.fn()} />)
   await screen.findByText('尚未配置自动化')
   fireEvent.click(screen.getByRole('button', { name: '新建' }))
   fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '真实任务' } })
   fireEvent.change(screen.getByLabelText('任务说明'), { target: { value: '汇总文件' } })
-  fireEvent.change(screen.getByLabelText('工作目录'), { target: { value: 'C:\\work' } })
-  fireEvent.click(screen.getByText('保存任务'))
+  fireEvent.click(screen.getByRole('button', { name: '选择工作空间' }))
+  // The native chooser is used instead of exposing an absolute-path textbox.
+  fireEvent.click(screen.getByText('打开本地文件夹'))
+  await waitFor(() => { expect(screen.getByRole('button', { name: '选择工作空间' }).title).toBe('C:\\work') })
+  fireEvent.click(screen.getByRole('button', { name: '确定' }))
   await waitFor(() => { expect(screen.getAllByText('磁盘写入失败')).toHaveLength(2) })
   expect(call.mock.calls[1]?.[0]).toBe('save')
   expect(call.mock.calls[1]?.[1]).toMatchObject({ task: { name: '真实任务', cwd: 'C:\\work', prompt: '汇总文件' } })
   expect(screen.getByRole('dialog')).toBeTruthy()
+})
+
+it('saves model, permission and recurrence choices without changing the active conversation', async () => {
+  const call = vi.fn().mockResolvedValue(empty)
+  const openSession = vi.fn()
+  render(<AutomationCards api={{ ...directories, call, openSession, fromTask: vi.fn(), chooseDirectory: async () => 'C:\\work' }} notify={vi.fn()} />)
+  await screen.findByText('尚未配置自动化')
+  fireEvent.click(screen.getByRole('button', { name: '新建' }))
+  fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '完整配置' } })
+  fireEvent.change(screen.getByLabelText('任务说明'), { target: { value: '检查资料' } })
+  fireEvent.click(screen.getByRole('button', { name: '选择模型' }))
+  fireEvent.click(await screen.findByRole('button', { name: '模型 B' }))
+  fireEvent.click(screen.getByRole('button', { name: '允许完全访问' }))
+  const permission = screen.getByRole('switch', { name: '允许完全访问' })
+  expect(permission.getAttribute('aria-checked')).toBe('true')
+  fireEvent.click(permission)
+  expect(permission.getAttribute('aria-checked')).toBe('false')
+  fireEvent.keyDown(permission, { key: 'Escape' })
+  expect(screen.getByRole('dialog', { name: '新建定时任务' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '触发频率' }))
+  fireEvent.click(screen.getByRole('button', { name: '每月' }))
+  fireEvent.click(screen.getByRole('button', { name: '执行时间' }))
+  const timePanel = screen.getByRole('dialog', { name: '执行时间' })
+  fireEvent.click(within(timePanel).getByRole('group', { name: '小时' }).querySelectorAll('button')[17]!)
+  fireEvent.click(within(timePanel).getByRole('group', { name: '分钟' }).querySelectorAll('button')[13]!)
+  fireEvent.keyDown(timePanel, { key: 'Escape' })
+  fireEvent.click(screen.getByRole('button', { name: '有效期' }))
+  const calendar = screen.getByRole('dialog', { name: '有效期' })
+  expect(calendar.parentElement).toBe(document.body)
+  expect(calendar.closest('form')).toBeNull()
+  fireEvent.click(within(calendar).getAllByRole('button', { name: '下个月' })[0]!)
+  const date = new Date()
+  const key = `${date.getFullYear() + Math.floor((date.getMonth() + 1) / 12)}-${String((date.getMonth() + 1) % 12 + 1).padStart(2, '0')}-20`
+  fireEvent.click(within(calendar).getByRole('button', { name: key }))
+  fireEvent.click(within(calendar).getByRole('button', { name: /结束日期/ }))
+  fireEvent.click(within(calendar).getByRole('button', { name: key.replace(/20$/, '25') }))
+  fireEvent.click(within(calendar).getByRole('button', { name: '确定' }))
+  fireEvent.click(screen.getByRole('button', { name: '选择工作空间' }))
+  fireEvent.click(screen.getByRole('button', { name: '打开本地文件夹' }))
+  await waitFor(() => { expect(screen.getByRole('button', { name: '选择工作空间' }).title).toBe('C:\\work') })
+  fireEvent.click(screen.getByRole('button', { name: '确定' }))
+  await waitFor(() => { expect(call.mock.calls.some(args => args[0] === 'save')).toBe(true) })
+  const payload: unknown = call.mock.calls.find(args => args[0] === 'save')?.[1]
+  expect(payload).toMatchObject({ task: {
+    cadence: 'monthly', startDate: key, endDate: key.replace(/20$/, '25'), time: '17:13', fullAccess: false,
+    model: { provider: 'mock', model: 'other' }, enabled: true,
+  } })
+  expect(openSession).not.toHaveBeenCalled()
 })
 
 it('opens the Session associated with an actual Host run record', async () => {

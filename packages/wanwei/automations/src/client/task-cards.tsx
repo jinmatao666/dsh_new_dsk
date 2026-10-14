@@ -7,6 +7,8 @@ import { TaskEditor } from './task-editor.tsx'
 import { RunHistory } from './run-history.tsx'
 import { CreationIcon } from './creation-icons.tsx'
 import { AutomationSearch } from './search.tsx'
+import type { ModelCatalog } from '@deepseek-ai/dsh-api-session-controller/types'
+import { cadenceLabel } from './task-labels.ts'
 
 /** Local RPC and normal desktop Session navigation. */
 export interface AutomationApi {
@@ -15,8 +17,8 @@ export interface AutomationApi {
   fromTask(): void
   listWorkspaces(): Promise<{ title: string; path: string }[]>
   chooseDirectory(): Promise<string | null>
+  listModels(): Promise<ModelCatalog>
 }
-const cadenceLabel = (value: AutomationTask['cadence']) => value === 'daily' ? text('每天') : value === 'workdays' ? text('每个工作日') : text('每周五')
 
 /** Show only committed tasks and execution records.
  * @param props - Host operations and desktop notification callback.
@@ -98,7 +100,7 @@ export function AutomationCards({ notify, api }: { notify: (message: string) => 
   }
   if (creation) return <CreationPicker onBack={() => { setCreation(false) }} onSelect={(value) => {
     setCreation(false)
-    setDraft({ id: '', nextRunAt: 0, cwd: '', enabled: false, ...value })
+    setDraft({ id: '', nextRunAt: 0, cwd: '', enabled: true, ...value })
   }} />
   const tabs = <nav aria-label={text('自动化页面')}>
     <button type="button" className={tab === 'tasks' ? 'selected' : ''} onClick={() => { setTab('tasks') }}>{text('定时任务')}</button>

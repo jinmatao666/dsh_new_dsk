@@ -5,16 +5,37 @@ import { z } from 'zod'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import type { AutomationSnapshot } from './contract.ts'
 
+/** Local date validation rejects calendar rollovers such as February 30. */
+const localDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+  const date = new Date(`${value}T12:00:00`)
+  return Number.isFinite(date.getTime()) && date.getFullYear() === Number(value.slice(0, 4))
+    && date.getMonth() + 1 === Number(value.slice(5, 7)) && date.getDate() === Number(value.slice(8, 10))
+}, '请选择有效日期')
 /** Validate task fields at both durable and RPC inputs. */
 export const taskInput = z.object({
   name: z.string().trim().min(1).max(80),
   prompt: z.string().trim().min(1).max(20000),
   cwd: z.string().trim().min(1),
-  cadence: z.enum(['daily', 'workdays', 'friday']),
+  cadence: z.enum(['daily', 'workdays', 'friday', 'interval', 'once', 'weekly', 'biweekly', 'monthly', 'yearly']),
   time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+  startDate: localDate.optional(), endDate: localDate.optional(),
+  intervalMinutes: z.number().int().min(1).max(525600).optional(),
+  model: z.object({ provider: z.string().min(1), model: z.string().min(1), reasoningEffort: z.string().optional() }).strict()
+    .transform(({ reasoningEffort, ...route }) => ({ ...route, ...reasoningEffort === undefined ? {} : { reasoningEffort } })).optional(),
+  fullAccess: z.boolean().optional(),
   enabled: z.boolean(),
-}).strict()
-const taskSchema = taskInput.extend({ id: z.string().min(1), owner: z.string().min(1), nextRunAt: z.number().int().nonnegative() })
+}).strict().superRefine((task, ctx) => {
+  if (task.startDate !== undefined && task.endDate !== undefined && task.endDate < task.startDate) {
+    ctx.addIssue({ code: 'custom', message: '结束日期不能早于开始日期', path: ['endDate'] })
+  }
+  if (!['daily', 'workdays', 'friday'].includes(task.cadence) && task.startDate === undefined) {
+    ctx.addIssue({ code: 'custom', message: '请选择开始日期', path: ['startDate'] })
+  }
+  if (task.cadence === 'interval' && task.intervalMinutes === undefined) {
+    ctx.addIssue({ code: 'custom', message: '请设置执行间隔', path: ['intervalMinutes'] })
+  }
+})
+const taskSchema = taskInput.safeExtend({ id: z.string().min(1), owner: z.string().min(1), nextRunAt: z.number().int().nonnegative() })
 const runSchema = z.object({
   id: z.string().min(1), owner: z.string().min(1), pid: z.number().int().positive(),
   taskId: z.string(), taskName: z.string(), startedAt: z.number().int().nonnegative(),

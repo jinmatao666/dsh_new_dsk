@@ -17,7 +17,7 @@ import { join, isAbsolute } from 'node:path'
 import { z } from 'zod'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { AutomationStore, taskInput } from './store.ts'
-import { nextOccurrence } from './schedule.ts'
+import { advanceSchedule, nextOccurrence } from './schedule.ts'
 import type { AutomationTask, AutomationRun } from './contract.ts'
 
 /** Install persistent CRUD and local due-slot claiming.
@@ -40,7 +40,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     return value
   }
   await store.update((state) => {
-    for (const task of state.tasks) if (task.nextRunAt <= Date.now()) task.nextRunAt = nextOccurrence(task, Date.now())
+    for (const task of state.tasks) if (task.nextRunAt <= Date.now()) advanceSchedule(task, Date.now())
     for (const run of state.runs) {
       if (run.status !== 'running') continue
       if (run.pid === process.pid) {
@@ -94,7 +94,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         record.sessionId = created.sessionId
       })
       await ctx.workspaceRegistry.archiveSession(created.sessionId)
-      ctx.permissionPresets.set(agent.session, 'danger-full-access')
+      ctx.permissionPresets.set(agent.session, task.fullAccess === false ? 'workspace-write' : 'danger-full-access')
+      if (task.model !== undefined) {
+        await ctx.sessionController.selectModel({ sessionId: created.sessionId, ...task.model, saveAsDefault: false })
+      }
       await ctx.sessionController.rename({ sessionId: created.sessionId, title: `定时任务：${task.name}` })
       if (await owner() !== username) throw new Error('登录账号已变化，执行已停止')
       lifetime.signal.throwIfAborted()
@@ -134,13 +137,14 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         if (id === undefined && (!task.enabled || task.nextRunAt > now)) continue
         if (id === undefined) {
           const overdue = now - task.nextRunAt > config.lateToleranceMs
-          task.nextRunAt = nextOccurrence(task, now)
+          advanceSchedule(task, now)
           if (overdue) continue
         }
         if (state.runs.some(run => run.taskId === task.id && run.status === 'running')) {
           if (id !== undefined) throw new Error('这个任务正在执行，请勿重复启动')
           continue
         }
+        if (id !== undefined && task.cadence === 'once') { task.enabled = false; task.nextRunAt = 0 }
         const run = { id: randomUUID(), owner: username, pid: process.pid, taskId: task.id, taskName: task.name,
           startedAt: now, status: 'running' as const, trigger: id === undefined ? 'scheduled' as const : 'manual' as const }
         state.runs.push(run); claimed.push({ task: { ...task }, run })
@@ -160,7 +164,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     for (const tracked of active.values()) if (username !== tracked.owner) tracked.agent?.cancel({ kind: 'hook', reason: '登录账号变化' })
     if (username !== lastOwner) {
       await store.update((state) => {
-        for (const task of state.tasks) if (task.nextRunAt <= Date.now()) task.nextRunAt = nextOccurrence(task, Date.now())
+        for (const task of state.tasks) if (task.nextRunAt <= Date.now()) advanceSchedule(task, Date.now())
       })
       lastOwner = username
     }
@@ -184,8 +188,9 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           }
           const value = { ...input.task, id: existing?.id ?? randomUUID(), owner: username,
             nextRunAt: nextOccurrence(input.task, Date.now()) }
+          if (value.enabled && value.nextRunAt === 0) throw new Error('所选时间或有效期内没有下一次执行，请调整日期或时间')
           if (existing === undefined) state.tasks.push(value)
-          else Object.assign(existing, value)
+          else state.tasks[state.tasks.indexOf(existing)] = value
         })
       } else if (endpoint === 'enable' || endpoint === 'delete') {
         const input = z.object({ ids: z.array(z.string()).min(1), enabled: z.boolean().optional() }).strict().parse(payload)
@@ -198,7 +203,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           } else {
             const enabled = input.enabled
             if (enabled === undefined) throw new Error('缺少启停状态')
-            tasks.forEach((task) => { task.enabled = enabled; task.nextRunAt = nextOccurrence(task, Date.now()) })
+            tasks.forEach((task) => {
+              task.enabled = enabled; advanceSchedule(task, Date.now())
+              if (enabled && task.nextRunAt === 0) throw new Error('任务有效期已结束，请编辑日期后再启用')
+            })
           }
         })
       } else if (endpoint === 'delete-run') {

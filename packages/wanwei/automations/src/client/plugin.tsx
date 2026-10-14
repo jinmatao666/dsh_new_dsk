@@ -10,6 +10,7 @@ import type {} from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import './page.css'
 import './task-cards.css'
+import './task-editor.css'
 import { AutomationCards, type AutomationApi } from './task-cards.tsx'
 import { productText } from './locales/product.ts'
 import { startAutomationConversation } from './task-draft.ts'
@@ -27,7 +28,7 @@ function AutomationPage({ api }: { api: AutomationApi }) {
     <Toast notice={notice} setNotice={setNotice} /></>
 }
 
-export const inject = ['slots', 'wanweiNetwork', 'connection', 'sessions', 'conversation', 'workspaces', 'remote', 'remote.directoryPicker']
+export const inject = ['slots', 'wanweiNetwork', 'connection', 'sessions', 'conversation', 'workspaces', 'remote', 'remote.directoryPicker', 'remote.session']
 /** Mount the persistent local scheduler UI.
  * @param ctx - Product Client context.
  */
@@ -49,6 +50,11 @@ export function apply(ctx: Context): void {
     },
     async chooseDirectory() {
       const result = await ctx.remote.directoryPicker.pick()
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    async listModels() {
+      const result = await ctx.remote.session.modelCatalog()
       if (!result.ok) throw new Error(result.error.message)
       return result.value
     },

@@ -1,12 +1,25 @@
 /** Browser-safe local task and execution records. */
+import type { ModelSelection } from '@deepseek-ai/dsh-api-session-controller/types'
+
+/** Persisted schedule, execution choices and enabled state for one local task. */
 export interface AutomationTask {
   id: string
   name: string
   prompt: string
   cwd: string
-  cadence: 'daily' | 'workdays' | 'friday'
+  cadence: 'daily' | 'workdays' | 'friday' | 'interval' | 'once' | 'weekly' | 'biweekly' | 'monthly' | 'yearly'
   time: string
+  /** Local calendar anchor for weekly, monthly and yearly schedules. */
+  startDate?: string | undefined
+  /** Inclusive last local date; absent means no expiry. */
+  endDate?: string | undefined
+  intervalMinutes?: number | undefined
+  /** Absent follows the configured model at execution time. */
+  model?: ModelSelection | undefined
+  /** Absent defaults to full access. */
+  fullAccess?: boolean | undefined
   enabled: boolean
+  /** Zero means no eligible future occurrence. */
   nextRunAt: number
 }
 /** Execution interval for a fresh, task-owned Session. */

@@ -27,13 +27,15 @@ Users can create local tasks, pause them, run them immediately and open their ex
 
 The Wanwei desktop product mounts this plugin through its [composition patch](../../bundle/wanwei-desktop/cordis.patch.yml). Its [Host configuration](src/runtime.ts) controls storage, scheduler interval, lateness tolerance, execution timeout and retention limits.
 
-The desktop shows only Host-saved tasks, with enabled/paused filters, editing and batch actions. Create a task with an existing absolute working directory and a local execution time. Enabling permits scheduled execution using the default model; immediate execution also works for paused tasks. Each run creates a fresh ordinary Session with full access and no approval prompts. Use only trusted tasks and working directories; ordinary conversation defaults remain unchanged.
+The desktop shows only Host-saved tasks, with enabled/paused filters, editing and batch actions. Choose an existing Workspace or local folder and a local execution time. Confirming a new task saves and enables it; editing preserves its enabled state. Each run creates a fresh ordinary Session. Full access is on by default and skips approval prompts; switching it off uses workspace-write with approvals, which can leave unattended work waiting. Use only trusted tasks and working directories; ordinary conversation defaults remain unchanged.
 
-The New menu offers manual creation, creation from a task, and templates. Creation from a task opens a new conversation with `帮我创建一个定时任务：` staged in the composer; it does not send a message or save a scheduled task automatically. Six office templates open editable, paused drafts. Confirm the description, working directory, time and enabled state before saving. Templates are not sample tasks in storage. Batch controls remain at the bottom of the page.
+The New menu offers manual creation, creation from a task, and templates. Creation from a task opens a new conversation with `帮我创建一个定时任务：` staged in the composer; it does not send a message or save a scheduled task automatically. Six office templates open editable drafts. Confirm the description, working directory and schedule before saving. Templates are not sample tasks in storage. Batch controls remain at the bottom of the page.
 
 Creation controls use Lucide SVG icons rather than font characters. The chevron is centered inside a fixed-size trigger, and decorative icons stay out of accessible labels. The compact menu matches the entire split button's width with a two-pixel gap and retains its Escape and focus-leaving dismissal behavior.
 
-The editor accepts an existing Workspace or a local folder through the shared directory picker. Selection changes only the draft's path, not the active conversation or Workspace registrations. Cancellation keeps the path; selection errors remain visible. Tasks use the default model, full-access permissions and ongoing recurrence; the dialog offers no message-push control. Run records form a filterable table with committed start/end timing, status, failure details and Session navigation. Three task cards occupy each row on wide windows, with fewer columns on narrow windows.
+The editor's upward-opening Workspace menu uses the same folder icon as the conversation picker and can extend outside the dialog without clipping. It supports search and the shared local folder picker, not manual path entry. Selection changes only the draft's path, not the active conversation or Workspace registrations; cancellation preserves it. The searchable model menu lists the Host catalog and supports following the default or saving a task-specific route. Execution selects that route only for its Session, without changing the user's default. The permission panel carries the full-access warning and switch; the form has no enable checkbox, persistent approval note or message-push control. Run records remain filterable and open their Sessions.
+
+Repeat, time and validity controls open above three equally sized fields. Supported recurrences are interval, once, daily, workdays, weekly, biweekly, monthly and yearly; saved Friday schedules remain supported. Intervals use positive whole minutes from the selected start date and time. Weekly and biweekly schedules retain the anchor weekday; monthly and yearly schedules retain the anchor day, clamping missing days to month end. Validity uses local calendar dates with an inclusive end date. A completed one-shot or exhausted validity range pauses automatically; enabling an exhausted schedule requires editing its dates. Public holidays are not interpreted.
 
 Empty task and run-record prompts are vertically centered in the remaining content area below the filters and table headings as the window resizes.
 
@@ -83,7 +85,7 @@ Each execution starts a fresh Session; this package does not reuse earlier task 
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- Only daily, Monday–Friday and Friday recurrences are offered; public holidays are not interpreted.
+- Timezone changes follow the desktop's local clock; the scheduler does not retain a separate task timezone.
 - No cloud execution or missed-slot recovery exists. Logout stops admission; timeout defaults to ten minutes, including waits for task input.
 - Records retain Session links, not independent artifact copies. Task deletion does not delete Sessions or working files.
 - Account isolation uses the local login username; separate deployments require separate Harness homes.
