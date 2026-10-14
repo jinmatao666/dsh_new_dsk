@@ -19,15 +19,16 @@
 .automation-card-tools > button, .automation-new-group { flex: none; white-space: nowrap; }
 .automation-card-tools > button, .automation-new-group > button, .automation-batch-bar button { padding: 8px 18px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 9px; background: var(--dsw-alias-bg-base); color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
 .automation-card-tools .icon-button { display: grid; place-items: center; border: 0; padding: 7px; }
-.automation-new-group { display: flex; gap: 0; align-items: stretch; }
+.automation-new-group { position: relative; display: flex; gap: 0; align-items: stretch; }
 .automation-new-group > .primary, .automation-new-group > details > summary { border: 0; color: #fff; background: var(--dsw-alias-primary, #2563eb); }
-.automation-new-group > .primary { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-width: 96px; border-radius: 9px 0 0 9px; height: 36px; line-height: 20px; }
-.automation-new-group > details > summary { display: grid; place-items: center; width: 32px; height: 36px; box-sizing: border-box; padding: 0; border-radius: 0 9px 9px 0; cursor: pointer; }
+.automation-new-group > .primary { display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: 80px; box-sizing: border-box; padding: 8px 6px; border-radius: 9px 0 0 9px; height: 36px; line-height: 20px; }
+.automation-new-group > details > summary { display: grid; place-items: center; width: 24px; height: 36px; box-sizing: border-box; padding: 0; border-radius: 0 9px 9px 0; cursor: pointer; }
 .automation-creation-icon { display: block; flex: none; width: 18px; height: 18px; }
 .automation-new-group > .primary .automation-creation-icon { width: 16px; height: 16px; }
 .automation-new-group summary .automation-creation-icon { width: 16px; height: 16px; }
 .automation-new-group summary:focus-visible { outline: 2px solid var(--dsw-alias-primary); outline-offset: 3px; }
 .automation-new-group details, .automation-task-more { position: relative; }
+.automation-new-group > details { position: static; }
 .automation-new-group summary, .automation-task-more summary { list-style: none; }
 .automation-new-group summary::-webkit-details-marker, .automation-task-more summary::-webkit-details-marker { display: none; }
 .automation-card-footnote { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.6; margin: 0 0 20px; }
@@ -50,6 +51,9 @@
 .automation-dropdown { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 130px; padding: 5px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 9px; background: var(--dsw-alias-bg-base); box-shadow: 0 6px 22px rgb(15 23 42 / 12%); }
 .automation-dropdown button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; background: none; border: 0; padding: 8px 12px; text-align: left; color: inherit; font: inherit; font-size: 13px; line-height: 20px; white-space: nowrap; cursor: pointer; border-radius: 6px; }
 .automation-dropdown button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.automation-new-group .automation-dropdown { top: calc(100% + 2px); width: 100%; min-width: 0; box-sizing: border-box; padding: 3px; }
+.automation-new-group .automation-dropdown button { box-sizing: border-box; min-height: 34px; padding: 6px 5px; gap: 5px; }
+.automation-new-group .automation-dropdown .automation-creation-icon { width: 16px; height: 16px; }
 .automation-inline-search { flex: 0 0 36px; min-width: 36px; height: 36px; color: var(--dsw-alias-label-secondary); }
 .automation-inline-search.expanded { flex: 0 1 250px; width: 250px; min-width: 120px; }
 .automation-search-toggle { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--dsw-alias-label-primary); cursor: pointer; }
