@@ -27,13 +27,13 @@ Users can create local tasks, pause them, run them immediately and open their ex
 
 The Wanwei desktop product mounts this plugin through its [composition patch](../../bundle/wanwei-desktop/cordis.patch.yml). Its [Host configuration](src/runtime.ts) controls storage, scheduler interval, lateness tolerance, execution timeout and retention limits.
 
-The desktop shows only Host-saved tasks, with enabled/paused filters, editing and batch actions. Create a task with an existing absolute working directory and a local execution time. Enabling permits scheduled execution using the default model; immediate execution also works for paused tasks. Each run creates a fresh ordinary Session with workspace-write permissions; operations requiring approval still require human confirmation.
+The desktop shows only Host-saved tasks, with enabled/paused filters, editing and batch actions. Create a task with an existing absolute working directory and a local execution time. Enabling permits scheduled execution using the default model; immediate execution also works for paused tasks. Each run creates a fresh ordinary Session with full access and no approval prompts. Use only trusted tasks and working directories; ordinary conversation defaults remain unchanged.
 
 The New menu offers manual creation, creation from a task, and templates. Creation from a task opens a new conversation with `帮我创建一个定时任务：` staged in the composer; it does not send a message or save a scheduled task automatically. Six office templates open editable, paused drafts. Confirm the description, working directory, time and enabled state before saving. Templates are not sample tasks in storage. Batch controls remain at the bottom of the page.
 
-Creation controls use Lucide SVG icons rather than font characters. The chevron is centered inside a fixed-size trigger, and decorative icons stay out of accessible labels. The menu retains its Escape and focus-leaving dismissal behavior.
+Creation controls use Lucide SVG icons rather than font characters. The chevron is centered inside a fixed-size trigger, and decorative icons stay out of accessible labels. The compact menu matches the entire split button's width with a two-pixel gap and retains its Escape and focus-leaving dismissal behavior.
 
-The editor accepts an existing Workspace or a local folder through the shared directory picker. Selection changes only the draft's path, not the active conversation or Workspace registrations. Cancellation keeps the path; selection errors remain visible. Tasks use the default model, workspace-write permissions and ongoing recurrence; the dialog offers no message-push control. Run records form a filterable table with committed start/end timing, status, failure details and Session navigation. Three task cards occupy each row on wide windows, with fewer columns on narrow windows.
+The editor accepts an existing Workspace or a local folder through the shared directory picker. Selection changes only the draft's path, not the active conversation or Workspace registrations. Cancellation keeps the path; selection errors remain visible. Tasks use the default model, full-access permissions and ongoing recurrence; the dialog offers no message-push control. Run records form a filterable table with committed start/end timing, status, failure details and Session navigation. Three task cards occupy each row on wide windows, with fewer columns on narrow windows.
 
 Empty task and run-record prompts are vertically centered in the remaining content area below the filters and table headings as the window resizes.
 
@@ -84,7 +84,7 @@ Each execution starts a fresh Session; this package does not reuse earlier task 
 <a id="known-limitations-and-deferred-work"></a>
 
 - Only daily, Monday–Friday and Friday recurrences are offered; public holidays are not interpreted.
-- No cloud execution or missed-slot recovery exists. Logout stops admission; timeout defaults to ten minutes, including waits for approval.
+- No cloud execution or missed-slot recovery exists. Logout stops admission; timeout defaults to ten minutes, including waits for task input.
 - Records retain Session links, not independent artifact copies. Task deletion does not delete Sessions or working files.
 - Account isolation uses the local login username; separate deployments require separate Harness homes.
 - Real-model and native UOS/macOS/Windows acceptance remain deployment checks; automated integration tests script the external model response.

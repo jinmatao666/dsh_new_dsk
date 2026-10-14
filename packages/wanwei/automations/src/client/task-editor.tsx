@@ -64,7 +64,7 @@ export function TaskEditor({ draft, change, api, error, titleId, close, save }: 
             <label>{text('工作目录')}<input value={draft.cwd} placeholder={text('填写本机工作目录的绝对路径')} onChange={(event) => { change({ ...draft, cwd: event.target.value }) }} /></label>
           </div>
         </details>
-        <span className="automation-permission-label">{text('工作区写入')}</span>
+        <span className="automation-permission-label">{text('完全权限')}</span>
       </div>
     </div>
     <div className="automation-editor-schedule">
@@ -74,7 +74,7 @@ export function TaskEditor({ draft, change, api, error, titleId, close, save }: 
       <div className="automation-validity"><span>{text('有效期')}</span>{text('长期有效')}</div>
     </div>
     <label className="automation-draft-switch"><input type="checkbox" checked={draft.enabled} onChange={(event) => { change({ ...draft, enabled: event.target.checked }) }} />{text('保存后启用')}</label>
-    <small className="automation-approval-note">{text('需要人工确认的操作仍须在会话中处理。')}</small>
+    <small className="automation-approval-note">{text('任务将以完全权限自动执行，请仅使用可信的任务和工作目录。')}</small>
     {(pickerError || error) && <p role="alert" className="automation-error">{pickerError || error}</p>}
     <footer><button type="button" onClick={close}>{text('取消')}</button><button type="submit" disabled={picking || !draft.name.trim() || !draft.prompt.trim() || !draft.cwd.trim()}>{text('保存任务')}</button></footer>
   </form></div>

@@ -12,7 +12,8 @@ import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { SessionTitleService } from '@deepseek-ai/dsh-session-title'
-import { expect, it } from 'vitest'
+import PermissionPresets from '@deepseek-ai/dsh-permission-presets'
+import { expect, it, vi } from 'vitest'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import { createSessionTestController } from '../../../api/session-controller/tests/test-remote.ts'
 import * as Automations from '../src/index.ts'
@@ -48,7 +49,10 @@ it('loads the plugin, persists a task, executes a real Session and records its c
       handler = next; return async () => { handler = undefined }
     } } } as never)
     ctx.provide('wanweiNetworkPolicy', { getSnapshot: () => ({ mode: 'internet' }) } as never)
-    ctx.provide('permissionPresets', { set: () => {} } as never)
+    ctx.provide('shell', { sandboxMode: 'workspace-write' } as never)
+    ctx.provide('approval', { config: { policy: 'ask' } } as never)
+    await ctx.plugin(PermissionPresets).await()
+    const setPermission = vi.spyOn(ctx.permissionPresets, 'set')
     createSessionTestController(ctx, { cwd: dir, defaultModelSelection: () => ({ provider: 'mock', model: 'mock' }) })
     const historical = ctx.sessions.create(SessionId('historical-automation'))
     await new AutomationStore(join(dir, 'tasks.json')).update((state) => {
@@ -83,6 +87,11 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     expect(run.sessionId).toBeTruthy()
     expect(archived.has(run.sessionId!)).toBe(true)
     expect(adapter.requests).toHaveLength(1)
+    expect(setPermission).toHaveBeenCalledWith(ctx.sessions.get(SessionId(run.sessionId!)), 'danger-full-access')
+    const events = ctx.sessions.get(SessionId(run.sessionId!))!.events
+    expect(events.filter(event => event.type === 'sandbox/mode').at(-1)?.data).toEqual({ mode: 'danger-full-access' })
+    expect(events.filter(event => event.type === 'approval/policy').at(-1)?.data).toEqual({ policy: 'never' })
+    expect(ctx.permissionPresets.current(historical.events)).toBe('workspace-write')
     expect(ctx.sessions.get(SessionId(run.sessionId!))?.events.some(event => event.type === 'turn/end')).toBe(true)
     // Establish the first account tick before installing a due slot.
     await new Promise(resolve => setTimeout(resolve, 1200))
@@ -90,6 +99,8 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     await store.update((state) => { state.tasks[0]!.enabled = true; state.tasks[0]!.nextRunAt = Date.now() - 1 })
     await expect.poll(async () => (await call('list', {})).runs.filter(item => item.status === 'success').length).toBe(2)
     expect(adapter.requests).toHaveLength(2)
+    expect(setPermission).toHaveBeenCalledTimes(2)
+    expect(setPermission.mock.calls.every(([, preset]) => preset === 'danger-full-access')).toBe(true)
     expect((await call('list', {})).runs[0]?.trigger).toBe('scheduled')
     expect((await call('list', {})).runs.every(item => item.sessionId !== undefined && archived.has(item.sessionId))).toBe(true)
     await call('run', { id: saved.tasks[0]!.id })

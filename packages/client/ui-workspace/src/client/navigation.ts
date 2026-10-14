@@ -158,12 +158,22 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   private watchNavigation(): () => void {
     let initial: 'waiting' | 'connecting' | 'done' = 'waiting'
     let disposed = false
+    let archived = new Set<SessionId>()
     const reconcile = (): void => {
       if (disposed) return
-      if (this.clearArchivedCurrent()) return
-      if (initial !== 'waiting') return
       const workspace = this.workspaces.list.getSnapshot()
       const sessions = this.sessions.list.getSnapshot()
+      // Clear only on archive admission, not when an explicit deep link opens
+      // an already archived Session (for example, an automation run record).
+      const newlyArchivedCurrent = sessions.current !== undefined
+        && workspace.archivedSessionIds.includes(sessions.current)
+        && !archived.has(sessions.current)
+      archived = new Set(workspace.archivedSessionIds)
+      if (newlyArchivedCurrent) {
+        this.sessions.clear()
+        return
+      }
+      if (initial !== 'waiting') return
       if (workspace.phase !== 'ready' || sessions.phase !== 'ready') return
       if (sessions.current !== undefined) {
         initial = 'done'
@@ -198,15 +208,6 @@ class UiWorkspaceService extends Service implements UiWorkspace {
       disposeSessions()
       disposeWorkspaces()
     }
-  }
-
-  /** @returns true when an archived current selection was cleared. */
-  private clearArchivedCurrent(): boolean {
-    const current = this.sessions.list.getSnapshot().current
-    if (current === undefined
-      || !this.workspaces.list.getSnapshot().archivedSessionIds.includes(current)) return false
-    this.sessions.clear()
-    return true
   }
 
 }

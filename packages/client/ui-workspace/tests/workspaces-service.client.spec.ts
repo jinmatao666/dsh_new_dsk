@@ -10,6 +10,7 @@ import type { ClientRemote, DirectoryListing } from '@deepseek-ai/dsh-api-remote
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { DirectoryBrowseError, UiWorkspaceService } from '../src/client/navigation.ts'
+import { deriveFlat, deriveGroups } from '../src/client/tree.ts'
 
 const sid = (id: string): SessionId => SessionId(id)
 const wid = (id: string): WorkspaceId => id as WorkspaceId
@@ -407,6 +408,32 @@ describe('UiWorkspaceService', () => {
       workspaces: workspaceState([workspace('one', [current.id])], [current.id]),
     })
     expect(archived.sessions.clear).toHaveBeenCalledOnce()
+  })
+
+  it('keeps an explicitly opened archived run selected through list updates without exposing sidebar rows', () => {
+    const run = summary('automation-run', { cwd: '/w/one' })
+    const normal = summary('normal', { cwd: '/w/one' })
+    const b = bench({
+      sessions: sessionState([run, normal], normal.id),
+      workspaces: workspaceState([workspace('one', [run.id, normal.id])], [run.id]),
+    })
+    b.sessions.open(run.id)
+    b.sessions.list.update(state => ({ ...state, byId: { ...state.byId, [run.id]: { ...run, running: true } } }))
+    b.workspaces.list.update(state => ({ ...state, archivedSessionIds: [...state.archivedSessionIds] }))
+    expect(b.sessions.list.getSnapshot().current).toBe(run.id)
+    expect(b.sessions.clear).not.toHaveBeenCalled()
+    const sessions = b.sessions.list.getSnapshot()
+    const workspaces = b.workspaces.list.getSnapshot()
+    expect(deriveFlat(sessions, workspaces.archivedSessionIds, new Map()).map(item => item.id)).toEqual([normal.id])
+    expect(deriveGroups(sessions, workspaces.items, workspaces.archivedSessionIds, new Map(), {
+      expandedGroups: ['one'],
+    })[0]!.sessions.map(item => item.id)).toEqual([normal.id])
+    b.sessions.open(normal.id)
+    b.sessions.open(run.id)
+    expect(b.sessions.list.getSnapshot().current).toBe(run.id)
+    // Archiving another Session must not evict the run being reviewed.
+    b.workspaces.list.update(state => ({ ...state, archivedSessionIds: [run.id, normal.id] }))
+    expect(b.sessions.list.getSnapshot().current).toBe(run.id)
   })
 
   it('forwards archive commands and preserves failures', async () => {

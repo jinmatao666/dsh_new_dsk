@@ -94,7 +94,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         record.sessionId = created.sessionId
       })
       await ctx.workspaceRegistry.archiveSession(created.sessionId)
-      ctx.permissionPresets.set(agent.session, 'workspace-write')
+      ctx.permissionPresets.set(agent.session, 'danger-full-access')
       await ctx.sessionController.rename({ sessionId: created.sessionId, title: `定时任务：${task.name}` })
       if (await owner() !== username) throw new Error('登录账号已变化，执行已停止')
       lifetime.signal.throwIfAborted()
