@@ -126,15 +126,16 @@
 }
 
 .inlinePrefix {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  display: flow-root;
   padding: 4px 12px 0 16px;
 }
 
+.inlinePrefixChip {
+  float: left;
+  margin-right: 8px;
+}
+
 .inlinePrefix .input {
-  flex: 1;
-  min-width: 0;
   padding: 0;
 }
 

@@ -321,6 +321,9 @@ describe('inline draft prefix', () => {
     const staged = render(<InputBar {...props} useInput={() => undefined} inputActions={undefined} keyboard={undefined} disabled stagedDraft="/helper 你好" onStageDraft={stage} renderSlot={renderSlot} />)
     const editor = staged.container.querySelector<HTMLElement>('[data-composer-input]')!
     expect(editor.textContent).toBe('你好')
+    const chip = staged.container.querySelector('[data-composer-staged-prefix]')!
+    expect(chip.textContent).toBe('助手')
+    expect(chip.parentElement).toBe(editor.parentElement)
     editor.textContent = '请转换文件'
     fireEvent.input(editor)
     expect(stage).toHaveBeenCalledWith('/helper 请转换文件')

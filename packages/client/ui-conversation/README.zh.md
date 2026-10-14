@@ -38,6 +38,8 @@ target package 通过 declaration merge 扩展 snapshot 与 Location data map，
 
 本包注册 optional-Session `conversation` shell、strict Session header/body、View list、composer chain 与 bar、输入区域、Hero 区域、queue dock、草稿持久化和 phase 计算。`ctx.uiSession.provide()` 从同一个 Session binding 物化 Conversation 与 input source，并将 `inputActions` 作为稳定标准 prop 提供。`appendReferences` 向实时草稿追加结构化引用，不替换现有文字或标签；输入锁定或销毁后返回 false。草稿前缀 Slot 可在暂存文字旁显示行内前缀，并把前导普通文字转成会话引用，不改变其序列化 token。
 
+暂存前缀只占用文字首行；后续行使用草稿的完整宽度，不需要先选择工作区。
+
 View 选择规则固定：有效且已注册的持久化选择优先，其次是已注册的 `chat`，否则不渲染 View；绝不选择第一个已注册 View。Shell phase 只组合 Session lifecycle 与 active-target set，不读取任何 target-specific snapshot。
 
 常驻 composer 在无 Session 与有 Session 之间保持挂载。尚无 Session 时，可编辑的纯文本草稿保存在 `ctx.conversation.input.stagedDraft`；选择工作区后，文本进入连接到的 Session，但不会自动发送。`conversation.input.draft-prefix` Slot 可展示已识别的行首标记，而不接管草稿。建立 Session 后，该表面使用 shell 所有的 Lexical 编辑器：引用 chip 是携带 owner 序列化身份的原子 decorator 节点（提交时经 owner codec 展开），已认领的 slash command 保持为带样式的行首文本，文件夹文本引用以图标前缀携带文件夹图形，草稿的剪贴板投影镜像到逐 Session Conversation store。Queue 操作通过 scoped `ctx.conversation` service 寻址准确的 queue occurrence；queue 预览经 `ui-primitives` 的共享行内引用投影渲染已发送文本（wire 会话形式折叠为其标签），编辑态则展示字面发送文本。繁忙时 Enter 行为保存在 Host-backed `ui-conversation` settings namespace。

@@ -374,7 +374,7 @@ export function InputBar({
   const renderInput = (prefixLength = 0, prefix?: ReactNode): ReactNode => (
     <div ref={scrollRef} className={css.scroll} data-input-scroll>
       <div className={clsx(css.grow, prefix !== undefined && css.inlinePrefix)}>
-        {prefix}
+        {prefix !== undefined && <span className={css.inlinePrefixChip} data-composer-staged-prefix>{prefix}</span>}
         <ComposerContentEditable
           editor={workspaceTrigger ? null : editor}
           editable={editable}
