@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-12-local-automation-execution.md
-2026-10-12-local-automation-execution.md: 8b22f1d7db1e7048a52e9a4cf5045674f0c130a0
-2026-10-12-local-automation-execution.zh.md: 39f759b8f722d77dae71913ca77bfe98e73a279d
+2026-10-12-local-automation-execution.md: e7bbc2c5d3e3fd2a4dbc40a7a67c9ee3ef993d64
+2026-10-12-local-automation-execution.zh.md: a1a6ca2e031884b237bec2d39e00bdcbbffca692

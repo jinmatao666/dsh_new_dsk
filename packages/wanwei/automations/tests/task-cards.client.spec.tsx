@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { AutomationCards, type AutomationApi } from '../src/client/task-cards.tsx'
 import type { AutomationSnapshot } from '../src/contract.ts'
 import { startAutomationConversation } from '../src/client/task-draft.ts'
@@ -10,13 +10,35 @@ afterEach(cleanup)
 const empty: AutomationSnapshot = { tasks: [], runs: [] }
 const directories = { listWorkspaces: async () => [], chooseDirectory: async () => null }
 
+it('keeps creation names readable while decorative SVG icons do not enter accessible labels', async () => {
+  render(<AutomationCards api={{ ...directories, call: vi.fn().mockResolvedValue(empty),
+    openSession: vi.fn(), fromTask: vi.fn() }} notify={vi.fn()} />)
+  await screen.findByText('尚未配置自动化')
+  const create = screen.getByRole('button', { name: '新建', exact: true })
+  expect(create.textContent).toBe('新建')
+  expect(create.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
+  const picker = screen.getByLabelText('新建方式')
+  expect(picker.textContent).toBe('')
+  expect(picker.querySelector('svg')?.getAttribute('focusable')).toBe('false')
+  fireEvent.click(picker)
+  const menu = picker.closest('details')
+  if (menu === null) throw new Error('Creation picker requires its owning details menu')
+  for (const name of ['手动新建', '从任务新建', '从模板新建']) {
+    const action = within(menu).getByRole('button', { name, exact: true })
+    expect(action.textContent).toBe(name)
+    expect(action.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
+  }
+  fireEvent.keyDown(picker, { key: 'Escape' })
+  expect(picker.closest('details')?.hasAttribute('open')).toBe(false)
+})
+
 it('selects an existing workspace or local folder without saving a task', async () => {
   const call = vi.fn().mockResolvedValue(empty)
   const chooseDirectory = vi.fn().mockResolvedValue('C:\\local-output')
   render(<AutomationCards api={{ ...directories, call, openSession: vi.fn(), fromTask: vi.fn(),
     listWorkspaces: async () => [{ title: '项目资料', path: 'C:\\project' }], chooseDirectory }} notify={vi.fn()} />)
   await screen.findByText('尚未配置自动化')
-  fireEvent.click(screen.getByText('＋ 新建'))
+  fireEvent.click(screen.getByRole('button', { name: '新建' }))
   const workspaceButton = await screen.findByText('▱ 项目资料')
   fireEvent.click(workspaceButton)
   expect(screen.getByLabelText<HTMLInputElement>('工作目录').value).toBe('C:\\project')
@@ -31,7 +53,7 @@ it('preserves the draft after directory cancellation or failure', async () => {
   render(<AutomationCards api={{ ...directories, call: vi.fn().mockResolvedValue(empty),
     openSession: vi.fn(), fromTask: vi.fn(), chooseDirectory }} notify={vi.fn()} />)
   await screen.findByText('尚未配置自动化')
-  fireEvent.click(screen.getByText('＋ 新建'))
+  fireEvent.click(screen.getByRole('button', { name: '新建' }))
   fireEvent.change(screen.getByLabelText('工作目录'), { target: { value: 'C:\\original' } })
   fireEvent.click(screen.getByText('打开本地文件夹'))
   await waitFor(() => { expect(screen.getByText('打开本地文件夹').hasAttribute('disabled')).toBe(false) })
@@ -42,7 +64,7 @@ it('preserves the draft after directory cancellation or failure', async () => {
 })
 
 it('shows real elapsed time and filters ledger rows by task name', () => {
-  render(<RunHistory openSession={vi.fn()} stop={vi.fn()} runs={[
+  render(<RunHistory openSession={vi.fn()} remove={vi.fn()} runs={[
     { id: 'one', taskId: 'a', taskName: '周报', startedAt: 1000, endedAt: 54000, status: 'success', trigger: 'scheduled' },
     { id: 'two', taskId: 'b', taskName: '检查', startedAt: 1000, endedAt: 2000, status: 'failed', trigger: 'manual', error: '模型不可用' },
   ]} />)
@@ -50,7 +72,8 @@ it('shows real elapsed time and filters ledger rows by task name', () => {
   expect(screen.getByText('53 秒')).toBeTruthy()
   fireEvent.click(screen.getByText('查看失败原因'))
   expect(screen.getByText('模型不可用')).toBeTruthy()
-  fireEvent.change(screen.getByLabelText('搜索运行记录'), { target: { value: '周报' } })
+  fireEvent.click(screen.getByRole('button', { name: '搜索运行记录' }))
+  fireEvent.change(screen.getByRole('textbox', { name: '搜索运行记录' }), { target: { value: '周报' } })
   expect(screen.queryByText('检查')).toBeNull()
   expect(screen.getByText('周报')).toBeTruthy()
 })
@@ -115,7 +138,7 @@ it('saves the real task through RPC and does not publish a failed write', async 
   const call = vi.fn().mockResolvedValueOnce(empty).mockRejectedValueOnce(new Error('磁盘写入失败'))
   render(<AutomationCards api={{ ...directories, call, openSession: vi.fn(), fromTask: vi.fn() }} notify={vi.fn()} />)
   await screen.findByText('尚未配置自动化')
-  fireEvent.click(screen.getByText('＋ 新建'))
+  fireEvent.click(screen.getByRole('button', { name: '新建' }))
   fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '真实任务' } })
   fireEvent.change(screen.getByLabelText('任务说明'), { target: { value: '汇总文件' } })
   fireEvent.change(screen.getByLabelText('工作目录'), { target: { value: 'C:\\work' } })
@@ -135,6 +158,71 @@ it('opens the Session associated with an actual Host run record', async () => {
   render(<AutomationCards api={api} notify={vi.fn()} />)
   await screen.findByText('尚未配置自动化')
   fireEvent.click(screen.getByText('运行记录'))
-  fireEvent.click(screen.getByText('查看会话与产物'))
+  fireEvent.click(screen.getByText('真实任务'))
   expect(openSession).toHaveBeenCalledWith('session')
+})
+
+it('expands task search inside the toolbar without rendering explanatory copy', async () => {
+  render(<AutomationCards api={{ ...directories, call: vi.fn().mockResolvedValue(empty),
+    openSession: vi.fn(), fromTask: vi.fn() }} notify={vi.fn()} />)
+  await screen.findByText('尚未配置自动化')
+  expect(screen.queryByText(/任务保存在本机/)).toBeNull()
+  expect(screen.queryByRole('textbox', { name: '搜索任务' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '搜索任务' }))
+  const search = screen.getByRole('textbox', { name: '搜索任务' })
+  expect(search.closest('.automation-card-toolbar')).toBeTruthy()
+  expect(document.activeElement).toBe(search)
+  fireEvent.change(search, { target: { value: '周报' } })
+  fireEvent.keyDown(search, { key: 'Escape' })
+  expect(screen.queryByRole('textbox', { name: '搜索任务' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '搜索任务' }))
+  expect(screen.getByRole<HTMLInputElement>('textbox', { name: '搜索任务' }).value).toBe('')
+  fireEvent.blur(screen.getByRole('textbox', { name: '搜索任务' }))
+  expect(screen.queryByRole('textbox', { name: '搜索任务' })).toBeNull()
+  fireEvent.click(screen.getByText('运行记录'))
+  expect(screen.queryByText(/任务保存在本机/)).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '搜索运行记录' }))
+  expect(screen.getByRole('textbox', { name: '搜索运行记录' }).closest('.automation-card-toolbar')).toBeTruthy()
+})
+
+it('opens ledger rows by click or keyboard while deletion and failure details do not navigate', () => {
+  const openSession = vi.fn()
+  const remove = vi.fn()
+  render(<RunHistory openSession={openSession} remove={remove} runs={[
+    { id: 'one', taskId: 'a', taskName: '周报', startedAt: 1000, endedAt: 54000,
+      status: 'success', trigger: 'scheduled', sessionId: 'session-one' },
+    { id: 'two', taskId: 'b', taskName: '检查', startedAt: 1000,
+      status: 'running', trigger: 'manual', sessionId: 'session-two' },
+    { id: 'three', taskId: 'c', taskName: '失败', startedAt: 1000, endedAt: 2000,
+      status: 'failed', trigger: 'manual', error: '失败原因', sessionId: 'session-three' },
+  ]} />)
+  const row = screen.getByText('周报').closest('tr')!
+  fireEvent.click(row)
+  fireEvent.keyDown(row, { key: 'Enter' })
+  expect(openSession.mock.calls).toEqual([['session-one'], ['session-one']])
+  fireEvent.click(screen.getByRole('button', { name: '删除运行记录 周报' }))
+  expect(remove).toHaveBeenCalledWith('one')
+  expect(openSession).toHaveBeenCalledTimes(2)
+  expect(screen.getByRole('button', { name: '删除运行记录 检查' }).hasAttribute('disabled')).toBe(true)
+  fireEvent.click(screen.getByText('查看失败原因'))
+  expect(openSession).toHaveBeenCalledTimes(2)
+  expect(screen.queryByText('定时执行')).toBeNull()
+  expect(screen.queryByRole('button', { name: '停止执行' })).toBeNull()
+  expect(screen.getAllByText('本地')).toHaveLength(3)
+})
+
+it('confirms record-only deletion through RPC without opening or deleting its Session', async () => {
+  const snapshot: AutomationSnapshot = { tasks: [], runs: [{ id: 'run', taskId: 'task', taskName: '周报',
+    status: 'success', trigger: 'scheduled', startedAt: 1, endedAt: 2, sessionId: 'session' }] }
+  const call = vi.fn().mockImplementation(async (operation: string) => operation === 'delete-run' ? empty : snapshot)
+  const openSession = vi.fn()
+  render(<AutomationCards api={{ ...directories, call, openSession, fromTask: vi.fn() }} notify={vi.fn()} />)
+  await screen.findByText('尚未配置自动化')
+  fireEvent.click(screen.getByText('运行记录'))
+  fireEvent.click(screen.getByRole('button', { name: '删除运行记录 周报' }))
+  expect(call.mock.calls.every(args => args[0] === 'list')).toBe(true)
+  fireEvent.click(within(screen.getByRole('dialog', { name: '删除运行记录' })).getByText('确认删除'))
+  await screen.findByText('暂无真实运行记录')
+  expect(call).toHaveBeenCalledWith('delete-run', { id: 'run' }, expect.any(AbortSignal))
+  expect(openSession).not.toHaveBeenCalled()
 })

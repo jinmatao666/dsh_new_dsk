@@ -7,6 +7,8 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type {} from '@deepseek-ai/dsh-workspace'
+import { WorkspaceUnknownSessionError } from '@deepseek-ai/dsh-workspace'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-wanwei-oneapi-auth'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { randomUUID } from 'node:crypto'
@@ -52,6 +54,14 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       }
     }
   })
+  for (const run of (await store.read()).runs) {
+    if (run.sessionId === undefined) continue
+    try { await ctx.workspaceRegistry.archiveSession(SessionId(run.sessionId)) }
+    catch (error) {
+      // A retained record may outlive a manually removed Session; storage failures remain fatal.
+      if (!(error instanceof WorkspaceUnknownSessionError)) throw error
+    }
+  }
   const finish = async (id: string, status: AutomationRun['status'], error?: string) => {
     await store.update((state) => {
       const run = state.runs.find(item => item.id === id)
@@ -71,9 +81,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       lifetime.signal.throwIfAborted()
       if (await owner() !== username) throw new Error('登录账号已变化，执行已停止')
       if (!(await stat(task.cwd)).isDirectory()) throw new Error('任务工作目录不可用')
-      const workspace = await ctx.workspaceRegistry.create(task.cwd)
       lifetime.signal.throwIfAborted()
-      const created = await ctx.sessionController.create({ workspaceId: workspace.id })
+      const created = await ctx.sessionController.create({ cwd: task.cwd })
       agent = ctx.agents.get(created.sessionId)
       if (agent === undefined) throw new Error('任务会话创建失败')
       const tracked = active.get(run.id)
@@ -84,6 +93,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         if (record === undefined) throw new Error('运行记录不存在')
         record.sessionId = created.sessionId
       })
+      await ctx.workspaceRegistry.archiveSession(created.sessionId)
       ctx.permissionPresets.set(agent.session, 'workspace-write')
       await ctx.sessionController.rename({ sessionId: created.sessionId, title: `定时任务：${task.name}` })
       if (await owner() !== username) throw new Error('登录账号已变化，执行已停止')
@@ -190,6 +200,14 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
             if (enabled === undefined) throw new Error('缺少启停状态')
             tasks.forEach((task) => { task.enabled = enabled; task.nextRunAt = nextOccurrence(task, Date.now()) })
           }
+        })
+      } else if (endpoint === 'delete-run') {
+        const input = z.object({ id: z.string().min(1) }).strict().parse(payload)
+        await store.update((state) => {
+          const run = state.runs.find(run => run.id === input.id && run.owner === username)
+          if (run === undefined) throw new Error('运行记录不存在')
+          if (run.status === 'running') throw new Error('执行中的记录暂不可删除')
+          state.runs = state.runs.filter(item => item.id !== run.id)
         })
       } else if (endpoint === 'run') {
         const input = z.object({ id: z.string() }).strict().parse(payload)

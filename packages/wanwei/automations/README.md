@@ -31,7 +31,15 @@ The desktop shows only Host-saved tasks, with enabled/paused filters, editing an
 
 The New menu offers manual creation, creation from a task, and templates. Creation from a task opens a new conversation with `帮我创建一个定时任务：` staged in the composer; it does not send a message or save a scheduled task automatically. Six office templates open editable, paused drafts. Confirm the description, working directory, time and enabled state before saving. Templates are not sample tasks in storage. Batch controls remain at the bottom of the page.
 
+Creation controls use Lucide SVG icons rather than font characters. The chevron is centered inside a fixed-size trigger, and decorative icons stay out of accessible labels. The menu retains its Escape and focus-leaving dismissal behavior.
+
 The editor accepts an existing Workspace or a local folder through the shared directory picker. Selection changes only the draft's path, not the active conversation or Workspace registrations. Cancellation keeps the path; selection errors remain visible. Tasks use the default model, workspace-write permissions and ongoing recurrence; the dialog offers no message-push control. Run records form a filterable table with committed start/end timing, status, failure details and Session navigation. Three task cards occupy each row on wide windows, with fewer columns on narrow windows.
+
+Empty task and run-record prompts are vertically centered in the remaining content area below the filters and table headings as the window resizes.
+
+Execution Sessions are durably archived before prompting and remain accessible from run records, not the sidebar or its search. Startup archives Sessions referenced by retained records; missing Sessions are skipped, while storage failures reject startup. Execution uses the configured working directory without registering a new Workspace. History filters reserve space between their labels and chevrons.
+
+Task and record search expand in the header without adding a row; Escape clears and closes search. Ledger columns stay left-aligned and single-line, with truncated task names and horizontal scrolling on narrow windows. Clicking a linked row or pressing Enter/Space opens its Session. The delete icon requests confirmation and removes only a completed, failed or interrupted record owned by the current account; tasks, Sessions and files remain. Running records cannot be deleted because they prevent overlapping executions.
 
 The default task file is automations.json inside the Harness home. Reads are account-filtered; mutations use a file lock and atomic replacement. Invalid storage causes an explicit error instead of resetting tasks. Stop the desktop before repairing a damaged file or an abandoned sibling lock file; retain a copy before repair.
 

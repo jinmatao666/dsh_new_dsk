@@ -5,6 +5,8 @@ import type { AutomationSnapshot, AutomationTask } from '../contract.ts'
 import { CreationPicker } from './creation.tsx'
 import { TaskEditor } from './task-editor.tsx'
 import { RunHistory } from './run-history.tsx'
+import { CreationIcon } from './creation-icons.tsx'
+import { AutomationSearch } from './search.tsx'
 
 /** Local RPC and normal desktop Session navigation. */
 export interface AutomationApi {
@@ -31,12 +33,12 @@ export function AutomationCards({ notify, api }: { notify: (message: string) => 
   const [error, setError] = useState('')
   const [tab, setTab] = useState<'tasks' | 'history'>('tasks')
   const [filter, setFilter] = useState<'all' | 'enabled' | 'paused'>('all')
-  const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [batch, setBatch] = useState(false)
   const [selection, setSelection] = useState<string[]>([])
   const [draft, setDraft] = useState<AutomationTask | null>(null)
   const [deleteIds, setDeleteIds] = useState<string[]>([])
+  const [deleteRunId, setDeleteRunId] = useState<string | null>(null)
   const [creation, setCreation] = useState(false)
   const newMenu = useRef<HTMLDetailsElement>(null)
   const tasks = snapshot.tasks
@@ -98,36 +100,41 @@ export function AutomationCards({ notify, api }: { notify: (message: string) => 
     setCreation(false)
     setDraft({ id: '', nextRunAt: 0, cwd: '', enabled: false, ...value })
   }} />
+  const tabs = <nav aria-label={text('自动化页面')}>
+    <button type="button" className={tab === 'tasks' ? 'selected' : ''} onClick={() => { setTab('tasks') }}>{text('定时任务')}</button>
+    <button type="button" className={tab === 'history' ? 'selected' : ''} onClick={() => { setTab('history') }}>{text('运行记录')}</button>
+  </nav>
   return <section className={`dsh-automation-page dsh-automation-cards${batch && tab === 'tasks' ? ' batch-mode' : ''}`}>
-    <header className="automation-card-toolbar">
-      <nav aria-label={text('自动化页面')}>
-        <button type="button" className={tab === 'tasks' ? 'selected' : ''} onClick={() => { setTab('tasks') }}>{text('定时任务')}</button>
-        <button type="button" className={tab === 'history' ? 'selected' : ''} onClick={() => { setTab('history') }}>{text('运行记录')}</button>
-      </nav>
+    {tab === 'tasks' && <header className="automation-card-toolbar">
+      {tabs}
       <div className="automation-card-tools">
-        {tab === 'tasks' && <button type="button" className="icon-button" aria-label={text('搜索任务')} onClick={() => { setSearchOpen(value => !value) }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="10" cy="10" r="7" /><path d="m16 16 5 5" /></svg>
-        </button>}
-        {tab === 'tasks' && <button type="button" onClick={() => { setBatch(value => !value); setSelection([]) }}>{batch ? text('完成管理') : text('批量管理')}</button>}
-        {tab === 'tasks' && <div className="automation-new-group">
-          <button type="button" className="primary" disabled={busy} onClick={create}>{text('＋ 新建')}</button>
+        <AutomationSearch label={text('搜索任务')} query={query} change={setQuery} />
+        <button type="button" onClick={() => { setBatch(value => !value); setSelection([]) }}>{batch ? text('完成管理') : text('批量管理')}</button>
+        <div className="automation-new-group">
+          <button type="button" className="primary" disabled={busy} onClick={create}>
+            <CreationIcon name="plus" /><span>{text('新建')}</span>
+          </button>
           <details ref={newMenu} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.removeAttribute('open') }} onKeyDown={(event) => { if (event.key === 'Escape') event.currentTarget.removeAttribute('open') }}>
-            <summary aria-label={text('新建方式')}>⌄</summary>
+            <summary aria-label={text('新建方式')}><CreationIcon name="chevron-down" /></summary>
             <div className="automation-dropdown">
-              <button type="button" disabled={busy} onClick={() => { chooseCreation('manual') }}>＋ {text('手动新建')}</button>
-              <button type="button" disabled={busy} onClick={() => { chooseCreation('conversation') }}>↗ {text('从任务新建')}</button>
-              <button type="button" disabled={busy} onClick={() => { chooseCreation('templates') }}>▦ {text('从模板新建')}</button>
+              <button type="button" disabled={busy} onClick={() => { chooseCreation('manual') }}>
+                <CreationIcon name="file-plus" /><span>{text('手动新建')}</span>
+              </button>
+              <button type="button" disabled={busy} onClick={() => { chooseCreation('conversation') }}>
+                <CreationIcon name="message-square-plus" /><span>{text('从任务新建')}</span>
+              </button>
+              <button type="button" disabled={busy} onClick={() => { chooseCreation('templates') }}>
+                <CreationIcon name="layout-template" /><span>{text('从模板新建')}</span>
+              </button>
             </div>
           </details>
-        </div>}
+        </div>
       </div>
-    </header>
-    <p className="automation-demo-label">{text('任务保存在本机，使用默认模型；执行时会新建会话并可能修改指定工作目录。')}</p>
+    </header>}
     {error && <p role="alert" className="automation-error">{error}</p>}
     {!loaded && !error && <p>{text('正在加载任务')}</p>}
     <fieldset disabled={busy} className="automation-content">
       {tab === 'tasks' && <>
-        {searchOpen && <input className="automation-search" aria-label={text('搜索任务')} placeholder={text('搜索任务名称')} value={query} onChange={(event) => { setQuery(event.target.value) }} />}
         <div className="automation-card-filters">{(['all', 'enabled', 'paused'] as const).map(value => <button type="button" key={value} className={filter === value ? 'selected' : ''} onClick={() => { setFilter(value) }}>
           {value === 'all' ? text('全部') : value === 'enabled' ? text('已启用') : text('已暂停')}{' ('}{tasks.filter(task => value === 'all' || task.enabled === (value === 'enabled')).length}{')'}
         </button>)}</div>
@@ -147,7 +154,7 @@ export function AutomationCards({ notify, api }: { notify: (message: string) => 
         </article>)}</div>
         {loaded && !visible.length && <div className="dsh-automation-empty"><h2>{tasks.length ? text('没有符合条件的任务') : text('尚未配置自动化')}</h2><button type="button" onClick={create}>{text('手动新建')}</button></div>}
       </>}
-      {tab === 'history' && <RunHistory runs={snapshot.runs} openSession={(id) => { api.openSession(id) }} stop={(id) => { void mutate('stop', { id }, text('已请求停止')) }} />}
+      {tab === 'history' && <RunHistory heading={tabs} runs={snapshot.runs} openSession={(id) => { api.openSession(id) }} remove={setDeleteRunId} />}
       {batch && tab === 'tasks' && <footer className="automation-batch-bar" role="toolbar" aria-label={text('批量管理')}>
         <div className="automation-batch-selection">
           <label><input type="checkbox" checked={visible.length > 0 && visible.every(task => selection.includes(task.id))} onChange={(event) => { setSelection(event.target.checked ? visible.map(task => task.id) : []) }} />{text('全选当前任务')}</label>
@@ -160,6 +167,12 @@ export function AutomationCards({ notify, api }: { notify: (message: string) => 
         </div>
       </footer>}
       {draft !== null && <TaskEditor draft={draft} change={setDraft} api={api} error={error} titleId={`${prefix}-title`} close={() => { setDraft(null) }} save={() => { void save() }} />}
+      {deleteRunId !== null && <div className="dsh-automation-modal-backdrop"><section className="dsh-automation-modal" role="dialog" aria-modal="true" aria-label={text('删除运行记录')}>
+        <header><span>{text('删除运行记录')}</span></header><p>{text('仅删除这条运行记录，不会删除任务、会话或产物。')}</p>
+        <footer><button type="button" onClick={() => { setDeleteRunId(null) }}>{text('取消')}</button><button type="button" onClick={() => {
+          void mutate('delete-run', { id: deleteRunId }, text('运行记录已删除')).then((ok) => { if (ok) setDeleteRunId(null) })
+        }}>{text('确认删除')}</button></footer>
+      </section></div>}
       {deleteIds.length > 0 && <div className="dsh-automation-modal-backdrop"><section className="dsh-automation-modal" role="dialog" aria-modal="true" aria-label={text('删除任务')}>
         <header><span>{text('删除任务')}</span></header><p>{text('删除所选任务？此操作不会删除工作目录、会话或产物。')}</p>
         <footer><button type="button" onClick={() => { setDeleteIds([]) }}>{text('取消')}</button><button type="button" onClick={() => {

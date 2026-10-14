@@ -37,7 +37,10 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     ctx.llm.registerAdapter(['mock'], adapter)
     new SessionTitleService(ctx, { fallbackMaxWords: 10, fallbackMaxBytes: 120, maxTitleBytes: 200 })
     const workspace = { id: 'test-workspace', path: dir, attachSession: async () => {} }
-    ctx.provide('workspaceRegistry', { create: async () => workspace, get: () => workspace, list: () => [] } as never)
+    const archived = new Set<string>()
+    ctx.provide('workspaceRegistry', { create: async () => workspace, get: () => workspace, list: () => [],
+      archiveSession: async (id: string) => { archived.add(id) },
+    } as never)
     ctx.provide('credentials', { resolve: async (ref: string) => authenticated ? {
       value: ref === 'DSH_LOGIN_USERNAME' ? 'account-a' : 'test-token',
     } : undefined } as never)
@@ -47,6 +50,11 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     ctx.provide('wanweiNetworkPolicy', { getSnapshot: () => ({ mode: 'internet' }) } as never)
     ctx.provide('permissionPresets', { set: () => {} } as never)
     createSessionTestController(ctx, { cwd: dir, defaultModelSelection: () => ({ provider: 'mock', model: 'mock' }) })
+    const historical = ctx.sessions.create(SessionId('historical-automation'))
+    await new AutomationStore(join(dir, 'tasks.json')).update((state) => {
+      state.runs.push({ id: 'historical-run', taskId: 'removed-task', taskName: '旧任务', owner: 'account-a',
+        pid: process.pid, status: 'failed', startedAt: 1, endedAt: 2, trigger: 'manual', sessionId: historical.id })
+    })
     const config = join(dir, 'cordis.yml')
     await writeFile(config, '- name: automations\n  config:\n    runTimeoutMs: 1000\n    dataFile: ' + JSON.stringify(join(dir, 'tasks.json')) + '\n')
     ctx.baseUrl = pathToFileURL(dir).href + '/'
@@ -59,6 +67,7 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(config).href } })
     await ctx.loader.await()
     expect(handler).toBeTypeOf('function')
+    expect(archived.has(historical.id)).toBe(true)
     const call = async (op: string, payload: unknown): Promise<AutomationSnapshot> => {
       const result = await handler!(op, payload, new AbortController().signal) as ConnectionRpcResult<AutomationSnapshot>
       if (!result.ok) throw new Error(result.error.message)
@@ -72,6 +81,7 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     await expect.poll(async () => (await call('list', {})).runs[0]?.status).toBe('success')
     const run = (await call('list', {})).runs[0]!
     expect(run.sessionId).toBeTruthy()
+    expect(archived.has(run.sessionId!)).toBe(true)
     expect(adapter.requests).toHaveLength(1)
     expect(ctx.sessions.get(SessionId(run.sessionId!))?.events.some(event => event.type === 'turn/end')).toBe(true)
     // Establish the first account tick before installing a due slot.
@@ -81,10 +91,20 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     await expect.poll(async () => (await call('list', {})).runs.filter(item => item.status === 'success').length).toBe(2)
     expect(adapter.requests).toHaveLength(2)
     expect((await call('list', {})).runs[0]?.trigger).toBe('scheduled')
+    expect((await call('list', {})).runs.every(item => item.sessionId !== undefined && archived.has(item.sessionId))).toBe(true)
     await call('run', { id: saved.tasks[0]!.id })
     await expect(call('run', { id: saved.tasks[0]!.id })).rejects.toThrow('正在执行')
+    const running = (await call('list', {})).runs[0]!
+    await expect(call('delete-run', { id: running.id })).rejects.toThrow('执行中的记录暂不可删除')
     await expect.poll(async () => (await call('list', {})).runs[0]?.status).toBe('failed')
     expect((await call('list', {})).runs[0]?.error).toContain('超时')
+    await store.update((state) => { state.runs.push({ ...state.runs[0]!, id: 'other-account-run', owner: 'account-b' }) })
+    await expect(call('delete-run', { id: 'other-account-run' })).rejects.toThrow('运行记录不存在')
+    const removed = await call('delete-run', { id: run.id })
+    expect(removed.runs.some(item => item.id === run.id)).toBe(false)
+    expect(removed.tasks).toHaveLength(1)
+    expect(ctx.sessions.get(SessionId(run.sessionId!))).toBeDefined()
+    expect((await new AutomationStore(join(dir, 'tasks.json')).read()).runs.some(item => item.id === 'other-account-run')).toBe(true)
     authenticated = false
     await expect(call('list', {})).rejects.toThrow('请先登录')
     await ctx.fiber.dispose()
