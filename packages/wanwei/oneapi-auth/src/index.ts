@@ -20,6 +20,7 @@ import { OneApiSearchProvider } from './search-provider.ts'
 import { registerSkillUsage } from './usage.ts'
 import { installNetworkPolicy } from './network.ts'
 import { fetchDeploymentSettings } from './deployment.ts'
+import { installFinalDeliverables } from './final-deliverables.ts'
 export type { NetworkPolicy } from './network.ts'
 
 export type { AuthState } from './contract.ts'
@@ -304,6 +305,7 @@ export function apply(ctx: Context, config: Config): void {
   const baseURL = normalizedOrigin(config.baseURL ?? launchEnvironmentOf(ctx).get('DSH_ONEAPI_URL')?.value ?? 'http://127.0.0.1:3000')
   const ref = credentialRef(config.credentialRef)
   const network = installNetworkPolicy(ctx, baseURL)
+  installFinalDeliverables(ctx)
   const usernameRef = credentialRef('DSH_LOGIN_USERNAME')
   const installMarkerRef = credentialRef('DSH_DESKTOP_INSTALL_MARKER')
   registerSkillUsage(ctx, baseURL, async () => (await ctx.credentials.resolve(ref))?.value)

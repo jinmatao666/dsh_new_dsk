@@ -53,7 +53,7 @@ export function startSkillUse(
  * Prepare a normal Workspace Session lazily; retain allocated paths across retryable registration failures.
  * @param workspaces - Normal persisted Workspace creation API.
  * @param sessions - Normal Session creation API.
- * @param allocate - Desktop directory allocator receiving local year/month/day/hour/minute digits.
+ * @param allocate - Desktop directory allocator receiving local year/month/day/hour/minute/second digits.
  * @returns First-send preparation, with one successful Session retained across repeated calls.
  */
 export function skillSessionPreparation(
@@ -66,7 +66,7 @@ export function skillSessionPreparation(
   return () => {
     prepared ??= (async () => {
       const now = new Date()
-      const name = [now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes()]
+      const name = [now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds()]
         .map((value, index) => String(value).padStart(index === 0 ? 4 : 2, '0')).join('')
       automaticPath ??= await allocate(name)
       const workspace = await workspaces.create({ path: automaticPath })

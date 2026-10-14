@@ -18,6 +18,8 @@ export interface DeliverablesTurnData {
   readonly produced: readonly ProducedPath[]
   /** Settled response text used only to select and order recorded delivery paths. */
   readonly responses?: readonly { readonly seq: number; readonly text: string }[]
+  /** Complete verified delivery lists; the latest successful declaration replaces earlier lists. */
+  readonly deliveries?: readonly { readonly seq: number; readonly paths: readonly string[] }[]
 }
 
 declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
@@ -31,6 +33,8 @@ interface DeliverablesState extends DeliverablesTurnData {
   readonly turn: number
   readonly calls: ReadonlyMap<string, string | null>
   readonly responses: NonNullable<DeliverablesTurnData['responses']>
+  readonly deliveries: NonNullable<DeliverablesTurnData['deliveries']>
+  readonly deliveryCalls: ReadonlySet<string>
 }
 
 /**
@@ -209,12 +213,16 @@ function isProcessPath(path: string): boolean {
     || /\.(?:tmp|temp|log|pyc)$/iu.test(path)
 }
 
-/** Select final references; without them, prefer document outputs over unclassified changed files. */
+/** Prefer an explicit delivery declaration; current history never guesses an unreferenced final document. */
 function deliveryPaths(data: Readonly<DeliverablesTurnData> | undefined, seq: number): readonly string[] {
+  const declared = data?.deliveries?.findLast(value => value.seq <= seq)
+  if (declared !== undefined) return declared.paths
   const recorded = producedForClosing(data, seq)
   const response = data?.responses?.findLast(value => value.seq <= seq)
   const named = response === undefined ? [] : referencedPaths(response.text, recorded)
   if (named.length > 0) return named.filter(path => !isProcessPath(path))
+  // A settled response without delivery references is not evidence that every changed document is final.
+  if (data?.responses !== undefined) return []
   const paths = recorded.filter(path => !isProcessPath(path))
   const documents = paths.filter(path => /\.(?:docx|xlsx|pptx|pdf)$/iu.test(path))
   return documents.length > 0 ? documents : paths
@@ -242,7 +250,7 @@ export function createDeliverablesDefinition(
     },
     start: (_context, match) => {
       if (match.event.type !== 'turn/start') throw new Error('deliverables start requires turn/start')
-      return { turn: match.event.data.turn, calls: new Map(), produced: [], responses: [] }
+      return { turn: match.event.data.turn, calls: new Map(), produced: [], responses: [], deliveries: [], deliveryCalls: new Set() }
     },
     update: (context, match) => {
       if (match.event.type === 'assistant/message') {
@@ -252,18 +260,38 @@ export function createDeliverablesDefinition(
       }
       if (match.event.type === 'tool/call') {
         const calls = new Map(context.state.calls)
+        const deliveryCalls = new Set(context.state.deliveryCalls)
+        if (match.event.data.name === 'deliver_files') deliveryCalls.add(String(match.event.data.callId))
         calls.set(
           String(match.event.data.callId),
           mutationPath(match.event.data.name, match.event.data.arguments),
         )
-        return { ...context.state, calls }
+        return { ...context.state, calls, deliveryCalls }
       }
       if (match.event.type !== 'tool/result') return context.state
       const result = match.event.data.message.content[0]
-      if (result.isError === true) return context.state
       const callId = String(match.event.data.message.source.callId)
+      if (result.isError === true) return context.state.deliveryCalls.has(callId)
+        ? { ...context.state, deliveries: [...context.state.deliveries, { seq: match.event.seq, paths: [] }] }
+        : context.state
       const path = context.state.calls.get(callId)
       const text = toolResultText(result)
+      if (context.state.deliveryCalls.has(callId)) {
+        const marker = text.split(/\r?\n/u).find(line => line.startsWith('DSH_DELIVERABLES='))
+        if (marker !== undefined) {
+          try {
+            const paths: unknown = JSON.parse(marker.slice('DSH_DELIVERABLES='.length))
+            if (Array.isArray(paths) && paths.every((path): path is string => typeof path === 'string' && path.trim() !== '')) {
+              const unique = [...new Set(paths)]
+              return { ...context.state,
+                deliveries: [...context.state.deliveries, { seq: match.event.seq, paths: unique }],
+                produced: [...context.state.produced, ...unique.map(path => ({ seq: match.event.seq, path }))],
+              }
+            }
+          } catch { /* Malformed declarations do not replace a verified list. */ }
+        }
+        return context.state
+      }
       const runtimePaths = [...runtimeDeliverablePaths(text), ...detectAdditional(text)]
       const additions = [path, ...runtimePaths]
         .filter((value): value is string => value !== null && value !== undefined)
@@ -278,7 +306,7 @@ export function createDeliverablesDefinition(
         kind: 'turn',
         turn: context.state.turn,
         key: 'deliverables',
-        value: { produced: context.state.produced, responses: context.state.responses },
+        value: { produced: context.state.produced, responses: context.state.responses, deliveries: context.state.deliveries },
       },
   }
 }

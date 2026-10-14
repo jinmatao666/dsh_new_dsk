@@ -3,8 +3,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub(crate) fn create(home: &Path, name: &str) -> Result<PathBuf, String> {
-    if name.len() != 12 || !name.bytes().all(|value| value.is_ascii_digit()) {
-        return Err("工作区名称必须为年月日时分".to_string());
+    if name.len() != 14 || !name.bytes().all(|value| value.is_ascii_digit()) {
+        return Err("工作区名称必须为年月日时分秒".to_string());
     }
     let root = home.join("workspaces");
     fs::create_dir_all(&root).map_err(|error| format!("无法创建工作区目录：{error}"))?;
@@ -43,14 +43,15 @@ mod tests {
             .unwrap()
             .as_nanos();
         let home = std::env::temp_dir().join(format!("wanwei-workspace-{unique}"));
-        let first = create(&home, "202610121930").unwrap();
+        let first = create(&home, "20261012193045").unwrap();
         fs::write(first.join("keep.txt"), "keep").unwrap();
-        let second = create(&home, "202610121930").unwrap();
+        let second = create(&home, "20261012193045").unwrap();
         assert_ne!(first, second);
-        assert_eq!(first.file_name().unwrap(), "202610121930");
-        assert_eq!(second.file_name().unwrap(), "202610121930 (2)");
+        assert_eq!(first.file_name().unwrap(), "20261012193045");
+        assert_eq!(second.file_name().unwrap(), "20261012193045 (2)");
         assert_eq!(fs::read_to_string(first.join("keep.txt")).unwrap(), "keep");
         assert!(create(&home, "../escape").is_err());
+        assert!(create(&home, "202610121930").is_err());
         fs::remove_dir_all(home).unwrap();
     }
 }

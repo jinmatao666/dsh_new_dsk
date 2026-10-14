@@ -176,6 +176,50 @@ function deliverablesOf(value: ConversationNodeAssembler, turn = 1): Readonly<De
 }
 
 describe('produced-file Turn data', () => {
+  it('uses only the verified final list despite duplicate aliases, intermediate files and missing prose links', () => {
+    const events = [
+      at(1, 'turn/start', { turn: 1 }),
+      call(2, 'draft', 'write', { file_path: 'draft.docx', content: 'draft' }), result(3, 'draft'),
+      call(4, 'report', 'write', { file_path: '摘要.docx', content: 'report' }), result(5, 'report'),
+      call(6, 'delivery', 'deliver_files', { paths: ['摘要.docx', '/workspace/摘要.docx'] }),
+      at(7, 'tool/result', { turn: 1, step: 1, message: {
+        source: { type: 'tool-result', callId: 'delivery' }, content: [{ type: 'tool-result', content: [
+          { type: 'text', text: 'DSH_DELIVERABLES=["/workspace/摘要.docx"]' },
+        ], isError: false }],
+      } }),
+      at(8, 'assistant/message', { turn: 1, step: 1, message: { content: [{ type: 'text', text: '质检通过。' }] } }),
+    ]
+    const replay = assembler(events)
+    expect(selectProducedFiles(tailOwner(deliverablesOf(replay), 8))).toMatchInlineSnapshot(`
+      [
+        "/workspace/摘要.docx",
+      ]
+    `)
+    const live = assembler(events.slice(0, -1)); live.append(events[events.length - 1]!); live.flush()
+    expect(selectProducedFiles(tailOwner(deliverablesOf(live), 8))).toEqual(['/workspace/摘要.docx'])
+    const paged = assembler(events.slice(4), true)
+    paged.prepend(events.slice(0, 4), false); paged.flush()
+    expect(selectProducedFiles(tailOwner(deliverablesOf(paged), 8))).toEqual(['/workspace/摘要.docx'])
+    const failed = assembler([
+      ...events,
+      call(9, 'failed-delivery', 'deliver_files', { paths: ['missing.docx'] }),
+      result(10, 'failed-delivery', true),
+    ])
+    expect(selectProducedFiles(tailOwner(deliverablesOf(failed), 10))).toBeNull()
+  })
+
+  it('replaces earlier delivery lists and does not advertise a failed final declaration', () => {
+    const data: DeliverablesTurnData = {
+      ...produced([3, 'draft.docx'], [5, 'final.docx']),
+      deliveries: [{ seq: 3, paths: ['draft.docx'] }, { seq: 5, paths: ['final.docx'] }, { seq: 7, paths: [] }],
+    }
+    expect(selectProducedFiles(tailOwner(data, 5))).toEqual(['final.docx'])
+    expect(selectProducedFiles(tailOwner(data, 7))).toBeNull()
+  })
+
+  it('does not infer final outputs from a reply without references or declaration', () => {
+    expect(selectProducedFiles(tailOwner({ ...produced([3, 'draft.docx']), responses: [{ seq: 4, text: '检查完毕。' }] }, 4))).toBeNull()
+  })
   it('shows only the final DOCX while retaining intermediate paths as recorded facts', () => {
     const data: DeliverablesTurnData = {
       ...produced([3, '地块 5/_draft.txt'], [5, '地块 5/摘要.md'], [7, '地块 5/摘要.docx']),
@@ -223,7 +267,7 @@ describe('produced-file Turn data', () => {
       ...produced([3, 'a/report.docx'], [4, 'b/report.docx']),
       responses: [{ seq: 5, text: '`report.docx`' }, { seq: 9, text: '`b/report.docx`' }],
     }
-    expect(selectProducedFiles(tailOwner(data, 5))).toEqual(['a/report.docx', 'b/report.docx'])
+    expect(selectProducedFiles(tailOwner(data, 5))).toBeNull()
     expect(selectProducedFiles(tailOwner(data, 9))).toEqual(['b/report.docx'])
   })
 

@@ -57,6 +57,8 @@
     "@deepseek-ai/schemastery": "workspace:^"
   },
   "peerDependencies": {
+    "@deepseek-ai/dsh-llm": "workspace:^",
+    "@deepseek-ai/dsh-fs": "workspace:^",
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
     "@deepseek-ai/dsh-skill": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^",
@@ -72,6 +74,10 @@
     "@deepseek-ai/dsh-web": "workspace:^"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-agent": "workspace:^",
+    "@deepseek-ai/dsh-fs-local": "workspace:^",
+    "@deepseek-ai/dsh-llm": "workspace:^",
+    "@deepseek-ai/dsh-fs": "workspace:^",
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",
     "@deepseek-ai/cordis-plugin-include": "workspace:^",
     "@deepseek-ai/dsh-settings-file": "workspace:^",

@@ -31,7 +31,7 @@ Mount this plugin alongside `ui-conversation`; a finished turn then ends with th
 
 The row shows the largest leading prefix that fits — up to six chips, basename text with the full path as the title — reserving the exact localized `+ N files` width, so the remainder stays visible without wrapping or horizontal scrolling.
 
-Recorded files referenced by Markdown links or inline code in the closing response appear in reference order. If no references resolve, DOCX, XLSX, PPTX and PDF outputs take precedence over other changed files; without those documents, other recorded files remain eligible. Known scratch paths such as `_draft.txt`, `.tmp-check.py`, temporary directories and intermediate folders are excluded from the row, not deleted. Explicit references can deliver Markdown or source files; ambiguous basenames and unrecorded paths never create entries. Prose links retain access to the complete recorded path list.
+The latest successful `deliver_files` result supplies the complete delivery list and replaces earlier lists in the same turn. An empty or failed declaration clears the row. Without a declaration, recorded closing references select files; current conversation history with no resolvable references shows no guessed document list. Known scratch paths are excluded from reference-based selection, not deleted. Explicit references can deliver Markdown or source files; ambiguous basenames and unrecorded paths never create entries. Prose links retain access to the complete recorded path list.
 
 ### Inline-code links
 

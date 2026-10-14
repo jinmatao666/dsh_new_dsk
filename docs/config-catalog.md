@@ -3324,7 +3324,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/wanwei/oneapi-auth/src/index.ts:31`](../packages/wanwei/oneapi-auth/src/index.ts)
+Source: [`packages/wanwei/oneapi-auth/src/index.ts:32`](../packages/wanwei/oneapi-auth/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-skillhub"></a>
 

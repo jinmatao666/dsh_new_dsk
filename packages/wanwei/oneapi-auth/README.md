@@ -127,6 +127,20 @@ The private-network guidance and appended tool feedback consume normal context t
 
 Changing the confirmed environment changes the dependency prompt section and can affect prefix-cache reuse. This package does not manage model caches.
 
+### Verified final file delivery
+
+#### What the model sees
+
+The Host exposes `deliver_files` and instructs the model to declare the complete final output list, excluding intermediate files. The tool verifies regular files, resolves workspace-relative paths and deduplicates filesystem identities. An empty list clears delivery. After successful file or shell work without a subsequent declaration, turn stopping steers one reminder into the same turn; cancellation and repeated stopping do not add another reminder.
+
+#### Token effect
+
+The static guidance, tool schema, file-path results and at most one reminder per turn use normal context tokens.
+
+#### KV Cache effect
+
+Static guidance can reuse the prompt prefix. Delivery paths and the conditional reminder vary with the task.
+
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
@@ -135,6 +149,7 @@ Changing the confirmed environment changes the dependency prompt section and can
 - Search sources require the updated OneAPI relay and a channel exposing Bailian's native generation endpoint, not only its compatible chat endpoint. Model compliance with citation instructions still needs live acceptance; links alone do not establish factual accuracy.
 - Independent expert launch requires the separate OneAPI `/api/expert-web` deployment and database tables; the ordinary login endpoint alone does not provide it.
 - Website tickets and child Webview permissions still require live service and cross-platform desktop acceptance.
+- Final delivery verifies file existence, not document quality or user intent. The model must call the tool directly with the correct final list; nested dispatch does not declare the UI list. Installed-desktop and live-model acceptance remain required.
 
 <a id="dev-note"></a>
 ### Dev Note
