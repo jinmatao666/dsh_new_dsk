@@ -25,6 +25,8 @@ Agents can inspect and operate a Chromium browser through the pinned official Pl
 <a id="use-this-package"></a>
 ## Use this package
 
+The settings card starts collapsed. Its header expands or collapses the permission controls without changing the saved preference; the switch saves immediately and keeps failures visible while expanded.
+
 Mount this plugin before creating Sessions. Without `executablePath`, the plugin searches standard Chrome then Edge installation locations on Windows/macOS; Linux searches Chrome, Chromium and Edge commands on PATH. A custom absolute executable path takes precedence and must be an accessible executable file. Missing browsers cause Chinese tool feedback instead of automatic downloads. Installing a browser or changing its path requires restarting the desktop and creating a new Session.
 
 ```yaml

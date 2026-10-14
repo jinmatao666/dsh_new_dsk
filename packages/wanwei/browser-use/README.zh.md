@@ -25,6 +25,8 @@ Agent 可以通过固定版本的官方 Playwright 提供方查看和操作 Chro
 <a id="use-this-package"></a>
 ## 使用本包
 
+设置卡片默认收起。点击标题展开或收起权限控件，不改变已保存的偏好；开关立即保存，展开时显示保存失败提示。
+
 在创建会话前挂载此插件。不指定 `executablePath` 时，Windows/macOS 按 Chrome、Edge 顺序检查标准安装目录；Linux 在 PATH 中查找 Chrome、Chromium 和 Edge 命令。自定义绝对可执行文件路径优先，必须是可访问的可执行文件。找不到浏览器时返回中文工具说明，不自动下载。安装浏览器或修改路径后需要重启桌面端并新建会话。
 
 ```yaml

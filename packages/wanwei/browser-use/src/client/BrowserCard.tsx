@@ -1,5 +1,5 @@
 /** Independent browser assistant card for the shared plugin configuration slot. */
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime, HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
@@ -27,6 +27,8 @@ export function BrowserCard(props: BrowserCardProps) {
   const intranet = props.useNetwork(value => value.mode) === 'intranet'
   const [saving, setSaving] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [open, setOpen] = useState(false)
+  const bodyId = useId()
   const enabled = snapshot.value?.enabled === true
   const blocked = intranet || snapshot.status !== 'ready' || !snapshot.writable || saving
   const toggle = async () => {
@@ -38,18 +40,25 @@ export function BrowserCard(props: BrowserCardProps) {
   }
   const status = intranet ? 'intranet' : saving ? 'saving'
     : snapshot.status !== 'ready' || !snapshot.writable ? 'unavailable' : enabled ? 'enabled' : 'disabled'
-  return <li className={css.card}>
-    <div className={css.row}>
-      <div className={css.copy}><h3>{props.t('title')}</h3><p>{props.t('description')}</p></div>
-      <div className={css.control}>
-        <span>{props.t(status)}</span>
-        <button type="button" role="switch" aria-label={props.t('title')}
-          aria-checked={enabled && !intranet} disabled={blocked}
-          className={`${css.switch} ${enabled && !intranet ? css.on : ''}`}
-          onClick={() => { void toggle() }}><span className={css.thumb} /></button>
+  return <li className={`${css.card} ${open ? css.cardOpen : ''}`}>
+    <button type="button" className={css.header} aria-expanded={open} aria-controls={open ? bodyId : undefined}
+      aria-label={props.t(open ? 'collapse' : 'expand')} onClick={() => { setOpen(value => !value) }}>
+      <span className={css.copy}><span className={css.title}>{props.t('title')}</span><span className={css.description}>{props.t('description')}</span></span>
+      <svg className={`${css.chevron} ${open ? css.chevronOpen : ''}`} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6" /></svg>
+    </button>
+    {open && <div className={css.body} id={bodyId}>
+      <div className={css.row}>
+        <span>{props.t('permission')}</span>
+        <div className={css.control}>
+          <span>{props.t(status)}</span>
+          <button type="button" role="switch" aria-label={props.t('title')}
+            aria-checked={enabled && !intranet} disabled={blocked}
+            className={`${css.switch} ${enabled && !intranet ? css.on : ''}`}
+            onClick={() => { void toggle() }}><span className={css.thumb} /></button>
+        </div>
       </div>
-    </div>
-    <p className={css.hint}>{props.t('timing')}</p>
-    {failed && <p className={css.error} role="alert">{props.t('failed')}</p>}
+      <p className={css.hint}>{props.t('timing')}</p>
+      {failed && <p className={css.error} role="alert">{props.t('failed')}</p>}
+    </div>}
   </li>
 }

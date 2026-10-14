@@ -22,6 +22,8 @@ The product resolves an explicit executable first, otherwise checks standard ins
 
 ## Consequences
 
+The desktop composition mounts the plugin with an enabled default, while saved choices and intranet denial remain authoritative. The settings card uses a collapsed title/description header and an expanded automatically saved switch, matching neighboring plugin disclosure without introducing staged preference state. Disclosure alone never writes settings.
+
 The shared Agent registry and loop stay unchanged. Fixed published packages require narrow peer-version acceptance and integration tests against the local services. Pure intranet mode denies all browser tools until browser-network confinement is available; URL checks alone cannot constrain redirects and subresources. The package does not download Chromium. Installed-desktop model-driven validation and platform packaging verification remain incomplete. The card uses the existing settings slot and locale services; no official settings component is forked.
 
 ## Verification

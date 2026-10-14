@@ -36,7 +36,7 @@ it.skipIf(!existsSync(chromium))('boots the official provider through Loader, na
     '- name: test-prompt', '- name: test-tools', '- name: test-agents',
     '- name: test-settings', '  config:', `    path: ${JSON.stringify(join(root, 'settings.yaml'))}`, '    watch: false',
     "- name: '@deepseek-ai/dsh-wanwei-browser-use'", '  config:',
-    '    enabled: true', `    headless: ${process.env.DSH_BROWSER_TEST_HEADED !== '1'}`,
+    `    headless: ${process.env.DSH_BROWSER_TEST_HEADED !== '1'}`,
     ...process.env.DSH_BROWSER_TEST_EXECUTABLE === undefined ? [] : [`    executablePath: ${JSON.stringify(chromium)}`], '',
   ].join('\n'))
   ctx = new Context()

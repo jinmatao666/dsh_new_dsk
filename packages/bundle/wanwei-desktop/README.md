@@ -38,7 +38,7 @@ The first command prints the effective default tree without booting it after the
 
 ### What you get
 
-The desktop product disables the browser-assistant plugin, including its settings card and browser tools. Existing saved enablement does not activate a disabled plugin; its implementation remains available for a later product release.
+The desktop product mounts the browser-assistant plugin with visible browser windows and an enabled default. Its Settings → Plugins card starts collapsed and reveals the automatically saved permission switch when expanded. Saved user preferences override the default; pure intranet mode still denies browser tools.
 
 The product enables [cross-step failure recovery](../../guard/repeat-tool-reminder/README.md) with three invalid-input attempts and memory for 128 failed call identities. It coaches correction and suppresses only unchanged inputs already confirmed invalid; it does not terminate tasks or block transient network retries.
 
