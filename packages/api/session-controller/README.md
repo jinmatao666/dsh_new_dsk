@@ -33,6 +33,8 @@ The Session object also carries local submission echoes: `session.beginSubmissio
 
 -----
 
+Model selection persists the selected route for subsequent requests in that Session. By default it also saves the user's default selection; callers such as scheduled tasks set `saveAsDefault: false` to keep their route Session-local.
+
 <a id="configuration"></a>
 ## Configuration
 

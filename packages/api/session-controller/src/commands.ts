@@ -134,12 +134,14 @@ export class SessionCommandController {
             : { reasoningEffort: resolved.reasoningEffort }),
         }
         this.agents.selectForNextRequest(agent, selected)
-        try {
-          await this.ctx.agentDefaultModel.saveSelection(selected)
-        } catch (error) {
-          this.ctx.logger.warn(
-            `session-controller: model selection changed for the Session but the default was not saved: ${String(error)}`,
-          )
+        if (request.saveAsDefault !== false) {
+          try {
+            await this.ctx.agentDefaultModel.saveSelection(selected)
+          } catch (error) {
+            this.ctx.logger.warn(
+              `session-controller: model selection changed for the Session but the default was not saved: ${String(error)}`,
+            )
+          }
         }
         return { selected: { ...selected } }
       } catch (error) {

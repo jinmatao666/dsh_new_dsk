@@ -33,6 +33,8 @@ Session 对象还承载本地提交回显：`session.beginSubmission` 在调用�
 
 -----
 
+模型选择会持久保存该会话后续请求使用的模型路由。默认还会保存用户的默认选择；定时任务等调用方通过 `saveAsDefault: false` 将路由限制为仅影响当前会话。
+
 <a id="configuration"></a>
 ## 配置
 

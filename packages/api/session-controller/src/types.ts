@@ -285,6 +285,8 @@ export interface SessionCreateValue {
 /** Session model-selection request. */
 export interface SessionSelectModelRequest extends ModelSelection {
   readonly sessionId: SessionId
+  /** False keeps this selection Session-local instead of changing the user's default. */
+  readonly saveAsDefault?: boolean
 }
 
 /** Accepted model selection after Host resolution. */
