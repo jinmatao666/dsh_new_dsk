@@ -171,6 +171,9 @@ jobs:
       - name: Verify Wanwei product identity
         run: pnpm --dir products/wanwei-desktop run check:identity
 
+      - name: Verify installer preserves user data
+        run: pnpm --dir products/wanwei-desktop run check:installer-data
+
       - name: Verify Wanwei product boundaries
         run: pnpm --dir products/wanwei-desktop run check:boundaries
 

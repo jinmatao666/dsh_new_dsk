@@ -884,6 +884,41 @@ mod tests {
     }
 
     #[test]
+    fn reinstall_keeps_skills_and_sessions_added_after_migration() {
+        let root = test_root("reinstall-data");
+        let app = root.join("app");
+        let new = app.join("dsh-home");
+        let old = root.join("legacy");
+        fs::create_dir_all(old.join("skills/old")).unwrap();
+        fs::write(old.join("skills/old/SKILL.md"), "old skill").unwrap();
+        let sources = [("current", new.clone()), ("legacy", old.clone())];
+        assert!(migrate_sources(&app, &new, &sources).unwrap());
+        fs::create_dir_all(new.join("skills/recent")).unwrap();
+        fs::create_dir_all(new.join("sessions/recent")).unwrap();
+        fs::write(new.join("skills/recent/SKILL.md"), "recent skill").unwrap();
+        fs::write(new.join("sessions/recent/session.jsonl"), "recent session").unwrap();
+        fs::write(new.join("settings.yaml"), "recent settings").unwrap();
+        let marker = fs::read(new.join(FORMAL_MARKER)).unwrap();
+        for _ in 0..3 {
+            assert!(!migrate_sources(&app, &new, &sources).unwrap());
+            assert_eq!(fs::read(new.join(FORMAL_MARKER)).unwrap(), marker);
+            assert_eq!(
+                fs::read_to_string(new.join("skills/recent/SKILL.md")).unwrap(),
+                "recent skill"
+            );
+            assert_eq!(
+                fs::read_to_string(new.join("sessions/recent/session.jsonl")).unwrap(),
+                "recent session"
+            );
+            assert_eq!(
+                fs::read_to_string(new.join("settings.yaml")).unwrap(),
+                "recent settings"
+            );
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn interrupted_publication_resumes_the_completed_stage() {
         let root = test_root("resume");
         let recovery = root.join("migration-backups/formal-v2-123");
