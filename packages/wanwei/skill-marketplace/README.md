@@ -13,6 +13,8 @@ Use skill stages an editable draft without creating a directory or inheriting th
 
 Installed platform, personal and SkillHub skill details offer Open directory beside Use skill. The desktop resolves the installation slug within its local skills root and opens the operating-system file manager; uninstalled skills do not show this action. The action does not inspect API keys or create or modify configuration files.
 
+Before Workspace selection, the staged skill label and editable question share one inline flow. Labels are not percentage-truncated; the question follows the label with a small gap, and subsequent lines use the full text area. Selecting a Workspace settles the same slash token into the ordinary editor reference without changing submitted text.
+
 The Wanwei desktop can browse published skills, manage local installations and review personal uploads through this plugin. The official DSH runtime discovers and executes installed skills. Expert workbenches, connectors and automations belong to independent plugins, not this market.
 
 ## Table of Contents

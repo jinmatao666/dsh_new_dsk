@@ -12,6 +12,8 @@ A separate skill banner duplicates the slash token above the question and consum
 
 Skill menu picks use atomic references whose codec emits the original slash token. The generic draft-prefix slot renders staged prefixes inline and settles plain leading text into Session references. Wanwei owns friendly-name lookup and capsule styling; shared primitives provide a skill glyph.
 
+The market's staged prefix overrides floating layout with inline flow. Its label has no percentage width cap, and the editable text follows at a six-pixel gap; wrapping does not reserve a skill column on subsequent lines. Long unbroken input wraps within the composer. These styles target only the staged market skill and do not change the editor-backed Session layout or reference serialization.
+
 ## Alternatives considered
 
 **Restyle the separate banner only.** The slash token remains duplicated and the question still occupies another row.
