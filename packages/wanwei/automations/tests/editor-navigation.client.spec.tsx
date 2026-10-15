@@ -25,7 +25,7 @@ it('keeps the real feature panel and draft open across body-portal selections, b
     ctx.loader.internal = { version: 'v2', async import(name: string) {
       if (name !== 'navigation-fixture') throw new Error(`Unexpected fixture plugin: ${name}`)
       return { apply(scope: Context) { controller = createPanelController(scope, 'automation-navigation-test') } }
-    } } as NonNullable<typeof ctx.loader.internal>
+    } } as unknown as NonNullable<typeof ctx.loader.internal>
     await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(config).href } })
     await ctx.loader.await()
     if (controller === undefined) throw new Error('Loader did not create the feature controller')
