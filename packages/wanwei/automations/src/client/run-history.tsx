@@ -6,7 +6,8 @@ import { productText as text } from './locales/product.ts'
 import { AutomationSearch } from './search.tsx'
 
 const statusLabel = (status: AutomationRun['status']) => status === 'running' ? text('执行中')
-  : status === 'success' ? text('已完成') : status === 'interrupted' ? text('已中断') : text('执行失败')
+  : status === 'success' ? text('已完成') : status === 'interrupted' ? text('已中断')
+    : status === 'waiting' ? text('待补充') : status === 'incomplete' ? text('未完成') : text('执行失败')
 
 /** Display real timing, status, errors and Session links without fabricating artifacts.
  * @param props - Committed records and existing execution controls.
@@ -30,7 +31,7 @@ export function RunHistory({ runs, openSession, remove, heading }: {
       {heading}
       <div className="automation-history-filters">
         <AutomationSearch label={text('搜索运行记录')} query={query} change={setQuery} />
-        <Select label={text('运行状态')} value={status} onChange={setStatus} options={[{ value: 'all', label: text('全部状态') }, ...(['running', 'success', 'failed', 'interrupted'] as const).map(value => ({ value, label: statusLabel(value) }))]} />
+        <Select label={text('运行状态')} value={status} onChange={setStatus} options={[{ value: 'all', label: text('全部状态') }, ...(['running', 'success', 'failed', 'interrupted', 'waiting', 'incomplete'] as const).map(value => ({ value, label: statusLabel(value) }))]} />
         <Select label={text('执行方式')} value={trigger} onChange={setTrigger} options={[{ value: 'all', label: text('全部类型') }, { value: 'manual', label: text('手动执行') }, { value: 'scheduled', label: text('定时执行') }]} />
         <Select label={text('任务筛选')} value={task} onChange={setTask} options={[{ value: 'all', label: text('全部任务') }, ...taskOptions]} />
       </div>
@@ -45,7 +46,12 @@ export function RunHistory({ runs, openSession, remove, heading }: {
           if (event.target !== event.currentTarget || !run.sessionId || (event.key !== 'Enter' && event.key !== ' ')) return
           event.preventDefault(); openSession(run.sessionId)
         }}>
-        <td><strong title={run.taskName}>{run.taskName}</strong>{run.error && <details className="automation-run-error" onClick={(event) => { event.stopPropagation() }}><summary>{text('查看失败原因')}</summary><p>{run.error}</p></details>}</td>
+        <td><strong title={run.taskName}>{run.taskName}</strong>{run.error && <details className="automation-run-error" onClick={(event) => { event.stopPropagation() }}><summary>{run.status === 'waiting' || run.status === 'incomplete' ? text('查看原因') : text('查看失败原因')}</summary><p>{run.error}</p></details>}
+          {run.checkpoint && <details className="automation-run-error automation-run-progress" onClick={(event) => { event.stopPropagation() }}>
+            <summary>{text('查看执行进度')}</summary><p>{run.checkpoint.summary}</p>
+            <ul>{run.checkpoint.nextSteps.map((step, index) => <li key={index}>{step}</li>)}</ul>
+          </details>}
+        </td>
         <td><span className={`automation-run-status ${run.status}`}><i aria-hidden="true" />{statusLabel(run.status)}</span></td>
         <td>{new Date(run.startedAt).toLocaleString()}</td>
         <td>{run.endedAt === undefined ? (run.status === 'running' ? text('执行中') : '—') : text('{0} 秒', [Math.max(0, Math.round((run.endedAt - run.startedAt) / 1000))])}</td>

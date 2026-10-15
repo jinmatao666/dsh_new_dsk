@@ -126,6 +126,7 @@
 .automation-run-status.success i { background: #10b981; }
 .automation-run-status.failed i { background: #ef4444; }
 .automation-run-status.interrupted i { background: #94a3b8; }
+.automation-run-status.waiting i, .automation-run-status.incomplete i { background: #d97706; }
 .automation-run-actions { display: flex; align-items: center; }
 .automation-run-actions button { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 7px; background: transparent; color: inherit; padding: 0; cursor: pointer; }
 .automation-run-actions button:hover:not(:disabled) { background: var(--dsw-alias-bg-base); color: #b42318; }
@@ -133,6 +134,8 @@
 .automation-run-error { margin-top: 6px; color: #b42318; }
 .automation-run-error summary { cursor: pointer; font-size: 12px; }
 .automation-run-error p { max-width: 360px; overflow-wrap: anywhere; white-space: normal; }
+.automation-run-progress { color: var(--dsw-alias-label-secondary); }
+.automation-run-progress ul { max-width: 360px; white-space: normal; overflow-wrap: anywhere; }
 .dsh-automation-cards { overflow-x: auto; }
 .automation-card-toolbar { min-width: 580px; }
 .automation-history-toolbar { min-width: 800px; }
