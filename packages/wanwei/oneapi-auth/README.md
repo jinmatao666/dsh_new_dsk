@@ -131,15 +131,15 @@ Changing the confirmed environment changes the dependency prompt section and can
 
 #### What the model sees
 
-The Host exposes `deliver_files` and instructs the model to declare the complete final output list, excluding intermediate files. The tool verifies regular files, resolves workspace-relative paths and deduplicates filesystem identities. An empty list clears delivery. After successful file or shell work without a subsequent declaration, turn stopping steers one reminder into the same turn; cancellation and repeated stopping do not add another reminder.
+The Host exposes `deliver_files` to declare the complete final output list before the final reply, excluding intermediate files. The tool verifies regular files, resolves workspace-relative paths and deduplicates filesystem identities. An empty list clears file delivery, not the text answer. Text-only tasks may omit the call or declare an empty list. File registration adds no turn-stopping reminder or follow-up request; the final reply contains the requested answer rather than a file-list acknowledgement.
 
 #### Token effect
 
-The static guidance, tool schema, file-path results and at most one reminder per turn use normal context tokens.
+The static guidance, tool schema and file-path results use normal context tokens. File registration does not force an additional request after a completed answer.
 
 #### KV Cache effect
 
-Static guidance can reuse the prompt prefix. Delivery paths and the conditional reminder vary with the task.
+Static guidance can reuse the prompt prefix. Delivery paths vary with the task.
 
 ## Known Limitations and Deferred Work
 
