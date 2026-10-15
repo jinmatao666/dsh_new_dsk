@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-15-folder-clipboard-import.md
+2026-10-15-folder-clipboard-import.md: 35103248f52020d4f042d6e6ae15c6459c39f100
+2026-10-15-folder-clipboard-import.zh.md: 5982290f88a1ccba75526bb1a397d800a80ec987

@@ -46,11 +46,53 @@ describe('desktop file import', () => {
     Object.defineProperty(file, 'arrayBuffer', { value: async () => new ArrayBuffer(4) })
     const event = clipboardPaste(composer(view), [file])
     expect(event.defaultPrevented).toBe(true)
-    await waitFor(() => { expect(view.invoke).toHaveBeenCalledWith('import_workspace_files', {
-      workspacePath: 'workspace', files: [{ name, bytes: [0, 0, 0, 0] }],
+    await waitFor(() => { expect(view.invoke).toHaveBeenCalledWith('import_clipboard_workspace_files', {
+      workspacePath: 'workspace',
     }) })
     await waitFor(() => { expect(view.appendReferences).toHaveBeenCalledTimes(1) })
     expect(view.setDraft).not.toHaveBeenCalled()
+  })
+
+  it('imports copied folders through OS paths without reading them as file bytes', async () => {
+    const view = bench(true)
+    view.invoke.mockResolvedValue(['资料/'])
+    const folder = new File([], '资料')
+    const read = vi.fn(async () => { throw new DOMException('Directory is not a file', 'NotFoundError') })
+    Object.defineProperty(folder, 'arrayBuffer', { value: read })
+    const editor = composer(view)
+    editor.focus()
+    fireEvent.keyDown(editor, { key: 'v', ctrlKey: true })
+    expect(clipboardPaste(editor, [folder]).defaultPrevented).toBe(true)
+    await waitFor(() => { expect(view.appendReferences).toHaveBeenCalledOnce() })
+    expect(view.appendReferences).toHaveBeenCalledWith([expect.objectContaining({ appearance: 'folder' })])
+    await new Promise(resolve => window.setTimeout(resolve, 5))
+    expect(read).not.toHaveBeenCalled()
+    expect(view.invoke).toHaveBeenCalledOnce()
+  })
+
+  it('imports browser file bytes when the system clipboard has no file paths', async () => {
+    const view = bench(true)
+    view.invoke.mockResolvedValueOnce([])
+    const file = new File(['pdf'], 'report.pdf', { type: 'application/pdf' })
+    Object.defineProperty(file, 'arrayBuffer', { value: async () => new ArrayBuffer(3) })
+    clipboardPaste(composer(view), [file])
+    await waitFor(() => { expect(view.appendReferences).toHaveBeenCalledOnce() })
+    expect(view.invoke).toHaveBeenNthCalledWith(2, 'import_workspace_files', {
+      workspacePath: 'workspace', files: [{ name: 'report.pdf', bytes: [0, 0, 0] }],
+    })
+  })
+
+  it('does not retry a failed native paste through browser bytes', async () => {
+    const view = bench(true)
+    view.invoke.mockRejectedValueOnce(new Error('无法复制文件夹'))
+    const file = new File([], '资料')
+    const read = vi.fn()
+    Object.defineProperty(file, 'arrayBuffer', { value: read })
+    clipboardPaste(composer(view), [file])
+    await waitFor(() => { expect(view.getByRole('alert').textContent).toContain('无法复制文件夹') })
+    expect(read).not.toHaveBeenCalled()
+    expect(view.invoke).toHaveBeenCalledOnce()
+    expect(view.appendReferences).not.toHaveBeenCalled()
   })
 
   it('relays images and text from mixed pastes without sending documents into image validation', async () => {

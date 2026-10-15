@@ -66,14 +66,18 @@ export function FileImportAction(props: FileImportProps) {
       throw new Error(productText('文件已导入，但输入框正在发送，请稍后重新添加文件'))
     }
   }
-  const importFiles = async (files: readonly File[]) => {
+  const importFiles = async (files: readonly File[], fromClipboard = false) => {
     if (files.length === 0 || importing.current) return
     importing.current = true
     setBusy(true)
     setError(undefined)
     setStatus({ text: productText('正在导入文件…'), error: false })
     try {
-      const paths = await nativeImport('import_workspace_files', workspacePath, files)
+      // OS directories can appear as File objects whose arrayBuffer() rejects with NotFoundError.
+      const clipboardPaths = fromClipboard
+        ? await nativeImport('import_clipboard_workspace_files', workspacePath) : []
+      const paths = clipboardPaths.length > 0 ? clipboardPaths
+        : await nativeImport('import_workspace_files', workspacePath, files)
       append(paths)
       setStatus({ text: productText('已导入 {0} 个文件', [paths.length]), error: false })
     } catch (reason) {
@@ -130,7 +134,7 @@ export function FileImportAction(props: FileImportProps) {
       if (documents.length === 0) return
       event.preventDefault()
       event.stopImmediatePropagation()
-      void importFiles(documents)
+      void importFiles(documents, true)
       // Relay only images/text to the existing editor so document bytes never enter image validation.
       const images = files.filter(file => file.type.startsWith('image/'))
       if (images.length === 0 && text === '') return

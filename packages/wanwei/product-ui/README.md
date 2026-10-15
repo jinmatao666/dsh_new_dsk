@@ -35,6 +35,8 @@ Picker imports and native drops append file or folder chips through `inputAction
 
 Pasting copied files into the editable composer imports documents through the same workspace/reference path, including Word, PDF and Excel without an extension allowlist. Mixed pastes relay images and plain text to the existing editor; image-only and text-only pastes retain their normal handling. When an OS file list produces no DOM payload, the desktop bridge reads that explicit format after a composer paste gesture. It never interprets arbitrary pasted text as a file path. Other inputs and inactive composers do not trigger imports. Empty native lists add no references; failures preserve the draft and show an error.
 
+Copied documents and folders use the system clipboard file list before reading browser file bytes. This avoids reading a folder as an ordinary file. Browser bytes are used only when the system file list is empty; native import errors are shown without retrying the same operation through browser bytes.
+
 The native drag invitation covers only the composer card. Folder chips use a folder icon without a display-only trailing slash; their serialized references retain the slash. When a same-named destination already exists, desktop import copies into a numbered sibling, and the chip shows that actual destination name.
 
 Session archive saving waits for native persistence, then requests the file manager to reveal the actual saved path. A reveal failure retains the saved path and returns a warning rather than reporting a failed download.
