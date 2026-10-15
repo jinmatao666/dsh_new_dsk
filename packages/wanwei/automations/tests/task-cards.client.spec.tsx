@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { AutomationCards, type AutomationApi } from '../src/client/task-cards.tsx'
 import type { AutomationSnapshot } from '../src/contract.ts'
@@ -11,6 +12,31 @@ const empty: AutomationSnapshot = { tasks: [], runs: [] }
 const directories = { listWorkspaces: async () => [], chooseDirectory: async () => null,
   listModels: async () => ({ default: { provider: 'mock', model: 'mock' }, routableProviders: ['mock'],
     groups: [{ id: 'mock', name: '测试模型', models: [{ id: 'mock', name: '模型 A' }, { id: 'other', name: '模型 B' }] }], failures: [] }) }
+
+it('keeps popover search focused and searchable without an inner focus outline', async () => {
+  const style = document.createElement('style')
+  style.textContent = 'input:focus { outline: 2px solid blue; box-shadow: 0 0 0 2px blue; }\n'
+    + readFileSync('packages/wanwei/automations/src/client/task-editor.css', 'utf8')
+  document.head.append(style)
+  try {
+    render(<AutomationCards api={{ ...directories, call: vi.fn().mockResolvedValue(empty),
+      openSession: vi.fn(), fromTask: vi.fn(),
+      listWorkspaces: async () => [{ title: '资料目录', path: 'C:\\project' }] }} notify={vi.fn()} />)
+    await screen.findByText('尚未配置自动化')
+    fireEvent.click(screen.getByRole('button', { name: '新建' }))
+    for (const [trigger, label] of [['选择工作空间', '搜索工作空间'], ['选择模型', '搜索模型']] as const) {
+      fireEvent.click(screen.getByRole('button', { name: trigger }))
+      const input = screen.getByRole('textbox', { name: label })
+      expect(document.activeElement).toBe(input)
+      expect(getComputedStyle(input).outline).toBe('none')
+      expect(getComputedStyle(input).boxShadow).toBe('none')
+      fireEvent.change(input, { target: { value: '不存在的项目' } })
+      expect(screen.queryByRole('button', { name: trigger === '选择模型' ? '模型 A' : '资料目录' })).toBeNull()
+      fireEvent.keyDown(input, { key: 'Escape' })
+      expect(screen.queryByRole('textbox', { name: label })).toBeNull()
+    }
+  } finally { style.remove() }
+})
 
 it('keeps creation names readable while decorative SVG icons do not enter accessible labels', async () => {
   render(<AutomationCards api={{ ...directories, call: vi.fn().mockResolvedValue(empty),
