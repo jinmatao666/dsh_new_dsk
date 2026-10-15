@@ -3209,7 +3209,7 @@ Source: [`packages/interaction/user-approval/src/index.ts:142`](../packages/inte
 
 ## `@deepseek-ai/dsh-wanwei-automations`
 
-Requires: `connection` · `credentials` · `sessionController` · `sessions` · `agents` · `workspaceRegistry` · `permissionPresets` · `wanweiNetworkPolicy`
+Requires: `connection` · `credentials` · `sessionController` · `sessions` · `agents` · `permissionPresets` · `wanweiNetworkPolicy` · `tools` · `workspaceRegistry`
 
 ```ts config-catalog
 /** Deployment limits and local storage location. */
@@ -3222,8 +3222,12 @@ export interface Config {
   tickMs: number
   /** Maximum due-slot lateness before skipping, in milliseconds. */
   lateToleranceMs: number
-  /** Execution timeout, including approval waits, in milliseconds. */
+  /** Execution timeout, including approval waits, in milliseconds; defaults to one hour. */
   runTimeoutMs: number
+  /** Optional document parser override; otherwise uses the desktop's DSH_DOCUMENT_TOOL. */
+  documentTool?: string
+  /** Per-file format parser timeout, in milliseconds. */
+  outputCheckTimeoutMs: number
   /** Maximum saved tasks per account. */
   maxTasks: number
   /** Maximum retained completed execution records. */

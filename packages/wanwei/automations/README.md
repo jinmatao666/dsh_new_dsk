@@ -41,9 +41,15 @@ Editor popovers retain an explicit link to their mounted trigger when rendered u
 
 Empty task and run-record prompts are vertically centered in the remaining content area below the filters and table headings as the window resizes.
 
-Execution Sessions are durably archived before prompting and remain accessible from run records, not the sidebar or its search. Startup archives Sessions referenced by retained records; missing Sessions are skipped, while storage failures reject startup. Execution uses the configured working directory without registering a new Workspace. History filters reserve space between their labels and chevrons.
+Each execution Session attaches to the selected Workspace and appears in its sidebar group as well as run records. A local folder is registered as a Workspace when execution starts. Startup does not archive Sessions; existing manually or previously archived Sessions remain archived. History filters reserve space between their labels and chevrons.
 
-Task and record search expand in the header without adding a row; Escape clears and closes search. Ledger columns stay left-aligned and single-line, with truncated task names and horizontal scrolling on narrow windows. Clicking a linked row or pressing Enter/Space opens its Session. The delete icon requests confirmation and removes only a completed, failed or interrupted record owned by the current account; tasks, Sessions and files remain. Running records cannot be deleted because they prevent overlapping executions.
+Every task receives generic prerequisite, scope and result-checking instructions plus a bounded top-level directory inventory. An empty directory is evidence, not an automatic failure: the model determines whether the task needs input files. Missing necessary inputs are reported as waiting; other unfinished work is incomplete. The model is instructed not to search unrelated directories or guess temporary paths. Full access remains full access; these instructions are not an OS filesystem restriction.
+
+The Session-scoped automation_checkpoint tool saves prerequisite findings, stage summaries, real paths and next steps in the locked run ledger and Session log. Run records expose the latest progress. Completed Agent turns without a completed checkpoint are incomplete, not successful. File-producing tasks cannot drop their declared output requirement or complete without files. The Host checks canonical output paths inside the Workspace, regular nonempty readable files, and uses the desktop document helper to open DOCX, PDF and XLSX files; a missing parser fails verification. Other formats receive the basic file check, while semantic accuracy remains outside this guarantee. documentTool overrides DSH_DOCUMENT_TOOL; outputCheckTimeoutMs defaults to 60000 per file.
+
+Open an interrupted or timed-out run's original Session to continue from its saved progress and process files. This is manual continuation, not automatic replay or a new scheduled run; continuing does not rewrite the original run's terminal status. Process files remain in the Workspace and are excluded from the final delivery list by the task instructions.
+
+Task and record search expand in the header without adding a row; Escape clears and closes search. Ledger columns stay left-aligned and single-line, with truncated task names and horizontal scrolling on narrow windows. Clicking a linked row or pressing Enter/Space opens its Session. The delete icon requests confirmation and removes only a non-running record owned by the current account; tasks, Sessions and files remain. Running records cannot be deleted because they prevent overlapping executions.
 
 The default task file is automations.json inside the Harness home. Reads are account-filtered; mutations use a file lock and atomic replacement. Invalid storage causes an explicit error instead of resetting tasks. Stop the desktop before repairing a damaged file or an abandoned sibling lock file; retain a copy before repair.
 
@@ -88,7 +94,7 @@ Each execution starts a fresh Session; this package does not reuse earlier task 
 <a id="known-limitations-and-deferred-work"></a>
 
 - Timezone changes follow the desktop's local clock; the scheduler does not retain a separate task timezone.
-- No cloud execution or missed-slot recovery exists. Logout stops admission; timeout defaults to ten minutes, including waits for task input.
+- No cloud execution or missed-slot recovery exists. Logout stops admission; timeout defaults to sixty minutes, including waits for task input. Stop remains available, and timeout records preserve progress with an explicit timeout reason.
 - Records retain Session links, not independent artifact copies. Task deletion does not delete Sessions or working files.
 - Account isolation uses the local login username; separate deployments require separate Harness homes.
 - Real-model and native UOS/macOS/Windows acceptance remain deployment checks; automated integration tests script the external model response.

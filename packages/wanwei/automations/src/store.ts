@@ -40,8 +40,13 @@ const runSchema = z.object({
   id: z.string().min(1), owner: z.string().min(1), pid: z.number().int().positive(),
   taskId: z.string(), taskName: z.string(), startedAt: z.number().int().nonnegative(),
   endedAt: z.number().int().nonnegative().optional(),
-  status: z.enum(['running', 'success', 'failed', 'interrupted']),
+  status: z.enum(['running', 'success', 'failed', 'interrupted', 'waiting', 'incomplete']),
   trigger: z.enum(['scheduled', 'manual']), sessionId: z.string().optional(), error: z.string().optional(),
+  checkpoint: z.object({
+    stage: z.enum(['preflight', 'progress', 'completed', 'waiting', 'incomplete']),
+    summary: z.string().min(1).max(8000), nextSteps: z.array(z.string().max(2000)).max(50),
+    files: z.array(z.string()).max(128), producesFiles: z.boolean(), updatedAt: z.number().int().nonnegative(),
+  }).strict().optional(),
 }).strict()
 const documentSchema = z.object({ version: z.literal(1), tasks: z.array(taskSchema), runs: z.array(runSchema) }).strict()
 /** Versioned local document with explicit account and process ownership. */

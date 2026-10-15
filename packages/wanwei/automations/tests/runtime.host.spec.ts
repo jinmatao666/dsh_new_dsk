@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -14,7 +14,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { SessionTitleService } from '@deepseek-ai/dsh-session-title'
 import PermissionPresets from '@deepseek-ai/dsh-permission-presets'
 import { expect, it, vi } from 'vitest'
-import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
+import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import { createSessionTestController } from '../../../api/session-controller/tests/test-remote.ts'
 import * as Automations from '../src/index.ts'
 import { AutomationStore } from '../src/store.ts'
@@ -34,15 +34,32 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
+    await writeFile(join(dir, 'final.txt'), 'actual delivered result')
+    const report = (label: string) => [
+      toolCallResponse(`${label}-preflight`, 'automation_checkpoint', { stage: 'preflight', summary: '检查完成，本任务仅需文字回答', nextSteps: ['回答'], files: [], producesFiles: false }),
+      toolCallResponse(`${label}-completed`, 'automation_checkpoint', { stage: 'completed', summary: label, nextSteps: [], files: [], producesFiles: false }),
+      textResponse(label),
+    ]
     const adapter = new MockAdapter([
-      textResponse('真实执行链路结果'), textResponse('定时执行结果'), 'hang', textResponse('单次完成'), textResponse('手动单次完成'),
+      ...report('真实执行链路结果'), ...report('定时执行结果'),
+      toolCallResponse('long-preflight', 'automation_checkpoint', { stage: 'preflight', summary: '必要条件已核对', nextSteps: ['阶段一'], files: [], producesFiles: false }),
+      toolCallResponse('long-progress', 'automation_checkpoint', { stage: 'progress', summary: '阶段一已完成', nextSteps: ['阶段二'], files: [], producesFiles: false }),
+      'hang', ...report('单次完成'), ...report('手动单次完成'),
+      toolCallResponse('missing-input', 'automation_checkpoint', { stage: 'waiting', summary: '缺少任务所需的资料', nextSteps: ['请用户补充资料'], files: [], producesFiles: true }),
+      textResponse('缺少输入，未生成文件'), textResponse('没有提交核验记录'),
+      toolCallResponse('premature-complete', 'automation_checkpoint', { stage: 'completed', summary: '错误完成声明', nextSteps: [], files: [], producesFiles: true }),
+      toolCallResponse('file-preflight', 'automation_checkpoint', { stage: 'preflight', summary: '需要最终文件', nextSteps: ['核验文件'], files: [], producesFiles: true }),
+      toolCallResponse('missing-file', 'automation_checkpoint', { stage: 'completed', summary: '不能确认不存在的文件', nextSteps: [], files: ['missing.txt'], producesFiles: true }),
+      toolCallResponse('valid-file', 'automation_checkpoint', { stage: 'completed', summary: '已读取 final.txt 验证内容', nextSteps: [], files: ['final.txt'], producesFiles: true }),
+      textResponse('交付已核验的文件'),
     ])
     ctx.llm.registerAdapter(['mock'], adapter)
     new SessionTitleService(ctx, { fallbackMaxWords: 10, fallbackMaxBytes: 120, maxTitleBytes: 200 })
-    const workspace = { id: 'test-workspace', path: dir, attachSession: async () => {} }
-    const archived = new Set<string>()
+    const attached: string[] = []
+    const workspace = { id: 'test-workspace', path: dir, attachSession: async (id: string) => { attached.push(id) } }
+    const archiveSession = vi.fn()
     ctx.provide('workspaceRegistry', { create: async () => workspace, get: () => workspace, list: () => [],
-      archiveSession: async (id: string) => { archived.add(id) },
+      archiveSession,
     } as never)
     ctx.provide('credentials', { resolve: async (ref: string) => authenticated ? {
       value: ref === 'DSH_LOGIN_USERNAME' ? 'account-a' : 'test-token',
@@ -63,7 +80,7 @@ it('loads the plugin, persists a task, executes a real Session and records its c
         pid: process.pid, status: 'failed', startedAt: 1, endedAt: 2, trigger: 'manual', sessionId: historical.id })
     })
     const config = join(dir, 'cordis.yml')
-    await writeFile(config, '- name: automations\n  config:\n    runTimeoutMs: 1000\n    dataFile: ' + JSON.stringify(join(dir, 'tasks.json')) + '\n')
+    await writeFile(config, '- name: automations\n  config:\n    runTimeoutMs: 10000\n    dataFile: ' + JSON.stringify(join(dir, 'tasks.json')) + '\n')
     ctx.baseUrl = pathToFileURL(dir).href + '/'
     await ctx.plugin(Loader)
     ctx.loader.builtins.include = Include
@@ -74,7 +91,7 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(config).href } })
     await ctx.loader.await()
     expect(handler).toBeTypeOf('function')
-    expect(archived.has(historical.id)).toBe(true)
+    expect(archiveSession).not.toHaveBeenCalled()
     const call = async (op: string, payload: unknown): Promise<AutomationSnapshot> => {
       const result = await handler!(op, payload, new AbortController().signal) as ConnectionRpcResult<AutomationSnapshot>
       if (!result.ok) throw new Error(result.error.message)
@@ -85,11 +102,13 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     expect(saved.tasks).toHaveLength(1)
     expect((await new AutomationStore(join(dir, 'tasks.json')).snapshot('account-a')).tasks).toHaveLength(1)
     await call('run', { id: saved.tasks[0]!.id })
-    await expect.poll(async () => (await call('list', {})).runs[0]?.status).toBe('success')
+    await expect.poll(async () => (await call('list', {})).runs[0]).toMatchObject({ status: 'success' })
     const run = (await call('list', {})).runs[0]!
     expect(run.sessionId).toBeTruthy()
-    expect(archived.has(run.sessionId!)).toBe(true)
-    expect(adapter.requests).toHaveLength(1)
+    expect(attached).toContain(run.sessionId)
+    expect(ctx.sessions.get(SessionId(run.sessionId!))?.header.cwd).toBe(dir)
+    expect(archiveSession).not.toHaveBeenCalled()
+    expect(adapter.requests).toHaveLength(3)
     expect(adapter.requests[0]).toMatchObject({ model: 'task-model' })
     expect(saveDefault).not.toHaveBeenCalled()
     expect(setPermission).toHaveBeenCalledWith(ctx.sessions.get(SessionId(run.sessionId!)), 'danger-full-access')
@@ -103,11 +122,12 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     const store = new AutomationStore(join(dir, 'tasks.json'))
     await store.update((state) => { state.tasks[0]!.enabled = true; state.tasks[0]!.nextRunAt = Date.now() - 1 })
     await expect.poll(async () => (await call('list', {})).runs.filter(item => item.status === 'success').length).toBe(2)
-    expect(adapter.requests).toHaveLength(2)
+    expect(adapter.requests).toHaveLength(6)
     expect(setPermission).toHaveBeenCalledTimes(2)
     expect(setPermission.mock.calls.every(([, preset]) => preset === 'danger-full-access')).toBe(true)
     expect((await call('list', {})).runs[0]?.trigger).toBe('scheduled')
-    expect((await call('list', {})).runs.every(item => item.sessionId !== undefined && archived.has(item.sessionId))).toBe(true)
+    expect((await call('list', {})).runs.filter(item => item.id !== 'historical-run')
+      .every(item => item.sessionId !== undefined && attached.includes(item.sessionId))).toBe(true)
     await call('save', { id: saved.tasks[0]!.id, task: { name: '测试任务', prompt: '只回复完成', cwd: dir,
       cadence: 'daily', time: '09:00', enabled: false, fullAccess: false } })
     expect((await call('list', {})).tasks[0]?.model).toBeUndefined()
@@ -116,23 +136,26 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     const running = (await call('list', {})).runs[0]!
     await expect.poll(() => setPermission.mock.calls.at(-1)?.[1]).toBe('workspace-write')
     await expect(call('delete-run', { id: running.id })).rejects.toThrow('执行中的记录暂不可删除')
-    await expect.poll(async () => (await call('list', {})).runs[0]?.status).toBe('failed')
-    expect((await call('list', {})).runs[0]?.error).toContain('超时')
+    await expect.poll(async () => (await call('list', {})).runs[0]?.status, { timeout: 15000 }).toBe('failed')
+    expect((await call('list', {})).runs[0]?.error).toBe('任务执行超过 10 秒，已停止；进度和文件已保留，可打开会话继续处理')
+    const timedRun = (await call('list', {})).runs[0]!
+    expect(timedRun.checkpoint, JSON.stringify(ctx.sessions.get(SessionId(timedRun.sessionId!))?.events
+      .filter(event => event.type === 'tool/result'))).toMatchObject({ summary: '阶段一已完成', nextSteps: ['阶段二'] })
     const now = new Date()
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     await call('save', { id: saved.tasks[0]!.id, task: { name: '单次任务', prompt: '只回复完成', cwd: dir,
       cadence: 'once', startDate: today, time, enabled: false } })
     await store.update((state) => { state.tasks[0]!.enabled = true; state.tasks[0]!.nextRunAt = Date.now() - 1 })
-    await expect.poll(async () => (await call('list', {})).runs[0]?.status).toBe('success')
-    await expect.poll(() => adapter.requests.length).toBe(4)
+    await expect.poll(async () => (await call('list', {})).runs[0]).toMatchObject({ status: 'success' })
+    await expect.poll(() => adapter.requests.length).toBe(12)
     expect((await call('list', {})).tasks[0]).toMatchObject({ enabled: false, nextRunAt: 0 })
     await expect(call('enable', { ids: [saved.tasks[0]!.id], enabled: true })).rejects.toThrow('有效期已结束')
     await call('save', { id: saved.tasks[0]!.id, task: { name: '手动单次任务', prompt: '只回复完成', cwd: dir,
       cadence: 'once', startDate: `${now.getFullYear() + 1}-12-20`, time: '09:00', enabled: true } })
     const previousRuns = (await call('list', {})).runs.length
     await call('run', { id: saved.tasks[0]!.id })
-    await expect.poll(() => adapter.requests.length).toBe(5)
+    await expect.poll(() => adapter.requests.length).toBe(15)
     await expect.poll(async () => (await call('list', {})).runs[0]?.status).toBe('success')
     expect((await call('list', {})).runs).toHaveLength(previousRuns + 1)
     expect((await call('list', {})).tasks[0]).toMatchObject({ enabled: false, nextRunAt: 0 })
@@ -143,6 +166,21 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     expect(removed.tasks).toHaveLength(1)
     expect(ctx.sessions.get(SessionId(run.sessionId!))).toBeDefined()
     expect((await new AutomationStore(join(dir, 'tasks.json')).read()).runs.some(item => item.id === 'other-account-run')).toBe(true)
+    await call('run', { id: saved.tasks[0]!.id })
+    await expect.poll(async () => (await call('list', {})).runs[0]?.status).toBe('waiting')
+    expect((await call('list', {})).runs[0]?.checkpoint).toMatchObject({ stage: 'waiting', nextSteps: ['请用户补充资料'] })
+    await call('run', { id: saved.tasks[0]!.id })
+    await expect.poll(async () => (await call('list', {})).runs[0]?.status).toBe('incomplete')
+    expect((await call('list', {})).runs[0]?.error).toContain('没有提交任务完成')
+    await call('run', { id: saved.tasks[0]!.id })
+    const finalPath = await realpath(join(dir, 'final.txt'))
+    await expect.poll(async () => (await call('list', {})).runs[0]).toMatchObject({ status: 'success',
+      checkpoint: { stage: 'completed', files: [finalPath] } })
+    const verifiedRun = (await call('list', {})).runs[0]!
+    const verificationEvents = ctx.sessions.get(SessionId(verifiedRun.sessionId!))!.events
+    expect(verificationEvents.filter(event => event.type === 'tool/result' && event.data.message.content[0].isError)).toHaveLength(2)
+    expect(archiveSession).not.toHaveBeenCalled()
+    expect(ctx.tools.get('automation_checkpoint')).toBeUndefined()
     authenticated = false
     await expect(call('list', {})).rejects.toThrow('请先登录')
     await ctx.fiber.dispose()
@@ -151,4 +189,10 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     await ctx.fiber.dispose()
     await rm(dir, { recursive: true, force: true })
   }
-}, 15000)
+}, 30000)
+
+it('allows an hour by default while retaining an explicit deployment timeout', () => {
+  // Loader input omits defaults; the schema's callable type describes its resolved output.
+  expect(Automations.Config({} as Automations.Config).runTimeoutMs).toBe(3600000)
+  expect(Automations.Config({ runTimeoutMs: 120000 } as Automations.Config).runTimeoutMs).toBe(120000)
+})

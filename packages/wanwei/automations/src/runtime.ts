@@ -7,8 +7,6 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type {} from '@deepseek-ai/dsh-workspace'
-import { WorkspaceUnknownSessionError } from '@deepseek-ai/dsh-workspace'
-import { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-wanwei-oneapi-auth'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { randomUUID } from 'node:crypto'
@@ -19,6 +17,7 @@ import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { AutomationStore, taskInput } from './store.ts'
 import { advanceSchedule, nextOccurrence } from './schedule.ts'
 import type { AutomationTask, AutomationRun } from './contract.ts'
+import { installRunProtocol, RUN_INSTRUCTIONS, workspaceEvidence, verifyOutputFiles } from './run-protocol.ts'
 
 /** Install persistent CRUD and local due-slot claiming.
  * @param ctx - Host context owning timers and execution intervals.
@@ -26,6 +25,7 @@ import type { AutomationTask, AutomationRun } from './contract.ts'
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
   const store = new AutomationStore(config.dataFile ?? join(resolveDshHome(), 'automations.json'))
+  const outputCheck = { documentTool: config.documentTool ?? process.env.DSH_DOCUMENT_TOOL, timeoutMs: config.outputCheckTimeoutMs }
   const lifetime = new AbortController()
   const active = new Map<string, { promise: Promise<void>; owner: string; agent?: Agent }>()
   const account = async (): Promise<string | undefined> => {
@@ -54,14 +54,6 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       }
     }
   })
-  for (const run of (await store.read()).runs) {
-    if (run.sessionId === undefined) continue
-    try { await ctx.workspaceRegistry.archiveSession(SessionId(run.sessionId)) }
-    catch (error) {
-      // A retained record may outlive a manually removed Session; storage failures remain fatal.
-      if (!(error instanceof WorkspaceUnknownSessionError)) throw error
-    }
-  }
   const finish = async (id: string, status: AutomationRun['status'], error?: string) => {
     await store.update((state) => {
       const run = state.runs.find(item => item.id === id)
@@ -74,17 +66,25 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const execute = async (task: AutomationTask, run: AutomationRun, username: string): Promise<void> => {
     let timer: ReturnType<typeof setTimeout> | undefined
     let timedOut = false
+    const deadline = new AbortController()
+    const runSignal = AbortSignal.any([lifetime.signal, deadline.signal])
+    const runOutputCheck = { ...outputCheck, signal: runSignal }
     const hasTimedOut = (): boolean => timedOut
     let agent: Agent | undefined
+    let removeProtocol: (() => void) | undefined
     try {
-      timer = setTimeout(() => { timedOut = true; agent?.cancel({ kind: 'hook', reason: '定时任务执行超时' }) }, config.runTimeoutMs)
+      timer = setTimeout(() => {
+        timedOut = true; deadline.abort(); agent?.cancel({ kind: 'hook', reason: '定时任务执行超时' })
+      }, config.runTimeoutMs)
       lifetime.signal.throwIfAborted()
       if (await owner() !== username) throw new Error('登录账号已变化，执行已停止')
       if (!(await stat(task.cwd)).isDirectory()) throw new Error('任务工作目录不可用')
       lifetime.signal.throwIfAborted()
-      const created = await ctx.sessionController.create({ cwd: task.cwd })
+      const workspace = await ctx.workspaceRegistry.create(task.cwd)
+      const created = await ctx.sessionController.create({ workspaceId: workspace.id })
       agent = ctx.agents.get(created.sessionId)
       if (agent === undefined) throw new Error('任务会话创建失败')
+      removeProtocol = installRunProtocol(agent, store, run.id, task.cwd, runOutputCheck)
       const tracked = active.get(run.id)
       if (tracked !== undefined) tracked.agent = agent
       lifetime.signal.throwIfAborted()
@@ -93,7 +93,6 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         if (record === undefined) throw new Error('运行记录不存在')
         record.sessionId = created.sessionId
       })
-      await ctx.workspaceRegistry.archiveSession(created.sessionId)
       ctx.permissionPresets.set(agent.session, task.fullAccess === false ? 'workspace-write' : 'danger-full-access')
       if (task.model !== undefined) {
         await ctx.sessionController.selectModel({ sessionId: created.sessionId, ...task.model, saveAsDefault: false })
@@ -104,22 +103,33 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       if (hasTimedOut()) throw new Error('任务初始化超时')
       await ctx.sessionController.prompt({
         sessionId: created.sessionId, requestId: run.id as SessionRequestId, mode: 'queue',
-        content: [{ type: 'text', text: task.prompt }], clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        content: [{ type: 'text', text: `${RUN_INSTRUCTIONS}\n\n${await workspaceEvidence(task.cwd)}\n\n用户任务：\n${task.prompt}` }],
+        clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       }, lifetime.signal)
       // This fresh Session owns the whole interval; idle alone does not prove success.
       await agent.whenIdle()
       await ctx.sessions.flush(agent.session)
       const end = agent.session.events.findLast(event => event.type === 'turn/end')
+      const checkpoint = (await store.read()).runs.find(item => item.id === run.id)?.checkpoint
       if (lifetime.signal.aborted) await finish(run.id, 'interrupted', '自动化插件关闭，执行已停止')
-      else if (hasTimedOut()) await finish(run.id, 'failed', '执行超时；需确认操作的任务请打开会话处理')
-      else if (end?.type === 'turn/end' && end.data.reason.kind === 'completed') await finish(run.id, 'success')
+      else if (hasTimedOut()) await finish(run.id, 'failed', `任务执行超过 ${Math.round(config.runTimeoutMs / 1000)} 秒，已停止；进度和文件已保留，可打开会话继续处理`)
+      else if (end?.type === 'turn/end' && end.data.reason.kind === 'completed') {
+        if (checkpoint?.stage === 'completed') {
+          await verifyOutputFiles(task.cwd, checkpoint.files, runOutputCheck)
+          runSignal.throwIfAborted()
+          await finish(run.id, 'success')
+        } else await finish(run.id, checkpoint?.stage === 'waiting' ? 'waiting' : 'incomplete',
+          checkpoint?.summary ?? '模型已停止，但没有提交任务完成及成果核验记录；请打开会话查看并继续处理')
+      }
       else await finish(run.id, 'failed', end?.type === 'turn/end' && end.data.reason.kind === 'error'
         ? end.data.reason.error.message : `执行未完成：${end?.type === 'turn/end' ? end.data.reason.kind : '没有结束记录'}`)
     } catch (error) {
       agent?.cancel({ kind: 'hook', reason: '定时任务停止' })
       if (agent !== undefined) await agent.whenIdle()
-      await finish(run.id, lifetime.signal.aborted ? 'interrupted' : 'failed', error instanceof Error ? error.message : String(error))
-    } finally { if (timer !== undefined) clearTimeout(timer) }
+      await finish(run.id, lifetime.signal.aborted ? 'interrupted' : 'failed', hasTimedOut()
+        ? '任务执行超时，已停止；进度和文件已保留，可打开会话继续处理'
+        : error instanceof Error ? error.message : String(error))
+    } finally { removeProtocol?.(); if (timer !== undefined) clearTimeout(timer) }
   }
   const launch = (task: AutomationTask, run: AutomationRun, username: string) => {
     const tracked: { promise: Promise<void>; owner: string; agent?: Agent } = { promise: Promise.resolve(), owner: username }

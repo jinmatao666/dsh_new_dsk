@@ -29,10 +29,21 @@ export interface AutomationRun {
   taskName: string
   startedAt: number
   endedAt?: number | undefined
-  status: 'running' | 'success' | 'failed' | 'interrupted'
+  status: 'running' | 'success' | 'failed' | 'interrupted' | 'waiting' | 'incomplete'
   trigger: 'scheduled' | 'manual'
   sessionId?: string | undefined
   error?: string | undefined
+  /** Latest committed progress; retained for continuation in the original Session. */
+  checkpoint?: AutomationCheckpoint | undefined
+}
+/** Model-reported progress; completed file paths are independently checked by the Host. */
+export interface AutomationCheckpoint {
+  stage: 'preflight' | 'progress' | 'completed' | 'waiting' | 'incomplete'
+  summary: string
+  nextSteps: string[]
+  files: string[]
+  producesFiles: boolean
+  updatedAt: number
 }
 /** Account-filtered committed state; no sample tasks are supplied. */
 export interface AutomationSnapshot {
