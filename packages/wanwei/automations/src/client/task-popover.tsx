@@ -1,10 +1,10 @@
 /** Editor-owned top-layer panels; clipping ancestors never crop their contents. */
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 /** Anchor a keyboard-dismissable panel above a task-editor control.
  * @param props - Local panel state, accessible trigger and panel content.
- * @returns Trigger and viewport-clamped body portal.
+ * @returns Trigger and viewport-clamped body portal linked to its owner for feature navigation.
  */
 export function TaskPopover({ open, close, trigger, label, className = '', align = 'start', children }: {
   open: boolean
@@ -15,6 +15,7 @@ export function TaskPopover({ open, close, trigger, label, className = '', align
   align?: 'start' | 'end'
   children: ReactNode
 }) {
+  const ownerId = useId()
   const anchor = useRef<HTMLSpanElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState<CSSProperties>({ visibility: 'hidden' })
@@ -45,8 +46,9 @@ export function TaskPopover({ open, close, trigger, label, className = '', align
     document.addEventListener('pointerdown', dismiss)
     return () => { document.removeEventListener('pointerdown', dismiss) }
   }, [open, close])
-  return <span className="automation-popover-anchor" ref={anchor}>{trigger}{open && createPortal(
+  return <span id={ownerId} className="automation-popover-anchor" ref={anchor}>{trigger}{open && createPortal(
     <div ref={panel} className={`automation-editor-popover ${className}`} style={position} role="dialog" aria-label={label}
+      data-dsh-select-owner={ownerId}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault(); event.stopPropagation(); close(); anchor.current?.querySelector('button')?.focus()

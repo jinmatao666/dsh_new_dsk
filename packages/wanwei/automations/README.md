@@ -37,6 +37,8 @@ The editor's upward-opening Workspace menu uses the same folder icon as the conv
 
 Repeat, time and validity controls open above three equally sized fields. Supported recurrences are interval, once, daily, workdays, weekly, biweekly, monthly and yearly; saved Friday schedules remain supported. Intervals use positive whole minutes from the selected start date and time. Weekly and biweekly schedules retain the anchor weekday; monthly and yearly schedules retain the anchor day, clamping missing days to month end. Validity uses local calendar dates with an inclusive end date. A completed one-shot or exhausted validity range pauses automatically; enabling an exhausted schedule requires editing its dates. Public holidays are not interpreted.
 
+Editor popovers retain an explicit link to their mounted trigger when rendered under the document body. Choosing a model, Workspace, permission, recurrence, time or date therefore keeps the feature page and draft open. Escape dismisses the popover; outside navigation and the page's Back control retain their normal closing behavior.
+
 Empty task and run-record prompts are vertically centered in the remaining content area below the filters and table headings as the window resizes.
 
 Execution Sessions are durably archived before prompting and remain accessible from run records, not the sidebar or its search. Startup archives Sessions referenced by retained records; missing Sessions are skipped, while storage failures reject startup. Execution uses the configured working directory without registering a new Workspace. History filters reserve space between their labels and chevrons.
