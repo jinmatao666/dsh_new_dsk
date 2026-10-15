@@ -190,6 +190,41 @@ it('saves the real task through RPC and does not publish a failed write', async 
   expect(screen.getByRole('dialog')).toBeTruthy()
 })
 
+it('selects and saves a concrete initial model instead of a default-model placeholder', async () => {
+  const call = vi.fn().mockResolvedValue(empty)
+  render(<AutomationCards api={{ ...directories, call, openSession: vi.fn(), fromTask: vi.fn(),
+    listWorkspaces: async () => [{ title: '资料', path: 'C:\\work' }] }} notify={vi.fn()} />)
+  await screen.findByText('尚未配置自动化')
+  fireEvent.click(screen.getByRole('button', { name: '新建' }))
+  await waitFor(() => { expect(screen.getByRole('button', { name: '选择模型' }).textContent).toBe('模型 A') })
+  fireEvent.click(screen.getByRole('button', { name: '选择模型' }))
+  expect(screen.queryByRole('button', { name: '默认模型' })).toBeNull()
+  expect(screen.getByRole('button', { name: '模型 A', pressed: true }).querySelector('svg')).not.toBeNull()
+  expect(screen.getByRole('button', { name: '模型 B', pressed: false })).toBeTruthy()
+  fireEvent.keyDown(screen.getByRole('textbox', { name: '搜索模型' }), { key: 'Escape' })
+  fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '检查' } })
+  fireEvent.change(screen.getByLabelText('任务说明'), { target: { value: '检查资料' } })
+  expect(screen.getByRole('button', { name: '确定' }).hasAttribute('disabled')).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: '选择工作空间' }))
+  fireEvent.click(await screen.findByRole('button', { name: '资料' }))
+  expect(screen.getByRole('button', { name: '确定' }).hasAttribute('disabled')).toBe(false)
+  fireEvent.click(screen.getByRole('button', { name: '确定' }))
+  await waitFor(() => { expect(call.mock.calls[1]?.[0]).toBe('save') })
+  expect(call.mock.calls[1]?.[1]).toMatchObject({ task: { model: { provider: 'mock', model: 'mock' } } })
+})
+
+it('retains an existing task model when the current default differs', async () => {
+  const snapshot: AutomationSnapshot = { tasks: [{ id: 'saved', name: '已配置任务', prompt: '检查',
+    cwd: 'C:\\work', cadence: 'daily', time: '09:00', enabled: true, nextRunAt: 0,
+    model: { provider: 'mock', model: 'other' } }], runs: [] }
+  render(<AutomationCards api={{ ...directories, call: vi.fn().mockResolvedValue(snapshot),
+    openSession: vi.fn(), fromTask: vi.fn() }} notify={vi.fn()} />)
+  fireEvent.click(await screen.findByRole('button', { name: '已配置任务' }))
+  fireEvent.click(screen.getByRole('button', { name: '选择模型' }))
+  expect(await screen.findByRole('button', { name: '模型 B', pressed: true })).toBeTruthy()
+  expect(screen.getByRole('button', { name: '模型 A', pressed: false })).toBeTruthy()
+})
+
 it('saves model, permission and recurrence choices without changing the active conversation', async () => {
   const call = vi.fn().mockResolvedValue(empty)
   const openSession = vi.fn()
@@ -200,6 +235,11 @@ it('saves model, permission and recurrence choices without changing the active c
   fireEvent.change(screen.getByLabelText('任务说明'), { target: { value: '检查资料' } })
   fireEvent.click(screen.getByRole('button', { name: '选择模型' }))
   fireEvent.click(await screen.findByRole('button', { name: '模型 B' }))
+  expect(screen.getByRole('button', { name: '选择模型' }).textContent).toBe('模型 B')
+  fireEvent.click(screen.getByRole('button', { name: '选择模型' }))
+  expect(screen.getByRole('button', { name: '模型 B', pressed: true })).toBeTruthy()
+  expect(screen.getByRole('button', { name: '模型 A', pressed: false })).toBeTruthy()
+  fireEvent.keyDown(screen.getByRole('textbox', { name: '搜索模型' }), { key: 'Escape' })
   fireEvent.click(screen.getByRole('button', { name: '允许完全访问' }))
   const permission = screen.getByRole('switch', { name: '允许完全访问' })
   expect(permission.getAttribute('aria-checked')).toBe('true')

@@ -39,7 +39,15 @@ export function TaskEditor({ draft, change, api, error, titleId, close, save }: 
     void api.listWorkspaces().then((items) => { if (active.current) setWorkspaces(items) }).catch((failure: unknown) => {
       if (active.current) setSelectorError(String(failure))
     })
-    void api.listModels().then((value) => { if (active.current) setCatalog(value) }).catch((failure: unknown) => {
+    void api.listModels().then((value) => {
+      if (!active.current) return
+      setCatalog(value)
+      if (!current.current.model) {
+        const next = { ...current.current, model: value.default }
+        current.current = next
+        change(next)
+      }
+    }).catch((failure: unknown) => {
       if (active.current) { setSelectorError(String(failure)); setModelFailed(true) }
     })
     return () => { active.current = false }
@@ -58,7 +66,7 @@ export function TaskEditor({ draft, change, api, error, titleId, close, save }: 
   const selected = workspaces.find(item => item.path === draft.cwd)
   const modelGroup = catalog?.groups.find(group => group.id === draft.model?.provider)
   const modelName = modelGroup?.models.find(model => model.id === draft.model?.model)?.name
-    ?? draft.model?.model ?? text('默认模型')
+    ?? draft.model?.model ?? text('选择模型')
   const fullAccess = draft.fullAccess !== false
   const cadenceOptions: AutomationTask['cadence'][] = ['interval', 'once', 'daily', 'workdays', 'weekly', 'biweekly', 'monthly', 'yearly']
   const invalidRange = draft.endDate !== undefined && draft.endDate < (draft.startDate ?? today)
@@ -76,10 +84,10 @@ export function TaskEditor({ draft, change, api, error, titleId, close, save }: 
       <div className="automation-prompt-tools"><TaskPopover open={panel === 'model'} close={collapse} label={text('选择模型')} className="automation-model-menu"
         trigger={<button type="button" className="automation-editor-trigger" aria-label={text('选择模型')} aria-expanded={panel === 'model'} onClick={() => { toggle('model') }}><span>{modelName}</span><IconChevronDownOutline14 /></button>}>
         <label className="automation-editor-search"><IconSearchOutline16 /><input autoFocus aria-label={text('搜索模型')} placeholder={text('搜索模型')} value={modelQuery} onChange={(event) => { setModelQuery(event.target.value) }} /></label>
-        <div className="automation-editor-options"><button type="button" onClick={() => { const { model: _model, ...rest } = draft; change(rest); collapse() }}>{text('默认模型')}{!draft.model && <IconCheckOutline16 />}</button>
+        <div className="automation-editor-options">
           {catalog === null && !modelFailed && <small>{text('正在加载模型')}</small>}
           {catalog?.groups.map(group => <section key={group.id}><small>{group.name}</small>{group.models.filter(model => `${model.name} ${model.id}`.toLowerCase().includes(modelQuery.toLowerCase())).map(model =>
-            <button type="button" key={model.id} onClick={() => { change({ ...draft, model: { provider: group.id, model: model.id } }); collapse() }}><span>{model.name}</span>{draft.model?.provider === group.id && draft.model.model === model.id && <IconCheckOutline16 />}</button>)}</section>)}
+            <button type="button" key={model.id} aria-pressed={draft.model?.provider === group.id && draft.model.model === model.id} onClick={() => { change({ ...draft, model: { provider: group.id, model: model.id } }); collapse() }}><span>{model.name}</span>{draft.model?.provider === group.id && draft.model.model === model.id && <IconCheckOutline16 />}</button>)}</section>)}
           {catalog?.failures.map(failure => <p role="status" key={failure.id}>{failure.name}: {failure.message}</p>)}
         </div>
       </TaskPopover></div>
@@ -118,6 +126,6 @@ export function TaskEditor({ draft, change, api, error, titleId, close, save }: 
     {draft.cadence === 'interval' && <label className="automation-interval-field">{text('间隔分钟')}<input type="number" min={1} max={525600} required value={draft.intervalMinutes ?? 60} onChange={(event) => { change({ ...draft, intervalMinutes: event.target.valueAsNumber }) }} /></label>}
     {invalidRange && <p role="alert" className="automation-error">{text('结束日期不能早于开始日期')}</p>}
     {(selectorError || error) && <p role="alert" className="automation-error">{selectorError || error}</p>}
-    <footer><button type="button" onClick={close}>{text('取消')}</button><button type="submit" disabled={picking || invalidRange || !draft.name.trim() || !draft.prompt.trim() || !draft.cwd.trim()}>{text('确定')}</button></footer>
+    <footer><button type="button" onClick={close}>{text('取消')}</button><button type="submit" disabled={picking || invalidRange || !draft.name.trim() || !draft.prompt.trim() || !draft.cwd.trim() || !draft.model}>{text('确定')}</button></footer>
   </form></div>
 }

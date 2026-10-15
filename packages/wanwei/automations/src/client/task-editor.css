@@ -27,7 +27,7 @@
 .automation-task-editor > footer { margin-top: 54px; gap: 12px; }
 .automation-task-editor > footer button { min-width: 84px; height: 40px; padding: 0 20px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 9px; font-size: 14px; }
 .automation-task-editor > footer button[type='submit'] { background: var(--dsw-alias-primary, #2563eb); border-color: transparent; color: #fff; }
-.automation-task-editor > footer button[type='submit']:disabled { background: var(--dsw-alias-border-l2); box-shadow: none; }
+.automation-task-editor > footer button[type='submit']:disabled { background: var(--dsw-alias-interactive-bg-hover, #f0f0f0); color: var(--dsw-alias-label-secondary, #60646c); opacity: 1; cursor: not-allowed; box-shadow: none; }
 .automation-task-editor > footer button[type='submit']:hover:not(:disabled) { background: var(--dsw-alias-primary, #2563eb); box-shadow: none; }
 
 .automation-editor-popover { position: fixed; z-index: 10000; box-sizing: border-box; width: 300px; max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 18px; background: var(--dsw-alias-bg-base, #fff); color: var(--dsw-alias-label-primary, #222); box-shadow: 0 12px 36px rgb(0 0 0 / 9%); font: inherit; font-size: 14px; }
