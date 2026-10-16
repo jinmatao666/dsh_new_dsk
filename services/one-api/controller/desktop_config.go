@@ -1,0 +1,114 @@
+package controller
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/songquanpeng/one-api/common/config"
+)
+
+type desktopFeatureFlags struct {
+	Automations bool `json:"automations"`
+	Connectors  bool `json:"connectors"`
+}
+
+type desktopDeploymentSettings struct {
+	Edition  string                         `json:"edition"`
+	Network  string                         `json:"network"`
+	Operator string                         `json:"operator"`
+	Phone    string                         `json:"phone"`
+	Features map[string]desktopFeatureFlags `json:"features"`
+	Plugins  desktopPluginSettings          `json:"plugins"`
+}
+
+type desktopPluginSettings struct {
+	BrowserAssistant bool `json:"browserAssistant"`
+}
+
+// Existing deployment records without feature settings retain their current behavior.
+func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, error) {
+	settings := desktopDeploymentSettings{Network: "internet", Edition: "operations", Plugins: desktopPluginSettings{BrowserAssistant: true}, Features: map[string]desktopFeatureFlags{
+		"internet": {Automations: true, Connectors: true},
+		"intranet": {Automations: true, Connectors: false},
+	}}
+	if raw == "" {
+		return settings, nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		return settings, err
+	}
+	var mode interface{}
+	if err := json.Unmarshal(fields["network"], &mode); err != nil {
+		return settings, err
+	}
+	if mode != "internet" && mode != "intranet" {
+		return settings, fmt.Errorf("invalid network")
+	}
+	if field, present := fields["edition"]; present {
+		var edition interface{}
+		if err := json.Unmarshal(field, &edition); err != nil {
+			return settings, err
+		}
+		if edition != "government" && edition != "operations" {
+			return settings, fmt.Errorf("invalid edition")
+		}
+	}
+	for _, key := range []string{"operator", "phone"} {
+		if field, present := fields[key]; present {
+			var value interface{}
+			if err := json.Unmarshal(field, &value); err != nil {
+				return settings, err
+			}
+			if _, ok := value.(string); !ok {
+				return settings, fmt.Errorf("invalid contact: %s", key)
+			}
+		}
+	}
+	if features, present := fields["features"]; present {
+		var environments map[string]map[string]interface{}
+		if err := json.Unmarshal(features, &environments); err != nil {
+			return settings, err
+		}
+		for _, mode := range []string{"internet", "intranet"} {
+			for _, feature := range []string{"automations", "connectors"} {
+				if _, ok := environments[mode][feature].(bool); !ok {
+					return settings, fmt.Errorf("invalid feature setting: %s.%s", mode, feature)
+				}
+			}
+		}
+	}
+	if plugins, present := fields["plugins"]; present {
+		var flags map[string]interface{}
+		if err := json.Unmarshal(plugins, &flags); err != nil {
+			return settings, err
+		}
+		if _, ok := flags["browserAssistant"].(bool); !ok {
+			return settings, fmt.Errorf("invalid plugin setting: browserAssistant")
+		}
+	}
+	if err := json.Unmarshal([]byte(raw), &settings); err != nil {
+		return settings, err
+	}
+	settings.Features = map[string]desktopFeatureFlags{"internet": settings.Features["internet"], "intranet": settings.Features["intranet"]}
+	if settings.Network != "internet" && settings.Network != "intranet" {
+		return settings, fmt.Errorf("invalid network")
+	}
+	return settings, nil
+}
+
+// GetDesktopConfig exposes deployment mode, entry visibility and the support contact before login.
+func GetDesktopConfig(c *gin.Context) {
+	config.OptionMapRWMutex.RLock()
+	raw := config.OptionMap["SystemDeploymentSettings"]
+	config.OptionMapRWMutex.RUnlock()
+	settings, err := parseDesktopDeploymentSettings(raw)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "系统部署配置无效，请联系管理员"})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": settings})
+}

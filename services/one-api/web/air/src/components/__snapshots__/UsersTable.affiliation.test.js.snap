@@ -1,0 +1,17 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`shows unit and department even with stored old columns, hides billing columns 1`] = `
+Object {
+  "headings": Array [
+    "ID",
+    "用户名",
+    "所属单位",
+    "所属部门",
+    "",
+  ],
+  "rows": Array [
+    "tester单位甲部门甲",
+    "empty——",
+  ],
+}
+`;

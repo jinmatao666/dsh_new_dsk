@@ -1,0 +1,270 @@
+﻿param(
+    [Parameter(Mandatory = $true)][Alias('GeoJsonFile')][string]$InputPath,
+    [Parameter(Mandatory = $true)][string]$OutputDirectory,
+    [string]$YfxFieldName = '',
+    [string]$BaseUrl = ''
+)
+
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+function Add-GeoJsonRings($node, [System.Collections.Generic.List[object]]$target) {
+    if ($null -eq $node) { return }
+    if ($node.type -eq 'FeatureCollection') { foreach ($feature in $node.features) { Add-GeoJsonRings $feature $target }; return }
+    if ($node.type -eq 'Feature') { Add-GeoJsonRings $node.geometry $target; return }
+    if ($node.type -eq 'Polygon') { foreach ($ring in $node.coordinates) { [void]$target.Add($ring) }; return }
+    if ($node.type -eq 'MultiPolygon') { foreach ($polygon in $node.coordinates) { foreach ($ring in $polygon) { [void]$target.Add($ring) } }; return }
+}
+
+function Get-Int32BigEndian([byte[]]$bytes, [int]$offset) {
+    $first = [int]$bytes[$offset]
+    $second = [int]$bytes[($offset + 1)]
+    $third = [int]$bytes[($offset + 2)]
+    $fourth = [int]$bytes[($offset + 3)]
+    return (($first -shl 24) -bor ($second -shl 16) -bor ($third -shl 8) -bor $fourth)
+}
+
+function Read-ShapefileRings([string]$shapePath) {
+    $bytes = [System.IO.File]::ReadAllBytes($shapePath)
+    if ($bytes.Length -lt 100) { throw "Shape 文件长度不足： $shapePath" }
+    $rings = [System.Collections.Generic.List[object]]::new()
+    $featureCount = 0
+    $offset = 100
+    while ($offset + 12 -le $bytes.Length) {
+        $length = (Get-Int32BigEndian $bytes ($offset + 4)) * 2
+        $content = $offset + 8
+        if ($length -lt 4 -or $content + $length -gt $bytes.Length) { throw "Shape 记录无效： $shapePath" }
+        $shapeType = [BitConverter]::ToInt32($bytes, $content)
+        if ($shapeType -in @(5, 15, 25)) {
+            if ($length -lt 44) { throw "面记录无效： $shapePath" }
+            $partCount = [BitConverter]::ToInt32($bytes, $content + 36)
+            $pointCount = [BitConverter]::ToInt32($bytes, $content + 40)
+            if ($partCount -lt 1 -or $pointCount -lt 4) { throw "Shape 面没有可用边界环： $shapePath" }
+            $partsOffset = $content + 44
+            $pointsOffset = $partsOffset + (4 * $partCount)
+            if ($pointsOffset + (16 * $pointCount) -gt $content + $length) { throw "Shape 面坐标超出记录长度： $shapePath" }
+            $parts = for ($index = 0; $index -lt $partCount; $index++) { [BitConverter]::ToInt32($bytes, $partsOffset + (4 * $index)) }
+            for ($partIndex = 0; $partIndex -lt $partCount; $partIndex++) {
+                $start = $parts[$partIndex]
+                $end = if ($partIndex + 1 -lt $partCount) { $parts[$partIndex + 1] } else { $pointCount }
+                if ($start -lt 0 -or $end -gt $pointCount -or $end - $start -lt 4) { throw "Shape 面存在无效边界环： $shapePath" }
+                $ring = [System.Collections.Generic.List[object]]::new()
+                for ($pointIndex = $start; $pointIndex -lt $end; $pointIndex++) {
+                    $pointOffset = $pointsOffset + (16 * $pointIndex)
+                    [void]$ring.Add(@([BitConverter]::ToDouble($bytes, $pointOffset), [BitConverter]::ToDouble($bytes, $pointOffset + 8)))
+                }
+                [void]$rings.Add($ring.ToArray())
+            }
+            $featureCount++
+        } elseif ($shapeType -ne 0) { throw "仅支持面类型 Shape；当前类型为 $shapeType，文件： $shapePath" }
+        $offset = $content + $length
+    }
+    if ($rings.Count -eq 0) { throw "Shape 文件不包含面几何： $shapePath" }
+    return [PSCustomObject]@{ Rings = $rings.ToArray(); FeatureCount = $featureCount }
+}
+
+function Read-DbfFields([string]$dbfPath) {
+    $bytes = [System.IO.File]::ReadAllBytes($dbfPath)
+    if ($bytes.Length -lt 33) { throw "DBF 文件长度不足： $dbfPath" }
+    $headerLength = [BitConverter]::ToInt16($bytes, 8)
+    $names = [System.Collections.Generic.List[string]]::new()
+    for ($offset = 32; $offset + 32 -le $headerLength; $offset += 32) {
+        if ($bytes[$offset] -eq 13) { break }
+        $nameBytes = $bytes[$offset..($offset + 10)] | Where-Object { $_ -ne 0 }
+        $name = [System.Text.Encoding]::ASCII.GetString([byte[]]$nameBytes).Trim()
+        if ($name) { [void]$names.Add($name) }
+    }
+    return $names.ToArray()
+}
+
+function Get-ShapeSource([string]$path) {
+    $source = [System.IO.Path]::GetFullPath($path)
+    $temporary = $null
+    if ([System.IO.Path]::GetExtension($source).ToLowerInvariant() -eq '.zip') {
+        if (-not [System.IO.File]::Exists($source)) { throw "Shape ZIP 文件不存在： $source" }
+        $temporary = Join-Path ([System.IO.Path]::GetTempPath()) ("dsh-gis-" + [guid]::NewGuid().ToString('N'))
+        [System.IO.Directory]::CreateDirectory($temporary) | Out-Null
+        $archive = [System.IO.Compression.ZipFile]::OpenRead($source)
+        try {
+            foreach ($entry in $archive.Entries) {
+                $name = $entry.FullName.Replace('\', '/')
+                if ($name.StartsWith('/') -or $name.Contains('../') -or $name.Contains(':')) { throw "ZIP 包含不安全路径： $($entry.FullName)" }
+            }
+        } finally { $archive.Dispose() }
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($source, $temporary)
+        $root = $temporary
+    } elseif ([System.IO.Directory]::Exists($source)) {
+        $root = $source
+    } elseif ([System.IO.Path]::GetExtension($source).ToLowerInvariant() -eq '.shp' -and [System.IO.File]::Exists($source)) {
+        $root = Split-Path -Parent $source
+    } else { throw "请提供 GeoJSON、面类型 .shp、Shape ZIP 或文件夹： $source" }
+    $shapes = Get-ChildItem -LiteralPath $root -Filter '*.shp' -File -Recurse
+    if ($shapes.Count -ne 1) { throw "数据源必须包含且仅包含一个 .shp 文件；当前找到 $($shapes.Count) 个。" }
+    $shape = $shapes[0]
+    $base = [System.IO.Path]::Combine($shape.DirectoryName, [System.IO.Path]::GetFileNameWithoutExtension($shape.Name))
+    foreach ($extension in @('.shx', '.dbf')) { if (-not [System.IO.File]::Exists("$base$extension")) { throw "Shape 数据缺少与 $($shape.Name) 同名的 $extension 文件" } }
+    $geometry = Read-ShapefileRings $shape.FullName
+    $prjPath = "$base.prj"
+    return [PSCustomObject]@{
+        SourcePath = $source; SourceKind = if ($temporary) { '空间矢量数据压缩包' } elseif ([System.IO.Directory]::Exists($source)) { '空间矢量数据文件夹' } else { '空间矢量数据文件' }
+        Rings = $geometry.Rings; FeatureCount = $geometry.FeatureCount; CoordinateSystem = if ([System.IO.File]::Exists($prjPath)) { [System.IO.File]::ReadAllText($prjPath).Trim() } else { '未提供 .prj 坐标系文件' }
+        AttributeFields = Read-DbfFields "$base.dbf"; TemporaryDirectory = $temporary
+    }
+}
+
+function Resolve-Input([string]$path) {
+    $source = [System.IO.Path]::GetFullPath($path)
+    $extension = [System.IO.Path]::GetExtension($source).ToLowerInvariant()
+    if ($extension -in @('.geojson', '.json')) {
+        if (-not [System.IO.File]::Exists($source)) { throw "GeoJSON 文件不存在： $source" }
+        $geoJson = Get-Content -LiteralPath $source -Raw -Encoding UTF8 | ConvertFrom-Json
+        $rings = [System.Collections.Generic.List[object]]::new()
+        Add-GeoJsonRings $geoJson $rings
+        if ($rings.Count -eq 0) { throw 'GeoJSON 必须包含 Polygon 或 MultiPolygon 面几何。' }
+        $firstFeature = if ($geoJson.type -eq 'FeatureCollection') { $geoJson.features | Select-Object -First 1 } elseif ($geoJson.type -eq 'Feature') { $geoJson } else { $null }
+        return [PSCustomObject]@{ SourcePath = $source; SourceKind = 'GeoJSON'; Rings = $rings.ToArray(); FeatureCount = if ($geoJson.type -eq 'FeatureCollection') { @($geoJson.features).Count } else { 1 }; CoordinateSystem = 'GeoJSON 未内嵌坐标系，请使用用户说明或源数据元信息。'; AttributeFields = if ($firstFeature) { @($firstFeature.properties.psobject.Properties.Name) } else { @() }; TemporaryDirectory = $null }
+    }
+    return Get-ShapeSource $source
+}
+
+function Localized([string]$value) { return [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($value)) }
+
+function FieldValue($record, [string]$field) {
+    $property = $record.psobject.Properties[$field]
+    if ($null -eq $property -or $null -eq $property.Value) { return '-' }
+    return [string]$property.Value
+}
+
+function ResponseRecords($data, [string[]]$fields) {
+    foreach ($field in $fields) {
+        $property = $data.psobject.Properties[$field]
+        if ($null -ne $property -and $null -ne $property.Value) { return @($property.Value) }
+    }
+    return @()
+}
+
+function Write-AnalysisMarkdown([string]$path, $sourceInfo, [string]$resultPath, $response, [string]$responseParseError) {
+    $lines = [System.Collections.Generic.List[string]]::new()
+    [void]$lines.Add('# ' + (Localized '5Zyw6LSo5p2h5Lu25YiG5p6Q5oql5ZGK'))
+    [void]$lines.Add('')
+    [void]$lines.Add('## ' + (Localized '6L6T5YWl5pWw5o2u5qC46aqM'))
+    [void]$lines.Add(('- {0}: {1}' -f (Localized '5pWw5o2u57G75Z6L'), $sourceInfo.SourceKind))
+    [void]$lines.Add(('- {0}: {1}' -f (Localized '5pWw5o2u6Lev5b6E'), $sourceInfo.SourcePath))
+    [void]$lines.Add(('- {0}: {1}' -f (Localized '6Z2i6KaB57Sg5pWw6YeP'), $sourceInfo.FeatureCount))
+    [void]$lines.Add(('- {0}: {1}' -f (Localized '6L6555WM546v5pWw6YeP'), $sourceInfo.Rings.Count))
+    [void]$lines.Add(('- {0}: {1}' -f (Localized '5Z2Q5qCH5Y+C6ICD'), $sourceInfo.CoordinateSystem))
+    if ($sourceInfo.AttributeFields.Count -gt 0) { [void]$lines.Add(('- {0}: {1}' -f (Localized '5bGe5oCn5a2X5q61'), ($sourceInfo.AttributeFields -join ', '))) }
+    [void]$lines.Add('')
+    [void]$lines.Add('## ' + (Localized '5Y+v6Kej6YeK55qE5YiG5p6Q57uT5p6c'))
+    if ($null -eq $response) {
+        [void]$lines.Add('- ' + (Localized '5pyN5Yqh6L+U5Zue5YaF5a655LiN5piv5pyJ5pWIIEpTT07vvIzlt7Lljp/moLfkv53nlZnlnKggSlNPTiDmlofku7bkuK3vvIzml6Dms5XlronlhajnlJ/miJDmlbDlgLzliIbmnpDjgII='))
+        [void]$lines.Add(('- {0}: {1}' -f (Localized '6Kej5p6Q6ZSZ6K+v'), $responseParseError))
+    } else {
+        $environment = @(ResponseRecords -data $response -fields @('YZT_DZHJTJ_LIST', 'YZT_DZHJTJ'))
+        $hazards = @(ResponseRecords -data $response -fields @('YZT_DZZHYFQK_LIST', 'YZT_DZZHYFQK'))
+        if ($environment.Count -gt 0) {
+            [void]$lines.Add(('### {0} ({1})' -f (Localized '5Zyw6LSo546v5aKD5p2h5Lu2'), $environment.Count))
+            foreach ($row in $environment) {
+                [void]$lines.Add(('- 地质环境条件（DZHJTJ）: {0}; {1}: {2}; {3}: {4}' -f (FieldValue $row 'DZHJTJ'), (Localized '5Zyw6LSo546v5aKD562J57qn'), (FieldValue $row 'DJ'), (Localized '5Y2g55So6Z2i56ev'), (FieldValue $row 'ZYMJ')))
+            }
+        }
+        if ($hazards.Count -gt 0) {
+            [void]$lines.Add(('### {0} ({1})' -f (Localized '5Zyw6LSo54G+5a6z5piT5Y+R5Yy6'), $hazards.Count))
+            foreach ($row in $hazards) {
+                [void]$lines.Add(('- {0}: {1}; {2}: {3}; {4}: {5}' -f (Localized '5YiG5Yy65ZCN56ew'), (FieldValue $row 'FQMC'), (Localized '562J57qn'), (FieldValue $row 'DJ'), (Localized '5Y2g55So6Z2i56ev'), (FieldValue $row 'ZYMJ')))
+            }
+        }
+        if ($environment.Count -eq 0 -and $hazards.Count -eq 0) { [void]$lines.Add('- ' + (Localized '5pyq6L+U5Zue5bey56Gu6K6k55qE5Zyw6LSo5YiG5p6Q5a2X5q6144CC')) }
+        [void]$lines.Add('')
+        [void]$lines.Add('## 专业分析')
+        [void]$lines.Add('- 地质环境条件反映工程地质背景，地质灾害易发分区反映区域灾害倾向；两项均用于选址和勘察决策，但不跨图层叠加面积。')
+        foreach ($row in $environment) {
+            $condition = FieldValue $row 'DZHJTJ'
+            if ($condition -match '复杂') { [void]$lines.Add(('- 地质环境为“{0}”，工程实施前应将地基条件、边坡稳定性、地下水和不良地质作用列为勘察重点。' -f $condition)) }
+            else { [void]$lines.Add(('- 地质环境为“{0}”，仍应结合拟建工程的开挖、荷载和排水条件布置常规工程地质勘察。' -f $condition)) }
+        }
+        foreach ($row in $hazards) {
+            $zone = FieldValue $row 'FQMC'
+            if ($zone -match '低易发') { [void]$lines.Add(('- 地质灾害易发性为“{0}”，不以区域灾害倾向作为选址直接否决因素；但不减免复杂地质环境对应的勘察和设计要求。' -f $zone)) }
+            else { [void]$lines.Add(('- 地质灾害易发性为“{0}”，应在方案深化前将对应范围落实到勘察点位、施工组织和防治措施。' -f $zone)) }
+        }
+        [void]$lines.Add('')
+        [void]$lines.Add('## 综合结论')
+        foreach ($row in $environment) { [void]$lines.Add(('- 工程地质条件：项目范围在本图层中判定为“{0}”（等级 {1}），涉及 {2} 公顷；工程设计应以该条件确定勘察重点。' -f (FieldValue $row 'DZHJTJ'), (FieldValue $row 'DJ'), (FieldValue $row 'ZYMJ'))) }
+        foreach ($row in $hazards) { [void]$lines.Add(('- 灾害倾向：项目范围在本图层中属于“{0}”（等级 {1}），涉及 {2} 公顷。应将地质环境复杂程度和灾害倾向作为两项并列条件纳入选址与设计。' -f (FieldValue $row 'FQMC'), (FieldValue $row 'DJ'), (FieldValue $row 'ZYMJ'))) }
+        [void]$lines.Add('- 实施建议：本次结果支持开展下一阶段工程方案深化；在施工图设计前，应完成与项目类型相匹配的工程地质勘察和风险处置设计。')
+    }
+    [void]$lines.Add('')
+    [void]$lines.Add('## ' + (Localized '5pWw5o2u6ZmQ5Yi2'))
+    [void]$lines.Add('- 分析结论以本次输入范围和地理信息分析服务返回的现势空间数据为依据；面积按各返回图层的独立统计口径表达。')
+    [void]$lines.Add('')
+    [void]$lines.Add('## ' + (Localized '5Y6f5aeL5o6l5Y+j6L+U5Zue'))
+    [void]$lines.Add(('- [JSON]({0})' -f [System.IO.Path]::GetFileName($resultPath)))
+    [System.IO.File]::WriteAllLines($path, $lines, [System.Text.UTF8Encoding]::new($false))
+}
+
+$resolved = $null
+try {
+    $resolved = Resolve-Input $InputPath
+    $outputPath = [System.IO.Path]::GetFullPath($OutputDirectory)
+    [System.IO.Directory]::CreateDirectory($outputPath) | Out-Null
+    $rings = $resolved.Rings
+if ([string]::IsNullOrWhiteSpace($YfxFieldName)) {
+    $YfxFieldName = -join (0x5206, 0x533A, 0x540D, 0x79F0 | ForEach-Object { [char]$_ })
+}
+if ([string]::IsNullOrWhiteSpace($BaseUrl)) { $BaseUrl = $env:DSH_GIS_SERVICE_URL }
+if ([string]::IsNullOrWhiteSpace($BaseUrl)) { $BaseUrl = 'http://60.191.110.206:38010' }
+$arcGeometry = @{ hasZ = $false; hasM = $false; rings = $rings } | ConvertTo-Json -Compress -Depth 100
+$body = @{
+    GeoJson = $arcGeometry
+    IsAnaXzCoverBp = $false
+    IsAnaDzzhyfqk = $true
+    IsAnaDzhjtj = $true
+    YfxFieldName = $YfxFieldName
+} | ConvertTo-Json -Compress -Depth 100
+$uri = "$($BaseUrl.TrimEnd('/'))/Analysis.svc/OneKeyAnalysis"
+$response = Invoke-WebRequest -UseBasicParsing -Method Post -Uri $uri -ContentType 'text/plain; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
+$stamp = Get-Date -Format 'yyyyMMdd_HHmmss_fff'
+$sourceName = [System.IO.Path]::GetFileNameWithoutExtension($resolved.SourcePath)
+if ([string]::IsNullOrWhiteSpace($sourceName)) { $sourceName = '空间范围' }
+$sourceName = ($sourceName -replace '[\\/:*?"<>|]', '_').Trim()
+$displayStamp = Get-Date -Format 'MMdd-HHmmss'
+$target = Join-Path $outputPath "${sourceName}_地质条件分析原始数据_${stamp}.json"
+$content = if ($response.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($response.Content) } else { [string]$response.Content }
+[System.IO.File]::WriteAllText($target, $content, [System.Text.UTF8Encoding]::new($false))
+$responseJson = $null
+$responseParseError = ''
+try { $responseJson = $content | ConvertFrom-Json } catch { $responseParseError = $_.Exception.Message }
+$report = Join-Path $outputPath "${sourceName}_地质条件分析底稿_${stamp}.md"
+Write-AnalysisMarkdown $report $resolved $target $responseJson $responseParseError
+$workbook = Join-Path $outputPath "${sourceName}_地质_${displayStamp}.xlsx"
+$wordReport = Join-Path $outputPath "${sourceName}_地质报告_${displayStamp}.docx"
+$analysisView = Join-Path $outputPath "${sourceName}_地质条件分析视图_${stamp}.json"
+& (Join-Path $PSScriptRoot 'export-office.ps1') -Title '地质条件分析' -JsonPath $target -MarkdownPath $report -ExcelPath $workbook -WordPath $wordReport -ViewPath $analysisView -OpenWorkbook
+Write-Output "已生成接口原始结果：$target"
+Write-Output "已生成 Markdown 分析底稿：$report"
+Write-Output "已生成对话分析数据：$analysisView"
+Write-Output "DSH_ANALYSIS_VIEW=$analysisView"
+foreach ($artifactPath in @($workbook, $wordReport)) {
+    if (-not [System.IO.File]::Exists($artifactPath)) { throw "成果文件不存在：$artifactPath" }
+}
+$result = [ordered]@{
+    success = $true; status = 'completed'
+    artifacts = @(
+        [ordered]@{ path = $wordReport; kind = 'docx'; description = 'Word 分析报告' },
+        [ordered]@{ path = $workbook; kind = 'xlsx'; description = 'Excel 分析明细' }
+    )
+    internalFiles = @($target, $report, $analysisView)
+    metadata = [ordered]@{
+        inputPath = $resolved.SourcePath; featureCount = $resolved.FeatureCount
+        coordinateSystem = $resolved.CoordinateSystem; analysisViewPath = $analysisView
+        responseParseError = $responseParseError
+    }
+}
+Write-Output ('WANWEI_RESULT=' + ($result | ConvertTo-Json -Compress -Depth 12))
+} catch {
+    Write-Output ('WANWEI_RESULT=' + (@{ success = $false; status = 'failed'; artifacts = @(); error = $_.Exception.Message } | ConvertTo-Json -Compress -Depth 5))
+    throw
+} finally {
+    if ($null -ne $resolved -and $null -ne $resolved.TemporaryDirectory -and [System.IO.Directory]::Exists($resolved.TemporaryDirectory)) { Remove-Item -LiteralPath $resolved.TemporaryDirectory -Recurse -Force }
+}

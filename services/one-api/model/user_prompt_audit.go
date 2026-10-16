@@ -1,0 +1,249 @@
+package model
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/songquanpeng/one-api/common/helper"
+	"github.com/songquanpeng/one-api/common/logger"
+	"gorm.io/gorm"
+)
+
+var userPromptAuditIgnoredPrefixes = []string{
+	"<system-reminder>",
+	"<app-context>",
+	"<skills_instructions>",
+	"<skill_content",
+	"<skill_resources>",
+	"<skill_instructions>",
+	"<permissions instructions>",
+	"<collaboration_mode>",
+	"<environment_context>",
+	"<recommended_plugins>",
+	"current runtime context.",
+	"current runtime context:",
+	"generate the session title from this json array",
+	"you are an ai assistant accessed by an api.",
+	"# agents.md instructions",
+	"## skills",
+	"a skill is a reusable set of task-specific",
+}
+
+// UserPromptAudit 是面向管理员的长期审计记录。它刻意只保存用户本次发出的
+// 文本问题与请求结果，不保存模型回答、图片附件或完整历史上下文。
+//
+// 与 logs 表不同，此表不参与常规调用日志清理，因此可用于长期问题追溯。
+type UserPromptAudit struct {
+	Id        int    `json:"id"`
+	CreatedAt int64  `json:"created_at" gorm:"bigint;index:idx_prompt_audit_created"`
+	UpdatedAt int64  `json:"updated_at" gorm:"bigint"`
+	UserId    int    `json:"user_id" gorm:"index:idx_prompt_audit_user_created,priority:1"`
+	Username  string `json:"username" gorm:"index;default:''"`
+	ChannelId int    `json:"channel_id" gorm:"index"`
+	ModelName string `json:"model_name" gorm:"index;default:''"`
+	// SessionId is the opaque DSH desktop conversation id. It is only used to
+	// group the administrator's prompt audit; the conversation itself remains
+	// on the user's local desktop and is never uploaded here.
+	SessionId        string `json:"session_id" gorm:"type:varchar(256);index;default:''"`
+	TurnId           string `json:"turn_id" gorm:"type:varchar(320);index;default:''"`
+	RequestId        string `json:"request_id" gorm:"uniqueIndex;default:''"`
+	Question         string `json:"question" gorm:"type:text"`
+	Status           string `json:"status" gorm:"index;default:'processing'"`
+	ErrorMessage     string `json:"error_message" gorm:"type:text;default:''"`
+	Quota            int    `json:"quota" gorm:"default:0"`
+	PromptTokens     int    `json:"prompt_tokens" gorm:"default:0"`
+	CompletionTokens int    `json:"completion_tokens" gorm:"default:0"`
+	ElapsedTime      int64  `json:"elapsed_time" gorm:"default:0"`
+}
+
+func (UserPromptAudit) TableName() string {
+	return "user_prompt_audits"
+}
+
+func trimAuditText(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit]
+}
+
+// IsUserPromptAuditQuestion accepts only text that can be shown as an end-user
+// question. DSH sends runtime snapshots and framework instructions as user-role
+// messages to some model calls, but those implementation messages never belong
+// in the administrator's question audit.
+func IsUserPromptAuditQuestion(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return false
+	}
+	for _, prefix := range userPromptAuditIgnoredPrefixes {
+		if strings.HasPrefix(normalized, prefix) {
+			return false
+		}
+	}
+	return true
+}
+
+// StartUserPromptAudit 在请求真正发送给上游前记录本次用户问题，保证上游异常时
+// 仍然保留可追溯的问题文本。
+func StartUserPromptAudit(
+	ctx context.Context,
+	userId, channelId int,
+	modelName, sessionId string,
+	questionOrdinal int,
+	question string,
+) {
+	question = trimAuditText(question, 20000)
+	sessionId = trimAuditText(sessionId, 256)
+	if !IsUserPromptAuditQuestion(question) || userId == 0 {
+		return
+	}
+	now := helper.GetTimestamp()
+	turnId := ""
+	if sessionId != "" && questionOrdinal > 0 {
+		turnId = sessionId + ":" + fmt.Sprintf("%d", questionOrdinal)
+		var existing UserPromptAudit
+		if err := DB.Where("user_id = ? AND turn_id = ?", userId, turnId).First(&existing).Error; err == nil {
+			updates := map[string]any{
+				"updated_at": now, "channel_id": channelId, "model_name": modelName,
+				"request_id": helper.GetRequestID(ctx), "status": "processing", "error_message": "",
+			}
+			if err := DB.Model(&existing).Updates(updates).Error; err != nil {
+				logger.Errorf(ctx, "failed to continue user prompt audit: %s", err.Error())
+			}
+			return
+		} else if err != gorm.ErrRecordNotFound {
+			logger.Errorf(ctx, "failed to find user prompt audit turn: %s", err.Error())
+			return
+		}
+	}
+	username := GetUsernameById(userId)
+	if names := resolveUsernamesByLocalUsers([]int{userId}); names[userId] != "" {
+		username = names[userId]
+	}
+	audit := &UserPromptAudit{
+		CreatedAt: now,
+		UpdatedAt: now,
+		UserId:    userId,
+		Username:  username,
+		ChannelId: channelId,
+		ModelName: modelName,
+		SessionId: sessionId,
+		TurnId:    turnId,
+		RequestId: helper.GetRequestID(ctx),
+		Question:  question,
+		Status:    "processing",
+	}
+	if err := DB.Create(audit).Error; err != nil {
+		logger.Errorf(ctx, "failed to start user prompt audit: %s", err.Error())
+	}
+}
+
+// FinishUserPromptAudit 仅更新此前已经创建的审计记录；不影响正常模型调用。
+func FinishUserPromptAudit(ctx context.Context, status, errorMessage string, quota, promptTokens, completionTokens int, elapsedTime int64) {
+	requestId := helper.GetRequestID(ctx)
+	if requestId == "" {
+		return
+	}
+	updates := map[string]any{
+		"updated_at":        helper.GetTimestamp(),
+		"status":            status,
+		"error_message":     trimAuditText(errorMessage, 2000),
+		"quota":             gorm.Expr("quota + ?", quota),
+		"prompt_tokens":     gorm.Expr("prompt_tokens + ?", promptTokens),
+		"completion_tokens": gorm.Expr("completion_tokens + ?", completionTokens),
+		"elapsed_time":      gorm.Expr("elapsed_time + ?", elapsedTime),
+	}
+	if err := DB.Model(&UserPromptAudit{}).Where("request_id = ?", requestId).Updates(updates).Error; err != nil {
+		logger.Errorf(ctx, "failed to finish user prompt audit: %s", err.Error())
+	}
+}
+
+func userPromptAuditQuery(keyword string) *gorm.DB {
+	query := DB.Model(&UserPromptAudit{}).Where("TRIM(question) <> ''")
+	for _, prefix := range userPromptAuditIgnoredPrefixes {
+		query = query.Where("LOWER(TRIM(question)) NOT LIKE ?", prefix+"%")
+	}
+	if keyword = strings.TrimSpace(keyword); keyword != "" {
+		like := "%" + keyword + "%"
+		query = query.Where("username LIKE ? OR model_name LIKE ? OR question LIKE ? OR error_message LIKE ?", like, like, like, like)
+	}
+	return query
+}
+
+// GetUserPromptAudits returns one filtered audit page and its matching row count.
+func GetUserPromptAudits(keyword string, startIdx, num int) (audits []*UserPromptAudit, total int64, err error) {
+	if num <= 0 {
+		return []*UserPromptAudit{}, 0, nil
+	}
+	var matching []*UserPromptAudit
+	err = userPromptAuditQuery(keyword).Order("created_at DESC, id DESC").Find(&matching).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	matching = collapseLegacyUserPromptAudits(matching)
+	total = int64(len(matching))
+	if startIdx >= len(matching) {
+		return []*UserPromptAudit{}, total, nil
+	}
+	end := startIdx + num
+	if end > len(matching) {
+		end = len(matching)
+	}
+	audits = matching[startIdx:end]
+	overlayUserPromptAuditUsernames(audits)
+	return audits, total, nil
+}
+
+const legacyPromptAuditMergeWindowSeconds int64 = 5 * 60
+
+func collapseLegacyUserPromptAudits(audits []*UserPromptAudit) []*UserPromptAudit {
+	result := make([]*UserPromptAudit, 0, len(audits))
+	for _, audit := range audits {
+		if audit == nil {
+			continue
+		}
+		if audit.TurnId == "" && len(result) > 0 {
+			newer := result[len(result)-1]
+			if newer.TurnId == "" && newer.UserId == audit.UserId && newer.SessionId != "" &&
+				newer.SessionId == audit.SessionId && newer.ModelName == audit.ModelName &&
+				newer.Question == audit.Question && newer.CreatedAt-audit.CreatedAt <= legacyPromptAuditMergeWindowSeconds {
+				newer.CreatedAt = audit.CreatedAt
+				newer.Quota += audit.Quota
+				newer.PromptTokens += audit.PromptTokens
+				newer.CompletionTokens += audit.CompletionTokens
+				newer.ElapsedTime += audit.ElapsedTime
+				if newer.ErrorMessage == "" {
+					newer.ErrorMessage = audit.ErrorMessage
+				}
+				continue
+			}
+		}
+		copy := *audit
+		result = append(result, &copy)
+	}
+	return result
+}
+
+func overlayUserPromptAuditUsernames(audits []*UserPromptAudit) {
+	userIDs := make([]int, 0, len(audits))
+	seen := make(map[int]struct{}, len(audits))
+	for _, audit := range audits {
+		if audit == nil || audit.UserId == 0 {
+			continue
+		}
+		if _, ok := seen[audit.UserId]; ok {
+			continue
+		}
+		seen[audit.UserId] = struct{}{}
+		userIDs = append(userIDs, audit.UserId)
+	}
+	nameByUser := resolveUsernamesByLocalUsers(userIDs)
+	for _, audit := range audits {
+		if name := nameByUser[audit.UserId]; name != "" {
+			audit.Username = name
+		}
+	}
+}

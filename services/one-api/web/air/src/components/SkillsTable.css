@@ -1,0 +1,880 @@
+/* 技能管理（公库）页面样式，全部挂在 .skill-admin 下，避免污染全局。
+   页面骨架（页头/页签/统计格/卡片）复用 Zjugis 预览页的 preview-* 样式。 */
+
+.skill-admin {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.skill-page-search {
+  width: min(350px, 32vw) !important;
+}
+
+.skill-page-search.semi-input-wrapper,
+.skill-page-search .semi-input-wrapper {
+  min-height: 44px;
+  padding-inline: 13px;
+  border: 1px solid #d9e4f2;
+  border-radius: 12px !important;
+  background: #fff;
+  box-shadow: 0 8px 22px rgb(43 82 134 / 6%);
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.skill-page-search.semi-input-wrapper-focus,
+.skill-page-search .semi-input-wrapper-focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 12%), 0 8px 22px rgb(43 82 134 / 7%);
+}
+
+.skill-page-search .semi-input {
+  color: #243a5d;
+  font-size: 14px;
+}
+
+.skill-page-search .semi-input::placeholder {
+  color: #93a4bb;
+}
+
+.skill-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.skill-page-actions .preview-button.primary {
+  min-height: 44px;
+  padding-inline: 19px;
+  border-radius: 12px;
+}
+
+.skill-admin-meta {
+  color: #7b90ad;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* surface 卡片内的 Semi 表格透明化，避免白卡套白卡 */
+.skill-admin-surface .semi-table-container,
+.skill-admin-surface .semi-table {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.skill-admin-surface .semi-table-thead > .semi-table-row > .semi-table-row-head {
+  background: transparent;
+  color: #7a90ae;
+  font-size: 13px;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(130, 155, 196, .2);
+}
+
+.skill-admin-surface .semi-table-tbody > .semi-table-row > .semi-table-row-cell {
+  border-bottom: 1px solid rgba(130, 155, 196, .12);
+}
+
+.skill-admin-surface .semi-table-tbody > .semi-table-row:hover > .semi-table-row-cell {
+  background: rgba(244, 248, 253, .8);
+}
+
+.skill-admin-surface .semi-table {
+  table-layout: fixed;
+  width: 100% !important;
+}
+
+.skill-admin-surface .semi-table-wrapper,
+.skill-admin-surface .semi-table-container {
+  overflow-x: hidden;
+}
+
+.skill-admin-surface .semi-table-thead > .semi-table-row > .semi-table-row-head,
+.skill-admin-surface .semi-table-tbody > .semi-table-row > .semi-table-row-cell {
+  overflow: hidden;
+}
+
+.skill-admin-surface .semi-table-thead > .semi-table-row > .semi-table-row-head:nth-last-child(-n + 5) {
+  white-space: nowrap;
+}
+
+/* ── 行内元素 ───────────────────────────── */
+
+.skill-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.skill-name-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.skill-identity-icon {
+  display: inline-grid;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #d9e8fb;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #2874df;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.skill-identity-icon.small {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.skill-identity-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.skill-name-main {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d2e4c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-name-sub {
+  font-size: 12px;
+  color: #7b90ad;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 能力标签单行排布，超长省略，保证行高一致 */
+.skill-cap-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.skill-cap-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 132px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.skill-cap-more {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #7b90ad;
+  line-height: 20px;
+}
+
+/* 主要能力悬停提示：深色浮层内纵向列出全部能力 */
+.skill-cap-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 2px;
+  max-width: 320px;
+}
+
+.skill-cap-tip-item {
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 操作列保持与模型配置一致的轻量文字操作，危险动作单独使用红色。 */
+.skill-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  justify-content: flex-start;
+  white-space: nowrap;
+}
+
+.skill-text-action {
+  min-height: 28px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #347ce8;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 28px;
+  transition: background-color .16s ease, color .16s ease;
+}
+
+.skill-text-action:hover {
+  background: #edf5ff;
+  color: #1766cf;
+}
+
+.skill-text-action:focus-visible {
+  outline: 2px solid rgb(52 124 232 / 35%);
+  outline-offset: 1px;
+}
+
+.skill-text-action.danger {
+  color: #e75a61;
+}
+
+.skill-text-action.danger:hover {
+  background: #fff1f1;
+  color: #d8424b;
+}
+
+.skill-version-action {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #607a9e;
+  cursor: pointer;
+  font: inherit;
+}
+
+.skill-version-action:hover,
+.skill-version-action:focus-visible {
+  color: #1766cf;
+  text-decoration: underline;
+}
+
+.skill-uploader,
+.skill-install-count {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-install-count {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.skill-upload-time {
+  display: inline-block;
+  color: #607a9e;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── 新增/编辑弹窗（复用 zjugis-modal 骨架，见 index.css） ── */
+
+.skill-required {
+  margin-left: 4px;
+  color: #e3554f;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.skill-import-ok {
+  color: #2f9e63;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.skill-status-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.skill-status-stack small {
+  color: #7b90ad;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.skill-validation-result {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e4ecf6;
+}
+
+.skill-release-backdrop {
+  z-index: 1100;
+}
+
+.skill-release-dialog {
+  width: min(980px, 100%);
+  max-height: min(820px, calc(100vh - 40px));
+}
+
+.skill-release-dialog .zjugis-modal-head {
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.skill-release-dialog .zjugis-modal-head p {
+  margin: 5px 0 0;
+  color: #7289a7;
+  font-size: 14px;
+}
+
+.skill-import-success-dialog {
+  width: min(560px, 100%);
+}
+
+.skill-import-success-dialog .zjugis-modal-head {
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.skill-import-success-dialog .zjugis-modal-head p {
+  margin: 5px 0 0;
+  color: #7289a7;
+  font-size: 14px;
+}
+
+.skill-import-success-copy {
+  margin: 0;
+  color: #516b90;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.skill-import-success-copy strong {
+  margin: 0 3px;
+  color: #d97706;
+}
+
+.skill-validation-result > p {
+  margin: 5px 0 12px;
+  color: #6f86a5;
+  font-size: 12px;
+}
+
+.skill-validation-content {
+  display: grid;
+  grid-template-columns: minmax(170px, .65fr) minmax(0, 1.35fr);
+  min-height: 280px;
+  overflow: hidden;
+  border: 1px solid #dce7f4;
+  border-radius: 10px;
+}
+
+.skill-validation-tree {
+  overflow: auto;
+  padding: 10px;
+  border-right: 1px solid #e2ebf6;
+  background: #f8fbff;
+}
+
+.skill-validation-file {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #4c668c;
+  cursor: pointer;
+  font: 12px/1.45 'JetBrains Mono', Consolas, monospace;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-validation-file:hover {
+  background: #edf5ff;
+  color: #1766cf;
+}
+
+.skill-validation-file.active {
+  background: #ddebff;
+  color: #155fc5;
+  font-weight: 700;
+}
+
+.skill-validation-preview {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 10px;
+}
+
+.skill-validation-preview select {
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 9px;
+  border: 1px solid #d6e2f2;
+  border-radius: 7px;
+  color: #304b70;
+}
+
+.skill-validation-preview pre {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  padding: 11px;
+  border-radius: 7px;
+  background: #17243a;
+  color: #e6effc;
+  font: 12px/1.6 'JetBrains Mono', Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.skill-binary-file {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  color: #7b90ad;
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.skill-import-dialog > p {
+  margin: 0 0 14px;
+  color: #607a9e;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.skill-import-options {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.skill-import-option {
+  display: flex;
+  align-items: center;
+  min-height: 66px;
+  padding: 11px 13px;
+  border: 1px solid #d9e5f4;
+  border-radius: 10px;
+  background: #f9fbff;
+  color: #1d4f99;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .16s ease, background-color .16s ease;
+}
+
+.skill-import-option:hover {
+  border-color: #4d8ff1;
+  background: #edf5ff;
+}
+
+.skill-import-option-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  place-items: center;
+  margin-right: 12px;
+  border: 1px solid #d7e7fb;
+  border-radius: 11px;
+  background: linear-gradient(145deg, #eaf4ff, #f7fbff);
+  color: #2675dc;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
+}
+
+.skill-import-option-icon svg {
+  display: block;
+}
+
+.skill-import-option-copy { min-width: 0; flex: 1; }
+.skill-import-option-copy strong,
+.skill-import-option-copy span { display: block; }
+.skill-import-option-copy strong { color: #244d86; font-size: 14px; }
+.skill-import-option-copy span { margin-top: 3px; color: #7289a7; font-size: 12px; line-height: 1.45; }
+.skill-import-option-arrow { display: grid; place-items: center; color: #a9c6ec; transition: color .16s ease; }
+.skill-import-option-arrow svg { display: block; }
+.skill-import-option:hover .skill-import-option-arrow { color: #4d8ff1; }
+
+.skill-import-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.skill-icon-picker {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid #dce7f4;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.skill-icon-preview {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border-radius: 14px;
+  background: #eef6ff;
+}
+
+.skill-icon-options {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.skill-icon-picker-label {
+  color: #526d92;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.skill-icon-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.skill-icon-presets button {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid #dce7f3;
+  border-radius: 10px;
+  background: #fff;
+  color: #5a7498;
+  cursor: pointer;
+  transition: border-color .16s ease, background-color .16s ease, color .16s ease;
+}
+.skill-icon-presets button:hover { border-color: #91bdf4; background: #f4f9ff; color: #1766cf; }
+.skill-icon-presets button.active { border-color: #2f7df0; background: #eaf3ff; color: #1766cf; box-shadow: 0 0 0 2px rgb(47 125 240 / 12%); }
+.skill-icon-presets button img { width: 30px; height: 30px; object-fit: contain; }
+.skill-icon-options .form-inline-actions { margin-top: 1px; }
+.skill-icon-options .preview-muted { margin-top: -2px; }
+
+/* ── 浏览抽屉 ───────────────────────────── */
+
+.skill-browse {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.skill-browse-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(239, 246, 255, .9), rgba(255, 255, 255, .6));
+  border: 1px solid rgba(130, 155, 196, .16);
+}
+
+.skill-browse-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.skill-browse-title {
+  color: #122344;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -.2px;
+}
+
+.skill-browse-sub {
+  margin-top: 6px;
+  color: #7b90ad;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+}
+
+.skill-browse-stats {
+  display: flex;
+  gap: 22px;
+  flex-shrink: 0;
+  padding-right: 4px;
+}
+
+.skill-browse-stats span {
+  display: block;
+  color: #7b90ad;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.skill-browse-stats strong {
+  display: block;
+  margin-top: 4px;
+  color: #1d2e4c;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.skill-browse-section h4 {
+  margin: 0 0 8px;
+  color: #1d2e4c;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.skill-browse-caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.skill-browse-caps .skill-cap-tag {
+  max-width: none;
+}
+
+.skill-browse-section p {
+  margin: 8px 0 0;
+  color: #43597c;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.skill-browse-files {
+  display: flex;
+  gap: 12px;
+  min-height: 380px;
+}
+
+.skill-browse-filetree {
+  width: 260px;
+  flex-shrink: 0;
+  border: 1px solid rgba(130, 155, 196, .2);
+  border-radius: 12px;
+  background: #f7f9fc;
+  overflow: auto;
+  padding: 10px 8px;
+}
+
+.skill-browse-preview {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid rgba(130, 155, 196, .2);
+  border-radius: 12px;
+  background: #fff;
+  overflow: auto;
+  padding: 16px 18px;
+}
+
+.skill-browse-preview pre {
+  margin: 0;
+  color: #33455f;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.skill-browse-preview img {
+  max-width: 100%;
+}
+
+/* ── 分类管理：与技能库视觉语言对齐 ───────────────────────────── */
+
+.skill-category-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.skill-category-expand {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #8aa2c0;
+  cursor: pointer;
+  transition: background-color .16s ease, color .16s ease;
+}
+
+.skill-category-expand:hover { background: #edf5ff; color: #1766cf; }
+
+.skill-category-expand svg { display: block; transition: transform .18s ease; }
+
+.skill-category-expand.open svg { transform: rotate(180deg); }
+
+.skill-category-title {
+  overflow: hidden;
+  color: #1d2e4c;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-category-count {
+  display: inline-block;
+  min-width: 28px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* 展开行：覆盖 Semi 默认灰底与单元格内边距（选择器优先级需高于 semi.css） */
+.skill-admin-surface .semi-table-tbody > .semi-table-row.semi-table-row-expand > .semi-table-row-cell {
+  padding: 0;
+  background: #f7faff;
+}
+
+.skill-admin-surface .semi-table-tbody > .semi-table-row.semi-table-row-expand:hover > .semi-table-row-cell {
+  background: #f7faff;
+}
+
+/* Semi 的 expand-inner 默认 sticky 且随内容收缩，导致展开区变窄贴左，重置为通栏 */
+.skill-admin-surface .semi-table-fixed > .semi-table-tbody > .semi-table-row-expand > .semi-table-row-cell > .semi-table-expand-inner {
+  position: static;
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.skill-category-skills {
+  padding: 12px 20px 16px 46px;
+}
+
+.skill-category-skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skill-category-skill-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  border: 1px solid #e2ebf6;
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.skill-category-skill-row:hover {
+  border-color: #bcd7f7;
+  box-shadow: 0 6px 16px rgb(43 82 134 / 6%);
+}
+
+.skill-category-skill-info {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+}
+
+.skill-category-skill-info strong {
+  overflow: hidden;
+  color: #24406b;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-category-skill-info span {
+  overflow: hidden;
+  color: #8aa2c0;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-category-default-tag {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #7b90ad;
+  font-size: 12px;
+}
+
+.skill-category-skills-empty {
+  padding: 14px 10px;
+  color: #8aa2c0;
+  font-size: 13px;
+  text-align: center;
+}
+.skill-review-surface { padding: 24px 30px; }
+.skill-review-summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+.skill-review-summary > div:first-child { display: flex; align-items: baseline; gap: 8px; }
+.skill-review-summary strong { color: #17335d; font-size: 28px; }
+.skill-review-summary span { color: #7890af; font-size: 13px; }
+.skill-review-filters { display: flex; gap: 6px; padding: 3px; border-radius: 10px; background: #f3f7fc; }
+.skill-review-filters button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 0; border-radius: 8px; background: transparent; color: #6680a2; cursor: pointer; }
+.skill-review-filters button.active { background: #fff; color: #2874e8; box-shadow: 0 2px 8px rgb(31 78 140 / 10%); }
+.skill-review-filter-count { color:#8294ad; font-size:12px; font-weight:500; font-variant-numeric:tabular-nums; }
+.skill-review-filters button.active .skill-review-filter-count { color:#6486b4; }
+.skill-review-identity { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.skill-review-identity strong { overflow: hidden; color: #17335d; text-overflow: ellipsis; white-space: nowrap; }
+.skill-review-identity span { overflow: hidden; color: #86a0c2; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.skill-review-actions { display: flex; align-items: center; gap: 2px; white-space: nowrap; }
+.skill-review-reject-copy { margin: 0 0 12px; color: #667f9f; line-height: 1.6; }
+
+.skill-list-heading { display: flex; min-width: 0; align-items: center; gap: 18px; }
+.skill-list-heading h2 { flex: none; }
+.skill-batch-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 8px 0 18px; padding: 14px 16px; border: 1px solid #d9e6f8; border-radius: 12px; background: #f0f6ff; }
+.skill-batch-selection, .skill-batch-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.skill-batch-selection strong { color: #17335d; font-size: 14px; }
+.skill-batch-toolbar p { flex-basis: 100%; margin: 0; color: #7b90ad; font-size: 12px; }
+.skill-batch-actions .preview-button { min-height: 34px; padding: 7px 14px; }
+.skill-batch-actions .skill-batch-danger { border-color: #f2c9cf; background: #fff; color: #cc3f51; }
+.skill-admin button:disabled { opacity: .5; cursor: not-allowed; }
+.skill-batch-toolbar button:focus-visible { outline: 2px solid #2874e8; outline-offset: 3px; }
+.skill-batch-result { margin-bottom: 16px; padding: 12px 16px; border: 1px solid #d9e6f8; border-radius: 10px; color: #243a5d; background: #fff; }
+.skill-batch-result summary { cursor: pointer; font-size: 13px; }
+.skill-batch-result ul { max-height: 220px; overflow-y: auto; margin-bottom: 0; padding-left: 20px; font-size: 13px; line-height: 1.8; }
+.skill-batch-result .failed { color: #cc3f51; }
+.skill-list-filters { display: flex; align-items: center; gap: 4px; padding: 3px; border: 1px solid #e2ebf7; border-radius: 10px; background: #f3f7fc; }
+.skill-list-filters button { min-width: 54px; padding: 6px 11px; border: 0; border-radius: 7px; background: transparent; color: #6680a2; font-size: 13px; line-height: 20px; cursor: pointer; transition: color .16s ease, background-color .16s ease, box-shadow .16s ease; }
+.skill-list-filters button:hover { color: #2874e8; }
+.skill-list-filters button.active { background: #fff; color: #2874e8; font-weight: 600; box-shadow: 0 2px 8px rgb(31 78 140 / 10%); }
+.skill-list-filters button:focus-visible { outline: 2px solid rgb(40 116 232 / 35%); outline-offset: 1px; }
+
+@media (max-width: 960px) {
+  .skill-list-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .skill-list-filters { flex-wrap: wrap; }
+}

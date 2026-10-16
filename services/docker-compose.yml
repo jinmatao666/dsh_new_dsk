@@ -1,0 +1,53 @@
+name: dsh-desktop
+
+services:
+  one-api:
+    build:
+      context: ./one-api
+      dockerfile: Dockerfile
+    image: dsh-one-api:${DSH_ONE_API_VERSION:-v1}
+    container_name: dsh-one-api
+    restart: unless-stopped
+    ports:
+      - "${DSH_ONE_API_BIND:-127.0.0.1}:${DSH_ONE_API_PORT:-3300}:3000"
+    environment:
+      TZ: Asia/Shanghai
+      GIN_MODE: release
+      PORT: "3000"
+      ORG_PORTAL_PORT: "3001"
+      SQL_DSN: ${DSH_SQL_DSN:?DSH_SQL_DSN is required}
+      ACCOUNT_SQL_DSN: ${DSH_ACCOUNT_SQL_DSN:-}
+      SESSION_SECRET: ${DSH_SESSION_SECRET:?DSH_SESSION_SECRET is required}
+      SERVER_ADDRESS: ${DSH_PUBLIC_BASE_URL:?DSH_PUBLIC_BASE_URL is required}
+      PARVIS_DEPLOYMENT_MODE: private
+      PARVIS_CAPABILITIES: ""
+      PARVIS_CHANNEL_KEY_ENCRYPTION_KEY: ${DSH_CHANNEL_KEY_ENCRYPTION_KEY:?DSH_CHANNEL_KEY_ENCRYPTION_KEY is required}
+      PARVIS_RELEASE_DETECTION_ENABLED: "false"
+      CORS_ALLOW_ORIGINS: http://tauri.localhost,tauri://localhost
+      REDIS_CONN_STRING: ${DSH_REDIS_CONN_STRING:-}
+    volumes:
+      - dsh-one-api-data:/data
+      - dsh-one-api-logs:/data/logs
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --quiet
+        - --spider
+        - http://127.0.0.1:3000/api/status
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - dsh-desktop
+
+networks:
+  dsh-desktop:
+    name: dsh-desktop
+
+volumes:
+  dsh-one-api-data:
+    name: dsh-one-api-data
+  dsh-one-api-logs:
+    name: dsh-one-api-logs

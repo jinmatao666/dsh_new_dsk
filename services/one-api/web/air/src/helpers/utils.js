@@ -1,0 +1,272 @@
+import { Toast } from '@douyinfe/semi-ui';
+import { toastConstants } from '../constants';
+import React from 'react';
+import {toast} from "react-toastify";
+
+const HTMLToastContent = ({ htmlContent }) => {
+  return <div dangerouslySetInnerHTML={{ __html: htmlContent }} />;
+};
+export default HTMLToastContent;
+export function isAdmin() {
+  let user = localStorage.getItem('user');
+  if (!user) return false;
+  user = JSON.parse(user);
+  return user.role >= 10;
+}
+
+export function isRoot() {
+  let user = localStorage.getItem('user');
+  if (!user) return false;
+  user = JSON.parse(user);
+  return user.role >= 100;
+}
+
+// 超管拥有全部权限；管理员需检查 admin_permissions 字段
+export function hasPermission(key) {
+  let user = localStorage.getItem('user');
+  if (!user) return false;
+  user = JSON.parse(user);
+  if (user.role >= 100) return true;
+  try {
+    const perms = JSON.parse(user.admin_permissions || '[]');
+    return perms.includes(key);
+  } catch {
+    return false;
+  }
+}
+
+export function getSystemName() {
+  let system_name = localStorage.getItem('system_name');
+  if (!system_name) return 'One API';
+  return system_name;
+}
+
+export function getLogo() {
+  let logo = localStorage.getItem('logo');
+  if (!logo) return '/brand-mark.svg';
+  return logo
+}
+
+export function getFooterHTML() {
+  return localStorage.getItem('footer_html');
+}
+
+export async function copy(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+  try {
+    return document.execCommand('copy');
+  } catch (e) {
+    console.error(e);
+    return false;
+  } finally {
+    textarea.remove();
+  }
+}
+
+export function isMobile() {
+  return window.innerWidth <= 600;
+}
+
+let showErrorOptions = { autoClose: toastConstants.ERROR_TIMEOUT };
+let showWarningOptions = { autoClose: toastConstants.WARNING_TIMEOUT };
+let showSuccessOptions = { autoClose: toastConstants.SUCCESS_TIMEOUT };
+let showInfoOptions = { autoClose: toastConstants.INFO_TIMEOUT };
+let showNoticeOptions = { autoClose: false };
+
+if (isMobile()) {
+  showErrorOptions.position = 'top-center';
+  // showErrorOptions.transition = 'flip';
+
+  showSuccessOptions.position = 'top-center';
+  // showSuccessOptions.transition = 'flip';
+
+  showInfoOptions.position = 'top-center';
+  // showInfoOptions.transition = 'flip';
+
+  showNoticeOptions.position = 'top-center';
+  // showNoticeOptions.transition = 'flip';
+}
+
+export function showError(error) {
+  console.error(error);
+  const message = error?.message || String(error || '');
+  // 后台并行加载时，网络失败、服务端 5xx 和前端响应解析错误不再遮挡页面；
+  // 详细信息仍保留在 DevTools Console，用户操作类校验错误仍正常提示。
+  const technicalError = error?.name === 'AxiosError'
+    || /Cannot read properties of undefined|Network Error|服务器内部错误|请求失败|Failed to fetch/i.test(message);
+  if (technicalError && error?.response?.status !== 401 && error?.response?.status !== 429) {
+    return;
+  }
+  if (message) {
+    if (error?.name === 'AxiosError') {
+      const status = error.response?.status;
+      switch (status) {
+        case 401:
+          // toast.error('错误：未登录或登录已过期，请重新登录！', showErrorOptions);
+          window.location.href = `${process.env.PUBLIC_URL || ''}/login?expired=true`;
+          break;
+        case 429:
+          Toast.error('错误：请求次数过多，请稍后再试！');
+          break;
+        case 500:
+          Toast.error('错误：服务器内部错误，请联系管理员！');
+          break;
+        case 405:
+          Toast.info('本站仅作演示之用，无服务端！');
+          break;
+        default:
+          Toast.error('错误：' + message);
+      }
+      return;
+    }
+    Toast.error('错误：' + message);
+  } else {
+    Toast.error('错误：' + error);
+  }
+}
+
+export function showWarning(message) {
+  Toast.warning(message);
+}
+
+export function showSuccess(message) {
+  Toast.success(message);
+}
+
+export function showInfo(message) {
+  Toast.info(message);
+}
+
+export function showNotice(message, isHTML = false) {
+  if (isHTML) {
+    toast(<HTMLToastContent htmlContent={message} />, showNoticeOptions);
+  } else {
+    Toast.info(message);
+  }
+}
+
+export function openPage(url) {
+  window.open(url);
+}
+
+export function removeTrailingSlash(url) {
+  if (url.endsWith('/')) {
+    return url.slice(0, -1);
+  } else {
+    return url;
+  }
+}
+
+export function timestamp2string(timestamp) {
+  let date = new Date(timestamp * 1000);
+  let year = date.getFullYear().toString();
+  let month = (date.getMonth() + 1).toString();
+  let day = date.getDate().toString();
+  let hour = date.getHours().toString();
+  let minute = date.getMinutes().toString();
+  let second = date.getSeconds().toString();
+  if (month.length === 1) {
+    month = '0' + month;
+  }
+  if (day.length === 1) {
+    day = '0' + day;
+  }
+  if (hour.length === 1) {
+    hour = '0' + hour;
+  }
+  if (minute.length === 1) {
+    minute = '0' + minute;
+  }
+  if (second.length === 1) {
+    second = '0' + second;
+  }
+  return (
+    year +
+    '-' +
+    month +
+    '-' +
+    day +
+    ' ' +
+    hour +
+    ':' +
+    minute +
+    ':' +
+    second
+  );
+}
+
+export function timestamp2string1(timestamp, dataExportDefaultTime = 'hour') {
+  let date = new Date(timestamp * 1000);
+  // let year = date.getFullYear().toString();
+  let month = (date.getMonth() + 1).toString();
+  let day = date.getDate().toString();
+  let hour = date.getHours().toString();
+  if (month.length === 1) {
+    month = '0' + month;
+  }
+  if (day.length === 1) {
+    day = '0' + day;
+  }
+  if (hour.length === 1) {
+    hour = '0' + hour;
+  }
+  let str = month + '-' + day
+  if (dataExportDefaultTime === 'hour') {
+    str += ' ' + hour + ":00"
+  } else if (dataExportDefaultTime === 'week') {
+    let nextWeek = new Date(timestamp * 1000 + 6 * 24 * 60 * 60 * 1000);
+    let nextMonth = (nextWeek.getMonth() + 1).toString();
+    let nextDay = nextWeek.getDate().toString();
+    if (nextMonth.length === 1) {
+        nextMonth = '0' + nextMonth;
+    }
+    if (nextDay.length === 1) {
+        nextDay = '0' + nextDay;
+    }
+    str += ' - ' + nextMonth + '-' + nextDay
+  }
+  return str;
+}
+
+export function downloadTextAsFile(text, filename) {
+  let blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  let url = URL.createObjectURL(blob);
+  let a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+}
+
+export const verifyJSON = (str) => {
+  try {
+    JSON.parse(str);
+  } catch (e) {
+    return false;
+  }
+  return true;
+};
+
+export function shouldShowPrompt(id) {
+  let prompt = localStorage.getItem(`prompt-${id}`);
+  return !prompt;
+
+}
+
+export function setPromptShown(id) {
+  localStorage.setItem(`prompt-${id}`, 'true');
+}

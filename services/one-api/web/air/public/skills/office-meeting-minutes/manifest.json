@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "id": "office-meeting-minutes",
+  "name": "office-meeting-minutes",
+  "slug": "office-meeting-minutes",
+  "displayName": "会议纪要",
+  "summary": "将常见音频转换、分段转写，并结合会议材料生成结构化会议纪要。",
+  "description": "将常见音频转换、分段转写，并结合会议材料生成结构化会议纪要。 包含可直接运行的本地处理脚本、依赖说明、错误处理和统一中文交付规范。",
+  "category": "办公工具",
+  "tags": [
+    "官方",
+    "办公",
+    "演示"
+  ],
+  "capabilities": [
+    "Qwen3-ASR 或后台百炼 Qwen-Audio 语音转写",
+    "音频转 WAV 与长录音分段转写",
+    "Qwen3.8 结构化会议纪要",
+    "会议纪要 Word 单一交付"
+  ],
+  "version": "1.0.10",
+  "author": "万维Buddy 办公工具",
+  "submitter": "root",
+  "createdAt": "2026-09-14 19:00:00",
+  "featured": true,
+  "status": "published",
+  "accent": "#9333ea",
+  "icon": "会",
+  "params": [
+    {
+      "name": "materials",
+      "type": "files",
+      "required": false,
+      "description": "可选会议材料或已有转写稿"
+    },
+    {
+      "name": "audioPath",
+      "type": "file",
+      "required": false,
+      "description": "可选 WAV、M4A、MP3 等语音文件；长音频自动分段转写"
+    },
+    {
+      "name": "meetingTitle",
+      "type": "string",
+      "required": false,
+      "description": "会议名称"
+    },
+    {
+      "name": "outputDirectory",
+      "type": "directory",
+      "required": false,
+      "description": "输出目录；留空时在输入文件旁创建独立目录"
+    }
+  ],
+  "files": [
+    "manifest.json",
+    "SKILL.md",
+    "scripts/invoke.ps1",
+    "scripts/office_tools.py",
+    "requirements.txt",
+    "scripts/invoke.py"
+  ]
+}

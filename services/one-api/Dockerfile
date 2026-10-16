@@ -1,0 +1,95 @@
+ARG PARVIS_VERSION=dev
+ARG ALPINE_MIRROR=mirrors.tuna.tsinghua.edu.cn/alpine
+ARG DOCKER_MIRROR=docker.m.daocloud.io
+
+FROM --platform=$BUILDPLATFORM ${DOCKER_MIRROR}/library/node:20 AS web-builder
+ARG PARVIS_VERSION
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+ARG DSH_ADMIN_PUBLIC_URL=
+ARG DSH_API_PUBLIC_URL=
+
+ENV NPM_CONFIG_REGISTRY=$NPM_REGISTRY \
+    NPM_CONFIG_REPLACE_REGISTRY_HOST=always
+
+WORKDIR /web
+
+# 两个管理端均使用随源码快照交付的锁文件。
+# 先复制依赖清单，方便 Docker 复用依赖安装缓存。
+COPY web/air/package.json web/air/package-lock.json ./air/
+COPY web/org-admin/package.json web/org-admin/package-lock.json ./org-admin/
+
+# npmmirror is the default for fast domestic builds. The mirror may lag new
+# Tiptap releases, so route that small package scope to npmjs explicitly.
+RUN npm config set @tiptap:registry https://registry.npmjs.org && \
+    npm ci --prefix /web/air --no-audit --no-fund
+RUN npm ci --prefix /web/org-admin --no-audit --no-fund
+
+COPY web/air ./air
+COPY web/org-admin ./org-admin
+RUN mkdir -p /web/build
+RUN cd /web/air && npx --no-install eslint src/components/ExpertWebTable.js src/pages/Expert/index.js
+
+# Runtime skills are database releases. Checked-in GIS packages remain source
+# migration samples and are deliberately excluded from the shipped web assets.
+RUN rm -rf /web/air/public/skills
+
+RUN DISABLE_ESLINT_PLUGIN=true \
+    REACT_APP_VERSION="$PARVIS_VERSION" \
+    PUBLIC_URL="$DSH_ADMIN_PUBLIC_URL" \
+    REACT_APP_SERVER="$DSH_API_PUBLIC_URL" \
+    npm run build --prefix /web/air
+
+RUN DISABLE_ESLINT_PLUGIN=true \
+    REACT_APP_VERSION="$PARVIS_VERSION" \
+    npm run build:unix --prefix /web/org-admin
+
+FROM ${DOCKER_MIRROR}/library/golang:alpine AS go-builder
+ARG PARVIS_VERSION
+ARG GO_PROXY=https://goproxy.cn,direct
+ARG ALPINE_MIRROR
+
+ENV GOPROXY=$GO_PROXY
+
+RUN sed -i "s#dl-cdn.alpinelinux.org/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories && \
+    apk add --no-cache \
+    gcc \
+    musl-dev \
+    sqlite-dev \
+    build-base
+
+ENV GO111MODULE=on \
+    CGO_ENABLED=1 \
+    GOOS=linux
+
+WORKDIR /build
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+COPY --from=web-builder /web/build ./web/build
+
+# Compile all tests; execute this release's expert/database/authentication checks.
+# Historical full-suite failures are listed in the release check report, not suppressed.
+RUN go test ./... -run '^$' && \
+    go test ./controller -run '^TestExpert' -count=1 && \
+    go test ./middleware -count=1
+
+RUN go build -trimpath \
+    -ldflags "-s -w -X 'github.com/songquanpeng/one-api/common.Version=${PARVIS_VERSION}' -linkmode external -extldflags '-static'" \
+    -o one-api
+
+FROM ${DOCKER_MIRROR}/library/alpine:latest
+ARG ALPINE_MIRROR
+
+ENV TIKTOKEN_CACHE_DIR=/opt/tiktoken-cache
+
+RUN sed -i "s#dl-cdn.alpinelinux.org/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories && \
+    apk add --no-cache ca-certificates tzdata
+
+COPY --from=go-builder /build/one-api /one-api
+COPY tiktoken-cache /opt/tiktoken-cache
+
+EXPOSE 3000 3001
+WORKDIR /data
+ENTRYPOINT ["/one-api"]

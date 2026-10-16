@@ -1,0 +1,23 @@
+services:
+  skill-test-runner:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - results:/data
+    networks:
+      dsh-internal:
+        aliases: [skill-test-runner]
+    mem_limit: 768m
+    cpus: 1
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+volumes:
+  results:
+networks:
+  dsh-internal:
+    external: true

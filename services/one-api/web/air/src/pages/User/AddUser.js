@@ -1,0 +1,131 @@
+import React, { useState } from 'react';
+import { API, isMobile, showError, showSuccess } from '../../helpers';
+import Title from '@douyinfe/semi-ui/lib/es/typography/title';
+import { Button, Input, Select, SideSheet, Space, Spin } from '@douyinfe/semi-ui';
+
+const AddUser = (props) => {
+  const originInputs = {
+    username: '',
+    display_name: '',
+    unit_name: '',
+    department_name: '',
+    password: '',
+    role: 1
+  };
+  const [inputs, setInputs] = useState(originInputs);
+  const [loading, setLoading] = useState(false);
+  const { username, display_name, unit_name, department_name, password, role } = inputs;
+
+  const handleInputChange = (name, value) => {
+    setInputs((inputs) => ({ ...inputs, [name]: value }));
+  };
+
+  const submit = async () => {
+    setLoading(true);
+    if (inputs.username === '' || inputs.password === '') {
+      setLoading(false);
+      return;
+    }
+    const res = await API.post(`/api/user/`, inputs);
+    const { success, message } = res.data;
+    if (success) {
+      showSuccess('用户账户创建成功！');
+      setInputs(originInputs);
+      props.refresh();
+      props.handleClose();
+    } else {
+      showError(message);
+    }
+    setLoading(false);
+  };
+
+  const handleCancel = () => {
+    props.handleClose();
+  };
+
+  return (
+    <>
+      <SideSheet
+        placement={'left'}
+        title={<Title level={3}>{'添加用户'}</Title>}
+        headerStyle={{ borderBottom: '1px solid var(--semi-color-border)' }}
+        bodyStyle={{ borderBottom: '1px solid var(--semi-color-border)' }}
+        visible={props.visible}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Space>
+              <Button theme="solid" size={'large'} onClick={submit}>提交</Button>
+              <Button theme="solid" size={'large'} type={'tertiary'} onClick={handleCancel}>取消</Button>
+            </Space>
+          </div>
+        }
+        closeIcon={null}
+        onCancel={() => handleCancel()}
+        width={isMobile() ? '100%' : 600}
+      >
+        <Spin spinning={loading}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile() ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: 16 }}>
+            <Input
+              style={{ marginTop: 20, width: '100%' }}
+              label="用户名"
+              name="username"
+              placeholder={'请输入用户名'}
+              onChange={value => handleInputChange('username', value)}
+              value={username}
+              autoComplete="off"
+            />
+            <Input
+              style={{ marginTop: 20 }}
+              label="显示名称"
+              name="display_name"
+              autoComplete="off"
+              placeholder={'请输入显示名称'}
+              onChange={value => handleInputChange('display_name', value)}
+              value={display_name}
+            />
+            <Input
+              style={{ marginTop: 20 }}
+              label="所属单位"
+              name="unit_name"
+              maxLength={100}
+              placeholder="请输入所属单位（选填）"
+              onChange={value => handleInputChange('unit_name', value)}
+              value={unit_name}
+            />
+            <Input
+              style={{ marginTop: 20 }}
+              label="所属部门"
+              name="department_name"
+              maxLength={100}
+              placeholder="请输入所属部门（选填）"
+              onChange={value => handleInputChange('department_name', value)}
+              value={department_name}
+            />
+            <Input
+              style={{ marginTop: 20 }}
+              label="密码"
+              name="password"
+              type={'password'}
+              placeholder={'请输入密码'}
+              onChange={value => handleInputChange('password', value)}
+              value={password}
+              autoComplete="off"
+            />
+            <Select
+              style={{ marginTop: 20, width: '100%' }}
+              label="角色权限"
+              name="role"
+              value={role}
+              onChange={value => handleInputChange('role', value)}
+            >
+              <Select.Option value={1}>普通用户</Select.Option>
+              <Select.Option value={100}>超级管理员</Select.Option>
+            </Select>
+          </div>
+        </Spin>
+      </SideSheet>
+    </>
+  );
+};
+
+export default AddUser;

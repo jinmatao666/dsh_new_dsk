@@ -1,0 +1,697 @@
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { Modal, Table, Tag, Tooltip } from '@douyinfe/semi-ui';
+import { Bot, ChartColumn, Compass, FileText, Map, Zap } from 'lucide-react';
+import SkillBrowseDrawer from './SkillBrowseDrawer';
+import CustomSelect from './CustomSelect';
+import { importSkillFolder, zipSkillFolder, groupSkillFolders, importSkillBatch } from './skillFolderImport';
+import { API, showError, showSuccess } from '../helpers';
+import './SkillsTable.css';
+import { manageSkillBatch, SKILL_BATCH_LABELS } from './skillBatchManage';
+
+const STATUS_LABELS = { 1: '已上架', 0: '已下架' };
+const STATUS_COLORS = { 1: 'green', 0: 'grey' };
+const LEGACY_SKILL_ICONS = [
+  { value: 'glyph:map', label: '地图', Icon: Map },
+  { value: 'glyph:document', label: '文档', Icon: FileText },
+  { value: 'glyph:chart', label: '图表', Icon: ChartColumn },
+  { value: 'glyph:compass', label: '指南', Icon: Compass },
+  { value: 'glyph:bot', label: '智能体', Icon: Bot },
+  { value: 'glyph:lightning', label: '效率', Icon: Zap }
+];
+const DEFAULT_SKILL_ICONS = [
+  { value: 'preset:checklist', label: '文档整理', src: '/skill-icons/checklist.png' },
+  { value: 'preset:batch-documents', label: '批量文档', src: '/skill-icons/batch-documents.png' },
+  { value: 'preset:assistant', label: '智能助手', src: '/skill-icons/assistant.png' },
+  { value: 'preset:document-settings', label: '文档配置', src: '/skill-icons/document-settings.png' },
+  { value: 'preset:workflow', label: '工作流程', src: '/skill-icons/workflow.png' },
+  { value: 'preset:analytics', label: '数据分析', src: '/skill-icons/analytics.png' },
+  { value: 'preset:conversation', label: '沟通协作', src: '/skill-icons/conversation.png' },
+  { value: 'preset:integration', label: '工具集成', src: '/skill-icons/integration.png' },
+  { value: 'preset:cloud-upload', label: '云端上传', src: '/skill-icons/cloud-upload.png' },
+  { value: 'preset:toolbox', label: '工具箱', src: '/skill-icons/toolbox.png' }
+];
+
+const splitLines = text => String(text || '').split('\n').map(line => line.trim()).filter(Boolean);
+const tagsToLines = tags => {
+  if (Array.isArray(tags)) return tags.filter(Boolean).join('\n');
+  if (typeof tags === 'string') {
+    try {
+      const parsed = JSON.parse(tags);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean).join('\n');
+    } catch { /* keep the original text as a safe fallback */ }
+    return tags.trim();
+  }
+  return '';
+};
+const compactTime = value => {
+  if (!value) return { display: '-', full: '-' };
+  const date = new Date(Number(value) * 1000);
+  const pad = number => String(number).padStart(2, '0');
+  const display = `${String(date.getFullYear()).slice(-2)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const full = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return { display, full };
+};
+const SkillIcon = ({ icon, small = false }) => {
+  const preset = DEFAULT_SKILL_ICONS.find(item => item.value === icon);
+  const legacy = LEGACY_SKILL_ICONS.find(item => item.value === icon) || LEGACY_SKILL_ICONS[4];
+  const Icon = legacy.Icon;
+  return <span className={`skill-identity-icon${small ? ' small' : ''}`} title={preset?.label || legacy.label}>
+    {String(icon || '').startsWith('data:image/') ? <img src={icon} alt='' /> : preset ? <img src={preset.src} alt='' /> : <Icon aria-hidden size={small ? 16 : 24} strokeWidth={1.8} />}
+  </span>;
+};
+const previewableFile = path => /\.(?:md|txt|json|ya?ml|toml|js|jsx|ts|tsx|py|go|rs|sh|ps1|bat|cmd|css|html?|xml|sql|csv|tsv)$/i.test(path || '');
+const decodePackageText = encoded => {
+  try {
+    const binary = atob(encoded || '');
+    const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch {
+    return '无法读取该文件内容。';
+  }
+};
+const filesFromDirectoryHandle = async (directory, root = directory.name, prefix = '') => {
+  const files = [];
+  for await (const [name, entry] of directory.entries()) {
+    const relativePath = `${prefix}${name}`;
+    if (entry.kind === 'directory') {
+      files.push(...await filesFromDirectoryHandle(entry, root, `${relativePath}/`));
+      continue;
+    }
+    const file = await entry.getFile();
+    // zipSkillFolder consumes webkitRelativePath. Defining it here gives the
+    // modern directory picker the same normalized input as webkitdirectory.
+    Object.defineProperty(file, 'webkitRelativePath', { value: `${root}/${relativePath}` });
+    files.push(file);
+  }
+  return files;
+};
+
+const EMPTY_FORM = {
+  name: '',
+  display_name: '',
+  category: '',
+  version: '1.0.0',
+  status: '0',
+  summary: '',
+  description: '',
+  capabilities: '通用能力',
+  body: '',
+  icon: 'preset:assistant'
+};
+
+const SKILL_SCOPES = [
+  ['all', '全部'],
+  ['official', '官方'],
+  ['personal-public', '个人公开'],
+  ['private', '私人']
+];
+
+const isPrivateSkill = skill => skill.record_type === 'private';
+const skillScope = skill => isPrivateSkill(skill) ? 'private' : skill.source === 'personal' ? 'personal-public' : 'official';
+
+const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
+  const [items, setItems] = useState([]);
+  const [managedCategories, setManagedCategories] = useState([]);
+  const [keyword, setKeyword] = useState(keywordProp);
+  const [scope, setScope] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState([]);
+  const [batchProgress, setBatchProgress] = useState(null);
+  const [batchResult, setBatchResult] = useState(null);
+  const batchBusyRef = useRef(false);
+  const [browse, setBrowse] = useState({ visible: false, skill: null });
+  // editor.base 为被编辑的技能；null 表示新增
+  const [editor, setEditor] = useState(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  // 从文件夹导入的产物；null 表示本次编辑未导入
+  const [imported, setImported] = useState(null);
+  const [importDialogVisible, setImportDialogVisible] = useState(false);
+  const [importSuccess, setImportSuccess] = useState(null);
+  const [importProgress, setImportProgress] = useState(null);
+  const importBusyRef = useRef(false);
+  const folderInputRef = useRef(null);
+  const zipInputRef = useRef(null);
+  const importFolderInputRef = useRef(null);
+  const iconInputRef = useRef(null);
+  const [releases, setReleases] = useState({ skill: null, items: [], files: [], selectedFilePath: '' });
+  const loadSkills = useCallback(async () => {
+    try {
+      const [publishedResponse, privateResponse] = await Promise.all([
+        API.get('/api/skill/admin/list', { params: { page: 1, perPage: 100 } }),
+        API.get('/api/personal-skill/admin/', { params: { page: 1, perPage: 100, visibility: 'private' } })
+      ]);
+      const published = Array.isArray(publishedResponse.data?.items) ? publishedResponse.data.items : [];
+      const privateSkills = (Array.isArray(privateResponse.data?.items) ? privateResponse.data.items : []).map(skill => ({
+        ...skill,
+        record_type: 'private',
+        submitter: skill.owner,
+        downloads: 0,
+        status: null,
+        _rowKey: `private-${skill.id}`
+      }));
+      setItems([...published.map(skill => ({ ...skill, _rowKey: `published-${skill.id}` })), ...privateSkills]);
+    } catch (error) {
+      showError(error.message || '加载技能失败');
+    }
+
+    try {
+      const categoryResponse = await API.get('/api/skill-category/', { params: { includeDisabled: 0, type: 'skill_package' } });
+      setManagedCategories(Array.isArray(categoryResponse.data?.data) ? categoryResponse.data.data : []);
+    } catch (error) {
+      setManagedCategories([]);
+      showError(error.message || '加载技能分类失败');
+    }
+  }, []);
+  useEffect(() => { void loadSkills(); }, [loadSkills]);
+  useEffect(() => {
+    window.addEventListener('skill-categories-changed', loadSkills);
+    return () => window.removeEventListener('skill-categories-changed', loadSkills);
+  }, [loadSkills]);
+
+  const onKeywordChange = useCallback(value => setKeyword(value || ''), []);
+  useImperativeHandle(ref, () => ({ onKeywordChange, openCreate: () => openEditor(null) }));
+
+  const openEditor = (skill) => {
+    setImported(null);
+    setForm(skill ? {
+      name: skill.name || '',
+      display_name: skill.display_name || '',
+      icon: skill.icon || 'preset:assistant',
+      category: skill.category || '',
+      version: skill.version || '1.0.0',
+      status: String(skill.status ?? 0),
+      summary: skill.summary || '',
+      description: skill.description || '',
+      capabilities: tagsToLines(skill.tags) || '通用能力',
+      body: skill.body || ''
+    } : { ...EMPTY_FORM });
+    setEditor({ base: skill || null });
+  };
+  const closeEditor = () => setEditor(null);
+  const setField = field => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
+
+  const chooseIconFile = async event => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) { showError('请选择 PNG、JPEG、WebP 或 GIF 图片'); return; }
+    if (file.size > 2 * 1024 * 1024) { showError('图标文件不能超过 2 MB'); return; }
+    const reader = new FileReader();
+    reader.onload = () => setForm(prev => ({ ...prev, icon: String(reader.result || '') }));
+    reader.onerror = () => showError('读取图标失败');
+    reader.readAsDataURL(file);
+  };
+
+  const runImportBatch = async entries => {
+    if (!entries.length || importBusyRef.current || batchBusyRef.current) return;
+    importBusyRef.current = true;
+    setImportDialogVisible(false);
+    setImportSuccess(null);
+    try {
+      const results = await importSkillBatch(entries, async file => {
+        const data = new FormData();
+        data.append('package', file); data.append('changelog', '后台导入');
+        const response = await API.post('/api/skill/admin/import', data);
+        if (response.data?.success !== true) throw new Error(response.data?.message || '导入失败');
+        return response.data.data;
+      }, setImportProgress);
+      setImportSuccess({ results });
+      await loadSkills();
+    } finally {
+      importBusyRef.current = false;
+      setImportProgress(null);
+    }
+  };
+  const importZip = async event => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+    await runImportBatch(files.map(file => ({ name: file.name, prepare: async () => file })));
+  };
+  const importFolderFiles = async (files) => {
+    if (!files.length) return;
+    setImportDialogVisible(false);
+    try {
+      const groups = groupSkillFolders(files);
+      await runImportBatch(groups.map(group => ({ name: group.name, prepare: async () => {
+        const zip = await zipSkillFolder(group.files);
+        return new File([zip], `${group.name}.zip`, { type: 'application/zip' });
+      } })));
+    } catch (error) { showError(error.message || '导入技能文件夹失败'); }
+  };
+  const importFolder = async (event) => {
+    const files = Array.from(event.target.files || []); event.target.value = '';
+    await importFolderFiles(files);
+  };
+  const chooseSkillFolder = async () => {
+    if (typeof window.showDirectoryPicker !== 'function') {
+      if (importFolderInputRef.current) {
+        importFolderInputRef.current.click();
+        return;
+      }
+      showError('当前浏览器不支持文件夹选择，请改用 ZIP 文件导入。');
+      return;
+    }
+    try {
+      const directory = await window.showDirectoryPicker({ mode: 'read' });
+      await importFolderFiles(await filesFromDirectoryHandle(directory));
+    } catch (error) {
+      if (error?.name !== 'AbortError') showError(error.message || '读取技能文件夹失败');
+    }
+  };
+  const openReleases = async skill => {
+    try { const response = await API.get(`/api/skill/${skill.id}/releases`); setReleases({ skill, items: response.data?.data || [], files: [], selectedFilePath: '' }); }
+    catch (error) { showError(error.response?.data?.message || error.message || '加载版本失败'); }
+  };
+  const closeReleases = () => setReleases({ skill: null, items: [], files: [], selectedFilePath: '' });
+  const releaseAction = async (release, action) => {
+    const skill = releases.skill; if (!skill) return;
+    try {
+      const response = await API.post(`/api/skill/${skill.id}/releases/${release.id}/${action}`);
+      const files = action === 'validate' && Array.isArray(response.data?.data?.files) ? response.data.data.files : [];
+      const listResponse = await API.get(`/api/skill/${skill.id}/releases`);
+      setReleases({ skill, items: listResponse.data?.data || [], files, selectedFilePath: files.find(file => file.path === 'SKILL.md')?.path || files[0]?.path || '' });
+      await loadSkills();
+      showSuccess(action === 'validate' ? '已加载完整文件结构与内容' : action === 'publish' ? '版本已上架' : '已回滚并上架该版本');
+    } catch (error) { showError(error.response?.data?.message || error.message || '版本操作失败'); }
+  };
+
+  const handleFolderImport = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (folderInputRef.current) folderInputRef.current.value = '';
+    if (!files.length) return;
+    try {
+      const result = await importSkillFolder(files);
+      setForm(prev => ({
+        ...prev,
+        name: prev.name || result.name,
+        display_name: prev.display_name || result.displayName,
+        description: prev.description || result.description,
+        body: result.body
+      }));
+      setImported({ fileCount: result.fileCount, paths: result.paths, assets: result.assets });
+      showSuccess(`已导入 ${result.fileCount} 个文件`);
+    } catch (err) {
+      showError(err.message || '导入失败');
+    }
+  };
+
+  const filteredItems = useMemo(() => {
+    const query = keyword.trim().toLowerCase();
+    return items.filter(item => {
+      if (scope !== 'all' && skillScope(item) !== scope) return false;
+      if (!query) return true;
+      return [item.name, item.display_name, item.description, item.category, item.submitter, item.owner].join(' ').toLowerCase().includes(query);
+    });
+  }, [items, keyword, scope]);
+  useEffect(() => { setCurrentPage(1); }, [keyword, scope]);
+  useEffect(() => { setSelectedKeys([]); setBatchResult(null); }, [keyword, scope]);
+  useEffect(() => {
+    const available = new Set(items.map(item => item._rowKey));
+    setSelectedKeys(keys => keys.filter(key => available.has(key)));
+  }, [items]);
+  useEffect(() => {
+    const lastPage = Math.max(1, Math.ceil(filteredItems.length / 20));
+    setCurrentPage(page => Math.min(page, lastPage));
+  }, [filteredItems.length]);
+
+  const selectedSkills = items.filter(item => selectedKeys.includes(item._rowKey));
+  const pageSkills = filteredItems.slice((currentPage - 1) * 20, currentPage * 20);
+  const batchBusy = batchProgress !== null;
+  const runBatch = async (action, records) => {
+    if (batchBusyRef.current || importBusyRef.current) return;
+    batchBusyRef.current = true;
+    setBatchResult(null);
+    try {
+      const results = await manageSkillBatch(records, action, API, setBatchProgress);
+      setBatchResult({ action, results });
+      const successful = new Set(results.filter(result => result.state === 'success').map(result => result.key));
+      setSelectedKeys(keys => keys.filter(key => !successful.has(key)));
+      await loadSkills();
+      const failed = results.filter(result => result.state === 'failed').length;
+      const success = successful.size;
+      const skipped = results.filter(result => result.state === 'skipped').length;
+      const message = `批量${SKILL_BATCH_LABELS[action]}完成：成功 ${success} 个，失败 ${failed} 个，跳过 ${skipped} 个`;
+      if (failed) showError(message); else showSuccess(message);
+    } finally {
+      batchBusyRef.current = false;
+      setBatchProgress(null);
+    }
+  };
+  const confirmBatch = action => {
+    if (!selectedSkills.length || batchBusyRef.current) return;
+    const records = [...selectedSkills];
+    const privateCount = records.filter(isPrivateSkill).length;
+    Modal.confirm({
+      title: `批量${SKILL_BATCH_LABELS[action]} ${records.length} 个技能？`,
+      content: action === 'delete'
+        ? '删除后将从技能管理中移除；公开技能不再出现在桌面技能市场。请确认所选技能，操作不会删除用户本机已安装的文件。'
+        : `将对所选公开技能执行${SKILL_BATCH_LABELS[action]}，桌面端刷新后生效。${privateCount ? `其中 ${privateCount} 个私人技能将跳过。` : ''}`,
+      okText: `确认${SKILL_BATCH_LABELS[action]}`, cancelText: '取消',
+      okType: action === 'delete' ? 'danger' : 'primary',
+      onOk: () => runBatch(action, records),
+    });
+  };
+
+  const removeSkill = skill => {
+    Modal.confirm({ title: `删除技能「${skill.display_name || skill.name}」？`, content: '删除后将不再出现在桌面技能市场。', okType: 'danger', onOk: async () => { await API.delete(`/api/skill/${skill.id}`); await loadSkills(); showSuccess('技能已删除'); } });
+  };
+  const togglePublish = async skill => {
+    try {
+      if (skill.status !== 1) {
+        const response = await API.get(`/api/skill/${skill.id}/releases`);
+        // A skill that was merely taken off shelf still has its last published
+        // package. That package is the valid target for putting it on shelf again.
+        const target = (response.data?.data || []).find(release => ['unpublished', 'draft', 'published'].includes(release.state));
+        if (!target) { showError('未找到可上架的技能版本'); return; }
+        await API.post(`/api/skill/${skill.id}/releases/${target.id}/publish`);
+        await loadSkills();
+        showSuccess('技能已上架，桌面端刷新后可见');
+        return;
+      }
+      await API.post(`/api/skill/${skill.id}/unpublish`);
+      await loadSkills();
+      showSuccess('技能已下架，桌面端刷新后将隐藏');
+    } catch (error) { showError(error.message || '更新状态失败'); }
+  };
+
+  const columns = [
+    {
+      title: '技能', width: 215, render: (_, record) => (
+        <div className='skill-name'>
+          <div className='skill-name-title'><SkillIcon icon={record.icon} small /><Tooltip content={record.display_name || record.name}><span className='skill-name-main'>{record.display_name || record.name}</span></Tooltip><Tag color={isPrivateSkill(record) ? 'grey' : record.source === 'personal' ? 'orange' : 'cyan'} size='small'>{isPrivateSkill(record) ? '私人' : record.source === 'personal' ? '个人公开' : '官方'}</Tag></div>
+          <Tooltip content={`${record.name || '-'} · ${record.team || '-'}`}><span className='skill-name-sub'>{record.name} · {record.team || '-'}</span></Tooltip>
+        </div>
+      )
+    },
+    { title: '分类', dataIndex: 'category', width: 96, render: value => <Tooltip content={value || '-'}><Tag color='blue' size='small'>{value}</Tag></Tooltip> },
+    {
+      title: '标签', width: 160, render: (_, record) => {
+        const capabilities = Array.isArray(record.tags) ? record.tags : [];
+        if (capabilities.length === 0) return null;
+        return (
+          <Tooltip
+            content={(
+              <div className='skill-cap-tip'>
+                {capabilities.map(item => <div key={item} className='skill-cap-tip-item'>{item}</div>)}
+              </div>
+            )}
+          >
+            <div className='skill-cap-row'>
+              <span className='skill-cap-tag'>{capabilities[0]}</span>
+              {capabilities.length > 1 && <span className='skill-cap-more'>+{capabilities.length - 1}</span>}
+            </div>
+          </Tooltip>
+        );
+      }
+    },
+    { title: '版本', dataIndex: 'version', width: 70, render: (value, record) => isPrivateSkill(record) ? <span>v{value || '-'}</span> : <button type='button' className='skill-version-action' title={`v${value || '-'}`} onClick={() => { void openReleases(record); }}>v{value}</button> },
+    { title: '上传人', dataIndex: 'submitter', width: 90, render: value => <Tooltip content={value || 'root'}><span className='skill-uploader'>{value || 'root'}</span></Tooltip> },
+    { title: '上传时间', dataIndex: 'created_at', width: 118, render: value => { const time = compactTime(value); return <span className='skill-upload-time' title={time.full}>{time.display}</span>; } },
+    { title: '安装量', dataIndex: 'installation_count', width: 62, render: value => { const count = Number(value || 0); return <Tooltip content={`安装用户数（同一用户仅计一次）：${count}`}><span className='skill-install-count'>{count}</span></Tooltip>; } },
+    { title: '状态', width: 100, render: (_, record) => isPrivateSkill(record)
+      ? <Tag color='grey' size='small'>私人留存</Tag>
+      : record.unpublished_release_count > 0
+      ? <div className='skill-status-stack'><Tag color='orange' size='small'>{record.status === 1 ? '待更新' : '未上架'}</Tag>{record.status === 1 && <small>旧版本仍已上架</small>}</div>
+      : <Tag color={STATUS_COLORS[record.status] || 'grey'} size='small'>{record.status === 1 ? STATUS_LABELS[record.status] : '未发布'}</Tag> },
+    {
+      title: '操作', width: 160, render: (_, record) => (
+        <div className='skill-row-actions'>
+          {!isPrivateSkill(record) && <button type='button' className='skill-text-action' disabled={batchBusy} onClick={() => openEditor(record)}>编辑</button>}
+          {!isPrivateSkill(record) && <button type='button' className='skill-text-action' disabled={batchBusy} onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '上架'}</button>}
+          <button type='button' className='skill-text-action' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</button>
+          {!isPrivateSkill(record) && <button type='button' className='skill-text-action danger' disabled={batchBusy} onClick={() => removeSkill(record)}>删除</button>}
+        </div>
+      )
+    }
+  ];
+
+  const saveSkill = async (e) => {
+    e.preventDefault();
+    const name = form.name.trim();
+    const displayName = form.display_name.trim();
+    if (!name) { showError('请输入技能标识'); return; }
+    if (!displayName) { showError('请输入显示名称'); return; }
+    if (!form.category) { showError('请选择分类；分类由“分类管理”维护'); return; }
+    const payload = {
+      name,
+      display_name: displayName,
+      category: form.category,
+      description: form.description || form.summary,
+      scenario: form.summary,
+      tags: splitLines(form.capabilities).length ? splitLines(form.capabilities) : ['通用能力'],
+      icon: form.icon,
+    };
+    if (!editor.base) { showError('请先通过“导入技能”创建技能'); return; }
+    try {
+      if (editor.base) await API.put(`/api/skill/${editor.base.id}`, payload);
+      else await API.post('/api/skill/', payload);
+      await loadSkills();
+      setEditor(null);
+      showSuccess('技能元数据已保存');
+    } catch (error) { showError(error.response?.data?.message || error.message || '保存失败'); }
+  };
+
+  const selectedReleaseFile = releases.files.find(file => file.path === releases.selectedFilePath);
+
+  return <div className='skill-admin'>
+    <div className='preview-stat-grid'>
+      <div>
+        <span>技能总数</span>
+        <strong>{items.length}</strong>
+      </div>
+      <div>
+        <span>已上架</span>
+        <strong>{items.filter(item => item.status === 1).length}</strong>
+      </div>
+      <div>
+        <span>当前分类</span>
+        <strong>{new Set(items.map(item => item.category)).size}</strong>
+      </div>
+    </div>
+    <section className='preview-surface skill-admin-surface'>
+      <div className='preview-section-head'>
+        <div className='skill-list-heading'>
+          <h2>技能列表</h2>
+          <div className='skill-list-filters' role='group' aria-label='技能来源筛选'>
+            {SKILL_SCOPES.map(([value, label]) => <button key={value} type='button' disabled={batchBusy} className={scope === value ? 'active' : ''} aria-pressed={scope === value} onClick={() => setScope(value)}>{label}</button>)}
+          </div>
+        </div>
+        <div className='form-inline-actions'><span className='skill-admin-meta'>共 {filteredItems.length} 条{keyword.trim() ? ` · 搜索“${keyword.trim()}”` : ''}</span>
+          <button type='button' className='preview-button' aria-pressed={batchMode} disabled={!!importProgress || batchBusy} onClick={() => { setBatchMode(value => !value); setSelectedKeys([]); setBatchResult(null); }}>{batchMode ? '退出批量管理' : '批量管理'}</button>
+          <button type='button' className='preview-button primary' disabled={!!importProgress || batchBusy} onClick={() => setImportDialogVisible(true)}>导入技能</button></div>
+      </div>
+      <input ref={zipInputRef} hidden type='file' multiple accept='.zip,application/zip' onChange={importZip} />
+      <input ref={importFolderInputRef} hidden type='file' multiple onChange={importFolder} {...{ webkitdirectory: '', directory: '' }} />
+      {importProgress && <p role='status' aria-live='polite'>正在导入 {importProgress.completed}/{importProgress.total}：{importProgress.current}。请保持本页面打开。</p>}
+      {batchMode && <div className='skill-batch-toolbar' aria-label='技能批量操作'>
+        <div className='skill-batch-selection'><strong>已选 {selectedKeys.length} 个技能</strong>
+          <button type='button' className='skill-text-action' disabled={batchBusy || !pageSkills.length} onClick={() => setSelectedKeys(keys => [...new Set([...keys, ...pageSkills.map(item => item._rowKey)])])}>全选当前页</button>
+          <button type='button' className='skill-text-action' disabled={batchBusy || !selectedKeys.length} onClick={() => setSelectedKeys([])}>清空选择</button>
+        </div>
+        <div className='skill-batch-actions'>
+          <button type='button' className='preview-button' disabled={batchBusy || !selectedSkills.some(item => !isPrivateSkill(item) && item.status !== 1)} onClick={() => confirmBatch('publish')}>批量上架</button>
+          <button type='button' className='preview-button' disabled={batchBusy || !selectedSkills.some(item => !isPrivateSkill(item) && item.status === 1)} onClick={() => confirmBatch('unpublish')}>批量下架</button>
+          <button type='button' className='preview-button skill-batch-danger' disabled={batchBusy || !selectedKeys.length} onClick={() => confirmBatch('delete')}>批量删除</button>
+        </div>
+        <p>可跨页勾选；切换来源或搜索会清空选择。私人技能仅支持批量删除。</p>
+      </div>}
+      {batchProgress && <p role='status' aria-live='polite'>正在批量处理 {batchProgress.completed}/{batchProgress.total}{batchProgress.current ? `：${batchProgress.current}` : ''}，请保持本页面打开。</p>}
+      {batchResult && <details className='skill-batch-result' open={batchResult.results.some(result => result.state === 'failed')}>
+        <summary>批量{SKILL_BATCH_LABELS[batchResult.action]}结果：成功 {batchResult.results.filter(result => result.state === 'success').length} 个，失败 {batchResult.results.filter(result => result.state === 'failed').length} 个，跳过 {batchResult.results.filter(result => result.state === 'skipped').length} 个</summary>
+        <ul>{batchResult.results.map(result => <li key={result.key} className={result.state}><strong>{result.name}</strong>：{result.state === 'success' ? '成功' : result.state === 'failed' ? '失败' : '跳过'}{result.message ? `，${result.message}` : ''}</li>)}</ul>
+      </details>}
+      <Table columns={columns} dataSource={filteredItems} rowKey='_rowKey' tableLayout='fixed'
+        rowSelection={batchMode ? { selectedRowKeys: selectedKeys, onChange: keys => { if (!batchBusyRef.current) setSelectedKeys(keys); }, getCheckboxProps: () => ({ disabled: batchBusy }) } : undefined}
+        pagination={{ pageSize: 20, currentPage, onPageChange: setCurrentPage }} empty='暂无技能' />
+    </section>
+    <SkillBrowseDrawer visible={browse.visible} kind={isPrivateSkill(browse.skill || {}) ? 'personal' : 'public'} id={browse.skill?.id} skill={browse.skill} onClose={() => setBrowse({ visible: false, skill: null })} />
+    {importSuccess && <div className='zjugis-modal-backdrop skill-release-backdrop' onMouseDown={(event) => { if (event.target === event.currentTarget) setImportSuccess(null); }}>
+      <div className='zjugis-modal skill-import-success-dialog' role='dialog' aria-modal='true' aria-label='技能上传完成'>
+        <div className='zjugis-modal-head'>
+          <div><h2>技能导入结果</h2><p>成功 {importSuccess.results.filter(item => item.success).length} 个，失败 {importSuccess.results.filter(item => !item.success).length} 个</p></div>
+          <button type='button' onClick={() => setImportSuccess(null)} aria-label='关闭'>×</button>
+        </div>
+        <p className='skill-import-success-copy'>本次导入的版本已保存，技能默认下架，手动上架后桌面端才可获取。失败的技能可修正后单独重传，请勿重复提交已成功的技能。</p>
+        <div style={{ maxHeight: '45vh', overflowY: 'auto' }}>
+          <ul>{importSuccess.results.map((item, index) => <li key={index}>
+            <strong>{item.success ? '成功' : '失败'}：{item.name}</strong>
+            {item.success ? ` · ${item.result?.skill?.display_name || item.result?.skill?.name || ''} · v${item.result?.release?.version || ''}` : ` — ${item.error}`}
+            {item.success && <p>{item.result?.skill?.status === 1
+              ? `待更新：旧版本 v${item.result.skill.version || '-'} 仍已上架。本次导入版本尚未发布；请点击列表版本号，在版本管理中上架新版本。`
+              : '未上架：请在列表中点击“上架”，发布后桌面端才可获取。'}</p>}
+          </li>)}</ul>
+        </div>
+        <div className='zjugis-modal-actions'><button type='button' className='preview-button primary' onClick={() => setImportSuccess(null)}>知道了</button></div>
+      </div>
+    </div>}
+    {importDialogVisible && (
+      <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) setImportDialogVisible(false); }}>
+        <div className='zjugis-modal'>
+          <div className='zjugis-modal-head'>
+            <h2>导入技能</h2>
+            <button type='button' onClick={() => setImportDialogVisible(false)} aria-label='关闭'>×</button>
+          </div>
+          <div className='skill-import-dialog'>
+            <p>选择导入方式。导入成功后技能默认下架；已有技能导入新版本也会下架，请核对后手动上架。</p>
+            <div className='skill-import-options'>
+              <button type='button' className='skill-import-option' onClick={() => { void chooseSkillFolder(); }}>
+                <span className='skill-import-option-icon'>
+                  <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
+                    <path d='M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z' />
+                    <path d='M12 10v6' />
+                    <path d='m9 13 3 3 3-3' />
+                  </svg>
+                </span>
+                <span className='skill-import-option-copy'><strong>从技能文件夹批量导入</strong><span>选择一个技能目录，或包含多个技能子目录的父文件夹；无需 manifest.json</span></span>
+                <span className='skill-import-option-arrow'>
+                  <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
+                    <path d='M5 12h14' />
+                    <path d='m13 6 6 6-6 6' />
+                  </svg>
+                </span>
+              </button>
+              <button type='button' className='skill-import-option' onClick={() => zipInputRef.current?.click()}>
+                <span className='skill-import-option-icon'>
+                  <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
+                    <rect x='3' y='4' width='18' height='4' rx='1' />
+                    <path d='M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8' />
+                    <path d='M10 12h4' />
+                  </svg>
+                </span>
+                <span className='skill-import-option-copy'><strong>从 ZIP 文件批量导入</strong><span>可同时选择多个 ZIP，每个 ZIP 包含一个技能；无需 manifest.json</span></span>
+                <span className='skill-import-option-arrow'>
+                  <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>
+                    <path d='M5 12h14' />
+                    <path d='m13 6 6 6-6 6' />
+                  </svg>
+                </span>
+              </button>
+            </div>
+            <div className='skill-import-footer'><button type='button' className='preview-button' onClick={() => setImportDialogVisible(false)}>取消</button></div>
+          </div>
+        </div>
+      </div>
+    )}
+    {releases.skill && <div className='zjugis-modal-backdrop skill-release-backdrop' onMouseDown={(event) => { if (event.target === event.currentTarget) closeReleases(); }}>
+      <div className='zjugis-modal wide skill-release-dialog' role='dialog' aria-modal='true' aria-label='版本管理'>
+        <div className='zjugis-modal-head'>
+          <div><h2>版本管理</h2><p>{releases.skill.display_name || releases.skill.name}</p></div>
+          <button type='button' onClick={closeReleases} aria-label='关闭'>×</button>
+        </div>
+        <Table rowKey='id' dataSource={releases.items} pagination={false} columns={[
+          { title: '版本', dataIndex: 'version', width: 100 },
+          { title: '状态', width: 104, render: (_, release) => <Tag color={release.state === 'published' ? 'green' : release.state === 'archived' ? 'grey' : 'orange'}>{release.state === 'published' ? '已上架' : release.state === 'archived' ? '已归档' : '未上架'}</Tag> },
+          { title: '文件', dataIndex: 'file_count', width: 88, render: value => `${Number(value || 0)} 个` },
+          { title: '创建时间', dataIndex: 'created_at', width: 150, render: value => <span className='skill-upload-time'>{compactTime(value).display}</span> },
+          { title: '操作', render: (_, release) => <div className='skill-row-actions'><button type='button' className='skill-text-action' onClick={() => { void releaseAction(release, 'validate'); }}>查看文件</button>{['unpublished', 'draft'].includes(release.state) && <button type='button' className='skill-text-action' onClick={() => { void releaseAction(release, 'publish'); }}>上架</button>}{release.state === 'archived' && <button type='button' className='skill-text-action' onClick={() => { void releaseAction(release, 'rollback'); }}>回滚并上架</button>}</div> }
+        ]} />
+        {releases.files.length > 0 && <div className='skill-validation-result'>
+          <strong>服务端校验后的完整技能包</strong>
+          <p>已校验 {releases.files.length} 个文件。请查看文件结构与内容，确认后再发布到桌面端。</p>
+          <div className='skill-validation-content'>
+            <div className='skill-validation-tree' aria-label='文件结构'>
+              {releases.files.map(file => <button type='button' key={file.path} className={`skill-validation-file${file.path === releases.selectedFilePath ? ' active' : ''}`} onClick={() => setReleases(current => ({ ...current, selectedFilePath: file.path }))}>{file.path}</button>)}
+            </div>
+            <div className='skill-validation-preview'>
+              {selectedReleaseFile && (previewableFile(selectedReleaseFile.path)
+                ? <pre>{decodePackageText(selectedReleaseFile.contentBase64)}</pre>
+                : <div className='skill-binary-file'>二进制文件：{selectedReleaseFile.path}<br />已纳入校验包，不提供文本预览。</div>)}
+            </div>
+          </div>
+        </div>}
+      </div>
+    </div>}
+    {editor && (
+      <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) closeEditor(); }}>
+        <div className='zjugis-modal wide'>
+          <div className='zjugis-modal-head'>
+            <h2>{editor.base ? '编辑技能' : '新增技能'}</h2>
+            <button type='button' onClick={closeEditor} aria-label='关闭'>×</button>
+          </div>
+          <form className='zjugis-form' onSubmit={saveSkill}>
+            <div className='form-grid'>
+              <label className='zjugis-field'>
+                <span>技能标识（英文 slug）<i className='skill-required'>*</i></span>
+                <input value={form.name} onChange={setField('name')} placeholder='例如 land-evaluation' disabled={Boolean(editor.base)} />
+              </label>
+              <label className='zjugis-field'>
+                <span>显示名称<i className='skill-required'>*</i></span>
+                <input value={form.display_name} onChange={setField('display_name')} placeholder='例如 土地评估报告' />
+              </label>
+              <label className='zjugis-field'>
+                <span>分类</span>
+                <CustomSelect value={form.category} onChange={setField('category')}>
+                  <option value=''>请选择分类</option>
+                  {managedCategories.map(category => <option key={category.id} value={category.name}>{category.name}</option>)}
+                </CustomSelect>
+                <small className='preview-muted'>只能选择“分类管理”中已启用的分类。</small>
+              </label>
+            </div>
+            <label className='zjugis-field full'>
+              <span>技能图标</span>
+              <div className='skill-icon-picker'>
+                <div className='skill-icon-preview'><SkillIcon icon={form.icon} /></div>
+                <div className='skill-icon-options'>
+                  <span className='skill-icon-picker-label'>选择通用图标</span>
+                  <div className='skill-icon-presets'>
+                    {DEFAULT_SKILL_ICONS.map(item => <button key={item.value} type='button' className={form.icon === item.value ? 'active' : ''} onClick={() => setForm(prev => ({ ...prev, icon: item.value }))} title={item.label} aria-label={item.label}><img src={item.src} alt='' /></button>)}
+                  </div>
+                  <div className='form-inline-actions'>
+                    <button type='button' className='preview-button' onClick={() => iconInputRef.current?.click()}>上传自定义图标</button>
+                    {String(form.icon || '').startsWith('data:image/') && <button type='button' className='skill-text-action' onClick={() => setForm(prev => ({ ...prev, icon: 'preset:assistant' }))}>恢复默认</button>}
+                  </div>
+                  <small className='preview-muted'>可以使用默认图标，也可以上传不超过 2 MB 的 PNG、JPEG、WebP 或 GIF；图片会自动生成适合桌面端显示的清晰缩略图。</small>
+                </div>
+              </div>
+              <input ref={iconInputRef} hidden type='file' accept='image/png,image/jpeg,image/webp,image/gif' onChange={chooseIconFile} />
+            </label>
+            {!editor.base && (
+              <label className='zjugis-field full'>
+                <span>从文件夹导入技能（可选）</span>
+                <div className='form-inline-actions'>
+                  <button type='button' className='preview-button' onClick={() => folderInputRef.current?.click()}>
+                    选择 SKILL 文件夹
+                  </button>
+                  {imported && <span className='skill-import-ok'>已导入 {imported.fileCount} 个文件，保存后可在详情中查看</span>}
+                </div>
+                <small className='preview-muted'>文件夹需包含 SKILL.md；标识、描述与正文将自动填充，其余文件随技能包一起保存。</small>
+                <input
+                  ref={folderInputRef}
+                  type='file'
+                  multiple
+                  hidden
+                  onChange={handleFolderImport}
+                  {...{ webkitdirectory: '', directory: '' }}
+                />
+              </label>
+            )}
+            <label className='zjugis-field full'>
+              <span>一句话简介</span>
+              <input value={form.summary} onChange={setField('summary')} placeholder='一句话说明技能用途' />
+            </label>
+            <label className='zjugis-field full'>
+              <span>详细描述</span>
+              <textarea rows='3' value={form.description} onChange={setField('description')} placeholder='技能的完整功能说明' />
+            </label>
+            <label className='zjugis-field full'>
+              <span>主要能力（每行一条）</span>
+              <textarea rows='3' value={form.capabilities} onChange={setField('capabilities')} />
+            </label>
+            <label className='zjugis-field full'>
+              <span>SKILL.md 内容（留空则按上面的信息生成）</span>
+              <textarea rows='5' value={form.body} onChange={setField('body')} />
+            </label>
+            <div className='zjugis-modal-actions'>
+              <button type='button' className='preview-button' onClick={closeEditor}>取消</button>
+              <button type='submit' className='preview-button primary'>保存技能</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
+  </div>;
+});
+
+SkillsTable.displayName = 'SkillsTable';
+export default SkillsTable;
