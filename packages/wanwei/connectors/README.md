@@ -29,6 +29,8 @@ The Wanwei desktop product mounts this plugin through its [composition patch](..
 
 The existing connector data and interactions are demonstrations. Dialog actions do not authorize a real service or persist credentials.
 
+Opening the page checks the configured platform through the deployment refresh RPC in either network mode. A failed request shows a disconnected-plug placeholder; a successful check displays the local demonstration directory. Reopening the page checks again. This checks platform reachability, not third-party connector health or authorization. Administrator entry visibility still applies.
+
 Disable this plugin's row to remove its entry; do not disable another business plugin as a substitute. Shared authentication, renderer and sidebar services remain provider-owned.
 
 -----

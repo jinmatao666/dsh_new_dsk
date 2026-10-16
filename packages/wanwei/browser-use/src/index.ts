@@ -11,6 +11,7 @@ import { stat } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import { FIRST_PARTY_SECTION_ORDER } from '@deepseek-ai/dsh-system-prompt'
 import { BROWSER_GUIDANCE, BROWSER_UNAVAILABLE, browserStartupFailure, resolveBrowserExecutable } from './browser-executable.ts'
+import type {} from '@deepseek-ai/dsh-wanwei-oneapi-auth'
 
 /** Explicit desktop launch configuration; no automatic browser download or attachment. */
 export interface Config {
@@ -130,9 +131,12 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     z.object({ enabled: z.boolean().default(true) }), { base: { enabled: config.enabled } })
   await ctx.plugin(BrowserUse)
   const networkMode = (): string | undefined => {
-    const policy = ctx.get('wanweiNetworkPolicy') as { getSnapshot(): { mode: string } } | undefined
+    const policy = ctx.get('wanweiNetworkPolicy')
     return policy?.getSnapshot().mode
   }
+  const administratorAllows = (): boolean =>
+    ctx.get('wanweiNetworkPolicy')?.pluginAllowed('browserAssistant') ?? true
+  const browserAllowed = (): boolean => administratorAllows() && preference.get().enabled && networkMode() !== 'intranet'
   const prefix = 'mcp__playwright-mcp__'
   const executablePath = await resolveBrowserExecutable(config.executablePath)
   ctx.effect(() => ctx.systemPrompt.section({
@@ -141,8 +145,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     text: BROWSER_GUIDANCE,
   }))
   ctx.effect(() => ctx.tools.registerAvailability(tool =>
-    !tool.startsWith(prefix) || (preference.get().enabled && networkMode() !== 'intranet')))
+    !tool.startsWith(prefix) || browserAllowed()))
   ctx.on('tools/pre-execute', async (exec, next) => {
+    if (exec.name.startsWith(prefix) && !administratorAllows()) {
+      return { kind: 'deny', reason: '管理员未允许使用浏览器助手，请联系管理员或刷新后台配置' }
+    }
     if (exec.name.startsWith(prefix) && networkMode() === 'intranet') {
       return { kind: 'deny', reason: '纯内网环境暂不开放浏览器自动化' }
     }
@@ -166,8 +173,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       ...content,
     ] }
   })
-  OfficialProvider.apply(browserCompatibilityContext(ctx,
-    () => preference.get().enabled && networkMode() !== 'intranet'), {
+  OfficialProvider.apply(browserCompatibilityContext(ctx, browserAllowed), {
     mode: 'launch', headless: config.headless,
     ...executablePath === undefined ? {} : { executablePath },
   })

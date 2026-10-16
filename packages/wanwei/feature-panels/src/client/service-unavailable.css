@@ -1,0 +1,12 @@
+.wanwei-service-unavailable { display: flex; flex: 1; min-height: 380px; box-sizing: border-box; flex-direction: column; align-items: center; justify-content: center; padding: 48px 24px; text-align: center; }
+.wanwei-service-unavailable-art { display: block; width: 320px; max-width: 100%; height: auto; margin-bottom: 20px; }
+.wanwei-service-unavailable h3 { margin: 0 0 10px; color: var(--dsw-alias-label-secondary, #64748b); font-size: 20px; font-weight: 500; line-height: 1.4; }
+.wanwei-service-unavailable p { max-width: 520px; margin: 0; color: var(--dsw-alias-label-secondary, #64748b); font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
+.wanwei-service-unavailable .wanwei-service-unavailable-hint { margin-top: 6px; font-size: 13px; }
+.dsh-skill-market-panel:has(> .wanwei-service-unavailable), .dsh-skill-market-panel:has(> .dsh-expert-active .wanwei-service-unavailable), .dsh-skill-market-panel:has(> .wanwei-skillhub > .wanwei-service-unavailable) { display: flex; flex-direction: column; }
+.dsh-skill-market-panel:has(> .wanwei-service-unavailable) > .dsh-skill-market-header, .dsh-skill-market-panel:has(> .dsh-expert-active .wanwei-service-unavailable) > .dsh-skill-market-header { flex: none; }
+.dsh-expert-active:has(.wanwei-service-unavailable), .dsh-expert-market:has(.wanwei-service-unavailable) { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+.dsh-expert-active:has(.wanwei-service-unavailable) > nav { flex: none; }
+.dsh-skill-market-panel:has(> .wanwei-skillhub > .wanwei-service-unavailable) > * { flex-shrink: 0; }
+.dsh-skill-market-panel > .wanwei-skillhub:has(> .wanwei-service-unavailable) { display: flex; flex: 1 0 auto; flex-direction: column; }
+.wanwei-skillhub:has(> .wanwei-service-unavailable) > .dsh-skill-section-header { flex: none; }

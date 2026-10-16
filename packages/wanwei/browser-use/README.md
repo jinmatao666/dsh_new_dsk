@@ -27,6 +27,8 @@ Agents can inspect and operate a Chromium browser through the pinned official Pl
 
 The settings card starts collapsed. Its header expands or collapses the permission controls without changing the saved preference; the switch saves immediately and keeps failures visible while expanded.
 
+System Settings → Plugin settings on the configured backend controls the administrator permission `plugins.browserAssistant`. Desktop startup, login, focus and authentication refresh synchronize this permission; a new process denies browser use until synchronization succeeds. Administrator denial locks the personal switch, hides tools, prevents initialization and denies subsequent execution without overwriting the personal preference. Re-enabling permits the user's saved choice; existing intranet restrictions still apply. Already-started operations are not forcibly interrupted. A backend update alone cannot enforce this policy in older desktop releases.
+
 Mount this plugin before creating Sessions. Without `executablePath`, the plugin searches standard Chrome then Edge installation locations on Windows/macOS; Linux searches Chrome, Chromium and Edge commands on PATH. A custom absolute executable path takes precedence and must be an accessible executable file. Missing browsers cause Chinese tool feedback instead of automatic downloads. Installing a browser or changing its path requires restarting the desktop and creating a new Session.
 
 ```yaml

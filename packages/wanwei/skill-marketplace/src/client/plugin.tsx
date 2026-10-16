@@ -448,10 +448,9 @@ function SkillCategorySelect({
     onChange={onChange} className="dsh-skill-add-select-trigger" />
 }
 
-function SkillMarketplace({ controller, services, chooseDirectory, useNetwork }: OverlayProps) {
+function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProps) {
   const { skillhubRequest, loadRemoteSkills, startSkillConversation, loadRemoteCategories,
     loadRemoteSkillBundle, recordRemoteSkillInstall, submitPersonalSkill, loadPersonalSkills } = services
-  const intranet = useNetwork(value => value.mode === 'intranet')
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState(L.all)
@@ -1198,7 +1197,6 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork }:
                 </div>
               )}
               {libraryView !== 'uploads' && <SkillHubSection
-                unavailable={intranet}
                 active installedOnly={libraryView === 'installed'} installedQuery={query}
                 {...(libraryView === 'installed' ? { installedPlatforms: visible.map(skill => ({
                   id: skill.id, slug: skillSlug(skill), name: skill.name, summary: skill.summary,

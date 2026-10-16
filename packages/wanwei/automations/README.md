@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Users can create local tasks, pause them, run them immediately and open their execution Sessions. Tasks and run records survive page closure and desktop restart. The desktop must remain running and logged in; missed schedules are not replayed. Existing entry visibility and intranet restrictions remain provider-owned; this package does not enable cloud scheduling.
+Users can create local tasks, pause them, run them immediately and open their execution Sessions. Tasks and run records survive page closure and desktop restart. The desktop must remain running and logged in; missed schedules are not replayed. Administrator entry visibility remains effective, but the intranet label does not disable local scheduling. Model and task dependencies must actually be reachable; this package does not enable cloud scheduling.
 
 ## Table of Contents
 

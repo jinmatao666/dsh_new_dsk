@@ -22,11 +22,15 @@ The product resolves an explicit executable first, otherwise checks standard ins
 
 ## Consequences
 
+The configured server owns `plugins.browserAssistant` independently of personal settings. The authentication plugin validates and commits its permission on deployment refresh; the browser adapter reads it before initialization, schema discovery and direct execution. Administrator denial locks the Client switch without writing the saved preference. Before the first successful refresh permission is denied; later refresh failures retain the last confirmed value. Missing plugin fields from older servers resolve to enabled. The policy uses the existing refresh schedule rather than a push channel, so revocation is effective after refresh and does not terminate an executing operation. Older desktop binaries do not implement administrator enforcement.
+
 The desktop composition mounts the plugin with an enabled default, while saved choices and intranet denial remain authoritative. The settings card uses a collapsed title/description header and an expanded automatically saved switch, matching neighboring plugin disclosure without introducing staged preference state. Disclosure alone never writes settings.
 
 The shared Agent registry and loop stay unchanged. Fixed published packages require narrow peer-version acceptance and integration tests against the local services. Pure intranet mode denies all browser tools until browser-network confinement is available; URL checks alone cannot constrain redirects and subresources. The package does not download Chromium. Installed-desktop model-driven validation and platform packaging verification remain incomplete. The card uses the existing settings slot and locale services; no official settings component is forked.
 
 ## Verification
+
+Deployment tests reject malformed plugin flags and retain explicit denial. Client tests verify administrator locking and restoration of personal preferences. The real Loader/browser composition also denies direct calls after administrator revocation, then verifies that administrator re-enabling does not override a personal disable.
 
 The desktop production deploy root depends on the Wanwei bundle so the pinned browser packages and their transitive npm dependencies are staged by pnpm. Workspace restoration alone supplies no registry packages. The packaged-profile startup check uses bundled Node without workspace resolver anchors.
 

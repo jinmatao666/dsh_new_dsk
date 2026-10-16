@@ -3213,7 +3213,7 @@ Source: [`packages/interaction/user-approval/src/index.ts:142`](../packages/inte
 
 ## `@deepseek-ai/dsh-wanwei-automations`
 
-Requires: `connection` · `credentials` · `sessionController` · `sessions` · `agents` · `permissionPresets` · `wanweiNetworkPolicy` · `tools` · `workspaceRegistry`
+Requires: `connection` · `credentials` · `sessionController` · `sessions` · `agents` · `permissionPresets` · `tools` · `workspaceRegistry`
 
 ```ts config-catalog
 /** Deployment limits and local storage location. */
@@ -3259,7 +3259,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/wanwei/browser-use/src/index.ts:16`](../packages/wanwei/browser-use/src/index.ts)
+Source: [`packages/wanwei/browser-use/src/index.ts:17`](../packages/wanwei/browser-use/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-chinese"></a>
 
@@ -3329,6 +3329,8 @@ export interface Config {
   installId?: string
   /** Skip the login overlay inside the source-only Tauri development shell. */
   developmentBypass?: boolean
+  /** Maximum deployment and expert service request duration in milliseconds. */
+  serviceTimeoutMs?: number
 }
 ```
 
@@ -3338,7 +3340,7 @@ Source: [`packages/wanwei/oneapi-auth/src/index.ts:32`](../packages/wanwei/oneap
 
 ## `@deepseek-ai/dsh-wanwei-skillhub`
 
-Requires: `connection` · `wanweiNetworkPolicy`
+Requires: `connection`
 
 ```ts config-catalog
 /** All upstream deployment choices are configured by the product bundle. */
@@ -3359,7 +3361,7 @@ export interface ApiConfig {
 }
 ```
 
-Source: [`packages/wanwei/skillhub/src/index.ts:9`](../packages/wanwei/skillhub/src/index.ts)
+Source: [`packages/wanwei/skillhub/src/index.ts:8`](../packages/wanwei/skillhub/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-vision"></a>
 

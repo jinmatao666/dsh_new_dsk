@@ -348,6 +348,17 @@ getSnapshot(): NetworkState
  * @returns Committed deployment network state.
  */
 setMode(mode: unknown): Promise<NetworkState>
+
+/** Read a server-confirmed plugin permission; denied before the first successful refresh.
+ * @param plugin - Product plugin identifier.
+ * @returns Whether the administrator allows the plugin.
+ */
+pluginAllowed(plugin: keyof DeploymentPlugins): boolean
+
+/** Commit validated server permissions without modifying personal settings.
+ * @param plugins - Permissions from the configured deployment server.
+ */
+setPlugins(plugins: DeploymentPlugins): void
 ```
 
 Source: [`packages/wanwei/oneapi-auth/src/network.ts`](../../packages/wanwei/oneapi-auth/src/network.ts)

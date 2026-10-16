@@ -1,7 +1,7 @@
-import { createPanelController, registerFeaturePanel } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
+import { createPanelController, registerFeaturePanel, ServiceUnavailable } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 import type { Context } from '@deepseek-ai/cordis'
 import './page.css'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PlusIcon } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 import { Select } from '@deepseek-ai/dsh-client-ui-primitives'
 import { productText } from './locales/product.ts'
@@ -79,7 +79,20 @@ function ConnectorBrandIcon({ icon, accent }: { icon: string; accent: string }) 
   )
 }
 
-function Connectors() {
+/** Render the local directory only after the configured platform responds.
+ * @param props - Platform connectivity check; no third-party authorization is implied.
+ * @returns Directory, loading state or service placeholder.
+ */
+export function Connectors({ checkConnection }: { checkConnection: () => Promise<unknown> }) {
+  const [connection, setConnection] = useState<'loading' | 'ready' | 'failed'>('loading')
+  useEffect(() => {
+    let disposed = false
+    setConnection('loading')
+    void checkConnection().then(() => { if (!disposed) setConnection('ready') }).catch(() => {
+      if (!disposed) setConnection('failed')
+    })
+    return () => { disposed = true }
+  }, [checkConnection])
   const [requested, setRequested] = useState<Set<string>>(() => new Set())
   const [selected, setSelected] = useState<Connector | null>(null)
   const [showCustom, setShowCustom] = useState(false)
@@ -99,6 +112,9 @@ function Connectors() {
     setShowCustom(false)
     setSelected(connector)
   }
+  if (connection === 'loading') return <p role="status">{productText('正在连接服务…')}</p>
+  if (connection === 'failed') return <ServiceUnavailable variant="connectors" title={productText('暂时无法连接连接器服务')}
+    description={productText('当前网络无法连接该服务，请检查网络连接或联系管理员。')} />
   return <section className="dsh-connectors-page">
     <div className="dsh-connectors-toolbar"><button type="button" onClick={() =>{  setShowCustom(true) }}><PlusIcon /> {productText(' 自定义连接器')}</button></div>
     <div className="dsh-connectors-grid">
@@ -135,8 +151,9 @@ export const inject = ['slots', 'wanweiNetwork']
  */
 export function apply(ctx: Context): void {
   const controller = createPanelController(ctx, 'wanwei-connectors')
+  const checkConnection = () => ctx.wanweiNetwork.refresh()
   registerFeaturePanel(ctx, 'skill-connectors', 20, { controller, title: productText('连接器'),
-    subtitle: productText('管理已授权的政务协同与数据服务连接'), blockedIntranet: true, visibility: ctx.wanweiNetwork.visibility('connectors'), Icon: ConnectorsIcon,
-    hooks: { network: ctx.wanweiNetwork }, renderContent: () => <Connectors />,
+    subtitle: productText('管理已授权的政务协同与数据服务连接'), visibility: ctx.wanweiNetwork.visibility('connectors'), Icon: ConnectorsIcon,
+    hooks: { network: ctx.wanweiNetwork }, renderContent: () => <Connectors checkConnection={checkConnection} />,
   })
 }

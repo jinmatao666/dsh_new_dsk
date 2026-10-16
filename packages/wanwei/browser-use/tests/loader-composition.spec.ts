@@ -16,6 +16,7 @@ import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import * as BrowserPlugin from '../src/index.ts'
 import SettingsFile from '@deepseek-ai/dsh-settings-file'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { installNetworkPolicy } from '../../oneapi-auth/src/network.ts'
 
 let ctx: Context | undefined
 let root: string | undefined
@@ -56,14 +57,35 @@ it.skipIf(!existsSync(chromium))('boots the official provider through Loader, na
   } as unknown as NonNullable<typeof ctx.loader.internal>
   await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
   await ctx.loader.await()
+  const policy = installNetworkPolicy(ctx, 'http://server.lan')
   const id = SessionId('browser-loader')
   const agent = { id, session: Session.create(id, [], { version: 0, id, createdAt: 0, cwd: root }) } as Agent
   const scope = createScope(ctx, agent)
   Object.assign(agent, { ctx: scope.ctx })
   const unregister = ctx.agents.register(agent)
+  const pending = await ctx.systemPrompt.assemble(assembleContextFor(agent))
+  expect(pending.tools.some(tool => tool.name.startsWith('mcp__playwright-mcp__'))).toBe(false)
+  policy.setPlugins({ browserAssistant: true })
   const assembly = await ctx.systemPrompt.assemble(assembleContextFor(agent))
   expect(assembly.tools.map(tool => tool.name)).toContain('mcp__playwright-mcp__browser_navigate')
+  policy.setPlugins({ browserAssistant: false })
+  expect(ctx.tools.schemas(assembleContextFor(agent)).some(tool => tool.name.startsWith('mcp__playwright-mcp__'))).toBe(false)
+  const administratorDenied = await ctx.tools.execute({ name: 'mcp__playwright-mcp__browser_navigate',
+    arguments: { url: 'about:blank' }, callId: ToolCallId('browser-administrator-disabled'), agent,
+    signal: new AbortController().signal })
+  expect(administratorDenied.isError).toBe(true)
+  expect(JSON.stringify(administratorDenied.content)).toContain('管理员未允许使用浏览器助手')
+  expect(administratorDenied.content).toMatchInlineSnapshot(`
+    [
+      {
+        "text": "Error: 管理员未允许使用浏览器助手，请联系管理员或刷新后台配置",
+        "type": "text",
+      },
+    ]
+  `)
+  expect(ctx.settings.get(settingsNamespace('wanwei-browser-use'))).toMatchObject({ enabled: true })
   await ctx.settings.update(settingsNamespace('wanwei-browser-use'), { enabled: false })
+  policy.setPlugins({ browserAssistant: true })
   expect(ctx.tools.schemas(assembleContextFor(agent)).some(tool => tool.name.startsWith('mcp__playwright-mcp__'))).toBe(false)
   const denied = await ctx.tools.execute({ name: 'mcp__playwright-mcp__browser_navigate',
     arguments: { url: 'about:blank' }, callId: ToolCallId('browser-disabled'), agent,

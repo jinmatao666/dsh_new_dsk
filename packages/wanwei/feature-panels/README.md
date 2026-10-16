@@ -25,6 +25,8 @@ Product plugins can share the sidebar and overlay appearance without sharing cat
 <a id="use-this-package"></a>
 ## Use this package
 
+Entry visibility is administrator-owned, not inferred from the network-mode label. The shared `ServiceUnavailable` component accepts localized copy and a service-specific illustration variant; consumers show it only after their actual service request fails. Bundled cloud-skill, expert-card and disconnected-plug illustrations need no network access. The placeholder has no retry button or raw diagnostic text.
+
 The Wanwei desktop product mounts this plugin through its [composition patch](../../bundle/wanwei-desktop/cordis.patch.yml). It has no per-plugin configuration fields.
 
 Keep this shared provider mounted when a feature imports its Client exports. It has no feature entries of its own and contains no expert, skill, connector or automation data.
@@ -39,7 +41,7 @@ Consumers import the helpers from `@deepseek-ai/dsh-wanwei-feature-panels/client
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The Client exports panel controllers, registration helpers, page chrome, notices and interaction classification. The caller supplies the title, icon, content, intranet policy and optional visibility observable. A hidden entry renders no placeholder and closes its page; the sidebar keeps Settings anchored below the remaining actions. Controller listeners belong to the caller's Context; callback failures are contained, logout closes open pages, and disposal closes the page and removes listeners. Resizing and owned dropdown interactions preserve the active page.
+The Client exports panel controllers, registration helpers, page chrome, notices and interaction classification. The caller supplies the title, icon, content and optional visibility observable. A hidden entry renders no placeholder and closes its page; the sidebar keeps Settings anchored below the remaining actions. Controller listeners belong to the caller's Context; callback failures are contained, logout closes open pages, and disposal closes the page and removes listeners. Resizing and owned dropdown interactions preserve the active page.
 
 The [Client entry](src/client/index.ts) supplies the implementation. The [Host entry](src/index.ts) anchors module discovery without registering a business service.
 

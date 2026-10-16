@@ -16,6 +16,7 @@ function props(intranet = false): BrowserCardProps {
     usePreference: selector => selector({ status: 'ready', value: { enabled: true },
       base: {}, user: {}, revision: 1, writable: true, mode: 'host' }),
     useNetwork: selector => selector({ mode: intranet ? 'intranet' : 'internet' }),
+    useAdministratorAllowed: selector => selector(true),
     setEnabled: vi.fn(async () => {}),
   }
 }
@@ -49,4 +50,21 @@ it('reports a failed save and permits retry', async () => {
   fireEvent.click(screen.getByRole('switch'))
   await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe(zh.failed) })
   expect(screen.getByRole('switch').hasAttribute('disabled')).toBe(false)
+})
+
+it('locks the personal switch when the administrator denies it and restores the saved choice', () => {
+  const face = props()
+  face.useAdministratorAllowed = selector => selector(false)
+  const view = render(<BrowserCard {...face} />)
+  fireEvent.click(screen.getByRole('button', { name: zh.expand }))
+  const toggle = screen.getByRole('switch')
+  expect(toggle.hasAttribute('disabled')).toBe(true)
+  expect(toggle.getAttribute('aria-checked')).toBe('false')
+  expect(screen.getByText(zh.administratorDisabled)).toBeDefined()
+  fireEvent.click(toggle)
+  expect(face.setEnabled).not.toHaveBeenCalled()
+  view.rerender(<BrowserCard {...face} useAdministratorAllowed={selector => selector(true)} />)
+  expect(toggle.hasAttribute('disabled')).toBe(false)
+  expect(toggle.getAttribute('aria-checked')).toBe('true')
+  expect(face.setEnabled).not.toHaveBeenCalled()
 })

@@ -72,7 +72,11 @@ describe('official browser lifecycle compatibility', () => {
 
   it('denies direct browser execution in pure intranet mode', async () => {
     await setup()
-    ctx.provide('wanweiNetworkPolicy', { getSnapshot: () => ({ mode: 'intranet' }) })
+    ctx.provide('wanweiNetworkPolicy', {
+      getSnapshot: () => ({ mode: 'intranet', internalOrigins: [] }),
+      setMode: async () => ({ mode: 'intranet', internalOrigins: [] }),
+      pluginAllowed: () => true, setPlugins: () => {},
+    })
     await ctx.plugin(BrowserPlugin, { enabled: true, headless: true })
     ctx.effect(() => ctx.tools.register(defineTool({
       name: 'mcp__playwright-mcp__policy-probe', description: 'test policy', parameters: {},

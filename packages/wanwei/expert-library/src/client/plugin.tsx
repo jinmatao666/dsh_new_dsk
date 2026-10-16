@@ -56,7 +56,7 @@ export function apply(ctx: Context): void {
     if (typeof invoke === 'function') await invoke('maximize_expert_window', {})
   }
   registerFeaturePanel(ctx, 'skill-experts', 30, { controller, title: productText('专家库'),
-    subtitle: productText('为自然资源与政企协同场景匹配专业智能角色'), blockedIntranet: true, Icon: ExpertsIcon,
+    subtitle: productText('为自然资源与政企协同场景匹配专业智能角色'), Icon: ExpertsIcon,
     hooks: { network: ctx.wanweiNetwork },
     renderContent: () => <ExpertMarket loadExperts={loadExperts} launchExpert={launchExpert}
       prepareExpertWorkspace={prepareExpertWorkspace} />,

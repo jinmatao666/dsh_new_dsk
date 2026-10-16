@@ -11,7 +11,7 @@
 flowchart LR
   pkg_wanwei_oneapi_auth["wanwei-oneapi-auth"]
   svc_wanweiNetworkPolicy["ctx.wanweiNetworkPolicy<br/>Desktop deployment network policy"]
-  pkg_wanwei_skillhub["wanwei-skillhub"]
+  pkg_wanwei_browser_use["wanwei-browser-use"]
   pkg_attachment["attachment"]
   svc_attachments["ctx.attachments<br/>Durable binary attachment storage"]
   pkg_attachment_local["attachment-local"]
@@ -455,7 +455,7 @@ flowchart LR
   svc_typert --> pkg_api_gateway
   svc_typert --> pkg_typert_loader
   svc_userQuestions --> pkg_tool_ask_user
-  svc_wanweiNetworkPolicy --> pkg_wanwei_skillhub
+  svc_wanweiNetworkPolicy --> pkg_wanwei_browser_use
   svc_web --> pkg_tool_web
   svc_webServer --> pkg_client_connection
   svc_webServer --> pkg_client_hmr
@@ -470,7 +470,7 @@ flowchart LR
 
 | ctx 键 | 角色 | 所属包 | 实现 | 直接消费方 | 配套插件 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ctx.wanweiNetworkPolicy` | `core` | [`wanwei-oneapi-auth`](../packages/wanwei/oneapi-auth) | - | [`wanwei-skillhub`](../packages/wanwei/skillhub) | - | 保存服务端确认的环境，控制部署功能可用性，但不替代操作系统的网络隔离。 |
+| `ctx.wanweiNetworkPolicy` | `core` | [`wanwei-oneapi-auth`](../packages/wanwei/oneapi-auth) | - | [`wanwei-browser-use`](../packages/wanwei/browser-use) | - | 保存服务端确认的环境，控制部署功能可用性，但不替代操作系统的网络隔离。 |
 | `ctx.attachments` | `seam` | [`attachment`](../packages/attachment/attachment) | [`attachment-local`](../packages/attachment/attachment-local) | [`api-session-controller`](../packages/api/session-controller), [`tool-fs`](../packages/fs/tool-fs), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-deepseek`](../packages/llm/llm-deepseek) | - | 宿主会在会话事件之前提交已接受的图片；提供方适配器将已授权的持久引用解析为提供方原生内容。 |
 | `ctx.llm` | `seam` | [`llm`](../packages/llm/llm) | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-replay`](../packages/test-support/llm-replay) | [`agent-loop`](../packages/core/agent-loop), [`compaction-basic`](../packages/compaction/compaction-basic) | - | 适配器注册提供方实现；agent loop（智能体循环）与压缩功能调用提供方无关的流服务。 |
 | `ctx.deepseekLlmApiExtensions` | `seam` | [`deepseek-llm-api-extensions`](../packages/llm/deepseek-llm-api-extensions) | [`session-log-deepseek`](../packages/session/session-log-deepseek), [`plugin-package-inventory-deepseek`](../packages/llm/plugin-package-inventory-deepseek) | [`llm-deepseek`](../packages/llm/llm-deepseek) | - | 插件准备彼此独立的顶层字段；官方适配器会合并这些字段，并在 HTTP 接受后提交其交付状态。 |

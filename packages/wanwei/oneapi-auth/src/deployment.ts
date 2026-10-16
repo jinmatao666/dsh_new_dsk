@@ -6,6 +6,21 @@ export interface DeploymentSettings {
   operator: string
   phone: string
   features: DeploymentFeatures
+  plugins: DeploymentPlugins
+}
+
+/** Administrator-owned plugin permissions, independent of personal preferences. */
+export interface DeploymentPlugins { browserAssistant: boolean }
+
+/** Validate public plugin permissions; omitted fields preserve older server behavior.
+ * @param value - Public API plugin settings.
+ * @returns Allowlisted plugin permissions.
+ */
+export function resolveDeploymentPlugins(value: unknown): DeploymentPlugins {
+  if (value === undefined) return { browserAssistant: true }
+  if (typeof value !== 'object' || value === null
+    || typeof (value as Record<string, unknown>).browserAssistant !== 'boolean') throw new Error('后台插件设置无效')
+  return { browserAssistant: (value as { browserAssistant: boolean }).browserAssistant }
 }
 
 /** Independent entry visibility for each deployment environment. */
@@ -49,5 +64,6 @@ export async function fetchDeploymentSettings(baseURL: string, signal?: AbortSig
   if ((data.network !== 'internet' && data.network !== 'intranet') ||
     typeof data.operator !== 'string' || data.operator.length > 160 ||
     typeof data.phone !== 'string' || data.phone.length > 80) throw new Error('后台系统设置字段无效')
-  return { network: data.network, operator: data.operator, phone: data.phone, features: resolveDeploymentFeatures(data.features) }
+  return { network: data.network, operator: data.operator, phone: data.phone,
+    features: resolveDeploymentFeatures(data.features), plugins: resolveDeploymentPlugins(data.plugins) }
 }

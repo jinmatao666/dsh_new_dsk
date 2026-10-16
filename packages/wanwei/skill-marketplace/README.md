@@ -113,7 +113,7 @@ No cache changes occur before sending. After send, normal prompt changes may aff
 <a id="known-limitations-and-deferred-work"></a>
 
 - Published skills and upload-review state depend on a reachable OneAPI service.
-- SkillHub browsing needs internet access; intranet mode preserves platform and local skills while disabling SkillHub.
+- SkillHub browsing needs actual upstream connectivity in either deployment mode. Failed catalog requests show a large retryable placeholder; installed SkillHub skills remain locally usable without the catalog. A skill's own remote dependencies can still fail.
 
 <a id="dev-note"></a>
 ### Dev Note

@@ -18,7 +18,8 @@ export function apply(ctx: Context): void {
   const scope = ctx.settingsScope.bind<BrowserPreference>({ namespace: 'wanwei-browser-use' })
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
     name: 'settings.plugin.item', key: 'wanwei-browser-use', locale: 'wanwei.browser',
-    inject: () => ({ hooks: { preference: scope, network: ctx.wanweiNetwork },
-      setEnabled: (enabled: boolean) => scope.set('enabled', enabled) }),
+    inject: () => ({ hooks: { preference: scope, network: ctx.wanweiNetwork,
+      administratorAllowed: ctx.wanweiNetwork.pluginAllowed('browserAssistant') },
+    setEnabled: (enabled: boolean) => scope.set('enabled', enabled) }),
   }, BrowserCard))
 }

@@ -2,12 +2,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-tools'
-import type {} from '@deepseek-ai/dsh-skill'
-import { existsSync } from 'node:fs'
-import { dirname, join } from 'node:path'
 import { internalLink, type NetworkState } from './network-contract.ts'
 import { DEPENDENCY_FEEDBACK, INTRANET_DEPENDENCY_GUIDANCE, dependencyFailure } from './dependency-policy.ts'
 import { FIRST_PARTY_SECTION_ORDER } from '@deepseek-ai/dsh-system-prompt'
+import type { DeploymentPlugins } from './deployment.ts'
 
 /** Host-owned durable network mode and administrator-provided internal origins. */
 export interface NetworkPolicy {
@@ -20,6 +18,15 @@ export interface NetworkPolicy {
    * @returns Committed deployment network state.
    */
   setMode(mode: unknown): Promise<NetworkState>
+  /** Read a server-confirmed plugin permission; denied before the first successful refresh.
+   * @param plugin - Product plugin identifier.
+   * @returns Whether the administrator allows the plugin.
+   */
+  pluginAllowed(plugin: keyof DeploymentPlugins): boolean
+  /** Commit validated server permissions without modifying personal settings.
+   * @param plugins - Permissions from the configured deployment server.
+   */
+  setPlugins(plugins: DeploymentPlugins): void
 }
 declare module '@deepseek-ai/cordis' {
   interface Context { wanweiNetworkPolicy: NetworkPolicy }
@@ -30,10 +37,13 @@ declare module '@deepseek-ai/cordis' {
  * @returns Installed network policy.
  */
 export function installNetworkPolicy(ctx: Context, baseURL: string): NetworkPolicy {
+  let plugins: DeploymentPlugins = { browserAssistant: false }
   const scope = ctx.settings.register(settingsNamespace('wanwei-network'), z.object({
     mode: z.union(['internet', 'intranet'] as const).default('internet'),
   }))
   const policy: NetworkPolicy = {
+    pluginAllowed: plugin => plugins[plugin],
+    setPlugins: (value) => { plugins = value },
     getSnapshot: () => ({ mode: scope.get().mode, internalOrigins: [new URL(baseURL).origin] }),
     async setMode(mode) {
       if (mode !== 'internet' && mode !== 'intranet') throw new Error('网络环境无效')
@@ -51,17 +61,6 @@ export function installNetworkPolicy(ctx: Context, baseURL: string): NetworkPoli
     let dispose = install()
     pctx.effect(() => scope.watch(() => { dispose(); dispose = install() }))
     pctx.effect(() => () => { dispose() })
-  })
-  ctx.inject(['skills'], (sctx) => {
-    const install = () => sctx.skills.registerFilter((skill) => {
-      if (scope.get().mode === 'internet') return true
-      const path = skill.resourceBase?.kind === 'directory' ? skill.resourceBase.path
-        : skill.path === undefined ? undefined : dirname(skill.path)
-      return path === undefined || !existsSync(join(path, '.wanwei-skillhub.json'))
-    })
-    let dispose = install()
-    sctx.effect(() => scope.watch(() => { dispose(); dispose = install() }))
-    sctx.effect(() => () => { dispose() })
   })
   ctx.inject(['tools'], (tctx) => {
     const install = () => tctx.tools.registerAvailability(name => scope.get().mode === 'internet' || name !== 'web_search')

@@ -63,6 +63,8 @@ describe('OneAPI login flow', () => {
 
     const requests: string[] = []
     let failDownloadReport = false
+    const deployment: { browserAssistant?: boolean } = {}
+    let failDeployment = false
     vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       requests.push(url)
@@ -73,7 +75,13 @@ describe('OneAPI login flow', () => {
         return Promise.resolve(Response.json({ success: true }))
       }
       if (url.endsWith('/api/desktop-config')) {
-        return Promise.resolve(Response.json({ success: true, data: { network: 'intranet', operator: '张运维', phone: '0571-12345678' } }))
+        if (failDeployment) return Promise.resolve(new Response('', { status: 503 }))
+        return Promise.resolve(Response.json({ success: true, data: { network: 'intranet', operator: '张运维', phone: '0571-12345678',
+          ...deployment.browserAssistant === undefined ? {} : { plugins: { browserAssistant: deployment.browserAssistant } } } }))
+      }
+      if (url.endsWith('/api/expert-web/')) return Promise.resolve(Response.json({ success: true, data: [] }))
+      if (url.endsWith('/api/expert-web/test-expert/launch')) {
+        return Promise.resolve(Response.json({ success: true, url: 'http://expert.lan/', ticket: 'ticket' }))
       }
       if (url.endsWith('/api/user/login')) {
         return Promise.resolve(new Response(JSON.stringify({ success: true, data: { username: 'tester' } }), {
@@ -137,16 +145,30 @@ describe('OneAPI login flow', () => {
     expect(await handler?.('network-get', {}, new AbortController().signal)).toEqual({
       ok: true, value: {
         mode: 'intranet', internalOrigins: [new URL(expected).origin],
+        plugins: { browserAssistant: true },
         features: { internet: { automations: true, connectors: true }, intranet: { automations: true, connectors: false } },
       },
     })
     expect(await handler?.('deployment-get', {}, new AbortController().signal)).toEqual({
       ok: true, value: {
         network: 'intranet', operator: '张运维', phone: '0571-12345678',
+        plugins: { browserAssistant: true },
         features: { internet: { automations: true, connectors: true }, intranet: { automations: true, connectors: false } },
       },
     })
     expect(requests).toEqual([`${expected}/api/desktop-config`, `${expected}/api/desktop-config`])
+    expect(ctx.wanweiNetworkPolicy.pluginAllowed('browserAssistant')).toBe(true)
+    deployment.browserAssistant = false
+    await handler?.('network-get', {}, new AbortController().signal)
+    expect(ctx.wanweiNetworkPolicy.pluginAllowed('browserAssistant')).toBe(false)
+    failDeployment = true
+    expect(await handler?.('network-get', {}, new AbortController().signal)).toMatchObject({ ok: false })
+    expect(ctx.wanweiNetworkPolicy.pluginAllowed('browserAssistant')).toBe(false)
+    failDeployment = false
+    expect(await handler?.('expert-list', {}, new AbortController().signal)).toEqual({ ok: true, value: { items: [] } })
+    expect(await handler?.('expert-launch', { key: 'test-expert' }, new AbortController().signal)).toEqual({
+      ok: true, value: { url: 'http://expert.lan/', ticket: 'ticket' },
+    })
     requests.length = 0
     for (let installation = 0; installation < 2; installation++) {
       expect(await handler?.('skill-download', { id: 7 }, new AbortController().signal)).toMatchObject({ ok: true })

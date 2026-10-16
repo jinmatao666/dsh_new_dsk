@@ -9,6 +9,7 @@
     { "path": "../../core/tools" },
     { "path": "../../core/system-prompt" },
     { "path": "../../settings/settings" },
-    { "path": "../../runtime-diagnostics/invariants" }
+    { "path": "../../runtime-diagnostics/invariants" },
+    { "path": "../oneapi-auth/tsconfig.host.json" }
   ]
 }

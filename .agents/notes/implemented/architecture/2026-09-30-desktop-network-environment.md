@@ -10,6 +10,8 @@ Private-network deployments need internal login and model access without present
 
 ## Decision
 
+The automation, expert, connector and SkillHub restrictions and unavailable-state artwork below are partially superseded by [service reachability](../feature/2026-10-16-service-reachability-placeholders.md). The network-state, search and generic-link policies remain active.
+
 The authentication Host owns durable `wanwei-network.mode`, initialized to Internet and updated from the backend under [server-owned login settings](2026-10-10-server-owned-login-settings.md). That decision partially supersedes local mode selection; this note retains ownership of restrictions and restoration. Client slot hooks share one observable mirror and synchronize native URL opening with committed policy. Administrator-configured login and model endpoints are not rewritten.
 
 SkillHub RPC is rejected before upstream I/O. Installed SkillHub definitions are filtered by installation receipt, including cached reads. Generic availability/filter registration is the only change to official tool and skill registries. Public search is removed from all scopes; public web fetch is denied before execution. Experts and connectors have disabled entries; Host expert RPC is independently denied. Local uninstall remains available.

@@ -23,6 +23,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+两种部署模式都会按现有超时和资源限制尝试访问配置的上游，不根据网络标签拒绝请求。上游请求失败返回市场页面，供其显示可重试的失败占位；本地已安装技能不依赖此目录。
+
 [万维 Bundle](../../bundle/wanwei-desktop/cordis.patch.yml) 将此插件挂载到经过认证的本机 Host 连接。访问 SkillHub 不依赖 OneAPI 认证插件。原生安装仅在产品桌面端可用。
 
 | 字段 | 默认值 | 含义 |

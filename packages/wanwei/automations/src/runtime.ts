@@ -36,7 +36,6 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const owner = async (): Promise<string> => {
     const value = await account()
     if (value === undefined) throw new Error('请先登录后管理定时任务')
-    if (ctx.wanweiNetworkPolicy.getSnapshot().mode === 'intranet') throw new Error('纯内网环境暂未开放自动化')
     return value
   }
   await store.update((state) => {
@@ -178,7 +177,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       })
       lastOwner = username
     }
-    if (username === undefined || ctx.wanweiNetworkPolicy.getSnapshot().mode === 'intranet') return
+    if (username === undefined) return
     const state = await store.read()
     if (!state.tasks.some(task => task.owner === username && task.enabled && task.nextRunAt <= Date.now())) return
     await claim(undefined, username, Date.now())

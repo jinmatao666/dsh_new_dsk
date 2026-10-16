@@ -17,33 +17,44 @@ const record = { ...skill, source: 'skillhub', localSlug: 'pdf-helper', sha256: 
 const page = { items: [skill], total: 13, pageSize: 12 }
 
 describe('SkillHub marketplace workflow', () => {
-  it('does not request the public catalog in intranet mode and resumes it in internet mode', async () => {
+  it('shows a SkillHub illustration only after request failure and reloads on reopening', async () => {
+    let offline = true
     const request = vi.fn(async (operation: string) => operation === 'categories' ? { items: [] } : page)
+    request.mockImplementation(async (operation: string) => {
+      if (offline) throw new Error('fetch failed')
+      return operation === 'categories' ? { items: [] } : page
+    })
     const props = { active: true, installedOnly: false, request, invoke: async () => [], onUse: vi.fn(), onCount: vi.fn() }
-    const view = render(<SkillHubSection {...props} unavailable />)
-    expect(screen.getByRole('heading', { name: 'SkillHub 暂不可用' })).toBeTruthy()
+    const view = render(<SkillHubSection {...props} />)
+    expect(await screen.findByRole('heading', { name: '暂时无法连接 SkillHub' })).toBeTruthy()
+    expect(screen.getByText('SkillHub 需要互联网连接，当前网络暂时无法访问。')).toBeTruthy()
     expect(screen.getByText('您仍可使用平台技能和本地技能')).toBeTruthy()
-    expect(screen.getByRole('status').querySelector('svg')).not.toBeNull()
+    expect(screen.getByRole('alert').querySelector('svg')).not.toBeNull()
+    expect(screen.getByRole('alert').classList.contains('wanwei-service-unavailable-skillhub')).toBe(true)
+    expect(screen.queryByRole('button', { name: '重新连接' })).toBeNull()
+    expect(screen.queryByText('fetch failed')).toBeNull()
     expect(view.container.querySelector('img')).toBeNull()
-    expect(request).not.toHaveBeenCalled()
-    view.rerender(<SkillHubSection {...props} unavailable={false} />)
+    expect(request).toHaveBeenCalled()
+    offline = false
+    view.unmount()
+    render(<SkillHubSection {...props} />)
     await screen.findByText(skill.name)
-    expect(screen.queryByRole('heading', { name: 'SkillHub 暂不可用' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: '暂时无法连接 SkillHub' })).toBeNull()
     expect(request).toHaveBeenCalledWith('list', expect.anything())
   })
-  it('disables installed SkillHub use but retains local uninstall in intranet mode', async () => {
+  it('allows installed SkillHub use and local uninstall without catalog connectivity', async () => {
     const request = vi.fn()
     const onUse = vi.fn()
     const invoke = vi.fn(async (command: string) => command === 'list_skillhub_skills' ? [record] : undefined)
-    render(<SkillHubSection active installedOnly unavailable request={request} invoke={invoke} onUse={onUse} onCount={() => {}} />)
+    render(<SkillHubSection active installedOnly request={request} invoke={invoke} onUse={onUse} onCount={() => {}} />)
     fireEvent.click(await screen.findByRole('button', { name: /PDF 助手/ }))
-    expect(screen.getByRole('button', { name: '使用技能' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: '使用技能' }).hasAttribute('disabled')).toBe(false)
     expect(screen.getByRole('button', { name: '卸载' }).hasAttribute('disabled')).toBe(false)
     fireEvent.click(screen.getByRole('button', { name: '打开目录' }))
     expect(invoke).toHaveBeenCalledWith('open_skill_directory', { slug: record.localSlug })
     expect(request).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '使用技能' }))
-    expect(onUse).not.toHaveBeenCalled()
+    expect(onUse).toHaveBeenCalledWith(record.localSlug, record.name)
   })
   it('never carries uninstalled remote cards into my installations after browsing duplicate slugs', async () => {
     const repeated = { ...skill, slug: 'dev-expert', name: '编程专家.Skill' }

@@ -6,6 +6,8 @@ This private product directory owns the Wanwei desktop shell and installer. It d
 
 ## Current boundary
 
+Expert native views and SkillHub archive installation do not reject the deployment network label. Existing URL, ticket, archive and installation validation remains effective; actual request failures appear in the owning feature page. [Service reachability](../../.agents/notes/implemented/feature/2026-10-16-service-reachability-placeholders.md) defines the feature behavior.
+
 Windows NSIS installation, upgrade and uninstall preserve the application data directory, including installed skills, Sessions, settings and migration markers. The product's pinned [installer template](src-tauri/windows/installer.nsi) removes the data-deletion checkbox and deletion commands; uninstall still removes program files. `check:installer-data` rejects restoring data deletion or changing the release identity and runs in installer CI. Existing older uninstallers are not retroactively protected: keep application data when replacing them. Explicit manual deletion and disk failures remain outside this guarantee.
 
 Automatic skill workspaces live under the product Harness home's `workspaces` directory, outside installer/runtime and temporary directories. The main-window-only `create_automatic_workspace` command accepts a fourteen-digit local `YYYYMMDDHHmmss` name and exclusively creates a directory; collisions receive ` (2)`, ` (3)` suffixes without modifying existing contents. The normal Workspace registry persists their sidebar membership. Replacing the installation keeps this user-data location; explicitly deleting user data is not an update-preservation guarantee.

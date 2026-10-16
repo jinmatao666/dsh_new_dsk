@@ -22,7 +22,7 @@ import type { ConnectionRpcHandler, ConnectionRpcResult } from '@deepseek-ai/dsh
 import type { AutomationSnapshot } from '../src/contract.ts'
 
 // Only transport, credentials and the model boundary are scripted; execution uses the real Agent loop.
-it('loads the plugin, persists a task, executes a real Session and records its completion', async () => {
+it.each(['internet', 'intranet'])('loads the plugin, persists and executes real Sessions in %s mode', async (mode) => {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-automation-runtime-'))
   const ctx = new Context()
   let handler: ConnectionRpcHandler | undefined
@@ -67,7 +67,7 @@ it('loads the plugin, persists a task, executes a real Session and records its c
     ctx.provide('connection', { rpc: { handle: (_channel: string, next: ConnectionRpcHandler) => {
       handler = next; return async () => { handler = undefined }
     } } } as never)
-    ctx.provide('wanweiNetworkPolicy', { getSnapshot: () => ({ mode: 'internet' }) } as never)
+    ctx.provide('wanweiNetworkPolicy', { getSnapshot: () => ({ mode }) } as never)
     ctx.provide('shell', { sandboxMode: 'workspace-write' } as never)
     ctx.provide('approval', { config: { policy: 'ask' } } as never)
     await ctx.plugin(PermissionPresets).await()

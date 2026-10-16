@@ -10,6 +10,8 @@ Status: implemented
 
 ## 决策
 
+下述自动化、专家、连接器、SkillHub 限制及不可用插画由[实际服务连通性](../feature/2026-10-16-service-reachability-placeholders.zh.md)部分替代。网络状态、搜索及通用链接策略继续有效。
+
 认证 Host 持有持久化的 `wanwei-network.mode`，初始值为互联网，并按[后台管理的登录设置](2026-10-10-server-owned-login-settings.zh.md)从后台更新。该决策部分替代本地模式选择，本记录仍负责限制与恢复。Client Slot 钩子共用可观察的状态镜像，并把已提交策略同步到原生 URL 打开。管理员配置的登录与模型地址不被改写。
 
 SkillHub RPC 在上游 I/O 前被拒绝。已安装 SkillHub 定义通过安装凭据过滤，包含缓存读取。官方工具与技能注册表只增加通用可用性与过滤注册。公网搜索从所有作用域移除；公网网页读取在执行前被拒绝。专家和连接器入口置灰；Host 独立拒绝专家 RPC。本地卸载仍可使用。

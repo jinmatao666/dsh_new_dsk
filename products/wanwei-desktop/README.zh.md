@@ -6,6 +6,8 @@
 
 ## 当前边界
 
+专家原生视图和 SkillHub 压缩包安装不根据部署网络标签拒绝操作。原有网址、票据、压缩包及安装校验继续有效；实际请求失败由所属功能页面展示。[服务连通性](../../.agents/notes/implemented/feature/2026-10-16-service-reachability-placeholders.zh.md)说明功能行为。
+
 Windows NSIS 安装、升级和卸载保留应用数据目录，包括已安装技能、会话、设置和迁移标记。产品固定版本的[安装器模板](src-tauri/windows/installer.nsi)移除删除数据的复选框和删除命令；卸载仍移除程序文件。`check:installer-data` 拒绝重新引入数据删除或改变正式版标识，并在安装包 CI 中运行。既有旧卸载程序不会自动获得保护：替换旧版时须保留应用数据。主动手动删除和磁盘故障不属于此保证。
 
 技能自动工作区保存在产品 Harness home 的 `workspaces` 目录，不在安装器、运行资源或临时目录中。仅限主窗口的 `create_automatic_workspace` 命令接受本地时间的十四位 `YYYYMMDDHHmmss` 名称，以独占方式创建目录；重名追加 ` (2)`、` (3)` 后缀，不修改已有内容。普通工作区索引持久化侧边栏成员关系。替换安装版本保持此用户数据位置；主动删除用户数据不属于更新保留保证。

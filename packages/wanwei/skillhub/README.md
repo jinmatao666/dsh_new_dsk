@@ -23,6 +23,8 @@ Users browse and search public SkillHub skills inside the Wanwei market. Catalog
 <a id="use-this-package"></a>
 ## Use this package
 
+Both deployment modes attempt the configured upstream with the existing timeout and resource limits. Network labels do not reject requests. A failed upstream request is returned to the marketplace for retryable failure presentation; local installed skills do not require this catalog.
+
 The [Wanwei bundle](../../bundle/wanwei-desktop/cordis.patch.yml) mounts this plugin on the authenticated local Host connection. SkillHub access does not require the OneAPI authentication plugin. Native installation is available only in the product desktop.
 
 | Field | Default | Meaning |

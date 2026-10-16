@@ -1076,9 +1076,6 @@ async fn open_expert_webview(
     if window.label() != "main" {
         return Err("只能从主窗口打开专家".to_string());
     }
-    if !network_policy::internet_enabled(window.app_handle()) {
-        return Err("纯内网环境不可用".into());
-    }
     let label = expert_webview_label(&key, &ticket)?;
     let (launch_url, allowed_url) = expert_webview_url(&url, &ticket)?;
     if width < 200.0

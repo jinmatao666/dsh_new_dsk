@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { apply } from '../src/index.ts'
 
 afterEach(() => { vi.unstubAllGlobals() })
-it('rejects every public RPC before I/O and restores the same handler in Internet mode', async () => {
+it('requests the upstream in either deployment mode and reports actual connection failures', async () => {
   const ctx = new Context()
   let mode: 'internet' | 'intranet' = 'intranet'
   let handler!: (operation: string, payload: unknown, signal: AbortSignal) => Promise<unknown>
@@ -12,11 +12,10 @@ it('rejects every public RPC before I/O and restores the same handler in Interne
   const fetcher = vi.fn(async () => Response.json({ items: [{ key: 'office', name: '办公' }] }))
   vi.stubGlobal('fetch', fetcher)
   apply(ctx, { baseURL: 'https://api.skillhub.cn', timeoutMs: 1000, maxJsonBytes: 4096, maxArchiveBytes: 4096, downloadHosts: [] })
-  for (const operation of ['list', 'categories', 'detail', 'icon', 'download']) {
-    expect(await handler(operation, {}, new AbortController().signal)).toEqual({ ok: false, error: { code: 'internal', message: '纯内网环境不可用', details: {} } })
-  }
-  expect(fetcher).not.toHaveBeenCalled()
+  expect(await handler('categories', {}, new AbortController().signal)).toEqual({ ok: true, value: { items: [{ key: 'office', name: '办公' }] } })
+  fetcher.mockRejectedValueOnce(new TypeError('fetch failed'))
+  expect(await handler('categories', {}, new AbortController().signal)).toMatchObject({ ok: false, error: { message: 'fetch failed' } })
   mode = 'internet'
   expect(await handler('categories', {}, new AbortController().signal)).toEqual({ ok: true, value: { items: [{ key: 'office', name: '办公' }] } })
-  expect(fetcher).toHaveBeenCalledTimes(1)
+  expect(fetcher).toHaveBeenCalledTimes(3)
 })

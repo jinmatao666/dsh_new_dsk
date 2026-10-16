@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import { CatalogToolbar, CatalogDownloadIcon, CatalogBackIcon } from './CatalogToolbar.tsx'
-import type { WanweiNotice } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
+import { ServiceUnavailable, type WanweiNotice } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 import './skillhub.css'
 
 type Skill = {
@@ -23,7 +23,6 @@ type Page = { items: Skill[]; total: number; pageSize: number }
 /** Only product-owned RPC and native commands cross this presentation boundary. */
 export interface SkillHubSectionProps {
   active: boolean
-  unavailable?: boolean
   installedOnly: boolean
   installedQuery?: string
   installedPlatforms?: readonly { id: string; slug: string; name: string; summary: string; searchText: string; card: ReactNode }[]
@@ -58,7 +57,7 @@ function SkillHubIcon({ skill, request }: { skill: Skill; request: SkillHubSecti
 
 /** Isolated remote catalog; local receipts remain available without the upstream. */
 export function SkillHubSection({
-  active, unavailable = false, installedOnly, installedQuery = '', installedPlatforms, request: remoteRequest, invoke, onUse, onCount, onNotice,
+  active, installedOnly, installedQuery = '', installedPlatforms, request: remoteRequest, invoke, onUse, onCount, onNotice,
 }: SkillHubSectionProps) {
   const request = remoteRequest
   const sectionRef = useRef<HTMLElement>(null)
@@ -119,16 +118,16 @@ export function SkillHubSection({
   }, [active, invoke, retry])
 
   useEffect(() => {
-    if (!active || installedOnly || unavailable) return
+    if (!active || installedOnly) return
     let disposed = false
     void request('categories', {}).then((value) => {
       if (!disposed) setCategories((value as { items: { key: string; name: string }[] }).items)
     }).catch(() => { /* The searchable list remains usable if optional categories fail. */ })
     return () => { disposed = true }
-  }, [active, installedOnly, unavailable, request, retry])
+  }, [active, installedOnly, request, retry])
 
   useEffect(() => {
-    if (!active || installedOnly || unavailable) return
+    if (!active || installedOnly) return
     const current = ++generation.current
     setLoading(true)
     setError('')
@@ -137,7 +136,7 @@ export function SkillHubSection({
     }).catch((e: unknown) => { if (current === generation.current) setError(errorText(e)) })
       .finally(() => { if (current === generation.current) setLoading(false) })
     return () => { generation.current++ }
-  }, [active, installedOnly, unavailable, query, category, sort, page, retry, request])
+  }, [active, installedOnly, query, category, sort, page, retry, request])
 
   useEffect(() => {
     detailGeneration.current++
@@ -255,10 +254,10 @@ export function SkillHubSection({
     ? installedCards.slice((currentInstalledPage - 1) * 12, currentInstalledPage * 12)
     : cards.map((skill, index) => ({ key: `${skill.slug}:${index}`, skill, card: undefined }))
   const renderHubCard = (skill: Skill, key: string) => <button type="button" className="dsh-skill-card wanwei-skillhub-card"
-    key={key} style={unavailable ? { opacity: 0.45 } : undefined} title={unavailable ? productText('纯内网环境不可用') : undefined} onClick={() => { void openDetail(skill) }}>
+    key={key} onClick={() => { void openDetail(skill) }}>
     <span className="dsh-skill-card-visual">
-      <span className="dsh-skill-card-icon wanwei-skillhub-icon">{unavailable ? <span aria-hidden="true">✦</span> : <SkillHubIcon skill={skill} request={request} />}</span>
-      {ownRecord(skill) && <span className="dsh-skill-installed-badge">{unavailable ? productText('内网不可用') : productText('已安装')}</span>}
+      <span className="dsh-skill-card-icon wanwei-skillhub-icon"><SkillHubIcon skill={skill} request={request} /></span>
+      {ownRecord(skill) && <span className="dsh-skill-installed-badge">{productText('已安装')}</span>}
     </span>
     <span className="dsh-skill-card-body"><span className="dsh-skill-card-meta">
       <span className="dsh-skill-card-category">{categories.find(item => item.key === skill.category)?.name || skill.category || productText('通用')}</span>
@@ -268,26 +267,12 @@ export function SkillHubSection({
   </button>
 
   if (!active) return null
-  if (unavailable && !installedOnly) return (
+  if (error && !loading && !installedOnly) return (
     <section className="wanwei-skillhub" aria-label={productText('SkillHub 技能')}>
       <div className="dsh-skill-section-header"><h2>{productText('SkillHub 技能')}</h2></div>
-      <div className="wanwei-skillhub-offline" role="status">
-        <svg className="wanwei-skillhub-offline-art" viewBox="0 0 240 176" aria-hidden="true" focusable="false">
-          <ellipse cx="120" cy="157" rx="84" ry="9" fill="currentColor" opacity=".06" />
-          <circle cx="118" cy="79" r="65" fill="currentColor" opacity=".05" />
-          <path d="M57 120a29 29 0 0 1-2-58 43 43 0 0 1 82-13 35 35 0 0 1 44 34 25 25 0 0 1-4 49H67" fill="var(--dsw-alias-bg-base, #fff)" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
-          <rect x="83" y="62" width="54" height="56" rx="12" fill="currentColor" opacity=".1" />
-          <path d="m110 71 5 12 13 5-13 5-5 12-5-12-13-5 13-5Z" fill="currentColor" opacity=".65" />
-          <path d="M155 113v-10a14 14 0 0 1 28 0v10" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-          <rect x="146" y="110" width="47" height="39" rx="10" fill="currentColor" />
-          <circle cx="169.5" cy="127" r="4" fill="#fff" />
-          <path d="M169.5 130v6" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
-          <path d="M40 37h10m-5-5v10M198 61h8m-4-4v8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity=".3" />
-        </svg>
-        <h3>{productText('SkillHub 暂不可用')}</h3>
-        <p>{productText('当前为纯内网环境，SkillHub 云端技能需要互联网连接。')}</p>
-        <span>{productText('您仍可使用平台技能和本地技能')}</span>
-      </div>
+      <ServiceUnavailable variant="skillhub" title={productText('暂时无法连接 SkillHub')}
+        description={productText('SkillHub 需要互联网连接，当前网络暂时无法访问。')}
+        hint={productText('您仍可使用平台技能和本地技能')} />
     </section>
   )
   return <section ref={sectionRef} className={integrated ? 'wanwei-installed-catalog' : 'wanwei-skillhub'}
@@ -318,19 +303,19 @@ export function SkillHubSection({
           <CatalogBackIcon /> {productText('返回')}
         </button>
         <div className="dsh-skill-detail-header">
-          <div className="dsh-skill-detail-icon wanwei-skillhub-icon">{unavailable ? <span aria-hidden="true">✦</span> : <SkillHubIcon skill={selected} request={request} />}</div>
+          <div className="dsh-skill-detail-icon wanwei-skillhub-icon"><SkillHubIcon skill={selected} request={request} /></div>
           <div className="dsh-skill-detail-info"><h1>{selected.name}</h1><p>{selected.summary}</p><div className="dsh-skill-detail-meta"><span className="dsh-skill-source official">{productText('SkillHub')}</span><span>{productText('版本')}: {selected.version}</span><span>{productText('作者')}: {selected.author || productText('未提供')}</span>{typeof selected.downloads === 'number' && <span>↓ {selected.downloads}</span>}</div></div>
           <div className="dsh-skill-detail-actions">
-            {!selectedRecord && <button type="button" className="dsh-skill-detail-install" disabled={unavailable || busy || !detailReady || !localReady || selected.paid} onClick={() => { void operate(selected, 'install') }}>{busy ? productText('处理中…') : productText('安装')}</button>}
+            {!selectedRecord && <button type="button" className="dsh-skill-detail-install" disabled={busy || !detailReady || !localReady || selected.paid} onClick={() => { void operate(selected, 'install') }}>{busy ? productText('处理中…') : productText('安装')}</button>}
             {selectedRecord && <>
               <button type="button" className="dsh-skill-detail-use" disabled={busy} onClick={() => {
                 void invoke('open_skill_directory', { slug: selectedRecord.localSlug }).catch((error) => {
                   latest.current.onNotice({ kind: 'error', text: errorText(error) })
                 })
               }}>{productText('打开目录')}</button>
-              <button type="button" className="dsh-skill-detail-use" disabled={busy || unavailable} title={unavailable ? productText('纯内网环境不可用') : undefined}
+              <button type="button" className="dsh-skill-detail-use" disabled={busy}
                 onClick={() => { latest.current.onUse(selectedRecord.localSlug, selectedRecord.name) }}>{productText('使用技能')}</button>
-              {updateAvailable && <button type="button" className="dsh-skill-detail-install" disabled={unavailable || busy || !detailReady || selected.paid}
+              {updateAvailable && <button type="button" className="dsh-skill-detail-install" disabled={busy || !detailReady || selected.paid}
                 onClick={() => { void operate(selected, 'update', selectedRecord) }}>{busy ? productText('处理中…') : productText('更新技能')}</button>}
               <button type="button" className="dsh-skill-detail-install installed" disabled={busy}
                 onClick={() => { void operate(selected, 'uninstall', selectedRecord) }}>{productText('卸载')}</button>

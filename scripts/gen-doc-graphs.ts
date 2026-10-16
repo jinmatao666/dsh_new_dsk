@@ -103,7 +103,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'wanwei-oneapi-auth',
     title: 'Desktop deployment network policy',
     mode: 'core',
-    consumers: ['wanwei-skillhub'],
+    consumers: ['wanwei-browser-use'],
     note: 'Persists the server-confirmed environment and controls deployment availability without replacing OS network isolation.',
   },
   {

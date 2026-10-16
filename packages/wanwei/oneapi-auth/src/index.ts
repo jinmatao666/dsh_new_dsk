@@ -55,6 +55,8 @@ export interface Config {
   installId?: string
   /** Skip the login overlay inside the source-only Tauri development shell. */
   developmentBypass?: boolean
+  /** Maximum deployment and expert service request duration in milliseconds. */
+  serviceTimeoutMs?: number
 }
 
 /** Runtime schema for {@link Config}. */
@@ -67,6 +69,7 @@ export const Config: z<Config> = z.object({
   defaultInput: z.array(z.union(['text', 'image'] as const)).default(['text']),
   installId: z.string(),
   developmentBypass: z.boolean().default(false),
+  serviceTimeoutMs: z.natural().min(1).default(15000),
 })
 
 interface LoginPayload { username: string; password: string }
@@ -555,20 +558,22 @@ export function apply(ctx: Context, config: Config): void {
   const connection = ctx.get('connection')
   if (connection === undefined) throw new Error('桌面认证需要 Connection 服务')
   const remove = connection.rpc.handle('/desktop-auth', async (endpoint, payload, signal) => {
+    const serviceSignal = () => AbortSignal.any([signal, AbortSignal.timeout(config.serviceTimeoutMs ?? 15000)])
     if (endpoint === 'network-get' || endpoint === 'deployment-get') {
       try {
-        const settings = await fetchDeploymentSettings(baseURL, signal)
-        if (endpoint === 'network-get') await network.setMode(settings.network)
-        return { ok: true as const, value: endpoint === 'network-get' ? { ...network.getSnapshot(), features: settings.features } : settings }
+        const settings = await fetchDeploymentSettings(baseURL, serviceSignal())
+        if (endpoint === 'network-get') {
+          await network.setMode(settings.network)
+          network.setPlugins(settings.plugins)
+        }
+        return { ok: true as const, value: endpoint === 'network-get'
+          ? { ...network.getSnapshot(), features: settings.features, plugins: settings.plugins } : settings }
       }
       catch (error) { return internal(error instanceof Error ? error.message : String(error)) }
     }
-    if (network.getSnapshot().mode === 'intranet' && (endpoint === 'expert-list' || endpoint === 'expert-launch')) {
-      return internal('纯内网环境不可用')
-    }
     if (endpoint === 'expert-list') {
       try {
-        return { ok: true as const, value: await listPublishedExperts(baseURL, signal) }
+        return { ok: true as const, value: await listPublishedExperts(baseURL, serviceSignal()) }
       } catch (error) {
         return internal(error instanceof Error ? error.message : String(error))
       }
@@ -579,7 +584,7 @@ export function apply(ctx: Context, config: Config): void {
         if (typeof key !== 'string') throw new Error('专家编号无效')
         const token = (await ctx.credentials.resolve(ref))?.value
         if (token === undefined) throw new Error('请先登录后再打开专家工作台')
-        return { ok: true as const, value: await launchExpertWebsite(baseURL, key, token, signal) }
+        return { ok: true as const, value: await launchExpertWebsite(baseURL, key, token, serviceSignal()) }
       } catch (error) {
         return internal(error instanceof Error ? error.message : String(error))
       }

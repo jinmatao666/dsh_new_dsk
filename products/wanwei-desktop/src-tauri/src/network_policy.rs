@@ -19,9 +19,6 @@ pub fn internal_link(url: &Url, origins: &[String]) -> bool {
     !host.is_empty() && (!host.contains('.') || host == "localhost" || host.ends_with(".localhost")
         || host.ends_with(".local") || host.ends_with(".internal") || host.ends_with(".lan"))
 }
-pub fn internet_enabled(app: &tauri::AppHandle) -> bool {
-    app.state::<NetworkPolicy>().0.lock().map(|value| value.0).unwrap_or(false)
-}
 pub fn may_open(app: &tauri::AppHandle, url: &Url) -> bool {
     app.state::<NetworkPolicy>().0.lock().map(|value| value.0 || internal_link(url, &value.1)).unwrap_or(false)
 }

@@ -84,7 +84,7 @@ describe('independent feature navigation', () => {
   })
 
   it.each([
-    ['internet', true, false], ['intranet', true, true], ['intranet', false, false],
+    ['internet', true, false], ['intranet', true, false], ['intranet', false, false],
   ] as const)('keeps mode %s and feature policy %s independent', async (mode, blockedIntranet, disabled) => {
     const ctx = new Context()
     const feature = await mount(ctx, 'policy')

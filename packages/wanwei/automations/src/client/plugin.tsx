@@ -61,7 +61,7 @@ export function apply(ctx: Context): void {
   }
   registerFeaturePanel(ctx, 'skill-automations', 10, {
     controller, title: productText('自动化'),
-    subtitle: productText('配置本机定时任务，查看执行记录'), blockedIntranet: true,
+    subtitle: productText('配置本机定时任务，查看执行记录'),
     visibility: ctx.wanweiNetwork.visibility('automations'), Icon: AutomationsIcon,
     hooks: { network: ctx.wanweiNetwork }, renderContent: () => <AutomationPage api={api} />,
   })

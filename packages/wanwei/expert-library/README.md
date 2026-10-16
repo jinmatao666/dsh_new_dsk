@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Users can inspect administrator-authored expert descriptions and open several workbenches in one tab row. Reopening an expert focuses its existing tab without obtaining another ticket. This page requires OneAPI and the desktop native bridge; intranet mode disables its entry.
+Users can inspect administrator-authored expert descriptions and open several workbenches in one tab row. Reopening an expert focuses its existing tab without obtaining another ticket. This page requires OneAPI and the desktop native bridge. Both deployment modes attempt the configured service; a failed catalog request shows an expert-card placeholder instead of disabled navigation or an empty catalog. Reopening the page loads the catalog again.
 
 ## Table of Contents
 

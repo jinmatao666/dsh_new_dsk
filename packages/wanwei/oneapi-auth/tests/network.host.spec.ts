@@ -24,7 +24,7 @@ class MemorySettings extends SettingsProvider {
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('Wanwei network policy', () => {
-  it('retains local/platform skills, rejects cached SkillHub loads and restores internet tools', async () => {
+  it('retains all installed skills in both modes while preserving search restrictions', async () => {
     const ctx = new Context()
     const root = await mkdtemp(join(tmpdir(), 'wanwei-network-'))
     try {
@@ -44,8 +44,8 @@ describe('Wanwei network policy', () => {
       expect(ctx.tools.get('web_search')).toBeDefined()
       await policy.setMode('intranet')
       expect((ctx.settings as MemorySettings).doc['wanwei-network']).toEqual({ mode: 'intranet' })
-      expect((await ctx.skills.list()).map(skill => skill.name)).toEqual(['platform-skill'])
-      expect(await ctx.skills.get('hub-skill')).toBeUndefined()
+      expect((await ctx.skills.list()).map(skill => skill.name)).toEqual(['hub-skill', 'platform-skill'])
+      expect(await ctx.skills.get('hub-skill')).toBeDefined()
       expect(await ctx.skills.get('platform-skill')).toBeDefined()
       expect(ctx.tools.get('web_search')).toBeUndefined()
       expect(ctx.tools.schemas()).toEqual([])

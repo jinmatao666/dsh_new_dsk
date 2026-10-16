@@ -113,7 +113,7 @@ SkillHub 返回数据可能包含重复标识。卡片身份包含行位置，�
 <a id="known-limitations-and-deferred-work"></a>
 
 - 已发布技能和上传审核记录需要可访问的 OneAPI 服务。
-- SkillHub 浏览需要互联网；纯内网模式保留平台和本地技能，禁用 SkillHub。
+- 两种部署模式下 SkillHub 浏览均依赖上游实际连通性。目录请求失败显示可重试的大幅占位；已安装 SkillHub 技能不依赖目录即可本地使用，技能自身的远程依赖仍可能失败。
 
 <a id="dev-note"></a>
 ### 开发备注

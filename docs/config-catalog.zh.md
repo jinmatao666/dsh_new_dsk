@@ -3215,7 +3215,7 @@ export type ApprovalPolicy = 'ask' | 'never'
 
 ## `@deepseek-ai/dsh-wanwei-automations`
 
-需要：`connection` · `credentials` · `sessionController` · `sessions` · `agents` · `permissionPresets` · `wanweiNetworkPolicy` · `tools` · `workspaceRegistry`
+需要：`connection` · `credentials` · `sessionController` · `sessions` · `agents` · `permissionPresets` · `tools` · `workspaceRegistry`
 
 ```ts config-catalog
 /** Deployment limits and local storage location. */
@@ -3261,7 +3261,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/wanwei/browser-use/src/index.ts:16`](../packages/wanwei/browser-use/src/index.ts)
+来源：[`packages/wanwei/browser-use/src/index.ts:17`](../packages/wanwei/browser-use/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-chinese"></a>
 
@@ -3331,6 +3331,8 @@ export interface Config {
   installId?: string
   /** Skip the login overlay inside the source-only Tauri development shell. */
   developmentBypass?: boolean
+  /** Maximum deployment and expert service request duration in milliseconds. */
+  serviceTimeoutMs?: number
 }
 ```
 
@@ -3340,7 +3342,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-wanwei-skillhub`
 
-需要：`connection` · `wanweiNetworkPolicy`
+需要：`connection`
 
 ```ts config-catalog
 /** All upstream deployment choices are configured by the product bundle. */
@@ -3361,7 +3363,7 @@ export interface ApiConfig {
 }
 ```
 
-来源：[`packages/wanwei/skillhub/src/index.ts:9`](../packages/wanwei/skillhub/src/index.ts)
+来源：[`packages/wanwei/skillhub/src/index.ts:8`](../packages/wanwei/skillhub/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-vision"></a>
 

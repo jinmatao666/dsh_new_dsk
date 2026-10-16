@@ -4,6 +4,7 @@ import { projectPublishedExperts } from './expert-catalog.ts'
 import type { ExpertDetailSection, RemoteExpert } from './expert-catalog.ts'
 import { ExpertWebview, type ExpertLaunch } from './expert-webview.tsx'
 import { ExpertDetailDialog } from './ExpertDetailDialog.tsx'
+import { ServiceUnavailable } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 /* oxlint-disable @stylistic/max-len */
 type Expert = {
   id: string
@@ -84,6 +85,7 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
   const [selected, setSelected] = useState<ExpertMarketDetail | null>(null)
   const [publishedExperts, setPublishedExperts] = useState<readonly Expert[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [catalogLoading, setCatalogLoading] = useState(true)
   const [expertTabs, setExpertTabs] = useState<readonly ExpertLaunch[]>([])
   const [activeExpertTab, setActiveExpertTab] = useState<string | null>(null)
   const workspaceRef = useRef<HTMLElement>(null)
@@ -94,7 +96,6 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
   }, [activeExpertTab])
   const [launching, setLaunching] = useState(false)
   const [launchError, setLaunchError] = useState<string | null>(null)
-  const [catalogRevision, setCatalogRevision] = useState(0)
   const launchRevision = useRef(0)
   const launchPending = useRef(false)
   useEffect(() => {
@@ -118,8 +119,11 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
   }, [])
   useEffect(() => {
     let cancelled = false
+    setCatalogLoading(true)
+    setLoadError(null)
     if (loadExperts === undefined) {
       setLoadError('专家目录服务不可用')
+      setCatalogLoading(false)
       return () => { cancelled = true }
     }
     void loadExperts().then((items) => {
@@ -128,9 +132,9 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
       setLoadError(null)
     }).catch((error: unknown) => {
       if (!cancelled) setLoadError(error instanceof Error ? error.message : '专家目录加载失败')
-    })
+    }).finally(() => { if (!cancelled) setCatalogLoading(false) })
     return () => { cancelled = true }
-  }, [catalogRevision, loadExperts])
+  }, [loadExperts])
   const categories = ['全部', ...new Set(publishedExperts.map(expert => expert.category))]
   const visibleExperts = category === '全部' ? publishedExperts : publishedExperts.filter(expert => expert.category === category)
   const openExpert = (expert: Expert) =>{  setSelected({ id: expert.id, name: expert.name, role: expert.role, summary: expert.summary, icon: expert.icon, tags: expert.tags, examples: expert.examples, accent: expert.accent, ...(expert.scenario === undefined ? {} : { scenario: expert.scenario }), ...(expert.materials === undefined ? {} : { materials: expert.materials }), ...(expert.detailSections === undefined ? {} : { detailSections: expert.detailSections }), ...(expert.footerNote === undefined ? {} : { footerNote: expert.footerNote }) }) }
@@ -167,7 +171,11 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
     }
   }
   const catalog = <section className="dsh-expert-market">
-    <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() =>{  setCategory(item) }}>{item}</button>)}</div>{loadError !== null && <p role="alert">{productText('专家目录加载失败：')}{loadError} <button type="button" onClick={() => { setCatalogRevision(value => value + 1) }}>{productText('重试')}</button></p>}{loadError === null && visibleExperts.length === 0 && <p>{productText('当前暂无已上架的专家。')}</p>}<div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} onClick={() =>{  openExpert(expert) }}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>
+    {catalogLoading ? <p role="status">{productText('正在连接服务…')}</p> : loadError !== null
+      ? <ServiceUnavailable variant="experts" title={productText('暂时无法连接专家库')}
+        description={productText('当前网络无法连接专家服务，请检查网络连接或联系管理员。')} /> :
+      <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() =>{  setCategory(item) }}>{item}</button>)}</div>{visibleExperts.length === 0 && <p>{productText('当前暂无已上架的专家。')}</p>}<div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} onClick={() =>{  openExpert(expert) }}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>
+    }
     {selected !== null && <ExpertDetailDialog expert={selected} launching={launching} launchError={launchError} onClose={() => { setSelected(null) }} onStart={() => { void startExpert() }} />}
   </section>
   return <section ref={workspaceRef} className="dsh-expert-active">
