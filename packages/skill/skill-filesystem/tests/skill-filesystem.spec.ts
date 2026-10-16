@@ -200,6 +200,40 @@ describe('dsh-skill-filesystem plugin exports', () => {
 })
 
 describe('FileSystemSkillProvider', () => {
+  it('limits cwd discovery to workspace roots while retaining installed and explicitly added skills', async () => {
+    const home = await tempDir('skill-scoped-home')
+    const project = await tempDir('skill-scoped-project')
+    const cwd = join(project, 'workspace')
+    const other = join(project, 'other')
+    const custom = await tempDir('skill-scoped-custom')
+    await mkdir(join(project, '.git'), { recursive: true })
+    await writeSkill(join(project, '.dsh/skills'), 'parent-only', 'Outside workspace')
+    await writeSkill(join(project, '.agents/skills'), 'parent-agents', 'Outside workspace')
+    await writeSkill(join(home, '.agents/skills'), 'external-only', 'Another agent')
+    await writeSkill(join(home, '.agents/skills'), 'same', 'External collision')
+    await writeSkill(join(home, '.dsh/skills'), 'same', 'Installed skill')
+    await writeSkill(join(home, '.dsh/skills'), 'market-installed', 'Marketplace install')
+    await writeSkill(join(cwd, '.dsh/skills'), 'workspace-dsh', 'Current workspace')
+    await writeSkill(join(cwd, '.agents/skills'), 'workspace-agents', 'Current workspace')
+    await writeSkill(join(other, '.dsh/skills'), 'other-workspace', 'Other workspace')
+    await writeSkill(custom, 'explicit-only', 'Explicit custom root')
+    const ctx = await setupLocal(home, { projectRootMode: 'cwd', includeUserAgentsRoot: false, customSkillDirs: [custom] })
+    try {
+      expect((await ctx.skills.list({ cwd })).map(skill => skill.name)).toEqual([
+        'explicit-only', 'market-installed', 'same', 'workspace-agents', 'workspace-dsh',
+      ])
+      expect((await ctx.skills.get('same', { cwd }))?.description).toBe('Installed skill')
+      expect(await ctx.skills.get('parent-only', { cwd })).toBeUndefined()
+      expect(await ctx.skills.get('external-only', { cwd })).toBeUndefined()
+      expect((await ctx.skills.list({ cwd: other })).map(skill => skill.name)).toEqual([
+        'explicit-only', 'market-installed', 'other-workspace', 'same',
+      ])
+      expect((await ctx.skills.list()).map(skill => skill.name)).toEqual(['explicit-only', 'market-installed', 'same'])
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('discovers project, custom, user, and agents skill roots in priority order', async () => {
     const home = await tempDir('skill-home')
     const project = await tempDir('skill-project')

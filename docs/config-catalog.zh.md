@@ -2164,6 +2164,10 @@ export interface Config {
   providerName?: string
   /** Whether project and user roots are included around custom roots. */
   includeDefaultRoots?: boolean
+  /** Whether project roots use the nearest Git ancestor or the exact lookup cwd. */
+  projectRootMode?: 'git' | 'cwd'
+  /** Whether the shared user agents skill root is included among default roots. */
+  includeUserAgentsRoot?: boolean
   /** DeepSeek Harness config root. Defaults to `$DSH_HOME` or `~/.dsh`. */
   dshHome?: string
   /** Shared agent config root. Defaults to `$DSH_AGENTS_HOME` or `~/.agents`. */

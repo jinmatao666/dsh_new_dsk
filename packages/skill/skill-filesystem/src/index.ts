@@ -51,6 +51,10 @@ export interface Config {
   providerName?: string
   /** Whether project and user roots are included around custom roots. */
   includeDefaultRoots?: boolean
+  /** Whether project roots use the nearest Git ancestor or the exact lookup cwd. */
+  projectRootMode?: 'git' | 'cwd'
+  /** Whether the shared user agents skill root is included among default roots. */
+  includeUserAgentsRoot?: boolean
   /** DeepSeek Harness config root. Defaults to `$DSH_HOME` or `~/.dsh`. */
   dshHome?: string
   /** Shared agent config root. Defaults to `$DSH_AGENTS_HOME` or `~/.agents`. */
@@ -76,6 +80,8 @@ export interface Config {
 export const Config: Schema<Config> = z.object({
   providerName: z.string().min(1).default('filesystem'),
   includeDefaultRoots: z.boolean().default(true),
+  projectRootMode: z.union([z.const('git'), z.const('cwd')]).default('git'),
+  includeUserAgentsRoot: z.boolean().default(true),
   dshHome: z.string(),
   agentsHome: z.string(),
   customSkillDirs: z.array(z.string()).default([]),
@@ -147,6 +153,8 @@ export function apply(ctx: Context, config: Config = {}): void {
 export class FileSystemSkillProvider implements SkillProvider {
   readonly name: string
   private readonly includeDefaultRoots: boolean
+  private readonly projectRootMode: 'git' | 'cwd'
+  private readonly includeUserAgentsRoot: boolean
   private readonly dshHome: string
   private readonly agentsHome: string
   private readonly customSkillDirs: string[]
@@ -161,6 +169,8 @@ export class FileSystemSkillProvider implements SkillProvider {
   ) {
     this.name = config.providerName ?? 'filesystem'
     this.includeDefaultRoots = config.includeDefaultRoots ?? true
+    this.projectRootMode = config.projectRootMode ?? 'git'
+    this.includeUserAgentsRoot = config.includeUserAgentsRoot ?? true
     this.dshHome = resolveDshHome(config.dshHome)
     this.agentsHome = resolve(config.agentsHome ?? process.env.DSH_AGENTS_HOME ?? join(homedir(), '.agents'))
     this.customSkillDirs = (config.customSkillDirs ?? []).map(root => resolve(root))
@@ -243,7 +253,9 @@ export class FileSystemSkillProvider implements SkillProvider {
   private async roots(cwd: string | undefined): Promise<SkillRoot[]> {
     const roots: SkillRoot[] = []
     if (this.includeDefaultRoots && cwd !== undefined) {
-      const projectRoot = await findProjectRoot(resolve(cwd), optionalFileSystem(this.ctx))
+      const projectRoot = this.projectRootMode === 'cwd'
+        ? resolve(cwd)
+        : await findProjectRoot(resolve(cwd), optionalFileSystem(this.ctx))
       roots.push(
         { path: join(projectRoot, '.dsh/skills'), source: 'project-dsh', rank: PROJECT_DSH_RANK, projectRoot },
         { path: join(projectRoot, '.agents/skills'), source: 'project-agents', rank: PROJECT_AGENTS_RANK, projectRoot },
@@ -251,10 +263,10 @@ export class FileSystemSkillProvider implements SkillProvider {
     }
     roots.push(...this.customSkillDirs.map(path => ({ path, source: 'custom' as const, rank: CUSTOM_RANK })))
     if (this.includeDefaultRoots) {
-      roots.push(
-        { path: join(this.dshHome, 'skills'), source: 'user-dsh', rank: USER_DSH_RANK, skipSystem: true },
-        { path: join(this.agentsHome, 'skills'), source: 'user-agents', rank: USER_AGENTS_RANK },
-      )
+      roots.push({ path: join(this.dshHome, 'skills'), source: 'user-dsh', rank: USER_DSH_RANK, skipSystem: true })
+      if (this.includeUserAgentsRoot) {
+        roots.push({ path: join(this.agentsHome, 'skills'), source: 'user-agents', rank: USER_AGENTS_RANK })
+      }
     }
     if (this.bundledSkillDir !== undefined) {
       roots.push({ path: this.bundledSkillDir, source: 'bundled', rank: BUNDLED_SKILL_RANK, trustedHost: true })

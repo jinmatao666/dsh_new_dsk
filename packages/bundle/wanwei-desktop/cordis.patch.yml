@@ -16,6 +16,11 @@
   config:
     searchProvider: oneapi-bailian
 
+- id: skill-filesystem
+  config:
+    projectRootMode: cwd
+    includeUserAgentsRoot: false
+
 - insert:
     - id: wanwei-browser-use
       name: '@deepseek-ai/dsh-wanwei-browser-use'

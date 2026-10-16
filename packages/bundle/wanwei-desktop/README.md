@@ -38,6 +38,8 @@ The first command prints the effective default tree without booting it after the
 
 ### What you get
 
+Desktop skill discovery uses only the selected workspace's `.dsh/skills` and `.agents/skills`, plus `<DSH_HOME>/skills` for installed/imported skills. It does not climb to parent Git repositories or automatically include shared `~/.agents/skills`. Explicit custom and bundled roots remain supported. This product policy leaves the generic provider defaults unchanged and does not delete existing files.
+
 The desktop product mounts the browser-assistant plugin with visible browser windows and an enabled default. Its Settings → Plugins card starts collapsed and reveals the automatically saved permission switch when expanded. Saved user preferences override the default; pure intranet mode still denies browser tools.
 
 The product enables [cross-step failure recovery](../../guard/repeat-tool-reminder/README.md) with three invalid-input attempts and memory for 128 failed call identities. It coaches correction and suppresses only unchanged inputs already confirmed invalid; it does not terminate tasks or block transient network retries.
