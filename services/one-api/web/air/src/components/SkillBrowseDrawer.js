@@ -118,6 +118,10 @@ export default function SkillBrowseDrawer({ visible, kind, id, skill: skillProp,
           : null}
         <p>{skill.description || '-'}</p>
       </section>
+      {skill.usage_example && <section className='skill-browse-section'>
+        <h4>技能使用示例</h4>
+        <p style={{ whiteSpace: 'pre-wrap' }}>{skill.usage_example}</p>
+      </section>}
       <section className='skill-browse-files'>
         <div className='skill-browse-filetree'>
           <Tree treeData={treeData(sanitizeName(skill.name), files)} defaultExpandAll value={`file:${selected}`} onChange={value => { if (typeof value === 'string' && value.startsWith('file:')) setSelected(value.slice(5)); }} />

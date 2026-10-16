@@ -469,6 +469,7 @@ export function InputBar({
           settlePrefix,
           sessionReady: live,
           removePrefix: (length) => {
+            if (!editable) return
             const next = draft.slice(length).trimStart()
             if (staging) onStageDraft(next)
             else inputActions?.setDraft(next)

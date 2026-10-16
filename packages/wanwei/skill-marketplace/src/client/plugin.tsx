@@ -40,6 +40,7 @@ type Skill = {
   tags: readonly string[]
   summary: string
   description: string
+  usageExample?: string
   installs: string
   updatedAt?: string | number
   accent: string
@@ -78,6 +79,7 @@ type RemoteSkill = {
   category?: unknown
   description?: unknown
   scenario?: unknown
+  usage_example?: unknown
   downloads?: unknown
   updated_at?: unknown
   version?: unknown
@@ -143,6 +145,7 @@ function reviewStatusLabel(status: Skill['reviewStatus']): string {
 type MarketplaceServices = {
   skillhubRequest: (operation: string, payload: unknown) => Promise<unknown>
   loadRemoteSkills?: () => Promise<RemoteSkill[]>
+  loadReferencedSkill?: (slug: string) => Promise<Skill | undefined>
   startSkillConversation?: (slug: string, displayName: string) => void
   loadRemoteCategories?: () => Promise<RemoteSkillCategory[]>
   loadRemoteSkillBundle?: (id: number) => Promise<unknown>
@@ -422,6 +425,10 @@ function SkillDetail({ skill, onBack, installState, installing, onToggleInstall,
           <h3>{productText('详细描述')}</h3>
           <p>{skill.description}</p>
         </div>
+        {skill.usageExample?.trim() && <div className="dsh-skill-detail-section dsh-skill-usage-examples">
+          <h3>{productText('使用示例')}</h3>
+          <p>{skill.usageExample}</p>
+        </div>}
       </div>
     </div>
   )
@@ -454,6 +461,7 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork }:
   const [platformPage, setPlatformPage] = useState(1)
   const [view, setView] = useState<'list' | 'detail'>('list')
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
+  const [requestedSkillRef, setRequestedSkillRef] = useState<string | null>(null)
   const [libraryView, setLibraryView] = useState<'market' | 'installed' | 'uploads'>('market')
   const [uploadView, setUploadView] = useState<PersonalSkillUploadView>('public')
   const [reviewFilter, setReviewFilter] = useState<PersonalSkillReviewFilter>('all')
@@ -471,6 +479,7 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork }:
   const [newSkill, setNewSkill] = useState({ name: '', summary: '', category: '通用', icon: 'preset:assistant', visibility: 'private' as 'private' | 'public' })
   const [customSkillSource, setCustomSkillSource] = useState<CustomSkillSource | null>(null)
   const [remoteSkills, setRemoteSkills] = useState<RemoteSkill[] | null>(null)
+  const [remoteSkillsLoaded, setRemoteSkillsLoaded] = useState(false)
   const [remoteCategories, setRemoteCategories] = useState<RemoteSkillCategory[] | null>(null)
   const [personalSkills, setPersonalSkills] = useState<RemotePersonalSkill[]>([])
   const [personalSkillsLoaded, setPersonalSkillsLoaded] = useState(false)
@@ -552,7 +561,11 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork }:
       setCategory(L.all)
       void refreshInstallStates()
       if (loadRemoteSkills !== undefined) {
+        setRemoteSkillsLoaded(false)
         void loadRemoteSkills().then(setRemoteSkills).catch(() => { setRemoteSkills(null) })
+          .finally(() => { setRemoteSkillsLoaded(true) })
+      } else {
+        setRemoteSkillsLoaded(true)
       }
       if (loadRemoteCategories !== undefined) {
         void loadRemoteCategories().then(setRemoteCategories).catch(() => { setRemoteCategories(null) })
@@ -563,6 +576,7 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork }:
       }
     }
     if (!next.open) {
+      setRequestedSkillRef(null)
       setView('list')
       setSelectedSkill(null)
     }
@@ -591,6 +605,7 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork }:
         tags: [...new Set([...remoteTags, source === 'personal' ? '个人' : '官方'])],
         summary: typeof remote.description === 'string' ? remote.description : '',
         description: typeof remote.scenario === 'string' && remote.scenario !== '' ? remote.scenario : (typeof remote.description === 'string' ? remote.description : ''),
+        usageExample: typeof remote.usage_example === 'string' ? remote.usage_example : '',
         installs: String(typeof remote.downloads === 'number' ? remote.downloads : 0),
         ...(updatedAt === undefined ? {} : { updatedAt }),
         accent: '#2563eb', icon: typeof remote.icon === 'string' && remote.icon.trim() !== '' ? remote.icon : 'preset:assistant', version: typeof remote.version === 'string' ? remote.version : '1.0.0',
@@ -642,6 +657,42 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork }:
     }]
   }), [personalSkills])
   const unreadReviewStatuses = Object.values(reviewAttention?.unread ?? {})
+  useEffect(() => {
+    const onReferenceOpen = (event: Event) => {
+      const detail: unknown = (event as CustomEvent).detail
+      if (typeof detail !== 'object' || detail === null || !('source' in detail) || detail.source !== 'skill'
+        || !('ref' in detail) || typeof detail.ref !== 'string') return
+      controller.open()
+      setRequestedSkillRef(detail.ref.replace(/^\//u, ''))
+    }
+    window.addEventListener('dsh:reference-open', onReferenceOpen)
+    return () => { window.removeEventListener('dsh:reference-open', onReferenceOpen) }
+  }, [controller])
+  useEffect(() => {
+    if (!open || requestedSkillRef === null || !remoteSkillsLoaded) return
+    const skill = [...allSkills, ...uploadedSkills].find(item => skillSlug(item) === requestedSkillRef)
+    if (skill !== undefined) {
+      setSelectedSkill(skill)
+      setView('detail')
+      setRequestedSkillRef(null)
+      return
+    }
+    let cancelled = false
+    void services.loadReferencedSkill?.(requestedSkillRef).then((local) => {
+      if (cancelled) return
+      if (local === undefined) {
+        setInstallMessage({ kind: 'error', text: productText('未找到该技能，请刷新技能列表后重试。') })
+        setRequestedSkillRef(null)
+        return
+      }
+      setSelectedSkill(local)
+      setView('detail')
+      setRequestedSkillRef(null)
+    }).catch((error: unknown) => {
+      if (!cancelled) setInstallMessage({ kind: 'error', text: String(error) })
+    })
+    return () => { cancelled = true }
+  }, [open, requestedSkillRef, allSkills, uploadedSkills, services, remoteSkillsLoaded])
   const uploadAttentionCount = unreadReviewStatuses.length
   useEffect(() => {
     if (!open || !personalSkillsLoaded || libraryView !== 'uploads' || uploadView !== 'reviews') return
@@ -1315,10 +1366,21 @@ export function SkillDraftPrefix({ draft, removePrefix, renderInput, settlePrefi
     settlePrefix(token.length, { source: 'skill', ref: token, clipboardText: token, label: displayName, appearance: 'skill' })
   }, [token, displayName, settlePrefix])
   if (sessionReady || token === undefined || displayName === undefined) return renderInput()
-  return renderInput(token.length, <button type="button" className="dsh-skill-draft-prefix" aria-label={productText('已选技能：{0}', [displayName])} onPointerDown={(event) => { event.stopPropagation() }} onClick={(event) => { event.stopPropagation(); removePrefix(token.length) }}><ReferenceIcon kind="skill" size={15} /><span>{displayName}</span><span aria-hidden="true">×</span></button>)
+  return renderInput(token.length, <span className="dsh-skill-draft-prefix" data-reference-kind="skill"
+    onPointerDown={(event) => { event.preventDefault(); event.stopPropagation() }}>
+    <button type="button" className="dsh-skill-draft-open" aria-label={productText('已选技能：{0}', [displayName])}
+      onClick={(event) => {
+        event.stopPropagation()
+        window.dispatchEvent(new CustomEvent('dsh:reference-open', { detail: { source: 'skill', ref: token } }))
+      }}>
+      <ReferenceIcon kind="skill" size={14} /><span>{displayName}</span>
+    </button>
+    <button type="button" className="dsh-skill-draft-remove" aria-label={productText('移除技能引用：{0}', [displayName])}
+      onClick={(event) => { event.stopPropagation(); removePrefix(token.length) }}>×</button>
+  </span>)
 }
 
-export const inject = ['slots', 'connection', 'conversation', 'sessions', 'workspaces', 'remote', 'remote.directoryPicker', 'wanweiNetwork']
+export const inject = ['slots', 'connection', 'conversation', 'sessions', 'workspaces', 'remote', 'remote.directoryPicker', 'remote.skills', 'wanweiNetwork']
 export function apply(ctx: Context): void {
   const network = ctx.wanweiNetwork
   const controller = createPanelController(ctx, 'wanwei-skill-marketplace')
@@ -1359,7 +1421,20 @@ export function apply(ctx: Context): void {
       ? [{ slug: item.name, displayName: item.display_name }] : []))
     return items
   }
-  const services: MarketplaceServices = { skillhubRequest, loadRemoteSkills, startSkillConversation, loadRemoteCategories,
+  const loadReferencedSkill = async (slug: string): Promise<Skill | undefined> => {
+    const sessionId = sessions.list.getSnapshot().current
+    if (sessionId === undefined) return undefined
+    const result = await ctx.remote.skills.list({ sessionId })
+    if (!result.ok) throw new Error(result.error.message)
+    const local = result.value.skills.find(skill => skill.name === slug)
+    if (local === undefined) return undefined
+    return { id: `reference-${slug}`, slug, name: local.displayName ?? skillDisplayName(slug) ?? slug,
+      category: productText('本地技能'), tags: [], summary: local.description, description: local.description,
+      installs: '0', accent: '#2563eb', icon: 'preset:assistant', version: '—', author: '—',
+      source: 'personal', installable: false, marketplacePublished: false }
+  }
+  const services: MarketplaceServices = {
+    skillhubRequest, loadRemoteSkills, loadReferencedSkill, startSkillConversation, loadRemoteCategories,
     loadRemoteSkillBundle, recordRemoteSkillInstall, submitPersonalSkill, loadPersonalSkills }
   const marketplaceUrl = (process.env.DSH_CLIENT_SKILL_MARKETPLACE_URL ?? 'https://skills.zjugis.com/').trim()
   const chooseDirectory = async (): Promise<string | null> => {

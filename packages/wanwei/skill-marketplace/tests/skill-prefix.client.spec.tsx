@@ -22,9 +22,22 @@ describe('skill prefix presentation', () => {
     const view = bench()
     expect(view.container.textContent).toBe('图片转 PDF×你好')
     expect(view.container.querySelector('button svg')).not.toBeNull()
-    fireEvent.click(view.getByRole('button'))
+    fireEvent.click(view.getByRole('button', { name: '移除技能引用：图片转 PDF' }))
     expect(view.removePrefix).toHaveBeenCalledWith('/office-images-to-pdf'.length)
     expect(view.bubble).not.toHaveBeenCalled()
+  })
+
+  it('opens skill details without removing the staged reference or selecting a workspace', () => {
+    const open = vi.fn<(event: WindowEventMap['dsh:reference-open']) => void>()
+    window.addEventListener('dsh:reference-open', open)
+    try {
+      const view = bench()
+      fireEvent.click(view.getByRole('button', { name: '已选技能：图片转 PDF' }))
+      expect(open).toHaveBeenCalledOnce()
+      expect(open.mock.calls[0]![0].detail).toEqual({ source: 'skill', ref: '/office-images-to-pdf' })
+      expect(view.removePrefix).not.toHaveBeenCalled()
+      expect(view.bubble).not.toHaveBeenCalled()
+    } finally { window.removeEventListener('dsh:reference-open', open) }
   })
 
   it('settles the token to a Session chip and leaves the editor as the only display', () => {

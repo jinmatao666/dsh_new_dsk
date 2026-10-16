@@ -9,9 +9,9 @@
  */
 import type { JSX } from 'react'
 import type {
-  EditorConfig, LexicalNode, NodeKey, SerializedLexicalNode, Spread,
+  EditorConfig, LexicalEditor, LexicalNode, NodeKey, SerializedLexicalNode, Spread,
 } from 'lexical'
-import { DecoratorNode } from 'lexical'
+import { $getNodeByKey, DecoratorNode } from 'lexical'
 import type { ReferenceInsert } from '../../contract/input.ts'
 import { ReferenceChip } from './ReferenceChip.tsx'
 
@@ -189,12 +189,22 @@ export class ReferenceChipNode extends DecoratorNode<JSX.Element> {
   }
 
   /** React face rendered into the host element by the decorator portal. */
-  override decorate(): JSX.Element {
+  override decorate(editor: LexicalEditor): JSX.Element {
+    const key = this.__key
+    const source = this.__source
+    const ref = this.__ref
     return (
       <ReferenceChip
         label={this.__label}
         appearance={this.__appearance}
         invalid={this.__invalid}
+        onOpen={() => {
+          editor.getRootElement()?.dispatchEvent(new CustomEvent('dsh:reference-open', { bubbles: true, detail: { source, ref } }))
+        }}
+        onRemove={() => {
+          if (!editor.isEditable()) return
+          editor.update(() => { $getNodeByKey(key)?.remove() })
+        }}
       />
     )
   }

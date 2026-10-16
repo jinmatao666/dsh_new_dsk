@@ -64,6 +64,7 @@ type Skill struct {
 	Category              string          `json:"category" gorm:"size:255;default:''"` // 分类,如 doc-processing / dev-tool
 	Description           string          `json:"description" gorm:"size:500;default:''"`
 	Scenario              string          `json:"scenario" gorm:"size:500;default:''"`
+	UsageExample          string          `json:"usage_example" gorm:"type:text"`
 	Content               string          `json:"content" gorm:"type:text;not null"`
 	Body                  string          `json:"body" gorm:"type:text"`
 	Assets                string          `json:"assets" gorm:"type:text"`
@@ -353,7 +354,7 @@ func buildSkillSearchQuery(keyword string, filter SkillCategoryFilter, includeDi
 	return query
 }
 
-const skillListSelectColumns = "skills.id, skills.name, skills.display_name, skills.icon, skills.category, skills.description, skills.scenario, skills.submitter, skills.source, skills.source_personal_skill_id, skills.tags, skills.downloads, skills.version, skills.status, skills.is_deleted, skills.created_at, skills.updated_at, skills.body_updated_at, skills.assets_updated_at"
+const skillListSelectColumns = "skills.id, skills.name, skills.display_name, skills.icon, skills.category, skills.description, skills.scenario, skills.usage_example, skills.submitter, skills.source, skills.source_personal_skill_id, skills.tags, skills.downloads, skills.version, skills.status, skills.is_deleted, skills.created_at, skills.updated_at, skills.body_updated_at, skills.assets_updated_at"
 
 func SearchSkillsWithOptions(keyword string, filter SkillCategoryFilter, page, perPage int, includeDisabled bool, deletedFilter SkillDeletedFilter, sortField, sortOrder string) ([]Skill, int64, error) {
 	return searchSkillsWithOptions(keyword, filter, page, perPage, includeDisabled, deletedFilter, sortField, sortOrder, false)

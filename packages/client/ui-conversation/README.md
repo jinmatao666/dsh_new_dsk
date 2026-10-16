@@ -9,6 +9,8 @@ English | [中文](README.zh.md)
 
 ## Summary
 
+Skill reference chips offer separate navigation and removal buttons. Navigation emits the browser `dsh:reference-open` event with `{ source, ref }` for the owning feature; removal deletes only that Lexical occurrence. Neither action submits a message or changes other references. The composer does not own the destination page.
+
 A feature may supply a first-send Session factory with its staged draft. Send or Enter invokes it once, transfers the draft and uses the ordinary Session input path. Preparation freezes staged editing; failure retains the draft. Manual Workspace selection transfers the text without sending and removes the factory. Without a supplied factory, the no-Workspace composer keeps its existing selection requirement.
 
 `ui-conversation` owns target-neutral Conversation assembly and the shared browser shell. It consumes Session Controller `SessionEventLikeEntry` feeds, exposes React-free registries and per-Session bindings through `ctx.uiConversation`, and contributes the `useConversation`, `useInput`, and `inputActions` standard props through `ctx.uiSession`. It also owns the per-session durable image URL cache: `ctx.uiConversation.imageUrl(sessionId, attachment)` resolves one session-authorized browser URL per attachment and revokes it with the Session binding, so every Conversation target shares one `session.attachment` read. Concrete targets such as Chat are separate packages that register their own Definitions, snapshot builders, Views, and renderers.

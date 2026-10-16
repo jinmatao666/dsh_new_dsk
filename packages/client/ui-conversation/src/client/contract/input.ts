@@ -58,6 +58,13 @@ export interface ReferenceInsert {
   readonly clipboardText: string
 }
 
+declare global {
+  interface WindowEventMap {
+    /** A composer reference requests navigation without mutating its draft. */
+    'dsh:reference-open': CustomEvent<Pick<ReferenceInsert, 'source' | 'ref'>>
+  }
+}
+
 /** Result of trigger-source adjudication. */
 export type PickOutcome =
   | { readonly claim: CommandClaim }

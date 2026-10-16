@@ -94,6 +94,7 @@ const EMPTY_FORM = {
   status: '0',
   summary: '',
   description: '',
+  usage_example: '',
   capabilities: '通用能力',
   body: '',
   icon: 'preset:assistant'
@@ -183,6 +184,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       status: String(skill.status ?? 0),
       summary: skill.summary || '',
       description: skill.description || '',
+      usage_example: skill.usage_example || '',
       capabilities: tagsToLines(skill.tags) || '通用能力',
       body: skill.body || ''
     } : { ...EMPTY_FORM });
@@ -439,6 +441,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       category: form.category,
       description: form.description || form.summary,
       scenario: form.summary,
+      usage_example: form.usage_example,
       tags: splitLines(form.capabilities).length ? splitLines(form.capabilities) : ['通用能力'],
       icon: form.icon,
     };
@@ -673,6 +676,10 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
             <label className='zjugis-field full'>
               <span>详细描述</span>
               <textarea rows='3' value={form.description} onChange={setField('description')} placeholder='技能的完整功能说明' />
+            </label>
+            <label className='zjugis-field full'>
+              <span>技能使用示例</span>
+              <textarea rows='5' value={form.usage_example} onChange={setField('usage_example')} placeholder={'例如：请将工作区中的 PDF 转成 PNG，每页一张，保存到输出目录。\n可填写多个示例，换行展示。'} />
             </label>
             <label className='zjugis-field full'>
               <span>主要能力（每行一条）</span>

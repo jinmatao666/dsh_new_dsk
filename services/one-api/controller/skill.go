@@ -54,6 +54,7 @@ type skillResponse struct {
 	Category                string                    `json:"category"`
 	Description             string                    `json:"description"`
 	Scenario                string                    `json:"scenario"`
+	UsageExample            string                    `json:"usage_example"`
 	Submitter               string                    `json:"submitter"`
 	Source                  string                    `json:"source"`
 	Tags                    any                       `json:"tags"`
@@ -83,6 +84,7 @@ func skillToResponse(s model.Skill, categories ...[]model.SkillCategoryView) ski
 		Category:        s.Category,
 		Description:     s.Description,
 		Scenario:        s.Scenario,
+		UsageExample:    s.UsageExample,
 		Submitter:       s.Submitter,
 		Source:          s.Source,
 		Tags:            s.Tags,
@@ -373,6 +375,14 @@ func CreateSkill(c *gin.Context) {
 	if v, ok := payload["scenario"]; ok {
 		_ = json.Unmarshal(v, &skill.Scenario)
 	}
+	if v, ok := payload["usage_example"]; ok {
+		var example *string
+		if err := json.Unmarshal(v, &example); err != nil || example == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "技能使用示例必须是文本"})
+			return
+		}
+		skill.UsageExample = *example
+	}
 	if v, ok := payload["submitter"]; ok {
 		_ = json.Unmarshal(v, &skill.Submitter)
 	}
@@ -525,6 +535,14 @@ func UpdateSkill(c *gin.Context) {
 	}
 	if v, ok := payload["scenario"]; ok {
 		_ = json.Unmarshal(v, &existing.Scenario)
+	}
+	if v, ok := payload["usage_example"]; ok {
+		var example *string
+		if err := json.Unmarshal(v, &example); err != nil || example == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "技能使用示例必须是文本"})
+			return
+		}
+		existing.UsageExample = *example
 	}
 	if v, ok := payload["submitter"]; ok {
 		_ = json.Unmarshal(v, &existing.Submitter)

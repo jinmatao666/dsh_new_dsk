@@ -1,39 +1,41 @@
-# One API 的前端界面
+# One API frontend themes
 
-> 每个文件夹代表一个主题，欢迎提交你的主题
+English | [中文](README.zh.md)
+
+> Each folder represents a theme. Contributions of new themes are welcome.
 
 > [!WARNING]
-> 不是每一个主题都及时同步了所有功能。当前推荐并默认使用 `air` 主题，其他主题欢迎 & 期待 PR。
+> Not every theme includes every feature update. The recommended default is the `air` theme; pull requests for other themes are welcome.
 
-## 提交新的主题
+## Contribute a new theme
 
-> 欢迎在页面底部保留你和 One API 的版权信息以及指向链接
+> You are welcome to retain your copyright information and One API copyright information, with links, at the bottom of the page.
 
-1. 在 `web` 文件夹下新建一个文件夹，文件夹名为主题名。
-2. 把你的主题文件放到这个文件夹下。
-3. 修改你的 `package.json` 文件，把 `build` 命令改为：`"build": "react-scripts build && mv -f build ../build/your-theme"`，其中 `your-theme` 为你的主题名。
-4. 修改 `common/config/config.go` 中的 `ValidThemes`，把你的主题名称注册进去。
-5. 修改 `web/THEMES` 文件，这里也需要同步修改。
+1. Create a folder under `web`, named after your theme.
+2. Put your theme files in that folder.
+3. In `package.json`, set the `build` command to `"build": "react-scripts build && mv -f build ../build/your-theme"`, replacing `your-theme` with your theme name.
+4. Register your theme name in `ValidThemes` in `common/config/config.go`.
+5. Also update `web/THEMES`.
 
-## 主题列表
+## Theme list
 
-### 主题：berry
+### Theme: berry
 
-由 [MartialBE](https://github.com/MartialBE) 开发。
+Developed by [MartialBE](https://github.com/MartialBE).
 
-预览：
+Preview:
 |||
 |:---:|:---:|
 |![image](https://github.com/songquanpeng/one-api/assets/42402987/36aff5c6-c5ff-4a90-8e3d-33d5cff34cbf)|![image](https://github.com/songquanpeng/one-api/assets/42402987/9ac63b36-5140-4064-8fad-fc9d25821509)|
 |![image](https://github.com/songquanpeng/one-api/assets/42402987/fb2b1c64-ef24-4027-9b80-0cd9d945a47f)|![image](https://github.com/songquanpeng/one-api/assets/42402987/b6b649ec-2888-4324-8b2d-d5e11554eed6)|
 |![image](https://github.com/songquanpeng/one-api/assets/42402987/6d3b22e0-436b-4e26-8911-bcc993c6a2bd)|![image](https://github.com/songquanpeng/one-api/assets/42402987/eef1e224-7245-44d7-804e-9d1c8fa3f29c)|
 
-### 主题：air
-由 [Calon](https://github.com/Calcium-Ion) 开发。
+### Theme: air
+Developed by [Calon](https://github.com/Calcium-Ion).
 
 |![image](https://github.com/songquanpeng/songquanpeng.github.io/assets/39998050/1ddb274b-a715-4e81-858b-857d520b6ff4)|![image](https://github.com/songquanpeng/songquanpeng.github.io/assets/39998050/163b0b8e-1f73-49cb-b632-3dcb986b56d5)|
 |:---:|:---:|
 
-#### 开发说明
+#### Development notes
 
-请查看 [web/berry/README.md](https://github.com/songquanpeng/one-api/tree/main/web/berry/README.md)
+See [web/berry/README.md](https://github.com/songquanpeng/one-api/tree/main/web/berry/README.md).
