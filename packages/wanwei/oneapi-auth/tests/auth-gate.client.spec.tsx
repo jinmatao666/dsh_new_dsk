@@ -27,7 +27,7 @@ const noAttention: AttentionSnapshot = new Map()
 const useSessionPendingInteraction: AuthGateProps['useSessionPendingInteraction'] = selector => selector(noAttention)
 const kit = {
   getSupportContact: vi.fn(async () => ({ network: 'internet' as const, operator: '张运维', phone: '0571-12345678',
-    features: resolveDeploymentFeatures(undefined) })),
+    features: resolveDeploymentFeatures(undefined), plugins: { browserAssistant: true } })),
   useSessions: unusedHook,
   useSessionPendingInteraction,
   useWorkspaces: unusedHook,
