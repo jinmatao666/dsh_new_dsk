@@ -11,7 +11,6 @@ import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
 import SettingsFile from '@deepseek-ai/dsh-settings-file'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { installNetworkPolicy } from '../src/network.ts'
 
 it('boots the intranet policy from cordis.yml and exposes feedback in prompt and tool output', async () => {
@@ -44,7 +43,7 @@ it('boots the intranet policy from cordis.yml and exposes feedback in prompt and
     } } as unknown as NonNullable<typeof ctx.loader.internal>
     await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
     await ctx.loader.await()
-    await ctx.settings.update(settingsNamespace('wanwei-network'), { mode: 'intranet' })
+    await ctx.wanweiNetworkPolicy.setMode('intranet')
     expect(renderPrompt(await ctx.systemPrompt.assemble())).toContain('下载成功就继续任务')
     const success = await ctx.tools.execute({ name: 'pwsh', callId: ToolCallId('success'),
       arguments: { command: 'pip install https://pypi.org/packages/x.whl' }, signal: new AbortController().signal })
@@ -68,6 +67,12 @@ it('boots the intranet policy from cordis.yml and exposes feedback in prompt and
         },
       ]
     `)
+    await ctx.wanweiNetworkPolicy.setDeployment({ network: 'intranet', operator: '', phone: '',
+      features: { internet: { automations: true, connectors: true }, intranet: { automations: true, connectors: false } },
+      plugins: { browserAssistant: false }, resources: { source: 'offline', proxyUrl: '', autoDetect: false, probeUrls: [] } })
+    expect(renderPrompt(await ctx.systemPrompt.assemble())).toMatchSnapshot('offline resource source')
+    expect(process.env.PIP_NO_INDEX).toBe('1')
+    expect(process.env.PIP_FIND_LINKS).toBe('http://server.lan/api/desktop-resources/wheels/')
   } finally {
     await ctx.fiber.dispose()
     await rm(root, { recursive: true, force: true })

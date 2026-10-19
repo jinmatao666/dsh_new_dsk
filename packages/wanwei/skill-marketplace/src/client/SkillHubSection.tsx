@@ -309,7 +309,7 @@ export function SkillHubSection({
             {!selectedRecord && <button type="button" className="dsh-skill-detail-install" disabled={busy || !detailReady || !localReady || selected.paid} onClick={() => { void operate(selected, 'install') }}>{busy ? productText('处理中…') : productText('安装')}</button>}
             {selectedRecord && <>
               <button type="button" className="dsh-skill-detail-use" disabled={busy} onClick={() => {
-                void invoke('open_skill_directory', { slug: selectedRecord.localSlug }).catch((error) => {
+                void invoke('open_skill_directory', { slug: selectedRecord.localSlug }).catch((error: unknown) => {
                   latest.current.onNotice({ kind: 'error', text: errorText(error) })
                 })
               }}>{productText('打开目录')}</button>

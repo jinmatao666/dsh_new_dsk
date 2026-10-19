@@ -47,11 +47,10 @@ it('passes real sources into model output and the replayable clickable search vi
     const result = await ctx.tools.execute({ name: 'web_search', callId: ToolCallId('search'),
       arguments: { queries: ['今日公告'] }, signal: new AbortController().signal })
     expect(result.isError).not.toBe(true)
-    expect(result.content).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'text', text: expect.stringContaining('[官方公告](https://news.example.com/release)') }),
-    ]))
+    expect(result.content.some(block => block.type === 'text'
+      && block.text.includes('[官方公告](https://news.example.com/release)'))).toBe(true)
     // JSON round-trip matches persisted tool/result metadata consumed on replay.
-    const view = presentSearchResult({ queries: ['今日公告'] }, JSON.parse(JSON.stringify(result)))
+    const view = presentSearchResult({ queries: ['今日公告'] }, JSON.parse(JSON.stringify(result)) as typeof result)
     expect(view).toMatchInlineSnapshot(`
       {
         "answer": "官方发布了公告。

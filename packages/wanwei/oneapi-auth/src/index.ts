@@ -566,8 +566,7 @@ export function apply(ctx: Context, config: Config): void {
       try {
         const settings = await fetchDeploymentSettings(baseURL, serviceSignal())
         if (endpoint === 'network-get') {
-          await network.setMode(settings.network)
-          network.setPlugins(settings.plugins)
+          await network.setDeployment(settings)
         }
         return { ok: true as const, value: endpoint === 'network-get'
           ? { ...network.getSnapshot(), features: settings.features, plugins: settings.plugins } : settings }

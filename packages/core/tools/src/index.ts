@@ -1198,9 +1198,9 @@ export class ToolRuntime extends Service {
 
   /** Product deployment availability applies to every scope and dispatch path.
    * @param filter - Predicate allowing a tool name to remain available.
-   * @returns Disposer removing the filter and notifying consumers.
+   * @returns Disposer removing the filter and notifying consumers; await any asynchronous effect cleanup.
    */
-  registerAvailability(filter: (name: string) => boolean): () => void {
+  registerAvailability(filter: (name: string) => boolean): () => void | Promise<void> {
     return this.ctx.effect(() => {
       this.availability.add(filter)
       this.ctx.emit('tools/change')

@@ -74,6 +74,6 @@ export function registerSkillUsage(ctx: Context, baseURL: string, resolveToken: 
   })
   ctx.effect(() => {
     const timer = setInterval(() => { void flush() }, 20000)
-    return () => clearInterval(timer)
+    return () => { clearInterval(timer) }
   }, 'wanwei-oneapi-auth: skill usage delivery')
 }

@@ -278,9 +278,9 @@ Layered registry of skill providers, the host+per-scope shape the tools registry
 ```ts cordis-catalog
 /** Install a deployment availability filter, applied even to cached reads.
  * @param filter - Predicate allowing a skill to remain available.
- * @returns Disposer removing the filter and invalidating cached reads.
+ * @returns Disposer removing the filter and invalidating cached reads; await any asynchronous effect cleanup.
  */
-registerFilter(filter: (skill: SkillCandidate | SkillDefinition) => boolean): () => void
+registerFilter(filter: (skill: SkillCandidate | SkillDefinition) => boolean): () => void | Promise<void>
 
 /**
  * Register a borrowed same-process provider synchronously during plugin

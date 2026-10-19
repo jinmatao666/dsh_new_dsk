@@ -13,6 +13,19 @@ import SkillRegistry, {
   type SkillProviderObservation,
 } from '@deepseek-ai/dsh-skill'
 
+it('awaits deployment filter disposal before serving cached skills again', async () => {
+  const ctx = new Context()
+  await ctx.plugin(SkillRegistry)
+  try {
+    ctx.skills.register({ name: 'fixture', description: 'fixture', source: 'memory', content: 'fixture body' })
+    expect(await ctx.skills.list()).toHaveLength(1)
+    const dispose = ctx.skills.registerFilter(() => false)
+    expect(await ctx.skills.list()).toEqual([])
+    await dispose()
+    expect(await ctx.skills.list()).toHaveLength(1)
+  } finally { await ctx.fiber.dispose() }
+})
+
 function memorySkill(name: string, description: string, rank: number, body = `${name} body.`): SkillCandidate {
   return {
     name,

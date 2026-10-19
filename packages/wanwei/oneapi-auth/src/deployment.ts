@@ -1,4 +1,5 @@
 import type { NetworkEnvironment } from './network-contract.ts'
+import { resolveResourceSettings, type ResourceSettings } from './resource-settings.ts'
 
 /** Public deployment metadata owned by the desktop's configured OneAPI server. */
 export interface DeploymentSettings {
@@ -7,6 +8,7 @@ export interface DeploymentSettings {
   phone: string
   features: DeploymentFeatures
   plugins: DeploymentPlugins
+  resources?: ResourceSettings
 }
 
 /** Administrator-owned plugin permissions, independent of personal preferences. */
@@ -64,6 +66,8 @@ export async function fetchDeploymentSettings(baseURL: string, signal?: AbortSig
   if ((data.network !== 'internet' && data.network !== 'intranet') ||
     typeof data.operator !== 'string' || data.operator.length > 160 ||
     typeof data.phone !== 'string' || data.phone.length > 80) throw new Error('后台系统设置字段无效')
+  const resources = resolveResourceSettings(data.resources)
   return { network: data.network, operator: data.operator, phone: data.phone,
+    ...(resources === undefined ? {} : { resources }),
     features: resolveDeploymentFeatures(data.features), plugins: resolveDeploymentPlugins(data.plugins) }
 }

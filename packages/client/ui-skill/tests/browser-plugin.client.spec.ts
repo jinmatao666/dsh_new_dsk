@@ -172,7 +172,8 @@ describe('candidates: sessionId addressing', () => {
     const items = await source.candidates(proj('s1'), req('纪要'))
     expect(items).toEqual([{ name: '会议纪要', value: 'community-12', description: '整理会议' }])
     expect(source.lexicon!(proj('s1'))).toEqual(['会议纪要', 'community-12'])
-    const pick = await source.onPick!({ candidate: items[0]! } as never)
+    const pick = source.onPick({ candidate: items[0]!, session: proj('s1'), position: 'leading',
+      via: 'menu', action: 'pick', span: { start: 0, end: 3, draftRev: 1 } })
     expect(pick).toMatchObject({ insert: { ref: '/community-12', label: '会议纪要', clipboardText: '/会议纪要' } })
   })
   it('lists via {sessionId} and filters by startsWith(query)', async () => {

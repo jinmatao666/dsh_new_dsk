@@ -958,7 +958,7 @@ function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProp
             installing={installing === selectedSkill.id}
             showReview={libraryView === 'uploads'}
             onToggleInstall={() => void toggleInstall(selectedSkill)}
-            onOpenDirectory={() => { void desktopInvoke('open_skill_directory', { slug: skillSlug(selectedSkill) }).catch((error) => {
+            onOpenDirectory={() => { void desktopInvoke('open_skill_directory', { slug: skillSlug(selectedSkill) }).catch((error: unknown) => {
               setInstallMessage({ kind: 'error', text: error instanceof Error ? error.message : String(error) })
             }) }}
             onUse={() => {
@@ -1187,13 +1187,11 @@ function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProp
                   <h3>{productText('平台技能没有匹配结果')}</h3>
                 </div> : <div className="dsh-skill-empty">
                   <div className="dsh-skill-empty-icon"><CategoryGlyph category={category} size={24} /></div>
-                  <span>{libraryView === 'uploads'
-                    ? uploadView === 'public'
-                      ? productText('暂无审核通过的公开技能')
-                      : uploadView === 'private'
-                        ? productText('暂无私人技能')
-                        : productText('暂无符合条件的审核记录')
-                    : productText('平台技能没有匹配结果')}</span>
+                  <span>{uploadView === 'public'
+                    ? productText('暂无审核通过的公开技能')
+                    : uploadView === 'private'
+                      ? productText('暂无私人技能')
+                      : productText('暂无符合条件的审核记录')}</span>
                 </div>
               )}
               {libraryView !== 'uploads' && <SkillHubSection

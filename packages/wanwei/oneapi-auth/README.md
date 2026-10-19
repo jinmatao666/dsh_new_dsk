@@ -43,7 +43,9 @@ The configured backend's System Settings owns the network environment and indepe
 
 Forgot password reads the backend's maintenance contact into a separate dialog. SMS and QR login display an unavailable notice without replacing account login. The login card keeps its existing sizing; no registration or simulated authentication controls are provided.
 
-Private-network mode permits dependency downloads when connectivity allows them. Recognized Bash, PowerShell and terminal results distinguish missing modules, connection failures and unavailable package versions, retain original output and append Chinese guidance. The model is instructed to retain the warning icon, explicitly mention private-network mode and blocked task progress, and briefly explain the actual cause without recovery suggestions or long raw diagnostics. Dependency names come from the current command and failure log; unconfirmed names remain generic. Dependent steps stop only when an essential dependency remains unavailable. Permission and syntax errors are not classified as network failures.
+Private-network resource settings select either the backend wheel bundle or a forward proxy, without cross-source fallback. Offline mode configures pip with `PIP_NO_INDEX` and the backend wheel links; proxy mode configures proxy-aware child clients. Automatic detection requires every configured HTTPS endpoint to return 204, concurrently within 2.5 seconds, and caches the result for 60 seconds. Shell execution refreshes deployment settings at most once per minute and refuses new commands if refresh fails. Running children keep their environment. See [resource setup and acceptance](../../../products/wanwei-desktop/resource-relay/README.md).
+
+Recognized Bash, PowerShell and terminal results distinguish missing modules, connection failures and unavailable package versions, retain original output and append Chinese guidance. The model is instructed to retain the warning icon, explicitly mention private-network mode and blocked task progress, and briefly explain the actual cause without recovery suggestions or long raw diagnostics. Dependency names come from the current command and failure log; unconfirmed names remain generic. Dependent steps stop only when an essential dependency remains unavailable. Permission and syntax errors are not classified as network failures.
 
 This is diagnostic feedback, not a firewall or shell sandbox. Unrecognized diagnostics receive no automatic dependency feedback. The dependency prompt section follows the confirmed mode for future prompt assembly; historical messages are not rewritten. Internet mode adds no dependency prompt section or feedback. Assistant headings, brevity and retry decisions follow model guidance rather than a deterministic response template.
 
@@ -119,7 +121,7 @@ Different search results may change subsequent prompt content and cache reuse; t
 
 #### What the model sees
 
-Only private-network mode adds dependency guidance to the system prompt. Recognized missing-dependency and download failures return Chinese guidance through ordinary tool results, visible to both the model and the conversation UI. Successful downloads receive no failure feedback. No separate popup or fabricated assistant message is inserted.
+Only private-network mode adds dependency guidance to the system prompt. Explicit resource settings replace generic guidance with the selected source's restrictions: offline mode forbids changing indexes or using public package URLs; proxy mode forbids falling back to offline bundles. Recognized missing-dependency and download failures return Chinese guidance through ordinary tool results, visible to both the model and the conversation UI. Successful downloads receive no failure feedback. No separate popup or fabricated assistant message is inserted.
 
 #### Token effect
 
@@ -148,6 +150,7 @@ Static guidance can reuse the prompt prefix. Delivery paths vary with the task.
 <a id="known-limitations-and-deferred-work"></a>
 
 - Model discovery, managed search and the expert catalog require a reachable OneAPI service. The desktop has no local provider-editing fallback.
+- Resource routing covers pip wheels and proxy-aware child clients, not browser traffic, native PowerShell downloads or Node fetch. It is not a network sandbox. Proxy credentials, source archives, OS packages and offline npm packages are not supplied. Internal OneAPI traffic bypasses the shell proxy. Public search and link restrictions remain independent.
 - Search sources require the updated OneAPI relay and a channel exposing Bailian's native generation endpoint, not only its compatible chat endpoint. Model compliance with citation instructions still needs live acceptance; links alone do not establish factual accuracy.
 - Independent expert launch requires the separate OneAPI `/api/expert-web` deployment and database tables; the ordinary login endpoint alone does not provide it.
 - Website tickets and child Webview permissions still require live service and cross-platform desktop acceptance.

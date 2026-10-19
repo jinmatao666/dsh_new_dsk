@@ -359,6 +359,12 @@ pluginAllowed(plugin: keyof DeploymentPlugins): boolean
  * @param plugins - Permissions from the configured deployment server.
  */
 setPlugins(plugins: DeploymentPlugins): void
+
+/** Apply a validated deployment, including shell resource routing.
+ * @param settings - Server-owned configuration.
+ * @returns Completion of persisted network mode and route selection.
+ */
+setDeployment(settings: DeploymentSettings): Promise<void>
 ```
 
 Source: [`packages/wanwei/oneapi-auth/src/network.ts`](../../packages/wanwei/oneapi-auth/src/network.ts)

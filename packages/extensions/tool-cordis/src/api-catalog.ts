@@ -2059,10 +2059,10 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Layered registry of skill providers, the host+per-scope shape the tools registry established. A registration files into the layer of its calling context\'s scope (scopeOf): host rows and repository plugins land in the global layer, while a plugin mounted by an agent preset\'s standing composition lands in that preset\'s layer. A read merges the global layer with the viewing scope\'s chain — the nearest layer\'s entry wins a duplicate name outright, and the rank order decides duplicates only within one layer. It exposes sorted invocation-neutral summaries and loads full skill bodies on demand.',
     methods: [
       {
-        signature: 'registerFilter(filter: (skill: SkillCandidate | SkillDefinition) => boolean): () => void',
+        signature: 'registerFilter(filter: (skill: SkillCandidate | SkillDefinition) => boolean): () => void | Promise<void>',
         description: 'Install a deployment availability filter, applied even to cached reads.',
         parameters: [{ name: 'filter', description: 'Predicate allowing a skill to remain available.' }],
-        returns: 'Disposer removing the filter and invalidating cached reads.',
+        returns: 'Disposer removing the filter and invalidating cached reads; await any asynchronous effect cleanup.',
       },
       {
         signature: 'registerProvider(create: (control: SkillProviderControl) => SkillProvider): () => void',
@@ -2530,10 +2530,10 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the exact disposer that unregisters the guard.',
       },
       {
-        signature: 'registerAvailability(filter: (name: string) => boolean): () => void',
+        signature: 'registerAvailability(filter: (name: string) => boolean): () => void | Promise<void>',
         description: 'Product deployment availability applies to every scope and dispatch path.',
         parameters: [{ name: 'filter', description: 'Predicate allowing a tool name to remain available.' }],
-        returns: 'Disposer removing the filter and notifying consumers.',
+        returns: 'Disposer removing the filter and notifying consumers; await any asynchronous effect cleanup.',
       },
       {
         signature: 'get(name: string, scope?: ScopeKey): ToolDefinition | undefined',
@@ -5772,7 +5772,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ToolRuntime',
-    declaration: 'export class ToolRuntime extends Service {\n    static inject;\n    static Config: z<Config>;\n    readonly [TOOL_RUNTIME_SCHEDULER]: ToolRuntimeScheduler;\n    constructor(ctx: Context, config: Config = {});\n    presentAs(mode: ToolPresentationMode): () => void;\n    register(definition: ToolDefinition): () => void;\n    restrict(filter: ToolRestriction): () => void;\n    guard(guard: ToolGuard): () => void;\n    registerAvailability(filter: (name: string) => boolean): () => void;\n    get(name: string, scope?: ScopeKey): ToolDefinition | undefined;\n    schemas(scope?: ScopeKey): ToolSchema[];\n    executionMode(exec: ToolExecutionInput): ToolExecutionMode;\n    async execute(exec: ToolExecutionInput): Promise<ToolExecutionResult>;\n}',
+    declaration: 'export class ToolRuntime extends Service {\n    static inject;\n    static Config: z<Config>;\n    readonly [TOOL_RUNTIME_SCHEDULER]: ToolRuntimeScheduler;\n    constructor(ctx: Context, config: Config = {});\n    presentAs(mode: ToolPresentationMode): () => void;\n    register(definition: ToolDefinition): () => void;\n    restrict(filter: ToolRestriction): () => void;\n    guard(guard: ToolGuard): () => void;\n    registerAvailability(filter: (name: string) => boolean): () => void | Promise<void>;\n    get(name: string, scope?: ScopeKey): ToolDefinition | undefined;\n    schemas(scope?: ScopeKey): ToolSchema[];\n    executionMode(exec: ToolExecutionInput): ToolExecutionMode;\n    async execute(exec: ToolExecutionInput): Promise<ToolExecutionResult>;\n}',
   },
   {
     name: 'ToolRuntimeScheduler',

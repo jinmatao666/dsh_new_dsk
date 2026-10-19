@@ -1,0 +1,7 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`boots the intranet policy from cordis.yml and exposes feedback in prompt and tool output > offline resource source 1`] = `
+"You are an AI agent powered by DeepSeek Harness.
+
+当前为内网离线依赖包模式。优先复用已安装依赖；安装 Python 包使用 python -m pip install 包名，环境已配置后台 wheel 依赖库。不得换源、访问公网包 URL 或切换代理。库中缺包时如实报告并停止依赖该包的步骤；不要反复修复环境。此资源库仅包含 Python wheel，不提供其他联网资源。"
+`;

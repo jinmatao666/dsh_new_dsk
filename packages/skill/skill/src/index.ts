@@ -373,9 +373,9 @@ export class SkillRegistry extends Service {
 
   /** Install a deployment availability filter, applied even to cached reads.
    * @param filter - Predicate allowing a skill to remain available.
-   * @returns Disposer removing the filter and invalidating cached reads.
+   * @returns Disposer removing the filter and invalidating cached reads; await any asynchronous effect cleanup.
    */
-  registerFilter(filter: (skill: SkillCandidate | SkillDefinition) => boolean): () => void {
+  registerFilter(filter: (skill: SkillCandidate | SkillDefinition) => boolean): () => void | Promise<void> {
     return this.ctx.effect(() => {
       this.filters.add(filter)
       this.invalidateCache()

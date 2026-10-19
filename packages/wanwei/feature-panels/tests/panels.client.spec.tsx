@@ -32,13 +32,13 @@ describe('independent feature navigation', () => {
       renderContent: () => <p>content</p> } as unknown as PanelActionProps & PanelProps
     try {
       render(<><PanelAction {...props} /><FeaturePanel {...props} /></>)
-      act(() => feature.controller.open())
+      act(() => { feature.controller.open() })
       expect(screen.getByRole('dialog')).toBeTruthy()
-      act(() => { visible = false; listeners.forEach(listener => listener()) })
+      act(() => { visible = false; listeners.forEach((listener) => { listener() }) })
       expect(screen.queryByRole('button')).toBeNull()
       expect(screen.queryByRole('dialog')).toBeNull()
       expect(feature.controller.isOpen()).toBe(false)
-      act(() => { visible = true; listeners.forEach(listener => listener()) })
+      act(() => { visible = true; listeners.forEach((listener) => { listener() }) })
       expect(screen.getByRole('button')).toBeTruthy()
       expect(screen.queryByRole('dialog')).toBeNull()
     } finally { await feature.dispose() }

@@ -34,6 +34,18 @@ const echoTool = defineTool({
 })
 
 describe('ToolRuntime', () => {
+  it('returns an awaitable disposer that restores deployment tool availability', async () => {
+    const ctx = await setup()
+    try {
+      ctx.tools.register(echoTool)
+      const dispose = ctx.tools.registerAvailability(() => false)
+      expectTypeOf(dispose).returns.toEqualTypeOf<void | Promise<void>>()
+      expect(ctx.tools.get('echo')).toBeUndefined()
+      await dispose()
+      expect(ctx.tools.get('echo')).toBeDefined()
+    } finally { await ctx.fiber.dispose() }
+  })
+
   it('registers tools, exposes schemas, and feeds the system-prompt assembly', async () => {
     const ctx = await setup()
     ctx.tools.register(echoTool)

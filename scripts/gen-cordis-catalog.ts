@@ -656,6 +656,7 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   NetworkState: 'private desktop deployment policy is owned by packages/wanwei/oneapi-auth/src/network-contract.ts',
   DeploymentPlugins: 'private desktop administrator permissions are owned by packages/wanwei/browser-use/README.md',
+  DeploymentSettings: 'private desktop resource and deployment settings are owned by packages/wanwei/oneapi-auth/README.md',
   z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',
   BeginCommandRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   InsertReferenceRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',

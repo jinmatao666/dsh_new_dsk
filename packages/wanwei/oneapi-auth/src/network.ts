@@ -5,7 +5,8 @@ import type {} from '@deepseek-ai/dsh-tools'
 import { internalLink, type NetworkState } from './network-contract.ts'
 import { DEPENDENCY_FEEDBACK, INTRANET_DEPENDENCY_GUIDANCE, dependencyFailure } from './dependency-policy.ts'
 import { FIRST_PARTY_SECTION_ORDER } from '@deepseek-ai/dsh-system-prompt'
-import type { DeploymentPlugins } from './deployment.ts'
+import { fetchDeploymentSettings, type DeploymentPlugins, type DeploymentSettings } from './deployment.ts'
+import { ResourceRouting } from './resource-routing.ts'
 
 /** Host-owned durable network mode and administrator-provided internal origins. */
 export interface NetworkPolicy {
@@ -27,6 +28,11 @@ export interface NetworkPolicy {
    * @param plugins - Permissions from the configured deployment server.
    */
   setPlugins(plugins: DeploymentPlugins): void
+  /** Apply a validated deployment, including shell resource routing.
+   * @param settings - Server-owned configuration.
+   * @returns Completion of persisted network mode and route selection.
+   */
+  setDeployment(settings: DeploymentSettings): Promise<void>
 }
 declare module '@deepseek-ai/cordis' {
   interface Context { wanweiNetworkPolicy: NetworkPolicy }
@@ -38,16 +44,29 @@ declare module '@deepseek-ai/cordis' {
  */
 export function installNetworkPolicy(ctx: Context, baseURL: string): NetworkPolicy {
   let plugins: DeploymentPlugins = { browserAssistant: false }
+  const resources = new ResourceRouting(baseURL)
+  ctx.effect(() => () => { resources.restore() })
+  let refreshPrompt = () => {}
+  let confirmedAt = 0
+  let refreshing: Promise<void> | undefined
   const scope = ctx.settings.register(settingsNamespace('wanwei-network'), z.object({
     mode: z.union(['internet', 'intranet'] as const).default('internet'),
   }))
   const policy: NetworkPolicy = {
+    async setDeployment(settings) {
+      await policy.setMode(settings.network)
+      policy.setPlugins(settings.plugins)
+      resources.configure(settings.network, settings.resources)
+      confirmedAt = Date.now()
+      refreshPrompt()
+    },
     pluginAllowed: plugin => plugins[plugin],
     setPlugins: (value) => { plugins = value },
     getSnapshot: () => ({ mode: scope.get().mode, internalOrigins: [new URL(baseURL).origin] }),
     async setMode(mode) {
       if (mode !== 'internet' && mode !== 'intranet') throw new Error('网络环境无效')
       if (scope.get().mode !== mode) await scope.update({ mode })
+      confirmedAt = Date.now()
       return policy.getSnapshot()
     },
   }
@@ -56,18 +75,30 @@ export function installNetworkPolicy(ctx: Context, baseURL: string): NetworkPoli
     const install = () => scope.get().mode === 'intranet' ? pctx.systemPrompt.section({
       name: 'wanwei:intranet-dependencies',
       order: FIRST_PARTY_SECTION_ORDER.DELIVERABLE_FILE_REFERENCES + 110,
-      text: INTRANET_DEPENDENCY_GUIDANCE,
+      text: resources.guidance() ?? INTRANET_DEPENDENCY_GUIDANCE,
     }) : () => {}
     let dispose = install()
+    refreshPrompt = () => { dispose(); dispose = install() }
     pctx.effect(() => scope.watch(() => { dispose(); dispose = install() }))
     pctx.effect(() => () => { dispose() })
   })
   ctx.inject(['tools'], (tctx) => {
     const install = () => tctx.tools.registerAvailability(name => scope.get().mode === 'internet' || name !== 'web_search')
     let dispose = install()
-    tctx.effect(() => scope.watch(() => { dispose(); dispose = install() }))
-    tctx.effect(() => () => { dispose() })
+    tctx.effect(() => scope.watch(() => { void dispose(); dispose = install() }))
+    tctx.effect(() => async () => { await dispose() })
     tctx.on('tools/pre-execute', async (exec, next) => {
+      if (['bash', 'pwsh', 'terminal_open', 'terminal_send'].includes(exec.name)) {
+        try {
+          if (Date.now() - confirmedAt >= 60_000) {
+            refreshing ??= fetchDeploymentSettings(baseURL, AbortSignal.timeout(5000)).then(settings => policy.setDeployment(settings))
+            try { await refreshing } finally { refreshing = undefined }
+          }
+          await resources.prepare()
+        } catch {
+          return { kind: 'deny' as const, reason: '无法确认后台资源配置，请恢复后台连接后重试；未启动此命令。' }
+        }
+      }
       if (scope.get().mode === 'intranet') {
         const args = typeof exec.arguments === 'object' && exec.arguments !== null ? exec.arguments as Record<string, unknown> : {}
         if (exec.name === 'web_search' || (exec.name === 'web_fetch'
