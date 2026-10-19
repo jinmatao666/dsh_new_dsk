@@ -151,7 +151,7 @@ function isLiveChannel(kind: ConnectorKind | undefined): boolean {
  * @param props - Live channel APIs, try-prompt handoff, and platform connectivity check.
  * @returns Directory, loading state or service placeholder.
  */
-function Connectors({
+export function Connectors({
   dingTalk,
   weCom,
   weChat,
