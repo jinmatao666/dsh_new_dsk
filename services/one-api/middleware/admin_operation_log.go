@@ -34,6 +34,9 @@ type auditAction struct {
 // 兜底落库，但动作名不够友好，因此建议补全。
 // Module 统一对齐前端侧边栏的功能入口名，便于运营按页面归类查看。
 var actionRegistry = map[string]auditAction{
+	"POST /api/desktop-updates": {"上传桌面更新包", "版本发布"},
+	"POST /api/desktop-updates/:id/publish": {"发布桌面更新包", "版本发布"},
+	"POST /api/desktop-updates/:id/withdraw": {"撤下桌面更新包", "版本发布"},
 	// 用户管理
 	"POST /api/user/":                         {"创建用户", "用户管理"},
 	"PUT /api/user/":                          {"更新用户", "用户管理"},

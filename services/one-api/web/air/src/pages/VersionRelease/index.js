@@ -3,6 +3,7 @@ import { Button, Table, Tag, Modal, Input, Space, Typography, TextArea } from '@
 import { Pencil, Trash2, Plus } from 'lucide-react';
 import { API, showError, showSuccess } from '../../helpers';
 import { ConfigPageTabPane, ConfigPageTabs } from '../../components/ConfigPageLayout';
+import DesktopUpdates from './DesktopUpdates';
 
 const { Text, Paragraph } = Typography;
 
@@ -339,6 +340,7 @@ const PlatformPanel = ({ platform }) => {
 
 const VersionRelease = () => (
   <ConfigPageTabs defaultActiveKey="app">
+    <ConfigPageTabPane tab="桌面端更新包" itemKey="desktop-updates"><DesktopUpdates /></ConfigPageTabPane>
     {PLATFORMS.map((p) => (
       <ConfigPageTabPane tab={p.label} itemKey={p.key} key={p.key}>
         <PlatformPanel platform={p.key} />

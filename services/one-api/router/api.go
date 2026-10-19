@@ -10,11 +10,19 @@ import (
 )
 
 func SetApiRouter(router *gin.Engine) {
+	// Public binary downloads bypass API gzip and authentication; only published artifacts are exposed.
+	router.GET("/desktop-updates/files/:id", controller.DownloadDesktopUpdate)
+	router.GET("/desktop-updates/:target/:arch/:current", controller.CheckDesktopUpdate)
 	apiRouter := router.Group("/api")
 	apiRouter.Use(middleware.CORS()) // 添加 CORS 支持
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
 	apiRouter.Use(middleware.GlobalAPIRateLimit())
 	apiRouter.Use(middleware.AdminOperationLog()) // 后台操作审计记录
+	desktopUpdates := apiRouter.Group("/desktop-updates", middleware.RootAuth())
+	desktopUpdates.GET("", controller.AdminListDesktopUpdates)
+	desktopUpdates.POST("", controller.AdminUploadDesktopUpdate)
+	desktopUpdates.POST("/:id/publish", controller.AdminPublishDesktopUpdate)
+	desktopUpdates.POST("/:id/withdraw", controller.AdminWithdrawDesktopUpdate)
 	{
 		apiRouter.GET("/status", controller.GetStatus)
 		apiRouter.GET("/desktop-config", controller.GetDesktopConfig)
