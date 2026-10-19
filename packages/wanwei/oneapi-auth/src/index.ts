@@ -21,7 +21,9 @@ import { registerSkillUsage } from './usage.ts'
 import { installNetworkPolicy } from './network.ts'
 import { fetchDeploymentSettings } from './deployment.ts'
 import { installFinalDeliverables } from './final-deliverables.ts'
+import { installDesktopLifecycle } from './desktop-lifecycle.ts'
 export type { NetworkPolicy } from './network.ts'
+export type {} from './desktop-lifecycle.ts'
 
 export type { AuthState } from './contract.ts'
 
@@ -309,6 +311,7 @@ export function apply(ctx: Context, config: Config): void {
   const ref = credentialRef(config.credentialRef)
   const network = installNetworkPolicy(ctx, baseURL)
   installFinalDeliverables(ctx)
+  installDesktopLifecycle(ctx)
   const usernameRef = credentialRef('DSH_LOGIN_USERNAME')
   const installMarkerRef = credentialRef('DSH_DESKTOP_INSTALL_MARKER')
   registerSkillUsage(ctx, baseURL, async () => (await ctx.credentials.resolve(ref))?.value)

@@ -37,9 +37,10 @@ const child = spawn(program, [
   env: {
     ...process.env,
     DSH_HOME: dshHome,
+    DSH_DESKTOP_PARENT_CONTROL: '1',
     ...(bundleAnchors === '' ? {} : { DSH_BUNDLE_ANCHORS: bundleAnchors }),
   },
-  stdio: ['ignore', 'pipe', 'pipe'],
+  stdio: ['pipe', 'pipe', 'pipe'],
 })
 
 let output = ''
@@ -58,13 +59,17 @@ try {
     throw new Error('sidecar token exchange omitted its HttpOnly session cookie')
   }
   process.stdout.write(`Wanwei desktop sidecar is ready at ${url.origin} with isolated DSH_HOME.\n`)
+  child.stdin.write('wanwei-update-shutdown\n')
+  const deadline = Date.now() + 30_000
+  while (child.exitCode === null && Date.now() < deadline) await new Promise(resolveWait => setTimeout(resolveWait, 50))
+  if (child.exitCode !== 0 || !output.includes('wanwei-update: clean')) throw new Error(`Sidecar did not acknowledge safe update shutdown:\n${output}`)
+  process.stdout.write('Wanwei desktop sidecar acknowledged clean update shutdown and exited 0.\n')
 } finally {
-  const exited = new Promise(resolveExit => child.once('exit', resolveExit))
-  child.kill()
-  await Promise.race([
-    exited,
-    new Promise(resolveTimeout => setTimeout(resolveTimeout, 3000)),
-  ])
+  if (child.exitCode === null) {
+    const exited = new Promise(resolveExit => child.once('exit', resolveExit))
+    child.kill()
+    await Promise.race([exited, new Promise(resolveTimeout => setTimeout(resolveTimeout, 3000))])
+  }
   await rm(dshHome, { recursive: true, force: true })
 }
 

@@ -11,6 +11,7 @@
     ]
   },
   "permissions": [
+    "allow-desktop-update",
     "core:default",
     "allow-set-auth-window-state",
     "allow-set-network-environment",

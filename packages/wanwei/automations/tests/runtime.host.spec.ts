@@ -134,6 +134,9 @@ it.each(['internet', 'intranet'])('loads the plugin, persists and executes real 
     await call('run', { id: saved.tasks[0]!.id })
     await expect(call('run', { id: saved.tasks[0]!.id })).rejects.toThrow('正在执行')
     const running = (await call('list', {})).runs[0]!
+    const updateCheck = { blocked: false }
+    ctx.emit('wanwei-update/check', updateCheck)
+    expect(updateCheck.blocked).toBe(true)
     await expect.poll(() => setPermission.mock.calls.at(-1)?.[1]).toBe('workspace-write')
     await expect(call('delete-run', { id: running.id })).rejects.toThrow('执行中的记录暂不可删除')
     await expect.poll(async () => (await call('list', {})).runs[0]?.status, { timeout: 15000 }).toBe('failed')
@@ -181,6 +184,8 @@ it.each(['internet', 'intranet'])('loads the plugin, persists and executes real 
     expect(verificationEvents.filter(event => event.type === 'tool/result' && event.data.message.content[0].isError)).toHaveLength(2)
     expect(archiveSession).not.toHaveBeenCalled()
     expect(ctx.tools.get('automation_checkpoint')).toBeUndefined()
+    ctx.emit('wanwei-update/stopping')
+    await expect(call('run', { id: saved.tasks[0]!.id })).rejects.toThrow('正在安装更新')
     authenticated = false
     await expect(call('list', {})).rejects.toThrow('请先登录')
     await ctx.fiber.dispose()

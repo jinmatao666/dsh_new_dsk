@@ -21,6 +21,9 @@ sha2 = "0.10"
 tauri = { version = "2", features = ["tray-icon", "unstable", "dynamic-acl"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-updater = "~2.7.1"
+minisign-verify = "0.2"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 tauri-plugin-single-instance = "2.4.3"
 url = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }

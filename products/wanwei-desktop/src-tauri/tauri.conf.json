@@ -3,6 +3,7 @@
   "productName": "万维Buddy",
   "version": "0.1.0",
   "identifier": "com.wanwei.harness",
+  "plugins": { "updater": { "pubkey": "", "dangerousInsecureTransportProtocol": true } },
   "build": {
     "frontendDist": "../shell"
   },

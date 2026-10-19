@@ -40,8 +40,15 @@ if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
 }
 
 const config = { version }
+const updateKey = process.env.DSH_DESKTOP_UPDATE_PUBLIC_KEY?.trim()
+if (updateKey) config.plugins = { updater: { pubkey: updateKey, dangerousInsecureTransportProtocol: parsedUrl.protocol === 'http:' } }
 if (platform === 'macos-arm64' || platform === 'macos-x64') {
   config.bundle = { macOS: { signingIdentity: '-' } }
+}
+if (process.env.DSH_BUILD_UPDATES === 'true') {
+  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(version)) throw new Error('正式更新只接受 x.y.z 版本')
+  if (!process.env.TAURI_SIGNING_PRIVATE_KEY || !process.env.DSH_DESKTOP_UPDATE_PUBLIC_KEY) throw new Error('更新构建缺少签名密钥或公钥配置')
+  config.bundle = { ...config.bundle, createUpdaterArtifacts: true }
 }
 
 const runnerTemp = process.env.RUNNER_TEMP

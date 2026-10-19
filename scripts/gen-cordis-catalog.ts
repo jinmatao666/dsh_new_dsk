@@ -208,6 +208,7 @@ export const EVENT_SCOPE_PAGE: Record<string, string> = {
   'session-telemetry': 'session-telemetry.md',
   'tools': 'tools.md',
   'user-questions': 'user-questions.md',
+  'wanwei-update': 'settings.md',
   'webserver': 'web-server.md',
   'workflow': 'workflow.md',
 }

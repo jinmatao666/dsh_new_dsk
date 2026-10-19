@@ -1,5 +1,13 @@
 /** Chinese authentication copy. */
 export const zh = {
+  updatesTitle: '桌面端更新',
+  updatesVersion: '当前版本：',
+  updatesHint: '启动时及每六小时检查一次。下载和安装均须确认；有任务运行时不会安装。',
+  updatesAutomatic: '自动检查更新',
+  updatesCheck: '检查更新',
+  updatesWorking: '正在处理更新…',
+  updatesUnavailable: '此安装包尚未配置更新公钥，请联系管理员。',
+  updatesDownload: '更新下载进度',
   networkUnavailable: '纯内网环境不可用',
   brandMark: '万',
   accountNav: '账户',
@@ -108,6 +116,14 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** English authentication copy. */
 export const en: { [Key in WanweiAuthKey]: string } = {
+  updatesTitle: 'Desktop updates',
+  updatesVersion: 'Current version:',
+  updatesHint: 'Checks at startup and every six hours. Download and installation require confirmation; installation is blocked while tasks are running.',
+  updatesAutomatic: 'Automatically check for updates',
+  updatesCheck: 'Check for updates',
+  updatesWorking: 'Processing update…',
+  updatesUnavailable: 'This installer has no update public key configured. Contact your administrator.',
+  updatesDownload: 'Update download progress',
   networkUnavailable: 'Unavailable in private-network mode',
   brandMark: 'W',
   accountNav: 'Account',

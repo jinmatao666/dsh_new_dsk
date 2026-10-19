@@ -19,6 +19,11 @@ on:
         required: true
         default: false
         type: boolean
+      build_update_bundles:
+        description: Generate signed desktop update bundles (requires signing Secrets and public-key variable)
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   group: wanwei-desktop-${{ inputs.source_ref }}
@@ -163,6 +168,10 @@ jobs:
             ${{ matrix.platform }}-wanwei-
 
       - name: Validate inputs and prepare platform config
+        env:
+          DSH_BUILD_UPDATES: ${{ inputs.build_update_bundles }}
+          DSH_DESKTOP_UPDATE_PUBLIC_KEY: ${{ vars.DSH_DESKTOP_UPDATE_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: node products/wanwei-desktop/scripts/prepare-runner-config.mjs ${{ matrix.platform }}
 
       - name: Install dependencies
@@ -199,6 +208,8 @@ jobs:
 
       - name: Build platform installer
         env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.build_update_bundles && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPIMAGE_EXTRACT_AND_RUN: ${{ startsWith(matrix.platform, 'linux-') && '1' || '' }}
           NO_STRIP: ${{ startsWith(matrix.platform, 'linux-') && '1' || '' }}
           RUST_LOG: ${{ startsWith(matrix.platform, 'linux-') && 'tauri_bundler=debug' || '' }}
@@ -254,6 +265,22 @@ jobs:
         with:
           name: wanwei-buddy-${{ inputs.version }}-windows-x64
           path: products/wanwei-desktop/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Package signed desktop update
+        if: ${{ inputs.build_update_bundles }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node products/wanwei-desktop/scripts/package-update.mjs ${{ matrix.platform }}
+
+      - name: Upload signed desktop update bundle
+        if: ${{ inputs.build_update_bundles }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: wanwei-update-${{ inputs.version }}-${{ matrix.platform }}
+          path: ${{ runner.temp }}/wanwei-update-*.zip
           if-no-files-found: error
           retention-days: 14
 

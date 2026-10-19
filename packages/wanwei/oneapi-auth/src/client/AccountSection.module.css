@@ -12,3 +12,8 @@
 .models li { padding: 6px 10px; border-radius: 8px; background: var(--dsw-surface-subtle, #f1f3f8); font-size: 13px; }
 .models p { margin: 10px 0 0; }
 .error { color: var(--dsw-danger, #c53b42); }
+.models h2 { font-size: 16px; font-weight: 500; margin: 0 0 12px; }
+.updateAutomatic { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.updateButton { padding: 8px 16px; border: 1px solid var(--dsw-alias-line-light); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; cursor: pointer; }
+.updateButton:disabled { opacity: .55; cursor: default; }
+.models progress { width: 100%; max-width: 480px; }

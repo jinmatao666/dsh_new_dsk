@@ -416,4 +416,39 @@ Committed change to one registered namespace's resolved value. Emitted after the
 ```
 
 Source: [`packages/settings/settings/src/types.ts`](../../packages/settings/settings/src/types.ts)
+
+<a id="wanwei-update-events"></a>
+
+### `wanwei-update/*` events
+
+<a id="wanwei-updatecheck--emit"></a>
+
+#### `wanwei-update/check` — emit
+
+Synchronously veto shutdown for product work outside an agent turn.
+
+```ts cordis-catalog
+/** Synchronously veto shutdown for product work outside an agent turn.
+ * @mode emit
+ * @param check - Listeners set blocked before returning; they must not await.
+ */
+'wanwei-update/check'(check: { blocked: boolean }): void
+```
+
+Source: [`packages/wanwei/oneapi-auth/src/desktop-lifecycle.ts`](../../packages/wanwei/oneapi-auth/src/desktop-lifecycle.ts)
+
+<a id="wanwei-updatestopping--emit"></a>
+
+#### `wanwei-update/stopping` — emit
+
+Freeze new product work after the final idle check.
+
+```ts cordis-catalog
+/** Freeze new product work after the final idle check.
+ * @mode emit
+ */
+'wanwei-update/stopping'(): void
+```
+
+Source: [`packages/wanwei/oneapi-auth/src/desktop-lifecycle.ts`](../../packages/wanwei/oneapi-auth/src/desktop-lifecycle.ts)
 <!-- END GENERATED cordis-surface -->

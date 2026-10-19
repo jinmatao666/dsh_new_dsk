@@ -69,6 +69,8 @@ The Client owns selections and notices, retrieves committed state through authen
 
 The [Host runtime](src/runtime.ts) claims due slots durably before invoking the existing Session Controller. It advances the next occurrence before launch and prevents overlapping runs of the same task. Completed-turn records, not idle status alone, determine success; timeout, interruption and execution failures are recorded. Disposal stops the scheduler and cancels owned executions.
 
+Desktop update shutdown is vetoed during initialization, due-slot claiming, scheduling and active execution, including post-turn output verification. Once the update Host freezes admission, new manual and scheduled runs cannot start. This protects the complete automation interval rather than only the agent's running status.
+
 </details>
 
 -----

@@ -29,6 +29,7 @@ mod sidecar_output;
 mod skillhub;
 mod skill_names;
 mod network_policy;
+mod desktop_update;
 
 const NATIVE_SKILLS_CHANGED_SCRIPT: &str = "window.dispatchEvent(new Event('dsh:skills-changed'));";
 const NATIVE_FILE_DRAG_ENTER_SCRIPT: &str =
@@ -682,9 +683,32 @@ fn read_analysis_view(path: String) -> Result<String, String> {
         .map_err(|error| format!("无法读取分析结果文件 {}：{error}", candidate.display()))
 }
 
-struct Sidecar(Arc<Mutex<Option<Child>>>);
+struct Sidecar(Arc<Mutex<Option<Child>>>, Mutex<mpsc::Receiver<String>>);
 
 impl Sidecar {
+    /// Ask the owned runtime to veto busy work, dispose fully, and exit. Never kill here.
+    fn prepare_update(&self) -> Result<(), String> {
+        let replies = self.1.lock().map_err(|_| "无法读取后台状态")?;
+        let mut guard = self.0.lock().map_err(|_| "无法读取后台进程")?;
+        let child = guard.as_mut().ok_or("后台进程不存在，请重启桌面端")?;
+        while replies.try_recv().is_ok() {}
+        child.stdin.as_mut().ok_or("当前后台不支持安全更新，请手动安装")?
+            .write_all(b"wanwei-update-shutdown\n").map_err(|error| error.to_string())?;
+        match replies.recv_timeout(Duration::from_secs(30)).as_deref() {
+            Ok("clean") => {},
+            Ok("busy") => return Err("仍有会话、工具或自动化正在执行，请结束任务后再检查更新。下载已保留。".into()),
+            _ => return Err("后台未能确认安全退出，本次不安装。请检查日志并重启桌面端。".into()),
+        }
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        loop {
+            match child.try_wait().map_err(|error| error.to_string())? {
+                Some(status) if status.success() => { *guard = None; return Ok(()); },
+                Some(_) => return Err("后台异常退出，本次不安装更新".into()),
+                None if std::time::Instant::now() >= deadline => return Err("后台进程尚未退出，本次不安装更新".into()),
+                None => std::thread::sleep(Duration::from_millis(50)),
+            }
+        }
+    }
     /// Stop the Node runtime before terminating the native shell. This makes
     /// upgrades deterministic: `sharp` keeps libvips loaded while Node lives.
     fn stop(&self) {
@@ -2148,7 +2172,7 @@ fn spawn_sidecar(
     config: &ServerConfig,
     log_path: &Path,
     app_data_dir: &Path,
-) -> Result<(Child, Url), String> {
+) -> Result<(Child, Url, mpsc::Receiver<String>), String> {
     let dsh_home = product_harness_home(app_data_dir)?;
     if !cfg!(debug_assertions) {
         if migration::migrate_desktop_data(app_data_dir, &dsh_home)? {
@@ -2218,6 +2242,7 @@ fn spawn_sidecar(
         .args(args)
         .current_dir(&cwd)
         .env("DSH_ONEAPI_URL", &config.one_api_url)
+        .env("DSH_DESKTOP_PARENT_CONTROL", "1")
         .env("DSH_NODE_BINARY", &program)
         .env("DSH_DOCUMENT_TOOL", &document_tool)
         .env("DSH_HOME", &dsh_home)
@@ -2227,6 +2252,7 @@ fn spawn_sidecar(
         .env("PYTHONIOENCODING", "utf-8")
         .env("PIP_DISABLE_PIP_VERSION_CHECK", "1")
         .stdout(Stdio::piped())
+        .stdin(Stdio::piped())
         .stderr(Stdio::piped());
     if !cfg!(target_os = "macos") {
         command
@@ -2273,6 +2299,7 @@ fn spawn_sidecar(
         .spawn()
         .map_err(|error| format!("无法启动本地 DSH Sidecar（{}）：{error}", program.display()))?;
 
+    let (update_sender, update_receiver) = mpsc::channel();
     let ready = (|| -> Result<Url, String> {
         let stdout = child.stdout.take().ok_or("无法读取 DSH Sidecar 输出")?;
         let stderr = child.stderr.take().ok_or("无法读取 DSH Sidecar 错误输出")?;
@@ -2280,6 +2307,9 @@ fn spawn_sidecar(
         let stdout_log = log_path.to_path_buf();
         std::thread::spawn(move || {
             sidecar_output::drain(BufReader::new(stdout), sender, |line| {
+                if let Some(reply) = line.strip_prefix("wanwei-update: ") {
+                    let _ = update_sender.send(reply.to_owned());
+                }
                 append_log(&stdout_log, format!("[stdout] {line}"));
                 eprintln!("[dsh] {line}");
             });
@@ -2337,13 +2367,14 @@ fn spawn_sidecar(
         Ok(url)
     })();
     let url = sidecar_output::finish_startup(&mut child, ready)?;
-    Ok((child, url))
+    Ok((child, url, update_receiver))
 }
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // A second launch only restores the existing window. Most
         // importantly, it never starts another Node sidecar that could keep
         // bundled runtime DLLs locked during the next installer upgrade.
@@ -2364,12 +2395,13 @@ pub fn run() {
                 append_log(&log_path, format!("[fatal] {message}"));
                 std::io::Error::new(std::io::ErrorKind::InvalidData, message)
             })?;
-            let (child, url) = spawn_sidecar(&resource_dir, &config, &log_path, &app_data_dir)
+            let (child, url, update_receiver) = spawn_sidecar(&resource_dir, &config, &log_path, &app_data_dir)
                 .map_err(|message| {
                     append_log(&log_path, format!("[fatal] {message}"));
                     std::io::Error::other(message)
                 })?;
-            app.manage(Sidecar(Arc::new(Mutex::new(Some(child)))));
+            app.manage(Sidecar(Arc::new(Mutex::new(Some(child))), Mutex::new(update_receiver)));
+            desktop_update::setup(app.handle(), &config.one_api_url)?;
             app.manage(PendingWorkspaceDrop(Mutex::new(None)));
             app.manage(network_policy::NetworkPolicy::default());
 
@@ -2480,6 +2512,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            desktop_update::desktop_update_status,
+            desktop_update::desktop_update_check,
+            desktop_update::desktop_update_automatic,
             network_policy::set_network_environment,
             set_auth_window_state,
             save_session_log_archive,

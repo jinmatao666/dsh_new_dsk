@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`shows version, persists the preference and delegates checking only to the native shell 1`] = `"桌面端更新当前版本： 1.2.0启动时及每六小时检查一次。下载和安装均须确认；有任务运行时不会安装。 自动检查更新检查更新"`;

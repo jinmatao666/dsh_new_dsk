@@ -6,6 +6,12 @@ This private product directory owns the Wanwei desktop shell and installer. It d
 
 ## Current boundary
 
+The manual Runner workflow can export signed per-platform update-upload ZIPs with `build_update_bundles`, defaulting to false. The OneAPI administrator publishes these independently of GitHub releases; see [desktop update distribution](../../services/one-api/docs/desktop-updates.md). Installers embed the configured `DSH_DESKTOP_UPDATE_PUBLIC_KEY` even when signed export is disabled; no public key means no updating.
+
+Account settings exposes the installed version, manual checking and a persisted automatic-check switch, enabled by default. Native checks run fifteen seconds after startup and every six hours. Downloads and installation each require confirmation. The native updater verifies the signed manifest's version, platform and package signature, then bounds the download by its signed size and checks SHA-256 and Minisign. HTTP is permitted for the configured service; package downloads cannot redirect or change origin. Downloads remain in memory up to 2 GiB and are lost on exit. Release notes and update availability are not authenticated over HTTP.
+
+Installation asks the owned sidecar over private stdin to refuse running agents, idle maintenance, background jobs, tool execution and automation claim/execution intervals. The Host freezes new work and awaits whole-tree disposal before acknowledging clean shutdown. The native parent requires that acknowledgement within thirty seconds and a successful process exit within another fifteen seconds; it never kills the sidecar for updating. Busy, timeout or ambiguous shutdown blocks installation and retains the downloaded package for retry. After an accepted shutdown, an installation error restarts the current app; Windows launches NSIS, while macOS and Linux restart after replacement. Code and isolated-process checks do not establish installed-device upgrade compatibility; Windows, macOS and Linux release acceptance remains required.
+
 Expert native views and SkillHub archive installation do not reject the deployment network label. Existing URL, ticket, archive and installation validation remains effective; actual request failures appear in the owning feature page. [Service reachability](../../.agents/notes/implemented/feature/2026-10-16-service-reachability-placeholders.md) defines the feature behavior.
 
 Windows NSIS installation, upgrade and uninstall preserve the application data directory, including installed skills, Sessions, settings and migration markers. The product's pinned [installer template](src-tauri/windows/installer.nsi) removes the data-deletion checkbox and deletion commands; uninstall still removes program files. `check:installer-data` rejects restoring data deletion or changing the release identity and runs in installer CI. Existing older uninstallers are not retroactively protected: keep application data when replacing them. Explicit manual deletion and disk failures remain outside this guarantee.
@@ -40,6 +46,8 @@ Release builds use `<com.wanwei.harness local data>/dsh-home`. Before the first 
 The release shares the original product's installer identity; development retains a separate single-instance lock, WebView profile and data directory. Development data and Mock configuration are never migration sources.
 
 ## Verify
+
+Linux native updating accepts AppImage installations only. DEB installations reject automatic installation before downloading or stopping the sidecar and require a manually installed package. Real-device acceptance must verify the installed package format as well as its OS and architecture.
 
 Local and SkillHub skill ZIPs accept at most 4096 entries, including explicit directory entries; local directory and file-list imports accept at most 4096 files. Compressed and expanded byte limits remain 16 MB each, directory depth remains 16, and unsafe paths and symbolic links are rejected. SkillHub importer failures identify the source and report the archive's entry count when it exceeds the limit. These native checks require an updated desktop binary; server skill-package limits are separate.
 
