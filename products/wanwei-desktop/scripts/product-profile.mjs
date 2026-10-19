@@ -6,6 +6,8 @@ export const PRODUCT_BUNDLES = [
   '@deepseek-ai/dsh-base',
   '@deepseek-ai/dsh-web-app',
   '@deepseek-ai/dsh-wanwei-desktop',
+  // DingTalk desktop skills use product-bundled `dws` + connectors RPC; do not mount
+  // `@dingtalk-real-ai/dsh-dingtalk` Stream IM here (that package stays an npm dep for dws-cli assets).
 ]
 
 /** Create only missing product-owned profile files; never replace user configuration. */

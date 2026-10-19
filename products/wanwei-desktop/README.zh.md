@@ -20,7 +20,7 @@ Windows NSIS 安装、升级和卸载保留应用数据目录，包括已安装�
 
 macOS 保留继承的系统临时目录，将随包 Node 的目录放到 Sidecar PATH 首位，保留现有工具路径并补充 Homebrew 目录。Python 用户依赖及 pip 下载使用宿主临时目录下按产品隔离的私有目录，该区域已在工作区写入模式的允许范围内。缓存可跨启动复用，但可能被系统清理，不属于持久用户数据。只读限制和扩大访问范围的审批保持有效。Windows 和 Linux 保持既有启动环境；Mac 安装版行为仍需实机验证。
 
-Tauri 2 桌面壳会以本地回环 DSH Sidecar 的形式启动 `wanwei-desktop` profile，等待其输出带鉴权信息的 Web 地址，再创建主 WebView。它把 `DSH_HOME` 放在应用的本地数据目录下。万维自有桌面命令通过明确的 WebView 权限提供。
+Tauri 2 桌面壳会以本地回环 DSH Sidecar 的形式启动 `wanwei-desktop` profile，等待其输出带鉴权信息的 Web 地址，再创建主 WebView。它把 `DSH_HOME` 放在应用的本地数据目录下。万维自有桌面命令通过明确的 WebView 权限提供。连接器页的钉钉与企业微信均在桌面 runtime 随包 CLI（WorkBuddy 式连接）：`dingtalk-workspace-cli`（`dws`）与 `@wecom/cli`，并把技能写入同一 `DSH_HOME`。微信助理使用腾讯 iLink 扫码绑定与入站聊天桥接（凭据在 `$DSH_HOME/wechat-assistant`）。产品仅保留 `@dingtalk-real-ai/dsh-dingtalk` 作为 `dws-cli` 技能资源；不挂载钉钉 Stream IM，也不要求填写机器人 Client ID / Secret。
 
 聊天框文件粘贴复用有容量限制的工作区导入器。仅限主窗口的 `import_clipboard_workspace_files` 命令通过禁用图片特性的 [clipboard-rs](https://github.com/ChurchTao/clipboard-rs) 读取系统剪贴板文件列表，接受绝对路径或本地文件 URL。不读取剪贴板纯文本、不移动源文件，也不向专家 WebView 授予剪贴板权限。原有同名处理、符号链接拒绝和大小限制保持有效。Windows 编译及路径测试已自动化，Windows 和 macOS 安装版复制粘贴仍需发布前实机验证。
 

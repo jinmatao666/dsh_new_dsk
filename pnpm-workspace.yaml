@@ -66,6 +66,9 @@ allowBuilds:
   # The Python runtime deploy includes the reviewed workspace postinstall that
   # restores the executable bit on node-pty's macOS spawn helper.
   '@deepseek-ai/dsh-subprocess-local@file:packages/subprocess/subprocess-local': true
+  # Product extracts vendor/dws in prepare-runtime / ensure:dws; deny postinstall
+  # so it does not write skills into agent homes during pnpm install.
+  dingtalk-workspace-cli: false
 
 minimumReleaseAgeExclude:
   # Official browser packages reviewed and pinned by the Wanwei integration.

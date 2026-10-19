@@ -9,6 +9,7 @@ test('the production deploy root includes the product bundle and its registry de
   const product = new URL('../runtime-closure/package.json', import.meta.url)
   const manifest = JSON.parse(readFileSync(product, 'utf8'))
   assert.equal(manifest.dependencies['@deepseek-ai/dsh-wanwei-desktop'], 'workspace:^')
+  assert.equal(manifest.dependencies['@dingtalk-real-ai/dsh-dingtalk'], '^0.10.2')
 })
 
 test('removing a staged dependency link preserves the original package', () => {

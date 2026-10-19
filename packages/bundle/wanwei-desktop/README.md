@@ -46,6 +46,8 @@ The product enables [cross-step failure recovery](../../guard/repeat-tool-remind
 
 The layer disables `llm-deepseek` and `ui-settings-models`, selects the Wanwei `oneapi-bailian` web-search provider, then mounts the Wanwei-owned plugins. The OneAPI authentication plugin supplies the sole managed model provider, a read-only Models settings section, and server-governed search; it does not change the official base or Web bundles.
 
+Connectors-page DingTalk uses personal `dws` auth and the `dws-cli` skill (`products/wanwei-desktop` ships `dingtalk-workspace-cli` and keeps `@dingtalk-real-ai/dsh-dingtalk` only for skill assets). The Wanwei `cordis.patch.yml` and product profile do not mount Stream IM or collect robot Client ID / Secret.
+
 -----
 
 <a id="understand-the-implementation"></a>

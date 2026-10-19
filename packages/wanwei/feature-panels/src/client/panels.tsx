@@ -74,9 +74,13 @@ export interface PanelInjected {
   controller: PanelController
   title: string
   subtitle: string
+  /** When true, intranet mode closes this overlay (connectors / outbound catalogs). */
+  blockedIntranet?: boolean
   visibility?: HostObservable<boolean>
   Icon: ComponentType<{ size?: number }>
   renderContent: () => ReactNode
+  /** Optional controls rendered in the fixed header before the back button. */
+  renderHeaderActions?: () => ReactNode
   hooks: { network: HostObservable<NetworkState> }
 }
 export type PanelProps = PropsRuntime<'shell.overlay'> & InjectFace<PanelInjected>
@@ -118,27 +122,33 @@ export function usePanelNavigation(controller: PanelController, open: boolean): 
  * @param props - Runtime visibility, policy and feature content.
  * @returns Visible page or no overlay.
  */
-export function FeaturePanel({ title, subtitle, controller, renderContent, visibility }: PanelProps) {
+export function FeaturePanel({
+  title, subtitle, controller, blockedIntranet, useNetwork, renderContent, renderHeaderActions, visibility,
+}: PanelProps) {
   const visible = useSyncExternalStore(
     listener => visibility ? visibility.subscribe(listener) : () => {}, () => visibility ? visibility.getSnapshot() : true,
   )
   const open = useSyncExternalStore(controller.subscribe, controller.isOpen)
+  const unavailable = Boolean(useNetwork?.(value => value.mode === 'intranet') && blockedIntranet)
   usePanelNavigation(controller, open)
-  useEffect(() => { if (!visible) controller.close() }, [controller, visible])
-  if (!open || !visible) return null
+  useEffect(() => { if (unavailable || !visible) controller.close() }, [controller, unavailable, visible])
+  if (!open || unavailable || !visible) return null
   return <div className="dsh-skill-market-overlay" role="dialog" aria-modal="true" aria-label={title}>
     <div className="dsh-skill-market-panel">
       <header className="dsh-skill-market-header">
         <div className="dsh-skill-market-heading"><span className="dsh-skill-kicker">{productText('WANWEI Buddy')}</span>
           <h1>{title}</h1><p>{subtitle}</p></div>
-        <button type="button" className="dsh-skill-close" aria-label={productText('返回')} onClick={() => { controller.close() }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-            strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M19 12H5" /><path d="m12 19-7-7 7-7" />
-          </svg>
-        </button>
+        <div className="dsh-skill-market-header-end">
+          {renderHeaderActions?.()}
+          <button type="button" className="dsh-skill-close" aria-label={productText('返回')} onClick={() => { controller.close() }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M19 12H5" /><path d="m12 19-7-7 7-7" />
+            </svg>
+          </button>
+        </div>
       </header>
-      {renderContent()}
+      <div className="dsh-skill-market-body">{renderContent()}</div>
     </div>
   </div>
 }

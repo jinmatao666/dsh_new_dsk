@@ -320,6 +320,7 @@
     { "path": "./packages/host/directory-picker-browse" },
     { "path": "./packages/host/directory-picker-native" },
     { "path": "./packages/wanwei/automations/tsconfig.host.json" },
+    { "path": "./packages/wanwei/connectors/tsconfig.host.json" },
     { "path": "./packages/wanwei/skillhub" },
     { "path": "./packages/wanwei/document-local" },
     { "path": "./packages/host/frontend-static" },

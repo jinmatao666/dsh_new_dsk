@@ -1,0 +1,21 @@
+=== C: cleanup 2026-10-19 ===
+Session result: Free space rose from ~1.1–4.6 GB to ~11.1 GB on an 80 GB C: volume.
+
+Removed (safe caches / orphaned app data):
+- Orphaned JetBrains Local+Roaming (~2.1 GB)
+- Postman old app-11.17.0 (~0.4 GB)
+- Office SolutionPackages + browser/component caches
+- cargo registry, CodeWithMe, RDP/Font/TypeScript caches
+- pyppeteer Chromium (~0.76 GB)
+- WorkBuddy updater installer (~0.42 GB)
+- DingTalk Cache/Code Cache/Service Worker (~1 GB)
+- Huawei DevEcoStudio caches/index/logs (~1 GB)
+- misc Chrome/Edge/ima/wanwei EBWebView caches
+
+NOT removed (confirm before deleting):
+- .rustup toolchains (~0.59 GB)
+- SourceTree git_local (~0.27 GB)
+- com.wanwei.harness\python (~0.36 GB)
+- Postman current app (~0.42 GB)
+- C:\ProgramData\Package Cache (~1 GB)
+- DISM WinSxS component store (needs elevated admin PowerShell)

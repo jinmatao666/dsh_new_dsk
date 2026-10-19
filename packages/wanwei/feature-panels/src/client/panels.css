@@ -62,12 +62,14 @@
 
 .dsh-skill-market-panel {
   position: relative;
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-width: 0;
   height: 100%;
   box-sizing: border-box;
-  overflow: auto;
-  padding: 28px 32px;
+  overflow: hidden;
+  padding: 28px 32px 0;
   background: var(--dsw-alias-bg-base);
   border-left: 1px solid var(--dsw-alias-border-l1);
   color: var(--dsw-alias-label-primary);
@@ -75,11 +77,24 @@
 
 .dsh-skill-market-header {
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: flex-start;
   gap: 12px 20px;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
-  padding-bottom: 22px;
+  padding-bottom: 16px;
+}
+
+.dsh-skill-market-header-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dsh-skill-market-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 28px;
 }
 
 .dsh-skill-market-header-controls {
@@ -95,7 +110,6 @@
   flex: none;
   width: 36px;
   height: 30px;
-  margin-top: 4px;
   border: 0;
   border-radius: 10px;
   background: transparent;

@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-用户可以浏览连接器分类，查看现有演示弹窗。系统设置分别控制互联网和纯内网部署的入口显示；默认互联网开启、纯内网隐藏。桌面端启动或登录刷新时应用配置。挂载它不需要技能市场、专家库或自动化插件。
+用户可以浏览连接器分类并查看演示弹窗。钉钉卡片连接本机钉钉 Workspace CLI（`dws`）个人授权，并把 `dws-cli` 技能安装到 `$DSH_HOME/skills`。企业微信卡片连接官方 `@wecom/cli` 授权，并把 `wecomcli-*` 技能安装到同一 home。微信助理卡片通过腾讯 iLink 扫码（应用内二维码）绑定个人微信，并运行入站聊天桥接，使手机消息驱动桌面 Session、结果回传到微信。系统设置分别控制互联网和纯内网部署的入口；默认互联网开启、纯内网隐藏。
 
 ## 目录
 
@@ -27,7 +27,7 @@ kind: "package-reference"
 
 万维桌面产品通过[组合补丁](../../bundle/wanwei-desktop/cordis.patch.yml)挂载本插件。它没有单独的插件配置字段。
 
-现有连接器数据和交互是演示。弹窗操作不会授权真实服务或保存凭据。
+连接器页的钉钉表示个人 DWS 授权加上供桌面 Agent 使用的 `dws-cli` 技能（日历、AI 表格、文档、邮箱、待办等相关产品）。产品在桌面 runtime 随包 `dingtalk-workspace-cli`（`dws`）。**连接**会运行 `dws auth login`（浏览器 OAuth / 扫码，通常回调本机 `127.0.0.1`），登录成功后从 `@dingtalk-real-ai/dsh-dingtalk` 资源安装技能。企业微信表示产品随包的 `wecom-cli` 扫码授权（`auth init --noninteractive`）加上从 runtime 随包资源复制到 `$DSH_HOME/skills` 的官方 `wecomcli-*` 技能。微信助理表示 iLink 扫码绑定（`loginStart` / `loginPoll`），凭据落在 `$DSH_HOME/wechat-assistant`，并由 Host `getupdates` 桥接：创建桌面 Session 执行后经 `sendmessage` 回传到微信。**去试试**会把示例提示写入主输入框，并在 `+` 旁蓝色的 `conversation.composer.tools` 芯片上选中对应连接器（点击可切换连接器或重新打开本页）；首次发送时自动准备工作区 Session，无需先手动选择工作空间。钉钉/企业微信**解绑**清除 CLI 凭据与技能副本；微信**取消连接**清除 iLink 凭据并停止桥接。产品仅把 `@dingtalk-real-ai/dsh-dingtalk` 当作 `dws-cli` 资源来源；不挂载钉钉 Stream IM，也不收集机器人 Client ID / Secret。其余连接器条目仍为演示。
 
 两种网络模式下打开页面都会通过部署配置刷新 RPC 检查配置的平台。请求失败显示断开插头占位；成功后显示本地演示目录。重新打开页面会再次检查。此检查只验证平台可达性，不代表第三方连接器健康或已授权。管理员入口显示开关仍有效。
 
@@ -41,9 +41,9 @@ kind: "package-reference"
 <details>
 <summary>实现细节 — 点击展开</summary>
 
-Client 拥有连接器列表、选择状态和弹窗。它从 feature-panels 导入共用展示组件，并使用圆角 Select 控件。实例控制器在侧边栏导航或退出登录时关闭页面，卸载时解绑监听。
+Client 拥有连接器列表、选择状态和弹窗。钉钉详情走 Host RPC `/wanwei-dingtalk`；企业微信走 `/wanwei-wecom`（`status`、`login`、`installSkill`、`disconnect`）；微信助理走 `/wanwei-wechat`（`status`、`loginStart`、`loginPoll`、`disconnect`）。密钥留在各自 CLI 或 iLink 凭据库；Client 只收到非机密状态与二维码图片 data URL。状态探测在 Host 短缓存，Client 用最近一次状态立刻画出「已连接」/「去试试」，再后台刷新。
 
-[Client 入口](src/client/index.ts)提供实现。[Host 入口](src/index.ts)支持模块发现，不注册业务服务。
+[Client 入口](src/client/index.ts)提供界面。[Host 入口](src/index.ts)注册连接器 RPC。
 
 </details>
 
@@ -55,13 +55,16 @@ Client 拥有连接器列表、选择状态和弹窗。它从 feature-panels 导
 - [产品组合](../../bundle/wanwei-desktop/README.zh.md) — profile 归属。
 - [鉴权与网络策略](../oneapi-auth/README.zh.md) — 共用服务。
 - [独立页面决策](../../../.agents/notes/implemented/architecture/2026-10-10-independent-wanwei-pages.zh.md) — 生命周期和依赖依据。
+- [桌面 DWS 技能](../../../.agents/notes/implemented/feature/2026-10-16-wanwei-dingtalk-desktop-dws-skills.zh.md) — 为何以个人 DWS 授权为钉钉连接器成功路径。
+- [桌面企业微信 CLI 技能](../../../.agents/notes/implemented/feature/2026-10-19-wanwei-wecom-desktop-cli-skills.zh.md) — 企业微信 wecom-cli 授权与技能路径。
+- [微信助理 iLink 通道](../../../.agents/notes/implemented/feature/2026-10-19-wanwei-wechat-assistant-ilink.zh.md) — 个人微信入站远程通道。
 
 -----
 
 <a id="model-experience"></a>
 ## Model Experience
 
-无，因为此 Client 展示不注册提示词或工具；网站执行和 Host 模型提供方负责下游请求和 token 消耗。
+Client 展示本身不注册提示词或工具。钉钉/企业微信连接后，桌面会话通过 skill-filesystem 发现 `dws-cli` 和/或 `wecomcli-*`。微信助理连接后，入站微信文本经 `sessionController` 创建普通桌面 Session，模型与 token 消耗跟随这些 Session。
 
 #### KV Cache effect
 
@@ -71,13 +74,15 @@ Client 拥有连接器列表、选择状态和弹窗。它从 feature-panels 导
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- 本页未实现真实授权、持久凭据和服务执行。
+- 除钉钉 DWS、企业微信 wecom-cli 与微信助理 iLink 路径外，本页其余条目仍为演示，未实现真实授权与服务执行。
+- 钉钉与企业微信均在桌面 `prepare:runtime` 闭包中随包 CLI（WorkBuddy 体验）；PATH / `npm -g` 仅作回退。
+- 微信助理 v1 仅处理私聊文本（及语音转写）；媒体与群聊延后。
 
 <a id="dev-note"></a>
 ### 开发备注
 
 <details>
-<summary>维护人员的工作上下文 — 点击展开</summary>
+<summary>维护者工作上下文 — 点击展开</summary>
 
 无。
 

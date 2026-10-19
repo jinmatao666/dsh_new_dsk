@@ -7,7 +7,7 @@ const PACKAGE_NAME = '@deepseek-ai/dsh-wanwei-connectors'
 export const name = 'connectors-invariant'
 /** Registry required to reserve package ownership. */
 export const inject = ['invariants']
-/** No runtime invariant: connectors owns reversible Client presentation; remote data and execution remain provider-owned. */
+/** No runtime invariant: connectors owns reversible Client presentation plus Host CLI/iLink RPC; remote providers own network truth. */
 const install: InvariantInstaller = () => {}
 /**
  * Reserve package ownership until the companion is disposed.

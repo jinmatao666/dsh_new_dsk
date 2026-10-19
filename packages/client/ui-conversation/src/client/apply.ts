@@ -181,6 +181,7 @@ export function apply(ctx: Context): void {
       'conversation.input.dock': { kind: 'list', scope: 'session' },
       'conversation.composer.dock': { kind: 'list', scope: 'session' },
       'conversation.input.left': { kind: 'list', scope: 'session' },
+      'conversation.composer.tools': { kind: 'list', scope: 'session-maybe' },
       'conversation.input.right': { kind: 'list', scope: 'session' },
       'conversation.hero.brand': { kind: 'single', scope: 'root' },
       'conversation.hero.brand.mark': { kind: 'single', scope: 'root' },

@@ -133,6 +133,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.composer.dock': { kind: 'list'; scope: 'session'; owner: InputZone }
     /** Compact controls at the left of the composer tool row. */
     'conversation.input.left': { kind: 'list'; scope: 'session'; owner: InputZone }
+    /**
+     * Session-optional tool-row entries next to `conversation.input.left`.
+     * Lives on the resident composer so hero / staged-draft mode can show
+     * connector chips without an open Session.
+     */
+    'conversation.composer.tools': { kind: 'list'; scope: 'session-maybe' }
     /** Compact controls before the composer submit action. */
     'conversation.input.right': { kind: 'list'; scope: 'session'; owner: InputZone }
     /** Resident composer body, including the no-Session inert state. */
@@ -355,7 +361,7 @@ export type ConversationSlotProps =
     | 'conversation.composer' | 'conversation.composer.bar'
     | 'conversation.input.overlay'
     | 'conversation.input.dock' | 'conversation.composer.dock'
-    | 'conversation.input.left' | 'conversation.input.right'
+    | 'conversation.input.left' | 'conversation.composer.tools' | 'conversation.input.right'
     | 'conversation.hero.brand' | 'conversation.hero.brand.mark'
     | 'conversation.hero.workspace'
     | 'conversation.hero.agentPreset'

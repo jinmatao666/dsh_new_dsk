@@ -1,0 +1,385 @@
+/**
+ * Desktop DingTalk “connected” means personal DWS auth + the dws-cli skill,
+ * so the Wanwei agent can run DingTalk product commands (docs/tables/calendar/…)
+ * in desktop chat. The product ships `dingtalk-workspace-cli` (`dws`) in the
+ * desktop runtime (WorkBuddy-style); PATH / npm -g is only a fallback.
+ */
+import { spawn } from 'node:child_process'
+import { cpSync, existsSync, mkdirSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { delimiter, dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import type { Context } from '@deepseek-ai/cordis'
+import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
+
+const require = createRequire(import.meta.url)
+
+/** How long a Host status snapshot may be reused without re-spawning `dws`. */
+const STATUS_CACHE_TTL_MS = 45_000
+
+/** Non-secret DWS + skill status for the connectors page. */
+export type DingTalkDwsStatus = {
+  dwsInstalled: boolean
+  dwsVersion: string | null
+  authed: boolean
+  skillInstalled: boolean
+  /** Short hint when something blocks desktop skill use. */
+  hint: string | null
+}
+
+type RunResult = { code: number | null; stdout: string; stderr: string }
+
+type StatusCacheEntry = { at: number; home: string; status: DingTalkDwsStatus }
+
+let statusCache: StatusCacheEntry | null = null
+let statusInflight: Promise<DingTalkDwsStatus> | null = null
+let resolvedDwsCommand: string | undefined | null = null
+
+/** Drop the in-process status cache after login / disconnect / skill install. */
+export function invalidateDingTalkDwsStatusCache(): void {
+  statusCache = null
+  statusInflight = null
+  resolvedDwsCommand = null
+}
+
+/**
+ * Resolve the product DSH home used for user-scoped skills.
+ * @param env - process environment.
+ * @returns absolute DSH home path.
+ */
+export function resolveProductDshHome(env: NodeJS.ProcessEnv = process.env): string {
+  const home = env.DSH_HOME?.trim()
+  if (home) return home
+  throw new Error('DSH_HOME is unset; desktop must set the product home before DingTalk skill install')
+}
+
+/**
+ * Candidate roots that may contain `@dingtalk-real-ai/dsh-dingtalk`.
+ * The connectors package does not depend on it; the desktop product / profile does.
+ * @param env - process environment.
+ * @returns package root directories to probe.
+ */
+function dingtalkPackageRoots(env: NodeJS.ProcessEnv = process.env): string[] {
+  const roots: string[] = []
+  try {
+    roots.push(dirname(require.resolve('@dingtalk-real-ai/dsh-dingtalk/package.json')))
+  } catch {
+    // Expected when this package is resolved outside the desktop product graph.
+  }
+  const cwd = process.cwd()
+  const home = env.DSH_HOME?.trim()
+  const searchFrom = [cwd, home, home ? join(home, '..') : undefined, home ? join(home, '..', '..') : undefined]
+  for (const base of searchFrom) {
+    if (!base) continue
+    roots.push(join(base, 'node_modules', '@dingtalk-real-ai', 'dsh-dingtalk'))
+  }
+  // Walk up from this module toward the monorepo / product install.
+  let dir = dirname(fileURLToPath(import.meta.url))
+  for (let i = 0; i < 10; i++) {
+    roots.push(join(dir, 'node_modules', '@dingtalk-real-ai', 'dsh-dingtalk'))
+    roots.push(join(dir, 'products', 'wanwei-desktop', 'node_modules', '@dingtalk-real-ai', 'dsh-dingtalk'))
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return roots
+}
+
+/**
+ * Locate the bundled dws-cli skill shipped with the official DingTalk channel package.
+ * @param env - process environment; overridable in tests.
+ * @returns absolute skill directory, or undefined when the package is absent.
+ */
+export function resolveBundledDwsCliSkillDir(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  for (const root of dingtalkPackageRoots(env)) {
+    const skill = join(root, 'assets', 'skills', 'dws-cli')
+    if (existsSync(join(skill, 'SKILL.md'))) return skill
+  }
+  return undefined
+}
+
+/**
+ * User-scoped install path discovered by skill-filesystem (`$DSH_HOME/skills`).
+ * @param dshHome - product DSH home.
+ * @returns destination directory for the dws-cli skill.
+ */
+export function dwsCliSkillInstallDir(dshHome: string): string {
+  return join(dshHome, 'skills', 'dws-cli')
+}
+
+function run(cmd: string, args: readonly string[], timeoutMs = 15_000): Promise<RunResult> {
+  // npm `.cmd` shims need a shell on Windows; the native `dws.exe` does not.
+  const shell = process.platform === 'win32' && /\.(cmd|bat|ps1)$/i.test(cmd)
+  return new Promise(resolve => {
+    const child = spawn(cmd, [...args], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell,
+      windowsHide: true,
+      env: process.env,
+    })
+    let stdout = ''
+    let stderr = ''
+    const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs)
+    child.stdout?.on('data', chunk => { stdout += String(chunk) })
+    child.stderr?.on('data', chunk => { stderr += String(chunk) })
+    child.on('error', () => {
+      clearTimeout(timer)
+      resolve({ code: null, stdout, stderr })
+    })
+    child.on('close', code => {
+      clearTimeout(timer)
+      resolve({ code, stdout, stderr })
+    })
+  })
+}
+
+function dwsBinaryFileName(platform: NodeJS.Platform = process.platform): string {
+  return platform === 'win32' ? 'dws.exe' : 'dws'
+}
+
+/**
+ * Candidate `node_modules` roots that may contain product-bundled `dingtalk-workspace-cli`.
+ * @param env - process environment.
+ * @returns directories to probe.
+ */
+function dwsNodeModulesRoots(env: NodeJS.ProcessEnv): string[] {
+  const roots: string[] = []
+  const nodeBin = env.DSH_NODE_BINARY?.trim()
+  if (nodeBin) {
+    roots.push(join(dirname(nodeBin), 'app', 'node_modules'))
+  }
+  const anchor = env.DSH_BUNDLE_ANCHORS?.trim()
+  if (anchor) {
+    roots.push(join(dirname(anchor), 'node_modules'))
+  }
+  const cwd = process.cwd()
+  roots.push(join(cwd, 'node_modules'))
+  roots.push(join(cwd, 'products', 'wanwei-desktop', 'node_modules'))
+  const home = env.DSH_HOME?.trim()
+  if (home) {
+    roots.push(join(home, '..', 'node_modules'))
+  }
+  return roots
+}
+
+/**
+ * Resolve the product-bundled DWS native binary (WorkBuddy-style; no npm -g).
+ * @param env - process environment; overridable in tests.
+ * @returns absolute binary path, or undefined when not staged.
+ */
+export function resolveBundledDwsCommand(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const override = env.DSH_DWS_CLI?.trim()
+  if (override && existsSync(override)) return override
+  const binaryName = dwsBinaryFileName()
+  for (const root of dwsNodeModulesRoots(env)) {
+    const candidate = join(root, 'dingtalk-workspace-cli', 'vendor', binaryName)
+    if (existsSync(candidate)) return candidate
+  }
+  try {
+    const pkgJson = require.resolve('dingtalk-workspace-cli/package.json')
+    const candidate = join(dirname(pkgJson), 'vendor', binaryName)
+    if (existsSync(candidate)) return candidate
+  } catch {
+    // Expected when the desktop product has not installed dingtalk-workspace-cli yet.
+  }
+  return undefined
+}
+
+/**
+ * Resolve the `dws` executable: product bundle first, then PATH.
+ * @param env - process environment; overridable in tests.
+ * @returns absolute shim/binary path, or undefined when not found.
+ */
+export function resolveDwsCommand(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  // PATH / bundle roots are stable for the Host process; avoid re-walking every poll.
+  if (env === process.env && resolvedDwsCommand !== null) {
+    return resolvedDwsCommand
+  }
+  const bundled = resolveBundledDwsCommand(env)
+  if (bundled !== undefined) {
+    if (env === process.env) resolvedDwsCommand = bundled
+    return bundled
+  }
+  const pathValue = env.PATH ?? env.Path ?? ''
+  const names = process.platform === 'win32' ? ['dws.exe', 'dws.cmd', 'dws'] : ['dws']
+  for (const dir of pathValue.split(delimiter)) {
+    if (dir.trim() === '') continue
+    for (const name of names) {
+      const candidate = join(dir, name)
+      if (existsSync(candidate)) {
+        if (env === process.env) resolvedDwsCommand = candidate
+        return candidate
+      }
+    }
+  }
+  if (env === process.env) resolvedDwsCommand = undefined
+  return undefined
+}
+
+function composeStatus(
+  dshHome: string,
+  dwsInstalled: boolean,
+  dwsVersion: string | null,
+  authed: boolean,
+): DingTalkDwsStatus {
+  const skillInstalled = existsSync(join(dwsCliSkillInstallDir(dshHome), 'SKILL.md'))
+  let hint: string | null = null
+  if (!dwsInstalled) {
+    hint = '未找到随包 dws。请使用最新桌面安装包，或临时执行 npm install -g dingtalk-workspace-cli 后重启。'
+  } else if (!authed) {
+    hint = '点击「连接」，在浏览器中完成钉钉扫码或头像授权。'
+  } else if (!skillInstalled) {
+    hint = '已授权，但尚未写入 dws-cli 技能。点击「连接」完成启用。'
+  }
+  return { dwsInstalled, dwsVersion, authed, skillInstalled, hint }
+}
+
+/**
+ * Read DWS install + auth + skill presence without mutating disk.
+ * Spawns at most one `dws auth status` (PATH presence implies install; no separate `--version`).
+ * Results are cached briefly and coalesced while a probe is in flight.
+ * @param dshHome - product DSH home for skill detection.
+ * @param options.fresh - When true, bypass the TTL cache (mutations / explicit refresh).
+ * @returns connector status payload.
+ */
+export async function buildDingTalkDwsStatus(
+  dshHome: string,
+  options?: { fresh?: boolean },
+): Promise<DingTalkDwsStatus> {
+  const fresh = options?.fresh === true
+  if (!fresh && statusCache !== null
+    && statusCache.home === dshHome
+    && Date.now() - statusCache.at < STATUS_CACHE_TTL_MS) {
+    return statusCache.status
+  }
+  if (!fresh && statusInflight !== null) return statusInflight
+
+  const probe = (async (): Promise<DingTalkDwsStatus> => {
+    const dws = resolveDwsCommand()
+    if (dws === undefined) {
+      return composeStatus(dshHome, false, null, false)
+    }
+    // PATH hit means the CLI shim/binary is installed; skip a second cold spawn for `--version`.
+    const auth = await run(dws, ['auth', 'status', '--format', 'json'])
+    const dwsInstalled = true
+    const authed = auth.code === 0
+    return composeStatus(dshHome, dwsInstalled, null, authed)
+  })()
+
+  statusInflight = probe
+  try {
+    const status = await probe
+    statusCache = { at: Date.now(), home: dshHome, status }
+    return status
+  } finally {
+    if (statusInflight === probe) statusInflight = null
+  }
+}
+
+/**
+ * Copy the official bundled dws-cli skill into `$DSH_HOME/skills/dws-cli`.
+ * @param dshHome - product DSH home.
+ * @returns absolute install directory.
+ */
+export function installDwsCliSkill(dshHome: string): string {
+  const source = resolveBundledDwsCliSkillDir()
+  if (source === undefined) {
+    throw new Error('未找到官方包内的 dws-cli 技能（需要 @dingtalk-real-ai/dsh-dingtalk）')
+  }
+  const dest = dwsCliSkillInstallDir(dshHome)
+  mkdirSync(dirname(dest), { recursive: true })
+  cpSync(source, dest, { recursive: true })
+  return dest
+}
+
+/**
+ * Start interactive personal login. The CLI owns QR / device / PC-session reuse;
+ * this Host only launches it and returns when the process exits.
+ * @returns status after the login process ends (success or cancel).
+ */
+export async function runDingTalkDwsLogin(dshHome: string): Promise<DingTalkDwsStatus> {
+  const before = await buildDingTalkDwsStatus(dshHome)
+  if (!before.dwsInstalled) {
+    throw new Error(before.hint ?? 'dws 未安装')
+  }
+  const dws = resolveDwsCommand()
+  if (dws === undefined) throw new Error(before.hint ?? 'dws 未安装')
+  // Long timeout: user may scan QR or confirm in DingTalk PC.
+  const result = await run(dws, ['auth', 'login'], 10 * 60_000)
+  if (result.code !== 0 && result.code !== null) {
+    const detail = (result.stderr || result.stdout).trim().slice(0, 400)
+    throw new Error(detail === '' ? 'dws auth login 未成功完成' : detail)
+  }
+  invalidateDingTalkDwsStatusCache()
+  const after = await buildDingTalkDwsStatus(dshHome, { fresh: true })
+  if (after.authed && !after.skillInstalled) {
+    installDwsCliSkill(dshHome)
+    invalidateDingTalkDwsStatusCache()
+    return buildDingTalkDwsStatus(dshHome, { fresh: true })
+  }
+  return after
+}
+
+/**
+ * Unbind desktop DingTalk: best-effort `dws auth logout`, then remove the skill copy.
+ * @param dshHome - product DSH home.
+ * @returns status after unbind.
+ */
+export async function disconnectDingTalkDws(dshHome: string): Promise<DingTalkDwsStatus> {
+  const before = await buildDingTalkDwsStatus(dshHome)
+  const dws = resolveDwsCommand()
+  if (before.dwsInstalled && dws !== undefined) {
+    // Logout may be unavailable on older CLI builds; still remove the skill.
+    await run(dws, ['auth', 'logout'], 30_000)
+  }
+  const dest = dwsCliSkillInstallDir(dshHome)
+  if (existsSync(dest)) {
+    const { rmSync } = await import('node:fs')
+    rmSync(dest, { recursive: true, force: true })
+  }
+  invalidateDingTalkDwsStatusCache()
+  return buildDingTalkDwsStatus(dshHome, { fresh: true })
+}
+
+/**
+ * Register `/wanwei-dingtalk` RPC for DWS personal auth + skill enablement.
+ * @param ctx - Host context with connection.
+ * @returns disposer from `ctx.effect`.
+ */
+export function registerDingTalkDwsRpc(ctx: Context): () => void {
+  const connection = ctx.get('connection') as HostConnectionHandle
+  const dshHome = () => resolveProductDshHome()
+  return ctx.effect(() => connection.rpc.handle('/wanwei-dingtalk', async (endpoint, _payload) => {
+    try {
+      if (endpoint === 'status') {
+        return { ok: true as const, value: await buildDingTalkDwsStatus(dshHome()) }
+      }
+      if (endpoint === 'login') {
+        return { ok: true as const, value: await runDingTalkDwsLogin(dshHome()) }
+      }
+      if (endpoint === 'installSkill') {
+        installDwsCliSkill(dshHome())
+        invalidateDingTalkDwsStatusCache()
+        return { ok: true as const, value: await buildDingTalkDwsStatus(dshHome(), { fresh: true }) }
+      }
+      if (endpoint === 'disconnect') {
+        return { ok: true as const, value: await disconnectDingTalkDws(dshHome()) }
+      }
+      throw new Error('未知钉钉连接器操作')
+    } catch (error) {
+      return {
+        ok: false as const,
+        error: {
+          code: 'internal',
+          message: error instanceof Error ? error.message : String(error),
+          details: {},
+        },
+      }
+    }
+  }), 'wanwei-connectors: dingtalk DWS RPC')
+}
+
+/** Package directory of this module (unused helper kept for tests). */
+export function connectorsPackageDir(): string {
+  return dirname(fileURLToPath(import.meta.url))
+}

@@ -46,6 +46,8 @@ pnpm dsh --profile wanwei-desktop
 
 此层禁用 `llm-deepseek` 和 `ui-settings-models`，选择万维 `oneapi-bailian` 联网搜索 Provider，再挂载万维自有插件。OneAPI 认证插件提供唯一受管模型 Provider、只读的“模型”设置页和服务端管理的联网搜索；官方 base 与 Web bundle 不承载这些私有配置。
 
+连接器页的钉钉走本机 `dws` 个人授权与 `dws-cli` 技能（`products/wanwei-desktop` 随包 `dingtalk-workspace-cli`，并仅把 `@dingtalk-real-ai/dsh-dingtalk` 留作技能资源）。万维 `cordis.patch.yml` 与产品 profile 不挂载 Stream IM，也不收集机器人 Client ID / Secret。
+
 -----
 
 <a id="understand-the-implementation"></a>

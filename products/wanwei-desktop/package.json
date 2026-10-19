@@ -11,7 +11,8 @@
     "check:runtime": "node scripts/verify-document-runtime.mjs && node scripts/verify-sidecar.mjs --staged",
     "check:rust": "cargo check --manifest-path src-tauri/Cargo.toml",
     "check:runner": "node scripts/require-github-runner.mjs",
-    "dev:prepare": "pnpm run check:boundaries && node scripts/build-dsh.mjs",
+    "ensure:dws": "node scripts/ensure-dws-vendor.mjs",
+    "dev:prepare": "pnpm run check:boundaries && node scripts/build-dsh.mjs && pnpm run ensure:dws",
     "dev": "pnpm run check:identity && pnpm run dev:prepare && tauri dev --config src-tauri/tauri.dev.conf.json",
     "prepare:runtime": "node scripts/prepare-runtime.mjs",
     "build:prepare": "pnpm run check:identity && pnpm run dev:prepare && pnpm run prepare:runtime && pnpm run check:runtime",
@@ -22,9 +23,19 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-wanwei-desktop": "workspace:^",
+    "@dingtalk-real-ai/dsh-dingtalk": "^0.10.2",
+    "@wecom/cli": "1.3.4",
+    "dingtalk-workspace-cli": "1.0.64",
     "mammoth": "^1.10.0",
     "pdfjs-dist": "^4.10.38",
     "xlsx": "^0.18.5"
+  },
+  "optionalDependencies": {
+    "@wecom/cli-darwin-arm64": "1.3.4",
+    "@wecom/cli-darwin-x64": "1.3.4",
+    "@wecom/cli-linux-arm64": "1.3.4",
+    "@wecom/cli-linux-x64": "1.3.4",
+    "@wecom/cli-win32-x64": "1.3.4"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.8.4"
