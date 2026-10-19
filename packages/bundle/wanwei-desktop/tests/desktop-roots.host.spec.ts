@@ -8,7 +8,7 @@ import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
-import * as SkillFileSystem from '../src/index.ts'
+import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
 
 it('boots the shipped desktop skill discovery policy through Loader', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-skill-roots-'))
@@ -31,7 +31,7 @@ it('boots the shipped desktop skill discovery policy through Loader', async () =
       await mkdir(skillDir, { recursive: true })
       await writeFile(join(skillDir, 'SKILL.md'), `---\nname: ${name}\ndescription: Test skill\n---\nUse this skill.\n`)
     }
-    const patches = parse(await readFile(new URL('../../../bundle/wanwei-desktop/cordis.patch.yml', import.meta.url), 'utf8'), {
+    const patches = parse(await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8'), {
       customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (value: string) => value }],
     }) as Array<{ id?: string; config?: SkillFileSystem.Config }>
     const desktop = patches.find(patch => patch.id === 'skill-filesystem')

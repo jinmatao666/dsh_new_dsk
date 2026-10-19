@@ -3335,22 +3335,6 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'request', description: 'pending user-question request.' }],
   },
   {
-    name: 'wanwei-update/check',
-    mode: 'emit',
-    signature: '\'wanwei-update/check\'(check: { blocked: boolean }): void',
-    summary: 'Synchronously veto shutdown for product work outside an agent turn.',
-    description: 'Synchronously veto shutdown for product work outside an agent turn.',
-    parameters: [{ name: 'check', description: 'Listeners set blocked before returning; they must not await.' }],
-  },
-  {
-    name: 'wanwei-update/stopping',
-    mode: 'emit',
-    signature: '\'wanwei-update/stopping\'(): void',
-    summary: 'Freeze new product work after the final idle check.',
-    description: 'Freeze new product work after the final idle check.',
-    parameters: [],
-  },
-  {
     name: 'webserver/index-inject',
     mode: 'emit',
     signature: '\'webserver/index-inject\'(table: IndexInjection[]): void',

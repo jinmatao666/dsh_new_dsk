@@ -977,7 +977,12 @@ export function computeOutputs(): [string, string][] {
   const pages = [...new Set([...Object.values(SERVICE_PAGE), ...Object.values(EVENT_SCOPE_PAGE)])].sort()
   const outputs: [string, string][] = [
     [OUT_INHERITED, renderInheritedPage(CORDIS_CATALOG_POLICY)],
-    [OUT_RUNTIME_API, projector.renderRuntimeApi(model)],
+    [OUT_RUNTIME_API, projector.renderRuntimeApi({
+      ...model,
+      // Product events remain documented but are not part of the official runtime API.
+      events: events.filter(event => !event.source.startsWith('packages/wanwei/')
+        && !event.source.startsWith('packages/bundle/wanwei-desktop/')),
+    })],
   ]
   for (const page of pages) {
     const region = renderPageRegion(

@@ -22,6 +22,9 @@ it('keeps private deployment policy documented but out of the official runtime c
   expect(runtime).toBeDefined()
   expect(runtime).not.toMatch(/wanwei|zjugis|oneapi/iu)
   expect([...outputs.values()].some(content => content.includes('wanweiNetworkPolicy'))).toBe(true)
+  const settings = outputs.get('docs/subsystems/settings.md')
+  expect(settings).toContain('wanwei-update/check')
+  expect(settings).toContain('wanwei-update/stopping')
 }, 120_000)
 
 afterEach(() => {
