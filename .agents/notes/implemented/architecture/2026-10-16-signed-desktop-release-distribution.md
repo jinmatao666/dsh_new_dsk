@@ -16,6 +16,8 @@ The manifest binds the product identity, stable version, platform, artifact name
 
 The native shell verifies both signatures with its embedded public key, preserving the manifest binding across HTTP transport. Checks are automatic, but downloading and installation are explicit user decisions. A private parent/child stdin exchange performs the final busy veto and freezes new work in one synchronous admission interval. The Host awaits complete plugin-tree disposal before acknowledging clean shutdown; the native parent also waits for successful process exit before calling the maintained Tauri installer. A timeout cannot authorize installation.
 
+Checks and artifact downloads use the desktop's configured OneAPI backend, including any reverse-proxy prefix. The service returns a relative artifact path; the native shell accepts only the update-artifact route with a fixed-format ID and resolves it under that backend. The absolute URL field satisfies Tauri parsing but cannot select the native download host. Check and download requests reject redirects. This removes dependence on public DNS or a separate download origin in disconnected intranets without trusting proxy headers to choose a host. Server storage remains private and persistent; the administrator upload handler writes the artifact, and the active-release download handler serves it.
+
 ## Alternatives considered
 
 **Publish straight from GitHub.** The operator needs a visual approval step on the existing self-hosted backend, independent of repository migration. Runner output is therefore an upload artifact, not an automatic release.

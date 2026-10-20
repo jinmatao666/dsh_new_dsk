@@ -245,7 +245,7 @@ func TestDesktopUpdateLifecycle(t *testing.T) {
 		t.Fatal(w.Body.String())
 	}
 	w := requestUpdate(t, r, "GET", "/desktop-updates/windows/x86_64/1.0.0", "", nil)
-	if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" || !bytes.Contains(w.Body.Bytes(), []byte("http://updates.example:3300/desktop-updates/files/"+id)) {
+	if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" || !bytes.Contains(w.Body.Bytes(), []byte(`"download_path":"desktop-updates/files/`+id+`"`)) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	for _, path := range []string{"/desktop-updates/windows/x86_64/1.2.0", "/desktop-updates/windows/x86_64/2.0.0", "/desktop-updates/darwin/aarch64/1.0.0"} {
@@ -274,6 +274,37 @@ func TestDesktopUpdateLifecycle(t *testing.T) {
 	}
 	if w := requestUpdate(t, r, "POST", "/api/desktop-updates/"+id+"/publish", "root", nil); w.Code == 200 {
 		t.Fatal("publish did not reverify")
+	}
+}
+
+func TestDesktopUpdateDownloadUsesConnectedBackendWithoutPublicURL(t *testing.T) {
+	r, key, _ := updateRouter(t)
+	id := uploadedID(t, requestUpdate(t, r, "POST", "/api/desktop-updates", "root", updateZIP(t, key, "1.2.0", "windows-x86_64", false)))
+	if w := requestUpdate(t, r, "POST", "/api/desktop-updates/"+id+"/publish", "root", nil); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	for _, address := range []string{"", "https://unreachable.example", "invalid-old-setting"} {
+		t.Setenv("DESKTOP_UPDATE_PUBLIC_URL", address)
+		t.Setenv("SERVER_ADDRESS", address)
+		for _, base := range []string{"http://192.168.1.100:3300", "http://ac.zjugis.com:3300", "https://backend.internal"} {
+			req := httptest.NewRequest("GET", base+"/desktop-updates/windows/x86_64/1.0.0", nil)
+			req.Header.Set("X-Forwarded-Host", "foreign.example")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			var response map[string]interface{}
+			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil || w.Code != 200 {
+				t.Fatal(w.Code, w.Body.String(), err)
+			}
+			if response["download_path"] != "desktop-updates/files/"+id || response["url"] != base+"/desktop-updates/files/"+id {
+				t.Fatal("download did not use request backend", response)
+			}
+			// Follow the returned relative path through the same backend entry.
+			download := httptest.NewRecorder()
+			r.ServeHTTP(download, httptest.NewRequest("GET", base+"/"+response["download_path"].(string), nil))
+			if download.Code != 200 || download.Body.String() != "test-only signed installer" {
+				t.Fatal("same-backend artifact download failed", download.Code)
+			}
+		}
 	}
 }
 

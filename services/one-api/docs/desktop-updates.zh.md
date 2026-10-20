@@ -16,12 +16,11 @@
 |---|---|
 | `DESKTOP_UPDATE_DIR` | 私有更新文件目录，默认 `/data/wanwei/desktop-updates` |
 | `DESKTOP_UPDATE_PUBLIC_KEY` | Tauri 生成的 Base64 公钥文件内容，绝不能填写私钥 |
-| `DESKTOP_UPDATE_PUBLIC_URL` | 公网服务根地址，可含反向代理前缀；未设置时使用 `SERVER_ADDRESS` |
 | `DESKTOP_UPDATE_MAX_BYTES` | 更新文件最大字节数，默认 2147483648，可配置为 1024 至 8589934592 |
 
 共用 Compose 将 `DSH_DESKTOP_UPDATE_HOST_DIR`（默认 `/data/wanwei/desktop-updates`）挂载到容器 `/data/desktop-updates`，并传入 `DSH_DESKTOP_UPDATE_PUBLIC_KEY` 和 `DSH_DESKTOP_UPDATE_MAX_BYTES`。OneAPI 启动时在现有数据库新增 `desktop_updates`、`desktop_update_channels`。须同时备份数据库和文件目录。签名依赖要求 Go 1.21 或更新版本。新增测试在 Windows 使用纯 Go SQLite 驱动，生产 SQLite 驱动不变。
 
-在现有 OneAPI 公网入口转发 `/desktop-updates/`，不要开启文件目录浏览。检查地址为 `/desktop-updates/{target}/{arch}/{currentVersion}`，返回 Tauri 更新 JSON 或 HTTP 204。下载地址从配置的根地址生成，不采信请求头。草稿和已撤下文件返回 404。版本和下载响应均使用 `Cache-Control: no-store`。管理员接口位于 `/api/desktop-updates`，受超级管理员鉴权保护并登记操作审计。
+在现有 OneAPI 入口转发 `/desktop-updates/`，不要开启文件目录浏览。检查地址为 `/desktop-updates/{target}/{arch}/{currentVersion}`，返回 Tauri 更新 JSON 或 HTTP 204。相对路径 `download_path` 指向该后台的更新文件。原生客户端以检查更新所用的后台地址解析它，保留代理路径前缀，不使用 Tauri 响应解析器要求的绝对 `url` 中的主机。不读取下载地址环境变量；网络须能连通配置的后台，但无需访问互联网。草稿和已撤下文件返回 404。版本和下载响应均使用 `Cache-Control: no-store`。管理员接口位于 `/api/desktop-updates`，受超级管理员鉴权保护并登记操作审计。
 
 代理须允许相应上传大小并设置足够的请求时间。上传有大小限制，流式写入私有临时文件；每个服务进程同时接收一次上传。成功上传先移入唯一目录，再写数据库；失败会清理暂存文件。进程或主机突然故障可能留下 `.upload-*` 或未被数据库引用的文件目录，仅可在没有上传运行时人工检查清理。多实例须共享数据库和存储。PostgreSQL／MySQL 使用行锁串行发布同平台；SQLite 写竞争会让请求失败，需管理员重试，不会发布部分状态。
 

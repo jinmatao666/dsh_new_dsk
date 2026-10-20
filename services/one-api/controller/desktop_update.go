@@ -428,21 +428,20 @@ func CheckDesktopUpdate(c *gin.Context) {
 		c.Status(503)
 		return
 	}
-	base := strings.TrimRight(os.Getenv("DESKTOP_UPDATE_PUBLIC_URL"), "/")
-	if base == "" {
-		base = strings.TrimRight(os.Getenv("SERVER_ADDRESS"), "/")
-	}
-	parsed, err := url.Parse(base)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-		c.Status(503)
-		return
-	}
 	var manifest desktopUpdateManifest
 	if err := json.Unmarshal([]byte(record.Manifest), &manifest); err != nil {
 		c.Status(503)
 		return
 	}
-	c.JSON(200, gin.H{"version": record.Version, "notes": record.Notes, "pub_date": channel.UpdatedAt.UTC().Format(time.RFC3339), "url": fmt.Sprintf("%s/desktop-updates/files/%s", base, record.ID), "signature": manifest.Signature, "manifest": record.Manifest, "manifest_signature": record.ManifestSignature})
+	// Tauri requires an absolute URL. Native clients use download_path with their
+	// configured backend instead, so proxy headers cannot choose the download host.
+	scheme := "http"
+	if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	downloadPath := "desktop-updates/files/" + record.ID
+	downloadURL := url.URL{Scheme: scheme, Host: c.Request.Host, Path: "/" + downloadPath}
+	c.JSON(200, gin.H{"version": record.Version, "notes": record.Notes, "pub_date": channel.UpdatedAt.UTC().Format(time.RFC3339), "url": downloadURL.String(), "download_path": downloadPath, "signature": manifest.Signature, "manifest": record.Manifest, "manifest_signature": record.ManifestSignature})
 }
 
 // DownloadDesktopUpdate exposes only the active published artifact, never an arbitrary storage path.

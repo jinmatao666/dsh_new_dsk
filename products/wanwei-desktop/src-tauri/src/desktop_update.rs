@@ -111,6 +111,30 @@ fn platform() -> String {
     )
 }
 
+// Resolve only an artifact ID beneath the configured backend, including its proxy prefix.
+fn download_url(endpoint: &Url, raw: &serde_json::Value) -> Result<Url, String> {
+    let path = raw["download_path"].as_str().ok_or("更新缺少下载路径")?;
+    let id = path
+        .strip_prefix("desktop-updates/files/")
+        .ok_or("更新下载路径无效")?;
+    if id.len() != 32
+        || !id
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("更新下载路径无效".into());
+    }
+    let (prefix, _) = endpoint
+        .path()
+        .rsplit_once("/desktop-updates/")
+        .ok_or("更新检查地址无效")?;
+    let mut url = endpoint.clone();
+    url.set_path(&format!("{prefix}/{path}"));
+    url.set_query(None);
+    url.set_fragment(None);
+    Ok(url)
+}
+
 fn update_state(app: &tauri::AppHandle, phase: &str, message: &str) {
     if let Ok(mut inner) = app.state::<DesktopUpdate>().inner.lock() {
         inner.snapshot.phase = phase.into();
@@ -313,12 +337,13 @@ async fn perform(app: &tauri::AppHandle, manual: bool) -> Result<(), String> {
         .endpoints(vec![state.endpoint.clone()])
         .map_err(|error| error.to_string())?
         .timeout(Duration::from_secs(20))
+        .configure_client(|client| client.redirect(reqwest::redirect::Policy::none()))
         .build()
         .map_err(|error| error.to_string())?
         .check()
         .await
         .map_err(|error| format!("检查更新失败：{error}"))?;
-    let Some(update) = update else {
+    let Some(mut update) = update else {
         state.inner.lock().map_err(|_| "更新状态不可用")?.cached = None;
         update_state(
             app,
@@ -338,6 +363,7 @@ async fn perform(app: &tauri::AppHandle, manual: bool) -> Result<(), String> {
         &update.signature,
         &platform(),
     )?;
+    update.download_url = download_url(&state.endpoint, &update.raw_json)?;
     // No off-server redirects or foreign origins, even when metadata arrives over HTTP.
     if update.download_url.origin() != state.endpoint.origin()
         || update.download_url.username() != ""
@@ -460,6 +486,52 @@ fn verify_package(bytes: &[u8], manifest: &Manifest, public_key: &str) -> Result
 mod tests {
     use super::*;
     use std::io::Read;
+
+    #[test]
+    fn download_uses_connected_backend_and_preserves_proxy_prefix() {
+        let id = "0123456789abcdef0123456789abcdef";
+        let raw = serde_json::json!({"download_path": format!("desktop-updates/files/{id}"), "url": "https://foreign.example/not-used"});
+        for base in [
+            "http://192.168.1.100:3300",
+            "https://backend.internal",
+            "http://backend.internal/oneapi",
+        ] {
+            let endpoint =
+                Url::parse(&format!("{base}/desktop-updates/windows/x86_64/1.0.0")).unwrap();
+            let resolved = download_url(&endpoint, &raw).unwrap();
+            assert_eq!(
+                resolved.as_str(),
+                format!("{base}/desktop-updates/files/{id}")
+            );
+            assert_eq!(resolved.origin(), endpoint.origin());
+        }
+    }
+
+    #[test]
+    fn download_rejects_foreign_traversal_and_non_artifact_paths() {
+        let endpoint =
+            Url::parse("http://backend.internal/desktop-updates/windows/x86_64/1.0.0").unwrap();
+        for path in [
+            "https://foreign.example/file",
+            "//foreign.example/file",
+            "/desktop-updates/files/0123456789abcdef0123456789abcdef",
+            "desktop-updates/files/../secret",
+            "desktop-updates/files/%2e%2e",
+            "desktop-updates/files/0123456789abcdef0123456789abcdef?token=x",
+            "desktop-updates/files/0123456789abcdef0123456789abcdef/extra",
+            "",
+        ] {
+            assert!(
+                download_url(&endpoint, &serde_json::json!({"download_path": path})).is_err(),
+                "{path}"
+            );
+        }
+        assert!(download_url(
+            &endpoint,
+            &serde_json::json!({"url": "http://backend.internal/file"})
+        )
+        .is_err());
+    }
 
     #[test]
     fn preference_replaces_existing_value_without_leaving_temporary_files() {
