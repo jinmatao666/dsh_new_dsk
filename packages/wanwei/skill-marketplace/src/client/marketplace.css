@@ -1,3 +1,10 @@
+.dsh-skill-market-panel.dsh-skill-market-catalog-panel {
+  display: block;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 28px;
+}
+
 .dsh-skill-toolbar {
   padding: 18px 0;
 }

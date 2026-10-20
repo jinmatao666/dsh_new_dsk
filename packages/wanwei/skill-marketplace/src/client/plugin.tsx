@@ -918,7 +918,7 @@ function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProp
 
   return (
     <div className="dsh-skill-market-overlay" role="dialog" aria-modal="true" aria-label={L.title}>
-      <div className="dsh-skill-market-panel">
+      <div className="dsh-skill-market-panel dsh-skill-market-catalog-panel">
         {view === 'list' && (
           <header className="dsh-skill-market-header">
             <div className="dsh-skill-market-heading">

@@ -43,6 +43,8 @@ The market contains official-platform-only recommendations, all published platfo
 
 Platform and SkillHub toolbars show nearby page numbers, the first and last page, and a bounded page-number jump. Paging, search and filters preserve the market panel's scroll position. SkillHub keeps the previous cards visible while the requested page loads so the panel does not collapse between requests.
 
+The market panel owns vertical scrolling for recommendations, catalog lists and platform details. Its sections retain their content height instead of shrinking inside the shared feature-panel flex layout; other feature pages retain their separate body scrollers.
+
 Recommendation cards show verified download counts with the same glyph and metadata styling as platform cards. They open details on click and contain no installation, removal or update controls; the installed badge below the skill icon remains.
 
 Platform download counts include each successful installation or update, including reinstalls by the same account. The administrator's installation column counts each account once per skill. Reporting failures leave the local installation intact and display a download-count synchronization error; they are not automatically retried. SkillHub counts retain the upstream definition.
