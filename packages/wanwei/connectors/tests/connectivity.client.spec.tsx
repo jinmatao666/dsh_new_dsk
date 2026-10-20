@@ -36,6 +36,7 @@ it('recovers the directory after a dropped local check and keeps the illustratio
   const props = { dingTalk, weCom, weChat, onTryPrompt: () => {}, checkConnection }
   const recovered = render(<Connectors {...props} />)
   expect(await screen.findByText('钉钉')).toBeTruthy()
+  expect(screen.queryByText('企业微信')).toBeNull()
   expect(screen.queryByRole('heading', { name: '暂时无法连接连接器服务' })).toBeNull()
   expect(checkConnection.mock.calls.length).toBeGreaterThan(1)
   recovered.unmount()

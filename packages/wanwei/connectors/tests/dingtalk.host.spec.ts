@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { chmodSync, mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs'
+import { chmodSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -273,6 +273,73 @@ describe('DingTalk DWS Host helpers', () => {
       expect(existsSync(exitFile)).toBe(true)
     }, { timeout: 8_000 })
   }, 15_000)
+
+  it('releases the CLI queue when a browser inherits login output pipes', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-dws-pipe-reconnect-'))
+    const cliDir = mkdtempSync(join(tmpdir(), 'wanwei-dws-pipe-reconnect-cli-'))
+    const authFile = join(cliDir, 'authed')
+    const countFile = join(cliDir, 'login-count')
+    const stopFile = join(cliDir, 'stop-holders')
+    const holder = join(cliDir, 'holder.mjs')
+    writeFileSync(holder, [
+      "import { existsSync } from 'node:fs'",
+      'const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))',
+      `while (!existsSync(${JSON.stringify(stopFile)})) await delay(100)`,
+      '',
+    ].join('\n'))
+    installFakeDws(cliDir, [
+      "import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'",
+      "import { spawn } from 'node:child_process'",
+      `const authFile = ${JSON.stringify(authFile)}`,
+      `const countFile = ${JSON.stringify(countFile)}`,
+      `const holder = ${JSON.stringify(holder)}`,
+      'const args = process.argv.slice(2)',
+      'if (args[0] === "auth" && args[1] === "status") {',
+      '  console.log(JSON.stringify({ authenticated: existsSync(authFile) }))',
+      '  process.exit(0)',
+      '}',
+      'if (args[0] === "auth" && args[1] === "login") {',
+      '  let count = 0',
+      '  try { count = Number(readFileSync(countFile, "utf8")) } catch {}',
+      '  writeFileSync(countFile, String(count + 1))',
+      '  writeFileSync(authFile, "1")',
+      '  const browser = spawn(process.execPath, [holder], {',
+      '    detached: true,',
+      '    stdio: ["ignore", process.stdout, process.stderr],',
+      '  })',
+      '  browser.unref()',
+      '  process.exit(0)',
+      '}',
+      'if (args[0] === "auth" && (args[1] === "logout" || args[1] === "reset")) {',
+      '  rmSync(authFile, { force: true })',
+      '  process.exit(0)',
+      '}',
+      'process.exit(0)',
+      '',
+    ].join('\n'))
+    process.env.DSH_HOME = home
+    const staged = join(cliDir, 'dws-cli')
+    mkdirSync(staged)
+    writeFileSync(join(staged, 'SKILL.md'), '---\nname: dws-cli\ndescription: x\n---\n')
+    process.env.DSH_DWS_SKILL_DIR = staged
+
+    await runDingTalkDwsLogin(home)
+    await vi.waitFor(async () => {
+      expect((await buildDingTalkDwsStatus(home)).authed).toBe(true)
+    }, { timeout: 8_000 })
+
+    await disconnectDingTalkDws(home)
+    await runDingTalkDwsLogin(home)
+    await vi.waitFor(async () => {
+      const status = await buildDingTalkDwsStatus(home)
+      expect(status.authorizing).toBe(false)
+      expect(status.authed).toBe(true)
+      expect(status.skillInstalled).toBe(true)
+      expect(readFileSync(countFile, 'utf8')).toBe('2')
+    }, { timeout: 12_000 })
+
+    writeFileSync(stopFile, '1')
+  }, 20_000)
 
   it('installs the skill from a readonly login without waiting for dws auth login to exit', async () => {
     const home = mkdtempSync(join(tmpdir(), 'wanwei-dws-readonly-now-'))

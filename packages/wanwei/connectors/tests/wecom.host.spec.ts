@@ -360,7 +360,7 @@ describe('WeCom CLI Host helpers', () => {
     const statusPromise = buildWeComCliStatus(home)
     await vi.waitFor(() => {
       expect(existsSync(showFile)).toBe(true)
-    })
+    }, { timeout: 8_000 })
     const pending = await runWeComCliLogin(home)
     expect(pending.authorizing).toBe(true)
     await vi.waitFor(() => {

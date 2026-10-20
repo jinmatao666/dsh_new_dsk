@@ -164,6 +164,7 @@ function run(
   args: readonly string[],
   timeoutMs = 15_000,
   onChild?: (child: ChildProcess) => void,
+  settleOnExit = false,
 ): Promise<RunResult> {
   // npm `.cmd` shims need a shell on Windows; the native `dws.exe` does not.
   const shell = process.platform === 'win32' && /\.(cmd|bat|ps1)$/i.test(cmd)
@@ -180,14 +181,20 @@ function run(
     const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs)
     child.stdout?.on('data', chunk => { stdout += String(chunk) })
     child.stderr?.on('data', chunk => { stderr += String(chunk) })
-    child.on('error', () => {
+    let settled = false
+    const settle = (code: number | null): void => {
+      if (settled) return
+      settled = true
       clearTimeout(timer)
-      resolve({ code: null, stdout, stderr })
-    })
-    child.on('close', code => {
-      clearTimeout(timer)
+      if (settleOnExit) {
+        child.stdout?.destroy()
+        child.stderr?.destroy()
+      }
       resolve({ code, stdout, stderr })
-    })
+    }
+    child.on('error', () => { settle(null) })
+    if (settleOnExit) child.on('exit', code => { settle(code) })
+    else child.on('close', code => { settle(code) })
   })
 }
 
@@ -533,6 +540,11 @@ async function publishDingTalkAuthorized(dshHome: string, epoch: number): Promis
     status: composeStatus(dshHome, true, null, true),
   }
   releaseDingTalkFlight(epoch)
+  // Browser processes can inherit the hidden release sidecar's stdout/stderr
+  // handles. Stop the completed login so its queued task cannot wait forever
+  // for those inherited pipes to close and block unbind or the next login.
+  const child = loginChild
+  if (child !== null && child.exitCode === null) child.kill('SIGKILL')
   return true
 }
 
@@ -563,12 +575,18 @@ async function finishDingTalkLogin(dshHome: string, dws: string, epoch: number):
       return
     }
   })()
-  const result = await run(dws, ['auth', 'login'], 10 * 60_000, child => {
-    loginChild = child
-    child.once('close', () => {
-      if (loginChild === child) loginChild = null
-    })
-  })
+  const result = await run(
+    dws,
+    ['auth', 'login'],
+    10 * 60_000,
+    child => {
+      loginChild = child
+      child.once('exit', () => {
+        if (loginChild === child) loginChild = null
+      })
+    },
+    true,
+  )
   stopWatch = true
   await watch
   if (epoch !== loginEpoch || published || loginFlight === null) return
