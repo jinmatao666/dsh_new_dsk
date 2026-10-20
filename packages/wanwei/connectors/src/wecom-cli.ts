@@ -38,7 +38,7 @@ export type WeComCliStatus = {
   skillInstalled: boolean
   /** Short hint when something blocks desktop skill use. */
   hint: string | null
-  /** True while `wecom-cli auth init` is still running outside the WebView request. */
+  /** True until `auth init` exits and the skill is installed, or the login fails. */
   authorizing: boolean
   /** Failure text from the latest background login, or null. */
   authorizeError: string | null
@@ -50,6 +50,7 @@ type StatusCacheEntry = { at: number; home: string; status: WeComCliStatus }
 
 let statusCache: StatusCacheEntry | null = null
 let statusInflight: Promise<WeComCliStatus> | null = null
+let statusChild: ChildProcess | null = null
 let resolvedWecomCommand: string | undefined | null = null
 let loginFlight: Promise<void> | null = null
 let loginChild: ChildProcess | null = null
@@ -406,7 +407,12 @@ export async function buildWeComCliStatus(
     if (cli === undefined) {
       return composeStatus(dshHome, false, null, false)
     }
-    const auth = await run(cli, ['auth', 'show', '--status'])
+    const auth = await run(cli, ['auth', 'show', '--status'], 15_000, child => {
+      statusChild = child
+      child.once('close', () => {
+        if (statusChild === child) statusChild = null
+      })
+    })
     const line = auth.stdout.trim().split(/\r?\n/).find(entry => entry.trim() !== '') ?? ''
     const authed = auth.code === 0 && line === 'authorized'
     return composeStatus(dshHome, true, null, authed)
@@ -415,7 +421,11 @@ export async function buildWeComCliStatus(
   statusInflight = probe
   try {
     const status = await probe
-    statusCache = { at: Date.now(), home: dshHome, status }
+    // A login started while this probe was running owns the cache. Do not
+    // write the pre-login snapshot over a connected result.
+    if (loginFlight === null && statusProbeHolds === 0) {
+      statusCache = { at: Date.now(), home: dshHome, status }
+    }
     return withLoginFlags(status)
   } finally {
     if (statusInflight === probe) statusInflight = null
@@ -529,82 +539,90 @@ export function clearWeComCliCredentials(env: NodeJS.ProcessEnv = process.env): 
   }
 }
 
+/** End the waiting state for this login generation. A newer「解绑」is left alone. */
+function releaseWeComFlight(epoch: number): void {
+  if (epoch !== loginEpoch) return
+  loginFlight = null
+}
+
+/** Stop `auth show`. It does not open the browser and can hold the CLI lock. */
+function stopWeComStatusProbe(): void {
+  const child = statusChild
+  statusChild = null
+  if (child !== null && child.exitCode === null) child.kill('SIGKILL')
+}
+
 /**
- * Copy `wecomcli-*` skills after a background `wecom-cli auth init` exits.
- * The WebView request that started login has already returned; this still runs
- * if that request was aborted while the system browser was focused.
+ * Store a connected snapshot and end the waiting state.
+ * @param dshHome - product DSH home.
+ * @param epoch - login generation captured when the flight started.
+ * @returns false when a newer unbind wins or the skill copy fails.
+ */
+async function publishWeComAuthorized(dshHome: string, epoch: number): Promise<boolean> {
+  if (epoch !== loginEpoch) return false
+  loginError = null
+  if (!existsSync(join(wecomSharedSkillDir(dshHome), 'SKILL.md'))) {
+    try {
+      await installWeComCliSkills(dshHome)
+    } catch (error) {
+      if (epoch !== loginEpoch) return false
+      loginError = errorText(error)
+      invalidateWeComCliStatusCache()
+      releaseWeComFlight(epoch)
+      return false
+    }
+  }
+  if (epoch !== loginEpoch) return false
+  statusCache = {
+    at: Date.now(),
+    home: dshHome,
+    status: composeStatus(dshHome, true, null, true),
+  }
+  releaseWeComFlight(epoch)
+  return true
+}
+
+/**
+ * Copy `wecomcli-*` skills after `wecom-cli auth init` exits.
+ * `auth init` is what opens the QR browser. An in-flight `auth show` is stopped first.
  * @param dshHome - product DSH home.
  * @param cli - absolute `wecom-cli` binary.
  * @param epoch - login generation; a newer「解绑」makes this a no-op.
  */
 async function finishWeComLogin(dshHome: string, cli: string, epoch: number): Promise<void> {
   if (epoch !== loginEpoch) return
-  const before = await buildWeComCliStatus(dshHome, { fresh: true })
-  if (epoch !== loginEpoch) return
-  if (before.authed) {
-    loginError = null
-    if (!before.skillInstalled) {
-      try {
-        await installWeComCliSkills(dshHome)
-      } catch (error) {
-        loginError = errorText(error)
-        invalidateWeComCliStatusCache()
-        return
-      }
-      invalidateWeComCliStatusCache()
-    }
-    await buildWeComCliStatus(dshHome, { fresh: true })
-    return
-  }
-  let result: RunResult
-  try {
-    result = await run(cli, ['auth', 'init', '--noninteractive'], 10 * 60_000, child => {
-      loginChild = child
-      child.once('close', () => {
-        if (loginChild === child) loginChild = null
-      })
+  // `auth show` never opens the QR browser. Stop it, then start `auth init`.
+  stopWeComStatusProbe()
+  const result = await run(cli, ['auth', 'init', '--noninteractive'], 10 * 60_000, child => {
+    loginChild = child
+    child.once('close', () => {
+      if (loginChild === child) loginChild = null
     })
-  } catch (error) {
-    if (epoch !== loginEpoch) return
-    loginError = errorText(error)
-    invalidateWeComCliStatusCache()
-    return
-  }
+  })
   if (epoch !== loginEpoch) return
   if (result.code === null) {
     loginError = 'wecom-cli auth init 未能启动'
     invalidateWeComCliStatusCache()
+    releaseWeComFlight(epoch)
     return
   }
   if (result.code !== 0) {
     const detail = (result.stderr || result.stdout).trim().slice(0, 400)
     loginError = detail === '' ? 'wecom-cli auth init 未成功完成' : detail
     invalidateWeComCliStatusCache()
+    releaseWeComFlight(epoch)
     return
   }
-  loginError = null
-  invalidateWeComCliStatusCache()
-  const after = await buildWeComCliStatus(dshHome, { fresh: true })
-  if (epoch !== loginEpoch) return
-  if (after.authed && !after.skillInstalled) {
-    try {
-      await installWeComCliSkills(dshHome)
-    } catch (error) {
-      loginError = errorText(error)
-      invalidateWeComCliStatusCache()
-      return
-    }
-    invalidateWeComCliStatusCache()
-  }
-  await buildWeComCliStatus(dshHome, { fresh: true })
+  await publishWeComAuthorized(dshHome, epoch)
 }
 
 /**
  * Start non-interactive QR login (`wecom-cli auth init --noninteractive`), then install skills.
- * The call queues the CLI and returns before that process starts. Holding the RPC
- * open until the QR process exits makes the WebView report a failed fetch.
+ * The call queues `auth init` and returns before that process starts. It does not
+ * run `auth show` first. Holding the RPC open until the QR process exits makes
+ * the WebView report a failed fetch.
  * @param dshHome - product DSH home.
- * @returns current status. `authorizing` stays true until the background login exits.
+ * @returns current status. `authorizing` stays true until `auth init` exits or the login fails.
  */
 export async function runWeComCliLogin(dshHome: string): Promise<WeComCliStatus> {
   if (loginFlight !== null) return buildWeComCliStatus(dshHome)

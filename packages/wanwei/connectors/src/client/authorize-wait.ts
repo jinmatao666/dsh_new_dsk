@@ -36,14 +36,24 @@ function waitForPoll(ms: number): Promise<void> {
 }
 
 /**
- * Poll until the Host login flight finishes.
+ * True when the snapshot is already connected, even if the login process is still exiting.
+ * @param status - polled connector status.
+ * @returns whether desktop auth and the skill copy are both present.
+ */
+function connectedWhileAuthorizing(status: ConnectorAuthorizationStatus): boolean {
+  const fields = status as ConnectorAuthorizationStatus & { authed?: boolean; skillInstalled?: boolean }
+  return fields.authed === true && fields.skillInstalled === true
+}
+
+/**
+ * Poll until the Host login flight finishes or the connector is already connected.
  * The packaged WebView stays `visible` while the system browser is in front, so a
  * dropped poll is retried until the Host flight finishes or the deadline passes.
  * @param read - status RPC. Must not start another browser login.
  * @param options.wait - test override for the poll delay.
  * @param options.now - test override for the deadline clock.
  * @param options.timeoutMs - how long to wait for the CLI process.
- * @returns the first status whose login flight has finished.
+ * @returns the first settled status.
  */
 export async function waitForConnectorAuthorization<T extends ConnectorAuthorizationStatus>(
   read: () => Promise<T>,
@@ -61,6 +71,7 @@ export async function waitForConnectorAuthorization<T extends ConnectorAuthoriza
     await wait(POLL_MS)
     try {
       const status = await read()
+      if (connectedWhileAuthorizing(status)) return status
       if (status.authorizing !== true) {
         if (typeof status.authorizeError === 'string' && status.authorizeError !== '') {
           throw new Error(status.authorizeError)

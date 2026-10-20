@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs'
+import { chmodSync, mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -39,6 +39,23 @@ afterEach(() => {
   if (originalPathWin === undefined) delete process.env.Path
   else process.env.Path = originalPathWin
 })
+
+/** Point `DSH_WECOM_CLI` at a node script. The script body is ESM. */
+function installFakeWeCom(cliDir: string, body: string): void {
+  const node = process.execPath.replace(/"/g, '')
+  const script = join(cliDir, 'fake-wecom.mjs')
+  writeFileSync(script, body)
+  const command = process.platform === 'win32' ? join(cliDir, 'wecom-cli.cmd') : join(cliDir, 'wecom-cli')
+  if (process.platform === 'win32') {
+    writeFileSync(command, `@echo off\r\n"${node}" "%~dp0fake-wecom.mjs" %*\r\n`)
+  } else {
+    writeFileSync(command, '#!/bin/sh\nexec "' + node + '" "$(dirname "$0")/fake-wecom.mjs" "$@"\n')
+    chmodSync(command, 0o755)
+  }
+  process.env.DSH_WECOM_CLI = command
+  process.env.PATH = ''
+  process.env.Path = ''
+}
 
 describe('WeCom CLI Host helpers', () => {
   it('resolves config dir from WECOM_CLI_CONFIG_DIR or platform defaults', () => {
@@ -227,6 +244,204 @@ describe('WeCom CLI Host helpers', () => {
     expect(second.authorizing).toBe(true)
     cancelWeComCliLoginFlight()
   })
+
+  it('starts auth init without auth show and leaves the waiting state when init exits', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wecom-init-'))
+    const cliDir = mkdtempSync(join(tmpdir(), 'wanwei-wecom-init-cli-'))
+    const showFile = join(cliDir, 'show')
+    const initFile = join(cliDir, 'init')
+    installFakeWeCom(cliDir, [
+      "import { writeFileSync } from 'node:fs'",
+      `const showFile = ${JSON.stringify(showFile)}`,
+      `const initFile = ${JSON.stringify(initFile)}`,
+      'const args = process.argv.slice(2)',
+      'const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))',
+      'if (args[0] === "auth" && args[1] === "show") {',
+      '  writeFileSync(showFile, "1")',
+      '  await delay(30000)',
+      '  process.exit(0)',
+      '}',
+      'if (args[0] === "auth" && args[1] === "init") {',
+      '  writeFileSync(initFile, "1")',
+      '  process.exit(0)',
+      '}',
+      'process.exit(0)',
+      '',
+    ].join('\n'))
+    process.env.DSH_HOME = home
+    process.env.WECOM_CLI_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'wanwei-wecom-init-cfg-'))
+    const dest = wecomSharedSkillDir(home)
+    mkdirSync(dest, { recursive: true })
+    writeFileSync(join(dest, 'SKILL.md'), '---\nname: wecomcli-shared\ndescription: x\n---\n')
+    const pending = await runWeComCliLogin(home)
+    expect(pending.authorizing).toBe(true)
+    await vi.waitFor(async () => {
+      const status = await buildWeComCliStatus(home)
+      expect(status.authorizing).toBe(false)
+      expect(status.authed).toBe(true)
+      expect(status.skillInstalled).toBe(true)
+    }, { timeout: 8_000 })
+    expect(existsSync(showFile)).toBe(false)
+    expect(existsSync(initFile)).toBe(true)
+  })
+
+  it('starts auth init while an auth show probe is still running', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wecom-show-block-'))
+    const cliDir = mkdtempSync(join(tmpdir(), 'wanwei-wecom-show-block-cli-'))
+    const showFile = join(cliDir, 'show')
+    const initFile = join(cliDir, 'init')
+    const stopFile = join(cliDir, 'stop')
+    installFakeWeCom(cliDir, [
+      "import { existsSync, writeFileSync } from 'node:fs'",
+      `const showFile = ${JSON.stringify(showFile)}`,
+      `const initFile = ${JSON.stringify(initFile)}`,
+      `const stopFile = ${JSON.stringify(stopFile)}`,
+      'const args = process.argv.slice(2)',
+      'const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))',
+      'if (args[0] === "auth" && args[1] === "show") {',
+      '  writeFileSync(showFile, "1")',
+      '  for (let i = 0; i < 300 && !existsSync(stopFile); i += 1) await delay(100)',
+      '  process.exit(0)',
+      '}',
+      'if (args[0] === "auth" && args[1] === "init") {',
+      '  writeFileSync(initFile, "1")',
+      '  process.exit(0)',
+      '}',
+      'process.exit(0)',
+      '',
+    ].join('\n'))
+    process.env.DSH_HOME = home
+    process.env.WECOM_CLI_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'wanwei-wecom-show-block-cfg-'))
+    const dest = wecomSharedSkillDir(home)
+    mkdirSync(dest, { recursive: true })
+    writeFileSync(join(dest, 'SKILL.md'), '---\nname: wecomcli-shared\ndescription: x\n---\n')
+    const statusPromise = buildWeComCliStatus(home)
+    await vi.waitFor(() => {
+      expect(existsSync(showFile)).toBe(true)
+    })
+    const pending = await runWeComCliLogin(home)
+    expect(pending.authorizing).toBe(true)
+    await vi.waitFor(() => {
+      expect(existsSync(initFile)).toBe(true)
+    }, { timeout: 8_000 })
+    writeFileSync(stopFile, '1')
+    await statusPromise
+    cancelWeComCliLoginFlight()
+  }, 15_000)
+
+  it('starts auth init even when the config directory already has files', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wecom-have-cred-'))
+    const cliDir = mkdtempSync(join(tmpdir(), 'wanwei-wecom-have-cred-cli-'))
+    const initFile = join(cliDir, 'init')
+    installFakeWeCom(cliDir, [
+      "import { writeFileSync } from 'node:fs'",
+      `const initFile = ${JSON.stringify(initFile)}`,
+      'const args = process.argv.slice(2)',
+      'if (args[0] === "auth" && args[1] === "init") {',
+      '  writeFileSync(initFile, "1")',
+      '  process.exit(0)',
+      '}',
+      'process.exit(0)',
+      '',
+    ].join('\n'))
+    process.env.DSH_HOME = home
+    const cfg = mkdtempSync(join(tmpdir(), 'wanwei-wecom-have-cred-cfg-'))
+    process.env.WECOM_CLI_CONFIG_DIR = cfg
+    writeFileSync(join(cfg, 'bot.json'), '{}')
+    const dest = wecomSharedSkillDir(home)
+    mkdirSync(dest, { recursive: true })
+    writeFileSync(join(dest, 'SKILL.md'), '---\nname: wecomcli-shared\ndescription: x\n---\n')
+    const pending = await runWeComCliLogin(home)
+    expect(pending.authorizing).toBe(true)
+    await vi.waitFor(async () => {
+      const status = await buildWeComCliStatus(home)
+      expect(status.authorizing).toBe(false)
+      expect(status.authed).toBe(true)
+    }, { timeout: 8_000 })
+    expect(existsSync(initFile)).toBe(true)
+  }, 15_000)
+
+  it('clears authorizing when the skill copy fails after credentials exist', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wecom-skill-fail-'))
+    const cliDir = mkdtempSync(join(tmpdir(), 'wanwei-wecom-skill-fail-cli-'))
+    const staged = join(home, 'staged-skills')
+    mkdirSync(join(staged, 'wecomcli-shared'), { recursive: true })
+    writeFileSync(join(staged, 'wecomcli-shared', 'SKILL.md'), '---\nname: wecomcli-shared\n---\n')
+    installFakeWeCom(cliDir, [
+      'const args = process.argv.slice(2)',
+      'if (args[0] === "auth" && args[1] === "init") process.exit(0)',
+      'process.exit(0)',
+      '',
+    ].join('\n'))
+    process.env.DSH_HOME = home
+    process.env.DSH_WECOM_SKILLS_DIR = staged
+    process.env.WECOM_CLI_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'wanwei-wecom-skill-fail-cfg-'))
+    writeFileSync(join(home, 'skills'), 'not-a-directory')
+    await runWeComCliLogin(home)
+    await vi.waitFor(async () => {
+      const status = await buildWeComCliStatus(home)
+      expect(status.authorizing).toBe(false)
+      expect(status.authorizeError && status.authorizeError.length > 0).toBe(true)
+    }, { timeout: 8_000 })
+  }, 15_000)
+
+  it('reports the CLI error when auth init exits non-zero', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wecom-init-fail-'))
+    const cliDir = mkdtempSync(join(tmpdir(), 'wanwei-wecom-init-fail-cli-'))
+    installFakeWeCom(cliDir, [
+      'const args = process.argv.slice(2)',
+      'if (args[0] === "auth" && args[1] === "init") {',
+      '  console.error("qr failed")',
+      '  process.exit(2)',
+      '}',
+      'process.exit(0)',
+      '',
+    ].join('\n'))
+    process.env.DSH_HOME = home
+    process.env.WECOM_CLI_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'wanwei-wecom-init-fail-cfg-'))
+    await runWeComCliLogin(home)
+    await vi.waitFor(async () => {
+      const status = await buildWeComCliStatus(home)
+      expect(status.authorizing).toBe(false)
+      expect(status.authorizeError).toMatch(/qr failed/)
+    }, { timeout: 8_000 })
+  }, 15_000)
+
+  it('reports a generic failure when auth init exits non-zero with no output', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wecom-init-empty-'))
+    const cliDir = mkdtempSync(join(tmpdir(), 'wanwei-wecom-init-empty-cli-'))
+    installFakeWeCom(cliDir, [
+      'const args = process.argv.slice(2)',
+      'if (args[0] === "auth" && args[1] === "init") process.exit(2)',
+      'process.exit(0)',
+      '',
+    ].join('\n'))
+    process.env.DSH_HOME = home
+    process.env.WECOM_CLI_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'wanwei-wecom-init-empty-cfg-'))
+    await runWeComCliLogin(home)
+    await vi.waitFor(async () => {
+      const status = await buildWeComCliStatus(home)
+      expect(status.authorizing).toBe(false)
+      expect(status.authorizeError).toMatch(/未成功完成/)
+    }, { timeout: 8_000 })
+  }, 15_000)
+
+  it('reports a start failure when wecom-cli cannot be spawned', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wecom-spawn-fail-'))
+    const cli = join(home, 'wecom-dir')
+    mkdirSync(cli)
+    process.env.DSH_HOME = home
+    process.env.DSH_WECOM_CLI = cli
+    process.env.PATH = ''
+    process.env.Path = ''
+    process.env.WECOM_CLI_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'wanwei-wecom-spawn-cfg-'))
+    await runWeComCliLogin(home)
+    await vi.waitFor(async () => {
+      const status = await buildWeComCliStatus(home)
+      expect(status.authorizing).toBe(false)
+      expect(status.authorizeError).toMatch(/未能启动/)
+    }, { timeout: 8_000 })
+  }, 15_000)
 
   it('status payloads include authorizing flags and cancel clears a flight', async () => {
     const home = mkdtempSync(join(tmpdir(), 'wanwei-wecom-auth-flags-'))

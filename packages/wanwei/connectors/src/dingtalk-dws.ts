@@ -25,7 +25,7 @@ export type DingTalkDwsStatus = {
   skillInstalled: boolean
   /** Short hint when something blocks desktop skill use. */
   hint: string | null
-  /** True while `dws auth login` is still running outside the WebView request. */
+  /** True until a lock-free status shows a saved login and the skill is installed, or the login fails. */
   authorizing: boolean
   /** Failure text from the latest background login, or null. */
   authorizeError: string | null
@@ -449,83 +449,124 @@ export function installDwsCliSkill(dshHome: string): string {
   return dest
 }
 
+/** `dws auth status --readonly` does not take the auth lock held by `dws auth login`. */
+const READONLY_STATUS_ARGS = ['auth', 'status', '--readonly', '--format', 'json'] as const
+const READONLY_STATUS_TIMEOUT_MS = 8_000
+const LOGIN_POLL_MS = 1_000
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, ms)
+  })
+}
+
 /**
- * Copy `dws-cli` after a background `dws auth login` exits.
- * The WebView request that started login has already returned; this still runs
- * if that request was aborted while the system browser was focused.
+ * Read the local DWS snapshot without taking the auth lock.
+ * @param dws - absolute `dws` binary.
+ * @returns true when the snapshot reports an active personal login.
+ */
+async function readDingTalkReadonlyAuthed(dws: string): Promise<boolean> {
+  const auth = await run(dws, READONLY_STATUS_ARGS, READONLY_STATUS_TIMEOUT_MS)
+  return parseDwsAuthenticated(auth.stdout)
+}
+
+/** End the waiting state for this login generation. A newer「解绑」is left alone. */
+function releaseDingTalkFlight(epoch: number): void {
+  if (epoch !== loginEpoch) return
+  loginFlight = null
+}
+
+/**
+ * Store a connected snapshot and end the waiting state.
+ * Status probes stay held until `dws auth login` exits, so a locking status is not started beside it.
+ * @param dshHome - product DSH home.
+ * @param epoch - login generation captured when the flight started.
+ * @returns false when a newer unbind wins or the skill copy fails.
+ */
+async function publishDingTalkAuthorized(dshHome: string, epoch: number): Promise<boolean> {
+  if (epoch !== loginEpoch) return false
+  loginError = null
+  if (!existsSync(join(dwsCliSkillInstallDir(dshHome), 'SKILL.md'))) {
+    try {
+      installDwsCliSkill(dshHome)
+    } catch (error) {
+      if (epoch !== loginEpoch) return false
+      loginError = errorText(error)
+      invalidateDingTalkDwsStatusCache()
+      releaseDingTalkFlight(epoch)
+      return false
+    }
+  }
+  if (epoch !== loginEpoch) return false
+  statusCache = {
+    at: Date.now(),
+    home: dshHome,
+    status: composeStatus(dshHome, true, null, true),
+  }
+  releaseDingTalkFlight(epoch)
+  return true
+}
+
+/**
+ * Copy `dws-cli` when a lock-free status shows the browser login has saved tokens.
+ * The WebView request that started login has already returned. `dws auth login` may
+ * still be running; that process holds the auth lock, so success is not its exit.
  * @param dshHome - product DSH home.
  * @param dws - absolute `dws` binary.
  * @param epoch - login generation; a newer「解绑」makes this a no-op.
  */
 async function finishDingTalkLogin(dshHome: string, dws: string, epoch: number): Promise<void> {
   if (epoch !== loginEpoch) return
-  const before = await buildDingTalkDwsStatus(dshHome, { fresh: true })
-  if (epoch !== loginEpoch) return
-  if (before.authed) {
-    loginError = null
-    if (!before.skillInstalled) {
-      try {
-        installDwsCliSkill(dshHome)
-      } catch (error) {
-        loginError = errorText(error)
-        invalidateDingTalkDwsStatusCache()
-        return
-      }
-      invalidateDingTalkDwsStatusCache()
-    }
-    await buildDingTalkDwsStatus(dshHome, { fresh: true })
-    return
-  }
-  let result: RunResult
-  try {
-    result = await run(dws, ['auth', 'login'], 10 * 60_000, child => {
-      loginChild = child
-      child.once('close', () => {
-        if (loginChild === child) loginChild = null
-      })
-    })
-  } catch (error) {
-    if (epoch !== loginEpoch) return
-    loginError = errorText(error)
-    invalidateDingTalkDwsStatusCache()
+  if (await readDingTalkReadonlyAuthed(dws)) {
+    await publishDingTalkAuthorized(dshHome, epoch)
     return
   }
   if (epoch !== loginEpoch) return
-  if (result.code === null) {
-    loginError = 'dws auth login 未能启动'
-    invalidateDingTalkDwsStatusCache()
-    return
-  }
-  if (result.code !== 0) {
-    const detail = (result.stderr || result.stdout).trim().slice(0, 400)
-    loginError = detail === '' ? 'dws auth login 未成功完成' : detail
-    invalidateDingTalkDwsStatusCache()
-    return
-  }
-  loginError = null
-  invalidateDingTalkDwsStatusCache()
-  const after = await buildDingTalkDwsStatus(dshHome, { fresh: true })
-  if (epoch !== loginEpoch) return
-  if (after.authed && !after.skillInstalled) {
-    try {
-      installDwsCliSkill(dshHome)
-    } catch (error) {
-      loginError = errorText(error)
-      invalidateDingTalkDwsStatusCache()
+  let published = false
+  let stopWatch = false
+  const watch = (async () => {
+    while (!stopWatch && epoch === loginEpoch) {
+      await delay(LOGIN_POLL_MS)
+      if (stopWatch || epoch !== loginEpoch) return
+      if (!(await readDingTalkReadonlyAuthed(dws))) continue
+      if (stopWatch || epoch !== loginEpoch) return
+      published = await publishDingTalkAuthorized(dshHome, epoch)
       return
     }
-    invalidateDingTalkDwsStatusCache()
+  })()
+  const result = await run(dws, ['auth', 'login'], 10 * 60_000, child => {
+    loginChild = child
+    child.once('close', () => {
+      if (loginChild === child) loginChild = null
+    })
+  })
+  stopWatch = true
+  await watch
+  if (epoch !== loginEpoch || published || loginFlight === null) return
+  if (result.code === 0 && await readDingTalkReadonlyAuthed(dws)) {
+    await publishDingTalkAuthorized(dshHome, epoch)
+    return
   }
-  await buildDingTalkDwsStatus(dshHome, { fresh: true })
+  if (epoch !== loginEpoch || loginFlight === null) return
+  if (result.code === null) {
+    loginError = 'dws auth login 未能启动'
+  } else if (result.code !== 0) {
+    const detail = (result.stderr || result.stdout).trim().slice(0, 400)
+    loginError = detail === '' ? 'dws auth login 未成功完成' : detail
+  } else {
+    loginError = 'dws auth login 已退出，但本地登录状态尚未生效'
+  }
+  invalidateDingTalkDwsStatusCache()
+  releaseDingTalkFlight(epoch)
 }
 
 /**
  * Start interactive personal login. The CLI owns QR / device / PC-session reuse.
  * The call queues `dws auth login` and returns before that process starts, so a
- * later「连接」does not wait on a background `dws auth logout`. Skill install
- * continues after the login process exits.
+ * later「连接」does not wait on a background `dws auth logout`. `authorizing`
+ * clears when `dws auth status --readonly` reports a saved login and the skill is installed.
  * @param dshHome - product DSH home.
- * @returns current status. `authorizing` stays true until the background login exits.
+ * @returns current status. `authorizing` stays true until that readonly snapshot succeeds or the login fails.
  */
 export async function runDingTalkDwsLogin(dshHome: string): Promise<DingTalkDwsStatus> {
   if (loginFlight !== null) return buildDingTalkDwsStatus(dshHome)

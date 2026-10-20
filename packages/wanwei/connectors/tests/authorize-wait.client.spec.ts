@@ -15,6 +15,20 @@ describe('waitForConnectorAuthorization', () => {
     expect(read).toHaveBeenCalledTimes(2)
   })
 
+  it('returns when auth and the skill are already present during the flight', async () => {
+    const read = vi.fn().mockResolvedValue({
+      authorizing: true,
+      authorizeError: null,
+      authed: true,
+      skillInstalled: true,
+    })
+    await expect(waitForConnectorAuthorization(read, {
+      wait: async () => {},
+      now: () => 0,
+      timeoutMs: 5_000,
+    })).resolves.toMatchObject({ authed: true, skillInstalled: true })
+  })
+
   it('surfaces authorizeError after the flight ends', async () => {
     const read = vi.fn().mockResolvedValue({
       authorizing: false,

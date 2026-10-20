@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-16-wanwei-dingtalk-desktop-dws-skills.md
-2026-10-16-wanwei-dingtalk-desktop-dws-skills.md: 6420e06248fe40a7960c624c8dae21d3049a1af8
-2026-10-16-wanwei-dingtalk-desktop-dws-skills.zh.md: c999ba84c5cdd54bebbc094b10874595773bdd72
+2026-10-16-wanwei-dingtalk-desktop-dws-skills.md: f5ab1c57c98696a2e76e9d6eaaea186f3c99a685
+2026-10-16-wanwei-dingtalk-desktop-dws-skills.zh.md: 70dab711bf8c1381e66de6e5f3100ec7a2f62fba
