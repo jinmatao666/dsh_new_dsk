@@ -59,9 +59,23 @@ function parseLoginPoll(value: unknown): WeChatLoginPoll {
 }
 
 /**
+ * Parse Host ensureSession payload.
+ * @param value - raw RPC success value.
+ * @returns Session identity for Client navigation.
+ */
+function parseEnsureSession(value: unknown): { sessionId: string } {
+  if (typeof value !== 'object' || value === null) throw new Error(productText('状态加载失败'))
+  const record = value as Record<string, unknown>
+  if (typeof record.sessionId !== 'string' || record.sessionId.trim() === '') {
+    throw new Error(productText('状态加载失败'))
+  }
+  return { sessionId: record.sessionId }
+}
+
+/**
  * Bind Connection RPC to the WeChat Assistant panel API.
  * @param connection - authenticated Client connection.
- * @returns status / loginStart / loginPoll / disconnect face.
+ * @returns status / loginStart / loginPoll / disconnect / ensureSession face.
  */
 export function createWeChatApi(connection: ConnectionHandle): WeChatApi {
   return {
@@ -73,5 +87,8 @@ export function createWeChatApi(connection: ConnectionHandle): WeChatApi {
       { sessionKey, ...(verifyCode === undefined ? {} : { verifyCode }) },
     ))),
     disconnect: async () => parseWeChatStatus(rpcValue(await connection.rpc.call('/wanwei-wechat', 'disconnect', {}))),
+    ensureSession: async () => parseEnsureSession(
+      rpcValue(await connection.rpc.call('/wanwei-wechat', 'ensureSession', {})),
+    ),
   }
 }

@@ -16,8 +16,12 @@ import type {} from '@deepseek-ai/dsh-agent'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-permission-presets'
+import { SessionId, type SessionId as WeChatSessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { resolveProductDshHome } from './dingtalk-dws.ts'
+
+/** Stable sidebar title for the single WeChat Assistant desktop Session. */
+const WECHAT_DESKTOP_SESSION_TITLE = '微信助理'
 
 /** Fixed iLink host for QR create / poll (OpenClaw Weixin protocol). */
 export const WECHAT_ILINK_QR_BASE = 'https://ilinkai.weixin.qq.com'
@@ -135,6 +139,73 @@ export function wechatWorkspaceDir(dshHome: string): string {
   const dir = join(dshHome, 'wechat-workspace')
   mkdirSync(dir, { recursive: true })
   return dir
+}
+
+/**
+ * Persisted pointer to the single WeChat Assistant desktop Session.
+ * @param dshHome - product DSH home.
+ * @returns absolute JSON path.
+ */
+export function wechatDesktopSessionPath(dshHome: string): string {
+  return join(wechatCredentialDir(dshHome), 'desktop-session.json')
+}
+
+function loadDesktopSessionId(dshHome: string): WeChatSessionId | undefined {
+  const path = wechatDesktopSessionPath(dshHome)
+  if (!existsSync(path)) return undefined
+  try {
+    const raw = JSON.parse(readFileSync(path, 'utf8')) as { sessionId?: unknown }
+    if (typeof raw.sessionId !== 'string' || raw.sessionId.trim() === '') return undefined
+    return SessionId(raw.sessionId)
+  } catch {
+    // Corrupt pointer: create a fresh Session on the next ensure.
+    return undefined
+  }
+}
+
+function saveDesktopSessionId(dshHome: string, sessionId: WeChatSessionId): void {
+  mkdirSync(wechatCredentialDir(dshHome), { recursive: true })
+  writeFileSync(
+    wechatDesktopSessionPath(dshHome),
+    `${JSON.stringify({ sessionId }, null, 2)}\n`,
+    { encoding: 'utf8', mode: 0o600 },
+  )
+}
+
+/**
+ * Create or resume the single WeChat Assistant Session under `wechat-workspace`.
+ * @param ctx - Host context with workspace + sessionController + agents.
+ * @param dshHome - product DSH home.
+ * @returns live Session id.
+ */
+export async function ensureWeChatDesktopSession(
+  ctx: Context,
+  dshHome: string,
+): Promise<WeChatSessionId> {
+  const cwd = wechatWorkspaceDir(dshHome)
+  const workspace = await ctx.workspaceRegistry.create(cwd)
+  const candidates: WeChatSessionId[] = []
+  const saved = loadDesktopSessionId(dshHome)
+  if (saved !== undefined) candidates.push(saved)
+  for (const id of workspace.sessionIds) {
+    if (!candidates.includes(id)) candidates.push(id)
+  }
+  for (const sessionId of candidates) {
+    const resolved = await ctx.sessionController.resolveAgent(sessionId)
+    if ('agent' in resolved) {
+      saveDesktopSessionId(dshHome, sessionId)
+      return sessionId
+    }
+  }
+  const created = await ctx.sessionController.create({ workspaceId: workspace.id })
+  saveDesktopSessionId(dshHome, created.sessionId)
+  await ctx.sessionController.rename({
+    sessionId: created.sessionId,
+    title: WECHAT_DESKTOP_SESSION_TITLE,
+  }).catch(() => {
+    // Title is UX-only; the Session remains usable without it.
+  })
+  return created.sessionId
 }
 
 function clientVersionUint(): number {
@@ -773,21 +844,17 @@ async function runDesktopTask(
   prompt: string,
   signal: AbortSignal,
 ): Promise<string> {
-  const cwd = wechatWorkspaceDir(dshHome)
-  const workspace = await ctx.workspaceRegistry.create(cwd)
   signal.throwIfAborted()
-  const created = await ctx.sessionController.create({ workspaceId: workspace.id })
-  const agent = ctx.agents.get(created.sessionId)
-  if (agent === undefined) throw new Error('无法创建桌面任务会话')
+  const sessionId = await ensureWeChatDesktopSession(ctx, dshHome)
+  signal.throwIfAborted()
+  const resolved = await ctx.sessionController.resolveAgent(sessionId)
+  if ('error' in resolved) throw new Error(resolved.error.message || '无法打开微信助理会话')
+  const agent = resolved.agent
   try {
     ctx.permissionPresets.set(agent.session, 'workspace-write')
-    await ctx.sessionController.rename({
-      sessionId: created.sessionId,
-      title: `微信助理：${prompt.slice(0, 32)}`,
-    })
     signal.throwIfAborted()
     await ctx.sessionController.prompt({
-      sessionId: created.sessionId,
+      sessionId,
       requestId: randomUUID() as SessionRequestId,
       mode: 'queue',
       content: [{ type: 'text', text: prompt }],
@@ -854,6 +921,10 @@ export function registerWeChatIlinkRpc(ctx: Context): () => void {
         }
         if (endpoint === 'disconnect') {
           return { ok: true as const, value: disconnectWeChat(home) }
+        }
+        if (endpoint === 'ensureSession') {
+          const sessionId = await ensureWeChatDesktopSession(ctx, home)
+          return { ok: true as const, value: { sessionId } }
         }
         throw new Error('未知微信助理操作')
       } catch (error) {

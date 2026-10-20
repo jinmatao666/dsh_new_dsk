@@ -46,6 +46,7 @@ function api(overrides: Partial<WeChatApi> = {}): WeChatApi {
       return polls === 1 ? waiting : confirmed
     }),
     disconnect: vi.fn(async () => status),
+    ensureSession: vi.fn(async () => ({ sessionId: 'wechat-session-1' })),
     ...overrides,
   }
 }

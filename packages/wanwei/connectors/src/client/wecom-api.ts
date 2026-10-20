@@ -2,7 +2,7 @@
  * Client adapter over `/wanwei-wecom` for wecom-cli auth + skill enablement.
  */
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-import { rpcValue } from './dingtalk-api.ts'
+import { connectorRpcError, rpcValue } from './dingtalk-api.ts'
 import type { WeComApi, WeComStatus } from './WeComPanel.tsx'
 import { productText } from './locales/product.ts'
 
@@ -33,8 +33,13 @@ export function parseWeComStatus(value: unknown): WeComStatus {
  * @returns status / login / installSkill / disconnect face.
  */
 export function createWeComApi(connection: ConnectionHandle): WeComApi {
-  const call = async (endpoint: string): Promise<WeComStatus> =>
-    parseWeComStatus(rpcValue(await connection.rpc.call('/wanwei-wecom', endpoint, {})))
+  const call = async (endpoint: string): Promise<WeComStatus> => {
+    try {
+      return parseWeComStatus(rpcValue(await connection.rpc.call('/wanwei-wecom', endpoint, {})))
+    } catch (error) {
+      throw connectorRpcError(error)
+    }
+  }
   return {
     status: () => call('status'),
     login: () => call('login'),

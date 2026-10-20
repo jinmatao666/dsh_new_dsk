@@ -39,6 +39,9 @@ describe('wechat-api', () => {
           },
         }
       }
+      if (endpoint === 'ensureSession') {
+        return { ok: true, value: { sessionId: 'wechat-session-1' } }
+      }
       return { ok: true, value: { authed: false, bridgeRunning: false, hint: null } }
     })
     const api = createWeChatApi({ rpc: { call } } as never)
@@ -46,6 +49,8 @@ describe('wechat-api', () => {
     await expect(api.loginStart()).resolves.toMatchObject({ sessionKey: 's' })
     await expect(api.loginPoll('s')).resolves.toMatchObject({ phase: 'wait' })
     await expect(api.disconnect()).resolves.toMatchObject({ authed: false })
+    await expect(api.ensureSession()).resolves.toEqual({ sessionId: 'wechat-session-1' })
     expect(call).toHaveBeenCalledWith('/wanwei-wechat', 'loginPoll', { sessionKey: 's' })
+    expect(call).toHaveBeenCalledWith('/wanwei-wechat', 'ensureSession', {})
   })
 })

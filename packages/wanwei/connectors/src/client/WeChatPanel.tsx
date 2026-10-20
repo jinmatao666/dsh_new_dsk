@@ -32,6 +32,8 @@ export type WeChatApi = {
   loginStart: () => Promise<WeChatLoginStart>
   loginPoll: (sessionKey: string, verifyCode?: string) => Promise<WeChatLoginPoll>
   disconnect: () => Promise<WeChatStatus>
+  /** Create or resume the single desktop Session used by inbound WeChat tasks. */
+  ensureSession: () => Promise<{ sessionId: string }>
 }
 
 /** Example prompts shown under 试试这样用 (phone-side interaction). */

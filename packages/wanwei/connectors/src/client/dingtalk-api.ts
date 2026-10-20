@@ -16,6 +16,20 @@ export function rpcValue(result: RpcResult<unknown>): unknown {
 }
 
 /**
+ * Map browser transport failures (literal `Failed to fetch`) to product copy.
+ * Host skill-install errors keep their original Chinese message.
+ * @param error - thrown value from `connection.rpc.call` or Host unwrap.
+ * @returns Error with a user-facing message.
+ */
+export function connectorRpcError(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/failed to fetch/i.test(message) || message === 'NetworkError when attempting to fetch resource.') {
+    return new Error(productText('无法连接本机服务以写入技能。请确认桌面端仍在运行后重试；若反复失败请使用完整安装包。'))
+  }
+  return error instanceof Error ? error : new Error(message)
+}
+
+/**
  * Parse Host DWS status payload.
  * @param value - raw RPC success value.
  * @returns typed status.
@@ -42,8 +56,13 @@ export function parseDingTalkStatus(value: unknown): DingTalkStatus {
  * @returns status / login / installSkill / disconnect face.
  */
 export function createDingTalkApi(connection: ConnectionHandle): DingTalkApi {
-  const call = async (endpoint: string): Promise<DingTalkStatus> =>
-    parseDingTalkStatus(rpcValue(await connection.rpc.call('/wanwei-dingtalk', endpoint, {})))
+  const call = async (endpoint: string): Promise<DingTalkStatus> => {
+    try {
+      return parseDingTalkStatus(rpcValue(await connection.rpc.call('/wanwei-dingtalk', endpoint, {})))
+    } catch (error) {
+      throw connectorRpcError(error)
+    }
+  }
   return {
     status: () => call('status'),
     login: () => call('login'),

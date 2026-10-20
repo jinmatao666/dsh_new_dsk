@@ -26,7 +26,7 @@ This mirrors WorkBuddy’s “open the app and connect” UX while reusing the o
 
 ## Consequences
 
-Installer / `prepare:runtime` builds must include the current-platform `@wecom/cli-*` optional package and staged skills under `app/assets/wecom-skills` (network required at build time for the skills tarball). Packaged Hosts refuse a connect-time GitHub download when `DSH_NODE_BINARY` is set, so intranet installs do not surface raw `Failed to fetch`. When auth already succeeded but skills are missing, **连接** installs skills without reopening QR. Until QR auth succeeds and skills are copied under `$DSH_HOME/skills`, desktop prompts that need WeCom APIs cannot run through those skills.
+Installer / `prepare:runtime` builds must include the current-platform `@wecom/cli-*` optional package and staged skills under `app/assets/wecom-skills` (network required at build time for the skills tarball). Packaged Hosts resolve skills via `DSH_WECOM_SKILLS_DIR` / `DSH_APP_ROOT` / `DSH_NODE_BINARY` → `app/assets/wecom-skills` and refuse a connect-time GitHub download in that packaged context, so intranet installs do not surface raw `Failed to fetch`. When auth already succeeded but skills are missing, **连接** installs skills without reopening QR. Until QR auth succeeds and skills are copied under `$DSH_HOME/skills`, desktop prompts that need WeCom APIs cannot run through those skills.
 
 「去试试」stages the example prompt and selects WeCom on the resident `conversation.composer.tools` chip next to `+`, matching the DingTalk chip behavior.
 

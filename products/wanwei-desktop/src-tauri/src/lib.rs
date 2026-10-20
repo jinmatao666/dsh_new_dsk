@@ -2237,6 +2237,14 @@ fn spawn_sidecar(
         "--no-open".into(),
     ]);
     let rendered_args = args.join(" ");
+    // Packaged Host resolves connector skills from `app/assets/*` via these paths
+    // (not only `DSH_NODE_BINARY` → sibling `app/`), so intranet installs never
+    // fall through to a connect-time GitHub `fetch`.
+    let app_root = if cfg!(debug_assertions) {
+        cwd.join("products").join("wanwei-desktop")
+    } else {
+        cwd.clone()
+    };
     let mut command = Command::new(&program);
     command
         .args(args)
@@ -2244,6 +2252,7 @@ fn spawn_sidecar(
         .env("DSH_ONEAPI_URL", &config.one_api_url)
         .env("DSH_DESKTOP_PARENT_CONTROL", "1")
         .env("DSH_NODE_BINARY", &program)
+        .env("DSH_APP_ROOT", &app_root)
         .env("DSH_DOCUMENT_TOOL", &document_tool)
         .env("DSH_HOME", &dsh_home)
         .env("PYTHONUSERBASE", &python_userbase)
@@ -2254,6 +2263,16 @@ fn spawn_sidecar(
         .stdout(Stdio::piped())
         .stdin(Stdio::piped())
         .stderr(Stdio::piped());
+    if !cfg!(debug_assertions) {
+        let dws_skill = app_root.join("assets").join("dws-cli");
+        let wecom_skills = app_root.join("assets").join("wecom-skills");
+        if dws_skill.join("SKILL.md").exists() {
+            command.env("DSH_DWS_SKILL_DIR", &dws_skill);
+        }
+        if wecom_skills.join("wecomcli-shared").join("SKILL.md").exists() {
+            command.env("DSH_WECOM_SKILLS_DIR", &wecom_skills);
+        }
+    }
     if !cfg!(target_os = "macos") {
         command
             .env("TEMP", &python_temp)

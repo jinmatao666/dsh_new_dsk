@@ -5,7 +5,7 @@
  * desktop runtime (WorkBuddy-style); PATH / npm -g is only a fallback.
  */
 import { spawn } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { delimiter, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -110,10 +110,23 @@ export function resolveBundledDwsCliSkillDir(env: NodeJS.ProcessEnv = process.en
     const staged = join(dirname(nodeBin), 'app', DWS_BUNDLED_SKILL_REL)
     if (existsSync(join(staged, 'SKILL.md'))) return staged
   }
+  // Production sidecar `cwd` is `runtime-<ver>/app` (document-tool.mjs sibling).
+  const appRoot = env.DSH_APP_ROOT?.trim() || process.cwd()
+  const cwdStaged = join(appRoot, DWS_BUNDLED_SKILL_REL)
+  if (existsSync(join(cwdStaged, 'SKILL.md'))) return cwdStaged
   const anchor = env.DSH_BUNDLE_ANCHORS?.trim()
   if (anchor) {
     const staged = join(dirname(anchor), 'resources', 'dws-cli')
     if (existsSync(join(staged, 'SKILL.md'))) return staged
+    // After `prepare:runtime`, skills live under src-tauri/resources/runtime-*/app/assets.
+    const resourcesRoot = join(dirname(anchor), 'src-tauri', 'resources')
+    if (existsSync(resourcesRoot)) {
+      for (const name of readdirSync(resourcesRoot)) {
+        if (!name.startsWith('runtime-')) continue
+        const nested = join(resourcesRoot, name, 'app', DWS_BUNDLED_SKILL_REL)
+        if (existsSync(join(nested, 'SKILL.md'))) return nested
+      }
+    }
   }
   for (const root of dingtalkPackageRoots(env)) {
     const skill = join(root, 'assets', 'skills', 'dws-cli')
