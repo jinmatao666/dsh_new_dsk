@@ -7,8 +7,10 @@ import {
   buildWeComCliStatus,
   disconnectWeComCli,
   invalidateWeComCliStatusCache,
+  installWeComCliSkills,
   registerWeComCliRpc,
   resolveBundledWeComCli,
+  resolveBundledWeComSkillsDir,
   resolveWeComCliCommand,
   resolveWeComConfigDir,
   wecomPlatformPackageName,
@@ -24,6 +26,10 @@ afterEach(() => {
   invalidateWeComCliStatusCache()
   delete process.env.DSH_HOME
   delete process.env.WECOM_CLI_CONFIG_DIR
+  delete process.env.DSH_WECOM_CLI
+  delete process.env.DSH_NODE_BINARY
+  delete process.env.DSH_BUNDLE_ANCHORS
+  delete process.env.DSH_WECOM_SKILLS_DIR
   if (originalPath === undefined) delete process.env.PATH
   else process.env.PATH = originalPath
   if (originalPathWin === undefined) delete process.env.Path
@@ -54,6 +60,31 @@ describe('WeCom CLI Host helpers', () => {
     const override = join(root, 'custom-wecom')
     writeFileSync(override, '')
     expect(resolveBundledWeComCli({ DSH_WECOM_CLI: override })).toBe(override)
+  })
+
+  it('resolves staged WeCom skills beside DSH_NODE_BINARY and refuses GitHub fetch in production', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'wanwei-wecom-skills-'))
+    const skills = join(root, 'app', 'assets', 'wecom-skills', 'wecomcli-shared')
+    mkdirSync(skills, { recursive: true })
+    writeFileSync(join(skills, 'SKILL.md'), '---\nname: wecomcli-shared\ndescription: x\n---\n')
+    const nodeBin = join(root, process.platform === 'win32' ? 'node.exe' : 'node')
+    writeFileSync(nodeBin, '')
+    expect(resolveBundledWeComSkillsDir({ DSH_NODE_BINARY: nodeBin })).toBe(dirname(skills))
+    const previous = process.env.DSH_NODE_BINARY
+    process.env.DSH_NODE_BINARY = nodeBin
+    delete process.env.DSH_WECOM_SKILLS_DIR
+    try {
+      const home = mkdtempSync(join(tmpdir(), 'wanwei-wecom-home-skills-'))
+      // Point resolution away from the staged skills by using a node binary without assets.
+      const bareRoot = mkdtempSync(join(tmpdir(), 'wanwei-wecom-bare-'))
+      const bareNode = join(bareRoot, process.platform === 'win32' ? 'node.exe' : 'node')
+      writeFileSync(bareNode, '')
+      process.env.DSH_NODE_BINARY = bareNode
+      await expect(installWeComCliSkills(home)).rejects.toThrow(/安装包缺少企业微信技能资源/)
+    } finally {
+      if (previous === undefined) delete process.env.DSH_NODE_BINARY
+      else process.env.DSH_NODE_BINARY = previous
+    }
   })
 
   it('reports missing wecom-cli when the CLI is absent from the bundle and PATH', async () => {

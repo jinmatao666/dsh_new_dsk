@@ -60,6 +60,16 @@ describe('DingTalk DWS Host helpers', () => {
     expect(resolveBundledDwsCommand({ DSH_DWS_CLI: override })).toBe(override)
   })
 
+  it('resolves staged dws-cli skill assets beside DSH_NODE_BINARY', () => {
+    const root = mkdtempSync(join(tmpdir(), 'wanwei-dws-skill-'))
+    const skill = join(root, 'app', 'assets', 'dws-cli')
+    mkdirSync(skill, { recursive: true })
+    writeFileSync(join(skill, 'SKILL.md'), '---\nname: dws-cli\ndescription: x\n---\n')
+    const nodeBin = join(root, process.platform === 'win32' ? 'node.exe' : 'node')
+    writeFileSync(nodeBin, '')
+    expect(resolveBundledDwsCliSkillDir({ DSH_NODE_BINARY: nodeBin })).toBe(skill)
+  })
+
   it('reports missing dws when the CLI is absent from the bundle and PATH', async () => {
     const home = mkdtempSync(join(tmpdir(), 'wanwei-dws-'))
     process.env.DSH_HOME = home

@@ -82,6 +82,77 @@ describe('WeChat Assistant Host helpers', () => {
     expect(after.authed).toBe(false)
     expect(existsSync(wechatCredentialPath(home))).toBe(false)
   })
+
+  it('recovers confirmed when the login session is gone but credentials already landed', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wechat-recover-'))
+    process.env.DSH_HOME = home
+    setWeChatQrFactoryForTests(async () => 'data:image/png;base64,qq')
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('get_bot_qrcode')) {
+        return new Response(JSON.stringify({
+          qrcode: 'qr-token',
+          qrcode_img_content: 'https://ilinkai.weixin.qq.com/ilink/bot/demo',
+        }), { status: 200 })
+      }
+      if (url.includes('get_qrcode_status')) {
+        return new Response(JSON.stringify({
+          status: 'confirmed',
+          bot_token: 'bot-token-secret',
+          ilink_bot_id: 'bot-id-1',
+          baseurl: 'https://ilinkai.weixin.qq.com',
+        }), { status: 200 })
+      }
+      if (url.includes('notifystart') || url.includes('notifystop') || url.includes('getupdates')) {
+        return new Response(JSON.stringify({ ret: 0, msgs: [], get_updates_buf: 'buf' }), { status: 200 })
+      }
+      return new Response(`unexpected ${url}`, { status: 500 })
+    })
+    setWeChatFetchForTests(fetchMock as unknown as typeof fetch)
+    const started = await startWeChatLogin(home)
+    await pollWeChatLogin(home, started.sessionKey, undefined, () => {})
+    const recovered = await pollWeChatLogin(home, started.sessionKey, undefined, () => {})
+    expect(recovered.phase).toBe('confirmed')
+    expect(recovered.status.authed).toBe(true)
+  })
+
+  it('re-polls when confirmed arrives before bot credentials', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wechat-cred-race-'))
+    process.env.DSH_HOME = home
+    setWeChatQrFactoryForTests(async () => 'data:image/png;base64,qq')
+    let statusCalls = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('get_bot_qrcode')) {
+        return new Response(JSON.stringify({
+          qrcode: 'qr-token',
+          qrcode_img_content: 'https://ilinkai.weixin.qq.com/ilink/bot/demo',
+        }), { status: 200 })
+      }
+      if (url.includes('get_qrcode_status')) {
+        statusCalls += 1
+        if (statusCalls === 1) {
+          return new Response(JSON.stringify({ status: 'confirmed' }), { status: 200 })
+        }
+        return new Response(JSON.stringify({
+          status: 'confirmed',
+          bot_token: 'bot-token-late',
+          ilink_bot_id: 'bot-id-late',
+          baseurl: 'https://ilinkai.weixin.qq.com',
+        }), { status: 200 })
+      }
+      if (url.includes('notifystart') || url.includes('notifystop') || url.includes('getupdates')) {
+        return new Response(JSON.stringify({ ret: 0, msgs: [], get_updates_buf: 'buf' }), { status: 200 })
+      }
+      return new Response(`unexpected ${url}`, { status: 500 })
+    })
+    setWeChatFetchForTests(fetchMock as unknown as typeof fetch)
+    const started = await startWeChatLogin(home)
+    const polled = await pollWeChatLogin(home, started.sessionKey, undefined, () => {})
+    expect(polled.phase).toBe('confirmed')
+    expect(loadWeChatCredentials(home)?.botToken).toBe('bot-token-late')
+    expect(statusCalls).toBeGreaterThan(1)
+  })
 })
 
 describe('WeChat Assistant RPC', () => {

@@ -336,12 +336,25 @@ export async function installWeComCliSkills(dshHome: string): Promise<string> {
   if (bundled !== undefined) {
     return copyWeComSkillsFrom(dshHome, bundled)
   }
+  // Packaged desktop must ship skills under `app/assets/wecom-skills`; do not fetch GitHub
+  // at connect time (intranet / Failed to fetch). Development may still download once.
+  if (process.env.DSH_NODE_BINARY?.trim()) {
+    throw new Error('安装包缺少企业微信技能资源（app/assets/wecom-skills）。请使用完整桌面安装包。')
+  }
   const skillsRoot = wecomSkillsInstallRoot(dshHome)
   mkdirSync(skillsRoot, { recursive: true })
   const tmp = mkdtempSync(join(tmpdir(), 'wanwei-wecom-skills-'))
   try {
     const archive = join(tmp, 'wecom-cli.tar.gz')
-    const response = await fetch(WECOM_CLI_SKILLS_TARBALL)
+    let response: Response
+    try {
+      response = await fetch(WECOM_CLI_SKILLS_TARBALL)
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(
+        `无法从 GitHub 下载企业微信技能（${detail}）。请检查网络，或使用已随包技能资源的桌面安装包。`,
+      )
+    }
     if (!response.ok) {
       throw new Error(`下载企业微信技能失败（HTTP ${String(response.status)}）`)
     }
@@ -396,12 +409,20 @@ export function clearWeComCliCredentials(env: NodeJS.ProcessEnv = process.env): 
  * @returns status after the login process ends (success or cancel).
  */
 export async function runWeComCliLogin(dshHome: string): Promise<WeComCliStatus> {
-  const before = await buildWeComCliStatus(dshHome)
+  const before = await buildWeComCliStatus(dshHome, { fresh: true })
   if (!before.cliInstalled) {
     throw new Error(before.hint ?? 'wecom-cli 未安装')
   }
   const cli = resolveWeComCliCommand()
   if (cli === undefined) throw new Error(before.hint ?? 'wecom-cli 未安装')
+  // Already authorized: only write skills (avoids reopening the QR browser).
+  if (before.authed) {
+    if (!before.skillInstalled) {
+      await installWeComCliSkills(dshHome)
+      invalidateWeComCliStatusCache()
+    }
+    return buildWeComCliStatus(dshHome, { fresh: true })
+  }
   // Long timeout: user may scan QR in the WeCom mobile app.
   const result = await run(cli, ['auth', 'init', '--noninteractive'], 10 * 60_000)
   if (result.code !== 0 && result.code !== null) {

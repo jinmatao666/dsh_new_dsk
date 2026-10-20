@@ -70,6 +70,7 @@ export function WeChatPanel({
   const [needVerify, setNeedVerify] = useState(false)
   const sessionKeyRef = useRef<string | null>(null)
   const pollCancelledRef = useRef(false)
+  const settledRef = useRef(false)
 
   const applyStatus = (next: WeChatStatus) => {
     setCachedWeChatStatus(next)
@@ -106,9 +107,49 @@ export function WeChatPanel({
     setVerifyCode('')
   }
 
+  const completeConnected = (next: WeChatStatus) => {
+    if (settledRef.current) return
+    settledRef.current = true
+    applyStatus(next)
+    closeQr()
+    setBusy('idle')
+    onNotice?.({ kind: 'success', text: productText('微信助理已连接') })
+  }
+
+  /** Host may have persisted credentials while a hung loginPoll never returned `confirmed`. */
+  const adoptHostAuthIfReady = async (): Promise<boolean> => {
+    try {
+      const snap = await api.status()
+      if (snap.authed) {
+        completeConnected(snap)
+        return true
+      }
+    } catch {
+      // Best-effort beside the loginPoll loop.
+    }
+    return false
+  }
+
   const pollUntilDone = async (sessionKey: string) => {
+    // Parallel status probe: closes the QR sheet when credentials land even if loginPoll stalls.
+    void (async () => {
+      while (!pollCancelledRef.current && sessionKeyRef.current === sessionKey) {
+        await new Promise(resolve => setTimeout(resolve, 1_500))
+        if (pollCancelledRef.current || sessionKeyRef.current !== sessionKey) return
+        if (await adoptHostAuthIfReady()) return
+      }
+    })()
+
     while (!pollCancelledRef.current && sessionKeyRef.current === sessionKey) {
-      const tick = await api.loginPoll(sessionKey)
+      let tick: WeChatLoginPoll
+      try {
+        tick = await api.loginPoll(sessionKey)
+      } catch {
+        if (pollCancelledRef.current || sessionKeyRef.current !== sessionKey) return
+        if (await adoptHostAuthIfReady()) return
+        await new Promise(resolve => setTimeout(resolve, 1_200))
+        continue
+      }
       if (pollCancelledRef.current || sessionKeyRef.current !== sessionKey) return
       applyStatus(tick.status)
       if (tick.qrDataUrl) setQrDataUrl(tick.qrDataUrl)
@@ -119,13 +160,12 @@ export function WeChatPanel({
         await new Promise(resolve => setTimeout(resolve, 1_200))
         continue
       }
-      if (tick.phase === 'confirmed') {
-        closeQr()
-        setBusy('idle')
-        onNotice?.({ kind: 'success', text: productText('微信助理已连接') })
+      if (tick.phase === 'confirmed' || tick.status.authed) {
+        completeConnected(tick.status)
         return
       }
       if (tick.phase === 'expired' || tick.phase === 'error') {
+        if (await adoptHostAuthIfReady()) return
         setError(tick.message ?? productText('连接失败，请重试'))
         onNotice?.({ kind: 'error', text: tick.message ?? productText('连接失败，请重试') })
         closeQr()
@@ -139,6 +179,7 @@ export function WeChatPanel({
     setBusy('login')
     setError(null)
     pollCancelledRef.current = false
+    settledRef.current = false
     try {
       const started = await api.loginStart()
       applyStatus(started.status)
@@ -148,6 +189,7 @@ export function WeChatPanel({
       setQrOpen(true)
       await pollUntilDone(started.sessionKey)
     } catch (err) {
+      if (await adoptHostAuthIfReady()) return
       const message = err instanceof Error ? err.message : String(err)
       setError(message)
       onNotice?.({ kind: 'error', text: message })
@@ -166,15 +208,14 @@ export function WeChatPanel({
       applyStatus(tick.status)
       if (tick.qrDataUrl) setQrDataUrl(tick.qrDataUrl)
       if (tick.message) setQrHint(tick.message)
-      if (tick.phase === 'confirmed') {
-        closeQr()
-        setBusy('idle')
-        onNotice?.({ kind: 'success', text: productText('微信助理已连接') })
+      if (tick.phase === 'confirmed' || tick.status.authed) {
+        completeConnected(tick.status)
         return
       }
       if (tick.phase === 'need_verifycode') setNeedVerify(true)
       else void pollUntilDone(sessionKey)
     } catch (err) {
+      if (await adoptHostAuthIfReady()) return
       setQrHint(err instanceof Error ? err.message : String(err))
     }
   }

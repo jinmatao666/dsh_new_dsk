@@ -222,6 +222,19 @@ function stageDingTalkRuntime(appRoot) {
   if (!existsSync(binary)) {
     throw new Error(`Desktop runtime is missing bundled DWS binary (${relative(appRoot, binary)})`)
   }
+  // Stage dws-cli skill assets next to the binary so packaged Hosts resolve them via
+  // DSH_NODE_BINARY → app/assets/dws-cli without relying on require.resolve.
+  const skillSource = join(appRoot, 'node_modules', '@dingtalk-real-ai', 'dsh-dingtalk', 'assets', 'skills', 'dws-cli')
+  if (!existsSync(join(skillSource, 'SKILL.md'))) {
+    throw new Error(`Desktop runtime is missing dws-cli skill assets (${relative(appRoot, skillSource)})`)
+  }
+  const skillDest = join(appRoot, 'assets', 'dws-cli')
+  if (existsSync(skillDest)) rmSync(skillDest, { recursive: true, force: true })
+  mkdirSync(dirname(skillDest), { recursive: true })
+  copyTreeWithoutDependencies(skillSource, skillDest)
+  if (!existsSync(join(skillDest, 'SKILL.md'))) {
+    throw new Error(`Desktop runtime failed to stage dws-cli skill (${relative(appRoot, skillDest)})`)
+  }
 }
 
 /**

@@ -30,7 +30,10 @@ export const WECHAT_ILINK_BOT_TYPE = '3'
 /** Observability User-Agent analogue sent in base_info. */
 export const WECHAT_BOT_AGENT = 'Wanwei/0.1.0'
 
-const QR_LONG_POLL_TIMEOUT_MS = 35_000
+/** Unary RPC long-poll budget; keep below typical reverse-proxy idle limits. */
+const QR_LONG_POLL_TIMEOUT_MS = 20_000
+/** Retries when iLink returns `confirmed` before minting bot_token / ilink_bot_id. */
+const CONFIRMED_CREDENTIAL_RETRIES = 3
 const ACTIVE_LOGIN_TTL_MS = 5 * 60_000
 const DEFAULT_GET_UPDATES_TIMEOUT_MS = 35_000
 const MESSAGE_TYPE_USER = 1
@@ -299,10 +302,15 @@ export function buildWeChatStatus(
  * @param dshHome - product DSH home.
  * @returns session key + QR assets + status.
  */
+function localTokenList(dshHome: string): string[] {
+  const existing = loadWeChatCredentials(dshHome)
+  return existing === null ? [] : [existing.botToken]
+}
+
 export async function startWeChatLogin(dshHome: string): Promise<WeChatLoginStart> {
   const raw = await httpPost(
     `${WECHAT_ILINK_QR_BASE}/ilink/bot/get_bot_qrcode?bot_type=${encodeURIComponent(WECHAT_ILINK_BOT_TYPE)}`,
-    { local_token_list: [] },
+    { local_token_list: localTokenList(dshHome) },
     { timeoutMs: 15_000 },
   )
   const parsed = JSON.parse(raw) as { qrcode?: string; qrcode_img_content?: string }
@@ -329,10 +337,10 @@ export async function startWeChatLogin(dshHome: string): Promise<WeChatLoginStar
   }
 }
 
-async function refreshLoginQr(login: ActiveLogin): Promise<void> {
+async function refreshLoginQr(login: ActiveLogin, dshHome: string): Promise<void> {
   const raw = await httpPost(
     `${WECHAT_ILINK_QR_BASE}/ilink/bot/get_bot_qrcode?bot_type=${encodeURIComponent(WECHAT_ILINK_BOT_TYPE)}`,
-    { local_token_list: [] },
+    { local_token_list: localTokenList(dshHome) },
     { timeoutMs: 15_000 },
   )
   const parsed = JSON.parse(raw) as { qrcode?: string; qrcode_img_content?: string }
@@ -362,9 +370,22 @@ export async function pollWeChatLogin(
 ): Promise<WeChatLoginPoll> {
   const login = activeLogins.get(sessionKey)
   if (login === undefined) {
+    // A prior poll may have persisted credentials while the Client never saw `confirmed`
+    // (hung unary RPC). Treat an already-authed Host as success so the QR modal can close.
+    const status = buildWeChatStatus(dshHome, { fresh: true })
+    if (status.authed) {
+      startBridge()
+      return {
+        phase: 'confirmed',
+        status,
+        message: '微信助理已连接',
+        qrcodeUrl: null,
+        qrDataUrl: null,
+      }
+    }
     return {
       phase: 'error',
-      status: buildWeChatStatus(dshHome, { fresh: true }),
+      status,
       message: '当前没有进行中的登录，请重新点「连接」。',
       qrcodeUrl: null,
       qrDataUrl: null,
@@ -440,7 +461,7 @@ export async function pollWeChatLogin(
   }
   if (phase === 'expired' || phase === 'verify_code_blocked') {
     try {
-      await refreshLoginQr(login)
+      await refreshLoginQr(login, dshHome)
       return {
         phase: 'wait',
         status: buildWeChatStatus(dshHome),
@@ -482,8 +503,26 @@ export async function pollWeChatLogin(
     }
   }
   if (phase === 'confirmed') {
-    if (typeof statusBody.bot_token !== 'string' || statusBody.bot_token === ''
-      || typeof statusBody.ilink_bot_id !== 'string' || statusBody.ilink_bot_id === '') {
+    let body = statusBody
+    for (let attempt = 0; attempt < CONFIRMED_CREDENTIAL_RETRIES; attempt += 1) {
+      if (typeof body.bot_token === 'string' && body.bot_token !== ''
+        && typeof body.ilink_bot_id === 'string' && body.ilink_bot_id !== '') {
+        break
+      }
+      // iLink can report confirmed a beat before minting credentials; re-poll the same QR.
+      await new Promise(resolve => setTimeout(resolve, 1_000))
+      try {
+        let retryEndpoint = `${login.currentApiBaseUrl}/ilink/bot/get_qrcode_status?qrcode=${encodeURIComponent(login.qrcode)}`
+        if (login.pendingVerifyCode) {
+          retryEndpoint += `&verify_code=${encodeURIComponent(login.pendingVerifyCode)}`
+        }
+        body = JSON.parse(await httpGet(retryEndpoint, QR_LONG_POLL_TIMEOUT_MS)) as typeof statusBody
+      } catch {
+        // Keep the last body; the loop either recovers credentials or fails below.
+      }
+    }
+    if (typeof body.bot_token !== 'string' || body.bot_token === ''
+      || typeof body.ilink_bot_id !== 'string' || body.ilink_bot_id === '') {
       activeLogins.delete(sessionKey)
       return {
         phase: 'error',
@@ -494,10 +533,10 @@ export async function pollWeChatLogin(
       }
     }
     saveCredentials(dshHome, {
-      botToken: statusBody.bot_token,
-      ilinkBotId: statusBody.ilink_bot_id,
-      ilinkUserId: typeof statusBody.ilink_user_id === 'string' ? statusBody.ilink_user_id : null,
-      baseUrl: (statusBody.baseurl?.trim() || WECHAT_ILINK_QR_BASE).replace(/\/+$/, ''),
+      botToken: body.bot_token,
+      ilinkBotId: body.ilink_bot_id,
+      ilinkUserId: typeof body.ilink_user_id === 'string' ? body.ilink_user_id : null,
+      baseUrl: (body.baseurl?.trim() || WECHAT_ILINK_QR_BASE).replace(/\/+$/, ''),
       getUpdatesBuf: '',
       connectedAt: Date.now(),
     })

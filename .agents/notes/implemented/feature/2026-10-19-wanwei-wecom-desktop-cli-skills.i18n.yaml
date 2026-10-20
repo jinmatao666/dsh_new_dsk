@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-19-wanwei-wecom-desktop-cli-skills.md
-2026-10-19-wanwei-wecom-desktop-cli-skills.md: 270d1f0202c2032cd80173b8a68e13caf3e744f4
-2026-10-19-wanwei-wecom-desktop-cli-skills.zh.md: 9ca9eec1fa1adc8e702367f88673bf10e46c2556
+2026-10-19-wanwei-wecom-desktop-cli-skills.md: f165b6d757e9b900bf5b7188f27bbbd82584d350
+2026-10-19-wanwei-wecom-desktop-cli-skills.zh.md: 5d52d03a35c2f1ebe762a025b3f789014030ce8a

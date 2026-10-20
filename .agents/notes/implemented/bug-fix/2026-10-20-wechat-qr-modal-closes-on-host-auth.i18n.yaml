@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-20-wechat-qr-modal-closes-on-host-auth.md
+2026-10-20-wechat-qr-modal-closes-on-host-auth.md: b716f2ceb9a0665c53f8025afb4731e22ffdc297
+2026-10-20-wechat-qr-modal-closes-on-host-auth.zh.md: fa3e1d8c755db2bde65d084d0bcbd1b636f63d1a

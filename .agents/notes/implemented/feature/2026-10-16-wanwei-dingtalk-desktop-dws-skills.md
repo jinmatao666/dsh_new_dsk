@@ -28,7 +28,7 @@ This matches the WeCom bundling decision in [desktop WeCom CLI skills](2026-10-1
 
 ## Consequences
 
-Installer / `prepare:runtime` builds must include `dingtalk-workspace-cli` and extract the current-platform `vendor/dws` binary. End users of a current installer only need to click **连接** and authorize. Until `dws auth login` succeeds and `dws-cli` is copied under the product home skills root, desktop prompts that need DingTalk APIs cannot run through the skill. Stream robot private-chat is out of product scope for this connectors card.
+Installer / `prepare:runtime` builds must include `dingtalk-workspace-cli`, extract the current-platform `vendor/dws` binary, and stage `app/assets/dws-cli` skill assets so packaged Hosts resolve them via `DSH_NODE_BINARY` without `require.resolve`. End users of a current installer only need to click **连接** and authorize. When auth already succeeded but the skill is missing, **连接** installs the skill without reopening the OAuth browser. Until `dws auth login` succeeds and `dws-cli` is copied under the product home skills root, desktop prompts that need DingTalk APIs cannot run through the skill. Stream robot private-chat is out of product scope for this connectors card.
 
 「去试试」stages the example prompt and selects DingTalk on the resident `conversation.composer.tools` chip (session-maybe, next to `+`), because `conversation.input.left` is session-scoped and disappears after `sessions.clear()`. The chip opens a picker to switch connectors or reopen the connectors panel.
 

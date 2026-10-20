@@ -53,6 +53,9 @@ export function resolveProductDshHome(env: NodeJS.ProcessEnv = process.env): str
   throw new Error('DSH_HOME is unset; desktop must set the product home before DingTalk skill install')
 }
 
+/** Relative dws-cli skill root under the staged desktop runtime app (WorkBuddy-style). */
+export const DWS_BUNDLED_SKILL_REL = join('assets', 'dws-cli')
+
 /**
  * Candidate roots that may contain `@dingtalk-real-ai/dsh-dingtalk`.
  * The connectors package does not depend on it; the desktop product / profile does.
@@ -61,6 +64,15 @@ export function resolveProductDshHome(env: NodeJS.ProcessEnv = process.env): str
  */
 function dingtalkPackageRoots(env: NodeJS.ProcessEnv = process.env): string[] {
   const roots: string[] = []
+  const nodeBin = env.DSH_NODE_BINARY?.trim()
+  if (nodeBin) {
+    // Production: `runtime-<ver>/node[.exe]` beside `runtime-<ver>/app/node_modules`.
+    roots.push(join(dirname(nodeBin), 'app', 'node_modules', '@dingtalk-real-ai', 'dsh-dingtalk'))
+  }
+  const anchor = env.DSH_BUNDLE_ANCHORS?.trim()
+  if (anchor) {
+    roots.push(join(dirname(anchor), 'node_modules', '@dingtalk-real-ai', 'dsh-dingtalk'))
+  }
   try {
     roots.push(dirname(require.resolve('@dingtalk-real-ai/dsh-dingtalk/package.json')))
   } catch {
@@ -86,11 +98,23 @@ function dingtalkPackageRoots(env: NodeJS.ProcessEnv = process.env): string[] {
 }
 
 /**
- * Locate the bundled dws-cli skill shipped with the official DingTalk channel package.
+ * Locate the bundled dws-cli skill: staged runtime assets first, then the npm package.
  * @param env - process environment; overridable in tests.
  * @returns absolute skill directory, or undefined when the package is absent.
  */
 export function resolveBundledDwsCliSkillDir(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const override = env.DSH_DWS_SKILL_DIR?.trim()
+  if (override && existsSync(join(override, 'SKILL.md'))) return override
+  const nodeBin = env.DSH_NODE_BINARY?.trim()
+  if (nodeBin) {
+    const staged = join(dirname(nodeBin), 'app', DWS_BUNDLED_SKILL_REL)
+    if (existsSync(join(staged, 'SKILL.md'))) return staged
+  }
+  const anchor = env.DSH_BUNDLE_ANCHORS?.trim()
+  if (anchor) {
+    const staged = join(dirname(anchor), 'resources', 'dws-cli')
+    if (existsSync(join(staged, 'SKILL.md'))) return staged
+  }
   for (const root of dingtalkPackageRoots(env)) {
     const skill = join(root, 'assets', 'skills', 'dws-cli')
     if (existsSync(join(skill, 'SKILL.md'))) return skill
@@ -284,7 +308,7 @@ export async function buildDingTalkDwsStatus(
 export function installDwsCliSkill(dshHome: string): string {
   const source = resolveBundledDwsCliSkillDir()
   if (source === undefined) {
-    throw new Error('未找到官方包内的 dws-cli 技能（需要 @dingtalk-real-ai/dsh-dingtalk）')
+    throw new Error('未找到随包 dws-cli 技能（需要 app/assets/dws-cli 或 @dingtalk-real-ai/dsh-dingtalk）。请使用完整桌面安装包。')
   }
   const dest = dwsCliSkillInstallDir(dshHome)
   mkdirSync(dirname(dest), { recursive: true })
@@ -298,12 +322,20 @@ export function installDwsCliSkill(dshHome: string): string {
  * @returns status after the login process ends (success or cancel).
  */
 export async function runDingTalkDwsLogin(dshHome: string): Promise<DingTalkDwsStatus> {
-  const before = await buildDingTalkDwsStatus(dshHome)
+  const before = await buildDingTalkDwsStatus(dshHome, { fresh: true })
   if (!before.dwsInstalled) {
     throw new Error(before.hint ?? 'dws 未安装')
   }
   const dws = resolveDwsCommand()
   if (dws === undefined) throw new Error(before.hint ?? 'dws 未安装')
+  // Already authorized: only write the skill (avoids reopening the OAuth browser).
+  if (before.authed) {
+    if (!before.skillInstalled) {
+      installDwsCliSkill(dshHome)
+      invalidateDingTalkDwsStatusCache()
+    }
+    return buildDingTalkDwsStatus(dshHome, { fresh: true })
+  }
   // Long timeout: user may scan QR or confirm in DingTalk PC.
   const result = await run(dws, ['auth', 'login'], 10 * 60_000)
   if (result.code !== 0 && result.code !== null) {
