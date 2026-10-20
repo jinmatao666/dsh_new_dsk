@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { waitForConnectorAuthorization } from './authorize-wait.ts'
 import { getCachedDingTalkStatus, setCachedDingTalkStatus } from './status-cache.ts'
 import { productText } from './locales/product.ts'
 
@@ -9,6 +10,10 @@ export type DingTalkStatus = {
   authed: boolean
   skillInstalled: boolean
   hint: string | null
+  /** True while the Host login process is still running after the RPC returned. */
+  authorizing?: boolean
+  /** CLI failure from that background login, or null. */
+  authorizeError?: string | null
 }
 
 /** Host RPC face for desktop DingTalk skill connection. */
@@ -81,7 +86,11 @@ export function DingTalkPanel({
     try {
       // Always go through Host `login`: it opens the browser when unauthenticated,
       // and only copies the skill when CLI auth is already present.
-      const next = await api.login()
+      const started = await api.login()
+      applyStatus(started)
+      const next = started.authorizing === true
+        ? await waitForConnectorAuthorization(() => api.status())
+        : started
       applyStatus(next)
       if (next.authed && next.skillInstalled) {
         onNotice?.({ kind: 'success', text: productText('钉钉已连接') })

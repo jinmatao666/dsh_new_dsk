@@ -10,12 +10,16 @@ describe('wecom-api client helpers', () => {
       authed: true,
       skillInstalled: false,
       hint: 'need skill',
+      authorizing: true,
+      authorizeError: 'x',
     })).toEqual({
       cliInstalled: true,
       cliVersion: '1.3.4',
       authed: true,
       skillInstalled: false,
       hint: 'need skill',
+      authorizing: true,
+      authorizeError: 'x',
     })
     expect(() => parseWeComStatus(null)).toThrow()
     expect(() => parseWeComStatus({ cliInstalled: true })).toThrow()

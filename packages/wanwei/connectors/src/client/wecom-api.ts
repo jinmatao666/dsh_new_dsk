@@ -24,6 +24,8 @@ export function parseWeComStatus(value: unknown): WeComStatus {
     authed: record.authed,
     skillInstalled: record.skillInstalled,
     hint: typeof record.hint === 'string' ? record.hint : null,
+    authorizing: record.authorizing === true,
+    authorizeError: typeof record.authorizeError === 'string' ? record.authorizeError : null,
   }
 }
 

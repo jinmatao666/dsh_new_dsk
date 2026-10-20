@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import {
   buildWeComCliStatus,
+  cancelWeComCliLoginFlight,
   disconnectWeComCli,
   invalidateWeComCliStatusCache,
   installWeComCliSkills,
@@ -22,6 +23,7 @@ const originalPath = process.env.PATH
 const originalPathWin = process.env.Path
 
 afterEach(() => {
+  cancelWeComCliLoginFlight()
   vi.restoreAllMocks()
   invalidateWeComCliStatusCache()
   delete process.env.DSH_HOME
@@ -30,6 +32,7 @@ afterEach(() => {
   delete process.env.DSH_NODE_BINARY
   delete process.env.DSH_BUNDLE_ANCHORS
   delete process.env.DSH_WECOM_SKILLS_DIR
+  delete process.env.DSH_DESKTOP_DEVELOPMENT
   if (originalPath === undefined) delete process.env.PATH
   else process.env.PATH = originalPath
   if (originalPathWin === undefined) delete process.env.Path
@@ -143,6 +146,18 @@ describe('WeCom CLI Host helpers', () => {
     const after = await disconnectWeComCli(home)
     expect(existsSync(join(dest, 'SKILL.md'))).toBe(false)
     expect(after.skillInstalled).toBe(false)
+  })
+
+  it('status payloads include authorizing flags and cancel clears a flight', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wecom-auth-flags-'))
+    process.env.DSH_HOME = home
+    process.env.PATH = ''
+    process.env.Path = ''
+    const status = await buildWeComCliStatus(home)
+    expect(status.authorizing).toBe(false)
+    expect(status.authorizeError).toBe(null)
+    expect(() => cancelWeComCliLoginFlight()).not.toThrow()
+    expect((await buildWeComCliStatus(home)).authorizing).toBe(false)
   })
 })
 

@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import {
   buildDingTalkDwsStatus,
+  cancelDingTalkDwsLoginFlight,
   disconnectDingTalkDws,
   dwsCliSkillInstallDir,
   invalidateDingTalkDwsStatusCache,
@@ -21,10 +22,12 @@ const originalPath = process.env.PATH
 const originalPathWin = process.env.Path
 
 afterEach(() => {
+  cancelDingTalkDwsLoginFlight()
   vi.restoreAllMocks()
   invalidateDingTalkDwsStatusCache()
   delete process.env.DSH_HOME
   delete process.env.DSH_DWS_CLI
+  delete process.env.DSH_DWS_SKILL_DIR
   delete process.env.DSH_NODE_BINARY
   delete process.env.DSH_BUNDLE_ANCHORS
   if (originalPath === undefined) delete process.env.PATH
@@ -153,6 +156,18 @@ describe('DingTalk DWS Host helpers', () => {
     expect(existsSync(join(dest, 'SKILL.md'))).toBe(false)
     expect(after.skillInstalled).toBe(false)
   })
+
+  it('status payloads include authorizing flags and cancel clears a flight', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-dws-auth-flags-'))
+    process.env.DSH_HOME = home
+    process.env.PATH = ''
+    process.env.Path = ''
+    const status = await buildDingTalkDwsStatus(home)
+    expect(status.authorizing).toBe(false)
+    expect(status.authorizeError).toBe(null)
+    expect(() => cancelDingTalkDwsLoginFlight()).not.toThrow()
+    expect((await buildDingTalkDwsStatus(home)).authorizing).toBe(false)
+  })
 })
 
 describe('DingTalk DWS RPC', () => {
@@ -200,6 +215,7 @@ describe('DingTalk DWS RPC', () => {
     expect(typeof result.value.dwsInstalled).toBe('boolean')
     expect(typeof result.value.authed).toBe('boolean')
     expect(typeof result.value.skillInstalled).toBe('boolean')
+    expect(result.value).toMatchObject({ authorizing: false, authorizeError: null })
 
     registerDingTalkDwsRpc(ctx as Context)
     const unknown = await handlers.get('/wanwei-dingtalk')!('nope', {}) as { ok: false }

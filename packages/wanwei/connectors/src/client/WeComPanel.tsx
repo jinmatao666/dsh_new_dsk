@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { waitForConnectorAuthorization } from './authorize-wait.ts'
 import { getCachedWeComStatus, setCachedWeComStatus } from './wecom-status-cache.ts'
 import { productText } from './locales/product.ts'
 
@@ -9,6 +10,10 @@ export type WeComStatus = {
   authed: boolean
   skillInstalled: boolean
   hint: string | null
+  /** True while the Host login process is still running after the RPC returned. */
+  authorizing?: boolean
+  /** CLI failure from that background login, or null. */
+  authorizeError?: string | null
 }
 
 /** Host RPC face for desktop WeCom skill connection. */
@@ -81,7 +86,11 @@ export function WeComPanel({
     try {
       // Always go through Host `login`: browser QR when unauthenticated; skill
       // copy only when CLI auth is already present (Host short-circuits auth init).
-      const next = await api.login()
+      const started = await api.login()
+      applyStatus(started)
+      const next = started.authorizing === true
+        ? await waitForConnectorAuthorization(() => api.status())
+        : started
       applyStatus(next)
       if (next.authed && next.skillInstalled) {
         onNotice?.({ kind: 'success', text: productText('企业微信已连接') })
