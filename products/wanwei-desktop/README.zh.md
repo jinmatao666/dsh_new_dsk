@@ -51,7 +51,7 @@ pnpm --filter @wanwei/dsh-desktop check:sidecar
 pnpm --filter @wanwei/dsh-desktop check:rust
 ```
 
-源码开发模式直接运行当前 checkout 中的 TypeScript CLI。`prepare:runtime` 会在 `src-tauri/resources/runtime-<version>` 中创建自包含生产运行时：部署万维专用生产依赖闭包（DSH 运行时、万维产品包及其传递 npm 依赖，加上 PDF、DOCX、XLSX 解析器），把所需 workspace 对等包恢复为普通文件，复制 Node 22，并预检暂存后的 `wanwei-desktop` profile。`check:runtime` 会用随包 Node 启动文档辅助程序和产品 profile，缺少解析器或插件依赖时会在制作安装包之前失败。官方 Python 运行时清单保持不变。生成的运行时文件由 Git 忽略，每次制作安装包时重新构建。
+源码开发模式直接运行当前 checkout 中的 TypeScript CLI。`prepare:runtime` 会在 `src-tauri/resources/runtime-<version>` 中创建自包含生产运行时：部署万维专用生产依赖闭包（DSH 运行时、万维产品包及其传递 npm 依赖，加上 PDF、DOCX、XLSX 解析器），把所需 workspace 对等包恢复为普通文件，剔除 `tests/` 与 `*.spec.ts` 等开发残留（避免 Windows NSIS 因路径过长解压失败），复制 Node 22，并预检暂存后的 `wanwei-desktop` profile。`check:runtime` 会用随包 Node 启动文档辅助程序和产品 profile，缺少解析器或插件依赖时会在制作安装包之前失败。官方 Python 运行时清单保持不变。生成的运行时文件由 Git 忽略，每次制作安装包时重新构建。
 
 ```sh
 pnpm --filter @wanwei/dsh-desktop prepare:runtime

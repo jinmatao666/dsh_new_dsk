@@ -3,7 +3,11 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { removeStagedEntry } from './runtime-files.mjs'
+import {
+  pruneStagedRuntimeDevArtifacts,
+  removeStagedEntry,
+  shouldSkipStagedRuntimeEntry,
+} from './runtime-files.mjs'
 
 test('the production deploy root includes the product bundle and its registry dependencies', () => {
   const product = new URL('../runtime-closure/package.json', import.meta.url)
@@ -40,6 +44,30 @@ test('removing an ordinary staged directory only removes that directory', () => 
     removeStagedEntry(target)
     assert.equal(existsSync(target), false)
     assert.equal(readFileSync(join(root, 'sibling.txt'), 'utf8'), 'keep')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('staged runtime skips package tests that blow Windows MAX_PATH in NSIS', () => {
+  assert.equal(shouldSkipStagedRuntimeEntry('tests', true), true)
+  assert.equal(shouldSkipStagedRuntimeEntry('commands-create-fork.host.spec.ts', false), true)
+  assert.equal(shouldSkipStagedRuntimeEntry('plugin.client.spec.tsx', false), true)
+  assert.equal(shouldSkipStagedRuntimeEntry('lib', true), false)
+  assert.equal(shouldSkipStagedRuntimeEntry('index.js', false), false)
+
+  const root = mkdtempSync(join(tmpdir(), 'wanwei-prune-tests-'))
+  try {
+    const pkg = join(root, 'node_modules', '@deepseek-ai', 'dsh-api-session-controller')
+    const tests = join(pkg, 'tests')
+    mkdirSync(tests, { recursive: true })
+    writeFileSync(join(tests, 'commands-create-fork.host.spec.ts'), 'export {}')
+    writeFileSync(join(pkg, 'lib-index.js'), 'export {}')
+    writeFileSync(join(pkg, 'accidental.host.spec.ts'), 'export {}')
+    pruneStagedRuntimeDevArtifacts(root)
+    assert.equal(existsSync(tests), false)
+    assert.equal(existsSync(join(pkg, 'accidental.host.spec.ts')), false)
+    assert.equal(readFileSync(join(pkg, 'lib-index.js'), 'utf8'), 'export {}')
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

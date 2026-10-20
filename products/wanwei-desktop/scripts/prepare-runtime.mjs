@@ -15,7 +15,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import process from 'node:process'
 import { ensureProductProfile } from './product-profile.mjs'
-import { removeStagedEntry } from './runtime-files.mjs'
+import { pruneStagedRuntimeDevArtifacts, removeStagedEntry, shouldSkipStagedRuntimeEntry } from './runtime-files.mjs'
 
 const productRoot = resolve(import.meta.dirname, '..')
 const repositoryRoot = resolve(productRoot, '..', '..')
@@ -84,6 +84,9 @@ restoreWorkspaceClosure([
   join(repositoryRoot, 'packages', 'bundle', 'wanwei-desktop', 'package.json'),
 ])
 materializeLinks(join(appRoot, 'node_modules'))
+// Workspace restores copy full package trees; drop tests before the NSIS payload
+// is built so Windows installers do not hit MAX_PATH on `*.host.spec.ts` paths.
+pruneStagedRuntimeDevArtifacts(appRoot)
 copyFileSync(join(productRoot, 'scripts', 'document-tool.mjs'), join(appRoot, 'document-tool.mjs'))
 stageDingTalkRuntime(appRoot)
 stageWeComRuntime(appRoot)
@@ -405,6 +408,7 @@ function copyTreeWithoutDependencies(source, destination) {
   mkdirSync(destination, { recursive: true })
   for (const entry of readdirSync(source, { withFileTypes: true })) {
     if (entry.name === 'node_modules') continue
+    if (shouldSkipStagedRuntimeEntry(entry.name, entry.isDirectory())) continue
     const sourcePath = join(source, entry.name)
     const targetPath = join(destination, entry.name)
     if (entry.isSymbolicLink()) {
