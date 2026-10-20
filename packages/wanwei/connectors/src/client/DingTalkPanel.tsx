@@ -79,10 +79,9 @@ export function DingTalkPanel({
     setBusy('login')
     setError(null)
     try {
-      // Already authorized: only copy the bundled skill (avoids reopening OAuth).
-      const next = status?.authed === true && status.skillInstalled !== true
-        ? await api.installSkill()
-        : await api.login()
+      // Always go through Host `login`: it opens the browser when unauthenticated,
+      // and only copies the skill when CLI auth is already present.
+      const next = await api.login()
       applyStatus(next)
       if (next.authed && next.skillInstalled) {
         onNotice?.({ kind: 'success', text: productText('钉钉已连接') })
@@ -131,9 +130,6 @@ export function DingTalkPanel({
         <p className="dsh-connector-dingtalk-hint">
           {productText('请在弹出的浏览器中完成钉钉扫码或头像授权，完成后返回此窗口。')}
         </p>
-      )}
-      {status !== null && !ready && busy !== 'login' && status.hint !== null && status.hint !== '' && (
-        <p className="dsh-connector-dingtalk-hint">{status.hint}</p>
       )}
       {error !== null && <p className="dsh-connector-dingtalk-error" role="alert">{error}</p>}
       <div className="dsh-connector-dingtalk-actions">

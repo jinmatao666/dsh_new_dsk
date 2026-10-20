@@ -8,6 +8,7 @@ import {
   disconnectDingTalkDws,
   dwsCliSkillInstallDir,
   invalidateDingTalkDwsStatusCache,
+  parseDwsAuthenticated,
   registerDingTalkDwsRpc,
   resolveBundledDwsCliSkillDir,
   resolveBundledDwsCommand,
@@ -33,6 +34,20 @@ afterEach(() => {
 })
 
 describe('DingTalk DWS Host helpers', () => {
+  it('parses dws auth status JSON without treating exit-0 as logged in', () => {
+    expect(parseDwsAuthenticated(JSON.stringify({
+      success: true,
+      authenticated: false,
+      message: '未登录',
+    }))).toBe(false)
+    expect(parseDwsAuthenticated(JSON.stringify({
+      success: true,
+      authenticated: true,
+      message: '已登录',
+    }))).toBe(true)
+    expect(parseDwsAuthenticated('not-json')).toBe(false)
+  })
+
   it('requires DSH_HOME for product skill install', () => {
     expect(() => resolveProductDshHome({})).toThrow(/DSH_HOME/)
     expect(resolveProductDshHome({ DSH_HOME: 'D:/data/dsh' })).toBe('D:/data/dsh')
@@ -76,6 +91,24 @@ describe('DingTalk DWS Host helpers', () => {
     mkdirSync(skill, { recursive: true })
     writeFileSync(join(skill, 'SKILL.md'), '---\nname: dws-cli\ndescription: x\n---\n')
     expect(resolveBundledDwsCliSkillDir({ DSH_APP_ROOT: root })).toBe(skill)
+  })
+
+  it('replaces an empty dws-cli destination when installing the skill', async () => {
+    const { installDwsCliSkill } = await import('../src/dingtalk-dws.ts')
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-dws-empty-dest-'))
+    const dest = join(home, 'skills', 'dws-cli')
+    mkdirSync(dest, { recursive: true })
+    const source = mkdtempSync(join(tmpdir(), 'wanwei-dws-src-'))
+    writeFileSync(join(source, 'SKILL.md'), '---\nname: dws-cli\ndescription: x\n---\n')
+    const previous = process.env.DSH_DWS_SKILL_DIR
+    process.env.DSH_DWS_SKILL_DIR = source
+    try {
+      expect(installDwsCliSkill(home)).toBe(dest)
+      expect(existsSync(join(dest, 'SKILL.md'))).toBe(true)
+    } finally {
+      if (previous === undefined) delete process.env.DSH_DWS_SKILL_DIR
+      else process.env.DSH_DWS_SKILL_DIR = previous
+    }
   })
 
   it('reports missing dws when the CLI is absent from the bundle and PATH', async () => {

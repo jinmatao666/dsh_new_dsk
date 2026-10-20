@@ -23,7 +23,12 @@ export function rpcValue(result: RpcResult<unknown>): unknown {
  */
 export function connectorRpcError(error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error)
-  if (/failed to fetch/i.test(message) || message === 'NetworkError when attempting to fetch resource.') {
+  // Only the browser's own transport failure. Host messages that mention
+  // "Failed to fetch" (for example a GitHub skill download) must stay intact.
+  const transport = message === 'Failed to fetch'
+    || message === 'NetworkError when attempting to fetch resource.'
+    || message === 'TypeError: Failed to fetch'
+  if (transport) {
     return new Error(productText('无法连接本机服务以写入技能。请确认桌面端仍在运行后重试；若反复失败请使用完整安装包。'))
   }
   return error instanceof Error ? error : new Error(message)

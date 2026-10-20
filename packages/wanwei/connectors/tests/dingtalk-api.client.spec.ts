@@ -17,6 +17,8 @@ describe('dingtalk-api client helpers', () => {
   it('maps browser Failed to fetch to product copy', () => {
     expect(connectorRpcError(new Error('Failed to fetch')).message).toMatch(/无法连接本机服务/)
     expect(connectorRpcError(new Error('未找到随包 dws-cli')).message).toBe('未找到随包 dws-cli')
+    expect(connectorRpcError(new Error('无法从 GitHub 下载企业微信技能（Failed to fetch）。')).message)
+      .toMatch(/GitHub/)
   })
 
   it('parses DWS status payloads', () => {

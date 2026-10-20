@@ -210,6 +210,11 @@ export function resolveBundledWeComSkillsDir(env: NodeJS.ProcessEnv = process.en
   const appRoot = env.DSH_APP_ROOT?.trim() || process.cwd()
   const cwdStaged = join(appRoot, WECOM_BUNDLED_SKILLS_REL)
   if (existsSync(join(cwdStaged, WECOM_SHARED_SKILL_ID, 'SKILL.md'))) return cwdStaged
+  const documentTool = env.DSH_DOCUMENT_TOOL?.trim()
+  if (documentTool) {
+    const staged = join(dirname(documentTool), WECOM_BUNDLED_SKILLS_REL)
+    if (existsSync(join(staged, WECOM_SHARED_SKILL_ID, 'SKILL.md'))) return staged
+  }
   const anchor = env.DSH_BUNDLE_ANCHORS?.trim()
   if (anchor) {
     const staged = join(dirname(anchor), 'resources', 'wecom-skills')
@@ -226,14 +231,17 @@ export function resolveBundledWeComSkillsDir(env: NodeJS.ProcessEnv = process.en
   return undefined
 }
 
-/** True when the Host is running inside a packaged / staged desktop runtime. */
+/**
+ * True when the Host is the production/staged desktop sidecar (skills must be on disk).
+ * `tauri dev` also sets `DSH_APP_ROOT` / `DSH_NODE_BINARY=node` — those must not block
+ * the development GitHub skill fallback.
+ */
 function isPackagedDesktopRuntime(env: NodeJS.ProcessEnv = process.env): boolean {
-  return Boolean(
-    env.DSH_NODE_BINARY?.trim()
-    || env.DSH_APP_ROOT?.trim()
-    || env.DSH_WECOM_SKILLS_DIR?.trim()
-    || env.DSH_DWS_SKILL_DIR?.trim(),
-  )
+  if (env.DSH_DESKTOP_DEVELOPMENT?.trim()) return false
+  if (env.DSH_WECOM_SKILLS_DIR?.trim() || env.DSH_DWS_SKILL_DIR?.trim()) return true
+  const nodeBin = env.DSH_NODE_BINARY?.trim()
+  // Production layout: `runtime-<ver>/node[.exe]` beside `runtime-<ver>/app/document-tool.mjs`.
+  return Boolean(nodeBin && existsSync(join(dirname(nodeBin), 'app', 'document-tool.mjs')))
 }
 
 /**
@@ -280,9 +288,8 @@ function composeStatus(
     hint = '未找到随包 wecom-cli。请使用最新桌面安装包，或临时执行 npm install -g @wecom/cli 后重启。'
   } else if (!authed) {
     hint = '点击「连接」，在浏览器中用企业微信扫码完成授权。'
-  } else if (!skillInstalled) {
-    hint = '已授权，但尚未写入 wecomcli 技能。点击「连接」完成启用。'
   }
+  // Authorized but the skill is not on disk yet: the sheet shows only「连接」.
   return { cliInstalled, cliVersion, authed, skillInstalled, hint }
 }
 
@@ -335,14 +342,21 @@ export async function buildWeComCliStatus(
 function copyWeComSkillsFrom(dshHome: string, sourceSkills: string): string {
   const skillsRoot = wecomSkillsInstallRoot(dshHome)
   mkdirSync(skillsRoot, { recursive: true })
+  let copied = 0
   for (const name of readdirSync(sourceSkills)) {
     if (!name.startsWith('wecomcli-')) continue
+    const from = join(sourceSkills, name)
+    if (!existsSync(join(from, 'SKILL.md'))) continue
     const dest = join(skillsRoot, name)
     rmSync(dest, { recursive: true, force: true })
-    cpSync(join(sourceSkills, name), dest, { recursive: true })
+    cpSync(from, dest, { recursive: true })
+    if (!existsSync(join(dest, 'SKILL.md'))) {
+      throw new Error(`写入企业微信技能失败（${name} 缺少 SKILL.md）`)
+    }
+    copied += 1
   }
-  if (!existsSync(join(wecomSharedSkillDir(dshHome), 'SKILL.md'))) {
-    throw new Error('企业微信技能写入失败')
+  if (copied === 0 || !existsSync(join(wecomSharedSkillDir(dshHome), 'SKILL.md'))) {
+    throw new Error('企业微信技能写入失败（未找到可复制的 wecomcli-* 技能）')
   }
   return skillsRoot
 }
@@ -418,8 +432,9 @@ export function removeWeComCliSkills(dshHome: string): void {
 export function clearWeComCliCredentials(env: NodeJS.ProcessEnv = process.env): void {
   try {
     const configDir = resolveWeComConfigDir(env)
-    const credentials = join(configDir, 'credentials.enc')
-    if (existsSync(credentials)) rmSync(credentials, { force: true })
+    if (!existsSync(configDir)) return
+    // Remove the whole config tree so the next「连接」must run auth init again.
+    rmSync(configDir, { recursive: true, force: true })
   } catch {
     // Config dir may be unresolvable in stripped test envs; skill removal still unbinds desktop use.
   }
@@ -437,7 +452,8 @@ export async function runWeComCliLogin(dshHome: string): Promise<WeComCliStatus>
   }
   const cli = resolveWeComCliCommand()
   if (cli === undefined) throw new Error(before.hint ?? 'wecom-cli 未安装')
-  // Already authorized: only write skills (avoids reopening the QR browser).
+  // Already authorized: only write skills. Re-running auth init keeps the RPC
+  // open until the CLI exits and the WebView reports that as a failed fetch.
   if (before.authed) {
     if (!before.skillInstalled) {
       await installWeComCliSkills(dshHome)
@@ -474,6 +490,27 @@ export async function disconnectWeComCli(dshHome: string): Promise<WeComCliStatu
 }
 
 /**
+ * When wecom-cli auth already succeeded, copy bundled skills if `wecomcli-shared` is missing.
+ * @param dshHome - product DSH home.
+ * @returns refreshed status.
+ */
+export async function ensureWeComSkillsInstalled(dshHome: string): Promise<WeComCliStatus> {
+  const status = await buildWeComCliStatus(dshHome, { fresh: true })
+  if (!status.authed || status.skillInstalled) return status
+  if (resolveBundledWeComSkillsDir() === undefined && isPackagedDesktopRuntime()) {
+    return status
+  }
+  try {
+    await installWeComCliSkills(dshHome)
+  } catch {
+    // Leave the existing hint when the source pack is absent or the copy fails.
+    return buildWeComCliStatus(dshHome, { fresh: true })
+  }
+  invalidateWeComCliStatusCache()
+  return buildWeComCliStatus(dshHome, { fresh: true })
+}
+
+/**
  * Register `/wanwei-wecom` RPC for wecom-cli auth + skill enablement.
  * @param ctx - Host context with connection.
  * @returns disposer from `ctx.effect`.
@@ -484,6 +521,7 @@ export function registerWeComCliRpc(ctx: Context): () => void {
   return ctx.effect(() => connection.rpc.handle('/wanwei-wecom', async (endpoint, _payload) => {
     try {
       if (endpoint === 'status') {
+        // Do not auto-write skills here: after「解绑」a status poll must not silently reconnect.
         return { ok: true as const, value: await buildWeComCliStatus(dshHome()) }
       }
       if (endpoint === 'login') {

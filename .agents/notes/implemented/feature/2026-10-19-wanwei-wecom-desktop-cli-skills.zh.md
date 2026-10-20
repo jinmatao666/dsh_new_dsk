@@ -26,7 +26,7 @@ Status: implemented
 
 ## 后果
 
-安装包 / `prepare:runtime` 构建必须包含当前平台的 `@wecom/cli-*` optional 包，以及落到 `app/assets/wecom-skills` 的随包技能（构建时下载技能包需要网络）。打包后的 Host 经 `DSH_WECOM_SKILLS_DIR` / `DSH_APP_ROOT` / `DSH_NODE_BINARY` → `app/assets/wecom-skills` 解析技能，并在该打包上下文中拒绝连接时再从 GitHub 下载，避免内网出现裸的 `Failed to fetch`。若授权已成功但技能尚未写入，「连接」会只安装技能、不再打开扫码页。在扫码授权成功且技能写入 `$DSH_HOME/skills` 之前，依赖企业微信 API 的桌面提示无法经这些技能执行。
+安装包 / `prepare:runtime` 构建必须包含当前平台的 `@wecom/cli-*` optional 包，以及落到 `app/assets/wecom-skills` 的随包技能（构建时下载技能包需要网络）。`tauri dev` 通过 `ensure:wecom-skills` 写入 `products/wanwei-desktop/assets/wecom-skills`，存在时设置 `DSH_WECOM_SKILLS_DIR`；`DSH_DESKTOP_DEVELOPMENT=1` 仍允许连接时从 GitHub 回退下载技能。打包后的 Host 经 `DSH_WECOM_SKILLS_DIR` / `DSH_APP_ROOT` / `DSH_NODE_BINARY` → `app/assets/wecom-skills` 解析技能，并拒绝连接时再从 GitHub 下载，避免内网出现裸的 `Failed to fetch`。「连接」在尚未授权时执行 `wecom-cli auth init --noninteractive`（浏览器扫码），再把技能写入 `$DSH_HOME/skills`。已经授权时「连接」只复制技能，不再把 RPC 挂在另一次扫码进程上。桌面壳在 sidecar 启动前也会把 `app/assets/dws-cli` 与 `app/assets/wecom-skills` 复制到 `$DSH_HOME/skills`。在扫码授权成功且技能写入之前，依赖企业微信 API 的桌面提示无法经这些技能执行。
 
 「去试试」会写入示例提示，并在常驻的 `conversation.composer.tools` 芯片上选中企业微信（紧挨 `+`），行为与钉钉芯片一致。
 

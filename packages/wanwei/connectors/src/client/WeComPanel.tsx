@@ -79,10 +79,9 @@ export function WeComPanel({
     setBusy('login')
     setError(null)
     try {
-      // Already authorized: only copy bundled skills (avoids reopening QR).
-      const next = status?.authed === true && status.skillInstalled !== true
-        ? await api.installSkill()
-        : await api.login()
+      // Always go through Host `login`: browser QR when unauthenticated; skill
+      // copy only when CLI auth is already present (Host short-circuits auth init).
+      const next = await api.login()
       applyStatus(next)
       if (next.authed && next.skillInstalled) {
         onNotice?.({ kind: 'success', text: productText('企业微信已连接') })
@@ -131,9 +130,6 @@ export function WeComPanel({
         <p className="dsh-connector-dingtalk-hint">
           {productText('请在弹出的浏览器中用企业微信扫码接入智能机器人，完成后返回此窗口。')}
         </p>
-      )}
-      {status !== null && !ready && busy !== 'login' && status.hint !== null && status.hint !== '' && (
-        <p className="dsh-connector-dingtalk-hint">{status.hint}</p>
       )}
       {error !== null && <p className="dsh-connector-dingtalk-error" role="alert">{error}</p>}
       <div className="dsh-connector-dingtalk-actions">

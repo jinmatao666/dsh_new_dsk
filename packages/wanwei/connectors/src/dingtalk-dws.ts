@@ -5,7 +5,7 @@
  * desktop runtime (WorkBuddy-style); PATH / npm -g is only a fallback.
  */
 import { spawn } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { delimiter, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -114,6 +114,11 @@ export function resolveBundledDwsCliSkillDir(env: NodeJS.ProcessEnv = process.en
   const appRoot = env.DSH_APP_ROOT?.trim() || process.cwd()
   const cwdStaged = join(appRoot, DWS_BUNDLED_SKILL_REL)
   if (existsSync(join(cwdStaged, 'SKILL.md'))) return cwdStaged
+  const documentTool = env.DSH_DOCUMENT_TOOL?.trim()
+  if (documentTool) {
+    const staged = join(dirname(documentTool), DWS_BUNDLED_SKILL_REL)
+    if (existsSync(join(staged, 'SKILL.md'))) return staged
+  }
   const anchor = env.DSH_BUNDLE_ANCHORS?.trim()
   if (anchor) {
     const staged = join(dirname(anchor), 'resources', 'dws-cli')
@@ -253,6 +258,24 @@ export function resolveDwsCommand(env: NodeJS.ProcessEnv = process.env): string 
   return undefined
 }
 
+/**
+ * Read personal-login state from `dws auth status --format json` stdout.
+ * Unauthenticated runs still exit 0 with `{ "authenticated": false }`.
+ * @param stdout - CLI stdout (may include a leading version_check object).
+ * @returns true only when the CLI reports an active login.
+ */
+export function parseDwsAuthenticated(stdout: string): boolean {
+  const text = stdout.trim()
+  const start = text.indexOf('{')
+  if (start < 0) return false
+  try {
+    const record = JSON.parse(text.slice(start)) as { authenticated?: unknown }
+    return record.authenticated === true
+  } catch {
+    return false
+  }
+}
+
 function composeStatus(
   dshHome: string,
   dwsInstalled: boolean,
@@ -265,9 +288,8 @@ function composeStatus(
     hint = '未找到随包 dws。请使用最新桌面安装包，或临时执行 npm install -g dingtalk-workspace-cli 后重启。'
   } else if (!authed) {
     hint = '点击「连接」，在浏览器中完成钉钉扫码或头像授权。'
-  } else if (!skillInstalled) {
-    hint = '已授权，但尚未写入 dws-cli 技能。点击「连接」完成启用。'
   }
+  // Authorized but the skill is not on disk yet: the sheet shows only「连接」.
   return { dwsInstalled, dwsVersion, authed, skillInstalled, hint }
 }
 
@@ -299,7 +321,8 @@ export async function buildDingTalkDwsStatus(
     // PATH hit means the CLI shim/binary is installed; skip a second cold spawn for `--version`.
     const auth = await run(dws, ['auth', 'status', '--format', 'json'])
     const dwsInstalled = true
-    const authed = auth.code === 0
+    // `dws auth status` exits 0 even when logged out; trust JSON `authenticated` only.
+    const authed = parseDwsAuthenticated(auth.stdout)
     return composeStatus(dshHome, dwsInstalled, null, authed)
   })()
 
@@ -315,6 +338,7 @@ export async function buildDingTalkDwsStatus(
 
 /**
  * Copy the official bundled dws-cli skill into `$DSH_HOME/skills/dws-cli`.
+ * Replaces any empty or partial destination left by a prior failed write.
  * @param dshHome - product DSH home.
  * @returns absolute install directory.
  */
@@ -323,9 +347,16 @@ export function installDwsCliSkill(dshHome: string): string {
   if (source === undefined) {
     throw new Error('未找到随包 dws-cli 技能（需要 app/assets/dws-cli 或 @dingtalk-real-ai/dsh-dingtalk）。请使用完整桌面安装包。')
   }
+  if (!existsSync(join(source, 'SKILL.md'))) {
+    throw new Error(`随包 dws-cli 技能损坏（缺少 SKILL.md）：${source}`)
+  }
   const dest = dwsCliSkillInstallDir(dshHome)
   mkdirSync(dirname(dest), { recursive: true })
+  rmSync(dest, { recursive: true, force: true })
   cpSync(source, dest, { recursive: true })
+  if (!existsSync(join(dest, 'SKILL.md'))) {
+    throw new Error(`写入 dws-cli 技能失败（目标缺少 SKILL.md）：${dest}`)
+  }
   return dest
 }
 
@@ -374,16 +405,39 @@ export async function disconnectDingTalkDws(dshHome: string): Promise<DingTalkDw
   const before = await buildDingTalkDwsStatus(dshHome)
   const dws = resolveDwsCommand()
   if (before.dwsInstalled && dws !== undefined) {
-    // Logout may be unavailable on older CLI builds; still remove the skill.
-    await run(dws, ['auth', 'logout'], 30_000)
+    // `-y` skips interactive confirm so Host unbind actually clears tokens.
+    await run(dws, ['auth', 'logout', '-y'], 30_000)
+    invalidateDingTalkDwsStatusCache()
+    const still = await buildDingTalkDwsStatus(dshHome, { fresh: true })
+    if (still.authed) {
+      // Stronger wipe when logout left a live session (older CLI / multi-profile).
+      await run(dws, ['auth', 'reset', '-y'], 30_000)
+    }
   }
   const dest = dwsCliSkillInstallDir(dshHome)
-  if (existsSync(dest)) {
-    const { rmSync } = await import('node:fs')
-    rmSync(dest, { recursive: true, force: true })
-  }
+  if (existsSync(dest)) rmSync(dest, { recursive: true, force: true })
   invalidateDingTalkDwsStatusCache()
   return buildDingTalkDwsStatus(dshHome, { fresh: true })
+}
+
+/**
+ * When personal auth already succeeded, copy the bundled skill if `$DSH_HOME/skills/dws-cli` is missing.
+ * Status probes call this so a second「连接」click is not required after OAuth.
+ * @param dshHome - product DSH home.
+ * @returns refreshed status.
+ */
+export async function ensureDingTalkSkillInstalled(dshHome: string): Promise<DingTalkDwsStatus> {
+  const status = await buildDingTalkDwsStatus(dshHome, { fresh: true })
+  if (!status.authed || status.skillInstalled) return status
+  if (resolveBundledDwsCliSkillDir() === undefined) return status
+  try {
+    installDwsCliSkill(dshHome)
+    invalidateDingTalkDwsStatusCache()
+    return buildDingTalkDwsStatus(dshHome, { fresh: true })
+  } catch {
+    // Keep the「尚未写入」hint when the copy fails;「连接」can retry.
+    return status
+  }
 }
 
 /**
@@ -397,6 +451,7 @@ export function registerDingTalkDwsRpc(ctx: Context): () => void {
   return ctx.effect(() => connection.rpc.handle('/wanwei-dingtalk', async (endpoint, _payload) => {
     try {
       if (endpoint === 'status') {
+        // Do not auto-write skills here: after「解绑」a status poll must not silently reconnect.
         return { ok: true as const, value: await buildDingTalkDwsStatus(dshHome()) }
       }
       if (endpoint === 'login') {

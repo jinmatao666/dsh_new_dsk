@@ -76,24 +76,25 @@ describe('WeCom CLI Host helpers', () => {
     writeFileSync(join(cwdSkills, 'SKILL.md'), '---\nname: wecomcli-shared\ndescription: x\n---\n')
     expect(resolveBundledWeComSkillsDir({ DSH_APP_ROOT: appRoot })).toBe(dirname(cwdSkills))
     const previous = process.env.DSH_NODE_BINARY
-    const previousApp = process.env.DSH_APP_ROOT
+    const previousDev = process.env.DSH_DESKTOP_DEVELOPMENT
     process.env.DSH_NODE_BINARY = nodeBin
     delete process.env.DSH_WECOM_SKILLS_DIR
-    delete process.env.DSH_APP_ROOT
+    delete process.env.DSH_DESKTOP_DEVELOPMENT
     try {
       const home = mkdtempSync(join(tmpdir(), 'wanwei-wecom-home-skills-'))
-      // Point resolution away from the staged skills by using a node binary without assets.
+      // Production sidecar layout (document-tool beside app/) without staged WeCom skills.
       const bareRoot = mkdtempSync(join(tmpdir(), 'wanwei-wecom-bare-'))
       const bareNode = join(bareRoot, process.platform === 'win32' ? 'node.exe' : 'node')
       writeFileSync(bareNode, '')
+      mkdirSync(join(bareRoot, 'app'), { recursive: true })
+      writeFileSync(join(bareRoot, 'app', 'document-tool.mjs'), '')
       process.env.DSH_NODE_BINARY = bareNode
-      process.env.DSH_APP_ROOT = bareRoot
       await expect(installWeComCliSkills(home)).rejects.toThrow(/安装包缺少企业微信技能资源/)
     } finally {
       if (previous === undefined) delete process.env.DSH_NODE_BINARY
       else process.env.DSH_NODE_BINARY = previous
-      if (previousApp === undefined) delete process.env.DSH_APP_ROOT
-      else process.env.DSH_APP_ROOT = previousApp
+      if (previousDev === undefined) delete process.env.DSH_DESKTOP_DEVELOPMENT
+      else process.env.DSH_DESKTOP_DEVELOPMENT = previousDev
     }
   })
 
@@ -161,6 +162,13 @@ describe('WeCom CLI RPC', () => {
     process.env.DSH_HOME = home
     process.env.PATH = ''
     process.env.Path = ''
+    // Stub the CLI so status cannot hang on a real wecom-cli from the workspace install.
+    const stub = join(home, process.platform === 'win32' ? 'wecom-cli.cmd' : 'wecom-cli')
+    writeFileSync(stub, process.platform === 'win32'
+      ? '@echo unauthorized\r\nexit /b 1\r\n'
+      : '#!/bin/sh\necho unauthorized\nexit 1\n')
+    process.env.DSH_WECOM_CLI = stub
+    invalidateWeComCliStatusCache()
     const ctx = new Context()
     Object.assign(ctx, {
       get(key: string) {

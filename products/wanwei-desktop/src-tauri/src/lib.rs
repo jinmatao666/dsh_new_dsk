@@ -2167,6 +2167,75 @@ fn development_port() -> Result<u16, String> {
         .map_err(|error| format!("无法分配本地开发端口：{error}"))
 }
 
+/// Copy packaged connector skills into `$DSH_HOME/skills` before the sidecar starts.
+/// The connectors page otherwise stays on「尚未写入」and a later RPC can surface as a failed fetch.
+fn install_packaged_connector_skills(app_root: &Path, dsh_home: &Path) -> Result<(), String> {
+    let skills_root = dsh_home.join("skills");
+    let dws = app_root.join("assets").join("dws-cli");
+    if dws.join("SKILL.md").is_file() {
+        let dest = skills_root.join("dws-cli");
+        if !dest.join("SKILL.md").is_file() {
+            if dest.exists() {
+                fs::remove_dir_all(&dest).map_err(|error| {
+                    format!("无法清理旧的 dws-cli 技能 {}：{error}", dest.display())
+                })?;
+            }
+            copy_connector_skill_dir(&dws, &dest)?;
+        }
+    }
+    let wecom = app_root.join("assets").join("wecom-skills");
+    if wecom.join("wecomcli-shared").join("SKILL.md").is_file() {
+        let entries = fs::read_dir(&wecom)
+            .map_err(|error| format!("无法枚举企业微信技能 {}：{error}", wecom.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|error| format!("无法读取企业微信技能项：{error}"))?;
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            if !name_str.starts_with("wecomcli-") {
+                continue;
+            }
+            if !entry.path().join("SKILL.md").is_file() {
+                continue;
+            }
+            let dest = skills_root.join(&name);
+            if dest.join("SKILL.md").is_file() {
+                continue;
+            }
+            if dest.exists() {
+                fs::remove_dir_all(&dest).map_err(|error| {
+                    format!("无法清理旧的企业微信技能 {}：{error}", dest.display())
+                })?;
+            }
+            copy_connector_skill_dir(&entry.path(), &dest)?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_connector_skill_dir(source: &Path, target: &Path) -> Result<(), String> {
+    fs::create_dir_all(target)
+        .map_err(|error| format!("无法创建技能目录 {}：{error}", target.display()))?;
+    for entry in fs::read_dir(source)
+        .map_err(|error| format!("无法枚举技能资源 {}：{error}", source.display()))?
+    {
+        let entry = entry.map_err(|error| format!("无法读取技能资源项：{error}"))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("无法读取技能资源类型 {}：{error}", entry.path().display()))?;
+        if file_type.is_symlink() {
+            continue;
+        }
+        let destination = target.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_connector_skill_dir(&entry.path(), &destination)?;
+        } else if file_type.is_file() {
+            fs::copy(entry.path(), &destination)
+                .map_err(|error| format!("无法复制技能文件 {}：{error}", entry.path().display()))?;
+        }
+    }
+    Ok(())
+}
+
 fn spawn_sidecar(
     resource_dir: &Path,
     config: &ServerConfig,
@@ -2245,6 +2314,12 @@ fn spawn_sidecar(
     } else {
         cwd.clone()
     };
+    if let Err(error) = install_packaged_connector_skills(&app_root, &dsh_home) {
+        append_log(
+            log_path,
+            format!("connector skill staging skipped: {error}"),
+        );
+    }
     let mut command = Command::new(&program);
     command
         .args(args)
@@ -2263,7 +2338,7 @@ fn spawn_sidecar(
         .stdout(Stdio::piped())
         .stdin(Stdio::piped())
         .stderr(Stdio::piped());
-    if !cfg!(debug_assertions) {
+    {
         let dws_skill = app_root.join("assets").join("dws-cli");
         let wecom_skills = app_root.join("assets").join("wecom-skills");
         if dws_skill.join("SKILL.md").exists() {
