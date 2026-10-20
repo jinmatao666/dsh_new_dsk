@@ -66,7 +66,7 @@ describe('DingTalkPanel', () => {
 
   it('shows 去试试 immediately from initialStatus while soft-refreshing', async () => {
     let resolveStatus: (value: DingTalkStatus) => void = () => {}
-    const pending = new Promise<DingTalkStatus>(resolve => { resolveStatus = resolve })
+    const pending = new Promise<DingTalkStatus>((resolve) => { resolveStatus = resolve })
     const face = api({
       status: vi.fn(() => pending),
     })
@@ -145,7 +145,7 @@ describe('DingTalkPanel', () => {
       })
       expect(screen.getByRole('button', { name: '去试试' })).toBeTruthy()
       expect(onNotice).toHaveBeenCalledWith({ kind: 'success', text: '钉钉已连接' })
-      expect(face.status.mock.calls.length).toBeGreaterThan(1)
+      expect(vi.mocked(face.status).mock.calls.length).toBeGreaterThan(1)
     } finally {
       vi.useRealTimers()
     }
