@@ -25,6 +25,13 @@
 .system-settings-page button:disabled { opacity: .5; cursor: not-allowed; }
 .settings-logout { margin-top: 24px; color: #c44949; }
 .settings-feedback { margin: 18px 0 0; color: #365d8c; }
+.settings-resources { margin-top: 28px; max-width: 820px; border-top: 1px solid #dfe8f5; padding-top: 24px; }
+.settings-resource-fields { margin-top: 20px; color: #385375; }
+.settings-resource-fields > label { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
+.settings-resource-fields input:not([type='checkbox']), .settings-resource-fields textarea { width: 100%; box-sizing: border-box; border: 1px solid #d6e3f4; padding: 12px 14px; border-radius: 8px; font: inherit; color: #253d60; background: white; }
+.settings-resource-fields .settings-resource-switch { flex-direction: row; align-items: center; }
+.settings-resource-switch input { accent-color: #3478ef; }
+.settings-resource-fields textarea:focus-visible { outline: 2px solid #3478ef; outline-offset: 3px; }
 .settings-features { width: 100%; max-width: 820px; border-collapse: collapse; color: #385375; }
 .settings-features th, .settings-features td { padding: 18px 16px; text-align: left; border-bottom: 1px solid #dfe8f5; }
 .settings-features thead th { color: #7589a7; font-weight: 500; }

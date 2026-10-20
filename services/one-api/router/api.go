@@ -26,6 +26,10 @@ func SetApiRouter(router *gin.Engine) {
 	{
 		apiRouter.GET("/status", controller.GetStatus)
 		apiRouter.GET("/desktop-config", controller.GetDesktopConfig)
+		apiRouter.GET("/desktop-resources", controller.GetDesktopResources)
+		apiRouter.POST("/desktop-resources", middleware.RootAuth(), controller.UploadDesktopResources)
+		apiRouter.GET("/desktop-resources/wheels/", controller.ListDesktopWheels)
+		apiRouter.GET("/desktop-resources/wheels/files/:bundle/:name", controller.DownloadDesktopWheel)
 		apiRouter.GET("/models", middleware.UserAuth(), controller.DashboardListModels)
 		apiRouter.GET("/model_ratios", middleware.UserAuth(), controller.GetModelRatios)
 		apiRouter.GET("/notice", controller.GetNotice)

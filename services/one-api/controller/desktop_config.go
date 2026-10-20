@@ -15,12 +15,13 @@ type desktopFeatureFlags struct {
 }
 
 type desktopDeploymentSettings struct {
-	Edition  string                         `json:"edition"`
-	Network  string                         `json:"network"`
-	Operator string                         `json:"operator"`
-	Phone    string                         `json:"phone"`
-	Features map[string]desktopFeatureFlags `json:"features"`
-	Plugins  desktopPluginSettings          `json:"plugins"`
+	Edition   string                         `json:"edition"`
+	Network   string                         `json:"network"`
+	Operator  string                         `json:"operator"`
+	Phone     string                         `json:"phone"`
+	Features  map[string]desktopFeatureFlags `json:"features"`
+	Plugins   desktopPluginSettings          `json:"plugins"`
+	Resources *desktopResourceSettings       `json:"resources,omitempty"`
 }
 
 type desktopPluginSettings struct {
@@ -91,6 +92,26 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 	}
 	if err := json.Unmarshal([]byte(raw), &settings); err != nil {
 		return settings, err
+	}
+	if field, present := fields["resources"]; present {
+		var resourceFields map[string]interface{}
+		if err := json.Unmarshal(field, &resourceFields); err != nil {
+			return settings, err
+		}
+		if _, ok := resourceFields["autoDetect"].(bool); !ok {
+			return settings, fmt.Errorf("invalid resources.autoDetect")
+		}
+		if _, ok := resourceFields["proxyUrl"].(string); !ok {
+			return settings, fmt.Errorf("invalid resources.proxyUrl")
+		}
+		if _, ok := resourceFields["probeUrls"].([]interface{}); !ok {
+			return settings, fmt.Errorf("invalid resources.probeUrls")
+		}
+	}
+	if settings.Resources != nil {
+		if err := validateDesktopResources(*settings.Resources); err != nil {
+			return settings, err
+		}
 	}
 	settings.Features = map[string]desktopFeatureFlags{"internet": settings.Features["internet"], "intranet": settings.Features["intranet"]}
 	if settings.Network != "internet" && settings.Network != "intranet" {

@@ -4,7 +4,7 @@ English | [中文](desktop-updates.zh.md)
 
 ## Administrator workflow
 
-The Version Release page includes a Desktop Update Bundles tab. Only the system root administrator may list, upload, publish or withdraw desktop releases. Upload one Runner-produced platform ZIP, enter plain-text release notes and wait for validation. Uploading never publishes. Publication requires a separate confirmation and rechecks signatures against the configured public key.
+The Version Release page filters desktop packages by OS and architecture and lists them as independent releases. Only the system root administrator may list, upload, publish or withdraw releases. Enter the stable version, OS and architecture, then upload one Runner-produced signed platform ZIP with plain-text notes. Multipart uploads require `version` and `platform`; both must exactly match the signed manifest and cannot relabel the package. A mismatch rejects the upload and removes staged files. Uploading never publishes. Publication requires a separate confirmation and rechecks signatures against the configured public key. Windows ARM64 has no build target; Windows supports x64, while macOS and Linux support x64 and ARM64. Legacy mobile, website and service-restart records remain at `/operation/version-release/legacy`, separate from desktop updates.
 
 The release ZIP contains exactly `release.json`, `release.json.sig` and one artifact named by the manifest. The manifest and artifact both use Tauri-compatible base64 Minisign prehashed signatures. The manifest binds product `com.wanwei.harness`, stable `x.y.z` version, platform, artifact filename, byte count, SHA-256 and artifact signature. A missing public key disables uploads and publication; the administrator page never accepts a private key.
 

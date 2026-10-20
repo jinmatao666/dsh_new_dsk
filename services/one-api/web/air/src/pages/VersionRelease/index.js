@@ -4,6 +4,9 @@ import { Pencil, Trash2, Plus } from 'lucide-react';
 import { API, showError, showSuccess } from '../../helpers';
 import { ConfigPageTabPane, ConfigPageTabs } from '../../components/ConfigPageLayout';
 import DesktopUpdates from './DesktopUpdates';
+import AdminPageFrame from '../../components/AdminPageFrame';
+import './index.css';
+import '../Zjugis/SystemSettings.css';
 
 const { Text, Paragraph } = Typography;
 
@@ -290,7 +293,7 @@ const PlatformPanel = ({ platform }) => {
 
   return (
     <>
-      <div style={{ margin: '12px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="release-history-toolbar">
         <Text type="tertiary" style={{ fontSize: 13 }}>{hint}</Text>
         <Space>
           <Button onClick={load} loading={loading}>刷新</Button>
@@ -338,15 +341,31 @@ const PlatformPanel = ({ platform }) => {
   );
 };
 
-const VersionRelease = () => (
-  <ConfigPageTabs defaultActiveKey="app">
-    <ConfigPageTabPane tab="桌面端更新包" itemKey="desktop-updates"><DesktopUpdates /></ConfigPageTabPane>
+export const LegacyVersionRelease = () => (
+  <AdminPageFrame title="旧系统发布记录" description="保留原移动应用、网站版本与服务重启记录，不用于桌面端自动更新。" actions={<a href={`${process.env.PUBLIC_URL || ''}/operation/version-release`}>返回桌面端更新</a>} className="release-page">
+  <ConfigPageTabs defaultActiveKey="app" sticky={false}>
     {PLATFORMS.map((p) => (
       <ConfigPageTabPane tab={p.label} itemKey={p.key} key={p.key}>
         <PlatformPanel platform={p.key} />
       </ConfigPageTabPane>
     ))}
   </ConfigPageTabs>
+  </AdminPageFrame>
 );
+
+const releaseTabs = [['all', '全部平台'], ['windows', 'Windows'], ['darwin', 'macOS'], ['linux', 'Linux']];
+
+const VersionRelease = () => {
+  const [platformFamily, setPlatformFamily] = useState('all');
+  return <div className="zjugis-new-page system-settings-page release-page">
+    <div className="preview-page-head"><div><h1>版本发布</h1><p>管理万维 Buddy 桌面端安装包与更新发布。</p></div><a className="release-legacy-link" href={`${process.env.PUBLIC_URL || ''}/operation/version-release/legacy`}>旧系统发布记录</a></div>
+    <section className="preview-surface system-settings-surface">
+      <div className="preview-tabs" role="tablist" aria-label="更新包平台">
+        {releaseTabs.map(([key, label]) => <button type="button" role="tab" id={`release-tab-${key}`} aria-controls="release-platform-panel" aria-selected={platformFamily === key} key={key} className={platformFamily === key ? 'active' : ''} onClick={() => setPlatformFamily(key)}>{label}</button>)}
+      </div>
+      <div role="tabpanel" id="release-platform-panel" aria-labelledby={`release-tab-${platformFamily}`}><DesktopUpdates platformFamily={platformFamily} /></div>
+    </section>
+  </div>;
+};
 
 export default VersionRelease;

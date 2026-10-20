@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { API, showSuccess } from '../../helpers';
 import './SystemSettings.css';
+import ResourceSettings, { defaultResources } from './ResourceSettings';
 
 const defaults = { network: 'internet', edition: 'operations', operator: '', phone: '', features: {
   internet: { automations: true, connectors: true },
@@ -84,6 +85,8 @@ export default function SystemSettings() {
     if (loading || loadError || saving || user?.role !== 100) return;
     setSaving(true); setFeedback('');
     const value = { ...settings, operator: settings.operator.trim(), phone: settings.phone.trim() };
+    if (value.network === 'intranet' && !value.resources) value.resources = defaultResources;
+    if (value.resources) value.resources = { ...value.resources, probeUrls: value.resources.probeUrls.map(url => url.trim()).filter(Boolean) };
     try {
       const response = await API.put('/api/option/', { key: 'SystemDeploymentSettings', value: JSON.stringify(value) });
       if (!response.data.success) throw new Error(response.data.message || '保存失败');
@@ -136,6 +139,10 @@ export default function SystemSettings() {
               <label>运维人员<input value={settings.operator} maxLength={80} placeholder='请输入运维人员姓名' disabled={saving} onChange={event => change('operator', event.target.value)} /></label>
               <label>联系电话<input type='tel' value={settings.phone} maxLength={40} placeholder='请输入手机号或固定电话' disabled={saving} onChange={event => change('phone', event.target.value)} /></label>
             </div>}
+            {active === 'network' && settings.network === 'intranet' && <ResourceSettings value={settings.resources || defaultResources}
+              disabled={saving} onChange={value => change('resources', value)} />}
+            {active === 'network' && settings.network === 'intranet' && !settings.resources && <button type='button'
+              className='settings-secondary' disabled={saving} onClick={() => change('resources', defaultResources)}>启用此资源配置（保存后生效）</button>}
             <div className='settings-footer'><span>{dirty ? '有未保存的修改' : ''}</span><div><button type='button' className='settings-secondary' disabled={!dirty || saving} onClick={() => { setSettings(saved); setFeedback(''); }}>取消修改</button><button type='submit' className='settings-primary' disabled={!dirty || saving}>{saving ? '保存中…' : '保存设置'}</button></div></div>
           </form>)}
         </div>}

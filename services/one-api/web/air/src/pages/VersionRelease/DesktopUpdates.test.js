@@ -44,6 +44,11 @@ test('missing public key disables upload and publish without asking for a privat
 
 test('upload uses multipart and remains separate from publication', async () => {
   await act(async () => root.render(<DesktopUpdates />));
+  const version = container.querySelector('input[aria-label="版本号"]');
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(version, '1.2.0');
+    version.dispatchEvent(new Event('input', { bubbles: true }));
+  });
   const input = container.querySelector('input[type="file"]');
   Object.defineProperty(input, 'files', { value: [new File(['signed release'], 'release.zip', { type: 'application/zip' })] });
   act(() => input.dispatchEvent(new Event('change', { bubbles: true })));
@@ -51,6 +56,8 @@ test('upload uses multipart and remains separate from publication', async () => 
   await act(async () => upload.click());
   expect(API.post.mock.calls[0][0]).toBe('/api/desktop-updates');
   expect(API.post.mock.calls[0][1]).toBeInstanceOf(FormData);
+  expect(API.post.mock.calls[0][1].get('version')).toBe('1.2.0');
+  expect(API.post.mock.calls[0][1].get('platform')).toBe('windows-x86_64');
   expect(API.post).toHaveBeenCalledTimes(1);
   expect(showSuccess).toHaveBeenCalledWith('更新包校验通过，已保存为待发布');
 });
@@ -66,4 +73,39 @@ test('publication requires explicit confirmation and cancellation makes no reque
   await act(async () => document.querySelector('button[aria-label="确认"]').click());
   expect(API.post).toHaveBeenCalledWith(`/api/desktop-updates/${record.id}/publish`);
   expect(showSuccess).toHaveBeenCalledWith('已发布，客户端将在检查更新时发现新版');
+});
+
+test('platform filtering changes records without changing the upload endpoint', async () => {
+  const mac = { ...record, id: 'b'.repeat(32), platform: 'darwin-aarch64', version: '1.3.0' };
+  API.get.mockResolvedValue({ data: { success: true, data: { items: [record, mac], channels: [], signing_configured: true } } });
+  await act(async () => root.render(<DesktopUpdates platformFamily="darwin" />));
+  expect(container.querySelector('tbody').textContent).toContain('macOSARM64');
+  expect(container.querySelector('tbody').textContent).not.toContain('Windows');
+  await act(async () => root.render(<DesktopUpdates platformFamily="windows" />));
+  expect(container.querySelector('tbody').textContent).toContain('Windowsx64');
+  expect(container.querySelector('tbody').textContent).not.toContain('macOS');
+});
+
+test('long notes have a dedicated detail view rather than expanding the table', async () => {
+  await act(async () => root.render(<DesktopUpdates />));
+  const view = [...container.querySelectorAll('button')].find(button => button.textContent === '查看');
+  act(() => view.click());
+  expect(document.querySelector('.release-full-notes').textContent).toBe(record.notes);
+});
+
+test('upload cannot omit version and same-version architectures remain separate rows', async () => {
+  const mac = { ...record, platform: 'darwin-aarch64', id: 'b'.repeat(32) };
+  const intel = { ...record, platform: 'darwin-x86_64', id: 'c'.repeat(32) };
+  API.get.mockResolvedValue({ data: { success: true, data: { items: [mac, intel], channels: [], signing_configured: true } } });
+  await act(async () => root.render(<DesktopUpdates platformFamily="darwin" />));
+  expect(container.querySelectorAll('tbody tr').length).toBe(2);
+  const upload = [...container.querySelectorAll('button')].find(button => button.textContent === '上传并校验');
+  const file = container.querySelector('input[type="file"]');
+  Object.defineProperty(file, 'files', { value: [new File(['mock'], 'release.zip')] });
+  act(() => file.dispatchEvent(new Event('change', { bubbles: true })));
+  expect(upload.disabled).toBe(true);
+  const filter = container.querySelector('select[aria-label="筛选架构"]');
+  act(() => { filter.value = 'aarch64'; filter.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(container.querySelectorAll('tbody tr').length).toBe(1);
+  expect(container.querySelector('tbody').textContent).toContain('ARM64');
 });

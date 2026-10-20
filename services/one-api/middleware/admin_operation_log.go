@@ -53,6 +53,7 @@ var actionRegistry = map[string]auditAction{
 	"DELETE /api/channel/disabled": {"清理禁用渠道", "渠道"},
 	// 模型配置 / 系统设置
 	"PUT /api/option/": {"修改系统设置", "模型配置"},
+		"POST /api/desktop-resources": {"替换桌面离线依赖包", "系统设置"},
 	// 商品管理（充值套餐）
 	"POST /api/recharge-package/":      {"新增商品", "商品管理"},
 	"PUT /api/recharge-package/":       {"更新商品", "商品管理"},

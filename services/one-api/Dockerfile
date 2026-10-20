@@ -28,6 +28,14 @@ COPY web/air ./air
 COPY web/org-admin ./org-admin
 RUN mkdir -p /web/build
 RUN cd /web/air && npx --no-install eslint src/components/ExpertWebTable.js src/pages/Expert/index.js
+RUN cd /web/air && npx --no-install eslint src/components/SkillsTable.js src/components/skillFolderImport.js src/pages/Zjugis/ResourceSettings.js src/pages/VersionRelease/DesktopUpdates.js && \
+    CI=true npm test -- --watchAll=false --runInBand --runTestsByPath \
+    src/components/SkillsTable.import.test.js \
+    src/components/SkillsTable.pagination.test.js \
+    src/components/skillFolderImport.test.js \
+    src/pages/Zjugis/SystemSettings.test.js \
+    src/pages/Zjugis/ResourceSettings.test.js \
+    src/pages/VersionRelease/DesktopUpdates.test.js
 
 # Runtime skills are database releases. Checked-in GIS packages remain source
 # migration samples and are deliberately excluded from the shipped web assets.
@@ -72,8 +80,9 @@ COPY --from=web-builder /web/build ./web/build
 # Compile all tests; execute this release's expert/database/authentication checks.
 # Historical full-suite failures are listed in the release check report, not suppressed.
 RUN go test ./... -run '^$' && \
-    go test ./controller -run '^TestExpert' -count=1 && \
-    go test ./middleware -count=1
+    go test ./controller -run '^Test(Expert|Usage|SkillDownload|SkillImport|ApplyPublished|AdminUserAffiliation|UserIdentityUpdate|Desktop)' -count=1 && \
+    go test ./middleware -count=1 && \
+    go test ./model -run '^Test(SkillDownloadCounts|SkillTestSession|UserAffiliation|UpdateUserDisplayName|UserIdentityUpdate)' -count=1
 
 RUN go build -trimpath \
     -ldflags "-s -w -X 'github.com/songquanpeng/one-api/common.Version=${PARVIS_VERSION}' -linkmode external -extldflags '-static'" \

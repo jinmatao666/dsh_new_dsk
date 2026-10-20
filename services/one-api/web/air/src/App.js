@@ -42,7 +42,7 @@ import UserOperation from './pages/UserOperation';
 import InfluencerCode from './pages/InfluencerCode';
 import MessageNotification from './pages/MessageNotification';
 import NotificationManage from './pages/NotificationManage';
-import VersionRelease from './pages/VersionRelease';
+import VersionRelease, { LegacyVersionRelease } from './pages/VersionRelease';
 import OperationDashboard from './pages/OperationDashboard';
 import ProductManagement from './pages/ProductManagement';
 import OrderManagement from './pages/OrderManagement';
@@ -489,6 +489,7 @@ function App() {
               </PrivateRoute>
             }
           />
+          <Route path="/operation/version-release/legacy" element={<PrivateRoute><PermissionGuard permKey="version_note"><LegacyVersionRelease /></PermissionGuard></PrivateRoute>} />
           <Route
             path="/monitor-board"
             element={

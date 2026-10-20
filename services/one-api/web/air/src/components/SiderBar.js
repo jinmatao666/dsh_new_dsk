@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { BarChart3, ClipboardList, Cpu, Home, PanelLeftClose, PanelLeftOpen, Settings, Sparkles, Users, UsersRound } from 'lucide-react';
+import { BarChart3, ClipboardList, Cpu, Home, Package, PanelLeftClose, PanelLeftOpen, Settings, Sparkles, Users, UsersRound } from 'lucide-react';
 import '../index.css';
-import { API, isRoot } from '../helpers';
+import { API, hasPermission, isRoot } from '../helpers';
 
 const items = [
   { label: '分析看板', path: '/', Icon: Home },
@@ -12,6 +12,7 @@ const items = [
   { label: '用户权限', path: '/user', Icon: Users },
   { label: '使用统计', path: '/usage', Icon: BarChart3 },
   { label: '模型日志', path: '/log', Icon: ClipboardList },
+  { label: '版本发布', path: '/operation/version-release', Icon: Package, permission: 'version_note' },
   { label: '系统设置', path: '/setting/personal', Icon: Settings }
 ];
 
@@ -32,7 +33,7 @@ export default function SiderBar({ isCollapsed, onCollapseChange }) {
     <div className="zjugis-sidebar-brand">{isCollapsed ? <img src="/brand-mark.svg" alt="万维 Buddy" /> : <img src="/brand-wordmark.svg" alt="万维 Buddy" />}</div>
     {!isCollapsed && <div className="zjugis-sidebar-caption">管理工作台</div>}
     <nav className="zjugis-sidebar-nav" aria-label="主导航">
-      {items.map(({ label, path, Icon }) => <Link key={path} to={path} className={`zjugis-sidebar-item${selected?.path === path ? ' active' : ''}`} title={isCollapsed ? label : undefined}>
+      {items.filter(item => !item.permission || hasPermission(item.permission)).map(({ label, path, Icon }) => <Link key={path} to={path} className={`zjugis-sidebar-item${selected?.path === path ? ' active' : ''}`} title={isCollapsed ? label : undefined}>
         <Icon className="zjugis-sidebar-item-icon" />{!isCollapsed && <span>{label}</span>}
         {path === '/skill' && pendingReviewCount !== null && pendingReviewCount > 0 && <span className="zjugis-sidebar-pending" aria-label={`${pendingReviewCount} 条待审核投稿`}>{isCollapsed ? (pendingReviewCount > 99 ? '99+' : pendingReviewCount) : `待审核 ${pendingReviewCount > 99 ? '99+' : pendingReviewCount}`}</span>}
       </Link>)}

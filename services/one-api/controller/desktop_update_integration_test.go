@@ -119,7 +119,7 @@ func updateZIP(t *testing.T, key minisign.PrivateKey, version, platform string, 
 	return out.Bytes()
 }
 
-func requestUpdate(t *testing.T, r *gin.Engine, method, path, role string, archive []byte) *httptest.ResponseRecorder {
+func requestUpdate(t *testing.T, r *gin.Engine, method, path, role string, archive []byte, overrides ...map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	var body bytes.Buffer
 	contentType := ""
@@ -131,6 +131,36 @@ func requestUpdate(t *testing.T, r *gin.Engine, method, path, role string, archi
 		}
 		file.Write(archive)
 		m.WriteField("notes", "更新说明")
+		fields := map[string]string{"version": "1.2.0", "platform": "windows-x86_64"}
+		if z, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive))); err == nil {
+			for _, entry := range z.File {
+				if entry.Name != "release.json" {
+					continue
+				}
+				reader, err := entry.Open()
+				if err != nil {
+					t.Fatal(err)
+				}
+				var manifest struct {
+					Version  string `json:"version"`
+					Platform string `json:"platform"`
+				}
+				err = json.NewDecoder(reader).Decode(&manifest)
+				reader.Close()
+				if err == nil {
+					fields["version"] = manifest.Version
+					fields["platform"] = manifest.Platform
+				}
+			}
+		}
+		for _, values := range overrides {
+			for key, value := range values {
+				fields[key] = value
+			}
+		}
+		for key, value := range fields {
+			m.WriteField(key, value)
+		}
 		m.Close()
 		contentType = m.FormDataContentType()
 	}
@@ -160,6 +190,36 @@ func uploadedID(t *testing.T, w *httptest.ResponseRecorder) string {
 		t.Fatalf("upload failed: %d %s", w.Code, w.Body.String())
 	}
 	return result.Data.ID
+}
+
+func TestDesktopUpdateDeclaredMetadataMustMatchSignature(t *testing.T) {
+	r, key, root := updateRouter(t)
+	bundle := updateZIP(t, key, "1.2.0", "darwin-aarch64", false)
+	for name, fields := range map[string]map[string]string{
+		"missing-version":    {"version": ""},
+		"invalid-version":    {"version": "v1.2.0"},
+		"relabelled-version": {"version": "2.0.0"},
+		"wrong-architecture": {"platform": "darwin-x86_64"},
+		"missing-platform":   {"platform": ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := requestUpdate(t, r, "POST", "/api/desktop-updates", "root", bundle, fields)
+			var result struct {
+				Success bool `json:"success"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.Success {
+				t.Fatal("mismatched metadata accepted")
+			}
+		})
+	}
+	files, err := os.ReadDir(root)
+	if err != nil || len(files) != 0 {
+		t.Fatalf("rejected metadata left files: %v", err)
+	}
+	uploadedID(t, requestUpdate(t, r, "POST", "/api/desktop-updates", "root", bundle))
 }
 
 func TestDesktopUpdateLifecycle(t *testing.T) {
@@ -214,6 +274,29 @@ func TestDesktopUpdateLifecycle(t *testing.T) {
 	}
 	if w := requestUpdate(t, r, "POST", "/api/desktop-updates/"+id+"/publish", "root", nil); w.Code == 200 {
 		t.Fatal("publish did not reverify")
+	}
+}
+
+func TestDesktopUpdateArchitecturesPublishIndependently(t *testing.T) {
+	r, key, _ := updateRouter(t)
+	ids := map[string]string{}
+	for _, arch := range []string{"x86_64", "aarch64"} {
+		id := uploadedID(t, requestUpdate(t, r, "POST", "/api/desktop-updates", "root", updateZIP(t, key, "1.2.0", "darwin-"+arch, false)))
+		ids[arch] = id
+		w := requestUpdate(t, r, "POST", "/api/desktop-updates/"+id+"/publish", "root", nil)
+		if w.Code != 200 {
+			t.Fatal(w.Body.String())
+		}
+	}
+	for arch, id := range ids {
+		w := requestUpdate(t, r, "GET", "/desktop-updates/darwin/"+arch+"/1.0.0", "", nil)
+		if w.Code != 200 || !bytes.Contains(w.Body.Bytes(), []byte("/files/"+id)) {
+			t.Fatalf("wrong package for %s: %s", arch, w.Body.String())
+		}
+	}
+	requestUpdate(t, r, "POST", "/api/desktop-updates/"+ids["x86_64"]+"/withdraw", "root", nil)
+	if w := requestUpdate(t, r, "GET", "/desktop-updates/darwin/aarch64/1.0.0", "", nil); w.Code != 200 {
+		t.Fatal("withdrawing x64 affected ARM64")
 	}
 }
 

@@ -234,6 +234,17 @@ func AdminUploadDesktopUpdate(c *gin.Context) {
 		return
 	}
 	notes := c.PostForm("notes")
+	expectedVersion := strings.TrimSpace(c.PostForm("version"))
+	expectedPlatform := strings.TrimSpace(c.PostForm("platform"))
+	requestedVersion, versionErr := semver.StrictNewVersion(expectedVersion)
+	if versionErr != nil || requestedVersion.Prerelease() != "" || requestedVersion.Metadata() != "" {
+		desktopUpdateFailure(c, errors.New("请填写正式版本号，例如 0.0.5"))
+		return
+	}
+	if expectedPlatform == "" || len(expectedPlatform) > 64 {
+		desktopUpdateFailure(c, errors.New("请选择操作系统和架构"))
+		return
+	}
 	if len(notes) > 16000 {
 		desktopUpdateFailure(c, errors.New("更新说明过长"))
 		return
@@ -270,6 +281,10 @@ func AdminUploadDesktopUpdate(c *gin.Context) {
 	manifest, data, signature, err := unpackDesktopUpdate(archivePath, stage, limit, key)
 	if err != nil {
 		desktopUpdateFailure(c, err)
+		return
+	}
+	if expectedVersion != manifest.Version || expectedPlatform != manifest.Platform {
+		desktopUpdateFailure(c, fmt.Errorf("填写的版本或平台与签名包不一致；包内版本为 %s，平台为 %s，请核对后重新上传", manifest.Version, manifest.Platform))
 		return
 	}
 	if err := os.Remove(archivePath); err != nil {
