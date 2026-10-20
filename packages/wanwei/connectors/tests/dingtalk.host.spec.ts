@@ -67,6 +67,10 @@ describe('DingTalk DWS Host helpers', () => {
       authenticated: true,
       message: '已登录',
     }))).toBe(true)
+    expect(parseDwsAuthenticated([
+      JSON.stringify({ version_check: { status: 'up_to_date' } }),
+      JSON.stringify({ success: true, authenticated: true }),
+    ].join('\n'))).toBe(true)
     expect(parseDwsAuthenticated('not-json')).toBe(false)
   })
 

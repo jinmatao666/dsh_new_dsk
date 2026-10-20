@@ -6,7 +6,7 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process'
 import {
-  cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync,
+  cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync,
 } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -19,6 +19,8 @@ const require = createRequire(import.meta.url)
 
 /** How long a Host status snapshot may be reused without re-spawning `wecom-cli`. */
 const STATUS_CACHE_TTL_MS = 45_000
+const AUTH_CREDENTIAL_FILE = 'credentials.enc'
+const AUTH_CREDENTIAL_POLL_MS = 500
 
 /** GitHub archive used when the desktop runtime has not staged WeCom skills. */
 const WECOM_CLI_SKILLS_TARBALL =
@@ -92,10 +94,6 @@ export function wecomSharedSkillDir(dshHome: string): string {
 export function resolveWeComConfigDir(env: NodeJS.ProcessEnv = process.env): string {
   const override = env.WECOM_CLI_CONFIG_DIR?.trim()
   if (override) return override
-  if (process.platform === 'win32') {
-    const appData = env.APPDATA?.trim()
-    if (appData) return join(appData, 'wecom')
-  }
   const home = env.HOME?.trim() || env.USERPROFILE?.trim()
   if (!home) throw new Error('无法解析企业微信 CLI 配置目录（缺少 HOME / USERPROFILE）')
   return join(home, '.config', 'wecom')
@@ -334,6 +332,12 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, ms)
+  })
+}
+
 /**
  * Run CLI work one process at a time. Callers return before `task` finishes.
  * @param task - status or browser login. Must not start another queued CLI task.
@@ -552,6 +556,51 @@ function stopWeComStatusProbe(): void {
   if (child !== null && child.exitCode === null) child.kill('SIGKILL')
 }
 
+function credentialSignature(path: string): string | null {
+  try {
+    const stat = statSync(path)
+    return `${String(stat.size)}:${String(stat.mtimeMs)}`
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Observe the credential file written by a successful QR authorization.
+ * `auth init` can keep running after this file is committed.
+ * @param dshHome - product DSH home.
+ * @param epoch - login generation captured when the flight started.
+ * @param stopped - true after `auth init` exits.
+ * @returns whether this login generation published connected status.
+ */
+async function watchWeComCredentials(
+  dshHome: string,
+  epoch: number,
+  initialSignature: string | null,
+  stopped: () => boolean,
+): Promise<boolean> {
+  const credential = join(resolveWeComConfigDir(), AUTH_CREDENTIAL_FILE)
+  let observedSignature: string | null = null
+  while (!stopped() && epoch === loginEpoch && loginFlight !== null) {
+    const signature = credentialSignature(credential)
+    if (signature !== null && signature !== initialSignature) {
+      if (signature === observedSignature) {
+        const published = await publishWeComAuthorized(dshHome, epoch)
+        if (published) {
+          const child = loginChild
+          if (child !== null && child.exitCode === null) child.kill('SIGKILL')
+        }
+        return published
+      }
+      observedSignature = signature
+    } else {
+      observedSignature = null
+    }
+    await delay(AUTH_CREDENTIAL_POLL_MS)
+  }
+  return false
+}
+
 /**
  * Store a connected snapshot and end the waiting state.
  * @param dshHome - product DSH home.
@@ -593,12 +642,24 @@ async function finishWeComLogin(dshHome: string, cli: string, epoch: number): Pr
   if (epoch !== loginEpoch) return
   // `auth show` never opens the QR browser. Stop it, then start `auth init`.
   stopWeComStatusProbe()
+  let stopWatch = false
+  const credential = join(resolveWeComConfigDir(), AUTH_CREDENTIAL_FILE)
+  const initialSignature = credentialSignature(credential)
+  const credentialWatch = watchWeComCredentials(
+    dshHome,
+    epoch,
+    initialSignature,
+    () => stopWatch,
+  )
   const result = await run(cli, ['auth', 'init', '--noninteractive'], 10 * 60_000, child => {
     loginChild = child
     child.once('close', () => {
       if (loginChild === child) loginChild = null
     })
   })
+  stopWatch = true
+  const published = await credentialWatch
+  if (published || loginFlight === null) return
   if (epoch !== loginEpoch) return
   if (result.code === null) {
     loginError = 'wecom-cli auth init 未能启动'

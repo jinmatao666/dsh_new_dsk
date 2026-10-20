@@ -282,14 +282,39 @@ export function resolveDwsCommand(env: NodeJS.ProcessEnv = process.env): string 
  */
 export function parseDwsAuthenticated(stdout: string): boolean {
   const text = stdout.trim()
-  const start = text.indexOf('{')
-  if (start < 0) return false
-  try {
-    const record = JSON.parse(text.slice(start)) as { authenticated?: unknown }
-    return record.authenticated === true
-  } catch {
-    return false
+  let start = -1
+  let depth = 0
+  let quoted = false
+  let escaped = false
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+    if (quoted) {
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === '"') quoted = false
+      continue
+    }
+    if (char === '"') {
+      quoted = true
+      continue
+    }
+    if (char === '{') {
+      if (depth === 0) start = index
+      depth += 1
+      continue
+    }
+    if (char !== '}' || depth === 0) continue
+    depth -= 1
+    if (depth !== 0 || start < 0) continue
+    try {
+      const record = JSON.parse(text.slice(start, index + 1)) as { authenticated?: unknown }
+      if (record.authenticated === true) return true
+    } catch {
+      // Keep scanning: the CLI may print a diagnostic object before status JSON.
+    }
+    start = -1
   }
+  return false
 }
 
 function composeStatus(
@@ -418,7 +443,11 @@ export async function buildDingTalkDwsStatus(
   statusInflight = probe
   try {
     const status = await probe
-    statusCache = { at: Date.now(), home: dshHome, status }
+    // A login started while this probe was running owns the cache. Do not let
+    // its pre-login result overwrite a connected snapshot.
+    if (loginFlight === null && statusProbeHolds === 0) {
+      statusCache = { at: Date.now(), home: dshHome, status }
+    }
     return withLoginFlags(status)
   } finally {
     if (statusInflight === probe) statusInflight = null
