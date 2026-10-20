@@ -79,7 +79,10 @@ export function WeComPanel({
     setBusy('login')
     setError(null)
     try {
-      const next = await api.login()
+      // Already authorized: only copy bundled skills (avoids reopening QR).
+      const next = status?.authed === true && status.skillInstalled !== true
+        ? await api.installSkill()
+        : await api.login()
       applyStatus(next)
       if (next.authed && next.skillInstalled) {
         onNotice?.({ kind: 'success', text: productText('企业微信已连接') })

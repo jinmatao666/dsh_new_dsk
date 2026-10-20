@@ -6,6 +6,7 @@ import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { IWorkspaces } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { IConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-api-workspace-controller/client'
@@ -294,6 +295,7 @@ export function Connectors({
       if (!value.authed) removeActiveConnectorId('wechat')
       return value
     },
+    ensureSession: async () => weChat.ensureSession(),
   }
 
   if (connection === 'loading') return <p role="status">{productText('正在连接服务…')}</p>
@@ -406,8 +408,24 @@ export function apply(ctx: Context): void {
   const weCom = createWeComApi(connection)
   const weChat = createWeChatApi(connection)
   const onTryPrompt = (prompt: string, connectorId: string) => {
+    // WeChat Assistant owns one durable Session under wechat-workspace — open it immediately
+    // so「去试试」lands on the same page inbound WeChat tasks already use.
+    if (connectorId === 'wechat') {
+      setActiveConnectorId('wechat')
+      controller.close()
+      void weChat.ensureSession()
+        .then(({ sessionId }) => {
+          sessions.open(SessionId(sessionId))
+        })
+        .catch(() => {
+          // Host Session unavailable: keep the example as a staged draft instead.
+          conversation.input.setStagedDraft(prompt)
+          sessions.clear()
+        })
+      return
+    }
     // Leave the connectors overlay, attach the connector chip, and stage the example (WorkBuddy「去试试」).
-    // Auto-prepare a Workspace Session on first send so WeChat (and other channels) need no picker.
+    // Auto-prepare a Workspace Session on first send so other channels need no picker.
     const current = sessions.list.getSnapshot().current
     const selected = current === undefined
       ? undefined

@@ -70,9 +70,16 @@ describe('WeCom CLI Host helpers', () => {
     const nodeBin = join(root, process.platform === 'win32' ? 'node.exe' : 'node')
     writeFileSync(nodeBin, '')
     expect(resolveBundledWeComSkillsDir({ DSH_NODE_BINARY: nodeBin })).toBe(dirname(skills))
+    const appRoot = mkdtempSync(join(tmpdir(), 'wanwei-wecom-app-root-'))
+    const cwdSkills = join(appRoot, 'assets', 'wecom-skills', 'wecomcli-shared')
+    mkdirSync(cwdSkills, { recursive: true })
+    writeFileSync(join(cwdSkills, 'SKILL.md'), '---\nname: wecomcli-shared\ndescription: x\n---\n')
+    expect(resolveBundledWeComSkillsDir({ DSH_APP_ROOT: appRoot })).toBe(dirname(cwdSkills))
     const previous = process.env.DSH_NODE_BINARY
+    const previousApp = process.env.DSH_APP_ROOT
     process.env.DSH_NODE_BINARY = nodeBin
     delete process.env.DSH_WECOM_SKILLS_DIR
+    delete process.env.DSH_APP_ROOT
     try {
       const home = mkdtempSync(join(tmpdir(), 'wanwei-wecom-home-skills-'))
       // Point resolution away from the staged skills by using a node binary without assets.
@@ -80,10 +87,13 @@ describe('WeCom CLI Host helpers', () => {
       const bareNode = join(bareRoot, process.platform === 'win32' ? 'node.exe' : 'node')
       writeFileSync(bareNode, '')
       process.env.DSH_NODE_BINARY = bareNode
+      process.env.DSH_APP_ROOT = bareRoot
       await expect(installWeComCliSkills(home)).rejects.toThrow(/安装包缺少企业微信技能资源/)
     } finally {
       if (previous === undefined) delete process.env.DSH_NODE_BINARY
       else process.env.DSH_NODE_BINARY = previous
+      if (previousApp === undefined) delete process.env.DSH_APP_ROOT
+      else process.env.DSH_APP_ROOT = previousApp
     }
   })
 

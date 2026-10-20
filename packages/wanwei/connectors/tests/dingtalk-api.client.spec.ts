@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connection/client'
 import {
+  connectorRpcError,
   createDingTalkApi,
   parseDingTalkStatus,
   rpcValue,
@@ -11,6 +12,11 @@ describe('dingtalk-api client helpers', () => {
     expect(rpcValue({ ok: true, value: 1 })).toBe(1)
     expect(() => rpcValue({ ok: false, error: { code: 'x', message: 'nope', details: {} } } as RpcResult<unknown>))
       .toThrow('nope')
+  })
+
+  it('maps browser Failed to fetch to product copy', () => {
+    expect(connectorRpcError(new Error('Failed to fetch')).message).toMatch(/无法连接本机服务/)
+    expect(connectorRpcError(new Error('未找到随包 dws-cli')).message).toBe('未找到随包 dws-cli')
   })
 
   it('parses DWS status payloads', () => {

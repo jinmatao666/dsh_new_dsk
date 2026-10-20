@@ -94,7 +94,9 @@ stageWeComRuntime(appRoot)
 const cli = join(appRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
 const productPatch = join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-wanwei-desktop', 'cordis.patch.yml')
 const webIndex = join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-web-frontend', 'dist', 'index.html')
-for (const required of [cli, productPatch, webIndex]) {
+const dwsCliSkill = join(appRoot, 'assets', 'dws-cli', 'SKILL.md')
+const wecomSharedSkill = join(appRoot, 'assets', 'wecom-skills', 'wecomcli-shared', 'SKILL.md')
+for (const required of [cli, productPatch, webIndex, dwsCliSkill, wecomSharedSkill]) {
   if (!existsSync(required)) throw new Error(`Desktop runtime is missing ${relative(appRoot, required)}`)
 }
 

@@ -206,12 +206,34 @@ export function resolveBundledWeComSkillsDir(env: NodeJS.ProcessEnv = process.en
     const staged = join(dirname(nodeBin), 'app', WECOM_BUNDLED_SKILLS_REL)
     if (existsSync(join(staged, WECOM_SHARED_SKILL_ID, 'SKILL.md'))) return staged
   }
+  // Production sidecar `cwd` is `runtime-<ver>/app`.
+  const appRoot = env.DSH_APP_ROOT?.trim() || process.cwd()
+  const cwdStaged = join(appRoot, WECOM_BUNDLED_SKILLS_REL)
+  if (existsSync(join(cwdStaged, WECOM_SHARED_SKILL_ID, 'SKILL.md'))) return cwdStaged
   const anchor = env.DSH_BUNDLE_ANCHORS?.trim()
   if (anchor) {
     const staged = join(dirname(anchor), 'resources', 'wecom-skills')
     if (existsSync(join(staged, WECOM_SHARED_SKILL_ID, 'SKILL.md'))) return staged
+    const resourcesRoot = join(dirname(anchor), 'src-tauri', 'resources')
+    if (existsSync(resourcesRoot)) {
+      for (const name of readdirSync(resourcesRoot)) {
+        if (!name.startsWith('runtime-')) continue
+        const nested = join(resourcesRoot, name, 'app', WECOM_BUNDLED_SKILLS_REL)
+        if (existsSync(join(nested, WECOM_SHARED_SKILL_ID, 'SKILL.md'))) return nested
+      }
+    }
   }
   return undefined
+}
+
+/** True when the Host is running inside a packaged / staged desktop runtime. */
+function isPackagedDesktopRuntime(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(
+    env.DSH_NODE_BINARY?.trim()
+    || env.DSH_APP_ROOT?.trim()
+    || env.DSH_WECOM_SKILLS_DIR?.trim()
+    || env.DSH_DWS_SKILL_DIR?.trim(),
+  )
 }
 
 /**
@@ -338,7 +360,7 @@ export async function installWeComCliSkills(dshHome: string): Promise<string> {
   }
   // Packaged desktop must ship skills under `app/assets/wecom-skills`; do not fetch GitHub
   // at connect time (intranet / Failed to fetch). Development may still download once.
-  if (process.env.DSH_NODE_BINARY?.trim()) {
+  if (isPackagedDesktopRuntime()) {
     throw new Error('安装包缺少企业微信技能资源（app/assets/wecom-skills）。请使用完整桌面安装包。')
   }
   const skillsRoot = wecomSkillsInstallRoot(dshHome)

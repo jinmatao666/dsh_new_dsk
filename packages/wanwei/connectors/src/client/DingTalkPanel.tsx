@@ -79,7 +79,10 @@ export function DingTalkPanel({
     setBusy('login')
     setError(null)
     try {
-      const next = await api.login()
+      // Already authorized: only copy the bundled skill (avoids reopening OAuth).
+      const next = status?.authed === true && status.skillInstalled !== true
+        ? await api.installSkill()
+        : await api.login()
       applyStatus(next)
       if (next.authed && next.skillInstalled) {
         onNotice?.({ kind: 'success', text: productText('钉钉已连接') })

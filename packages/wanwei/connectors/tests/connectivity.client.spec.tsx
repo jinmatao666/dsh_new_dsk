@@ -26,6 +26,7 @@ const weChat: WeChatApi = {
     phase: 'wait', status: weChatStatus, message: null, qrcodeUrl: null, qrDataUrl: null,
   }),
   disconnect: async () => weChatStatus,
+  ensureSession: async () => ({ sessionId: 'wechat-session-1' }),
 }
 
 afterEach(cleanup)
