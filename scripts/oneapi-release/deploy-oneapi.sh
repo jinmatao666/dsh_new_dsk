@@ -68,6 +68,9 @@ STATE=''
 BACKUP=''
 NEW_ID=''
 RESOURCE_BIND=''
+UPDATE_BIND=''
+# Public verification key only. The checksummed release script owns this deployment setting.
+UPDATE_PUBLIC_KEY='dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE1RDdEQURENzA4OTRFRTcKUldUblRvbHczZHJYRlg3S00xdk1maXZiVWtnb3cyd1ZQa1loZDV6Q3VWZzZSK2J2aks5S09mN2wK'
 CHANGING=0
 die() { echo "ERROR: $*" >&2; exit 1; }
 validate_archive() {
@@ -99,8 +102,8 @@ flock -n 9 || die 'Another OneAPI build/update is in progress.'
 
 inspect_and_validate() {
   docker inspect "$CONTAINER" > "$1"
-  python3 -I - "$1" "${2:-strict}" <<'PY'
-import json, sys, posixpath
+  python3 -I - "$1" "${2:-strict}" "$UPDATE_PUBLIC_KEY" <<'PY'
+import base64, json, sys, posixpath
 with open(sys.argv[1], encoding='utf-8') as f:
     c = json.load(f)[0]
 h = c['HostConfig']
@@ -130,6 +133,29 @@ if not persisted:
     print('Validated: legacy container has no mounts; deploy will add a dedicated resource directory only.')
 else:
     print('Validated: offline resource storage is persisted by an existing writable mount.')
+
+key = sys.argv[3]
+key_lines = base64.b64decode(key, validate=True).decode('utf-8').splitlines()
+assert len(key_lines) == 2 and key_lines[0].startswith('untrusted comment: '), 'Invalid packaged public key'
+raw_key = base64.b64decode(key_lines[1], validate=True)
+assert len(raw_key) == 42 and raw_key[:2] == b'Ed', 'Invalid packaged public key'
+env = dict(e.split('=', 1) for e in c['Config'].get('Env', []))
+existing_key = env.get('DESKTOP_UPDATE_PUBLIC_KEY', '')
+assert existing_key in ('', key), 'Existing desktop public key differs; explicit key rotation required; old container was not stopped'
+assert sys.argv[2] == 'allow-init' or existing_key == key, 'Desktop update public key was not applied'
+update_root = env.get('DESKTOP_UPDATE_DIR') or '/data/wanwei/desktop-updates'
+assert update_root.startswith('/') and posixpath.normpath(update_root) == update_root, 'Invalid DESKTOP_UPDATE_DIR'
+# The deepest mount determines writability; a read-only child overrides a writable parent.
+covering = [m for m in c.get('Mounts', []) if m.get('Destination') not in (None, '', '/')
+            and (update_root == m['Destination'] or update_root.startswith(m['Destination'].rstrip('/') + '/'))]
+mount = max(covering, key=lambda m: len(m['Destination']), default=None)
+if mount:
+    assert mount.get('RW', True), 'Desktop update storage mount is read-only'
+else:
+    assert sys.argv[2] == 'allow-init' and update_root == '/data/wanwei/desktop-updates', 'Desktop updates need writable persistent storage; custom storage requires manual migration'
+    assert not any(m.get('Destination', '').startswith(update_root + '/') for m in c.get('Mounts', [])), 'Nested desktop update mounts require manual review'
+    print('Validated: deploy will add dedicated persistent desktop update storage.')
+print('Validated: desktop update public key matches the release (or will be initialized).')
 
 assert any(e.startswith('SQL_DSN=') and e.split('=', 1)[1] for e in c['Config'].get('Env', [])), 'External SQL_DSN required; embedded SQLite update is unsupported'
 for e in c['Config']['Env']:
@@ -230,6 +256,28 @@ deploy() {
     printf '%s\n' "$RESOURCE_BIND" > "$STATE/resource-bind-path"
     echo "Adding persistent resource storage: $RESOURCE_BIND -> /data/desktop-resources"
   fi
+  local update_persisted
+  update_persisted=$(python3 -I - "$STATE/old-container.json" <<'UPDATES'
+import json, sys
+c = json.load(open(sys.argv[1], encoding='utf-8'))[0]
+env = dict(e.split('=', 1) for e in c['Config'].get('Env', []))
+root = env.get('DESKTOP_UPDATE_DIR') or '/data/wanwei/desktop-updates'
+print(int(any(m.get('Destination') not in (None, '', '/') and
+              (root == m['Destination'] or root.startswith(m['Destination'].rstrip('/') + '/'))
+              for m in c.get('Mounts', []))))
+UPDATES
+  )
+  update_persisted=${update_persisted%$'\r'}
+  if test "$update_persisted" = 0; then
+    docker exec "$CONTAINER" sh -c 'test ! -e /data/wanwei/desktop-updates && test ! -L /data/wanwei/desktop-updates' \
+      || die 'Existing desktop update directory or exec failure; migrate storage manually. Old container was not stopped.'
+    test ! -L /root/dsh && test ! -L /root/dsh/data || die 'Storage parents must not be symlinks.'
+    mkdir -p /root/dsh/data
+    UPDATE_BIND=$(mktemp -d /root/dsh/data/one-api-updates.XXXXXXXX)
+    chmod 700 "$UPDATE_BIND"
+    printf '%s\n' "$UPDATE_BIND" > "$STATE/update-bind-path"
+    echo "Adding persistent desktop update storage: $UPDATE_BIND -> /data/wanwei/desktop-updates"
+  fi
   printf '%s\n' "$DB_BACKUP_RECORD" > "$STATE/db-backup-path"
   OLD_ID=$(docker inspect -f '{{.Id}}' "$CONTAINER")
   local image_id
@@ -247,7 +295,7 @@ deploy() {
   docker rename "$CONTAINER" "$BACKUP"
   # Docker API copies Config/HostConfig instead of silently dropping env, mounts,
   # resource limits, restart policy, command, labels, logging or security options.
-  NEW_ID=$(python3 -I - "$STATE/old-container.json" "$image_id" "$OLD_ID" "$RESOURCE_BIND" <<'PY'
+  NEW_ID=$(python3 -I - "$STATE/old-container.json" "$image_id" "$OLD_ID" "$RESOURCE_BIND" "$UPDATE_BIND" "$UPDATE_PUBLIC_KEY" <<'PY'
 import copy, http.client, json, socket, sys
 class DockerConnection(http.client.HTTPConnection):
     def connect(self):
@@ -271,11 +319,26 @@ if body.get('Hostname') in (sys.argv[3], sys.argv[3][:12]):
     body['Hostname'] = ''
 body['HostConfig'] = copy.deepcopy(c['HostConfig'])
 resource_bind = sys.argv[4]
+update_bind, public_key = sys.argv[5:7]
+env = dict(e.split('=', 1) for e in body.get('Env', []))
+assert env.get('DESKTOP_UPDATE_PUBLIC_KEY', '') in ('', public_key), 'Refusing implicit key rotation'
+body['Env'] = [e for e in body.get('Env', []) if not e.startswith('DESKTOP_UPDATE_PUBLIC_KEY=')]
+body['Env'].append('DESKTOP_UPDATE_PUBLIC_KEY=' + public_key)
 if resource_bind:
     assert not c.get('Mounts') and not body['HostConfig'].get('Binds') and not body['HostConfig'].get('Mounts'), 'Refusing to replace existing mounts'
     assert resource_bind.startswith('/root/dsh/data/one-api-resources.') and '/' not in resource_bind[len('/root/dsh/data/one-api-resources.'):], 'Unexpected resource storage path'
     body['HostConfig']['Mounts'] = [{'Type': 'bind', 'Source': resource_bind,
                                     'Target': '/data/desktop-resources', 'ReadOnly': False}]
+if update_bind:
+    prefix = '/root/dsh/data/one-api-updates.'
+    assert update_bind.startswith(prefix) and update_bind[len(prefix):] and '/' not in update_bind[len(prefix):], 'Unexpected update storage path'
+    root = env.get('DESKTOP_UPDATE_DIR') or '/data/wanwei/desktop-updates'
+    assert root == '/data/wanwei/desktop-updates', 'Custom update storage requires manual migration'
+    assert not any(m.get('Destination') and (root == m['Destination'] or root.startswith(m['Destination'].rstrip('/') + '/') or m['Destination'].startswith(root + '/')) for m in c.get('Mounts', [])), 'Refusing overlapping update storage mounts'
+    if not body['HostConfig'].get('Mounts'):
+        body['HostConfig']['Mounts'] = []
+    body['HostConfig']['Mounts'].append({'Type': 'bind', 'Source': update_bind,
+                                       'Target': root, 'ReadOnly': False})
 oldnet = c['NetworkSettings']['Networks']['dsh-internal']
 aliases = [a for a in oldnet.get('Aliases') or [] if a not in (sys.argv[3], sys.argv[3][:12])]
 body['NetworkingConfig'] = {'EndpointsConfig': {'dsh-internal': {'Aliases': aliases}}}
@@ -308,6 +371,8 @@ PY
   echo "Old container retained (stopped): $BACKUP"
   echo "Private state (contains credentials; do NOT share): $STATE"
   if test -n "$RESOURCE_BIND"; then echo "Offline resources are persisted at: $RESOURCE_BIND"; fi
+  if test -n "$UPDATE_BIND"; then echo "Desktop update packages are persisted at: $UPDATE_BIND"; fi
+  echo 'Desktop update public key and writable persistent mount verified; clients download through their connected backend.'
   echo 'Next: verify admin login, usage statistics, ticket verification and all six expert submissions.'
 }
 case "$ACTION" in

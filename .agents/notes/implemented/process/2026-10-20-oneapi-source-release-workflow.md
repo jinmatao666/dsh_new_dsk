@@ -16,6 +16,8 @@ Each version has an exclusive output directory, source tar, commit metadata, che
 
 The unified repository owns both the offline-resource backend and signed desktop-update publishing. Resource handlers, deployment-setting validation, routes and the admin resource panel coexist with update-package routes and audit actions. Migration from a separate working copy adds only the missing resource functionality; it does not replace the update publisher, dependency versions or colleagues' remote commits. Historical delivery archives remain unchanged.
 
+The deployer owns the desktop-update public key because replacing the image alone preserves a missing key from the old container. Its checksummed bytes carry the public key, initialize the missing setting and refuse implicit key rotation. Default update storage receives a dedicated persistent bind only when no existing mount covers it and the container path does not exist. Existing unmounted data requires explicit migration; a mount must not hide it. The server receives no signing private key or password. Post-start inspection checks the applied key and writable persistent mount before accepting deployment. Download routing belongs to the [connected-backend updater](../architecture/2026-10-16-signed-desktop-release-distribution.md), not a deployment-specific public URL.
+
 ## Alternatives considered
 
 **Package the current working directory.** This includes unfinished contributions and makes the deployed source difficult to reproduce, so the command requires committed backend files instead.

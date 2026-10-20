@@ -17,6 +17,7 @@ import subprocess
 
 SCRIPT = pathlib.Path(__file__).with_name('deploy-oneapi.sh').read_text(encoding='utf-8')
 BLOCKS = re.findall(r"<<'PY'\n(.*?)\nPY", SCRIPT, re.S)
+PUBLIC_KEY = re.search(r"^UPDATE_PUBLIC_KEY='([^']+)'", SCRIPT, re.M).group(1)
 
 class ReleaseTests(unittest.TestCase):
     def setUp(self):
@@ -26,7 +27,7 @@ class ReleaseTests(unittest.TestCase):
         self.container = {
             'State': {'Running': True},
             'Config': {'Hostname': self.old_id[:12], 'Image': 'old:image',
-                       'Env': ['SQL_DSN=test-only', 'OTHER=retained'],
+                       'Env': ['SQL_DSN=test-only', 'OTHER=retained', 'SERVER_ADDRESS=https://existing.example', 'DESKTOP_UPDATE_PUBLIC_KEY=' + PUBLIC_KEY],
                        'Cmd': ['--port', '3000'], 'Entrypoint': ['/one-api'],
                        'Labels': {'example': 'retained'}},
             'HostConfig': {'NetworkMode': 'dsh-internal',
@@ -46,6 +47,8 @@ class ReleaseTests(unittest.TestCase):
         prior = sys.argv
         if code == BLOCKS[0] and not args:
             args = ['strict']
+        if code == BLOCKS[0]:
+            args = [*args, PUBLIC_KEY]
         sys.argv = ['fixture', str(self.path), *args]
         try:
             with contextlib.redirect_stdout(io.StringIO()):
@@ -65,8 +68,8 @@ class ReleaseTests(unittest.TestCase):
 
     def test_custom_persistent_resource_storage_passes(self):
         self.container['Config']['Env'].append('DESKTOP_RESOURCE_DIR=/resources/wheels')
-        self.container['Mounts'] = [{'Type': 'volume', 'Name': 'resources',
-                                     'Destination': '/resources', 'RW': True}]
+        self.container['Mounts'].append({'Type': 'volume', 'Name': 'resources',
+                                        'Destination': '/resources', 'RW': True})
         self.run_block(BLOCKS[0], [])
 
     def test_legacy_no_mounts_allows_explicit_initialization_only(self):
@@ -107,7 +110,7 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self.run_block(BLOCKS[0], [])
 
-    def clone_payload(self, resource_bind=''):
+    def clone_payload(self, resource_bind='', update_bind=''):
         # Stub Docker transport while executing the actual release payload builder.
         tree = ast.parse(BLOCKS[1])
         tree.body = [node for node in tree.body if not isinstance(node, (ast.ClassDef, ast.FunctionDef))]
@@ -115,8 +118,68 @@ class ReleaseTests(unittest.TestCase):
         def request(method, path, body=None):
             calls.append((method, path, body))
             return {'ApiVersion': '1.45'} if method == 'GET' else {'Id': 'new-container-id'}
-        self.run_block(compile(tree, 'release-clone', 'exec'), ['sha256:new-image', self.old_id, resource_bind], {'request': request})
+        self.run_block(compile(tree, 'release-clone', 'exec'), ['sha256:new-image', self.old_id, resource_bind, update_bind, PUBLIC_KEY], {'request': request})
         return calls[1][2]
+
+    def test_no_download_address_configuration_required_or_injected(self):
+        self.container['Config']['Env'] = [e for e in self.container['Config']['Env'] if not e.startswith('SERVER_ADDRESS=')]
+        self.run_block(BLOCKS[0], ['strict'])
+        payload = self.clone_payload()
+        self.assertFalse(any(e.startswith('DESKTOP_UPDATE_PUBLIC_URL=') for e in payload['Env']))
+        self.assertNotIn('ac.zjugis.com:3300', SCRIPT)
+        self.container['Config']['Env'].append('DESKTOP_UPDATE_PUBLIC_URL=https://custom.example')
+        self.assertIn('DESKTOP_UPDATE_PUBLIC_URL=https://custom.example', self.clone_payload()['Env'])
+        self.run_block(BLOCKS[0], ['strict'])
+
+    def test_missing_public_key_initialized_without_losing_other_environment(self):
+        self.container['Config']['Env'].pop()
+        self.run_block(BLOCKS[0], ['allow-init'])
+        with self.assertRaises(AssertionError):
+            self.run_block(BLOCKS[0], ['strict'])
+        payload = self.clone_payload()
+        self.assertEqual(payload['Env'], self.container['Config']['Env'] + ['DESKTOP_UPDATE_PUBLIC_KEY=' + PUBLIC_KEY])
+
+    def test_existing_different_key_requires_manual_rotation(self):
+        self.container['Config']['Env'][-1] = 'DESKTOP_UPDATE_PUBLIC_KEY=different'
+        with self.assertRaises(AssertionError):
+            self.run_block(BLOCKS[0], ['allow-init'])
+        with self.assertRaises(AssertionError):
+            self.clone_payload()
+
+    def test_update_storage_initialization_preserves_resource_mounts(self):
+        self.container['Mounts'] = [{'Type': 'bind', 'Destination': '/data/desktop-resources', 'RW': True}]
+        self.container['HostConfig']['Binds'] = ['/resources:/data/desktop-resources']
+        self.run_block(BLOCKS[0], ['allow-init'])
+        with self.assertRaises(AssertionError):
+            self.run_block(BLOCKS[0], ['strict'])
+        payload = self.clone_payload(update_bind='/root/dsh/data/one-api-updates.example')
+        self.assertEqual(payload['HostConfig']['Binds'], self.container['HostConfig']['Binds'])
+        self.assertEqual(payload['HostConfig']['Mounts'], [{'Type': 'bind', 'Source': '/root/dsh/data/one-api-updates.example', 'Target': '/data/wanwei/desktop-updates', 'ReadOnly': False}])
+        self.container['Mounts'].append({'Type': 'bind', 'Destination': '/data/wanwei/desktop-updates', 'RW': True})
+        self.run_block(BLOCKS[0], ['strict'])
+
+    def test_readonly_update_child_overrides_writable_parent(self):
+        self.container['Mounts'].append({'Type': 'bind', 'Destination': '/data/wanwei/desktop-updates', 'RW': False})
+        with self.assertRaises(AssertionError):
+            self.run_block(BLOCKS[0], ['allow-init'])
+
+    def test_custom_update_path_requires_existing_persistence(self):
+        self.container['Config']['Env'].append('DESKTOP_UPDATE_DIR=/custom-updates')
+        with self.assertRaises(AssertionError):
+            self.run_block(BLOCKS[0], ['allow-init'])
+        self.container['Mounts'].append({'Type': 'volume', 'Name': 'updates', 'Destination': '/custom-updates', 'RW': True})
+        self.run_block(BLOCKS[0], ['strict'])
+
+    def test_update_bind_rejects_unexpected_and_overlapping_paths(self):
+        for bind in ('/unrelated', '/root/dsh/data/one-api-updates.example'):
+            with self.assertRaises(AssertionError):
+                self.clone_payload(update_bind=bind)
+
+    def test_no_mount_legacy_adds_both_stores(self):
+        self.container['Mounts'] = []
+        self.container['HostConfig']['Binds'] = []
+        payload = self.clone_payload('/root/dsh/data/one-api-resources.example', '/root/dsh/data/one-api-updates.example')
+        self.assertEqual(len(payload['HostConfig']['Mounts']), 2)
 
     def test_clone_preserves_configuration(self):
         payload = self.clone_payload()
@@ -152,6 +215,9 @@ class ReleaseTests(unittest.TestCase):
         self.assertLess(deploy.index('RESOURCE_BIND=$(mktemp'), deploy.index('docker stop'))
         self.assertIn('test ! -e /data/desktop-resources', deploy)
         self.assertIn('test ! -L /data/desktop-resources', deploy)
+        self.assertLess(deploy.index('UPDATE_BIND=$(mktemp'), deploy.index('docker stop'))
+        self.assertIn('test ! -e /data/wanwei/desktop-updates', deploy)
+        self.assertIn('test ! -L /data/wanwei/desktop-updates', deploy)
 
     def test_no_gateway_mutation(self):
         self.assertNotRegex(SCRIPT, r'docker (?:stop|rm|rename|restart|run).*\$GATEWAY')

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/developer/oneapi-release.md
-oneapi-release.md: cf168d49d607f640cfc3d2d2e0243756eaf54801
-oneapi-release.zh.md: d9da628c1390eb5f7b1fd8413b2dc44026805a9a
+oneapi-release.md: c5b0704e5ba6aba46980b5d04857d936e4efbeee
+oneapi-release.zh.md: 248bde0d88c27e13a7dbe69b5557dbbd44119fc0
