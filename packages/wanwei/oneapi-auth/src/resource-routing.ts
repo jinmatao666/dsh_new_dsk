@@ -2,6 +2,7 @@
 import type { NetworkEnvironment } from './network-contract.ts'
 import { request } from 'node:https'
 import type { ResourceSettings } from './resource-settings.ts'
+import { ResourceTunnel } from './resource-tunnel.ts'
 
 const proxyKeys = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy',
   'NO_PROXY', 'no_proxy', 'PIP_PROXY', 'npm_config_proxy', 'npm_config_https_proxy', 'NPM_CONFIG_PROXY', 'NPM_CONFIG_HTTPS_PROXY']
@@ -29,8 +30,23 @@ export class ResourceRouting {
   private checkedAt = 0
   private direct = false
   private pending: Promise<void> | undefined
+  private readonly tunnel: ResourceTunnel
+  private localProxy: string | undefined
 
-  constructor(private readonly baseURL: string, private readonly probe: (url: string) => Promise<boolean> = probeDirect) {}
+  constructor(private readonly baseURL: string, private readonly probe: (url: string) => Promise<boolean> = probeDirect,
+    resolveToken: () => Promise<string | undefined> = () => Promise.resolve(undefined)) {
+    this.tunnel = new ResourceTunnel(async () => {
+      if (this.mode !== 'intranet' || this.settings?.source !== 'proxy' || this.settings.transport !== 'tunnel' || this.direct) {
+        throw new Error('Managed resource tunnel is not active')
+      }
+      const endpoint = new URL(this.settings.proxyUrl || this.baseURL)
+      // A public administrator setting must not send login credentials to another origin.
+      if (endpoint.origin !== new URL(this.baseURL).origin) throw new Error('中转入口须与登录后台同源')
+      const token = await resolveToken()
+      if (!token) throw new Error('请先登录后使用联网中转')
+      return { baseURL: endpoint.origin, token }
+    })
+  }
 
   /** Commit a server configuration; later commands observe it without rewriting running children.
    * @param mode - Server-confirmed deployment mode.
@@ -40,6 +56,7 @@ export class ResourceRouting {
     if (mode === this.mode && JSON.stringify(settings) === JSON.stringify(this.settings)) return
     this.mode = mode
     this.settings = settings
+    this.tunnel.disconnect()
     this.checkedAt = 0
     this.direct = false
     this.revision++
@@ -50,9 +67,20 @@ export class ResourceRouting {
    * @returns Completion of the current route decision. Failed probes select the configured proxy.
    */
   async prepare(): Promise<void> {
+    await this.detect()
+    if (this.mode === 'intranet' && this.settings?.source === 'proxy' && this.settings.transport === 'tunnel' && !this.direct) {
+      if (this.settings.proxyUrl && new URL(this.settings.proxyUrl).origin !== new URL(this.baseURL).origin) {
+        throw new Error('中转入口须与登录后台同源')
+      }
+      this.localProxy = await this.tunnel.start()
+      this.apply()
+    }
+  }
+
+  private async detect(): Promise<void> {
     if (this.mode !== 'intranet' || this.settings?.source !== 'proxy' || !this.settings.autoDetect) return
     if (Date.now() - this.checkedAt < 60_000) return
-    if (this.pending) { await this.pending; return this.prepare() }
+    if (this.pending) { await this.pending; return this.detect() }
     const revision = this.revision
     const urls = this.settings.probeUrls
     this.pending = (async () => {
@@ -67,7 +95,7 @@ export class ResourceRouting {
       this.apply()
     })()
     try { await this.pending } finally { this.pending = undefined }
-    if (revision !== this.revision) await this.prepare()
+    if (revision !== this.revision) await this.detect()
   }
 
   /** Model guidance describes only the selected source, not task capability.
@@ -91,12 +119,13 @@ export class ResourceRouting {
     if (this.mode !== 'intranet' || !this.settings) return
     for (const key of [...proxyKeys, ...pipKeys]) this.set(key, undefined)
     const offline = this.settings.source === 'offline'
-    const proxy = offline ? 'http://127.0.0.1:9' : this.direct ? undefined : this.settings.proxyUrl
+    const proxy = offline ? 'http://127.0.0.1:9' : this.direct ? undefined
+      : this.settings.transport === 'tunnel' ? this.localProxy ?? 'http://127.0.0.1:9' : this.settings.proxyUrl
     for (const key of proxyKeys.filter(key => !['NO_PROXY', 'no_proxy'].includes(key))) this.set(key, proxy)
     // pip's explicit proxy option bypasses requests' NO_PROXY resolution for the internal wheel index.
     if (offline) this.set('PIP_PROXY', undefined)
     const platform = new URL(this.baseURL)
-    const bypass = ['localhost', '127.0.0.1', '::1', platform.hostname].join(',')
+    const bypass = ['localhost', '127.0.0.1', '::1', platform.hostname, ...this.settings.bypassHosts ?? []].join(',')
     this.set('NO_PROXY', bypass)
     this.set('no_proxy', bypass)
     // Ignore user/global pip indexes: mode switching cannot retain an extra index or a conflicting pip.ini.
@@ -123,5 +152,13 @@ export class ResourceRouting {
       else process.env[key] = original
     }
     this.owned.clear()
+  }
+
+  /** Restore the owned environment and await local proxy teardown.
+   * @returns Completion after the listener and active bridges are closed.
+   */
+  async dispose(): Promise<void> {
+    this.restore()
+    await this.tunnel.dispose()
   }
 }

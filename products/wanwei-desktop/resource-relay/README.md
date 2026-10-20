@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Administrators select an offline Python wheel bundle or an HTTP forward proxy in OneAPI System Settings → Network. Both require the updated backend and desktop. The resource source does not change model, login or expert service addresses.
+Administrators select an offline Python wheel bundle or a network relay in OneAPI System Settings → Network. Relay transport is either the authenticated backend tunnel or a separately deployed HTTP forward proxy. Both require the updated backend and desktop. The resource source does not change model, login or expert service addresses.
 
 ## Offline bundle
 
@@ -19,6 +19,16 @@ python products/wanwei-desktop/resource-relay/build-offline-python.py --output E
 For production, choose a new output filename and the required package list. Cross-target options are `--platform`, `--python-version` and `--abi`; inspect the actual desktop interpreter before selecting values. Upload the ZIP under Offline dependency bundle, then save the resource selection. Upload replaces the shared bundle immediately; cancelling settings does not undo the upload.
 
 OneAPI stores bundles under `/data/desktop-resources`, or `DESKTOP_RESOURCE_DIR`. Persist this directory. Old content-addressed bundles remain for in-flight downloads; operators own disk-capacity monitoring and retention. Downloads are public within the service, so upload dependency artifacts only, never private customer files.
+
+## Managed tunnel over the existing entry
+
+Select Intranet → Network relay → Reuse backend entry, leave the address blank to use the login backend, and disable automatic detection for a forced-relay test. A configured address must have the same origin as the login backend; credentials are never sent to a different origin. A separate resource server can be placed behind this same public gateway. The desktop owns a loopback-only HTTP proxy and bridges its HTTP/CONNECT traffic through `/api/desktop-resources/tunnel` using WebSocket. OneAPI owns the authenticated TCP relay. Squid and another public port are not required.
+
+The gateway must forward WebSocket Upgrade headers at this exact path. `gateway-tunnel.location.conf` is the route snippet. The release operator first obtains the real host-side main configuration path with `docker inspect dsh-experts-gateway --format '{{json .Mounts}}'`. Operator-only commands, not run against this Windows host: `bash update-gateway.sh check /absolute/host/nginx.conf ac.zjugis.com` generates a private candidate; `bash update-gateway.sh apply /absolute/host/nginx.conf ac.zjugis.com` backs up the original, validates the mount and configuration, reloads Nginx and checks the backend and six experts. Failure restores the original. The printed backup directory can be passed to `bash update-gateway.sh rollback /root/dsh-gateway-tunnel.XXXXXXXX`. Keep the Python helper and location snippet beside the shell script. No container is restarted.
+
+The relay only connects to public destinations on ports 80/443. DNS answers are validated and the selected IP is pinned before dialing. Browser-origin handshakes and unauthenticated connections are refused. Deployment limits are `DSH_RELAY_CONNECTIONS` (64), `DSH_RELAY_PER_USER` (8), `DSH_RELAY_BYTES` (1 GiB per connection, both directions), `DSH_RELAY_IDLE_SECONDS` (90), and `DSH_RELAY_LIFETIME_SECONDS` (3600). Malformed values disable new tunnels. Logs contain user ID, target host/port and byte count, never request bodies or authorization headers.
+
+The tunnel adds no encryption. HTTPS target traffic keeps end-to-end TLS and certificate verification; HTTP target traffic is plaintext. A public HTTP/WS entry exposes relay authentication and connection metadata to network observers and active attackers. Authentication does not remove that risk. No content classification or website allowlist is applied. Optional bypass hosts accept up to 32 individual IPs or DNS names, without protocol, path or port; localhost and the platform host are included automatically. Actual bypass behavior follows the child client's NO_PROXY support. Source changes close existing managed bridges; running processes may still retain old environment variables and must be restarted.
 
 ## Forward proxy
 
@@ -38,7 +48,7 @@ Stop old tasks and start a new conversation after saving. Configuration refreshe
 4. Automatic: test with public access allowed and blocked. Allow 60 seconds for detection-cache expiry between changes. Verify direct access in the first case and relay use in the second. A captive-login response or redirect must not count as success.
 5. Return to Internet mode: verify normal login/model access and that intranet resource variables no longer apply to new child processes.
 
-These installed-device checks belong to the release operator. Local automated tests cover settings, ZIP validation, a real offline pip installation, a Python request through a test relay, route switching and a Loader-composed prompt snapshot. Squid deployment and signed installers still require release acceptance.
+These installed-device checks belong to the release operator. Local automated tests cover settings, ZIP validation, a real offline pip installation, a Python request through a test relay, route switching and a Loader-composed prompt snapshot. A local interoperability smoke also exercises the shipping TypeScript bridge with the Go relay: Python HTTPS succeeds and pip downloads six 1.17.0 from PyPI with cache disabled, with both target hosts recorded by the relay. Production gateway deployment, Squid and signed installers still require release acceptance.
 
 ## Limits
 

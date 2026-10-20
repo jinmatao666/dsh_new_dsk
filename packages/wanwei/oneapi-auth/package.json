@@ -51,6 +51,7 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "ws": "^8.21.0",
     "@deepseek-ai/dsh-launch-environment": "workspace:^",
     "@deepseek-ai/dsh-credentials": "workspace:^",
     "@deepseek-ai/dsh-settings": "workspace:^",
@@ -77,6 +78,7 @@
     "@deepseek-ai/dsh-web": "workspace:^"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.1",
     "@deepseek-ai/dsh-agent-loop": "workspace:^",
     "@deepseek-ai/dsh-jobs-local": "workspace:^",
     "@deepseek-ai/dsh-cmdline": "workspace:^",

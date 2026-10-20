@@ -10,6 +10,8 @@ Disconnected desktops need script dependencies without assuming that an intranet
 
 ## Decision
 
+Proxy transport is either an independent forward proxy or a managed WebSocket tunnel through the authenticated OneAPI origin. The Host's loopback listener accepts ordinary HTTP and CONNECT; Nginx forwards WebSocket Upgrade traffic without needing native CONNECT support. OneAPI resolves and pins only public target IPs on ports 80/443, applies per-user/global connection and byte/time limits, and never decrypts target TLS. The Host refuses cross-origin credential forwarding, revokes bridges on source changes and awaits listener disposal. No extra channel encryption is added: a public HTTP/WS entry exposes authentication and metadata even when target TLS remains encrypted. Explicit bypass hosts extend the child client's NO_PROXY behavior.
+
 OneAPI's public deployment configuration carries an optional resource selection: `offline` or `proxy`. Root administrators upload wheel-only ZIPs independently of saving the selected source. Content-addressed wheel URLs retain SHA-256 fragments and survive bundle replacement. Resource artifacts contain dependencies, not private documents.
 
 The Wanwei Host applies the selection to its dedicated sidecar environment before new shell work. Offline pip uses no index and only the backend wheel library; proxy-aware external downloads receive a failing loopback proxy in that mode. Proxy mode clears offline pip variables and uses an HTTP forward proxy. Both preserve internal platform access. Neither mode falls back to the other.
@@ -20,7 +22,7 @@ The model receives source-specific dependency guidance through the existing netw
 
 ## Alternatives considered
 
-Automatic cross-source fallback defeats administrator control over latency. System-wide proxy settings affect unrelated applications and require machine-level authority. Rewriting shell command text is not a reliable process policy and violates immutable tool arguments. A custom forward-proxy implementation adds protocol and security obligations; the deployment scaffold uses Squid with a client subnet allowlist and restricted destinations instead.
+Automatic cross-source fallback defeats administrator control over latency. System-wide proxy settings affect unrelated applications and require machine-level authority. Rewriting shell command text is not a reliable process policy and violates immutable tool arguments. Independent Squid avoids a local bridge but needs a reachable proxy port. The managed bridge accepts protocol and lifecycle obligations to reuse the existing public entry without replacing the gateway. Custom cryptography is excluded; users explicitly accept plaintext entry authentication risk.
 
 ## Consequences
 

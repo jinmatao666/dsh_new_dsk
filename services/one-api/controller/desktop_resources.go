@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,23 +23,36 @@ import (
 
 // The resource source is exclusive. Proxy mode never falls back to offline bundles.
 type desktopResourceSettings struct {
-	Source     string   `json:"source"`
-	ProxyURL   string   `json:"proxyUrl"`
-	AutoDetect bool     `json:"autoDetect"`
-	ProbeURLs  []string `json:"probeUrls"`
+	BypassHosts []string `json:"bypassHosts,omitempty"`
+	Transport   string   `json:"transport,omitempty"`
+	Source      string   `json:"source"`
+	ProxyURL    string   `json:"proxyUrl"`
+	AutoDetect  bool     `json:"autoDetect"`
+	ProbeURLs   []string `json:"probeUrls"`
 }
 
 func validateDesktopResources(settings desktopResourceSettings) error {
+	if len(settings.BypassHosts) > 32 {
+		return fmt.Errorf("直连主机最多32个")
+	}
+	for _, host := range settings.BypassHosts {
+		if len(host) > 253 || (net.ParseIP(host) == nil && !bypassHostName.MatchString(host)) {
+			return fmt.Errorf("直连主机只填写域名或IP")
+		}
+	}
+	if settings.Transport != "" && settings.Transport != "forward" && settings.Transport != "tunnel" {
+		return fmt.Errorf("中转接入方式无效")
+	}
 	if settings.Source != "offline" && settings.Source != "proxy" {
 		return fmt.Errorf("资源方式必须为 offline 或 proxy")
 	}
 	if settings.ProxyURL != "" {
 		u, err := url.Parse(settings.ProxyURL)
-		if err != nil || u.Scheme != "http" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		if err != nil || (u.Scheme != "http" && !(settings.Transport == "tunnel" && u.Scheme == "https")) || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
 			return fmt.Errorf("中转地址须为 http://主机:端口，不包含账号、路径或参数")
 		}
 	}
-	if settings.Source == "proxy" && settings.ProxyURL == "" {
+	if settings.Source == "proxy" && settings.ProxyURL == "" && settings.Transport != "tunnel" {
 		return fmt.Errorf("请填写联网中转地址")
 	}
 	if len(settings.ProbeURLs) > 4 {
@@ -55,6 +69,8 @@ func validateDesktopResources(settings desktopResourceSettings) error {
 	}
 	return nil
 }
+
+var bypassHostName = regexp.MustCompile(`^[A-Za-z0-9.-]{1,253}$`)
 
 type offlineWheel struct {
 	Name   string `json:"name"`

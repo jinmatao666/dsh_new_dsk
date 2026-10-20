@@ -1,5 +1,11 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`boots the intranet policy from cordis.yml and exposes feedback in prompt and tool output > managed resource tunnel 1`] = `
+"You are an AI agent powered by DeepSeek Harness.
+
+当前为内网联网中转模式。优先复用已安装依赖；pip、Python requests 和遵循 HTTP(S)_PROXY 的下载工具已配置资源路由。不得读取离线依赖库、覆盖代理或擅自换源。自动检测只决定直连或中转，不保证每个网站可达。原生 PowerShell 下载、Node fetch、浏览器等不保证读取代理环境，不能声称所有联网已接通。失败时依据原始输出简短报告，不要盲目重试。"
+`;
+
 exports[`boots the intranet policy from cordis.yml and exposes feedback in prompt and tool output > offline resource source 1`] = `
 "You are an AI agent powered by DeepSeek Harness.
 

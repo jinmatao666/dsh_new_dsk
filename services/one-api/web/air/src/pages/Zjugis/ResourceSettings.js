@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { API } from '../../helpers';
 
 export const defaultResources = {
-  source: 'offline', proxyUrl: '', autoDetect: false,
+  source: 'offline', transport: 'tunnel', proxyUrl: '', autoDetect: false,
   probeUrls: ['https://www.gstatic.com/generate_204', 'https://cp.cloudflare.com/generate_204'],
 };
 
@@ -38,23 +38,35 @@ export default function ResourceSettings({ value = defaultResources, onChange, d
   return <section className='settings-resources' aria-label='内网资源配置'>
     <fieldset className='settings-network' disabled={disabled || uploading}><legend>资源获取方式（二选一）</legend>
       {[['offline', '离线依赖包', '仅使用已有依赖和后台依赖包，不切换到中转服务器。'],
-        ['proxy', '联网中转服务器', '通过 HTTP 正向代理下载依赖和资源，不读取离线包。']].map(([key, label, hint]) =>
+        ['proxy', '联网中转服务器', '通过服务器获取依赖和网络资源，不读取离线包。']].map(([key, label, hint]) =>
         <label key={key} className={`settings-network-option${value.source === key ? ' selected' : ''}`}>
           <input type='radio' name='resource-source' checked={value.source === key} onChange={() => change({ source: key })} />
           <span><strong>{label}</strong><small>{hint}</small></span>
         </label>)}
     </fieldset>
-    {value.source === 'proxy' ? <div className='settings-resource-fields'>
-      <label>中转服务器地址<input type='url' required placeholder='http://192.168.1.10:3128' value={value.proxyUrl}
+    {value.source === 'proxy' ? <div key='proxy' className='settings-resource-fields'>
+      <label>中转接入方式<select value={value.transport || 'forward'} disabled={disabled}
+        onChange={event => change({ transport: event.target.value, proxyUrl: '' })}>
+        <option value='tunnel'>复用后台入口（无需新开公网端口）</option>
+        <option value='forward'>独立 HTTP 代理（已有 Squid 等服务）</option>
+      </select></label>
+      <label>中转服务器地址<input type='url' required={value.transport !== 'tunnel'}
+        placeholder={value.transport === 'tunnel' ? '留空使用当前登录后台，如 http://域名:3300' : 'http://192.168.1.10:3128'} value={value.proxyUrl}
         disabled={disabled} onChange={event => change({ proxyUrl: event.target.value.trim() })} /></label>
-      <p className='settings-description'>需部署 HTTP 正向代理服务，仅填写 IP 不够。首版通过服务器客户端网段白名单控制访问，不填写账号密码。</p>
+      <p className='settings-description'>{value.transport === 'tunnel'
+        ? '复用登录后台的同源入口，须更新后台、桌面端和 Nginx 的 WebSocket 路由；无需 Squid。跨服务器可由该入口转发，不会向其他域名发送登录令牌。HTTP 入口不保护通道认证信息，HTTPS 目标仍保留证书校验。'
+        : '需另外部署 HTTP 正向代理服务；此地址不是后台页面地址。请限制允许连接的客户端网段。'}</p>
+      <label>额外直连的内网主机（可选，每行一个域名或 IP）<textarea rows={2}
+        value={(value.bypassHosts || []).join('\n')} disabled={disabled}
+        onChange={event => change({ bypassHosts: event.target.value.split('\n').map(host => host.trim()).filter(Boolean) })} /></label>
+      <p className='settings-description'>本机和登录后台默认直连。其他内部接口可在此补充；不要填写 http://、路径或端口。实际绕过行为取决于请求程序对 NO_PROXY 的支持。</p>
       <label className='settings-resource-switch'><input type='checkbox' checked={value.autoDetect} disabled={disabled}
         onChange={event => change({ autoDetect: event.target.checked })} />自动检测桌面机器是否能直连互联网</label>
       <p className='settings-description'>{value.autoDetect ? '两个检测地址均返回 HTTP 204 时直连，否则使用中转；结果缓存 60 秒。' : '不检测，桌面端直接使用中转服务器。'}</p>
       {value.autoDetect && <label>直连检测地址（每行一个，2—4 个公网 HTTPS 地址，需返回 HTTP 204）
         <textarea rows={3} value={value.probeUrls.join('\n')} disabled={disabled}
           onChange={event => change({ probeUrls: event.target.value.split('\n') })} /></label>}
-    </div> : <div className='settings-resource-fields'>
+    </div> : <div key='offline' className='settings-resource-fields'>
       <p>Python wheel 依赖包：{bundle ? `${bundle.files.length} 个文件，包标识 ${bundle.id}` : '尚未上传'}</p>
       <label>上传或替换依赖 ZIP<input type='file' accept='.zip' disabled={disabled || uploading} onChange={upload} /></label>
       <p className='settings-description'>ZIP 根目录仅放 .whl，包含所需包及其间接依赖，且匹配桌面端的操作系统和 Python 版本。最大 512MB。上传后立即替换公共依赖库，不包含客户文件。</p>

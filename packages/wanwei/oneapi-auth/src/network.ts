@@ -40,12 +40,14 @@ declare module '@deepseek-ai/cordis' {
 /** Persist the last server-confirmed environment; model/login URLs remain administrator-owned.
  * @param ctx - Plugin scope owning policy registrations and disposal.
  * @param baseURL - Administrator-owned platform URL defining the internal origin.
+ * @param resolveToken - Host-owned credential lookup for the authenticated resource tunnel.
  * @returns Installed network policy.
  */
-export function installNetworkPolicy(ctx: Context, baseURL: string): NetworkPolicy {
+export function installNetworkPolicy(ctx: Context, baseURL: string,
+  resolveToken?: () => Promise<string | undefined>): NetworkPolicy {
   let plugins: DeploymentPlugins = { browserAssistant: false }
-  const resources = new ResourceRouting(baseURL)
-  ctx.effect(() => () => { resources.restore() })
+  const resources = new ResourceRouting(baseURL, undefined, resolveToken)
+  ctx.effect(() => () => resources.dispose())
   let refreshPrompt = () => {}
   let confirmedAt = 0
   let refreshing: Promise<void> | undefined

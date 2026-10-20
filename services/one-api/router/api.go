@@ -10,6 +10,8 @@ import (
 )
 
 func SetApiRouter(router *gin.Engine) {
+	// Upgrade requests must bypass API gzip; authentication still applies.
+	router.GET("/api/desktop-resources/tunnel", middleware.UserAuth(), controller.DesktopResourceTunnel)
 	// Public binary downloads bypass API gzip and authentication; only published artifacts are exposed.
 	router.GET("/desktop-updates/files/:id", controller.DownloadDesktopUpdate)
 	router.GET("/desktop-updates/:target/:arch/:current", controller.CheckDesktopUpdate)

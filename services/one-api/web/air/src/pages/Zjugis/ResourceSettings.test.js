@@ -38,3 +38,14 @@ test('uploads a ZIP without silently changing the selected source', async () => 
   expect(container.textContent).toContain('bundle-two');
   expect(change).not.toHaveBeenCalled();
 });
+
+test('managed tunnel defaults to the existing entry and standalone proxy remains selectable', async () => {
+  const change = jest.fn();
+  await act(async () => root.render(<ResourceSettings value={{ ...defaultResources, source: 'proxy' }} onChange={change} />));
+  expect(container.querySelector('select').value).toBe('tunnel');
+  expect(container.querySelector('input[type="url"]').required).toBe(false);
+  expect(container.textContent).toContain('无需 Squid');
+  const select = container.querySelector('select');
+  act(() => { select.value = 'forward'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(change).toHaveBeenCalledWith({ ...defaultResources, source: 'proxy', transport: 'forward', proxyUrl: '' });
+});

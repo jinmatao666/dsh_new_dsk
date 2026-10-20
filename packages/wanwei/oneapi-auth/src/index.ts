@@ -309,7 +309,7 @@ export function apply(ctx: Context, config: Config): void {
   }
   const baseURL = normalizedOrigin(config.baseURL ?? launchEnvironmentOf(ctx).get('DSH_ONEAPI_URL')?.value ?? 'http://127.0.0.1:3000')
   const ref = credentialRef(config.credentialRef)
-  const network = installNetworkPolicy(ctx, baseURL)
+  const network = installNetworkPolicy(ctx, baseURL, async () => (await ctx.credentials.resolve(ref))?.value)
   installFinalDeliverables(ctx)
   installDesktopLifecycle(ctx)
   const usernameRef = credentialRef('DSH_LOGIN_USERNAME')

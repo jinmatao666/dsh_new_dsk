@@ -80,6 +80,7 @@ COPY --from=web-builder /web/build ./web/build
 # Compile all tests; execute this release's expert/database/authentication checks.
 # Historical full-suite failures are listed in the release check report, not suppressed.
 RUN go test ./... -run '^$' && \
+    go test ./common/resourcerelay -count=1 && \
     go test ./controller -run '^Test(Expert|Usage|SkillDownload|SkillImport|ApplyPublished|AdminUserAffiliation|UserIdentityUpdate|Desktop)' -count=1 && \
     go test ./middleware -count=1 && \
     go test ./model -run '^Test(SkillDownloadCounts|SkillTestSession|UserAffiliation|UpdateUserDisplayName|UserIdentityUpdate)' -count=1

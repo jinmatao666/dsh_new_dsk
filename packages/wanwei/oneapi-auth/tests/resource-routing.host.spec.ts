@@ -19,6 +19,17 @@ it('rejects credentials, paths, missing probes and malformed fields', () => {
   expect(resolveResourceSettings(offline)).toEqual(offline)
 })
 
+it('validates managed transport and explicit internal bypass hosts', () => {
+  const value: ResourceSettings = { ...proxy, transport: 'tunnel', proxyUrl: '', bypassHosts: ['10.10.1.20', 'files.internal', '::1'] }
+  expect(resolveResourceSettings(value)).toEqual(value)
+  for (const bypassHosts of [['http://internal'], ['internal:3300'], ['internal,path'], Array.from({ length: 33 }, () => 'internal')]) {
+    expect(() => resolveResourceSettings({ ...value, bypassHosts })).toThrow()
+  }
+  route = new ResourceRouting('http://platform.lan')
+  route.configure('intranet', value)
+  expect(process.env.NO_PROXY).toContain('10.10.1.20,files.internal,::1')
+})
+
 it('passes exclusive offline settings to real children, switches cleanly, and restores environment', async () => {
   const original = process.env.PIP_FIND_LINKS
   const probe = vi.fn()
