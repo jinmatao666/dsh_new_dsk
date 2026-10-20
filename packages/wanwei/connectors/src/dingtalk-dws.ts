@@ -42,6 +42,8 @@ let loginFlight: Promise<void> | null = null
 let loginChild: ChildProcess | null = null
 let loginEpoch = 0
 let loginError: string | null = null
+let cliTail: Promise<void> = Promise.resolve()
+let statusProbeHolds = 0
 
 /** Drop the in-process status cache after login / disconnect / skill install. */
 export function invalidateDingTalkDwsStatusCache(): void {
@@ -331,6 +333,28 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/**
+ * Run CLI work one process at a time. Callers return before `task` finishes.
+ * @param task - logout, status, or browser login. Must not start another queued CLI task.
+ * @returns the task's completion. Rejects when `task` throws.
+ */
+function enqueueCli(task: () => Promise<void>): Promise<void> {
+  const run = cliTail.then(task, task)
+  cliTail = run.then(() => undefined, () => undefined)
+  return run
+}
+
+/** Block non-fresh status probes until the matching CLI work finishes. */
+function holdStatusProbes(): () => void {
+  statusProbeHolds += 1
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    statusProbeHolds -= 1
+  }
+}
+
 /** Stop a browser login so a later status poll cannot write skills after「解绑」. */
 function cancelDingTalkLogin(): void {
   loginEpoch += 1
@@ -365,7 +389,7 @@ export async function buildDingTalkDwsStatus(
   const fresh = options?.fresh === true
   // A second `dws` process during `auth login` can block on the CLI lock and
   // hold another WebView request open until the browser round-trip aborts it.
-  if (loginFlight !== null && !fresh) {
+  if (!fresh && (loginFlight !== null || statusProbeHolds > 0)) {
     const base = statusCache !== null && statusCache.home === dshHome
       ? statusCache.status
       : composeStatus(dshHome, resolveDwsCommand() !== undefined, null, false)
@@ -434,6 +458,24 @@ export function installDwsCliSkill(dshHome: string): string {
  * @param epoch - login generation; a newer「解绑」makes this a no-op.
  */
 async function finishDingTalkLogin(dshHome: string, dws: string, epoch: number): Promise<void> {
+  if (epoch !== loginEpoch) return
+  const before = await buildDingTalkDwsStatus(dshHome, { fresh: true })
+  if (epoch !== loginEpoch) return
+  if (before.authed) {
+    loginError = null
+    if (!before.skillInstalled) {
+      try {
+        installDwsCliSkill(dshHome)
+      } catch (error) {
+        loginError = errorText(error)
+        invalidateDingTalkDwsStatusCache()
+        return
+      }
+      invalidateDingTalkDwsStatusCache()
+    }
+    await buildDingTalkDwsStatus(dshHome, { fresh: true })
+    return
+  }
   let result: RunResult
   try {
     result = await run(dws, ['auth', 'login'], 10 * 60_000, child => {
@@ -479,61 +521,72 @@ async function finishDingTalkLogin(dshHome: string, dws: string, epoch: number):
 
 /**
  * Start interactive personal login. The CLI owns QR / device / PC-session reuse.
- * Already-authorized calls only copy the skill and return when that copy finishes.
- * A new browser login returns as soon as `dws auth login` is spawned; skill install
- * continues after the process exits.
+ * The call queues `dws auth login` and returns before that process starts, so a
+ * later「连接」does not wait on a background `dws auth logout`. Skill install
+ * continues after the login process exits.
  * @param dshHome - product DSH home.
  * @returns current status. `authorizing` stays true until the background login exits.
  */
 export async function runDingTalkDwsLogin(dshHome: string): Promise<DingTalkDwsStatus> {
   if (loginFlight !== null) return buildDingTalkDwsStatus(dshHome)
   loginError = null
-  const before = await buildDingTalkDwsStatus(dshHome, { fresh: true })
-  if (!before.dwsInstalled) {
-    throw new Error(before.hint ?? 'dws 未安装')
-  }
   const dws = resolveDwsCommand()
-  if (dws === undefined) throw new Error(before.hint ?? 'dws 未安装')
-  // Already authorized: only write the skill (avoids reopening the OAuth browser).
-  if (before.authed) {
-    if (!before.skillInstalled) {
-      installDwsCliSkill(dshHome)
-      invalidateDingTalkDwsStatusCache()
-    }
-    return buildDingTalkDwsStatus(dshHome, { fresh: true })
+  if (dws === undefined) {
+    const missing = await buildDingTalkDwsStatus(dshHome)
+    throw new Error(missing.hint ?? 'dws 未安装')
   }
+  // Return before any CLI process starts. A fresh `dws auth status` here can sit
+  // behind logout and the WebView reports that wait as a lost local connection.
   const epoch = loginEpoch
-  const flight = finishDingTalkLogin(dshHome, dws, epoch)
+  const release = holdStatusProbes()
+  const flight = enqueueCli(async () => {
+    try {
+      await finishDingTalkLogin(dshHome, dws, epoch)
+    } finally {
+      release()
+    }
+  })
   loginFlight = flight
   void flight.finally(() => {
     if (loginFlight === flight) loginFlight = null
   })
-  return withLoginFlags(before)
+  return withLoginFlags(composeStatus(dshHome, true, null, false))
 }
 
 /**
- * Unbind desktop DingTalk: best-effort `dws auth logout`, then remove the skill copy.
+ * Unbind desktop DingTalk: remove the skill copy and return. `dws auth logout` runs afterward.
  * @param dshHome - product DSH home.
  * @returns status after unbind.
  */
 export async function disconnectDingTalkDws(dshHome: string): Promise<DingTalkDwsStatus> {
   cancelDingTalkLogin()
-  const before = await buildDingTalkDwsStatus(dshHome)
-  const dws = resolveDwsCommand()
-  if (before.dwsInstalled && dws !== undefined) {
-    // `-y` skips interactive confirm so Host unbind actually clears tokens.
-    await run(dws, ['auth', 'logout', '-y'], 30_000)
-    invalidateDingTalkDwsStatusCache()
-    const still = await buildDingTalkDwsStatus(dshHome, { fresh: true })
-    if (still.authed) {
-      // Stronger wipe when logout left a live session (older CLI / multi-profile).
-      await run(dws, ['auth', 'reset', '-y'], 30_000)
-    }
-  }
   const dest = dwsCliSkillInstallDir(dshHome)
   if (existsSync(dest)) rmSync(dest, { recursive: true, force: true })
   invalidateDingTalkDwsStatusCache()
-  return buildDingTalkDwsStatus(dshHome, { fresh: true })
+  const dws = resolveDwsCommand()
+  if (dws !== undefined) {
+    const epoch = loginEpoch
+    const release = holdStatusProbes()
+    void enqueueCli(async () => {
+      try {
+        if (epoch !== loginEpoch) return
+        // `-y` skips interactive confirm so Host unbind actually clears tokens.
+        await run(dws, ['auth', 'logout', '-y'], 30_000)
+        if (epoch !== loginEpoch) return
+        invalidateDingTalkDwsStatusCache()
+        const still = await buildDingTalkDwsStatus(dshHome, { fresh: true })
+        if (epoch !== loginEpoch) return
+        if (still.authed) {
+          // Stronger wipe when logout left a live session (older CLI / multi-profile).
+          await run(dws, ['auth', 'reset', '-y'], 30_000)
+          invalidateDingTalkDwsStatusCache()
+        }
+      } finally {
+        release()
+      }
+    })
+  }
+  return withLoginFlags(composeStatus(dshHome, dws !== undefined, null, false))
 }
 
 /**

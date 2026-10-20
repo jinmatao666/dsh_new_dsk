@@ -8,6 +8,7 @@ import {
   cancelDingTalkDwsLoginFlight,
   disconnectDingTalkDws,
   dwsCliSkillInstallDir,
+  runDingTalkDwsLogin,
   invalidateDingTalkDwsStatusCache,
   parseDwsAuthenticated,
   registerDingTalkDwsRpc,
@@ -155,6 +156,53 @@ describe('DingTalk DWS Host helpers', () => {
     const after = await disconnectDingTalkDws(home)
     expect(existsSync(join(dest, 'SKILL.md'))).toBe(false)
     expect(after.skillInstalled).toBe(false)
+  })
+
+  it('returns from connect and unbind before the CLI process finishes', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-dws-async-'))
+    const cliDir = mkdtempSync(join(tmpdir(), 'wanwei-dws-fake-'))
+    const node = process.execPath.replace(/"/g, '')
+    const script = join(cliDir, 'fake-dws.mjs')
+    writeFileSync(script, [
+      'const args = process.argv.slice(2)',
+      'const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))',
+      'if (args[0] === "auth" && args[1] === "status") {',
+      '  console.log(JSON.stringify({ authenticated: false }))',
+      '  process.exit(0)',
+      '}',
+      'if (args[0] === "auth" && args[1] === "login") {',
+      '  await delay(800)',
+      '  process.exit(0)',
+      '}',
+      'process.exit(0)',
+      '',
+    ].join('\n'))
+    const command = process.platform === 'win32' ? join(cliDir, 'dws.cmd') : join(cliDir, 'dws')
+    if (process.platform === 'win32') {
+      writeFileSync(command, `@echo off\r\n"${node}" "%~dp0fake-dws.mjs" %*\r\n`)
+    } else {
+      writeFileSync(command, `#!/bin/sh\nexec "${node}" "$(dirname "$0")/fake-dws.mjs" "$@"\n`)
+      const { chmodSync } = await import('node:fs')
+      chmodSync(command, 0o755)
+    }
+    process.env.DSH_HOME = home
+    process.env.DSH_DWS_CLI = command
+    process.env.PATH = ''
+    process.env.Path = ''
+    const started = Date.now()
+    const pending = await runDingTalkDwsLogin(home)
+    expect(Date.now() - started).toBeLessThan(1000)
+    expect(pending.authorizing).toBe(true)
+    const dest = dwsCliSkillInstallDir(home)
+    mkdirSync(dest, { recursive: true })
+    writeFileSync(join(dest, 'SKILL.md'), '---\nname: dws-cli\ndescription: x\n---\n')
+    const unbound = await disconnectDingTalkDws(home)
+    expect(unbound.skillInstalled).toBe(false)
+    expect(unbound.authed).toBe(false)
+    await vi.waitFor(async () => {
+      const status = await buildDingTalkDwsStatus(home)
+      expect(status.authorizing).toBe(false)
+    })
   })
 
   it('status payloads include authorizing flags and cancel clears a flight', async () => {

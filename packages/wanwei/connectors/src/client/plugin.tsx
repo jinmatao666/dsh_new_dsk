@@ -168,11 +168,27 @@ export function Connectors({
   const [connection, setConnection] = useState<'loading' | 'ready' | 'failed'>('loading')
   useEffect(() => {
     let disposed = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let failures = 0
+    const run = (): void => {
+      void checkConnection().then(() => {
+        if (!disposed) setConnection('ready')
+      }).catch(() => {
+        if (disposed) return
+        failures += 1
+        // A connector card can lose one localhost request while the system browser
+        // is focused. Keep retrying so that blip does not leave this page on the
+        // service-unavailable illustration.
+        if (failures >= 3) setConnection('failed')
+        timer = setTimeout(run, failures >= 3 ? 1500 : 0)
+      })
+    }
     setConnection('loading')
-    void checkConnection().then(() => { if (!disposed) setConnection('ready') }).catch(() => {
-      if (!disposed) setConnection('failed')
-    })
-    return () => { disposed = true }
+    run()
+    return () => {
+      disposed = true
+      clearTimeout(timer)
+    }
   }, [checkConnection])
   const [requested, setRequested] = useState<Set<string>>(() => new Set())
   const [selected, setSelected] = useState<Connector | null>(null)

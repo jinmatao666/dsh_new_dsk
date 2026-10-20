@@ -30,10 +30,18 @@ const weChat: WeChatApi = {
 }
 
 afterEach(cleanup)
-it('shows a connector illustration without retry controls and checks again on reopening', async () => {
+it('recovers the directory after a dropped local check and keeps the illustration only while the service stays down', async () => {
   const checkConnection = vi.fn(async () => {})
-  checkConnection.mockRejectedValueOnce(new Error('平台服务连接失败'))
+  checkConnection.mockRejectedValueOnce(new Error('Failed to fetch'))
   const props = { dingTalk, weCom, weChat, onTryPrompt: () => {}, checkConnection }
+  const recovered = render(<Connectors {...props} />)
+  expect(await screen.findByText('钉钉')).toBeTruthy()
+  expect(screen.queryByRole('heading', { name: '暂时无法连接连接器服务' })).toBeNull()
+  expect(checkConnection.mock.calls.length).toBeGreaterThan(1)
+  recovered.unmount()
+
+  checkConnection.mockReset()
+  checkConnection.mockRejectedValue(new Error('平台服务连接失败'))
   const view = render(<Connectors {...props} />)
   expect(await screen.findByRole('heading', { name: '暂时无法连接连接器服务' })).toBeTruthy()
   expect(screen.queryByText('钉钉')).toBeNull()
@@ -41,8 +49,9 @@ it('shows a connector illustration without retry controls and checks again on re
   expect(screen.getByRole('alert').classList.contains('wanwei-service-unavailable-connectors')).toBe(true)
   expect(screen.queryByRole('button', { name: '重新连接' })).toBeNull()
   view.unmount()
+  checkConnection.mockReset()
+  checkConnection.mockResolvedValue(undefined)
   render(<Connectors {...props} />)
   expect(await screen.findByText('钉钉')).toBeTruthy()
   expect(screen.queryByRole('alert')).toBeNull()
-  expect(checkConnection).toHaveBeenCalledTimes(2)
 })

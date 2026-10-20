@@ -7,6 +7,7 @@ import {
   buildWeComCliStatus,
   cancelWeComCliLoginFlight,
   disconnectWeComCli,
+  runWeComCliLogin,
   invalidateWeComCliStatusCache,
   installWeComCliSkills,
   registerWeComCliRpc,
@@ -146,6 +147,85 @@ describe('WeCom CLI Host helpers', () => {
     const after = await disconnectWeComCli(home)
     expect(existsSync(join(dest, 'SKILL.md'))).toBe(false)
     expect(after.skillInstalled).toBe(false)
+  })
+
+  it('returns from unbind before a hanging wecom-cli can answer', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wecom-async-'))
+    const cliDir = mkdtempSync(join(tmpdir(), 'wanwei-wecom-fake-'))
+    const node = process.execPath.replace(/"/g, '')
+    const marker = join(cliDir, 'spawned')
+    const script = join(cliDir, 'fake-wecom.mjs')
+    writeFileSync(script, `import { writeFileSync } from 'node:fs'\nwriteFileSync(${JSON.stringify(marker)}, 'spawned')\nprocess.exit(0)\n`)
+    const command = process.platform === 'win32' ? join(cliDir, 'wecom-cli.cmd') : join(cliDir, 'wecom-cli')
+    if (process.platform === 'win32') {
+      writeFileSync(command, `@echo off\r\n"${node}" "%~dp0fake-wecom.mjs" %*\r\n`)
+    } else {
+      writeFileSync(command, `#!/bin/sh\nexec "${node}" "$(dirname "$0")/fake-wecom.mjs" "$@"\n`)
+      const { chmodSync } = await import('node:fs')
+      chmodSync(command, 0o755)
+    }
+    process.env.DSH_HOME = home
+    process.env.DSH_WECOM_CLI = command
+    process.env.PATH = ''
+    process.env.Path = ''
+    process.env.WECOM_CLI_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'wanwei-wecom-cfg-'))
+    const dest = wecomSharedSkillDir(home)
+    mkdirSync(dest, { recursive: true })
+    writeFileSync(join(dest, 'SKILL.md'), '---\nname: wecomcli-shared\ndescription: x\n---\n')
+    const started = Date.now()
+    const after = await disconnectWeComCli(home)
+    expect(Date.now() - started).toBeLessThan(1000)
+    expect(after.skillInstalled).toBe(false)
+    expect(after.authed).toBe(false)
+    expect(after.cliInstalled).toBe(true)
+    expect(existsSync(marker)).toBe(false)
+  })
+
+  it('returns from connect and a later connect before wecom-cli finishes', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wecom-login-'))
+    const cliDir = mkdtempSync(join(tmpdir(), 'wanwei-wecom-login-cli-'))
+    const node = process.execPath.replace(/"/g, '')
+    const script = join(cliDir, 'fake-wecom.mjs')
+    writeFileSync(script, [
+      'const args = process.argv.slice(2)',
+      'const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))',
+      'if (args[0] === "auth" && args[1] === "show") {',
+      '  console.log("unauthorized")',
+      '  process.exit(0)',
+      '}',
+      'if (args[0] === "auth" && args[1] === "init") {',
+      '  await delay(800)',
+      '  process.exit(0)',
+      '}',
+      'process.exit(0)',
+      '',
+    ].join('\n'))
+    const command = process.platform === 'win32' ? join(cliDir, 'wecom-cli.cmd') : join(cliDir, 'wecom-cli')
+    if (process.platform === 'win32') {
+      writeFileSync(command, `@echo off\r\n"${node}" "%~dp0fake-wecom.mjs" %*\r\n`)
+    } else {
+      writeFileSync(command, `#!/bin/sh\nexec "${node}" "$(dirname "$0")/fake-wecom.mjs" "$@"\n`)
+      const { chmodSync } = await import('node:fs')
+      chmodSync(command, 0o755)
+    }
+    process.env.DSH_HOME = home
+    process.env.DSH_WECOM_CLI = command
+    process.env.PATH = ''
+    process.env.Path = ''
+    process.env.WECOM_CLI_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'wanwei-wecom-login-cfg-'))
+    const started = Date.now()
+    const pending = await runWeComCliLogin(home)
+    expect(Date.now() - started).toBeLessThan(1000)
+    expect(pending.authorizing).toBe(true)
+    expect(pending.authed).toBe(false)
+    const unbound = await disconnectWeComCli(home)
+    expect(unbound.authed).toBe(false)
+    expect(unbound.skillInstalled).toBe(false)
+    const again = Date.now()
+    const second = await runWeComCliLogin(home)
+    expect(Date.now() - again).toBeLessThan(1000)
+    expect(second.authorizing).toBe(true)
+    cancelWeComCliLoginFlight()
   })
 
   it('status payloads include authorizing flags and cancel clears a flight', async () => {

@@ -55,6 +55,8 @@ let loginFlight: Promise<void> | null = null
 let loginChild: ChildProcess | null = null
 let loginEpoch = 0
 let loginError: string | null = null
+let cliTail: Promise<void> = Promise.resolve()
+let statusProbeHolds = 0
 
 /** Drop the in-process status cache after login / disconnect / skill install. */
 export function invalidateWeComCliStatusCache(): void {
@@ -331,6 +333,28 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/**
+ * Run CLI work one process at a time. Callers return before `task` finishes.
+ * @param task - status or browser login. Must not start another queued CLI task.
+ * @returns the task's completion. Rejects when `task` throws.
+ */
+function enqueueCli(task: () => Promise<void>): Promise<void> {
+  const run = cliTail.then(task, task)
+  cliTail = run.then(() => undefined, () => undefined)
+  return run
+}
+
+/** Block non-fresh status probes until the matching CLI work finishes. */
+function holdStatusProbes(): () => void {
+  statusProbeHolds += 1
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    statusProbeHolds -= 1
+  }
+}
+
 /** Stop a browser login so a later status poll cannot write skills after「解绑」. */
 function cancelWeComLogin(): void {
   loginEpoch += 1
@@ -364,7 +388,7 @@ export async function buildWeComCliStatus(
   const fresh = options?.fresh === true
   // A second `wecom-cli` process during `auth init` can block on the CLI lock and
   // hold another WebView request open until the browser round-trip aborts it.
-  if (loginFlight !== null && !fresh) {
+  if (!fresh && (loginFlight !== null || statusProbeHolds > 0)) {
     const base = statusCache !== null && statusCache.home === dshHome
       ? statusCache.status
       : composeStatus(dshHome, resolveWeComCliCommand() !== undefined, null, false)
@@ -514,6 +538,24 @@ export function clearWeComCliCredentials(env: NodeJS.ProcessEnv = process.env): 
  * @param epoch - login generation; a newer「解绑」makes this a no-op.
  */
 async function finishWeComLogin(dshHome: string, cli: string, epoch: number): Promise<void> {
+  if (epoch !== loginEpoch) return
+  const before = await buildWeComCliStatus(dshHome, { fresh: true })
+  if (epoch !== loginEpoch) return
+  if (before.authed) {
+    loginError = null
+    if (!before.skillInstalled) {
+      try {
+        await installWeComCliSkills(dshHome)
+      } catch (error) {
+        loginError = errorText(error)
+        invalidateWeComCliStatusCache()
+        return
+      }
+      invalidateWeComCliStatusCache()
+    }
+    await buildWeComCliStatus(dshHome, { fresh: true })
+    return
+  }
   let result: RunResult
   try {
     result = await run(cli, ['auth', 'init', '--noninteractive'], 10 * 60_000, child => {
@@ -559,39 +601,39 @@ async function finishWeComLogin(dshHome: string, cli: string, epoch: number): Pr
 
 /**
  * Start non-interactive QR login (`wecom-cli auth init --noninteractive`), then install skills.
- * Already-authorized calls only copy skills and return when that copy finishes.
- * A new browser login returns as soon as the CLI is spawned. Holding the RPC open
- * until the QR process exits makes the WebView report a failed fetch.
+ * The call queues the CLI and returns before that process starts. Holding the RPC
+ * open until the QR process exits makes the WebView report a failed fetch.
  * @param dshHome - product DSH home.
  * @returns current status. `authorizing` stays true until the background login exits.
  */
 export async function runWeComCliLogin(dshHome: string): Promise<WeComCliStatus> {
   if (loginFlight !== null) return buildWeComCliStatus(dshHome)
   loginError = null
-  const before = await buildWeComCliStatus(dshHome, { fresh: true })
-  if (!before.cliInstalled) {
-    throw new Error(before.hint ?? 'wecom-cli 未安装')
-  }
   const cli = resolveWeComCliCommand()
-  if (cli === undefined) throw new Error(before.hint ?? 'wecom-cli 未安装')
-  if (before.authed) {
-    if (!before.skillInstalled) {
-      await installWeComCliSkills(dshHome)
-      invalidateWeComCliStatusCache()
-    }
-    return buildWeComCliStatus(dshHome, { fresh: true })
+  if (cli === undefined) {
+    const missing = await buildWeComCliStatus(dshHome)
+    throw new Error(missing.hint ?? 'wecom-cli 未安装')
   }
+  // Return before any CLI process starts. `auth show` after「解绑」can block
+  // until the WebView drops the request.
   const epoch = loginEpoch
-  const flight = finishWeComLogin(dshHome, cli, epoch)
+  const release = holdStatusProbes()
+  const flight = enqueueCli(async () => {
+    try {
+      await finishWeComLogin(dshHome, cli, epoch)
+    } finally {
+      release()
+    }
+  })
   loginFlight = flight
   void flight.finally(() => {
     if (loginFlight === flight) loginFlight = null
   })
-  return withLoginFlags(before)
+  return withLoginFlags(composeStatus(dshHome, true, null, false))
 }
 
 /**
- * Unbind desktop WeCom: clear CLI credentials when present, then remove skill copies.
+ * Unbind desktop WeCom: clear CLI credentials and remove skill copies without spawning `wecom-cli`.
  * @param dshHome - product DSH home.
  * @returns status after unbind.
  */
@@ -600,7 +642,10 @@ export async function disconnectWeComCli(dshHome: string): Promise<WeComCliStatu
   clearWeComCliCredentials()
   removeWeComCliSkills(dshHome)
   invalidateWeComCliStatusCache()
-  return buildWeComCliStatus(dshHome, { fresh: true })
+  // Credentials are already gone. Do not spawn `wecom-cli auth show` here:
+  // that process can hang or open a browser and the WebView reports the
+  // disconnect request as a lost local connection.
+  return withLoginFlags(composeStatus(dshHome, resolveWeComCliCommand() !== undefined, null, false))
 }
 
 /**
