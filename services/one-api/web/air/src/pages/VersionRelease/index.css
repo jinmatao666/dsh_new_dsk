@@ -8,14 +8,19 @@
 .release-upload { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 24px; margin-bottom: 34px; padding-bottom: 28px; border-bottom: 1px solid #dfe8f5; }
 .release-metadata { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
 .release-metadata label { display: flex; flex-direction: column; gap: 10px; color: #385375; font-size: 14px; font-weight: 600; }
-.release-metadata input, .release-metadata select, .release-list-actions select { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #d6e3f4; border-radius: 8px; background: #fff; color: #253d60; font: inherit; font-weight: 400; }
+.release-metadata input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #d6e3f4; border-radius: 8px; background: #fff; color: #253d60; font: inherit; font-weight: 400; }
 .release-metadata small { color: #7589a7; font-size: 12px; line-height: 1.5; font-weight: 400; }
 .release-list-actions { display: flex; align-items: center; gap: 12px; }
 .release-list-actions .release-select { width: 130px; }
-.release-select { position: relative; display: block; min-width: 0; }
-.release-select select { appearance: none; -webkit-appearance: none; padding-right: 36px; cursor: pointer; }
-.release-select > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #7589a7; pointer-events: none; }
-.release-select select:disabled { cursor: not-allowed; opacity: .5; }
+.release-select { position: relative; display: block; min-width: 0; width: 100%; }
+.release-select .zjugis-select-trigger { min-height: 42px; padding: 10px 14px; border: 1px solid #d6e3f4; border-radius: 10px; background: #fff; font-size: 14px; font-weight: 400; }
+.release-select .zjugis-select.open .zjugis-select-trigger, .release-select .zjugis-select-trigger:focus-visible { outline: none; border-color: #a9c9f5; box-shadow: 0 0 0 3px rgb(52 120 239 / .08); }
+.release-select .zjugis-select-menu { z-index: 30; padding: 6px; border: 1px solid #e1eaf6; border-radius: 12px; box-shadow: 0 10px 28px rgb(37 61 96 / .1); }
+.release-select .zjugis-select-option { min-height: 36px; padding: 8px 10px; border-radius: 7px; font-size: 14px; }
+.release-select .zjugis-select-option.active { background: #edf4ff; color: #3478ef; font-weight: 500; }
+.release-select .zjugis-select-option:focus-visible { outline: none; background: #f0f6ff; box-shadow: inset 0 0 0 1px #bfd4f4; }
+.release-select .zjugis-select-option:disabled { opacity: .45; cursor: not-allowed; background: transparent; color: #7589a7; }
+.release-select .zjugis-select-trigger:disabled { opacity: .5; cursor: not-allowed; }
 .release-upload-field > span, .release-upload-notes > label { display: block; margin-bottom: 10px; color: #385375; font-size: 14px; font-weight: 600; }
 .release-file { position: relative; display: flex; align-items: center; gap: 14px; min-height: 96px; box-sizing: border-box; padding: 18px; border: 1px dashed #b8cbe5; border-radius: 8px; background: #fff; color: #3478ef; cursor: pointer; }
 .release-file > svg { flex-shrink: 0; }
@@ -48,7 +53,26 @@
 .release-status { color: #7589a7; font-size: 13px; }
 .release-status.is-published { color: #248169; }
 .release-page .release-empty { padding: 44px 16px; text-align: center; white-space: normal; color: #7589a7; }
-.release-full-notes { max-height: 55vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #385375; line-height: 1.8; }
+.release-full-notes { min-height: 72px; max-height: 55vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #385375; line-height: 1.8; padding: 4px 0 8px; }
+.release-dialog .semi-modal-content { box-sizing: border-box; height: auto; max-height: calc(100vh - 48px); padding: 28px; border: 1px solid #dfe8f5; border-radius: 16px; background: #fff; box-shadow: 0 24px 64px rgb(20 40 80 / .2); }
+.release-dialog .semi-modal-header { margin: 0 0 20px; }
+.release-dialog .semi-modal-title { color: #203a5e; font-size: 20px; line-height: 1.5; }
+.release-dialog .semi-modal-body { min-height: 0; max-height: calc(100vh - 190px); margin: 0; padding: 0; overflow: auto; }
+.release-dialog .semi-modal-footer { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin: 28px 0 0; padding: 20px 0 0; border-top: 1px solid #e5edf7; }
+.release-dialog .semi-modal-footer .semi-button { min-width: 88px; height: 40px; margin: 0; padding: 0 20px; border: 1px solid #d6e3f4; border-radius: 8px; background: #fff; color: #526b8c; font-size: 14px; font-weight: 500; }
+.release-dialog .semi-modal-footer .semi-button:hover { background: #f5f8fd; border-color: #b8cbe5; }
+.release-dialog .semi-modal-footer .semi-button + .semi-button { margin-left: 12px; }
+.release-dialog .semi-modal-footer .semi-button.semi-button-primary { border-color: #3478ef; background: #3478ef; color: #fff; }
+.release-dialog .semi-modal-footer .semi-button.semi-button-primary:hover { border-color: #2563db; background: #2563db; }
+.release-dialog .semi-modal-footer .semi-button.semi-button-danger { border-color: #c44949; background: #c44949; color: #fff; }
+.release-dialog .semi-modal-footer .semi-button.semi-button-danger:hover { border-color: #aa3939; background: #aa3939; }
+.release-dialog .semi-modal-footer .semi-button:disabled { opacity: .5; cursor: not-allowed; }
+.release-dialog .semi-button:focus-visible { outline: 2px solid #3478ef; outline-offset: 3px; }
+.release-dialog .semi-modal-close { width: 30px; height: 30px; border-radius: 8px; color: #7589a7; }
+.release-dialog .semi-modal-body > p { margin: 0; color: #385375; line-height: 1.8; overflow-wrap: anywhere; }
+.release-dialog .semi-modal-body > .release-version-warning { margin-top: 18px; padding: 12px 14px; border: 1px solid #efd7ad; border-radius: 8px; background: #fff8eb; color: #8a6028; }
+.release-table .release-delete { margin-left: 12px; color: #c44949; }
+.release-table .release-delete:disabled { cursor: not-allowed; opacity: .5; }
 .release-error { color: #c44949; overflow-wrap: anywhere; }
 .release-history-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin: 12px 0 24px; }
 .release-page button:focus-visible, .release-page textarea:focus-visible, .release-page input:focus-visible, .release-page select:focus-visible, .release-page a:focus-visible { outline: 2px solid #3478ef; outline-offset: 3px; }

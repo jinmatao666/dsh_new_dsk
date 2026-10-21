@@ -23,6 +23,7 @@ import (
 	"aead.dev/minisign"
 	"github.com/Masterminds/semver/v3"
 	"github.com/gin-gonic/gin"
+	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -43,6 +44,7 @@ type desktopUpdateManifest struct {
 
 var desktopUpdateUploadGate = make(chan struct{}, 1)
 var desktopUpdatePublication sync.Mutex
+var desktopUpdateOlderConfirmation = errors.New("发布版本低于该平台历史发布版本，请确认是否继续发布")
 var desktopUpdateID = regexp.MustCompile(`^[a-f0-9]{32}$`)
 var desktopUpdateFilename = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$`)
 
@@ -326,13 +328,16 @@ func AdminListDesktopUpdates(c *gin.Context) {
 	c.JSON(200, gin.H{"success": true, "data": gin.H{"items": records, "channels": channels, "signing_configured": keyErr == nil}})
 }
 
-// AdminPublishDesktopUpdate revalidates signatures and atomically advances one platform pointer.
+// AdminPublishDesktopUpdate revalidates signatures and atomically selects one platform release.
 func AdminPublishDesktopUpdate(c *gin.Context) { changeDesktopUpdate(c, true) }
 
 // AdminWithdrawDesktopUpdate hides the active platform without falling back to an older upload.
 func AdminWithdrawDesktopUpdate(c *gin.Context) { changeDesktopUpdate(c, false) }
-func changeDesktopUpdate(c *gin.Context, publish bool) {
-	if !desktopUpdateID.MatchString(c.Param("id")) {
+
+// AdminDeleteDesktopUpdate removes an unpublished upload, retaining the channel's version high-water mark.
+func AdminDeleteDesktopUpdate(c *gin.Context) {
+	id := c.Param("id")
+	if !desktopUpdateID.MatchString(id) {
 		desktopUpdateFailure(c, errors.New("版本标识无效"))
 		return
 	}
@@ -340,7 +345,48 @@ func changeDesktopUpdate(c *gin.Context, publish bool) {
 	defer desktopUpdatePublication.Unlock()
 	err := model.DB.Transaction(func(tx *gorm.DB) error {
 		var record model.DesktopUpdate
-		if err := tx.First(&record, "id = ?", c.Param("id")).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&record, "id = ?", id).Error; err != nil {
+			return err
+		}
+		var channel model.DesktopUpdateChannel
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&channel, "platform = ?", record.Platform).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if err == nil && channel.ReleaseID == id {
+			if channel.Published {
+				return errors.New("该更新包正在发布中，请先撤下再删除")
+			}
+			if err := tx.Model(&channel).Update("release_id", "").Error; err != nil {
+				return err
+			}
+		}
+		return tx.Delete(&record).Error
+	})
+	if err != nil {
+		desktopUpdateFailure(c, err)
+		return
+	}
+	// Commit visibility first; a cleanup failure must not restore a downloadable record.
+	message := "更新包及发布记录已删除"
+	if err := os.RemoveAll(filepath.Join(desktopUpdateRoot(), id)); err != nil {
+		logger.SysErrorf("desktop update artifact cleanup failed for %s: %v", id, err)
+		message = "发布记录已删除，但更新包文件清理失败，请联系运维清理"
+	}
+	c.JSON(200, gin.H{"success": true, "message": message})
+}
+
+func changeDesktopUpdate(c *gin.Context, publish bool) {
+	if !desktopUpdateID.MatchString(c.Param("id")) {
+		desktopUpdateFailure(c, errors.New("版本标识无效"))
+		return
+	}
+	desktopUpdatePublication.Lock()
+	defer desktopUpdatePublication.Unlock()
+	previousVersion := ""
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		var record model.DesktopUpdate
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&record, "id = ?", c.Param("id")).Error; err != nil {
 			return err
 		}
 		if publish {
@@ -366,6 +412,7 @@ func changeDesktopUpdate(c *gin.Context, publish bool) {
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&channel, "platform = ?", record.Platform).Error; err != nil {
 			return err
 		}
+		highWaterVersion := record.Version
 		if channel.Version != "" {
 			previous, err := semver.StrictNewVersion(channel.Version)
 			if err != nil {
@@ -375,16 +422,24 @@ func changeDesktopUpdate(c *gin.Context, publish bool) {
 			if err != nil {
 				return err
 			}
-			if publish && candidate.LessThan(previous) {
-				return errors.New("不允许发布低于该平台历史发布版本的更新")
+			if candidate.LessThan(previous) {
+				highWaterVersion = channel.Version
+				if publish && c.Query("confirm_older") != record.Version {
+					previousVersion = channel.Version
+					return desktopUpdateOlderConfirmation
+				}
 			}
 		}
 		if !publish && channel.ReleaseID != record.ID {
 			return errors.New("只能撤下该平台当前发布的版本")
 		}
-		return tx.Model(&channel).Updates(map[string]interface{}{"version": record.Version, "release_id": record.ID, "published": publish, "updated_by": c.GetInt("id"), "updated_at": time.Now()}).Error
+		return tx.Model(&channel).Updates(map[string]interface{}{"version": highWaterVersion, "release_id": record.ID, "published": publish, "updated_by": c.GetInt("id"), "updated_at": time.Now()}).Error
 	})
 	if err != nil {
+		if errors.Is(err, desktopUpdateOlderConfirmation) {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "confirmation_required": true, "previous_version": previousVersion, "message": err.Error()})
+			return
+		}
 		desktopUpdateFailure(c, err)
 		return
 	}
@@ -414,18 +469,18 @@ func CheckDesktopUpdate(c *gin.Context) {
 		c.Status(204)
 		return
 	}
-	latest, err := semver.StrictNewVersion(channel.Version)
+	var record model.DesktopUpdate
+	if err := model.DB.First(&record, "id = ?", channel.ReleaseID).Error; err != nil {
+		c.Status(503)
+		return
+	}
+	latest, err := semver.StrictNewVersion(record.Version)
 	if err != nil {
 		c.Status(503)
 		return
 	}
 	if !latest.GreaterThan(current) {
 		c.Status(204)
-		return
-	}
-	var record model.DesktopUpdate
-	if err := model.DB.First(&record, "id = ?", channel.ReleaseID).Error; err != nil {
-		c.Status(503)
 		return
 	}
 	var manifest desktopUpdateManifest

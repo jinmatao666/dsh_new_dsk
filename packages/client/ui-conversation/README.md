@@ -9,6 +9,8 @@ English | [中文](README.zh.md)
 
 ## Summary
 
+Reference chips reserve inline space for the caret; skill removal buttons stay inside the capsule. Unmodified horizontal arrows cross a chip and its single following space together, preserving that space in copied and submitted text. Repeated spaces, selection gestures, word navigation and IME input retain editor behavior.
+
 Skill reference chips offer separate navigation and removal buttons. Navigation emits the browser `dsh:reference-open` event with `{ source, ref }` for the owning feature; removal deletes only that Lexical occurrence. Neither action submits a message or changes other references. The composer does not own the destination page.
 
 A product may register a default first-send Session factory; a feature-supplied draft factory takes precedence. Send or Enter prepares the Session, applies registered pending choices, transfers the draft and uses ordinary Session input. Preparation freezes staged editing; failure retains the draft. Manual Workspace selection applies the same pending choices and transfers text without sending. Without either factory, sending requires Workspace selection. The optional-Session model seat and draft permission selector remain available before selection.

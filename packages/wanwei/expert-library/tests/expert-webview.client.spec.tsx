@@ -25,14 +25,17 @@ describe('same-window expert webview lifecycle', () => {
       <ExpertWebview launch={second} visible={false} onError={onError} />
     </>)
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith('set_expert_webview_visible', { label: 'view-second-expert', visible: false })
+      expect(invoke).toHaveBeenCalledWith('set_expert_webview_visible', { label: 'view-geology-analysis', visible: true })
     })
+    expect(invoke.mock.calls.filter(([command]) => command === 'open_expert_webview')).toHaveLength(1)
     view.rerender(<>
       <ExpertWebview launch={launch} visible={false} onError={onError} />
       <ExpertWebview launch={second} visible onError={onError} />
     </>)
     expect(invoke).toHaveBeenCalledWith('set_expert_webview_visible', { label: 'view-geology-analysis', visible: false })
-    expect(invoke).toHaveBeenCalledWith('set_expert_webview_visible', { label: 'view-second-expert', visible: true })
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('set_expert_webview_visible', { label: 'view-second-expert', visible: true })
+    })
     expect(invoke.mock.calls.filter(([command]) => command === 'open_expert_webview')).toHaveLength(2)
     expect(invoke.mock.calls.filter(([command]) => command === 'close_expert_webview')).toHaveLength(0)
     view.unmount()
@@ -82,6 +85,34 @@ describe('same-window expert webview lifecycle', () => {
     expect(invoke).toHaveBeenCalledWith('set_expert_webview_visible', { label: 'expert-geology-analysis-aaaaaaaaaaaaaaaa', visible: true })
     view.unmount()
     expect(invoke).toHaveBeenCalledWith('close_expert_webview', { label: 'expert-geology-analysis-aaaaaaaaaaaaaaaa' })
+  })
+
+  it('waits for a valid layout before opening and ignores transient undersized bounds', async () => {
+    let width = 0
+    let height = 0
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({
+      x: 20, y: 100, width, height,
+    } as DOMRect))
+    const invoke = vi.fn(async (command: string) => command === 'open_expert_webview' ? 'expert-view' : undefined)
+    ;(window as Window & { __ZJUGIS_NATIVE_INVOKE__?: typeof invoke }).__ZJUGIS_NATIVE_INVOKE__ = invoke
+    const onError = vi.fn()
+    const view = render(<ExpertWebview launch={launch} visible onError={onError} />)
+    expect(invoke).not.toHaveBeenCalled()
+    width = 800
+    height = 560
+    window.dispatchEvent(new Event('resize'))
+    await waitFor(() => { expect(invoke).toHaveBeenCalledWith('open_expert_webview', expect.objectContaining({ width: 800, height: 560 })) })
+    await waitFor(() => { expect(invoke).toHaveBeenCalledWith('set_expert_webview_bounds', expect.objectContaining({ width: 800, height: 560 })) })
+    const boundsCount = invoke.mock.calls.filter(([command]) => command === 'set_expert_webview_bounds').length
+    width = 150
+    document.dispatchEvent(new Event('scroll'))
+    expect(invoke.mock.calls.filter(([command]) => command === 'set_expert_webview_bounds')).toHaveLength(boundsCount)
+    expect(invoke).toHaveBeenCalledWith('set_expert_webview_visible', { label: 'expert-view', visible: false })
+    width = 800
+    document.dispatchEvent(new Event('scroll'))
+    expect(invoke).toHaveBeenCalledWith('set_expert_webview_visible', { label: 'expert-view', visible: true })
+    expect(onError).not.toHaveBeenCalled()
+    view.unmount()
   })
 
   it('closes a late-created native view after the Tab was unmounted', async () => {

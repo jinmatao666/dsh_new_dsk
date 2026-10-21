@@ -3,6 +3,13 @@
    radius, and label truncation are ordinary styles here). Vertical metrics
    stay inside the composer's 24px line so a chip never changes line height. */
 
+.host {
+  display: inline-block;
+  padding-inline: 3px;
+  vertical-align: middle;
+  line-height: 22px;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -10,7 +17,7 @@
   max-width: 240px;
   padding: 0 6px;
   border-radius: 6px;
-  vertical-align: bottom;
+  vertical-align: top;
   line-height: 22px;
   height: 22px;
   background: var(--dsw-alias-interactive-bg-hover);
@@ -40,7 +47,7 @@
   opacity: 0.7;
 }
 
-.skill { position: relative; border-radius: 999px; padding: 0; overflow: visible; background: #f0f1f3; color: #30343b; }
-.open { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; height: 22px; padding: 0 9px; border: 0; border-radius: inherit; background: transparent; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
-.remove { position: absolute; top: -6px; right: -5px; display: grid; place-items: center; width: 14px; height: 14px; padding: 0; border: 1px solid #fff; border-radius: 50%; background: #e5484d; color: #fff; font: 12px/1 sans-serif; cursor: pointer; }
-.open:focus-visible, .remove:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.skill { gap: 0; border-radius: 999px; padding: 0; overflow: visible; color: var(--dsw-alias-label-primary); }
+.open { display: inline-flex; flex: 1; align-items: center; gap: 5px; min-width: 0; max-width: 100%; height: 22px; padding: 0 7px; border: 0; border-radius: inherit; background: transparent; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+.remove { display: grid; flex: none; place-items: center; box-sizing: border-box; width: 14px; height: 14px; margin-right: 5px; padding: 0; border: 0; border-radius: 50%; background: var(--dsw-alias-state-error-primary); color: var(--dsw-alias-label-primary-foreground); font: 12px/1 sans-serif; cursor: pointer; }
+.open:focus-visible, .remove:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }

@@ -19,7 +19,7 @@ it('keeps a staged skill and its editable question in the same inline flow', () 
       inputDisplay: input.display, wrap: input.wordBreak, maxWidth: chip.maxWidth,
       ellipsis: label.textOverflow === 'ellipsis' }).toMatchInlineSnapshot(`
       {
-        "display": "inline",
+        "display": "inline-block",
         "ellipsis": true,
         "float": "none",
         "gap": "6px",
@@ -28,5 +28,8 @@ it('keeps a staged skill and its editable question in the same inline flow', () 
         "wrap": "break-all",
       }
     `)
+    const remove = getComputedStyle(fixture.querySelector('.dsh-skill-draft-remove')!)
+    expect(remove.position).not.toBe('absolute')
+    expect(remove.marginRight).toBe('5px')
   } finally { fixture.remove(); style.remove() }
 })

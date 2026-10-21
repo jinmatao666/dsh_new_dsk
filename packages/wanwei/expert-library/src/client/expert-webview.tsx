@@ -6,6 +6,11 @@ export type ExpertLaunch = { id: string; name: string; url: string; ticket: stri
 function webviewBounds(element: HTMLDivElement | null) {
   const rect = element?.getBoundingClientRect()
   if (rect === undefined) return undefined
+  // The native child rejects smaller views. Layout may still be settling after
+  // the marketplace panel opens or the desktop window is maximized on macOS.
+  if (!Number.isFinite(rect.x) || !Number.isFinite(rect.y)
+    || !Number.isFinite(rect.width) || !Number.isFinite(rect.height)
+    || rect.width < 200 || rect.height < 200) return undefined
   return {
     x: Math.max(0, Math.floor(rect.x)),
     y: Math.max(0, Math.floor(rect.y)),
@@ -45,19 +50,37 @@ export function ExpertWebview({ launch, visible, onError }: {
   const { id, url, ticket } = launch
   useEffect(() => {
     let cancelled = false
+    let opening = false
     viewLabel.current = undefined
     nativeVisible.current = undefined
     const update = () => {
+      const value = webviewBounds(holder.current)
       const label = viewLabel.current
-      if (label === undefined) return
-      const shouldShow = visibleRef.current && !hasBlockingDialog(holder.current)
+      if (label === undefined) {
+        if (!visibleRef.current || value === undefined || opening) return
+        opening = true
+        void invokeNative('open_expert_webview', { ...value, key: id, url, ticket })
+          .then((result) => {
+            if (typeof result !== 'string') throw new Error('专家视图返回了无效标识')
+            if (cancelled) {
+              void invokeNative('close_expert_webview', { label: result })
+              return
+            }
+            viewLabel.current = result
+            update()
+          })
+          .catch((error: unknown) => {
+            if (!cancelled) onErrorRef.current(error instanceof Error ? error.message : String(error))
+          })
+        return
+      }
+      const shouldShow = visibleRef.current && value !== undefined && !hasBlockingDialog(holder.current)
       if (nativeVisible.current !== shouldShow) {
         nativeVisible.current = shouldShow
         void invokeNative('set_expert_webview_visible', { label, visible: shouldShow })
           .catch((error: unknown) => { if (!cancelled) onErrorRef.current(error instanceof Error ? error.message : String(error)) })
       }
-      const value = webviewBounds(holder.current)
-      if (shouldShow && value !== undefined) {
+      if (shouldShow) {
         void invokeNative('set_expert_webview_bounds', { label, ...value })
           .catch((error: unknown) => { if (!cancelled) onErrorRef.current(error instanceof Error ? error.message : String(error)) })
       }
@@ -71,20 +94,7 @@ export function ExpertWebview({ launch, visible, onError }: {
     // Native child Webviews sit above HTML overlays; hide them while a separate modal is open.
     const dialogs = new MutationObserver(update)
     dialogs.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['open', 'style', 'class', 'aria-modal'] })
-    const value = webviewBounds(holder.current)
-    if (value !== undefined) {
-      void invokeNative('open_expert_webview', { ...value, key: id, url, ticket })
-        .then((result) => {
-          if (typeof result !== 'string') throw new Error('专家视图返回了无效标识')
-          if (cancelled) {
-            void invokeNative('close_expert_webview', { label: result })
-            return
-          }
-          viewLabel.current = result
-          update()
-        })
-        .catch((error: unknown) => { if (!cancelled) onErrorRef.current(error instanceof Error ? error.message : String(error)) })
-    }
+    update()
     return () => {
       cancelled = true
       observer?.disconnect()

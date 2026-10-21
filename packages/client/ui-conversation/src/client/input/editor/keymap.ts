@@ -14,11 +14,37 @@
  */
 import type { LexicalEditor } from 'lexical'
 import {
-  COMMAND_PRIORITY_CRITICAL, KEY_ARROW_DOWN_COMMAND, KEY_ARROW_UP_COMMAND, KEY_ENTER_COMMAND,
+  $getSelection, $isRangeSelection, COMMAND_PRIORITY_CRITICAL,
+  KEY_ARROW_DOWN_COMMAND, KEY_ARROW_LEFT_COMMAND, KEY_ARROW_RIGHT_COMMAND, KEY_ARROW_UP_COMMAND, KEY_ENTER_COMMAND,
   KEY_ESCAPE_COMMAND, KEY_SPACE_COMMAND, KEY_TAB_COMMAND, PASTE_COMMAND,
 } from 'lexical'
 import { mergeRegister } from '@lexical/utils'
 import type { ArbitrateKey, ArbitrateOutcome } from '../../contract/input.ts'
+import { $composerLayout, $detectOffsetOfPoint } from './projection.ts'
+import { $selectDetectSpan } from './span-map.ts'
+
+/** Move across an atomic reference and its single separating space together. */
+function moveAcrossChip(event: KeyboardEvent, backward: boolean, composing: boolean): boolean {
+  if (composing || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return false
+  const selection = $getSelection()
+  if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false
+  const layout = $composerLayout()
+  const caret = $detectOffsetOfPoint(layout, selection.anchor)
+  for (const segment of layout.segments) {
+    if (segment.kind !== 'chip') continue
+    const start = segment.detectStart
+    const end = start + segment.detectLength
+    const text = layout.detectText.slice(end, end + 2)
+    // Keep repeated spaces editable; only fold the normal one-space boundary.
+    const after = end + (text.startsWith(' ') && text[1] !== ' ' ? 1 : 0)
+    if (backward ? caret !== end && caret !== after : caret !== start && !(after > end && caret === end)) continue
+    const target = backward ? start : after
+    $selectDetectSpan({ start: target, end: target })
+    event.preventDefault()
+    return true
+  }
+  return false
+}
 
 /** The bar-supplied behavior behind each intercepted gesture. */
 export interface ComposerKeymapHandlers {
@@ -84,6 +110,10 @@ export function registerComposerKeymap(editor: LexicalEditor, handlers: Composer
     }),
     editor.registerCommand(KEY_ARROW_UP_COMMAND, arrow('up'), COMMAND_PRIORITY_CRITICAL),
     editor.registerCommand(KEY_ARROW_DOWN_COMMAND, arrow('down'), COMMAND_PRIORITY_CRITICAL),
+    editor.registerCommand(KEY_ARROW_LEFT_COMMAND, event => moveAcrossChip(event, true,
+      isComposingEvent(event, recentlyComposing)), COMMAND_PRIORITY_CRITICAL),
+    editor.registerCommand(KEY_ARROW_RIGHT_COMMAND, event => moveAcrossChip(event, false,
+      isComposingEvent(event, recentlyComposing)), COMMAND_PRIORITY_CRITICAL),
     // Tab drills into a drillable highlighted row; otherwise it passes so the
     // browser keeps its native focus traversal.
     editor.registerCommand(KEY_TAB_COMMAND, arrow('tab'), COMMAND_PRIORITY_CRITICAL),

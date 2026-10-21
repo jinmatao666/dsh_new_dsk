@@ -25,6 +25,7 @@ func SetApiRouter(router *gin.Engine) {
 	desktopUpdates.POST("", controller.AdminUploadDesktopUpdate)
 	desktopUpdates.POST("/:id/publish", controller.AdminPublishDesktopUpdate)
 	desktopUpdates.POST("/:id/withdraw", controller.AdminWithdrawDesktopUpdate)
+	desktopUpdates.DELETE("/:id", controller.AdminDeleteDesktopUpdate)
 	{
 		apiRouter.GET("/status", controller.GetStatus)
 		apiRouter.GET("/desktop-config", controller.GetDesktopConfig)

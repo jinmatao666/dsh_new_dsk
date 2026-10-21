@@ -14,24 +14,32 @@ const flattenChildren = (node) => {
 };
 
 const CustomSelect = React.forwardRef(function CustomSelect(
-  { value, onChange, children, placeholder = '请选择', className = '', id, disabled = false },
+  { value, onChange, children, placeholder = '请选择', className = '', id, disabled = false, 'aria-label': ariaLabel },
   ref
 ) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
+  const keyboardOpen = useRef(false);
   const currentValue = String(value ?? '');
   const options = React.Children.toArray(children).map((child) => {
     const optionValue = child.props.value != null ? String(child.props.value) : '';
-    return { value: optionValue, label: flattenChildren(child.props.children) || optionValue };
+    return { value: optionValue, label: flattenChildren(child.props.children) || optionValue, disabled: Boolean(child.props.disabled) };
   });
   const current = options.find((option) => option.value === currentValue);
 
   useEffect(() => {
     if (!open) return undefined;
+    if (keyboardOpen.current) {
+      keyboardOpen.current = false;
+      const selected = rootRef.current?.querySelector('[role="option"][aria-selected="true"]:not(:disabled)');
+      (selected || rootRef.current?.querySelector('[role="option"]:not(:disabled)'))?.focus();
+    }
     const onPointerDown = (event) => {
       if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
     };
-    const onKeyDown = (event) => { if (event.key === 'Escape') setOpen(false); };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') { setOpen(false); rootRef.current?.querySelector('.zjugis-select-trigger')?.focus(); }
+    };
     document.addEventListener('mousedown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
     return () => {
@@ -42,17 +50,29 @@ const CustomSelect = React.forwardRef(function CustomSelect(
 
   const pick = (optionValue) => {
     setOpen(false);
+    rootRef.current?.querySelector('.zjugis-select-trigger')?.focus();
     if (onChange) onChange({ target: { value: optionValue } });
   };
 
   return (
-    <div ref={rootRef} id={id} className={`zjugis-select${open ? ' open' : ''}${className ? ` ${className}` : ''}`}>
+    <div ref={rootRef} id={id} className={`zjugis-select${open ? ' open' : ''}${className ? ` ${className}` : ''}`}
+      onKeyDown={event => {
+        if (disabled || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        if (!open) { keyboardOpen.current = true; setOpen(true); return; }
+        const items = [...rootRef.current.querySelectorAll('[role="option"]:not(:disabled)')];
+        const index = items.indexOf(document.activeElement);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        items[next]?.focus();
+      }}>
       <button
         type='button'
         ref={ref}
         className='zjugis-select-trigger'
         disabled={disabled}
         aria-haspopup='listbox'
+        aria-label={ariaLabel}
+        value={currentValue}
         aria-expanded={open}
         onClick={() => setOpen((visible) => !visible)}
       >
@@ -67,6 +87,8 @@ const CustomSelect = React.forwardRef(function CustomSelect(
               type='button'
               role='option'
               aria-selected={option.value === currentValue}
+              disabled={disabled || option.disabled}
+              value={option.value}
               className={`zjugis-select-option${option.value === currentValue ? ' active' : ''}`}
               onClick={() => pick(option.value)}
             >

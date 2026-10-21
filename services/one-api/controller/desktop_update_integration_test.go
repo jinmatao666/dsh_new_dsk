@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"aead.dev/minisign"
@@ -71,6 +72,7 @@ func updateRouter(t *testing.T) (*gin.Engine, minisign.PrivateKey, string) {
 	admin.POST("", controller.AdminUploadDesktopUpdate)
 	admin.POST("/:id/publish", controller.AdminPublishDesktopUpdate)
 	admin.POST("/:id/withdraw", controller.AdminWithdrawDesktopUpdate)
+	admin.DELETE("/:id", controller.AdminDeleteDesktopUpdate)
 	r.GET("/desktop-updates/files/:id", controller.DownloadDesktopUpdate)
 	r.GET("/desktop-updates/:target/:arch/:current", controller.CheckDesktopUpdate)
 	return r, private, root
@@ -220,6 +222,92 @@ func TestDesktopUpdateDeclaredMetadataMustMatchSignature(t *testing.T) {
 		t.Fatalf("rejected metadata left files: %v", err)
 	}
 	uploadedID(t, requestUpdate(t, r, "POST", "/api/desktop-updates", "root", bundle))
+}
+
+func TestDesktopUpdateDelete(t *testing.T) {
+	r, key, root := updateRouter(t)
+	id := uploadedID(t, requestUpdate(t, r, "POST", "/api/desktop-updates", "root", updateZIP(t, key, "1.2.0", "windows-x86_64", false)))
+	path := "/api/desktop-updates/" + id
+	for _, role := range []string{"", "user"} {
+		if w := requestUpdate(t, r, "DELETE", path, role, nil); bytes.Contains(w.Body.Bytes(), []byte(`"success":true`)) {
+			t.Fatal("non-root deleted release", w.Body.String())
+		}
+	}
+	if w := requestUpdate(t, r, "POST", path+"/publish", "root", nil); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	if w := requestUpdate(t, r, "DELETE", path, "root", nil); w.Code != 400 {
+		t.Fatal("published release deletion accepted", w.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, id, "artifact")); err != nil {
+		t.Fatal("denied deletion removed artifact", err)
+	}
+	if w := requestUpdate(t, r, "POST", path+"/withdraw", "root", nil); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	if w := requestUpdate(t, r, "DELETE", path, "root", nil); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, id)); !os.IsNotExist(err) {
+		t.Fatal("artifact directory retained", err)
+	}
+	var record model.DesktopUpdate
+	if err := model.DB.First(&record, "id = ?", id).Error; err != gorm.ErrRecordNotFound {
+		t.Fatal("record retained", err)
+	}
+	var channel model.DesktopUpdateChannel
+	if err := model.DB.First(&channel, "platform = ?", "windows-x86_64").Error; err != nil || channel.Version != "1.2.0" || channel.Published || channel.ReleaseID != "" {
+		t.Fatal("high-water mark changed", channel, err)
+	}
+	if w := requestUpdate(t, r, "GET", "/desktop-updates/windows/x86_64/1.0.0", "", nil); w.Code != 204 {
+		t.Fatal("deleted channel advertised update", w.Code)
+	}
+	older := uploadedID(t, requestUpdate(t, r, "POST", "/api/desktop-updates", "root", updateZIP(t, key, "1.1.0", "windows-x86_64", false)))
+	if w := requestUpdate(t, r, "POST", "/api/desktop-updates/"+older+"/publish", "root", nil); w.Code != 409 {
+		t.Fatal("deletion allowed downgrade", w.Body.String())
+	}
+	if w := requestUpdate(t, r, "DELETE", "/api/desktop-updates/"+older, "root", nil); w.Code != 200 {
+		t.Fatal("draft deletion failed", w.Body.String())
+	}
+	for _, invalid := range []string{id, "invalid", strings.Repeat("f", 32)} {
+		if w := requestUpdate(t, r, "DELETE", "/api/desktop-updates/"+invalid, "root", nil); w.Code != 400 {
+			t.Fatal("invalid or missing release deletion accepted", w.Body.String())
+		}
+	}
+}
+
+func TestDesktopUpdateOlderPublicationRequiresConfirmation(t *testing.T) {
+	r, key, _ := updateRouter(t)
+	newer := uploadedID(t, requestUpdate(t, r, "POST", "/api/desktop-updates", "root", updateZIP(t, key, "2.1.1", "windows-x86_64", false)))
+	if w := requestUpdate(t, r, "POST", "/api/desktop-updates/"+newer+"/publish", "root", nil); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	older := uploadedID(t, requestUpdate(t, r, "POST", "/api/desktop-updates", "root", updateZIP(t, key, "1.2.0", "windows-x86_64", false)))
+	path := "/api/desktop-updates/" + older + "/publish"
+	for _, suffix := range []string{"", "?confirm_older=1.1.0"} {
+		if w := requestUpdate(t, r, "POST", path+suffix, "root", nil); w.Code != 409 || !bytes.Contains(w.Body.Bytes(), []byte(`"confirmation_required":true`)) {
+			t.Fatal("missing or incorrect confirmation accepted", w.Code, w.Body.String())
+		}
+	}
+	if w := requestUpdate(t, r, "POST", path+"?confirm_older=1.2.0", "user", nil); bytes.Contains(w.Body.Bytes(), []byte(`"success":true`)) {
+		t.Fatal("non-root confirmation accepted")
+	}
+	if w := requestUpdate(t, r, "POST", path+"?confirm_older=1.2.0", "root", nil); w.Code != 200 {
+		t.Fatal("confirmed older publication failed", w.Body.String())
+	}
+	for _, version := range []string{"1.2.0", "2.0.0", "2.1.1", "3.0.0"} {
+		if w := requestUpdate(t, r, "GET", "/desktop-updates/windows/x86_64/"+version, "", nil); w.Code != 204 {
+			t.Fatal("older release advertised to newer client", version, w.Body.String())
+		}
+	}
+	if w := requestUpdate(t, r, "GET", "/desktop-updates/windows/x86_64/1.0.0", "", nil); w.Code != 200 || !bytes.Contains(w.Body.Bytes(), []byte(`"version":"1.2.0"`)) {
+		t.Fatal("eligible client did not receive selected version", w.Body.String())
+	}
+	var channel model.DesktopUpdateChannel
+	model.DB.First(&channel, "platform = ?", "windows-x86_64")
+	if channel.Version != "2.1.1" || channel.ReleaseID != older {
+		t.Fatal("history and active release not separated", channel)
+	}
 }
 
 func TestDesktopUpdateLifecycle(t *testing.T) {

@@ -14,6 +14,7 @@ import type {
 import { $getNodeByKey, DecoratorNode } from 'lexical'
 import type { ReferenceInsert } from '../../contract/input.ts'
 import { ReferenceChip } from './ReferenceChip.tsx'
+import css from './ReferenceChip.module.css'
 
 /** JSON form of one chip (Lexical node serialization contract). */
 export type SerializedReferenceChipNode = Spread<{
@@ -118,6 +119,7 @@ export class ReferenceChipNode extends DecoratorNode<JSX.Element> {
    */
   override createDOM(_config: EditorConfig): HTMLElement {
     const el = document.createElement('span')
+    el.className = css.host ?? ''
     el.setAttribute('data-composer-chip', this.__source)
     el.setAttribute('contenteditable', 'false')
     return el
