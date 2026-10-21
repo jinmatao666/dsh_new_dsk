@@ -29,7 +29,11 @@ it('boots the intranet policy from cordis.yml and exposes feedback in prompt and
     const modules = new Map<string, unknown>([
       ['test-settings', SettingsFile], ['test-prompt', SystemPrompt], ['test-tools', ToolRuntime],
       ['test-network', { name: 'test-network', inject: ['settings'], apply(ctx: Context) {
-        installNetworkPolicy(ctx, 'http://server.lan')
+        installNetworkPolicy(ctx, 'http://server.lan', undefined, {
+          indexes: ['https://repo.huaweicloud.com/repository/pypi/simple/',
+            'https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/', 'https://pypi.org/simple/'],
+          attemptSeconds: 120,
+        })
       } }],
       ['test-shell', { name: 'test-shell', inject: ['tools'], apply(ctx: Context) {
         ctx.effect(() => ctx.tools.register(defineTool({ name: 'pwsh', description: 'fake shell',
@@ -82,6 +86,15 @@ it('boots the intranet policy from cordis.yml and exposes feedback in prompt and
     expect(tunneled.isError).toBe(false)
     expect(process.env.HTTPS_PROXY).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u)
     expect(process.env.PIP_NO_INDEX).toBeUndefined()
+    expect(process.env.PIP_INDEX_URL).toBe('https://repo.huaweicloud.com/repository/pypi/simple/')
+    expect(process.env.DSH_PIP_MIRROR_INDEXES).toBe(JSON.stringify([
+      'https://repo.huaweicloud.com/repository/pypi/simple/',
+      'https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/', 'https://pypi.org/simple/',
+    ]))
+    execute.mockResolvedValue('pip ProxyError: 502\n[wanwei-pip] result: success\n')
+    const recovered = await ctx.tools.execute({ name: 'pwsh', callId: ToolCallId('mirror-recovery'),
+      arguments: { command: 'python -m pip download demo' }, signal: new AbortController().signal })
+    expect(recovered.content).toEqual([{ type: 'text', text: 'pip ProxyError: 502\n[wanwei-pip] result: success\n' }])
     expect(renderPrompt(await ctx.systemPrompt.assemble())).toMatchSnapshot('managed resource tunnel')
   } finally {
     await ctx.fiber.dispose()

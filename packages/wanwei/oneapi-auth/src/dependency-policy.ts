@@ -19,6 +19,9 @@ export const DEPENDENCY_FEEDBACK: Record<DependencyFailure, string> = {
  * @returns Failure category, or undefined when no recognizable dependency failure is present.
  */
 export function dependencyFailure(text: string): DependencyFailure | undefined {
+  // 已恢复成功的镜像尝试不再触发失败提示；仍检查成功标记后其他命令的报错。
+  const recovered = text.lastIndexOf('[wanwei-pip] result: success')
+  if (recovered !== -1) text = text.slice(recovered + '[wanwei-pip] result: success'.length)
   const manager = /(?:pip|npm|pnpm|yarn|conda|uv|package|dependency|pypi|registry|Looking in indexes)/iu
   const connection = new RegExp(
     '(?:ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNREFUSED|ECONNRESET|Failed to establish a new connection'

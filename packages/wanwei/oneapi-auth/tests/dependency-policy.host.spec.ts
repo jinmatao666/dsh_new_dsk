@@ -47,6 +47,8 @@ describe('Intranet dependency feedback', () => {
     ['pip: Access is denied', undefined],
     ['Successfully installed humanize-4.15.0', undefined],
     ['HTTP request: ECONNREFUSED', undefined],
+    ['pip ProxyError: 502\n[wanwei-pip] result: success\n', undefined],
+    ['pip ProxyError: 502\n[wanwei-pip] result: success\npip: Connection refused', 'download'],
   ])('classifies actual diagnostics: %s', (text, kind) => {
     expect(dependencyFailure(text)).toBe(kind)
   })

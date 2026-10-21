@@ -3,11 +3,14 @@ import type { NetworkEnvironment } from './network-contract.ts'
 import { request } from 'node:https'
 import type { ResourceSettings } from './resource-settings.ts'
 import { ResourceTunnel } from './resource-tunnel.ts'
+import { delimiter } from 'node:path'
+import { PipMirrors, type PipMirrorPolicy } from './pip-mirrors.ts'
 
 const proxyKeys = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy',
   'NO_PROXY', 'no_proxy', 'PIP_PROXY', 'npm_config_proxy', 'npm_config_https_proxy', 'NPM_CONFIG_PROXY', 'NPM_CONFIG_HTTPS_PROXY']
 const pipKeys = ['PIP_NO_INDEX', 'PIP_FIND_LINKS', 'PIP_INDEX_URL', 'PIP_EXTRA_INDEX_URL', 'PIP_CONFIG_FILE',
   'PIP_TRUSTED_HOST', 'PIP_RETRIES', 'PIP_TIMEOUT', 'PIP_DISABLE_PIP_VERSION_CHECK', 'npm_config_offline', 'NPM_CONFIG_OFFLINE']
+const mirrorKeys = ['PYTHONPATH', 'DSH_PIP_MIRROR_INDEXES', 'DSH_PIP_MIRROR_SECONDS', 'DSH_PIP_MIRROR_CHILD']
 
 async function probeDirect(url: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -22,7 +25,7 @@ async function probeDirect(url: string): Promise<boolean> {
 
 /** Own only this sidecar's environment; disposal does not overwrite later external edits. */
 export class ResourceRouting {
-  private readonly original = new Map([...proxyKeys, ...pipKeys].map(key => [key, process.env[key]]))
+  private readonly original = new Map([...proxyKeys, ...pipKeys, ...mirrorKeys].map(key => [key, process.env[key]]))
   private readonly owned = new Map<string, string | undefined>()
   private settings: ResourceSettings | undefined
   private mode: NetworkEnvironment = 'internet'
@@ -32,9 +35,12 @@ export class ResourceRouting {
   private pending: Promise<void> | undefined
   private readonly tunnel: ResourceTunnel
   private localProxy: string | undefined
+  private readonly pipMirrors: PipMirrors | undefined
+  private pythonOverlay: string | undefined
 
   constructor(private readonly baseURL: string, private readonly probe: (url: string) => Promise<boolean> = probeDirect,
-    resolveToken: () => Promise<string | undefined> = () => Promise.resolve(undefined)) {
+    resolveToken: () => Promise<string | undefined> = () => Promise.resolve(undefined), pipMirrors?: PipMirrorPolicy) {
+    this.pipMirrors = pipMirrors === undefined ? undefined : new PipMirrors(pipMirrors)
     this.tunnel = new ResourceTunnel(async () => {
       if (this.mode !== 'intranet' || this.settings?.source !== 'proxy' || this.settings.transport !== 'tunnel' || this.direct) {
         throw new Error('Managed resource tunnel is not active')
@@ -75,6 +81,10 @@ export class ResourceRouting {
       this.localProxy = await this.tunnel.start()
       this.apply()
     }
+    if (this.mode === 'intranet' && this.settings?.source === 'proxy' && this.pipMirrors) {
+      this.pythonOverlay = this.pipMirrors.start()
+      this.apply()
+    }
   }
 
   private async detect(): Promise<void> {
@@ -111,9 +121,11 @@ export class ResourceRouting {
    */
   guidance(): string | undefined {
     if (this.mode !== 'intranet' || !this.settings) return undefined
+    const mirrors = this.pipMirrors === undefined ? ''
+      : '安装或下载 Python 依赖使用 python -m pip，不使用裸 pip、隔离解释器或覆盖 PYTHONPATH；系统已配置按顺序回退的依赖源，不要手动指定 -i/--index-url。'
     return this.settings.source === 'offline'
       ? '当前为内网离线依赖包模式。优先复用已安装依赖；安装 Python 包使用 python -m pip install 包名，环境已配置后台 wheel 依赖库。不得换源、访问公网包 URL 或切换代理。库中缺包时如实报告并停止依赖该包的步骤；不要反复修复环境。此资源库仅包含 Python wheel，不提供其他联网资源。'
-      : '当前为内网联网中转模式。优先复用已安装依赖；pip、Python requests 和遵循 HTTP(S)_PROXY 的下载工具已配置资源路由。不得读取离线依赖库、覆盖代理或擅自换源。自动检测只决定直连或中转，不保证每个网站可达。原生 PowerShell 下载、Node fetch、浏览器等不保证读取代理环境，不能声称所有联网已接通。失败时依据原始输出简短报告，不要盲目重试。'
+      : '当前为内网联网中转模式。优先复用已安装依赖；pip、Python requests 和遵循 HTTP(S)_PROXY 的下载工具已配置资源路由。不得读取离线依赖库、覆盖代理或擅自换源。自动检测只决定直连或中转，不保证每个网站可达。原生 PowerShell 下载、Node fetch、浏览器等不保证读取代理环境，不能声称所有联网已接通。失败时依据原始输出简短报告，不要盲目重试。' + mirrors
   }
 
   private set(key: string, value: string | undefined): void {
@@ -147,7 +159,14 @@ export class ResourceRouting {
       if (platform.protocol === 'http:') this.set('PIP_TRUSTED_HOST', platform.hostname)
       this.set('npm_config_offline', 'true')
     } else {
-      this.set('PIP_INDEX_URL', 'https://pypi.org/simple')
+      this.set('PIP_INDEX_URL', this.pipMirrors?.policy.indexes[0] ?? 'https://pypi.org/simple')
+      if (this.pythonOverlay && this.pipMirrors) {
+        const originalPath = this.original.get('PYTHONPATH')
+        this.set('PYTHONPATH', [this.pythonOverlay, ...(originalPath ? [originalPath] : [])].join(delimiter))
+        this.set('DSH_PIP_MIRROR_INDEXES', JSON.stringify(this.pipMirrors.policy.indexes))
+        this.set('DSH_PIP_MIRROR_SECONDS', String(this.pipMirrors.policy.attemptSeconds))
+        this.set('DSH_PIP_MIRROR_CHILD', undefined)
+      }
     }
   }
 
@@ -168,5 +187,6 @@ export class ResourceRouting {
   async dispose(): Promise<void> {
     this.restore()
     await this.tunnel.dispose()
+    this.pipMirrors?.dispose()
   }
 }

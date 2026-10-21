@@ -7,6 +7,7 @@ import { DEPENDENCY_FEEDBACK, INTRANET_DEPENDENCY_GUIDANCE, dependencyFailure } 
 import { FIRST_PARTY_SECTION_ORDER } from '@deepseek-ai/dsh-system-prompt'
 import { fetchDeploymentSettings, type DeploymentPlugins, type DeploymentSettings } from './deployment.ts'
 import { ResourceRouting } from './resource-routing.ts'
+import type { PipMirrorPolicy } from './pip-mirrors.ts'
 
 /** Host-owned durable network mode and administrator-provided internal origins. */
 export interface NetworkPolicy {
@@ -41,12 +42,13 @@ declare module '@deepseek-ai/cordis' {
  * @param ctx - Plugin scope owning policy registrations and disposal.
  * @param baseURL - Administrator-owned platform URL defining the internal origin.
  * @param resolveToken - Host-owned credential lookup for the authenticated resource tunnel.
+ * @param pipMirrors - Product-owned ordered Python indexes and per-attempt time budget.
  * @returns Installed network policy.
  */
 export function installNetworkPolicy(ctx: Context, baseURL: string,
-  resolveToken?: () => Promise<string | undefined>): NetworkPolicy {
+  resolveToken?: () => Promise<string | undefined>, pipMirrors?: PipMirrorPolicy): NetworkPolicy {
   let plugins: DeploymentPlugins = { browserAssistant: false }
-  const resources = new ResourceRouting(baseURL, undefined, resolveToken)
+  const resources = new ResourceRouting(baseURL, undefined, resolveToken, pipMirrors)
   ctx.effect(() => () => resources.dispose())
   let refreshPrompt = () => {}
   let confirmedAt = 0

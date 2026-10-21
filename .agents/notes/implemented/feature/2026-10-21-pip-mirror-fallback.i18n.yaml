@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-21-pip-mirror-fallback.md
+2026-10-21-pip-mirror-fallback.md: dadf02ed84b3a042fb11e456fe43accfecf93739
+2026-10-21-pip-mirror-fallback.zh.md: d19aeedc9d48ca35e688e0e7502d056154bf33c9

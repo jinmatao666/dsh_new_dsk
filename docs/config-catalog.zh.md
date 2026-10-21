@@ -3333,6 +3333,10 @@ export interface Config {
   developmentBypass?: boolean
   /** Maximum deployment and expert service request duration in milliseconds. */
   serviceTimeoutMs?: number
+  /** Ordered Python package indexes for intranet relay commands; no administrator UI. */
+  pipMirrorUrls?: string[]
+  /** Complete timeout for each managed pip mirror attempt in seconds. */
+  pipMirrorAttemptSeconds?: number
 }
 ```
 

@@ -59,6 +59,10 @@ export interface Config {
   developmentBypass?: boolean
   /** Maximum deployment and expert service request duration in milliseconds. */
   serviceTimeoutMs?: number
+  /** Ordered Python package indexes for intranet relay commands; no administrator UI. */
+  pipMirrorUrls?: string[]
+  /** Complete timeout for each managed pip mirror attempt in seconds. */
+  pipMirrorAttemptSeconds?: number
 }
 
 /** Runtime schema for {@link Config}. */
@@ -72,6 +76,12 @@ export const Config: z<Config> = z.object({
   installId: z.string(),
   developmentBypass: z.boolean().default(false),
   serviceTimeoutMs: z.natural().min(1).default(15000),
+  pipMirrorUrls: z.array(z.string()).default([
+    'https://repo.huaweicloud.com/repository/pypi/simple/',
+    'https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/',
+    'https://pypi.org/simple/',
+  ]),
+  pipMirrorAttemptSeconds: z.natural().min(1).max(600).default(30),
 })
 
 interface LoginPayload { username: string; password: string }
@@ -309,7 +319,10 @@ export function apply(ctx: Context, config: Config): void {
   }
   const baseURL = normalizedOrigin(config.baseURL ?? launchEnvironmentOf(ctx).get('DSH_ONEAPI_URL')?.value ?? 'http://127.0.0.1:3000')
   const ref = credentialRef(config.credentialRef)
-  const network = installNetworkPolicy(ctx, baseURL, async () => (await ctx.credentials.resolve(ref))?.value)
+  const network = installNetworkPolicy(ctx, baseURL, async () => (await ctx.credentials.resolve(ref))?.value,
+    config.pipMirrorUrls === undefined ? undefined : {
+      indexes: config.pipMirrorUrls, attemptSeconds: config.pipMirrorAttemptSeconds ?? 30,
+    })
   installFinalDeliverables(ctx)
   installDesktopLifecycle(ctx)
   const usernameRef = credentialRef('DSH_LOGIN_USERNAME')
