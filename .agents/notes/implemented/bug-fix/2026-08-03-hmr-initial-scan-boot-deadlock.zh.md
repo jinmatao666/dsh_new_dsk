@@ -22,6 +22,8 @@
 
 两者齐备后，失败的启动走上预期路径：唯一一次 apply 失败，回滚并 dispose（资源释放）整棵树（执行 TUI 自身的 shutdown、恢复终端），`loader.create` reject，`boot()` 重新抛出带标签的诊断并以 1 退出。
 
+退出中断首次扫描时，配置 watcher 的启动等待也会结束。HMR 在取得 watcher 快照前标记正在关闭，以 `INACTIVE_EFFECT` 拒绝待完成的就绪等待，并在异步路径解析后拒绝已经进入清理阶段的注册。只关闭 Chokidar 不会触发 `ready`；遗留的等待即使在桌面端确认干净退出后，仍可能导致顶层 await 悬空。快照保留全部 watcher 供清理等待关闭，不受注册拒绝后自行从活动映射中移除的影响。
+
 ## 曾考虑的替代方案
 
 **只加 `ignoreInitial: true`。** 消除了触发条件，但保留了破坏本身：任何真正并发的 refresh（配置编辑与缓慢的 apply 竞争）仍会交错两次 group update 并使 fiber 悬置。

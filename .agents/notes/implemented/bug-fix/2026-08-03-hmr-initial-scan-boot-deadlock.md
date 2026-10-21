@@ -22,6 +22,8 @@ Both halves are fixed in the vendored packages (logged in `vendor/README.md`):
 
 With both in place a failing boot follows the intended path: the single apply fails, the rollback disposes the tree (running the TUI's own shutdown, restoring the terminal), `loader.create` rejects, and `boot()` rethrows the labelled diagnostic with exit 1.
 
+Config-watcher startup also settles when shutdown interrupts its initial scan. HMR marks itself closing before taking the watcher snapshot, rejects pending readiness with `INACTIVE_EFFECT`, and refuses registrations after asynchronous path resolution if teardown has started. Closing Chokidar alone does not emit `ready`; leaving that promise pending can produce an unsettled top-level await even after the desktop acknowledges clean shutdown. The snapshot retains every watcher for awaited closure while rejected registrations remove themselves from the live map.
+
 ## Alternatives considered
 
 **Only `ignoreInitial: true`.** Removes the trigger but leaves the corruption: any genuinely concurrent refresh (a config edit racing a slow apply) still interleaves two group updates and strands the fiber.

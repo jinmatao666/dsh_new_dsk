@@ -32,6 +32,54 @@ async function eventually(test: () => boolean, message: string): Promise<void> {
 }
 
 describe('HMR exact config paths', () => {
+  it('settles config startup when disposal closes a watcher before ready', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-hmr-opening-shutdown-'))
+    const ctx = await bootHmr(dir)
+    const hmrFiber = [...ctx.registry.get(Hmr)!.fibers][0]!
+    const disposed = Promise.withResolvers<undefined>()
+    const configs = Reflect.get(ctx.hmr, 'configs') as Map<string, unknown>
+    // 在真实 watcher 已登记、但首次文件扫描尚未完成时触发退出。
+    const register = vi.spyOn(configs, 'set').mockImplementation((key, value) => {
+      Map.prototype.set.call(configs, key, value)
+      queueMicrotask(() => {
+        void hmrFiber.dispose().then(() => { disposed.resolve(undefined) }, disposed.reject)
+      })
+      return configs
+    })
+    try {
+      await expect(ctx.hmr.registerConfig(join(dir, 'plugins.yml'), () => {}))
+        .rejects.toMatchObject({ code: 'INACTIVE_EFFECT' })
+      await disposed.promise
+      expect(register).toHaveBeenCalled()
+      expect(configs.size).toBe(0)
+    } finally {
+      register.mockRestore()
+      await ctx.fiber.dispose()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not open a config watcher after disposal races path resolution', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-hmr-shutdown-'))
+    const ctx = await bootHmr(dir)
+    const hmr = ctx.hmr
+    const configs = Reflect.get(hmr, 'configs') as Map<string, unknown>
+    const register = vi.spyOn(configs, 'set')
+    try {
+      const registration = hmr.registerConfig(join(dir, 'plugins.yml'), () => {})
+      const rejected = expect(registration).rejects.toMatchObject({ code: 'INACTIVE_EFFECT' })
+      await ctx.fiber.dispose()
+      await rejected
+      expect(register).not.toHaveBeenCalled()
+      await expect(hmr.registerConfig(join(dir, 'later.yml'), () => {}))
+        .rejects.toMatchObject({ code: 'INACTIVE_EFFECT' })
+    } finally {
+      register.mockRestore()
+      await ctx.fiber.dispose()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('observes module changes when its watch base is a filesystem alias', { timeout: 30_000 }, async () => {
     const target = mkdtempSync(join(tmpdir(), 'dsh-hmr-module-canonical-'))
     const alias = `${target}-alias`

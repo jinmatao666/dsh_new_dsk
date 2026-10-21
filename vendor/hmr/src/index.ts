@@ -1,4 +1,4 @@
-import { Context, Service, type Plugin } from '@deepseek-ai/cordis'
+import { Context, CordisError, Service, type Plugin } from '@deepseek-ai/cordis'
 import type { Dict } from '@deepseek-ai/cosmokit'
 import { ModuleLoader, type ModuleJob, type ResolveResult } from '@deepseek-ai/cordis-plugin-loader'
 import type { Include } from '@deepseek-ai/cordis-plugin-include'
@@ -59,6 +59,7 @@ interface ConfigRefresh {
 
 interface ConfigRegistration {
   watcher: FSWatcher
+  cancelStartup?: () => void
 }
 
 async function findWatchRoot(filename: string): Promise<{ filename: string; root: string; depth: number }> {
@@ -90,6 +91,7 @@ class Hmr extends Service {
 
   private internal: ModuleLoader
   private watcher!: FSWatcher
+  private closing = false
   private readonly configs = new Map<string, ConfigRegistration>()
   private readonly configRefreshes = new WeakMap<object, ConfigRefresh>()
   private readonly refreshTasks = new Set<Promise<void>>()
@@ -132,9 +134,12 @@ class Hmr extends Service {
    * @throws when HMR is inactive, the path is already registered, or watcher startup fails.
    */
   async registerConfig(filename: string, refresh: () => Promise<void> | void): Promise<() => Promise<void>> {
+    if (this.closing) throw new CordisError('INACTIVE_EFFECT')
     if (!this.watcher) throw new Error('HMR is not active')
     filename = resolve(this.baseDir, filename)
     const target = await findWatchRoot(filename)
+    // 路径解析期间可能已开始退出，不能在清理快照之后再创建文件监听器。
+    if (this.closing) throw new CordisError('INACTIVE_EFFECT')
     const watchFilename = target.filename
     if (this.configs.has(watchFilename)) throw new Error(`config path already registered: ${filename}`)
 
@@ -146,7 +151,7 @@ class Hmr extends Service {
       ignored: undefined,
       ignoreInitial: false,
     })
-    const registration = { watcher }
+    const registration: ConfigRegistration = { watcher }
     this.configs.set(watchFilename, registration)
     const onChange = (path: string) => {
       const observed = resolve(path)
@@ -159,7 +164,13 @@ class Hmr extends Service {
 
     const ready = Promise.withResolvers<void>()
     let readyState: 'pending' | 'resolved' | 'rejected' = 'pending'
+    registration.cancelStartup = () => {
+      if (readyState !== 'pending') return
+      readyState = 'rejected'
+      ready.reject(new CordisError('INACTIVE_EFFECT'))
+    }
     watcher.once('ready', () => {
+      if (readyState !== 'pending') return
       readyState = 'resolved'
       ready.resolve()
     })
@@ -198,8 +209,12 @@ class Hmr extends Service {
 
   async* [Service.init]() {
     yield async () => {
+      this.closing = true
+      const registrations = [...this.configs.values()]
+      // close() 不会发送 ready；主动结束启动等待，避免悬空顶层 await 导致退出码 13。
+      for (const registration of registrations) registration.cancelStartup?.()
       await this.watcher?.close()
-      await Promise.allSettled([...this.configs.values()].map(registration => registration.watcher.close()))
+      await Promise.allSettled(registrations.map(registration => registration.watcher.close()))
       this.configs.clear()
       await Promise.allSettled([...this.refreshTasks])
     }

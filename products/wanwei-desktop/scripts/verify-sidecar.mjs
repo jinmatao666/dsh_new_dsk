@@ -81,7 +81,12 @@ try {
   child.stdin.write('wanwei-update-shutdown\n')
   const deadline = Date.now() + 30_000
   while (child.exitCode === null && Date.now() < deadline) await new Promise(resolveWait => setTimeout(resolveWait, 50))
-  if (child.exitCode !== 0 || !output.includes('wanwei-update: clean')) throw new Error(`Sidecar did not acknowledge safe update shutdown:\n${output}`)
+  if (child.exitCode !== 0 || !output.includes('wanwei-update: clean')) {
+    const reason = child.signalCode !== null ? `terminated by ${child.signalCode}`
+      : child.exitCode === null ? 'did not exit within 30 seconds'
+        : `exited with code ${child.exitCode}`
+    throw new Error(`Sidecar safe update shutdown failed: ${reason}; clean acknowledgement=${output.includes('wanwei-update: clean')}.\n${safeOutput()}`)
+  }
   process.stdout.write('Wanwei desktop sidecar acknowledged clean update shutdown and exited 0.\n')
 } finally {
   if (child.exitCode === null) {
@@ -100,8 +105,13 @@ async function waitForReadyUrl() {
   while (Date.now() < deadline) {
     const match = /dsh web: (http:\/\/[^\s]+)/u.exec(output)
     if (match?.[1]) return new URL(match[1])
-    if (child.exitCode !== null) throw new Error(`sidecar exited with ${child.exitCode}:\n${output}`)
+    if (child.exitCode !== null) throw new Error(`sidecar exited with ${child.exitCode}:\n${safeOutput()}`)
     await new Promise(resolveWait => setTimeout(resolveWait, 100))
   }
-  throw new Error(`sidecar did not become ready in 90 seconds:\n${output}`)
+  throw new Error(`sidecar did not become ready in 90 seconds:\n${safeOutput()}`)
+}
+
+// 失败日志不能泄露本地会话的一次性认证令牌。
+function safeOutput() {
+  return output.replace(/([?&]token=)[^\s&]+/gu, '$1[REDACTED]')
 }
