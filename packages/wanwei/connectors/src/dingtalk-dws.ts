@@ -168,7 +168,7 @@ function run(
 ): Promise<RunResult> {
   // npm `.cmd` shims need a shell on Windows; the native `dws.exe` does not.
   const shell = process.platform === 'win32' && /\.(cmd|bat|ps1)$/i.test(cmd)
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const child = spawn(cmd, [...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
       shell,
@@ -179,8 +179,8 @@ function run(
     let stdout = ''
     let stderr = ''
     const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs)
-    child.stdout?.on('data', chunk => { stdout += String(chunk) })
-    child.stderr?.on('data', chunk => { stderr += String(chunk) })
+    child.stdout?.on('data', (chunk) => { stdout += String(chunk) })
+    child.stderr?.on('data', (chunk) => { stderr += String(chunk) })
     let settled = false
     const settle = (code: number | null): void => {
       if (settled) return
@@ -193,8 +193,8 @@ function run(
       resolve({ code, stdout, stderr })
     }
     child.on('error', () => { settle(null) })
-    if (settleOnExit) child.on('exit', code => { settle(code) })
-    else child.on('close', code => { settle(code) })
+    if (settleOnExit) child.on('exit', (code) => { settle(code) })
+    else child.on('close', (code) => { settle(code) })
   })
 }
 
@@ -491,7 +491,7 @@ const READONLY_STATUS_TIMEOUT_MS = 8_000
 const LOGIN_POLL_MS = 1_000
 
 function delay(ms: number): Promise<void> {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     setTimeout(resolve, ms)
   })
 }
@@ -579,7 +579,7 @@ async function finishDingTalkLogin(dshHome: string, dws: string, epoch: number):
     dws,
     ['auth', 'login'],
     10 * 60_000,
-    child => {
+    (child) => {
       loginChild = child
       child.once('exit', () => {
         if (loginChild === child) loginChild = null
@@ -736,7 +736,10 @@ export function registerDingTalkDwsRpc(ctx: Context): () => void {
   }), 'wanwei-connectors: dingtalk DWS RPC')
 }
 
-/** Package directory of this module (unused helper kept for tests). */
+/**
+ * 返回连接器模块所在目录。
+ * @returns 当前模块的绝对目录路径。
+ */
 export function connectorsPackageDir(): string {
   return dirname(fileURLToPath(import.meta.url))
 }

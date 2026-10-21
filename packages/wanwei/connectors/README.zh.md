@@ -47,6 +47,8 @@ Client 拥有连接器列表、选择状态和弹窗。钉钉详情走 Host RPC 
 
 [Client 入口](src/client/index.ts)提供界面。[Host 入口](src/index.ts)注册连接器 RPC。
 
+钉钉/企业微信连接后，桌面会话通过 skill-filesystem 发现 `dws-cli` 和/或 `wecomcli-*`。微信助理连接后，入站微信文本经 `sessionController` 创建普通桌面 Session，模型与 token 消耗跟随这些 Session。
+
 </details>
 
 -----
@@ -66,7 +68,7 @@ Client 拥有连接器列表、选择状态和弹窗。钉钉详情走 Host RPC 
 <a id="model-experience"></a>
 ## Model Experience
 
-Client 展示本身不注册提示词或工具。钉钉/企业微信连接后，桌面会话通过 skill-filesystem 发现 `dws-cli` 和/或 `wecomcli-*`。微信助理连接后，入站微信文本经 `sessionController` 创建普通桌面 Session，模型与 token 消耗跟随这些 Session。
+无，因为 Client 展示本身不注册提示词或工具。
 
 #### KV Cache effect
 

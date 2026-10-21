@@ -95,12 +95,16 @@ let bridgeRunning = false
 let fetchImpl: FetchLike = globalThis.fetch.bind(globalThis)
 let qrDataUrlFactory: ((content: string) => Promise<string>) | null = null
 
-/** Test hook: replace Host HTTP. */
+/** 测试时替换 Host HTTP。
+ * @param next - 测试请求实现；null 恢复系统 fetch。
+ */
 export function setWeChatFetchForTests(next: FetchLike | null): void {
   fetchImpl = next ?? globalThis.fetch.bind(globalThis)
 }
 
-/** Test hook: replace QR PNG encoder. */
+/** 测试时替换二维码 PNG 编码器。
+ * @param next - 测试编码器；null 恢复默认实现。
+ */
 export function setWeChatQrFactoryForTests(next: ((content: string) => Promise<string>) | null): void {
   qrDataUrlFactory = next
 }
@@ -378,6 +382,10 @@ function localTokenList(dshHome: string): string[] {
   return existing === null ? [] : [existing.botToken]
 }
 
+/** 创建微信助理二维码登录流程，凭据在确认登录后另行持久化。
+ * @param dshHome - 当前产品的数据目录，用于读取已有微信凭据。
+ * @returns 登录会话标识及可供 Client 展示的二维码信息。
+ */
 export async function startWeChatLogin(dshHome: string): Promise<WeChatLoginStart> {
   const raw = await httpPost(
     `${WECHAT_ILINK_QR_BASE}/ilink/bot/get_bot_qrcode?bot_type=${encodeURIComponent(WECHAT_ILINK_BOT_TYPE)}`,
@@ -751,7 +759,7 @@ export function startWeChatBridge(ctx: Context, dshHome: string): void {
   bridgeAbort = abort
   bridgeRunning = true
   invalidateWeChatStatusCache()
-  void runBridgeLoop(ctx, dshHome, abort.signal).catch(error => {
+  void runBridgeLoop(ctx, dshHome, abort.signal).catch((error) => {
     ctx.logger.warn(`微信助理远程通道已停止：${error instanceof Error ? error.message : String(error)}`)
     if (bridgeAbort === abort) {
       bridgeRunning = false

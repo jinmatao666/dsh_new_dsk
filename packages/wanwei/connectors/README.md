@@ -47,6 +47,8 @@ The Client owns its connector list, selection and dialogs. DingTalk detail uses 
 
 The [Client entry](src/client/index.ts) supplies the UI. The [Host entry](src/index.ts) registers the connector RPC channels.
 
+After DingTalk/WeCom connect, desktop sessions discover `dws-cli` and/or `wecomcli-*` through skill-filesystem. After WeChat Assistant connect, inbound WeChat text creates ordinary desktop Sessions through `sessionController`, so model/token use follows those Sessions.
+
 </details>
 
 -----
@@ -66,7 +68,7 @@ The [Client entry](src/client/index.ts) supplies the UI. The [Host entry](src/in
 <a id="model-experience"></a>
 ## Model Experience
 
-None from the Client presentation itself (it registers no prompt or tools). After DingTalk/WeCom connect, desktop sessions discover `dws-cli` and/or `wecomcli-*` through skill-filesystem. After WeChat Assistant connect, inbound WeChat text creates ordinary desktop Sessions through `sessionController`, so model/token use follows those Sessions.
+None, as the Client presentation itself registers no prompt or tools.
 
 #### KV Cache effect
 

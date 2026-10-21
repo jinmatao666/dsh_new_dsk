@@ -308,7 +308,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/api/session-controller/src/index.ts:67`](../packages/api/session-controller/src/index.ts)
+来源：[`packages/api/session-controller/src/index.ts:68`](../packages/api/session-controller/src/index.ts)
 
 <a id="deepseek-aidsh-api-settings-controller"></a>
 
@@ -3660,7 +3660,7 @@ export interface Config {
 - `@deepseek-ai/dsh-tool-cordis` — 需要 `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect`（[`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts)）
 - `@deepseek-ai/dsh-tool-subagent-control` — 需要 `tools` · `subagents`（[`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts)）
 - `@deepseek-ai/dsh-user-questions`（[`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts)）
-- `@deepseek-ai/dsh-wanwei-connectors`（[`packages/wanwei/connectors/src/index.ts`](../packages/wanwei/connectors/src/index.ts)）
+- `@deepseek-ai/dsh-wanwei-connectors` — 依赖 `connection` · `sessionController` · `sessions` · `agents` · `workspaceRegistry` · `permissionPresets`（[`packages/wanwei/connectors/src/index.ts`](../packages/wanwei/connectors/src/index.ts)）
 - `@deepseek-ai/dsh-wanwei-expert-library`（[`packages/wanwei/expert-library/src/index.ts`](../packages/wanwei/expert-library/src/index.ts)）
 - `@deepseek-ai/dsh-wanwei-feature-panels`（[`packages/wanwei/feature-panels/src/index.ts`](../packages/wanwei/feature-panels/src/index.ts)）
 - `@deepseek-ai/dsh-wanwei-product-ui`（[`packages/wanwei/product-ui/src/index.ts`](../packages/wanwei/product-ui/src/index.ts)）

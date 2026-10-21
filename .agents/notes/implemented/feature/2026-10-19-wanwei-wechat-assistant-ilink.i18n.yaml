@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-19-wanwei-wechat-assistant-ilink.md
-2026-10-19-wanwei-wechat-assistant-ilink.md: 8279cef9cb78443a4dcf0f86f26ad489034f5a07
-2026-10-19-wanwei-wechat-assistant-ilink.zh.md: 5f8c63bff6b9661d8a9464f4cb5ee5359dca4728
+2026-10-19-wanwei-wechat-assistant-ilink.md: 9755d5212c70508695bbd93e105ffa27416c359e
+2026-10-19-wanwei-wechat-assistant-ilink.zh.md: 24311a9104a93a9d6fb6814a4e7679f248e3f738

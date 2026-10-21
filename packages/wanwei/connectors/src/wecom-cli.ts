@@ -107,7 +107,7 @@ function run(
 ): Promise<RunResult> {
   // npm `.cmd` shims need a shell on Windows; the native `wecom-cli.exe` does not.
   const shell = process.platform === 'win32' && /\.(cmd|bat|ps1)$/i.test(cmd)
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const child = spawn(cmd, [...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
       shell,
@@ -118,13 +118,13 @@ function run(
     let stdout = ''
     let stderr = ''
     const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs)
-    child.stdout?.on('data', chunk => { stdout += String(chunk) })
-    child.stderr?.on('data', chunk => { stderr += String(chunk) })
+    child.stdout?.on('data', (chunk) => { stdout += String(chunk) })
+    child.stderr?.on('data', (chunk) => { stderr += String(chunk) })
     child.on('error', () => {
       clearTimeout(timer)
       resolve({ code: null, stdout, stderr })
     })
-    child.on('close', code => {
+    child.on('close', (code) => {
       clearTimeout(timer)
       resolve({ code, stdout, stderr })
     })
@@ -133,6 +133,8 @@ function run(
 
 /**
  * Platform package name used by `@wecom/cli` optionalDependencies.
+ * @param platform - 操作系统标识，默认使用当前平台。
+ * @param arch - CPU 架构标识，默认使用当前架构。
  * @returns scoped package id, or undefined when the OS/arch is unsupported.
  */
 export function wecomPlatformPackageName(
@@ -333,7 +335,7 @@ function errorText(error: unknown): string {
 }
 
 function delay(ms: number): Promise<void> {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     setTimeout(resolve, ms)
   })
 }
@@ -411,7 +413,7 @@ export async function buildWeComCliStatus(
     if (cli === undefined) {
       return composeStatus(dshHome, false, null, false)
     }
-    const auth = await run(cli, ['auth', 'show', '--status'], 15_000, child => {
+    const auth = await run(cli, ['auth', 'show', '--status'], 15_000, (child) => {
       statusChild = child
       child.once('close', () => {
         if (statusChild === child) statusChild = null
@@ -651,7 +653,7 @@ async function finishWeComLogin(dshHome: string, cli: string, epoch: number): Pr
     initialSignature,
     () => stopWatch,
   )
-  const result = await run(cli, ['auth', 'init', '--noninteractive'], 10 * 60_000, child => {
+  const result = await run(cli, ['auth', 'init', '--noninteractive'], 10 * 60_000, (child) => {
     loginChild = child
     child.once('close', () => {
       if (loginChild === child) loginChild = null
