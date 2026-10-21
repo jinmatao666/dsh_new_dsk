@@ -64,6 +64,20 @@ test('network selection saves one deployment option without changing account dat
   expect(container.querySelector('button[type="submit"]').disabled).toBe(true);
 });
 
+test('saving deployment settings clears hidden resource options even without editing resources', async () => {
+  const resources = { source: 'proxy', transport: 'forward', proxyUrl: 'http://backend.example:3300', bypassHosts: ['internal.example'], autoDetect: false, probeUrls: [] };
+  API.get.mockImplementation(path => Promise.resolve({ data: { success: true, data: path === '/api/user/self'
+    ? { username: 'root', role: 100 }
+    : [{ key: 'SystemDeploymentSettings', value: JSON.stringify({ network: 'internet', operator: '', phone: '', resources }) }] } }));
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[2].click());
+  act(() => container.querySelector('input[value="intranet"]').click());
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(JSON.parse(API.put.mock.calls[0][1].value).resources).toEqual({
+    source: 'proxy', transport: 'tunnel', proxyUrl: resources.proxyUrl, autoDetect: false, probeUrls: [],
+  });
+});
+
 test('feature switches save independently for internet and intranet', async () => {
   await act(async () => root.render(<SystemSettings />));
   act(() => container.querySelectorAll('[role="tab"]')[4].click());

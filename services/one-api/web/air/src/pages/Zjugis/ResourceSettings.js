@@ -6,6 +6,13 @@ export const defaultResources = {
   probeUrls: ['https://www.gstatic.com/generate_204', 'https://cp.cloudflare.com/generate_204'],
 };
 
+/** Saving uses the managed tunnel and removes manually configured bypass hosts. */
+export function normalizeResources(value) {
+  const normalized = { ...value, transport: 'tunnel' };
+  delete normalized.bypassHosts;
+  return normalized;
+}
+
 /** Uploading replaces the shared bundle; saving selects the resource source. */
 export default function ResourceSettings({ value = defaultResources, onChange, disabled }) {
   const [bundle, setBundle] = useState(null);
@@ -20,7 +27,7 @@ export default function ResourceSettings({ value = defaultResources, onChange, d
     });
     return () => controller.abort();
   }, []);
-  const change = patch => onChange({ ...value, ...patch });
+  const change = patch => onChange(normalizeResources({ ...value, ...patch }));
   const upload = async event => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -45,21 +52,11 @@ export default function ResourceSettings({ value = defaultResources, onChange, d
         </label>)}
     </fieldset>
     {value.source === 'proxy' ? <div key='proxy' className='settings-resource-fields'>
-      <label>中转接入方式<select value={value.transport || 'forward'} disabled={disabled}
-        onChange={event => change({ transport: event.target.value, proxyUrl: '' })}>
-        <option value='tunnel'>复用后台入口（无需新开公网端口）</option>
-        <option value='forward'>独立 HTTP 代理（已有 Squid 等服务）</option>
-      </select></label>
-      <label>中转服务器地址<input type='url' required={value.transport !== 'tunnel'}
-        placeholder={value.transport === 'tunnel' ? '留空使用当前登录后台，如 http://域名:3300' : 'http://192.168.1.10:3128'} value={value.proxyUrl}
+      <label>中转服务器地址<input type='url'
+        placeholder='留空使用当前登录后台，如 http://域名:3300' value={value.proxyUrl}
         disabled={disabled} onChange={event => change({ proxyUrl: event.target.value.trim() })} /></label>
-      <p className='settings-description'>{value.transport === 'tunnel'
-        ? '复用登录后台的同源入口，须更新后台、桌面端和 Nginx 的 WebSocket 路由；无需 Squid。跨服务器可由该入口转发，不会向其他域名发送登录令牌。HTTP 入口不保护通道认证信息，HTTPS 目标仍保留证书校验。'
-        : '需另外部署 HTTP 正向代理服务；此地址不是后台页面地址。请限制允许连接的客户端网段。'}</p>
-      <label>额外直连的内网主机（可选，每行一个域名或 IP）<textarea rows={2}
-        value={(value.bypassHosts || []).join('\n')} disabled={disabled}
-        onChange={event => change({ bypassHosts: event.target.value.split('\n').map(host => host.trim()).filter(Boolean) })} /></label>
-      <p className='settings-description'>本机和登录后台默认直连。其他内部接口可在此补充；不要填写 http://、路径或端口。实际绕过行为取决于请求程序对 NO_PROXY 的支持。</p>
+      <p className='settings-description'>留空使用当前登录后台的中转服务。填写服务根地址，不含接口路径。当前仅支持与登录后台同源的地址；专用联网服务器的直接接入暂未开放。本机和登录后台自动直连。</p>
+      <p className='settings-description'>HTTP 中转入口不保护通道认证信息；HTTPS 目标仍保留证书校验。</p>
       <label className='settings-resource-switch'><input type='checkbox' checked={value.autoDetect} disabled={disabled}
         onChange={event => change({ autoDetect: event.target.checked })} />自动检测桌面机器是否能直连互联网</label>
       <p className='settings-description'>{value.autoDetect ? '两个检测地址均返回 HTTP 204 时直连，否则使用中转；结果缓存 60 秒。' : '不检测，桌面端直接使用中转服务器。'}</p>

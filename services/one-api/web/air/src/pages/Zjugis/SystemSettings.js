@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { API, showSuccess } from '../../helpers';
 import './SystemSettings.css';
-import ResourceSettings, { defaultResources } from './ResourceSettings';
+import ResourceSettings, { defaultResources, normalizeResources } from './ResourceSettings';
 
 const defaults = { network: 'internet', edition: 'operations', operator: '', phone: '', features: {
   internet: { automations: true, connectors: true },
@@ -86,7 +86,7 @@ export default function SystemSettings() {
     setSaving(true); setFeedback('');
     const value = { ...settings, operator: settings.operator.trim(), phone: settings.phone.trim() };
     if (value.network === 'intranet' && !value.resources) value.resources = defaultResources;
-    if (value.resources) value.resources = { ...value.resources, probeUrls: value.resources.probeUrls.map(url => url.trim()).filter(Boolean) };
+    if (value.resources) value.resources = normalizeResources({ ...value.resources, probeUrls: value.resources.probeUrls.map(url => url.trim()).filter(Boolean) });
     try {
       const response = await API.put('/api/option/', { key: 'SystemDeploymentSettings', value: JSON.stringify(value) });
       if (!response.data.success) throw new Error(response.data.message || '保存失败');

@@ -1,7 +1,7 @@
 /* eslint-disable testing-library/no-unnecessary-act -- ReactDOM roots require explicit act. */
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import ResourceSettings, { defaultResources } from './ResourceSettings';
+import ResourceSettings, { defaultResources, normalizeResources } from './ResourceSettings';
 import { API } from '../../helpers';
 
 jest.mock('../../helpers', () => ({ API: { get: jest.fn(), post: jest.fn() } }));
@@ -39,13 +39,29 @@ test('uploads a ZIP without silently changing the selected source', async () => 
   expect(change).not.toHaveBeenCalled();
 });
 
-test('managed tunnel defaults to the existing entry and standalone proxy remains selectable', async () => {
+test('managed tunnel retains the optional address without transport or bypass controls', async () => {
   const change = jest.fn();
   await act(async () => root.render(<ResourceSettings value={{ ...defaultResources, source: 'proxy' }} onChange={change} />));
-  expect(container.querySelector('select').value).toBe('tunnel');
+  expect(container.querySelector('select')).toBeNull();
   expect(container.querySelector('input[type="url"]').required).toBe(false);
-  expect(container.textContent).toContain('无需 Squid');
-  const select = container.querySelector('select');
-  act(() => { select.value = 'forward'; select.dispatchEvent(new Event('change', { bubbles: true })); });
-  expect(change).toHaveBeenCalledWith({ ...defaultResources, source: 'proxy', transport: 'forward', proxyUrl: '' });
+  expect(container.querySelector('textarea')).toBeNull();
+  expect(container.textContent).not.toContain('Squid');
+  expect(container.textContent).not.toContain('额外直连');
+  expect(container.textContent).toContain('本机和登录后台自动直连');
+  expect(container.textContent).toContain('直接接入暂未开放');
+});
+
+test('resource edits remove hidden bypass settings and select managed transport', async () => {
+  const change = jest.fn();
+  const value = { ...defaultResources, source: 'proxy', transport: 'forward', bypassHosts: ['internal.example'] };
+  await act(async () => root.render(<ResourceSettings value={value} onChange={change} />));
+  act(() => container.querySelector('input[type="checkbox"]').click());
+  expect(change).toHaveBeenCalledWith({ ...defaultResources, source: 'proxy', autoDetect: true });
+  expect(value.bypassHosts).toEqual(['internal.example']);
+});
+
+test('normalization preserves the address and detection settings without mutating the input', () => {
+  const value = { ...defaultResources, source: 'proxy', proxyUrl: 'https://backend.example', autoDetect: true, bypassHosts: ['internal.example'] };
+  expect(normalizeResources(value)).toEqual({ ...defaultResources, source: 'proxy', proxyUrl: value.proxyUrl, autoDetect: true });
+  expect(value.bypassHosts).toEqual(['internal.example']);
 });
