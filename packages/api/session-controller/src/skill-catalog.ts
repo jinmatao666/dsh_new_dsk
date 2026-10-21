@@ -8,6 +8,7 @@ import { isUserInvocable } from '@deepseek-ai/dsh-skill'
 import type { ScopeKey } from '@deepseek-ai/dsh-scope'
 import { Remote, TypertRemoteFailure, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { SkillListRequest, SkillListValue } from './types.ts'
+import { homedir } from 'node:os'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -23,6 +24,22 @@ export class SessionSkillCatalog extends TypertRemoteService {
   /** @param ctx - Host context carrying Session reads and optional skill/preset services. */
   constructor(ctx: Context) {
     super(ctx, 'sessionSkillCatalog', { namespace: 'skills' })
+  }
+
+  /** List user-level skills before a Workspace is selected; no Agent is created.
+   * @returns User-invocable skills from the root composition.
+   */
+  @Remote
+  async draftList(): Promise<SkillListValue> {
+    const registry = this.ctx.get('skills')
+    if (registry === undefined) return { skills: [] }
+    const skills = (await registry.list({ cwd: homedir() })).filter(isUserInvocable)
+    return { skills: skills.map(skill => ({
+      name: skill.name, description: skill.description,
+      ...(skill.displayName === undefined ? {} : { displayName: skill.displayName }),
+      ...(skill.whenToUse === undefined ? {} : { whenToUse: skill.whenToUse }),
+      modelInvocable: skill.invocation.modelInvocable,
+    })) }
   }
 
   /**

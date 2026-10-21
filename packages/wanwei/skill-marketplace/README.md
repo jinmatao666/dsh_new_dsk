@@ -33,6 +33,8 @@ The Wanwei desktop can browse published skills, manage local installations and r
 <a id="use-this-package"></a>
 ## Use this package
 
+Ordinary new conversations and Use skill share the registered first-send timestamp-directory allocator. The pre-Session skill selector lists installed user-invocable skills without creating a Session. Empty and populated skill drafts keep the label on the same first-line baseline.
+
 The Wanwei desktop bundle mounts this Client plugin after the official browser UI; it is not a standalone application.
 
 ### When to choose it

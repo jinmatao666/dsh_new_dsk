@@ -9,6 +9,46 @@ import { ComposerContentEditable } from '../src/client/input/editor/ComposerCont
 afterEach(cleanup)
 
 describe('pre-Session draft', () => {
+  it('uses the registered default for plain drafts and applies choices before opening or sending', async () => {
+    const order: string[] = []
+    const sessions = { list: { getSnapshot: () => ({ current: undefined }) }, open: () => { order.push('open') } }
+    const hub = new InputHub({ get: () => sessions } as unknown as Context, (() => ''))
+    vi.spyOn(hub, 'shell').mockReturnValue({
+      setDraft: () => { order.push('draft') }, submit: () => { order.push('send') },
+    } as unknown as SessionInputShell)
+    const prepare = vi.fn(async () => { order.push('allocate'); return 'default' as Parameters<InputHub['moveStagedDraftTo']>[0] })
+    const dispose = hub.registerStagedSessionFactory(prepare)
+    hub.registerStagedSessionTransfer(async () => { order.push('model-and-permission') })
+    hub.setStagedDraft('普通新用户的问题')
+    expect(prepare).not.toHaveBeenCalled()
+    await hub.submitStagedDraft()
+    expect(order).toMatchInlineSnapshot(`
+      [
+        "allocate",
+        "model-and-permission",
+        "draft",
+        "open",
+        "send",
+      ]
+    `)
+    expect(hub.stagedSubmission.getSnapshot().available).toBe(true)
+    dispose()
+    expect(hub.stagedSubmission.getSnapshot().available).toBe(false)
+  })
+
+  it('keeps the draft editable when a pending choice cannot be applied', async () => {
+    const sessions = { list: { getSnapshot: () => ({ current: undefined }) }, open: vi.fn() }
+    const hub = new InputHub({ get: () => sessions } as unknown as Context, (() => ''))
+    hub.registerStagedSessionFactory(async () => 'default' as Parameters<InputHub['moveStagedDraftTo']>[0])
+    const dispose = hub.registerStagedSessionTransfer(async () => { throw new Error('model denied') })
+    hub.setStagedDraft('保留这个问题')
+    await expect(hub.submitStagedDraft()).rejects.toThrow('model denied')
+    expect(hub.stagedDraft.getSnapshot()).toBe('保留这个问题')
+    expect(hub.stagedSubmission.getSnapshot().busy).toBe(false)
+    expect(sessions.open).not.toHaveBeenCalled()
+    dispose()
+  })
+
   it('creates nothing until send, deduplicates pending sends, and submits into the prepared Session', async () => {
     const open = vi.fn()
     const sessions = { list: { getSnapshot: () => ({ current: undefined }) }, open }

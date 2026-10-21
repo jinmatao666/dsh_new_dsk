@@ -93,7 +93,12 @@ async function bench() {
   const remote = Object.assign(new TestRemote(ctx), { session: sessionRemote })
   ctx.reflect.provide('remote.session', sessionRemote)
   const blocks = new Map<SessionId, { reason: string } | undefined>()
+  let transferDraft: ((id: SessionId) => Promise<void>) | undefined
   ctx.provide('conversation', {
+    input: { registerStagedSessionTransfer: (transfer: (id: SessionId) => Promise<void>) => {
+      transferDraft = transfer
+      return () => { transferDraft = undefined }
+    } },
     blocks: {
       set: (id: SessionId, block: { reason: string } | undefined) => { blocks.set(id, block) },
     },
@@ -106,12 +111,12 @@ async function bench() {
     },
   })
   const seats = new Map<string, {
-    inject: ((sessionId: SessionId) => ModelSelectInjected) | undefined
+    inject: ((sessionId: SessionId | undefined) => ModelSelectInjected) | undefined
     locale: string | undefined
   }>()
   ctx.provide('slots', {
     inject(_name: string, callback: () => () => void) { return callback() },
-    register(options: { name: string; locale?: string; inject?: (sessionId: SessionId) => ModelSelectInjected }) {
+    register(options: { name: string; locale?: string; inject?: (sessionId: SessionId | undefined) => ModelSelectInjected }) {
       seats.set(options.name, { inject: options.inject, locale: options.locale })
       return () => { seats.delete(options.name) }
     },
@@ -156,6 +161,7 @@ async function bench() {
   }
   return {
     ctx, fiber, mint, calls, remote,
+    transferDraft: (id: SessionId) => transferDraft!(id),
     contribution: () => contribution!,
     seat: () => seats.get('conversation.input.model')!,
     hostCurrent: () => selected,
@@ -170,6 +176,18 @@ async function bench() {
 const projection = (id: string) => ({ sessionId: sid(id) })
 
 describe('ui-model-selection dual entry', () => {
+  it('keeps the same selector available without a Session and transfers an explicit model before first send', async () => {
+    const b = await bench()
+    const face = b.seat().inject!(undefined)
+    expect(face.available).toBe(true)
+    await b.ctx.modelDirectories.draft.load()
+    expect(await face.select({ provider: 'deepseek-official', model: 'deepseek-v4-pro', reasoningEffort: 'high' })).toBe(true)
+    expect(b.calls.select).toBe(0)
+    b.mint('first-send')
+    await b.transferDraft(sid('first-send'))
+    expect(b.calls.select).toBe(1)
+    expect(b.hostCurrent()).toEqual({ provider: 'deepseek-official', model: 'deepseek-v4-pro', reasoningEffort: 'high' })
+  })
   it('registers the /model contribution and the composer model seat', async () => {
     const b = await bench()
     expect(b.contribution().name).toBe('model')

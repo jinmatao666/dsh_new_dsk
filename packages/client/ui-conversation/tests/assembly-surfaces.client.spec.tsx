@@ -78,7 +78,7 @@ async function bench(opts?: { blank?: boolean }) {
 }
 
 describe('resident composer', () => {
-  it('prepares a Workspace on Send and forwards the staged skill through the assembled Session input', async () => {
+  it.each(['/images-to-pdf 请转换图片', '新用户直接发送问题'])('prepares a default Workspace only on Send for %s', async (draft) => {
     const runtime = await SlotTestRuntime.create()
     runtime.ctx.provide('uiWorkspace', { connectWorkspace: vi.fn(async () => SID) } as never)
     runtime.ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
@@ -97,7 +97,8 @@ describe('resident composer', () => {
       return SID
     })
     const input = runtime.ctx.conversation.input
-    act(() => { input.setStagedDraft('/images-to-pdf 请转换图片', prepare) })
+    input.registerStagedSessionFactory(prepare)
+    act(() => { input.setStagedDraft(draft) })
     const view = runtime.renderRoot()
     expect(runtime.workspaces.list.getSnapshot().items).toHaveLength(0)
     expect(prepare).not.toHaveBeenCalled()
@@ -110,7 +111,7 @@ describe('resident composer', () => {
     expect(prepare).toHaveBeenCalledOnce()
     expect(runtime.sessions.list.getSnapshot().current).toBe(SID)
     expect(runtime.workspaces.list.getSnapshot().items[0]?.title).toBe('202610122015')
-    expect(prompt.mock.calls[0]?.[0]).toEqual([{ type: 'text', text: '/images-to-pdf 请转换图片' }])
+    expect(prompt.mock.calls[0]?.[0]).toEqual([{ type: 'text', text: draft }])
     await runtime.dispose()
   })
   it('allows staging without a Session while ordinary send still requires a Workspace', async () => {

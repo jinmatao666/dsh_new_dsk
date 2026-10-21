@@ -46,6 +46,8 @@ export class ModelDirectory {
   private generation = 0
   private disposed = false
   private resolved = false
+  /** Explicit pre-Session selection; null leaves the new Session's default intact. */
+  pendingDraftSelection: ModelSelection | null = null
   private readonly unsubscribeCatalog: () => void
   private readonly unsubscribeSelection: () => void
 
@@ -58,7 +60,7 @@ export class ModelDirectory {
    */
   constructor(
     private readonly sessions: Pick<TypertClientRemote['session'], 'selectModel'>,
-    private readonly sessionId: SessionId,
+    private readonly sessionId: SessionId | undefined,
     private readonly available: () => boolean,
     private readonly catalog: ModelCatalogDirectory,
     private readonly projected: ObservableSnapshot<unknown>,
@@ -87,6 +89,11 @@ export class ModelDirectory {
  */
   async select(selection: ModelSelection): Promise<void> {
     this.assertAvailable()
+    if (this.sessionId === undefined) {
+      this.pendingDraftSelection = selection
+      this.store.update((state) => { state.current = selection; state.status = 'ready'; state.error = null })
+      return
+    }
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'selecting'; s.error = null })
     const result = await this.sessions.selectModel({
@@ -159,7 +166,9 @@ export class ModelDirectory {
       })
       return
     }
-    const current = projected.next ?? catalog.value.default
+    const current = this.sessionId === undefined
+      ? this.pendingDraftSelection ?? catalog.value.default
+      : projected.next ?? catalog.value.default
     this.resolved = true
     this.store.set({
       current,

@@ -53,28 +53,62 @@ export class InputHub implements SessionInputResolver {
   readonly stagedDraft = createSnapshotStore('')
   readonly stagedSubmission = createSnapshotStore({ available: false, busy: false })
   private prepareStagedSession: (() => Promise<SessionId>) | undefined
+  private defaultStagedSession: (() => Promise<SessionId>) | undefined
+  private readonly stagedTransfers = new Set<(id: SessionId) => Promise<void>>()
+
+  /** Register a product-owned default without eagerly allocating files or Sessions.
+   * @param factory - First-send Session allocator.
+   * @returns Registration disposer.
+   */
+  registerStagedSessionFactory(factory: () => Promise<SessionId>): () => void {
+    this.defaultStagedSession = factory
+    this.stagedSubmission.set({ available: true, busy: this.stagedSubmission.getSnapshot().busy })
+    return () => {
+      if (this.defaultStagedSession !== factory) return
+      this.defaultStagedSession = undefined
+      this.stagedSubmission.set({ available: this.prepareStagedSession !== undefined, busy: this.stagedSubmission.getSnapshot().busy })
+    }
+  }
+
+  /** Register pending feature state transfer independently of the directory allocator.
+   * @param transfer - Apply the feature choice before draft submission.
+   * @returns Registration disposer.
+   */
+  registerStagedSessionTransfer(transfer: (id: SessionId) => Promise<void>): () => void {
+    this.stagedTransfers.add(transfer)
+    return () => { this.stagedTransfers.delete(transfer) }
+  }
+
+  /** Apply pending choices to an explicitly selected or automatically created Session.
+   * @param id - Destination Session.
+   */
+  async transferStagedSession(id: SessionId): Promise<void> {
+    for (const transfer of this.stagedTransfers) await transfer(id)
+  }
 
   setStagedDraft(text: string, prepareSession?: () => Promise<SessionId>): void {
     if (this.stagedSubmission.getSnapshot().busy) return
     if (prepareSession !== undefined) this.prepareStagedSession = prepareSession
     if (text === '') this.prepareStagedSession = undefined
     this.stagedDraft.set(text)
-    this.stagedSubmission.set({ available: this.prepareStagedSession !== undefined, busy: false })
+    this.stagedSubmission.set({ available: (this.prepareStagedSession ?? this.defaultStagedSession) !== undefined, busy: false })
   }
 
   async submitStagedDraft(): Promise<void> {
-    const prepare = this.prepareStagedSession
+    const prepare = this.prepareStagedSession ?? this.defaultStagedSession
     if (prepare === undefined || this.stagedSubmission.getSnapshot().busy || this.stagedDraft.getSnapshot().trim() === '') return
     this.stagedSubmission.set({ available: true, busy: true })
     try {
       const id = await prepare()
       // Navigation during preparation must not send into a different conversation.
       if (this.sessions().list.getSnapshot().current !== undefined) return
+      await this.transferStagedSession(id)
+      if (this.sessions().list.getSnapshot().current !== undefined) return
       this.moveStagedDraftTo(id)
       this.sessions().open(id)
       this.shell(id).submit('queue')
     } finally {
-      this.stagedSubmission.set({ available: this.prepareStagedSession !== undefined, busy: false })
+      this.stagedSubmission.set({ available: (this.prepareStagedSession ?? this.defaultStagedSession) !== undefined, busy: false })
     }
   }
 
@@ -82,7 +116,7 @@ export class InputHub implements SessionInputResolver {
     const text = this.stagedDraft.getSnapshot()
     this.stagedDraft.set('')
     this.prepareStagedSession = undefined
-    this.stagedSubmission.set({ available: false, busy: false })
+    this.stagedSubmission.set({ available: this.defaultStagedSession !== undefined, busy: this.stagedSubmission.getSnapshot().busy })
     return text
   }
 

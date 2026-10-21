@@ -11,7 +11,7 @@ kind: "package-reference"
 
 技能引用标签提供独立的跳转和移除按钮。跳转通过浏览器 `dsh:reference-open` 事件向所属功能传递 `{ source, ref }`；移除仅删除当前 Lexical 引用。两者都不发送消息，也不改变其他引用。输入框不持有详情页。
 
-功能插件可以为暂存草稿提供首次发送的会话准备函数。发送按钮或 Enter 只调用一次，转入草稿后复用普通会话输入流程。准备期间冻结草稿编辑，失败保留草稿。手动选择工作区只转入文字、不发送，并清除准备函数。没有提供准备函数时，无工作区输入框仍要求先选择工作区。
+产品可以注册默认的首次发送会话准备函数；功能插件为草稿提供的准备函数优先。发送按钮或 Enter 准备会话、应用已注册的待选配置、转入草稿，再复用普通会话输入。准备期间冻结草稿编辑，失败保留草稿。手动选择工作区同样应用待选配置并转入文字，但不发送。两类准备函数均不存在时，发送仍要求选择工作区。可选会话模型位和草稿权限选择器在选择工作区前保持可用。
 
 `ui-conversation` 拥有与 target 无关的 Conversation 组装和共享浏览器 shell。它消费 Session Controller 的 `SessionEventLikeEntry` feed，通过 `ctx.uiConversation` 暴露不依赖 React 的 registry 与逐 Session binding，并通过 `ctx.uiSession` 提供 `useConversation`、`useInput` 和 `inputActions` 标准 props。它还拥有按会话的持久化图片 URL 缓存：`ctx.uiConversation.imageUrl(sessionId, attachment)` 为每个附件解析一个经会话授权的浏览器 URL，并随 Session binding 释放而撤销，因此所有 Conversation target 共享一次 `session.attachment` 读取。Chat 等具体 target 位于独立 package，由各自 package 注册 Definition、snapshot builder、View 和 renderer。
 

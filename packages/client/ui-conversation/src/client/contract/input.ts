@@ -230,6 +230,10 @@ export interface SessionInputResolver {
   submitStagedDraft(): Promise<void>
   /** Consume staged text after a Session is ready to own it. */
   takeStagedDraft(): string
+  /** Register the product's default first-send factory; registration creates no Session. */
+  registerStagedSessionFactory(factory: () => Promise<SessionId>): () => void
+  /** Apply pending feature choices before a new Session receives its staged draft. */
+  registerStagedSessionTransfer(transfer: (sessionId: SessionId) => Promise<void>): () => void
 }
 
 /**

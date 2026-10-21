@@ -29,6 +29,7 @@ import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { InputBar } from './skeleton/InputBar.tsx'
+import { DraftPermission } from './skeleton/DraftPermission.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
 import { en, NS, zh, type ConversationKey } from './locales.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, type ConversationSettings } from '../submission-settings.ts'
@@ -198,7 +199,10 @@ export function apply(ctx: Context): void {
       submitStagedDraft: () => inputHub.submitStagedDraft(),
       selectWorkspace: async (workspaceId) => {
         const nextId = await workspaceNavigation.connectWorkspace(workspaceId)
-        if (sessionId === undefined) inputHub.moveStagedDraftTo(nextId)
+        if (sessionId === undefined) {
+          await inputHub.transferStagedSession(nextId)
+          inputHub.moveStagedDraftTo(nextId)
+        }
         if (sessionId !== undefined && nextId !== sessionId) {
           const from = inputHub.shell(sessionId)
           const draft = from.snapshot.draft
@@ -253,7 +257,7 @@ export function apply(ctx: Context): void {
       'conversation.input.attachments': { kind: 'single', scope: 'session-maybe' },
       'conversation.input.draft-prefix': { kind: 'single', scope: 'session-maybe' },
       'conversation.input.plan': { kind: 'single', scope: 'session' },
-      'conversation.input.model': { kind: 'single', scope: 'session' },
+      'conversation.input.model': { kind: 'single', scope: 'session-maybe' },
     },
     inject: (sessionId: SessionId | undefined): ComposerBarInjected => {
       if (sessionId === undefined) {
@@ -339,6 +343,25 @@ export function apply(ctx: Context): void {
   })
 
   ctx.plugin(ConversationController, { input: inputHub, blocks: composerBlocks })
+  ctx.inject(['remote', 'remote.session'], (scope: Context) => {
+    let selected: string | undefined
+    const load = async () => {
+      const result = await scope.remote.session.composerPermissions()
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value === null || selected === undefined ? result.value : { ...result.value, currentValue: selected }
+    }
+    scope.effect(() => inputHub.registerStagedSessionTransfer(async (id) => {
+      if (selected === undefined) return
+      const binding = sessions.binding(id)
+      if (binding === undefined) throw new Error('Draft destination Session is unavailable')
+      const result = await binding.session.command(`/permission ${selected}`)
+      if (!result.ok || !result.value.matched) throw new Error('Permission selection was not applied')
+    }), 'draft permission transfer')
+    scope.slots.inject('conversation.composer.tools', () => scope.slots.register({
+      name: 'conversation.composer.tools', id: 'draft-permission', order: -50, locale: NS,
+      inject: () => ({ load, hooks: { submission: inputHub.stagedSubmission }, choose: (value: string) => { selected = value } }),
+    }, DraftPermission))
+  })
   ctx.plugin(todoDockEntry)
   ctx.plugin(queueDockEntry)
 }

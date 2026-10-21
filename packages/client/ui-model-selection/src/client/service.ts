@@ -18,6 +18,8 @@ import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { ModelCatalogDirectory } from './catalog.ts'
 import { ModelDirectory } from './directory.ts'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ModelSelectionProjection } from '@deepseek-ai/dsh-api-session-controller/types'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -37,6 +39,8 @@ export class ModelDirectoryResolver extends Service {
 
   private readonly live: LiveState = { directories: new Map() }
   private readonly catalog: ModelCatalogDirectory
+  /** Shared pre-Session selector; explicit choices transfer through the input service. */
+  readonly draft: ModelDirectory
 
   /** Localized composer-block copy; this plugin owns the string it raises. */
   private readonly blockReason: () => string
@@ -49,6 +53,17 @@ export class ModelDirectoryResolver extends Service {
     super(ctx, 'modelDirectories')
     this.blockReason = config.blockReason
     this.catalog = new ModelCatalogDirectory(ctx.remote.session)
+    this.draft = new ModelDirectory(ctx.remote.session, undefined, () => true, this.catalog,
+      createSnapshotStore<ModelSelectionProjection>({ lastUsed: null, next: null }))
+    ctx.effect(() => () => { this.draft.dispose() }, 'model draft directory')
+    ctx.inject(['conversation'], (scope: Context) => {
+      scope.effect(() => scope.conversation.input.registerStagedSessionTransfer(async (sessionId) => {
+        const selection = this.draft.pendingDraftSelection
+        if (selection === null) return
+        const result = await ctx.remote.session.selectModel({ sessionId, ...selection })
+        if (!result.ok) throw new Error(result.error.message)
+      }), 'model draft selection transfer')
+    })
     void this.catalog.load().catch(() => { /* selectors expose the shared error */ })
     ctx.on('connection/reset', () => {
       this.catalog.resetGeneration()

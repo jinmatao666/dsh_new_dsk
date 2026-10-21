@@ -477,7 +477,7 @@ export function InputBar({
         }, { fallback: renderInput() }) ?? renderInput()}
         <div className={css.row}>
           <div className={css.tools}>
-            <Tooltip label={t('input.commands')} side="top" delayMs={500}>
+            {!staging && <Tooltip label={t('input.commands')} side="top" delayMs={500}>
               <button
                 type="button"
                 className={css.add}
@@ -490,7 +490,7 @@ export function InputBar({
               >
                 <IconPlusOutline16 size={14} />
               </button>
-            </Tooltip>
+            </Tooltip>}
             <div className={css.modes}>
               {accessSelect}
               {sessionId === undefined ? null : renderSlot('conversation.input.plan', { locked })}
@@ -499,7 +499,7 @@ export function InputBar({
           </div>
           <div className={css.trailing}>
             {rightItems}
-            {sessionId === undefined ? null : renderSlot('conversation.input.model', { locked: modelSeatLocked })}
+            {renderSlot('conversation.input.model', { locked: staging ? stagedSubmitting : modelSeatLocked })}
             <ContextMeter useProjection={useProjection} t={t} />
             {interruptible && (
               <Tooltip label={t('input.stop')} side="top" delayMs={500}>

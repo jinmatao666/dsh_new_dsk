@@ -25,6 +25,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+会话创建前，同一 Model/Effort 菜单基于共用宿主目录将显式选择保存在本地。创建或手动选择工作区时，在发送前通过普通 `session.selectModel` 应用该选择。仅展示部署默认值不会覆盖新会话自身的预设默认值。
+
 与 `ui-conversation` 及命令包一起挂载本插件；composer 随即在待处理指示器旁显示模型位，`/model` 则以弹窗打开同一份目录。当确切提供方／模型对仍在已公布分组中时，两个表面都显示宿主报告的当前选择；目录行缺席时，可路由的选择保持不变，触发器提示 `Select model`。
 
 ### 模型与推理强度

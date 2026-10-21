@@ -651,7 +651,8 @@
 [data-composer-staged-prefix]:has(> .dsh-skill-draft-prefix) { float: none; display: inline; margin-right: 6px; }
 
 [data-composer-staged-prefix]:has(> .dsh-skill-draft-prefix) + [data-composer-input] { display: inline; word-break: break-all; }
-[data-composer-staged-prefix]:has(> .dsh-skill-draft-prefix) + [data-composer-input]:empty { display: inline-block; min-width: 2ch; }
+[data-composer-staged-prefix]:has(> .dsh-skill-draft-prefix) + [data-composer-input]:empty { display: inline-block; min-width: 2ch; min-height: 24px; vertical-align: top; }
+[data-composer-staged-prefix]:has(> .dsh-skill-draft-prefix) { vertical-align: top; }
 
 .dsh-skill-draft-open { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; height: 22px; padding: 0 9px; border: 0; border-radius: inherit; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .dsh-skill-draft-open span { overflow: hidden; text-overflow: ellipsis; }

@@ -154,7 +154,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     /** Plan control inside the composer tool row. */
     'conversation.input.plan': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
     /** Model selector inside the composer tool row. */
-    'conversation.input.model': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
+    'conversation.input.model': { kind: 'single'; scope: 'session-maybe'; owner: InputControlOwnerProps }
   }
 
   interface GlobalStandardProps {

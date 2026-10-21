@@ -25,6 +25,8 @@ This package provides model selection in the Web GUI: the `/model` popup command
 <a id="use-this-package"></a>
 ## Use this package
 
+Before a Session exists, the same Model/Effort menu stores an explicit choice locally over the shared Host catalog. Creating or manually selecting a Workspace applies that choice through ordinary `session.selectModel` before sending. Merely displaying the deployment default does not override the new Session's own preset default.
+
 Mount this plugin alongside `ui-conversation` and the commands package; the composer then shows the model seat next to the pending indicator, and `/model` opens the same directory as a popup. Both surfaces show the host-reported current selection when the exact provider/model pair remains in the advertised groups; a missing catalog row leaves the routable selection intact while the trigger prompts `Select model`.
 
 ### Model and effort

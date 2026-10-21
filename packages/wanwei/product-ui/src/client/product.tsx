@@ -9,13 +9,16 @@ import { AnalysisResultCard } from './AnalysisResultCard.tsx'
 import { importedFileReference } from './imported-file-reference.ts'
 import { wanweiDeliverablePaths } from './deliverable-paths.ts'
 import type { HeroBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { InputActions, IConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { SidebarBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import './theme.css'
 
 type BrandMarkProps = HeroBrandMarkOwnerProps & SidebarBrandMarkOwnerProps
-type FileImportProps = PropsRuntime<'conversation.input.left'>
+type FileImportProps = Pick<PropsRuntime<'conversation.composer.tools'>, 'sessionId' | 'useWorkspaces'> & {
+  inputActions: Pick<InputActions, 'appendReferences'>
+}
 type NativeInvoke = (command: string, argumentsValue?: unknown) => Promise<unknown>
 
 function invokeDesktop(command: string, argumentsValue?: unknown): Promise<unknown> {
@@ -26,7 +29,9 @@ function invokeDesktop(command: string, argumentsValue?: unknown): Promise<unkno
 
 function useActiveWorkspacePath(props: FileImportProps): string | undefined {
   const workspaces = props.useWorkspaces(value => value.items)
-  return workspaces.find(workspace => workspace.sessionIds.includes(props.sessionId))?.path
+  const id = props.sessionId
+  return id === undefined ? undefined
+    : workspaces.find(workspace => workspace.sessionIds.includes(id))?.path
 }
 
 async function nativeImport(
@@ -304,4 +309,20 @@ export function apply(ctx: Context): void {
         }))))
   ctx.slots.inject('conversation.input.left', () =>
     ctx.slots.register({ name: 'conversation.input.left', id: 'wanwei-file-import', order: -100 }, FileImportAction))
+  ctx.inject(['conversation'], (scope: Context) => {
+    const input = (scope.get('conversation') as IConversation).input
+    const actions: Pick<InputActions, 'appendReferences'> = {
+      appendReferences: (references) => {
+        if (input.stagedSubmission.getSnapshot().busy) return false
+        input.setStagedDraft([input.stagedDraft.getSnapshot(), ...references.map(reference => reference.ref)].filter(Boolean).join(' '))
+        return true
+      },
+    }
+    scope.slots.inject('conversation.composer.tools', () => scope.slots.register({
+      name: 'conversation.composer.tools', id: 'wanwei-draft-file-import', order: -100,
+    }, function DraftFileImport(props: PropsRuntime<'conversation.composer.tools'>) {
+      if (props.sessionId !== undefined) return null
+      return <FileImportAction {...props} inputActions={actions} />
+    }))
+  })
 }

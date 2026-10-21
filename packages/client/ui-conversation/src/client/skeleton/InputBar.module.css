@@ -139,6 +139,11 @@
   padding: 0;
 }
 
+/* An empty contenteditable still needs its first line beside the floated chip. */
+.inlinePrefix .input:empty::before {
+  content: '\200b';
+}
+
 /* Machine pending dot (adjudicating / submitting). */
 .pending {
   width: 8px;

@@ -42,6 +42,31 @@ async function context(): Promise<Context> {
 }
 
 describe('SessionSkillCatalog', () => {
+  it('lists user-invocable draft skills without a Session read or Agent creation', async () => {
+    const ctx = await context()
+    const observeSession = vi.fn()
+    ctx.provide('sessionQuery', { observeSession } as never)
+    const list = vi.fn(async () => [
+      { name: 'review', displayName: '公文检查', description: 'Review', invocation: { userInvocable: true, modelInvocable: true } },
+      { name: 'private', description: 'Hidden', invocation: { userInvocable: false, modelInvocable: true } },
+    ])
+    ctx.provide('skills', { list } as never)
+    const catalog = new SessionSkillCatalog(ctx)
+    expect(await catalog.draftList()).toMatchInlineSnapshot(`
+      {
+        "skills": [
+          {
+            "description": "Review",
+            "displayName": "公文检查",
+            "modelInvocable": true,
+            "name": "review",
+          },
+        ],
+      }
+    `)
+    expect(observeSession).not.toHaveBeenCalled()
+    expect(ctx.agents.list()).toEqual([])
+  })
   it('reads a cold Session catalog without resuming an Agent', async () => {
     const ctx = await context()
     const sessionId = SessionId('cold-skills')

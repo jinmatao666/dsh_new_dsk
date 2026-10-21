@@ -290,7 +290,7 @@ describe('inline draft prefix', () => {
     const { shell, view, sink } = bench({ draft: '/helper 你好', lexicon: new Map(), draftPrefix: (props) => { owner = props; return props.renderInput() } })
     act(() => { expect(owner?.settlePrefix(7, { source: 'skill', ref: '/helper', clipboardText: '/helper', label: '助手', appearance: 'skill' })).toBe(true) })
     expect(view.getByText('助手')).toBeTruthy()
-    expect(view.container.querySelector('[data-composer-input]')?.textContent).toBe('助手 你好')
+    expect(view.container.querySelector('[data-composer-input]')?.textContent).toBe('助手× 你好')
     expect(shell.snapshot.draft).toBe('/helper 你好')
     expect(owner?.settlePrefix(7, { source: 'skill', ref: '/helper', clipboardText: '/helper', label: '助手', appearance: 'skill' })).toBe(false)
     await act(async () => { shell.submit() })

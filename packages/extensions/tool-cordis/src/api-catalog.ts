@@ -1371,6 +1371,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'provider-grouped models, the deployment default, and isolated provider failures.',
       },
       {
+        signature: '@Remote composerPermissions(): { options: { value: string; name: string; description?: string }[]; currentValue: string } | null',
+        description: 'Read the deployment permission choices without allocating a Session.',
+        parameters: [],
+        returns: 'Configured presets and the default for new Sessions, or null when absent.',
+      },
+      {
         signature: '@Remote canOpenWorkspacePath(): boolean',
         description: 'Report whether this deployment can hand a Session workspace path to a native desktop.',
         parameters: [],
@@ -1828,6 +1834,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     summary: 'Host service backing `ctx.remote.skills` without activating a cold Agent.',
     description: 'Host service backing `ctx.remote.skills` without activating a cold Agent.',
     methods: [
+      {
+        signature: '@Remote async draftList(): Promise<SkillListValue>',
+        description: 'List user-level skills before a Workspace is selected; no Agent is created.',
+        parameters: [],
+        returns: 'User-invocable skills from the root composition.',
+      },
       {
         signature: '@Remote async list(request: SkillListRequest, signal: AbortSignal): Promise<SkillListValue>',
         description: 'List the user-invocable skills visible to one Session composition.',

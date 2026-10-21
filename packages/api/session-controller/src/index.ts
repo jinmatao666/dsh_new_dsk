@@ -4,6 +4,7 @@ import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { errorChain } from '@deepseek-ai/dsh-llm'
 import { canOpenNativePath, openNativePath } from '@deepseek-ai/dsh-native-command'
+import type {} from '@deepseek-ai/dsh-permission-presets'
 import type { SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionObservation } from '@deepseek-ai/dsh-session-query'
 import { Remote, TypertRemoteFailure, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -248,6 +249,17 @@ export class SessionController extends TypertRemoteService {
   @Remote('modelCatalog')
   modelCatalog(): Promise<ModelCatalog> {
     return buildModelCatalog(this.ctx)
+  }
+
+  /** Read the deployment permission choices without allocating a Session.
+   * @returns Configured presets and the default for new Sessions, or null when absent.
+   */
+  @Remote
+  composerPermissions(): { options: { value: string; name: string; description?: string }[]; currentValue: string } | null {
+    const presets = this.ctx.get('permissionPresets')
+    if (presets === undefined) return null
+    const value = presets.selectFor({ preset: null, sandbox: null, approval: null })
+    return { ...value, currentValue: presets.defaultPreset }
   }
 
   /**

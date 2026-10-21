@@ -649,6 +649,11 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<{ meta: SessionH
  */
 @Remote('modelCatalog') modelCatalog(): Promise<ModelCatalog>
 
+/** Read the deployment permission choices without allocating a Session.
+ * @returns Configured presets and the default for new Sessions, or null when absent.
+ */
+@Remote composerPermissions(): { options: { value: string; name: string; description?: string }[]; currentValue: string } | null
+
 /**
  * Report whether this deployment can hand a Session workspace path to a native desktop.
  * @returns true when the matching open operation is available.

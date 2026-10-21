@@ -25,6 +25,8 @@ This client plugin owns Wanwei branding, theme overrides, desktop file-import af
 <a id="use-this-package"></a>
 ## Use this package
 
+File picking, native drops and document pastes are available before Workspace selection through the same importer. Without a selected Workspace, the native importer uses its existing persistent import location and appends path mentions to the staged draft; a task directory is allocated only on Send. Session-backed imports retain structured filename chips.
+
 Mount it through the Wanwei desktop bundle after the client platform-action registry and official conversation, deliverable, renderer and sidebar plugins. The product theme loads from `src/client/theme.css`; the generic official DSH web application does not mount it.
 
 -----

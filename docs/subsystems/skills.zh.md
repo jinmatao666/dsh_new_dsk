@@ -257,6 +257,11 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 Host service backing `ctx.remote.skills` without activating a cold Agent.
 
 ```ts cordis-catalog
+/** List user-level skills before a Workspace is selected; no Agent is created.
+ * @returns User-invocable skills from the root composition.
+ */
+@Remote async draftList(): Promise<SkillListValue>
+
 /**
  * List the user-invocable skills visible to one Session composition.
  * @param request - Session identity whose cwd and preset select the catalog view.

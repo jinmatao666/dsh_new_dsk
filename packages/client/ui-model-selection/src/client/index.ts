@@ -162,8 +162,8 @@ export function apply(ctx: ClientContext): void {
       name: 'conversation.input.model',
       locale: NS,
       inject: (sessionId): ModelSelectInjected => {
-        const directory = models.directoryFor(sessionId)
-        const available = sessions.subagentAddress(sessionId) === undefined
+        const directory = sessionId === undefined ? models.draft : models.directoryFor(sessionId)
+        const available = sessionId === undefined || sessions.subagentAddress(sessionId) === undefined
         return {
           available,
           directory: directory.store,
