@@ -1,5 +1,7 @@
 .dsh-skill-market-panel.dsh-expert-view-open { display: flex; flex-direction: column; overflow: hidden; }
 
+.dsh-skill-market-panel.dsh-expert-view-open > .dsh-skill-market-body { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+
 .dsh-skill-market-panel.dsh-expert-view-open .dsh-expert-active { flex: 1; min-height: 0; }
 
 .dsh-skill-market-panel.dsh-expert-view-open .dsh-expert-webview { min-height: 0; }

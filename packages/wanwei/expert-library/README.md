@@ -41,6 +41,8 @@ Disable this plugin's row to remove its entry; do not disable another business p
 
 Expert IDs accept 3–80 lowercase ASCII letters, digits or hyphens, beginning with a letter. The instance owns catalog loading and pending launches. Logout or unmount invalidates late responses; pending launches cannot be submitted twice. Native views stay mounted while changing tabs, hide beneath dialogs, and dispose when their tabs close. Equivalent launch values preserve a website session; changing ID, URL or ticket replaces it.
 
+The active workbench fills the remaining panel height through the body and expert container's flex layout. The native view waits for valid bounds; catalog mode retains ordinary scrolling. The [layout regression](tests/workbench-composition.mjs) boots the desktop profile and checks real browser geometry without mocking element sizes.
+
 The [Client entry](src/client/index.ts) supplies the implementation. The [Host entry](src/index.ts) anchors module discovery without registering a business service.
 
 </details>
