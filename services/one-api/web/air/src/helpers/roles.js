@@ -44,6 +44,11 @@ export function cacheManagedRole(role) {
   writeRoleCache(next.sort((left, right) => Number(left.role) - Number(right.role)));
 }
 
+// 删除成功后同步缓存，避免切换页面时再次出现已删除角色。
+export function removeManagedRole(code) {
+  if (roleCache !== null) writeRoleCache(roleCache.filter(role => Number(role.role) !== Number(code)));
+}
+
 /** Read the authoritative role list and retry one transient or non-JSON response. */
 export async function fetchManagedRoles() {
   if (roleCache !== null && Date.now() - roleCacheUpdatedAt < ROLE_CACHE_TTL) {

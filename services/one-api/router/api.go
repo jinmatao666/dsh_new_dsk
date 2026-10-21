@@ -196,6 +196,7 @@ func SetApiRouter(router *gin.Engine) {
 			roleRoute.GET("/", controller.ListRoles)
 			roleRoute.POST("/", controller.CreateRole)
 			roleRoute.PUT("/:role", controller.UpdateRole)
+			roleRoute.DELETE("/:role", controller.DeleteRole)
 		}
 		channelRoute := apiRouter.Group("/channel")
 		channelRoute.Use(middleware.AdminAuth())
@@ -223,11 +224,13 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			modelDefRoute.GET("/", controller.GetAllModelDefinitions)
 			modelDefRoute.GET("/aggregated", controller.ListAggregatedModels)
+			modelDefRoute.GET("/channels", controller.GetConfiguredModelChannels)
 			modelDefRoute.GET("/candidate_channels", controller.GetCandidateChannels)
 			modelDefRoute.GET("/channel_model_names", controller.GetChannelModelNames)
 			modelDefRoute.GET("/test", controller.TestModelChannels)
 			modelDefRoute.GET("/:id", controller.GetModelDefinition)
 			modelDefRoute.POST("/", controller.AddModelDefinition)
+			modelDefRoute.POST("/from_channel", controller.RegisterChannelModel)
 			modelDefRoute.PUT("/", controller.UpdateModelDefinition)
 			modelDefRoute.PUT("/reorder", controller.ReorderModelDefinitions)
 			modelDefRoute.DELETE("/:id", controller.DeleteModelDefinition)

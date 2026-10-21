@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-20-managed-role-lifecycle.md
+2026-10-20-managed-role-lifecycle.md: fa2ee400bdec6dfb53b0bea4f63106222edf219a
+2026-10-20-managed-role-lifecycle.zh.md: 534e12490d3673d412a5c542ce12f21bd726754a

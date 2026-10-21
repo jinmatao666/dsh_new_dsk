@@ -176,6 +176,15 @@ type modelSourceTestResult struct {
 // GET /api/model_definition/:id/test  或  GET /api/model_definition/test?model=xxx
 func TestModelChannels(c *gin.Context) {
 	ctx := c.Request.Context()
+	selectedChannel := 0
+	if raw := c.Query("channel_id"); raw != "" {
+		var err error
+		selectedChannel, err = strconv.Atoi(raw)
+		if err != nil || selectedChannel <= 0 {
+			respondError(c, "渠道编号不合法")
+			return
+		}
+	}
 	modelName := c.Query("model")
 	if modelName == "" {
 		// 兼容按 id 调用:解析 ModelDefinition 取其 Name
@@ -206,6 +215,9 @@ func TestModelChannels(c *gin.Context) {
 
 	results := make([]modelSourceTestResult, 0, len(sources))
 	for _, s := range sources {
+		if selectedChannel != 0 && s.ChannelId != selectedChannel {
+			continue
+		}
 		channel, err := model.GetChannelById(s.ChannelId, true)
 		if err != nil {
 			results = append(results, modelSourceTestResult{

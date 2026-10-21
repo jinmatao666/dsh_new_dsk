@@ -4,6 +4,7 @@ import { fetchManagedRoles } from '../../helpers/roles';
 import CustomSelect from '../../components/CustomSelect';
 import RolePermissions from '../../components/RolePermissions';
 import SystemSettings from './SystemSettings';
+import { ChannelModelBatch, ChannelModelPicker, channelModelNames, filterChannelModels, filterModelSources } from './ChannelModelTools';
 
 const emptyChannel = {
   name: '',
@@ -250,6 +251,7 @@ function SelectField({ label, children, ...props }) {
 export function ModelConfigPage() {
   const dialog = useDialog();
   const list = useList('/api/channel/', 'p=0&page_size=100&id_sort=false');
+  const modelChannelList = useList('/api/model_definition/channels');
   const [editing, setEditing] = useState(null);
   const [tab, setTab] = useState('channels');
   const [form, setForm] = useState(emptyChannel);
@@ -257,6 +259,8 @@ export function ModelConfigPage() {
   const [fetchedModels, setFetchedModels] = useState([]);
   const [definitions, setDefinitions] = useState([]);
   const [modelEdit, setModelEdit] = useState(null);
+  const [modelChannelFilter, setModelChannelFilter] = useState('all');
+  const [batchModelsOpen, setBatchModelsOpen] = useState(false);
   const [options, setOptions] = useState({
     PreConsumedQuota: '',
     DefaultContextLimit: '',
@@ -276,6 +280,10 @@ export function ModelConfigPage() {
     () => [...new Set(rows.flatMap((r) => splitModels(r.models)))],
     [rows]
   );
+  const visibleDefinitions = filterChannelModels(definitions, modelChannelFilter);
+  const modelChannels = modelChannelList.rows;
+  const selectedModelChannel = modelChannels.find(row => row.id === Number(modelEdit?.sourceChannelIds?.[0]));
+  const selectableModelNames = channelModelNames(selectedModelChannel);
   const searchCandidates = useMemo(
     () =>
       definitions.flatMap((model) =>
@@ -475,6 +483,7 @@ export function ModelConfigPage() {
     // empty dropdown on a direct visit to “基础设置”.
     if (tab === 'models' || tab === 'basic') loadDefinitions();
     if (tab === 'basic' || tab === 'models') loadOptions();
+    if (tab === 'models') modelChannelList.refresh();
   }, [tab]);
   const openModel = (row) =>
     setModelEdit(
@@ -500,29 +509,12 @@ export function ModelConfigPage() {
             completion_ratio: 0,
           }
     );
-  // 选中/输入匹配到渠道已有模型名时，自动填显示名、默认上下文、来源渠道
-  const syncFromModelName = (name) => {
-    if (!name) return;
-    setModelEdit((m) => {
-      const next = { ...m };
-      if (!next.display_name) next.display_name = name;
-      const defaultCtx = Number(options.DefaultContextLimit) || 0;
-      if (!next.context_limit && defaultCtx) next.context_limit = defaultCtx;
-      // 仅新建时自动关联包含该模型的所有渠道；编辑时不覆盖已保存的关联
-      if (!next.id) {
-        const matched = rows
-          .filter((r) => splitModels(r.models).includes(name))
-          .map((r) => r.id);
-        next.sourceChannelIds = [
-          ...new Set([...(next.sourceChannelIds || []), ...matched]),
-        ];
-      }
-      return next;
-    });
-  };
   const saveModel = async (e) => {
     e.preventDefault();
     const m = modelEdit;
+    if (!m.id && (!selectedModelChannel || !selectableModelNames.includes(m.name))) {
+      return dialog.notice('请先选择来源渠道，再选择该渠道已配置的模型');
+    }
     const body = {
       name: m.name,
       display_name: m.display_name || '',
@@ -537,7 +529,7 @@ export function ModelConfigPage() {
     };
     const res = m.id
       ? await API.put('/api/model_definition/', { ...body, id: m.id })
-      : await API.post('/api/model_definition/', body);
+      : await API.post('/api/model_definition/', { ...body, source_channel_id: selectedModelChannel.id });
     if (!res.data?.success)
       return dialog.notice(res.data?.message || '保存模型失败');
     const oldSources = new Set((m.sources || []).map((x) => x.channel_id));
@@ -629,7 +621,7 @@ export function ModelConfigPage() {
     setModelTest({ model: m.name, status: 'running', results: [] });
     try {
       const res = await API.get(
-        `/api/model_definition/test?model=${encodeURIComponent(m.name)}`
+        `/api/model_definition/test?model=${encodeURIComponent(m.name)}${!['all', 'unbound'].includes(modelChannelFilter) ? `&channel_id=${encodeURIComponent(modelChannelFilter)}` : ''}`
       );
       if (!res.data?.success)
         throw new Error(res.data?.message || '模型测试失败');
@@ -694,10 +686,10 @@ export function ModelConfigPage() {
     );
   };
   const testAllModels = async () => {
-    const enabled = definitions.filter((m) => m.enabled);
+    const enabled = visibleDefinitions.filter((m) => m.enabled);
     if (enabled.length === 0) return dialog.notice('没有已启用的模型可测试');
     setModelTest({
-      model: '全部已启用模型',
+      model: '当前列表已启用模型',
       status: 'running',
       results: [],
       batch: { current: 0, total: enabled.length },
@@ -711,7 +703,7 @@ export function ModelConfigPage() {
       }));
       try {
         const res = await API.get(
-          `/api/model_definition/test?model=${encodeURIComponent(model.name)}`
+          `/api/model_definition/test?model=${encodeURIComponent(model.name)}${!['all', 'unbound'].includes(modelChannelFilter) ? `&channel_id=${encodeURIComponent(modelChannelFilter)}` : ''}`
         );
         if (!res.data?.success)
           throw new Error(res.data?.message || '模型测试失败');
@@ -741,7 +733,7 @@ export function ModelConfigPage() {
       setModelTest((previous) => ({ ...previous, results: [...allResults] }));
     }
     setModelTest({
-      model: '全部已启用模型',
+      model: '当前列表已启用模型',
       status: allResults.every((result) => result.success)
         ? 'success'
         : 'failed',
@@ -945,11 +937,11 @@ export function ModelConfigPage() {
               <button
                 className='preview-button'
                 disabled={
-                  modelTest?.status === 'running' || definitions.length === 0
+                  modelTest?.status === 'running' || visibleDefinitions.length === 0
                 }
                 onClick={() => testAllModels()}
               >
-                {modelTest?.status === 'running' ? '测试中…' : '全部测试模型'}
+                {modelTest?.status === 'running' ? '测试中…' : '测试当前列表'}
               </button>
               <button
                 className='preview-button'
@@ -967,7 +959,15 @@ export function ModelConfigPage() {
               >
                 ＋ 添加模型
               </button>
+              <button className='preview-button' onClick={() => setBatchModelsOpen(true)}>批量添加</button>
             </div>
+          </div>
+          <div className='channel-model-filter'>
+            <label>来源渠道 <select aria-label='筛选来源渠道' value={modelChannelFilter} onChange={e => setModelChannelFilter(e.target.value)}>
+              <option value='all'>全部渠道</option>{modelChannels.map(row => <option key={row.id} value={row.id}>{row.name}（{row.id}）</option>)}<option value='unbound'>未绑定渠道</option>
+            </select></label>
+            <span>共 {visibleDefinitions.length} 个模型</span>
+            {modelChannelList.error && <span role='alert'>渠道清单读取失败 <button className='link-button' onClick={modelChannelList.refresh}>重试</button></span>}
           </div>
           <div className='preview-table-wrap'>
             <table className='preview-table'>
@@ -984,7 +984,7 @@ export function ModelConfigPage() {
                 </tr>
               </thead>
               <tbody>
-                {definitions.map((m) => (
+                {visibleDefinitions.map((m) => (
                   <tr key={m.name}>
                     <td>
                       <strong>{m.name}</strong>
@@ -993,7 +993,7 @@ export function ModelConfigPage() {
                     <td>{m.display_name || m.name || ''}</td>
                     <td>{modelCapabilityLabel(m)}</td>
                     <td>
-                      {(m.sources || [])
+                      {filterModelSources(m, modelChannelFilter)
                         .map((x) => x.channel_name || `#${x.channel_id}`)
                         .join('、') || ''}
                     </td>
@@ -1063,9 +1063,9 @@ export function ModelConfigPage() {
                 ))}
               </tbody>
             </table>
-            {definitions.length === 0 && (
+            {visibleDefinitions.length === 0 && (
               <div className='preview-empty'>
-                暂无模型定义，可从渠道中的模型创建
+                当前筛选下暂无模型定义，可从渠道中的模型创建
               </div>
             )}
           </div>
@@ -1528,6 +1528,8 @@ export function ModelConfigPage() {
           </form>
         </Modal>
       )}
+      {batchModelsOpen && <ChannelModelBatch channels={modelChannels} definitions={definitions} defaultContext={Number(options.DefaultContextLimit) || 0}
+        Modal={Modal} onClose={() => setBatchModelsOpen(false)} onSaved={loadDefinitions} />}
       {modelEdit && (
         <Modal
           wide
@@ -1535,31 +1537,23 @@ export function ModelConfigPage() {
           onClose={() => setModelEdit(null)}
         >
           <form className='zjugis-form' onSubmit={saveModel}>
+            {!modelEdit.id && <div className='zjugis-field full'><span>来源渠道</span>
+              <CustomSelect value={String(modelEdit.sourceChannelIds?.[0] || '')} onChange={e => setModelEdit(current => ({ ...current, sourceChannelIds: e.target.value ? [Number(e.target.value)] : [], name: '', display_name: '' }))}>
+                <option value=''>请选择来源渠道</option>{modelChannels.map(row => <option key={row.id} value={row.id}>{row.name}（{row.id}）</option>)}
+              </CustomSelect><small className='preview-muted'>先选择渠道，再从该渠道已配置的模型清单中选择；不依赖获取上游模型。</small>
+            </div>}
             <div className='form-grid zjugis-model-identity-grid'>
               <label className='zjugis-field'>
                 <span>模型 ID</span>
-                <input
-                  list='zjugis-model-id-options'
-                  value={modelEdit.name || ''}
-                  disabled={!!modelEdit.id}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setModelEdit({ ...modelEdit, name: v });
-                    if (!modelEdit.id && models.includes(v))
-                      syncFromModelName(v);
-                  }}
-                  required
-                />
+                {modelEdit.id ? <input value={modelEdit.name || ''} disabled /> : <ChannelModelPicker key={modelEdit.sourceChannelIds?.[0] || 'none'}
+                  names={selectableModelNames} value={modelEdit.name || ''} disabled={!selectedModelChannel} onChange={name => {
+                    setModelEdit(current => ({ ...current, name, display_name: name, context_limit: current.context_limit || Number(options.DefaultContextLimit) || 0 }));
+                  }} />}
                 {!modelEdit.id && (
                   <small className='preview-muted'>
-                    可从渠道已有模型中选择，选中后自动填充显示名称、默认上下文与来源渠道
+                    仅显示所选渠道已配置的模型；选中后填充显示名称与默认上下文。
                   </small>
                 )}
-                <datalist id='zjugis-model-id-options'>
-                  {models.map((m) => (
-                    <option key={m} value={m} />
-                  ))}
-                </datalist>
               </label>
               <Field
                 label='显示名称'
@@ -1626,7 +1620,7 @@ export function ModelConfigPage() {
                 rows='2'
               />
             </label>
-            <div className='zjugis-field full'>
+            {!!modelEdit.id && <div className='zjugis-field full'>
               <span>来源渠道</span>
               <CustomSelect
                 value={String((modelEdit.sourceChannelIds || [])[0] || '')}
@@ -1649,7 +1643,7 @@ export function ModelConfigPage() {
               <small className='preview-muted'>
                 选择该模型实际调用的来源渠道；需要备用渠道时可在后续编辑中调整。
               </small>
-            </div>
+            </div>}
             <div className='form-inline-actions'>
               <label className='zjugis-check'>
                 <input

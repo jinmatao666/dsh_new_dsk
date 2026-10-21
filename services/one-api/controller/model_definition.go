@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common/config"
@@ -12,6 +13,40 @@ import (
 )
 
 // 模型主表 CRUD(T1.2)+ 模型↔渠道关系管理(T1.3)
+
+func GetConfiguredModelChannels(c *gin.Context) {
+	channels, err := model.GetConfiguredModelChannels()
+	if err != nil {
+		respondError(c, "渠道模型清单读取失败")
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": channels})
+}
+
+// RegisterChannelModel 从渠道已配置清单登记一个模型，不发起上游测试。
+func RegisterChannelModel(c *gin.Context) {
+	var req struct {
+		ChannelID       int                   `json:"channel_id"`
+		Definition      model.ModelDefinition `json:"definition"`
+		InputRatio      float64               `json:"model_ratio"`
+		CompletionRatio float64               `json:"completion_ratio"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, "模型配置格式不合法")
+		return
+	}
+	if req.ChannelID <= 0 {
+		respondError(c, "请先选择来源渠道")
+		return
+	}
+	def, status, err := model.RegisterChannelModel(req.ChannelID, req.Definition, req.InputRatio, req.CompletionRatio)
+	if err != nil {
+		respondError(c, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": def, "status": status})
+}
 
 func GetAllModelDefinitions(c *gin.Context) {
 	defs, err := model.GetAllModelDefinitions()
@@ -45,10 +80,25 @@ func GetModelDefinition(c *gin.Context) {
 }
 
 func AddModelDefinition(c *gin.Context) {
-	def := model.ModelDefinition{}
-	if err := c.ShouldBindJSON(&def); err != nil {
+	var req struct {
+		model.ModelDefinition
+		SourceChannelID *int `json:"source_channel_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		respondError(c, err.Error())
 		return
+	}
+	def := req.ModelDefinition
+	if req.SourceChannelID != nil {
+		if *req.SourceChannelID <= 0 {
+			respondError(c, "请先选择来源渠道")
+			return
+		}
+		channel, err := model.GetChannelById(*req.SourceChannelID, false)
+		if err != nil || !model.ChannelHasConfiguredModel(channel, strings.TrimSpace(def.Name)) {
+			respondError(c, "模型不在所选渠道的已配置清单中")
+			return
+		}
 	}
 	if err := def.Insert(); err != nil {
 		respondError(c, err.Error())

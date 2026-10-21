@@ -1,0 +1,31 @@
+.role-management-dialog .semi-modal-content { border-radius: 16px; padding: 24px; }
+.role-management-dialog .semi-modal-header { margin-bottom: 24px; }
+.role-management-dialog .semi-modal-title { color: #243958; font-size: 20px; }
+.role-management-dialog .zjugis-role-form { gap: 16px; }
+.role-management-dialog .zjugis-role-form select {
+  width: 100%; padding: 10px 12px; border: 1px solid #d5dfec; border-radius: 9px;
+  background: #f8fbff; color: #243958; font: inherit; font-weight: 400;
+}
+.role-management-dialog .role-form-hint { margin: -6px 0 0; color: #7185a0; font-size: 12px; line-height: 1.7; }
+.role-management-dialog .zjugis-role-modal-actions { margin-top: 8px; }
+.role-management-dialog .zjugis-modal-btn { min-height: 38px; font-weight: 500; }
+.role-management-dialog .zjugis-modal-btn.cancel { color: #527092; background: white; }
+.role-management-dialog .zjugis-modal-btn.primary { color: white; background: #2563eb; border-color: #2563eb; }
+.role-management-dialog .zjugis-modal-btn.danger { color: white; background: #dc2626; border-color: #dc2626; }
+.role-management-dialog button:disabled { opacity: .5; cursor: not-allowed; }
+.role-management-dialog :is(button, input, select, textarea):focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+.role-management-dialog .role-form-error { color: #b42318; background: #fff1f0; border-radius: 8px; padding: 10px 12px; margin: 0; line-height: 1.6; }
+.role-management-dialog .role-delete-message { color: #527092; line-height: 1.8; margin: 0 0 20px; overflow-wrap: anywhere; }
+.zjugis-role-permissions .role-kind { color: #7185a0; font-size: 11px; font-weight: 400; margin-left: 8px; }
+.zjugis-role-permissions .role-delete { color: #b42318; background: white; border-color: #f0d5d2; }
+.zjugis-role-modal .role-model-bulk-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin: -4px 0 6px; flex-shrink: 0; }
+.role-model-bulk-actions button { border: 0; border-radius: 5px; background: transparent; color: #2563eb; font: inherit; font-size: 12px; padding: 4px 6px; cursor: pointer; }
+.role-model-bulk-actions button:hover:not(:disabled) { background: #edf4ff; }
+.role-model-bulk-actions button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.role-model-bulk-actions button:disabled { color: #94a3b8; cursor: not-allowed; }
+.role-model-bulk-actions span { color: #c1ccda; font-size: 12px; }
+@media (max-width: 600px) {
+  .zjugis-role-permissions .zjugis-role-row { flex-wrap: wrap; }
+  .zjugis-role-permissions .zjugis-role-row-info { min-width: 60%; }
+  .role-management-dialog { max-width: calc(100vw - 32px); }
+}
