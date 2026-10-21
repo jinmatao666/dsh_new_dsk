@@ -928,8 +928,16 @@ export function ModelConfigPage() {
       )}
       {tab === 'models' && (
         <section className='preview-surface'>
-          <div className='preview-section-head'>
-            <h2>模型定义</h2>
+          <div className='preview-section-head channel-model-heading'>
+            <div className='channel-model-heading-main'>
+              <h2>模型定义</h2>
+              <div className='channel-model-filter'>
+                <CustomSelect aria-label='筛选来源渠道' value={modelChannelFilter} onChange={e => setModelChannelFilter(e.target.value)}>
+                  <option value='all'>全部渠道</option>{modelChannels.map(row => <option key={row.id} value={row.id}>{row.name}（{row.id}）</option>)}<option value='unbound'>未绑定渠道</option>
+                </CustomSelect>
+                <span className='channel-model-count'>共 {visibleDefinitions.length} 个模型</span>
+              </div>
+            </div>
             <div className='form-inline-actions'>
               <button className='preview-button' onClick={loadDefinitions}>
                 ↻ 刷新
@@ -962,13 +970,7 @@ export function ModelConfigPage() {
               <button className='preview-button' onClick={() => setBatchModelsOpen(true)}>批量添加</button>
             </div>
           </div>
-          <div className='channel-model-filter'>
-            <label>来源渠道 <select aria-label='筛选来源渠道' value={modelChannelFilter} onChange={e => setModelChannelFilter(e.target.value)}>
-              <option value='all'>全部渠道</option>{modelChannels.map(row => <option key={row.id} value={row.id}>{row.name}（{row.id}）</option>)}<option value='unbound'>未绑定渠道</option>
-            </select></label>
-            <span>共 {visibleDefinitions.length} 个模型</span>
-            {modelChannelList.error && <span role='alert'>渠道清单读取失败 <button className='link-button' onClick={modelChannelList.refresh}>重试</button></span>}
-          </div>
+          {modelChannelList.error && <div className='channel-model-filter-error' role='alert'>渠道清单读取失败 <button className='link-button' onClick={modelChannelList.refresh}>重试</button></div>}
           <div className='preview-table-wrap'>
             <table className='preview-table'>
               <thead>

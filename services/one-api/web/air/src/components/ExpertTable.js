@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Building2, FileText, Layers3, Leaf, Map, MessagesSquare, Scale } from 'lucide-react';
 import { API, showError, showSuccess } from '../helpers';
 import './ExpertTable.css';
+import CustomSelect from './CustomSelect';
 
 const readArray = value => {
   try { const result = JSON.parse(value || '[]'); return Array.isArray(result) ? result : []; }
@@ -137,7 +138,7 @@ export default function ExpertTable() {
       <div className='expert-admin-fields'>
         <label>专家名称<input value={editing.name} onChange={event => setEditing({ ...editing, name: event.target.value })} /></label>
         <label>副标题<input value={editing.subtitle} onChange={event => setEditing({ ...editing, subtitle: event.target.value })} /></label>
-        <label>分类<select value={editing.category} onChange={event => setEditing({ ...editing, category: event.target.value })}><option value=''>请选择分类</option>{categories.map(category => <option key={category.id} value={category.name}>{category.name}</option>)}</select></label>
+        <label>分类<CustomSelect aria-label='分类' value={editing.category} onChange={event => setEditing({ ...editing, category: event.target.value })}><option value=''>请选择分类</option>{categories.map(category => <option key={category.id} value={category.name}>{category.name}</option>)}</CustomSelect></label>
         <div className='wide expert-admin-icon-picker'><span>专家图标</span><div className='expert-admin-icon-options'>{EXPERT_ICONS.map(({ value, label, Icon }) => <button type='button' key={value} className={editing.icon === value ? 'selected' : ''} onClick={() => setEditing({ ...editing, icon: value })} title={label}><Icon/><small>{label}</small></button>)}</div><div className='expert-admin-icon-field'><span className='expert-admin-icon preview'><IconPreview value={editing.icon} /></span><button type='button' className='preview-button' onClick={() => iconInputRef.current?.click()}>上传自定义图标</button>{editing.icon !== defaultIcon(editing.key) && <button type='button' className='preview-button' onClick={() => setEditing({ ...editing, icon: defaultIcon(editing.key) })}>恢复默认</button>}</div><input ref={iconInputRef} hidden type='file' accept='image/png,image/jpeg,image/webp,image/gif' onChange={chooseIconFile} /><small>常用图标和上传图标会同步用于市场卡片、介绍弹窗和专家工作台。支持 PNG、JPEG、WebP 或 GIF，最大 2 MB。</small></div>
         <label className='wide'>市场简介<textarea value={editing.summary} onChange={event => setEditing({ ...editing, summary: event.target.value })} /></label>
         <label className='wide'>标签（每行一个）<textarea value={readArray(editing.tags).join('\n')} onChange={event => setEditing({ ...editing, tags: JSON.stringify(event.target.value.split('\n').map(text => text.trim()).filter(Boolean)) })} /></label>

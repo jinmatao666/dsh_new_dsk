@@ -25,9 +25,9 @@ test('creation selects a type without exposing role codes and submits only once'
   await act(async () => root.render(<RolePermissions />));
   act(() => button('新建角色').click());
   expect(document.querySelector('input[type="number"]')).toBeNull();
-  const select = document.querySelector('select');
-  expect([...select.options].map(option => option.textContent)).toEqual(['普通成员', '管理员']);
-  act(() => { select.value = 'admin'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  act(() => document.querySelector('[aria-label="角色类型"]').click());
+  expect([...document.querySelectorAll('[role="option"]')].map(option => option.textContent)).toEqual(['普通成员', '管理员']);
+  act(() => document.querySelector('[role="option"][value="admin"]').click());
   const input = document.querySelector('input');
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '业务管理员');
@@ -63,7 +63,8 @@ test('ordinary administrators cannot choose the administrator type', async () =>
   isRoot.mockReturnValue(false);
   await act(async () => root.render(<RolePermissions />));
   act(() => button('新建角色').click());
-  expect(document.querySelector('option[value="admin"]').disabled).toBe(true);
+  act(() => document.querySelector('[aria-label="角色类型"]').click());
+  expect(document.querySelector('[role="option"][value="admin"]').disabled).toBe(true);
 });
 
 test('select all and invert operate on the complete model list and only save explicitly', async () => {

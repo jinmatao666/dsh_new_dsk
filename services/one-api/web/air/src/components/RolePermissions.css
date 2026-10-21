@@ -2,7 +2,7 @@
 .role-management-dialog .semi-modal-header { margin-bottom: 24px; }
 .role-management-dialog .semi-modal-title { color: #243958; font-size: 20px; }
 .role-management-dialog .zjugis-role-form { gap: 16px; }
-.role-management-dialog .zjugis-role-form select {
+.role-management-dialog .zjugis-role-form .zjugis-select-trigger {
   width: 100%; padding: 10px 12px; border: 1px solid #d5dfec; border-radius: 9px;
   background: #f8fbff; color: #243958; font: inherit; font-weight: 400;
 }
@@ -14,6 +14,7 @@
 .role-management-dialog .zjugis-modal-btn.danger { color: white; background: #dc2626; border-color: #dc2626; }
 .role-management-dialog button:disabled { opacity: .5; cursor: not-allowed; }
 .role-management-dialog :is(button, input, select, textarea):focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+.role-management-dialog .zjugis-select-trigger:focus-visible { outline: none; box-shadow: 0 0 0 3px rgb(91 150 236 / 14%); }
 .role-management-dialog .role-form-error { color: #b42318; background: #fff1f0; border-radius: 8px; padding: 10px 12px; margin: 0; line-height: 1.6; }
 .role-management-dialog .role-delete-message { color: #527092; line-height: 1.8; margin: 0 0 20px; overflow-wrap: anywhere; }
 .zjugis-role-permissions .role-kind { color: #7185a0; font-size: 11px; font-weight: 400; margin-left: 8px; }

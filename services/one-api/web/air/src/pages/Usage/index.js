@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { API } from '../../helpers';
 import AdminPageFrame from '../../components/AdminPageFrame';
 import './usage.css';
+import CustomSelect from '../../components/CustomSelect';
 
 const tabs = [
   ['skill-stats', '技能统计', 'skill'],
@@ -75,7 +76,7 @@ export default function Usage() {
     <div className="usage-filters">
       <label>开始日期<input type="date" value={from} max={to} onChange={event => { setFrom(event.target.value); setPage(1); }} /></label>
       <label>结束日期<input type="date" value={to} min={from} onChange={event => { setTo(event.target.value); setPage(1); }} /></label>
-      {!details && <label>统计周期<select value={period} onChange={event => setPeriod(event.target.value)}><option value="day">按天</option><option value="week">按周</option><option value="month">按月</option></select></label>}
+      {!details && <label>统计周期<CustomSelect aria-label='统计周期' value={period} onChange={event => setPeriod(event.target.value)}><option value="day">按天</option><option value="week">按周</option><option value="month">按月</option></CustomSelect></label>}
       {itemID && <button type="button" className="usage-clear" onClick={() => setItemID('')}>清除对象筛选</button>}
     </div>
     {loading && <p className="usage-state">正在读取使用记录…</p>}

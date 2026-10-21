@@ -1,6 +1,7 @@
 import React, { useId, useRef, useState } from 'react';
 import { API } from '../../helpers';
 import './ChannelModelTools.css';
+import CustomSelect from '../../components/CustomSelect';
 
 export const channelModelNames = (channel) => [...new Set(String(channel?.models || '').split(/[,\n\r]/).map(name => name.trim()).filter(Boolean))];
 export const filterModelSources = (model, channel) => (model.sources || []).filter(source => channel === 'all' || String(source.channel_id) === channel);
@@ -79,9 +80,9 @@ export function ChannelModelBatch({ channels, definitions, defaultContext, Modal
   return <Modal wide title='从渠道批量添加模型' onClose={close}>
     <div className='channel-model-batch'>
       {!drafts ? <>
-        <label className='zjugis-field'><span>来源渠道</span><select aria-label='批量来源渠道' value={channelID} onChange={e => { setChannelID(e.target.value); setSelected([]); setQuery(''); }}>
+        <label className='zjugis-field'><span>来源渠道</span><CustomSelect aria-label='批量来源渠道' value={channelID} onChange={e => { setChannelID(e.target.value); setSelected([]); setQuery(''); }}>
           <option value=''>请选择来源渠道</option>{channels.map(item => <option key={item.id} value={item.id}>{item.name}（{item.id}）</option>)}
-        </select></label>
+        </CustomSelect></label>
         <p className='preview-muted'>候选来自渠道已配置清单，不代表已获上游调用授权；默认不勾选。</p>
         <input aria-label='搜索批量模型' placeholder='搜索模型 ID' value={query} onChange={e => setQuery(e.target.value)} disabled={!channelID} />
         <div className='channel-model-bulk-toolbar'><span>已选 {selected.length} 个</span>
@@ -102,7 +103,7 @@ export function ChannelModelBatch({ channels, definitions, defaultContext, Modal
         <div className='preview-table-wrap'><table className='preview-table channel-model-batch-table'><thead><tr><th>模型 ID</th><th>显示名称</th><th>类型</th><th>上下文</th><th>输入倍率</th><th>补全倍率</th><th>结果</th></tr></thead><tbody>
           {drafts.map(item => <tr key={item.name}><td>{item.name}</td>
             {['display_name', 'model_type', 'context_limit', 'model_ratio', 'completion_ratio'].map(key => <td key={key}>{key === 'model_type'
-              ? <select aria-label={`${item.name} 类型`} value={item[key]} disabled={busy || Boolean(existing(item.name)) || results[item.name]?.success} onChange={e => update(item.name, key, e.target.value)}>{['chat', 'image', 'audio', 'embedding', 'other'].map(type => <option key={type}>{type}</option>)}</select>
+              ? <CustomSelect aria-label={`${item.name} 类型`} value={item[key]} disabled={busy || Boolean(existing(item.name)) || results[item.name]?.success} onChange={e => update(item.name, key, e.target.value)}>{['chat', 'image', 'audio', 'embedding', 'other'].map(type => <option key={type}>{type}</option>)}</CustomSelect>
               : <input aria-label={`${item.name} ${key}`} type={key === 'display_name' ? 'text' : 'number'} min={0} step='any' value={item[key]} disabled={busy || Boolean(existing(item.name)) || results[item.name]?.success} onChange={e => update(item.name, key, e.target.value)} />}</td>)}
             <td aria-live='polite'>{results[item.name]?.message || (existing(item.name) ? '保留已有配置' : '待保存')}</td></tr>)}
         </tbody></table></div>

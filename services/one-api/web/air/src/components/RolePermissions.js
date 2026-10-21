@@ -4,6 +4,7 @@ import { Cpu, Pencil, Plus, ShieldCheck, Trash2, Users } from 'lucide-react';
 import { API, isRoot, showError, showSuccess } from '../helpers';
 import { cacheManagedRole, fetchManagedRoles, removeManagedRole } from '../helpers/roles';
 import './RolePermissions.css';
+import CustomSelect from './CustomSelect';
 
 const MOCK_MODELS = [
   { name: 'deepseek-chat', display_name: 'DeepSeek Chat', model_type: 'chat' },
@@ -197,9 +198,9 @@ export default function RolePermissions() {
       <Modal title='新建角色' centered width={480} className='role-management-dialog' visible={createModal} onCancel={closeMutation}
         maskClosable={!submitting} closable={!submitting} closeOnEsc={!submitting} footer={null}>
         <form className='zjugis-role-form' onSubmit={createRole}>
-          <label>角色类型<select value={draft.role_type} disabled={submitting} onChange={e => setDraft(current => ({ ...current, role_type: e.target.value }))}>
+          <label>角色类型<CustomSelect aria-label='角色类型' value={draft.role_type} disabled={submitting} onChange={e => setDraft(current => ({ ...current, role_type: e.target.value }))}>
             <option value='member'>普通成员</option><option value='admin' disabled={!rootUser}>管理员</option>
-          </select></label>
+          </CustomSelect></label>
           <p className='role-form-hint'>{draft.role_type === 'admin' ? '管理员可进入后台管理，请谨慎分配。' : '普通成员用于日常使用，可单独配置可用模型。'}编号由系统分配，超级管理员为内置角色。</p>
           <label>角色名称<input required maxLength={64} disabled={submitting} type='text' value={draft.name} onChange={(e) => setDraft((current) => ({ ...current, name: e.target.value }))} placeholder='例如：审核员' /></label>
           <label>角色说明<textarea maxLength={255} disabled={submitting} value={draft.description} onChange={(e) => setDraft((current) => ({ ...current, description: e.target.value }))} placeholder='说明该角色的适用范围（可选）' rows={3} /></label>

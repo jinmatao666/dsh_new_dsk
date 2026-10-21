@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { API, showError, showSuccess } from '../helpers';
 import './ExpertWebTable.css';
+import CustomSelect from './CustomSelect';
 
 const blank = { key: '', name: '', subtitle: '', category: '', summary: '', icon: '', tags: '[]', scenario: '', materials: '', detail_sections: '[]', footer_note: '', provider: '', workbench_url: '', sort_order: 0 };
 const lines = text => JSON.stringify(text.split('\n').map(item => item.trim()).filter(Boolean));
@@ -126,7 +127,7 @@ export default function ExpertWebTable() {
         <label>专家编号<input value={editing.key} disabled={items.some(item => item.key === editing.key)} placeholder='geology-analysis' onChange={event => setEditing({ ...editing, key: event.target.value })} /></label>
         <label>专家名称<input value={editing.name} onChange={event => setEditing({ ...editing, name: event.target.value })} /></label>
         <label>提供方<input value={editing.provider} onChange={event => setEditing({ ...editing, provider: event.target.value })} /></label>
-        <label>分类<select value={editing.category} onChange={event => setEditing({ ...editing, category: event.target.value })}><option value=''>请选择分类</option>{categories.map(category => <option key={category.id} value={category.name}>{category.name}</option>)}</select></label>
+        <label>分类<CustomSelect aria-label='分类' value={editing.category} onChange={event => setEditing({ ...editing, category: event.target.value })}><option value=''>请选择分类</option>{categories.map(category => <option key={category.id} value={category.name}>{category.name}</option>)}</CustomSelect></label>
         <label className='wide'>HTTP/HTTPS 工作台地址<input type='url' value={editing.workbench_url} placeholder='http://ac.zjugis.com:3301/' onChange={event => setEditing({ ...editing, workbench_url: event.target.value })} /></label>
         <label>副标题<input value={editing.subtitle} onChange={event => setEditing({ ...editing, subtitle: event.target.value })} /></label>
         <label className='wide'>专家主图标（卡片和介绍弹窗共用）<span className='expert-web-icon-editor'><input type='file' accept='image/png,image/jpeg,image/webp,image/gif' onChange={uploadIcon} />{editing.icon?.startsWith('data:image/') && <img className='expert-web-icon-preview' src={editing.icon} alt='专家图标预览' />}</span><small>上传 PNG、JPEG、WebP 或 GIF；保存后桌面端自动同步。</small></label>

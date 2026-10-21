@@ -20,7 +20,7 @@ let container, root;
 const record = { id: 'a'.repeat(32), platform: 'windows-x86_64', version: '1.2.0', size: 1048576, notes: '更新说明' };
 function choose(trigger, value) {
   act(() => trigger.click());
-  act(() => trigger.closest('.zjugis-select').querySelector(`[role="option"][value="${value}"]`).click());
+  act(() => document.getElementById(trigger.getAttribute('aria-controls')).querySelector(`[role="option"][value="${value}"]`).click());
 }
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -53,7 +53,7 @@ test('styled dropdown supports keyboard navigation, closes on Escape and respect
   choose(system, 'windows');
   const architecture = container.querySelector('button[aria-label="架构"]');
   act(() => architecture.click());
-  const arm = architecture.closest('.zjugis-select').querySelector('[role="option"][value="aarch64"]');
+  const arm = document.getElementById(architecture.getAttribute('aria-controls')).querySelector('[role="option"][value="aarch64"]');
   expect(arm.disabled).toBe(true);
   act(() => arm.click());
   expect(architecture.value).toBe('x86_64');

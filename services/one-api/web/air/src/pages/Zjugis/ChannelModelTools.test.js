@@ -36,7 +36,12 @@ test('channel filters include multi-source models and distinguish unbound defini
 test('actual model page filters sources and tests only the selected channel', async () => {
   await act(async () => root.render(<ModelConfigPage />));
   await click('模型配置');
+  const heading = container.querySelector('.channel-model-heading');
+  expect(heading.querySelector('h2').textContent).toBe('模型定义');
+  expect(heading.querySelector('select[aria-label="筛选来源渠道"]').value).toBe('all');
+  expect(heading.querySelector('.channel-model-count').textContent).toBe('共 2 个模型');
   await changeSelect(container.querySelector('select[aria-label="筛选来源渠道"]'), '2');
+  expect(heading.querySelector('.channel-model-count').textContent).toBe('共 1 个模型');
   const table = container.querySelector('.preview-surface tbody');
   expect(table.textContent).toContain('渠道 b');
   expect(table.textContent).not.toContain('渠道 a');
