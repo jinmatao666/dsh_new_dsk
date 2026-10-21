@@ -9,9 +9,9 @@ import (
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/common/random"
+	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"os"
@@ -149,7 +149,7 @@ func openSQLite(primary bool) (*gorm.DB, error) {
 	if primary {
 		common.UsingSQLite = true
 	}
-	dsn := fmt.Sprintf("%s?_busy_timeout=%d", common.SQLitePath, common.SQLiteBusyTimeout)
+	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(%d)", common.SQLitePath, common.SQLiteBusyTimeout)
 	return gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
 	})
@@ -328,6 +328,9 @@ func migrateDB() error {
 		return err
 	}
 	if err = DB.AutoMigrate(&OrgDepartment{}); err != nil {
+		return err
+	}
+	if err = DB.AutoMigrate(&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeConversation{}, &KnowledgeDocumentNote{}, &KnowledgeDocumentPath{}); err != nil {
 		return err
 	}
 	if err = DB.AutoMigrate(&OrgMemberLimit{}); err != nil {

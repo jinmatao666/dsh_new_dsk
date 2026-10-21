@@ -27,6 +27,7 @@ Each package owns its configuration and behavior.
 | Package | Contribution |
 |---|---|
 | [oneapi-auth](oneapi-auth/README.md) | Sign-in, managed models, and administration-service access |
+| [knowledge-base](knowledge-base/README.md) | Authorized RAGFlow datasets, documents, and knowledge conversations |
 | [product-ui](product-ui/README.md) | Branding, file import, and artifact presentation |
 | [skill-marketplace](skill-marketplace/README.md) | Skill catalogs and independent expert websites |
 | [skillhub](skillhub/README.md) | External skill discovery and installation |

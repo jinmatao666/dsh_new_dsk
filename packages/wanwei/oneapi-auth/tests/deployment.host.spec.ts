@@ -20,9 +20,13 @@ it('accepts explicit administrator denial, allowlists public plugins and rejects
 })
 
 it('keeps the two environments independent and rejects incomplete or non-boolean flags', () => {
-  const features = { internet: { automations: false, connectors: false }, intranet: { automations: true, connectors: true } }
+  const features = {
+    internet: { automations: false, connectors: false, knowledgeBases: true },
+    intranet: { automations: true, connectors: true, knowledgeBases: false },
+  }
   expect(resolveDeploymentFeatures(features)).toEqual(features)
-  for (const value of [null, {}, { ...features, intranet: null }, { ...features, internet: { automations: 'false', connectors: true } }]) {
+  for (const value of [null, {}, { ...features, intranet: null },
+    { ...features, internet: { automations: 'false', connectors: true, knowledgeBases: true } }]) {
     expect(() => resolveDeploymentFeatures(value)).toThrow('后台功能设置无效')
   }
 })

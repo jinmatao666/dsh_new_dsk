@@ -72,13 +72,19 @@ it('boots the intranet policy from cordis.yml and exposes feedback in prompt and
       ]
     `)
     await ctx.wanweiNetworkPolicy.setDeployment({ network: 'intranet', operator: '', phone: '',
-      features: { internet: { automations: true, connectors: true }, intranet: { automations: true, connectors: false } },
+      features: {
+        internet: { automations: true, connectors: true, knowledgeBases: true },
+        intranet: { automations: true, connectors: false, knowledgeBases: true },
+      },
       plugins: { browserAssistant: false }, resources: { source: 'offline', proxyUrl: '', autoDetect: false, probeUrls: [] } })
     expect(renderPrompt(await ctx.systemPrompt.assemble())).toMatchSnapshot('offline resource source')
     expect(process.env.PIP_NO_INDEX).toBe('1')
     expect(process.env.PIP_FIND_LINKS).toBe('http://server.lan/api/desktop-resources/wheels/')
     await ctx.wanweiNetworkPolicy.setDeployment({ network: 'intranet', operator: '', phone: '',
-      features: { internet: { automations: true, connectors: true }, intranet: { automations: true, connectors: false } },
+      features: {
+        internet: { automations: true, connectors: true, knowledgeBases: true },
+        intranet: { automations: true, connectors: false, knowledgeBases: true },
+      },
       plugins: { browserAssistant: false },
       resources: { source: 'proxy', transport: 'tunnel', proxyUrl: '', autoDetect: false, probeUrls: [] } })
     const tunneled = await ctx.tools.execute({ name: 'pwsh', callId: ToolCallId('managed-tunnel'),

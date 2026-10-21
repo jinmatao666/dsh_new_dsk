@@ -6,11 +6,11 @@ English | [中文](2026-10-10-environment-feature-visibility.zh.md)
 
 ## Problem
 
-Administrators need different automation and connector entry visibility in Internet and intranet deployments. One global switch or a fixed intranet block cannot represent an intranet-only connector deployment.
+Administrators need different automation, connector and knowledge-base entry visibility in Internet and intranet deployments. One global switch or a fixed intranet block cannot represent deployment-specific availability.
 
 ## Decision
 
-System Settings stores four independent booleans in SystemDeploymentSettings.features, keyed by environment and entry. Existing records without features resolve to automation enabled in both environments and connectors enabled only on Internet. Explicit incomplete or non-boolean settings are rejected. The public desktop-config response allowlists both environment rows and contains no private configuration.
+System Settings stores six independent booleans in SystemDeploymentSettings.features, keyed by environment and entry. Existing records without features resolve to automation and knowledge bases enabled in both environments and connectors enabled only on Internet. Explicit incomplete or non-boolean settings are rejected. The public desktop-config response allowlists both environment rows and contains no private configuration.
 
 The authentication plugin reads these settings during startup and login refresh. Each independent business plugin supplies its own visibility observable to feature-panels. Hidden actions render no placeholder and close their open overlay. The existing sidebar keeps Settings anchored at the bottom, allowing the remaining actions to move downward without CSS changes. Enabling an intranet connector does not override outbound network restrictions or create a real connector integration.
 

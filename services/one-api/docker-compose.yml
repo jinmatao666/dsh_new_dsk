@@ -12,6 +12,8 @@ services:
       SQL_DSN: ${SQL_DSN:?SQL_DSN is required}
       ACCOUNT_SQL_DSN: ${ACCOUNT_SQL_DSN:-}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      RAGFLOW_BASE_URL: ${RAGFLOW_BASE_URL:-}
+      RAGFLOW_API_KEY: ${RAGFLOW_API_KEY:-}
       TZ: Asia/Shanghai
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://tauri.localhost,tauri://localhost}
     volumes:

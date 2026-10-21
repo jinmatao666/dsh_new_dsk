@@ -1,2 +1,29 @@
 locale:
   preference: zh-CN
+llm-pi-ai:
+  providers:
+    dsh-server:
+      displayName: Model Server
+      apiKeyEnv: DSH_ONEAPI_TOKEN
+      api: openai-completions
+      baseURL: http://127.0.0.1:3000/v1
+      models:
+        - id: local-test
+          name: 本地测试模型
+          input:
+            - text
+      defaultInput:
+        - text
+      compat:
+        supportsStore: false
+        supportsDeveloperRole: false
+        supportsReasoningEffort: false
+        supportsUsageInStreaming: true
+        maxTokensField: max_tokens
+        supportsStrictMode: false
+        thinkingFormat: qwen-chat-template
+        chatTemplateKwargs:
+          enable_thinking: false
+agent-default-model:
+  provider: dsh-server
+  model: local-test

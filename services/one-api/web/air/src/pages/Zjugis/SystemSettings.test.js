@@ -39,6 +39,7 @@ test('plugin administrator switch saves independently and cancellation restores 
   expect(value.network).toBe('internet');
   expect(value.operator).toBe('张运维');
   expect(value.features.internet.connectors).toBe(true);
+  expect(value.features.internet.knowledgeBases).toBe(true);
 });
 
 test('non-root administrator cannot modify plugin settings', async () => {
@@ -57,7 +58,7 @@ test('network selection saves one deployment option without changing account dat
   const saved = JSON.parse(API.put.mock.calls[0][1].value);
   expect(saved.network).toBe('intranet');
   expect(saved.operator).toBe('张运维');
-  expect(saved.features).toEqual({ internet: { automations: true, connectors: true }, intranet: { automations: true, connectors: false } });
+  expect(saved.features).toEqual({ internet: { automations: true, connectors: true, knowledgeBases: true }, intranet: { automations: true, connectors: false, knowledgeBases: true } });
   expect(showSuccess).toHaveBeenCalledWith('设置已保存');
   expect(container.textContent).not.toContain('设置已保存');
   expect(container.textContent).not.toContain('所有修改已保存');
@@ -84,8 +85,9 @@ test('feature switches save independently for internet and intranet', async () =
   const toggle = label => container.querySelector(`input[aria-label="${label}"]`);
   act(() => toggle('互联网自动化').click());
   act(() => toggle('纯内网连接器').click());
+  act(() => toggle('互联网知识库').click());
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-  expect(JSON.parse(API.put.mock.calls[0][1].value).features).toEqual({ internet: { automations: false, connectors: true }, intranet: { automations: true, connectors: true } });
+  expect(JSON.parse(API.put.mock.calls[0][1].value).features).toEqual({ internet: { automations: false, connectors: true, knowledgeBases: false }, intranet: { automations: true, connectors: true, knowledgeBases: true } });
   expect(toggle('纯内网自动化').checked).toBe(true);
 });
 

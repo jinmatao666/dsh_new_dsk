@@ -65,19 +65,25 @@ it('refreshes server-owned mode, synchronizes native policy and retains the last
 })
 
 it('publishes independent visibility flags only after a successful deployment refresh', async () => {
-  const features = { internet: { automations: false, connectors: false }, intranet: { automations: true, connectors: true } }
+  const features = {
+    internet: { automations: false, connectors: false, knowledgeBases: true },
+    intranet: { automations: true, connectors: true, knowledgeBases: false },
+  }
   let mode = 'internet'
   const call = vi.fn(async () => ({ ok: true, value: { mode, internalOrigins: [], features } }))
   const controller = new NetworkController({ rpc: { call } } as unknown as ConnectionHandle)
   const connectors = controller.visibility('connectors')
   const automations = controller.visibility('automations')
+  const knowledgeBases = controller.visibility('knowledgeBases')
   await controller.refresh()
   expect(connectors.getSnapshot()).toBe(false)
   expect(automations.getSnapshot()).toBe(false)
+  expect(knowledgeBases.getSnapshot()).toBe(true)
   mode = 'intranet'
   await controller.refresh()
   expect(connectors.getSnapshot()).toBe(true)
   expect(automations.getSnapshot()).toBe(true)
+  expect(knowledgeBases.getSnapshot()).toBe(false)
   call.mockRejectedValueOnce(new Error('offline'))
   await expect(controller.refresh()).rejects.toThrow('offline')
   expect(connectors.getSnapshot()).toBe(true)

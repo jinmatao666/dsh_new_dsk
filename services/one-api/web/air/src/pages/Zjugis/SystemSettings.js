@@ -4,8 +4,8 @@ import './SystemSettings.css';
 import ResourceSettings, { defaultResources, normalizeResources } from './ResourceSettings';
 
 const defaults = { network: 'internet', edition: 'operations', operator: '', phone: '', features: {
-  internet: { automations: true, connectors: true },
-  intranet: { automations: true, connectors: false },
+  internet: { automations: true, connectors: true, knowledgeBases: true },
+  intranet: { automations: true, connectors: false, knowledgeBases: true },
 }, plugins: { browserAssistant: true } };
 const tabs = [['account', '账户设置'], ['security', '安全设置'], ['network', '网络设置'], ['edition', '版本类型'], ['features', '功能设置'], ['operations', '运维设置'], ['plugins', '插件设置']];
 const descriptions = {
@@ -70,7 +70,7 @@ export default function SystemSettings() {
       if (typeof value.plugins?.browserAssistant !== 'boolean') throw new Error('插件设置无效，请联系管理员检查配置');
       if (!['government', 'operations'].includes(value.edition)) throw new Error('版本类型无效，请联系管理员检查配置');
       for (const mode of ['internet', 'intranet']) {
-        for (const feature of ['automations', 'connectors']) {
+        for (const feature of ['automations', 'connectors', 'knowledgeBases']) {
           if (typeof value.features?.[mode]?.[feature] !== 'boolean') throw new Error('功能设置无效，请联系管理员检查配置');
         }
       }
@@ -128,7 +128,7 @@ export default function SystemSettings() {
                 <input type='radio' name='edition' value={key} checked={settings.edition === key} onChange={() => change('edition', key)} disabled={saving} /><span><strong>{label}</strong><small>{hint}</small></span>
               </label>)}
             </fieldset> : active === 'features' ? <table className='settings-features'><thead><tr><th scope='col'>功能</th><th scope='col'>互联网环境</th><th scope='col'>纯内网环境</th></tr></thead><tbody>
-              {[['automations', '自动化'], ['connectors', '连接器']].map(([feature, label]) => <tr key={feature}><th scope='row'>{label}</th>
+              {[['automations', '自动化'], ['connectors', '连接器'], ['knowledgeBases', '知识库']].map(([feature, label]) => <tr key={feature}><th scope='row'>{label}</th>
                 {['internet', 'intranet'].map(mode => <td key={mode}><label><input type='checkbox' role='switch' aria-label={`${mode === 'internet' ? '互联网' : '纯内网'}${label}`} checked={settings.features[mode][feature]} disabled={saving} onChange={event => change('features', { ...settings.features, [mode]: { ...settings.features[mode], [feature]: event.target.checked } })} /><span>{settings.features[mode][feature] ? '开启' : '关闭'}</span></label></td>)}
               </tr>)}
             </tbody></table> : active === 'network' ? <fieldset className='settings-network'><legend>网络类型</legend>

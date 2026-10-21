@@ -28,6 +28,7 @@ import ParvisDashboard from './pages/ParvisDashboard';
 import Skill from './pages/Skill';
 import SkillTest from './pages/SkillTest';
 import Expert from './pages/Expert';
+import KnowledgeLibrary from './pages/Knowledge';
 import Usage from './pages/Usage';
 import Config from './pages/Config';
 import ModelConfigPage from './pages/ModelConfig';
@@ -384,6 +385,10 @@ function App() {
             }
           />
           <Route path="/skill/experts" element={<Navigate to="/expert" replace />} />
+          <Route
+            path="/knowledge"
+            element={<PrivateRoute><KnowledgeLibrary /></PrivateRoute>}
+          />
           <Route
             path="/skill/reviews"
             element={

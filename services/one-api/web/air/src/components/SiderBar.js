@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { BarChart3, ClipboardList, Cpu, Home, Package, PanelLeftClose, PanelLeftOpen, Settings, Sparkles, Users, UsersRound } from 'lucide-react';
+import { BarChart3, ClipboardList, Cpu, Home, Library, Package, PanelLeftClose, PanelLeftOpen, Settings, Sparkles, Users, UsersRound } from 'lucide-react';
 import '../index.css';
 import { API, hasPermission, isRoot } from '../helpers';
 
@@ -9,6 +9,7 @@ const items = [
   { label: '模型配置', path: '/config/model', Icon: Cpu },
   { label: '技能管理', path: '/skill', Icon: Sparkles },
   { label: '专家管理', path: '/expert', Icon: UsersRound },
+  { label: '知识库', path: '/knowledge', Icon: Library },
   { label: '用户权限', path: '/user', Icon: Users },
   { label: '使用统计', path: '/usage', Icon: BarChart3 },
   { label: '模型日志', path: '/log', Icon: ClipboardList },

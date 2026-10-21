@@ -78,15 +78,15 @@ func TestDesktopPluginSettings(t *testing.T) {
 }
 
 func TestDesktopFeatureSettings(t *testing.T) {
-	settings, err := parseDesktopDeploymentSettings(`{"network":"internet","features":{"internet":{"automations":false,"connectors":false},"intranet":{"automations":true,"connectors":true},"secret":{"connectors":true}}}`)
-	if err != nil || len(settings.Features) != 2 || settings.Features["internet"].Connectors || !settings.Features["intranet"].Connectors {
+	settings, err := parseDesktopDeploymentSettings(`{"network":"internet","features":{"internet":{"automations":false,"connectors":false,"knowledgeBases":true},"intranet":{"automations":true,"connectors":true,"knowledgeBases":false},"secret":{"connectors":true}}}`)
+	if err != nil || len(settings.Features) != 2 || settings.Features["internet"].Connectors || !settings.Features["intranet"].Connectors || !settings.Features["internet"].KnowledgeBases {
 		t.Fatalf("settings: %+v %v", settings, err)
 	}
 	legacy, err := parseDesktopDeploymentSettings(`{"network":"intranet"}`)
-	if err != nil || !legacy.Features["internet"].Connectors || legacy.Features["intranet"].Connectors || !legacy.Features["intranet"].Automations {
+	if err != nil || !legacy.Features["internet"].Connectors || legacy.Features["intranet"].Connectors || !legacy.Features["intranet"].Automations || !legacy.Features["intranet"].KnowledgeBases {
 		t.Fatalf("defaults: %+v %v", legacy, err)
 	}
-	for _, raw := range []string{`null`, `{}`, `{"network":null}`, `{"network":"internet","operator":null}`, `{"network":"internet","features":null}`, `{"network":"internet","features":{}}`, `{"network":"internet","features":{"internet":{"automations":"false","connectors":true}}}`} {
+	for _, raw := range []string{`null`, `{}`, `{"network":null}`, `{"network":"internet","operator":null}`, `{"network":"internet","features":null}`, `{"network":"internet","features":{}}`, `{"network":"internet","features":{"internet":{"automations":"false","connectors":true,"knowledgeBases":true}}}`} {
 		if _, err := parseDesktopDeploymentSettings(raw); err == nil {
 			t.Fatalf("accepted %s", raw)
 		}

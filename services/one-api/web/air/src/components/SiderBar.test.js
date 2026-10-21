@@ -21,6 +21,7 @@ test('release navigation follows permission and highlights the active page', () 
     act(render);
     const link = container.querySelector('a[href="/operation/version-release"]');
     expect(link.textContent).toBe('版本发布');
+    expect(container.querySelector('a[href="/knowledge"]').textContent).toBe('知识库');
     expect(link.classList.contains('active')).toBe(true);
   } finally {
     act(() => root.unmount());

@@ -22,6 +22,7 @@ import { installNetworkPolicy } from './network.ts'
 import { fetchDeploymentSettings } from './deployment.ts'
 import { installFinalDeliverables } from './final-deliverables.ts'
 import { installDesktopLifecycle } from './desktop-lifecycle.ts'
+import { KnowledgeBaseApi } from './knowledge-base.ts'
 export type { NetworkPolicy } from './network.ts'
 export type {} from './desktop-lifecycle.ts'
 
@@ -573,6 +574,16 @@ export function apply(ctx: Context, config: Config): void {
 
   const connection = ctx.get('connection')
   if (connection === undefined) throw new Error('桌面认证需要 Connection 服务')
+  const knowledgeBases = new KnowledgeBaseApi(baseURL, async () => (await ctx.credentials.resolve(ref))?.value)
+  const removeKnowledgeBases = connection.rpc.handle('/desktop-knowledge-base',
+    (endpoint, payload, signal) => knowledgeBases.call(endpoint, payload, signal)
+      .then(value => ({ ok: true as const, value }))
+      .catch(error => internal(error instanceof Error ? error.message : String(error))))
+  const removeKnowledgeChat = connection.fetch.register({
+    path: '/api/desktop-knowledge-chat',
+    methods: ['POST'],
+    fetch: request => knowledgeBases.streamChat(request),
+  })
   const remove = connection.rpc.handle('/desktop-auth', async (endpoint, payload, signal) => {
     const serviceSignal = () => AbortSignal.any([signal, AbortSignal.timeout(config.serviceTimeoutMs ?? 15000)])
     if (endpoint === 'network-get' || endpoint === 'deployment-get') {
@@ -673,5 +684,5 @@ export function apply(ctx: Context, config: Config): void {
     if (endpoint === 'report-question') return reportQuestion(payload)
     return internal(`未知认证操作：${endpoint}`)
   })
-  ctx.effect(() => () => { void remove() }, 'ui-oneapi-auth: loopback RPC')
+  ctx.effect(() => () => { void remove(); void removeKnowledgeBases(); void removeKnowledgeChat() }, 'ui-oneapi-auth: loopback RPC')
 }

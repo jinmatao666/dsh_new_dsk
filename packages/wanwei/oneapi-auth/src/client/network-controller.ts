@@ -23,7 +23,7 @@ export class NetworkController {
    * @param feature - Entry owned by the consuming plugin.
    * @returns Boolean observable sharing the committed deployment refresh.
    */
-  visibility(feature: 'automations' | 'connectors'): HostObservable<boolean> {
+  visibility(feature: 'automations' | 'connectors' | 'knowledgeBases'): HostObservable<boolean> {
     return { getSnapshot: () => this.features[this.snapshot.mode][feature], subscribe: this.subscribe }
   }
   constructor(private readonly connection: ConnectionHandle) {}
