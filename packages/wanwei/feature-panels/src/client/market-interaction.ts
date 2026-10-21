@@ -7,6 +7,14 @@ import { isNoticeTarget } from './Toast.tsx'
 export function isMarketInteraction(target: Element): boolean {
   // AppFrame's column handles change geometry, not the selected feature or session.
   if (target.closest('[data-side="sidebar"], [data-side="details"]') !== null) return true
+  // Knowledge-base preview, action menu, and transfer dialogs portal above the overlay.
+  if (target.closest([
+    '.dsh-knowledge-viewer',
+    '.dsh-knowledge-viewer-shell',
+    '.dsh-knowledge-context-menu',
+    '.dsh-knowledge-modal-backdrop',
+    '.dsh-knowledge-transfer',
+  ].join(', ')) !== null) return true
   if (target.closest('.dsh-skill-market-panel, .dsh-skill-market-action') !== null || isNoticeTarget(target)) return true
   const owner = target.closest<HTMLElement>('[data-dsh-select-owner]')?.dataset.dshSelectOwner
   return Boolean(owner && document.getElementById(owner)?.closest('.dsh-skill-market-panel'))

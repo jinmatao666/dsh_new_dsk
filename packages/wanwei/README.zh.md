@@ -27,6 +27,7 @@ kind: "package-group"
 | 包 | 提供的能力 |
 |---|---|
 | [oneapi-auth](oneapi-auth/README.zh.md) | 登录、受管模型和管理服务访问 |
+| [knowledge-base](knowledge-base/README.zh.md) | 已授权的 RAGFlow 数据集、文档和知识对话 |
 | [product-ui](product-ui/README.zh.md) | 品牌、文件导入和成果呈现 |
 | [skill-marketplace](skill-marketplace/README.zh.md) | 技能目录和独立专家网站 |
 | [skillhub](skillhub/README.zh.md) | 外部技能发现和安装 |

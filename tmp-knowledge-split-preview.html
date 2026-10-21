@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>knowledge split preview</title>
+<style>
+  :root {
+    --dsw-alias-bg-base: #fff;
+    --dsw-alias-border-l1: rgba(0, 0, 0, 0.04);
+    --dsw-alias-border-l2: rgba(0, 0, 0, 0.1);
+    --dsw-alias-border-l2-darkmode-thin: rgba(0, 0, 0, 0.1);
+    --dsw-alias-border-l3: rgba(0, 0, 0, 0.12);
+    --dsw-alias-button-floating-fill: #fff;
+    --dsw-alias-button-floating-hover: #f3f4f6;
+    --dsw-alias-label-primary: #1f2a37;
+    --dsw-alias-label-secondary: #667085;
+    --dsw-specific-sidebar-fill: #f7f8fa;
+    --ds-transition-duration-slow: 160ms;
+    --ds-ease-in-out: ease;
+  }
+  body { margin: 0; background: #e8ebf0; font: 14px/1.4 "Segoe UI", sans-serif; }
+  .stage { display: grid; gap: 20px; padding: 20px; }
+  h1 { margin: 0 0 8px; font-size: 13px; color: #667085; }
+  .dsh-knowledge { min-height: 0; height: 360px; }
+  .fake-nav, .fake-content, .fake-chat { padding: 16px; }
+  .fake-nav { background: var(--dsw-specific-sidebar-fill); border-right: 1px solid var(--dsw-alias-border-l1); }
+  .fake-chat { display: flex; flex-direction: column; }
+  .fake-chat .box { margin-top: auto; height: 96px; border: 1px solid #8d9aab; border-radius: 16px; }
+  .force .dsh-knowledge-split::after { opacity: 1; background: var(--dsw-alias-button-floating-hover); border-color: var(--dsw-alias-border-l3); }
+</style>
+<link rel="stylesheet" href="./packages/wanwei/knowledge-base/src/client/page.css" />
+</head>
+<body>
+  <div class="stage">
+    <section>
+      <h1>resting</h1>
+      <div class="dsh-knowledge" style="--dsh-knowledge-content-width: 280px">
+        <aside class="fake-nav">个人知识库</aside>
+        <main class="fake-content">内容</main>
+        <div class="dsh-knowledge-split" role="separator"></div>
+        <section class="fake-chat">基于知识库问答<div class="box"></div></section>
+      </div>
+    </section>
+    <section class="force">
+      <h1>hover</h1>
+      <div class="dsh-knowledge" style="--dsh-knowledge-content-width: 280px">
+        <aside class="fake-nav">个人知识库</aside>
+        <main class="fake-content">内容</main>
+        <div class="dsh-knowledge-split" role="separator"></div>
+        <section class="fake-chat">基于知识库问答<div class="box"></div></section>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

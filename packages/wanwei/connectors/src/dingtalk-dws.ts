@@ -198,6 +198,38 @@ function run(
   })
 }
 
+/**
+ * Run browser login without output pipes that the system browser can inherit.
+ * Process exit completes this runner without waiting for descendant handles;
+ * a subsequent status check still decides whether authorization succeeded.
+ */
+function runBrowserLogin(
+  cmd: string,
+  timeoutMs: number,
+  onChild: (child: ChildProcess) => void,
+): Promise<{ code: number | null }> {
+  const shell = process.platform === 'win32' && /\.(cmd|bat|ps1)$/i.test(cmd)
+  return new Promise((resolve) => {
+    const child = spawn(cmd, ['auth', 'login'], {
+      stdio: 'ignore',
+      shell,
+      windowsHide: true,
+      env: process.env,
+    })
+    onChild(child)
+    const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs)
+    let settled = false
+    const settle = (code: number | null): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve({ code })
+    }
+    child.once('error', () => { settle(null) })
+    child.once('exit', (code) => { settle(code) })
+  })
+}
+
 function dwsBinaryFileName(platform: NodeJS.Platform = process.platform): string {
   return platform === 'win32' ? 'dws.exe' : 'dws'
 }
@@ -506,6 +538,12 @@ async function readDingTalkReadonlyAuthed(dws: string): Promise<boolean> {
   return parseDwsAuthenticated(auth.stdout)
 }
 
+/** Read the settled login state after the browser login process has exited. */
+async function readDingTalkSettledAuthed(dws: string): Promise<boolean> {
+  const auth = await run(dws, ['auth', 'status', '--format', 'json'], 30_000)
+  return parseDwsAuthenticated(auth.stdout)
+}
+
 /** End the waiting state for this login generation. A newer「解绑」is left alone. */
 function releaseDingTalkFlight(epoch: number): void {
   if (epoch !== loginEpoch) return
@@ -514,7 +552,7 @@ function releaseDingTalkFlight(epoch: number): void {
 
 /**
  * Store a connected snapshot and end the waiting state.
- * Status probes stay held until `dws auth login` exits, so a locking status is not started beside it.
+ * The connected cache serves status while `dws auth login` finishes in the background.
  * @param dshHome - product DSH home.
  * @param epoch - login generation captured when the flight started.
  * @returns false when a newer unbind wins or the skill copy fails.
@@ -540,18 +578,14 @@ async function publishDingTalkAuthorized(dshHome: string, epoch: number): Promis
     status: composeStatus(dshHome, true, null, true),
   }
   releaseDingTalkFlight(epoch)
-  // Browser processes can inherit the hidden release sidecar's stdout/stderr
-  // handles. Stop the completed login so its queued task cannot wait forever
-  // for those inherited pipes to close and block unbind or the next login.
-  const child = loginChild
-  if (child !== null && child.exitCode === null) child.kill('SIGKILL')
+  console.info('[wanwei-connectors:dingtalk] authorization published')
   return true
 }
 
 /**
  * Copy `dws-cli` when a lock-free status shows the browser login has saved tokens.
- * The WebView request that started login has already returned. `dws auth login` may
- * still be running; that process holds the auth lock, so success is not its exit.
+ * The WebView request that started login has already returned. Readonly status can
+ * publish early; process exit followed by normal status is the authoritative path.
  * @param dshHome - product DSH home.
  * @param dws - absolute `dws` binary.
  * @param epoch - login generation; a newer「解绑」makes this a no-op.
@@ -559,25 +593,26 @@ async function publishDingTalkAuthorized(dshHome: string, epoch: number): Promis
 async function finishDingTalkLogin(dshHome: string, dws: string, epoch: number): Promise<void> {
   if (epoch !== loginEpoch) return
   if (await readDingTalkReadonlyAuthed(dws)) {
+    console.info('[wanwei-connectors:dingtalk] saved authorization found before login')
     await publishDingTalkAuthorized(dshHome, epoch)
     return
   }
+  console.info('[wanwei-connectors:dingtalk] browser login starting')
   if (epoch !== loginEpoch) return
-  let published = false
   let stopWatch = false
-  const watch = (async () => {
+  const watch = (async (): Promise<boolean> => {
     while (!stopWatch && epoch === loginEpoch) {
       await delay(LOGIN_POLL_MS)
-      if (stopWatch || epoch !== loginEpoch) return
+      if (stopWatch || epoch !== loginEpoch) return false
       if (!(await readDingTalkReadonlyAuthed(dws))) continue
-      if (stopWatch || epoch !== loginEpoch) return
-      published = await publishDingTalkAuthorized(dshHome, epoch)
-      return
+      if (stopWatch || epoch !== loginEpoch) return false
+      console.info('[wanwei-connectors:dingtalk] saved authorization detected')
+      return publishDingTalkAuthorized(dshHome, epoch)
     }
+    return false
   })()
-  const result = await run(
+  const login = runBrowserLogin(
     dws,
-    ['auth', 'login'],
     10 * 60_000,
     (child) => {
       loginChild = child
@@ -585,12 +620,22 @@ async function finishDingTalkLogin(dshHome: string, dws: string, epoch: number):
         if (loginChild === child) loginChild = null
       })
     },
-    true,
   )
+  const first = await Promise.race([
+    watch.then(() => ({ kind: 'watch' as const })),
+    login.then(result => ({ kind: 'login' as const, result })),
+  ])
+  if (first.kind === 'watch') {
+    // The watcher published auth, recorded an install failure, or observed cancel.
+    // None requires terminating DWS while it finalizes login.
+    return
+  }
+  const result = first.result
+  console.info(`[wanwei-connectors:dingtalk] browser login exited (${String(result.code)})`)
   stopWatch = true
-  await watch
+  const published = await watch
   if (epoch !== loginEpoch || published || loginFlight === null) return
-  if (result.code === 0 && await readDingTalkReadonlyAuthed(dws)) {
+  if (result.code === 0 && await readDingTalkSettledAuthed(dws)) {
     await publishDingTalkAuthorized(dshHome, epoch)
     return
   }
@@ -598,8 +643,7 @@ async function finishDingTalkLogin(dshHome: string, dws: string, epoch: number):
   if (result.code === null) {
     loginError = 'dws auth login 未能启动'
   } else if (result.code !== 0) {
-    const detail = (result.stderr || result.stdout).trim().slice(0, 400)
-    loginError = detail === '' ? 'dws auth login 未成功完成' : detail
+    loginError = 'dws auth login 未成功完成'
   } else {
     loginError = 'dws auth login 已退出，但本地登录状态尚未生效'
   }
@@ -611,12 +655,14 @@ async function finishDingTalkLogin(dshHome: string, dws: string, epoch: number):
  * Start interactive personal login. The CLI owns QR / device / PC-session reuse.
  * The call queues `dws auth login` and returns before that process starts, so a
  * later「连接」does not wait on a background `dws auth logout`. `authorizing`
- * clears when `dws auth status --readonly` reports a saved login and the skill is installed.
+ * clears when readonly or settled status reports a saved login and the skill is installed.
  * @param dshHome - product DSH home.
  * @returns current status. `authorizing` stays true until that readonly snapshot succeeds or the login fails.
  */
 export async function runDingTalkDwsLogin(dshHome: string): Promise<DingTalkDwsStatus> {
-  if (loginFlight !== null) return buildDingTalkDwsStatus(dshHome)
+  // Readonly status may publish before DWS exits. Keep that child as the
+  // re-entrancy guard so a second RPC cannot start another browser login.
+  if (loginFlight !== null || loginChild !== null) return buildDingTalkDwsStatus(dshHome)
   loginError = null
   const dws = resolveDwsCommand()
   if (dws === undefined) {
@@ -627,6 +673,7 @@ export async function runDingTalkDwsLogin(dshHome: string): Promise<DingTalkDwsS
   // behind logout and the WebView reports that wait as a lost local connection.
   const epoch = loginEpoch
   const release = holdStatusProbes()
+  console.info('[wanwei-connectors:dingtalk] authorization queued')
   const flight = enqueueCli(async () => {
     try {
       await finishDingTalkLogin(dshHome, dws, epoch)
@@ -655,11 +702,13 @@ export async function disconnectDingTalkDws(dshHome: string): Promise<DingTalkDw
   if (dws !== undefined) {
     const epoch = loginEpoch
     const release = holdStatusProbes()
+    console.info('[wanwei-connectors:dingtalk] disconnect queued')
     void enqueueCli(async () => {
       try {
         if (epoch !== loginEpoch) return
         // `-y` skips interactive confirm so Host unbind actually clears tokens.
-        await run(dws, ['auth', 'logout', '-y'], 30_000)
+        const logout = await run(dws, ['auth', 'logout', '-y'], 30_000)
+        console.info(`[wanwei-connectors:dingtalk] logout exited (${String(logout.code)})`)
         if (epoch !== loginEpoch) return
         invalidateDingTalkDwsStatusCache()
         const still = await buildDingTalkDwsStatus(dshHome, { fresh: true })

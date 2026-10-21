@@ -59,6 +59,8 @@
       name: '@deepseek-ai/dsh-wanwei-expert-library'
     - id: wanwei-connectors
       name: '@deepseek-ai/dsh-wanwei-connectors'
+    - id: wanwei-knowledge-base
+      name: '@deepseek-ai/dsh-wanwei-knowledge-base'
     - id: wanwei-automations
       name: '@deepseek-ai/dsh-wanwei-automations'
     - id: wanwei-skill-marketplace

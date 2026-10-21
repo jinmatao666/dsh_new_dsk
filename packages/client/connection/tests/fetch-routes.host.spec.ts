@@ -36,8 +36,8 @@ describe('Connection exact Fetch routes', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ query: 'session-1' })
     expect(route).toHaveBeenCalledOnce()
-    const post = await shared.fetch(new Request('http://host/api/session.export', { method: 'POST' }))
-    expect(post.status).toBe(404)
+    const unownedPost = await shared.fetch(new Request('http://host/api/session.export', { method: 'POST' }))
+    expect(unownedPost.status).toBe(404)
 
     await dispose()
     const withdrawn = await shared.fetch(new Request('http://host/api/session.export'))

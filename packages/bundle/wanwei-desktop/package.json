@@ -49,6 +49,7 @@
     "@deepseek-ai/dsh-wanwei-skillhub": "workspace:^",
     "@deepseek-ai/dsh-wanwei-feature-panels": "workspace:^",
     "@deepseek-ai/dsh-wanwei-expert-library": "workspace:^",
+    "@deepseek-ai/dsh-wanwei-knowledge-base": "workspace:^",
     "@deepseek-ai/dsh-wanwei-connectors": "workspace:^",
     "@deepseek-ai/dsh-wanwei-automations": "workspace:^"
   },

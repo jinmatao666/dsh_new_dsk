@@ -26,7 +26,11 @@ export function resolveDeploymentPlugins(value: unknown): DeploymentPlugins {
 }
 
 /** Independent entry visibility for each deployment environment. */
-export type DeploymentFeatures = Record<NetworkEnvironment, { automations: boolean; connectors: boolean }>
+export type DeploymentFeatures = Record<NetworkEnvironment, {
+  automations: boolean
+  connectors: boolean
+  knowledgeBases: boolean
+}>
 
 /** Resolve omitted legacy settings and validate explicitly configured flags.
  * @param value - Public API feature settings.
@@ -34,16 +38,19 @@ export type DeploymentFeatures = Record<NetworkEnvironment, { automations: boole
  */
 export function resolveDeploymentFeatures(value: unknown): DeploymentFeatures {
   if (value === undefined) return {
-    internet: { automations: true, connectors: true }, intranet: { automations: true, connectors: false },
+    internet: { automations: true, connectors: true, knowledgeBases: true },
+    intranet: { automations: true, connectors: false, knowledgeBases: true },
   }
   if (typeof value !== 'object' || value === null) throw new Error('后台功能设置无效')
   const result = {} as DeploymentFeatures
   for (const mode of ['internet', 'intranet'] as const) {
     const flags: unknown = (value as Record<string, unknown>)[mode]
     if (typeof flags !== 'object' || flags === null) throw new Error('后台功能设置无效')
-    const { automations, connectors } = flags as Record<string, unknown>
-    if (typeof automations !== 'boolean' || typeof connectors !== 'boolean') throw new Error('后台功能设置无效')
-    result[mode] = { automations, connectors }
+    const { automations, connectors, knowledgeBases } = flags as Record<string, unknown>
+    if (typeof automations !== 'boolean' || typeof connectors !== 'boolean' || typeof knowledgeBases !== 'boolean') {
+      throw new Error('后台功能设置无效')
+    }
+    result[mode] = { automations, connectors, knowledgeBases }
   }
   return result
 }

@@ -10,8 +10,9 @@ import (
 )
 
 type desktopFeatureFlags struct {
-	Automations bool `json:"automations"`
-	Connectors  bool `json:"connectors"`
+	Automations   bool `json:"automations"`
+	Connectors    bool `json:"connectors"`
+	KnowledgeBases bool `json:"knowledgeBases"`
 }
 
 type desktopDeploymentSettings struct {
@@ -31,8 +32,8 @@ type desktopPluginSettings struct {
 // Existing deployment records without feature settings retain their current behavior.
 func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, error) {
 	settings := desktopDeploymentSettings{Network: "internet", Edition: "operations", Plugins: desktopPluginSettings{BrowserAssistant: true}, Features: map[string]desktopFeatureFlags{
-		"internet": {Automations: true, Connectors: true},
-		"intranet": {Automations: true, Connectors: false},
+		"internet": {Automations: true, Connectors: true, KnowledgeBases: true},
+		"intranet": {Automations: true, Connectors: false, KnowledgeBases: true},
 	}}
 	if raw == "" {
 		return settings, nil
@@ -74,7 +75,7 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 			return settings, err
 		}
 		for _, mode := range []string{"internet", "intranet"} {
-			for _, feature := range []string{"automations", "connectors"} {
+			for _, feature := range []string{"automations", "connectors", "knowledgeBases"} {
 				if _, ok := environments[mode][feature].(bool); !ok {
 					return settings, fmt.Errorf("invalid feature setting: %s.%s", mode, feature)
 				}
