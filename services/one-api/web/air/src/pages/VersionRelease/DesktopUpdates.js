@@ -9,7 +9,7 @@ const architectures = { x86_64: 'x64', aarch64: 'ARM64' };
 const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 // This page accepts Runner-produced signed bundles, never a private key or arbitrary download URL.
-export default function DesktopUpdates({ platformFamily = 'all' }) {
+export default function DesktopUpdates() {
   const [snapshot, setSnapshot] = useState({ items: [], channels: [], signing_configured: false });
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
@@ -18,6 +18,7 @@ export default function DesktopUpdates({ platformFamily = 'all' }) {
   const [version, setVersion] = useState('');
   const [uploadSystem, setUploadSystem] = useState('windows');
   const [uploadArchitecture, setUploadArchitecture] = useState('x86_64');
+  const [systemFilter, setSystemFilter] = useState('all');
   const [architectureFilter, setArchitectureFilter] = useState('all');
   const [progress, setProgress] = useState(0);
   const [action, setAction] = useState(null);
@@ -39,7 +40,7 @@ export default function DesktopUpdates({ platformFamily = 'all' }) {
     if (root) refresh(controller.signal);
     return () => { mounted.current = false; controller.abort(); };
   }, [root]);
-  useEffect(() => { setPage(1); }, [platformFamily, architectureFilter, snapshot.items]);
+  useEffect(() => { setPage(1); }, [systemFilter, architectureFilter, snapshot.items]);
   if (!root) return <p>仅系统超级管理员可以管理桌面端更新包。</p>;
   const upload = async () => {
     if (!file || busy || !stableVersion.test(version.trim())) return;
@@ -69,10 +70,10 @@ export default function DesktopUpdates({ platformFamily = 'all' }) {
     } catch (error) { if (mounted.current) showError(error.response?.data?.message || error.message); }
     finally { if (mounted.current) setBusy(false); }
   };
-  const records = snapshot.items.filter(record => (platformFamily === 'all' || record.platform.startsWith(`${platformFamily}-`)) && (architectureFilter === 'all' || record.platform.endsWith(`-${architectureFilter}`)));
+  const records = snapshot.items.filter(record => (systemFilter === 'all' || record.platform.startsWith(`${systemFilter}-`)) && (architectureFilter === 'all' || record.platform.endsWith(`-${architectureFilter}`)));
   const pageCount = Math.max(1, Math.ceil(records.length / 12));
   return <section aria-label="桌面端更新包" className="desktop-releases">
-    <div className="release-section-heading"><div><h2>上传更新包</h2><p className="settings-description">选择构建生成的 ZIP，填写说明后上传；校验通过，再确认发布。</p></div><span className={`release-key-status${snapshot.signing_configured ? ' is-ready' : ''}`}><ShieldCheck size={16} />{snapshot.signing_configured ? '签名验证已启用' : '待配置公钥'}</span></div>
+    <div className="release-section-heading"><div><h2>上传更新包</h2><p className="settings-description">下载 wanwei-update 产物，解压外层 ZIP，选择里面的发布 ZIP 上传；校验通过后再确认发布。</p></div><span className={`release-key-status${snapshot.signing_configured ? ' is-ready' : ''}`}><ShieldCheck size={16} />{snapshot.signing_configured ? '签名验证已启用' : '待配置公钥'}</span></div>
     {!snapshot.signing_configured && <p role="status">尚未配置更新公钥。请先由运维配置公钥，上传和发布保持关闭；不要在此上传私钥。</p>}
     {failure && <p role="alert" className="release-error">{failure}</p>}
     <div className="release-upload">
@@ -81,13 +82,13 @@ export default function DesktopUpdates({ platformFamily = 'all' }) {
         <label>操作系统<span className="release-select"><select aria-label="操作系统" value={uploadSystem} disabled={busy} onChange={event => { setUploadSystem(event.target.value); if (event.target.value === 'windows') setUploadArchitecture('x86_64'); }}>{Object.entries(systems).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" /></span></label>
         <label>架构<span className="release-select"><select aria-label="架构" value={uploadArchitecture} disabled={busy} onChange={event => setUploadArchitecture(event.target.value)}><option value="x86_64">x64</option><option value="aarch64" disabled={uploadSystem === 'windows'}>ARM64{uploadSystem === 'windows' ? '（暂未提供构建）' : ''}</option></select><ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" /></span><small>各架构独立发布，不会相互覆盖。</small></label>
       </div>
-      <div className="release-upload-field"><span>更新包</span><label className={`release-file${!snapshot.signing_configured ? ' is-disabled' : ''}`}><input ref={uploadInput} type="file" aria-label="单平台发布 ZIP" accept=".zip" disabled={busy || !snapshot.signing_configured} onChange={event => setFile(event.target.files?.[0] || null)} /><FileArchive size={22} strokeWidth={1.5} /><span><strong>{file ? file.name : '选择签名更新包'}</strong><small>{file ? `${(file.size / 1048576).toFixed(1)} MB，点击重新选择` : '仅支持单平台发布 ZIP，自动识别版本和平台'}</small></span></label></div>
+      <div className="release-upload-field"><span>更新包</span><label className={`release-file${!snapshot.signing_configured ? ' is-disabled' : ''}`}><input ref={uploadInput} type="file" aria-label="单平台发布 ZIP" accept=".zip" disabled={busy || !snapshot.signing_configured} onChange={event => setFile(event.target.files?.[0] || null)} /><FileArchive size={22} strokeWidth={1.5} /><span><strong>{file ? file.name : '选择签名更新包'}</strong><small>{file ? `${(file.size / 1048576).toFixed(1)} MB，点击重新选择` : '选择 wanwei-update 产物内的发布 ZIP，不要上传 wanwei-buddy 普通安装包'}</small></span></label></div>
       <div className="release-upload-notes"><label htmlFor="desktop-release-notes">更新说明</label><textarea id="desktop-release-notes" aria-label="更新说明" placeholder="填写本次更新内容，发布后向用户展示" value={notes} onChange={event => setNotes(event.target.value)} maxLength={16000} disabled={busy} rows={3} /></div>
       <div className="release-upload-actions">
       <button type="button" className="settings-primary" onClick={upload} disabled={busy || !file || !stableVersion.test(version.trim()) || !snapshot.signing_configured}>上传并校验</button><span role={busy ? 'status' : undefined}>{busy ? action ? '正在处理发布状态…' : progress < 100 ? `上传中 ${progress}%` : '正在校验，请勿重复上传' : '上传时核对版本、系统和架构，校验通过后才能发布。'}</span>
       </div>
     </div>
-    <div className="release-list-heading"><div><h2>发布记录</h2><span>共 {records.length} 个更新包</span></div><div className="release-list-actions"><span className="release-select"><select aria-label="筛选架构" value={architectureFilter} onChange={event => setArchitectureFilter(event.target.value)}><option value="all">全部架构</option><option value="x86_64">x64</option><option value="aarch64">ARM64</option></select><ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" /></span><button type="button" className="settings-secondary release-refresh" disabled={busy} onClick={() => refresh()}><RefreshCw size={15} />刷新列表</button></div></div>
+    <div className="release-list-heading"><div><h2>发布记录</h2><span>共 {records.length} 个更新包</span></div><div className="release-list-actions"><span className="release-select"><select aria-label="筛选系统" value={systemFilter} onChange={event => setSystemFilter(event.target.value)}><option value="all">全部系统</option>{Object.entries(systems).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" /></span><span className="release-select"><select aria-label="筛选架构" value={architectureFilter} onChange={event => setArchitectureFilter(event.target.value)}><option value="all">全部架构</option><option value="x86_64">x64</option><option value="aarch64">ARM64</option></select><ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" /></span><button type="button" className="settings-secondary release-refresh" disabled={busy} onClick={() => refresh()}><RefreshCw size={15} />刷新列表</button></div></div>
     <div className="preview-table-wrap release-table-scroll"><table className="preview-table release-table"><colgroup><col style={{ width: '10%' }} /><col style={{ width: '12%' }} /><col style={{ width: '11%' }} /><col style={{ width: '10%' }} /><col style={{ width: '30%' }} /><col style={{ width: '15%' }} /><col style={{ width: '12%' }} /></colgroup><thead><tr>{['版本', '系统', '架构', '大小', '更新说明', '状态', '操作'].map(label => <th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>
       {records.slice((page - 1) * 12, page * 12).map(record => {
         const current = snapshot.channels.find(channel => channel.platform === record.platform && channel.release_id === record.id);

@@ -1,6 +1,5 @@
 .release-page .preview-page-head { align-items: center; }
 .release-page .preview-page-head h1 { font-size: 38px; font-weight: 700; letter-spacing: normal; }
-.release-legacy-link { color: #7589a7; font-size: 13px; white-space: nowrap; }
 .release-section-heading, .release-list-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .release-page h2 { margin: 0 0 10px; color: #203a5e; font-size: 20px; font-weight: 600; }
 .release-section-heading .settings-description { margin-bottom: 24px; }
@@ -33,6 +32,8 @@
 .release-upload-actions > span { color: #7589a7; font-size: 13px; line-height: 1.6; }
 .release-list-heading { align-items: center; margin-bottom: 16px; }
 .release-list-heading > div { display: flex; align-items: baseline; gap: 14px; }
+.release-list-heading > div:first-child { flex-shrink: 0; }
+.release-list-heading > .release-list-actions { align-items: center; flex-wrap: wrap; }
 .release-list-heading h2 { margin: 0; }
 .release-list-heading span { color: #7589a7; font-size: 13px; }
 .release-refresh { display: inline-flex; align-items: center; gap: 7px; }
@@ -52,11 +53,13 @@
 .release-history-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin: 12px 0 24px; }
 .release-page button:focus-visible, .release-page textarea:focus-visible, .release-page input:focus-visible, .release-page select:focus-visible, .release-page a:focus-visible { outline: 2px solid #3478ef; outline-offset: 3px; }
 .release-page button:disabled { opacity: .5; cursor: not-allowed; }
-@media (max-width: 800px) {
+@media (max-width: 1024px) {
   .release-page .preview-page-head { align-items: flex-start; flex-direction: column; gap: 12px; }
   .release-upload { grid-template-columns: minmax(0, 1fr); }
   .release-metadata { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .release-list-heading { flex-wrap: wrap; }
+  .release-list-actions { width: 100%; }
+  .release-list-actions .release-select { flex: 1; min-width: 110px; }
   .release-section-heading { flex-direction: column; gap: 0; margin-bottom: 20px; }
   .release-section-heading .settings-description { margin-bottom: 10px; }
   .release-upload-actions { align-items: flex-start; flex-direction: column; }

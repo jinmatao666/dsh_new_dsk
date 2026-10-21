@@ -353,17 +353,11 @@ export const LegacyVersionRelease = () => (
   </AdminPageFrame>
 );
 
-const releaseTabs = [['all', '全部平台'], ['windows', 'Windows'], ['darwin', 'macOS'], ['linux', 'Linux']];
-
 const VersionRelease = () => {
-  const [platformFamily, setPlatformFamily] = useState('all');
   return <div className="zjugis-new-page system-settings-page release-page">
-    <div className="preview-page-head"><div><h1>版本发布</h1><p>管理万维 Buddy 桌面端安装包与更新发布。</p></div><a className="release-legacy-link" href={`${process.env.PUBLIC_URL || ''}/operation/version-release/legacy`}>旧系统发布记录</a></div>
+    <div className="preview-page-head"><div><h1>版本发布</h1><p>管理万维 Buddy 桌面端安装包与更新发布。</p></div></div>
     <section className="preview-surface system-settings-surface">
-      <div className="preview-tabs" role="tablist" aria-label="更新包平台">
-        {releaseTabs.map(([key, label]) => <button type="button" role="tab" id={`release-tab-${key}`} aria-controls="release-platform-panel" aria-selected={platformFamily === key} key={key} className={platformFamily === key ? 'active' : ''} onClick={() => setPlatformFamily(key)}>{label}</button>)}
-      </div>
-      <div role="tabpanel" id="release-platform-panel" aria-labelledby={`release-tab-${platformFamily}`}><DesktopUpdates platformFamily={platformFamily} /></div>
+      <DesktopUpdates />
     </section>
   </div>;
 };
