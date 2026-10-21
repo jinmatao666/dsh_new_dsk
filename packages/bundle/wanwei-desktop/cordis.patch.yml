@@ -17,11 +17,17 @@
     searchProvider: oneapi-bailian
 
 - id: skill-filesystem
+  disabled: false
   config:
     projectRootMode: cwd
     includeUserAgentsRoot: false
 
 - insert:
+    - id: wanwei-skill-discovery-policy
+      name: '@deepseek-ai/dsh-skill-filesystem/policy'
+      config:
+        projectRootMode: cwd
+        includeUserAgentsRoot: false
     - id: wanwei-browser-use
       name: '@deepseek-ai/dsh-wanwei-browser-use'
       disabled: false

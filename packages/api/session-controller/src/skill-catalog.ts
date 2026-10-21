@@ -8,7 +8,6 @@ import { isUserInvocable } from '@deepseek-ai/dsh-skill'
 import type { ScopeKey } from '@deepseek-ai/dsh-scope'
 import { Remote, TypertRemoteFailure, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { SkillListRequest, SkillListValue } from './types.ts'
-import { homedir } from 'node:os'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -33,7 +32,7 @@ export class SessionSkillCatalog extends TypertRemoteService {
   async draftList(): Promise<SkillListValue> {
     const registry = this.ctx.get('skills')
     if (registry === undefined) return { skills: [] }
-    const skills = (await registry.list({ cwd: homedir() })).filter(isUserInvocable)
+    const skills = (await registry.list()).filter(isUserInvocable)
     return { skills: skills.map(skill => ({
       name: skill.name, description: skill.description,
       ...(skill.displayName === undefined ? {} : { displayName: skill.displayName }),

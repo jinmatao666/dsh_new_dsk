@@ -65,6 +65,7 @@ describe('SessionSkillCatalog', () => {
       }
     `)
     expect(observeSession).not.toHaveBeenCalled()
+    expect(list).toHaveBeenCalledWith()
     expect(ctx.agents.list()).toEqual([])
   })
   it('reads a cold Session catalog without resuming an Agent', async () => {

@@ -8,6 +8,8 @@ English | [中文](README.zh.md)
 
 ## Summary
 
+The pre-Session `skills.draftList` reads only the global catalog without a workspace cwd; it does not treat the user's home directory as a selected Workspace. Session-addressed skill listing uses that Session's cwd and preset scope.
+
 `@deepseek-ai/dsh-api-session-controller` owns the Host `ctx.sessionController` service and the generated Client `session`, `skills`, and `fileReferences` Remote namespaces. It serves Session lifecycle and history, the Host-generation model catalog, workspace-path opening, user-invocable skill discovery, and the adapter for Agent-scoped file references. Use it through API Gateway when a Client needs operations addressed by a Session.
 
 ## Table of Contents

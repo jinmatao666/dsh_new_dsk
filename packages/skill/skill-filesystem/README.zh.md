@@ -61,6 +61,8 @@ skill 可以是被扫描根目录顶层的目录 bundle `<name>/SKILL.md`，也�
 
 与 skill 注册表一起加载该插件；它需要 `ctx.skills`。
 
+部署可以在 Host 上挂载一次 `@deepseek-ai/dsh-skill-filesystem/policy`，必填字段为 `projectRootMode`（`git` 或 `cwd`）和 `includeUserAgentsRoot`（布尔值）。其 `ctx.skillFileSystemPolicy.config` 覆盖所有后代提供方的这两个字段，也包括 agent 预设挂载的提供方。自定义及内置根目录仍为显式启用项。未挂载服务时，提供方默认值不变。策略服务变化会使已缓存目录失效；策略不会删除技能文件。
+
 ```yaml
 - name: '@deepseek-ai/dsh-skill'
 - name: '@deepseek-ai/dsh-skill-filesystem'

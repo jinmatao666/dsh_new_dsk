@@ -38,6 +38,7 @@
     "release": false
   },
   "dependencies": {
+    "@deepseek-ai/dsh-skill-filesystem": "workspace:^",
     "@deepseek-ai/dsh-wanwei-browser-use": "workspace:^",
     "@deepseek-ai/dsh-wanwei-chinese": "workspace:^",
     "@deepseek-ai/dsh-wanwei-skill-marketplace": "workspace:^",
@@ -56,10 +57,10 @@
     "@deepseek-ai/cordis": "workspace:^"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-agent-presets": "workspace:^",
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",
     "@deepseek-ai/cordis-plugin-include": "workspace:^",
     "@deepseek-ai/dsh-skill": "workspace:^",
-    "@deepseek-ai/dsh-skill-filesystem": "workspace:^",
     "yaml": "^2.4.2",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"

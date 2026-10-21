@@ -38,6 +38,8 @@ The first command prints the effective default tree without booting it after the
 
 ### What you get
 
+The desktop mounts the host `skill-filesystem/policy` service so every preset's filesystem provider obeys the same discovery rules. A host provider serves installed skills before a Session exists; that draft catalog has no implicit workspace cwd. Standard, PTC, Cordis and locally authored presets cannot re-enable implicit shared-user scanning through their own provider defaults. Changing deployments requires restarting the Host.
+
 Desktop skill discovery uses only the selected workspace's `.dsh/skills` and `.agents/skills`, plus `<DSH_HOME>/skills` for installed/imported skills. It does not climb to parent Git repositories or automatically include shared `~/.agents/skills`. Explicit custom and bundled roots remain supported. This product policy leaves the generic provider defaults unchanged and does not delete existing files.
 
 The desktop product mounts the browser-assistant plugin with visible browser windows and an enabled default. Its Settings → Plugins card starts collapsed and reveals the automatically saved permission switch when expanded. Saved user preferences override the default; pure intranet mode still denies browser tools.

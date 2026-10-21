@@ -10,6 +10,8 @@ Status: implemented
 
 ## 决策
 
+[主进程发现策略](2026-10-21-desktop-preset-skill-roots.zh.md)将这些选择同时应用到预设作用域提供方和主进程提供方。仅配置主进程行无法约束预设挂载的提供方。
+
 文件系统提供方新增 `projectRootMode` 和 `includeUserAgentsRoot`，通用默认值仍为 `git`、`true`。万维桌面产品层使用 `cwd`、`false`。保留桌面端安装技能和显式配置的自定义或内置根目录。不删除或迁移技能。
 
 ## 考虑过的替代方案

@@ -14,6 +14,7 @@ import { unwatchFile, watchFile, type Stats } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from './policy.ts'
 import chokidar from 'chokidar'
 import z from '@deepseek-ai/schemastery'
 import type Schema from '@deepseek-ai/schemastery'
@@ -138,6 +139,9 @@ export function apply(ctx: Context, config: Config = {}): void {
   let provider!: FileSystemSkillProvider
   ctx.skills.registerProvider((control) => {
     provider = new FileSystemSkillProvider(ctx, control, config)
+    ctx.on('internal/service', (name) => {
+      if (name === 'skillFileSystemPolicy') control.invalidate()
+    })
     return provider
   })
   ctx.effect(function* () {
@@ -252,8 +256,9 @@ export class FileSystemSkillProvider implements SkillProvider {
 
   private async roots(cwd: string | undefined): Promise<SkillRoot[]> {
     const roots: SkillRoot[] = []
+    const policy = this.ctx.get('skillFileSystemPolicy')?.config
     if (this.includeDefaultRoots && cwd !== undefined) {
-      const projectRoot = this.projectRootMode === 'cwd'
+      const projectRoot = (policy?.projectRootMode ?? this.projectRootMode) === 'cwd'
         ? resolve(cwd)
         : await findProjectRoot(resolve(cwd), optionalFileSystem(this.ctx))
       roots.push(
@@ -264,7 +269,7 @@ export class FileSystemSkillProvider implements SkillProvider {
     roots.push(...this.customSkillDirs.map(path => ({ path, source: 'custom' as const, rank: CUSTOM_RANK })))
     if (this.includeDefaultRoots) {
       roots.push({ path: join(this.dshHome, 'skills'), source: 'user-dsh', rank: USER_DSH_RANK, skipSystem: true })
-      if (this.includeUserAgentsRoot) {
+      if (policy?.includeUserAgentsRoot ?? this.includeUserAgentsRoot) {
         roots.push({ path: join(this.agentsHome, 'skills'), source: 'user-agents', rank: USER_AGENTS_RANK })
       }
     }

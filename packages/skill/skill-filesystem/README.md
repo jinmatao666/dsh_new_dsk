@@ -61,6 +61,8 @@ By default, the project root is the nearest ancestor containing `.git`; without 
 
 Load the plugin alongside the skill registry; it requires `ctx.skills`.
 
+Deployments may mount `@deepseek-ai/dsh-skill-filesystem/policy` once on the Host with required `projectRootMode` (`git` or `cwd`) and `includeUserAgentsRoot` (boolean) fields. Its `ctx.skillFileSystemPolicy.config` overrides those two fields for every descendant provider, including providers mounted by agent presets. Custom and bundled roots remain explicit opt-ins. Without the service, provider defaults are unchanged. Policy service changes invalidate cached catalogs; the policy does not delete skill files.
+
 ```yaml
 - name: '@deepseek-ai/dsh-skill'
 - name: '@deepseek-ai/dsh-skill-filesystem'

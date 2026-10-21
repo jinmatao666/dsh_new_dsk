@@ -10,6 +10,8 @@ The desktop inherited generic skill discovery: shared `~/.agents/skills` and the
 
 ## Decision
 
+The [host discovery policy](2026-10-21-desktop-preset-skill-roots.md) applies these choices to preset-scoped providers as well as the host provider. A host-row configuration alone does not constrain providers mounted by presets.
+
 Add `projectRootMode` and `includeUserAgentsRoot` to the filesystem provider, keeping generic defaults `git` and `true`. The Wanwei desktop product layer selects `cwd` and `false`. Keep desktop-owned installed skills and explicit custom/bundled roots. Do not delete or migrate skills.
 
 ## Alternatives considered
