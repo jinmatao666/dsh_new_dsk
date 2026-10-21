@@ -167,7 +167,9 @@ func TestHTTPSRemainsEndToEndAndVerifiesCertificate(t *testing.T) {
 	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "verified-https-resource") }))
 	defer target.Close()
 	s := New()
+	finished := make(chan struct{}, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() { finished <- struct{}{} }()
 		l := limits()
 		l.Bytes = 64 << 10
 		s.serve(w, r, 1, l, func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -178,8 +180,11 @@ func TestHTTPSRemainsEndToEndAndVerifiesCertificate(t *testing.T) {
 	roots := x509.NewCertPool()
 	roots.AddCert(target.Certificate())
 	for _, trust := range []bool{true, false} {
-		conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"?host=example.com&port=443", http.Header{"Authorization": []string{"fixture"}})
+		conn, handshakeResponse, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"?host=example.com&port=443", http.Header{"Authorization": []string{"fixture"}})
 		if err != nil {
+			if handshakeResponse != nil {
+				t.Fatalf("WebSocket handshake returned HTTP %d: %v", handshakeResponse.StatusCode, err)
+			}
 			t.Fatal(err)
 		}
 		_, _, _ = conn.ReadMessage()
@@ -196,6 +201,7 @@ func TestHTTPSRemainsEndToEndAndVerifiesCertificate(t *testing.T) {
 				t.Fatal("untrusted certificate accepted")
 			}
 			conn.Close()
+			waitHTTPSRelayFinished(t, finished)
 			continue
 		}
 		if err != nil {
@@ -212,5 +218,16 @@ func TestHTTPSRemainsEndToEndAndVerifiesCertificate(t *testing.T) {
 		}
 		response.Body.Close()
 		conn.Close()
+		waitHTTPSRelayFinished(t, finished)
+	}
+}
+
+func waitHTTPSRelayFinished(t *testing.T, finished <-chan struct{}) {
+	t.Helper()
+	// 客户端关闭不代表服务端已释放并发名额；下一轮必须等待整个处理函数退出。
+	select {
+	case <-finished:
+	case <-time.After(2 * time.Second):
+		t.Fatal("HTTPS relay did not release its connection before the next certificate case")
 	}
 }
