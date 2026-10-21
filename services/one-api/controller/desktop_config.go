@@ -69,6 +69,7 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 			}
 		}
 	}
+	legacyKnowledge := make(map[string]bool)
 	if features, present := fields["features"]; present {
 		var environments map[string]map[string]interface{}
 		if err := json.Unmarshal(features, &environments); err != nil {
@@ -76,6 +77,10 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 		}
 		for _, mode := range []string{"internet", "intranet"} {
 			for _, feature := range []string{"automations", "connectors", "knowledgeBases"} {
+				if _, present := environments[mode][feature]; feature == "knowledgeBases" && !present {
+					legacyKnowledge[mode] = true
+					continue
+				}
 				if _, ok := environments[mode][feature].(bool); !ok {
 					return settings, fmt.Errorf("invalid feature setting: %s.%s", mode, feature)
 				}
@@ -93,6 +98,12 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 	}
 	if err := json.Unmarshal([]byte(raw), &settings); err != nil {
 		return settings, err
+	}
+	// 旧记录只补新增字段，不覆盖已有的功能开关。
+	for mode := range legacyKnowledge {
+		flags := settings.Features[mode]
+		flags.KnowledgeBases = true
+		settings.Features[mode] = flags
 	}
 	if field, present := fields["resources"]; present {
 		var resourceFields map[string]interface{}

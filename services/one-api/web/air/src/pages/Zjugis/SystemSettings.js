@@ -67,6 +67,15 @@ export default function SystemSettings() {
       if (!Array.isArray(options)) throw new Error('系统配置返回异常，请重新加载');
       const raw = options.find(item => item.key === 'SystemDeploymentSettings')?.value;
       const value = raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
+      // 仅兼容旧记录缺少的知识库开关，错误值和缺失的原有字段仍交给校验拒绝。
+      if (value.features && typeof value.features === 'object') {
+        for (const mode of ['internet', 'intranet']) {
+          const flags = value.features[mode];
+          if (flags && typeof flags === 'object' && !Object.prototype.hasOwnProperty.call(flags, 'knowledgeBases')) {
+            value.features = { ...value.features, [mode]: { ...flags, knowledgeBases: true } };
+          }
+        }
+      }
       if (typeof value.plugins?.browserAssistant !== 'boolean') throw new Error('插件设置无效，请联系管理员检查配置');
       if (!['government', 'operations'].includes(value.edition)) throw new Error('版本类型无效，请联系管理员检查配置');
       for (const mode of ['internet', 'intranet']) {

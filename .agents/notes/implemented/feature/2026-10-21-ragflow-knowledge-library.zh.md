@@ -16,6 +16,8 @@ OneAPI 存储知识库、用户或部门授权以及对话映射。`RAGFLOW_BASE
 
 回答使用纯文本：RAGFlow 助手提示词禁止 Markdown 排版，OneAPI 在返回前再剥离残留 Markdown。流式问答对该完成接口使用 `stream: true`；Host 暴露 `POST /api/desktop-knowledge-chat`，桌面按累计片段渲染回答，而不是等整段一次性出现。
 
+知识库功能开关是新增字段。后台部署配置解析、管理员表单和桌面部署校验在已有环境对象缺少 `knowledgeBases` 时补 true，保留明确的 false 和全部原有开关。null 或非布尔值仍属无效配置。公开读取只规范化响应，不改写存储选项；管理员保存时写入完整对象，使已经配置的旧部署可以升级，不因 503 阻断登录。
+
 ## 考虑过的替代方案
 
 **浏览器直接调用 RAGFlow：**不采用，因为这会暴露部署 API Key，并绕过本地用户和部门授权。

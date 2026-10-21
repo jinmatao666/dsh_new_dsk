@@ -17,7 +17,7 @@ func TestDesktopConfigPublicFields(t *testing.T) {
 		config.OptionMap = make(map[string]string)
 	}
 	previous, existed := config.OptionMap["SystemDeploymentSettings"]
-	config.OptionMap["SystemDeploymentSettings"] = `{"network":"intranet","operator":"张运维","phone":"0571-12345678","secret":"must-not-leak"}`
+	config.OptionMap["SystemDeploymentSettings"] = `{"network":"intranet","operator":"张运维","phone":"0571-12345678","secret":"must-not-leak","features":{"internet":{"automations":false,"connectors":true},"intranet":{"automations":true,"connectors":false}}}`
 	config.OptionMapRWMutex.Unlock()
 	t.Cleanup(func() {
 		config.OptionMapRWMutex.Lock()
@@ -78,6 +78,15 @@ func TestDesktopPluginSettings(t *testing.T) {
 }
 
 func TestDesktopFeatureSettings(t *testing.T) {
+	legacyFlags, err := parseDesktopDeploymentSettings(`{"network":"intranet","features":{"internet":{"automations":false,"connectors":true},"intranet":{"automations":true,"connectors":false}}}`)
+	if err != nil || legacyFlags.Features["internet"].Automations || legacyFlags.Features["intranet"].Connectors || !legacyFlags.Features["internet"].KnowledgeBases || !legacyFlags.Features["intranet"].KnowledgeBases {
+		t.Fatalf("legacy feature settings: %+v %v", legacyFlags, err)
+	}
+	for _, invalid := range []string{`null`, `"true"`, `1`} {
+		if _, err := parseDesktopDeploymentSettings(`{"network":"internet","features":{"internet":{"automations":true,"connectors":true,"knowledgeBases":` + invalid + `},"intranet":{"automations":true,"connectors":false}}}`); err == nil {
+			t.Fatalf("accepted invalid knowledge flag: %s", invalid)
+		}
+	}
 	settings, err := parseDesktopDeploymentSettings(`{"network":"internet","features":{"internet":{"automations":false,"connectors":false,"knowledgeBases":true},"intranet":{"automations":true,"connectors":true,"knowledgeBases":false},"secret":{"connectors":true}}}`)
 	if err != nil || len(settings.Features) != 2 || settings.Features["internet"].Connectors || !settings.Features["intranet"].Connectors || !settings.Features["internet"].KnowledgeBases {
 		t.Fatalf("settings: %+v %v", settings, err)

@@ -46,7 +46,10 @@ export function resolveDeploymentFeatures(value: unknown): DeploymentFeatures {
   for (const mode of ['internet', 'intranet'] as const) {
     const flags: unknown = (value as Record<string, unknown>)[mode]
     if (typeof flags !== 'object' || flags === null) throw new Error('后台功能设置无效')
-    const { automations, connectors, knowledgeBases } = flags as Record<string, unknown>
+    const { automations, connectors } = flags as Record<string, unknown>
+    // 旧后台尚未提供知识库开关；显式 null 或错误类型仍必须拒绝。
+    const knowledgeBases = Object.hasOwn(flags, 'knowledgeBases')
+      ? (flags as Record<string, unknown>).knowledgeBases : true
     if (typeof automations !== 'boolean' || typeof connectors !== 'boolean' || typeof knowledgeBases !== 'boolean') {
       throw new Error('后台功能设置无效')
     }

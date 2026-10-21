@@ -13,6 +13,38 @@ beforeEach(() => {
   API.put.mockResolvedValue({ data: { success: true } });
 });
 afterEach(() => { act(() => root.unmount()); container.remove(); jest.clearAllMocks(); jest.useRealTimers(); delete global.IS_REACT_ACT_ENVIRONMENT; });
+test('legacy feature switches load and save with knowledge defaults without resetting other settings', async () => {
+  const legacy = { network: 'intranet', operator: '运维', phone: '123', features: {
+    internet: { automations: false, connectors: true }, intranet: { automations: true, connectors: false },
+  }, resources: { source: 'proxy', transport: 'tunnel', proxyUrl: '', autoDetect: false, probeUrls: [] } };
+  API.get.mockImplementation(path => Promise.resolve({ data: { success: true, data: path === '/api/user/self'
+    ? { username: 'root', role: 100 } : [{ key: 'SystemDeploymentSettings', value: JSON.stringify(legacy) }] } }));
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[4].click());
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  const switches = [...container.querySelectorAll('[role="switch"]')];
+  expect(switches.map(toggle => toggle.checked)).toEqual([false, true, true, false, true, true]);
+  act(() => switches[4].click());
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  const saved = JSON.parse(API.put.mock.calls[0][1].value);
+  expect(saved.features).toEqual({ internet: { ...legacy.features.internet, knowledgeBases: false }, intranet: { ...legacy.features.intranet, knowledgeBases: true } });
+  expect(saved.network).toBe(legacy.network);
+  expect(saved.resources).toEqual(legacy.resources);
+});
+
+test.each([null, 'true', 1])('rejects an explicitly invalid knowledge flag %p', async knowledgeBases => {
+  const value = { network: 'internet', features: {
+    internet: { automations: true, connectors: true, knowledgeBases },
+    intranet: { automations: true, connectors: false },
+  } };
+  API.get.mockImplementation(path => Promise.resolve({ data: { success: true, data: path === '/api/user/self'
+    ? { username: 'root', role: 100 } : [{ key: 'SystemDeploymentSettings', value: JSON.stringify(value) }] } }));
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[4].click());
+  expect(container.querySelector('[role="alert"]').textContent).toContain('功能设置无效');
+  expect(API.put).not.toHaveBeenCalled();
+});
+
 test('seven tabs preserve profile and security, and load deployment contacts', async () => {
   await act(async () => root.render(<SystemSettings />));
   const tabs = [...container.querySelectorAll('[role="tab"]')];

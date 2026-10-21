@@ -30,6 +30,18 @@ it('keeps the two environments independent and rejects incomplete or non-boolean
     expect(() => resolveDeploymentFeatures(value)).toThrow('后台功能设置无效')
   }
 })
+it('defaults only the missing knowledge switch in legacy per-environment settings', () => {
+  const legacy = { internet: { automations: false, connectors: true }, intranet: { automations: true, connectors: false } }
+  expect(resolveDeploymentFeatures(legacy)).toEqual({
+    internet: { ...legacy.internet, knowledgeBases: true }, intranet: { ...legacy.intranet, knowledgeBases: true },
+  })
+  for (const knowledgeBases of [null, 'true', 1]) {
+    expect(() => resolveDeploymentFeatures({ ...legacy, internet: { ...legacy.internet, knowledgeBases } })).toThrow('后台功能设置无效')
+  }
+  const denied = resolveDeploymentFeatures({ ...legacy, internet: { ...legacy.internet, knowledgeBases: false } })
+  expect(denied.internet.knowledgeBases).toBe(false)
+})
+
 it('rejects unavailable or invalid configuration without assuming internet mode', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })))
   await expect(fetchDeploymentSettings('http://server.lan')).rejects.toThrow('无法读取后台系统设置')

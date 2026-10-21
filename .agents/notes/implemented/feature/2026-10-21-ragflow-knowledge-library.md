@@ -16,6 +16,8 @@ The Wanwei desktop mounts an independent knowledge-base Client plugin through th
 
 Answers are plain text: the RAGFlow assistant prompt forbids Markdown markup, and OneAPI strips residual Markdown before returning. Streaming Q&A uses `stream: true` on that completion route; the Host exposes `POST /api/desktop-knowledge-chat` so the desktop can render cumulative answer chunks instead of waiting for one final dump.
 
+The knowledge-base feature flag is additive. Backend deployment parsing, the administrator form and desktop deployment validation default an absent `knowledgeBases` flag to true for each existing environment object, preserving explicit false and all existing flags. Null or non-boolean flags remain invalid. Public reads normalize the response without rewriting the stored option; administrator saves persist the complete object. This allows an older configured deployment to upgrade without a login-blocking 503.
+
 ## Alternatives considered
 
 **Call RAGFlow from the browser:** rejected because it exposes the deployment API key and bypasses local user and department grants.
