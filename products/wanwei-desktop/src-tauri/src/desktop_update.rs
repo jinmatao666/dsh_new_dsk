@@ -10,7 +10,7 @@ use std::{
     sync::Mutex,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-use tauri::{Manager, State, WebviewWindow};
+use tauri::{Manager, State, Webview};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_updater::{Update, UpdaterExt};
 use url::Url;
@@ -232,10 +232,10 @@ pub fn setup(app: &tauri::AppHandle, base_url: &str) -> Result<(), Box<dyn std::
 
 #[tauri::command]
 pub fn desktop_update_status(
-    window: WebviewWindow,
+    webview: Webview,
     state: State<'_, DesktopUpdate>,
 ) -> Result<Snapshot, String> {
-    if window.label() != "main" {
+    if !is_main_update_caller(webview.label(), webview.window().label()) {
         return Err("仅主窗口可以检查更新".into());
     }
     Ok(state
@@ -248,11 +248,11 @@ pub fn desktop_update_status(
 
 #[tauri::command]
 pub fn desktop_update_automatic(
-    window: WebviewWindow,
+    webview: Webview,
     enabled: bool,
     state: State<'_, DesktopUpdate>,
 ) -> Result<(), String> {
-    if window.label() != "main" {
+    if !is_main_update_caller(webview.label(), webview.window().label()) {
         return Err("仅主窗口可以设置更新".into());
     }
     // Persist before publishing the new preference; a failed write leaves the old value active.
@@ -293,14 +293,16 @@ fn save_preference(path: &Path, enabled: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn desktop_update_check(
-    window: WebviewWindow,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    if window.label() != "main" {
+pub async fn desktop_update_check(webview: Webview, app: tauri::AppHandle) -> Result<(), String> {
+    if !is_main_update_caller(webview.label(), webview.window().label()) {
         return Err("仅主窗口可以检查更新".into());
     }
     run(app, true).await
+}
+
+// 专家子视图使主窗口不再是单 WebView 窗口；更新权限仍只属于主窗口的主页面。
+fn is_main_update_caller(webview_label: &str, window_label: &str) -> bool {
+    webview_label == "main" && window_label == "main"
 }
 
 async fn run(app: tauri::AppHandle, manual: bool) -> Result<(), String> {
@@ -486,6 +488,14 @@ fn verify_package(bytes: &[u8], manifest: &Manifest, public_key: &str) -> Result
 mod tests {
     use super::*;
     use std::io::Read;
+
+    #[test]
+    fn update_caller_checks_webview_and_window_without_requiring_single_webview() {
+        assert!(is_main_update_caller("main", "main"));
+        assert!(!is_main_update_caller("expert-test", "main"));
+        assert!(!is_main_update_caller("main", "other"));
+        assert!(!is_main_update_caller("expert-test", "other"));
+    }
 
     #[test]
     fn download_uses_connected_backend_and_preserves_proxy_prefix() {
