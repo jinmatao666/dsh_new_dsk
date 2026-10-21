@@ -100,7 +100,7 @@ type TransferMode = 'copy' | 'move'
 type TransferState = {
   mode: TransferMode
   documentIds: string[]
-  targetId?: number
+  targetId?: number | undefined
   remaining: number
   busy: boolean
 }
@@ -182,11 +182,11 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   }, [])
   useEffect(() => {
     let disposed = false
-    api.list().then(result => {
+    api.list().then((result) => {
       if (disposed) return
       setItems(result)
       setSelectedId(result[0]?.id)
-    }).catch(cause => { if (!disposed) setError(`${productText('加载失败')}：${String(cause)}`) })
+    }).catch((cause) => { if (!disposed) setError(`${productText('加载失败')}：${String(cause)}`) })
       .finally(() => { if (!disposed) setLoading(false) })
     return () => { disposed = true }
   }, [api])
@@ -203,15 +203,15 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     setMessages([])
     setSelectedDocumentIds([])
     setDocumentMenu(undefined)
-    api.documents(selectedId).then(value => {
+    api.documents(selectedId).then((value) => {
       if (disposed) return
       setDocuments(value)
       setExpandedFolders(topLevelFolderPaths(value))
     })
-      .catch(cause => { if (!disposed) setError(`${productText('加载失败')}：${String(cause)}`) })
-    api.messages(selectedId).then(value => {
+      .catch((cause) => { if (!disposed) setError(`${productText('加载失败')}：${String(cause)}`) })
+    api.messages(selectedId).then((value) => {
       if (!disposed && historyEpoch.current === epoch) setMessages(value)
-    }).catch(cause => {
+    }).catch((cause) => {
       if (disposed || historyEpoch.current !== epoch) return
       setMessages([])
       setError(`${productText('加载失败')}：${String(cause)}`)
@@ -233,7 +233,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const transferTargets = items.filter(item =>
     (item.kind === 'personal' || item.kind === 'shared') && item.id !== selectedId)
   const selectDocument = (documentId: string, additive: boolean, menuAt?: { x: number; y: number }) => {
-    setSelectedDocumentIds(current => {
+    setSelectedDocumentIds((current) => {
       if (additive) {
         return current.includes(documentId)
           ? current.filter(id => id !== documentId)
@@ -251,11 +251,11 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     setSelectedDocumentIds(current => current.includes(documentId) ? current : [documentId])
     setDocumentMenu({ documentId, x, y })
   }
-  const askConflict = (names: string[]) => new Promise<KnowledgeConflictPolicy | 'cancel'>(resolve => {
+  const askConflict = (names: string[]) => new Promise<KnowledgeConflictPolicy | 'cancel'>((resolve) => {
     setConflict({ names, resolve })
   })
   const closeConflict = (policy: KnowledgeConflictPolicy | 'cancel') => {
-    setConflict(current => {
+    setConflict((current) => {
       current?.resolve(policy)
       return undefined
     })
@@ -336,7 +336,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     setError('')
   }
   const closeViewer = () => {
-    setViewer(current => {
+    setViewer((current) => {
       if (current?.objectUrl !== undefined) URL.revokeObjectURL(current.objectUrl)
       return undefined
     })
@@ -348,14 +348,14 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   }
   const openDocument = (document: KnowledgeDocument) => {
     if (selectedId === undefined) return
-    setViewer(current => {
+    setViewer((current) => {
       if (current?.objectUrl !== undefined) URL.revokeObjectURL(current.objectUrl)
       return { document, loading: true, mode: 'text', content: '' }
     })
     setError('')
     void (async () => {
       const apply = (next: DocumentViewer, orphanUrl?: string) => {
-        setViewer(current => {
+        setViewer((current) => {
           if (current === undefined || current.document.id !== document.id) {
             if (orphanUrl !== undefined) URL.revokeObjectURL(orphanUrl)
             return current
@@ -391,7 +391,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
           content: chunks.map(chunk => chunk.content.trim()).filter(Boolean).join('\n\n'),
         })
       } catch (cause) {
-        setViewer(current => {
+        setViewer((current) => {
           if (current === undefined || current.document.id !== document.id) return current
           if (current.objectUrl !== undefined) URL.revokeObjectURL(current.objectUrl)
           return undefined
@@ -464,7 +464,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       for (const file of candidates) await api.upload(selectedId, file)
       const next = await api.documents(selectedId)
       setDocuments(next)
-      setExpandedFolders(current => {
+      setExpandedFolders((current) => {
         const merged = new Set(current)
         for (const path of topLevelFolderPaths(next)) merged.add(path)
         for (const file of candidates) {
@@ -491,7 +491,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     input.value = ''
     void uploadFiles(files)
   }
-  const shownDocuments = documents.filter(document => {
+  const shownDocuments = documents.filter((document) => {
     if (query.trim() === '') return true
     const needle = query.trim().toLowerCase()
     return documentDisplayName(document).toLowerCase().includes(needle)
@@ -500,7 +500,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const contentTree = buildContentTree(shownDocuments, newestFirst)
   const searching = query.trim() !== ''
   const toggleFolder = (path: string) => {
-    setExpandedFolders(current => {
+    setExpandedFolders((current) => {
       const next = new Set(current)
       if (next.has(path)) next.delete(path)
       else next.add(path)
@@ -527,8 +527,8 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     setMessages(current => [...current, { role: 'user', content: text }, { role: 'assistant', content: '' }])
     setAnswering(true)
     try {
-      const answer = await api.complete(targetKnowledgeBaseId, text, progress => {
-        setMessages(current => {
+      const answer = await api.complete(targetKnowledgeBaseId, text, (progress) => {
+        setMessages((current) => {
           if (current.length === 0) return current
           const next = [...current]
           const last = next[next.length - 1]
@@ -541,7 +541,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
           return next
         })
       }, abort.signal)
-      setMessages(current => {
+      setMessages((current) => {
         if (current.length === 0) return current
         const next = [...current]
         const last = next[next.length - 1]
@@ -559,7 +559,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       const aborted = abort.signal.aborted
         || (cause instanceof DOMException && cause.name === 'AbortError')
         || (cause instanceof Error && cause.name === 'AbortError')
-      setMessages(current => {
+      setMessages((current) => {
         if (current.length === 0) return current
         const last = current[current.length - 1]
         if (last?.role === 'assistant' && last.content === '') return current.slice(0, -1)
@@ -706,7 +706,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       <form className="dsh-knowledge-composer" onSubmit={ask}>
         <textarea value={question} disabled={selectedId === undefined || answering} rows={2}
           onChange={event => setQuestion(event.target.value)} placeholder={productText('基于知识库提问')}
-          onKeyDown={event => {
+          onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault()
               if (!answering) event.currentTarget.form?.requestSubmit()
@@ -732,17 +732,17 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       style={{ left: documentMenu.x, top: documentMenu.y }}
       onPointerDown={event => event.stopPropagation()}
       onMouseDown={event => event.stopPropagation()}>
-      <button type="button" role="menuitem" onClick={event => {
+      <button type="button" role="menuitem" onClick={(event) => {
         event.preventDefault()
         event.stopPropagation()
         startTransfer('move')
       }}><MoveIcon />{productText('移动到')}</button>
-      <button type="button" role="menuitem" onClick={event => {
+      <button type="button" role="menuitem" onClick={(event) => {
         event.preventDefault()
         event.stopPropagation()
         startTransfer('copy')
       }}><CopyIcon />{productText('复制到')}</button>
-      <button type="button" role="menuitem" className="danger" onClick={event => {
+      <button type="button" role="menuitem" className="danger" onClick={(event) => {
         event.preventDefault()
         event.stopPropagation()
         const ids = selectedDocumentIds.length > 0 ? selectedDocumentIds : [documentMenu.documentId]
@@ -753,93 +753,93 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     {transfer !== undefined && <div className="dsh-knowledge-modal-backdrop"
       onPointerDown={event => event.stopPropagation()}>
       <section className="dsh-knowledge-transfer" role="dialog"
-      aria-modal="true" aria-labelledby="dsh-knowledge-transfer-title">
-      <header>
-        <h2 id="dsh-knowledge-transfer-title">
-          {transfer.mode === 'copy' ? productText('复制') : productText('移动')}
-          {transfer.documentIds.length === 1
-            ? `: ${documents.find(item => item.id === transfer.documentIds[0])?.name ?? ''}`
-            : ` (${transfer.documentIds.length})`}
-        </h2>
-        <button type="button" aria-label={productText('关闭')} disabled={transfer.busy}
-          onClick={() => setTransfer(undefined)}>×</button>
-      </header>
-      {transfer.busy
-        ? <div className="dsh-knowledge-transfer-progress" role="status">
-          <span className="dsh-knowledge-upload-busy" aria-hidden="true" />
-          <p>{productText('剩余 {count} 个内容').replace('{count}', String(transfer.remaining))}</p>
-        </div>
-        : <div className="dsh-knowledge-transfer-body">
-          <aside>
-            {([
-              { kind: 'personal' as const, label: productText('个人知识库') },
-              { kind: 'shared' as const, label: productText('共享知识库') },
-            ]).map(group => {
-              const rows = transferTargets.filter(item => item.kind === group.kind)
-              if (rows.length === 0) return null
-              return <div key={group.kind}>
-                <strong>{group.label}</strong>
-                {rows.map(item =>
-                  <button type="button" key={item.id} className={item.id === transfer.targetId ? 'active' : ''}
-                    onClick={() => setTransfer(current => current === undefined ? current : { ...current, targetId: item.id })}>
-                    <BookIcon />{item.name}
-                  </button>)}
-              </div>
-            })}
-            {transferTargets.length === 0 && <p className="dsh-knowledge-empty">{productText('暂无可用知识库')}</p>}
-          </aside>
-          <div className="dsh-knowledge-transfer-preview">
-            {transfer.documentIds.map(id => {
-              const document = documents.find(item => item.id === id)
-              if (document === undefined) return null
-              const kind = fileKind(document.name)
-              return <div key={id}>
-                <span className={`dsh-knowledge-file-icon ${kind}`} aria-hidden="true"><TypeIcon kind={kind} /></span>
-                <strong>{document.name}</strong>
-              </div>
-            })}
+        aria-modal="true" aria-labelledby="dsh-knowledge-transfer-title">
+        <header>
+          <h2 id="dsh-knowledge-transfer-title">
+            {transfer.mode === 'copy' ? productText('复制') : productText('移动')}
+            {transfer.documentIds.length === 1
+              ? `: ${documents.find(item => item.id === transfer.documentIds[0])?.name ?? ''}`
+              : ` (${transfer.documentIds.length})`}
+          </h2>
+          <button type="button" aria-label={productText('关闭')} disabled={transfer.busy}
+            onClick={() => setTransfer(undefined)}>×</button>
+        </header>
+        {transfer.busy
+          ? <div className="dsh-knowledge-transfer-progress" role="status">
+            <span className="dsh-knowledge-upload-busy" aria-hidden="true" />
+            <p>{productText('剩余 {count} 个内容').replace('{count}', String(transfer.remaining))}</p>
           </div>
-        </div>}
-      <footer>
-        <button type="button" disabled={transfer.busy} onClick={() => setTransfer(undefined)}>{productText('取消')}</button>
-        <button type="button" disabled={transfer.busy || transfer.targetId === undefined}
-          onClick={() => void runTransfer()}>
-          {transfer.mode === 'copy' ? productText('复制至此') : productText('移动至此')}
-        </button>
-      </footer>
-    </section></div>}
+          : <div className="dsh-knowledge-transfer-body">
+            <aside>
+              {([
+                { kind: 'personal' as const, label: productText('个人知识库') },
+                { kind: 'shared' as const, label: productText('共享知识库') },
+              ]).map((group) => {
+                const rows = transferTargets.filter(item => item.kind === group.kind)
+                if (rows.length === 0) return null
+                return <div key={group.kind}>
+                  <strong>{group.label}</strong>
+                  {rows.map(item =>
+                    <button type="button" key={item.id} className={item.id === transfer.targetId ? 'active' : ''}
+                      onClick={() => setTransfer(current => current === undefined ? current : { ...current, targetId: item.id })}>
+                      <BookIcon />{item.name}
+                    </button>)}
+                </div>
+              })}
+              {transferTargets.length === 0 && <p className="dsh-knowledge-empty">{productText('暂无可用知识库')}</p>}
+            </aside>
+            <div className="dsh-knowledge-transfer-preview">
+              {transfer.documentIds.map((id) => {
+                const document = documents.find(item => item.id === id)
+                if (document === undefined) return null
+                const kind = fileKind(document.name)
+                return <div key={id}>
+                  <span className={`dsh-knowledge-file-icon ${kind}`} aria-hidden="true"><TypeIcon kind={kind} /></span>
+                  <strong>{document.name}</strong>
+                </div>
+              })}
+            </div>
+          </div>}
+        <footer>
+          <button type="button" disabled={transfer.busy} onClick={() => setTransfer(undefined)}>{productText('取消')}</button>
+          <button type="button" disabled={transfer.busy || transfer.targetId === undefined}
+            onClick={() => void runTransfer()}>
+            {transfer.mode === 'copy' ? productText('复制至此') : productText('移动至此')}
+          </button>
+        </footer>
+      </section></div>}
     {conflict !== undefined && <div className="dsh-knowledge-modal-backdrop"
       onPointerDown={event => event.stopPropagation()}>
       <section className="dsh-knowledge-modal" role="dialog"
-      aria-modal="true" aria-labelledby="dsh-knowledge-conflict-title">
-      <header><h2 id="dsh-knowledge-conflict-title">{productText('同名项目')}</h2>
-        <button type="button" aria-label={productText('关闭')} onClick={() => closeConflict('cancel')}>×</button></header>
-      <p>{productText('此处存在以下同名项目，请选择操作')}</p>
-      <ul className="dsh-knowledge-conflict-list">{conflict.names.map(name => <li key={name}>{name}</li>)}</ul>
-      <footer>
-        <button type="button" onClick={() => closeConflict('keep')}>{productText('保留全部')}</button>
-        <button type="button" onClick={() => closeConflict('replace')}>{productText('替换')}</button>
-        <button type="button" onClick={() => closeConflict('cancel')}>{productText('取消')}</button>
-      </footer>
-    </section></div>}
+        aria-modal="true" aria-labelledby="dsh-knowledge-conflict-title">
+        <header><h2 id="dsh-knowledge-conflict-title">{productText('同名项目')}</h2>
+          <button type="button" aria-label={productText('关闭')} onClick={() => closeConflict('cancel')}>×</button></header>
+        <p>{productText('此处存在以下同名项目，请选择操作')}</p>
+        <ul className="dsh-knowledge-conflict-list">{conflict.names.map(name => <li key={name}>{name}</li>)}</ul>
+        <footer>
+          <button type="button" onClick={() => closeConflict('keep')}>{productText('保留全部')}</button>
+          <button type="button" onClick={() => closeConflict('replace')}>{productText('替换')}</button>
+          <button type="button" onClick={() => closeConflict('cancel')}>{productText('取消')}</button>
+        </footer>
+      </section></div>}
     {deleteIds !== undefined && <div className="dsh-knowledge-modal-backdrop"
       onPointerDown={event => event.stopPropagation()}>
       <section className="dsh-knowledge-modal" role="dialog"
-      aria-modal="true" aria-labelledby="dsh-knowledge-delete-title">
-      <header><h2 id="dsh-knowledge-delete-title">{productText('确认删除')}</h2>
-        <button type="button" aria-label={productText('关闭')} disabled={mutating} onClick={() => setDeleteIds(undefined)}>×</button></header>
-      <p>{productText('确认删除所选内容？删除后将从知识库同步移除。')}</p>
-      <ul className="dsh-knowledge-conflict-list">
-        {deleteIds.map(id => {
-          const document = documents.find(item => item.id === id)
-          return <li key={id}>{document?.name ?? id}</li>
-        })}
-      </ul>
-      <footer>
-        <button type="button" disabled={mutating} onClick={() => setDeleteIds(undefined)}>{productText('取消')}</button>
-        <button type="button" className="danger" disabled={mutating} onClick={() => void confirmDelete()}>{productText('确认删除')}</button>
-      </footer>
-    </section></div>}
+        aria-modal="true" aria-labelledby="dsh-knowledge-delete-title">
+        <header><h2 id="dsh-knowledge-delete-title">{productText('确认删除')}</h2>
+          <button type="button" aria-label={productText('关闭')} disabled={mutating} onClick={() => setDeleteIds(undefined)}>×</button></header>
+        <p>{productText('确认删除所选内容？删除后将从知识库同步移除。')}</p>
+        <ul className="dsh-knowledge-conflict-list">
+          {deleteIds.map((id) => {
+            const document = documents.find(item => item.id === id)
+            return <li key={id}>{document?.name ?? id}</li>
+          })}
+        </ul>
+        <footer>
+          <button type="button" disabled={mutating} onClick={() => setDeleteIds(undefined)}>{productText('取消')}</button>
+          <button type="button" className="danger" disabled={mutating} onClick={() => void confirmDelete()}>{productText('确认删除')}</button>
+        </footer>
+      </section></div>}
     {createKind !== undefined && <div className="dsh-knowledge-modal-backdrop"><form className="dsh-knowledge-modal" role="dialog" aria-modal="true"
       aria-labelledby="dsh-knowledge-create-title" onSubmit={submitCreate}>
       <header><h2 id="dsh-knowledge-create-title">{createKind === 'shared' ? productText('新建共享知识库') : productText('新建知识库')}</h2>
@@ -854,7 +854,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         <button type="submit" disabled={name.trim() === '' || saving}>{productText('确定')}</button></footer>
     </form></div>}
     {viewer !== undefined && createPortal(<div className="dsh-knowledge-viewer-shell"
-      onPointerDown={event => { event.stopPropagation() }}>
+      onPointerDown={(event) => { event.stopPropagation() }}>
       <section className="dsh-knowledge-viewer" role="dialog" aria-modal="true" aria-labelledby="dsh-knowledge-viewer-title">
         <header>
           <h2 id="dsh-knowledge-viewer-title">{documentDisplayName(viewer.document)}</h2>
@@ -864,7 +864,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
               {downloading ? <span className="dsh-knowledge-viewer-busy" aria-hidden="true" /> : <DownloadTrayIcon />}
             </button>
             <button type="button" className="icon-only close" aria-label={productText('关闭')}
-              onClick={event => { event.stopPropagation(); closeViewer() }}>
+              onClick={(event) => { event.stopPropagation(); closeViewer() }}>
               <CloseIcon />
             </button>
           </div>
@@ -1024,7 +1024,8 @@ function buildContentTree(documents: KnowledgeDocument[], newestFirst: boolean):
     }
     let cursor = root
     for (let index = 0; index < parts.length - 1; index += 1) {
-      const name = parts[index]!
+      const name = parts[index]
+      if (name === undefined) continue
       const path = parts.slice(0, index + 1).join('/')
       let next = cursor.folders.get(name)
       if (next === undefined) {
@@ -1105,7 +1106,7 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
         className={selectedDoc ? 'selected' : ''}
         style={{ paddingLeft: `${4 + handlers.depth * 14}px` }}
         aria-pressed={selectedDoc}
-        onClick={event => {
+        onClick={(event) => {
           const rect = event.currentTarget.getBoundingClientRect()
           handlers.onSelectDocument(document.id, event.metaKey || event.ctrlKey, {
             x: Math.min(rect.right + 6, window.innerWidth - 160),
@@ -1113,7 +1114,7 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
           })
         }}
         onDoubleClick={() => handlers.onOpenDocument(document)}
-        onContextMenu={event => {
+        onContextMenu={(event) => {
           event.preventDefault()
           handlers.onOpenMenu(document.id, event.clientX, event.clientY)
         }}>

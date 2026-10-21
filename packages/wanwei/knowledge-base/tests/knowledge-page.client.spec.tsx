@@ -8,8 +8,8 @@ afterEach(cleanup)
 function api(): KnowledgeApi {
   return {
     list: vi.fn(async () => [
-      { id: 1, name: '我的资料', description: '测试资料', kind: 'personal', owner_user_id: 7 },
-      { id: 3, name: '团队共享', description: '共享', kind: 'shared', owner_user_id: 7 },
+      { id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7 },
+      { id: 3, name: '团队共享', description: '共享', kind: 'shared' as const, owner_user_id: 7 },
     ]),
     create: vi.fn(async input => ({ id: 2, owner_user_id: 7, ...input })),
     documents: vi.fn(async () => [{ id: 'doc-1', name: '说明.pdf', size: 2048, run: 'DONE', progress: 1 }]),
@@ -60,9 +60,9 @@ it('uploads every file from a local folder into the selected knowledge base', as
   Object.defineProperty(top, 'webkitRelativePath', { value: '资料/指南.txt' })
   fireEvent.change(folderInput, { target: { files: [nested, junk, top] } })
   await waitFor(() => expect(service.upload).toHaveBeenCalledTimes(2))
-  const uploaded = service.upload.mock.calls.map(call => ({
-    id: call[0] as number,
-    name: (call[1] as File).name,
+  const uploaded = vi.mocked(service.upload).mock.calls.map((call: [number, File]) => ({
+    id: call[0],
+    name: call[1].name,
   }))
   expect(uploaded).toEqual([{ id: 1, name: 'nested.md' }, { id: 1, name: '指南.txt' }])
   expect(service.documents).toHaveBeenCalled()
@@ -88,7 +88,9 @@ it('shows uploaded folder paths as expandable folders with nested files', async 
 it('drags the divider to change the content width', async () => {
   const { container } = render(<KnowledgePage api={api()} />)
   const section = container.querySelector('.dsh-knowledge') as HTMLElement
-  section.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 1200, bottom: 700, width: 1200, height: 700, toJSON() { return {} } })
+  section.getBoundingClientRect = () => ({
+    x: 0, y: 0, left: 0, top: 0, right: 1200, bottom: 700, width: 1200, height: 700, toJSON() { return {} },
+  })
   const split = await screen.findByRole('separator', { name: '调整内容宽度' })
   fireEvent.pointerDown(split, { button: 0, clientX: 490 })
   fireEvent.pointerMove(window, { clientX: 640 })
@@ -101,8 +103,8 @@ it('drags the divider to change the content width', async () => {
 it('restores saved Q&A turns when opening a knowledge base', async () => {
   const service = api()
   service.messages = vi.fn(async () => [
-    { role: 'user', content: '上次的问题' },
-    { role: 'assistant', content: '上次的回答' },
+    { role: 'user' as const, content: '上次的问题' },
+    { role: 'assistant' as const, content: '上次的回答' },
   ])
   render(<KnowledgePage api={service} />)
   await waitFor(() => expect(service.messages).toHaveBeenCalledWith(1))
@@ -134,11 +136,14 @@ it('asks the selected knowledge base through chat completions and renders recomm
 it('shows typing dots and a stop control while waiting for the first answer chunk', async () => {
   let finish!: (value: { answer: string; recommendations: string[] }) => void
   const service = api()
-  service.complete = vi.fn((_id, _question, onProgress, signal) => new Promise((resolve, reject) => {
-    finish = resolve
-    signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')), { once: true })
-    onProgress?.({ answer: '', done: false })
-  }))
+  service.complete = vi.fn((_id, _question, onProgress, signal) =>
+    new Promise<{ answer: string; recommendations: string[] }>((resolve, reject) => {
+      finish = resolve
+      signal?.addEventListener('abort', () => {
+        reject(new DOMException('The operation was aborted.', 'AbortError'))
+      }, { once: true })
+      onProgress?.({ answer: '', done: false })
+    }))
   render(<KnowledgePage api={service} />)
   const input = await screen.findByPlaceholderText('基于知识库提问')
   fireEvent.change(input, { target: { value: '请概括文档' } })

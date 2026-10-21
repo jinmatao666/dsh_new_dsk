@@ -124,7 +124,7 @@ export function apply(ctx: Context): void {
     async documents(id) {
       const raw = await call('documents', { id })
       if (!Array.isArray(raw)) throw new Error('知识库文件列表无效')
-      return raw.map(item => {
+      return raw.map((item) => {
         if (typeof item !== 'object' || item === null) throw new Error('知识库文件无效')
         const document = item as Record<string, unknown>
         if (typeof document.id !== 'string' || typeof document.name !== 'string' ||
@@ -147,7 +147,7 @@ export function apply(ctx: Context): void {
     async chunks(knowledgeBaseId, documentId) {
       const raw = await call('chunks', { id: knowledgeBaseId, documentId })
       if (!Array.isArray(raw)) throw new Error('知识库文件内容无效')
-      return raw.map(item => {
+      return raw.map((item) => {
         if (typeof item !== 'object' || item === null) throw new Error('知识库切片无效')
         const chunk = item as Record<string, unknown>
         if (typeof chunk.id !== 'string' || typeof chunk.content !== 'string') throw new Error('知识库切片字段无效')
@@ -199,7 +199,7 @@ export function apply(ctx: Context): void {
     async messages(knowledgeBaseId) {
       const raw = await call('messages', { id: knowledgeBaseId })
       if (!Array.isArray(raw)) throw new Error('知识库对话历史无效')
-      return raw.map(item => {
+      return raw.map((item) => {
         if (typeof item !== 'object' || item === null) throw new Error('知识库对话消息无效')
         const message = item as Record<string, unknown>
         if ((message.role !== 'user' && message.role !== 'assistant') || typeof message.content !== 'string') {
@@ -214,7 +214,7 @@ export function apply(ctx: Context): void {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ id: knowledgeBaseId, question }),
         credentials: 'same-origin',
-        signal,
+        ...(signal === undefined ? {} : { signal }),
       })
       const contentType = response.headers.get('content-type') ?? ''
       if (response.ok && contentType.includes('text/event-stream') && response.body !== null) {
