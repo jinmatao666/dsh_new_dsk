@@ -15,6 +15,24 @@ export function rpcValue(result: RpcResult<unknown>): unknown {
   return result.value
 }
 
+const TRANSPORT_MESSAGES = new Set([
+  'Failed to fetch',
+  'NetworkError when attempting to fetch resource.',
+  'TypeError: Failed to fetch',
+])
+
+/**
+ * Whether `error` is the browser dropping a Host request, including the product copy
+ * already substituted for that failure.
+ * @param error - thrown value from `connection.rpc.call` or a later retry.
+ * @returns true when the connectors page should retry rather than treat it as a CLI failure.
+ */
+export function isConnectorTransportError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return TRANSPORT_MESSAGES.has(message)
+    || message === productText('无法连接本机服务以写入技能。请确认桌面端仍在运行后重试；若反复失败请使用完整安装包。')
+}
+
 /**
  * Map browser transport failures (literal `Failed to fetch`) to product copy.
  * Host skill-install errors keep their original Chinese message.
@@ -25,10 +43,7 @@ export function connectorRpcError(error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error)
   // Only the browser's own transport failure. Host messages that mention
   // "Failed to fetch" (for example a GitHub skill download) must stay intact.
-  const transport = message === 'Failed to fetch'
-    || message === 'NetworkError when attempting to fetch resource.'
-    || message === 'TypeError: Failed to fetch'
-  if (transport) {
+  if (TRANSPORT_MESSAGES.has(message)) {
     return new Error(productText('无法连接本机服务以写入技能。请确认桌面端仍在运行后重试；若反复失败请使用完整安装包。'))
   }
   return error instanceof Error ? error : new Error(message)
@@ -52,6 +67,8 @@ export function parseDingTalkStatus(value: unknown): DingTalkStatus {
     authed: record.authed,
     skillInstalled: record.skillInstalled,
     hint: typeof record.hint === 'string' ? record.hint : null,
+    authorizing: record.authorizing === true,
+    authorizeError: typeof record.authorizeError === 'string' ? record.authorizeError : null,
   }
 }
 

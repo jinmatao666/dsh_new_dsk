@@ -3,6 +3,7 @@ import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connec
 import {
   connectorRpcError,
   createDingTalkApi,
+  isConnectorTransportError,
   parseDingTalkStatus,
   rpcValue,
 } from '../src/client/dingtalk-api.ts'
@@ -15,7 +16,10 @@ describe('dingtalk-api client helpers', () => {
   })
 
   it('maps browser Failed to fetch to product copy', () => {
-    expect(connectorRpcError(new Error('Failed to fetch')).message).toMatch(/无法连接本机服务/)
+    const mapped = connectorRpcError(new Error('Failed to fetch'))
+    expect(mapped.message).toMatch(/无法连接本机服务/)
+    expect(isConnectorTransportError(mapped)).toBe(true)
+    expect(isConnectorTransportError(new Error('Failed to fetch'))).toBe(true)
     expect(connectorRpcError(new Error('未找到随包 dws-cli')).message).toBe('未找到随包 dws-cli')
     expect(connectorRpcError(new Error('无法从 GitHub 下载企业微信技能（Failed to fetch）。')).message)
       .toMatch(/GitHub/)
@@ -28,12 +32,16 @@ describe('dingtalk-api client helpers', () => {
       authed: true,
       skillInstalled: false,
       hint: 'need skill',
+      authorizing: true,
+      authorizeError: 'x',
     })).toEqual({
       dwsInstalled: true,
       dwsVersion: '1.2.3',
       authed: true,
       skillInstalled: false,
       hint: 'need skill',
+      authorizing: true,
+      authorizeError: 'x',
     })
     expect(() => parseDingTalkStatus(null)).toThrow()
     expect(() => parseDingTalkStatus({ dwsInstalled: true })).toThrow()

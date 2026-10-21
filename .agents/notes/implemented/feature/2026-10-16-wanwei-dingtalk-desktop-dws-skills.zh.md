@@ -28,7 +28,7 @@ Status: implemented
 
 ## 后果
 
-安装包 / `prepare:runtime` 构建必须包含 `dingtalk-workspace-cli`、解压当前平台的 `vendor/dws` 二进制，并把 `dws-cli` 技能资源落到 `app/assets/dws-cli`，以便打包后的 Host 通过 `DSH_DWS_SKILL_DIR` / `DSH_APP_ROOT` / `DSH_NODE_BINARY` 解析，而不依赖 `require.resolve`。使用当前安装包的终端用户只需点「连接」并完成授权。若授权已成功但技能尚未写入，「连接」会只安装技能、不再打开 OAuth 浏览器。在 `dws auth login` 成功且 `dws-cli` 写入产品 home 技能根之前，依赖钉钉 API 的桌面提示无法经该技能执行。Stream 机器人私聊不在本连接器卡片的产品范围内。
+安装包 / `prepare:runtime` 构建必须包含 `dingtalk-workspace-cli`、解压当前平台的 `vendor/dws` 二进制，并把 `dws-cli` 技能资源落到 `app/assets/dws-cli`，以便打包后的 Host 通过 `DSH_DWS_SKILL_DIR` / `DSH_APP_ROOT` / `DSH_NODE_BINARY` 解析，而不依赖 `require.resolve`。使用当前安装包的终端用户只需点「连接」并完成授权。「连接」在 Host 进程内启动 `dws auth login` 后立即返回 `authorizing: true`。Client 轮询 `status`，直到 `dws auth status --readonly` 报告登录已保存且 `dws-cli` 已在磁盘上，或登录写入 `authorizeError`。该只读探测不获取认证锁，因此浏览器授权已经把令牌落盘时，即使 `dws auth login` 仍在运行，面板也会离开等待授权。Host 会停止已完成的登录，并按进程退出而不是输出管道关闭来结束排队任务：系统浏览器可能继承隐藏发布进程的 stdout/stderr 句柄；若等待这些句柄关闭，**解绑**和之后每次**连接**都会阻塞到桌面重启。若把整段浏览器授权挂在同一次登录 RPC 上，桌面 WebView 在从系统浏览器回来后会报 `Failed to fetch`。**解绑**先删掉技能副本并立刻返回，`dws auth logout` 在后台继续；随后的**连接**排在这次退出之后，仍立即返回 `authorizing: true`。若授权已成功但技能尚未写入，「连接」会只安装技能、不再打开 OAuth 浏览器。在 `dws auth login` 成功且 `dws-cli` 写入产品 home 技能根之前，依赖钉钉 API 的桌面提示无法经该技能执行。Stream 机器人私聊不在本连接器卡片的产品范围内。
 
 「去试试」会写入示例提示，并在常驻的 `conversation.composer.tools` 芯片上选中钉钉（session-maybe，紧挨 `+`），因为 `conversation.input.left` 是 session 作用域，在 `sessions.clear()` 后不会渲染。点击芯片可切换连接器或重新打开连接器面板。
 

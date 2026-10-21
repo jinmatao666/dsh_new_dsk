@@ -119,6 +119,8 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
   }, [])
   useEffect(() => {
     let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let failures = 0
     setCatalogLoading(true)
     setLoadError(null)
     if (loadExperts === undefined) {
@@ -126,14 +128,29 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
       setCatalogLoading(false)
       return () => { cancelled = true }
     }
-    void loadExperts().then((items) => {
-      if (cancelled) return
-      setPublishedExperts(projectPublishedExperts(items, EXPERTS))
-      setLoadError(null)
-    }).catch((error: unknown) => {
-      if (!cancelled) setLoadError(error instanceof Error ? error.message : '专家目录加载失败')
-    }).finally(() => { if (!cancelled) setCatalogLoading(false) })
-    return () => { cancelled = true }
+    const run = (): void => {
+      void loadExperts().then((items) => {
+        if (cancelled) return
+        setPublishedExperts(projectPublishedExperts(items, EXPERTS))
+        setLoadError(null)
+        setCatalogLoading(false)
+      }).catch((error: unknown) => {
+        if (cancelled) return
+        failures += 1
+        // Same localhost blip that fails a connector card must not leave the
+        // expert catalog on the service-unavailable illustration.
+        if (failures >= 3) {
+          setLoadError(error instanceof Error ? error.message : '专家目录加载失败')
+          setCatalogLoading(false)
+        }
+        timer = setTimeout(run, failures >= 3 ? 1500 : 0)
+      })
+    }
+    run()
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [loadExperts])
   const categories = ['全部', ...new Set(publishedExperts.map(expert => expert.category))]
   const visibleExperts = category === '全部' ? publishedExperts : publishedExperts.filter(expert => expert.category === category)

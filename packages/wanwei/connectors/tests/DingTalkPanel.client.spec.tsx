@@ -66,7 +66,7 @@ describe('DingTalkPanel', () => {
 
   it('shows 去试试 immediately from initialStatus while soft-refreshing', async () => {
     let resolveStatus: (value: DingTalkStatus) => void = () => {}
-    const pending = new Promise<DingTalkStatus>(resolve => { resolveStatus = resolve })
+    const pending = new Promise<DingTalkStatus>((resolve) => { resolveStatus = resolve })
     const face = api({
       status: vi.fn(() => pending),
     })
@@ -85,6 +85,70 @@ describe('DingTalkPanel', () => {
       await pending
     })
     await waitFor(() => expect(face.status).toHaveBeenCalled())
+  })
+
+  it('polls status while Host login stays authorizing after the RPC returns', async () => {
+    vi.useFakeTimers()
+    try {
+      const face = api({
+        login: vi.fn(async () => ({
+          dwsInstalled: true,
+          dwsVersion: '1.0.0',
+          authed: false,
+          skillInstalled: false,
+          hint: null,
+          authorizing: true,
+          authorizeError: null,
+        })),
+        status: vi.fn()
+          .mockResolvedValueOnce({
+            dwsInstalled: true,
+            dwsVersion: '1.0.0',
+            authed: false,
+            skillInstalled: false,
+            hint: null,
+            authorizing: false,
+            authorizeError: null,
+          })
+          .mockResolvedValueOnce({
+            dwsInstalled: true,
+            dwsVersion: '1.0.0',
+            authed: false,
+            skillInstalled: false,
+            hint: null,
+            authorizing: true,
+            authorizeError: null,
+          })
+          .mockResolvedValue({
+            dwsInstalled: true,
+            dwsVersion: '1.0.0',
+            authed: true,
+            skillInstalled: true,
+            hint: null,
+            authorizing: false,
+            authorizeError: null,
+          }),
+      })
+      const onNotice = vi.fn()
+      render(<DingTalkPanel api={face} onNotice={onNotice} />)
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(face.status).toHaveBeenCalled()
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: '连接' }))
+      })
+      expect(face.login).toHaveBeenCalled()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000)
+        await vi.advanceTimersByTimeAsync(1000)
+      })
+      expect(screen.getByRole('button', { name: '去试试' })).toBeTruthy()
+      expect(onNotice).toHaveBeenCalledWith({ kind: 'success', text: '钉钉已连接' })
+      expect(vi.mocked(face.status).mock.calls.length).toBeGreaterThan(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('surfaces load errors and keeps a single 连接 button when skill is still missing', async () => {

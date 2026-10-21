@@ -95,6 +95,9 @@ const CONNECTORS: readonly Connector[] = [
   { id: 'archive-system', name: '档案管理系统', summary: productText('按授权范围检索历史项目档案，支持资料调阅与成果归档。'), scope: '档案管理', accent: '#6366f1', icon: '/connector-icons/archive-system.svg', capabilities: ['档案检索', '资料调阅', '成果归档'], access: '按档案密级与目录权限控制' },
 ]
 
+/** Product-visible rows. WeCom stays mounted on the Host while its packaged QR flow is disabled in the Client. */
+const VISIBLE_CONNECTORS = CONNECTORS.filter(connector => connector.id !== 'wecom')
+
 function ConnectorBrandIcon({ icon, accent }: { icon: string; accent: string }) {
   // Bundled official brand artwork renders on a white tile; emoji values
   // keep the accent placeholder. 浙政钉 stays neutral until official artwork is licensed.
@@ -168,11 +171,27 @@ export function Connectors({
   const [connection, setConnection] = useState<'loading' | 'ready' | 'failed'>('loading')
   useEffect(() => {
     let disposed = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let failures = 0
+    const run = (): void => {
+      void checkConnection().then(() => {
+        if (!disposed) setConnection('ready')
+      }).catch(() => {
+        if (disposed) return
+        failures += 1
+        // A connector card can lose one localhost request while the system browser
+        // is focused. Keep retrying so that blip does not leave this page on the
+        // service-unavailable illustration.
+        if (failures >= 3) setConnection('failed')
+        timer = setTimeout(run, failures >= 3 ? 1500 : 0)
+      })
+    }
     setConnection('loading')
-    void checkConnection().then(() => { if (!disposed) setConnection('ready') }).catch(() => {
-      if (!disposed) setConnection('failed')
-    })
-    return () => { disposed = true }
+    run()
+    return () => {
+      disposed = true
+      clearTimeout(timer)
+    }
   }, [checkConnection])
   const [requested, setRequested] = useState<Set<string>>(() => new Set())
   const [selected, setSelected] = useState<Connector | null>(null)
@@ -185,7 +204,7 @@ export function Connectors({
   const [weComStatus, setWeComStatus] = useState<WeComStatus | null>(() => getCachedWeComStatus())
   const [weChatStatus, setWeChatStatus] = useState<WeChatStatus | null>(() => getCachedWeChatStatus())
   const [notice, setNotice] = useState<WanweiNotice | null>(null)
-  const connectors = [...CONNECTORS, ...customConnectors]
+  const connectors = [...VISIBLE_CONNECTORS, ...customConnectors]
   const rememberDingTalk = (value: DingTalkStatus) => {
     setCachedDingTalkStatus(value)
     setDingTalkStatus(value)
@@ -205,9 +224,6 @@ export function Connectors({
   useEffect(() => {
     void dingTalk.status().then(rememberDingTalk).catch(() => {})
   }, [dingTalk])
-  useEffect(() => {
-    void weCom.status().then(rememberWeCom).catch(() => {})
-  }, [weCom])
   useEffect(() => {
     void weChat.status().then(rememberWeChat).catch(() => {})
   }, [weChat])
@@ -394,7 +410,7 @@ function ConnectorsIcon({ size = 18 }: { size?: number }) {
 }
 
 export const inject = ['slots', 'connection', 'conversation', 'sessions', 'workspaces', 'wanweiNetwork']
-/** Mount the connector directory; DingTalk/WeCom use CLI skills; WeChat is an inbound remote channel.
+/** Mount the connector directory; DingTalk uses CLI skills and WeChat is an inbound remote channel.
  * @param ctx - Product Client context.
  */
 export function apply(ctx: Context): void {
@@ -470,13 +486,9 @@ export function apply(ctx: Context): void {
       { name: 'conversation.composer.tools', id: 'wanwei-active-connector', order: 0 },
       function ActiveComposerConnector() {
         const dingTalkCached = getCachedDingTalkStatus()
-        const weComCached = getCachedWeComStatus()
         const weChatCached = getCachedWeChatStatus()
         const [dingTalkConnected, setDingTalkConnected] = useState(
           () => dingTalkCached?.authed === true && dingTalkCached.skillInstalled === true,
-        )
-        const [weComConnected, setWeComConnected] = useState(
-          () => weComCached?.authed === true && weComCached.skillInstalled === true,
         )
         const [weChatConnected, setWeChatConnected] = useState(
           () => weChatCached?.authed === true,
@@ -488,12 +500,6 @@ export function apply(ctx: Context): void {
               setDingTalkConnected(value.authed && value.skillInstalled)
             })
             .catch(() => { setDingTalkConnected(false) })
-          void weCom.status()
-            .then(value => {
-              setCachedWeComStatus(value)
-              setWeComConnected(value.authed && value.skillInstalled)
-            })
-            .catch(() => { setWeComConnected(false) })
           void weChat.status()
             .then(value => {
               setCachedWeChatStatus(value)
@@ -507,9 +513,8 @@ export function apply(ctx: Context): void {
           else removeActiveConnectorId('dingtalk')
         }, [dingTalkConnected])
         useEffect(() => {
-          if (weComConnected) setActiveConnectorId('wecom')
-          else removeActiveConnectorId('wecom')
-        }, [weComConnected])
+          removeActiveConnectorId('wecom')
+        }, [])
         useEffect(() => {
           if (weChatConnected) setActiveConnectorId('wechat')
           else removeActiveConnectorId('wechat')
@@ -517,13 +522,12 @@ export function apply(ctx: Context): void {
         return (
           <ComposerConnectorChip
             onManage={() => { controller.open() }}
-            options={CONNECTORS.map(entry => ({
+            options={VISIBLE_CONNECTORS.map(entry => ({
               id: entry.id,
               name: entry.name,
               icon: entry.icon,
               accent: entry.accent,
               available: (entry.kind === 'dingtalk-channel' && dingTalkConnected)
-                || (entry.kind === 'wecom-channel' && weComConnected)
                 || (entry.kind === 'wechat-channel' && weChatConnected),
             }))}
           />

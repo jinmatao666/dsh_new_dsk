@@ -2567,6 +2567,11 @@ pub fn run() {
                 // navigation. Reinstall the small bridge on each document so
                 // client features do not fall back to WebView browser downloads.
                 .initialization_script(NATIVE_BRIDGE_INITIALIZATION_SCRIPT)
+                // Keep wry's default feature disables, and turn off native occlusion.
+                // When the system browser covers this window, WebView2 otherwise
+                // suspends the page and aborts every localhost call, including
+                // connector writes and session/prompt.
+                .additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion")
                 // The external sidecar can lose window.__TAURI__ after a
                 // navigation. AuthGate emits this marker through
                 // document.title, which this native callback always sees.
