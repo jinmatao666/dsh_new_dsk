@@ -15,6 +15,7 @@
     "src/client/AuthGate.tsx",
     "src/client/AccountSection.tsx",
     "src/client/DesktopUpdateSection.tsx",
+    "src/client/desktop-update-controller.ts",
     "src/client/ManagedModelsSection.tsx",
     "src/client/controller.ts",
     "src/client/locales.ts",

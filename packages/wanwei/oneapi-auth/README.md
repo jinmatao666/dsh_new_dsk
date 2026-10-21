@@ -35,7 +35,7 @@ Users sign in to the configured OneAPI service and use the models permitted for 
 
 The Wanwei product bundle mounts the Host and Client halves. The browser receives authentication state and model identifiers, not passwords or generated tokens.
 
-Account settings shows native desktop update controls only when the shell bridge is present. The Host's parent-only update protocol rejects busy agents, maintenance, tools, jobs and registered automation intervals, then awaits whole-tree disposal before acknowledging shutdown. Browser-only deployments have no installer controls. Native scheduling, signing configuration and platform acceptance belong to the [desktop shell](../../../products/wanwei-desktop/README.md).
+Version settings appears before Account and shows the current version, automatic-check switch and manual check button when the desktop bridge is present. A plugin-owned monitor shows download and installation progress in a separate modal independently of settings navigation. Hiding download progress does not cancel the download; Version can reopen it. Unknown sizes use indeterminate progress, and installation progress cannot be dismissed. Native download and installation confirmations remain unchanged. The Host's parent-only update protocol rejects busy agents, maintenance, tools, jobs and registered automation intervals, then awaits whole-tree disposal before acknowledging shutdown. Browser-only deployments have no installer controls. Native scheduling, signing configuration and platform acceptance belong to the [desktop shell](../../../products/wanwei-desktop/README.md).
 
 ### Configuration
 

@@ -7,6 +7,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { AccountSection, type AccountInjected } from './AccountSection.tsx'
 import { ManagedModelsSection } from './ManagedModelsSection.tsx'
+import { DesktopUpdateSection, DesktopUpdateOverlay } from './DesktopUpdateSection.tsx'
+import { DesktopUpdateController } from './desktop-update-controller.ts'
 import { AuthGate, type AuthInjected } from './AuthGate.tsx'
 import { AuthController } from './controller.ts'
 import { NetworkController } from './network-controller.ts'
@@ -47,6 +49,13 @@ export function apply(ctx: Context): void {
     logout: () => controller.logout(),
   })
   const t = ctx.locale.bind(NS)
+  const updates = new DesktopUpdateController((window as Window & {
+    __ZJUGIS_NATIVE_INVOKE__?: (command: string, args: unknown) => Promise<unknown>
+  }).__ZJUGIS_NATIVE_INVOKE__)
+  ctx.effect(() => updates.start(), 'wanwei-auth: update monitor')
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay', id: 'wanwei-update-progress', order: 200, locale: NS, inject: () => ({ updates }),
+  }, DesktopUpdateOverlay))
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay', id: 'wanwei-network-guard', order: -999, locale: NS, inject: () => ({ hooks: { network } }),
   }, NetworkGuard))
@@ -60,4 +69,8 @@ export function apply(ctx: Context): void {
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'wanwei-account', order: 40, label: () => t('accountNav'), locale: NS, inject: accountInject,
   }, AccountSection))
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section', id: 'wanwei-version', order: 35, label: () => t('updatesNav'), locale: NS,
+    inject: () => ({ updates }),
+  }, DesktopUpdateSection))
 }

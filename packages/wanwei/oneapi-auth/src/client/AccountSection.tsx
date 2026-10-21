@@ -3,7 +3,6 @@ import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@dee
 import type { AuthState } from '../contract.ts'
 import type { AuthView } from './controller.ts'
 import css from './AccountSection.module.css'
-import { DesktopUpdateSection } from './DesktopUpdateSection.tsx'
 
 export interface AccountInjected {
   hooks: { auth: HostObservable<AuthView> }
@@ -54,7 +53,6 @@ export function AccountSection({ useAuth, logout, close, t }: AccountSectionProp
         ? <div className={css.models}><span>{t('models')}</span><ul>{auth.models.map(model => <li key={model}>{model}</li>)}</ul></div>
         : null}
       {error === undefined ? null : <p className={css.error} role="alert">{error}</p>}
-      <DesktopUpdateSection t={t} />
     </section>
   )
 }

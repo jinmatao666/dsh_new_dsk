@@ -1,0 +1,49 @@
+.section { padding: 12px 0 28px; color: var(--dsw-alias-label-primary, #182236); }
+.section h1 { margin: 0; font-size: 22px; font-weight: 500; }
+.intro { margin: 8px 0 26px; color: var(--dsw-alias-label-secondary, #65758b); font-size: 14px; line-height: 1.6; }
+.versionCard { display: flex; align-items: center; gap: 14px; padding: 20px; border: 1px solid var(--dsw-alias-border-l1, #e5eaf2); border-radius: 14px; background: var(--dsw-alias-bg-layer-1, #f5f7fb); }
+.versionIcon, .downloadIcon { display: grid; place-items: center; width: 52px; height: 52px; flex: none; border-radius: 16px; color: var(--dsw-alias-primary, #2563eb); background: var(--dsw-alias-bg-base, #fff); }
+.versionIcon { width: 44px; height: 44px; border-radius: 12px; }
+.versionInfo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.versionInfo > span { font-size: 14px; font-weight: 500; }
+.versionInfo strong { font-size: 22px; line-height: 1.3; font-weight: 500; letter-spacing: -.2px; overflow-wrap: anywhere; }
+.versionInfo small { color: var(--dsw-alias-label-secondary, #65758b); font-size: 12px; }
+.desktopBadge { margin-left: auto; align-self: flex-start; padding: 4px 9px; border: 1px solid var(--dsw-alias-border-l1, #e5eaf2); border-radius: 6px; color: var(--dsw-alias-label-secondary, #65758b); font-size: 12px; white-space: nowrap; }
+.preference, .checkRow { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 24px 0; border-bottom: 1px solid var(--dsw-alias-border-l1, #e5eaf2); }
+.section h2 { margin: 0 0 7px; font-size: 14px; font-weight: 500; }
+.preference p, .checkRow p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--dsw-alias-label-secondary, #65758b); }
+.switch { position: relative; width: 40px; height: 24px; padding: 3px; border: 0; border-radius: 999px; flex: none; background: #a0aaba; cursor: pointer; transition: background .15s; }
+.switch span { display: block; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #0002; transition: transform .15s; }
+.switch[aria-checked='true'] { background: var(--dsw-alias-primary, #2563eb); }
+.switch[aria-checked='true'] span { transform: translateX(16px); }
+.primary, .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 0 14px; border: 1px solid transparent; border-radius: 9px; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; flex: none; }
+.primary { color: #fff; background: var(--dsw-alias-primary, #2563eb); }
+.primary svg { width: 16px; height: 16px; }
+.secondary { color: var(--dsw-alias-label-primary, #182236); background: var(--dsw-alias-bg-base, #fff); border-color: var(--dsw-alias-border-l1, #e5eaf2); }
+.primary:hover:not(:disabled) { filter: brightness(.95); }
+.secondary:hover:not(:disabled) { background: var(--dsw-alias-bg-layer-1, #f5f7fb); }
+.section button:disabled, .dialog button:disabled { cursor: default; opacity: .5; }
+.section button:focus-visible, .dialog button:focus-visible { outline: 2px solid var(--dsw-alias-primary, #2563eb); outline-offset: 4px; }
+.safety { margin: 18px 0 0; color: var(--dsw-alias-label-secondary, #65758b); font-size: 12px; line-height: 1.7; }
+.notice { margin: 16px 0 0; color: var(--dsw-alias-label-secondary, #65758b); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.error { color: var(--dsw-danger, #c53b42); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.textButton { margin-top: 14px; padding: 0; border: 0; background: none; color: var(--dsw-alias-primary, #2563eb); font: inherit; font-size: 13px; cursor: pointer; }
+.dialog { box-sizing: border-box; width: min(440px, calc(100vw - 40px)); max-height: calc(100dvh - 48px); padding: 28px; border: 1px solid var(--dsw-alias-border-l1, #e5eaf2); border-radius: 20px; color: var(--dsw-alias-label-primary, #182236); background: var(--dsw-alias-bg-base, #fff); box-shadow: 0 24px 80px #17264230; font-family: inherit; }
+.dialog::backdrop { background: #16203650; backdrop-filter: blur(4px); }
+.dialogHeader { display: flex; align-items: flex-start; justify-content: space-between; }
+.downloadIcon { width: 40px; height: 40px; border-radius: 12px; background: var(--dsw-alias-bg-layer-1, #f5f7fb); }
+.close { display: grid; place-items: center; width: 30px; height: 30px; margin: -8px -8px 0 0; border: 0; border-radius: 8px; background: none; color: var(--dsw-alias-label-secondary, #65758b); font: 24px/1 sans-serif; cursor: pointer; }
+.close:hover { background: var(--dsw-alias-bg-layer-1, #f5f7fb); }
+.dialog h2 { margin: 12px 0 6px; font-size: 18px; font-weight: 600; }
+.dialogHint { margin: 0; color: var(--dsw-alias-label-secondary, #65758b); font-size: 13px; line-height: 1.7; }
+.progressMeta { display: flex; justify-content: space-between; gap: 12px; margin-top: 20px; font-size: 12px; color: var(--dsw-alias-label-secondary, #65758b); }
+.progressMeta strong { color: var(--dsw-alias-primary, #2563eb); font-variant-numeric: tabular-nums; }
+.progress { appearance: none; display: block; width: 100%; height: 7px; margin-top: 10px; overflow: hidden; border: 0; border-radius: 99px; background: var(--dsw-alias-bg-layer-1, #edf1f7); accent-color: var(--dsw-alias-primary, #2563eb); }
+.progress::-webkit-progress-bar { background: var(--dsw-alias-bg-layer-1, #edf1f7); border-radius: 99px; }
+.progress::-webkit-progress-value { background: var(--dsw-alias-primary, #2563eb); border-radius: 99px; }
+.progress::-moz-progress-bar { background: var(--dsw-alias-primary, #2563eb); border-radius: 99px; }
+.bytes { margin: 10px 0 0; color: var(--dsw-alias-label-secondary, #65758b); font-size: 12px; font-variant-numeric: tabular-nums; }
+.dialogFooter { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--dsw-alias-border-l1, #e5eaf2); }
+.dialogFooter > span { max-width: 210px; color: var(--dsw-alias-label-secondary, #65758b); font-size: 12px; line-height: 1.6; }
+@media (max-width: 520px) { .versionCard { gap: 12px; padding: 18px; } .preference, .checkRow { gap: 12px; } .checkRow { align-items: flex-start; flex-wrap: wrap; } .dialog { padding: 22px; } .dialogFooter { align-items: flex-start; flex-direction: column; } }
+@media (prefers-reduced-motion: reduce) { .switch, .switch span { transition: none; } }
