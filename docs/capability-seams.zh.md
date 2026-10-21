@@ -9,6 +9,8 @@
 
 ```mermaid
 flowchart LR
+  pkg_skill_filesystem["skill-filesystem"]
+  svc_skillFileSystemPolicy["ctx.skillFileSystemPolicy<br/>Deployment-wide local skill discovery policy"]
   pkg_wanwei_oneapi_auth["wanwei-oneapi-auth"]
   svc_wanweiNetworkPolicy["ctx.wanweiNetworkPolicy<br/>Desktop deployment network policy"]
   pkg_wanwei_browser_use["wanwei-browser-use"]
@@ -122,7 +124,6 @@ flowchart LR
   pkg_skill["skill"]
   svc_skills["ctx.skills<br/>Skill provider registry"]
   pkg_skill_badge["skill-badge"]
-  pkg_skill_filesystem["skill-filesystem"]
   svc_agents["ctx.agents<br/>Agent service"]
   pkg_acp["acp"]
   pkg_agent_default_model["agent-default-model"]
@@ -303,6 +304,7 @@ flowchart LR
   pkg_shell_env --> svc_shellEnv
   pkg_skill --> svc_skills
   pkg_skill_badge --> svc_skills
+  pkg_skill_filesystem --> svc_skillFileSystemPolicy
   pkg_skill_filesystem --> svc_skills
   pkg_spill --> svc_spillStore
   pkg_spill_local --> svc_spillStore
@@ -418,6 +420,7 @@ flowchart LR
   svc_shell --> pkg_tool_pwsh
   svc_shellEnv --> pkg_tool_bash
   svc_shellEnv --> pkg_tool_pwsh
+  svc_skillFileSystemPolicy --> pkg_skill_filesystem
   svc_skills --> pkg_tool_skill
   svc_spillStore --> pkg_spill_policy
   svc_storage --> pkg_storage_domain
@@ -470,6 +473,7 @@ flowchart LR
 
 | ctx 键 | 角色 | 所属包 | 实现 | 直接消费方 | 配套插件 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.skillFileSystemPolicy` | `core` | [`skill-filesystem`](../packages/skill/skill-filesystem) | - | [`skill-filesystem`](../packages/skill/skill-filesystem) | - | 将宿主拥有的技能发现根目录策略应用于 Agent 预设中的文件系统提供方。 |
 | `ctx.wanweiNetworkPolicy` | `core` | [`wanwei-oneapi-auth`](../packages/wanwei/oneapi-auth) | - | [`wanwei-browser-use`](../packages/wanwei/browser-use) | - | 保存服务端确认的环境，控制部署功能可用性，但不替代操作系统的网络隔离。 |
 | `ctx.attachments` | `seam` | [`attachment`](../packages/attachment/attachment) | [`attachment-local`](../packages/attachment/attachment-local) | [`api-session-controller`](../packages/api/session-controller), [`tool-fs`](../packages/fs/tool-fs), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-deepseek`](../packages/llm/llm-deepseek) | - | 宿主会在会话事件之前提交已接受的图片；提供方适配器将已授权的持久引用解析为提供方原生内容。 |
 | `ctx.llm` | `seam` | [`llm`](../packages/llm/llm) | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-replay`](../packages/test-support/llm-replay) | [`agent-loop`](../packages/core/agent-loop), [`compaction-basic`](../packages/compaction/compaction-basic) | - | 适配器注册提供方实现；agent loop（智能体循环）与压缩功能调用提供方无关的流服务。 |

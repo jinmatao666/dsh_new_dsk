@@ -274,6 +274,14 @@ Host service backing `ctx.remote.skills` without activating a cold Agent.
 
 Source: [`packages/api/session-controller/src/skill-catalog.ts`](../../packages/api/session-controller/src/skill-catalog.ts)
 
+<a id="ctxskillfilesystempolicy--skillfilesystempolicy"></a>
+
+### `ctx.skillFileSystemPolicy` — `SkillFileSystemPolicy`
+
+A deployment policy applies to host and preset providers without editing presets.
+
+Source: [`packages/skill/skill-filesystem/src/policy.ts`](../../packages/skill/skill-filesystem/src/policy.ts)
+
 <a id="ctxskills--skillregistry"></a>
 
 ### `ctx.skills` — `SkillRegistry`

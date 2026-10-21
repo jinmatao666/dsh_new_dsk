@@ -7,6 +7,8 @@ A service can be a core spine service, a swappable capability seam, or a bundle/
 
 ```mermaid
 flowchart LR
+  pkg_skill_filesystem["skill-filesystem"]
+  svc_skillFileSystemPolicy["ctx.skillFileSystemPolicy<br/>Deployment-wide local skill discovery policy"]
   pkg_wanwei_oneapi_auth["wanwei-oneapi-auth"]
   svc_wanweiNetworkPolicy["ctx.wanweiNetworkPolicy<br/>Desktop deployment network policy"]
   pkg_wanwei_browser_use["wanwei-browser-use"]
@@ -120,7 +122,6 @@ flowchart LR
   pkg_skill["skill"]
   svc_skills["ctx.skills<br/>Skill provider registry"]
   pkg_skill_badge["skill-badge"]
-  pkg_skill_filesystem["skill-filesystem"]
   svc_agents["ctx.agents<br/>Agent service"]
   pkg_acp["acp"]
   pkg_agent_default_model["agent-default-model"]
@@ -301,6 +302,7 @@ flowchart LR
   pkg_shell_env --> svc_shellEnv
   pkg_skill --> svc_skills
   pkg_skill_badge --> svc_skills
+  pkg_skill_filesystem --> svc_skillFileSystemPolicy
   pkg_skill_filesystem --> svc_skills
   pkg_spill --> svc_spillStore
   pkg_spill_local --> svc_spillStore
@@ -416,6 +418,7 @@ flowchart LR
   svc_shell --> pkg_tool_pwsh
   svc_shellEnv --> pkg_tool_bash
   svc_shellEnv --> pkg_tool_pwsh
+  svc_skillFileSystemPolicy --> pkg_skill_filesystem
   svc_skills --> pkg_tool_skill
   svc_spillStore --> pkg_spill_policy
   svc_storage --> pkg_storage_domain
@@ -468,6 +471,7 @@ flowchart LR
 
 | ctx key | Role | Owner | Implementations | Direct consumers | Companion plugins | Note |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.skillFileSystemPolicy` | `core` | [`skill-filesystem`](../packages/skill/skill-filesystem) | - | [`skill-filesystem`](../packages/skill/skill-filesystem) | - | Applies host-owned discovery roots to filesystem providers in agent presets. |
 | `ctx.wanweiNetworkPolicy` | `core` | [`wanwei-oneapi-auth`](../packages/wanwei/oneapi-auth) | - | [`wanwei-browser-use`](../packages/wanwei/browser-use) | - | Persists the server-confirmed environment and controls deployment availability without replacing OS network isolation. |
 | `ctx.attachments` | `seam` | [`attachment`](../packages/attachment/attachment) | [`attachment-local`](../packages/attachment/attachment-local) | [`api-session-controller`](../packages/api/session-controller), [`tool-fs`](../packages/fs/tool-fs), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-deepseek`](../packages/llm/llm-deepseek) | - | The host commits accepted images before session events; provider adapters resolve authorized durable references into provider-native content. |
 | `ctx.llm` | `seam` | [`llm`](../packages/llm/llm) | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-replay`](../packages/test-support/llm-replay) | [`agent-loop`](../packages/core/agent-loop), [`compaction-basic`](../packages/compaction/compaction-basic) | - | Adapters register provider implementations; the loop and compaction call the provider-neutral stream service. |

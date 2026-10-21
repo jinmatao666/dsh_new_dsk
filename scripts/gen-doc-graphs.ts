@@ -99,6 +99,14 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+    key: 'skillFileSystemPolicy',
+    pkg: 'skill-filesystem',
+    title: 'Deployment-wide local skill discovery policy',
+    mode: 'core',
+    consumers: ['skill-filesystem'],
+    note: 'Applies host-owned discovery roots to filesystem providers in agent presets.',
+  },
+  {
     key: 'wanweiNetworkPolicy',
     pkg: 'wanwei-oneapi-auth',
     title: 'Desktop deployment network policy',
