@@ -22,6 +22,7 @@ import { mergeRegister } from '@lexical/utils'
 import type { ArbitrateKey, ArbitrateOutcome } from '../../contract/input.ts'
 import { $composerLayout, $detectOffsetOfPoint } from './projection.ts'
 import { $selectDetectSpan } from './span-map.ts'
+import { registerChipCaret } from './chip-caret.ts'
 
 /** Move across an atomic reference and its single separating space together. */
 function moveAcrossChip(event: KeyboardEvent, backward: boolean, composing: boolean): boolean {
@@ -30,6 +31,13 @@ function moveAcrossChip(event: KeyboardEvent, backward: boolean, composing: bool
   if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false
   const layout = $composerLayout()
   const caret = $detectOffsetOfPoint(layout, selection.anchor)
+  // Do not delegate an outward arrow at a reference document edge to WebKit:
+  // its native contenteditable navigation can enter auxiliary decorator DOM.
+  if ((backward ? caret === 0 : caret === layout.detectLength)
+    && layout.segments.some(segment => segment.kind === 'chip')) {
+    event.preventDefault()
+    return true
+  }
   for (const segment of layout.segments) {
     if (segment.kind !== 'chip') continue
     const start = segment.detectStart
@@ -102,6 +110,7 @@ export function registerComposerKeymap(editor: LexicalEditor, handlers: Composer
   }
 
   return mergeRegister(
+    registerChipCaret(editor),
     editor.registerRootListener((root, prevRoot) => {
       prevRoot?.removeEventListener('compositionstart', onCompositionStart)
       prevRoot?.removeEventListener('compositionend', onCompositionEnd)

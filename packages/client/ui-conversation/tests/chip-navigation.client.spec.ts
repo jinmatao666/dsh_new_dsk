@@ -35,6 +35,16 @@ function bench(appearance: 'skill' | 'folder', separator = ' ') {
 }
 
 describe('reference boundary navigation', () => {
+  it.each(['skill', 'folder'] as const)('stops repeated outward arrows at %s document edges without changing text', (appearance) => {
+    const { editor, move, unregister } = bench(appearance)
+    for (let count = 0; count < 4; count++) {
+      expect(move(0, true)).toEqual({ handled: true, caret: 0 })
+      expect(move(12)).toEqual({ handled: true, caret: 12 })
+    }
+    expect(editor.getEditorState().read(() => $projectComposer(() => 1).clipboardText)).toBe('@one @two question')
+    unregister()
+  })
+
   it.each(['skill', 'folder'] as const)('crosses %s and its separator in one arrow step', (appearance) => {
     const { editor, move, unregister } = bench(appearance)
     expect(move(0)).toEqual({ handled: true, caret: 2 })

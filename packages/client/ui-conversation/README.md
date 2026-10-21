@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Reference chips reserve inline space for the caret; skill removal buttons stay inside the capsule. Unmodified horizontal arrows cross a chip and its single following space together, preserving that space in copied and submitted text. Repeated spaces, selection gestures, word navigation and IME input retain editor behavior.
+Reference chips reserve inline space for the caret and skill removal control. Unmodified horizontal arrows cross a chip and its single following space together, preserving that space in copied and submitted text, and stop at document edges. Focused element-point selections beside a chip use a CSS caret without adding draft characters; text selections retain the native caret. WebKit's managed line-break image remains in the DOM but paints no broken-image icon. Repeated spaces, selection gestures, word navigation and IME input retain editor behavior.
 
 Skill reference chips offer separate navigation and removal buttons. Navigation emits the browser `dsh:reference-open` event with `{ source, ref }` for the owning feature; removal deletes only that Lexical occurrence. Neither action submits a message or changes other references. The composer does not own the destination page.
 

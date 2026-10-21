@@ -4,10 +4,47 @@
    stay inside the composer's 24px line so a chip never changes line height. */
 
 .host {
+  position: relative;
   display: inline-block;
   padding-inline: 3px;
   vertical-align: middle;
   line-height: 22px;
+}
+
+/* Lexical's WebKit caret scaffold is an image without a source, not content.
+   Preserve the node for selection mapping without painting a broken-image icon. */
+.surface img[data-lexical-managed-linebreak] {
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.boundaryCaret {
+  caret-color: transparent !important;
+}
+
+.host[data-composer-caret]::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 1em;
+  transform: translateY(-50%);
+  background: var(--dsw-alias-state-business-primary);
+  pointer-events: none;
+  animation: referenceCaretBlink 1s step-end infinite;
+}
+
+.host[data-composer-caret='before']::after { inset-inline-start: 0; }
+.host[data-composer-caret='after']::after { inset-inline-end: 0; }
+
+@keyframes referenceCaretBlink {
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .host[data-composer-caret]::after { animation: none; }
 }
 
 /* WebKit paints a caret at the first inline child's edge before decorators.

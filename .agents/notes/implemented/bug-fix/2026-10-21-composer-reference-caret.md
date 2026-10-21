@@ -10,9 +10,11 @@ Inline reference capsules contain non-editable icons and interactive skill butto
 
 ## Decision
 
-The [reference host](../../../../packages/client/ui-conversation/src/client/input/editor/chip-node.tsx) is an inline block with three pixels of horizontal padding on each side. The skill removal button participates in the capsule's flex layout; the staged skill prefix follows the same rule. Both reserve visual space without adding text or editable nodes.
+The [reference host](../../../../packages/client/ui-conversation/src/client/input/editor/chip-node.tsx) is an inline block with three pixels of horizontal padding on each side; skill hosts reserve additional leading and trailing space around the capsule and removal badge. Reference layout reserves visual space without adding text or editable nodes.
 
 The [keymap](../../../../packages/client/ui-conversation/src/client/input/editor/keymap.ts) moves a collapsed caret across one reference and its single following ASCII space in one unmodified horizontal-arrow gesture. Repeated spaces, selection gestures, modified arrows and composition pass through. Clipboard text, occurrence identity and submission codecs are unchanged.
+
+Unmodified outward arrows stop at the ends of a document containing references instead of entering WebKit's auxiliary decorator DOM. The [caret binding](../../../../packages/client/ui-conversation/src/client/input/editor/chip-caret.ts) paints a CSS caret for focused, collapsed element-point selections beside reference hosts. Native text carets remain unchanged; blur, range selection, read-only state, root replacement and disposal clear the decoration. WebKit's managed line-break image retains its DOM identity with zero dimensions and opacity, suppressing broken-image painting without changing editor text.
 
 ## Alternatives considered
 
@@ -20,6 +22,8 @@ The [keymap](../../../../packages/client/ui-conversation/src/client/input/editor
 
 **Only add margins.** Margins do not remove duplicate arrow stops, and an out-of-flow badge still has no reserved width. An atomic host box plus an in-flow button addresses both geometry and navigation.
 
+**Insert invisible text anchors.** Extra characters create editable positions and must be stripped from clipboard, persistence and submission. A DOM-only caret decoration avoids changing those representations.
+
 ## Consequences
 
-Skill capsules reserve additional width for their removal button, so long labels truncate earlier. Keyboard users retain visible button focus. Focused editor tests cover navigation and unchanged text; browser checks cover caret boundaries, typing, deletion, capsule spacing and narrow-screen wrapping. The change adds no model-visible content or network requests.
+Skill capsules reserve additional width for their removal button, so long labels truncate earlier. Keyboard users retain visible button focus. Focused editor tests cover navigation, caret-decoration cleanup and unchanged text; Chromium and WebKit checks cover repeated outward arrows, both reference types, typing and deletion. macOS WKWebView release acceptance remains required because Windows-hosted WebKit does not reproduce every native caret-painting defect. The change adds no model-visible content or network requests.
