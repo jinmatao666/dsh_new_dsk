@@ -1086,6 +1086,12 @@ fn maximize_expert_window(window: Window) -> Result<(), String> {
     Ok(())
 }
 
+fn log_expert_view(app: &tauri::AppHandle, event: &str) {
+    if let Ok(directory) = app.path().app_local_data_dir() {
+        append_log(&directory.join("logs").join("expert-webviews.log"), event);
+    }
+}
+
 #[tauri::command]
 async fn open_expert_webview(
     window: Window,
@@ -1140,22 +1146,46 @@ async fn open_expert_webview(
         .app_handle()
         .add_capability(capability)
         .map_err(|error| format!("专家权限初始化失败：{error}"))?;
+    let navigation_app = window.app_handle().clone();
+    let loading_app = window.app_handle().clone();
     let builder = WebviewBuilder::new(&label, WebviewUrl::External(launch_url))
         .disable_drag_drop_handler()
         .initialization_script(NATIVE_BRIDGE_INITIALIZATION_SCRIPT)
-        .on_navigation(move |target| target.origin() == allowed_url.origin());
-    window
+        .on_navigation(move |target| {
+            let allowed = target.origin() == allowed_url.origin();
+            if !allowed {
+                log_expert_view(&navigation_app, "navigation blocked: foreign origin");
+            }
+            allowed
+        })
+        .on_page_load(move |_, payload| {
+            log_expert_view(
+                &loading_app,
+                match payload.event() {
+                    tauri::webview::PageLoadEvent::Started => "page loading started",
+                    tauri::webview::PageLoadEvent::Finished => "page loading finished",
+                },
+            );
+        });
+    let view = window
         .add_child(
             builder,
             LogicalPosition::new(x, y),
             LogicalSize::new(width, height),
         )
         .map_err(|error| format!("无法打开专家网页：{error}"))?;
+    // Keep a newly created child from covering HTML before the renderer has
+    // committed its latest geometry and visibility decision.
+    if let Err(error) = view.hide() {
+        let _ = view.close();
+        return Err(format!("无法初始化专家视图：{error}"));
+    }
+    log_expert_view(window.app_handle(), "created hidden");
     Ok(label)
 }
 
 #[tauri::command]
-fn set_expert_webview_bounds(
+async fn set_expert_webview_bounds(
     window: Window,
     label: String,
     x: f64,
@@ -1175,26 +1205,43 @@ fn set_expert_webview_bounds(
         .app_handle()
         .get_webview(&label)
         .ok_or("专家视图不存在")?;
-    view.set_position(LogicalPosition::new(x, y))
-        .map_err(|error| error.to_string())?;
-    view.set_size(LogicalSize::new(width, height))
-        .map_err(|error| error.to_string())
+    let result = view
+        .set_bounds(tauri::Rect {
+            position: LogicalPosition::new(x, y).into(),
+            size: LogicalSize::new(width, height).into(),
+        })
+        .map_err(|error| error.to_string());
+    if result.is_err() {
+        log_expert_view(window.app_handle(), "bounds failed");
+    }
+    result
 }
 
 #[tauri::command]
-fn close_expert_webview(window: Window, label: String) -> Result<(), String> {
+async fn close_expert_webview(window: Window, label: String) -> Result<(), String> {
     if window.label() != "main" {
         return Err("只能从主窗口关闭专家".to_string());
     }
     validate_expert_webview_label(&label)?;
     if let Some(view) = window.app_handle().get_webview(&label) {
+        // Remove hit testing before disposal; a failed close must not leave
+        // a visible child over the main page.
+        let _ = view.hide();
         view.close().map_err(|error| error.to_string())?;
     }
+    if let Some(main) = window.app_handle().get_webview("main") {
+        main.set_focus().map_err(|error| error.to_string())?;
+    }
+    log_expert_view(window.app_handle(), "closed; main focus restored");
     Ok(())
 }
 
 #[tauri::command]
-fn set_expert_webview_visible(window: Window, label: String, visible: bool) -> Result<(), String> {
+async fn set_expert_webview_visible(
+    window: Window,
+    label: String,
+    visible: bool,
+) -> Result<(), String> {
     if window.label() != "main" {
         return Err("只能从主窗口切换专家视图".to_string());
     }
@@ -1204,9 +1251,23 @@ fn set_expert_webview_visible(window: Window, label: String, visible: bool) -> R
         .get_webview(&label)
         .ok_or("专家视图不存在")?;
     if visible {
-        view.show().map_err(|error| error.to_string())
+        let result = view.show().map_err(|error| error.to_string());
+        log_expert_view(
+            window.app_handle(),
+            if result.is_ok() {
+                "show requested"
+            } else {
+                "show failed"
+            },
+        );
+        result
     } else {
-        view.hide().map_err(|error| error.to_string())
+        view.hide().map_err(|error| error.to_string())?;
+        if let Some(main) = window.app_handle().get_webview("main") {
+            main.set_focus().map_err(|error| error.to_string())?;
+        }
+        log_expert_view(window.app_handle(), "hide requested; main focus restored");
+        Ok(())
     }
 }
 

@@ -40,8 +40,6 @@ export function ExpertWebview({ launch, visible, onError }: {
   onError: (message: string) => void
 }) {
   const holder = useRef<HTMLDivElement>(null)
-  const viewLabel = useRef<string | undefined>(undefined)
-  const nativeVisible = useRef<boolean | undefined>(undefined)
   const syncView = useRef<() => void>(() => {})
   const visibleRef = useRef(visible)
   visibleRef.current = visible
@@ -50,40 +48,51 @@ export function ExpertWebview({ launch, visible, onError }: {
   const { id, url, ticket } = launch
   useEffect(() => {
     let cancelled = false
-    let opening = false
-    viewLabel.current = undefined
-    nativeVisible.current = undefined
+    let label: string | undefined
+    let nativeVisible: boolean | undefined
+    let dirty = false
+    let pending: Promise<void> | undefined
+    const isCancelled = () => cancelled
+    const needsUpdate = () => dirty && !isCancelled()
+    const shouldShow = () => visibleRef.current && webviewBounds(holder.current) !== undefined
+      && !hasBlockingDialog(holder.current)
     const update = () => {
-      const value = webviewBounds(holder.current)
-      const label = viewLabel.current
-      if (label === undefined) {
-        if (!visibleRef.current || value === undefined || opening) return
-        opening = true
-        void invokeNative('open_expert_webview', { ...value, key: id, url, ticket })
-          .then((result) => {
+      if (cancelled) return
+      dirty = true
+      if (pending !== undefined) return
+      pending = (async () => {
+        while (needsUpdate()) {
+          dirty = false
+          const value = webviewBounds(holder.current)
+          const show = shouldShow()
+          if (label === undefined) {
+            if (!show || value === undefined) continue
+            const result = await invokeNative('open_expert_webview', { ...value, key: id, url, ticket })
             if (typeof result !== 'string') throw new Error('专家视图返回了无效标识')
-            if (cancelled) {
-              void invokeNative('close_expert_webview', { label: result })
-              return
-            }
-            viewLabel.current = result
-            update()
-          })
-          .catch((error: unknown) => {
-            if (!cancelled) onErrorRef.current(error instanceof Error ? error.message : String(error))
-          })
-        return
-      }
-      const shouldShow = visibleRef.current && value !== undefined && !hasBlockingDialog(holder.current)
-      if (nativeVisible.current !== shouldShow) {
-        nativeVisible.current = shouldShow
-        void invokeNative('set_expert_webview_visible', { label, visible: shouldShow })
-          .catch((error: unknown) => { if (!cancelled) onErrorRef.current(error instanceof Error ? error.message : String(error)) })
-      }
-      if (shouldShow) {
-        void invokeNative('set_expert_webview_bounds', { label, ...value })
-          .catch((error: unknown) => { if (!cancelled) onErrorRef.current(error instanceof Error ? error.message : String(error)) })
-      }
+            label = result
+            // Creation can finish after navigation or a resize. Re-read layout
+            // before ever showing the newly created, initially hidden child.
+            dirty = true
+            continue
+          }
+          if (show && value !== undefined) {
+            await invokeNative('set_expert_webview_bounds', { label, ...value })
+            if (isCancelled()) break
+            if (!shouldShow()) { dirty = true; continue }
+          }
+          if (nativeVisible !== show) {
+            await invokeNative('set_expert_webview_visible', { label, visible: show })
+            nativeVisible = show
+          }
+        }
+      })().catch((error: unknown) => {
+        dirty = false
+        nativeVisible = undefined
+        if (!cancelled) onErrorRef.current(error instanceof Error ? error.message : String(error))
+      }).finally(() => {
+        pending = undefined
+        if (dirty && !cancelled) update()
+      })
     }
     syncView.current = update
     const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(update)
@@ -102,7 +111,20 @@ export function ExpertWebview({ launch, visible, onError }: {
       window.removeEventListener('resize', update)
       document.removeEventListener('scroll', update, true)
       syncView.current = () => {}
-      if (viewLabel.current !== undefined) void invokeNative('close_expert_webview', { label: viewLabel.current })
+      // Drain outstanding create/show/bounds calls before cleanup, so a late
+      // show can never resurrect an unmounted view over another feature page.
+      void (async () => {
+        await pending
+        if (label === undefined) return
+        try { await invokeNative('set_expert_webview_visible', { label, visible: false }) }
+        catch { /* Close is the fallback when hiding the owned child fails. */ }
+        try { await invokeNative('close_expert_webview', { label }) }
+        catch (error) {
+          // Closing is idempotent; retry once before reporting a native failure.
+          try { await invokeNative('close_expert_webview', { label }) }
+          catch { console.error('专家视图清理失败', error) }
+        }
+      })()
     }
   }, [id, url, ticket])
   useEffect(() => {

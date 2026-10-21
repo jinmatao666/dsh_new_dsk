@@ -43,6 +43,8 @@ Expert IDs accept 3–80 lowercase ASCII letters, digits or hyphens, beginning w
 
 The active workbench fills the remaining panel height through the body and expert container's flex layout. The native view waits for valid bounds; catalog mode retains ordinary scrolling. The [layout regression](tests/workbench-composition.mjs) boots the desktop profile and checks real browser geometry without mocking element sizes.
 
+Native operations run serially: creation returns a hidden child, bounds are applied before showing, and disposal waits for outstanding operations before hiding and closing. Visibility is recorded only after native acknowledgement. A bridge failure removes the affected tab and shows its error in the catalog; close retries once. The desktop restores main-view focus after hiding or closing and records lifecycle events in `logs/expert-webviews.log` under its local application data directory without URLs or tickets.
+
 The [Client entry](src/client/index.ts) supplies the implementation. The [Host entry](src/index.ts) anchors module discovery without registering a business service.
 
 </details>

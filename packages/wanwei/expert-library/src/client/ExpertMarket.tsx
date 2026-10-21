@@ -212,6 +212,10 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
     </nav>
     {launchError !== null && selected === null && <p role="alert">{launchError}</p>}
     {activeExpertTab === null && catalog}
-    {expertTabs.map(tab => <ExpertWebview key={tab.id} launch={tab} visible={activeExpertTab === tab.id} onError={setLaunchError} />)}
+    {expertTabs.map(tab => <ExpertWebview key={tab.id} launch={tab} visible={activeExpertTab === tab.id} onError={(message) => {
+      setLaunchError(message)
+      setExpertTabs(tabs => tabs.filter(item => item.id !== tab.id))
+      setActiveExpertTab(active => active === tab.id ? null : active)
+    }} />)}
   </section>
 }
