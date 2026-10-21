@@ -53,7 +53,9 @@ fn install_at(
     archive: Vec<u8>,
     mut record: InstalledSkill,
 ) -> Result<InstalledSkill, String> {
-    let _guard = skill_names::INSTALL_LOCK.lock().map_err(|e| e.to_string())?;
+    let _guard = skill_names::INSTALL_LOCK
+        .lock()
+        .map_err(|e| e.to_string())?;
     safe_root(root)?;
     if record.slug.is_empty()
         || record.slug.len() > 128
@@ -98,8 +100,15 @@ fn install_at(
         skill_staging_root(root)?.join(format!("skillhub-{}-{nonce}", std::process::id()));
     let temporary_root = workspace.join("skills");
     let result = (|| {
-        let imported = install_custom_skill_archive_at(&temporary_root, archive)
-            .map_err(|error| format!("SkillHub 技能包安装失败：{}", error.replace("个人技能", "技能").replace("自定义技能", "技能")))?;
+        let imported =
+            install_custom_skill_archive_at(&temporary_root, archive).map_err(|error| {
+                format!(
+                    "SkillHub 技能包安装失败：{}",
+                    error
+                        .replace("个人技能", "技能")
+                        .replace("自定义技能", "技能")
+                )
+            })?;
         let requested_local_slug = record.local_slug.clone();
         record.source = "skillhub".into();
         record.local_slug = imported.slug;
@@ -171,7 +180,9 @@ fn list_at(root: &Path) -> Result<Vec<InstalledSkill>, String> {
 }
 
 fn uninstall_at(root: &Path, slug: &str, local_slug: &str) -> Result<(), String> {
-    let _guard = skill_names::INSTALL_LOCK.lock().map_err(|e| e.to_string())?;
+    let _guard = skill_names::INSTALL_LOCK
+        .lock()
+        .map_err(|e| e.to_string())?;
     safe_root(root)?;
     validate_marketplace_slug(local_slug)?;
     let directory = root.join(local_slug);
@@ -271,9 +282,17 @@ mod tests {
     fn archive_with_entries(count: usize) -> Vec<u8> {
         let files: Vec<(String, String)> = (1..count)
             .map(|i| (format!("references/help-{i}.md"), "reference".into()))
-            .chain(std::iter::once(("SKILL.md".into(), "---\nname: local-skill\ndescription: test\n---".into())))
+            .chain(std::iter::once((
+                "SKILL.md".into(),
+                "---\nname: local-skill\ndescription: test\n---".into(),
+            )))
             .collect();
-        archive(&files.iter().map(|(p, c)| (p.as_str(), c.as_str())).collect::<Vec<_>>())
+        archive(
+            &files
+                .iter()
+                .map(|(p, c)| (p.as_str(), c.as_str()))
+                .collect::<Vec<_>>(),
+        )
     }
     #[test]
     fn installs_archive_at_entry_limit_through_directory_validation() {
@@ -296,7 +315,12 @@ mod tests {
         assert!(error.contains("4097"));
         assert!(!error.contains("个人技能"));
         assert!(!skills.join("local-skill").exists());
-        assert_eq!(fs::read_dir(root.0.join(".dsh-skill-staging")).unwrap().count(), 0);
+        assert_eq!(
+            fs::read_dir(root.0.join(".dsh-skill-staging"))
+                .unwrap()
+                .count(),
+            0
+        );
     }
     #[test]
     fn rejects_expanded_archive_above_byte_limit() {
@@ -306,7 +330,9 @@ mod tests {
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated);
         writer.start_file("SKILL.md", options).unwrap();
-        writer.write_all(b"---\nname: local-skill\ndescription: test\n---").unwrap();
+        writer
+            .write_all(b"---\nname: local-skill\ndescription: test\n---")
+            .unwrap();
         writer.start_file("references/large.txt", options).unwrap();
         writer.write_all(&vec![b'x'; 16 * 1024 * 1024]).unwrap();
         let bytes = writer.finish().unwrap().into_inner();
