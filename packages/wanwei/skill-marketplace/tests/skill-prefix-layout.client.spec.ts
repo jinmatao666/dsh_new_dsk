@@ -15,21 +15,22 @@ it('keeps a staged skill and its editable question in the same inline flow', () 
     const input = getComputedStyle(fixture.lastElementChild!)
     const chip = getComputedStyle(fixture.querySelector('.dsh-skill-draft-prefix')!)
     const label = getComputedStyle(fixture.querySelector('button span')!)
-    expect({ float: prefix.cssFloat, display: prefix.display, gap: prefix.marginRight,
+    expect({ float: prefix.cssFloat, display: prefix.display, inlineMargin: prefix.marginInline,
       inputDisplay: input.display, wrap: input.wordBreak, maxWidth: chip.maxWidth,
       ellipsis: label.textOverflow === 'ellipsis' }).toMatchInlineSnapshot(`
       {
         "display": "inline-block",
         "ellipsis": true,
         "float": "none",
-        "gap": "6px",
+        "inlineMargin": "6px 10px",
         "inputDisplay": "inline",
         "maxWidth": "240px",
         "wrap": "break-all",
       }
     `)
     const remove = getComputedStyle(fixture.querySelector('.dsh-skill-draft-remove')!)
-    expect(remove.position).not.toBe('absolute')
-    expect(remove.marginRight).toBe('5px')
+    expect(remove.position).toBe('absolute')
+    expect(remove.top).toBe('-4px')
+    expect(remove.right).toBe('-4px')
   } finally { fixture.remove(); style.remove() }
 })

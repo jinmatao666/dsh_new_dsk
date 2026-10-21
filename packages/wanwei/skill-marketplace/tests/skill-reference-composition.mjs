@@ -60,6 +60,7 @@ try {
   }, { slug, workspace })
   await page.goto(match[0])
   await page.getByText('专业智能助手', { exact: true }).waitFor({ timeout: 30000 })
+  assert.equal(await page.getByRole('combobox', { name: '选择技能', exact: true }).count(), 0)
   await page.locator('.dsh-skill-market-action').filter({ hasText: '技能市场' }).click()
   await page.getByText('Excel 数据处理', { exact: true }).first().click()
   await page.getByRole('heading', { name: '使用示例', exact: true }).waitFor()
@@ -68,6 +69,12 @@ try {
   await page.getByRole('button', { name: '使用技能', exact: true }).click()
   const staged = page.locator('.dsh-skill-draft-prefix')
   await staged.waitFor()
+  const capsuleBox = await staged.boundingBox()
+  const removeBox = await staged.locator('.dsh-skill-draft-remove').boundingBox()
+  assert.ok(capsuleBox && removeBox && removeBox.y < capsuleBox.y
+    && removeBox.x + removeBox.width > capsuleBox.x + capsuleBox.width,
+  'The removal control stays at the upper-right corner, outside the capsule text.')
+  assert.equal(await page.getByRole('combobox', { name: '选择技能', exact: true }).count(), 0)
   await page.locator('[data-composer-input]:visible').fill('仅清理客户台账，不修改原文件。')
   await staged.locator('.dsh-skill-draft-open').click()
   await page.getByRole('heading', { name: '使用示例', exact: true }).waitFor()

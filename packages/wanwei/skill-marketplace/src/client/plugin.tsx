@@ -29,7 +29,6 @@ import { Toast, createPanelController, usePanelNavigation, type PanelController,
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import './marketplace.css'
 import { SkillHubSection } from './SkillHubSection.tsx'
-import { DraftSkillPicker } from './DraftSkillPicker.tsx'
 import { CatalogToolbar, CatalogDownloadIcon, CatalogBackIcon as ArrowLeftIcon } from './CatalogToolbar.tsx'
 
 type SkillParam = { name: string; type: string; required: boolean; description: string; defaultValue?: string }
@@ -1388,20 +1387,6 @@ export function apply(ctx: Context): void {
   const conversation = ctx.get('conversation') as IConversation
   const sessions = ctx.get('sessions') as ISessions
   const workspaces: IWorkspaces = ctx.workspaces
-  const loadDraftSkills = async () => {
-    const result = await ctx.remote.skills.draftList()
-    if (!result.ok) throw new Error(result.error.message)
-    rememberSkillDisplayNames(result.value.skills.map(skill => ({ slug: skill.name, displayName: skill.displayName ?? skill.name })))
-    return result.value.skills
-  }
-  ctx.slots.inject('conversation.composer.tools', () => ctx.slots.register({
-    name: 'conversation.composer.tools', id: 'wanwei-draft-skills', order: -40,
-    inject: () => ({ load: loadDraftSkills, choose: (skill: { name: string; displayName?: string }) => {
-      const draft = conversation.input.stagedDraft.getSnapshot()
-      const withoutSkill = draft.replace(/^\/[\w-]+(?=\s|$)\s*/u, '')
-      conversation.input.setStagedDraft(`/${skill.name}${withoutSkill === '' ? '' : ` ${withoutSkill}`}`)
-    } }),
-  }, DraftSkillPicker))
   const createDefaultPreparation = () => skillSessionPreparation(workspaces, sessions, async (name) => {
     const path = await desktopInvoke('create_automatic_workspace', { name })
     if (typeof path !== 'string') throw new Error(productText('无法创建默认工作区，请稍后重试。'))

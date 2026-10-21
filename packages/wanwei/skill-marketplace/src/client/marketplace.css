@@ -642,13 +642,13 @@
 
 .dsh-skill-detail-use:hover { background: #eff6ff; }
 
-.dsh-skill-draft-prefix { display: inline-flex; flex: none; align-items: center; width: max-content; max-width: 240px; height: 22px; margin: 0; padding: 0; border: 0; border-radius: 999px; background: #f0f1f3; color: #30343b; font: inherit; font-size: 13px; white-space: nowrap; vertical-align: middle; }
+.dsh-skill-draft-prefix { position: relative; display: inline-flex; flex: none; align-items: center; width: max-content; max-width: 240px; height: 22px; margin: 0; padding: 0; border: 0; border-radius: 999px; background: #f0f1f3; color: #30343b; font: inherit; font-size: 13px; white-space: nowrap; vertical-align: middle; }
 
 .dsh-skill-draft-prefix span:first-of-type { white-space: nowrap; }
 
 .dsh-skill-draft-prefix svg { flex: none; }
 
-[data-composer-staged-prefix]:has(> .dsh-skill-draft-prefix) { float: none; display: inline-block; padding-inline: 3px; margin-right: 6px; }
+[data-composer-staged-prefix]:has(> .dsh-skill-draft-prefix) { float: none; display: inline-block; margin-inline: 6px 10px; }
 
 [data-composer-staged-prefix]:has(> .dsh-skill-draft-prefix) + [data-composer-input] { display: inline; word-break: break-all; }
 [data-composer-staged-prefix]:has(> .dsh-skill-draft-prefix) + [data-composer-input]:empty { display: inline-block; min-width: 2ch; min-height: 24px; vertical-align: top; }
@@ -656,7 +656,7 @@
 
 .dsh-skill-draft-open { display: inline-flex; flex: 1; align-items: center; gap: 5px; min-width: 0; max-width: 100%; height: 22px; padding: 0 7px; border: 0; border-radius: inherit; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .dsh-skill-draft-open span { overflow: hidden; text-overflow: ellipsis; }
-.dsh-skill-draft-remove { display: grid; flex: none; place-items: center; box-sizing: border-box; width: 14px; height: 14px; margin-right: 5px; padding: 0; border: 0; border-radius: 50%; background: #e5484d; color: #fff; font: 12px/1 sans-serif; cursor: pointer; }
+.dsh-skill-draft-remove { position: absolute; top: -4px; right: -4px; display: grid; place-items: center; box-sizing: border-box; width: 14px; height: 14px; margin: 0; padding: 0; border: 0; border-radius: 50%; background: #e5484d; color: #fff; font: 12px/1 sans-serif; cursor: pointer; }
 .dsh-skill-draft-open:focus-visible, .dsh-skill-draft-remove:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
 .dsh-skill-usage-examples p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; }
 
