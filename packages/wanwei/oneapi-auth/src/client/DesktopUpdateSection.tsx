@@ -15,7 +15,7 @@ function UpdateIcon({ download = false }: { download?: boolean }) {
   </svg>
 }
 
-/** Version information, checking preference and explicit native check action.
+/** Compact branded version card, checking preference and explicit native check action.
  * @param props - Shared plugin-owned monitor and localized copy.
  * @returns Version settings; no executable controls in a standalone browser.
  */
@@ -27,9 +27,9 @@ export function DesktopUpdateSection({ t, updates }: UpdateProps) {
   return <section className={css.section} aria-label={t('updatesTitle')}>
     <h1>{t('updatesNav')}</h1><p className={css.intro}>{t('updatesIntro')}</p>
     <div className={css.versionCard}>
-      <span className={css.versionIcon}><UpdateIcon /></span>
+      <span className={css.versionIcon}><img src="/brand-mark.svg" width={32} height={32} alt="" aria-hidden="true" /></span>
       <div className={css.versionInfo}><span>{t('productName')}</span>
-        <strong>{view?.currentVersion ?? '—'}</strong><small>{t('updatesVersionLabel')}</small></div>
+        <div className={css.versionLine}><strong>{view?.currentVersion ?? '—'}</strong><small>{t('updatesVersionLabel')}</small></div></div>
       <span className={css.desktopBadge}>{t('updatesDesktop')}</span>
     </div>
     <div className={css.preference}>

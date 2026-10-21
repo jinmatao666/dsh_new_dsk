@@ -38,6 +38,8 @@ it('shows a dedicated version page, persists its switch and delegates checking t
   const { updates, invoke } = bench()
   render(<DesktopUpdateSection t={t} updates={updates} />)
   await screen.findByText('2.1.1')
+  expect(screen.getByText('2.1.1').tagName).toBe('STRONG')
+  expect(screen.getByLabelText(zh.updatesTitle).querySelector('img')?.getAttribute('src')).toBe('/brand-mark.svg')
   expect(screen.getByLabelText(zh.updatesTitle).textContent).toMatchSnapshot()
   expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true')
   fireEvent.click(screen.getByRole('switch'))
