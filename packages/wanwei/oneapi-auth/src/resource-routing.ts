@@ -98,6 +98,14 @@ export class ResourceRouting {
     if (revision !== this.revision) await this.detect()
   }
 
+  /** Check direct connectivity without starting a resource tunnel.
+   * @returns True in internet mode or after an enabled intranet probe succeeds; relay reachability does not qualify.
+   */
+  async directAvailable(): Promise<boolean> {
+    await this.detect()
+    return this.mode === 'internet' || (this.settings?.source === 'proxy' && this.settings.autoDetect && this.direct)
+  }
+
   /** Model guidance describes only the selected source, not task capability.
    * @returns Source-specific restrictions, or undefined when no explicit intranet source is configured.
    */

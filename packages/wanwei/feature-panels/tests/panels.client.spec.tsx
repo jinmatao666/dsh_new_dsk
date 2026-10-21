@@ -15,6 +15,30 @@ async function mount(ctx: Context, id: string) {
 }
 
 describe('independent feature navigation', () => {
+  it('closes an unavailable page even when opened outside the disabled sidebar action and restores the entry after recovery', async () => {
+    const ctx = new Context()
+    const feature = await mount(ctx, 'connectivity')
+    let directInternet = true
+    const props = { wide: true, title: 'fixture', subtitle: '', Icon: () => null,
+      controller: feature.controller, requiresDirectInternet: true,
+      useNetwork: (selector: (state: unknown) => boolean) => selector({ mode: 'intranet', directInternet }),
+      renderContent: () => <p>content</p> } as unknown as PanelActionProps & PanelProps
+    try {
+      const view = render(<><PanelAction {...props} /><FeaturePanel {...props} /></>)
+      act(() => { feature.controller.open() })
+      expect(screen.getByRole('dialog')).toBeTruthy()
+      directInternet = false
+      view.rerender(<><PanelAction {...props} /><FeaturePanel {...props} /></>)
+      expect(screen.getByRole<HTMLButtonElement>('button').disabled).toBe(true)
+      expect(screen.queryByRole('dialog')).toBeNull()
+      act(() => { feature.controller.open() })
+      expect(screen.queryByRole('dialog')).toBeNull()
+      directInternet = true
+      view.rerender(<><PanelAction {...props} /><FeaturePanel {...props} /></>)
+      act(() => { screen.getByRole<HTMLButtonElement>('button', { name: 'fixture' }).click() })
+      expect(screen.getByRole('dialog')).toBeTruthy()
+    } finally { await feature.dispose() }
+  })
   it('removes a disabled entry without a placeholder and closes its open page', async () => {
     const ctx = new Context()
     const feature = await mount(ctx, 'visibility')
@@ -28,7 +52,7 @@ describe('independent feature navigation', () => {
       },
     }
     const props = { wide: true, title: 'fixture', subtitle: '', Icon: () => null, controller: feature.controller,
-      visibility, blockedIntranet: false, useNetwork: () => false,
+      visibility, requiresDirectInternet: false, useNetwork: () => false,
       renderContent: () => <p>content</p> } as unknown as PanelActionProps & PanelProps
     try {
       render(<><PanelAction {...props} /><FeaturePanel {...props} /></>)
@@ -84,16 +108,22 @@ describe('independent feature navigation', () => {
   })
 
   it.each([
-    ['internet', true, false], ['intranet', true, false], ['intranet', false, false],
-  ] as const)('keeps mode %s and feature policy %s independent', async (mode, blockedIntranet, disabled) => {
+    ['internet', true, undefined, false], ['intranet', true, undefined, true],
+    ['intranet', true, false, true], ['intranet', true, true, false], ['intranet', false, false, false],
+  ] as const)('applies mode %s and direct-internet policy %s with result %s', async (mode, requiresDirectInternet, directInternet, disabled) => {
     const ctx = new Context()
     const feature = await mount(ctx, 'policy')
     try {
       // The feature owns policy; the UI receives a selector hook from its slot injection.
       const props = { wide: true, title: 'fixture', Icon: () => null, controller: feature.controller,
-        blockedIntranet, useNetwork: () => mode === 'intranet' } as unknown as PanelActionProps
+        requiresDirectInternet,
+        useNetwork: (selector: (state: unknown) => boolean) => selector({ mode, directInternet }),
+      } as unknown as PanelActionProps
       render(<PanelAction {...props} />)
       expect(screen.getByRole<HTMLButtonElement>('button').disabled).toBe(disabled)
+      expect(screen.getByRole('button').title).toBe(disabled ? '当前网络环境不可达，请检查您的网络' : 'fixture')
+      act(() => { screen.getByRole<HTMLButtonElement>('button').click() })
+      expect(feature.controller.isOpen()).toBe(!disabled)
     } finally { await feature.dispose() }
   })
 })

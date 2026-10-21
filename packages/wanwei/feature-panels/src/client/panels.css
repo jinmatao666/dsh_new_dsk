@@ -39,6 +39,9 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.dsh-skill-market-action:disabled { opacity: .45; cursor: not-allowed; }
+.dsh-skill-market-action:disabled:hover { background: transparent; color: var(--dsw-alias-label-primary); }
+
 .dsh-skill-market-action.rail {
   width: 36px;
   height: 30px;

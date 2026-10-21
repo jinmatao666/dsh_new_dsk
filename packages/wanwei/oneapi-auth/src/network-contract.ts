@@ -4,6 +4,8 @@ export type NetworkEnvironment = 'internet' | 'intranet'
 export interface NetworkState {
   mode: NetworkEnvironment
   internalOrigins: readonly string[]
+  /** Direct connectivity confirmed by the current deployment probe; absent before confirmation. */
+  directInternet?: boolean
 }
 /** Classify literal private addresses, local DNS names and configured service origins.
  * @param address - HTTP or HTTPS address to classify.

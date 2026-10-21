@@ -4,6 +4,20 @@ import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client
 import { NetworkController } from '../src/client/network-controller.ts'
 
 afterEach(() => { delete (window as unknown as Record<string, unknown>).__ZJUGIS_NATIVE_INVOKE__ })
+
+it('publishes direct connectivity for entry policy and rejects malformed probe results', async () => {
+  let directInternet: unknown = false
+  const call = vi.fn(async () => ({ ok: true, value: { mode: 'intranet', internalOrigins: [], directInternet } }))
+  const controller = new NetworkController({ rpc: { call } } as unknown as ConnectionHandle)
+  await controller.refresh()
+  expect(controller.getSnapshot().directInternet).toBe(false)
+  directInternet = true
+  await controller.refresh()
+  expect(controller.getSnapshot().directInternet).toBe(true)
+  directInternet = 'true'
+  await expect(controller.refresh()).rejects.toThrow('网络检测状态无效')
+  expect(controller.getSnapshot().directInternet).toBe(true)
+})
 it('publishes administrator permissions on refresh and retains a denial across network failures', async () => {
   let browserAssistant = false
   const call = vi.fn(async () => ({ ok: true, value: { mode: 'internet', internalOrigins: [], plugins: { browserAssistant } } }))

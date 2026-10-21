@@ -37,7 +37,7 @@ it('keeps the real feature panel and draft open across body-portal selections, b
       listModels: async () => ({ default: { provider: 'mock', model: 'a' }, routableProviders: ['mock'], failures: [],
         groups: [{ id: 'mock', name: '测试', models: [{ id: 'a', name: '模型 A' }] }] }),
     }
-    const props = { controller: owned, title: '自动化', subtitle: '', blockedIntranet: false,
+    const props = { controller: owned, title: '自动化', subtitle: '', requiresDirectInternet: false,
       useNetwork: () => false, renderContent: () => <AutomationCards api={api} notify={vi.fn()} />,
     } as unknown as PanelProps
     render(<><FeaturePanel {...props} /><button type="button">对话导航</button></>)

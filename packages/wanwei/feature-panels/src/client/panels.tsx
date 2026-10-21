@@ -74,8 +74,8 @@ export interface PanelInjected {
   controller: PanelController
   title: string
   subtitle: string
-  /** When true, intranet mode closes this overlay (connectors / outbound catalogs). */
-  blockedIntranet?: boolean
+  /** In intranet mode, require an enabled successful direct-connectivity probe before opening. */
+  requiresDirectInternet?: boolean
   visibility?: HostObservable<boolean>
   Icon: ComponentType<{ size?: number }>
   renderContent: () => ReactNode
@@ -90,14 +90,17 @@ export type PanelActionProps = PropsRuntime<'sidebar.footer.action'> & SidebarFo
  * @param props - Slot runtime and feature presentation.
  * @returns Sidebar action.
  */
-export function PanelAction({ wide, title, Icon, controller, visibility }: PanelActionProps) {
+export function PanelAction({ wide, title, Icon, controller, visibility, requiresDirectInternet, useNetwork }: PanelActionProps) {
   const visible = useSyncExternalStore(
     listener => visibility ? visibility.subscribe(listener) : () => {}, () => visibility ? visibility.getSnapshot() : true,
   )
   const open = useSyncExternalStore(controller.subscribe, controller.isOpen)
+  const unavailable = useNetwork(value => Boolean(requiresDirectInternet)
+    && value.mode === 'intranet' && value.directInternet !== true)
   if (!visible) return null
   return <button type="button" className={`dsh-skill-market-action${wide ? '' : ' rail'}${open ? ' active' : ''}`}
-    aria-label={title} aria-expanded={open} title={title}
+    aria-label={title} aria-expanded={open} disabled={unavailable}
+    title={unavailable ? productText('当前网络环境不可达，请检查您的网络') : title}
     onClick={() => { controller.toggle() }}>
     <Icon size={wide ? 16 : 18} />{wide && <span>{title}</span>}
   </button>
@@ -123,15 +126,16 @@ export function usePanelNavigation(controller: PanelController, open: boolean): 
  * @returns Visible page or no overlay.
  */
 export function FeaturePanel({
-  title, subtitle, controller, blockedIntranet, useNetwork, renderContent, renderHeaderActions, visibility,
+  title, subtitle, controller, requiresDirectInternet, useNetwork, renderContent, renderHeaderActions, visibility,
 }: PanelProps) {
   const visible = useSyncExternalStore(
     listener => visibility ? visibility.subscribe(listener) : () => {}, () => visibility ? visibility.getSnapshot() : true,
   )
   const open = useSyncExternalStore(controller.subscribe, controller.isOpen)
-  const unavailable = Boolean(useNetwork?.(value => value.mode === 'intranet') && blockedIntranet)
+  const unavailable = useNetwork(value => Boolean(requiresDirectInternet)
+    && value.mode === 'intranet' && value.directInternet !== true)
   usePanelNavigation(controller, open)
-  useEffect(() => { if (unavailable || !visible) controller.close() }, [controller, unavailable, visible])
+  useEffect(() => { if (unavailable || !visible) controller.close() }, [controller, unavailable, visible, open])
   if (!open || unavailable || !visible) return null
   return <div className="dsh-skill-market-overlay" role="dialog" aria-modal="true" aria-label={title}>
     <div className="dsh-skill-market-panel">

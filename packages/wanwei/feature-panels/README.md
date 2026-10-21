@@ -29,6 +29,8 @@ Entry visibility is administrator-owned, not inferred from the network-mode labe
 
 The Wanwei desktop product mounts this plugin through its [composition patch](../../bundle/wanwei-desktop/cordis.patch.yml). It has no per-plugin configuration fields.
 
+Features with `requiresDirectInternet` retain a disabled sidebar entry in intranet mode until the Host confirms a successful direct probe. Their tooltip reads “当前网络环境不可达，请检查您的网络”. An unavailable page stays closed even when opened through another entry point. Administrator visibility remains independent and can still hide an entry.
+
 Keep this shared provider mounted when a feature imports its Client exports. It has no feature entries of its own and contains no expert, skill, connector or automation data.
 
 Consumers import the helpers from `@deepseek-ai/dsh-wanwei-feature-panels/client`. Keep this provider enabled while any consumer is mounted; disabling a business feature removes only that feature's entry. Shared authentication, renderer and sidebar services remain provider-owned.

@@ -1,5 +1,6 @@
 /** Product copy owned by this feature. */
 const zh = {
+  '当前网络环境不可达，请检查您的网络': '当前网络环境不可达，请检查您的网络',
   '纯内网环境不可用': '纯内网环境不可用',
   '不可用': '不可用',
   'WANWEI Buddy': 'WANWEI Buddy',

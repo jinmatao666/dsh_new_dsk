@@ -11,6 +11,25 @@ const offline: ResourceSettings = { source: 'offline', proxyUrl: '', autoDetect:
 const proxy: ResourceSettings = { source: 'proxy', proxyUrl: 'http://relay.lan:3128', autoDetect: false,
   probeUrls: ['https://one.example/204', 'https://two.example/204'] }
 
+it('shares cached direct connectivity without treating relay or offline resources as internet', async () => {
+  const probe = vi.fn(async () => true)
+  route = new ResourceRouting('http://platform.lan', probe)
+  expect(await route.directAvailable()).toBe(true)
+  route.configure('intranet', proxy)
+  expect(await route.directAvailable()).toBe(false)
+  expect(probe).not.toHaveBeenCalled()
+  route.configure('intranet', { ...proxy, autoDetect: true })
+  expect(await route.directAvailable()).toBe(true)
+  expect(await route.directAvailable()).toBe(true)
+  expect(probe).toHaveBeenCalledTimes(2)
+  probe.mockResolvedValue(false)
+  route.configure('intranet', { ...proxy, autoDetect: true, proxyUrl: 'http://other.lan:3128' })
+  expect(await route.directAvailable()).toBe(false)
+  route.configure('intranet', offline)
+  expect(await route.directAvailable()).toBe(false)
+  expect(probe).toHaveBeenCalledTimes(4)
+})
+
 it('rejects credentials, paths, missing probes and malformed fields', () => {
   expect(resolveResourceSettings(undefined)).toBeUndefined()
   for (const value of [null, {}, { ...proxy, proxyUrl: 'http://secret:secret@relay:3128' },

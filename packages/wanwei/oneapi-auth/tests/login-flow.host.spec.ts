@@ -144,7 +144,7 @@ describe('OneAPI login flow', () => {
     requests.length = 0
     expect(await handler?.('network-get', {}, new AbortController().signal)).toEqual({
       ok: true, value: {
-        mode: 'intranet', internalOrigins: [new URL(expected).origin],
+        mode: 'intranet', internalOrigins: [new URL(expected).origin], directInternet: false,
         plugins: { browserAssistant: true },
         features: { internet: { automations: true, connectors: true }, intranet: { automations: true, connectors: false } },
       },

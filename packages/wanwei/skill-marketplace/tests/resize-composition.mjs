@@ -24,7 +24,9 @@ if (disabled) {
 const backend = createServer((request, response) => {
   response.setHeader('Content-Type', 'application/json')
   const data = request.url === '/api/desktop-config'
-    ? { network, operator: 'fixture', phone: '' } : []
+    ? { network, operator: 'fixture', phone: '', features: {
+      internet: { automations: true, connectors: true }, intranet: { automations: true, connectors: true },
+    } } : []
   response.end(JSON.stringify({ success: true, data }))
 })
 await new Promise(done => backend.listen(0, '127.0.0.1', done))
@@ -56,11 +58,11 @@ try {
   await page.goto(match[0])
   await page.getByText('专业智能助手', { exact: true }).waitFor({ timeout: 30000 })
   if (network === 'intranet') {
-    await page.locator('.dsh-skill-market-action').filter({ hasText: '自动化' })
-      .locator('small').getByText('不可用', { exact: true }).waitFor({ timeout: 30000 })
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('.dsh-skill-market-action'))
+      .some(button => button.textContent.includes('自动化') && button.disabled), undefined, { timeout: 30000 })
   }
   const hidden = Object.entries(featureIds).filter(([name, id]) =>
-    id === disabled || (network === 'intranet' && name === '连接器'))
+    id === disabled)
   assert.equal(await page.locator('.dsh-skill-market-action').count(), 4 - hidden.length)
   for (const [name, id] of Object.entries(featureIds)) {
     if (hidden.some(([, hiddenId]) => hiddenId === id)) {
@@ -68,10 +70,9 @@ try {
       continue
     }
     const action = page.locator('.dsh-skill-market-action').filter({ hasText: name })
-    if (network === 'intranet' && ['专家库', '自动化'].includes(name)) {
+    if (network === 'intranet' && ['连接器', '自动化'].includes(name)) {
       assert.equal(await action.isDisabled(), true, `${name}: intranet entry remains disabled`)
-      assert.equal(await action.getAttribute('title'), '纯内网环境不可用')
-      assert.equal(await action.locator('small').textContent(), '不可用')
+      assert.equal(await action.getAttribute('title'), '当前网络环境不可达，请检查您的网络')
       await action.evaluate(button => button.click())
       assert.equal(await page.getByRole('dialog', { name, exact: true }).count(), 0)
       console.log(`${name}: intranet entry disabled; no page opens`)

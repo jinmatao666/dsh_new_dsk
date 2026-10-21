@@ -35,6 +35,8 @@ Opening the page checks the configured platform through the deployment refresh R
 
 Disable this plugin's row to remove its entry; do not disable another business plugin as a substitute. Shared authentication, renderer and sidebar services remain provider-owned.
 
+In intranet mode, the connector entry requires a successful enabled direct-connectivity probe. Disabled detection, offline resources or a failed probe leave a grey, non-clickable entry with the network-unreachable tooltip. Relay connectivity does not count as direct Internet access. Administrator-hidden entries remain hidden; Internet mode retains its existing service checks.
+
 -----
 
 <a id="understand-the-implementation"></a>

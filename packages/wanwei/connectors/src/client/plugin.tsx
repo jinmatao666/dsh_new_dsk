@@ -227,8 +227,8 @@ export function Connectors({
   useEffect(() => {
     void weChat.status().then(rememberWeChat).catch(() => {})
   }, [weChat])
-  const dingTalkConnected = dingTalkStatus?.authed === true && dingTalkStatus.skillInstalled === true
-  const weComConnected = weComStatus?.authed === true && weComStatus.skillInstalled === true
+  const dingTalkConnected = dingTalkStatus?.authed === true && dingTalkStatus.skillInstalled
+  const weComConnected = weComStatus?.authed === true && weComStatus.skillInstalled
   const weChatConnected = weChatStatus?.authed === true
   const requestAccess = (connector: Connector) =>{  setRequested(current => new Set(current).add(connector.id)) }
   const saveCustomConnector = () => {
@@ -459,7 +459,7 @@ export function apply(ctx: Context): void {
     sessions.clear()
   }
   registerFeaturePanel(ctx, 'skill-connectors', 20, { controller, title: productText('连接器'),
-    subtitle: productText('管理已授权的政务协同与数据服务连接'), blockedIntranet: true, visibility: ctx.wanweiNetwork.visibility('connectors'), Icon: ConnectorsIcon,
+    subtitle: productText('管理已授权的政务协同与数据服务连接'), requiresDirectInternet: true, visibility: ctx.wanweiNetwork.visibility('connectors'), Icon: ConnectorsIcon,
     hooks: { network: ctx.wanweiNetwork },
     renderHeaderActions: () => (
       <button
@@ -488,7 +488,7 @@ export function apply(ctx: Context): void {
         const dingTalkCached = getCachedDingTalkStatus()
         const weChatCached = getCachedWeChatStatus()
         const [dingTalkConnected, setDingTalkConnected] = useState(
-          () => dingTalkCached?.authed === true && dingTalkCached.skillInstalled === true,
+          () => dingTalkCached?.authed === true && dingTalkCached.skillInstalled,
         )
         const [weChatConnected, setWeChatConnected] = useState(
           () => weChatCached?.authed === true,

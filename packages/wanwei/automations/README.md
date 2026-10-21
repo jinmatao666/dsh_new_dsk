@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
 
 Users can create local tasks, pause them, run them immediately and open their execution Sessions. Tasks and run records survive page closure and desktop restart. The desktop must remain running and logged in; missed schedules are not replayed. Administrator entry visibility remains effective, but the intranet label does not disable local scheduling. Model and task dependencies must actually be reachable; this package does not enable cloud scheduling.
 
+In intranet mode, the sidebar entry requires an enabled successful direct-connectivity probe; otherwise it is grey and non-clickable with the shared network-unreachable tooltip. This entry policy does not pause or delete existing tasks. Administrator visibility remains effective, and Internet mode is unchanged.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)

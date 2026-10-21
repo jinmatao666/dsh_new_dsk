@@ -50,6 +50,7 @@ export function installNetworkPolicy(ctx: Context, baseURL: string,
   ctx.effect(() => () => resources.dispose())
   let refreshPrompt = () => {}
   let confirmedAt = 0
+  let directInternet: boolean | undefined
   let refreshing: Promise<void> | undefined
   const scope = ctx.settings.register(settingsNamespace('wanwei-network'), z.object({
     mode: z.union(['internet', 'intranet'] as const).default('internet'),
@@ -59,15 +60,17 @@ export function installNetworkPolicy(ctx: Context, baseURL: string,
       await policy.setMode(settings.network)
       policy.setPlugins(settings.plugins)
       resources.configure(settings.network, settings.resources)
+      directInternet = await resources.directAvailable()
       confirmedAt = Date.now()
       refreshPrompt()
     },
     pluginAllowed: plugin => plugins[plugin],
     setPlugins: (value) => { plugins = value },
-    getSnapshot: () => ({ mode: scope.get().mode, internalOrigins: [new URL(baseURL).origin] }),
+    getSnapshot: () => ({ mode: scope.get().mode, internalOrigins: [new URL(baseURL).origin],
+      ...(directInternet === undefined ? {} : { directInternet }) }),
     async setMode(mode) {
       if (mode !== 'internet' && mode !== 'intranet') throw new Error('网络环境无效')
-      if (scope.get().mode !== mode) await scope.update({ mode })
+      if (scope.get().mode !== mode) { directInternet = undefined; await scope.update({ mode }) }
       confirmedAt = Date.now()
       return policy.getSnapshot()
     },

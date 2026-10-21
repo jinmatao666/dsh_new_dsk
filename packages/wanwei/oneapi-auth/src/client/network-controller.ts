@@ -56,11 +56,19 @@ export class NetworkController {
     const run = async () => {
       const result = await this.connection.rpc.call('/desktop-auth', operation, payload, signal)
       if (!result.ok) throw new Error(result.error.message)
-      const value = result.value as { mode: unknown; internalOrigins: readonly string[]; features?: unknown; plugins?: unknown }
+      const value = result.value as {
+        mode: unknown
+        internalOrigins: readonly string[]
+        directInternet?: unknown
+        features?: unknown
+        plugins?: unknown
+      }
       if (value.mode !== 'internet' && value.mode !== 'intranet') throw new Error('网络环境状态无效')
+      if (value.directInternet !== undefined && typeof value.directInternet !== 'boolean') throw new Error('网络检测状态无效')
       const features = resolveDeploymentFeatures(value.features)
       const plugins = resolveDeploymentPlugins(value.plugins)
-      await this.synchronize({ mode: value.mode, internalOrigins: value.internalOrigins }, features, plugins)
+      await this.synchronize({ mode: value.mode, internalOrigins: value.internalOrigins,
+        ...(value.directInternet === undefined ? {} : { directInternet: value.directInternet }) }, features, plugins)
       return this.snapshot
     }
     const promise = this.tail.then(run)
