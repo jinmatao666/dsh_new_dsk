@@ -112,6 +112,14 @@ Host capability for cancellable file-reference discovery.
 
 ```ts cordis-catalog
 /**
+ * Optional pre-Session discovery without creating an Agent.
+ * @param _query - Path text following the draft's @ trigger.
+ * @param _signal - Caller cancellation.
+ * @returns No candidates unless the provider implements a draft browser.
+ */
+listDraft(_query: string, _signal: AbortSignal): Promise<FileReferenceCandidate[]>
+
+/**
  * List file and directory candidates for one agent's working directory.
  * @param agent - target agent whose session cwd bounds discovery.
  * @param query - path text following `@` or `@"`.
@@ -132,6 +140,14 @@ Source: [`packages/context/file-reference/src/index.ts`](../../packages/context/
 Host Remote adapter over the composed file-reference provider.
 
 ```ts cordis-catalog
+/**
+ * Browse draft-safe paths without creating or looking up a Session.
+ * @param query - Path text following the draft's @ trigger.
+ * @param signal - Caller cancellation.
+ * @returns Provider-owned paths whose identity survives Workspace selection.
+ */
+@Remote draftList(query: string, signal: AbortSignal): Promise<FileReferenceCandidate[]>
+
 /**
  * List file and directory candidates for one Agent's working directory.
  * @param agent - target Agent resolved from the Session identity on the wire.

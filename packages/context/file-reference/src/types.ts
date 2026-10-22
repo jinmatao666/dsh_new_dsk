@@ -4,7 +4,7 @@
  * @module @deepseek-ai/dsh-file-reference/types
  */
 
-/** One path-only completion candidate inside the target session cwd. */
+/** One path-only candidate from a Session workspace or a provider's draft browsing root. */
 export interface FileReferenceCandidate {
   /** User-facing path accepted by normal prompts and filesystem tools. */
   path: string

@@ -6,6 +6,8 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { homedir } from 'node:os'
+import { isAbsolute, relative, resolve } from 'node:path'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import FileReferenceService, {
   FILE_REFERENCE_PROMPT,
@@ -122,6 +124,21 @@ export class LocalFileReferenceService extends FileReferenceService {
       this.searches.set(agent, search)
     }
     return search.list(query, signal)
+  }
+
+  /** Browse the user's home explicitly, without a workspace, Agent or recursive home index. */
+  override async listDraft(query: string, signal: AbortSignal): Promise<FileReferenceCandidate[]> {
+    signal.throwIfAborted()
+    const root = homedir()
+    const normalized = query.replaceAll('\\', '/')
+    let fromHome = isAbsolute(normalized) ? relative(root, normalized).replaceAll('\\', '/') : normalized
+    if (fromHome === '..' || fromHome.startsWith('../') || isAbsolute(fromHome)) return []
+    if (normalized.endsWith('/') && !fromHome.endsWith('/')) fromHome = fromHome === '' ? './' : `${fromHome}/`
+    const search = new WorkspaceFileSearch(root, this.config)
+    try {
+      const entries = await search.list(fromHome.includes('/') ? fromHome : `./${fromHome}`, signal)
+      return entries.map(entry => ({ ...entry, path: resolve(root, entry.path).replaceAll('\\', '/') }))
+    } finally { search.dispose() }
   }
 }
 

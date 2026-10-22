@@ -25,6 +25,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+`fileReferences.draftList` 接口将草稿安全浏览委托给已组合的提供方，不查找 Agent 或 Session。返回的绝对路径在后续选择工作区后仍有效。普通 `fileReferences.list` 接口保留按 Agent 寻址的语义。
+
 会话创建前的输入框可以读取权限选项及用户级可调用技能，不创建 Agent。权限选项来自已配置的预设服务，不由客户端维护固定列表。选择工作区后，技能发现沿用现有按会话寻址的 cwd 与预设流程。
 
 历史页与 follow opening snapshot 携带带判别字段的 `SessionHistoryRecord`。两个分支都使用 `{ type, event }`：`type: 'event'` 携带一个原始 `SessionWireEvent`，`type: 'chunks'` 则携带一个由连续且属于同一 block 的 `assistant/chunk` delta 组成的无损 `ChunkRowEvent`。两种内部值都公开 `type`、`seq`、`time` 与 `data`，因此 Client 无需逐 record 转换，就能把每条已接受 record 保留为一个 `SessionEventLikeEntry`。packed event 的 `seq` 与 `time` 表示首成员，`data` 保留 fragment 与 timestamp-gap 数组。实时 follow frame 继续携带单个 `event` record。工具参数、结果内容、失败信息和 `tool/result.data.meta` 原样通过；controller 不解析 Tool definition、不运行 presenter，也不附加 UI 数据。

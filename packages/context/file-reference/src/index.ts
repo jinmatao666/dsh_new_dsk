@@ -14,7 +14,7 @@ export type { ActiveAtToken } from './grammar.ts'
 export type { FileReferenceCandidate } from './types.ts'
 
 /** Model guidance for path-only references selected by a user interface. */
-export const FILE_REFERENCE_PROMPT = 'Tokens prefixed with @ are workspace paths the user explicitly referenced, relative to the workspace root. A trailing slash marks a directory: list it when its contents matter. Anything else is a file: use the read tool when its contents are needed, and do not claim to have inspected it before reading. @"..." quotes a path containing spaces.'
+export const FILE_REFERENCE_PROMPT = 'Tokens prefixed with @ are file or directory paths the user explicitly referenced. Relative paths resolve from the workspace root; absolute paths keep their stated location. A trailing slash marks a directory: list it when its contents matter. Anything else is a file: use the read tool when its contents are needed, and do not claim to have inspected it before reading. @"..." quotes a path containing spaces.'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -26,6 +26,16 @@ declare module '@deepseek-ai/cordis' {
 export abstract class FileReferenceService extends Service {
   constructor(ctx: Context) {
     super(ctx, 'fileReferences')
+  }
+
+  /**
+   * Optional pre-Session discovery without creating an Agent.
+   * @param _query - Path text following the draft's @ trigger.
+   * @param _signal - Caller cancellation.
+   * @returns No candidates unless the provider implements a draft browser.
+   */
+  listDraft(_query: string, _signal: AbortSignal): Promise<FileReferenceCandidate[]> {
+    return Promise.resolve([])
   }
 
   /**

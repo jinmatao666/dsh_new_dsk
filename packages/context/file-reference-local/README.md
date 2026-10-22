@@ -25,6 +25,8 @@ Agents and their host UIs get ranked path candidates for `@file` mentions, scope
 <a id="use-this-package"></a>
 ## Use this package
 
+Pre-Session `listDraft` browses the user’s home directory without creating a directory, Workspace, Session or Agent. Empty and bare queries list only one directory; there is no recursive home index. Directory descent stays inside home and retains the ordinary symlink and exclusion checks. Returned paths are absolute so they survive the later Workspace choice.
+
 Mount this provider when `@file` completion should discover the Harness host's own filesystem — the namespace the shipped `read` tool operates on. Each agent's workspace is indexed from its session working directory, falling back to the host process directory when the session has none.
 
 ### Enabling the provider
@@ -105,7 +107,7 @@ When the addressed agent has an effective `read` tool, the provider contributes 
 ##### File-reference instruction
 
 ```markdown
-Tokens prefixed with @ are workspace paths the user explicitly referenced, relative to the workspace root. A trailing slash marks a directory: list it when its contents matter. Anything else is a file: use the read tool when its contents are needed, and do not claim to have inspected it before reading. @"..." quotes a path containing spaces.
+Tokens prefixed with @ are file or directory paths the user explicitly referenced. Relative paths resolve from the workspace root; absolute paths keep their stated location. A trailing slash marks a directory: list it when its contents matter. Anything else is a file: use the read tool when its contents are needed, and do not claim to have inspected it before reading. @"..." quotes a path containing spaces.
 ```
 
 #### Token effect

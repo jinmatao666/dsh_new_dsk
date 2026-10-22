@@ -25,6 +25,8 @@ Host-backed user interfaces use `dsh-file-reference` to offer `@file` completion
 <a id="use-this-package"></a>
 ## Use this package
 
+`listDraft(query, signal)` is the provider’s optional pre-Session browser. The base implementation returns no candidates; providers that support it return paths that remain meaningful after a Workspace handoff. It receives no Agent and must not allocate one.
+
 Choose this package when a host-backed UI (web or terminal) should offer `@file` completion, and pair it with a provider whose namespace matches the agent's effective `read` tool. Mounting the seam without a provider gives the UI an empty completion surface.
 
 ### Mention grammar

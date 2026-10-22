@@ -23,6 +23,17 @@ export class SessionFileReferences extends TypertRemoteService {
   }
 
   /**
+   * Browse draft-safe paths without creating or looking up a Session.
+   * @param query - Path text following the draft's @ trigger.
+   * @param signal - Caller cancellation.
+   * @returns Provider-owned paths whose identity survives Workspace selection.
+   */
+  @Remote
+  draftList(query: string, signal: AbortSignal): Promise<FileReferenceCandidate[]> {
+    return this.ctx.fileReferences.listDraft(query, signal)
+  }
+
+  /**
    * List file and directory candidates for one Agent's working directory.
    * @param agent - target Agent resolved from the Session identity on the wire.
    * @param query - path text following `@` or `@"`.

@@ -837,6 +837,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Host capability for cancellable file-reference discovery.',
     methods: [
       {
+        signature: 'listDraft(_query: string, _signal: AbortSignal): Promise<FileReferenceCandidate[]>',
+        description: 'Optional pre-Session discovery without creating an Agent.',
+        parameters: [{ name: '_query', description: 'Path text following the draft\'s @ trigger.' }, { name: '_signal', description: 'Caller cancellation.' }],
+        returns: 'No candidates unless the provider implements a draft browser.',
+      },
+      {
         signature: 'abstract list( agent: Agent, query: string, signal: AbortSignal, ): Promise<FileReferenceCandidate[]>',
         description: 'List file and directory candidates for one agent\'s working directory.',
         parameters: [{ name: 'agent', description: 'target agent whose session cwd bounds discovery.' }, { name: 'query', description: 'path text following `@` or `@"`.' }, { name: 'signal', description: 'caller cancellation.' }],
@@ -1450,6 +1456,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     summary: 'Host Remote adapter over the composed file-reference provider.',
     description: 'Host Remote adapter over the composed file-reference provider.',
     methods: [
+      {
+        signature: '@Remote draftList(query: string, signal: AbortSignal): Promise<FileReferenceCandidate[]>',
+        description: 'Browse draft-safe paths without creating or looking up a Session.',
+        parameters: [{ name: 'query', description: 'Path text following the draft\'s @ trigger.' }, { name: 'signal', description: 'Caller cancellation.' }],
+        returns: 'Provider-owned paths whose identity survives Workspace selection.',
+      },
       {
         signature: '@Remote list( agent: Agent, query: string, signal: AbortSignal, ): Promise<FileReferenceCandidate[]>',
         description: 'List file and directory candidates for one Agent\'s working directory.',

@@ -1,5 +1,5 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -55,6 +55,31 @@ async function stubAgent(
 }
 
 describe('LocalFileReferenceService', () => {
+  it('browses draft paths without creating an Agent, never recursively scans home, and keeps absolute paths', async () => {
+    const root = await mkdtemp(join(homedir(), '.dsh-draft-file-reference-'))
+    roots.push(root)
+    await mkdir(join(root, 'folder'))
+    await writeFile(join(root, 'report.docx'), 'draft')
+    await writeFile(join(root, 'folder', 'nested.docx'), 'nested')
+    const ctx = await harness()
+    await ctx.plugin(LocalFileReferenceService)
+    const list = vi.spyOn(WorkspaceFileSearch.prototype, 'list').mockResolvedValue([{ path: 'report.docx', kind: 'file' }])
+    const before = ctx.agents.list().length
+    const result = await ctx.fileReferences.listDraft('', new AbortController().signal)
+    expect(list).toHaveBeenCalledWith('./', expect.any(AbortSignal))
+    expect(result[0]?.path).toMatch(/\/report\.docx$/u)
+    expect(ctx.agents.list()).toHaveLength(before)
+    list.mockRestore()
+    const absoluteRoot = root.replaceAll('\\', '/')
+    expect(await ctx.fileReferences.listDraft(`${absoluteRoot}/`, new AbortController().signal)).toEqual([
+      { path: `${absoluteRoot}/folder`, kind: 'directory' },
+      { path: `${absoluteRoot}/report.docx`, kind: 'file' },
+    ])
+    expect(await ctx.fileReferences.listDraft(`${absoluteRoot}/folder/`, new AbortController().signal)).toEqual([
+      { path: `${absoluteRoot}/folder/nested.docx`, kind: 'file' },
+    ])
+    expect(await ctx.fileReferences.listDraft('../', new AbortController().signal)).toEqual([])
+  })
   it('serves the addressed workspace and installs read-tool guidance for existing agents', async () => {
     const ctx = await harness()
     const { agent } = await stubAgent(ctx)

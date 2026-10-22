@@ -25,6 +25,8 @@ The pre-Session `skills.draftList` reads only the global catalog without a works
 <a id="use-this-package"></a>
 ## Use this package
 
+The `fileReferences.draftList` endpoint delegates draft-safe browsing to the composed provider without an Agent or Session lookup. Its absolute path results survive a later Workspace choice. The ordinary `fileReferences.list` endpoint retains its Agent-addressed semantics.
+
 The pre-Session composer reads permission choices and user-invocable user-level skills without creating an Agent. Permission choices come from the configured preset service, not a client-maintained list. After Workspace selection, skill discovery uses the existing Session-addressed cwd and preset path.
 
 History pages and follow opening snapshots carry a discriminated `SessionHistoryRecord`. Both variants use `{ type, event }`: `type: 'event'` carries one raw `SessionWireEvent`, while `type: 'chunks'` carries one lossless `ChunkRowEvent` for consecutive same-block `assistant/chunk` deltas. Both inner values expose `type`, `seq`, `time`, and `data`, so the Client retains each accepted record as one `SessionEventLikeEntry` without record-by-record conversion. A packed event's `seq` and `time` identify its first member, and `data` retains the fragment and timestamp-gap arrays. Live follow frames remain individual `event` records. Tool arguments, result content, failures, and `tool/result.data.meta` pass through unchanged; the controller does not resolve a Tool definition, run a presenter, or attach UI data.

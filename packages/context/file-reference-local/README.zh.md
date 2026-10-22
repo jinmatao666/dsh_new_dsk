@@ -25,6 +25,8 @@ agent（智能体）及其宿主 UI 获得 `@file` mention 的排序路径候选
 <a id="use-this-package"></a>
 ## 使用本包
 
+无会话的 `listDraft` 浏览用户主目录，不创建目录、工作区、会话或 Agent。空查询和不含路径分隔符的查询只列出一级目录，不建立主目录递归索引。进入子目录时仍限制在主目录内，并保留原有符号链接和排除规则检查。返回绝对路径，使引用在后续选择工作区后仍指向同一位置。
+
 当 `@file` 补全应发现 Harness 宿主自身的文件系统——即随附 `read` 工具所操作的命名空间——时，挂载此提供方。每个 agent 的工作区从该会话的工作目录开始建立索引；会话没有工作目录时回退到宿主进程目录。
 
 ### 启用提供方
@@ -105,7 +107,7 @@ agent（智能体）及其宿主 UI 获得 `@file` mention 的排序路径候选
 ##### 文件引用指令
 
 ```markdown
-Tokens prefixed with @ are workspace paths the user explicitly referenced, relative to the workspace root. A trailing slash marks a directory: list it when its contents matter. Anything else is a file: use the read tool when its contents are needed, and do not claim to have inspected it before reading. @"..." quotes a path containing spaces.
+Tokens prefixed with @ are file or directory paths the user explicitly referenced. Relative paths resolve from the workspace root; absolute paths keep their stated location. A trailing slash marks a directory: list it when its contents matter. Anything else is a file: use the read tool when its contents are needed, and do not claim to have inspected it before reading. @"..." quotes a path containing spaces.
 ```
 
 #### Token 影响

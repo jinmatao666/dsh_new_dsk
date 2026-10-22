@@ -25,6 +25,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+`listDraft(query, signal)` 是提供方可选的无会话浏览入口。基类实现返回空候选；支持此功能的提供方返回在切换工作区后仍有明确含义的路径。它不接收 Agent，也不得分配 Agent。
+
 当宿主驱动 UI（Web 或终端）需要提供 `@file` 补全时选择本包，并搭配一个命名空间与 agent 实际生效的 `read` 工具一致的提供方。单独挂载该 seam 而没有提供方时，UI 只能得到空的补全列表。
 
 ### mention 语法
