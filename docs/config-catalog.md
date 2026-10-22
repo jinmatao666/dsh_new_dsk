@@ -3304,6 +3304,8 @@ Requires: `connection` · `credentials` · `settings` · `agentDefaultModel` · 
 ```ts config-catalog
 /** Desktop OneAPI authentication configuration. */
 export interface Config {
+  /** Idle time before an incomplete knowledge upload is removed from local temporary storage. */
+  knowledgeUploadIdleTimeoutMs?: number
   /** Explicit origin overrides launch-environment DSH_ONEAPI_URL, then loopback port 3000; excludes `/v1`. */
   baseURL?: string
   /** DSH provider route managed by this login plugin. */
@@ -3338,7 +3340,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/wanwei/oneapi-auth/src/index.ts:34`](../packages/wanwei/oneapi-auth/src/index.ts)
+Source: [`packages/wanwei/oneapi-auth/src/index.ts:35`](../packages/wanwei/oneapi-auth/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-skillhub"></a>
 
@@ -3665,6 +3667,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-wanwei-connectors` — requires `connection` · `sessionController` · `sessions` · `agents` · `workspaceRegistry` · `permissionPresets` ([`packages/wanwei/connectors/src/index.ts`](../packages/wanwei/connectors/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-expert-library` ([`packages/wanwei/expert-library/src/index.ts`](../packages/wanwei/expert-library/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-feature-panels` ([`packages/wanwei/feature-panels/src/index.ts`](../packages/wanwei/feature-panels/src/index.ts))
+- `@deepseek-ai/dsh-wanwei-knowledge-base` ([`packages/wanwei/knowledge-base/src/index.ts`](../packages/wanwei/knowledge-base/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-product-ui` ([`packages/wanwei/product-ui/src/index.ts`](../packages/wanwei/product-ui/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-skill-marketplace` ([`packages/wanwei/skill-marketplace/src/index.ts`](../packages/wanwei/skill-marketplace/src/index.ts))
 - `@deepseek-ai/dsh-webhook` — requires `agents` · `agentDefaultModel` · `agentPresets` · `permissionPresets` · `sessionTitle` · `workspaceRegistry` ([`packages/webhook/webhook/src/index.ts`](../packages/webhook/webhook/src/index.ts))

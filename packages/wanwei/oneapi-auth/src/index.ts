@@ -33,6 +33,8 @@ const MAX_RESPONSE_BYTES = 1024 * 1024
 
 /** Desktop OneAPI authentication configuration. */
 export interface Config {
+  /** Idle time before an incomplete knowledge upload is removed from local temporary storage. */
+  knowledgeUploadIdleTimeoutMs?: number
   /** Explicit origin overrides launch-environment DSH_ONEAPI_URL, then loopback port 3000; excludes `/v1`. */
   baseURL?: string
   /** DSH provider route managed by this login plugin. */
@@ -68,6 +70,7 @@ export interface Config {
 
 /** Runtime schema for {@link Config}. */
 export const Config: z<Config> = z.object({
+  knowledgeUploadIdleTimeoutMs: z.natural().min(1).default(900000),
   baseURL: z.string(),
   provider: z.string().default('dsh-server'),
   credentialRef: z.string().default('DSH_ONEAPI_TOKEN'),
@@ -574,11 +577,12 @@ export function apply(ctx: Context, config: Config): void {
 
   const connection = ctx.get('connection')
   if (connection === undefined) throw new Error('桌面认证需要 Connection 服务')
-  const knowledgeBases = new KnowledgeBaseApi(baseURL, async () => (await ctx.credentials.resolve(ref))?.value)
+  const knowledgeBases = new KnowledgeBaseApi(baseURL, async () => (await ctx.credentials.resolve(ref))?.value,
+    config.knowledgeUploadIdleTimeoutMs ?? 900000)
   const removeKnowledgeBases = connection.rpc.handle('/desktop-knowledge-base',
     (endpoint, payload, signal) => knowledgeBases.call(endpoint, payload, signal)
       .then(value => ({ ok: true as const, value }))
-      .catch(error => internal(error instanceof Error ? error.message : String(error))))
+      .catch((error: unknown) => internal(error instanceof Error ? error.message : String(error))))
   const removeKnowledgeChat = connection.fetch.register({
     path: '/api/desktop-knowledge-chat',
     methods: ['POST'],
@@ -684,5 +688,7 @@ export function apply(ctx: Context, config: Config): void {
     if (endpoint === 'report-question') return reportQuestion(payload)
     return internal(`未知认证操作：${endpoint}`)
   })
-  ctx.effect(() => () => { void remove(); void removeKnowledgeBases(); void removeKnowledgeChat() }, 'ui-oneapi-auth: loopback RPC')
+  ctx.effect(() => async () => {
+    await Promise.all([remove(), removeKnowledgeBases(), removeKnowledgeChat(), knowledgeBases.dispose()])
+  }, 'ui-oneapi-auth: loopback RPC')
 }

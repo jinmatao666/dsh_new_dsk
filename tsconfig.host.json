@@ -8,6 +8,8 @@
     "rewriteRelativeImportExtensions": false
   },
   "include": [
+    // Host upload integration exercises this Cordis-free browser chunker.
+    "packages/wanwei/knowledge-base/src/client/upload.ts",
     "apps/web/tests/scaffold.ts",
     "apps/web/tests/default-model.e2e.ts",
     "apps/web/tests/github-ready-review.e2e.ts",

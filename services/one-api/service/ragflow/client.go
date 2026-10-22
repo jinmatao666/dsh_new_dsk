@@ -143,14 +143,14 @@ func jsonBody(value interface{}) (io.Reader, error) {
 // Retrieval stays below Elasticsearch nested-clause limits that RAGFlow hybrid search can hit.
 func chatPrompt(datasetId string) map[string]interface{} {
 	return map[string]interface{}{
-		"similarity_threshold":        0.2,
-		"keywords_similarity_weight":  0.3,
-		"top_n":                       6,
-		"top_k":                       512,
-		"rerank_model":                "",
-		"empty_response":              "知识库中未找到相关内容。",
-		"show_quote":                  false,
-		"variables":                   []map[string]interface{}{{"key": "knowledge", "optional": true}},
+		"similarity_threshold":       0.2,
+		"keywords_similarity_weight": 0.3,
+		"top_n":                      6,
+		"top_k":                      512,
+		"rerank_model":               "",
+		"empty_response":             "知识库中未找到相关内容。",
+		"show_quote":                 false,
+		"variables":                  []map[string]interface{}{{"key": "knowledge", "optional": true}},
 		"prompt": "你是知识库助手。仅依据下列知识用纯文本回答用户问题；禁止 Markdown、加粗、标题符号与代码围栏；可用普通编号列表；知识不足时明确说明。" +
 			"\n知识：\n{knowledge}\n以上是知识。",
 		"dataset_ids": []string{datasetId},
@@ -236,9 +236,9 @@ func (c *Client) ListDocumentsPage(ctx context.Context, datasetId string, page, 
 		pageSize = 100
 	}
 	var result struct {
-		Docs           []Document `json:"docs"`
-		Total          int        `json:"total"`
-		TotalDatasets  int        `json:"total_datasets"`
+		Docs          []Document `json:"docs"`
+		Total         int        `json:"total"`
+		TotalDatasets int        `json:"total_datasets"`
 	}
 	query := url.Values{}
 	query.Set("page", strconv.Itoa(page))
@@ -396,24 +396,28 @@ func (c *Client) UploadDocument(ctx context.Context, datasetId, filename string,
 	parent, base := SplitDocumentUploadPath(filename, parentPath)
 	var payload bytes.Buffer
 	writer := multipart.NewWriter(&payload)
-	part, err := writer.CreateFormFile("file", base)
-	if err != nil {
-		return nil, err
-	}
-	if _, err = io.Copy(part, source); err != nil {
-		return nil, err
-	}
 	if parent != "" {
-		if err = writer.WriteField("parent_path", parent); err != nil {
+		if err := writer.WriteField("parent_path", parent); err != nil {
 			return nil, err
 		}
 	}
-	if err = writer.Close(); err != nil {
+	if _, err := writer.CreateFormFile("file", base); err != nil {
 		return nil, err
 	}
+	headerLength := payload.Len()
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	// Only multipart framing is buffered; file bytes flow directly from the source.
+	body := io.MultiReader(bytes.NewReader(payload.Bytes()[:headerLength]), source,
+		bytes.NewReader(payload.Bytes()[headerLength:]))
+	uploadClient := *c
+	httpClient := *c.http
+	httpClient.Timeout = 30 * time.Minute
+	uploadClient.http = &httpClient
 	var documents []Document
-	err = c.request(ctx, http.MethodPost, "/api/v1/datasets/"+url.PathEscape(datasetId)+"/documents",
-		writer.FormDataContentType(), &payload, &documents)
+	err := uploadClient.request(ctx, http.MethodPost, "/api/v1/datasets/"+url.PathEscape(datasetId)+"/documents",
+		writer.FormDataContentType(), body, &documents)
 	if err != nil || parent == "" {
 		return documents, err
 	}

@@ -19,7 +19,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const maxKnowledgeUploadBytes = 20 << 20
+const maxKnowledgeUploadBytes = 1 << 30
 
 type knowledgeGrantInput struct {
 	SubjectType string `json:"subject_type"`
@@ -471,10 +471,19 @@ func applyKnowledgeDocumentPaths(baseId int, documents []ragflow.Document) {
 }
 
 func uploadKnowledgeDocument(c *gin.Context, row *model.KnowledgeBase) {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxKnowledgeUploadBytes)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxKnowledgeUploadBytes+(1<<20))
+	defer func() {
+		if c.Request.MultipartForm != nil {
+			_ = c.Request.MultipartForm.RemoveAll()
+		}
+	}()
 	header, err := c.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请选择不超过 20MB 的文件"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请选择不超过 1GB 的文件"})
+		return
+	}
+	if header.Size > maxKnowledgeUploadBytes {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"success": false, "message": "文件不能超过 1GB"})
 		return
 	}
 	source, err := header.Open()

@@ -1,13 +1,25 @@
+import { KnowledgeUpload } from './knowledge-upload.ts'
+
 /** Host-side proxy for authenticated knowledge-base operations. */
 export class KnowledgeBaseApi {
-  constructor(private readonly baseURL: string, private readonly resolveToken: () => Promise<string | undefined>) {}
+  private readonly uploads: KnowledgeUpload
+
+  constructor(private readonly baseURL: string, private readonly resolveToken: () => Promise<string | undefined>,
+    uploadIdleTimeoutMs: number) {
+    this.uploads = new KnowledgeUpload(uploadIdleTimeoutMs)
+  }
+
+  /** Wait for upload cancellation and remove private temporary files. */
+  async dispose(): Promise<void> { await this.uploads.dispose() }
 
   private async request(path: string, init: RequestInit, signal: AbortSignal): Promise<unknown> {
     const token = await this.resolveToken()
     if (token === undefined || token === '') throw new Error('请先登录后再使用知识库')
+    const headers = new Headers(init.headers)
+    headers.set('authorization', `Bearer ${token}`)
     const response = await fetch(`${this.baseURL}${path}`, {
       ...init,
-      headers: { authorization: `Bearer ${token}`, ...init.headers },
+      headers,
       signal,
       redirect: 'error',
     })
@@ -30,6 +42,12 @@ export class KnowledgeBaseApi {
    */
   async call(operation: string, payload: unknown, signal: AbortSignal): Promise<unknown> {
     const value = typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : {}
+    if (['upload-begin', 'upload-chunk', 'upload-finish', 'upload-abort'].includes(operation)) {
+      const token = await this.resolveToken()
+      if (token === undefined || token === '') throw new Error('请先登录后再使用知识库')
+      return this.uploads.call(operation, value, signal, (id, form, uploadSignal) =>
+        this.request(`/api/knowledge-bases/${id}/documents`, { method: 'POST', body: form }, uploadSignal))
+    }
     if (operation === 'list') return this.request('/api/knowledge-bases', {}, signal)
     if (operation === 'create') {
       return this.request('/api/knowledge-bases', {
@@ -49,25 +67,6 @@ export class KnowledgeBaseApi {
       const id = integer(value.id, '知识库编号')
       const documentId = documentIdOf(value.documentId)
       return this.downloadFile(`/api/knowledge-bases/${id}/documents/${encodeURIComponent(documentId)}/file`, signal)
-    }
-    if (operation === 'upload') {
-      const id = integer(value.id, '知识库编号')
-      if (typeof value.name !== 'string' || !Array.isArray(value.bytes) || value.bytes.length > 20 * 1024 * 1024) {
-        throw new Error('上传文件无效或超过 20MB')
-      }
-      const bytes = Uint8Array.from(value.bytes.map((byte) => {
-        if (!Number.isInteger(byte) || byte < 0 || byte > 255) throw new Error('上传文件无效')
-        return byte as number
-      }))
-      const form = new FormData()
-      form.append('file', new Blob([bytes], { type: typeof value.type === 'string' ? value.type : '' }), value.name)
-      if (typeof value.parentPath === 'string') {
-        const parentPath = value.parentPath.trim().replace(/\\/g, '/')
-        if (parentPath !== '' && parentPath.length <= 500 && !parentPath.split('/').includes('..')) {
-          form.append('parent_path', parentPath)
-        }
-      }
-      return this.request(`/api/knowledge-bases/${id}/documents`, { method: 'POST', body: form }, signal)
     }
     if (operation === 'delete') {
       const id = integer(value.id, '知识库编号')

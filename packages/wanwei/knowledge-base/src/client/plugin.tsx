@@ -8,6 +8,7 @@ import {
   type KnowledgeBaseItem,
 } from './KnowledgePage.tsx'
 import { productText } from './locales/product.ts'
+import { uploadKnowledgeFile } from './upload.ts'
 import './page.css'
 
 async function readKnowledgeStream(
@@ -57,7 +58,7 @@ async function readKnowledgeStream(
         if (typeof event.error === 'string' && event.error !== '') throw new Error(event.error)
         if (typeof event.answer === 'string') answer = event.answer
         if (Array.isArray(event.recommendations) && event.recommendations.every(item => typeof item === 'string')) {
-          recommendations = event.recommendations as string[]
+          recommendations = event.recommendations
         }
         const finished = event.done === true
         onProgress?.({
@@ -166,20 +167,7 @@ export function apply(ctx: Context): void {
       return { contentType: file.contentType, bytes: file.bytes as number[] }
     },
     async upload(id, file) {
-      const bytes = [...new Uint8Array(await file.arrayBuffer())]
-      const relative = typeof file.webkitRelativePath === 'string' && file.webkitRelativePath !== ''
-        ? file.webkitRelativePath.replace(/\\/g, '/')
-        : file.name
-      const segments = relative.split('/').filter(part => part !== '')
-      const name = segments.pop() ?? file.name
-      const parentPath = segments.join('/')
-      await call('upload', {
-        id,
-        name,
-        type: file.type,
-        bytes,
-        ...(parentPath !== '' ? { parentPath } : {}),
-      })
+      await uploadKnowledgeFile(call, id, file)
     },
     async delete(knowledgeBaseId, documentId) {
       await call('delete', { id: knowledgeBaseId, documentId })
@@ -238,7 +226,7 @@ export function apply(ctx: Context): void {
       const result = raw as { answer?: unknown; recommendations?: unknown }
       if (typeof result.answer !== 'string' || !Array.isArray(result.recommendations) ||
         !result.recommendations.every(item => typeof item === 'string')) throw new Error('知识库回答字段无效')
-      const answer = { answer: result.answer, recommendations: result.recommendations as string[] }
+      const answer = { answer: result.answer, recommendations: result.recommendations }
       onProgress?.({ answer: answer.answer, recommendations: answer.recommendations, done: true })
       return answer
     },

@@ -453,9 +453,9 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     // Folder picks arrive as a flat FileList of every nested file; upload each into the open library.
     const candidates = files.filter(file => !isSkippedUploadName(file.name))
     if (candidates.length === 0) return
-    const oversized = candidates.find(file => file.size > 20 * 1024 * 1024)
+    const oversized = candidates.find(file => file.size > 1024 * 1024 * 1024)
     if (oversized !== undefined) {
-      setError(productText('文件不能超过 20MB'))
+      setError(productText('文件不能超过 1GB'))
       return
     }
     setUploading(true)

@@ -5,6 +5,37 @@ import { KnowledgePage, type KnowledgeApi } from '../src/client/KnowledgePage.ts
 
 afterEach(cleanup)
 
+it('accepts a 1GB MDB selection and keeps the page usable after an upload error', async () => {
+  const service = api()
+  const upload = vi.fn(async () => { throw new Error('后台拒绝上传') })
+  service.upload = upload
+  const { container } = render(<KnowledgePage api={service} />)
+  await screen.findByText('说明.pdf')
+  const input = container.querySelector('input[type="file"]') as HTMLInputElement
+  const file = new File(['MDB'], '基础库.mdb')
+  Object.defineProperty(file, 'size', { value: 1024 ** 3 })
+  fireEvent.change(input, { target: { files: [file] } })
+  expect((await screen.findByRole('alert')).textContent).toContain('后台拒绝上传')
+  expect(upload).toHaveBeenCalledWith(1, file)
+  expect(screen.getByText('说明.pdf')).toBeTruthy()
+  expect(screen.getByRole('button', { name: '上传文档' }).hasAttribute('disabled')).toBe(false)
+  expect(screen.getByRole('alert').textContent).toMatchSnapshot()
+})
+
+it('rejects a file over 1GB before reading or uploading it', async () => {
+  const service = api()
+  const upload = vi.fn(async () => {})
+  service.upload = upload
+  const { container } = render(<KnowledgePage api={service} />)
+  await screen.findByText('说明.pdf')
+  const input = container.querySelector('input[type="file"]') as HTMLInputElement
+  const file = new File(['MDB'], '基础库.mdb')
+  Object.defineProperty(file, 'size', { value: 1024 ** 3 + 1 })
+  fireEvent.change(input, { target: { files: [file] } })
+  expect((await screen.findByRole('alert')).textContent).toContain('文件不能超过 1GB')
+  expect(upload).not.toHaveBeenCalled()
+})
+
 function api(): KnowledgeApi {
   return {
     list: vi.fn(async () => [
