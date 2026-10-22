@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Calendar, Download, Eye, FileText, Layers, Plus, Search, Tag, Trash2, Upload } from 'lucide-react';
 import { API } from '../../helpers';
+import CustomSelect from '../../components/CustomSelect';
 import './index.css';
 
 const SCOPES = [
@@ -537,10 +538,10 @@ const KnowledgeLibrary = () => {
       </div>
       <div className='knowledge-toolbar'>
         <label className='knowledge-search'><Search size={16} /><input value={keyword} onChange={event => setKeyword(event.target.value)} placeholder='搜索知识库...' /></label>
-        <select aria-label='排序' value={order} onChange={event => setOrder(event.target.value)}>
+        <CustomSelect aria-label='排序' value={order} onChange={event => setOrder(event.target.value)}>
           <option value='desc'>按时间降序</option>
           <option value='asc'>按时间升序</option>
-        </select>
+        </CustomSelect>
         <button type='button' className='knowledge-primary' onClick={() => { setForm({ name: '', description: '', kind: scope, tags: '' }); setCreating(true); }}><Plus size={16} />新建知识库</button>
       </div>
       {loading ? <p className='knowledge-empty' role='status'>正在加载知识库</p> : visible.length === 0 ? <p className='knowledge-empty'>
@@ -566,9 +567,9 @@ const KnowledgeLibrary = () => {
       <header><h2>新建知识库</h2><button type='button' onClick={() => setCreating(false)}>×</button></header>
       <label>名称<input autoFocus required maxLength={128} value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} placeholder='请输入知识库名称' /></label>
       <label>描述<textarea maxLength={500} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} placeholder='填写知识库覆盖的内容和用途' /></label>
-      <label>类型<select value={form.kind} onChange={event => setForm(current => ({ ...current, kind: event.target.value }))}>
+      <label>类型<CustomSelect aria-label='知识库类型' value={form.kind} onChange={event => setForm(current => ({ ...current, kind: event.target.value }))}>
         {SCOPES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-      </select></label>
+      </CustomSelect></label>
       {form.kind === 'shared' && <p className='knowledge-hint'>共享知识库默认仅创建者可见，部门或用户授权仍由管理接口写入。</p>}
       <label>标签<input maxLength={200} value={form.tags} onChange={event => setForm(current => ({ ...current, tags: event.target.value }))} placeholder='多个标签用逗号分隔' /></label>
       <footer><button type='button' onClick={() => setCreating(false)}>取消</button><button type='submit' className='knowledge-primary' disabled={saving || form.name.trim() === ''}>{saving ? '正在创建' : '确定'}</button></footer>

@@ -48,6 +48,27 @@ function button(text) {
   return [...container.querySelectorAll('button')].find(item => item.textContent.includes(text));
 }
 
+test('sort and creation type use the themed listbox and preserve selected values', async () => {
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  expect(container.querySelector('select')).toBeNull();
+  const sort = container.querySelector('[aria-label="排序"]');
+  act(() => { sort.click(); });
+  expect(document.querySelector('[role="listbox"]')).not.toBeNull();
+  act(() => { document.querySelector('[role="option"][value="asc"]').click(); });
+  expect(sort.textContent).toContain('按时间升序');
+  act(() => { button('新建知识库').click(); });
+  act(() => { container.querySelector('[aria-label="知识库类型"]').click(); });
+  act(() => { document.querySelector('[role="option"][value="shared"]').click(); });
+  expect(container.querySelector('[aria-label="知识库类型"]').textContent).toContain('共享知识库');
+  const name = container.querySelector('.knowledge-modal input');
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(name, '共享测试');
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => { container.querySelector('.knowledge-modal').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/bases', expect.objectContaining({ kind: 'shared', name: '共享测试' }));
+});
+
 test('knowledge catalog filters scopes and opens the file list', async () => {
   await act(async () => { root.render(<KnowledgeLibrary />); });
   await act(async () => { await Promise.resolve(); });
