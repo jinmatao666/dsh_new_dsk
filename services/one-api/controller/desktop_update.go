@@ -414,6 +414,10 @@ func changeDesktopUpdate(c *gin.Context, publish bool) {
 		}
 		highWaterVersion := record.Version
 		if channel.Version != "" {
+			var retained int64
+			if err := tx.Model(&model.DesktopUpdate{}).Where("platform = ? AND version = ?", record.Platform, channel.Version).Count(&retained).Error; err != nil {
+				return err
+			}
 			previous, err := semver.StrictNewVersion(channel.Version)
 			if err != nil {
 				return err
@@ -422,7 +426,9 @@ func changeDesktopUpdate(c *gin.Context, publish bool) {
 			if err != nil {
 				return err
 			}
-			if candidate.LessThan(previous) {
+			// Deleted uploads must not keep triggering publication warnings, including
+			// channels left behind by earlier deployments.
+			if retained > 0 && candidate.LessThan(previous) {
 				highWaterVersion = channel.Version
 				if publish && c.Query("confirm_older") != record.Version {
 					previousVersion = channel.Version

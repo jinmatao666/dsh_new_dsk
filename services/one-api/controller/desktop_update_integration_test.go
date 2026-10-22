@@ -263,8 +263,14 @@ func TestDesktopUpdateDelete(t *testing.T) {
 		t.Fatal("deleted channel advertised update", w.Code)
 	}
 	older := uploadedID(t, requestUpdate(t, r, "POST", "/api/desktop-updates", "root", updateZIP(t, key, "1.1.0", "windows-x86_64", false)))
-	if w := requestUpdate(t, r, "POST", "/api/desktop-updates/"+older+"/publish", "root", nil); w.Code != 409 {
-		t.Fatal("deletion allowed downgrade", w.Body.String())
+	if w := requestUpdate(t, r, "POST", "/api/desktop-updates/"+older+"/publish", "root", nil); w.Code != 200 {
+		t.Fatal("deleted history still required confirmation", w.Body.String())
+	}
+	if w := requestUpdate(t, r, "GET", "/desktop-updates/windows/x86_64/1.2.0", "", nil); w.Code != 204 {
+		t.Fatal("newer client offered a downgrade", w.Code, w.Body.String())
+	}
+	if w := requestUpdate(t, r, "POST", "/api/desktop-updates/"+older+"/withdraw", "root", nil); w.Code != 200 {
+		t.Fatal("withdrawal failed", w.Body.String())
 	}
 	if w := requestUpdate(t, r, "DELETE", "/api/desktop-updates/"+older, "root", nil); w.Code != 200 {
 		t.Fatal("draft deletion failed", w.Body.String())
@@ -273,6 +279,28 @@ func TestDesktopUpdateDelete(t *testing.T) {
 		if w := requestUpdate(t, r, "DELETE", "/api/desktop-updates/"+invalid, "root", nil); w.Code != 400 {
 			t.Fatal("invalid or missing release deletion accepted", w.Body.String())
 		}
+	}
+}
+
+func TestDesktopUpdateDeletedHistoryDoesNotRequireConfirmation(t *testing.T) {
+	r, key, _ := updateRouter(t)
+	// A persisted channel can outlive the deleted historical upload after an upgrade.
+	if err := model.DB.Create(&model.DesktopUpdateChannel{Platform: "windows-x86_64", Version: "2.1.1"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	// A surviving upload on another architecture must not revive this platform's warning.
+	uploadedID(t, requestUpdate(t, r, "POST", "/api/desktop-updates", "root", updateZIP(t, key, "2.1.1", "darwin-aarch64", false)))
+	id := uploadedID(t, requestUpdate(t, r, "POST", "/api/desktop-updates", "root", updateZIP(t, key, "0.0.6", "windows-x86_64", false)))
+	if w := requestUpdate(t, r, "POST", "/api/desktop-updates/"+id+"/publish", "root", nil); w.Code != 200 {
+		t.Fatal("deleted version prompted for confirmation", w.Code, w.Body.String())
+	}
+	for _, version := range []string{"0.0.6", "2.1.1"} {
+		if w := requestUpdate(t, r, "GET", "/desktop-updates/windows/x86_64/"+version, "", nil); w.Code != 204 {
+			t.Fatal("equal/newer client offered update", version, w.Code)
+		}
+	}
+	if w := requestUpdate(t, r, "GET", "/desktop-updates/windows/x86_64/0.0.5", "", nil); w.Code != 200 {
+		t.Fatal("older client did not receive published update", w.Code, w.Body.String())
 	}
 }
 

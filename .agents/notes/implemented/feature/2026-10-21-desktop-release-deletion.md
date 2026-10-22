@@ -16,13 +16,13 @@ The administrator confirms permanent deletion. List operations retain the curren
 
 Upload and list filters reuse the administrator's custom dropdown component instead of native OS menus. Disabled architecture options remain unavailable, and keyboard navigation, Escape dismissal and visible focus are preserved. Styling is scoped to release controls so other administrator pages retain their appearance.
 
-Publication below the retained historical version requires separate consent bound to the candidate version. The administrator sees a confirmation prompt, not an error toast. The history value remains the maximum version; client update availability compares the selected record's actual version against the requesting client's version. Publishing an older record therefore does not advertise a downgrade to newer clients, and signature verification remains mandatory.
+Publication below the historical version requires separate consent bound to the candidate version only while its platform/version upload still exists, as defined by the [deleted-release warning decision](../bug-fix/2026-10-22-deleted-release-publication-warning.md). The administrator sees a confirmation prompt, not an error toast. Client update availability compares the selected record's actual version against the requesting client's version. Publishing an older record therefore does not advertise a downgrade to newer clients, and signature verification remains mandatory.
 
 ## Alternatives considered
 
 **Delete active releases directly.** This can invalidate an update while clients are discovering it. Explicit withdrawal keeps the availability change separate from permanent cleanup.
 
-**Delete the platform channel with the record.** This loses the historical comparison needed for lower-version confirmation. The warning history survives removal of its upload.
+**Delete the platform channel with the record.** This loses its independent publication state. The channel survives record removal, but a deleted upload does not participate in lower-version confirmation.
 
 ## Consequences
 
