@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Calendar, Download, Eye, FileText, Layers, Plus, Search, Tag, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, Calendar, Download, Eye, FileText, Layers, Plus, RefreshCw, Search, Tag, Trash2, Upload } from 'lucide-react';
 import { API } from '../../helpers';
 import CustomSelect from '../../components/CustomSelect';
 import './index.css';
@@ -11,6 +11,8 @@ const SCOPES = [
 ];
 
 const FILE_PAGE_SIZE = 20;
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+const PARSE_POLL_MS = 2500;
 
 function unwrap(response) {
   if (!response?.data?.success) throw new Error(response?.data?.message || '请求失败');
@@ -89,6 +91,36 @@ function fileKind(name) {
   return 'file';
 }
 
+function isSkippedUploadName(name) {
+  const base = String(name || '').split(/[/\\]/).pop() || '';
+  if (base === '' || base === '.' || base === '..') return true;
+  const lower = base.toLowerCase();
+  return lower === '.ds_store' || lower === 'thumbs.db' || lower === 'desktop.ini' || lower.startsWith('._');
+}
+
+// RAGFlow reports run as UNSTART/RUNNING/CANCEL/DONE/FAIL or the legacy codes 0–4.
+function parseState(file) {
+  const run = String(file?.run ?? '').trim().toUpperCase();
+  const progress = Number(file?.progress);
+  const percent = Number.isFinite(progress)
+    ? Math.max(0, Math.min(100, Math.round(progress <= 1 ? progress * 100 : progress)))
+    : null;
+  if (run === '3' || run === 'DONE') return { key: 'done', label: '已解析', pending: false, retry: false };
+  if (run === '4' || run === 'FAIL') return { key: 'fail', label: '解析失败', pending: false, retry: true };
+  if (run === '2' || run === 'CANCEL') return { key: 'cancel', label: '已取消', pending: false, retry: true };
+  if (run === '1' || run === 'RUNNING') {
+    return {
+      key: 'running',
+      label: percent == null || percent <= 0 ? '解析中' : `解析中 ${percent}%`,
+      pending: true,
+      retry: false,
+    };
+  }
+  if (run === '0' || run === 'UNSTART') return { key: 'wait', label: '等待解析', pending: true, retry: true };
+  if (Number(file?.chunk_count) > 0) return { key: 'done', label: '已解析', pending: false, retry: false };
+  return { key: 'unknown', label: '—', pending: false, retry: false };
+}
+
 function isPlainTextName(name) {
   return ['md', 'txt', 'json', 'csv', 'log', 'xml', 'html', 'htm', 'css', 'js', 'ts', 'tsx', 'jsx', 'yaml', 'yml'].includes(fileExtension(name));
 }
@@ -151,6 +183,8 @@ const KnowledgeLibrary = () => {
   const fileInput = useRef(null);
   const counted = useRef(new Set());
   const viewerRef = useRef(null);
+  const loadDocumentsRef = useRef(null);
+  const pollRef = useRef({ library: null, page: 1, keywords: '' });
   viewerRef.current = viewer;
 
   useEffect(() => () => { revokeViewerUrl(viewerRef.current); }, []);
@@ -213,10 +247,12 @@ const KnowledgeLibrary = () => {
 
   const filePageCount = Math.max(1, Math.ceil(documentTotal / FILE_PAGE_SIZE) || 1);
 
-  const loadDocuments = async (library, { page = 1, keywords = '' } = {}) => {
+  const loadDocuments = async (library, { page = 1, keywords = '', silent = false } = {}) => {
     if (!library) return;
-    setDocumentsLoading(true);
-    setError('');
+    if (!silent) {
+      setDocumentsLoading(true);
+      setError('');
+    }
     try {
       const result = unwrapDocumentPage(await API.get(
         `/api/knowledge-admin/bases/${library.id}/documents?${documentsQuery({ page, keywords })}`,
@@ -238,16 +274,37 @@ const KnowledgeLibrary = () => {
       setFilePage(nextPage);
       if (!keywords.trim()) setCounts(current => ({ ...current, [library.id]: result.total }));
     } catch (cause) {
+      if (silent) return;
       setDocuments([]);
       setDocumentTotal(0);
       setError(await errorMessage(cause));
     } finally {
-      setDocumentsLoading(false);
+      if (!silent) setDocumentsLoading(false);
     }
   };
+  loadDocumentsRef.current = loadDocuments;
+  pollRef.current = { library: opened, page: filePage, keywords: fileSearch };
+
+  const pendingParse = documents.some(file => parseState(file).pending);
+  useEffect(() => {
+    if (!opened || !pendingParse) return undefined;
+    // Keep the current rows on screen while RAGFlow chunking is still running.
+    const timer = window.setInterval(() => {
+      const current = pollRef.current;
+      if (!current.library) return;
+      void loadDocumentsRef.current?.(current.library, {
+        page: current.page,
+        keywords: current.keywords,
+        silent: true,
+      });
+    }, PARSE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [opened, pendingParse]);
 
   const openFiles = async library => {
     setOpened(library);
+    setDocuments([]);
+    setDocumentTotal(0);
     setFileKeyword('');
     setFileSearch('');
     setFilePage(1);
@@ -276,16 +333,24 @@ const KnowledgeLibrary = () => {
     setSaving(true);
     setError('');
     try {
-      unwrap(await API.post('/api/knowledge-admin/bases', {
+      const created = unwrap(await API.post('/api/knowledge-admin/bases', {
         name: form.name.trim(),
         description: form.description.trim(),
         kind: form.kind,
         tags: form.tags.trim(),
       }));
+      const library = {
+        ...created,
+        name: created?.name || form.name.trim(),
+        description: created?.description ?? form.description.trim(),
+        kind: created?.kind || form.kind,
+        tags: created?.tags ?? form.tags.trim(),
+      };
       setCreating(false);
       setForm({ name: '', description: '', kind: scope, tags: '' });
-      setScope(form.kind);
+      setScope(library.kind);
       await loadLibraries();
+      await openFiles(library);
     } catch (cause) {
       setError(await errorMessage(cause));
     } finally {
@@ -297,13 +362,24 @@ const KnowledgeLibrary = () => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file || !opened) return;
+    if (isSkippedUploadName(file.name)) {
+      setError('不支持上传该文件');
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError('文件不能超过 20MB');
+      return;
+    }
     setBusy('upload');
     setError('');
     try {
       const body = new FormData();
       body.append('file', file);
       unwrap(await API.post(`/api/knowledge-admin/bases/${opened.id}/documents`, body));
-      await refreshOpened(opened);
+      setFileKeyword('');
+      setFileSearch('');
+      setFilePage(1);
+      await loadDocuments(opened, { page: 1, keywords: '' });
     } catch (cause) {
       setError(await errorMessage(cause));
     } finally {
@@ -463,8 +539,9 @@ const KnowledgeLibrary = () => {
         <button type='button' className='knowledge-primary' disabled={busy === 'upload'} onClick={() => fileInput.current?.click()}>
           <Upload size={15} />{busy === 'upload' ? '正在上传' : '上传文件'}
         </button>
-        <input ref={fileInput} type='file' hidden onChange={uploadFile} />
+        <input ref={fileInput} className='knowledge-file-input' type='file' aria-label='上传文件' tabIndex={-1} disabled={busy === 'upload'} onChange={uploadFile} />
       </header>
+      <p className='knowledge-hint knowledge-upload-hint'>一次上传一个文件，不超过 20MB。上传后在后台解析，列表会显示解析进度。</p>
       <div className='knowledge-files-toolbar'>
         <label className='knowledge-search'>
           <Search size={16} />
@@ -495,22 +572,27 @@ const KnowledgeLibrary = () => {
       </div>
       <div className='knowledge-table-wrap'>
         <table>
-          <thead><tr><th>文件名称</th><th>大小</th><th>上传时间</th><th>切片数量</th><th>摘要</th><th>操作</th></tr></thead>
+          <thead><tr><th>文件名称</th><th>大小</th><th>上传时间</th><th>解析状态</th><th>切片数量</th><th>摘要</th><th>操作</th></tr></thead>
           <tbody>
-            {documentsLoading ? <tr><td colSpan={6}>正在加载文件</td></tr> : documents.length === 0 ? <tr><td colSpan={6}>{fileSearch ? '没有匹配的文件' : '暂无文件'}</td></tr> : documents.map(file => <tr key={file.id}>
+            {documentsLoading ? <tr><td colSpan={7}>正在加载文件</td></tr> : documents.length === 0 ? <tr><td colSpan={7}>{fileSearch ? '没有匹配的文件' : '暂无文件'}</td></tr> : documents.map(file => {
+              const state = parseState(file);
+              return <tr key={file.id}>
               <td>{file.name}</td>
               <td>{formatSize(file.size)}</td>
               <td>{formatUnix(file.create_time || file.update_time)}</td>
+              <td className={`knowledge-parse ${state.key}`}>{state.label}</td>
               <td>{Number.isFinite(Number(file.chunk_count)) ? file.chunk_count : '—'}</td>
               <td className='knowledge-summary' title={file.summary || ''}>{file.summary || '—'}</td>
               <td className='knowledge-ops'>
                 <button type='button' disabled={busy === `${file.id}:browse`} onClick={() => runFileAction(file, 'browse')}><Eye size={14} />浏览</button>
                 <button type='button' disabled={busy === `${file.id}:download`} onClick={() => runFileAction(file, 'download')}><Download size={14} />下载</button>
                 <button type='button' disabled={busy === `${file.id}:chunks`} onClick={() => runFileAction(file, 'chunks')}><Layers size={14} />切片</button>
+                {state.retry && <button type='button' disabled={busy === `${file.id}:parse`} onClick={() => runFileAction(file, 'parse')}><RefreshCw size={14} />重新解析</button>}
                 <button type='button' onClick={() => { setSummaryFile(file); setSummaryText(file.summary || ''); }}><FileText size={14} />摘要</button>
                 <button type='button' className='danger' onClick={() => setConfirming({ type: 'file', file })}><Trash2 size={14} />删除</button>
               </td>
-            </tr>)}
+            </tr>;
+            })}
           </tbody>
         </table>
       </div>

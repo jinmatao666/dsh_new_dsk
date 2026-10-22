@@ -3,7 +3,45 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, expect, it, vi } from 'vitest'
 import { KnowledgePage, type KnowledgeApi } from '../src/client/KnowledgePage.tsx'
 
+vi.mock('pdfjs-dist', () => ({
+  GlobalWorkerOptions: { workerSrc: '' },
+  getDocument: () => ({
+    promise: Promise.resolve({
+      numPages: 1,
+      async getPage() {
+        return {
+          getViewport: () => ({ width: 120, height: 160 }),
+          render: () => ({ promise: Promise.resolve() }),
+          getTextContent: async () => ({ items: [] }),
+        }
+      },
+      async destroy() {},
+    }),
+  }),
+}))
+
+vi.mock('pdfjs-dist/build/pdf.worker.min.mjs', () => ({
+  WorkerMessageHandler: { setup() {} },
+}))
+
 afterEach(cleanup)
+
+function stubCanvas() {
+  HTMLCanvasElement.prototype.getContext = vi.fn(() => {
+    return {
+      fillRect() {},
+      clearRect() {},
+      drawImage() {},
+      save() {},
+      restore() {},
+      scale() {},
+      translate() {},
+      transform() {},
+      setTransform() {},
+    } as unknown as CanvasRenderingContext2D
+  }) as unknown as typeof HTMLCanvasElement.prototype.getContext
+  HTMLCanvasElement.prototype.toDataURL = vi.fn(() => 'data:image/png;base64,AA==')
+}
 
 it('accepts a 1GB MDB selection and keeps the page usable after an upload error', async () => {
   const service = api()
@@ -133,15 +171,30 @@ it('drags the divider to change the content width', async () => {
 
 it('restores saved Q&A turns when opening a knowledge base', async () => {
   const service = api()
+  stubCanvas()
   service.messages = vi.fn(async () => [
     { role: 'user' as const, content: '上次的问题' },
-    { role: 'assistant' as const, content: '上次的回答' },
+    {
+      role: 'assistant' as const,
+      content: '上次的回答[ID:0]',
+      citations: [{
+        index: 1, chunk_index: 0, document_id: 'doc-1', document_name: '说明.pdf',
+        quote: '摘录', page: 1,
+        positions: [{ page: 1, left: 0.1, right: 0.5, top: 0.2, bottom: 0.3 }],
+      }],
+    },
   ])
-  render(<KnowledgePage api={service} />)
+  const { container } = render(<KnowledgePage api={service} />)
+  const pane = container.querySelector('.dsh-knowledge-messages') as HTMLDivElement
+  Object.defineProperty(pane, 'scrollHeight', { configurable: true, get: () => 960 })
   await waitFor(() => expect(service.messages).toHaveBeenCalledWith(1))
   expect(await screen.findByText('上次的问题')).toBeTruthy()
-  expect(screen.getByText('上次的回答')).toBeTruthy()
+  expect(screen.getByText(/上次的回答/)).toBeTruthy()
   expect(screen.getByText('万维')).toBeTruthy()
+  expect(screen.getByRole('button', { name: '引用定位 【1】' })).toBeTruthy()
+  expect(pane.scrollTop).toBe(0)
+  fireEvent.click(screen.getByRole('button', { name: '引用定位 【1】' }))
+  await waitFor(() => expect(service.download).toHaveBeenCalledWith(1, 'doc-1'))
 })
 
 it('asks the selected knowledge base through chat completions and renders recommendations', async () => {
@@ -151,7 +204,9 @@ it('asks the selected knowledge base through chat completions and renders recomm
     onProgress?.({ answer: '知识库回答', recommendations: ['继续提问'], done: true })
     return { answer: '知识库回答', recommendations: ['继续提问'] }
   })
-  render(<KnowledgePage api={service} />)
+  const { container } = render(<KnowledgePage api={service} />)
+  const pane = container.querySelector('.dsh-knowledge-messages') as HTMLDivElement
+  Object.defineProperty(pane, 'scrollHeight', { configurable: true, get: () => 960 })
   const input = await screen.findByPlaceholderText('基于知识库提问')
   fireEvent.change(input, { target: { value: '请概括文档' } })
   expect(screen.getByRole('button', { name: '发送' }).className).toContain('ready')
@@ -162,6 +217,7 @@ it('asks the selected knowledge base through chat completions and renders recomm
   expect(screen.getByText('万维')).toBeTruthy()
   expect(screen.getByText('继续提问')).toBeTruthy()
   expect(screen.getByRole('button', { name: '发送' }).className).toContain('idle')
+  await waitFor(() => expect(pane.scrollTop).toBe(960))
 })
 
 it('shows typing dots and a stop control while waiting for the first answer chunk', async () => {
@@ -187,8 +243,9 @@ it('shows typing dots and a stop control while waiting for the first answer chun
   expect(screen.getByRole('button', { name: '发送' }).className).toContain('idle')
 })
 
-it('opens a PDF blob preview when a content list item is double-clicked', async () => {
+it('opens a PDF preview with pdf.js when a content list item is clicked', async () => {
   const service = api()
+  stubCanvas()
   const createObjectURL = vi.fn(() => 'blob:doc')
   const revokeObjectURL = vi.fn()
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
@@ -201,18 +258,73 @@ it('opens a PDF blob preview when a content list item is double-clicked', async 
     return element
   })
   render(<KnowledgePage api={service} />)
-  fireEvent.doubleClick(await screen.findByRole('button', { name: /说明\.pdf/ }))
+  fireEvent.click(await screen.findByRole('button', { name: /说明\.pdf/ }))
   await waitFor(() => expect(service.download).toHaveBeenCalledWith(1, 'doc-1'))
   expect(service.chunks).not.toHaveBeenCalled()
   expect(screen.getByRole('dialog', { name: '说明.pdf' })).toBeTruthy()
-  expect(screen.getByTitle('说明.pdf')).toBeTruthy()
+  expect(await screen.findByAltText('PDF 1')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: '下载' }))
   await waitFor(() => expect(service.download).toHaveBeenCalledTimes(2))
   expect(createObjectURL).toHaveBeenCalled()
   expect(click).toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: '关闭' }))
   expect(screen.queryByRole('dialog', { name: '说明.pdf' })).toBeNull()
-  expect(revokeObjectURL).toHaveBeenCalled()
+})
+
+it('opens a cited PDF when a blue answer citation number is clicked', async () => {
+  const service = api()
+  stubCanvas()
+  service.complete = vi.fn(async (_id, _question, onProgress) => {
+    const answer = {
+      answer: '依据制度执行。##0$$',
+      recommendations: [] as string[],
+      citations: [{
+        index: 1, chunk_index: 0, document_id: 'doc-1', document_name: '说明.pdf',
+        quote: '适用范围', page: 1,
+        positions: [{ page: 1, left: 0.1, right: 0.5, top: 0.2, bottom: 0.3 }],
+      }],
+    }
+    onProgress?.({ ...answer, done: true })
+    return answer
+  })
+  render(<KnowledgePage api={service} />)
+  const input = await screen.findByPlaceholderText('基于知识库提问')
+  fireEvent.change(input, { target: { value: '制度要求是什么' } })
+  fireEvent.click(screen.getByRole('button', { name: '发送' }))
+  expect(await screen.findByRole('button', { name: '引用定位 【1】' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '引用定位 【1】' }))
+  await waitFor(() => expect(service.download).toHaveBeenCalledWith(1, 'doc-1'))
+  expect(screen.getByRole('dialog', { name: '说明.pdf' })).toBeTruthy()
+})
+
+it('turns answer [ID:i] markers into inline locate controls without trailing source chips', async () => {
+  const service = api()
+  stubCanvas()
+  service.complete = vi.fn(async (_id, _question, onProgress) => {
+    const answer = {
+      answer: '准备工作包括：[ID:0]',
+      recommendations: [] as string[],
+      citations: [
+        {
+          index: 1, chunk_index: 0, document_id: 'doc-1', document_name: '说明.pdf',
+          quote: '建表', page: 1,
+          positions: [{ page: 1, left: 0.1, right: 0.5, top: 0.2, bottom: 0.3 }],
+        },
+        { index: 2, chunk_index: 1, document_id: 'doc-2', document_name: '其它.pdf', quote: '其它' },
+      ],
+    }
+    onProgress?.({ ...answer, done: true })
+    return answer
+  })
+  render(<KnowledgePage api={service} />)
+  const input = await screen.findByPlaceholderText('基于知识库提问')
+  fireEvent.change(input, { target: { value: '准备工作是什么' } })
+  fireEvent.click(screen.getByRole('button', { name: '发送' }))
+  expect(await screen.findByRole('button', { name: '引用定位 【1】' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: '引用定位 【2】' })).toBeNull()
+  expect(screen.queryByText(/\[ID:0\]/)).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '引用定位 【1】' }))
+  await waitFor(() => expect(service.download).toHaveBeenCalledWith(1, 'doc-1'))
 })
 
 it('previews images through the original file blob', async () => {
@@ -222,16 +334,16 @@ it('previews images through the original file blob', async () => {
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:image') })
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
   render(<KnowledgePage api={service} />)
-  fireEvent.doubleClick(await screen.findByRole('button', { name: /截图\.png/ }))
+  fireEvent.click(await screen.findByRole('button', { name: /截图\.png/ }))
   await waitFor(() => expect(service.download).toHaveBeenCalledWith(1, 'img-1'))
   expect(screen.getByRole('img', { name: '截图.png' })).toBeTruthy()
 })
 
-it('selects a document and shows move, copy, and delete actions', async () => {
+it('selects a document on right-click and shows move, copy, and delete actions', async () => {
   const service = api()
   render(<KnowledgePage api={service} />)
   const row = await screen.findByRole('button', { name: /说明\.pdf/ })
-  fireEvent.click(row)
+  fireEvent.contextMenu(row)
   expect(row.className).toContain('selected')
   expect(screen.getByRole('menuitem', { name: '移动到' })).toBeTruthy()
   expect(screen.getByRole('menuitem', { name: '复制到' })).toBeTruthy()
@@ -246,7 +358,7 @@ it('moves a selected document into another personal or shared library', async ()
     ? [{ id: 'doc-1', name: '说明.pdf', size: 2048, run: 'DONE', progress: 1 }]
     : [])
   render(<KnowledgePage api={service} />)
-  fireEvent.click(await screen.findByRole('button', { name: /说明\.pdf/ }))
+  fireEvent.contextMenu(await screen.findByRole('button', { name: /说明\.pdf/ }))
   fireEvent.click(screen.getByRole('menuitem', { name: '移动到' }))
   const dialog = await screen.findByRole('dialog', { name: /移动/ })
   fireEvent.click(dialog.querySelector('aside button') as HTMLButtonElement)
@@ -257,7 +369,7 @@ it('moves a selected document into another personal or shared library', async ()
 it('asks for confirmation before deleting a selected document', async () => {
   const service = api()
   render(<KnowledgePage api={service} />)
-  fireEvent.click(await screen.findByRole('button', { name: /说明\.pdf/ }))
+  fireEvent.contextMenu(await screen.findByRole('button', { name: /说明\.pdf/ }))
   fireEvent.click(screen.getByRole('menuitem', { name: '删除' }))
   const dialog = await screen.findByRole('dialog', { name: '确认删除' })
   expect(dialog.textContent).toContain('说明.pdf')

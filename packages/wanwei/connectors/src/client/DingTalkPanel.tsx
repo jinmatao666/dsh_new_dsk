@@ -26,6 +26,7 @@ export type DingTalkApi = {
 
 /** Example prompts shown under 试试这样用 (WorkBuddy-compatible). */
 export const DINGTALK_EXAMPLE_PROMPTS = [
+  '给张三发一条钉钉消息，内容：明天下午 3 点的材料我已放好',
   '在钉钉群【产品周会】里用机器人发一条通知：今天 15:00 在 3 楼会议室开周会，记得带上周的进展材料',
   '查一下我下周的钉钉日程，列出和【客户对接】相关的会议（时间、参会人、会议室），并帮我找出三人都空闲的时段约一次同步会',
   '在钉钉 AI 表格【任务跟踪】里新增一行：标题=Q2 上线评审、负责人=张三、截止时间=2026-05-20、状态=进行中',
@@ -147,7 +148,7 @@ export function DingTalkPanel({
             <button
               type="button"
               disabled={busy === 'login' || busy === 'disconnect'}
-              onClick={() => tryPrompt(DINGTALK_EXAMPLE_PROMPTS[1])}
+              onClick={() => tryPrompt(DINGTALK_EXAMPLE_PROMPTS[2])}
             >
               {productText('去试试')}
             </button>

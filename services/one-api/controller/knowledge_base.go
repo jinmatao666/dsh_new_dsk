@@ -680,6 +680,12 @@ func recreateKnowledgeConversation(c *gin.Context, client *ragflow.Client, base 
 }
 
 func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, conversation model.KnowledgeConversation, question string, stream bool) {
+	// Refresh the assistant prompt so older chats also emit citation markers.
+	if err := client.UpdateChat(c.Request.Context(), conversation.RagflowChatId, base.RagflowDatasetId, conversation.Model); err != nil &&
+		!ragflow.ChatOwnershipLost(err) {
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	if stream {
 		answerKnowledgeConversationStream(c, client, base, conversation, question)
 		return
@@ -696,7 +702,11 @@ func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *m
 	if recommendations == nil {
 		recommendations = []string{}
 	}
-	data := gin.H{"answer": completion.Answer, "reference": completion.Reference, "recommendations": recommendations}
+	citations := ragflow.ParseCitations(completion.Reference, completion.Answer)
+	data := gin.H{
+		"answer": completion.Answer, "reference": completion.Reference,
+		"recommendations": recommendations, "citations": citations,
+	}
 	if recommendationErr != nil {
 		data["recommendation_warning"] = recommendationErr.Error()
 	}
@@ -755,13 +765,16 @@ func answerKnowledgeConversationStream(c *gin.Context, client *ragflow.Client, b
 	}
 	run := func(active model.KnowledgeConversation) error {
 		return client.CompleteStream(c.Request.Context(), active.RagflowChatId, active.RagflowSessionId, question,
-			func(answer string, done bool) error {
+			func(answer string, reference json.RawMessage, done bool) error {
 				if done {
 					recommendations, recommendationErr := client.Recommend(c.Request.Context(), question)
 					if recommendations == nil {
 						recommendations = []string{}
 					}
-					event := gin.H{"answer": answer, "recommendations": recommendations, "done": true}
+					event := gin.H{
+						"answer": answer, "recommendations": recommendations,
+						"citations": ragflow.ParseCitations(reference, answer), "done": true,
+					}
 					if recommendationErr != nil {
 						event["recommendation_warning"] = recommendationErr.Error()
 					}

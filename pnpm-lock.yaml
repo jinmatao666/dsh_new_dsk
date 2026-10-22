@@ -9747,6 +9747,9 @@ importers:
 
   packages/wanwei/connectors:
     dependencies:
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
@@ -9910,6 +9913,13 @@ importers:
         version: 18.3.1
 
   packages/wanwei/knowledge-base:
+    dependencies:
+      marked:
+        specifier: ^15.0.11
+        version: 15.0.11
+      pdfjs-dist:
+        specifier: ^4.10.38
+        version: 4.10.38
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -9966,9 +9976,6 @@ importers:
         specifier: ^8.21.0
         version: 8.21.0
     devDependencies:
-      '@deepseek-ai/dsh-subprocess':
-        specifier: workspace:^
-        version: link:../../subprocess/subprocess
       '@deepseek-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
@@ -10038,6 +10045,9 @@ importers:
       '@deepseek-ai/dsh-skill':
         specifier: workspace:^
         version: link:../../skill/skill
+      '@deepseek-ai/dsh-subprocess':
+        specifier: workspace:^
+        version: link:../../subprocess/subprocess
       '@deepseek-ai/dsh-system-prompt':
         specifier: workspace:^
         version: link:../../core/system-prompt
@@ -15974,6 +15984,11 @@ packages:
 
   markdown-table@3.0.4:
     resolution: {integrity: sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw==}
+
+  marked@15.0.11:
+    resolution: {integrity: sha512-1BEXAU2euRCG3xwgLVT1y0xbJEld1XOrmRJpUwRCcy7rxhSCwMrmEu9LXoPhHSCJG41V7YcQ2mjKRr5BA3ITIA==}
+    engines: {node: '>= 18'}
+    hasBin: true
 
   marked@16.4.2:
     resolution: {integrity: sha512-TI3V8YYWvkVf3KJe1dRkpnjs68JUPyEa5vjKrp1XEEJUAOaQc+Qj+L1qWbPd0SJuAdQkFU0h73sXXqwDYxsiDA==}
@@ -21995,6 +22010,8 @@ snapshots:
   mark.js@8.11.1: {}
 
   markdown-table@3.0.4: {}
+
+  marked@15.0.11: {}
 
   marked@16.4.2: {}
 

@@ -8,7 +8,10 @@
   "files": [
     "src/index.ts",
     "src/invariant.ts",
+    "src/copy-tree.ts",
     "src/dingtalk-dws.ts",
+    "src/dingtalk-dws-tool.ts",
+    "src/dingtalk-personal-dm.ts",
     "src/wecom-cli.ts",
     "src/wechat-ilink.ts"
   ],
@@ -30,6 +33,9 @@
     },
     {
       "path": "../../core/agent"
+    },
+    {
+      "path": "../../core/tools"
     },
     {
       "path": "../../runtime-diagnostics/invariants"

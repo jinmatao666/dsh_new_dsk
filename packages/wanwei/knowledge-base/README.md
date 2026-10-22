@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This Client plugin adds the administrator-controlled Knowledge Base entry. OneAPI owns authorization, local records and the RAGFlow credential; the browser receives only authorized knowledge-base metadata, document metadata, parsed preview text, downloadable file bytes, saved Q&A turns and answers.
+This Client plugin adds the administrator-controlled Knowledge Base entry. OneAPI owns authorization, local records and the RAGFlow credential; the browser receives only authorized knowledge-base metadata, document metadata, parsed preview text, downloadable file bytes, saved Q&A turns, answers and locatable citations.
 
 ## Table of Contents
 
@@ -48,7 +48,7 @@ Each knowledge conversation owns a distinct RAGFlow assistant and session, so ca
 
 - Upload acceptance does not prove content parsing support; MDB parsing is not implemented by this package. RAGFlow and reverse-proxy upload limits must permit the file size. Original-file preview, download and cross-library copy/move retain their separate 20 MiB limit. Upload requires local temporary disk space; interrupted uploads expire according to the authentication plugin's `knowledgeUploadIdleTimeoutMs` setting.
 - The creation dialog does not yet expose user and department grant editing; the database and API accept grant records for the administration workflow.
-- Upload starts RAGFlow parsing asynchronously on the server; the desktop page does not expose manual re-parse. Selecting a content item highlights the row; the context menu offers only move, copy, and delete. Move and copy target personal or shared libraries and sync through OneAPI (download plus upload, then RAGFlow delete for move). Delete calls RAGFlow document deletion. Double-click opens a viewer: images and PDFs use the original file blob, plain text uses the downloaded bytes, and other types fall back to RAGFlow chunk text.
+- Upload starts RAGFlow parsing asynchronously on the server; the desktop page does not expose manual re-parse. Click opens a viewer; right-click selects and shows move, copy, and delete. Move and copy target personal or shared libraries and sync through OneAPI (download plus upload, then RAGFlow delete for move). Delete calls RAGFlow document deletion. Images use the original file blob; PDFs render with pdf.js so answer citations can highlight RAGFlow chunk boxes (quote text-layer search is the fallback); plain text uses downloaded bytes; other types fall back to RAGFlow chunk text. Finished answers and restored history turns replace `##i$$` / `[ID:i]` markers with blue `【n】` citations from those RAGFlow `reference` chunks; the page does not invent a separate source list.
 - The add-content menu uploads local files and local folders into the current library. Folder upload still stores each file in the library, and the content list groups them by relative path as a folder tree. Web links, notes, Tencent docs, recording minutes, personal-library import, and empty new folders are shown but not connected.
 
 <a id="dev-note"></a>

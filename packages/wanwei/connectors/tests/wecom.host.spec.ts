@@ -503,6 +503,7 @@ describe('WeCom CLI RPC', () => {
     expect(name).toBe('wanwei-connectors')
     expect(inject).toEqual([
       'connection',
+      'tools',
       'sessionController',
       'sessions',
       'agents',
@@ -539,6 +540,7 @@ describe('WeCom CLI RPC', () => {
       effect(fn: () => () => void | Promise<void>) {
         return fn()
       },
+      tools: { register: () => () => undefined },
     })
     apply(ctx as Context)
     expect(handlers.has('/wanwei-wecom')).toBe(true)
