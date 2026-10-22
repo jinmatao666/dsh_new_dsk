@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent, PointerEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import {
+  splitAnswerCitations,
+  type KnowledgeCitation,
+} from './citations.ts'
+import { MarkdownView } from './MarkdownView.tsx'
+import { PdfLocateViewer, type PdfLocateRequest } from './PdfLocateViewer.tsx'
+import { ViewerLoading } from './ViewerLoading.tsx'
 import { productText } from './locales/product.ts'
 
 export interface KnowledgeBaseItem {
@@ -35,12 +42,14 @@ interface KnowledgeChunk {
 interface KnowledgeAnswer {
   answer: string
   recommendations: string[]
+  citations?: KnowledgeCitation[]
 }
 
 /** Progressive answer updates while the Host streams a completion. */
 export interface KnowledgeAnswerProgress {
   answer: string
   recommendations?: string[]
+  citations?: KnowledgeCitation[]
   done: boolean
 }
 
@@ -49,7 +58,12 @@ interface KnowledgeFileBytes {
   bytes: number[]
 }
 
-type Message = { role: 'user' | 'assistant'; content: string; recommendations?: string[] }
+type Message = {
+  role: 'user' | 'assistant'
+  content: string
+  recommendations?: string[]
+  citations?: KnowledgeCitation[]
+}
 
 /** Conflict handling when the destination already has the same file name. */
 export type KnowledgeConflictPolicy = 'keep' | 'replace'
@@ -114,7 +128,11 @@ type DocumentViewer = {
   loading: boolean
   mode: 'image' | 'pdf' | 'text'
   objectUrl?: string
+  pdfBytes?: Uint8Array
   content?: string
+  /** Render downloaded text as Markdown when the file is .md. */
+  markdown?: boolean
+  locate?: PdfLocateRequest
 }
 
 const CONTENT_MIN = 260
@@ -166,12 +184,20 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const folderInput = useRef<HTMLInputElement>(null)
   const uploadRoot = useRef<HTMLDivElement>(null)
   const layout = useRef<HTMLElement>(null)
+  const messagesPane = useRef<HTMLDivElement>(null)
   const answerAbort = useRef<AbortController>()
   const historyEpoch = useRef(0)
   const viewerRef = useRef<DocumentViewer>()
   viewerRef.current = viewer
 
   const selected = items.find(item => item.id === selectedId)
+  // Stick to the latest turn only while an answer is streaming; history opens at the top.
+  useEffect(() => {
+    if (!answering) return
+    const pane = messagesPane.current
+    if (pane === null) return
+    pane.scrollTop = pane.scrollHeight
+  }, [messages, answering])
   useEffect(() => {
     const input = folderInput.current
     if (input === null) return
@@ -232,21 +258,16 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   }, [documentMenu])
   const transferTargets = items.filter(item =>
     (item.kind === 'personal' || item.kind === 'shared') && item.id !== selectedId)
-  const selectDocument = (documentId: string, additive: boolean, menuAt?: { x: number; y: number }) => {
+  /** Toggle multi-select without opening preview or the action panel. */
+  const toggleDocumentSelection = (documentId: string) => {
+    setDocumentMenu(undefined)
     setSelectedDocumentIds((current) => {
-      if (additive) {
-        return current.includes(documentId)
-          ? current.filter(id => id !== documentId)
-          : [...current, documentId]
-      }
-      return current.length === 1 && current[0] === documentId ? current : [documentId]
+      return current.includes(documentId)
+        ? current.filter(id => id !== documentId)
+        : [...current, documentId]
     })
-    if (additive) {
-      setDocumentMenu(undefined)
-      return
-    }
-    if (menuAt !== undefined) setDocumentMenu({ documentId, x: menuAt.x, y: menuAt.y })
   }
+  /** Select the document (keeping multi-select if already included) and show the action panel. */
   const openDocumentMenu = (documentId: string, x: number, y: number) => {
     setSelectedDocumentIds(current => current.includes(documentId) ? current : [documentId])
     setDocumentMenu({ documentId, x, y })
@@ -346,11 +367,11 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     setError('')
     closeViewer()
   }
-  const openDocument = (document: KnowledgeDocument) => {
+  const openDocument = (document: KnowledgeDocument, locate?: PdfLocateRequest) => {
     if (selectedId === undefined) return
     setViewer((current) => {
       if (current?.objectUrl !== undefined) URL.revokeObjectURL(current.objectUrl)
-      return { document, loading: true, mode: 'text', content: '' }
+      return { document, loading: true, mode: 'text', content: '', ...(locate === undefined ? {} : { locate }) }
     })
     setError('')
     void (async () => {
@@ -375,13 +396,16 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
             return
           }
           if (kind === 'pdf' || contentType.includes('pdf')) {
-            const objectUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
-            apply({ document, loading: false, mode: 'pdf', objectUrl }, objectUrl)
+            apply({
+              document, loading: false, mode: 'pdf', pdfBytes: bytes,
+              ...(locate === undefined ? {} : { locate }),
+            })
             return
           }
           apply({
             document, loading: false, mode: 'text',
             content: new TextDecoder('utf-8').decode(bytes),
+            markdown: isMarkdownName(document.name),
           })
           return
         }
@@ -389,6 +413,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         apply({
           document, loading: false, mode: 'text',
           content: chunks.map(chunk => chunk.content.trim()).filter(Boolean).join('\n\n'),
+          markdown: isMarkdownName(document.name),
         })
       } catch (cause) {
         setViewer((current) => {
@@ -399,6 +424,23 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         setError(`${productText('打开失败')}：${String(cause)}`)
       }
     })()
+  }
+  const openCitation = (citation: KnowledgeCitation) => {
+    const document = documents.find(item => item.id === citation.document_id)
+      ?? {
+        id: citation.document_id,
+        name: citation.document_name || citation.document_id,
+        size: 0,
+        run: 'DONE',
+        progress: 1,
+      }
+    openDocument(document, {
+      ...(citation.page !== undefined ? { page: citation.page } : {}),
+      ...(citation.quote !== '' ? { quote: citation.quote } : {}),
+      ...(citation.positions !== undefined && citation.positions.length > 0
+        ? { positions: citation.positions }
+        : {}),
+    })
   }
   const downloadDocument = async () => {
     if (selectedId === undefined || viewer === undefined || downloading) return
@@ -537,6 +579,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
             role: 'assistant',
             content: progress.answer,
             ...(progress.recommendations !== undefined ? { recommendations: progress.recommendations } : {}),
+            ...(progress.citations !== undefined ? { citations: progress.citations } : {}),
           }
           return next
         })
@@ -545,13 +588,18 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         if (current.length === 0) return current
         const next = [...current]
         const last = next[next.length - 1]
+        const citations = answer.citations ?? []
         if (last === undefined || last.role !== 'assistant') {
-          return [...current, { role: 'assistant', content: answer.answer, recommendations: answer.recommendations }]
+          return [...current, {
+            role: 'assistant', content: answer.answer, recommendations: answer.recommendations,
+            ...(citations.length > 0 ? { citations } : {}),
+          }]
         }
         next[next.length - 1] = {
           role: 'assistant',
           content: answer.answer,
           recommendations: answer.recommendations,
+          ...(citations.length > 0 ? { citations } : {}),
         }
         return next
       })
@@ -673,7 +721,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
             searching,
             selectedDocumentIds,
             onToggleFolder: toggleFolder,
-            onSelectDocument: selectDocument,
+            onToggleDocumentSelection: toggleDocumentSelection,
             onOpenDocument: openDocument,
             onOpenMenu: openDocumentMenu,
           })}</div>}
@@ -683,11 +731,12 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       aria-label={productText('调整内容宽度')} aria-valuemin={CONTENT_MIN} aria-valuemax={contentLimit} aria-valuenow={contentWidth}
       onPointerDown={resizeContent} onKeyDown={nudgeContent} />
     <section className="dsh-knowledge-chat" aria-label={productText('基于知识库问答')}>
-      <div className="dsh-knowledge-messages">
+      <div className="dsh-knowledge-messages" ref={messagesPane}>
         {messages.length === 0 && <div className="dsh-knowledge-chat-empty"><p><span><ChatIcon /></span>{productText('基于知识库问答')}</p></div>}
         {messages.map((message, index) => {
           const waiting = message.role === 'assistant' && message.content === ''
             && answering && index === messages.length - 1
+          const citations = message.citations ?? []
           return <article className={message.role} key={`${message.role}-${index}`}>
             {message.role === 'assistant' && <header className="dsh-knowledge-assistant-brand">
               <img src="/brand-mark.svg" width={18} height={16} alt="" />
@@ -697,9 +746,11 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
               ? <p className="dsh-knowledge-typing" role="status" aria-label={productText('正在回答…')}>
                 <span /><span /><span />
               </p>
-              : message.content !== '' && <p>{message.content}</p>}
-            {message.recommendations && message.recommendations.length > 0 && <div><small>{productText('相关问题')}</small>
-              {message.recommendations.map(value => <button type="button" key={value} onClick={() => setQuestion(value)}>{value}</button>)}</div>}
+              : message.content !== '' && <p>{renderAnswerBody(message.content, citations, openCitation)}</p>}
+            {message.recommendations && message.recommendations.length > 0 &&
+              <div className="dsh-knowledge-related"><small>{productText('相关问题')}</small>
+                {message.recommendations.map(value =>
+                  <button type="button" key={value} onClick={() => setQuestion(value)}>{value}</button>)}</div>}
           </article>
         })}
       </div>
@@ -870,18 +921,36 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
           </div>
         </header>
         <div className={`dsh-knowledge-viewer-body ${viewer.mode}`}>
-          {viewer.loading ? <p role="status">{productText('正在加载…')}</p>
+          {viewer.loading ? <ViewerLoading label={productText('正在加载…')} />
             : viewer.mode === 'image' && viewer.objectUrl !== undefined
               ? <img src={viewer.objectUrl} alt={documentDisplayName(viewer.document)} />
-              : viewer.mode === 'pdf' && viewer.objectUrl !== undefined
-                ? <iframe title={documentDisplayName(viewer.document)} src={viewer.objectUrl} />
+              : viewer.mode === 'pdf' && viewer.pdfBytes !== undefined
+                ? <PdfLocateViewer bytes={viewer.pdfBytes} locate={viewer.locate} />
                 : (viewer.content ?? '') === ''
                   ? <p className="dsh-knowledge-empty">{productText('暂无解析内容')}</p>
-                  : <article><pre>{viewer.content}</pre></article>}
+                  : viewer.markdown === true
+                    ? <MarkdownView source={viewer.content ?? ''} />
+                    : <article><pre>{viewer.content}</pre></article>}
         </div>
       </section>
     </div>, document.body)}
   </section>
+}
+
+function renderAnswerBody(
+  content: string,
+  citations: KnowledgeCitation[],
+  onOpen: (citation: KnowledgeCitation) => void,
+): ReactNode {
+  return splitAnswerCitations(content, citations).map((part, index) => {
+    if (part.type === 'text') return <span key={`t-${index}`}>{part.text}</span>
+    return <button type="button" key={`c-${part.citation.chunk_index}-${index}`}
+      className="dsh-knowledge-cite"
+      aria-label={`${productText('引用定位')} 【${part.citation.index}】`}
+      onClick={() => onOpen(part.citation)}>
+      【{part.citation.index}】
+    </button>
+  })
 }
 
 function PlusIcon() {
@@ -1062,7 +1131,7 @@ type ContentTreeHandlers = {
   searching: boolean
   selectedDocumentIds: string[]
   onToggleFolder: (path: string) => void
-  onSelectDocument: (documentId: string, additive: boolean, menuAt?: { x: number; y: number }) => void
+  onToggleDocumentSelection: (documentId: string) => void
   onOpenDocument: (document: KnowledgeDocument) => void
   onOpenMenu: (documentId: string, x: number, y: number) => void
 }
@@ -1107,13 +1176,12 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
         style={{ paddingLeft: `${4 + handlers.depth * 14}px` }}
         aria-pressed={selectedDoc}
         onClick={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect()
-          handlers.onSelectDocument(document.id, event.metaKey || event.ctrlKey, {
-            x: Math.min(rect.right + 6, window.innerWidth - 160),
-            y: rect.top,
-          })
+          if (event.metaKey || event.ctrlKey) {
+            handlers.onToggleDocumentSelection(document.id)
+            return
+          }
+          handlers.onOpenDocument(document)
         }}
-        onDoubleClick={() => handlers.onOpenDocument(document)}
         onContextMenu={(event) => {
           event.preventDefault()
           handlers.onOpenMenu(document.id, event.clientX, event.clientY)
@@ -1158,6 +1226,10 @@ function fileKind(name: string): FileKind {
 
 function isPlainTextName(name: string): boolean {
   return ['md', 'txt', 'json', 'csv', 'log', 'xml', 'html', 'htm', 'css', 'js', 'ts', 'tsx', 'jsx', 'yaml', 'yml'].includes(fileExtension(name))
+}
+
+function isMarkdownName(name: string): boolean {
+  return fileExtension(name) === 'md' || fileExtension(name) === 'markdown'
 }
 
 function mimeFor(name: string, contentType: string): string {

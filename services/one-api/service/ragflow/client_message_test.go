@@ -150,6 +150,29 @@ func TestNormalizeSessionHistoryDropsPrologueAndMarkdown(t *testing.T) {
 	}
 }
 
+func TestNormalizeSessionHistoryKeepsCitationMarkersAndCitations(t *testing.T) {
+	reference := json.RawMessage(`[
+		{"id":"c0","content":"建表说明","document_id":"doc-a","document_name":"制度.pdf","positions":[[1,10,20,30,40]]},
+		{"id":"c1","content":"其它","document_id":"doc-b","document_name":"其它.pdf"}
+	]`)
+	got := NormalizeSessionHistory([]SessionMessage{
+		{Role: "user", Content: "准备工作是什么"},
+		{Role: "assistant", Content: "准备工作包括：[ID:0]", Reference: reference},
+	})
+	if len(got) != 2 {
+		t.Fatalf("len=%d %#v", len(got), got)
+	}
+	if got[1].Content != "准备工作包括：[ID:0]" {
+		t.Fatalf("content=%q", got[1].Content)
+	}
+	if len(got[1].Citations) != 1 || got[1].Citations[0].DocumentId != "doc-a" || got[1].Citations[0].ChunkIndex != 0 {
+		t.Fatalf("citations=%#v", got[1].Citations)
+	}
+	if len(got[1].Reference) != 0 {
+		t.Fatalf("raw reference should be cleared, got %#v", got[1].Reference)
+	}
+}
+
 func TestListSessionMessagesFiltersById(t *testing.T) {
 	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -158,7 +181,9 @@ func TestListSessionMessagesFiltersById(t *testing.T) {
 		_, _ = w.Write([]byte(`{"code":0,"data":[{"id":"sess-1","messages":[
 			{"role":"assistant","content":"欢迎"},
 			{"role":"user","content":"你好"},
-			{"role":"assistant","content":"你好！"}
+			{"role":"assistant","content":"你好！[ID:0]","reference":[
+				{"id":"c0","content":"摘录","document_id":"doc-1","document_name":"a.pdf","positions":[[2,1,2,3,4]]}
+			]}
 		]}],"message":"ok"}`))
 	}))
 	defer server.Close()
@@ -171,7 +196,10 @@ func TestListSessionMessagesFiltersById(t *testing.T) {
 	if gotPath != "/api/v1/chats/chat-1/sessions?page=1&page_size=1&id=sess-1" {
 		t.Fatalf("path=%s", gotPath)
 	}
-	if len(messages) != 2 || messages[0].Content != "你好" || messages[1].Content != "你好！" {
+	if len(messages) != 2 || messages[0].Content != "你好" || messages[1].Content != "你好！[ID:0]" {
 		t.Fatalf("messages=%#v", messages)
+	}
+	if len(messages[1].Citations) != 1 || messages[1].Citations[0].DocumentId != "doc-1" {
+		t.Fatalf("citations=%#v", messages[1].Citations)
 	}
 }

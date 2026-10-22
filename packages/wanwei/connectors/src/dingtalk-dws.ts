@@ -5,12 +5,13 @@
  * desktop runtime (WorkBuddy-style); PATH / npm -g is only a fallback.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { delimiter, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
+import { copyDirectoryTree } from './copy-tree.ts'
 
 const require = createRequire(import.meta.url)
 
@@ -510,7 +511,7 @@ export function installDwsCliSkill(dshHome: string): string {
   const dest = dwsCliSkillInstallDir(dshHome)
   mkdirSync(dirname(dest), { recursive: true })
   rmSync(dest, { recursive: true, force: true })
-  cpSync(source, dest, { recursive: true })
+  copyDirectoryTree(source, dest)
   if (!existsSync(join(dest, 'SKILL.md'))) {
     throw new Error(`写入 dws-cli 技能失败（目标缺少 SKILL.md）：${dest}`)
   }

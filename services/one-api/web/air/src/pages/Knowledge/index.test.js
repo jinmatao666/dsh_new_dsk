@@ -136,3 +136,87 @@ test('knowledge catalog filters scopes and opens the file list', async () => {
   await act(async () => { await Promise.resolve(); });
   expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/bases', expect.objectContaining({ name: '协作资料', kind: 'common' }));
 });
+
+test('uploads one file, shows parse progress, and opens the new library', async () => {
+  const timers = [];
+  const interval = jest.spyOn(window, 'setInterval').mockImplementation((fn, delay) => {
+    timers.push({ fn, delay });
+    return timers.length;
+  });
+  const clear = jest.spyOn(window, 'clearInterval').mockImplementation(() => {});
+  const parsing = {
+    items: [{ id: 'doc-run', name: '说明.pdf', size: 2048, create_time: 1748833920, chunk_count: 0, run: '1', progress: 0.4, summary: '' }],
+    total: 1, page: 1, page_size: 20,
+  };
+  API.get.mockImplementation(url => {
+    if (String(url).includes('/documents?')) return Promise.resolve({ data: { success: true, data: parsing } });
+    return Promise.resolve(documentsResponse(url));
+  });
+  try {
+    await act(async () => { root.render(<KnowledgeLibrary />); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+    await act(async () => { button('查看文件清单').click(); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+    expect(container.textContent).toContain('解析中 40%');
+    expect(container.textContent).toContain('一次上传一个文件，不超过 20MB');
+    const input = container.querySelector('input[type="file"]');
+    expect(input.multiple).toBe(false);
+    expect(input.hidden).toBe(false);
+    expect(getComputedStyle(input).display).not.toBe('none');
+    const upload = [...container.querySelectorAll('button')].find(item => item.textContent.includes('上传文件'));
+    const clicked = jest.spyOn(input, 'click').mockImplementation(() => {});
+    await act(async () => { upload.click(); });
+    expect(clicked).toHaveBeenCalled();
+    clicked.mockRestore();
+    const file = new File(['hello'], '说明.txt', { type: 'text/plain' });
+    API.post.mockClear();
+    await act(async () => {
+      Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+    expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/bases/1/documents', expect.any(FormData));
+    expect(API.post.mock.calls.at(-1)[1].get('file').name).toBe('说明.txt');
+
+    const oversized = new File(['x'], 'big.bin');
+    Object.defineProperty(oversized, 'size', { value: 20 * 1024 * 1024 + 1 });
+    API.post.mockClear();
+    await act(async () => {
+      Object.defineProperty(input, 'files', { configurable: true, value: [oversized] });
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(container.textContent).toContain('文件不能超过 20MB');
+    expect(API.post).not.toHaveBeenCalled();
+
+    const poll = timers.find(item => item.delay === 2500);
+    expect(poll).toBeTruthy();
+    const calls = API.get.mock.calls.length;
+    await act(async () => { poll.fn(); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+    expect(API.get.mock.calls.length).toBeGreaterThan(calls);
+
+    parsing.items = [{ id: 'doc-fail', name: '失败.pdf', size: 100, create_time: 1748833920, chunk_count: 0, run: 'FAIL', progress: 0, summary: '' }];
+    await act(async () => { poll.fn(); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+    expect(container.textContent).toContain('解析失败');
+    API.post.mockClear();
+    await act(async () => { button('重新解析').click(); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+    expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/bases/1/documents/doc-fail/parse');
+
+    await act(async () => { button('返回').click(); });
+    await act(async () => { button('新建知识库').click(); });
+    const name = container.querySelector('input[placeholder="请输入知识库名称"]');
+    const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    await act(async () => {
+      setValue.call(name, '协作资料');
+      name.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => { container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+    for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+    expect(container.textContent).toContain('协作资料 - 文件清单');
+  } finally {
+    interval.mockRestore();
+    clear.mockRestore();
+  }
+});

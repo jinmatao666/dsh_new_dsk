@@ -557,6 +557,9 @@ function clientConfig(id: string, entry: string): UserConfig {
     }],
     outputOptions: {
       entryFileNames: 'client.js',
+      // ModuleLoader loads one closure factory per plugin; hashed async chunks
+      // are not on the module table and would throw at require("./chunk-*.cjs").
+      codeSplitting: false,
       sourcemapExcludeSources: false,
       // The map is served from /plugins/<scoped-package>/client.js.map. The
       // browser resolves its local sources back into URLs that mirror the

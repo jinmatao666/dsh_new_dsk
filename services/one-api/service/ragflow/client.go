@@ -66,9 +66,13 @@ type Completion struct {
 }
 
 // SessionMessage is one turn stored inside a RAGFlow chat session.
+// RAGFlow list-sessions attaches per-assistant `reference` chunk lists; NormalizeSessionHistory
+// turns those into desktop `citations` and clears the raw reference before returning.
 type SessionMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role      string          `json:"role"`
+	Content   string          `json:"content"`
+	Reference json.RawMessage `json:"reference,omitempty"`
+	Citations []Citation      `json:"citations,omitempty"`
 }
 
 // NewFromEnvironment resolves deployment-owned RAGFlow connection settings.
@@ -149,9 +153,10 @@ func chatPrompt(datasetId string) map[string]interface{} {
 		"top_k":                      512,
 		"rerank_model":               "",
 		"empty_response":             "知识库中未找到相关内容。",
-		"show_quote":                 false,
+		"show_quote":                 true,
 		"variables":                  []map[string]interface{}{{"key": "knowledge", "optional": true}},
 		"prompt": "你是知识库助手。仅依据下列知识用纯文本回答用户问题；禁止 Markdown、加粗、标题符号与代码围栏；可用普通编号列表；知识不足时明确说明。" +
+			"引用知识时，在相关句末标注 ##i$$，其中 i 为知识片段从 0 开始的序号；不要输出其它引用格式。" +
 			"\n知识：\n{knowledge}\n以上是知识。",
 		"dataset_ids": []string{datasetId},
 	}
@@ -483,6 +488,7 @@ func (c *Client) ListSessionMessages(ctx context.Context, chatId, sessionId stri
 }
 
 // NormalizeSessionHistory keeps non-empty user/assistant turns and drops the leading assistant prologue.
+// Assistant turns keep citation markers in content and attach ParseCitations from the stored reference.
 func NormalizeSessionHistory(messages []SessionMessage) []SessionMessage {
 	out := make([]SessionMessage, 0, len(messages))
 	started := false
@@ -501,7 +507,17 @@ func NormalizeSessionHistory(messages []SessionMessage) []SessionMessage {
 			}
 			started = true
 		}
-		out = append(out, SessionMessage{Role: role, Content: content})
+		next := SessionMessage{Role: role, Content: content}
+		if role == "assistant" {
+			reference := message.Reference
+			if len(bytesTrim(reference)) > 0 {
+				citations := ParseCitations(reference, content)
+				if len(citations) > 0 {
+					next.Citations = citations
+				}
+			}
+		}
+		out = append(out, next)
 	}
 	return out
 }
@@ -532,8 +548,10 @@ func (c *Client) Complete(ctx context.Context, chatId, sessionId, question strin
 }
 
 // CompleteStream asks through the conversation-owned assistant and emits cumulative plain-text answers.
-// emit receives the latest full answer so far; the final call sets done to true.
-func (c *Client) CompleteStream(ctx context.Context, chatId, sessionId, question string, emit func(answer string, done bool) error) error {
+// emit receives the latest full answer so far; reference is set when RAGFlow includes source chunks;
+// the final call sets done to true.
+func (c *Client) CompleteStream(ctx context.Context, chatId, sessionId, question string,
+	emit func(answer string, reference json.RawMessage, done bool) error) error {
 	body, err := jsonBody(map[string]interface{}{"question": question, "session_id": sessionId, "stream": true})
 	if err != nil {
 		return err
@@ -563,6 +581,7 @@ func (c *Client) CompleteStream(ctx context.Context, chatId, sessionId, question
 	scanner := bufio.NewScanner(response.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxResponseBytes)
 	lastAnswer := ""
+	var lastReference json.RawMessage
 	finished := false
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -587,7 +606,7 @@ func (c *Client) CompleteStream(ctx context.Context, chatId, sessionId, question
 		trimmed := bytes.TrimSpace(wrapped.Data)
 		if bytes.Equal(trimmed, []byte("true")) {
 			finished = true
-			if err := emit(lastAnswer, true); err != nil {
+			if err := emit(lastAnswer, lastReference, true); err != nil {
 				return err
 			}
 			return nil
@@ -597,7 +616,10 @@ func (c *Client) CompleteStream(ctx context.Context, chatId, sessionId, question
 			return errors.New("RAGFlow 流式响应字段无效")
 		}
 		lastAnswer = PlainTextAnswer(completion.Answer)
-		if err := emit(lastAnswer, false); err != nil {
+		if len(bytes.TrimSpace(completion.Reference)) > 0 && string(bytes.TrimSpace(completion.Reference)) != "null" {
+			lastReference = completion.Reference
+		}
+		if err := emit(lastAnswer, lastReference, false); err != nil {
 			return err
 		}
 	}
@@ -608,7 +630,7 @@ func (c *Client) CompleteStream(ctx context.Context, chatId, sessionId, question
 		if lastAnswer == "" {
 			return errors.New("RAGFlow 流式响应未完成")
 		}
-		return emit(lastAnswer, true)
+		return emit(lastAnswer, lastReference, true)
 	}
 	return nil
 }

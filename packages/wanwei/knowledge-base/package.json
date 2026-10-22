@@ -28,6 +28,10 @@
   },
   "scripts": { "bundle": "tsdown", "watch": "tsdown --watch" },
   "license": "MIT",
+  "dependencies": {
+    "marked": "^15.0.11",
+    "pdfjs-dist": "^4.10.38"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-client-connection": "workspace:^",

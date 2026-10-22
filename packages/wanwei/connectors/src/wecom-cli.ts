@@ -6,13 +6,14 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process'
 import {
-  cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync,
+  existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync,
 } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
+import { copyDirectoryTree } from './copy-tree.ts'
 import { resolveProductDshHome } from './dingtalk-dws.ts'
 
 const require = createRequire(import.meta.url)
@@ -454,7 +455,7 @@ function copyWeComSkillsFrom(dshHome: string, sourceSkills: string): string {
     if (!existsSync(join(from, 'SKILL.md'))) continue
     const dest = join(skillsRoot, name)
     rmSync(dest, { recursive: true, force: true })
-    cpSync(from, dest, { recursive: true })
+    copyDirectoryTree(from, dest)
     if (!existsSync(join(dest, 'SKILL.md'))) {
       throw new Error(`写入企业微信技能失败（${name} 缺少 SKILL.md）`)
     }

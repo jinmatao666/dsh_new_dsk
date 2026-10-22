@@ -1,6 +1,7 @@
 import { createPanelController, registerFeaturePanel } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connection/client'
+import { parseCitations, type KnowledgeCitation } from './citations.ts'
 import {
   KnowledgePage,
   type KnowledgeAnswerProgress,
@@ -15,7 +16,7 @@ async function readKnowledgeStream(
   body: ReadableStream<Uint8Array>,
   onProgress?: (progress: KnowledgeAnswerProgress) => void,
   signal?: AbortSignal,
-): Promise<{ answer: string; recommendations: string[] }> {
+): Promise<{ answer: string; recommendations: string[]; citations: KnowledgeCitation[] }> {
   const reader = body.getReader()
   const onAbort = () => {
     void reader.cancel().catch(() => {
@@ -27,6 +28,7 @@ async function readKnowledgeStream(
   let buffer = ''
   let answer = ''
   let recommendations: string[] = []
+  let citations: KnowledgeCitation[] = []
   try {
     for (;;) {
       if (signal?.aborted === true) throw new DOMException('The operation was aborted.', 'AbortError')
@@ -52,6 +54,7 @@ async function readKnowledgeStream(
         const event = parsed as {
           answer?: unknown
           recommendations?: unknown
+          citations?: unknown
           done?: unknown
           error?: unknown
         }
@@ -60,23 +63,25 @@ async function readKnowledgeStream(
         if (Array.isArray(event.recommendations) && event.recommendations.every(item => typeof item === 'string')) {
           recommendations = event.recommendations
         }
+        if (event.citations !== undefined) citations = parseCitations(event.citations)
         const finished = event.done === true
         onProgress?.({
           answer,
           ...(recommendations.length > 0 || finished ? { recommendations } : {}),
+          ...(citations.length > 0 || finished ? { citations } : {}),
           done: finished,
         })
         if (finished) {
           await reader.cancel().catch(() => {
             // Named: cancel after the final event is best-effort.
           })
-          return { answer, recommendations }
+          return { answer, recommendations, citations }
         }
       }
     }
     if (answer === '') throw new Error('知识库流式响应未完成')
-    onProgress?.({ answer, recommendations, done: true })
-    return { answer, recommendations }
+    onProgress?.({ answer, recommendations, citations, done: true })
+    return { answer, recommendations, citations }
   } finally {
     signal?.removeEventListener('abort', onAbort)
   }
@@ -193,7 +198,12 @@ export function apply(ctx: Context): void {
         if ((message.role !== 'user' && message.role !== 'assistant') || typeof message.content !== 'string') {
           throw new Error('知识库对话消息字段无效')
         }
-        return { role: message.role, content: message.content }
+        const citations = parseCitations(message.citations)
+        return {
+          role: message.role,
+          content: message.content,
+          ...(citations.length > 0 ? { citations } : {}),
+        }
       })
     },
     async complete(knowledgeBaseId, question, onProgress, signal) {
@@ -223,11 +233,19 @@ export function apply(ctx: Context): void {
       }
       const raw = await call('chat-completions', { id: knowledgeBaseId, question })
       if (typeof raw !== 'object' || raw === null) throw new Error('知识库回答无效')
-      const result = raw as { answer?: unknown; recommendations?: unknown }
+      const result = raw as { answer?: unknown; recommendations?: unknown; citations?: unknown }
       if (typeof result.answer !== 'string' || !Array.isArray(result.recommendations) ||
         !result.recommendations.every(item => typeof item === 'string')) throw new Error('知识库回答字段无效')
-      const answer = { answer: result.answer, recommendations: result.recommendations }
-      onProgress?.({ answer: answer.answer, recommendations: answer.recommendations, done: true })
+      const citations = parseCitations(result.citations)
+      const answer = {
+        answer: result.answer,
+        recommendations: result.recommendations as string[],
+        ...(citations.length > 0 ? { citations } : {}),
+      }
+      onProgress?.({
+        answer: answer.answer, recommendations: answer.recommendations,
+        ...(citations.length > 0 ? { citations } : {}), done: true,
+      })
       return answer
     },
   }
