@@ -734,7 +734,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/context/file-reference-local/src/index.ts:35`](../packages/context/file-reference-local/src/index.ts)
+来源：[`packages/context/file-reference-local/src/index.ts:37`](../packages/context/file-reference-local/src/index.ts)
 
 <a id="deepseek-aidsh-fs-local"></a>
 
@@ -3342,7 +3342,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/wanwei/oneapi-auth/src/index.ts:35`](../packages/wanwei/oneapi-auth/src/index.ts)
+来源：[`packages/wanwei/oneapi-auth/src/index.ts:36`](../packages/wanwei/oneapi-auth/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-skillhub"></a>
 
