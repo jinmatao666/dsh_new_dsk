@@ -39,7 +39,7 @@ function stubCanvas() {
       transform() {},
       setTransform() {},
     } as unknown as CanvasRenderingContext2D
-  }) as typeof HTMLCanvasElement.prototype.getContext
+  }) as unknown as typeof HTMLCanvasElement.prototype.getContext
   HTMLCanvasElement.prototype.toDataURL = vi.fn(() => 'data:image/png;base64,AA==')
 }
 
