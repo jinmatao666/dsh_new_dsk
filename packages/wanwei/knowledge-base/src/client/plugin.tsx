@@ -128,17 +128,20 @@ export function apply(ctx: Context): void {
       return raw.map((item) => {
         if (typeof item !== 'object' || item === null) throw new Error('知识库文件无效')
         const document = item as Record<string, unknown>
-        if (typeof document.id !== 'string' || typeof document.name !== 'string' ||
-          typeof document.size !== 'number' || typeof document.run !== 'string' || typeof document.progress !== 'number') {
+        if (typeof document.id !== 'string' || document.id === '' || typeof document.name !== 'string' || document.name === '') {
           throw new Error('知识库文件字段无效')
         }
+        const size = typeof document.size === 'number' && Number.isFinite(document.size) && document.size >= 0 ? document.size : 0
+        const run = typeof document.run === 'string' ? document.run : ''
+        const progress = typeof document.progress === 'number' && Number.isFinite(document.progress)
+          ? Math.max(0, Math.min(1, document.progress)) : 0
         const location = typeof document.location === 'string' ? document.location : undefined
         return {
           id: document.id,
           name: document.name,
-          size: document.size,
-          run: document.run,
-          progress: document.progress,
+          size,
+          run,
+          progress,
           ...(location !== undefined && location !== '' ? { location } : {}),
           ...(typeof document.create_time === 'number' ? { create_time: document.create_time } : {}),
           ...(typeof document.update_time === 'number' ? { update_time: document.update_time } : {}),

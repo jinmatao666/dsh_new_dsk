@@ -1141,7 +1141,7 @@ function isSkippedUploadName(name: string): boolean {
   return lower === '.ds_store' || lower === 'thumbs.db' || lower === 'desktop.ini' || lower.startsWith('._')
 }
 
-type FileKind = 'image' | 'pdf' | 'word' | 'sheet' | 'file'
+type FileKind = 'image' | 'pdf' | 'word' | 'sheet' | 'database' | 'file'
 
 function fileExtension(name: string): string {
   return name.split('.').pop()?.toLowerCase() ?? ''
@@ -1153,6 +1153,7 @@ function fileKind(name: string): FileKind {
   if (extension === 'pdf') return 'pdf'
   if (['doc', 'docx'].includes(extension)) return 'word'
   if (['xls', 'xlsx', 'csv'].includes(extension)) return 'sheet'
+  if (['mdb', 'accdb'].includes(extension)) return 'database'
   return 'file'
 }
 
@@ -1175,11 +1176,12 @@ function mimeFor(name: string, contentType: string): string {
   return contentType || 'application/octet-stream'
 }
 
-function kindLabel(kind: FileKind): '图片' | 'PDF' | 'Word' | '表格' | '文件' {
+function kindLabel(kind: FileKind): '图片' | 'PDF' | 'Word' | '表格' | '数据库' | '文件' {
   if (kind === 'image') return '图片'
   if (kind === 'pdf') return 'PDF'
   if (kind === 'word') return 'Word'
   if (kind === 'sheet') return '表格'
+  if (kind === 'database') return '数据库'
   return '文件'
 }
 

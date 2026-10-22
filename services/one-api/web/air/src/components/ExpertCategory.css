@@ -1,0 +1,146 @@
+.expert-category .expert-admin-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(16 40 76 / 48%);
+}
+
+.expert-category .expert-admin-dialog {
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(720px, calc(100vh - 48px));
+  overflow: auto;
+  box-sizing: border-box;
+  border: 1px solid #e2eaf5;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgb(15 39 72 / 24%);
+}
+
+.expert-category .expert-admin-dialog header,
+.expert-category .expert-admin-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+}
+
+.expert-category .expert-admin-dialog header {
+  border-bottom: 1px solid #e7edf6;
+}
+
+.expert-category .expert-admin-dialog header h2 {
+  margin: 0;
+  color: #172b4d;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.expert-category .expert-admin-dialog header > button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.expert-category .expert-admin-dialog header > button:hover {
+  background: #f1f5fa;
+  color: #172b4d;
+}
+
+.expert-category .expert-admin-fields {
+  display: grid;
+  grid-template-columns: 1fr 160px;
+  gap: 16px;
+  padding: 24px;
+}
+
+.expert-category .expert-admin-fields label {
+  display: grid;
+  gap: 7px;
+  color: #344563;
+  font-size: 13px;
+}
+
+.expert-category .expert-admin-fields .wide {
+  grid-column: 1 / -1;
+}
+
+.expert-category .expert-admin-fields input:not([type='checkbox']),
+.expert-category .expert-admin-fields textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cfdbed;
+  border-radius: 9px;
+  background: #fff;
+  color: #172b4d;
+  font: inherit;
+  outline: none;
+  padding: 10px 12px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.expert-category .expert-admin-fields input:not([type='checkbox']):focus,
+.expert-category .expert-admin-fields textarea:focus {
+  border-color: #2874e8;
+  box-shadow: 0 0 0 3px rgb(40 116 232 / 12%);
+}
+
+.expert-category .expert-admin-fields textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.expert-category .expert-admin-publish {
+  display: flex !important;
+  align-items: center;
+  align-self: end;
+  gap: 8px !important;
+  min-height: 40px;
+}
+
+.expert-category .expert-admin-dialog footer {
+  justify-content: flex-end;
+  border-top: 1px solid #e7edf6;
+}
+
+.expert-category .expert-admin-dialog footer > button {
+  min-width: 76px;
+  min-height: 38px;
+  border: 1px solid #d7e2f2;
+  border-radius: 9px;
+  background: #fff;
+  color: #52637b;
+  cursor: pointer;
+  font: inherit;
+  padding: 0 14px;
+}
+
+.expert-category .expert-admin-dialog footer > button:hover {
+  border-color: #a9c5ed;
+  background: #f6f9ff;
+}
+
+.expert-category .expert-admin-dialog footer > button.preview-button.primary {
+  border-color: #2874e8;
+  background: #2874e8;
+  color: #fff;
+}
+
+@media (max-width: 640px) {
+  .expert-category .expert-admin-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .expert-category .expert-admin-publish {
+    align-self: auto;
+  }
+}

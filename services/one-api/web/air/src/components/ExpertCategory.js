@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal } from '@douyinfe/semi-ui';
 import { API, showError, showSuccess } from '../helpers';
-import './ExpertTable.css';
+import './ExpertCategory.css';
 
 const empty = { id: null, name: '', description: '', status: 1, sort_order: 0 };
 
