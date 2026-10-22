@@ -25,7 +25,7 @@ fn record(app: &tauri::AppHandle, value: serde_json::Value) {
     }
 }
 
-/// Start one process-bounded trace when the first expert is opened.
+/// Start one process-bounded trace when the expert library is opened.
 pub fn activate(app: &tauri::AppHandle) {
     if !ACTIVE.swap(true, Ordering::Relaxed) {
         record(
@@ -113,6 +113,8 @@ pub struct InputEvent {
     event: String,
     tag: String,
     hit_tag: String,
+    #[serde(default)]
+    control: String,
     x: i32,
     y: i32,
     width: u32,
@@ -136,10 +138,23 @@ fn permitted(event: &InputEvent) -> bool {
         "focus",
         "blur",
         "feature-open",
+        "library-open",
+        "detail-open",
+        "cancel-handler",
+        "start-handler",
+        "start-enter",
+        "start-ignored",
+        "request-start",
+        "request-success",
+        "prepare-start",
+        "prepare-done",
+        "launch-mounted",
+        "launch-error",
     ]
     .contains(&event.event.as_str())
         && TAGS.contains(&event.tag.as_str())
         && TAGS.contains(&event.hit_tag.as_str())
+        && ["", "none", "cancel", "start"].contains(&event.control.as_str())
         && event.x.abs_diff(0) <= 100_000
         && event.y.abs_diff(0) <= 100_000
         && event.width <= 100_000
@@ -154,6 +169,9 @@ pub async fn expert_input_diagnostic(webview: Webview, event: InputEvent) -> Res
     if !permitted(&event) {
         return Err("诊断事件无效".into());
     }
+    if event.event == "library-open" {
+        activate(webview.app_handle());
+    }
     if !ACTIVE.load(Ordering::Relaxed) {
         return Ok(());
     }
@@ -161,12 +179,18 @@ pub async fn expert_input_diagnostic(webview: Webview, event: InputEvent) -> Res
     record(
         app,
         json!({"kind": "dom-input", "event": event.event, "tag": event.tag,
-        "hitTag": event.hit_tag, "x": event.x, "y": event.y, "size": [event.width, event.height],
+        "hitTag": event.hit_tag, "control": event.control, "x": event.x, "y": event.y, "size": [event.width, event.height],
         "focused": event.focused, "interactive": event.interactive, "blocked": event.blocked}),
     );
     if matches!(
         event.event.as_str(),
-        "settled-click" | "resize" | "feature-open"
+        "settled-click"
+            | "resize"
+            | "feature-open"
+            | "library-open"
+            | "detail-open"
+            | "cancel-handler"
+            | "start-handler"
     ) {
         snapshot(app, "dom-checkpoint");
     }

@@ -1,6 +1,8 @@
 import { productText } from './locales/product.ts'
 import type { ExpertDetailSection } from './expert-catalog.ts'
 import styles from './ExpertDetailDialog.module.css'
+import { useEffect } from 'react'
+import { traceExpertAction } from './expert-diagnostics.ts'
 
 export type ExpertDetail = {
   name: string
@@ -42,6 +44,7 @@ export function ExpertDetailDialog({ expert, launching, launchError, onClose, on
   onStart: () => void
 }) {
   const sections = expert.detailSections?.length ? expert.detailSections : fallbackSections(expert)
+  useEffect(() => { traceExpertAction('detail-open') }, [expert])
   return <div className={styles.backdrop} onMouseDown={(event) => { if (event.currentTarget === event.target) onClose() }}>
     <section className={styles.dialog} role="dialog" aria-modal="true" aria-label={productText('{0}详情', [expert.name])} onKeyDown={(event) => { if (event.key === 'Escape') onClose() }}>
       <header className={styles.header}>
@@ -59,7 +62,11 @@ export function ExpertDetailDialog({ expert, launching, launchError, onClose, on
       </div>
       <footer className={styles.footer}>
         <small role={launchError ? 'alert' : undefined}>{launchError ?? (expert.footerNote?.trim() || productText('将在桌面端打开独立专家网页。'))}</small>
-        <div><button className={styles.cancel} type="button" onClick={onClose}>{productText('取消')}</button><button className={styles.start} type="button" disabled={launching} onClick={onStart}>{launching ? productText('正在打开…') : productText('开始使用')}</button></div>
+        <div><button className={styles.cancel} data-expert-action="cancel" type="button" onClick={() => {
+          traceExpertAction('cancel-handler'); onClose()
+        }}>{productText('取消')}</button><button className={styles.start} data-expert-action="start" type="button" disabled={launching} onClick={() => {
+          traceExpertAction('start-handler'); onStart()
+        }}>{launching ? productText('正在打开…') : productText('开始使用')}</button></div>
       </footer>
     </section>
   </div>

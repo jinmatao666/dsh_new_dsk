@@ -11,6 +11,7 @@ test('expert input trace is dormant, content-free and bounded', async () => {
     value = 'private-value'
     textContent = 'private-text'
     closest() { return this }
+    getAttribute() { return 'cancel' }
   }
   const addEventListener = (name, callback) => {
     const existing = listeners.get(name) ?? []
@@ -29,20 +30,26 @@ test('expert input trace is dormant, content-free and bounded', async () => {
     performance: { now: () => 1000 }, queueMicrotask, setTimeout, clearTimeout,
   })
   const event = { isTrusted: true, target: new Element(), clientX: 35, clientY: 42, defaultPrevented: false }
+  emit('wanwei:feature-open', { detail: 'other-feature' })
   emit('click', event)
   await new Promise(resolve => setTimeout(resolve, 5))
   assert.equal(calls.length, 0)
-  emit('wanwei:expert-diagnostics-start')
+  emit('wanwei:expert-action', { detail: 'library-open' })
   emit('click', { ...event, isTrusted: false })
   assert.equal(calls.length, 1)
   emit('click', event)
   event.defaultPrevented = true
   await new Promise(resolve => setTimeout(resolve, 5))
-  assert.deepEqual(calls.map(([, args]) => args.event.event), ['start', 'click', 'settled-click'])
+  assert.deepEqual(calls.map(([, args]) => args.event.event), ['library-open', 'click', 'settled-click'])
   assert.equal(calls[1][1].event.tag, 'button')
   assert.equal(calls[1][1].event.x, 35)
+  assert.equal(calls[1][1].event.control, 'cancel')
   assert.equal(calls[2][1].event.blocked, true)
   assert.equal(JSON.stringify(calls).includes('private-'), false)
+  emit('wanwei:expert-action', { detail: 'cancel-handler' })
+  emit('wanwei:expert-action', { detail: 'start-handler' })
+  emit('wanwei:expert-action', { detail: 'private-text' })
+  assert.deepEqual(calls.slice(-2).map(([, args]) => args.event.event), ['cancel-handler', 'start-handler'])
   for (let i = 0; i < 400; i++) emit('click', event)
   await new Promise(resolve => setTimeout(resolve, 5))
   assert.equal(calls.length, 300)

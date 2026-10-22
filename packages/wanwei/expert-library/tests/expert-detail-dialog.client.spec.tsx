@@ -16,6 +16,18 @@ const expert = {
 }
 
 describe('independent expert detail dialog', () => {
+  it('reports detail and button handler checkpoints without expert content', () => {
+    const actions: unknown[] = []
+    const listen = (event: Event) => { actions.push((event as CustomEvent<unknown>).detail) }
+    window.addEventListener('wanwei:expert-action', listen)
+    try {
+      render(<ExpertDetailDialog expert={expert} launching={false} launchError={null} onStart={vi.fn()} onClose={vi.fn()} />)
+      fireEvent.click(screen.getByRole('button', { name: '开始使用' }))
+      fireEvent.click(screen.getByRole('button', { name: '取消' }))
+      expect(actions).toEqual(['detail-open', 'start-handler', 'cancel-handler'])
+    } finally { window.removeEventListener('wanwei:expert-action', listen) }
+  })
+
   it('restores the four-card presentation while keeping the launch action', () => {
     const onStart = vi.fn()
     const onClose = vi.fn()

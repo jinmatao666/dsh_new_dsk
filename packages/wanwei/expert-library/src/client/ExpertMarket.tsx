@@ -4,6 +4,7 @@ import { projectPublishedExperts } from './expert-catalog.ts'
 import type { ExpertDetailSection, RemoteExpert } from './expert-catalog.ts'
 import { ExpertWebview, type ExpertLaunch } from './expert-webview.tsx'
 import { ExpertDetailDialog } from './ExpertDetailDialog.tsx'
+import { traceExpertAction } from './expert-diagnostics.ts'
 import { ServiceUnavailable } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 /* oxlint-disable @stylistic/max-len */
 type Expert = {
@@ -89,6 +90,7 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
   const [expertTabs, setExpertTabs] = useState<readonly ExpertLaunch[]>([])
   const [activeExpertTab, setActiveExpertTab] = useState<string | null>(null)
   const workspaceRef = useRef<HTMLElement>(null)
+  useEffect(() => { traceExpertAction('library-open') }, [])
   useEffect(() => {
     const panel = workspaceRef.current?.closest('.dsh-skill-market-panel')
     panel?.classList.toggle('dsh-expert-view-open', activeExpertTab !== null)
@@ -156,7 +158,11 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
   const visibleExperts = category === '全部' ? publishedExperts : publishedExperts.filter(expert => expert.category === category)
   const openExpert = (expert: Expert) =>{  setSelected({ id: expert.id, name: expert.name, role: expert.role, summary: expert.summary, icon: expert.icon, tags: expert.tags, examples: expert.examples, accent: expert.accent, ...(expert.scenario === undefined ? {} : { scenario: expert.scenario }), ...(expert.materials === undefined ? {} : { materials: expert.materials }), ...(expert.detailSections === undefined ? {} : { detailSections: expert.detailSections }), ...(expert.footerNote === undefined ? {} : { footerNote: expert.footerNote }) }) }
   const startExpert = async () => {
-    if (selected === null || launchExpert === undefined || launchPending.current) return
+    traceExpertAction('start-enter')
+    if (selected === null || launchExpert === undefined || launchPending.current) {
+      traceExpertAction('start-ignored')
+      return
+    }
     if (expertTabs.some(tab => tab.id === selected.id)) {
       setActiveExpertTab(selected.id)
       setSelected(null)
@@ -167,18 +173,24 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
     setLaunching(true)
     setLaunchError(null)
     try {
+      traceExpertAction('request-start')
       const { url, ticket } = await launchExpert(selected.id)
+      traceExpertAction('request-success')
       if (revision !== launchRevision.current) return
       // Layout and native window changes are presentation-only; a failed maximize
       // must never discard an otherwise valid expert launch ticket.
       if (prepareExpertWorkspace !== undefined) {
+        traceExpertAction('prepare-start')
         try { await prepareExpertWorkspace() } catch { /* keep opening the expert */ }
+        traceExpertAction('prepare-done')
         if (revision !== launchRevision.current) return
       }
       setExpertTabs(tabs => [...tabs, { id: selected.id, name: selected.name, url, ticket }])
       setActiveExpertTab(selected.id)
+      traceExpertAction('launch-mounted')
       setSelected(null)
     } catch (error) {
+      traceExpertAction('launch-error')
       if (revision === launchRevision.current) setLaunchError(error instanceof Error ? error.message : String(error))
     } finally {
       if (revision === launchRevision.current) {

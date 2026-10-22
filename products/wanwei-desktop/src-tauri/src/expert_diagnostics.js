@@ -11,18 +11,33 @@
     if (typeof invoke !== 'function') return;
     count++;
     const target = source?.target;
+    const candidate = target instanceof Element ? target.closest('[data-expert-action]')?.getAttribute('data-expert-action') : null;
+    const control = candidate === 'cancel' || candidate === 'start' ? candidate : 'none';
     const x = Math.round(source?.clientX ?? 0);
     const y = Math.round(source?.clientY ?? 0);
     const hit = document.elementFromPoint(x, y);
     // Never collect text, attributes, URLs, keyboard keys or input values.
     void invoke('expert_input_diagnostic', { event: {
-      event, tag: tag(target), hitTag: tag(hit), x, y,
+      event, tag: tag(target), hitTag: tag(hit), control, x, y,
       width: innerWidth, height: innerHeight, focused: document.hasFocus(),
       interactive: target instanceof Element && !!target.closest('button,a,input,select,textarea,[role="button"],[role="option"]'),
       blocked: source?.defaultPrevented === true,
     } }).catch(() => {}); // Diagnostic failure must not affect normal interaction.
   };
   window.addEventListener('wanwei:expert-diagnostics-start', () => { active = true; send('start'); });
+  const actions = new Set(['library-open', 'detail-open', 'cancel-handler', 'start-handler',
+    'start-enter', 'start-ignored', 'request-start', 'request-success', 'prepare-start',
+    'prepare-done', 'launch-mounted', 'launch-error']);
+  window.addEventListener('wanwei:expert-action', event => {
+    if (!actions.has(event.detail)) return;
+    if (event.detail === 'library-open') active = true;
+    send(event.detail);
+  });
+  window.addEventListener('wanwei:feature-open', event => {
+    if (event.detail !== 'wanwei-expert-library') return;
+    active = true;
+    send('library-open');
+  });
   for (const type of ['pointerdown', 'pointerup', 'click']) {
     document.addEventListener(type, event => {
       if (!event.isTrusted) return;
