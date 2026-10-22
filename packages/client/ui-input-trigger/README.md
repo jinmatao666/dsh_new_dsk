@@ -25,6 +25,8 @@ This package powers the input trigger pipeline of the Web GUI: it detects `/` an
 <a id="use-this-package"></a>
 ## Use this package
 
+Before Session selection, `draft()` drives the same controller and menu with only sources that explicitly provide a `draft` variant. These callbacks receive no Session identity. Editor attachment owns guarded pick application; detaching dismisses the menu. Draft queries allocate no Workspace or Session; Session-only commands require a selected Session.
+
 Mount this plugin alongside `ui-conversation`; the menu then appears in the input overlay when the user types a trigger under the caret. Grouped candidates render under title rows; a pick routes to the source, and the consuming surface applies the result — a slash command opens its popup or executes, a reference inserts its inline token.
 
 ### Keyboard and mouse

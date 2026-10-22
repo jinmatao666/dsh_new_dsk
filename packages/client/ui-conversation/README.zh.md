@@ -9,6 +9,8 @@ kind: "package-reference"
 
 ## 概述
 
+未选择工作区的草稿使用草稿安全的 `/`、`@` 候选流水线，不分配持久化实体。编辑器在序列化文字之外保留结构化引用；首次发送的自动分配和手动选择工作区都会将引用转移到目标 shell。打开技能、移除预置引用、浏览候选或放弃草稿，不会选中工作区或新增侧栏记录。
+
 引用标签在行内为光标和技能移除控件预留间距。不带修饰键的左右方向键一次跨过标签及其后的单个空格，同时保留复制和提交文本中的空格，并在文档两端停止。输入框聚焦时，标签旁的元素位置选区使用 CSS 光标，不向草稿添加字符；文字位置选区保留原生光标。WebKit 的辅助换行图片保留在 DOM 中，但不绘制破图图标。连续多个空格、选区手势、按词移动和输入法输入保持编辑器原有行为。
 
 技能引用标签提供独立的跳转和移除按钮。跳转通过浏览器 `dsh:reference-open` 事件向所属功能传递 `{ source, ref }`；移除仅删除当前 Lexical 引用。两者都不发送消息，也不改变其他引用。输入框不持有详情页。
@@ -40,13 +42,13 @@ target package 通过 declaration merge 扩展 snapshot 与 Location data map，
 <a id="shell-and-standard-props"></a>
 ## Shell 与标准 props
 
-本包注册 optional-Session `conversation` shell、strict Session header/body、View list、composer chain 与 bar、输入区域、Hero 区域、queue dock、草稿持久化和 phase 计算。`ctx.uiSession.provide()` 从同一个 Session binding 物化 Conversation 与 input source，并将 `inputActions` 作为稳定标准 prop 提供。`appendReferences` 向实时草稿追加结构化引用，不替换现有文字或标签；输入锁定或销毁后返回 false。草稿前缀 Slot 可在暂存文字旁显示行内前缀，并把前导普通文字转成会话引用，不改变其序列化 token。
+本包注册 optional-Session `conversation` shell、strict Session header/body、View list、composer chain 与 bar、输入区域、Hero 区域、queue dock、草稿持久化和 phase 计算。`ctx.uiSession.provide()` 从同一个 Session binding 物化 Conversation 与 input source，并将 `inputActions` 作为稳定标准 prop 提供。`appendReferences` 向实时草稿追加结构化引用，不替换现有文字或标签；输入锁定或销毁后返回 false。草稿前缀 Slot 在暂存和会话草稿中将前导普通文字转成编辑器引用，不改变其序列化 token；它不单独渲染前缀。
 
 暂存前缀只占用文字首行；后续行使用草稿的完整宽度，不需要先选择工作区。
 
 View 选择规则固定：有效且已注册的持久化选择优先，其次是已注册的 `chat`，否则不渲染 View；绝不选择第一个已注册 View。Shell phase 只组合 Session lifecycle 与 active-target set，不读取任何 target-specific snapshot。
 
-常驻 composer 在无 Session 与有 Session 之间保持挂载。尚无 Session 时，可编辑的纯文本草稿保存在 `ctx.conversation.input.stagedDraft`；选择工作区后，文本进入连接到的 Session，但不会自动发送。`conversation.input.draft-prefix` Slot 可展示已识别的行首标记，而不接管草稿。建立 Session 后，该表面使用 shell 所有的 Lexical 编辑器：引用 chip 是携带 owner 序列化身份的原子 decorator 节点（提交时经 owner codec 展开），已认领的 slash command 保持为带样式的行首文本，文件夹文本引用以图标前缀携带文件夹图形，草稿的剪贴板投影镜像到逐 Session Conversation store。Queue 操作通过 scoped `ctx.conversation` service 寻址准确的 queue occurrence；queue 预览经 `ui-primitives` 的共享行内引用投影渲染已发送文本（wire 会话形式折叠为其标签），编辑态则展示字面发送文本。繁忙时 Enter 行为保存在 Host-backed `ui-conversation` settings namespace。
+常驻 composer 在无 Session 与有 Session 之间保持挂载。尚无 Session 时，本地 Lexical 编辑器将序列化草稿同步到 `ctx.conversation.input.stagedDraft`；选择工作区后，文本进入连接到的 Session，但不会自动发送。暂存和会话编辑器共用节点类型、纯文本编辑、撤销历史、引用导航和光标绘制。外部草稿回显保留本地节点和选区。会话表面使用 shell 所有的编辑器：引用 chip 是携带 owner 序列化身份的原子 decorator 节点（提交时经 owner codec 展开），已认领的 slash command 保持为带样式的行首文本，文件夹文本引用以图标前缀携带文件夹图形，草稿的剪贴板投影镜像到逐 Session Conversation store。Queue 操作通过 scoped `ctx.conversation` service 寻址准确的 queue occurrence；queue 预览经 `ui-primitives` 的共享行内引用投影渲染已发送文本（wire 会话形式折叠为其标签），编辑态则展示字面发送文本。繁忙时 Enter 行为保存在 Host-backed `ui-conversation` settings namespace。
 
 默认发送采用乐观提交：Enter 在同一事务里清空草稿、occurrence 表和撤销历史，composer 保持 `plain`，发送作为 detached attempt 运行，发送期间可以继续输入和提交。`sendSession` 在序列化之前注册 Session 提交回显（`session.beginSubmission`），让出一帧使回显在点击当帧渲染，图片经浏览器原生 `FileReader` data-URL 路径编码。多个并发发送失败时，在用户编辑还原内容之前按提交顺序合并还原；命令提交保持冻结的 `submitting` 阶段。Detached attempt 持有图片 id，直到 admission 完成或 Session scope 销毁。回显以 observed 退休时，durable 图片缓存立即公开预览 URL，同时读取 admitted 附件，随后用规范化 URL 替换预览，并在两个 URL 各自停止使用后撤销。直接 subagent continuation 不创建本地回显，因为其 transport 不保留浏览器 request id。
 

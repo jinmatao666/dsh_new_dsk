@@ -25,6 +25,8 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
+The no-Session composer offers `/` completion through `skills.draftList`, reading user-level skills without a project cwd or Agent. A draft chip shows the friendly label but copies and transfers the stable slash identifier. Selecting a Workspace keeps its structured reference.
+
 Type `/` in the composer and pick a skill from the suggestions, or type `/name` directly; the sent message carries the literal text, and the host loads the skill the same way for a menu pick or a hand-typed token. A name shared with a host command still resolves to the command — adjudication claims the line client-side before it ever becomes a prompt.
 
 ### What the source offers

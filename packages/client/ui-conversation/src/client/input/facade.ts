@@ -15,10 +15,8 @@ import {
 import type { LexicalEditor, NodeKey } from 'lexical'
 import {
   $addUpdateTag, $createParagraphNode, $createTextNode, $getRoot, $getSelection, $isRangeSelection,
-  CLEAR_HISTORY_COMMAND, createEditor, HISTORY_MERGE_TAG, PASTE_TAG,
+  CLEAR_HISTORY_COMMAND, HISTORY_MERGE_TAG, PASTE_TAG,
 } from 'lexical'
-import { registerPlainText } from '@lexical/plain-text'
-import { createEmptyHistoryState, registerHistory } from '@lexical/history'
 import { mergeRegister } from '@lexical/utils'
 import type {
   ArbitrateKey, ArbitrateOutcome, CommandClaim, ConsumeTokenRequest, DraftAttachmentId,
@@ -28,9 +26,10 @@ import type {
 } from '../contract/input.ts'
 import type { InputSubmitMode } from '../contract/composer-submission.ts'
 import { SubmitMachine } from './machine.ts'
-import { ReferenceChipNode, $createReferenceChipNode } from './editor/chip-node.tsx'
+import { $createReferenceChipNode, ReferenceChipNode } from './editor/chip-node.tsx'
+import { cleanComposerText, createComposerEditor, registerComposerDocument } from './editor/document.ts'
 import { refreshClaimDecoration, registerClaimDecoration } from './editor/claim-decor.ts'
-import { registerTextRefDecoration, rescanTextRefs, TextRefNode } from './editor/text-ref.ts'
+import { registerTextRefDecoration, rescanTextRefs } from './editor/text-ref.ts'
 import type { EditorProjection } from './editor/projection.ts'
 import { $composerLayout, $projectComposer, detectOffsetOfClipboardOffset } from './editor/projection.ts'
 import { $replaceDetectSpanWithNodes, $replaceDetectSpanWithText } from './editor/span-map.ts'
@@ -102,17 +101,6 @@ const EMPTY_QUEUE: readonly QueuedMessage[] = []
 /** No-pipeline lexicon: zero text-ref decorations. */
 const EMPTY_LEXICON: ReadonlyMap<'/' | '@', readonly string[]> = new Map()
 
-/**
- * Detect-projection and legacy reference placeholders stripped from every
- * external text entering the document (paste, persisted-draft seed): a chip
- * is the only legitimate source of U+FFFC in the detect projection, so a
- * literal one in text would forge chip positions.
- */
-const REFERENCE_PLACEHOLDER_RE = /[\uE100-\uE11D\uFFFC]/gu
-
-/** Undo merge window for contiguous typing, in ms (the old machine's mergeWindowMs). */
-const HISTORY_MERGE_DELAY_MS = 1000
-
 /** Editor and attachment snapshot owned by one detached default send. */
 interface DetachedDraft {
   readonly draft: string
@@ -172,14 +160,9 @@ export class SessionInputShell implements SessionInput {
   }>()
 
   constructor(private readonly deps: SessionInputDeps) {
-    this.editor = createEditor({
-      namespace: 'dsh-composer',
-      nodes: [ReferenceChipNode, TextRefNode],
-      onError: (error) => { throw error },
-    })
+    this.editor = createComposerEditor()
     this.unregister = mergeRegister(
-      registerPlainText(this.editor),
-      registerHistory(this.editor, createEmptyHistoryState(), HISTORY_MERGE_DELAY_MS),
+      registerComposerDocument(this.editor),
       this.editor.registerUpdateListener(() => { this.onEditorUpdate() }),
       registerClaimDecoration(this.editor, () => this.activeClaimToken()),
       registerTextRefDecoration(this.editor, () => this.lexicon.getSnapshot(), () => this.activeClaimToken()),
@@ -266,10 +249,11 @@ export class SessionInputShell implements SessionInput {
    * Placeholder-sanitized; newlines split paragraphs; the caret lands at the
    * end. Merged into history so a seed is not an undoable step of its own.
    * @param text - the full next draft.
+   * @param references - structured chips whose offsets match the serialized text.
    */
-  setDraft(text: string): void {
-    const clean = text.replace(REFERENCE_PLACEHOLDER_RE, '')
-    if (clean === this.projection.clipboardText) return
+  setDraft(text: string, references?: readonly Occurrence[]): void {
+    const clean = cleanComposerText(text)
+    if (clean === this.projection.clipboardText && references === undefined) return
     this.editor.update(() => {
       const root = $getRoot()
       root.clear()
@@ -277,6 +261,15 @@ export class SessionInputShell implements SessionInput {
         const paragraph = $createParagraphNode()
         if (line !== '') paragraph.append($createTextNode(line))
         root.append(paragraph)
+      }
+      for (const occurrence of [...references ?? []].sort((a, b) => b.offset - a.offset)) {
+        if (clean.slice(occurrence.offset, occurrence.offset + occurrence.length) !== occurrence.clipboardText) {
+          throw new Error('draft reference does not match its serialized text')
+        }
+        $replaceDetectSpanWithNodes({ start: occurrence.offset, end: occurrence.offset + occurrence.length }, [$createReferenceChipNode({
+          source: occurrence.source, ref: occurrence.ref, label: occurrence.label, clipboardText: occurrence.clipboardText,
+          ...(occurrence.appearance === undefined ? {} : { appearance: occurrence.appearance }),
+        })])
       }
       root.selectEnd()
     }, { discrete: true, tag: HISTORY_MERGE_TAG })
@@ -354,7 +347,7 @@ export class SessionInputShell implements SessionInput {
    * @param text - pasted plain text.
    */
   paste(text: string): void {
-    const clean = text.replace(REFERENCE_PLACEHOLDER_RE, '')
+    const clean = cleanComposerText(text)
     if (clean === '') return
     this.applyEdit(() => {
       const selection = $getSelection()

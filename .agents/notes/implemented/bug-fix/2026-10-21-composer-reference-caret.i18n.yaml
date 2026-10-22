@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-21-composer-reference-caret.md
-2026-10-21-composer-reference-caret.md: ea846d8851466ce44e91d27a4bc3e518f56d57ca
-2026-10-21-composer-reference-caret.zh.md: 573aaa17738cd159884f37ee0357bfe72f328dad
+2026-10-21-composer-reference-caret.md: c308f7c411e7324b623f7f5b2dca6d3e811070e1
+2026-10-21-composer-reference-caret.zh.md: e77398d4a1c420a1a67f510159474581fe0f55c0

@@ -36,6 +36,7 @@ import { $getRoot } from 'lexical'
 import { $createReferenceChipNode, $isReferenceChipNode } from '../input/editor/chip-node.tsx'
 import { $replaceDetectSpanWithNodes } from '../input/editor/span-map.ts'
 import { $composerLayout } from '../input/editor/projection.ts'
+import { useStagedEditor } from '../input/editor/use-staged-editor.ts'
 import type { ReferenceInsert } from '../contract/input.ts'
 import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { ContextMeter } from './ContextMeter.tsx'
@@ -45,7 +46,7 @@ import css from './InputBar.module.css'
 export type InputBarProps = ComposerBarProps
 
 export function InputBar({
-  useSession, useInput, inputActions, keyboard, addImages, removeImage, draftImages,
+  useSession, useInput, inputActions, keyboard, draftTriggers, onStageReferences, addImages, removeImage, draftImages,
   resolveSubmitMode, toggleCommandMenu, stop, command, t,
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
@@ -70,7 +71,6 @@ export function InputBar({
   const live = input !== undefined && keyboard !== undefined && inputActions !== undefined
   const staging = inert && input === undefined && onStageDraft !== undefined
   const draft = input?.draft ?? (staging ? stagedDraft ?? '' : '')
-  const editor = keyboard?.editor ?? null
   const attachments = useMemo(
     () => input === undefined || draftImages === undefined ? [] : draftImages(input.imageIds),
     [draftImages, input?.imageIds],
@@ -135,6 +135,9 @@ export function InputBar({
   const workspaceTrigger = inert && !staging && !removed && onRequestWorkspace !== undefined
   const editorDisabled = removed || (locked && !workspaceTrigger && !staging)
   const editable = (live && !locked && !machineBusy) || (staging && !removed && !stagedSubmitting)
+  const stagedEditor = useStagedEditor({ active: staging, text: draft, editable,
+    triggers: draftTriggers, onReferences: onStageReferences, onChange: onStageDraft, onSubmit: onSubmitStagedDraft, onError: showToast })
+  const editor = keyboard?.editor ?? stagedEditor
   const canSteerQueue = !locked && !machineBusy && !commandMenuOpen && empty && running && subagent === null
     && input.queue.some(row => row.placement === 'queued')
 
@@ -176,12 +179,12 @@ export function InputBar({
   // is ours to perform — switching to a longer draft otherwise leaves the
   // caret (restored at the draft's end) off screen.
   useEffect(() => {
-    if (locked || editor === null) return
+    if ((locked && !staging) || editor === null) return
     // Lexical's focus() restores the editor selection but never calls the DOM
     // focus itself; preventScroll keeps the conversation scrollport still.
     editor.getRootElement()?.focus({ preventScroll: true })
     editor.focus(() => { revealSelection() })
-  }, [locked, sessionId, editor])
+  }, [locked, staging, sessionId, editor])
 
   // A persisted draft arrives AFTER the unlock effect: ConversationSession
   // adopts it in its own mount effect, and a parent's mount effect runs after
@@ -371,15 +374,12 @@ export function InputBar({
         ? t('placeholder.steerQueue')
         : planActive ? t('placeholder.plan') : t('placeholder.default'))
 
-  const renderInput = (prefixLength = 0, prefix?: ReactNode): ReactNode => (
+  const renderInput = (): ReactNode => (
     <div ref={scrollRef} className={css.scroll} data-input-scroll>
-      <div className={clsx(css.grow, prefix !== undefined && css.inlinePrefix)}>
-        {prefix !== undefined && <span className={css.inlinePrefixChip} data-composer-staged-prefix>{prefix}</span>}
+      <div className={css.grow}>
         <ComposerContentEditable
           editor={workspaceTrigger ? null : editor}
           editable={editable}
-          standaloneText={staging ? (prefixLength > 0 ? draft.slice(prefixLength).trimStart() : draft) : undefined}
-          onStandaloneInput={staging ? (text) => { onStageDraft(`${draft.slice(0, prefixLength)}${prefixLength > 0 ? ' ' : ''}${text}`) } : undefined}
           className={clsx(css.input, editorDisabled && css.inputDisabled)}
           data-phase={input?.phase ?? 'inert'}
           aria-disabled={editorDisabled || undefined}
@@ -388,9 +388,7 @@ export function InputBar({
           aria-haspopup={workspaceTrigger ? 'menu' : undefined}
           aria-expanded={workspaceTrigger ? workspacePickerOpen : undefined}
           tabIndex={workspaceTrigger ? 0 : undefined}
-          onKeyDown={workspaceTrigger ? onWorkspaceKeyDown : staging && onSubmitStagedDraft !== undefined ? (event) => {
-            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); onPrimary() }
-          } : undefined}
+          onKeyDown={workspaceTrigger ? onWorkspaceKeyDown : undefined}
           style={hint === null ? undefined : { '--dsh-composer-hint': JSON.stringify(hint) } as CSSProperties}
         />
         {empty && !claimActive && <div aria-hidden className={css.placeholder} data-composer-placeholder>{placeholderText}</div>}
@@ -399,7 +397,7 @@ export function InputBar({
     </div>
   )
   const settlePrefix = (length: number, reference: ReferenceInsert): boolean => {
-    if (editor === null || input?.phase !== 'plain' || length <= 0) return false
+    if (editor === null || !editable || (!staging && input?.phase !== 'plain') || length <= 0) return false
     const needsLabel = editor.getEditorState().read(() => {
       const first = $getRoot().getFirstDescendant()
       return $isReferenceChipNode(first)
@@ -452,6 +450,7 @@ export function InputBar({
         onPointerDown={workspaceTrigger ? (e) => { e.stopPropagation() } : undefined}
       >
         {overlay !== undefined && <div className={css.overlayAnchor}>{overlay}</div>}
+        {staging && <div className={css.overlayAnchor}>{renderSlot('conversation.input.draft-overlay', {})}</div>}
         {accessory !== undefined && <div className={css.accessory}>{accessory}</div>}
         {renderSlot('conversation.input.attachments', {
           attachments,
@@ -467,13 +466,6 @@ export function InputBar({
           draft,
           renderInput,
           settlePrefix,
-          sessionReady: live,
-          removePrefix: (length) => {
-            if (!editable) return
-            const next = draft.slice(length).trimStart()
-            if (staging) onStageDraft(next)
-            else inputActions?.setDraft(next)
-          },
         }, { fallback: renderInput() }) ?? renderInput()}
         <div className={css.row}>
           <div className={css.tools}>

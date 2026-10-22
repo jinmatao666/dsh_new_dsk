@@ -15,7 +15,7 @@ Use skill stages an editable draft without creating a directory or inheriting th
 
 Installed platform, personal and SkillHub skill details offer Open directory beside Use skill. The desktop resolves the installation slug within its local skills root and opens the operating-system file manager; uninstalled skills do not show this action. The action does not inspect API keys or create or modify configuration files.
 
-Before Workspace selection, the staged skill label and editable question share one inline flow. Labels are not percentage-truncated; the question follows the label with a small gap, and subsequent lines use the full text area. Selecting a Workspace settles the same slash token into the ordinary editor reference without changing submitted text.
+Before Workspace selection, the staged skill is an atomic reference in the same editor document as the question. Staged and Session input share caret navigation, reference spacing, removal and WebKit caret rendering. Selecting a Workspace transfers the same slash token without changing submitted text.
 
 The Wanwei desktop can browse published skills, manage local installations and review personal uploads through this plugin. The official DSH runtime discovers and executes installed skills. Expert workbenches, connectors and automations belong to independent plugins, not this market.
 
@@ -33,6 +33,8 @@ The Wanwei desktop can browse published skills, manage local installations and r
 <a id="use-this-package"></a>
 ## Use this package
 
+Use skill opens the ordinary unselected draft composer with a preset reference, not a skill-only input mode. Removing that reference leaves `/` skill completion and `@` file completion available. No timestamp directory or sidebar entry is created until the first send; a manual Workspace choice takes precedence and keeps the draft references.
+
 Ordinary new conversations and Use skill share the registered first-send timestamp-directory allocator. Skill-marketplace use stages a skill reference without requiring Workspace selection; the composer has no separate skill-selection dropdown. Session input retains `/` skill references. Empty and populated skill drafts keep the label on the same first-line baseline.
 
 The Wanwei desktop bundle mounts this Client plugin after the official browser UI; it is not a standalone application.
@@ -49,7 +51,7 @@ The market panel owns vertical scrolling for recommendations, catalog lists and 
 
 Recommendation cards show verified download counts with the same glyph and metadata styling as platform cards. They open details on click and contain no installation, removal or update controls; the installed badge below the skill icon remains.
 
-Platform download counts include each successful installation or update, including reinstalls by the same account. The administrator's installation column counts each account once per skill. Reporting failures leave the local installation intact and display a download-count synchronization error; they are not automatically retried. SkillHub counts retain the upstream definition.
+Platform downloads count complete package receipts, including repeat downloads by one account. The Host confirms each download with a unique event ID before local installation; failed confirmation stops installation. After native installation succeeds, the client reports that event ID separately. Installation-report failure preserves the local installation and displays a synchronization error; reports are not automatically retried. The administrator's installation column counts each account once per skill, including reinstalls, updates and multiple devices. SkillHub counts retain the upstream definition.
 
 Catalog and installation filters share the rounded dropdown control with desktop settings fields. The list is positioned above or below its trigger according to available space, without the operating system's square native popup.
 
@@ -67,7 +69,7 @@ The personal-skill import dialog presents visibility and skill source as peer fi
 
 Platform and SkillHub operations share restrained, top-centered notices. SkillHub progress remains visible until completion; installation, update and removal results appear as soon as the native operation succeeds, before refreshing local receipts. A failed refresh reports that the operation completed but the list could not refresh.
 
-Starting an installed skill stages its slash token and friendly name. The composer displays a compact inline skill chip beside the editable question; Session-backed chips serialize to the same slash token. Product styling remains in the Wanwei UI packages.
+Starting an installed skill stages its slash token and friendly name. The composer displays its shared reference node inside the editable document; staged and Session-backed chips serialize to the same slash token. The market supplies the skill identity and label, not a separate editable surface.
 
 The product bundle owns the `wanwei-skill-marketplace` row in [its patch](../../bundle/wanwei-desktop/cordis.patch.yml). Product installations must configure the OneAPI Host and native bridge; this package does not ask a user to enter a provider secret in the browser.
 

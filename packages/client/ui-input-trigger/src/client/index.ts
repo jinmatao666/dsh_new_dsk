@@ -62,6 +62,22 @@ export function apply(ctx: ClientContext): void {
   ctx.inject(['slots', 'inputTriggers', 'sessions'], (scope: ClientContext) => {
     const inputTriggers = scope.inputTriggers
     const sessions = scope.sessions
+    scope.slots.inject('conversation.input.draft-overlay', () => scope.slots.register({
+      name: 'conversation.input.draft-overlay',
+      id: 'draft-slash-menu',
+      locale: MENU_NS,
+      inject: (): MenuViewInjected => {
+        const controller = inputTriggers.draft()
+        return {
+          menu: controller.menu,
+          headers: controller.headers,
+          onPick: (source, index, action) => { controller.pick(source, index, action) },
+          onCrumb: (source, index) => { controller.pickCrumb(source, index) },
+          onHover: (source, index) => { controller.hover(source, index) },
+          onDismiss: () => { controller.dismiss() },
+        }
+      },
+    }, MenuView))
     scope.slots.inject('conversation.input.overlay', () => scope.slots.register({
       name: 'conversation.input.overlay',
       id: 'slash-menu',

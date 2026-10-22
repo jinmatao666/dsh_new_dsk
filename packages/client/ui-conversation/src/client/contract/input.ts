@@ -141,6 +141,12 @@ export interface InputTriggerController {
   toggleSource(source: string, hit: InputTriggerHit): void
 }
 
+/** A root draft menu uses no Session and applies guarded edits to its attached editor. */
+export interface DraftInputTriggers extends InputTriggerController {
+  bindEditor(apply: (outcome: PickOutcome, span: TokenSpan) => boolean): () => void
+  dismiss(): void
+}
+
 declare module '@deepseek-ai/cordis' {
   interface Events {
     /**

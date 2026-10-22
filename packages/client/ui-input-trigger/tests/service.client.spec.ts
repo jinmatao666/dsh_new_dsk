@@ -19,6 +19,39 @@ import type {
 
 const sid = (k: string): SessionId => k as SessionId
 
+describe('draft trigger controller', () => {
+  it('shares the menu engine without a Session, includes only explicit draft sources, and disposes late sources', async () => {
+    const ctx = new Context()
+    const service = new InputTriggerService(ctx)
+    const sessionCandidates = vi.fn(async () => [{ name: 'session-only' }])
+    service.registerSource({ trigger: '/', name: 'command', candidates: sessionCandidates, onPick: () => undefined })
+    const controller = service.draft()
+    const execute = vi.fn(() => true)
+    const detach = controller.bindEditor(execute)
+    const draftCandidates = vi.fn(async () => [{ name: 'draft-skill' }])
+    const remove = service.registerSource({
+      trigger: '/', name: 'skill', candidates: sessionCandidates, onPick: () => undefined,
+      draft: {
+        trigger: '/', name: 'skill', candidates: draftCandidates,
+        onPick: () => ({ insert: { source: 'skill', ref: '/draft-skill', label: '技能', clipboardText: '/draft-skill' } }),
+      },
+    })
+    controller.track('/', 1, { tier: 'plain' }, 7)
+    await vi.waitFor(() => { expect(controller.menu.getSnapshot().groups[0]?.status).toBe('ready') })
+    expect(draftCandidates).toHaveBeenCalledWith(undefined, expect.objectContaining({ query: '' }))
+    expect(sessionCandidates).not.toHaveBeenCalled()
+    controller.pick('skill', 0)
+    expect(execute).toHaveBeenCalledWith({ insert: {
+      source: 'skill', ref: '/draft-skill', label: '技能', clipboardText: '/draft-skill',
+    } }, { start: 0, end: 1, draftRev: 7 })
+    controller.track('/', 1, { tier: 'plain' }, 8)
+    remove()
+    expect(controller.menu.getSnapshot().open).toBe(false)
+    detach()
+    controller.dispose()
+  })
+})
+
 interface PendingFetch {
   resolve: (items: readonly InputTriggerCandidate[]) => void
   reject: (err: unknown) => void

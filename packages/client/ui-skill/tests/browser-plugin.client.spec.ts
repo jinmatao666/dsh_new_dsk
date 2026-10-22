@@ -57,7 +57,7 @@ function providePresentation(ctx: Context): PresentationCapture {
 }
 
 /** Boot the plugin over fake slash/connection faces; returns the captured source and its ctx. */
-async function bench(list: ListFn, addressed?: SessionId) {
+async function bench(list: ListFn, addressed?: SessionId, draftList: () => Promise<ListResult> = () => list({})) {
   const ctx = new Context()
   let captured: InputTriggerSource | undefined
   ctx.provide('inputTriggers', { registerSource: (src: InputTriggerSource) => { captured = src; return () => {} } })
@@ -67,7 +67,7 @@ async function bench(list: ListFn, addressed?: SessionId) {
       ? { parentSessionId: sid('parent'), childSessionId: id, mode: 'continuable' as const }
       : undefined,
   })
-  const remote = new TestRemote(ctx, { skills: { list } })
+  const remote = new TestRemote(ctx, { skills: { list, draftList } })
   providePresentation(ctx)
   await ctx.plugin({ inject: [...inject], apply }).await()
   return { ctx, source: captured!, remote }
@@ -99,6 +99,21 @@ const req = (query: string, signal?: AbortSignal) =>
   ({ query, position: 'leading' as const, drilled: false, signal: signal ?? new AbortController().signal })
 
 describe('apply', () => {
+  it('lists draft skills without a Session and preserves the slug when the displayed name differs', async () => {
+    const liveList = vi.fn(listOk([]))
+    const draftList = vi.fn(async () => ({ ok: true as const, value: { skills: [
+      { name: 'office-helper', displayName: '办公助手', description: '处理材料', modelInvocable: true },
+    ] } }))
+    const { source } = await bench(liveList, undefined, draftList)
+    const draft = source.draft!
+    const candidates = await draft.candidates(undefined, req('助手'))
+    expect(candidates[0]).toMatchObject({ name: '办公助手', value: 'office-helper' })
+    expect(liveList).not.toHaveBeenCalled()
+    expect(draftList).toHaveBeenCalledOnce()
+    expect(draft.onPick({ candidate: candidates[0]!, session: undefined, position: 'leading', via: 'menu', action: 'pick', span: { start: 0, end: 1, draftRev: 1 } })).toMatchObject({
+      insert: { ref: '/office-helper', label: '办公助手', clipboardText: '/office-helper' },
+    })
+  })
   it('declares the services it binds', () => {
     expect(inject).toEqual(['inputTriggers', 'connection', 'sessions', 'slots', 'locale', 'remote', 'remote.skills'])
   })

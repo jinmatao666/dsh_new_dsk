@@ -11,7 +11,7 @@ Sources: [`packages/context/file-reference/src/types.ts`](../../packages/context
 `FileReferenceCandidate` is the path-only discovery result. The addressed agent supplies the working-directory scope; providers decide ranking and namespace access without reading file contents.
 
 ```ts type-equiv
-/** One path-only completion candidate inside the target session cwd. */
+/** One path-only candidate from a Session workspace or a provider's draft browsing root. */
 interface FileReferenceCandidate {
   /** User-facing path accepted by normal prompts and filesystem tools. */
   path: string

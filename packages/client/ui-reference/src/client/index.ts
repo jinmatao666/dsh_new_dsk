@@ -20,7 +20,7 @@ import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import { relativeTime } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
-  ClientSessionContext, InputTriggerCrumb, InputTriggerServiceContract, InputTriggerSource,
+  ClientSessionContext, InputTriggerCrumb, InputTriggerPick, InputTriggerServiceContract, InputTriggerSource,
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { formatFileMention } from '@deepseek-ai/dsh-file-reference/grammar'
 import type { FileReferenceCandidate } from '@deepseek-ai/dsh-file-reference/types'
@@ -43,6 +43,23 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   const connection = ctx.get('connection') as ConnectionHandle
   const sessions = ctx.get('sessions') as ISessions
+  const pickReference = ({ candidate, action }: Pick<InputTriggerPick, 'candidate' | 'action'>) => {
+    const value = parseCandidate(candidate.value)
+    if (value?.kind === 'file') {
+      if (value.fileKind === 'directory' && action === 'drill') return { text: value.mention, continue: true }
+      return { insert: {
+        source: 'reference', ref: value.mention,
+        label: value.fileKind === 'directory' ? `${value.label}/` : value.label,
+        appearance: value.fileKind === 'directory' ? 'folder' as const : 'file' as const,
+        clipboardText: value.mention,
+      } }
+    }
+    if (value?.kind === 'session') return { insert: {
+      source: 'reference', ref: value.mention, label: value.label,
+      appearance: 'session' as const, clipboardText: value.mention,
+    } }
+    return undefined
+  }
   const source: InputTriggerSource = {
     trigger: '@',
     name: 'reference',
@@ -80,44 +97,23 @@ export function apply(ctx: ClientContext): void {
     header(_session: ClientSessionContext, req) {
       return crumbsFor(req.query, req.quoted === true, req.drilled, t)
     },
-    onPick({ candidate, action }) {
-      const value = parseCandidate(candidate.value)
-      if (value?.kind === 'file') {
-        // A directory row carries two verbs: the settling pick resolves the
-        // folder itself as an atomic reference, while the drill action (Tab /
-        // row chevron / a header crumb) keeps the literal descent text and
-        // the open menu.
-        if (value.fileKind === 'directory' && action === 'drill') {
-          return { text: value.mention, continue: true }
-        }
-        return {
-          insert: {
-            source: 'reference',
-            ref: value.mention,
-            label: value.fileKind === 'directory' ? `${value.label}/` : value.label,
-            appearance: value.fileKind === 'directory' ? 'folder' : 'file',
-            clipboardText: value.mention,
-          },
-        }
-      }
-      if (value?.kind === 'session') {
-        return {
-          insert: {
-            source: 'reference',
-            ref: value.mention,
-            label: value.label,
-            appearance: 'session',
-            clipboardText: value.mention,
-          },
-        }
-      }
-      return undefined
-    },
+    onPick: pickReference,
     codec: {
       clipboardText: ref => ref,
       serialize: ref => Promise.resolve(ref),
     },
   }
+  const draftSource: InputTriggerSource<undefined> = {
+    trigger: '@', name: 'reference', showGroupTitle: false,
+    async candidates(_draft, { query, quoted, signal }) {
+      const result = await ctx.remote.fileReferences.draftList(query, signal)
+      if (!result.ok || signal.aborted) return []
+      return result.value.flatMap(candidate => fileCandidate(candidate, quoted === true, true, t))
+    },
+    onPick: pickReference,
+    codec: { clipboardText: ref => ref, serialize: ref => Promise.resolve(ref) },
+  }
+  Object.assign(source, { draft: draftSource })
   const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
   ctx.effect(() => inputTriggers.registerSource(source), 'ui-reference: @ source')
 }

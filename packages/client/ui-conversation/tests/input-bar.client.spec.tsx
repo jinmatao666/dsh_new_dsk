@@ -10,13 +10,15 @@
 
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { useEffect, useState } from 'react'
 import { $getRoot, $isTextNode } from 'lexical'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SessionListState, SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
 import { conversationSnapshot as conversationFixture, makeTranslate, sessionSnapshot as sessionFixture } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
-import type { Context } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
+import { InputTriggerService } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SubmitOutcome } from '../src/client/contract/input.ts'
 import { SessionInputShell } from '../src/client/input/facade.ts'
@@ -285,6 +287,89 @@ describe('programmatic reference append', () => {
 })
 
 describe('inline draft prefix', () => {
+  it('supports slash and file-menu picks after deleting the preset skill without sending or creating a Session', async () => {
+    const service = new InputTriggerService(new Context())
+    for (const trigger of ['/', '@'] as const) service.registerSource({
+      trigger, name: trigger === '/' ? 'skill' : 'reference', candidates: async () => { throw new Error('unexpected Session lookup') },
+      onPick: () => undefined,
+      draft: {
+        trigger, name: trigger === '/' ? 'skill' : 'reference', candidates: async () => [{ name: '候选' }],
+        onPick: () => ({ insert: trigger === '/'
+          ? { source: 'skill', ref: '/next', label: '新技能', clipboardText: '/next', appearance: 'skill' }
+          : { source: 'reference', ref: '@/home/report.docx', label: 'report.docx', clipboardText: '@/home/report.docx', appearance: 'file' } }),
+      },
+    })
+    const controller = service.draft()
+    let owner: DraftPrefixOwnerProps | undefined
+    const { props, view } = bench({ draftPrefix: (value) => { owner = value; return value.renderInput() } })
+    view.unmount()
+    const send = vi.fn(async () => {})
+    function Staged() {
+      const [draft, setDraft] = useState('/helper')
+      return <><output>{draft}</output><InputBar {...props} useInput={() => undefined} inputActions={undefined}
+        keyboard={undefined} draftTriggers={controller} disabled stagedDraft={draft} onStageDraft={setDraft}
+        onSubmitStagedDraft={send} /></>
+    }
+    const staged = render(<Staged />)
+    const editor = staged.container.querySelector<HTMLElement>('[data-composer-input]')!
+    act(() => { owner!.settlePrefix(7, { source: 'skill', ref: '/helper', label: '助手', clipboardText: '/helper', appearance: 'skill' }) })
+    fireEvent.click(staged.getByRole('button', { name: '× 助手' }))
+    await vi.waitFor(() => { expect(staged.container.querySelector('output')?.textContent).toBe('') })
+    for (const [trigger, source] of [['/', 'skill'], ['@', 'reference']] as const) {
+      act(() => { editor.focus() })
+      fireEvent.paste(editor, { clipboardData: { items: [], getData: () => trigger } })
+      await vi.waitFor(() => { expect(controller.menu.getSnapshot().groups[0]?.status).toBe('ready') })
+      expect(controller.menu.getSnapshot().groups[0]?.source).toBe(source)
+      fireEvent.keyDown(editor, { key: 'Enter' })
+      await vi.waitFor(() => { expect(controller.menu.getSnapshot().open).toBe(false) })
+    }
+    expect(staged.container.querySelector('output')?.textContent).toBe('/next @/home/report.docx ')
+    expect(editor.querySelectorAll('[data-composer-chip]')).toHaveLength(2)
+    expect(send).not.toHaveBeenCalled()
+    controller.dispose()
+  })
+  it('restores staged skill and file chips into a Session without changing their submission identities', async () => {
+    const { shell, sink } = bench({ lexicon: new Map() })
+    const path = '@/home/report.docx'
+    act(() => { shell.setDraft(`/helper ${path}`, [
+      { occurrenceId: 1, source: 'skill', ref: '/helper', label: '助手', clipboardText: '/helper', offset: 0, length: 7, appearance: 'skill' },
+      { occurrenceId: 2, source: 'reference', ref: path, label: 'report.docx', clipboardText: path, offset: 8, length: path.length, appearance: 'file' },
+    ]) })
+    expect(shell.snapshot.occurrences.map(item => item.ref)).toEqual(['/helper', path])
+    await act(async () => { shell.submit() })
+    expect(sink).toHaveBeenCalledWith(`/helper ${path}`, [], 'queue', expect.any(AbortSignal))
+  })
+  it('preserves the staged reference and caret when edited text is echoed by its owner', async () => {
+    const { props, view } = bench()
+    view.unmount()
+    function Prefix(owner: DraftPrefixOwnerProps) {
+      useEffect(() => {
+        if (owner.draft.startsWith('/helper')) owner.settlePrefix(7, {
+          source: 'skill', ref: '/helper', clipboardText: '/helper', label: '助手', appearance: 'skill',
+        })
+      }, [owner.draft, owner.settlePrefix])
+      return owner.renderInput()
+    }
+    const renderSlot = ((key: string, owner: object) => key === 'conversation.input.draft-prefix'
+      ? <Prefix {...owner as DraftPrefixOwnerProps} /> : null) as never
+    function Staged() {
+      const [draft, setDraft] = useState('/helper')
+      return <><output>{draft}</output><InputBar {...props} useInput={() => undefined} inputActions={undefined}
+        keyboard={undefined} disabled stagedDraft={draft} onStageDraft={setDraft} renderSlot={renderSlot} /></>
+    }
+    const staged = render(<Staged />)
+    const editor = staged.container.querySelector<HTMLElement>('[data-composer-input]')!
+    const chip = editor.querySelector('[data-composer-chip="skill"]')!
+    expect(chip).not.toBeNull()
+    act(() => { editor.focus() })
+    fireEvent.keyDown(editor, { key: 'ArrowLeft' })
+    fireEvent.paste(editor, { clipboardData: { items: [], getData: () => '测试abc' } })
+    await vi.waitFor(() => { expect(staged.container.querySelector('output')?.textContent).toBe('测试abc/helper') })
+    expect(editor.querySelector('[data-composer-chip="skill"]')).toBe(chip)
+    expect(editor.textContent).toBe('测试abc助手×')
+    expect(editor.textContent).not.toMatch(/[\uE100-\uE11D\uFFFC]/u)
+  })
+
   it('settles only the leading plain text and preserves the question and model token', async () => {
     let owner: DraftPrefixOwnerProps | undefined
     const { shell, view, sink } = bench({ draft: '/helper 你好', lexicon: new Map(), draftPrefix: (props) => { owner = props; return props.renderInput() } })
@@ -305,6 +390,10 @@ describe('inline draft prefix', () => {
     const editor = staged.container.querySelector<HTMLElement>('[data-composer-input]')!
     fireEvent.keyDown(editor, { key: 'Enter' })
     expect(send).toHaveBeenCalledOnce()
+    fireEvent.keyDown(editor, { key: 'Enter', isComposing: true })
+    fireEvent.keyDown(editor, { key: 'Enter', keyCode: 229 })
+    fireEvent.keyDown(editor, { key: 'Enter', repeat: true })
+    expect(send).toHaveBeenCalledOnce()
     fireEvent.click(staged.getByRole('button', { name: props.t('input.send') }))
     expect(send).toHaveBeenCalledTimes(2)
     staged.rerender(<InputBar {...props} useInput={() => undefined} inputActions={undefined} keyboard={undefined} disabled stagedDraft="/helper 你好" onStageDraft={vi.fn()} onSubmitStagedDraft={send} stagedSubmitting />)
@@ -312,21 +401,22 @@ describe('inline draft prefix', () => {
     expect(editor.getAttribute('contenteditable')).toBe('false')
   })
 
-  it('edits staged question text beside a prefix while preserving its serialized token', () => {
+  it('settles the staged prefix inside the same editable document and removes it atomically', async () => {
     const { props, view } = bench()
     const stage = vi.fn()
-    const prefix = (owner: DraftPrefixOwnerProps) => owner.renderInput(7, <span>助手</span>)
+    let prefixOwner: DraftPrefixOwnerProps | undefined
+    const prefix = (owner: DraftPrefixOwnerProps) => { prefixOwner = owner; return owner.renderInput() }
     const renderSlot = ((key: string, owner: object) => key === 'conversation.input.draft-prefix' ? prefix(owner as DraftPrefixOwnerProps) : null) as never
     view.unmount()
     const staged = render(<InputBar {...props} useInput={() => undefined} inputActions={undefined} keyboard={undefined} disabled stagedDraft="/helper 你好" onStageDraft={stage} renderSlot={renderSlot} />)
     const editor = staged.container.querySelector<HTMLElement>('[data-composer-input]')!
-    expect(editor.textContent).toBe('你好')
-    const chip = staged.container.querySelector('[data-composer-staged-prefix]')!
-    expect(chip.textContent).toBe('助手')
-    expect(chip.parentElement).toBe(editor.parentElement)
-    editor.textContent = '请转换文件'
-    fireEvent.input(editor)
-    expect(stage).toHaveBeenCalledWith('/helper 请转换文件')
+    act(() => { expect(prefixOwner?.settlePrefix(7, { source: 'skill', ref: '/helper', clipboardText: '/helper', label: '助手', appearance: 'skill' })).toBe(true) })
+    expect(editor.querySelector('[data-composer-chip="skill"]')).not.toBeNull()
+    expect(editor.textContent).toBe('助手× 你好')
+    expect(staged.container.querySelector('[data-composer-staged-prefix]')).toBeNull()
+    expect(stage).not.toHaveBeenCalled()
+    fireEvent.click(staged.getByRole('button', { name: '× 助手' }))
+    await vi.waitFor(() => { expect(stage).toHaveBeenCalledWith(' 你好') })
   })
 })
 

@@ -129,6 +129,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.input.dock': { kind: 'list'; scope: 'session'; owner: InputZone }
     /** Floating entries rendered inside the resident composer card. */
     'conversation.input.overlay': { kind: 'list'; scope: 'session' }
+    /**
+     * Register a resident draft-menu component; it receives no owner props.
+     * Entries compose without replacing each other; absence leaves no draft overlay.
+     */
+    'conversation.input.draft-overlay': { kind: 'list'; scope: 'session-maybe' }
     /** Ambient entries below the composer card. */
     'conversation.composer.dock': { kind: 'list'; scope: 'session'; owner: InputZone }
     /** Compact controls at the left of the composer tool row. */
@@ -290,17 +295,18 @@ export interface ComposerBarOwnerProps {
 /** Current draft and generic edit action for an optional prefix presenter. */
 export interface DraftPrefixOwnerProps {
   draft: string
-  /** Whether this draft is owned by a Session editor. */
-  sessionReady: boolean
-  removePrefix: (length: number) => void
-  /** Render the draft, optionally showing an inline presenter instead of its leading text before a Session exists. */
-  renderInput: (prefixLength?: number, prefix?: ReactNode) => ReactNode
-  /** Convert leading plain text to a reference in an unlocked Session; false before Session creation. */
+  /** Render the shared editor for either a staged or Session draft. */
+  renderInput: () => ReactNode
+  /** Convert leading plain text to a reference in an editable staged or Session document. */
   settlePrefix: (length: number, reference: import('./input.ts').ReferenceInsert) => boolean
 }
 
 /** Package-private operations injected into the resident composer bar. */
 export interface ComposerBarInjected {
+  /** Cache structured draft references for a lossless manual Workspace handoff. */
+  onStageReferences?: ((text: string, references: readonly import('./input.ts').Occurrence[]) => void) | undefined
+  /** Draft-safe candidate pipeline, absent when no trigger plugin is composed. */
+  draftTriggers?: import('./input.ts').DraftInputTriggers | undefined
   keyboard: ComposerKeyboard | undefined
   addImages: ((files: readonly File[]) => string | null) | undefined
   removeImage: ((id: DraftAttachmentId) => void) | undefined
@@ -330,7 +336,7 @@ export interface InputControlOwnerProps {
 export type ComposerBarProps =
   PropsRuntime<'conversation.composer.bar'>
   & PropsRenderSlots<
-    'conversation.input.attachments' | 'conversation.input.draft-prefix' | 'conversation.input.plan' | 'conversation.input.model'
+    'conversation.input.attachments' | 'conversation.input.draft-prefix' | 'conversation.input.draft-overlay' | 'conversation.input.plan' | 'conversation.input.model'
   >
   & InjectFace<ComposerBarInjected>
   & PropsLocale<'conversation'>

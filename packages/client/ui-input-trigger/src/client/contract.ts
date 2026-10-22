@@ -7,6 +7,7 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { InputTriggerSource } from '../types.ts'
 import type { InputTriggerController } from './controller.ts'
+import type { DraftInputTriggers } from '@deepseek-ai/dsh-client-ui-conversation/client'
 
 /** The `ctx.inputTriggers` service face. */
 export interface InputTriggerServiceContract {
@@ -22,4 +23,9 @@ export interface InputTriggerServiceContract {
    * @returns controller that dies with that scope.
    */
   sessionOf(actx: ClientContext): InputTriggerController
+  /**
+   * Resolve the root draft menu without allocating a Session or Workspace.
+   * @returns The resident controller and its editor binding port.
+   */
+  draft(): InputTriggerController<undefined> & DraftInputTriggers
 }

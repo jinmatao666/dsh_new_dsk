@@ -125,25 +125,6 @@
   position: relative;
 }
 
-.inlinePrefix {
-  display: flow-root;
-  padding: 4px 12px 0 16px;
-}
-
-.inlinePrefixChip {
-  float: left;
-  margin-right: 8px;
-}
-
-.inlinePrefix .input {
-  padding: 0;
-}
-
-/* An empty contenteditable still needs its first line beside the floated chip. */
-.inlinePrefix .input:empty::before {
-  content: '\200b';
-}
-
 /* Machine pending dot (adjudicating / submitting). */
 .pending {
   width: 8px;

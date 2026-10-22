@@ -22,6 +22,9 @@ import type {
 import type { InputSubmitMode } from '../contract/composer-submission.ts'
 import type { PopupDismissFace } from './facade.ts'
 import { SessionInputShell } from './facade.ts'
+import type { DraftInputTriggers, Occurrence } from '../contract/input.ts'
+
+const EMPTY_DRAFT_LEXICON: ReadonlyMap<'/' | '@', readonly string[]> = new Map()
 
 /** Structural command face for per-session popup resolution. */
 interface CommandFace {
@@ -32,6 +35,7 @@ interface CommandFace {
 interface InputTriggerServiceFace {
   /** @param actx - Session scope. @returns that Session's trigger provider. */
   sessionOf(actx: Context): InputTriggerController
+  draft?(): DraftInputTriggers
 }
 
 /** Attachment-send face resolved lazily to keep hub/service construction acyclic. */
@@ -49,8 +53,65 @@ interface ConversationAttachmentFace {
 
 /** Session-addressed input facade registry (SessionInputResolver face + composer-layer extras). */
 export class InputHub implements SessionInputResolver {
+  private draftApply: Parameters<DraftInputTriggers['bindEditor']>[0] | undefined
+  private boundDraft: { controller: DraftInputTriggers; off: () => void } | undefined
+  private resolveDraftTriggers(): DraftInputTriggers | undefined {
+    const controller = (this.rootCtx.get('inputTriggers') as InputTriggerServiceFace | undefined)?.draft?.()
+    if (controller !== this.boundDraft?.controller && this.draftApply !== undefined) {
+      this.boundDraft?.off()
+      this.boundDraft = controller === undefined ? undefined : { controller, off: controller.bindEditor(this.draftApply) }
+    }
+    return controller
+  }
+  private readonly draftFace: DraftInputTriggers = {
+    launcher: {
+      getSnapshot: () => this.resolveDraftTriggers()?.launcher.getSnapshot() ?? null,
+      subscribe: listener => this.resolveDraftTriggers()?.launcher.subscribe(listener) ?? (() => {}),
+    },
+    lexicon: {
+      getSnapshot: () => this.resolveDraftTriggers()?.lexicon.getSnapshot() ?? EMPTY_DRAFT_LEXICON,
+      subscribe: listener => this.resolveDraftTriggers()?.lexicon.subscribe(listener) ?? (() => {}),
+    },
+    bindEditor: (apply) => {
+      this.draftApply = apply
+      this.resolveDraftTriggers()
+      return () => {
+        if (this.draftApply !== apply) return
+        this.boundDraft?.off()
+        this.boundDraft = undefined
+        this.draftApply = undefined
+      }
+    },
+    track: (...args) => { this.resolveDraftTriggers()?.track(...args) },
+    arbitrate: (...args) => this.resolveDraftTriggers()?.arbitrate(...args) ?? 'pass',
+    onSpace: () => this.resolveDraftTriggers()?.onSpace() ?? false,
+    dismiss: () => { this.resolveDraftTriggers()?.dismiss() },
+    toggleSource: (...args) => { this.resolveDraftTriggers()?.toggleSource(...args) },
+    adjudicate: (...args) => this.resolveDraftTriggers()?.adjudicate(...args) ?? Promise.resolve(undefined),
+    serializeReference: (...args) => {
+      const controller = this.resolveDraftTriggers()
+      if (controller === undefined) return Promise.reject(new Error('draft reference provider is unavailable'))
+      return controller.serializeReference(...args)
+    },
+  }
+  /**
+   * Root draft trigger binding; neither lookup nor use allocates persistent entities.
+   * @returns The stable draft trigger facade.
+   */
+  draftTriggers(): DraftInputTriggers {
+    return this.draftFace
+  }
   private readonly shells = new Map<SessionId, SessionInputShell>()
   readonly stagedDraft = createSnapshotStore('')
+  private stagedReferences: readonly Occurrence[] = []
+  /**
+   * Accept only the reference projection belonging to the current staged text.
+   * @param text - Serialized text associated with the projection.
+   * @param references - Structured reference occurrences in that text.
+   */
+  setStagedReferences(text: string, references: readonly Occurrence[]): void {
+    if (this.stagedDraft.getSnapshot() === text && !this.stagedSubmission.getSnapshot().busy) this.stagedReferences = references
+  }
   readonly stagedSubmission = createSnapshotStore({ available: false, busy: false })
   private prepareStagedSession: (() => Promise<SessionId>) | undefined
   private defaultStagedSession: (() => Promise<SessionId>) | undefined
@@ -90,6 +151,7 @@ export class InputHub implements SessionInputResolver {
     if (this.stagedSubmission.getSnapshot().busy) return
     if (prepareSession !== undefined) this.prepareStagedSession = prepareSession
     if (text === '') this.prepareStagedSession = undefined
+    this.stagedReferences = []
     this.stagedDraft.set(text)
     this.stagedSubmission.set({ available: (this.prepareStagedSession ?? this.defaultStagedSession) !== undefined, busy: false })
   }
@@ -115,6 +177,7 @@ export class InputHub implements SessionInputResolver {
   takeStagedDraft(): string {
     const text = this.stagedDraft.getSnapshot()
     this.stagedDraft.set('')
+    this.stagedReferences = []
     this.prepareStagedSession = undefined
     this.stagedSubmission.set({ available: this.defaultStagedSession !== undefined, busy: this.stagedSubmission.getSnapshot().busy })
     return text
@@ -126,7 +189,8 @@ export class InputHub implements SessionInputResolver {
   moveStagedDraftTo(sessionId: SessionId): void {
     const text = this.stagedDraft.getSnapshot()
     if (text === '') return
-    this.shell(sessionId).setDraft(text)
+    if (this.stagedReferences.length === 0) this.shell(sessionId).setDraft(text)
+    else this.shell(sessionId).setDraft(text, this.stagedReferences)
     this.takeStagedDraft()
   }
 

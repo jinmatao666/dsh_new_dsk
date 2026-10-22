@@ -56,11 +56,6 @@ const ABSENT_BLOCK = {
   getSnapshot: (): ComposerBlock | undefined => undefined,
   subscribe: () => () => {},
 }
-const EMPTY_LEXICON: ReadonlyMap<'/' | '@', readonly string[]> = new Map()
-const ABSENT_LEXICON = {
-  getSnapshot: () => EMPTY_LEXICON,
-  subscribe: () => () => {},
-}
 const ABSENT_MENU_LAUNCHER = {
   getSnapshot: (): string | null => null,
   subscribe: () => () => {},
@@ -256,12 +251,16 @@ export function apply(ctx: Context): void {
     children: {
       'conversation.input.attachments': { kind: 'single', scope: 'session-maybe' },
       'conversation.input.draft-prefix': { kind: 'single', scope: 'session-maybe' },
+      'conversation.input.draft-overlay': { kind: 'list', scope: 'session-maybe' },
       'conversation.input.plan': { kind: 'single', scope: 'session' },
       'conversation.input.model': { kind: 'single', scope: 'session-maybe' },
     },
     inject: (sessionId: SessionId | undefined): ComposerBarInjected => {
       if (sessionId === undefined) {
+        const draftTriggers = inputHub.draftTriggers()
         return {
+          draftTriggers,
+          onStageReferences: (text, references) => { inputHub.setStagedReferences(text, references) },
           keyboard: undefined,
           addImages: undefined,
           removeImage: undefined,
@@ -273,8 +272,8 @@ export function apply(ctx: Context): void {
           command: undefined,
           hooks: {
             notices: ABSENT_NOTICES,
-            lexicon: ABSENT_LEXICON,
-            menuLauncher: ABSENT_MENU_LAUNCHER,
+            lexicon: draftTriggers.lexicon,
+            menuLauncher: draftTriggers.launcher,
           },
         }
       }

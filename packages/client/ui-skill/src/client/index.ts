@@ -32,7 +32,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SkillEntry } from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { InputTriggerServiceContract, InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
+import type { CandidateRequest, InputTriggerCandidate, InputTriggerServiceContract, InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: pulls the SlotRegistry service merge (ctx.slots).
@@ -80,11 +80,11 @@ export function apply(ctx: ClientContext): void {
   const sessions = ctx.sessions
   // Session-keyed catalog cache; single-flight per key. Plugin-closure state:
   // the fiber effect below is its teardown boundary.
-  const fetches = new Map<SessionId, CatalogFetch>()
+  const fetches = new Map<SessionId | undefined, CatalogFetch>()
   // Per-session lexicon invalidation listeners (subscribeLexicon consumers).
-  const lexiconListeners = new Map<SessionId, Set<() => void>>()
+  const lexiconListeners = new Map<SessionId | undefined, Set<() => void>>()
 
-  const notifyLexicon = (sessionId: SessionId): void => {
+  const notifyLexicon = (sessionId: SessionId | undefined): void => {
     for (const listener of [...(lexiconListeners.get(sessionId) ?? [])]) {
       try {
         listener()
@@ -97,13 +97,13 @@ export function apply(ctx: ClientContext): void {
     }
   }
 
-  const fetchCatalog = (sessionId: SessionId): Promise<readonly SkillEntry[]> => {
-    if (sessions.subagentAddress(sessionId) !== undefined) return Promise.resolve([])
+  const fetchCatalog = (sessionId: SessionId | undefined): Promise<readonly SkillEntry[]> => {
+    if (sessionId !== undefined && sessions.subagentAddress(sessionId) !== undefined) return Promise.resolve([])
     const existing = fetches.get(sessionId)
     if (existing !== undefined) return existing.promise
     const abort = new AbortController()
     const promise = (async () => {
-      const result = await skills.list({ sessionId }, abort.signal)
+      const result = sessionId === undefined ? await skills.draftList() : await skills.list({ sessionId }, abort.signal)
       if (!result.ok) throw new Error(`skills/list failed: ${result.error.code}: ${result.error.message}`)
       return result.value.skills
     })()
@@ -123,7 +123,7 @@ export function apply(ctx: ClientContext): void {
     return promise
   }
 
-  const invalidate = (key: SessionId): void => {
+  const invalidate = (key: SessionId | undefined): void => {
     const entry = fetches.get(key)
     if (entry === undefined) return
     fetches.delete(key)
@@ -139,25 +139,35 @@ export function apply(ctx: ClientContext): void {
   // locale service's own fallback ladder; candidate-time reads stay plain text.
   const t = ctx.locale.bind(NS)
 
+  const candidatesFor = async (sessionId: SessionId | undefined, { query, signal }: CandidateRequest) => {
+    const catalog = await fetchCatalog(sessionId)
+    if (signal.aborted) return []
+    return catalog.filter(skill => (skill.displayName ?? skill.name).toLocaleLowerCase().includes(query.toLocaleLowerCase())
+      || skill.name.startsWith(query)).map(skill => ({
+      name: skill.displayName ?? skill.name,
+      ...skill.displayName === undefined ? {} : { value: skill.name },
+      description: skill.modelInvocable ? skill.description : `${t('menu.userOnly')} · ${skill.description}`,
+    }))
+  }
+  const pickSkill = (candidate: InputTriggerCandidate) => ({ insert: {
+    source: 'skill', ref: `/${candidate.value ?? candidate.name}`, clipboardText: `/${candidate.name}`,
+    label: candidate.name, appearance: 'skill' as const,
+  } })
+
   const source: InputTriggerSource = {
+    draft: {
+      trigger: '/', name: 'skill', order: 2,
+      candidates: (_draft, request) => candidatesFor(undefined, request),
+      onPick: ({ candidate }) => {
+        const { insert } = pickSkill(candidate)
+        return { insert: { ...insert, clipboardText: insert.ref } }
+      },
+      codec: { clipboardText: ref => ref, serialize: ref => Promise.resolve(ref) },
+    },
     trigger: '/',
     name: 'skill',
     order: 2,
-    async candidates(session, { query, signal }) {
-      const skills = await fetchCatalog(session.sessionId)
-      // Superseded keystroke: the shared fetch stays warm, this caller yields.
-      if (signal.aborted) return []
-      return skills
-        .filter(skill => (skill.displayName ?? skill.name).toLocaleLowerCase().includes(query.toLocaleLowerCase())
-          || skill.name.startsWith(query))
-        .map(skill => ({
-          name: skill.displayName ?? skill.name,
-          ...skill.displayName === undefined ? {} : { value: skill.name },
-          // The user-only marker rides the description (the menu's only
-          // secondary text); `hint` is the claim-state ghost text, not a badge.
-          description: skill.modelInvocable ? skill.description : `${t('menu.userOnly')} · ${skill.description}`,
-        }))
-    },
+    candidates: (session, request) => candidatesFor(session.sessionId, request),
     warm(session) {
       // Fire-and-forget scope-birth prewarm; the shared fetch reports
       // through candidates.

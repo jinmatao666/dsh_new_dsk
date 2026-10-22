@@ -13,6 +13,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { InputTriggerSource } from '../types.ts'
 import { InputTriggerController } from './controller.ts'
 import type { InputTriggerServiceContract } from './contract.ts'
+import type { DraftInputTriggers, PickOutcome, TokenSpan } from '@deepseek-ai/dsh-client-ui-conversation/src/client/contract/input.ts'
 
 /**
  * All mutable service state in one holder: cordis service methods run behind
@@ -24,6 +25,7 @@ interface LiveState {
   readonly sources: InputTriggerSource[]
   /** Per-session controllers; entries are deleted by their scope disposer. */
   readonly controllers: Map<SessionId, InputTriggerController>
+  draft?: { controller: InputTriggerController<undefined> & DraftInputTriggers }
 }
 
 /** The `ctx.inputTriggers` trigger pipeline service (root registry + controller resolution). */
@@ -37,6 +39,7 @@ export class InputTriggerService extends Service implements InputTriggerServiceC
    */
   constructor(ctx: Context) {
     super(ctx, 'inputTriggers')
+    ctx.effect(() => () => { this.live.draft?.controller.dispose() }, 'input triggers: draft lifecycle')
   }
 
   /**
@@ -52,6 +55,7 @@ export class InputTriggerService extends Service implements InputTriggerServiceC
       throw new Error(`slash source "${src.trigger}${src.name}" is already registered`)
     }
     live.sources.push(src)
+    if (src.draft !== undefined) live.draft?.controller.sourceAdded(src.draft)
     for (const controller of live.controllers.values()) {
       try {
         controller.sourceAdded(src)
@@ -66,6 +70,7 @@ export class InputTriggerService extends Service implements InputTriggerServiceC
       const at = live.sources.indexOf(src)
       if (at < 0) return
       live.sources.splice(at, 1)
+      if (src.draft !== undefined) live.draft?.controller.sourceRemoved(src.draft)
       for (const controller of live.controllers.values()) controller.sourceRemoved(src)
     }
   }
@@ -98,6 +103,29 @@ export class InputTriggerService extends Service implements InputTriggerServiceC
       controller.dispose()
       live.controllers.delete(id)
     }, 'slash: session controller')
+    return controller
+  }
+
+  /** The draft shares detection, cancellation, keyboard routing and menu rendering with Sessions. */
+  draft(): InputTriggerController<undefined> & DraftInputTriggers {
+    const { live } = this
+    if (live.draft !== undefined) return live.draft.controller
+    let apply: ((outcome: PickOutcome, span: TokenSpan) => boolean) | undefined
+    const sources = () => live.sources.flatMap(source => source.draft === undefined ? [] : [source.draft])
+    const controller = Object.assign(new InputTriggerController<undefined>({
+      project: () => undefined,
+      execute: (outcome, span) => apply?.(outcome, span) ?? false,
+      roster: {
+        all: sources,
+        sources: trigger => sources().filter(source => source.trigger === trigger).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+      },
+    }), {
+      bindEditor(next: (outcome: PickOutcome, span: TokenSpan) => boolean) {
+        apply = next
+        return () => { if (apply === next) { apply = undefined; controller.dismiss() } }
+      },
+    })
+    live.draft = { controller }
     return controller
   }
 

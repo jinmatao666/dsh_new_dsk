@@ -111,9 +111,9 @@ export interface CandidateRequest {
 }
 
 /** Everything a source receives on pick: candidate + session projection + the span snapshot for CAS. */
-export interface InputTriggerPick {
+export interface InputTriggerPick<Projection = ClientSessionContext> {
   readonly candidate: InputTriggerCandidate
-  readonly session: ClientSessionContext
+  readonly session: Projection
   readonly position: TriggerPosition
   readonly via: PickVia
   /** Settling pick, or the candidate's drill action (Tab / row chevron). */
@@ -146,7 +146,9 @@ export interface ReferenceCodec {
  * budgets differ: space fires mid-keystroke and must answer synchronously
  * from hot state, while enter may await the source's own warmup.
  */
-export interface InputTriggerSource {
+export interface InputTriggerSource<Projection = ClientSessionContext> {
+  /** Optional draft-safe source. It receives no Session identity and must not create one. */
+  readonly draft?: InputTriggerSource<undefined>
   readonly trigger: TriggerChar
   /** Menu group label; unique per trigger — duplicate registration throws. */
   readonly name: string
@@ -154,7 +156,7 @@ export interface InputTriggerSource {
   readonly order?: number
   /** Whether the menu renders the source-title row; defaults to true. */
   readonly showGroupTitle?: boolean
-  candidates(session: ClientSessionContext, req: CandidateRequest): Promise<readonly InputTriggerCandidate[]>
+  candidates(session: Projection, req: CandidateRequest): Promise<readonly InputTriggerCandidate[]>
   /**
    * Synchronous breadcrumb rendered above this source's group, re-polled on
    * every hit. Implementing IS the participation claim; `undefined` means
@@ -166,11 +168,11 @@ export interface InputTriggerSource {
    * @param req - the live query and how the menu reached it.
    * @returns the crumbs to render, or undefined for no header.
    */
-  header?(session: ClientSessionContext, req: HeaderRequest): readonly InputTriggerCrumb[] | undefined
+  header?(session: Projection, req: HeaderRequest): readonly InputTriggerCrumb[] | undefined
   /** Every pick lands here; claim/insert outcomes are executed by the pipeline via the scoped input events. */
-  onPick(pick: InputTriggerPick): PickOutcome
+  onPick(pick: InputTriggerPick<Projection>): PickOutcome
   /** Synchronous space-time adjudication over hot state only. `token` is the just-completed leading token (e.g. '/goal'). */
-  matchSpace?(session: ClientSessionContext, token: string): PickOutcome
+  matchSpace?(session: Projection, token: string): PickOutcome
   /**
    * Enter-time adjudication; may strong-wait the source's own warmup and
    * reject on warmup failure. `line` is the full trimmed draft: the source
@@ -182,7 +184,7 @@ export interface InputTriggerSource {
    * submission intact.
    */
   matchEnter?(
-    session: ClientSessionContext,
+    session: Projection,
     line: string,
     signal: AbortSignal,
     envelope: SubmitEnvelope,
@@ -192,7 +194,7 @@ export interface InputTriggerSource {
    * calls it once when the session scope comes alive so sources can fetch
    * their backing data before the first interaction.
    */
-  warm?(session: ClientSessionContext): void
+  warm?(session: Projection): void
   /**
    * Synchronous hot-snapshot name roll for plain-text reference decoration.
    * Implementing IS the participation claim: the render side
@@ -200,7 +202,7 @@ export interface InputTriggerSource {
    * `undefined` = backing data not warm yet — no decoration, never a fetch
    * (the render path must stay synchronous and side-effect free).
    */
-  lexicon?(session: ClientSessionContext): readonly string[] | undefined
+  lexicon?(session: Projection): readonly string[] | undefined
   /**
    * Subscribe to changes of this source's {@link InputTriggerSource.lexicon} answer
    * for one session (backing data settled, invalidated, or refreshed). The
@@ -210,7 +212,7 @@ export interface InputTriggerSource {
    * @param listener - invalidation callback.
    * @returns unsubscribe.
    */
-  subscribeLexicon?(session: ClientSessionContext, listener: () => void): () => void
+  subscribeLexicon?(session: Projection, listener: () => void): () => void
   /** Reference codec; required for sources producing insert outcomes. */
   readonly codec?: ReferenceCodec
 }

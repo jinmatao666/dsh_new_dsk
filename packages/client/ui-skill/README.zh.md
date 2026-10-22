@@ -25,6 +25,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+无 Session 输入框通过 `skills.draftList` 提供 `/` 补全，不指定项目 cwd，也不创建 Agent，仅查询用户级技能。草稿标签显示友好名称，但复制和转移使用稳定的斜杠标识。选择工作区会保留结构化引用。
+
 在编辑器中输入 `/` 并从建议中选择 skill，或直接键入 `/name`；发出的消息携带字面文本，宿主对菜单 pick 与手动键入的 token 以同样方式加载 skill。与宿主命令同名的名称仍解析为命令——裁决在客户端把该行认领走，它根本不会成为提示词。
 
 ### source 提供什么

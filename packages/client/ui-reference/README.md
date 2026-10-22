@@ -25,6 +25,8 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
+Before Session selection, `@` uses `fileReferences.draftList` for file and folder completion without resuming an Agent. Local draft discovery browses the user’s home directory and returns absolute mentions, so a later automatic Workspace cannot change the selected path. Draft menus do not query Session-reference candidates. Workspace-backed completion retains its relative-path and Session-reference behavior.
+
 The source is active whenever the composition mounts this package and a Host `ctx.fileReferences` provider is available. Type `@` followed by an unquoted token to see files first, then sessions; open `@"…` to search files only. The candidate list is a completion menu, not a search result page: pick once and keep typing.
 
 ### What a pick inserts

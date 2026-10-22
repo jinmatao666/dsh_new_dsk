@@ -1,14 +1,50 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render } from '@testing-library/react'
-import type { Context } from '@deepseek-ai/cordis'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { Context } from '@deepseek-ai/cordis'
+import type { DraftInputTriggers } from '../src/client/contract/input.ts'
 import { InputHub } from '../src/client/input/hub.ts'
 import type { SessionInputShell } from '../src/client/input/facade.ts'
 import { ComposerContentEditable } from '../src/client/input/editor/ComposerContentEditable.tsx'
+import { useStagedEditor } from '../src/client/input/editor/use-staged-editor.ts'
+import { $getRoot } from 'lexical'
+import type { LexicalEditor } from 'lexical'
 
 afterEach(cleanup)
 
 describe('pre-Session draft', () => {
+  it('binds the editor when the optional trigger service arrives after the composer', () => {
+    const ctx = new Context()
+    const hub = new InputHub(ctx, (() => ''))
+    const face = hub.draftTriggers()
+    const apply = vi.fn(() => true)
+    const detach = face.bindEditor(apply)
+    const off = vi.fn()
+    const bindEditor = vi.fn(() => off)
+    const track = vi.fn()
+    const controller = { bindEditor, track } as unknown as DraftInputTriggers
+    ctx.provide('inputTriggers', { draft: () => controller } as never)
+    face.track('/', 1, { tier: 'plain' }, 1)
+    expect(bindEditor).toHaveBeenCalledExactlyOnceWith(apply)
+    expect(track).toHaveBeenCalledWith('/', 1, { tier: 'plain' }, 1)
+    detach()
+    expect(off).toHaveBeenCalledOnce()
+  })
+  it('transfers structured references without invoking the automatic Workspace factory on manual selection', () => {
+    const hub = new InputHub({} as Context, (() => ''))
+    const prepare = vi.fn()
+    hub.registerStagedSessionFactory(prepare)
+    const setDraft = vi.fn()
+    vi.spyOn(hub, 'shell').mockReturnValue({ setDraft } as unknown as SessionInputShell)
+    const text = '/helper @/home/report.docx'
+    const references = [{ occurrenceId: 1, source: 'skill', ref: '/helper', label: '助手', clipboardText: '/helper', offset: 0, length: 7 }]
+    hub.setStagedDraft(text)
+    hub.setStagedReferences(text, references)
+    hub.moveStagedDraftTo('manual' as Parameters<InputHub['moveStagedDraftTo']>[0])
+    expect(setDraft).toHaveBeenCalledExactlyOnceWith(text, references)
+    expect(prepare).not.toHaveBeenCalled()
+    expect(hub.stagedDraft.getSnapshot()).toBe('')
+  })
   it('uses the registered default for plain drafts and applies choices before opening or sending', async () => {
     const order: string[] = []
     const sessions = { list: { getSnapshot: () => ({ current: undefined }) }, open: () => { order.push('open') } }
@@ -99,15 +135,23 @@ describe('pre-Session draft', () => {
     expect(hub.takeStagedDraft()).toBe('')
   })
 
-  it('lets the user edit text before a Session editor exists', () => {
-    let draft = ''
-    const view = render(<ComposerContentEditable editor={null} editable standaloneText="" onStandaloneInput={(text) => { draft = text }} />)
+  it('uses the shared local editor for pre-Session text, sanitizes paste and accepts external drafts', async () => {
+    const change = vi.fn()
+    let editor: LexicalEditor | null = null
+    function Surface({ text }: { text: string }) {
+      editor = useStagedEditor({ active: true, text, editable: true, onChange: change, onError: vi.fn() })
+      return <ComposerContentEditable editor={editor} editable />
+    }
+    const view = render(<Surface text="" />)
     const input = view.getByRole('textbox')
     expect(input.getAttribute('contenteditable')).toBe('true')
-    input.textContent = '先写材料摘要'
-    fireEvent.input(input)
-    expect(draft).toBe('先写材料摘要')
-    view.rerender(<ComposerContentEditable editor={null} editable standaloneText="外部草稿" onStandaloneInput={(text) => { draft = text }} />)
+    act(() => { editor!.update(() => { $getRoot().selectEnd() }, { discrete: true }) })
+    fireEvent.paste(input, { clipboardData: { items: [], getData: () => '\uE100先写\uFFFC材料摘要' } })
+    await vi.waitFor(() => { expect(change).toHaveBeenCalledWith('先写材料摘要') })
+    view.rerender(<Surface text="外部草稿" />)
     expect(input.textContent).toBe('外部草稿')
+    view.rerender(<Surface text={'\uE100多行\n\uFFFC草稿'} />)
+    expect(input.querySelectorAll('p').length).toBe(2)
+    expect(input.textContent).toBe('多行草稿')
   })
 })

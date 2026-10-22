@@ -11,7 +11,7 @@
 `FileReferenceCandidate` 是仅含路径的发现结果。被寻址的 agent 提供工作目录范围；提供方负责排序和命名空间访问，但不会读取文件内容。
 
 ```ts type-equiv
-/** One path-only completion candidate inside the target session cwd. */
+/** One path-only candidate from a Session workspace or a provider's draft browsing root. */
 interface FileReferenceCandidate {
   /** User-facing path accepted by normal prompts and filesystem tools. */
   path: string

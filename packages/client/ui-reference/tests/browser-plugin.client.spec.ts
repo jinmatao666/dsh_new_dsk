@@ -74,6 +74,8 @@ async function bench(
     }],
   })),
   listed: Record<string, { updatedAt: number }> = {},
+  draftFiles: (query: string, signal?: AbortSignal) => Promise<RemoteEnvelope<FileReferenceCandidate[]>>
+    = async () => ({ ok: true, value: [] }),
 ): Promise<{ ctx: Context; fiber: ReturnType<Context['plugin']>; source: InputTriggerSource }> {
   const ctx = new Context()
   let source: InputTriggerSource | undefined
@@ -89,7 +91,7 @@ async function bench(
     }
   }
   new RemoteService(ctx)
-  ctx.provide('remote.fileReferences', { list: files })
+  ctx.provide('remote.fileReferences', { list: files, draftList: draftFiles })
   ctx.provide('remote.sessionReferenceResolver', { candidates: sessions })
   ctx.provide('locale', new LocaleRuntime(ctx))
   ctx.provide('connection', { generation: { getSnapshot: () => ({ id: 1, host: { home: HOME } }) } })
@@ -101,6 +103,20 @@ async function bench(
 }
 
 describe('apply', () => {
+  it('uses draft discovery without a Session and inserts stable absolute file paths', async () => {
+    const files = vi.fn(async () => ({ ok: true as const, value: [] }))
+    const sessions = vi.fn(async () => ({ ok: true as const, value: [] }))
+    const draftFiles = vi.fn(async () => ({ ok: true as const, value: [{ path: '/Users/dev/a b.docx', kind: 'file' as const }] }))
+    const { source } = await bench(files, sessions, {}, draftFiles)
+    const draft = source.draft!
+    const candidates = await draft.candidates(undefined, request('a'))
+    expect(files).not.toHaveBeenCalled()
+    expect(sessions).not.toHaveBeenCalled()
+    expect(candidates[0]?.name).toBe('a b.docx')
+    expect(draft.onPick({ candidate: candidates[0]!, session: undefined, action: 'pick', via: 'menu', position: 'inline', span: { start: 0, end: 2, draftRev: 1 } })).toMatchObject({
+      insert: { ref: '@"/Users/dev/a b.docx"', clipboardText: '@"/Users/dev/a b.docx"' },
+    })
+  })
   it('declares its services and releases the @ reference registration on disposal', async () => {
     expect(inject).toEqual([
       'inputTriggers', 'locale', 'connection', 'sessions', 'remote', 'remote.fileReferences',

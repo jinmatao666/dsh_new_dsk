@@ -22,19 +22,22 @@ import type {
 } from '../types.ts'
 
 /** Roster access the controller borrows from the root service (registration order preserved). */
-export interface SourceRoster {
-  sources(trigger: string): readonly InputTriggerSource[]
-  all(): readonly InputTriggerSource[]
+export interface SourceRoster<Projection = ClientSessionContext> {
+  sources(trigger: string): readonly InputTriggerSource<Projection>[]
+  all(): readonly InputTriggerSource<Projection>[]
 }
 
 /** Construction hooks for one controller. */
-export interface InputTriggerControllerDeps {
+export interface InputTriggerControllerDeps<Projection = ClientSessionContext> {
   /** The owning session scope (event dispatch + teardown registration site). */
-  actx: ClientContext
+  actx?: ClientContext
   /** The session's stable host identity (the projection handed to sources). */
-  sessionId: SessionId
+  sessionId?: SessionId
   /** Root-service roster view. */
-  roster: SourceRoster
+  roster: SourceRoster<Projection>
+  /** Detached drafts supply their projection and editor mutation route explicitly. */
+  project?: () => Projection
+  execute?: (outcome: PickOutcome, span: import('../types.ts').TokenSpan) => boolean
 }
 
 /**
@@ -42,7 +45,7 @@ export interface InputTriggerControllerDeps {
  * inside; MenuView renders from {@link InputTriggerController.menu} and routes
  * pointer picks back through {@link InputTriggerController.pick}.
  */
-export class InputTriggerController {
+export class InputTriggerController<Projection = ClientSessionContext> {
   /** Menu state store (per-session; survives session switches, dies with the scope). */
   readonly menu: SnapshotStore<MenuState> = createSnapshotStore<MenuState>(MENU_CLOSED)
   /**
@@ -79,9 +82,9 @@ export class InputTriggerController {
   private fetch: AbortController | null = null
   private disposed = false
   /** Per-source lexicon unsubscribers (sources without the hook never enter). */
-  private readonly lexiconOffs = new Map<InputTriggerSource, () => void>()
+  private readonly lexiconOffs = new Map<InputTriggerSource<Projection>, () => void>()
 
-  constructor(private readonly deps: InputTriggerControllerDeps) {
+  constructor(private readonly deps: InputTriggerControllerDeps<Projection>) {
     // Scope-birth prewarm: sessions are always agent-backed, so the one-time
     // roster warm here replaces the projection-transition watch — there are
     // no capability steps to react to.
@@ -321,7 +324,7 @@ export class InputTriggerController {
    * Drop the menu group of a disposed source (root registry change notification).
    * @param source - the source whose registration was disposed.
    */
-  sourceRemoved(source: InputTriggerSource): void {
+  sourceRemoved(source: InputTriggerSource<Projection>): void {
     const state = this.menu.getSnapshot()
     if (state.open && state.hit !== null && state.hit.trigger === source.trigger) {
       this.reduce({ type: 'source-failed', generation: state.generation, source: source.name })
@@ -338,7 +341,7 @@ export class InputTriggerController {
    * birth.
    * @param source - the newly registered source.
    */
-  sourceAdded(source: InputTriggerSource): void {
+  sourceAdded(source: InputTriggerSource<Projection>): void {
     const projection = this.project()
     source.warm?.(projection)
     this.watchLexicon(source, projection)
@@ -363,13 +366,17 @@ export class InputTriggerController {
   }
 
   /** The session projection handed to sources (agent-backed identity; constant per scope). */
-  private project(): ClientSessionContext {
-    return { sessionId: this.deps.sessionId }
+  private project(): Projection {
+    if (this.deps.project !== undefined) return this.deps.project()
+    if (this.deps.sessionId === undefined) throw new Error('input trigger requires an explicit draft projection or Session identity')
+    return { sessionId: this.deps.sessionId } as Projection
   }
 
   /** Execute a claim/insert/text outcome via the scoped input events (actx as dispatch subject); true = the input applied it. */
   private execute(outcome: PickOutcome, span: import('../types.ts').TokenSpan): boolean {
+    if (this.deps.execute !== undefined) return this.deps.execute(outcome, span)
     const { actx } = this.deps
+    if (actx === undefined) throw new Error('input trigger requires an editor mutation route')
     if (outcome === undefined || outcome === 'handled') return false
     if ('claim' in outcome) {
       return actx.bail(actx, 'slash/input-begin-command', { claim: outcome.claim, span }) === true
@@ -408,7 +415,7 @@ export class InputTriggerController {
   }
 
   /** Wire one source's lexicon invalidation channel into refresh (hookless or roll-less sources never notify). */
-  private watchLexicon(source: InputTriggerSource, projection: ClientSessionContext): void {
+  private watchLexicon(source: InputTriggerSource<Projection>, projection: Projection): void {
     if (source.lexicon === undefined || source.subscribeLexicon === undefined) return
     this.lexiconOffs.set(source, source.subscribeLexicon(projection, () => {
       this.refreshLexicon()
@@ -424,7 +431,7 @@ export class InputTriggerController {
   }
 
   /** Launch the candidate fetch for one hit generation, superseding the previous one. */
-  private fetchCandidates(hit: TriggerHit, roster: readonly InputTriggerSource[]): void {
+  private fetchCandidates(hit: TriggerHit, roster: readonly InputTriggerSource<Projection>[]): void {
     this.stopFetch()
     const controller = new AbortController()
     this.fetch = controller
@@ -470,7 +477,7 @@ export class InputTriggerController {
    * @param action - settling pick or drill.
    */
   private settle(
-    src: InputTriggerSource,
+    src: InputTriggerSource<Projection>,
     candidate: InputTriggerCandidate,
     hit: TriggerHit,
     action: PickAction,
@@ -495,7 +502,7 @@ export class InputTriggerController {
   }
 
   /** Re-poll every header-bearing source in the hit roster and publish their crumbs. */
-  private refreshHeaders(hit: TriggerHit, roster: readonly InputTriggerSource[]): void {
+  private refreshHeaders(hit: TriggerHit, roster: readonly InputTriggerSource<Projection>[]): void {
     const projection = this.project()
     const crumbs = new Map<string, readonly InputTriggerCrumb[]>()
     for (const src of roster) {

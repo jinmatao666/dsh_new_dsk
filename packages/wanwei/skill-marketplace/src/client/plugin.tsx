@@ -8,7 +8,7 @@ import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connec
 import type { PropsRuntime, HostObservable, InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { IConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { ReferenceIcon, Select } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Select } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { IWorkspaces } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import {
@@ -89,7 +89,7 @@ type RemoteSkill = {
   categories?: unknown
 }
 type RemoteSkillCategory = { name?: unknown; code?: unknown }
-type RemoteSkillBundle = { assets?: unknown; sha256?: unknown }
+type RemoteSkillBundle = { assets?: unknown; sha256?: unknown; download_event_id?: unknown }
 type RemotePersonalSkill = {
   id?: unknown
   name?: unknown
@@ -149,7 +149,7 @@ type MarketplaceServices = {
   startSkillConversation?: (slug: string, displayName: string) => void
   loadRemoteCategories?: () => Promise<RemoteSkillCategory[]>
   loadRemoteSkillBundle?: (id: number) => Promise<unknown>
-  recordRemoteSkillInstall?: (id: number) => Promise<unknown>
+  recordRemoteSkillInstall?: (id: number, eventId?: string) => Promise<unknown>
   submitPersonalSkill?: (payload: unknown) => Promise<unknown>
   loadPersonalSkills?: () => Promise<RemotePersonalSkill[]>
 }
@@ -194,7 +194,7 @@ function hasVerifiedInstallCount(skill: Skill): boolean {
   return skill.remoteId !== undefined
 }
 
-function serverSkillFiles(bundle: unknown): { files: Array<{ path: string; content: number[] }>; sha256?: string } {
+function serverSkillFiles(bundle: unknown): { files: Array<{ path: string; content: number[] }>; sha256?: string; eventId?: string } {
   const assets = (typeof bundle === 'object' && bundle !== null ? (bundle as { assets?: unknown }).assets : undefined)
   if (typeof assets !== 'string') throw new Error('服务器返回的技能包缺少文件内容')
   let parsed: unknown
@@ -214,7 +214,9 @@ function serverSkillFiles(bundle: unknown): { files: Array<{ path: string; conte
     const binary = atob(contentBase64)
     return { path, content: Array.from(binary, char => char.charCodeAt(0)) }
   })
-  return sha256 === undefined ? { files: decodedFiles } : { files: decodedFiles, sha256 }
+  const candidateEventId = (bundle as RemoteSkillBundle).download_event_id
+  return { files: decodedFiles, ...(sha256 === undefined ? {} : { sha256 }),
+    ...(typeof candidateEventId === 'string' ? { eventId: candidateEventId } : {}) }
 }
 
 const L = {
@@ -788,7 +790,7 @@ function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProp
         await desktopInvoke('install_marketplace_skill', { slug, files: bundle?.files, sha256: bundle?.sha256, displayName: skill.name })
         if (skill.remoteId !== undefined && recordRemoteSkillInstall !== undefined) {
           try {
-            await recordRemoteSkillInstall(skill.remoteId)
+            await recordRemoteSkillInstall(skill.remoteId, bundle?.eventId)
             if (loadRemoteSkills !== undefined) setRemoteSkills(await loadRemoteSkills())
           } catch (error) {
             // The completed local installation remains valid when telemetry is unavailable.
@@ -1352,7 +1354,7 @@ function SkillMarketplaceAction({ wide, controller, services }: ActionProps) {
   )
 }
 
-export function SkillDraftPrefix({ draft, removePrefix, renderInput, settlePrefix, sessionReady }: PropsRuntime<'conversation.input.draft-prefix'>) {
+export function SkillDraftPrefix({ draft, renderInput, settlePrefix }: PropsRuntime<'conversation.input.draft-prefix'>) {
   const match = /^\/([\w-]+)(?=\s|$)/u.exec(draft)
   const slug = match?.[1]
   const displayName = slug === undefined ? undefined : skillDisplayName(slug)
@@ -1361,19 +1363,7 @@ export function SkillDraftPrefix({ draft, removePrefix, renderInput, settlePrefi
     if (token === undefined || displayName === undefined) return
     settlePrefix(token.length, { source: 'skill', ref: token, clipboardText: token, label: displayName, appearance: 'skill' })
   }, [token, displayName, settlePrefix])
-  if (sessionReady || token === undefined || displayName === undefined) return renderInput()
-  return renderInput(token.length, <span className="dsh-skill-draft-prefix" data-reference-kind="skill"
-    onPointerDown={(event) => { event.preventDefault(); event.stopPropagation() }}>
-    <button type="button" className="dsh-skill-draft-open" aria-label={productText('已选技能：{0}', [displayName])}
-      onClick={(event) => {
-        event.stopPropagation()
-        window.dispatchEvent(new CustomEvent('dsh:reference-open', { detail: { source: 'skill', ref: token } }))
-      }}>
-      <ReferenceIcon kind="skill" size={14} /><span>{displayName}</span>
-    </button>
-    <button type="button" className="dsh-skill-draft-remove" aria-label={productText('移除技能引用：{0}', [displayName])}
-      onClick={(event) => { event.stopPropagation(); removePrefix(token.length) }}>×</button>
-  </span>)
+  return renderInput()
 }
 
 export const inject = ['slots', 'connection', 'conversation', 'sessions', 'workspaces', 'remote', 'remote.directoryPicker', 'remote.skills', 'wanweiNetwork']
@@ -1415,7 +1405,7 @@ export function apply(ctx: Context): void {
     return Array.isArray(raw.items) ? raw.items.filter((item): item is RemoteSkillCategory => typeof item === 'object' && item !== null) : []
   }
   const loadRemoteSkillBundle = async (id: number) => rpcValue(await connection.rpc.call('/desktop-auth', 'skill-bundle', { id }))
-  const recordRemoteSkillInstall = async (id: number) => rpcValue(await connection.rpc.call('/desktop-auth', 'skill-download', { id }))
+  const recordRemoteSkillInstall = async (id: number, eventId?: string) => rpcValue(await connection.rpc.call('/desktop-auth', 'skill-download', { id, eventId }))
   const submitPersonalSkill = async (payload: unknown) => rpcValue(await connection.rpc.call('/desktop-auth', 'personal-skill-submit', payload))
   const loadPersonalSkills = async () => {
     const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'personal-skill-list', {})) as { items?: unknown }

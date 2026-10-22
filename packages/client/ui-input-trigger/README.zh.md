@@ -25,6 +25,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+选择 Session 前，`draft()` 使用相同的控制器和菜单，仅接入明确提供 `draft` 变体的 source。这些回调不接收 Session 身份。编辑器绑定负责带校验的候选应用，解绑会关闭菜单。草稿查询不分配工作区或会话；仅支持会话的命令仍需先选择 Session。
+
 与 `ui-conversation` 一起挂载本插件；用户在光标处键入触发器时，菜单随即出现在输入浮层中。分组候选项渲染在标题行之下；pick 路由到 source，消费方表面应用其结果——斜杠命令打开其弹窗或执行，引用插入其行内 token。
 
 ### 键盘与鼠标
