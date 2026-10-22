@@ -45,6 +45,8 @@ The configured backend's System Settings owns the network environment and indepe
 
 Knowledge-base visibility defaults to enabled in each environment when only the `knowledgeBases` field is absent from a legacy feature object. Existing automation and connector flags and explicit knowledge-base denial remain unchanged; null and non-boolean values fail validation. OneAPI configuration reads and the administrator settings page apply the same rule without rewriting stored configuration until an administrator saves.
 
+Version settings shows a check result only after a manual check in that mounted page; reopening clears result visibility. It does not repeat the static download/install reminder below the check button. Missing updater configuration and bridge errors remain visible. A no-update response says no update was found and names the current version; it does not claim the backend has a published release. Automatic checks and native confirmation dialogs are unchanged.
+
 Forgot password reads the backend's maintenance contact into a separate dialog. SMS and QR login display an unavailable notice without replacing account login. The login card keeps its existing sizing; no registration or simulated authentication controls are provided.
 
 The network snapshot includes `directInternet` after deployment confirmation. Intranet confirmation reuses the resource route's cached direct probe without starting a tunnel. Disabled detection, offline resources or a failed probe report false; Internet mode reports true. The Client validates and publishes that result for automation and connector entry availability, without changing administrator visibility or native network mode.

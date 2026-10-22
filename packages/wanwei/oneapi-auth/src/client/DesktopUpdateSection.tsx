@@ -1,5 +1,5 @@
 /** Dedicated version settings and shell-level download progress. */
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DesktopUpdateController } from './desktop-update-controller.ts'
@@ -21,6 +21,7 @@ function UpdateIcon({ download = false }: { download?: boolean }) {
  */
 export function DesktopUpdateSection({ t, updates }: UpdateProps) {
   const { snapshot: view, pending, error } = useSyncExternalStore(updates.subscribe, updates.getSnapshot)
+  const [checked, setChecked] = useState(false)
   if (!updates.available) return null
   const active = view !== undefined && ['checking', 'downloading', 'installing'].includes(view.phase)
   const downloading = view?.phase === 'downloading'
@@ -41,13 +42,12 @@ export function DesktopUpdateSection({ t, updates }: UpdateProps) {
     <div className={css.checkRow}>
       <div><h2>{t('updatesManual')}</h2><p>{t('updatesManualHint')}</p></div>
       <button type="button" className={css.primary} disabled={pending || active || view?.configured !== true}
-        onClick={() => { void updates.check() }}><UpdateIcon />{active || pending ? t('updatesWorking') : t('updatesCheck')}</button>
+        onClick={() => { setChecked(true); void updates.check() }}><UpdateIcon />{active || pending ? t('updatesWorking') : t('updatesCheck')}</button>
     </div>
     {downloading ? <button type="button" className={css.textButton} onClick={() => { updates.showProgress(true) }}>
       {t('updatesShowProgress')}</button> : null}
-    <p className={css.safety}>{t('updatesSafety')}</p>
     {view?.configured === false ? <p className={css.notice}>{t('updatesUnavailable')}</p> : null}
-    {view?.message && !downloading ? <p role="status" className={css.notice}>{view.message}</p> : null}
+    {checked && !pending && view?.message && !downloading ? <p role="status" className={css.notice}>{view.message}</p> : null}
     {error === undefined ? null : <p role="alert" className={css.error}>{error}</p>}
   </section>
 }

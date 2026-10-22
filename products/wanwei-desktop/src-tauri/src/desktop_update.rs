@@ -347,14 +347,15 @@ async fn perform(app: &tauri::AppHandle, manual: bool) -> Result<(), String> {
         .map_err(|error| format!("检查更新失败：{error}"))?;
     let Some(mut update) = update else {
         state.inner.lock().map_err(|_| "更新状态不可用")?.cached = None;
+        let message = if manual {
+            format!("未发现可用更新，当前版本 {}。", app.package_info().version)
+        } else {
+            String::new()
+        };
         update_state(
             app,
             "idle",
-            if manual {
-                "当前已是最新版本（或该平台尚无发布版本）"
-            } else {
-                ""
-            },
+            &message,
         );
         return Ok(());
     };

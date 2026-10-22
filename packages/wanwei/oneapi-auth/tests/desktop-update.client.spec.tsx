@@ -50,6 +50,21 @@ it('shows a dedicated version page, persists its switch and delegates checking t
   expect(screen.queryByRole('progressbar')).toBeNull()
 })
 
+it('hides cached results and static safety copy until a manual check, then clears results on reopening', async () => {
+  const { updates, state } = bench()
+  state.message = '上次检查结果'
+  const first = render(<DesktopUpdateSection t={t} updates={updates} />)
+  await screen.findByText('2.1.1')
+  expect(screen.queryByText(state.message)).toBeNull()
+  expect(screen.queryByText(zh.updatesSafety)).toBeNull()
+  state.message = '未发现可用更新，当前版本 2.1.1。'
+  fireEvent.click(screen.getByRole('button', { name: zh.updatesCheck }))
+  expect((await screen.findByRole('status')).textContent).toBe(state.message)
+  first.unmount()
+  render(<DesktopUpdateSection t={t} updates={updates} />)
+  expect(screen.queryByRole('status')).toBeNull()
+})
+
 it('disables checking without a public key and reports native failures', async () => {
   const { updates } = bench('idle', false)
   const first = render(<DesktopUpdateSection t={t} updates={updates} />)
