@@ -182,6 +182,7 @@ describe('WeChat Assistant RPC', () => {
       effect(fn: () => () => void | Promise<void>) {
         return fn()
       },
+      tools: { register: () => () => undefined },
     })
     apply(ctx as Context)
     expect(handlers.has('/wanwei-wechat')).toBe(true)

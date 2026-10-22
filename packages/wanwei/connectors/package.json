@@ -60,6 +60,7 @@
     "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-permission-presets": "workspace:^",
+    "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/dsh-wanwei-feature-panels": "workspace:^",
     "@deepseek-ai/dsh-wanwei-oneapi-auth": "workspace:^",
     "@deepseek-ai/dsh-workspace": "workspace:^",
@@ -80,6 +81,7 @@
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-permission-presets": "workspace:^",
     "@deepseek-ai/dsh-session": "workspace:^",
+    "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/dsh-wanwei-feature-panels": "workspace:^",
     "@deepseek-ai/dsh-wanwei-oneapi-auth": "workspace:^",
     "@deepseek-ai/dsh-workspace": "workspace:^",
@@ -97,6 +99,7 @@
     "lib/types/**/*.d.ts"
   ],
   "dependencies": {
+    "@deepseek-ai/dsh-tools": "workspace:^",
     "qrcode": "^1.5.4"
   }
 }

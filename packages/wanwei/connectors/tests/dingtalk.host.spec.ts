@@ -490,6 +490,7 @@ describe('DingTalk DWS RPC', () => {
     expect(name).toBe('wanwei-connectors')
     expect(inject).toEqual([
       'connection',
+      'tools',
       'sessionController',
       'sessions',
       'agents',
@@ -497,6 +498,7 @@ describe('DingTalk DWS RPC', () => {
       'permissionPresets',
     ])
     const handlers = new Map<string, (endpoint: string, payload: unknown) => Promise<unknown>>()
+    const registeredTools: string[] = []
     const home = mkdtempSync(join(tmpdir(), 'wanwei-dws-rpc-'))
     process.env.DSH_HOME = home
     process.env.PATH = ''
@@ -519,9 +521,16 @@ describe('DingTalk DWS RPC', () => {
       effect(fn: () => () => void | Promise<void>) {
         return fn()
       },
+      tools: {
+        register(tool: { name: string }) {
+          registeredTools.push(tool.name)
+          return () => undefined
+        },
+      },
     })
     apply(ctx as Context)
     expect(handlers.has('/wanwei-dingtalk')).toBe(true)
+    expect(registeredTools).toEqual(['dingtalk_dws'])
     const result = await handlers.get('/wanwei-dingtalk')!('status', {}) as {
       ok: true
       value: { dwsInstalled: boolean; authed: boolean; skillInstalled: boolean }

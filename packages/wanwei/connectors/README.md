@@ -47,7 +47,7 @@ In intranet mode, the connector entry requires a successful enabled direct-conne
 
 The Client owns its connector list, selection and dialogs. DingTalk detail uses Host RPC `/wanwei-dingtalk`; WeCom uses `/wanwei-wecom` (`status`, `login`, `installSkill`, `disconnect`); WeChat Assistant uses `/wanwei-wechat` (`status`, `loginStart`, `loginPoll`, `disconnect`). Secrets stay inside each CLI or iLink credential store; the Client only receives non-secret status and QR image data URLs. Status probes are cached briefly on Host and the Client paints from the last known status so「已连接」/「去试试」appear immediately on reopen.
 
-The [Client entry](src/client/index.ts) supplies the UI. The [Host entry](src/index.ts) registers the connector RPC channels.
+The [Client entry](src/client/index.ts) supplies the UI. The [Host entry](src/index.ts) registers the connector RPC channels and the `dingtalk_dws` tool, which runs product-bundled `dws` in the Host process so desktop chat sees the same DingTalk login as the connector card. Session `pwsh`/`bash` cannot read `~/.dws` under the file sandbox.
 
 After DingTalk/WeCom connect, desktop sessions discover `dws-cli` and/or `wecomcli-*` through skill-filesystem. After WeChat Assistant connect, inbound WeChat text creates ordinary desktop Sessions through `sessionController`, so model/token use follows those Sessions.
 
@@ -70,11 +70,11 @@ After DingTalk/WeCom connect, desktop sessions discover `dws-cli` and/or `wecomc
 <a id="model-experience"></a>
 ## Model Experience
 
-The connectors page registers no prompt or tools. Refreshing the copied `dws-cli` skill inserts a personal-DM section that a desktop session loads with the skill: message a person with `dws chat +dm` when `authenticated` is already true, and use a robot or webhook only when the user asks for one. A robot notice uses `+bot-find` and then `+messages-send --as bot` directly into the group. The user's send request is the confirmation, so the command includes `--yes` without a second login or a second prompt. A robot notice uses `+bot-find` and then `+messages-send --as bot` directly into the group. The CLI cannot create a robot.
+The Host registers `dingtalk_dws`. Refreshing the copied `dws-cli` skill tells the model to call that tool for every `dws` command, not `pwsh` or `bash`: message a person with `dws chat +dm` when `authenticated` is already true, and use a robot or webhook only when the user asks for one. A robot notice uses `+bot-find` and then `+messages-send --as bot` directly into the group. The user's send request is the confirmation, so the command includes `--yes` without a second login or a second prompt. The CLI cannot create a robot.
 
 #### KV Cache effect
 
-No standing prompt. The personal-DM section is loaded only when the session reads the `dws-cli` skill.
+`dingtalk_dws` is a standing Host tool. The personal-DM and execution sections load when the session reads the `dws-cli` skill.
 
 ## Known Limitations and Deferred Work
 

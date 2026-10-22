@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   applyDingTalkPersonalDmOverlay,
   DINGTALK_BOT_DIRECT_MARKER,
+  DINGTALK_DWS_TOOL_MARKER,
   DINGTALK_PERSONAL_DM_MARKER,
   ensureDingTalkPersonalDmOverlay,
 } from '../src/dingtalk-personal-dm.ts'
@@ -26,6 +27,8 @@ description: robots
    - \`DWS_CLIENT_SECRET=<clientSecret>\` — 当前钉钉应用的 Client Secret
 
 如果 CLI 未安装或未授权，请引导用户完成对应操作（详见下方错误处理章节）。
+
+通过 \`dws\` 命令管理钉钉产品能力。所有命令由 DSH 的 bash 工具在终端中执行，agent 负责生成正确的 CLI 命令。
 
 用户提到"群聊/建群/群成员/群管理/机器人发消息/Webhook/机器人群发/机器人单聊/通知" → \`chat\`
 
@@ -76,17 +79,22 @@ describe('DingTalk personal DM overlay', () => {
 
     const skillText = readFileSync(join(skill, 'SKILL.md'), 'utf8')
     expect(skillText).toContain(DINGTALK_PERSONAL_DM_MARKER)
-    expect(skillText).toContain('dws chat +dm --to <姓名> --content <内容> --yes --format json')
+    expect(skillText).toContain('["chat", "+dm", "--to", "<姓名>", "--content", "<内容>", "--yes", "--format", "json"]')
     expect(skillText).toContain('authenticated')
     expect(skillText).toContain('禁止再执行 `dws auth login`')
     expect(skillText).not.toContain('DWS_CLIENT_SECRET=<clientSecret>')
     expect(skillText).toContain('没点名机器人时用 `dws chat +dm`')
     expect(skillText).not.toContain('机器人单聊/通知" → `chat`')
     expect(skillText).toContain(DINGTALK_BOT_DIRECT_MARKER)
-    expect(skillText).toContain('dws chat +bot-find --limit 20 --format json')
+    expect(skillText).toContain('["chat", "+bot-find", "--limit", "20", "--format", "json"]')
     expect(skillText).toContain('dws chat +messages-send --as bot --robot-code <robotCode> --group <openConversationId> --text <内容> --yes --format json')
     expect(skillText).toContain('不要先把机器人加为群成员')
     expect(skillText).toContain('命令行不能创建机器人')
+    expect(skillText).toContain(DINGTALK_DWS_TOOL_MARKER)
+    expect(skillText).toContain('调用 `dingtalk_dws` 工具执行')
+    expect(skillText).toContain('不要用 pwsh 或 bash 执行 `dws`')
+    expect(skillText).toContain('每条命令调用 `dingtalk_dws` 工具执行')
+    expect(skillText).not.toContain('所有命令由 DSH 的 bash 工具')
 
     const chatText = readFileSync(join(skill, 'references', 'products', 'chat.md'), 'utf8')
     expect(chatText.indexOf('个人单聊')).toBeLessThan(chatText.indexOf('message send-by-bot'))
@@ -116,6 +124,21 @@ describe('DingTalk personal DM overlay', () => {
     const text = readFileSync(join(skill, 'SKILL.md'), 'utf8')
     expect(text).toContain(DINGTALK_BOT_DIRECT_MARKER)
     expect(text).toContain('不要执行 `+chat-add-bot`')
+    expect(applyDingTalkPersonalDmOverlay(skill)).toBe(false)
+  })
+
+  it('routes dws commands through dingtalk_dws when the earlier sections are already present', () => {
+    const skill = writeSkill(mkdtempSync(join(tmpdir(), 'wanwei-dws-tool-')))
+    writeFileSync(join(skill, 'SKILL.md'), `---\nname: dws-cli\n---\n${DINGTALK_PERSONAL_DM_MARKER}\n${DINGTALK_BOT_DIRECT_MARKER}\n`)
+    expect(applyDingTalkPersonalDmOverlay(skill)).toBe(true)
+    const text = readFileSync(join(skill, 'SKILL.md'), 'utf8')
+    expect(text).toContain(DINGTALK_DWS_TOOL_MARKER)
+    expect(text.indexOf(DINGTALK_DWS_TOOL_MARKER)).toBeLessThan(text.indexOf(DINGTALK_PERSONAL_DM_MARKER))
+    expect(text).toContain('调用 `dingtalk_dws` 工具执行')
+    expect(text).toContain('不要用 pwsh 或 bash 执行 `dws`')
+    for (const file of [join('references', 'products', 'chat.md'), join('references', 'intent-guide.md')]) {
+      expect(readFileSync(join(skill, file), 'utf8')).toContain(DINGTALK_DWS_TOOL_MARKER)
+    }
     expect(applyDingTalkPersonalDmOverlay(skill)).toBe(false)
   })
 })

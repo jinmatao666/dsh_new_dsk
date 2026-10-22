@@ -1,19 +1,21 @@
 /**
- * Host half: DingTalk DWS + WeCom wecom-cli skills + WeChat Assistant iLink channel.
+ * Host half: DingTalk DWS skill + `dingtalk_dws` tool + WeCom wecom-cli skills + WeChat Assistant iLink channel.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { registerDingTalkDwsRpc } from './dingtalk-dws.ts'
+import { registerDingTalkDwsRpc, resolveDwsCommand } from './dingtalk-dws.ts'
+import { registerDingTalkDwsTool } from './dingtalk-dws-tool.ts'
 import { registerWeComCliRpc } from './wecom-cli.ts'
 import { registerWeChatIlinkRpc } from './wechat-ilink.ts'
 
 /** Cordis plugin name. */
 export const name = 'wanwei-connectors'
 /**
- * Connection carries RPC; session services power the WeChat inbound bridge;
- * DSH_HOME is read from the process environment.
+ * Connection carries RPC; tools carries `dingtalk_dws`; session services power
+ * the WeChat inbound bridge; DSH_HOME is read from the process environment.
  */
 export const inject = [
   'connection',
+  'tools',
   'sessionController',
   'sessions',
   'agents',
@@ -22,11 +24,14 @@ export const inject = [
 ]
 
 /**
- * Mount DingTalk, WeCom, and WeChat Assistant connector RPC for the connectors page.
- * @param ctx - Host context with connection and session services.
+ * Mount DingTalk, WeCom, and WeChat Assistant connector RPC for the connectors page,
+ * plus the `dingtalk_dws` tool for desktop chat.
+ * @param ctx - Host context with connection, tool, and session services.
+ * @returns nothing.
  */
 export function apply(ctx: Context): void {
   registerDingTalkDwsRpc(ctx)
+  registerDingTalkDwsTool(ctx, () => resolveDwsCommand())
   registerWeComCliRpc(ctx)
   registerWeChatIlinkRpc(ctx)
 }

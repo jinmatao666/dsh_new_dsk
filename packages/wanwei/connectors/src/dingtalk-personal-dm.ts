@@ -6,6 +6,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { DINGTALK_DWS_TOOL } from './dingtalk-dws-tool.ts'
 
 /** Marks a file that already carries the personal-DM instructions. */
 export const DINGTALK_PERSONAL_DM_MARKER = '<!-- wanwei-personal-dm -->'
@@ -13,13 +14,28 @@ export const DINGTALK_PERSONAL_DM_MARKER = '<!-- wanwei-personal-dm -->'
 /** Marks a file that already tells the model to send a robot message straight into the group. */
 export const DINGTALK_BOT_DIRECT_MARKER = '<!-- wanwei-bot-direct -->'
 
+/** Marks a file that already routes every `dws` command through the `dingtalk_dws` tool. */
+export const DINGTALK_DWS_TOOL_MARKER = '<!-- wanwei-dws-tool -->'
+
+const DWS_TOOL_BLOCK = `${DINGTALK_DWS_TOOL_MARKER}
+## 执行方式（万维桌面端）
+
+本技能里写的每条 \`dws ...\` 命令，都调用 \`${DINGTALK_DWS_TOOL}\` 工具执行，\`args\` 填 \`dws\` 后面的参数数组。例如 \`dws chat +dm --to 张三 --content 你好 --yes --format json\` 对应 \`{"args": ["chat", "+dm", "--to", "张三", "--content", "你好", "--yes", "--format", "json"]}\`。
+
+不要用 pwsh 或 bash 执行 \`dws\`。会话命令行运行在文件沙箱里，读不到连接器保存在 \`~/.dws\` 的登录态，会误报「未登录」。查登录、发消息都以 \`${DINGTALK_DWS_TOOL}\` 的返回为准。连接器卡片已显示已连接时，不要再让用户点「连接」。
+`
+
+const BASH_LINE = '通过 `dws` 命令管理钉钉产品能力。所有命令由 DSH 的 bash 工具在终端中执行，agent 负责生成正确的 CLI 命令。'
+
+const BASH_NEXT = '通过 `dws` 命令管理钉钉产品能力。每条命令调用 `dingtalk_dws` 工具执行，不要用 pwsh 或 bash 跑 `dws`。'
+
 const PERSONAL_DM_BLOCK = `${DINGTALK_PERSONAL_DM_MARKER}
 ## 个人单聊（连接后的默认发消息方式）
 
 给某人、给我、或按姓名发钉钉消息、私聊、单聊，且用户没有说「机器人」、也没有提供 Webhook Token 时：
 
-1. 执行 \`dws auth status --format json\`。只看 JSON 里的 \`authenticated\`。为 true 时禁止再执行 \`dws auth login\`，不要打开浏览器。没有 \`DWS_CLIENT_ID\` / \`DWS_CLIENT_SECRET\` 是个人授权的正常状态，不是未登录，也不需要机器人。
-2. 用当前登录身份发送：\`dws chat +dm --to <姓名> --content <内容> --yes --format json\`。用户要求把这句内容发给这个人，就是发送确认。
+1. 调用 \`${DINGTALK_DWS_TOOL}\`，args 为 \`["auth", "status", "--format", "json"]\`。只看 JSON 里的 \`authenticated\`。为 true 时禁止再执行 \`dws auth login\`，不要打开浏览器，也不要用 pwsh 跑 \`dws\`。没有 \`DWS_CLIENT_ID\` / \`DWS_CLIENT_SECRET\` 是个人授权的正常状态，不是未登录，也不需要机器人。
+2. 用当前登录身份发送：调用 \`${DINGTALK_DWS_TOOL}\`，args 为 \`["chat", "+dm", "--to", "<姓名>", "--content", "<内容>", "--yes", "--format", "json"]\`。用户要求把这句内容发给这个人，就是发送确认。
 3. 姓名对应多人时停下来请用户选择，不要默认第一个。
 4. 以命令返回的发送结果判断是否发出。这条消息出现在钉钉单聊里。
 5. 不要执行 \`bot search\`、\`message send-by-bot\`、\`message send-by-webhook\`。那些只在用户明确要求机器人或给出 Webhook Token 时使用。
@@ -30,8 +46,8 @@ const BOT_DIRECT_BLOCK = `${DINGTALK_BOT_DIRECT_MARKER}
 
 用户明确说用机器人往某个群发通知时，机器人把消息直接发进该群。不要先把机器人加为群成员，不要执行 \`+chat-add-bot\` 或 \`group members add-bot\`。
 
-1. 执行 \`dws auth status --format json\`。\`authenticated\` 为 true 时禁止 \`dws auth login\`，不要打开浏览器。用户这句要求就是发送确认，不要再问一次，命令加 \`--yes\`。
-2. 用 \`dws chat +bot-find --limit 20 --format json\` 找当前账号可用的机器人，包含他人创建的和官方机器人。不要用 \`bot search\` 或 \`+bot-search\`，那只返回自己创建的，空列表不代表没有可用机器人。
+1. 调用 \`${DINGTALK_DWS_TOOL}\`，args 为 \`["auth", "status", "--format", "json"]\`。\`authenticated\` 为 true 时禁止 \`dws auth login\`，不要打开浏览器，也不要用 pwsh 跑 \`dws\`。用户这句要求就是发送确认，不要再问一次，命令加 \`--yes\`。
+2. 调用 \`${DINGTALK_DWS_TOOL}\`，args 为 \`["chat", "+bot-find", "--limit", "20", "--format", "json"]\` 找当前账号可用的机器人，包含他人创建的和官方机器人。不要用 \`bot search\` 或 \`+bot-search\`，那只返回自己创建的，空列表不代表没有可用机器人。
 3. 只有一个就用它的 robotCode。多个且用户没指定名字时列出名称让用户选，不要默认第一个。
 4. 先把群名解析成唯一 openConversationId，再直接发送：\`dws chat +messages-send --as bot --robot-code <robotCode> --group <openConversationId> --text <内容> --yes --format json\`。多个群候选时停下来问。
 5. \`+bot-find\` 没有任何可用机器人时，说明命令行不能创建机器人，这次机器人身份发送停止。不要引导用户去开放平台现造机器人来完成这次发送，也不要用本人身份顶替。
@@ -39,8 +55,8 @@ const BOT_DIRECT_BLOCK = `${DINGTALK_BOT_DIRECT_MARKER}
 
 const PRECONDITION = `## 前置条件
 
-1. 执行 \`dws --version\`，确认 CLI 已安装。
-2. 执行 \`dws auth status --format json\`。\`authenticated\` 为 true 时直接继续，禁止 \`dws auth login\`。为 false 时才引导用户在连接器里点「连接」，或执行一次 \`dws auth login\`。
+1. 调用 \`${DINGTALK_DWS_TOOL}\`，args 为 \`["--version"]\`，确认 CLI 已安装。
+2. 调用 \`${DINGTALK_DWS_TOOL}\`，args 为 \`["auth", "status", "--format", "json"]\`。只看返回里的 \`authenticated\`。为 true 时直接继续。为 false 时才请用户在连接器里点「连接」。禁止 \`dws auth login\`，也不要用 pwsh 或 bash 跑 \`dws\`。
 3. 个人单聊不读取 \`DWS_CLIENT_ID\` / \`DWS_CLIENT_SECRET\`。不要因为缺少这两个变量而要求重新授权或改用机器人。
 `
 
@@ -126,9 +142,10 @@ function overlayFile(file: string, marker: string, edit: (text: string) => strin
 }
 
 /**
- * Teach an installed `dws-cli` tree to send person-to-person messages as the logged-in user,
- * and to send an explicit robot notice straight into the group.
- * A file that already contains one marker can still receive the other.
+ * Teach an installed `dws-cli` tree to run `dws` through `dingtalk_dws`, to send
+ * person-to-person messages as the logged-in user, and to send an explicit robot
+ * notice straight into the group. Each block has its own marker, so a file that
+ * already carries some blocks still receives the missing ones.
  * @param skillDir - absolute `dws-cli` directory containing `SKILL.md`.
  * @returns true when at least one file was written.
  */
@@ -156,7 +173,12 @@ export function applyDingTalkPersonalDmOverlay(skillDir: string): boolean {
   const botSkill = overlayFile(skillFile, DINGTALK_BOT_DIRECT_MARKER, text => insertAfterFrontmatter(text, BOT_DIRECT_BLOCK))
   const botChat = overlayFile(chatFile, DINGTALK_BOT_DIRECT_MARKER, text => `${BOT_DIRECT_BLOCK}\n${text}`)
   const botIntent = overlayFile(intentFile, DINGTALK_BOT_DIRECT_MARKER, text => `${BOT_DIRECT_BLOCK}\n${text}`)
-  return skill || chat || intent || botSkill || botChat || botIntent
+  const toolSkill = overlayFile(skillFile, DINGTALK_DWS_TOOL_MARKER, (text) => {
+    return insertAfterFrontmatter(text.replace(BASH_LINE, BASH_NEXT), DWS_TOOL_BLOCK)
+  })
+  const toolChat = overlayFile(chatFile, DINGTALK_DWS_TOOL_MARKER, text => `${DWS_TOOL_BLOCK}\n${text}`)
+  const toolIntent = overlayFile(intentFile, DINGTALK_DWS_TOOL_MARKER, text => `${DWS_TOOL_BLOCK}\n${text}`)
+  return skill || chat || intent || botSkill || botChat || botIntent || toolSkill || toolChat || toolIntent
 }
 
 /**

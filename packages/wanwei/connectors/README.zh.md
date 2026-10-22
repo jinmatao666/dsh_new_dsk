@@ -47,7 +47,7 @@ Client 当前不在连接器目录和输入框连接器选择器里展示企业�
 
 Client 拥有连接器列表、选择状态和弹窗。钉钉详情走 Host RPC `/wanwei-dingtalk`；企业微信走 `/wanwei-wecom`（`status`、`login`、`installSkill`、`disconnect`）；微信助理走 `/wanwei-wechat`（`status`、`loginStart`、`loginPoll`、`disconnect`）。密钥留在各自 CLI 或 iLink 凭据库；Client 只收到非机密状态与二维码图片 data URL。状态探测在 Host 短缓存，Client 用最近一次状态立刻画出「已连接」/「去试试」，再后台刷新。
 
-[Client 入口](src/client/index.ts)提供界面。[Host 入口](src/index.ts)注册连接器 RPC。
+[Client 入口](src/client/index.ts)提供界面。[Host 入口](src/index.ts)注册连接器 RPC 和 `dingtalk_dws` 工具；该工具在 Host 进程中运行随包 `dws`，使桌面对话与连接器卡片看到同一份钉钉登录。会话里的 `pwsh`/`bash` 在文件沙箱下读不到 `~/.dws`。
 
 钉钉/企业微信连接后，桌面会话通过 skill-filesystem 发现 `dws-cli` 和/或 `wecomcli-*`。微信助理连接后，入站微信文本经 `sessionController` 创建普通桌面 Session，模型与 token 消耗跟随这些 Session。
 
@@ -70,11 +70,11 @@ Client 拥有连接器列表、选择状态和弹窗。钉钉详情走 Host RPC 
 <a id="model-experience"></a>
 ## Model Experience
 
-连接器页本身不注册提示词或工具。刷新已复制的 `dws-cli` 技能时会写入个人单聊说明，桌面会话在加载该技能时读到：`authenticated` 已为 true 时用 `dws chat +dm` 给某人发消息；只有用户要求机器人或 Webhook 时才走机器人发送。机器人通知先 `+bot-find`，再用 `+messages-send --as bot` 直接发进群。用户这句发送要求就是确认，命令带 `--yes`，不再次登录、不再次询问。机器人通知先 `+bot-find`，再 `+messages-send --as bot` 直接发进群。命令行不能创建机器人。
+Host 注册 `dingtalk_dws`。刷新已复制的 `dws-cli` 技能时会要求模型用该工具执行每条 `dws` 命令，不要用 `pwsh` 或 `bash`：`authenticated` 已为 true 时用 `dws chat +dm` 给某人发消息；只有用户要求机器人或 Webhook 时才走机器人发送。机器人通知先 `+bot-find`，再用 `+messages-send --as bot` 直接发进群。用户这句发送要求就是确认，命令带 `--yes`，不再次登录、不再次询问。命令行不能创建机器人。
 
 #### KV Cache effect
 
-没有常驻提示词。个人单聊说明只在会话读取 `dws-cli` 技能时进入上下文。
+`dingtalk_dws` 是常驻 Host 工具。个人单聊与执行方式说明只在会话读取 `dws-cli` 技能时进入上下文。
 
 ## Known Limitations and Deferred Work
 
