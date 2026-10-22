@@ -9966,6 +9966,9 @@ importers:
         specifier: ^8.21.0
         version: 8.21.0
     devDependencies:
+      '@deepseek-ai/dsh-subprocess':
+        specifier: workspace:^
+        version: link:../../subprocess/subprocess
       '@deepseek-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis

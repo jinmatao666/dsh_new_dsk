@@ -78,6 +78,7 @@
     "@deepseek-ai/dsh-web": "workspace:^"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-subprocess": "workspace:^",
     "@types/ws": "^8.18.1",
     "@deepseek-ai/dsh-agent-loop": "workspace:^",
     "@deepseek-ai/dsh-jobs-local": "workspace:^",

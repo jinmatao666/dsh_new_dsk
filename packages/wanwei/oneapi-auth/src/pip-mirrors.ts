@@ -34,6 +34,8 @@ export class PipMirrors {
       mkdirSync(join(directory, 'pip'))
       writeFileSync(join(directory, 'pip', '__init__.py'), PIP_INIT, { mode: 0o600 })
       writeFileSync(join(directory, 'pip', '__main__.py'), PIP_MAIN, { mode: 0o600 })
+      // 非敏感策略随覆盖层保存，不依赖会被子进程安全清理移除的 DSH_* 环境变量。
+      writeFileSync(join(directory, 'pip', 'mirror-policy.json'), JSON.stringify(this.policy), { mode: 0o600 })
     } catch (error) {
       rmSync(directory, { recursive: true, force: true })
       throw error
@@ -74,6 +76,7 @@ import subprocess
 import sys
 import tempfile
 from urllib.parse import urlsplit
+from pathlib import Path
 
 def real_pip():
     from pip._internal.cli.main import main
@@ -106,8 +109,10 @@ def managed_pip():
         or os.environ.get("PIP_NO_INDEX", "").lower() in ("1", "true", "yes")):
         return real_pip()
 
-    indexes = json.loads(os.environ["DSH_PIP_MIRROR_INDEXES"])
-    seconds = int(os.environ["DSH_PIP_MIRROR_SECONDS"])
+    with Path(__file__).with_name("mirror-policy.json").open(encoding="utf-8") as source:
+        policy = json.load(source)
+    indexes = policy["indexes"]
+    seconds = policy["attemptSeconds"]
     # 每个源用独立进程，避免 pip 的解析缓存或上一次安装状态污染下一次尝试。
     for number, index in enumerate(indexes, 1):
         print("[wanwei-pip] mirror %d/%d: %s" % (number, len(indexes), urlsplit(index).hostname), flush=True)

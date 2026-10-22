@@ -93,10 +93,7 @@ it('boots the intranet policy from cordis.yml and exposes feedback in prompt and
     expect(process.env.HTTPS_PROXY).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u)
     expect(process.env.PIP_NO_INDEX).toBeUndefined()
     expect(process.env.PIP_INDEX_URL).toBe('https://repo.huaweicloud.com/repository/pypi/simple/')
-    expect(process.env.DSH_PIP_MIRROR_INDEXES).toBe(JSON.stringify([
-      'https://repo.huaweicloud.com/repository/pypi/simple/',
-      'https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/', 'https://pypi.org/simple/',
-    ]))
+    expect(process.env.PYTHONPATH).toContain('wanwei-pip-')
     execute.mockResolvedValue('pip ProxyError: 502\n[wanwei-pip] result: success\n')
     const recovered = await ctx.tools.execute({ name: 'pwsh', callId: ToolCallId('mirror-recovery'),
       arguments: { command: 'python -m pip download demo' }, signal: new AbortController().signal })

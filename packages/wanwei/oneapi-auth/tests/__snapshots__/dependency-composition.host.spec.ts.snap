@@ -3,7 +3,7 @@
 exports[`boots the intranet policy from cordis.yml and exposes feedback in prompt and tool output > managed resource tunnel 1`] = `
 "You are an AI agent powered by DeepSeek Harness.
 
-当前为内网联网中转模式。优先复用已安装依赖；pip、Python requests 和遵循 HTTP(S)_PROXY 的下载工具已配置资源路由。不得读取离线依赖库、覆盖代理或擅自换源。自动检测只决定直连或中转，不保证每个网站可达。原生 PowerShell 下载、Node fetch、浏览器等不保证读取代理环境，不能声称所有联网已接通。失败时依据原始输出简短报告，不要盲目重试。安装或下载 Python 依赖使用 python -m pip，不使用裸 pip、隔离解释器或覆盖 PYTHONPATH；系统已配置按顺序回退的依赖源，不要手动指定 -i/--index-url。"
+当前为内网联网中转模式。优先复用已安装依赖；pip、Python requests 和遵循 HTTP(S)_PROXY 的下载工具已配置资源路由。不得读取离线依赖库、覆盖代理或擅自换源。自动检测只决定直连或中转，不保证每个网站可达。原生 PowerShell 下载、Node fetch、浏览器等不保证读取代理环境，不能声称所有联网已接通。失败时依据原始输出简短报告，不要盲目重试。安装或下载 Python 依赖使用 python -m pip，不使用裸 pip、隔离解释器或覆盖 PYTHONPATH；系统已配置按顺序回退的依赖源，不要手动指定 -i/--index-url。本地 DLL 加载失败不代表下载失败。用户要求的验证未执行成功时必须如实标为未通过，不能用降低标准的替代检查宣称原验证通过。"
 `;
 
 exports[`boots the intranet policy from cordis.yml and exposes feedback in prompt and tool output > offline resource source 1`] = `

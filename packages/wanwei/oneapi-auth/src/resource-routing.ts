@@ -10,7 +10,7 @@ const proxyKeys = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'http
   'NO_PROXY', 'no_proxy', 'PIP_PROXY', 'npm_config_proxy', 'npm_config_https_proxy', 'NPM_CONFIG_PROXY', 'NPM_CONFIG_HTTPS_PROXY']
 const pipKeys = ['PIP_NO_INDEX', 'PIP_FIND_LINKS', 'PIP_INDEX_URL', 'PIP_EXTRA_INDEX_URL', 'PIP_CONFIG_FILE',
   'PIP_TRUSTED_HOST', 'PIP_RETRIES', 'PIP_TIMEOUT', 'PIP_DISABLE_PIP_VERSION_CHECK', 'npm_config_offline', 'NPM_CONFIG_OFFLINE']
-const mirrorKeys = ['PYTHONPATH', 'DSH_PIP_MIRROR_INDEXES', 'DSH_PIP_MIRROR_SECONDS', 'DSH_PIP_MIRROR_CHILD']
+const mirrorKeys = ['PYTHONPATH']
 
 async function probeDirect(url: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -122,7 +122,7 @@ export class ResourceRouting {
   guidance(): string | undefined {
     if (this.mode !== 'intranet' || !this.settings) return undefined
     const mirrors = this.pipMirrors === undefined ? ''
-      : '安装或下载 Python 依赖使用 python -m pip，不使用裸 pip、隔离解释器或覆盖 PYTHONPATH；系统已配置按顺序回退的依赖源，不要手动指定 -i/--index-url。'
+      : '安装或下载 Python 依赖使用 python -m pip，不使用裸 pip、隔离解释器或覆盖 PYTHONPATH；系统已配置按顺序回退的依赖源，不要手动指定 -i/--index-url。本地 DLL 加载失败不代表下载失败。用户要求的验证未执行成功时必须如实标为未通过，不能用降低标准的替代检查宣称原验证通过。'
     return this.settings.source === 'offline'
       ? '当前为内网离线依赖包模式。优先复用已安装依赖；安装 Python 包使用 python -m pip install 包名，环境已配置后台 wheel 依赖库。不得换源、访问公网包 URL 或切换代理。库中缺包时如实报告并停止依赖该包的步骤；不要反复修复环境。此资源库仅包含 Python wheel，不提供其他联网资源。'
       : '当前为内网联网中转模式。优先复用已安装依赖；pip、Python requests 和遵循 HTTP(S)_PROXY 的下载工具已配置资源路由。不得读取离线依赖库、覆盖代理或擅自换源。自动检测只决定直连或中转，不保证每个网站可达。原生 PowerShell 下载、Node fetch、浏览器等不保证读取代理环境，不能声称所有联网已接通。失败时依据原始输出简短报告，不要盲目重试。' + mirrors
@@ -163,9 +163,6 @@ export class ResourceRouting {
       if (this.pythonOverlay && this.pipMirrors) {
         const originalPath = this.original.get('PYTHONPATH')
         this.set('PYTHONPATH', [this.pythonOverlay, ...(originalPath ? [originalPath] : [])].join(delimiter))
-        this.set('DSH_PIP_MIRROR_INDEXES', JSON.stringify(this.pipMirrors.policy.indexes))
-        this.set('DSH_PIP_MIRROR_SECONDS', String(this.pipMirrors.policy.attemptSeconds))
-        this.set('DSH_PIP_MIRROR_CHILD', undefined)
       }
     }
   }

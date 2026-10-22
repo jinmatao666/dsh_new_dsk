@@ -47,6 +47,9 @@ describe('Intranet dependency feedback', () => {
     ['pip: Access is denied', undefined],
     ['Successfully installed humanize-4.15.0', undefined],
     ['HTTP request: ECONNREFUSED', undefined],
+    ["FileNotFoundError: Could not find module 'libiconv.dll' (or one of its dependencies).", 'missing'],
+    ['ImportError: DLL load failed while importing native: The specified module could not be found.', 'missing'],
+    ['FileNotFoundError: input.csv', undefined],
     ['pip ProxyError: 502\n[wanwei-pip] result: success\n', undefined],
     ['pip ProxyError: 502\n[wanwei-pip] result: success\npip: Connection refused', 'download'],
   ])('classifies actual diagnostics: %s', (text, kind) => {

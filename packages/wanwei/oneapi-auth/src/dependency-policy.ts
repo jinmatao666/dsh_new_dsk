@@ -23,6 +23,11 @@ export function dependencyFailure(text: string): DependencyFailure | undefined {
   const recovered = text.lastIndexOf('[wanwei-pip] result: success')
   if (recovered !== -1) text = text.slice(recovered + '[wanwei-pip] result: success'.length)
   const manager = /(?:pip|npm|pnpm|yarn|conda|uv|package|dependency|pypi|registry|Looking in indexes)/iu
+  // Python 的 DLL 查找错误含 “dependencies”和 “_load_library”，并非网络请求失败。
+  const nativeLibrary = /(?:FileNotFoundError|OSError|ImportError):[^\n]*(?:\.dll|\.so\b|\.dylib|DLL load failed)/iu
+  if (nativeLibrary.test(text) || /ImportError: DLL load failed/iu.test(text)) {
+    return 'missing'
+  }
   const connection = new RegExp(
     '(?:ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNREFUSED|ECONNRESET|Failed to establish a new connection'
     + '|Network is unreachable|Could not resolve host|Connection refused|ConnectionError|ConnectTimeout'
