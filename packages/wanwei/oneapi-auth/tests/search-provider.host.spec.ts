@@ -36,7 +36,8 @@ describe('Wanwei OneAPI web search', () => {
     const result = await provider.search({ query: 'latest news' })
     expect(result.sources).toEqual([])
     expect(result.content).toContain('本次搜索未返回可核验的来源链接')
-    expect(result.content).toContain('不要编造来源网址')
+    expect(result.content).toContain('不要编造标题或链接')
+    expect(result.content).not.toContain('current answer')
     expect(fetchMock.mock.calls[0]).toEqual(['https://oneapi.test/api/status', { redirect: 'error' }])
     const [endpoint, init] = fetchMock.mock.calls[1] as [string, RequestInit]
     expect(endpoint).toBe('https://oneapi.test/v1/chat/completions')
@@ -44,7 +45,7 @@ describe('Wanwei OneAPI web search', () => {
     expect(init.headers).toEqual({ authorization: 'Bearer user-token', 'content-type': 'application/json', 'x-dsh-web-search': '1' })
     expect(JSON.parse(init.body as string)).toEqual({
       model: 'qwen3.6-plus', stream: false,
-      messages: [{ role: 'user', content: '搜索网页并整理以下问题：latest news。只依据检索到的资料作答，区分事件日期与发布日期。' }],
+      messages: [{ role: 'user', content: '搜索网页并整理以下问题：latest news。只依据检索到的资料作答，区分事件日期与发布日期。引用使用真实网页标题作为可点击的链接文字，链接必须指向支持对应信息的具体原文页面，不得编造标题、网址或用无关网页代替。' }],
     })
   })
 
@@ -64,7 +65,12 @@ describe('Wanwei OneAPI web search', () => {
     expect(result.sources).toEqual([
       { title: '官方公告', url: 'https://news.example.com/release' }, { url: 'https://second.example.com/' },
     ])
-    expect(result.content).toContain('在每条相关事实或结论旁引用')
+    expect(result.content).toContain('在每条相关事实或结论旁提供可点击的原文链接')
+    expect(result.content).toContain('[网页真实标题](原文URL)')
+    expect(result.content).toContain('返回的原始标题')
+    expect(result.content).toContain('没有真实标题时显示可点击的原文 URL')
+    expect(result.content).toContain('先用 web_fetch')
+    expect(result.content).not.toContain('网页答案')
     expect(result.content).not.toContain('未返回可核验')
   })
 
@@ -76,6 +82,33 @@ describe('Wanwei OneAPI web search', () => {
       .search({ query: '新闻' })
     expect(result.sources).toEqual([])
     expect(result.content).toContain('未返回可核验的来源链接')
+    expect(result.content).not.toContain('made-up.example.com')
+  })
+
+  it('does not pass invented links or claims through alongside legitimate retrieval metadata', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ data: { search_model: 'qwen-plus' } }))
+      .mockResolvedValueOnce(jsonResponse({ choices: [{ message: {
+        content: '虚构消息 [source](https://made-up.example.com/news) <a href="https://fake.example.com">来源</a>',
+      } }], search_info: { search_results: [{ title: '公告', url: 'https://news.example.com/release' }] } })))
+    const result = await new OneApiSearchProvider({ baseURL: 'https://oneapi.test', resolveToken: async () => 'token' })
+      .search({ query: '新闻' })
+    expect(result.sources).toEqual([{ title: '公告', url: 'https://news.example.com/release' }])
+    expect(result.content).not.toContain('虚构消息')
+    expect(result.content).not.toContain('made-up.example.com')
+    expect(result.content).not.toContain('fake.example.com')
+    expect(result.content).toContain('正文不支持结论')
+    expect(result.content).toContain('明确标注未核实')
+  })
+
+  it('accepts structured retrieval metadata without a generated summary', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ data: { search_model: 'qwen-plus' } }))
+      .mockResolvedValueOnce(jsonResponse({ search_info: { search_results: [{ url: 'https://news.example.com/release' }] } })))
+    const result = await new OneApiSearchProvider({ baseURL: 'https://oneapi.test', resolveToken: async () => 'token' })
+      .search({ query: '新闻' })
+    expect(result.sources).toHaveLength(1)
+    expect(result.content).toContain('[网页真实标题]')
   })
 
   it('does not contact OneAPI before login or when no search model is configured', async () => {

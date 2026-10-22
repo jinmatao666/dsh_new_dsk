@@ -1,13 +1,31 @@
 /** Administrator-governed OneAPI web search for the Wanwei desktop profile. */
 import { WebError } from '@deepseek-ai/dsh-web'
+import type { Context } from '@deepseek-ai/cordis'
+import { FIRST_PARTY_SECTION_ORDER } from '@deepseek-ai/dsh-system-prompt'
 import type { WebSearchProvider, WebSearchRequest, WebSearchResult, WebSearchSource } from '@deepseek-ai/dsh-web'
 
 /** Search provider ID selected by the Wanwei desktop bundle. */
 export const ONEAPI_BAILIAN_PROVIDER_ID = 'oneapi-bailian'
 
+const CITATION_GUIDANCE = [
+  '网页搜索返回的是候选网页，不代表已核实正文。回答前先用 web_fetch 或可用的浏览器工具读取具体原文，逐条核对事实、事件日期和发布日期。',
+  '在每条相关事实或结论旁提供可点击的原文链接，格式为 [网页真实标题](原文URL)。链接文字使用检索或实际页面返回的原始标题，不得编造标题，也不要用 source、来源、源网站或只有编号的引用代替。没有真实标题时显示可点击的原文 URL，不猜测标题。',
+  '链接只能来自本次或后续检索、网页读取工具实际返回的 URL；不能猜测或拼接网址，不能用站点首页或无关网页支撑具体消息。',
+  '读取失败、正文不支持结论或资料不足时，明确标注未核实或不采用该条，不得声称已验证。没有来源时明确说明未找到可核验的原文网页。',
+].join('')
+
+/** Install product-owned citation guidance independently of untrusted search content.
+ * @param ctx - Host context; prompt registration follows its plugin lifecycle.
+ */
+export function installSearchCitationPolicy(ctx: Context): void {
+  ctx.inject(['systemPrompt'], (child) => {
+    child.systemPrompt.section({ name: 'wanwei:web-source-citations',
+      order: FIRST_PARTY_SECTION_ORDER.DELIVERABLE_FILE_REFERENCES + 130, text: CITATION_GUIDANCE })
+  })
+}
+
 interface StatusEnvelope { data?: { search_model?: unknown } }
 interface CompletionEnvelope {
-  choices?: Array<{ message?: { content?: unknown } }>
   search_info?: { search_results?: unknown }
   error?: { code?: unknown; message?: unknown }
 }
@@ -77,7 +95,7 @@ export class OneApiSearchProvider implements WebSearchProvider {
       body: JSON.stringify({
         model,
         stream: false,
-        messages: [{ role: 'user', content: `搜索网页并整理以下问题：${request.query}。只依据检索到的资料作答，区分事件日期与发布日期。` }],
+        messages: [{ role: 'user', content: `搜索网页并整理以下问题：${request.query}。只依据检索到的资料作答，区分事件日期与发布日期。引用使用真实网页标题作为可点击的链接文字，链接必须指向支持对应信息的具体原文页面，不得编造标题、网址或用无关网页代替。` }],
       }),
       ...signalInit,
     })
@@ -91,12 +109,12 @@ export class OneApiSearchProvider implements WebSearchProvider {
       const guidance = response.status === 400 ? '请求被拒绝，请停止重复搜索并告知用户检查后台搜索模型与渠道配置；更换关键词不能解决接口错误。' : ''
       throw new WebError(`网页搜索失败（HTTP ${String(response.status)}${code}）。${reason}${guidance}`, 'WEB_PROVIDER_REQUEST_FAILED')
     }
-    const answer = result.choices?.[0]?.message?.content
-    if (typeof answer !== 'string' || answer.trim() === '') throw new WebError('The web search model returned no usable content', 'WEB_PROVIDER_RESPONSE_INVALID')
     const sources = searchSources(result.search_info?.search_results)
+    // Generated prose can contain invented claims and URLs even alongside genuine search results.
+    // Pass retrieval metadata only; the conversation model must inspect the source pages itself.
     const citationInstruction = sources.length > 0
-      ? '回答时在每条相关事实或结论旁引用下方 Sources 中对应的真实网址，使用 Markdown 链接。不要编造网址或把无来源支持的内容当成已核实事实；不要仅使用 [1] 等没有链接的编号。'
-      : '本次搜索未返回可核验的来源链接。请向用户明确说明这一点，不要编造来源网址，也不要把这些内容称为已核实的新闻或事实。'
-    return { content: `${answer.trim()}\n\n${citationInstruction}`, sources, truncated: false }
+      ? CITATION_GUIDANCE
+      : '本次搜索未返回可核验的来源链接。不要使用搜索模型生成的摘要或网址代替检索证据；请向用户明确说明未找到可核验的原文网页，不要编造标题或链接，也不要据此生成已核实的新闻或事实。'
+    return { content: citationInstruction, sources, truncated: false }
   }
 }

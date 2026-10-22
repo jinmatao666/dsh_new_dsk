@@ -121,11 +121,11 @@ Authentication alone does not change a prompt or cache key. Model selection and 
 
 #### What the model sees
 
-The `oneapi-bailian` search provider returns structured retrieval sources through the existing DSH web tool path. The model receives real HTTP(S) URLs and instructions to cite them beside relevant claims; the search card also exposes clickable sources. Missing sources produce an explicit verification warning, never synthesized source metadata. The server-selected search model and token do not appear as prompt text. HTTP 400 failures show a bounded error code and explain recognized endpoint or streaming mismatches without replaying raw upstream diagnostics. The tool asks the model to stop repeated searches and report a backend configuration issue; this is guidance, not a deterministic retry lock.
+The `oneapi-bailian` search provider returns structured retrieval sources through the existing DSH web tool path, without forwarding the search model's generated summary or its prose-written links. Product-owned prompt guidance requires reading the source page, matching each claim and date to its text, and citing the actual URL beside the claim using the retrieved or inspected page's real title as the clickable label. Missing titles use the clickable original URL rather than an invented title or a generic source label. The search card exposes retrieval-supplied HTTP(S) URLs, not independently verified pages. Missing sources produce an explicit verification warning, never synthesized source metadata. The server-selected search model and token do not appear as prompt text. HTTP 400 failures show a bounded error code and explain recognized endpoint or streaming mismatches without replaying raw upstream diagnostics. The tool asks the model to stop repeated searches and report a backend configuration issue; this is guidance, not a deterministic retry lock.
 
 #### Token effect
 
-Search requests use the configured OneAPI service. Any tool-result tokens enter the normal model context when the agent uses the result.
+Search requests use the configured OneAPI service. Citation guidance adds fixed system-prompt text. Any tool-result tokens enter the normal model context when the agent uses the result. Source-page inspection can require additional tool calls and page-content tokens.
 
 #### KV Cache effect
 
@@ -164,6 +164,7 @@ Static guidance can reuse the prompt prefix. Delivery paths vary with the task.
 <a id="known-limitations-and-deferred-work"></a>
 
 - Model discovery, managed search and the expert catalog require a reachable OneAPI service. The desktop has no local provider-editing fallback.
+- Citation guidance does not mechanically prove that a claim matches a page or that the conversation model follows it. Inaccessible or unsupported sources must be reported as unverified; no live-news truthfulness guarantee is provided by URL parsing alone.
 - Resource routing covers pip wheels and proxy-aware child clients, not browser traffic, native PowerShell downloads or Node fetch. It is not a network sandbox. Proxy credentials, source archives, OS packages and offline npm packages are not supplied. Internal OneAPI traffic bypasses the shell proxy. Public search and link restrictions remain independent.
 - Search sources require the updated OneAPI relay and a channel exposing Bailian's native generation endpoint, not only its compatible chat endpoint. Model compliance with citation instructions still needs live acceptance; links alone do not establish factual accuracy.
 - Independent expert launch requires the separate OneAPI `/api/expert-web` deployment and database tables; the ordinary login endpoint alone does not provide it.

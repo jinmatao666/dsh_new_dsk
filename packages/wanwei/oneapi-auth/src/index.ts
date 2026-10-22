@@ -16,7 +16,7 @@ import type {} from '@deepseek-ai/dsh-web'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type { AuthState } from './contract.ts'
 import { launchExpertWebsite, listPublishedExperts } from './expert-catalog.ts'
-import { OneApiSearchProvider } from './search-provider.ts'
+import { installSearchCitationPolicy, OneApiSearchProvider } from './search-provider.ts'
 import { registerSkillUsage } from './usage.ts'
 import { installNetworkPolicy } from './network.ts'
 import { fetchDeploymentSettings } from './deployment.ts'
@@ -328,6 +328,7 @@ export function apply(ctx: Context, config: Config): void {
       indexes: config.pipMirrorUrls, attemptSeconds: config.pipMirrorAttemptSeconds ?? 30,
     })
   installFinalDeliverables(ctx)
+  installSearchCitationPolicy(ctx)
   installDesktopLifecycle(ctx)
   const usernameRef = credentialRef('DSH_LOGIN_USERNAME')
   const installMarkerRef = credentialRef('DSH_DESKTOP_INSTALL_MARKER')
