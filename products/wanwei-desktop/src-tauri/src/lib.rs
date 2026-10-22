@@ -30,6 +30,7 @@ mod skillhub;
 mod skill_names;
 mod network_policy;
 mod desktop_update;
+mod expert_diagnostics;
 
 const NATIVE_SKILLS_CHANGED_SCRIPT: &str = "window.dispatchEvent(new Event('dsh:skills-changed'));";
 const NATIVE_FILE_DRAG_ENTER_SCRIPT: &str =
@@ -1106,6 +1107,7 @@ async fn open_expert_webview(
     if window.label() != "main" {
         return Err("只能从主窗口打开专家".to_string());
     }
+    expert_diagnostics::activate(window.app_handle());
     let label = expert_webview_label(&key, &ticket)?;
     let (launch_url, allowed_url) = expert_webview_url(&url, &ticket)?;
     if width < 200.0
@@ -1181,6 +1183,7 @@ async fn open_expert_webview(
         return Err(format!("无法初始化专家视图：{error}"));
     }
     log_expert_view(window.app_handle(), "created hidden");
+    expert_diagnostics::snapshot(window.app_handle(), "created-hidden");
     Ok(label)
 }
 
@@ -1233,6 +1236,8 @@ async fn close_expert_webview(window: Window, label: String) -> Result<(), Strin
         main.set_focus().map_err(|error| error.to_string())?;
     }
     log_expert_view(window.app_handle(), "closed; main focus restored");
+    expert_diagnostics::snapshot(window.app_handle(), "close-dispatched");
+    expert_diagnostics::settled_snapshot(window.app_handle(), "close-settled-sample");
     Ok(())
 }
 
@@ -1252,6 +1257,7 @@ async fn set_expert_webview_visible(
         .ok_or("专家视图不存在")?;
     if visible {
         let result = view.show().map_err(|error| error.to_string());
+        expert_diagnostics::settled_snapshot(window.app_handle(), "show-settled-sample");
         log_expert_view(
             window.app_handle(),
             if result.is_ok() {
@@ -1267,6 +1273,7 @@ async fn set_expert_webview_visible(
             main.set_focus().map_err(|error| error.to_string())?;
         }
         log_expert_view(window.app_handle(), "hide requested; main focus restored");
+        expert_diagnostics::settled_snapshot(window.app_handle(), "hide-settled-sample");
         Ok(())
     }
 }
@@ -2628,6 +2635,7 @@ pub fn run() {
                 // navigation. Reinstall the small bridge on each document so
                 // client features do not fall back to WebView browser downloads.
                 .initialization_script(NATIVE_BRIDGE_INITIALIZATION_SCRIPT)
+                .initialization_script(expert_diagnostics::SCRIPT)
                 // Keep wry's default feature disables, and turn off native occlusion.
                 // When the system browser covers this window, WebView2 otherwise
                 // suspends the page and aborts every localhost call, including
@@ -2660,6 +2668,8 @@ pub fn run() {
                     let _ = window_for_events.hide();
                 }
                 WindowEvent::DragDrop(event) => forward_workspace_drop(&window_for_events, event),
+                WindowEvent::Resized(_) => expert_diagnostics::snapshot(window_for_events.app_handle(), "window-resized"),
+                WindowEvent::Focused(_) => expert_diagnostics::snapshot(window_for_events.app_handle(), "window-focus"),
                 _ => {}
             });
             let window_for_webview_events = window.clone();
@@ -2672,6 +2682,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            expert_diagnostics::expert_input_diagnostic,
             desktop_update::desktop_update_status,
             desktop_update::desktop_update_check,
             desktop_update::desktop_update_automatic,

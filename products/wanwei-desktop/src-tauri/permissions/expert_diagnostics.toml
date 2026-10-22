@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-expert-input-diagnostic"
+description = "Allows only the main desktop UI to report bounded content-free expert input diagnostics."
+commands.allow = ["expert_input_diagnostic"]

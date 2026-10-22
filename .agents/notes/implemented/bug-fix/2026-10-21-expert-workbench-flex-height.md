@@ -22,4 +22,6 @@ Resizing the window can refresh native bounds but does not repair view ownership
 
 ## Consequences
 
+Native input investigation uses bounded, content-free telemetry rather than inferring disposal success from queued command results. The main view alone reports structural click facts after expert activation, while native snapshots read view enumeration, geometry, focus and Windows controller visibility. Sampling after hide/close and resize permits comparison with DOM hit delivery. The trace does not establish that parent-window message handling causes the failure; that remains a hypothesis requiring installed Windows reproduction.
+
 The fix is shared Client CSS and does not change expert URLs, tickets or server deployment. The browser regression boots the desktop profile, uses the real panel and expert plugins, mocks only the external backend and native bridge, and measures actual element bounds through launch, resize, tab reuse, closure and catalog restoration. Component tests with mocked rectangles alone cannot detect this failure. Native Windows and macOS packages still require platform acceptance after rebuilding.
