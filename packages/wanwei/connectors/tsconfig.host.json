@@ -10,6 +10,7 @@
     "src/invariant.ts",
     "src/copy-tree.ts",
     "src/dingtalk-dws.ts",
+    "src/dingtalk-personal-dm.ts",
     "src/wecom-cli.ts",
     "src/wechat-ilink.ts"
   ],

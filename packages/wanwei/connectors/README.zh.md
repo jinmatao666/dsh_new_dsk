@@ -27,7 +27,7 @@ kind: "package-reference"
 
 万维桌面产品通过[组合补丁](../../bundle/wanwei-desktop/cordis.patch.yml)挂载本插件。它没有单独的插件配置字段。
 
-连接器页的钉钉表示个人 DWS 授权加上供桌面 Agent 使用的 `dws-cli` 技能（日历、AI 表格、文档、邮箱、待办等相关产品）。产品在桌面 runtime 随包 `dingtalk-workspace-cli`（`dws`）并落盘 `app/assets/dws-cli`。**连接**在 WebView 请求外启动不带可继承输出管道的 `dws auth login`（浏览器 OAuth / 扫码，通常回调本机 `127.0.0.1`）。无锁的 `dws auth status --readonly` 报告登录已保存时，或登录进程退出后普通状态检查确认授权时，Host 会从随包资源（或 `@dingtalk-real-ai/dsh-dingtalk`）安装技能；若授权已成功则只写技能、不再打开浏览器。**解绑**先删掉本机技能副本并立刻返回；钉钉的退出登录在后台继续，企业微信解绑不会再启动 `wecom-cli`。之后的**连接**也会在 DWS 启动前返回。单次本机请求被丢掉时只留在该连接器卡片上；连接器目录和专家库会重试本机服务，不会停在整页的服务不可用提示上。企业微信表示产品随包的 `wecom-cli` 扫码授权（直接 `auth init --noninteractive`，不先执行 `auth show`）；Host 观察稳定写入的 `~/.config/wecom/credentials.enc`，把 `app/assets/wecom-skills` 中的官方 `wecomcli-*` 技能复制到 `$DSH_HOME/skills`，并在 init 自行退出前报告已连接（打包后的 Host 连接时不会再从 GitHub 下载技能）。微信助理表示 iLink 扫码绑定（`loginStart` / `loginPoll`），凭据落在 `$DSH_HOME/wechat-assistant`，并由 Host `getupdates` 桥接：创建桌面 Session 执行后经 `sendmessage` 回传到微信。**去试试**会把示例提示写入主输入框，并在 `+` 旁蓝色的 `conversation.composer.tools` 芯片上选中对应连接器（点击可切换连接器或重新打开本页）；首次发送时自动准备工作区 Session，无需先手动选择工作空间。钉钉/企业微信**解绑**清除 CLI 凭据与技能副本；微信**取消连接**清除 iLink 凭据并停止桥接。产品仅把 `@dingtalk-real-ai/dsh-dingtalk` 当作 `dws-cli` 资源来源；不挂载钉钉 Stream IM，也不收集机器人 Client ID / Secret。其余连接器条目仍为演示。
+连接器页的钉钉表示个人 DWS 授权加上供桌面 Agent 使用的 `dws-cli` 技能（日历、AI 表格、文档、邮箱、待办等相关产品）。技能复制后，Host 会写入个人单聊说明：给某人发消息使用已保存登录上的 `dws chat +dm`；除非用户明确要求机器人或提供了 Webhook Token，否则不再次执行 `dws auth login`，也不走 `send-by-bot`。用户要求机器人往群里发通知时，先 `dws chat +bot-find`，再用 `dws chat +messages-send --as bot` 把消息直接发进该群，不把机器人加为群成员。`+bot-find` 没有任何可用机器人时这次发送停止，因为 `dws` 不能创建机器人。用户明确要求机器人往群里发通知时，先 `dws chat +bot-find`，再用 `dws chat +messages-send --as bot` 直接发进该群，不把机器人加为群成员。命令行不能创建机器人，没有可用机器人时这次发送停止。产品在桌面 runtime 随包 `dingtalk-workspace-cli`（`dws`）并落盘 `app/assets/dws-cli`。**连接**在 WebView 请求外启动不带可继承输出管道的 `dws auth login`（浏览器 OAuth / 扫码，通常回调本机 `127.0.0.1`）。无锁的 `dws auth status --readonly` 报告登录已保存时，或登录进程退出后普通状态检查确认授权时，Host 会从随包资源（或 `@dingtalk-real-ai/dsh-dingtalk`）安装技能；若授权已成功则只写技能、不再打开浏览器。**解绑**先删掉本机技能副本并立刻返回；钉钉的退出登录在后台继续，企业微信解绑不会再启动 `wecom-cli`。之后的**连接**也会在 DWS 启动前返回。单次本机请求被丢掉时只留在该连接器卡片上；连接器目录和专家库会重试本机服务，不会停在整页的服务不可用提示上。企业微信表示产品随包的 `wecom-cli` 扫码授权（直接 `auth init --noninteractive`，不先执行 `auth show`）；Host 观察稳定写入的 `~/.config/wecom/credentials.enc`，把 `app/assets/wecom-skills` 中的官方 `wecomcli-*` 技能复制到 `$DSH_HOME/skills`，并在 init 自行退出前报告已连接（打包后的 Host 连接时不会再从 GitHub 下载技能）。微信助理表示 iLink 扫码绑定（`loginStart` / `loginPoll`），凭据落在 `$DSH_HOME/wechat-assistant`，并由 Host `getupdates` 桥接：创建桌面 Session 执行后经 `sendmessage` 回传到微信。**去试试**会把示例提示写入主输入框，并在 `+` 旁蓝色的 `conversation.composer.tools` 芯片上选中对应连接器（点击可切换连接器或重新打开本页）；首次发送时自动准备工作区 Session，无需先手动选择工作空间。钉钉/企业微信**解绑**清除 CLI 凭据与技能副本；微信**取消连接**清除 iLink 凭据并停止桥接。产品仅把 `@dingtalk-real-ai/dsh-dingtalk` 当作 `dws-cli` 资源来源；不挂载钉钉 Stream IM，也不收集机器人 Client ID / Secret。其余连接器条目仍为演示。
 
 Client 当前不在连接器目录和输入框连接器选择器里展示企业微信，也不探测其状态；Host RPC 和随包 CLI/技能资源仍保持挂载。
 
@@ -70,11 +70,11 @@ Client 拥有连接器列表、选择状态和弹窗。钉钉详情走 Host RPC 
 <a id="model-experience"></a>
 ## Model Experience
 
-无，因为 Client 展示本身不注册提示词或工具。
+连接器页本身不注册提示词或工具。刷新已复制的 `dws-cli` 技能时会写入个人单聊说明，桌面会话在加载该技能时读到：`authenticated` 已为 true 时用 `dws chat +dm` 给某人发消息；只有用户要求机器人或 Webhook 时才走机器人发送。机器人通知先 `+bot-find`，再用 `+messages-send --as bot` 直接发进群。用户这句发送要求就是确认，命令带 `--yes`，不再次登录、不再次询问。机器人通知先 `+bot-find`，再 `+messages-send --as bot` 直接发进群。命令行不能创建机器人。
 
 #### KV Cache effect
 
-不直接修改模型上下文或缓存复用。
+没有常驻提示词。个人单聊说明只在会话读取 `dws-cli` 技能时进入上下文。
 
 ## Known Limitations and Deferred Work
 
