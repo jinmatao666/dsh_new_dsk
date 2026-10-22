@@ -13,9 +13,10 @@ test('expert input trace is dormant, content-free and bounded', async () => {
     closest() { return this }
     getAttribute() { return 'cancel' }
   }
-  const addEventListener = (name, callback) => {
+  const addEventListener = (name, callback, capture) => {
     const existing = listeners.get(name) ?? []
-    existing.push(callback)
+    if (capture === true) existing.unshift(callback)
+    else existing.push(callback)
     listeners.set(name, existing)
   }
   const emit = (name, event = {}) => {
@@ -40,11 +41,16 @@ test('expert input trace is dormant, content-free and bounded', async () => {
   emit('click', event)
   event.defaultPrevented = true
   await new Promise(resolve => setTimeout(resolve, 5))
-  assert.deepEqual(calls.map(([, args]) => args.event.event), ['library-open', 'click', 'settled-click'])
+  assert.deepEqual(calls.map(([, args]) => args.event.event), ['library-open', 'click', 'bubble-click', 'settled-click'])
   assert.equal(calls[1][1].event.tag, 'button')
   assert.equal(calls[1][1].event.x, 35)
   assert.equal(calls[1][1].event.control, 'cancel')
-  assert.equal(calls[2][1].event.blocked, true)
+  assert.equal(calls[3][1].event.blocked, true)
+  assert.equal(calls[1][1].event.hitMatches, false)
+  assert.equal(calls[1][1].event.dialogs, 0)
+  emit('pointercancel', event)
+  emit('visibilitychange')
+  assert.deepEqual(calls.slice(-2).map(([, args]) => args.event.event), ['pointercancel', 'visibilitychange'])
   assert.equal(JSON.stringify(calls).includes('private-'), false)
   emit('wanwei:expert-action', { detail: 'cancel-handler' })
   emit('wanwei:expert-action', { detail: 'start-handler' })

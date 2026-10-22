@@ -22,6 +22,9 @@
       width: innerWidth, height: innerHeight, focused: document.hasFocus(),
       interactive: target instanceof Element && !!target.closest('button,a,input,select,textarea,[role="button"],[role="option"]'),
       blocked: source?.defaultPrevented === true,
+      disabled: target instanceof Element && !!target.closest(':disabled,[aria-disabled="true"],[inert]'),
+      hitMatches: target === hit || (target instanceof Element && target.contains?.(hit) === true),
+      dialogs: document.querySelectorAll?.('[role="dialog"][aria-modal="true"],dialog[open]').length ?? 0,
     } }).catch(() => {}); // Diagnostic failure must not affect normal interaction.
   };
   window.addEventListener('wanwei:expert-diagnostics-start', () => { active = true; send('start'); });
@@ -38,7 +41,9 @@
     active = true;
     send('library-open');
   });
-  for (const type of ['pointerdown', 'pointerup', 'click']) {
+  document.addEventListener('click', event => { if (event.isTrusted) send('bubble-click', event); });
+  document.addEventListener('visibilitychange', () => send('visibilitychange'));
+  for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'click']) {
     document.addEventListener(type, event => {
       if (!event.isTrusted) return;
       if (type === 'pointerdown') {

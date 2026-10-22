@@ -4700,6 +4700,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "url",
+ "windows 0.61.3",
  "zip",
 ]
 

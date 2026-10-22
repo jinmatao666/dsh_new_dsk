@@ -13,7 +13,7 @@ use std::{
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent},
-    DragDropEvent, LogicalPosition, LogicalSize, Manager, State, WebviewBuilder, WebviewEvent,
+    DragDropEvent, LogicalPosition, LogicalSize, Manager, State, WebviewEvent,
     WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent,
 };
 use tauri_plugin_dialog::DialogExt;
@@ -31,6 +31,9 @@ mod skill_names;
 mod network_policy;
 mod desktop_update;
 mod expert_diagnostics;
+mod webview_environment;
+#[cfg(target_os = "windows")]
+mod windows_input;
 
 const NATIVE_SKILLS_CHANGED_SCRIPT: &str = "window.dispatchEvent(new Event('dsh:skills-changed'));";
 const NATIVE_FILE_DRAG_ENTER_SCRIPT: &str =
@@ -1089,7 +1092,10 @@ fn maximize_expert_window(window: Window) -> Result<(), String> {
 
 fn log_expert_view(app: &tauri::AppHandle, event: &str) {
     if let Ok(directory) = app.path().app_local_data_dir() {
-        append_log(&directory.join("logs").join("expert-webviews.log"), event);
+        append_log(&directory.join("logs").join("expert-webviews.log"), serde_json::json!({
+            "timeMs":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+            "processId":std::process::id(), "event":event,
+        }).to_string());
     }
 }
 
@@ -1109,6 +1115,8 @@ async fn open_expert_webview(
     }
     expert_diagnostics::activate(window.app_handle());
     let label = expert_webview_label(&key, &ticket)?;
+    let started = std::time::Instant::now();
+    expert_diagnostics::lifecycle(window.app_handle(), &label, "create-requested");
     let (launch_url, allowed_url) = expert_webview_url(&url, &ticket)?;
     if width < 200.0
         || height < 200.0
@@ -1119,6 +1127,7 @@ async fn open_expert_webview(
     if window.app_handle().get_webview(&label).is_some() {
         return Err("专家视图已打开".to_string());
     }
+    expert_diagnostics::layout(window.app_handle(), &label, "create", [x, y, width, height]);
     let origin = allowed_url.origin().ascii_serialization();
     let mut capability = tauri::ipc::CapabilityBuilder::new(format!("published-{label}"))
         .webview(&label)
@@ -1144,23 +1153,38 @@ async fn open_expert_webview(
     ] {
         capability = capability.permission(permission);
     }
-    window
+    let permission = window
         .app_handle()
         .add_capability(capability)
-        .map_err(|error| format!("专家权限初始化失败：{error}"))?;
+        .map_err(|_| "专家权限初始化失败".to_string());
+    // ACL 错误可能包含远程来源；不把该原始错误写入诊断。
+    expert_diagnostics::native_result(window.app_handle(), &label, "capability-ready", started, &permission);
+    permission?;
     let navigation_app = window.app_handle().clone();
     let loading_app = window.app_handle().clone();
-    let builder = WebviewBuilder::new(&label, WebviewUrl::External(launch_url))
-        .disable_drag_drop_handler()
+    let navigation_label = label.clone();
+    let loading_label = label.clone();
+    let title_app = window.app_handle().clone();
+    let title_label = label.clone();
+    let builder = webview_environment::expert_builder(&label, launch_url)
         .initialization_script(NATIVE_BRIDGE_INITIALIZATION_SCRIPT)
+        .on_document_title_changed(move |_, _| {
+            expert_diagnostics::lifecycle(&title_app, &title_label, "document-title-changed");
+        })
         .on_navigation(move |target| {
             let allowed = target.origin() == allowed_url.origin();
+            expert_diagnostics::lifecycle(&navigation_app, &navigation_label,
+                if allowed { "navigation-allowed" } else { "navigation-blocked" });
             if !allowed {
                 log_expert_view(&navigation_app, "navigation blocked: foreign origin");
             }
             allowed
         })
         .on_page_load(move |_, payload| {
+            expert_diagnostics::lifecycle(&loading_app, &loading_label, match payload.event() {
+                tauri::webview::PageLoadEvent::Started => "load-started",
+                tauri::webview::PageLoadEvent::Finished => "load-finished",
+            });
             log_expert_view(
                 &loading_app,
                 match payload.event() {
@@ -1169,17 +1193,23 @@ async fn open_expert_webview(
                 },
             );
         });
-    let view = window
+    let created = window
         .add_child(
             builder,
             LogicalPosition::new(x, y),
             LogicalSize::new(width, height),
         )
-        .map_err(|error| format!("无法打开专家网页：{error}"))?;
+        .map_err(|error| format!("无法打开专家网页：{error}"));
+    expert_diagnostics::native_result(window.app_handle(), &label, "create-dispatched", started, &created);
+    let view = created?;
     // Keep a newly created child from covering HTML before the renderer has
     // committed its latest geometry and visibility decision.
-    if let Err(error) = view.hide() {
-        let _ = view.close();
+    let confirmed = view.hide().map_err(|error| error.to_string())
+        .and_then(|_| webview_environment::confirm(&view, false));
+    expert_diagnostics::native_result(window.app_handle(), &label, "create-confirmed", started, &confirmed);
+    if let Err(error) = confirmed {
+        let rollback = view.close().map_err(|e| e.to_string());
+        expert_diagnostics::native_result(window.app_handle(), &label, "create-rollback-close", started, &rollback);
         return Err(format!("无法初始化专家视图：{error}"));
     }
     log_expert_view(window.app_handle(), "created hidden");
@@ -1204,19 +1234,27 @@ async fn set_expert_webview_bounds(
         return Err("专家视图尺寸无效".to_string());
     }
     validate_expert_webview_label(&label)?;
+    let started = std::time::Instant::now();
+    expert_diagnostics::lifecycle(window.app_handle(), &label, "bounds-requested");
+    expert_diagnostics::layout(window.app_handle(), &label, "bounds", [x, y, width, height]);
     let view = window
         .app_handle()
         .get_webview(&label)
-        .ok_or("专家视图不存在")?;
+        .ok_or_else(|| {
+            expert_diagnostics::lifecycle(window.app_handle(), &label, "bounds-view-missing");
+            "专家视图不存在"
+        })?;
     let result = view
         .set_bounds(tauri::Rect {
             position: LogicalPosition::new(x, y).into(),
             size: LogicalSize::new(width, height).into(),
         })
-        .map_err(|error| error.to_string());
+        .map_err(|error| error.to_string())
+        .and_then(|_| view.bounds().map(|_| ()).map_err(|error| error.to_string()));
     if result.is_err() {
         log_expert_view(window.app_handle(), "bounds failed");
     }
+    expert_diagnostics::native_result(window.app_handle(), &label, "bounds-completed", started, &result);
     result
 }
 
@@ -1226,14 +1264,26 @@ async fn close_expert_webview(window: Window, label: String) -> Result<(), Strin
         return Err("只能从主窗口关闭专家".to_string());
     }
     validate_expert_webview_label(&label)?;
+    let started = std::time::Instant::now();
+    expert_diagnostics::lifecycle(window.app_handle(), &label, "close-requested");
     if let Some(view) = window.app_handle().get_webview(&label) {
         // Remove hit testing before disposal; a failed close must not leave
         // a visible child over the main page.
-        let _ = view.hide();
-        view.close().map_err(|error| error.to_string())?;
+        let hidden = view.hide().map_err(|e| e.to_string());
+        expert_diagnostics::native_result(window.app_handle(), &label, "close-hide-dispatched", started, &hidden);
+        let closed = view.close().map_err(|error| error.to_string());
+        expert_diagnostics::native_result(window.app_handle(), &label, "close-dispatched", started, &closed);
+        closed?;
+        // 查询失败通常表示已移除，但保留真实结果，不把任意查询错误认定为关闭成功。
+        let remaining = view.bounds().map_err(|error| error.to_string());
+        expert_diagnostics::native_result(window.app_handle(), &label, "close-post-query", started, &remaining);
+    } else {
+        expert_diagnostics::lifecycle(window.app_handle(), &label, "close-view-already-missing");
     }
     if let Some(main) = window.app_handle().get_webview("main") {
-        main.set_focus().map_err(|error| error.to_string())?;
+        let focus = main.set_focus().map_err(|error| error.to_string());
+        expert_diagnostics::native_result(window.app_handle(), &label, "close-main-focus-dispatched", started, &focus);
+        focus?;
     }
     log_expert_view(window.app_handle(), "closed; main focus restored");
     expert_diagnostics::snapshot(window.app_handle(), "close-dispatched");
@@ -1251,12 +1301,19 @@ async fn set_expert_webview_visible(
         return Err("只能从主窗口切换专家视图".to_string());
     }
     validate_expert_webview_label(&label)?;
+    let started = std::time::Instant::now();
+    expert_diagnostics::lifecycle(window.app_handle(), &label, if visible { "show-requested" } else { "hide-requested" });
     let view = window
         .app_handle()
         .get_webview(&label)
-        .ok_or("专家视图不存在")?;
+        .ok_or_else(|| {
+            expert_diagnostics::lifecycle(window.app_handle(), &label, "visibility-view-missing");
+            "专家视图不存在"
+        })?;
     if visible {
-        let result = view.show().map_err(|error| error.to_string());
+        let result = view.show().map_err(|error| error.to_string())
+            .and_then(|_| webview_environment::confirm(&view, true));
+        expert_diagnostics::native_result(window.app_handle(), &label, "show-confirmed", started, &result);
         expert_diagnostics::settled_snapshot(window.app_handle(), "show-settled-sample");
         log_expert_view(
             window.app_handle(),
@@ -1268,9 +1325,14 @@ async fn set_expert_webview_visible(
         );
         result
     } else {
-        view.hide().map_err(|error| error.to_string())?;
+        let hidden = view.hide().map_err(|error| error.to_string())
+            .and_then(|_| webview_environment::confirm(&view, false));
+        expert_diagnostics::native_result(window.app_handle(), &label, "hide-confirmed", started, &hidden);
+        hidden?;
         if let Some(main) = window.app_handle().get_webview("main") {
-            main.set_focus().map_err(|error| error.to_string())?;
+            let focus = main.set_focus().map_err(|error| error.to_string());
+            expert_diagnostics::native_result(window.app_handle(), &label, "hide-main-focus-dispatched", started, &focus);
+            focus?;
         }
         log_expert_view(window.app_handle(), "hide requested; main focus restored");
         expert_diagnostics::settled_snapshot(window.app_handle(), "hide-settled-sample");
@@ -2640,7 +2702,7 @@ pub fn run() {
                 // When the system browser covers this window, WebView2 otherwise
                 // suspends the page and aborts every localhost call, including
                 // connector writes and session/prompt.
-                .additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion")
+                .additional_browser_args(webview_environment::BROWSER_ARGS)
                 // The external sidecar can lose window.__TAURI__ after a
                 // navigation. AuthGate emits this marker through
                 // document.title, which this native callback always sees.

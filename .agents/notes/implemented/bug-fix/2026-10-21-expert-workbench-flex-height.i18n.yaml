@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-21-expert-workbench-flex-height.md
-2026-10-21-expert-workbench-flex-height.md: 19b7ca750b9e4d7c4faf1dee4d0df425ef9545f8
-2026-10-21-expert-workbench-flex-height.zh.md: 0aac35febfb21292d0b12399e969963dc46c42b5
+2026-10-21-expert-workbench-flex-height.md: 4ddcb355e2cd6c8dc4aa7f07c6a7b4bfa855eb03
+2026-10-21-expert-workbench-flex-height.zh.md: ab4e4b6449ebdf7b79b5143c6c646c2de5fb0119
