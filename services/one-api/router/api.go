@@ -481,6 +481,8 @@ func SetApiRouter(router *gin.Engine) {
 			skillRoute.GET("/:id", controller.GetSkill)
 			skillRoute.GET("/:id/bundle", middleware.UserAuth(), middleware.SkillBundleRateLimit(), controller.GetSkillBundle)
 			skillRoute.POST("/:id/download", middleware.UserAuth(), controller.IncrementSkillDownloads)
+			skillRoute.POST("/:id/download-record", middleware.UserAuth(), controller.RecordSkillDownload)
+			skillRoute.POST("/:id/installation", middleware.UserAuth(), controller.RecordSkillInstallation)
 
 			skillAdminRoute := skillRoute.Group("/admin")
 			skillAdminRoute.Use(middleware.AdminAuth())

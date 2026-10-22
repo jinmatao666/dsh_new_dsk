@@ -8,6 +8,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { randomUUID } from 'node:crypto'
 import z from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
@@ -442,7 +443,20 @@ export function apply(ctx: Context, config: Config): void {
     if (!response.ok || ! result.success || result.data === undefined) {
       throw new Error(result.message ?? `技能包下载失败（HTTP ${String(response.status)}）`)
     }
-    return result.data
+    const bundle = result.data
+    if (typeof bundle !== 'object' || bundle === null || !('version' in bundle) || typeof bundle.version !== 'string') {
+      throw new Error('技能包版本无效')
+    }
+    const eventId = randomUUID()
+    const report = await fetch(`${baseURL}/api/skill/${String(id)}/download-record`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ event_id: eventId, version: bundle.version }),
+      ...(signal === undefined ? {} : { signal }),
+    })
+    const acknowledgement = await jsonBody<OneApiEnvelope<unknown>>(report)
+    if (!report.ok || !acknowledgement.success) throw new Error('技能下载记录保存失败，请重试')
+    return { ...bundle, download_event_id: eventId }
   }
 
   const recordPublishedSkillInstall = async (payload: unknown, signal?: AbortSignal): Promise<unknown> => {
@@ -451,9 +465,12 @@ export function apply(ctx: Context, config: Config): void {
     if (!Number.isInteger(id) || id < 1) throw new Error('技能标识无效')
     const token = (await ctx.credentials.resolve(ref))?.value
     if (token === undefined) throw new Error('请先登录后再记录技能安装')
-    const response = await fetch(`${baseURL}/api/skill/${String(id)}/download`, {
+    const eventId = typeof payload === 'object' && payload !== null && 'eventId' in payload ? payload.eventId : undefined
+    if (typeof eventId !== 'string' || eventId.length === 0) throw new Error('缺少技能下载记录')
+    const response = await fetch(`${baseURL}/api/skill/${String(id)}/installation`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ event_id: eventId }),
       ...(signal === undefined ? {} : { signal }),
     })
     const result = await jsonBody<OneApiEnvelope<unknown>>(response)

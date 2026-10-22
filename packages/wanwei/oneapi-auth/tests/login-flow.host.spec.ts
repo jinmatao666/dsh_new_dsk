@@ -1,7 +1,14 @@
 import { Context } from '@deepseek-ai/cordis'
+import Loader from '@deepseek-ai/cordis-plugin-loader'
+import Include from '@deepseek-ai/cordis-plugin-include'
+import { mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apply, type Config } from '../src/index.ts'
+import * as OneApiAuth from '../src/index.ts'
+import type { Config } from '../src/index.ts'
 
 const config: Config = {
   baseURL: 'https://oneapi.example.test/dsh-api',
@@ -13,7 +20,9 @@ const config: Config = {
 
 type Handler = (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>
 
-afterEach(() => {
+const cleanup: Array<() => Promise<void>> = []
+afterEach(async () => {
+  for (const dispose of cleanup.splice(0).reverse()) await dispose()
   vi.unstubAllGlobals()
 })
 
@@ -33,10 +42,10 @@ describe('OneAPI login flow', () => {
     }]))
     ctx.provide('web', { registerSearchProvider: vi.fn() } as never)
     ctx.provide('connection', {
+      fetch: { register: () => () => {} },
       rpc: {
         handle(path: string, next: Handler) {
-          expect(path).toBe('/desktop-auth')
-          handler = next
+          if (path === '/desktop-auth') handler = next
           return async () => {}
         },
       },
@@ -68,9 +77,15 @@ describe('OneAPI login flow', () => {
     vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       requests.push(url)
-      if (url.endsWith('/api/skill/7/download')) {
+      if (url.endsWith('/api/skill/7/bundle')) {
+        return Promise.resolve(Response.json({ success: true, data: { version: '1.2.3', assets: '{}' } }))
+      }
+      if (url.endsWith('/api/skill/7/installation') || url.endsWith('/api/skill/7/download-record')) {
         expect(init?.method).toBe('POST')
         expect(new Headers(init?.headers).get('authorization')).toBe('Bearer oneapi-token')
+        if (typeof init?.body !== 'string') throw new Error('Expected a JSON report')
+        const report: unknown = JSON.parse(init.body)
+        expect(report).toMatchObject({ event_id: expect.any(String) as unknown })
         if (failDownloadReport) return Promise.resolve(Response.json({ success: false, message: '下载量上报失败' }, { status: 500 }))
         return Promise.resolve(Response.json({ success: true }))
       }
@@ -107,13 +122,27 @@ describe('OneAPI login flow', () => {
       throw new Error(`unexpected request: ${url}`)
     }))
 
-    apply(ctx, {
+    const settings: Config = {
       ...(baseURL === undefined ? {} : { baseURL }),
       provider: config.provider,
       credentialRef: config.credentialRef,
       tokenName: config.tokenName,
       ...(config.defaultInput === undefined ? {} : { defaultInput: config.defaultInput }),
-    })
+    }
+    const root = await mkdtemp(join(tmpdir(), 'wanwei-skill-stat-'))
+    cleanup.push(() => rm(root, { recursive: true, force: true }))
+    cleanup.push(async () => { await ctx.fiber.dispose() })
+    const configPath = join(root, 'cordis.yml')
+    await writeFile(configPath, `- name: oneapi\n  config: ${JSON.stringify(settings)}\n`)
+    ctx.baseUrl = `${pathToFileURL(root).href}/`
+    await ctx.plugin(Loader)
+    ctx.loader.builtins.include = Include
+    ctx.loader.internal = { version: 'v2', async import(specifier: string) {
+      if (specifier !== 'oneapi') throw new Error(`Unexpected plugin: ${specifier}`)
+      return OneApiAuth
+    } } as unknown as NonNullable<typeof ctx.loader.internal>
+    await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
+    await ctx.loader.await()
     const result = await handler?.('login', { username: ' tester ', password: 'secret' }, new AbortController().signal)
 
     expect(result).toEqual({
@@ -146,14 +175,20 @@ describe('OneAPI login flow', () => {
       ok: true, value: {
         mode: 'intranet', internalOrigins: [new URL(expected).origin], directInternet: false,
         plugins: { browserAssistant: true },
-        features: { internet: { automations: true, connectors: true }, intranet: { automations: true, connectors: false } },
+        features: {
+          internet: { automations: true, connectors: true, knowledgeBases: true },
+          intranet: { automations: true, connectors: false, knowledgeBases: true },
+        },
       },
     })
     expect(await handler?.('deployment-get', {}, new AbortController().signal)).toEqual({
       ok: true, value: {
         network: 'intranet', operator: '张运维', phone: '0571-12345678',
         plugins: { browserAssistant: true },
-        features: { internet: { automations: true, connectors: true }, intranet: { automations: true, connectors: false } },
+        features: {
+          internet: { automations: true, connectors: true, knowledgeBases: true },
+          intranet: { automations: true, connectors: false, knowledgeBases: true },
+        },
       },
     })
     expect(requests).toEqual([`${expected}/api/desktop-config`, `${expected}/api/desktop-config`])
@@ -170,12 +205,20 @@ describe('OneAPI login flow', () => {
       ok: true, value: { url: 'http://expert.lan/', ticket: 'ticket' },
     })
     requests.length = 0
+    const downloadIds: string[] = []
     for (let installation = 0; installation < 2; installation++) {
-      expect(await handler?.('skill-download', { id: 7 }, new AbortController().signal)).toMatchObject({ ok: true })
+      const bundle = await handler?.('skill-bundle', { id: 7 }, new AbortController().signal) as { ok: boolean; value: { download_event_id: string } }
+      expect(bundle.ok).toBe(true)
+      downloadIds.push(bundle.value.download_event_id)
+      expect(await handler?.('skill-download', { id: 7, eventId: bundle.value.download_event_id }, new AbortController().signal)).toMatchObject({ ok: true })
     }
-    expect(requests).toEqual([`${expected}/api/skill/7/download`, `${expected}/api/skill/7/download`])
+    expect(new Set(downloadIds).size).toBe(2)
+    expect(requests).toEqual(Array.from({ length: 2 }, () => [
+      `${expected}/api/skill/7/bundle`, `${expected}/api/skill/7/download-record`, `${expected}/api/skill/7/installation`,
+    ]).flat())
     failDownloadReport = true
-    expect(await handler?.('skill-download', { id: 7 }, new AbortController().signal)).toMatchObject({ ok: false })
+    expect(await handler?.('skill-download', { id: 7, eventId: downloadIds[0] }, new AbortController().signal)).toMatchObject({ ok: false })
+    expect(await handler?.('skill-bundle', { id: 7 }, new AbortController().signal)).toMatchObject({ ok: false })
     credentials.delete('DSH_ONEAPI_TOKEN')
     requests.length = 0
     expect(await handler?.('skill-download', { id: 7 }, new AbortController().signal)).toMatchObject({ ok: false })

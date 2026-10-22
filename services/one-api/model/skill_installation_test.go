@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -45,6 +45,8 @@ func setupSkillInstallationTestDB(t *testing.T) {
 		}
 	})
 	require.NoError(t, db.AutoMigrate(&Skill{}, &SkillCategoryType{}, &SkillCategory{}, &SkillCategoryRelation{}))
+	require.NoError(t, db.AutoMigrate(&SkillInstallation{}))
+	require.NoError(t, MigrateSkillUserStats())
 }
 
 func TestSkillDownloadCountsSeparateRepeatedInstallsFromUsers(t *testing.T) {

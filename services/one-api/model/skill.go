@@ -10,11 +10,10 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/songquanpeng/one-api/common/logger"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 type skillPackageDigestFile struct {
@@ -655,26 +654,16 @@ func IncrementSkillDownloads(id, userID int) error {
 		return errors.New("installation requires an authenticated user")
 	}
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&Skill{}).Where("id = ? AND status = ? AND is_deleted = ?", id, 1, false).UpdateColumn("downloads", gorm.Expr("downloads + 1"))
-		if result.Error != nil {
-			return result.Error
+		// 旧桌面仅在安装成功后上报，保留旧口径并写入用户统计。
+		eventID := uuid.NewString()
+		if _, err := recordSkillDownload(tx, id, userID, eventID, ""); err != nil {
+			return err
 		}
-		if result.RowsAffected != 1 {
-			return gorm.ErrRecordNotFound
-		}
-		return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&SkillInstallation{SkillID: id, UserID: userID, InstalledAt: time.Now()}).Error
+		return recordSkillInstallation(tx, id, userID, eventID)
 	})
 	if err != nil {
 		return err
 	}
-	// Update cache
-	skillCacheLock.Lock()
-	defer skillCacheLock.Unlock()
-	for _, s := range skillCache {
-		if s.Id == id {
-			s.Downloads++
-			break
-		}
-	}
+	incrementSkillDownloadCache(id)
 	return nil
 }

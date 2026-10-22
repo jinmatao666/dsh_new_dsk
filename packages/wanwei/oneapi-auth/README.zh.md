@@ -159,6 +159,8 @@ Host 提供 `deliver_files`，在最终回复前声明完整的最终成果清�
 
 ## Known Limitations and Deferred Work
 
+平台技能下载和安装确认使用独立的登录认证接口。Host 收到完整技能包后创建下载事件，并将事件 ID 传给原生安装完成后的回调。OneAPI 保存按用户、技能汇总的统计及去重事件，不新增后台页面。详见[统计决策](../../../.agents/notes/implemented/feature/2026-10-10-skill-download-installation-counts.zh.md)。
+
 <a id="known-limitations-and-deferred-work"></a>
 
 - 模型发现、受管理搜索和专家目录需要可访问的 OneAPI 服务。桌面没有本地编辑提供方的兜底方式。

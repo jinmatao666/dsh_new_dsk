@@ -83,7 +83,7 @@ RUN go test ./... -run '^$' && \
     go test ./common/resourcerelay -count=1 && \
     go test ./controller -run '^Test(Expert|Usage|SkillDownload|SkillImport|ApplyPublished|AdminUserAffiliation|UserIdentityUpdate|Desktop)' -count=1 && \
     go test ./middleware -count=1 && \
-    go test ./model -run '^Test(SkillDownloadCounts|SkillTestSession|UserAffiliation|UpdateUserDisplayName|UserIdentityUpdate)' -count=1
+    go test ./model -run '^Test(SkillDownloadCounts|SkillUserStats|SkillTestSession|UserAffiliation|UpdateUserDisplayName|UserIdentityUpdate)' -count=1
 
 RUN go build -trimpath \
     -ldflags "-s -w -X 'github.com/songquanpeng/one-api/common.Version=${PARVIS_VERSION}' -linkmode external -extldflags '-static'" \

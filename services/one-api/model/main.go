@@ -3,13 +3,13 @@ package model
 import (
 	"database/sql"
 	"fmt"
+	"github.com/glebarez/sqlite"
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/env"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/common/random"
-	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -209,7 +209,9 @@ func InitDB() {
 
 func migrateDB() error {
 	var err error
-	if err = DB.AutoMigrate(&DesktopUpdate{}, &DesktopUpdateChannel{}); err != nil { return err }
+	if err = DB.AutoMigrate(&DesktopUpdate{}, &DesktopUpdateChannel{}); err != nil {
+		return err
+	}
 	if err = DB.AutoMigrate(&Channel{}); err != nil {
 		return err
 	}
@@ -280,6 +282,9 @@ func migrateDB() error {
 		return err
 	}
 	if err = DB.AutoMigrate(&SkillInstallation{}); err != nil {
+		return err
+	}
+	if err = MigrateSkillUserStats(); err != nil {
 		return err
 	}
 	if err = DB.AutoMigrate(&ExpertProfile{}, &ExpertCategory{}); err != nil {

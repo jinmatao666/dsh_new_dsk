@@ -161,6 +161,8 @@ Static guidance can reuse the prompt prefix. Delivery paths vary with the task.
 
 ## Known Limitations and Deferred Work
 
+Platform skill downloads and installation confirmations use separate authenticated endpoints. The Host creates a download event after receiving the complete bundle and passes its ID to the native-install completion callback. OneAPI stores per-user, per-skill summaries and deduplicated events without adding an administrator page. See the [statistics decision](../../../.agents/notes/implemented/feature/2026-10-10-skill-download-installation-counts.md).
+
 <a id="known-limitations-and-deferred-work"></a>
 
 - Model discovery, managed search and the expert catalog require a reachable OneAPI service. The desktop has no local provider-editing fallback.
