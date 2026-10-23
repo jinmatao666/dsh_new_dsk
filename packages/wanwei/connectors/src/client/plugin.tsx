@@ -368,8 +368,11 @@ export function apply(ctx: Context): void {
   const workspaces: IWorkspaces = ctx.workspaces
   const dingTalk = createDingTalkApi(connection)
   const weChat = createWeChatApi(connection)
-  /** Open the fixed 微信助理 Session (create/resume on Host, refresh Client list, select). */
-  const openWeChatSession = async (): Promise<string> => {
+  /**
+   * Open the fixed 微信助理 Session (create/resume on Host, refresh Client list, select).
+   * @param closePanel - leave the connectors panel; bind success keeps it open so its toast stays visible.
+   */
+  const openWeChatSession = async (closePanel: boolean): Promise<string> => {
     const { sessionId } = await weChat.ensureSession()
     setCachedWeChatStatus({
       ...(getCachedWeChatStatus() ?? { authed: true, bridgeRunning: true, hint: null, sessionId: null }),
@@ -386,14 +389,14 @@ export function apply(ctx: Context): void {
       sessions.open(id)
     }
     setActiveConnectorId('wechat')
-    controller.close()
+    if (closePanel) controller.close()
     return sessionId
   }
   const onTryPrompt = (prompt: string, connectorId: string) => {
     // WeChat Assistant owns one durable Session — open it immediately so「去试试」
     // and inbound phone tasks share the same transcript without a Workspace picker.
     if (connectorId === 'wechat') {
-      void openWeChatSession().catch(() => {
+      void openWeChatSession(true).catch(() => {
         // Keep any selection; clearing here hid Host-side inbound turns from the UI.
         conversation.input.setStagedDraft(prompt)
       })
@@ -434,7 +437,7 @@ export function apply(ctx: Context): void {
         dingTalk={dingTalk}
         weChat={weChat}
         onTryPrompt={onTryPrompt}
-        onWeChatConnected={() => { void openWeChatSession().catch(() => {}) }}
+        onWeChatConnected={() => { void openWeChatSession(false).catch(() => {}) }}
         checkConnection={checkConnection}
       />
     ),

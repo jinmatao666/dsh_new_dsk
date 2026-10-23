@@ -218,11 +218,14 @@ async function ensureWeChatDesktopSessionUnlocked(
 ): Promise<WeChatSessionId> {
   const cwd = wechatWorkspaceDir(dshHome)
   const workspace = await ctx.workspaceRegistry.create(cwd, WECHAT_DESKTOP_SESSION_TITLE)
+  // Sidebar "delete" archives a Session but keeps it resumable; an archived
+  // 微信助理 Session must be replaced, never revived.
+  const archived = new Set(ctx.workspaceRegistry.archivedSessionIds)
   const candidates: WeChatSessionId[] = []
   const saved = loadDesktopSessionId(dshHome)
-  if (saved !== undefined) candidates.push(saved)
+  if (saved !== undefined && !archived.has(saved)) candidates.push(saved)
   for (const id of workspace.sessionIds) {
-    if (!candidates.includes(id)) candidates.push(id)
+    if (!archived.has(id) && !candidates.includes(id)) candidates.push(id)
   }
   for (const sessionId of candidates) {
     const resolved = await ctx.sessionController.resolveAgent(sessionId)

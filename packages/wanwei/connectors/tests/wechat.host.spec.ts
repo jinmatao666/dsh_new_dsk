@@ -91,6 +91,26 @@ describe('WeChat Assistant Host helpers', () => {
     expect(JSON.parse(readFileSync(pointer, 'utf8')).sessionId).toBe('wechat-saved')
   })
 
+  it('replaces an archived saved Session instead of reviving it', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wechat-archived-'))
+    const pointer = wechatDesktopSessionPath(home)
+    mkdirSync(dirname(pointer), { recursive: true })
+    writeFileSync(pointer, `${JSON.stringify({ sessionId: 'wechat-old' }, null, 2)}\n`)
+    const resolveAgent = vi.fn(async () => ({ agent: {} }))
+    const create = vi.fn(async () => ({ sessionId: 'wechat-fresh' }))
+    const ctx = {
+      workspaceRegistry: {
+        archivedSessionIds: ['wechat-old'],
+        create: async () => ({ id: 'ws-wechat', sessionIds: ['wechat-old'] }),
+      },
+      sessionController: { resolveAgent, create, rename: async () => {} },
+    }
+    await expect(ensureWeChatDesktopSession(ctx as never, home)).resolves.toBe('wechat-fresh')
+    expect(resolveAgent).not.toHaveBeenCalled()
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(readFileSync(pointer, 'utf8')).sessionId).toBe('wechat-fresh')
+  })
+
   it('does not restart a running bridge for the same bot token', async () => {
     const home = mkdtempSync(join(tmpdir(), 'wanwei-wechat-bridge-'))
     mkdirSync(dirname(wechatCredentialPath(home)), { recursive: true })
