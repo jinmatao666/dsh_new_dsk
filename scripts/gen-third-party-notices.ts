@@ -74,12 +74,6 @@ const OVERRIDES: Record<string, { license?: string; repo?: string }> = {
   '@modelcontextprotocol/server-filesystem': { license: 'MIT / Apache-2.0', repo: 'https://github.com/modelcontextprotocol/servers' },
   // No repository field in the published manifest.
   'node-addon-require-builtin': { repo: 'https://www.npmjs.com/package/node-addon-require-builtin' },
-  // 1.3.4 发布元数据均声明 MIT；平台包没有仓库字段，且 pnpm 只安装当前平台。
-  '@wecom/cli-darwin-arm64': { license: 'MIT', repo: 'https://github.com/WecomTeam/wecom-cli' },
-  '@wecom/cli-darwin-x64': { license: 'MIT', repo: 'https://github.com/WecomTeam/wecom-cli' },
-  '@wecom/cli-linux-arm64': { license: 'MIT', repo: 'https://github.com/WecomTeam/wecom-cli' },
-  '@wecom/cli-linux-x64': { license: 'MIT', repo: 'https://github.com/WecomTeam/wecom-cli' },
-  '@wecom/cli-win32-x64': { license: 'MIT', repo: 'https://github.com/WecomTeam/wecom-cli' },
 }
 
 /**

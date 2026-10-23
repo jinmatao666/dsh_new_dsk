@@ -2313,32 +2313,6 @@ fn install_packaged_connector_skills(app_root: &Path, dsh_home: &Path) -> Result
             copy_connector_skill_dir(&dws, &dest)?;
         }
     }
-    let wecom = app_root.join("assets").join("wecom-skills");
-    if wecom.join("wecomcli-shared").join("SKILL.md").is_file() {
-        let entries = fs::read_dir(&wecom)
-            .map_err(|error| format!("无法枚举企业微信技能 {}：{error}", wecom.display()))?;
-        for entry in entries {
-            let entry = entry.map_err(|error| format!("无法读取企业微信技能项：{error}"))?;
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy();
-            if !name_str.starts_with("wecomcli-") {
-                continue;
-            }
-            if !entry.path().join("SKILL.md").is_file() {
-                continue;
-            }
-            let dest = skills_root.join(&name);
-            if dest.join("SKILL.md").is_file() {
-                continue;
-            }
-            if dest.exists() {
-                fs::remove_dir_all(&dest).map_err(|error| {
-                    format!("无法清理旧的企业微信技能 {}：{error}", dest.display())
-                })?;
-            }
-            copy_connector_skill_dir(&entry.path(), &dest)?;
-        }
-    }
     Ok(())
 }
 
@@ -2470,12 +2444,8 @@ fn spawn_sidecar(
         .stderr(Stdio::piped());
     {
         let dws_skill = app_root.join("assets").join("dws-cli");
-        let wecom_skills = app_root.join("assets").join("wecom-skills");
         if dws_skill.join("SKILL.md").exists() {
             command.env("DSH_DWS_SKILL_DIR", &dws_skill);
-        }
-        if wecom_skills.join("wecomcli-shared").join("SKILL.md").exists() {
-            command.env("DSH_WECOM_SKILLS_DIR", &wecom_skills);
         }
     }
     if !cfg!(target_os = "macos") {

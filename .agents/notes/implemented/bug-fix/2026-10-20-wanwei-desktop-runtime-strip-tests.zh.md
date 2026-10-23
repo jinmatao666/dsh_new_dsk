@@ -10,7 +10,7 @@ Windows NSIS 安装包在解压类似 `resources\runtime-*\app\node_modules\@dee
 
 ## 决策
 
-`prepare:runtime` 在恢复 workspace 包时跳过开发专用条目，并在钉钉／企微资源落盘前从暂存 app 树剔除 `tests/`、`__tests__/` 以及 `*.spec.*` / `*.test.*`。辅助函数在 `products/wanwei-desktop/scripts/runtime-files.mjs`。
+`prepare:runtime` 在恢复 workspace 包时跳过开发专用条目，并在钉钉资源落盘前从暂存 app 树剔除 `tests/`、`__tests__/` 以及 `*.spec.*` / `*.test.*`。辅助函数在 `products/wanwei-desktop/scripts/runtime-files.mjs`。
 
 ## 考虑过的替代方案
 

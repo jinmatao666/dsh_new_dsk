@@ -25,10 +25,10 @@ const options = [
     available: true,
   },
   {
-    id: 'wecom',
-    name: '企业微信',
-    icon: '/connector-icons/wecom.png',
-    accent: '#2b7de9',
+    id: 'wechat',
+    name: '微信助理',
+    icon: '/connector-icons/wechat.svg',
+    accent: '#07c160',
     available: true,
   },
 ] as const
@@ -40,21 +40,21 @@ describe('ComposerConnectorChip', () => {
   })
 
   it('stacks every active icon and sorts selected, then connected, then connect CTAs', () => {
-    setActiveConnectorId('wecom')
+    setActiveConnectorId('wechat')
     const onManage = vi.fn()
     render(<ComposerConnectorChip options={options} onManage={onManage} />)
-    const trigger = screen.getByRole('button', { name: '当前连接器：企业微信' })
-    expect(trigger.querySelector('img')?.getAttribute('src')).toBe('/connector-icons/wecom.png')
+    const trigger = screen.getByRole('button', { name: '当前连接器：微信助理' })
+    expect(trigger.querySelector('img')?.getAttribute('src')).toBe('/connector-icons/wechat.svg')
     fireEvent.click(trigger)
     const menu = screen.getByRole('menu', { name: '切换连接器' })
     const rows = within(menu).getAllByRole('menuitem').filter(node => node.classList.contains('dsh-composer-connector-row'))
     expect(rows.map(row => row.textContent)).toEqual([
-      '企业微信',
+      '微信助理',
       '钉钉',
       '飞书连接',
     ])
     expect(screen.getByRole('switch', { name: '钉钉' }).getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByRole('switch', { name: '企业微信' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('switch', { name: '微信助理' }).getAttribute('aria-checked')).toBe('true')
     const connect = screen.getByRole('button', { name: '连接' })
     expect(connect.querySelector('svg')).toBeTruthy()
     fireEvent.click(screen.getByRole('menuitem', { name: '管理连接器' }))
@@ -63,10 +63,10 @@ describe('ComposerConnectorChip', () => {
 
   it('keeps remaining chips when one active switch is turned off', () => {
     setActiveConnectorId('dingtalk')
-    setActiveConnectorId('wecom')
+    setActiveConnectorId('wechat')
     render(<ComposerConnectorChip options={options} onManage={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: '当前连接器：钉钉、企业微信' }))
+    fireEvent.click(screen.getByRole('button', { name: '当前连接器：钉钉、微信助理' }))
     fireEvent.click(screen.getByRole('switch', { name: '钉钉' }))
-    expect(screen.getByRole('button', { name: '当前连接器：企业微信' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '当前连接器：微信助理' })).toBeTruthy()
   })
 })

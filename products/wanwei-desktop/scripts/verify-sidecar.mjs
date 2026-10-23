@@ -25,13 +25,9 @@ const entryArgs = staged
 const cwd = staged ? join(runtimeRoot, 'app') : repositoryRoot
 const bundleAnchors = staged ? '' : join(productRoot, 'package.json')
 if (staged) {
-  for (const required of [
-    join(cwd, 'assets', 'dws-cli', 'SKILL.md'),
-    join(cwd, 'assets', 'wecom-skills', 'wecomcli-shared', 'SKILL.md'),
-  ]) {
-    if (!existsSync(required)) {
-      throw new Error(`Staged runtime is missing connector skill asset: ${required}`)
-    }
+  const dwsSkill = join(cwd, 'assets', 'dws-cli', 'SKILL.md')
+  if (!existsSync(dwsSkill)) {
+    throw new Error(`Staged runtime is missing connector skill asset: ${dwsSkill}`)
   }
 }
 const child = spawn(program, [
@@ -54,7 +50,6 @@ const child = spawn(program, [
         DSH_NODE_BINARY: program,
         DSH_APP_ROOT: cwd,
         DSH_DWS_SKILL_DIR: join(cwd, 'assets', 'dws-cli'),
-        DSH_WECOM_SKILLS_DIR: join(cwd, 'assets', 'wecom-skills'),
       }
       : {}),
     ...(bundleAnchors === '' ? {} : { DSH_BUNDLE_ANCHORS: bundleAnchors }),

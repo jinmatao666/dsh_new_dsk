@@ -12,7 +12,6 @@
     "src/dingtalk-dws.ts",
     "src/dingtalk-dws-tool.ts",
     "src/dingtalk-personal-dm.ts",
-    "src/wecom-cli.ts",
     "src/wechat-ilink.ts"
   ],
   "references": [

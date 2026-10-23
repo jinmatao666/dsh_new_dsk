@@ -16,6 +16,7 @@ function api(overrides: Partial<WeChatApi> = {}): WeChatApi {
     authed: false,
     bridgeRunning: false,
     hint: '点击「连接」，用微信扫码绑定远程通道。',
+    sessionId: null,
   }
   const start: WeChatLoginStart = {
     sessionKey: 'sess-1',
@@ -32,7 +33,7 @@ function api(overrides: Partial<WeChatApi> = {}): WeChatApi {
   }
   const confirmed: WeChatLoginPoll = {
     phase: 'confirmed',
-    status: { authed: true, bridgeRunning: true, hint: null },
+    status: { authed: true, bridgeRunning: true, hint: null, sessionId: 'wechat-session-1' },
     message: '微信助理已连接',
     qrcodeUrl: null,
     qrDataUrl: null,
@@ -55,7 +56,8 @@ describe('WeChatPanel', () => {
   it('opens in-app QR, confirms, then cancels connection', async () => {
     const face = api()
     const onNotice = vi.fn()
-    render(<WeChatPanel api={face} onNotice={onNotice} />)
+    const onConnected = vi.fn()
+    render(<WeChatPanel api={face} onNotice={onNotice} onConnected={onConnected} />)
     await waitFor(() => expect(face.status).toHaveBeenCalled())
     expect(screen.getByRole('button', { name: '连接' })).toBeTruthy()
 
@@ -66,6 +68,7 @@ describe('WeChatPanel', () => {
     await waitFor(() => expect(face.loginPoll).toHaveBeenCalled())
     await waitFor(() => expect(screen.getByRole('button', { name: '取消连接' })).toBeTruthy())
     expect(onNotice).toHaveBeenCalledWith({ kind: 'success', text: '微信助理已连接' })
+    expect(onConnected).toHaveBeenCalled()
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '取消连接' }))
@@ -84,6 +87,7 @@ describe('WeChatPanel', () => {
       authed: true,
       bridgeRunning: true,
       hint: null,
+      sessionId: 'wechat-session-1',
     }
     render(<WeChatPanel api={face} initialStatus={initial} />)
     expect(screen.getByRole('button', { name: '取消连接' })).toBeTruthy()
@@ -104,9 +108,9 @@ describe('WeChatPanel', () => {
           statusCalls += 1
           // First call is the mount soft-refresh; later calls are the QR-side probe.
           if (statusCalls <= 1) {
-            return { authed: false, bridgeRunning: false, hint: null }
+            return { authed: false, bridgeRunning: false, hint: null, sessionId: null }
           }
-          return { authed: true, bridgeRunning: true, hint: null }
+          return { authed: true, bridgeRunning: true, hint: null, sessionId: 'wechat-session-1' }
         }),
         loginPoll: vi.fn(() => new Promise<WeChatLoginPoll>(() => {})),
       })

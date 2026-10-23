@@ -3,7 +3,6 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import type { DingTalkApi } from '../src/client/DingTalkPanel.tsx'
 import type { WeChatApi } from '../src/client/WeChatPanel.tsx'
-import type { WeComApi } from '../src/client/WeComPanel.tsx'
 import { Connectors } from '../src/client/plugin.tsx'
 
 const dingTalk: DingTalkApi = {
@@ -12,13 +11,7 @@ const dingTalk: DingTalkApi = {
   installSkill: async () => ({ dwsInstalled: false, dwsVersion: null, authed: false, skillInstalled: false, hint: null }),
   disconnect: async () => ({ dwsInstalled: false, dwsVersion: null, authed: false, skillInstalled: false, hint: null }),
 }
-const weCom: WeComApi = {
-  status: async () => ({ cliInstalled: false, cliVersion: null, authed: false, skillInstalled: false, hint: null }),
-  login: async () => ({ cliInstalled: false, cliVersion: null, authed: false, skillInstalled: false, hint: null }),
-  installSkill: async () => ({ cliInstalled: false, cliVersion: null, authed: false, skillInstalled: false, hint: null }),
-  disconnect: async () => ({ cliInstalled: false, cliVersion: null, authed: false, skillInstalled: false, hint: null }),
-}
-const weChatStatus = { authed: false, bridgeRunning: false, hint: null }
+const weChatStatus = { authed: false, bridgeRunning: false, hint: null, sessionId: null }
 const weChat: WeChatApi = {
   status: async () => weChatStatus,
   loginStart: async () => ({ sessionKey: '', qrcodeUrl: '', qrDataUrl: '', status: weChatStatus }),
@@ -33,7 +26,7 @@ afterEach(cleanup)
 it('recovers the directory after a dropped local check and keeps the illustration only while the service stays down', async () => {
   const checkConnection = vi.fn(async () => {})
   checkConnection.mockRejectedValueOnce(new Error('Failed to fetch'))
-  const props = { dingTalk, weCom, weChat, onTryPrompt: () => {}, checkConnection }
+  const props = { dingTalk, weChat, onTryPrompt: () => {}, checkConnection }
   const recovered = render(<Connectors {...props} />)
   expect(await screen.findByText('钉钉')).toBeTruthy()
   expect(screen.queryByText('企业微信')).toBeNull()

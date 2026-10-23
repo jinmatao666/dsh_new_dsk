@@ -12,7 +12,14 @@ export function getCachedWeChatStatus(): WeChatStatus | null {
     if (raw === null) return null
     const value = JSON.parse(raw) as WeChatStatus
     if (typeof value.authed !== 'boolean' || typeof value.bridgeRunning !== 'boolean') return null
-    return value
+    return {
+      authed: value.authed,
+      bridgeRunning: value.bridgeRunning,
+      hint: typeof value.hint === 'string' ? value.hint : null,
+      sessionId: typeof value.sessionId === 'string' && value.sessionId.trim() !== ''
+        ? value.sessionId
+        : null,
+    }
   } catch {
     return null
   }

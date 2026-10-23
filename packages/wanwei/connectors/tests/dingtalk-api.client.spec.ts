@@ -21,7 +21,7 @@ describe('dingtalk-api client helpers', () => {
     expect(isConnectorTransportError(mapped)).toBe(true)
     expect(isConnectorTransportError(new Error('Failed to fetch'))).toBe(true)
     expect(connectorRpcError(new Error('未找到随包 dws-cli')).message).toBe('未找到随包 dws-cli')
-    expect(connectorRpcError(new Error('无法从 GitHub 下载企业微信技能（Failed to fetch）。')).message)
+    expect(connectorRpcError(new Error('无法从 GitHub 下载技能（Failed to fetch）。')).message)
       .toMatch(/GitHub/)
   })
 

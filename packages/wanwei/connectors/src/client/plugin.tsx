@@ -23,15 +23,12 @@ import { ComposerConnectorChip } from './ComposerConnectorChip.tsx'
 import { createDingTalkApi } from './dingtalk-api.ts'
 import { DingTalkPanel, DINGTALK_EXAMPLE_PROMPTS, type DingTalkApi, type DingTalkStatus } from './DingTalkPanel.tsx'
 import { getCachedDingTalkStatus, setCachedDingTalkStatus } from './status-cache.ts'
-import { createWeComApi } from './wecom-api.ts'
-import { WeComPanel, WECOM_EXAMPLE_PROMPTS, type WeComApi, type WeComStatus } from './WeComPanel.tsx'
-import { getCachedWeComStatus, setCachedWeComStatus } from './wecom-status-cache.ts'
 import { createWeChatApi } from './wechat-api.ts'
 import { WeChatPanel, WECHAT_EXAMPLE_PROMPTS, type WeChatApi, type WeChatStatus } from './WeChatPanel.tsx'
 import { getCachedWeChatStatus, setCachedWeChatStatus } from './wechat-status-cache.ts'
 import { productText } from './locales/product.ts'
 /* oxlint-disable @stylistic/arrow-parens */
-type ConnectorKind = 'demo' | 'dingtalk-channel' | 'wecom-channel' | 'wechat-channel'
+type ConnectorKind = 'demo' | 'dingtalk-channel' | 'wechat-channel'
 type Connector = {
   id: string
   name: string
@@ -63,17 +60,6 @@ const CONNECTORS: readonly Connector[] = [
   { id: 'internal-mail', name: '内部邮箱', summary: productText('适配内网 SMTP 或 Exchange 环境，专用于不出网的邮件通知与归档。'), scope: '内网邮件', accent: '#7c3aed', icon: '/connector-icons/internal-mail.svg', capabilities: ['内网投递', '通知归档', '审批抄送'], access: '需管理员配置内网服务地址' },
   { id: 'feishu', name: '飞书', summary: productText('协助整理飞书文档、群消息和待办信息，支持将成果回写到协作空间。'), scope: '团队协作', accent: '#00aeef', icon: '/connector-icons/feishu.png', capabilities: ['云文档', '群消息', '待办同步'], access: '仅访问你选择的工作空间内容' },
   {
-    id: 'wecom',
-    name: '企业微信',
-    summary: productText('连接企业微信的消息、日程和审批通知，为内部协同提供统一入口。'),
-    scope: '企业微信技能',
-    accent: '#2d8cf0',
-    icon: '/connector-icons/wecom.png',
-    capabilities: ['消息', '邮件', '文档', '待办', '日程', '会议', '微盘', '通讯录'],
-    access: productText('授权本机 wecom-cli 扫码接入，并启用 wecomcli 技能后，可在桌面对话中调用企业微信能力。'),
-    kind: 'wecom-channel',
-  },
-  {
     id: 'wechat',
     name: '微信助理',
     summary: productText('通过微信直接下发指令，结果实时回传至微信聊天窗口。'),
@@ -94,9 +80,6 @@ const CONNECTORS: readonly Connector[] = [
   { id: 'pm-system', name: '项目管理系统', summary: productText('读取项目进度、任务分工与里程碑信息，生成项目跟踪与汇报材料。'), scope: '项目管理', accent: '#8b5cf6', icon: '/connector-icons/pm-system.svg', capabilities: ['进度读取', '任务汇总', '里程碑跟踪'], access: '按项目授权访问可见范围' },
   { id: 'archive-system', name: '档案管理系统', summary: productText('按授权范围检索历史项目档案，支持资料调阅与成果归档。'), scope: '档案管理', accent: '#6366f1', icon: '/connector-icons/archive-system.svg', capabilities: ['档案检索', '资料调阅', '成果归档'], access: '按档案密级与目录权限控制' },
 ]
-
-/** Product-visible rows. WeCom stays mounted on the Host while its packaged QR flow is disabled in the Client. */
-const VISIBLE_CONNECTORS = CONNECTORS.filter(connector => connector.id !== 'wecom')
 
 function ConnectorBrandIcon({ icon, accent }: { icon: string; accent: string }) {
   // Bundled official brand artwork renders on a white tile; emoji values
@@ -135,20 +118,18 @@ let openCustomConnector: (() => void) | null = null
 
 function channelTitle(connector: Connector): string {
   if (connector.kind === 'dingtalk-channel') return productText('连接 钉钉')
-  if (connector.kind === 'wecom-channel') return productText('连接 企业微信')
   if (connector.kind === 'wechat-channel') return productText('连接 微信助理')
   return productText('{0}连接器详情', [connector.name])
 }
 
 function channelSubtitle(connector: Connector): string {
   if (connector.kind === 'dingtalk-channel') return productText(' · 钉钉技能')
-  if (connector.kind === 'wecom-channel') return productText(' · 企业微信技能')
   if (connector.kind === 'wechat-channel') return productText(' · 远程通道')
   return `${connector.scope}${productText(' · 本地演示目录')}`
 }
 
 function isLiveChannel(kind: ConnectorKind | undefined): boolean {
-  return kind === 'dingtalk-channel' || kind === 'wecom-channel' || kind === 'wechat-channel'
+  return kind === 'dingtalk-channel' || kind === 'wechat-channel'
 }
 
 /** Render the connector directory after the configured platform responds.
@@ -157,15 +138,16 @@ function isLiveChannel(kind: ConnectorKind | undefined): boolean {
  */
 export function Connectors({
   dingTalk,
-  weCom,
   weChat,
   onTryPrompt,
+  onWeChatConnected,
   checkConnection,
 }: {
   dingTalk: DingTalkApi
-  weCom: WeComApi
   weChat: WeChatApi
   onTryPrompt: (prompt: string, connectorId: string) => void
+  /** Open the fixed 微信助理 Session after a successful QR bind. */
+  onWeChatConnected?: () => void
   checkConnection: () => Promise<unknown>
 }) {
   const [connection, setConnection] = useState<'loading' | 'ready' | 'failed'>('loading')
@@ -201,17 +183,12 @@ export function Connectors({
   const [customCategory, setCustomCategory] = useState('协同办公')
   const [customDescription, setCustomDescription] = useState('')
   const [dingTalkStatus, setDingTalkStatus] = useState<DingTalkStatus | null>(() => getCachedDingTalkStatus())
-  const [weComStatus, setWeComStatus] = useState<WeComStatus | null>(() => getCachedWeComStatus())
   const [weChatStatus, setWeChatStatus] = useState<WeChatStatus | null>(() => getCachedWeChatStatus())
   const [notice, setNotice] = useState<WanweiNotice | null>(null)
-  const connectors = [...VISIBLE_CONNECTORS, ...customConnectors]
+  const connectors = [...CONNECTORS, ...customConnectors]
   const rememberDingTalk = (value: DingTalkStatus) => {
     setCachedDingTalkStatus(value)
     setDingTalkStatus(value)
-  }
-  const rememberWeCom = (value: WeComStatus) => {
-    setCachedWeComStatus(value)
-    setWeComStatus(value)
   }
   const rememberWeChat = (value: WeChatStatus) => {
     setCachedWeChatStatus(value)
@@ -228,7 +205,6 @@ export function Connectors({
     void weChat.status().then(rememberWeChat).catch(() => {})
   }, [weChat])
   const dingTalkConnected = dingTalkStatus?.authed === true && dingTalkStatus.skillInstalled
-  const weComConnected = weComStatus?.authed === true && weComStatus.skillInstalled
   const weChatConnected = weChatStatus?.authed === true
   const requestAccess = (connector: Connector) =>{  setRequested(current => new Set(current).add(connector.id)) }
   const saveCustomConnector = () => {
@@ -261,30 +237,6 @@ export function Connectors({
       const value = await dingTalk.disconnect()
       rememberDingTalk(value)
       if (!(value.authed && value.skillInstalled)) removeActiveConnectorId('dingtalk')
-      return value
-    },
-  }
-
-  const weComApi: WeComApi = {
-    status: async () => {
-      const value = await weCom.status()
-      rememberWeCom(value)
-      return value
-    },
-    login: async () => {
-      const value = await weCom.login()
-      rememberWeCom(value)
-      return value
-    },
-    installSkill: async () => {
-      const value = await weCom.installSkill()
-      rememberWeCom(value)
-      return value
-    },
-    disconnect: async () => {
-      const value = await weCom.disconnect()
-      rememberWeCom(value)
-      if (!(value.authed && value.skillInstalled)) removeActiveConnectorId('wecom')
       return value
     },
   }
@@ -322,13 +274,10 @@ export function Connectors({
     <div className="dsh-connectors-grid" role="list">
       {connectors.map(connector => {
         const connected = (connector.kind === 'dingtalk-channel' && dingTalkConnected)
-          || (connector.kind === 'wecom-channel' && weComConnected)
           || (connector.kind === 'wechat-channel' && weChatConnected)
-        const tryPrompt = connector.kind === 'wecom-channel'
-          ? WECOM_EXAMPLE_PROMPTS[1]
-          : connector.kind === 'wechat-channel'
-            ? WECHAT_EXAMPLE_PROMPTS[0]
-            : DINGTALK_EXAMPLE_PROMPTS[1]
+        const tryPrompt = connector.kind === 'wechat-channel'
+          ? WECHAT_EXAMPLE_PROMPTS[0]
+          : DINGTALK_EXAMPLE_PROMPTS[1]
         return (
           <div
             key={connector.id}
@@ -379,13 +328,10 @@ export function Connectors({
         )
       })}
     </div>
-    {selected !== null && <div className="dsh-connector-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}><section className="dsh-connector-detail" aria-label={channelTitle(selected)}><header><div><ConnectorBrandIcon icon={selected.icon} accent={selected.accent} /><div><h2>{selected.kind === 'dingtalk-channel' || selected.kind === 'wecom-channel' || selected.kind === 'wechat-channel' ? channelTitle(selected) : selected.name}</h2><p>{channelSubtitle(selected)}</p></div></div><button type="button" onClick={() =>{  setSelected(null) }} aria-label={productText('关闭')}>×</button></header>{selected.kind === 'dingtalk-channel' ? <DingTalkPanel api={dingTalkApi} initialStatus={dingTalkStatus} onNotice={setNotice} onTry={(prompt) => {
+    {selected !== null && <div className="dsh-connector-modal-backdrop" onMouseDown={event => { if (event.currentTarget === event.target) setSelected(null) }}><section className="dsh-connector-detail" aria-label={channelTitle(selected)}><header><div><ConnectorBrandIcon icon={selected.icon} accent={selected.accent} /><div><h2>{selected.kind === 'dingtalk-channel' || selected.kind === 'wechat-channel' ? channelTitle(selected) : selected.name}</h2><p>{channelSubtitle(selected)}</p></div></div><button type="button" onClick={() =>{  setSelected(null) }} aria-label={productText('关闭')}>×</button></header>{selected.kind === 'dingtalk-channel' ? <DingTalkPanel api={dingTalkApi} initialStatus={dingTalkStatus} onNotice={setNotice} onTry={(prompt) => {
       setSelected(null)
       onTryPrompt(prompt, 'dingtalk')
-    }} /> : selected.kind === 'wecom-channel' ? <WeComPanel api={weComApi} initialStatus={weComStatus} onNotice={setNotice} onTry={(prompt) => {
-      setSelected(null)
-      onTryPrompt(prompt, 'wecom')
-    }} /> : selected.kind === 'wechat-channel' ? <WeChatPanel api={weChatApi} initialStatus={weChatStatus} onNotice={setNotice} onTry={(prompt) => {
+    }} /> : selected.kind === 'wechat-channel' ? <WeChatPanel api={weChatApi} initialStatus={weChatStatus} onNotice={setNotice} {...(onWeChatConnected === undefined ? {} : { onConnected: onWeChatConnected })} onTry={(prompt) => {
       setSelected(null)
       onTryPrompt(prompt, 'wechat')
     }} /> : <><p className="dsh-connector-detail-summary">{selected.summary}</p><div className="dsh-connector-detail-block"><span>{productText('可协助完成')}</span><div>{selected.capabilities.map(item => <b key={item}>{item}</b>)}</div></div><div className="dsh-connector-detail-block"><span>{productText('接入说明')}</span><p>{selected.access}</p></div><footer><small>{productText('接入后仅在授权范围内访问数据。')}</small><button type="button" className={requested.has(selected.id) ? 'requested' : ''} onClick={() =>{  requestAccess(selected) }}>{requested.has(selected.id) ? productText('已提交申请') : productText('申请接入')}</button></footer></>}</section></div>}
@@ -421,23 +367,36 @@ export function apply(ctx: Context): void {
   const sessions = ctx.get('sessions') as ISessions
   const workspaces: IWorkspaces = ctx.workspaces
   const dingTalk = createDingTalkApi(connection)
-  const weCom = createWeComApi(connection)
   const weChat = createWeChatApi(connection)
+  /** Open the fixed 微信助理 Session (create/resume on Host, refresh Client list, select). */
+  const openWeChatSession = async (): Promise<string> => {
+    const { sessionId } = await weChat.ensureSession()
+    setCachedWeChatStatus({
+      ...(getCachedWeChatStatus() ?? { authed: true, bridgeRunning: true, hint: null, sessionId: null }),
+      authed: true,
+      sessionId,
+    })
+    const id = SessionId(sessionId)
+    await sessions.refresh()
+    try {
+      sessions.open(id)
+    } catch {
+      // List snapshot can lag Host create by one refresh cycle.
+      await sessions.refresh()
+      sessions.open(id)
+    }
+    setActiveConnectorId('wechat')
+    controller.close()
+    return sessionId
+  }
   const onTryPrompt = (prompt: string, connectorId: string) => {
-    // WeChat Assistant owns one durable Session under wechat-workspace — open it immediately
-    // so「去试试」lands on the same page inbound WeChat tasks already use.
+    // WeChat Assistant owns one durable Session — open it immediately so「去试试」
+    // and inbound phone tasks share the same transcript without a Workspace picker.
     if (connectorId === 'wechat') {
-      setActiveConnectorId('wechat')
-      controller.close()
-      void weChat.ensureSession()
-        .then(({ sessionId }) => {
-          sessions.open(SessionId(sessionId))
-        })
-        .catch(() => {
-          // Host Session unavailable: keep the example as a staged draft instead.
-          conversation.input.setStagedDraft(prompt)
-          sessions.clear()
-        })
+      void openWeChatSession().catch(() => {
+        // Keep any selection; clearing here hid Host-side inbound turns from the UI.
+        conversation.input.setStagedDraft(prompt)
+      })
       return
     }
     // Leave the connectors overlay, attach the connector chip, and stage the example (WorkBuddy「去试试」).
@@ -473,9 +432,9 @@ export function apply(ctx: Context): void {
     renderContent: () => (
       <Connectors
         dingTalk={dingTalk}
-        weCom={weCom}
         weChat={weChat}
         onTryPrompt={onTryPrompt}
+        onWeChatConnected={() => { void openWeChatSession().catch(() => {}) }}
         checkConnection={checkConnection}
       />
     ),
@@ -501,11 +460,16 @@ export function apply(ctx: Context): void {
             })
             .catch(() => { setDingTalkConnected(false) })
           void weChat.status()
-            .then(value => {
+            .then(async value => {
               setCachedWeChatStatus(value)
               setWeChatConnected(value.authed)
+              // Inbound focus needs the fixed id even when the bridge had not ensured it yet.
+              if (value.authed && value.sessionId === null) {
+                const { sessionId } = await weChat.ensureSession()
+                setCachedWeChatStatus({ ...value, sessionId })
+              }
             })
-            .catch(() => { setWeChatConnected(false) })
+            .catch(() => { setWeChatConnected(getCachedWeChatStatus()?.authed === true) })
         }, [])
         // Connected accounts attach to the composer stack (WorkBuddy: all authed icons).
         useEffect(() => {
@@ -513,16 +477,39 @@ export function apply(ctx: Context): void {
           else removeActiveConnectorId('dingtalk')
         }, [dingTalkConnected])
         useEffect(() => {
-          removeActiveConnectorId('wecom')
-        }, [])
-        useEffect(() => {
           if (weChatConnected) setActiveConnectorId('wechat')
           else removeActiveConnectorId('wechat')
+        }, [weChatConnected])
+        // Keep the fixed 微信助理 Session selected when inbound phone work is running.
+        useEffect(() => {
+          if (!weChatConnected) return
+          const openFixed = (sessionId: string) => {
+            const id = SessionId(sessionId)
+            const snap = sessions.list.getSnapshot()
+            if (snap.current === id) return
+            try {
+              sessions.open(id)
+            } catch {
+              // List may not yet include the Host-created Session; refresh then retry.
+              void sessions.refresh().then(() => {
+                try { sessions.open(id) } catch { /* ignore */ }
+              })
+            }
+          }
+          const focusRunning = () => {
+            const cached = getCachedWeChatStatus()
+            const sessionId = cached?.sessionId
+            if (sessionId === null || sessionId === undefined || sessionId === '') return
+            const snap = sessions.list.getSnapshot()
+            if (snap.byId[SessionId(sessionId)]?.running === true) openFixed(sessionId)
+          }
+          focusRunning()
+          return sessions.list.subscribe(focusRunning)
         }, [weChatConnected])
         return (
           <ComposerConnectorChip
             onManage={() => { controller.open() }}
-            options={VISIBLE_CONNECTORS.map(entry => ({
+            options={CONNECTORS.map(entry => ({
               id: entry.id,
               name: entry.name,
               icon: entry.icon,

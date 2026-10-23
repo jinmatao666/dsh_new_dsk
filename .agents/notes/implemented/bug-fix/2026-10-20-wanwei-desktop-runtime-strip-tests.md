@@ -10,7 +10,7 @@ Windows NSIS installers failed with `Extract: error writing to file` on paths su
 
 ## Decision
 
-`prepare:runtime` skips development-only entries when restoring workspace packages and prunes `tests/`, `__tests__/`, and `*.spec.*` / `*.test.*` files from the staged app tree before DingTalk/WeCom asset staging. Helpers live in `products/wanwei-desktop/scripts/runtime-files.mjs`.
+`prepare:runtime` skips development-only entries when restoring workspace packages and prunes `tests/`, `__tests__/`, and `*.spec.*` / `*.test.*` files from the staged app tree before DingTalk asset staging. Helpers live in `products/wanwei-desktop/scripts/runtime-files.mjs`.
 
 ## Alternatives considered
 

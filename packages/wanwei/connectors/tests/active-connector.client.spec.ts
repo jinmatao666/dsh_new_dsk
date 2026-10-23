@@ -33,11 +33,11 @@ describe('active-connector', () => {
 
   it('keeps multiple attached connectors and can toggle or remove one', () => {
     setActiveConnectorId('dingtalk')
-    setActiveConnectorId('wecom')
-    expect(getActiveConnectorIds()).toEqual(['dingtalk', 'wecom'])
+    setActiveConnectorId('wechat')
+    expect(getActiveConnectorIds()).toEqual(['dingtalk', 'wechat'])
     toggleActiveConnectorId('dingtalk')
-    expect(getActiveConnectorIds()).toEqual(['wecom'])
-    removeActiveConnectorId('wecom')
+    expect(getActiveConnectorIds()).toEqual(['wechat'])
+    removeActiveConnectorId('wechat')
     expect(getActiveConnectorIds()).toEqual([])
   })
 })

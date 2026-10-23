@@ -7,6 +7,8 @@ export type WeChatStatus = {
   authed: boolean
   bridgeRunning: boolean
   hint: string | null
+  /** Fixed desktop Session id once Host has ensured the 微信助理 Session. */
+  sessionId: string | null
 }
 
 /** Result of starting an in-app QR login. */
@@ -49,17 +51,20 @@ export const WECHAT_EXAMPLE_PROMPTS = [
  * @param props.onTry - Stage a prompt in desktop chat (optional; primary use is phone chat).
  * @param props.initialStatus - Last-known status for instant paint while a soft refresh runs.
  * @param props.onNotice - Transient success/error feedback after connect or unbind.
+ * @param props.onConnected - Open the fixed 微信助理 Session after a successful bind.
  */
 export function WeChatPanel({
   api,
   onTry,
   initialStatus,
   onNotice,
+  onConnected,
 }: {
   api: WeChatApi
   onTry?: (prompt: string) => void
   initialStatus?: WeChatStatus | null
   onNotice?: (notice: { kind: 'success' | 'error' | 'info'; text: string }) => void
+  onConnected?: () => void
 }) {
   const seed = initialStatus ?? getCachedWeChatStatus()
   const [status, setStatus] = useState<WeChatStatus | null>(seed)
@@ -116,6 +121,7 @@ export function WeChatPanel({
     closeQr()
     setBusy('idle')
     onNotice?.({ kind: 'success', text: productText('微信助理已连接') })
+    onConnected?.()
   }
 
   /** Host may have persisted credentials while a hung loginPoll never returned `confirmed`. */

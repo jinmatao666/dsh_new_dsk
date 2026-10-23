@@ -7,14 +7,20 @@ describe('wechat-api', () => {
       authed: true,
       bridgeRunning: false,
       hint: 'x',
-    })).toEqual({ authed: true, bridgeRunning: false, hint: 'x' })
+      sessionId: 'wechat-session-1',
+    })).toEqual({
+      authed: true,
+      bridgeRunning: false,
+      hint: 'x',
+      sessionId: 'wechat-session-1',
+    })
     expect(() => parseWeChatStatus(null)).toThrow(/状态加载失败/)
   })
 
   it('calls /wanwei-wechat endpoints', async () => {
     const call = vi.fn(async (_channel: string, endpoint: string) => {
       if (endpoint === 'status') {
-        return { ok: true, value: { authed: false, bridgeRunning: false, hint: null } }
+        return { ok: true, value: { authed: false, bridgeRunning: false, hint: null, sessionId: null } }
       }
       if (endpoint === 'loginStart') {
         return {
@@ -23,7 +29,7 @@ describe('wechat-api', () => {
             sessionKey: 's',
             qrcodeUrl: 'u',
             qrDataUrl: 'd',
-            status: { authed: false, bridgeRunning: false, hint: null },
+            status: { authed: false, bridgeRunning: false, hint: null, sessionId: null },
           },
         }
       }
@@ -32,7 +38,7 @@ describe('wechat-api', () => {
           ok: true,
           value: {
             phase: 'wait',
-            status: { authed: false, bridgeRunning: false, hint: null },
+            status: { authed: false, bridgeRunning: false, hint: null, sessionId: null },
             message: null,
             qrcodeUrl: 'u',
             qrDataUrl: 'd',
@@ -42,7 +48,7 @@ describe('wechat-api', () => {
       if (endpoint === 'ensureSession') {
         return { ok: true, value: { sessionId: 'wechat-session-1' } }
       }
-      return { ok: true, value: { authed: false, bridgeRunning: false, hint: null } }
+      return { ok: true, value: { authed: false, bridgeRunning: false, hint: null, sessionId: null } }
     })
     const api = createWeChatApi({ rpc: { call } } as never)
     await expect(api.status()).resolves.toMatchObject({ authed: false })

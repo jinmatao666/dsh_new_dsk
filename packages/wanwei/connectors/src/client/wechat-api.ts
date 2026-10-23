@@ -23,6 +23,9 @@ export function parseWeChatStatus(value: unknown): WeChatStatus {
     authed: record.authed,
     bridgeRunning: record.bridgeRunning,
     hint: typeof record.hint === 'string' ? record.hint : null,
+    sessionId: typeof record.sessionId === 'string' && record.sessionId.trim() !== ''
+      ? record.sessionId
+      : null,
   }
 }
 

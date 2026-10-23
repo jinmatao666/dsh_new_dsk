@@ -14,7 +14,7 @@ Status: implemented
 
 桌面产品在 **`prepare:runtime` 中随包 `dingtalk-workspace-cli`**，并解压出原生 `vendor/dws[.exe]`（deploy 会禁用 npm lifecycle，故需显式解压）。Host 解析优先使用随包二进制（`DSH_DWS_CLI` / `DSH_NODE_BINARY` 旁 / 产品 `node_modules`），PATH 仅作回退。`products/wanwei-desktop` 保留 `@dingtalk-real-ai/dsh-dingtalk` npm 依赖**仅用于**随包 `dws-cli` 技能资源；产品 profile **不**挂载该包做 Stream IM，连接器也不跑应用注册扫码，不写入 `DINGTALK_CLIENT_ID` / `DINGTALK_CLIENT_SECRET`。
 
-这与 [桌面企业微信 CLI 技能](2026-10-19-wanwei-wecom-desktop-cli-skills.zh.md) 的随包策略一致，并合并取代已移除的机器人扫码绑定连接器路径与原先的 profile Stream 通道挂载。
+本决策合并取代已移除的机器人扫码绑定连接器路径与原先的 profile Stream 通道挂载。企业微信 CLI 随包随后已删除，见 [移除万维企业微信连接器](../simplification/2026-10-23-remove-wanwei-wecom-connector.zh.md)。
 
 ## 考虑过的替代方案
 

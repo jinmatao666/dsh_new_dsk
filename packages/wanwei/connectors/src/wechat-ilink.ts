@@ -1,7 +1,7 @@
 /**
  * Personal WeChat Assistant (微信助理): Tencent iLink QR bind + inbound chat bridge.
- * Distinct from WeCom wecom-cli skills — messages arrive from WeChat and drive a
- * desktop Session; replies return to the WeChat chat window.
+ * Messages arrive from WeChat and drive a desktop Session; replies return to the
+ * WeChat chat window.
  */
 import { randomBytes, randomUUID } from 'node:crypto'
 import {
@@ -48,6 +48,8 @@ export type WeChatStatus = {
   authed: boolean
   bridgeRunning: boolean
   hint: string | null
+  /** Fixed desktop Session id when credentials exist and the Session has been ensured. */
+  sessionId: string | null
 }
 
 /** Login session snapshot returned to the Client (no secrets). */
@@ -90,7 +92,11 @@ type FetchLike = typeof fetch
 
 let statusCache: { at: number; home: string; status: WeChatStatus } | null = null
 const activeLogins = new Map<string, ActiveLogin>()
+/** One in-flight ensure per product home so「去试试」and the inbound bridge never mint two Sessions. */
+const ensureDesktopSessionInflight = new Map<string, Promise<WeChatSessionId>>()
 let bridgeAbort: AbortController | null = null
+/** Bot token the running bridge polls with; a changed token forces a restart. */
+let bridgeToken: string | null = null
 let bridgeRunning = false
 let fetchImpl: FetchLike = globalThis.fetch.bind(globalThis)
 let qrDataUrlFactory: ((content: string) => Promise<string>) | null = null
@@ -178,6 +184,10 @@ function saveDesktopSessionId(dshHome: string, sessionId: WeChatSessionId): void
 
 /**
  * Create or resume the single WeChat Assistant Session under `wechat-workspace`.
+ * There is exactly one durable Session for this channel; callers must not ask
+ * the user to pick a Workspace. Concurrent callers for the same `dshHome`
+ * share one in-flight promise so bridge start and Client「去试试」cannot each
+ * create a Session and then diverge.
  * @param ctx - Host context with workspace + sessionController + agents.
  * @param dshHome - product DSH home.
  * @returns live Session id.
@@ -186,8 +196,28 @@ export async function ensureWeChatDesktopSession(
   ctx: Context,
   dshHome: string,
 ): Promise<WeChatSessionId> {
+  const pending = ensureDesktopSessionInflight.get(dshHome)
+  if (pending !== undefined) return pending
+  const run = ensureWeChatDesktopSessionUnlocked(ctx, dshHome).finally(() => {
+    if (ensureDesktopSessionInflight.get(dshHome) === run) {
+      ensureDesktopSessionInflight.delete(dshHome)
+    }
+  })
+  ensureDesktopSessionInflight.set(dshHome, run)
+  return run
+}
+
+/** Clear the ensure coalescer (tests only). */
+export function resetWeChatDesktopSessionInflightForTests(): void {
+  ensureDesktopSessionInflight.clear()
+}
+
+async function ensureWeChatDesktopSessionUnlocked(
+  ctx: Context,
+  dshHome: string,
+): Promise<WeChatSessionId> {
   const cwd = wechatWorkspaceDir(dshHome)
-  const workspace = await ctx.workspaceRegistry.create(cwd)
+  const workspace = await ctx.workspaceRegistry.create(cwd, WECHAT_DESKTOP_SESSION_TITLE)
   const candidates: WeChatSessionId[] = []
   const saved = loadDesktopSessionId(dshHome)
   if (saved !== undefined) candidates.push(saved)
@@ -197,8 +227,15 @@ export async function ensureWeChatDesktopSession(
   for (const sessionId of candidates) {
     const resolved = await ctx.sessionController.resolveAgent(sessionId)
     if ('agent' in resolved) {
-      saveDesktopSessionId(dshHome, sessionId)
+      // Reuse the first live Session forever across reconnects; do not create another.
+      if (loadDesktopSessionId(dshHome) !== sessionId) saveDesktopSessionId(dshHome, sessionId)
+      invalidateWeChatStatusCache()
       return sessionId
+    }
+    // Only a Session that no longer exists may be replaced; a transient resume
+    // failure must not mint a second 微信助理 Session.
+    if (resolved.error.code !== 'session-not-found') {
+      throw new Error(resolved.error.message || '无法打开微信助理会话')
     }
   }
   const created = await ctx.sessionController.create({ workspaceId: workspace.id })
@@ -209,6 +246,7 @@ export async function ensureWeChatDesktopSession(
   }).catch(() => {
     // Title is UX-only; the Session remains usable without it.
   })
+  invalidateWeChatStatusCache()
   return created.sessionId
 }
 
@@ -335,8 +373,9 @@ function saveCredentials(dshHome: string, credentials: StoredCredentials): void 
 }
 
 function clearCredentials(dshHome: string): void {
-  const dir = wechatCredentialDir(dshHome)
-  if (existsSync(dir)) rmSync(dir, { recursive: true, force: true })
+  // Keep `desktop-session.json` so reconnect reuses the same 微信助理 Session.
+  const path = wechatCredentialPath(dshHome)
+  if (existsSync(path)) rmSync(path, { force: true })
 }
 
 /**
@@ -355,11 +394,13 @@ export function buildWeChatStatus(
     return { ...statusCache.status, bridgeRunning }
   }
   const credentials = loadWeChatCredentials(dshHome)
+  const sessionId = credentials === null ? null : (loadDesktopSessionId(dshHome) ?? null)
   const status: WeChatStatus = credentials === null
     ? {
       authed: false,
       bridgeRunning: false,
       hint: '点击「连接」，用微信扫码绑定远程通道。',
+      sessionId: null,
     }
     : {
       authed: true,
@@ -367,6 +408,7 @@ export function buildWeChatStatus(
       hint: bridgeRunning
         ? null
         : '已授权；远程通道正在启动，可用微信给助理发指令。',
+      sessionId,
     }
   statusCache = { at: Date.now(), home: dshHome, status }
   return { ...status, bridgeRunning }
@@ -742,6 +784,7 @@ function extractAssistantText(agent: Agent): string {
 export function stopWeChatBridge(): void {
   bridgeAbort?.abort()
   bridgeAbort = null
+  bridgeToken = null
   bridgeRunning = false
   invalidateWeChatStatusCache()
 }
@@ -754,16 +797,26 @@ export function stopWeChatBridge(): void {
 export function startWeChatBridge(ctx: Context, dshHome: string): void {
   const credentials = loadWeChatCredentials(dshHome)
   if (credentials === null) return
+  // Login polls call this repeatedly; restarting would abort an in-flight phone task.
+  if (bridgeAbort !== null && bridgeToken === credentials.botToken) return
   stopWeChatBridge()
   const abort = new AbortController()
   bridgeAbort = abort
+  bridgeToken = credentials.botToken
   bridgeRunning = true
   invalidateWeChatStatusCache()
+  // Materialize the fixed desktop Session as soon as the channel is live so
+  // the Client can open「微信助理」without a Workspace picker.
+  void ensureWeChatDesktopSession(ctx, dshHome).catch((error) => {
+    ctx.logger.warn(`微信助理会话准备失败：${error instanceof Error ? error.message : String(error)}`)
+  })
   void runBridgeLoop(ctx, dshHome, abort.signal).catch((error) => {
     ctx.logger.warn(`微信助理远程通道已停止：${error instanceof Error ? error.message : String(error)}`)
+  }).finally(() => {
     if (bridgeAbort === abort) {
       bridgeRunning = false
       bridgeAbort = null
+      bridgeToken = null
       invalidateWeChatStatusCache()
     }
   })
@@ -772,11 +825,13 @@ export function startWeChatBridge(ctx: Context, dshHome: string): void {
 async function runBridgeLoop(ctx: Context, dshHome: string, signal: AbortSignal): Promise<void> {
   let credentials = loadWeChatCredentials(dshHome)
   if (credentials === null) return
+  let active: StoredCredentials = credentials
   await notifyLifecycle(credentials, 'start', signal)
   try {
     while (!signal.aborted) {
       credentials = loadWeChatCredentials(dshHome)
       if (credentials === null) return
+      active = credentials
       let response: {
         ret?: number
         errcode?: number
@@ -829,6 +884,9 @@ async function runBridgeLoop(ctx: Context, dshHome: string, signal: AbortSignal)
         const text = extractUserText(message)
         if (text === '') {
           await sendTextReply(credentials, from, '暂只支持文字指令，请用文字描述要在电脑上完成的任务。', message.context_token)
+            .catch((error: unknown) => {
+              ctx.logger.warn(`微信回复失败：${error instanceof Error ? error.message : String(error)}`)
+            })
           continue
         }
         try {
@@ -841,8 +899,8 @@ async function runBridgeLoop(ctx: Context, dshHome: string, signal: AbortSignal)
       }
     }
   } finally {
-    const latest = loadWeChatCredentials(dshHome)
-    if (latest !== null) await notifyLifecycle(latest, 'stop').catch(() => {})
+    // A replaced bridge must not announce offline for the token its successor just started.
+    if (bridgeAbort === null) await notifyLifecycle(active, 'stop').catch(() => {})
   }
 }
 
@@ -858,29 +916,26 @@ async function runDesktopTask(
   const resolved = await ctx.sessionController.resolveAgent(sessionId)
   if ('error' in resolved) throw new Error(resolved.error.message || '无法打开微信助理会话')
   const agent = resolved.agent
-  try {
-    ctx.permissionPresets.set(agent.session, 'workspace-write')
-    signal.throwIfAborted()
-    await ctx.sessionController.prompt({
-      sessionId,
-      requestId: randomUUID() as SessionRequestId,
-      mode: 'queue',
-      content: [{ type: 'text', text: prompt }],
-      clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    }, signal)
-    await agent.whenIdle()
-    await ctx.sessions.flush(agent.session)
-    const end = agent.session.events.findLast(event => event.type === 'turn/end')
-    if (end?.type === 'turn/end' && end.data.reason.kind === 'error') {
-      throw new Error(end.data.reason.error.message)
-    }
-    if (end?.type === 'turn/end' && end.data.reason.kind !== 'completed') {
-      throw new Error(`任务未完成：${end.data.reason.kind}`)
-    }
-    return extractAssistantText(agent)
-  } finally {
-    agent.cancel({ kind: 'hook', reason: '微信助理任务结束' })
+  ctx.permissionPresets.set(agent.session, 'workspace-write')
+  signal.throwIfAborted()
+  await ctx.sessionController.prompt({
+    sessionId,
+    requestId: randomUUID() as SessionRequestId,
+    mode: 'queue',
+    content: [{ type: 'text', text: prompt }],
+    clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  }, signal)
+  await agent.whenIdle()
+  await ctx.sessions.flush(agent.session)
+  const end = agent.session.events.findLast(event => event.type === 'turn/end')
+  if (end?.type === 'turn/end' && end.data.reason.kind === 'error') {
+    throw new Error(end.data.reason.error.message)
   }
+  if (end?.type === 'turn/end' && end.data.reason.kind !== 'completed') {
+    throw new Error(`任务未完成：${end.data.reason.kind}`)
+  }
+  // Keep the fixed 微信助理 Session alive so the desktop transcript stays open.
+  return extractAssistantText(agent)
 }
 
 /**
@@ -910,6 +965,8 @@ export function registerWeChatIlinkRpc(ctx: Context): () => void {
       try {
         const home = dshHome()
         if (endpoint === 'status') {
+          // Revive a bridge whose loop exited on an unexpected error.
+          ensureBridge()
           return { ok: true as const, value: buildWeChatStatus(home) }
         }
         if (endpoint === 'loginStart') {
@@ -932,7 +989,10 @@ export function registerWeChatIlinkRpc(ctx: Context): () => void {
         }
         if (endpoint === 'ensureSession') {
           const sessionId = await ensureWeChatDesktopSession(ctx, home)
-          return { ok: true as const, value: { sessionId } }
+          return {
+            ok: true as const,
+            value: { sessionId, status: buildWeChatStatus(home, { fresh: true }) },
+          }
         }
         throw new Error('未知微信助理操作')
       } catch (error) {

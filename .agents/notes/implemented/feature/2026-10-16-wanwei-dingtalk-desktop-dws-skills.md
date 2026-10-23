@@ -14,7 +14,7 @@ The connectors DingTalk card’s primary “已连接” state is **personal DWS
 
 The desktop product **ships `dingtalk-workspace-cli` inside `prepare:runtime`** and extracts the native `vendor/dws[.exe]` (deploy ignores npm lifecycle scripts). Host resolution prefers the bundled binary (`DSH_DWS_CLI` / next to `DSH_NODE_BINARY` / product `node_modules`) before PATH. `products/wanwei-desktop` keeps `@dingtalk-real-ai/dsh-dingtalk` as an npm dependency **only** for the bundled `dws-cli` skill assets; the product profile does **not** mount that package for Stream IM, and connectors do not run app-registration QR or write `DINGTALK_CLIENT_ID` / `DINGTALK_CLIENT_SECRET`.
 
-This matches the WeCom bundling decision in [desktop WeCom CLI skills](2026-10-19-wanwei-wecom-desktop-cli-skills.md). It consolidates and replaces the removed robot scan-bind connectors path and the former profile Stream channel mount.
+It consolidates and replaces the removed robot scan-bind connectors path and the former profile Stream channel mount. WeCom CLI packaging was later removed; see [Remove the Wanwei WeCom connector](../simplification/2026-10-23-remove-wanwei-wecom-connector.md).
 
 ## Alternatives considered
 

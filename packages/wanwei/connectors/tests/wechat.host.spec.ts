@@ -1,26 +1,31 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import {
   buildWeChatStatus,
   disconnectWeChat,
+  ensureWeChatDesktopSession,
   invalidateWeChatStatusCache,
   loadWeChatCredentials,
   pollWeChatLogin,
   registerWeChatIlinkRpc,
+  resetWeChatDesktopSessionInflightForTests,
   setWeChatFetchForTests,
   setWeChatQrFactoryForTests,
+  startWeChatBridge,
   startWeChatLogin,
   stopWeChatBridge,
   wechatCredentialPath,
+  wechatDesktopSessionPath,
 } from '../src/wechat-ilink.ts'
 import { apply, inject, name } from '../src/index.ts'
 
 afterEach(() => {
   vi.restoreAllMocks()
   invalidateWeChatStatusCache()
+  resetWeChatDesktopSessionInflightForTests()
   stopWeChatBridge()
   setWeChatFetchForTests(null)
   setWeChatQrFactoryForTests(null)
@@ -34,6 +39,93 @@ describe('WeChat Assistant Host helpers', () => {
     expect(status.authed).toBe(false)
     expect(status.bridgeRunning).toBe(false)
     expect(status.hint).toMatch(/连接/)
+  })
+
+  it('coalesces concurrent ensureWeChatDesktopSession into one create', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wechat-ensure-'))
+    let creates = 0
+    let releaseCreate!: () => void
+    const createHold = new Promise<void>(resolve => { releaseCreate = resolve })
+    const ctx = {
+      workspaceRegistry: {
+        create: async () => ({ id: 'ws-wechat', sessionIds: [] as string[] }),
+      },
+      sessionController: {
+        resolveAgent: async () => ({ error: { code: 'session-not-found', message: 'missing' } }),
+        create: async () => {
+          creates += 1
+          await createHold
+          return { sessionId: 'wechat-only-session' }
+        },
+        rename: async () => {},
+      },
+    }
+    const first = ensureWeChatDesktopSession(ctx as never, home)
+    const second = ensureWeChatDesktopSession(ctx as never, home)
+    releaseCreate()
+    const [a, b] = await Promise.all([first, second])
+    expect(a).toBe('wechat-only-session')
+    expect(b).toBe('wechat-only-session')
+    expect(creates).toBe(1)
+    expect(JSON.parse(readFileSync(wechatDesktopSessionPath(home), 'utf8')).sessionId).toBe('wechat-only-session')
+  })
+
+  it('reuses the saved Session without renaming and never creates on a transient resume failure', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wechat-reuse-'))
+    const pointer = wechatDesktopSessionPath(home)
+    mkdirSync(dirname(pointer), { recursive: true })
+    writeFileSync(pointer, `${JSON.stringify({ sessionId: 'wechat-saved' }, null, 2)}\n`)
+    const create = vi.fn(async () => ({ sessionId: 'wechat-second' }))
+    const rename = vi.fn(async () => {})
+    let resolveResult: unknown = { agent: {} }
+    const ctx = {
+      workspaceRegistry: { create: async () => ({ id: 'ws-wechat', sessionIds: ['wechat-saved'] }) },
+      sessionController: { resolveAgent: async () => resolveResult, create, rename },
+    }
+    await expect(ensureWeChatDesktopSession(ctx as never, home)).resolves.toBe('wechat-saved')
+    expect(rename).not.toHaveBeenCalled()
+
+    resolveResult = { error: { code: 'internal', message: 'resume failed' } }
+    await expect(ensureWeChatDesktopSession(ctx as never, home)).rejects.toThrow('resume failed')
+    expect(create).not.toHaveBeenCalled()
+    expect(JSON.parse(readFileSync(pointer, 'utf8')).sessionId).toBe('wechat-saved')
+  })
+
+  it('does not restart a running bridge for the same bot token', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'wanwei-wechat-bridge-'))
+    mkdirSync(dirname(wechatCredentialPath(home)), { recursive: true })
+    writeFileSync(wechatCredentialPath(home), JSON.stringify({
+      botToken: 'tok', ilinkBotId: 'bot', ilinkUserId: null,
+      baseUrl: 'https://ilinkai.weixin.qq.com', getUpdatesBuf: '', connectedAt: 1,
+    }))
+    const calls: string[] = []
+    setWeChatFetchForTests((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      calls.push(url)
+      if (url.includes('getupdates')) {
+        await new Promise((_, reject) => {
+          init?.signal?.addEventListener('abort', () => { reject(Object.assign(new Error('aborted'), { name: 'AbortError' })) })
+        })
+      }
+      return new Response(JSON.stringify({ ret: 0 }), { status: 200 })
+    }) as unknown as typeof fetch)
+    const ctx = {
+      logger: { warn: () => {} },
+      workspaceRegistry: { create: async () => ({ id: 'ws', sessionIds: [] }) },
+      sessionController: {
+        resolveAgent: async () => ({ error: { code: 'session-not-found', message: '' } }),
+        create: async () => ({ sessionId: 'wechat-s' }),
+        rename: async () => {},
+      },
+    }
+    startWeChatBridge(ctx as never, home)
+    startWeChatBridge(ctx as never, home)
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(calls.filter(url => url.includes('notifystart'))).toHaveLength(1)
+    expect(calls.filter(url => url.includes('notifystop'))).toHaveLength(0)
+    stopWeChatBridge()
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(calls.filter(url => url.includes('notifystop'))).toHaveLength(1)
   })
 
   it('starts QR login, confirms, and disconnects', async () => {
@@ -78,9 +170,16 @@ describe('WeChat Assistant Host helpers', () => {
     expect(stored?.botToken).toBe('bot-token-secret')
     expect(JSON.parse(readFileSync(wechatCredentialPath(home), 'utf8')).botToken).toBe('bot-token-secret')
 
+    const sessionPointer = wechatDesktopSessionPath(home)
+    mkdirSync(dirname(sessionPointer), { recursive: true })
+    writeFileSync(sessionPointer, `${JSON.stringify({ sessionId: 'wechat-session-fixed' }, null, 2)}\n`)
+
     const after = disconnectWeChat(home)
     expect(after.authed).toBe(false)
     expect(existsSync(wechatCredentialPath(home))).toBe(false)
+    // Unbind clears iLink credentials only; the fixed Session pointer survives reconnect.
+    expect(existsSync(sessionPointer)).toBe(true)
+    expect(JSON.parse(readFileSync(sessionPointer, 'utf8')).sessionId).toBe('wechat-session-fixed')
   })
 
   it('recovers confirmed when the login session is gone but credentials already landed', async () => {
