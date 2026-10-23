@@ -335,7 +335,7 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&OrgDepartment{}); err != nil {
 		return err
 	}
-	if err = DB.AutoMigrate(&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeConversation{}, &KnowledgeDocumentNote{}, &KnowledgeDocumentPath{}); err != nil {
+	if err = DB.AutoMigrate(&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{}, &KnowledgeConversation{}, &KnowledgeDocumentNote{}, &KnowledgeDocumentPath{}); err != nil {
 		return err
 	}
 	if err = DB.AutoMigrate(&OrgMemberLimit{}); err != nil {

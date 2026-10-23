@@ -6,9 +6,12 @@ import { API } from '../../helpers';
 
 jest.mock('../../helpers', () => ({ API: { get: jest.fn(), post: jest.fn(), put: jest.fn(), delete: jest.fn() } }));
 
+const categories = [
+  { id: 1, name: '测绘规范', type: 'common', require_auth: false },
+];
 const libraries = [
-  { id: 1, name: '测绘标准规范合集', description: '关于测绘标准规范合集的详细知识资源集合', kind: 'common', shelf: 'published', tags: '政策法规,林草资源', updated_at: '2025-08-10T15:52:00+08:00', created_at: '2025-08-10T15:52:00+08:00' },
-  { id: 2, name: '个人笔记', description: '个人资料', kind: 'personal', shelf: 'published', tags: '', updated_at: '2024-01-02T00:00:00Z', created_at: '2024-01-02T00:00:00Z' }
+  { id: 1, name: '测绘标准规范合集', description: '关于测绘标准规范合集的详细知识资源集合', kind: 'common', category_id: 1, shelf: 'published', tags: '政策法规,林草资源', owner_username: 'Root User', visit_count: 12, daily_usage: 3, updated_at: '2025-08-10T15:52:00+08:00', created_at: '2025-08-10T15:52:00+08:00' },
+  { id: 2, name: '个人笔记', description: '个人资料', kind: 'personal', shelf: 'published', tags: '', owner_username: 'alice', owner_user_id: 2, visit_count: 0, daily_usage: 0, updated_at: '2024-01-02T00:00:00Z', created_at: '2024-01-02T00:00:00Z' }
 ];
 const documents = [
   { id: 'doc1', name: '测绘标准规范合集_文件1.pdf', size: 11.3 * 1024 * 1024, create_time: 1748833920, chunk_count: 7, summary: '这是测绘标准规范合集文件1的文档摘要' }
@@ -16,6 +19,7 @@ const documents = [
 const documentPage = { items: documents, total: 1, page: 1, page_size: 20 };
 
 function documentsResponse(url) {
+  if (url === '/api/knowledge-admin/categories') return { data: { success: true, data: categories } };
   if (url === '/api/knowledge-admin/bases') return { data: { success: true, data: libraries } };
   if (String(url).includes('/documents?') || /\/documents$/.test(String(url))) {
     return { data: { success: true, data: documentPage } };
@@ -45,10 +49,12 @@ afterEach(() => {
 });
 
 function button(text) {
-  return [...container.querySelectorAll('button')].find(item => item.textContent.includes(text));
+  const items = [...container.querySelectorAll('button')];
+  return items.find(item => item.textContent.trim() === text)
+    || items.find(item => item.textContent.includes(text));
 }
 
-test('sort and creation type use the themed listbox and preserve selected values', async () => {
+test('sort listbox preserves the selected value and creates a personal library', async () => {
   await act(async () => { root.render(<KnowledgeLibrary />); });
   expect(container.querySelector('select')).toBeNull();
   const sort = container.querySelector('[aria-label="排序"]');
@@ -57,32 +63,54 @@ test('sort and creation type use the themed listbox and preserve selected values
   act(() => { document.querySelector('[role="option"][value="asc"]').click(); });
   expect(sort.textContent).toContain('按时间升序');
   act(() => { button('新建知识库').click(); });
-  act(() => { container.querySelector('[aria-label="知识库类型"]').click(); });
-  act(() => { document.querySelector('[role="option"][value="shared"]').click(); });
-  expect(container.querySelector('[aria-label="知识库类型"]').textContent).toContain('共享知识库');
+  expect(container.textContent).toContain('将创建为个人知识库');
+  expect(container.querySelector('[aria-label="知识库类型"]')).toBeNull();
   const name = container.querySelector('.knowledge-modal input');
   act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(name, '共享测试');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(name, '个人测试');
     name.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await act(async () => { container.querySelector('.knowledge-modal').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
-  expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/bases', expect.objectContaining({ kind: 'shared', name: '共享测试' }));
+  expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/bases', expect.objectContaining({ kind: 'personal', name: '个人测试' }));
 });
 
 test('knowledge catalog filters scopes and opens the file list', async () => {
   await act(async () => { root.render(<KnowledgeLibrary />); });
   await act(async () => { await Promise.resolve(); });
-  expect(container.textContent).toContain('测绘标准规范合集');
+  expect(container.textContent).toContain('个人笔记');
   expect(container.textContent).not.toContain('已上架');
   expect(container.textContent).not.toContain('下架');
-  expect(button('共性知识库').textContent).toContain('1');
   expect(button('个人知识库').textContent).toContain('1');
-  expect(button('共享知识库').textContent).toContain('0');
-  await act(async () => { button('个人知识库').click(); });
-  expect(container.textContent).toContain('个人笔记');
-  expect(container.textContent).not.toContain('测绘标准规范合集');
-  await act(async () => { button('共性知识库').click(); });
-  await act(async () => { button('查看文件清单').click(); });
+  expect(button('测绘规范').textContent).toContain('1');
+  expect(button('共性知识库')).toBeUndefined();
+  expect(button('共享知识库')).toBeUndefined();
+  await act(async () => { button('测绘规范').click(); });
+  expect(container.textContent).toContain('测绘标准规范合集');
+  expect(container.textContent).not.toContain('个人笔记');
+  expect(container.textContent).toContain('创建人 Root User');
+  expect(container.textContent).toContain('文件量');
+  expect(container.textContent).toContain('用户访问量 12');
+  expect(container.textContent).toContain('每天使用量 3');
+  await act(async () => { button('编辑').click(); });
+  expect(container.querySelector('#dsh-knowledge-edit-title')?.textContent).toBe('编辑知识库');
+  const editModal = container.querySelector('.knowledge-modal');
+  expect(editModal.textContent).not.toContain('用户访问量');
+  expect(editModal.textContent).not.toContain('每天使用量');
+  expect(editModal.textContent).not.toContain('文件量');
+  const editName = container.querySelector('.knowledge-modal input[maxlength="128"]');
+  const setEditValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  await act(async () => {
+    setEditValue.call(editName, '测绘标准规范合集修订');
+    editName.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => { container.querySelector('.knowledge-modal').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  await act(async () => { await Promise.resolve(); });
+  expect(API.put).toHaveBeenCalledWith('/api/knowledge-admin/bases/1', expect.objectContaining({
+    name: '测绘标准规范合集修订',
+    description: '关于测绘标准规范合集的详细知识资源集合',
+    tags: '政策法规,林草资源',
+  }));
+  await act(async () => { button('文件清单').click(); });
   await act(async () => { await Promise.resolve(); });
   expect(container.textContent).toContain('测绘标准规范合集 - 文件清单');
   expect(container.textContent).toContain('测绘标准规范合集_文件1.pdf');
@@ -155,7 +183,8 @@ test('uploads one file, shows parse progress, and opens the new library', async 
   try {
     await act(async () => { root.render(<KnowledgeLibrary />); });
     for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
-    await act(async () => { button('查看文件清单').click(); });
+    await act(async () => { button('测绘规范').click(); });
+    await act(async () => { button('文件清单').click(); });
     for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
     expect(container.textContent).toContain('解析中 40%');
     expect(container.textContent).toContain('一次上传一个文件，不超过 20MB');
@@ -219,4 +248,93 @@ test('uploads one file, shows parse progress, and opens the new library', async 
     interval.mockRestore();
     clear.mockRestore();
   }
+});
+
+test('reviews a pending subscription application from the workbench audit list', async () => {
+  API.get.mockImplementation(url => {
+    if (String(url).startsWith('/api/knowledge-admin/subscription-applications')) {
+      return Promise.resolve({
+        data: {
+          success: true,
+          data: {
+            items: [{
+              id: 11,
+              knowledge_base_id: 9,
+              applicant_user_id: 3,
+              status: 'pending',
+              knowledge_base_name: '地方法规知识库',
+              category_name: '法律',
+              applicant_username: 'alice',
+              owner_username: 'bob',
+              created_at: '2026-10-23T08:00:00Z',
+            }],
+            total: 1,
+            page: 1,
+            page_size: 20,
+          },
+        },
+      });
+    }
+    return Promise.resolve(documentsResponse(url));
+  });
+  API.post.mockResolvedValue({ data: { success: true, data: { id: 11, status: 'approved' } } });
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+  await act(async () => { button('订阅审核').click(); });
+  for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(container.textContent).toContain('订阅审核');
+  expect(container.textContent).toContain('alice');
+  expect(container.textContent).toContain('地方法规知识库');
+  expect(API.get).toHaveBeenCalledWith(expect.stringContaining('/api/knowledge-admin/subscription-applications?page=1&page_size=20&status=pending'));
+  await act(async () => { button('审核').click(); });
+  expect(container.textContent).toContain('同意');
+  expect(container.textContent).toContain('不同意');
+  await act(async () => { button('同意').click(); });
+  for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/subscription-applications/11/review', { decision: 'approve' });
+});
+
+test('creates a category beside personal and files the next library under it', async () => {
+  const stored = [];
+  API.get.mockImplementation(url => {
+    if (url === '/api/knowledge-admin/categories') return Promise.resolve({ data: { success: true, data: stored } });
+    return Promise.resolve(documentsResponse(url));
+  });
+  API.post.mockImplementation((url, body) => {
+    if (url === '/api/knowledge-admin/categories') {
+      const row = { id: 4, name: body.name, type: body.type, require_auth: body.require_auth };
+      stored.push(row);
+      return Promise.resolve({ data: { success: true, data: row } });
+    }
+    return Promise.resolve({ data: { success: true, data: { id: 9, name: body.name, kind: body.kind, category_id: body.category_id } } });
+  });
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+  act(() => { button('新建知识库分类').click(); });
+  act(() => { container.querySelector('[aria-label="分类类型"]').click(); });
+  act(() => { document.querySelector('[role="option"][value="authorized"]').click(); });
+  expect(container.textContent).toContain('订阅后可见');
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+  const name = container.querySelector('input[placeholder="请输入分类名称"]');
+  act(() => {
+    setValue.call(name, '部门规范');
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => { container.querySelector('.knowledge-modal').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/categories', { name: '部门规范', type: 'shared', require_auth: true });
+  const created = button('部门规范');
+  expect(created).toBeTruthy();
+  expect(created.getAttribute('aria-selected')).toBe('true');
+  expect(button('个人知识库').compareDocumentPosition(created) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  act(() => { button('新建知识库').click(); });
+  expect(container.textContent).toContain('将创建到当前分类');
+  const libraryName = container.querySelector('input[placeholder="请输入知识库名称"]');
+  await act(async () => {
+    setValue.call(libraryName, '规范汇编');
+    libraryName.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => { container.querySelector('.knowledge-modal').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/bases', expect.objectContaining({ name: '规范汇编', kind: 'shared', category_id: 4 }));
 });

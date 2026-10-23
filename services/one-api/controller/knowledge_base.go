@@ -19,7 +19,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const maxKnowledgeUploadBytes = 1 << 30
+const maxKnowledgeUploadBytes = 20 << 20
 
 type knowledgeGrantInput struct {
 	SubjectType string `json:"subject_type"`
@@ -31,6 +31,7 @@ type createKnowledgeBaseInput struct {
 	Description string                `json:"description"`
 	Kind        string                `json:"kind"`
 	Tags        string                `json:"tags"`
+	CategoryId  int                   `json:"category_id"`
 	Grants      []knowledgeGrantInput `json:"grants"`
 }
 
@@ -73,6 +74,107 @@ func ListKnowledgeBases(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": rows})
 }
 
+// ListKnowledgeCategories returns workbench categories for the desktop and admin tabs.
+func ListKnowledgeCategories(c *gin.Context) {
+	rows, err := model.ListKnowledgeCategories()
+	if err != nil {
+		logger.Errorf(c.Request.Context(), "list knowledge categories: %s", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库分类失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": rows})
+}
+
+// ListKnowledgePlaza returns marketplace cards for libraries that require a subscription grant.
+func ListKnowledgePlaza(c *gin.Context) {
+	categoryId, _ := strconv.Atoi(c.DefaultQuery("category_id", "0"))
+	keyword := strings.TrimSpace(c.Query("keyword"))
+	rows, err := model.ListKnowledgePlaza(c.GetInt("id"), categoryId, keyword)
+	if err != nil {
+		logger.Errorf(c.Request.Context(), "list knowledge plaza: %s", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库广场失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": rows})
+}
+
+// GetKnowledgePlazaItem returns one marketplace library card when it is published and auth-required.
+func GetKnowledgePlazaItem(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库编号无效"})
+		return
+	}
+	row, err := model.GetKnowledgePlazaItem(c.GetInt("id"), id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "知识库不存在"})
+			return
+		}
+		logger.Errorf(c.Request.Context(), "get knowledge plaza item: %s", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
+}
+
+// ListKnowledgePlazaDocuments returns marketplace document metadata for one plaza library.
+// Catalog names and folder paths are visible before subscription; file bytes stay grant-gated.
+func ListKnowledgePlazaDocuments(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库编号无效"})
+		return
+	}
+	if _, err := model.GetKnowledgePlazaItem(c.GetInt("id"), id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "知识库不存在"})
+			return
+		}
+		logger.Errorf(c.Request.Context(), "get knowledge plaza item for documents: %s", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
+		return
+	}
+	row, err := model.GetKnowledgeBase(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "知识库不存在"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
+		return
+	}
+	writeKnowledgeDocuments(c, row, false)
+}
+
+// SubscribeKnowledgeBase opens a pending subscription application for an auth-required category library.
+func SubscribeKnowledgeBase(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库编号无效"})
+		return
+	}
+	row, err := model.ApplyKnowledgeSubscription(c.GetInt("id"), id)
+	if err != nil {
+		if errors.Is(err, model.ErrKnowledgeSubscriptionInvalid) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		if errors.Is(err, model.ErrKnowledgeSubscriptionDuplicate) {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "知识库不存在"})
+			return
+		}
+		logger.Errorf(c.Request.Context(), "subscribe knowledge base: %s", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "提交订阅申请失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
+}
+
 // CreateKnowledgeBase creates RAGFlow first and compensates it when the local transaction fails.
 func CreateKnowledgeBase(c *gin.Context) {
 	var input createKnowledgeBaseInput
@@ -92,6 +194,27 @@ func CreateKnowledgeBase(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "只有管理员可以创建共性知识库"})
 		return
 	}
+	if input.CategoryId < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库分类无效"})
+		return
+	}
+	if input.CategoryId > 0 && !knowledgeAdmin(c) {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "只有管理员可以指定知识库分类"})
+		return
+	}
+	if input.CategoryId > 0 {
+		category, err := model.GetKnowledgeCategory(input.CategoryId)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库分类不存在"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库分类失败"})
+			return
+		}
+		// Workbench tabs copy visibility from the category; keep kind aligned.
+		input.Kind = category.Type
+	}
 	client, ok := knowledgeClient(c)
 	if !ok {
 		return
@@ -104,7 +227,8 @@ func CreateKnowledgeBase(c *gin.Context) {
 		return
 	}
 	row := model.KnowledgeBase{Name: input.Name, Description: input.Description, Tags: input.Tags,
-		RagflowDatasetId: dataset.Id, OwnerUserId: userId, Kind: input.Kind, Shelf: model.KnowledgeShelfPublished}
+		RagflowDatasetId: dataset.Id, OwnerUserId: userId, Kind: input.Kind, Shelf: model.KnowledgeShelfPublished,
+		CategoryId: input.CategoryId}
 	err = model.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&row).Error; err != nil {
 			return err
@@ -471,19 +595,10 @@ func applyKnowledgeDocumentPaths(baseId int, documents []ragflow.Document) {
 }
 
 func uploadKnowledgeDocument(c *gin.Context, row *model.KnowledgeBase) {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxKnowledgeUploadBytes+(1<<20))
-	defer func() {
-		if c.Request.MultipartForm != nil {
-			_ = c.Request.MultipartForm.RemoveAll()
-		}
-	}()
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxKnowledgeUploadBytes)
 	header, err := c.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请选择不超过 1GB 的文件"})
-		return
-	}
-	if header.Size > maxKnowledgeUploadBytes {
-		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"success": false, "message": "文件不能超过 1GB"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请选择不超过 20MB 的文件"})
 		return
 	}
 	source, err := header.Open()

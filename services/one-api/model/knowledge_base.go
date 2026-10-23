@@ -1,20 +1,26 @@
 package model
 
 import (
+	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 )
 
 const (
-	KnowledgeBasePersonal   = "personal"
-	KnowledgeBaseShared     = "shared"
-	KnowledgeBaseCommon     = "common"
-	KnowledgeGrantUser      = "user"
-	KnowledgeGrantDept      = "department"
-	KnowledgeShelfPublished = "published"
-	KnowledgeShelfOffline   = "offline"
+	KnowledgeBasePersonal             = "personal"
+	KnowledgeBaseShared               = "shared"
+	KnowledgeBaseCommon               = "common"
+	KnowledgeGrantUser                = "user"
+	KnowledgeGrantDept                = "department"
+	KnowledgeShelfPublished           = "published"
+	KnowledgeShelfOffline             = "offline"
+	KnowledgeSubscriptionPending      = "pending"
+	KnowledgeSubscriptionApproved     = "approved"
+	KnowledgeSubscriptionRejected     = "rejected"
+	KnowledgeSubscriptionStatusNone   = "none"
 )
 
 // KnowledgeBase binds an authorized OneAPI resource to one RAGFlow dataset.
@@ -28,8 +34,27 @@ type KnowledgeBase struct {
 	Kind             string    `json:"kind" gorm:"type:varchar(16);index;not null"`
 	Shelf            string    `json:"shelf" gorm:"type:varchar(16);not null;default:published;index"`
 	Tags             string    `json:"tags" gorm:"type:varchar(200)"`
+	CategoryId       int       `json:"category_id" gorm:"index;default:0"`
 	CreatedAt        time.Time `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt        time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
+// ErrKnowledgeCategoryDuplicate is returned when a category name is already stored.
+var ErrKnowledgeCategoryDuplicate = errors.New("知识库分类名称已存在")
+
+// ErrKnowledgeCategoryInvalid is returned when the name or type cannot be stored.
+var ErrKnowledgeCategoryInvalid = errors.New("知识库分类无效")
+
+// KnowledgeCategory is an administrator-defined tab beside Personal on the workbench and desktop.
+// Type is the library kind created inside the tab. RequireAuth false shows every published library
+// in the category; true keeps the shared owner-or-grant rule.
+type KnowledgeCategory struct {
+	Id          int       `json:"id" gorm:"primaryKey"`
+	Name        string    `json:"name" gorm:"type:varchar(64);uniqueIndex;not null"`
+	Type        string    `json:"type" gorm:"type:varchar(16);not null"`
+	RequireAuth bool      `json:"require_auth" gorm:"not null;default:false"`
+	CreatedAt   time.Time `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt   time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
 // KnowledgeBaseGrant gives one user or department access to a shared knowledge base.
@@ -40,6 +65,45 @@ type KnowledgeBaseGrant struct {
 	SubjectId       int       `json:"subject_id" gorm:"uniqueIndex:uk_knowledge_grant;not null"`
 	CreatedAt       time.Time `json:"created_at" gorm:"autoCreateTime"`
 }
+
+// KnowledgeSubscriptionApplication is one user's request to subscribe to an auth-required category library.
+// Approval writes a user grant so the library appears under Subscription on the desktop.
+type KnowledgeSubscriptionApplication struct {
+	Id              int        `json:"id" gorm:"primaryKey"`
+	KnowledgeBaseId int        `json:"knowledge_base_id" gorm:"uniqueIndex:uk_knowledge_subscription;index;not null"`
+	ApplicantUserId int        `json:"applicant_user_id" gorm:"uniqueIndex:uk_knowledge_subscription;index;not null"`
+	Status          string     `json:"status" gorm:"type:varchar(16);index;not null"`
+	ReviewedBy      int        `json:"reviewed_by" gorm:"default:0"`
+	ReviewedAt      *time.Time `json:"reviewed_at"`
+	CreatedAt       time.Time  `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt       time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
+// KnowledgePlazaItem is one marketplace card for libraries in auth-required categories.
+type KnowledgePlazaItem struct {
+	KnowledgeBase
+	CategoryName       string `json:"category_name"`
+	OwnerUsername      string `json:"owner_username"`
+	SubscriptionStatus string `json:"subscription_status"`
+}
+
+// KnowledgeSubscriptionApplicationItem is one workbench audit row.
+type KnowledgeSubscriptionApplicationItem struct {
+	KnowledgeSubscriptionApplication
+	KnowledgeBaseName string `json:"knowledge_base_name"`
+	CategoryName      string `json:"category_name"`
+	ApplicantUsername string `json:"applicant_username"`
+	OwnerUsername     string `json:"owner_username"`
+}
+
+// ErrKnowledgeSubscriptionInvalid is returned when a library cannot accept a subscription.
+var ErrKnowledgeSubscriptionInvalid = errors.New("该知识库不支持订阅申请")
+
+// ErrKnowledgeSubscriptionDuplicate is returned when a pending or approved application already exists.
+var ErrKnowledgeSubscriptionDuplicate = errors.New("订阅申请已存在")
+
+// ErrKnowledgeSubscriptionNotPending is returned when an application is no longer awaiting review.
+var ErrKnowledgeSubscriptionNotPending = errors.New("订阅申请已处理")
 
 // KnowledgeDocumentNote stores the administrator-written summary for one RAGFlow document.
 type KnowledgeDocumentNote struct {
@@ -78,8 +142,11 @@ type KnowledgeBaseListItem struct {
 	OwnerUsername string `json:"owner_username"`
 }
 
-// ListAuthorizedKnowledgeBases returns published libraries the user may open:
-// personal ones they own, shared ones they own or are granted, and every common library.
+// ListAuthorizedKnowledgeBases returns published libraries the user may open.
+// Uncategorized personal libraries stay with their owner, uncategorized shared libraries
+// require ownership or a grant, and every uncategorized common library is included.
+// A library in a workbench category follows that category instead: without require_auth
+// every user sees it, and with require_auth only the owner or a grant does.
 func ListAuthorizedKnowledgeBases(userId int) ([]KnowledgeBase, error) {
 	var deptIds []int
 	if err := DB.Model(&OrgMember{}).
@@ -88,30 +155,68 @@ func ListAuthorizedKnowledgeBases(userId int) ([]KnowledgeBase, error) {
 		return nil, err
 	}
 	// An empty shelf is the pre-migration published state.
+	grant := `(knowledge_base_grants.subject_type = ? AND knowledge_base_grants.subject_id = ?)`
+	grantArgs := []interface{}{KnowledgeGrantUser, userId}
+	if len(deptIds) != 0 {
+		grant += ` OR (knowledge_base_grants.subject_type = ? AND knowledge_base_grants.subject_id IN ?)`
+		grantArgs = append(grantArgs, KnowledgeGrantDept, deptIds)
+	}
 	clause := `COALESCE(knowledge_bases.shelf, '') <> ? AND (` +
+		`(COALESCE(knowledge_bases.category_id, 0) = 0 AND (` +
 		`knowledge_bases.kind = ? OR ` +
 		`(knowledge_bases.kind = ? AND knowledge_bases.owner_user_id = ?) OR ` +
-		`(knowledge_bases.kind = ? AND (knowledge_bases.owner_user_id = ? OR ` +
-		`(knowledge_base_grants.subject_type = ? AND knowledge_base_grants.subject_id = ?)`
+		`(knowledge_bases.kind = ? AND (knowledge_bases.owner_user_id = ? OR ` + grant + `)))) OR ` +
+		`(COALESCE(knowledge_bases.category_id, 0) <> 0 AND knowledge_categories.id IS NOT NULL AND (` +
+		`knowledge_categories.require_auth = ? OR knowledge_bases.owner_user_id = ? OR ` + grant + `)))`
 	args := []interface{}{
 		KnowledgeShelfOffline,
 		KnowledgeBaseCommon,
 		KnowledgeBasePersonal, userId,
-		KnowledgeBaseShared, userId, KnowledgeGrantUser, userId,
+		KnowledgeBaseShared, userId,
 	}
-	if len(deptIds) != 0 {
-		clause += ` OR (knowledge_base_grants.subject_type = ? AND knowledge_base_grants.subject_id IN ?)`
-		args = append(args, KnowledgeGrantDept, deptIds)
-	}
-	// Close shared-inner, shared, and the outer authorization group.
-	clause += `)))`
+	args = append(args, grantArgs...)
+	args = append(args, false, userId)
+	args = append(args, grantArgs...)
 	var rows []KnowledgeBase
 	err := DB.Model(&KnowledgeBase{}).Distinct("knowledge_bases.*").
 		Joins("LEFT JOIN knowledge_base_grants ON knowledge_base_grants.knowledge_base_id = knowledge_bases.id").
+		Joins("LEFT JOIN knowledge_categories ON knowledge_categories.id = knowledge_bases.category_id").
 		Where(clause, args...).
 		Order("knowledge_bases.updated_at DESC").
 		Find(&rows).Error
 	return rows, err
+}
+
+// ListKnowledgeCategories returns workbench categories in creation order.
+func ListKnowledgeCategories() ([]KnowledgeCategory, error) {
+	var rows []KnowledgeCategory
+	err := DB.Order("id ASC").Find(&rows).Error
+	return rows, err
+}
+
+// GetKnowledgeCategory reads one category by its local id.
+func GetKnowledgeCategory(id int) (*KnowledgeCategory, error) {
+	var row KnowledgeCategory
+	err := DB.First(&row, id).Error
+	return &row, err
+}
+
+// SaveKnowledgeCategory inserts one category. Names are unique after trimming.
+func SaveKnowledgeCategory(row *KnowledgeCategory) error {
+	row.Name = strings.TrimSpace(row.Name)
+	row.Type = strings.TrimSpace(row.Type)
+	if row.Name == "" || utf8.RuneCountInString(row.Name) > 64 ||
+		(row.Type != KnowledgeBasePersonal && row.Type != KnowledgeBaseShared && row.Type != KnowledgeBaseCommon) {
+		return ErrKnowledgeCategoryInvalid
+	}
+	var count int64
+	if err := DB.Model(&KnowledgeCategory{}).Where("name = ?", row.Name).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return ErrKnowledgeCategoryDuplicate
+	}
+	return DB.Create(row).Error
 }
 
 // ListManagedKnowledgeBases returns every library for the workbench, including offline and common ones.
@@ -230,6 +335,9 @@ func DeleteKnowledgeBaseRecords(id int) error {
 		if err := tx.Where("knowledge_base_id = ?", id).Delete(&KnowledgeBaseGrant{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("knowledge_base_id = ?", id).Delete(&KnowledgeSubscriptionApplication{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("knowledge_base_id = ?", id).Delete(&KnowledgeConversation{}).Error; err != nil {
 			return err
 		}
@@ -241,6 +349,322 @@ func DeleteKnowledgeBaseRecords(id int) error {
 		}
 		return tx.Delete(&KnowledgeBase{}, id).Error
 	})
+}
+
+func userDisplayNames(userIds []int) (map[int]string, error) {
+	names := make(map[int]string, len(userIds))
+	if len(userIds) == 0 {
+		return names, nil
+	}
+	var users []User
+	if err := DB.Select("id", "username", "display_name").Where("id IN ?", userIds).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	for _, user := range users {
+		name := user.DisplayName
+		if name == "" {
+			name = user.Username
+		}
+		names[user.Id] = name
+	}
+	return names, nil
+}
+
+// ListKnowledgePlaza returns published libraries in categories that require authorization.
+// Owners already see their libraries in the desktop category group, so plaza omits own libraries.
+// Callers without a grant still see others' cards so they can apply; subscription_status reflects the applicant.
+func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]KnowledgePlazaItem, error) {
+	// Personal categories are owner-only and never listed for subscription.
+	query := DB.Model(&KnowledgeBase{}).
+		Joins("INNER JOIN knowledge_categories ON knowledge_categories.id = knowledge_bases.category_id").
+		Where("knowledge_categories.require_auth = ? AND knowledge_categories.type <> ? AND COALESCE(knowledge_bases.shelf, '') <> ? AND knowledge_bases.owner_user_id <> ?",
+			true, KnowledgeBasePersonal, KnowledgeShelfOffline, userId)
+	if categoryId > 0 {
+		query = query.Where("knowledge_bases.category_id = ?", categoryId)
+	}
+	keyword = strings.TrimSpace(keyword)
+	if keyword != "" {
+		like := "%" + keyword + "%"
+		query = query.Where("knowledge_bases.name LIKE ? OR knowledge_bases.description LIKE ?", like, like)
+	}
+	var bases []KnowledgeBase
+	if err := query.Order("knowledge_bases.updated_at DESC").Find(&bases).Error; err != nil {
+		return nil, err
+	}
+	if len(bases) == 0 {
+		return []KnowledgePlazaItem{}, nil
+	}
+	categoryIds := make([]int, 0, len(bases))
+	ownerIds := make([]int, 0, len(bases))
+	baseIds := make([]int, 0, len(bases))
+	seenCategory := map[int]struct{}{}
+	seenOwner := map[int]struct{}{}
+	for _, base := range bases {
+		baseIds = append(baseIds, base.Id)
+		if _, ok := seenCategory[base.CategoryId]; !ok {
+			seenCategory[base.CategoryId] = struct{}{}
+			categoryIds = append(categoryIds, base.CategoryId)
+		}
+		if _, ok := seenOwner[base.OwnerUserId]; !ok {
+			seenOwner[base.OwnerUserId] = struct{}{}
+			ownerIds = append(ownerIds, base.OwnerUserId)
+		}
+	}
+	categories := map[int]string{}
+	if len(categoryIds) != 0 {
+		var rows []KnowledgeCategory
+		if err := DB.Where("id IN ?", categoryIds).Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			categories[row.Id] = row.Name
+		}
+	}
+	owners, err := userDisplayNames(ownerIds)
+	if err != nil {
+		return nil, err
+	}
+	statusByBase := map[int]string{}
+	var apps []KnowledgeSubscriptionApplication
+	if err := DB.Where("applicant_user_id = ? AND knowledge_base_id IN ?", userId, baseIds).Find(&apps).Error; err != nil {
+		return nil, err
+	}
+	for _, app := range apps {
+		if app.Status == KnowledgeSubscriptionPending || app.Status == KnowledgeSubscriptionApproved {
+			statusByBase[app.KnowledgeBaseId] = app.Status
+		}
+	}
+	var grants []KnowledgeBaseGrant
+	if err := DB.Where("subject_type = ? AND subject_id = ? AND knowledge_base_id IN ?",
+		KnowledgeGrantUser, userId, baseIds).Find(&grants).Error; err != nil {
+		return nil, err
+	}
+	for _, grant := range grants {
+		statusByBase[grant.KnowledgeBaseId] = KnowledgeSubscriptionApproved
+	}
+	items := make([]KnowledgePlazaItem, len(bases))
+	for i, base := range bases {
+		status := statusByBase[base.Id]
+		if status == "" {
+			status = KnowledgeSubscriptionStatusNone
+		}
+		items[i] = KnowledgePlazaItem{
+			KnowledgeBase:      base,
+			CategoryName:       categories[base.CategoryId],
+			OwnerUsername:      owners[base.OwnerUserId],
+			SubscriptionStatus: status,
+		}
+	}
+	return items, nil
+}
+
+// GetKnowledgePlazaItem reads one marketplace library when it sits in an auth-required published category.
+func GetKnowledgePlazaItem(userId, id int) (*KnowledgePlazaItem, error) {
+	items, err := ListKnowledgePlaza(userId, 0, "")
+	if err != nil {
+		return nil, err
+	}
+	for i := range items {
+		if items[i].Id == id {
+			return &items[i], nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+// ApplyKnowledgeSubscription creates or reopens a pending application for an auth-required category library.
+func ApplyKnowledgeSubscription(userId, knowledgeBaseId int) (*KnowledgeSubscriptionApplication, error) {
+	base, err := GetKnowledgeBase(knowledgeBaseId)
+	if err != nil {
+		return nil, err
+	}
+	if base.CategoryId == 0 || base.Shelf == KnowledgeShelfOffline {
+		return nil, ErrKnowledgeSubscriptionInvalid
+	}
+	category, err := GetKnowledgeCategory(base.CategoryId)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrKnowledgeSubscriptionInvalid
+		}
+		return nil, err
+	}
+	if !category.RequireAuth {
+		return nil, ErrKnowledgeSubscriptionInvalid
+	}
+	if base.OwnerUserId == userId {
+		return nil, ErrKnowledgeSubscriptionDuplicate
+	}
+	var grantCount int64
+	if err := DB.Model(&KnowledgeBaseGrant{}).
+		Where("knowledge_base_id = ? AND subject_type = ? AND subject_id = ?",
+			knowledgeBaseId, KnowledgeGrantUser, userId).
+		Count(&grantCount).Error; err != nil {
+		return nil, err
+	}
+	if grantCount > 0 {
+		return nil, ErrKnowledgeSubscriptionDuplicate
+	}
+	var existing KnowledgeSubscriptionApplication
+	err = DB.Where("knowledge_base_id = ? AND applicant_user_id = ?", knowledgeBaseId, userId).First(&existing).Error
+	if err == nil {
+		if existing.Status == KnowledgeSubscriptionPending || existing.Status == KnowledgeSubscriptionApproved {
+			return nil, ErrKnowledgeSubscriptionDuplicate
+		}
+		existing.Status = KnowledgeSubscriptionPending
+		existing.ReviewedBy = 0
+		existing.ReviewedAt = nil
+		if err := DB.Save(&existing).Error; err != nil {
+			return nil, err
+		}
+		return &existing, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	row := KnowledgeSubscriptionApplication{
+		KnowledgeBaseId: knowledgeBaseId,
+		ApplicantUserId: userId,
+		Status:          KnowledgeSubscriptionPending,
+	}
+	if err := DB.Create(&row).Error; err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+// ListKnowledgeSubscriptionApplications returns a page of applications for the workbench audit list.
+func ListKnowledgeSubscriptionApplications(status string, page, pageSize int) ([]KnowledgeSubscriptionApplicationItem, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	query := DB.Model(&KnowledgeSubscriptionApplication{})
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var apps []KnowledgeSubscriptionApplication
+	if err := query.Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&apps).Error; err != nil {
+		return nil, 0, err
+	}
+	if len(apps) == 0 {
+		return []KnowledgeSubscriptionApplicationItem{}, total, nil
+	}
+	baseIds := make([]int, 0, len(apps))
+	userIds := make([]int, 0, len(apps)*2)
+	seenBase := map[int]struct{}{}
+	seenUser := map[int]struct{}{}
+	for _, app := range apps {
+		if _, ok := seenBase[app.KnowledgeBaseId]; !ok {
+			seenBase[app.KnowledgeBaseId] = struct{}{}
+			baseIds = append(baseIds, app.KnowledgeBaseId)
+		}
+		if _, ok := seenUser[app.ApplicantUserId]; !ok {
+			seenUser[app.ApplicantUserId] = struct{}{}
+			userIds = append(userIds, app.ApplicantUserId)
+		}
+	}
+	var bases []KnowledgeBase
+	if err := DB.Where("id IN ?", baseIds).Find(&bases).Error; err != nil {
+		return nil, 0, err
+	}
+	baseById := map[int]KnowledgeBase{}
+	categoryIds := make([]int, 0, len(bases))
+	seenCategory := map[int]struct{}{}
+	for _, base := range bases {
+		baseById[base.Id] = base
+		if _, ok := seenUser[base.OwnerUserId]; !ok {
+			seenUser[base.OwnerUserId] = struct{}{}
+			userIds = append(userIds, base.OwnerUserId)
+		}
+		if base.CategoryId > 0 {
+			if _, ok := seenCategory[base.CategoryId]; !ok {
+				seenCategory[base.CategoryId] = struct{}{}
+				categoryIds = append(categoryIds, base.CategoryId)
+			}
+		}
+	}
+	names, err := userDisplayNames(userIds)
+	if err != nil {
+		return nil, 0, err
+	}
+	categories := map[int]string{}
+	if len(categoryIds) != 0 {
+		var rows []KnowledgeCategory
+		if err := DB.Where("id IN ?", categoryIds).Find(&rows).Error; err != nil {
+			return nil, 0, err
+		}
+		for _, row := range rows {
+			categories[row.Id] = row.Name
+		}
+	}
+	items := make([]KnowledgeSubscriptionApplicationItem, len(apps))
+	for i, app := range apps {
+		base := baseById[app.KnowledgeBaseId]
+		items[i] = KnowledgeSubscriptionApplicationItem{
+			KnowledgeSubscriptionApplication: app,
+			KnowledgeBaseName:                base.Name,
+			CategoryName:                     categories[base.CategoryId],
+			ApplicantUsername:                names[app.ApplicantUserId],
+			OwnerUsername:                    names[base.OwnerUserId],
+		}
+	}
+	return items, total, nil
+}
+
+// ReviewKnowledgeSubscription approves or rejects one pending application.
+// Approval inserts a user grant so ListAuthorizedKnowledgeBases includes the library.
+func ReviewKnowledgeSubscription(applicationId, reviewerId int, approve bool) (*KnowledgeSubscriptionApplication, error) {
+	var app KnowledgeSubscriptionApplication
+	if err := DB.First(&app, applicationId).Error; err != nil {
+		return nil, err
+	}
+	if app.Status != KnowledgeSubscriptionPending {
+		return nil, ErrKnowledgeSubscriptionNotPending
+	}
+	now := time.Now()
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		status := KnowledgeSubscriptionRejected
+		if approve {
+			status = KnowledgeSubscriptionApproved
+			var count int64
+			if err := tx.Model(&KnowledgeBaseGrant{}).
+				Where("knowledge_base_id = ? AND subject_type = ? AND subject_id = ?",
+					app.KnowledgeBaseId, KnowledgeGrantUser, app.ApplicantUserId).
+				Count(&count).Error; err != nil {
+				return err
+			}
+			if count == 0 {
+				if err := tx.Create(&KnowledgeBaseGrant{
+					KnowledgeBaseId: app.KnowledgeBaseId,
+					SubjectType:     KnowledgeGrantUser,
+					SubjectId:       app.ApplicantUserId,
+				}).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return tx.Model(&app).Updates(map[string]interface{}{
+			"status":      status,
+			"reviewed_by": reviewerId,
+			"reviewed_at": now,
+		}).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := DB.First(&app, applicationId).Error; err != nil {
+		return nil, err
+	}
+	return &app, nil
 }
 
 // GetAuthorizedKnowledgeBase fails closed when the user has no grant.

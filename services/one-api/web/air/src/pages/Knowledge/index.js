@@ -1,16 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Calendar, Download, Eye, FileText, Layers, Plus, RefreshCw, Search, Tag, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, Download, Eye, FileText, Layers, Pencil, Plus, RefreshCw, Search, Tag, Trash2, Upload } from 'lucide-react';
 import { API } from '../../helpers';
 import CustomSelect from '../../components/CustomSelect';
 import './index.css';
 
-const SCOPES = [
-  ['common', '共性知识库'],
-  ['shared', '共享知识库'],
-  ['personal', '个人知识库'],
+/** Category dialog visibility: maps to type + require_auth for the workbench/desktop. */
+const CATEGORY_VISIBILITY = [
+  ['personal', '个人', '仅自己可见'],
+  ['public', '公开', '所有人可见'],
+  ['authorized', '授权', '订阅后可见'],
 ];
 
+function categoryPayload(visibility, name) {
+  if (visibility === 'public') return { name, type: 'common', require_auth: false };
+  if (visibility === 'authorized') return { name, type: 'shared', require_auth: true };
+  return { name, type: 'personal', require_auth: true };
+}
+
 const FILE_PAGE_SIZE = 20;
+const REVIEW_PAGE_SIZE = 20;
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const PARSE_POLL_MS = 2500;
 
@@ -158,12 +166,16 @@ async function mapPool(items, limit, worker) {
 
 const KnowledgeLibrary = () => {
   const [libraries, setLibraries] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [scope, setScope] = useState('common');
+  const [scope, setScope] = useState('personal');
   const [keyword, setKeyword] = useState('');
   const [order, setOrder] = useState('desc');
   const [counts, setCounts] = useState({});
+  const [sizes, setSizes] = useState({});
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', description: '', tags: '' });
   const [opened, setOpened] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [documentTotal, setDocumentTotal] = useState(0);
@@ -172,7 +184,15 @@ const KnowledgeLibrary = () => {
   const [fileSearch, setFileSearch] = useState('');
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: '', description: '', kind: 'common', tags: '' });
+  const [form, setForm] = useState({ name: '', description: '', kind: 'personal', tags: '', category_id: 0 });
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  const [categoryForm, setCategoryForm] = useState({ name: '', visibility: 'personal' });
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewItems, setReviewItems] = useState([]);
+  const [reviewTotal, setReviewTotal] = useState(0);
+  const [reviewPage, setReviewPage] = useState(1);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewing, setReviewing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(null);
   const [summaryFile, setSummaryFile] = useState(null);
@@ -201,10 +221,15 @@ const KnowledgeLibrary = () => {
     setLibraries(Array.isArray(rows) ? rows : []);
   };
 
+  const loadCategories = async () => {
+    const rows = unwrap(await API.get('/api/knowledge-admin/categories'));
+    setCategories(Array.isArray(rows) ? rows : []);
+  };
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    loadLibraries()
+    Promise.all([loadLibraries(), loadCategories()])
       .catch(async cause => {
         const message = await errorMessage(cause);
         if (!cancelled) setError(message);
@@ -219,11 +244,20 @@ const KnowledgeLibrary = () => {
     pending.forEach(item => counted.current.add(item.id));
     void mapPool(pending, 3, async item => {
       try {
-        const page = unwrapDocumentPage(await API.get(`/api/knowledge-admin/bases/${item.id}/documents?${documentsQuery({ page: 1, pageSize: 1 })}`));
-        if (!cancelled) setCounts(current => ({ ...current, [item.id]: page.total }));
+        const page = unwrapDocumentPage(await API.get(`/api/knowledge-admin/bases/${item.id}/documents?${documentsQuery({ page: 1, pageSize: 100 })}`));
+        if (cancelled) return;
+        setCounts(current => ({ ...current, [item.id]: page.total }));
+        const known = page.items.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
+        setSizes(current => ({
+          ...current,
+          [item.id]: page.items.length >= page.total ? known : null,
+        }));
       } catch {
         // 单个知识库的文件数量失败时保留目录，卡片显示占位。
-        if (!cancelled) setCounts(current => ({ ...current, [item.id]: null }));
+        if (!cancelled) {
+          setCounts(current => ({ ...current, [item.id]: null }));
+          setSizes(current => ({ ...current, [item.id]: null }));
+        }
       }
     });
     return () => { cancelled = true; };
@@ -231,8 +265,11 @@ const KnowledgeLibrary = () => {
 
   const visible = useMemo(() => {
     const text = keyword.trim().toLowerCase();
+    const categoryId = scope.startsWith('c:') ? Number(scope.slice(2)) : 0;
     return libraries
-      .filter(item => item.kind === scope)
+      .filter(item => (categoryId
+        ? Number(item.category_id || 0) === categoryId
+        : item.kind === scope && !Number(item.category_id || 0)))
       .filter(item => {
         if (!text) return true;
         return [item.name, item.description, item.tags, item.owner_username].some(value => String(value || '').toLowerCase().includes(text));
@@ -243,7 +280,20 @@ const KnowledgeLibrary = () => {
       });
   }, [libraries, scope, keyword, order]);
 
-  const countsByScope = useMemo(() => Object.fromEntries(SCOPES.map(([key]) => [key, libraries.filter(item => item.kind === key).length])), [libraries]);
+  const countsByScope = useMemo(() => {
+    const counts = {
+      personal: libraries.filter(item => item.kind === 'personal' && !Number(item.category_id || 0)).length,
+    };
+    categories.forEach(category => {
+      counts[`c:${category.id}`] = libraries.filter(item => Number(item.category_id || 0) === category.id).length;
+    });
+    return counts;
+  }, [libraries, categories]);
+  const tabs = [
+    { key: 'personal', label: '个人知识库' },
+    ...categories.map(category => ({ key: `c:${category.id}`, label: category.name })),
+  ];
+  const activeCategory = categories.find(category => `c:${category.id}` === scope);
 
   const filePageCount = Math.max(1, Math.ceil(documentTotal / FILE_PAGE_SIZE) || 1);
 
@@ -321,10 +371,42 @@ const KnowledgeLibrary = () => {
     try {
       unwrap(await API.delete(`/api/knowledge-admin/bases/${library.id}`));
       setConfirming(null);
+      setEditing(current => current?.id === library.id ? null : current);
       if (opened?.id === library.id) setOpened(null);
       await loadLibraries();
     } catch (cause) {
       setError(await errorMessage(cause));
+    }
+  };
+
+  const openEdit = library => {
+    setCreating(false);
+    setCategoryOpen(false);
+    setEditing(library);
+    setEditForm({
+      name: library.name || '',
+      description: library.description || '',
+      tags: library.tags || '',
+    });
+  };
+
+  const saveLibrary = async event => {
+    event.preventDefault();
+    if (!editing) return;
+    setSaving(true);
+    setError('');
+    try {
+      unwrap(await API.put(`/api/knowledge-admin/bases/${editing.id}`, {
+        name: editForm.name.trim(),
+        description: editForm.description.trim(),
+        tags: editForm.tags.trim(),
+      }));
+      setEditing(null);
+      await loadLibraries();
+    } catch (cause) {
+      setError(await errorMessage(cause));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -333,22 +415,26 @@ const KnowledgeLibrary = () => {
     setSaving(true);
     setError('');
     try {
+      const kind = form.category_id ? form.kind : 'personal';
       const created = unwrap(await API.post('/api/knowledge-admin/bases', {
         name: form.name.trim(),
         description: form.description.trim(),
-        kind: form.kind,
+        kind,
         tags: form.tags.trim(),
+        ...(form.category_id ? { category_id: form.category_id } : {}),
       }));
+      const categoryId = form.category_id || created?.category_id || 0;
       const library = {
         ...created,
         name: created?.name || form.name.trim(),
         description: created?.description ?? form.description.trim(),
-        kind: created?.kind || form.kind,
+        kind: created?.kind || kind,
         tags: created?.tags ?? form.tags.trim(),
+        category_id: categoryId,
       };
       setCreating(false);
-      setForm({ name: '', description: '', kind: scope, tags: '' });
-      setScope(library.kind);
+      setForm({ name: '', description: '', kind: 'personal', tags: '', category_id: 0 });
+      setScope(categoryId ? `c:${categoryId}` : 'personal');
       await loadLibraries();
       await openFiles(library);
     } catch (cause) {
@@ -526,13 +612,130 @@ const KnowledgeLibrary = () => {
 
   const fileCount = id => {
     if (!(id in counts)) return '…';
-    return counts[id] == null ? '—' : `${counts[id]}个文件`;
+    return counts[id] == null ? '—' : `${counts[id]}`;
   };
 
+  const librarySize = id => {
+    if (!(id in sizes)) return '…';
+    return sizes[id] == null ? '—' : formatSize(sizes[id]);
+  };
+
+  const libraryCreator = library => library.owner_username || (library.owner_user_id ? `#${library.owner_user_id}` : '—');
+
+  const visitCount = library => {
+    const value = library.visit_count ?? library.user_visit_count;
+    return Number.isFinite(Number(value)) ? String(Number(value)) : '—';
+  };
+
+  const dailyUsage = library => {
+    const value = library.daily_usage ?? library.daily_use_count;
+    return Number.isFinite(Number(value)) ? String(Number(value)) : '—';
+  };
+
+  const createCategory = async event => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const created = unwrap(await API.post('/api/knowledge-admin/categories',
+        categoryPayload(categoryForm.visibility, categoryForm.name.trim())));
+      setCategoryOpen(false);
+      setCategoryForm({ name: '', visibility: 'personal' });
+      await loadCategories();
+      if (created?.id) setScope(`c:${created.id}`);
+    } catch (cause) {
+      setError(await errorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const loadReviews = async (page = 1) => {
+    setReviewLoading(true);
+    setError('');
+    try {
+      const data = unwrap(await API.get(`/api/knowledge-admin/subscription-applications?page=${page}&page_size=${REVIEW_PAGE_SIZE}&status=pending`));
+      setReviewItems(Array.isArray(data?.items) ? data.items : []);
+      setReviewTotal(Number(data?.total) || 0);
+      setReviewPage(Number(data?.page) || page);
+    } catch (cause) {
+      setReviewItems([]);
+      setReviewTotal(0);
+      setError(await errorMessage(cause));
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  const openReviews = () => {
+    setOpened(null);
+    setCreating(false);
+    setEditing(null);
+    setCategoryOpen(false);
+    setReviewOpen(true);
+    void loadReviews(1);
+  };
+
+  const submitReview = async decision => {
+    if (!reviewing) return;
+    setSaving(true);
+    setError('');
+    try {
+      unwrap(await API.post(`/api/knowledge-admin/subscription-applications/${reviewing.id}/review`, { decision }));
+      setReviewing(null);
+      await loadReviews(reviewPage);
+    } catch (cause) {
+      setError(await errorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reviewPageCount = Math.max(1, Math.ceil(reviewTotal / REVIEW_PAGE_SIZE) || 1);
+
   return <div className='knowledge-admin'>
-    <h1 className='knowledge-admin-title'>知识库</h1>
+    <header className='knowledge-page-head'>
+      <h1>知识库</h1>
+      <div className='knowledge-page-actions'>
+        <button type='button' className='knowledge-back' onClick={openReviews}>订阅审核</button>
+        <button type='button' className='knowledge-primary' onClick={() => { setCreating(false); setEditing(null); setReviewOpen(false); setCategoryForm({ name: '', visibility: 'personal' }); setCategoryOpen(true); }}><Plus size={16} />新建知识库分类</button>
+      </div>
+    </header>
     {error && <div className='knowledge-alert' role='alert'>{error}<button type='button' onClick={() => setError('')}>关闭</button></div>}
-    {opened ? <section className='knowledge-files'>
+    {reviewOpen ? <section className='knowledge-files' aria-label='订阅审核'>
+      <header>
+        <button type='button' className='knowledge-back' onClick={() => setReviewOpen(false)}><ArrowLeft size={16} />返回</button>
+        <h2>订阅审核</h2>
+      </header>
+      <p className='knowledge-hint'>列出需要授权类别下的订阅申请，同意后申请人可在桌面对应分类中看到该知识库。</p>
+      <div className='knowledge-table-wrap'>
+        <table>
+          <thead><tr><th>申请人</th><th>知识库</th><th>分类</th><th>所有者</th><th>申请时间</th><th>操作</th></tr></thead>
+          <tbody>
+            {reviewLoading ? <tr><td colSpan={6}>正在加载审核列表</td></tr>
+              : reviewItems.length === 0 ? <tr><td colSpan={6}>暂无待审核申请</td></tr>
+                : reviewItems.map(item => <tr key={item.id}>
+                  <td>{item.applicant_username || ('#' + item.applicant_user_id)}</td>
+                  <td>{item.knowledge_base_name || ('#' + item.knowledge_base_id)}</td>
+                  <td>{item.category_name || '—'}</td>
+                  <td>{item.owner_username || '—'}</td>
+                  <td>{formatDate(item.created_at)}</td>
+                  <td className='knowledge-ops'>
+                    <button type='button' onClick={() => setReviewing(item)}>审核</button>
+                  </td>
+                </tr>)}
+          </tbody>
+        </table>
+      </div>
+      <div className='zjugis-table-pagination knowledge-files-pagination'>
+        <span>共 {reviewTotal} 条，每页 {REVIEW_PAGE_SIZE} 条</span>
+        <div>
+          <button type='button' aria-label='上一页' disabled={reviewLoading || reviewPage <= 1} onClick={() => void loadReviews(reviewPage - 1)}>上一页</button>
+          <span>{reviewPage} / {reviewPageCount}</span>
+          <button type='button' aria-label='下一页' disabled={reviewLoading || reviewPage >= reviewPageCount} onClick={() => void loadReviews(reviewPage + 1)}>下一页</button>
+        </div>
+      </div>
+    </section> : opened ? <section className='knowledge-files'>
       <header>
         <button type='button' className='knowledge-back' onClick={() => { closeViewer(); setChunks(null); setOpened(null); }}><ArrowLeft size={16} />返回</button>
         <h2>{opened.name} - 文件清单</h2>
@@ -614,8 +817,8 @@ const KnowledgeLibrary = () => {
       </div>
     </section> : <>
       <div className='knowledge-tabs' role='tablist' aria-label='知识库分类'>
-        {SCOPES.map(([key, label]) => <button key={key} type='button' role='tab' aria-selected={scope === key} className={scope === key ? 'active' : ''} onClick={() => setScope(key)}>
-          {label}<span>{countsByScope[key] || 0}</span>
+        {tabs.map(tab => <button key={tab.key} type='button' role='tab' aria-selected={scope === tab.key} className={scope === tab.key ? 'active' : ''} onClick={() => setScope(tab.key)}>
+          {tab.label}<span>{countsByScope[tab.key] || 0}</span>
         </button>)}
       </div>
       <div className='knowledge-toolbar'>
@@ -624,37 +827,60 @@ const KnowledgeLibrary = () => {
           <option value='desc'>按时间降序</option>
           <option value='asc'>按时间升序</option>
         </CustomSelect>
-        <button type='button' className='knowledge-primary' onClick={() => { setForm({ name: '', description: '', kind: scope, tags: '' }); setCreating(true); }}><Plus size={16} />新建知识库</button>
+        <button type='button' className='knowledge-primary' onClick={() => { setCategoryOpen(false); setEditing(null); setForm({ name: '', description: '', kind: activeCategory?.type || 'personal', tags: '', category_id: activeCategory?.id || 0 }); setCreating(true); }}><Plus size={16} />新建知识库</button>
       </div>
       {loading ? <p className='knowledge-empty' role='status'>正在加载知识库</p> : visible.length === 0 ? <p className='knowledge-empty'>
-        {libraries.some(item => item.kind !== scope) ? '当前分类暂无知识库。用户创建的内容在「个人知识库」或「共享知识库」中。' : '暂无知识库'}
+        {libraries.length > 0 ? '当前分类暂无知识库。' : '暂无知识库'}
       </p> : <div className='knowledge-grid'>
         {visible.map(library => <article key={library.id} className='knowledge-card'>
-          <header><h2>{library.name}</h2></header>
+          <header>
+            <h2>{library.name}</h2>
+            <button type='button' className='knowledge-card-edit' aria-label='编辑知识库' onClick={() => openEdit(library)}>
+              <Pencil size={14} />编辑
+            </button>
+          </header>
           <p>{library.description || '暂无描述'}</p>
           <div className='knowledge-tags'>{splitTags(library.tags).map(tag => <span key={tag}><Tag size={12} />{tag}</span>)}</div>
           <div className='knowledge-meta'>
-            {(library.kind === 'personal' || library.kind === 'shared') && <span>所有者 {library.owner_username || ('#' + library.owner_user_id)}</span>}
-            <span><FileText size={13} />{fileCount(library.id)}</span>
-            <span><Calendar size={13} />{formatDate(library.updated_at || library.created_at)}</span>
+            <span>创建人 {libraryCreator(library)}</span>
+            <span>文件量 {fileCount(library.id)}</span>
+            <span>大小 {librarySize(library.id)}</span>
+            <span>用户访问量 {visitCount(library)}</span>
+            <span>每天使用量 {dailyUsage(library)}</span>
           </div>
           <div className='knowledge-card-actions'>
-            <button type='button' onClick={() => openFiles(library)}>查看文件清单</button>
+            <button type='button' onClick={() => openFiles(library)}>文件清单</button>
             <button type='button' className='remove' onClick={() => setConfirming({ type: 'library', library })}>删除</button>
           </div>
         </article>)}
       </div>}
     </>}
+    {categoryOpen && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' onSubmit={createCategory}>
+      <header><h2>新建知识库分类</h2><button type='button' onClick={() => setCategoryOpen(false)}>×</button></header>
+      <label>类型<CustomSelect aria-label='分类类型' value={categoryForm.visibility} onChange={event => setCategoryForm(current => ({ ...current, visibility: event.target.value }))}>
+        {CATEGORY_VISIBILITY.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+      </CustomSelect></label>
+      <p className='knowledge-hint'>{CATEGORY_VISIBILITY.find(([key]) => key === categoryForm.visibility)?.[2]}</p>
+      <label>名称<input autoFocus required maxLength={64} value={categoryForm.name} onChange={event => setCategoryForm(current => ({ ...current, name: event.target.value }))} placeholder='请输入分类名称' /></label>
+      <footer><button type='button' onClick={() => setCategoryOpen(false)}>取消</button><button type='submit' className='knowledge-primary' disabled={saving || categoryForm.name.trim() === ''}>{saving ? '正在创建' : '确定'}</button></footer>
+    </form></div>}
     {creating && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' onSubmit={createLibrary}>
       <header><h2>新建知识库</h2><button type='button' onClick={() => setCreating(false)}>×</button></header>
       <label>名称<input autoFocus required maxLength={128} value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} placeholder='请输入知识库名称' /></label>
       <label>描述<textarea maxLength={500} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} placeholder='填写知识库覆盖的内容和用途' /></label>
-      <label>类型<CustomSelect aria-label='知识库类型' value={form.kind} onChange={event => setForm(current => ({ ...current, kind: event.target.value }))}>
-        {SCOPES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-      </CustomSelect></label>
-      {form.kind === 'shared' && <p className='knowledge-hint'>共享知识库默认仅创建者可见，部门或用户授权仍由管理接口写入。</p>}
+      {form.category_id
+        ? <p className='knowledge-hint'>将创建到当前分类，可见性与该分类一致。</p>
+        : <p className='knowledge-hint'>将创建为个人知识库，仅自己可见。</p>}
       <label>标签<input maxLength={200} value={form.tags} onChange={event => setForm(current => ({ ...current, tags: event.target.value }))} placeholder='多个标签用逗号分隔' /></label>
       <footer><button type='button' onClick={() => setCreating(false)}>取消</button><button type='submit' className='knowledge-primary' disabled={saving || form.name.trim() === ''}>{saving ? '正在创建' : '确定'}</button></footer>
+    </form></div>}
+    {editing && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' onSubmit={saveLibrary} aria-labelledby='dsh-knowledge-edit-title'>
+      <header><h2 id='dsh-knowledge-edit-title'>编辑知识库</h2><button type='button' onClick={() => setEditing(null)}>×</button></header>
+      {error && <div className='knowledge-alert' role='alert'>{error}<button type='button' onClick={() => setError('')}>关闭</button></div>}
+      <label>名称<input autoFocus required maxLength={128} value={editForm.name} onChange={event => setEditForm(current => ({ ...current, name: event.target.value }))} placeholder='请输入知识库名称' /></label>
+      <label>描述<textarea maxLength={500} value={editForm.description} onChange={event => setEditForm(current => ({ ...current, description: event.target.value }))} placeholder='填写知识库覆盖的内容和用途' /></label>
+      <label>标签<input maxLength={200} value={editForm.tags} onChange={event => setEditForm(current => ({ ...current, tags: event.target.value }))} placeholder='多个标签用逗号分隔' /></label>
+      <footer><button type='button' onClick={() => setEditing(null)}>取消</button><button type='submit' className='knowledge-primary' disabled={saving || editForm.name.trim() === ''}>{saving ? '正在保存' : '保存'}</button></footer>
     </form></div>}
     {summaryFile && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' onSubmit={saveSummary}>
       <header><h2>编辑摘要</h2><button type='button' onClick={() => setSummaryFile(null)}>×</button></header>
@@ -695,6 +921,15 @@ const KnowledgeLibrary = () => {
       <footer>
         <button type='button' onClick={() => setConfirming(null)}>取消</button>
         <button type='button' className='remove' onClick={() => confirming.type === 'library' ? removeLibrary(confirming.library) : runFileAction(confirming.file, 'delete')}>删除</button>
+      </footer>
+    </section></div>}
+    {reviewing && <div className='knowledge-modal-backdrop'><section className='knowledge-modal' role='dialog' aria-label='订阅审核'>
+      <header><h2>订阅审核</h2><button type='button' onClick={() => setReviewing(null)}>×</button></header>
+      <p>申请人 <strong>{reviewing.applicant_username || ('#' + reviewing.applicant_user_id)}</strong> 申请订阅「{reviewing.knowledge_base_name || ('#' + reviewing.knowledge_base_id)}」。</p>
+      <footer>
+        <button type='button' disabled={saving} onClick={() => setReviewing(null)}>取消</button>
+        <button type='button' className='remove' disabled={saving} onClick={() => void submitReview('reject')}>不同意</button>
+        <button type='button' className='knowledge-primary' disabled={saving} onClick={() => void submitReview('approve')}>同意</button>
       </footer>
     </section></div>}
   </div>;

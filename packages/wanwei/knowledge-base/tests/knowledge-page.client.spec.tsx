@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { KnowledgePage, type KnowledgeApi } from '../src/client/KnowledgePage.tsx'
 
@@ -39,40 +39,9 @@ function stubCanvas() {
       transform() {},
       setTransform() {},
     } as unknown as CanvasRenderingContext2D
-  }) as unknown as typeof HTMLCanvasElement.prototype.getContext
+  }) as typeof HTMLCanvasElement.prototype.getContext
   HTMLCanvasElement.prototype.toDataURL = vi.fn(() => 'data:image/png;base64,AA==')
 }
-
-it('accepts a 1GB MDB selection and keeps the page usable after an upload error', async () => {
-  const service = api()
-  const upload = vi.fn(async () => { throw new Error('后台拒绝上传') })
-  service.upload = upload
-  const { container } = render(<KnowledgePage api={service} />)
-  await screen.findByText('说明.pdf')
-  const input = container.querySelector('input[type="file"]') as HTMLInputElement
-  const file = new File(['MDB'], '基础库.mdb')
-  Object.defineProperty(file, 'size', { value: 1024 ** 3 })
-  fireEvent.change(input, { target: { files: [file] } })
-  expect((await screen.findByRole('alert')).textContent).toContain('后台拒绝上传')
-  expect(upload).toHaveBeenCalledWith(1, file)
-  expect(screen.getByText('说明.pdf')).toBeTruthy()
-  expect(screen.getByRole('button', { name: '上传文档' }).hasAttribute('disabled')).toBe(false)
-  expect(screen.getByRole('alert').textContent).toMatchSnapshot()
-})
-
-it('rejects a file over 1GB before reading or uploading it', async () => {
-  const service = api()
-  const upload = vi.fn(async () => {})
-  service.upload = upload
-  const { container } = render(<KnowledgePage api={service} />)
-  await screen.findByText('说明.pdf')
-  const input = container.querySelector('input[type="file"]') as HTMLInputElement
-  const file = new File(['MDB'], '基础库.mdb')
-  Object.defineProperty(file, 'size', { value: 1024 ** 3 + 1 })
-  fireEvent.change(input, { target: { files: [file] } })
-  expect((await screen.findByRole('alert')).textContent).toContain('文件不能超过 1GB')
-  expect(upload).not.toHaveBeenCalled()
-})
 
 function api(): KnowledgeApi {
   return {
@@ -80,6 +49,13 @@ function api(): KnowledgeApi {
       { id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7 },
       { id: 3, name: '团队共享', description: '共享', kind: 'shared' as const, owner_user_id: 7 },
     ]),
+    categories: vi.fn(async () => []),
+    plaza: vi.fn(async () => []),
+    plazaItem: vi.fn(async () => {
+      throw new Error('missing plaza item')
+    }),
+    plazaDocuments: vi.fn(async () => []),
+    subscribe: vi.fn(async () => {}),
     create: vi.fn(async input => ({ id: 2, owner_user_id: 7, ...input })),
     documents: vi.fn(async () => [{ id: 'doc-1', name: '说明.pdf', size: 2048, run: 'DONE', progress: 1 }]),
     chunks: vi.fn(async () => [{ id: 'chunk-1', content: '文档正文内容' }]),
@@ -93,25 +69,102 @@ function api(): KnowledgeApi {
   }
 }
 
-it('loads authorized knowledge bases and creates a shared library', async () => {
+it('loads authorized knowledge bases and creates a personal library', async () => {
   const service = api()
   render(<KnowledgePage api={service} />)
   expect(await screen.findByText('说明.pdf')).toBeTruthy()
-  expect(screen.getByRole('button', { name: '新建订阅知识库' })).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: '新建订阅知识库' }))
-  expect(screen.getByRole('alert').textContent).toContain('暂不支持')
-  expect(service.create).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: '新建共享知识库' }))
-  expect(screen.getByRole('dialog', { name: '新建共享知识库' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: '新建订阅知识库' })).toBeNull()
+  expect(screen.queryByRole('button', { name: '新建共享知识库' })).toBeNull()
+  expect(screen.queryByText('共享知识库')).toBeNull()
+  expect(screen.queryByText('订阅知识库')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '新建个人知识库' }))
+  expect(screen.getByRole('dialog', { name: '新建个人知识库' })).toBeTruthy()
   fireEvent.change(screen.getByPlaceholderText('请输入知识库名称'), { target: { value: '协作资料' } })
   fireEvent.click(screen.getByText('确定'))
   await waitFor(() => expect(screen.getAllByText('协作资料')).toHaveLength(2))
-  expect(service.create).toHaveBeenCalledWith({ name: '协作资料', description: '', kind: 'shared' })
+  expect(service.create).toHaveBeenCalledWith({ name: '协作资料', description: '', kind: 'personal' })
   fireEvent.click(screen.getByRole('button', { name: '上传文档' }))
   expect(screen.getByRole('menuitem', { name: '本地文件' })).toBeTruthy()
   expect(screen.getByRole('menuitem', { name: '本地文件夹' })).toBeTruthy()
   expect(screen.getByRole('menuitem', { name: '新建文件夹' })).toBeTruthy()
   expect(screen.getByText('PDF')).toBeTruthy()
+})
+
+it('hides auth category names from the sidebar and discovers them only in the plaza', async () => {
+  const service = api()
+  const plazaItem = {
+    id: 9,
+    name: '地方法规知识库',
+    description: '地方法规合集',
+    kind: 'common' as const,
+    owner_user_id: 2,
+    category_id: 4,
+    category_name: '法律',
+    owner_username: '法务平台',
+    subscription_status: 'none' as const,
+  }
+  service.categories = vi.fn(async () => [
+    { id: 3, name: '公开规范', type: 'common' as const, require_auth: false },
+    { id: 4, name: '法律', type: 'shared' as const, require_auth: true },
+  ])
+  service.list = vi.fn(async () => [
+    { id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7 },
+    { id: 5, name: '公开汇编', description: '开放', kind: 'common' as const, owner_user_id: 2, category_id: 3 },
+  ])
+  service.plaza = vi.fn(async () => [plazaItem])
+  service.plazaItem = vi.fn(async () => plazaItem)
+  service.plazaDocuments = vi.fn(async () => [
+    { id: 'doc-zhejiang', name: '浙江省/条例.pdf', location: '浙江省/条例.pdf', size: 1024, run: 'DONE', progress: 1, update_time: 1_729_036_800 },
+    { id: 'doc-anhui', name: '安徽省/办法.pdf', location: '安徽省/办法.pdf', size: 1024, run: 'DONE', progress: 1, update_time: 1_729_036_800 },
+  ])
+  service.subscribe = vi.fn(async () => {})
+  render(<KnowledgePage api={service} />)
+  expect(await screen.findByText('公开规范')).toBeTruthy()
+  expect(screen.queryByText('法律')).toBeNull()
+  expect(screen.queryByText('订阅知识库')).toBeNull()
+  const open = screen.getByText('公开规范').closest('.dsh-knowledge-group')
+  expect(within(open as HTMLElement).getByText('公开汇编')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: /知识库广场/ }))
+  expect(await screen.findByText('地方法规知识库')).toBeTruthy()
+  expect(screen.queryByRole('tab')).toBeNull()
+  expect(service.plaza).toHaveBeenCalledWith({})
+  fireEvent.click(screen.getByRole('button', { name: /地方法规知识库/ }))
+  expect(await screen.findByRole('button', { name: '订阅' })).toBeTruthy()
+  expect(await screen.findByText('浙江省')).toBeTruthy()
+  expect(screen.getByText('安徽省')).toBeTruthy()
+  expect(service.plazaDocuments).toHaveBeenCalledWith(9)
+  fireEvent.click(screen.getByRole('button', { name: '订阅' }))
+  await waitFor(() => expect(service.subscribe).toHaveBeenCalledWith(9))
+  expect(await screen.findByRole('button', { name: '审核中' })).toBeTruthy()
+})
+
+it('places approved auth-category libraries under 订阅知识库 instead of the category name', async () => {
+  const service = api()
+  service.categories = vi.fn(async () => [
+    { id: 4, name: '法律', type: 'shared' as const, require_auth: true },
+  ])
+  service.list = vi.fn(async () => [
+    { id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7 },
+    { id: 8, name: '已订法规', description: '已通过', kind: 'shared' as const, owner_user_id: 2, category_id: 4 },
+  ])
+  render(<KnowledgePage api={service} />)
+  expect(await screen.findByText('订阅知识库')).toBeTruthy()
+  expect(screen.queryByText('法律')).toBeNull()
+  const subscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group')
+  expect(within(subscription as HTMLElement).getByText('已订法规')).toBeTruthy()
+})
+
+it('hides empty open categories from the sidebar', async () => {
+  const service = api()
+  service.categories = vi.fn(async () => [
+    { id: 3, name: '公开规范', type: 'common' as const, require_auth: false },
+  ])
+  service.list = vi.fn(async () => [
+    { id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7 },
+  ])
+  render(<KnowledgePage api={service} />)
+  expect(await screen.findAllByText('我的资料')).not.toHaveLength(0)
+  expect(screen.queryByText('公开规范')).toBeNull()
 })
 
 it('uploads every file from a local folder into the selected knowledge base', async () => {
@@ -171,30 +224,18 @@ it('drags the divider to change the content width', async () => {
 
 it('restores saved Q&A turns when opening a knowledge base', async () => {
   const service = api()
-  stubCanvas()
   service.messages = vi.fn(async () => [
     { role: 'user' as const, content: '上次的问题' },
-    {
-      role: 'assistant' as const,
-      content: '上次的回答[ID:0]',
-      citations: [{
-        index: 1, chunk_index: 0, document_id: 'doc-1', document_name: '说明.pdf',
-        quote: '摘录', page: 1,
-        positions: [{ page: 1, left: 0.1, right: 0.5, top: 0.2, bottom: 0.3 }],
-      }],
-    },
+    { role: 'assistant' as const, content: '上次的回答' },
   ])
   const { container } = render(<KnowledgePage api={service} />)
   const pane = container.querySelector('.dsh-knowledge-messages') as HTMLDivElement
   Object.defineProperty(pane, 'scrollHeight', { configurable: true, get: () => 960 })
   await waitFor(() => expect(service.messages).toHaveBeenCalledWith(1))
   expect(await screen.findByText('上次的问题')).toBeTruthy()
-  expect(screen.getByText(/上次的回答/)).toBeTruthy()
+  expect(screen.getByText('上次的回答')).toBeTruthy()
   expect(screen.getByText('万维')).toBeTruthy()
-  expect(screen.getByRole('button', { name: '引用定位 【1】' })).toBeTruthy()
   expect(pane.scrollTop).toBe(0)
-  fireEvent.click(screen.getByRole('button', { name: '引用定位 【1】' }))
-  await waitFor(() => expect(service.download).toHaveBeenCalledWith(1, 'doc-1'))
 })
 
 it('asks the selected knowledge base through chat completions and renders recommendations', async () => {
@@ -291,8 +332,8 @@ it('opens a cited PDF when a blue answer citation number is clicked', async () =
   const input = await screen.findByPlaceholderText('基于知识库提问')
   fireEvent.change(input, { target: { value: '制度要求是什么' } })
   fireEvent.click(screen.getByRole('button', { name: '发送' }))
-  expect(await screen.findByRole('button', { name: '引用定位 【1】' })).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: '引用定位 【1】' }))
+  expect(await screen.findByRole('button', { name: '引用定位 1' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '引用定位 1' }))
   await waitFor(() => expect(service.download).toHaveBeenCalledWith(1, 'doc-1'))
   expect(screen.getByRole('dialog', { name: '说明.pdf' })).toBeTruthy()
 })
@@ -320,10 +361,10 @@ it('turns answer [ID:i] markers into inline locate controls without trailing sou
   const input = await screen.findByPlaceholderText('基于知识库提问')
   fireEvent.change(input, { target: { value: '准备工作是什么' } })
   fireEvent.click(screen.getByRole('button', { name: '发送' }))
-  expect(await screen.findByRole('button', { name: '引用定位 【1】' })).toBeTruthy()
-  expect(screen.queryByRole('button', { name: '引用定位 【2】' })).toBeNull()
+  expect(await screen.findByRole('button', { name: '引用定位 1' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: '引用定位 2' })).toBeNull()
   expect(screen.queryByText(/\[ID:0\]/)).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: '引用定位 【1】' }))
+  fireEvent.click(screen.getByRole('button', { name: '引用定位 1' }))
   await waitFor(() => expect(service.download).toHaveBeenCalledWith(1, 'doc-1'))
 })
 

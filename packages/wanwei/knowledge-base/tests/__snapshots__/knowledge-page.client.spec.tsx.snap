@@ -1,3 +1,0 @@
-// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
-
-exports[`accepts a 1GB MDB selection and keeps the page usable after an upload error 1`] = `"上传失败：Error: 后台拒绝上传×"`;

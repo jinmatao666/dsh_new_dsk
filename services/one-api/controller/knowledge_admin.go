@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,6 +16,99 @@ import (
 type managedKnowledgeDocument struct {
 	ragflow.Document
 	Summary string `json:"summary"`
+}
+
+type createKnowledgeCategoryInput struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	RequireAuth bool   `json:"require_auth"`
+}
+
+type reviewKnowledgeSubscriptionInput struct {
+	Decision string `json:"decision"`
+}
+
+// ListManagedKnowledgeSubscriptionApplications returns a paginated audit queue for subscription requests.
+func ListManagedKnowledgeSubscriptionApplications(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	status := strings.TrimSpace(c.DefaultQuery("status", model.KnowledgeSubscriptionPending))
+	if status != "" && status != model.KnowledgeSubscriptionPending &&
+		status != model.KnowledgeSubscriptionApproved && status != model.KnowledgeSubscriptionRejected {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "审核状态无效"})
+		return
+	}
+	rows, total, err := model.ListKnowledgeSubscriptionApplications(status, page, pageSize)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取订阅审核列表失败"})
+		return
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"items":     rows,
+			"total":     total,
+			"page":      page,
+			"page_size": pageSize,
+		},
+	})
+}
+
+// ReviewManagedKnowledgeSubscription approves or rejects one pending subscription application.
+func ReviewManagedKnowledgeSubscription(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "申请编号无效"})
+		return
+	}
+	var input reviewKnowledgeSubscriptionInput
+	if c.ShouldBindJSON(&input) != nil ||
+		(input.Decision != "approve" && input.Decision != "reject") {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "审核决定无效"})
+		return
+	}
+	row, err := model.ReviewKnowledgeSubscription(id, c.GetInt("id"), input.Decision == "approve")
+	if err != nil {
+		if errors.Is(err, model.ErrKnowledgeSubscriptionNotPending) {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "订阅申请不存在"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存审核结果失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
+}
+
+// CreateManagedKnowledgeCategory adds a workbench tab that the desktop lists after Personal.
+func CreateManagedKnowledgeCategory(c *gin.Context) {
+	var input createKnowledgeCategoryInput
+	if c.ShouldBindJSON(&input) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库分类参数无效"})
+		return
+	}
+	row := model.KnowledgeCategory{Name: input.Name, Type: input.Type, RequireAuth: input.RequireAuth}
+	if err := model.SaveKnowledgeCategory(&row); err != nil {
+		if errors.Is(err, model.ErrKnowledgeCategoryDuplicate) || errors.Is(err, model.ErrKnowledgeCategoryInvalid) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存知识库分类失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
 }
 
 // CreateManagedKnowledgeBase allows the workbench to create a common library.
@@ -81,28 +175,59 @@ func remoteKnowledgeMissing(err error) bool {
 	return strings.Contains(text, "404") || strings.Contains(text, "not found") || strings.Contains(err.Error(), "不存在")
 }
 
-type updateKnowledgeShelfInput struct {
-	Shelf string `json:"shelf"`
+type updateManagedKnowledgeBaseInput struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Tags        string `json:"tags"`
+	Shelf       string `json:"shelf"`
 }
 
-// UpdateManagedKnowledgeBase changes whether desktop retrieval can see the library.
+// UpdateManagedKnowledgeBase saves workbench metadata and optional shelf visibility.
 func UpdateManagedKnowledgeBase(c *gin.Context) {
 	row, ok := managedKnowledgeBase(c)
 	if !ok {
 		return
 	}
-	var input updateKnowledgeShelfInput
-	if c.ShouldBindJSON(&input) != nil ||
-		(input.Shelf != model.KnowledgeShelfPublished && input.Shelf != model.KnowledgeShelfOffline) {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "上架状态无效"})
+	var input updateManagedKnowledgeBaseInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库参数无效"})
 		return
 	}
-	if err := model.DB.Model(row).Update("shelf", input.Shelf).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存上架状态失败"})
+	input.Name = strings.TrimSpace(input.Name)
+	input.Description = strings.TrimSpace(input.Description)
+	input.Tags = strings.TrimSpace(input.Tags)
+	input.Shelf = strings.TrimSpace(input.Shelf)
+	updates := map[string]interface{}{}
+	if input.Name != "" {
+		if len([]rune(input.Name)) > 128 || len([]rune(input.Description)) > 500 || len([]rune(input.Tags)) > 200 {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库名称、描述或标签无效"})
+			return
+		}
+		updates["name"] = input.Name
+		updates["description"] = input.Description
+		updates["tags"] = input.Tags
+	}
+	if input.Shelf != "" {
+		if input.Shelf != model.KnowledgeShelfPublished && input.Shelf != model.KnowledgeShelfOffline {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "上架状态无效"})
+			return
+		}
+		updates["shelf"] = input.Shelf
+	}
+	if len(updates) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库参数无效"})
 		return
 	}
-	row.Shelf = input.Shelf
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
+	if err := model.DB.Model(&model.KnowledgeBase{}).Where("id = ?", row.Id).Updates(updates).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存知识库失败"})
+		return
+	}
+	updated, err := model.GetKnowledgeBase(row.Id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": updated})
 }
 
 // DeleteManagedKnowledgeBase removes the RAGFlow dataset and then the local records.

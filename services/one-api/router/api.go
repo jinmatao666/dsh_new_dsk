@@ -179,7 +179,12 @@ func SetApiRouter(router *gin.Engine) {
 		knowledgeRoute.Use(middleware.UserAuth())
 		{
 			knowledgeRoute.GET("", controller.ListKnowledgeBases)
+			knowledgeRoute.GET("/categories", controller.ListKnowledgeCategories)
+			knowledgeRoute.GET("/plaza", controller.ListKnowledgePlaza)
+			knowledgeRoute.GET("/plaza/:id", controller.GetKnowledgePlazaItem)
+			knowledgeRoute.GET("/plaza/:id/documents", controller.ListKnowledgePlazaDocuments)
 			knowledgeRoute.POST("", controller.CreateKnowledgeBase)
+			knowledgeRoute.POST("/:id/subscribe", controller.SubscribeKnowledgeBase)
 			knowledgeRoute.GET("/:id/documents", controller.ListKnowledgeDocuments)
 			knowledgeRoute.POST("/:id/documents", controller.UploadKnowledgeDocument)
 			knowledgeRoute.DELETE("/:id/documents/:documentId", controller.DeleteKnowledgeDocument)
@@ -198,6 +203,10 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			knowledgeAdminRoute.GET("/bases", controller.ListManagedKnowledgeBases)
 			knowledgeAdminRoute.POST("/bases", controller.CreateManagedKnowledgeBase)
+			knowledgeAdminRoute.GET("/categories", controller.ListKnowledgeCategories)
+			knowledgeAdminRoute.POST("/categories", controller.CreateManagedKnowledgeCategory)
+			knowledgeAdminRoute.GET("/subscription-applications", controller.ListManagedKnowledgeSubscriptionApplications)
+			knowledgeAdminRoute.POST("/subscription-applications/:id/review", controller.ReviewManagedKnowledgeSubscription)
 			knowledgeAdminRoute.PUT("/bases/:id", controller.UpdateManagedKnowledgeBase)
 			knowledgeAdminRoute.DELETE("/bases/:id", controller.DeleteManagedKnowledgeBase)
 			knowledgeAdminRoute.GET("/bases/:id/documents", controller.ListManagedKnowledgeDocuments)

@@ -23,6 +23,19 @@ export type PdfLocateRequest = {
 
 type HighlightBox = { left: number; top: number; width: number; height: number }
 
+type TextPiece = { text: string; left: number; top: number; width: number; height: number }
+
+type PageGeom = {
+  pageNumber: number
+  width: number
+  height: number
+  dataUrl: string
+  pageWidth: number
+  pageHeight: number
+  scale: number
+  pieces: TextPiece[]
+}
+
 type PageLayer = {
   pageNumber: number
   width: number
@@ -47,12 +60,16 @@ export function PdfLocateViewer({
   const [loading, setLoading] = useState(true)
   const scroller = useRef<HTMLDivElement>(null)
   const targetPage = useRef<number>()
+  const locateRef = useRef(locate)
+  const geometryRef = useRef<PageGeom[]>([])
+  locateRef.current = locate
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError('')
     setPages([])
+    geometryRef.current = []
     targetPage.current = undefined
     void (async () => {
       try {
@@ -63,9 +80,7 @@ export function PdfLocateViewer({
           isEvalSupported: false,
         })
         const pdf = await task.promise
-        const rendered: PageLayer[] = []
-        const locatePageCandidates = pageCandidates(locate)
-        let applied = false
+        const geometry: PageGeom[] = []
         for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
           if (cancelled) {
             await pdf.destroy()
@@ -81,41 +96,24 @@ export function PdfLocateViewer({
           const context = canvas.getContext('2d')
           if (context === null) continue
           await page.render({ canvasContext: context, viewport: draw }).promise
-          let highlights: HighlightBox[] = []
-          if (!applied && locatePageCandidates.includes(pageNumber)) {
-            highlights = boxesForPage(locate, pageNumber, viewport.width, viewport.height)
-              .map(box => scaleBox(box, scale))
-            if (highlights.length === 0 && (locate?.quote ?? '') !== '') {
-              const quoteBox = await findQuoteBox(page, locate?.quote ?? '', viewport.width, viewport.height)
-              if (quoteBox !== undefined) highlights = [scaleBox(quoteBox, scale)]
-            }
-            if (highlights.length === 0) {
-              highlights = [scaleBox(fallbackBox(viewport.width, viewport.height), scale)]
-            }
-            targetPage.current = pageNumber
-            applied = true
-          }
-          rendered.push({
+          const pieces = await textPieces(page, viewport.height)
+          geometry.push({
             pageNumber,
             width: canvas.width,
             height: canvas.height,
             dataUrl: canvas.toDataURL('image/png'),
-            highlights,
+            pageWidth: viewport.width,
+            pageHeight: viewport.height,
+            scale,
+            pieces,
           })
         }
-        if (!applied && locate !== undefined && pdf.numPages > 0) {
-          const pageNumber = Math.min(Math.max(locatePageCandidates[0] ?? 1, 1), pdf.numPages)
-          const layer = rendered.find(page => page.pageNumber === pageNumber)
-          if (layer !== undefined) {
-            const page = await pdf.getPage(pageNumber)
-            const viewport = page.getViewport({ scale: 1 })
-            const scale = layer.width / Math.max(viewport.width, 1)
-            layer.highlights = [scaleBox(fallbackBox(viewport.width, viewport.height), scale)]
-            targetPage.current = pageNumber
-          }
-        }
         await pdf.destroy()
-        if (!cancelled) setPages(rendered)
+        if (cancelled) return
+        geometryRef.current = geometry
+        const located = paintLocate(geometry, locateRef.current)
+        targetPage.current = located.target
+        setPages(located.pages)
       } catch (cause) {
         if (!cancelled) setError(`${productText('打开失败')}：${String(cause)}`)
       } finally {
@@ -123,7 +121,15 @@ export function PdfLocateViewer({
       }
     })()
     return () => { cancelled = true }
-  }, [bytes, locate])
+  }, [bytes])
+
+  useEffect(() => {
+    const geometry = geometryRef.current
+    if (geometry.length === 0) return
+    const located = paintLocate(geometry, locate)
+    targetPage.current = located.target
+    setPages(located.pages)
+  }, [locate])
 
   useEffect(() => {
     if (loading || targetPage.current === undefined) return
@@ -146,6 +152,37 @@ export function PdfLocateViewer({
           }} />)}
       </div>)}
   </div>
+}
+
+function paintLocate(geometry: PageGeom[], locate: PdfLocateRequest | undefined): { pages: PageLayer[]; target?: number } {
+  const pages: PageLayer[] = geometry.map(page => ({
+    pageNumber: page.pageNumber,
+    width: page.width,
+    height: page.height,
+    dataUrl: page.dataUrl,
+    highlights: [],
+  }))
+  if (locate === undefined || geometry.length === 0) return { pages }
+  const candidates = pageCandidates(locate)
+  for (const page of geometry) {
+    if (!candidates.includes(page.pageNumber)) continue
+    let highlights = boxesForPage(locate, page.pageNumber, page.pageWidth, page.pageHeight)
+      .map(box => scaleBox(box, page.scale))
+    if (highlights.length === 0 && (locate.quote ?? '') !== '') {
+      const quoteBox = quoteBoxFromPieces(page.pieces, locate.quote ?? '', page.pageWidth, page.pageHeight)
+      if (quoteBox !== undefined) highlights = [scaleBox(quoteBox, page.scale)]
+    }
+    if (highlights.length === 0) highlights = [scaleBox(fallbackBox(page.pageWidth, page.pageHeight), page.scale)]
+    const layer = pages.find(item => item.pageNumber === page.pageNumber)
+    if (layer !== undefined) layer.highlights = highlights
+    return { pages, target: page.pageNumber }
+  }
+  const pageNumber = Math.min(Math.max(candidates[0] ?? 1, 1), geometry.length)
+  const page = geometry.find(item => item.pageNumber === pageNumber) ?? geometry[0]
+  if (page === undefined) return { pages }
+  const layer = pages.find(item => item.pageNumber === page.pageNumber)
+  if (layer !== undefined) layer.highlights = [scaleBox(fallbackBox(page.pageWidth, page.pageHeight), page.scale)]
+  return { pages, target: page.pageNumber }
 }
 
 function pageCandidates(locate: PdfLocateRequest | undefined): number[] {
@@ -217,25 +254,32 @@ function fallbackBox(pageWidth: number, pageHeight: number): HighlightBox {
   }
 }
 
-async function findQuoteBox(
+async function textPieces(
   page: { getTextContent: () => Promise<{ items: Array<Record<string, unknown>> }> },
-  quote: string,
-  pageWidth: number,
   pageHeight: number,
-): Promise<HighlightBox | undefined> {
-  const needle = normalizeQuote(quote)
-  if (needle.length < 4) return undefined
+): Promise<TextPiece[]> {
   const content = await page.getTextContent()
-  const pieces: Array<{ text: string; left: number; top: number; width: number; height: number }> = []
+  const pieces: TextPiece[] = []
   for (const item of content.items) {
     if (typeof item.str !== 'string' || item.str.trim() === '') continue
     const transform = Array.isArray(item.transform) ? item.transform as number[] : []
     const left = transform[4] ?? 0
-    const top = pageHeight - (transform[5] ?? 0)
-    const width = typeof item.width === 'number' ? item.width : Math.max(needle.length * 4, 24)
     const height = typeof item.height === 'number' ? item.height : 14
+    const top = pageHeight - (transform[5] ?? 0)
+    const width = typeof item.width === 'number' ? item.width : Math.max(item.str.length * 4, 24)
     pieces.push({ text: item.str, left, top: top - height, width, height })
   }
+  return pieces
+}
+
+function quoteBoxFromPieces(
+  pieces: TextPiece[],
+  quote: string,
+  pageWidth: number,
+  pageHeight: number,
+): HighlightBox | undefined {
+  const needle = normalizeQuote(quote)
+  if (needle.length < 4) return undefined
   const joined = pieces.map(piece => piece.text).join('')
   const normalizedJoined = normalizeQuote(joined)
   const hit = normalizedJoined.indexOf(needle.slice(0, Math.min(needle.length, 48)))
@@ -250,7 +294,7 @@ async function findQuoteBox(
 }
 
 function boxAround(
-  pieces: Array<{ text: string; left: number; top: number; width: number; height: number }>,
+  pieces: TextPiece[],
   start: number,
   length: number,
   pageWidth: number,

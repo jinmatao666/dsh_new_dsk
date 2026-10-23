@@ -7,6 +7,7 @@ import {
   type KnowledgeAnswerProgress,
   type KnowledgeApi,
   type KnowledgeBaseItem,
+  type KnowledgePlazaItem,
 } from './KnowledgePage.tsx'
 import { productText } from './locales/product.ts'
 import { uploadKnowledgeFile } from './upload.ts'
@@ -108,7 +109,54 @@ function knowledgeItem(raw: unknown): KnowledgeBaseItem {
     !Number.isInteger(item.owner_user_id)) {
     throw new Error('知识库响应字段无效')
   }
-  return item as unknown as KnowledgeBaseItem
+  let categoryId = 0
+  if (item.category_id !== undefined && item.category_id !== null) {
+    if (!Number.isInteger(item.category_id) || (item.category_id as number) < 0) {
+      throw new Error('知识库响应字段无效')
+    }
+    categoryId = item.category_id as number
+  }
+  return { ...(item as unknown as KnowledgeBaseItem), category_id: categoryId }
+}
+
+function knowledgeCategory(raw: unknown) {
+  if (typeof raw !== 'object' || raw === null) throw new Error('知识库分类无效')
+  const item = raw as Record<string, unknown>
+  if (!Number.isInteger(item.id) || typeof item.name !== 'string' || item.name.trim() === '' ||
+    (item.type !== 'personal' && item.type !== 'shared' && item.type !== 'common') ||
+    typeof item.require_auth !== 'boolean') {
+    throw new Error('知识库分类字段无效')
+  }
+  return {
+    id: item.id as number,
+    name: item.name,
+    type: item.type,
+    require_auth: item.require_auth,
+  }
+}
+
+function knowledgePlazaItem(raw: unknown): KnowledgePlazaItem {
+  if (typeof raw !== 'object' || raw === null) throw new Error('知识库广场响应无效')
+  const item = raw as Record<string, unknown>
+  if (!Number.isInteger(item.id) || typeof item.name !== 'string' || typeof item.description !== 'string' ||
+    (item.kind !== 'personal' && item.kind !== 'shared' && item.kind !== 'common') ||
+    !Number.isInteger(item.owner_user_id) || !Number.isInteger(item.category_id) ||
+    typeof item.category_name !== 'string' || typeof item.owner_username !== 'string' ||
+    (item.subscription_status !== 'none' && item.subscription_status !== 'pending' &&
+      item.subscription_status !== 'approved')) {
+    throw new Error('知识库广场字段无效')
+  }
+  return {
+    id: item.id as number,
+    name: item.name,
+    description: item.description,
+    kind: item.kind,
+    owner_user_id: item.owner_user_id as number,
+    category_id: item.category_id as number,
+    category_name: item.category_name,
+    owner_username: item.owner_username,
+    subscription_status: item.subscription_status,
+  }
 }
 
 export const inject = ['slots', 'connection', 'wanweiNetwork']
@@ -126,6 +174,41 @@ export function apply(ctx: Context): void {
       if (!Array.isArray(raw)) throw new Error('知识库列表无效')
       return raw.map(knowledgeItem)
     },
+    async categories() {
+      const raw = await call('categories')
+      if (!Array.isArray(raw)) throw new Error('知识库分类列表无效')
+      return raw.map(knowledgeCategory)
+    },
+    async plaza(input = {}) {
+      const raw = await call('plaza', input)
+      if (!Array.isArray(raw)) throw new Error('知识库广场列表无效')
+      return raw.map(knowledgePlazaItem)
+    },
+    async plazaItem(id) { return knowledgePlazaItem(await call('plaza-item', { id })) },
+    async plazaDocuments(id) {
+      const raw = await call('plaza-documents', { id })
+      if (!Array.isArray(raw)) throw new Error('知识库文件列表无效')
+      return raw.map((item) => {
+        if (typeof item !== 'object' || item === null) throw new Error('知识库文件无效')
+        const document = item as Record<string, unknown>
+        if (typeof document.id !== 'string' || typeof document.name !== 'string' ||
+          typeof document.size !== 'number' || typeof document.run !== 'string' || typeof document.progress !== 'number') {
+          throw new Error('知识库文件字段无效')
+        }
+        const location = typeof document.location === 'string' ? document.location : undefined
+        return {
+          id: document.id,
+          name: document.name,
+          size: document.size,
+          run: document.run,
+          progress: document.progress,
+          ...(location !== undefined && location !== '' ? { location } : {}),
+          ...(typeof document.create_time === 'number' ? { create_time: document.create_time } : {}),
+          ...(typeof document.update_time === 'number' ? { update_time: document.update_time } : {}),
+        }
+      })
+    },
+    async subscribe(id) { await call('subscribe', { id }) },
     async create(input) { return knowledgeItem(await call('create', input)) },
     async documents(id) {
       const raw = await call('documents', { id })

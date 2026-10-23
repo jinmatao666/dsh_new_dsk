@@ -49,6 +49,30 @@ export class KnowledgeBaseApi {
         this.request(`/api/knowledge-bases/${id}/documents`, { method: 'POST', body: form }, uploadSignal))
     }
     if (operation === 'list') return this.request('/api/knowledge-bases', {}, signal)
+    if (operation === 'categories') return this.request('/api/knowledge-bases/categories', {}, signal)
+    if (operation === 'plaza') {
+      const params = new URLSearchParams()
+      if (Number.isInteger(value.categoryId) && (value.categoryId as number) > 0) {
+        params.set('category_id', String(value.categoryId))
+      }
+      if (typeof value.keyword === 'string' && value.keyword.trim() !== '') {
+        params.set('keyword', value.keyword.trim())
+      }
+      const query = params.toString()
+      return this.request(`/api/knowledge-bases/plaza${query === '' ? '' : `?${query}`}`, {}, signal)
+    }
+    if (operation === 'plaza-item') {
+      const id = integer(value.id, '知识库编号')
+      return this.request(`/api/knowledge-bases/plaza/${id}`, {}, signal)
+    }
+    if (operation === 'plaza-documents') {
+      const id = integer(value.id, '知识库编号')
+      return this.request(`/api/knowledge-bases/plaza/${id}/documents`, {}, signal)
+    }
+    if (operation === 'subscribe') {
+      const id = integer(value.id, '知识库编号')
+      return this.request(`/api/knowledge-bases/${id}/subscribe`, { method: 'POST' }, signal)
+    }
     if (operation === 'create') {
       return this.request('/api/knowledge-bases', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(value),

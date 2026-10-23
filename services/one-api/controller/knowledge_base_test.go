@@ -233,4 +233,27 @@ func TestCreateKnowledgeBaseValidatesCatalogKind(t *testing.T) {
 	if got := post("/user", `{"name":"资料","kind":"personal","tags":"`+strings.Repeat("标", 201)+`"}`); got.Code != http.StatusBadRequest {
 		t.Fatalf("long tags: %d %s", got.Code, got.Body.String())
 	}
+	if got := post("/user", `{"name":"资料","kind":"personal","category_id":3}`); got.Code != http.StatusForbidden {
+		t.Fatalf("user category: %d %s", got.Code, got.Body.String())
+	}
+}
+
+func TestCreateKnowledgeCategoryRejectsInvalidInput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/categories", CreateManagedKnowledgeCategory)
+	post := func(body string) *httptest.ResponseRecorder {
+		t.Helper()
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/categories", strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		engine.ServeHTTP(recorder, request)
+		return recorder
+	}
+	if got := post(`{"name":"","type":"personal"}`); got.Code != http.StatusBadRequest {
+		t.Fatalf("empty name: %d %s", got.Code, got.Body.String())
+	}
+	if got := post(`{"name":"部门规范","type":"other"}`); got.Code != http.StatusBadRequest {
+		t.Fatalf("unknown type: %d %s", got.Code, got.Body.String())
+	}
 }

@@ -3,18 +3,21 @@ package model
 import (
 	"testing"
 
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func TestListAuthorizedKnowledgeBasesScopesPersonalSharedCommon(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open("file:knowledge-auth?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	previous := DB
 	DB = db
 	t.Cleanup(func() { DB = previous })
-	require.NoError(t, db.AutoMigrate(&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeDocumentNote{}, &OrgMember{}, &User{}))
+	require.NoError(t, db.AutoMigrate(
+		&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{},
+		&KnowledgeConversation{}, &KnowledgeDocumentNote{}, &KnowledgeDocumentPath{}, &OrgMember{}, &User{},
+	))
 
 	require.NoError(t, db.Create(&User{Id: 1, Username: "alice", AccessToken: "tok-alice", AffCode: "aff-alice", Role: RoleCommonUser, Status: UserStatusEnabled}).Error)
 	require.NoError(t, db.Create(&User{Id: 2, Username: "bob", AccessToken: "tok-bob", AffCode: "aff-bob", Role: RoleCommonUser, Status: UserStatusEnabled}).Error)
@@ -37,7 +40,7 @@ func TestListAuthorizedKnowledgeBasesScopesPersonalSharedCommon(t *testing.T) {
 	require.NoError(t, db.Where("name = ?", "other-personal").First(&otherPersonal).Error)
 	require.NoError(t, db.Create(&KnowledgeBaseGrant{KnowledgeBaseId: granted.Id, SubjectType: KnowledgeGrantUser, SubjectId: 1}).Error)
 	require.NoError(t, db.Create(&KnowledgeBaseGrant{KnowledgeBaseId: department.Id, SubjectType: KnowledgeGrantDept, SubjectId: 9}).Error)
-	require.NoError(t, db.Exec(`UPDATE knowledge_bases SET shelf = NULL WHERE name = ?`, "legacy-shelf").Error)
+	// Empty shelf is the pre-migration published state; pure-Go sqlite keeps NOT NULL so NULL is not written.
 
 	visible, err := ListAuthorizedKnowledgeBases(1)
 	require.NoError(t, err)
@@ -50,6 +53,28 @@ func TestListAuthorizedKnowledgeBasesScopesPersonalSharedCommon(t *testing.T) {
 	departmentVisible, err := ListAuthorizedKnowledgeBases(3)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"dept-shared", "common-1"}, namesOf(departmentVisible))
+
+	openCategory := KnowledgeCategory{Name: "部门规范", Type: KnowledgeBasePersonal, RequireAuth: false}
+	closedCategory := KnowledgeCategory{Name: "内部规范", Type: KnowledgeBasePersonal, RequireAuth: true}
+	require.NoError(t, SaveKnowledgeCategory(&openCategory))
+	require.NoError(t, SaveKnowledgeCategory(&closedCategory))
+	require.ErrorIs(t, SaveKnowledgeCategory(&KnowledgeCategory{Name: "部门规范", Type: KnowledgeBasePersonal}), ErrKnowledgeCategoryDuplicate)
+	require.Error(t, SaveKnowledgeCategory(&KnowledgeCategory{Name: "", Type: KnowledgeBasePersonal}))
+	categorized := []KnowledgeBase{
+		{Name: "open-foreign", RagflowDatasetId: "ds-9", OwnerUserId: 2, Kind: KnowledgeBasePersonal, Shelf: KnowledgeShelfPublished, CategoryId: openCategory.Id},
+		{Name: "closed-foreign", RagflowDatasetId: "ds-10", OwnerUserId: 2, Kind: KnowledgeBasePersonal, Shelf: KnowledgeShelfPublished, CategoryId: closedCategory.Id},
+		{Name: "closed-offline", RagflowDatasetId: "ds-11", OwnerUserId: 1, Kind: KnowledgeBaseCommon, Shelf: KnowledgeShelfOffline, CategoryId: openCategory.Id},
+	}
+	require.NoError(t, db.Create(&categorized).Error)
+	var closedForeign KnowledgeBase
+	require.NoError(t, db.Where("name = ?", "closed-foreign").First(&closedForeign).Error)
+	require.NoError(t, db.Create(&KnowledgeBaseGrant{KnowledgeBaseId: closedForeign.Id, SubjectType: KnowledgeGrantUser, SubjectId: 1}).Error)
+	withCategories, err := ListAuthorizedKnowledgeBases(1)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"personal-1", "shared-granted", "legacy-shelf", "common-1", "open-foreign", "closed-foreign"}, namesOf(withCategories))
+	outsider, err := ListAuthorizedKnowledgeBases(3)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"dept-shared", "common-1", "open-foreign"}, namesOf(outsider))
 	_, err = GetAuthorizedKnowledgeBase(1, secret.Id, false)
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 	_, err = GetAuthorizedKnowledgeBase(1, otherPersonal.Id, false)
@@ -69,6 +94,65 @@ func TestListAuthorizedKnowledgeBasesScopesPersonalSharedCommon(t *testing.T) {
 	remaining, err := ListKnowledgeDocumentSummaries(granted.Id)
 	require.NoError(t, err)
 	require.Empty(t, remaining)
+}
+
+func TestKnowledgeSubscriptionApplicationApprovalGrantsAccess(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:knowledge-subscribe?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previous := DB
+	DB = db
+	t.Cleanup(func() { DB = previous })
+	require.NoError(t, db.AutoMigrate(&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{}, &OrgMember{}, &User{}))
+	require.NoError(t, db.Create(&User{Id: 1, Username: "alice", AccessToken: "tok-a", AffCode: "aff-a", Role: RoleCommonUser, Status: UserStatusEnabled}).Error)
+	require.NoError(t, db.Create(&User{Id: 2, Username: "bob", DisplayName: "鲍勃", AccessToken: "tok-b", AffCode: "aff-b", Role: RoleCommonUser, Status: UserStatusEnabled}).Error)
+	category := KnowledgeCategory{Name: "法律", Type: KnowledgeBaseCommon, RequireAuth: true}
+	require.NoError(t, SaveKnowledgeCategory(&category))
+	base := KnowledgeBase{
+		Name: "地方法规", RagflowDatasetId: "ds-law", OwnerUserId: 2,
+		Kind: KnowledgeBaseCommon, Shelf: KnowledgeShelfPublished, CategoryId: category.Id,
+	}
+	require.NoError(t, db.Create(&base).Error)
+
+	personalCategory := KnowledgeCategory{Name: "私货", Type: KnowledgeBasePersonal, RequireAuth: true}
+	require.NoError(t, SaveKnowledgeCategory(&personalCategory))
+	require.NoError(t, db.Create(&KnowledgeBase{
+		Name: "仅自己", RagflowDatasetId: "ds-private", OwnerUserId: 2,
+		Kind: KnowledgeBasePersonal, Shelf: KnowledgeShelfPublished, CategoryId: personalCategory.Id,
+	}).Error)
+
+	plaza, err := ListKnowledgePlaza(1, 0, "")
+	require.NoError(t, err)
+	require.Len(t, plaza, 1)
+	require.Equal(t, "法律", plaza[0].CategoryName)
+	require.Equal(t, "地方法规", plaza[0].Name)
+	require.Equal(t, "鲍勃", plaza[0].OwnerUsername)
+	require.Equal(t, KnowledgeSubscriptionStatusNone, plaza[0].SubscriptionStatus)
+	ownerPlaza, err := ListKnowledgePlaza(2, 0, "")
+	require.NoError(t, err)
+	require.Empty(t, ownerPlaza)
+
+	app, err := ApplyKnowledgeSubscription(1, base.Id)
+	require.NoError(t, err)
+	require.Equal(t, KnowledgeSubscriptionPending, app.Status)
+	_, err = ApplyKnowledgeSubscription(1, base.Id)
+	require.ErrorIs(t, err, ErrKnowledgeSubscriptionDuplicate)
+
+	pending, total, err := ListKnowledgeSubscriptionApplications(KnowledgeSubscriptionPending, 1, 20)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Equal(t, "alice", pending[0].ApplicantUsername)
+	require.Equal(t, "地方法规", pending[0].KnowledgeBaseName)
+
+	reviewed, err := ReviewKnowledgeSubscription(app.Id, 2, true)
+	require.NoError(t, err)
+	require.Equal(t, KnowledgeSubscriptionApproved, reviewed.Status)
+	visible, err := ListAuthorizedKnowledgeBases(1)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"地方法规"}, namesOf(visible))
+	plazaAfter, err := ListKnowledgePlaza(1, category.Id, "地方")
+	require.NoError(t, err)
+	require.Len(t, plazaAfter, 1)
+	require.Equal(t, KnowledgeSubscriptionApproved, plazaAfter[0].SubscriptionStatus)
 }
 
 func namesOf(rows []KnowledgeBase) []string {
