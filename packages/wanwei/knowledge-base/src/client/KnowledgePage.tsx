@@ -841,7 +841,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
               return
             }
             setPlazaOpen(false)
-            void reloadLibraries().catch((cause) => setError(`${productText('加载失败')}：${String(cause)}`))
+            void reloadLibraries().catch(cause => setError(`${productText('加载失败')}：${String(cause)}`))
           }}>
           <BackIcon />
         </button>
@@ -909,7 +909,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
               {renderPlazaContentTree(buildContentTree(plazaDocuments, true), {
                 depth: 0,
                 expandedFolders: plazaFolders,
-                onToggleFolder: (path) => setPlazaFolders((current) => {
+                onToggleFolder: path => setPlazaFolders((current) => {
                   const next = new Set(current)
                   if (next.has(path)) next.delete(path)
                   else next.add(path)
@@ -1269,20 +1269,22 @@ function PlazaMarkIcon() {
  */
 function PlazaCoverIcon({ seed }: { seed: number }) {
   const shift = Math.abs(seed) % 5
-  const skies = [
+  const skyPalettes = [
     ['#8ec5ff', '#d7ecff', '#f7fbff'],
     ['#6aa8f0', '#b9dbff', '#eef6ff'],
     ['#5b9be8', '#9fd0ff', '#e8f4ff'],
     ['#7eb3f2', '#c5e3ff', '#f3f9ff'],
     ['#4f92e4', '#a8d4ff', '#e6f3ff'],
-  ][shift]
-  const hills = [
+  ] as const
+  const hillPalettes = [
     ['#6fbf8a', '#4f9f6d', '#3f7f58'],
     ['#62b57f', '#458f63', '#356f4c'],
     ['#78c793', '#57a674', '#447f5a'],
     ['#6aba86', '#4d9a6a', '#3c7b54'],
     ['#59ae76', '#418c5e', '#326e4a'],
-  ][shift]
+  ] as const
+  const skies = skyPalettes[shift] ?? skyPalettes[0]
+  const hills = hillPalettes[shift] ?? hillPalettes[0]
   const gid = `plaza-sky-${seed}`
   return <svg width="88" height="88" viewBox="0 0 88 88" aria-hidden="true">
     <defs>

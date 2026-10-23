@@ -27,19 +27,17 @@ vi.mock('pdfjs-dist/build/pdf.worker.min.mjs', () => ({
 afterEach(cleanup)
 
 function stubCanvas() {
-  HTMLCanvasElement.prototype.getContext = vi.fn(() => {
-    return {
-      fillRect() {},
-      clearRect() {},
-      drawImage() {},
-      save() {},
-      restore() {},
-      scale() {},
-      translate() {},
-      transform() {},
-      setTransform() {},
-    } as unknown as CanvasRenderingContext2D
-  }) as typeof HTMLCanvasElement.prototype.getContext
+  HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
+    fillRect() {},
+    clearRect() {},
+    drawImage() {},
+    save() {},
+    restore() {},
+    scale() {},
+    translate() {},
+    transform() {},
+    setTransform() {},
+  })) as unknown as typeof HTMLCanvasElement.prototype.getContext
   HTMLCanvasElement.prototype.toDataURL = vi.fn(() => 'data:image/png;base64,AA==')
 }
 

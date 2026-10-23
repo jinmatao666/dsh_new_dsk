@@ -7,6 +7,7 @@ import {
   type KnowledgeAnswerProgress,
   type KnowledgeApi,
   type KnowledgeBaseItem,
+  type KnowledgeCategory,
   type KnowledgePlazaItem,
 } from './KnowledgePage.tsx'
 import { productText } from './locales/product.ts'
@@ -119,18 +120,19 @@ function knowledgeItem(raw: unknown): KnowledgeBaseItem {
   return { ...(item as unknown as KnowledgeBaseItem), category_id: categoryId }
 }
 
-function knowledgeCategory(raw: unknown) {
+function knowledgeCategory(raw: unknown): KnowledgeCategory {
   if (typeof raw !== 'object' || raw === null) throw new Error('知识库分类无效')
   const item = raw as Record<string, unknown>
+  const type = item.type
   if (!Number.isInteger(item.id) || typeof item.name !== 'string' || item.name.trim() === '' ||
-    (item.type !== 'personal' && item.type !== 'shared' && item.type !== 'common') ||
+    (type !== 'personal' && type !== 'shared' && type !== 'common') ||
     typeof item.require_auth !== 'boolean') {
     throw new Error('知识库分类字段无效')
   }
   return {
     id: item.id as number,
     name: item.name,
-    type: item.type,
+    type,
     require_auth: item.require_auth,
   }
 }
