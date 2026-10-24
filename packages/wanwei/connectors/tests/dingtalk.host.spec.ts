@@ -530,7 +530,7 @@ describe('DingTalk DWS RPC', () => {
     })
     apply(ctx as Context)
     expect(handlers.has('/wanwei-dingtalk')).toBe(true)
-    expect(registeredTools).toEqual(['dingtalk_dws'])
+    expect(registeredTools).toEqual(['dingtalk_dws', 'feishu_cli', 'wechat_notify'])
     const result = await handlers.get('/wanwei-dingtalk')!('status', {}) as {
       ok: true
       value: { dwsInstalled: boolean; authed: boolean; skillInstalled: boolean }

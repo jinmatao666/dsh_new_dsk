@@ -18,6 +18,7 @@ export interface AutomationApi {
   listWorkspaces(): Promise<{ title: string; path: string }[]>
   chooseDirectory(): Promise<string | null>
   listModels(): Promise<ModelCatalog>
+  listConnectors?(): Promise<{ id: 'feishu' | 'dingtalk' | 'wechat'; name: string; icon: string; connected: boolean }[]>
 }
 
 /** Show only committed tasks and execution records.

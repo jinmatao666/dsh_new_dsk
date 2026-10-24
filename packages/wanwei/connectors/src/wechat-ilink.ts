@@ -76,6 +76,7 @@ type StoredCredentials = {
   baseUrl: string
   getUpdatesBuf: string
   connectedAt: number
+  replyContext?: { userId: string; token: string }
 }
 
 type ActiveLogin = {
@@ -360,6 +361,10 @@ export function loadWeChatCredentials(dshHome: string): StoredCredentials | null
       baseUrl: raw.baseUrl.replace(/\/+$/, ''),
       getUpdatesBuf: typeof raw.getUpdatesBuf === 'string' ? raw.getUpdatesBuf : '',
       connectedAt: typeof raw.connectedAt === 'number' ? raw.connectedAt : Date.now(),
+      ...(typeof raw.replyContext === 'object' && raw.replyContext !== null
+        && typeof (raw.replyContext as Record<string, unknown>).userId === 'string'
+        && typeof (raw.replyContext as Record<string, unknown>).token === 'string'
+        ? { replyContext: raw.replyContext as { userId: string; token: string } } : {}),
     }
   } catch {
     return null
@@ -730,6 +735,20 @@ async function notifyLifecycle(
   }
 }
 
+/** Send only to the bound user's latest inbound conversation; never an arbitrary contact.
+ * @param home - Product credential directory owner.
+ * @param text - Explicitly requested notification text.
+ * @returns Resolves after iLink accepts the request; expired contexts reject upstream.
+ */
+export async function sendWeChatNotification(home: string, text: string): Promise<void> {
+  const credentials = loadWeChatCredentials(home)
+  const context = credentials?.replyContext
+  if (!credentials || !context || (credentials.ilinkUserId !== null && context.userId !== credentials.ilinkUserId)) {
+    throw new Error('请先绑定微信，并从微信向助理发送一条消息以建立回复会话')
+  }
+  await sendTextReply(credentials, context.userId, text, context.token)
+}
+
 async function sendTextReply(
   credentials: StoredCredentials,
   toUserId: string,
@@ -884,6 +903,10 @@ async function runBridgeLoop(ctx: Context, dshHome: string, signal: AbortSignal)
         const from = message.from_user_id?.trim()
         if (!from) continue
         if (credentials.ilinkUserId !== null && from !== credentials.ilinkUserId) continue
+        if (message.context_token) {
+          credentials = { ...credentials, replyContext: { userId: from, token: message.context_token } }
+          saveCredentials(dshHome, credentials)
+        }
         const text = extractUserText(message)
         if (text === '') {
           await sendTextReply(credentials, from, '暂只支持文字指令，请用文字描述要在电脑上完成的任务。', message.context_token)

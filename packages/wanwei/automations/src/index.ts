@@ -34,7 +34,7 @@ export const Config: schema<Config> = schema.object({
 })
 /** Host services; no Agent-loop changes. */
 export const inject = ['connection', 'credentials', 'sessionController', 'sessions', 'agents',
-  'permissionPresets', 'tools', 'workspaceRegistry']
+  'permissionPresets', 'tools', 'workspaceRegistry', 'wanweiConnectors']
 /** Stable plugin identity. */
 export const name = 'wanwei-automations'
 /** Install persistent CRUD and local scheduling.

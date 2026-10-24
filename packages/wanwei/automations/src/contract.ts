@@ -18,6 +18,8 @@ export interface AutomationTask {
   model?: ModelSelection | undefined
   /** Absent defaults to full access. */
   fullAccess?: boolean | undefined
+  /** Explicit connector capability selection; absent means no connectors. */
+  connectors?: ('feishu' | 'dingtalk' | 'wechat')[] | undefined
   enabled: boolean
   /** Zero means no eligible future occurrence. */
   nextRunAt: number

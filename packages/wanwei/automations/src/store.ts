@@ -23,6 +23,8 @@ export const taskInput = z.object({
   model: z.object({ provider: z.string().min(1), model: z.string().min(1), reasoningEffort: z.string().optional() }).strict()
     .transform(({ reasoningEffort, ...route }) => ({ ...route, ...reasoningEffort === undefined ? {} : { reasoningEffort } })).optional(),
   fullAccess: z.boolean().optional(),
+  connectors: z.array(z.enum(['feishu', 'dingtalk', 'wechat'])).max(3)
+    .refine(value => new Set(value).size === value.length, '连接器不能重复').optional(),
   enabled: z.boolean(),
 }).strict().superRefine((task, ctx) => {
   if (task.startDate !== undefined && task.endDate !== undefined && task.endDate < task.startDate) {

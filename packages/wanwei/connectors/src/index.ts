@@ -5,6 +5,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { registerDingTalkDwsRpc, resolveDwsCommand } from './dingtalk-dws.ts'
 import { registerDingTalkDwsTool } from './dingtalk-dws-tool.ts'
 import { registerWeChatIlinkRpc } from './wechat-ilink.ts'
+import { registerFeishu } from './feishu-cli.ts'
+import { registerAutomationConnectors } from './automation-bridge.ts'
 
 /** Cordis plugin name. */
 export const name = 'wanwei-connectors'
@@ -32,4 +34,6 @@ export function apply(ctx: Context): void {
   registerDingTalkDwsRpc(ctx)
   registerDingTalkDwsTool(ctx, () => resolveDwsCommand())
   registerWeChatIlinkRpc(ctx)
+  registerFeishu(ctx)
+  registerAutomationConnectors(ctx)
 }

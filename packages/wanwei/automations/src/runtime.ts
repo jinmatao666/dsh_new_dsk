@@ -8,6 +8,7 @@ import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type {} from '@deepseek-ai/dsh-workspace'
 import type {} from '@deepseek-ai/dsh-wanwei-oneapi-auth'
+import type {} from '@deepseek-ai/dsh-wanwei-connectors'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
@@ -108,9 +109,12 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       if (await owner() !== username) throw new Error('登录账号已变化，执行已停止')
       lifetime.signal.throwIfAborted()
       if (hasTimedOut()) throw new Error('任务初始化超时')
+      const connectors = ctx.get('wanweiConnectors')
+      if (task.connectors?.length && connectors === undefined) throw new Error('连接器插件未加载，任务未执行')
+      const connectorInstructions = await connectors?.prepare(task.connectors ?? [], agent, runSignal)
       await ctx.sessionController.prompt({
         sessionId: created.sessionId, requestId: run.id as SessionRequestId, mode: 'queue',
-        content: [{ type: 'text', text: `${RUN_INSTRUCTIONS}\n\n${await workspaceEvidence(task.cwd)}\n\n用户任务：\n${task.prompt}` }],
+        content: [{ type: 'text', text: `${RUN_INSTRUCTIONS}\n\n${connectorInstructions ?? ''}\n\n${await workspaceEvidence(task.cwd)}\n\n用户任务：\n${task.prompt}` }],
         clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       }, lifetime.signal)
       // This fresh Session owns the whole interval; idle alone does not prove success.

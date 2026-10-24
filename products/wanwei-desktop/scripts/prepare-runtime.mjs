@@ -15,6 +15,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import process from 'node:process'
 import { ensureProductProfile } from './product-profile.mjs'
+import { ensureLark } from './ensure-lark.mjs'
 import { pruneStagedRuntimeDevArtifacts, removeStagedEntry, shouldSkipStagedRuntimeEntry } from './runtime-files.mjs'
 
 const productRoot = resolve(import.meta.dirname, '..')
@@ -89,6 +90,7 @@ materializeLinks(join(appRoot, 'node_modules'))
 pruneStagedRuntimeDevArtifacts(appRoot)
 copyFileSync(join(productRoot, 'scripts', 'document-tool.mjs'), join(appRoot, 'document-tool.mjs'))
 stageDingTalkRuntime(appRoot)
+await ensureLark(appRoot)
 
 const cli = join(appRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
 const productPatch = join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-wanwei-desktop', 'cordis.patch.yml')

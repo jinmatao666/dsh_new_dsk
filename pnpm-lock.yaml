@@ -9631,6 +9631,9 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:^
         version: link:../../core/tools
+      '@deepseek-ai/dsh-wanwei-connectors':
+        specifier: workspace:^
+        version: link:../connectors
       '@deepseek-ai/dsh-wanwei-feature-panels':
         specifier: workspace:^
         version: link:../feature-panels

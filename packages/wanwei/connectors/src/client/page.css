@@ -1,4 +1,5 @@
 .dsh-connectors-page { position: relative; min-height: 0; }
+.dsh-connector-feishu-auth { display: flex; flex-direction: column; align-items: center; gap: 12px; margin: 16px 22px; }
 
 .dsh-connectors-header-action {
   display: inline-flex;

@@ -58,6 +58,17 @@ export function apply(ctx: Context): void {
       if (!result.ok) throw new Error(result.error.message)
       return result.value
     },
+    async listConnectors() {
+      const result = await connection.rpc.call('/wanwei-connectors', 'options', {})
+      if (!result.ok) throw new Error(result.error.message)
+      if (!Array.isArray(result.value) || result.value.some((item: unknown) => {
+        if (!item || typeof item !== 'object') return true
+        const row = item as Record<string, unknown>
+        return !['feishu', 'dingtalk', 'wechat'].includes(String(row.id))
+          || typeof row.name !== 'string' || typeof row.icon !== 'string' || typeof row.connected !== 'boolean'
+      })) throw new Error(productText('连接器状态加载失败'))
+      return result.value as Awaited<ReturnType<NonNullable<AutomationApi['listConnectors']>>>
+    },
   }
   registerFeaturePanel(ctx, 'skill-automations', 10, {
     controller, title: productText('自动化'),

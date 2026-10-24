@@ -29,7 +29,9 @@ export function TaskEditor({ draft, change, api, error, titleId, close, save }: 
   const [modelQuery, setModelQuery] = useState('')
   const [selectorError, setSelectorError] = useState('')
   const [picking, setPicking] = useState(false)
-  const [panel, setPanel] = useState<'workspace' | 'permission' | 'model' | 'cadence' | 'time' | 'validity' | null>(null)
+  const [connectors, setConnectors] = useState<Awaited<ReturnType<NonNullable<AutomationApi['listConnectors']>>>>([])
+  const [connectorError, setConnectorError] = useState('')
+  const [panel, setPanel] = useState<'workspace' | 'permission' | 'model' | 'cadence' | 'time' | 'validity' | 'connectors' | null>(null)
   const active = useRef(true)
   const current = useRef(draft)
   current.current = draft
@@ -51,6 +53,17 @@ export function TaskEditor({ draft, change, api, error, titleId, close, save }: 
       if (active.current) { setSelectorError(String(failure)); setModelFailed(true) }
     })
     return () => { active.current = false }
+  }, [api])
+  useEffect(() => {
+    let disposed = false
+    const refresh = () => {
+      if (!api.listConnectors) { setConnectorError(text('连接器状态加载失败')); return }
+      void api.listConnectors().then((value) => { if (!disposed) { setConnectors(value); setConnectorError('') } })
+        .catch(() => { if (!disposed) setConnectorError(text('连接器状态加载失败')) })
+    }
+    refresh()
+    window.addEventListener('focus', refresh)
+    return () => { disposed = true; window.removeEventListener('focus', refresh) }
   }, [api])
   const chooseFolder = async () => {
     if (picking) return
@@ -106,6 +119,21 @@ export function TaskEditor({ draft, change, api, error, titleId, close, save }: 
           trigger={<button type="button" className={`automation-editor-trigger${fullAccess ? ' full-access' : ''}`} aria-expanded={panel === 'permission'} onClick={() => { toggle('permission') }}><IconWarningOutline16 /><span>{fullAccess ? text('允许完全访问') : text('工作区写入')}</span><IconChevronDownOutline14 /></button>}>
           <p>{fullAccess ? text('当前权限为允许完全访问，请注意数据安全，建议执行可信任的任务。') : text('仅允许工作区写入；需要审批的操作可能使定时任务等待人工处理。')}</p>
           <div className="automation-permission-toggle"><span>{text('允许完全访问')}</span><button type="button" role="switch" aria-label={text('允许完全访问')} aria-checked={fullAccess} className={`automation-task-switch${fullAccess ? ' on' : ''}`} onClick={() => { change({ ...draft, fullAccess: !fullAccess }) }} /></div>
+        </TaskPopover>
+        <TaskPopover open={panel === 'connectors'} close={collapse} label={text('选择连接器')} className="automation-connectors-menu"
+          trigger={<button type="button" className="automation-editor-trigger" aria-label={text('选择连接器')}
+            aria-expanded={panel === 'connectors'} onClick={() => { toggle('connectors') }}>
+            <span>{text('连接器')}{draft.connectors?.length ? ` (${draft.connectors.length})` : ''}</span><IconChevronDownOutline14 /></button>}>
+          <div className="automation-editor-options">{connectors.map((item) => {
+            const checked = draft.connectors?.includes(item.id) === true
+            return <button type="button" key={item.id} role="menuitemcheckbox" aria-checked={checked}
+              disabled={!item.connected && !checked} onClick={() => { change({ ...draft,
+                connectors: checked ? draft.connectors?.filter(id => id !== item.id) : [...draft.connectors ?? [], item.id],
+              }) }}><img src={item.icon} alt="" width={20} height={20} /><span>{item.name}</span>
+              <small>{item.connected ? text('已连接') : text('未连接，请先在连接器页面授权')}</small>{checked && <IconCheckOutline16 />}</button>
+          })}</div>
+          {connectorError && <p role="alert">{connectorError}</p>}
+          {connectors.length === 0 && !connectorError && <p role="status">{text('正在加载连接器')}</p>}
         </TaskPopover>
       </div>
     </div>

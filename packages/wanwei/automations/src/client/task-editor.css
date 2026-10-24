@@ -1,4 +1,7 @@
 /* The composer is the visual focus; anchored controls stay quiet until opened. */
+.automation-connectors-menu { min-width: 300px; }
+.automation-connectors-menu .automation-editor-options button { gap: 8px; }
+.automation-connectors-menu .automation-editor-options small { margin-left: auto; font-size: 11px; }
 .automation-task-editor { box-sizing: border-box; width: min(1000px, calc(100vw - 64px)); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 28px 30px; border-radius: 28px; font-size: 14px; color: var(--dsw-alias-label-primary); }
 .automation-task-editor > header { display: flex; align-items: center; justify-content: space-between; margin: 0 0 22px; }
 .automation-task-editor > header span { color: var(--dsw-alias-label-primary); font-size: 19px; font-weight: 600; }
