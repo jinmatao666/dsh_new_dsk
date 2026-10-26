@@ -8,7 +8,7 @@
     "check:installer-data": "node --test scripts/verify-installer-data.test.mjs && node scripts/verify-installer-data.mjs",
     "check:boundaries": "node scripts/verify-boundaries.mjs",
     "check:sidecar": "node scripts/verify-sidecar.mjs",
-    "check:runtime": "node scripts/verify-document-runtime.mjs && node scripts/verify-sidecar.mjs --staged",
+    "check:runtime": "node --test scripts/expert-ticket-bootstrap.test.mjs && node scripts/verify-document-runtime.mjs && node scripts/verify-sidecar.mjs --staged",
     "check:rust": "cargo check --manifest-path src-tauri/Cargo.toml",
     "check:expert-window": "node scripts/verify-expert-window.mjs",
     "check:runner": "node scripts/require-github-runner.mjs",

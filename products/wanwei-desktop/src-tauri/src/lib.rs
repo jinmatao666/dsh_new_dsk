@@ -1074,6 +1074,18 @@ fn expert_webview_url(raw: &str, ticket: &str) -> Result<(Url, Url), String> {
     Ok((url, allowed))
 }
 
+fn expert_ticket_bootstrap(url: &Url) -> String {
+    let marker = format!("wanwei-expert-launch:{:x}", Sha256::digest(url.as_str().as_bytes()));
+    let payload = serde_json::json!({
+        "origin": url.origin().ascii_serialization(),
+        "path": url.path(),
+        "search": url.query().filter(|query| !query.is_empty()).map(|query| format!("?{query}")).unwrap_or_default(),
+        "fragment": url.fragment().map(|fragment| format!("#{fragment}")).unwrap_or_default(),
+        "marker": marker,
+    });
+    include_str!("expert_ticket_bootstrap.js").replace("__WANWEI_EXPERT_LAUNCH__", &payload.to_string())
+}
+
 #[tauri::command]
 fn maximize_expert_window(window: Window) -> Result<(), String> {
     if window.label() != "main" {
@@ -1166,8 +1178,11 @@ async fn open_expert_webview(
     let loading_label = label.clone();
     let title_app = window.app_handle().clone();
     let title_label = label.clone();
-    let builder = webview_environment::expert_builder(&label, launch_url)
+    // 原生加载不携带 fragment，避免部分 Mac 将 #ticket 编成请求路径 %23ticket。
+    let ticket_bootstrap = expert_ticket_bootstrap(&launch_url);
+    let builder = webview_environment::expert_builder(&label, allowed_url.clone())
         .initialization_script(NATIVE_BRIDGE_INITIALIZATION_SCRIPT)
+        .initialization_script(&ticket_bootstrap)
         .on_document_title_changed(move |_, _| {
             expert_diagnostics::lifecycle(&title_app, &title_label, "document-title-changed");
         })
@@ -2769,7 +2784,26 @@ pub fn run() {
 
 #[cfg(test)]
 mod expert_web_tests {
-    use super::{expert_webview_label, expert_webview_url, validate_expert_webview_label};
+    use super::{expert_ticket_bootstrap, expert_webview_label, expert_webview_url, validate_expert_webview_label};
+
+    #[test]
+    fn ticket_bootstrap_keeps_native_url_clean_and_checks_exact_entry() {
+        let ticket = "a".repeat(64);
+        let (launch, native) = expert_webview_url(
+            "http://ac.zjugis.com:3300/experts/meeting-minutes/?mode=test", &ticket,
+        ).unwrap();
+        assert_eq!(native.fragment(), None);
+        assert!(!native.as_str().contains(&ticket));
+        let script = expert_ticket_bootstrap(&launch);
+        assert!(!script.contains("__WANWEI_EXPERT_LAUNCH__"));
+        let json = script.split("const launch = ").nth(1).unwrap().split(';').next().unwrap();
+        let payload: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(payload["origin"], "http://ac.zjugis.com:3300");
+        assert_eq!(payload["path"], "/experts/meeting-minutes/");
+        assert_eq!(payload["search"], "?mode=test");
+        assert_eq!(payload["fragment"], format!("#ticket={ticket}"));
+        assert!(!payload["marker"].as_str().unwrap().contains(&ticket));
+    }
 
     #[test]
     fn launch_url_is_https_and_ticket_stays_in_fragment() {
