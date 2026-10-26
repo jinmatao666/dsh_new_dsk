@@ -102,7 +102,7 @@ export function PdfLocateViewer({
           publish()
           if (byNumber.size === 1) setLoading(false)
           // Yield so the first pages paint before the rest finish encoding.
-          await new Promise<void>(resolve => {
+          await new Promise<void>((resolve) => {
             requestAnimationFrame(() => resolve())
           })
         }
@@ -167,11 +167,7 @@ function pageRenderOrder(numPages: number, locate: PdfLocateRequest | undefined)
 }
 
 async function renderPage(
-  pdf: { getPage: (pageNumber: number) => Promise<{
-    getViewport: (params: { scale: number }) => { width: number; height: number; transform: number[] }
-    render: (params: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number; transform: number[] } }) => { promise: Promise<void> }
-    getTextContent: () => Promise<{ items: Array<Record<string, unknown>> }>
-  }> },
+  pdf: Awaited<ReturnType<typeof pdfjs.getDocument>['promise']>,
   pageNumber: number,
   locate: PdfLocateRequest | undefined,
 ): Promise<PageGeom | undefined> {
