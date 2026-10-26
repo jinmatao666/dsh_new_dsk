@@ -17,10 +17,18 @@ const documents = [
   { id: 'doc1', name: '测绘标准规范合集_文件1.pdf', size: 11.3 * 1024 * 1024, create_time: 1748833920, chunk_count: 7, summary: '这是测绘标准规范合集文件1的文档摘要' }
 ];
 const documentPage = { items: documents, total: 1, page: 1, page_size: 20 };
+const users = [
+  { id: 2, username: 'alice', display_name: '爱丽丝', department_name: '', created_at: '2024-01-02T00:00:00Z', status: 1 },
+  { id: 8, username: 'chen', display_name: '陈静', department_name: '办公室', created_at: '2019-05-20T00:00:00Z', status: 1 },
+];
 
 function documentsResponse(url) {
+  if (String(url).startsWith('/api/user/')) return { data: { success: true, data: users } };
   if (url === '/api/knowledge-admin/categories') return { data: { success: true, data: categories } };
   if (url === '/api/knowledge-admin/bases') return { data: { success: true, data: libraries } };
+  if (String(url).startsWith('/api/knowledge-admin/subscription-applications')) {
+    return { data: { success: true, data: { items: [], total: 0, page: 1, page_size: 1 } } };
+  }
   if (String(url).includes('/documents?') || /\/documents$/.test(String(url))) {
     return { data: { success: true, data: documentPage } };
   }
@@ -56,12 +64,16 @@ function button(text) {
 
 test('sort listbox preserves the selected value and creates a personal library', async () => {
   await act(async () => { root.render(<KnowledgeLibrary />); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(container.textContent).toContain('全部人员');
   expect(container.querySelector('select')).toBeNull();
+  await act(async () => { button('测绘规范').click(); });
   const sort = container.querySelector('[aria-label="排序"]');
   act(() => { sort.click(); });
   expect(document.querySelector('[role="listbox"]')).not.toBeNull();
   act(() => { document.querySelector('[role="option"][value="asc"]').click(); });
   expect(sort.textContent).toContain('按时间升序');
+  await act(async () => { button('个人知识库').click(); });
   act(() => { button('新建知识库').click(); });
   expect(container.textContent).toContain('将创建为个人知识库');
   expect(container.querySelector('[aria-label="知识库类型"]')).toBeNull();
@@ -75,9 +87,12 @@ test('sort listbox preserves the selected value and creates a personal library',
 });
 
 test('knowledge catalog filters scopes and opens the file list', async () => {
-  await act(async () => { root.render(<KnowledgeLibrary />); });
-  await act(async () => { await Promise.resolve(); });
-  expect(container.textContent).toContain('个人笔记');
+  // Strict Mode re-runs effects once; stats must still resolve (not stick on "…").
+  await act(async () => { root.render(<React.StrictMode><KnowledgeLibrary /></React.StrictMode>); });
+  for (let i = 0; i < 12; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(container.textContent).toContain('全部人员');
+  expect(container.textContent).toContain('爱丽丝');
+  expect(container.textContent).not.toContain('个人笔记');
   expect(container.textContent).not.toContain('已上架');
   expect(container.textContent).not.toContain('下架');
   expect(button('个人知识库').textContent).toContain('1');
@@ -87,10 +102,25 @@ test('knowledge catalog filters scopes and opens the file list', async () => {
   await act(async () => { button('测绘规范').click(); });
   expect(container.textContent).toContain('测绘标准规范合集');
   expect(container.textContent).not.toContain('个人笔记');
-  expect(container.textContent).toContain('创建人 Root User');
+  expect(container.textContent).toContain('创建人');
+  expect(container.textContent).toContain('Root User');
   expect(container.textContent).toContain('文件量');
-  expect(container.textContent).toContain('用户访问量 12');
-  expect(container.textContent).toContain('每天使用量 3');
+  expect(container.textContent).toContain('1个');
+  expect(container.textContent).toContain('大小');
+  expect(container.textContent).toContain('11.3MB');
+  expect(container.textContent).toContain('用户访问量');
+  expect(container.textContent).toContain('12');
+  expect(container.textContent).toContain('每天使用量');
+  expect(container.textContent).toContain('3');
+  const meta = container.querySelector('.knowledge-meta');
+  expect(meta.querySelector('.knowledge-meta-label').textContent).toBe('创建人');
+  expect(meta.querySelector('.knowledge-meta-value').textContent).toBe('Root User');
+  expect(meta.textContent).not.toContain('…');
+  expect(button('编辑')).toBeUndefined();
+  expect(button('删除')).toBeUndefined();
+  await act(async () => { container.querySelector('[aria-label="更多操作"]').click(); });
+  expect(button('编辑')).toBeTruthy();
+  expect(button('删除')).toBeTruthy();
   await act(async () => { button('编辑').click(); });
   expect(container.querySelector('#dsh-knowledge-edit-title')?.textContent).toBe('编辑知识库');
   const editModal = container.querySelector('.knowledge-modal');
@@ -280,11 +310,13 @@ test('reviews a pending subscription application from the workbench audit list',
   API.post.mockResolvedValue({ data: { success: true, data: { id: 11, status: 'approved' } } });
   await act(async () => { root.render(<KnowledgeLibrary />); });
   for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(container.querySelector('.knowledge-review-count')?.textContent).toBe('1');
   await act(async () => { button('订阅审核').click(); });
   for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
   expect(container.textContent).toContain('订阅审核');
   expect(container.textContent).toContain('alice');
   expect(container.textContent).toContain('地方法规知识库');
+  expect(API.get).toHaveBeenCalledWith(expect.stringContaining('/api/knowledge-admin/subscription-applications?page=1&page_size=1&status=pending'));
   expect(API.get).toHaveBeenCalledWith(expect.stringContaining('/api/knowledge-admin/subscription-applications?page=1&page_size=20&status=pending'));
   await act(async () => { button('审核').click(); });
   expect(container.textContent).toContain('同意');
@@ -337,4 +369,86 @@ test('creates a category beside personal and files the next library under it', a
   await act(async () => { container.querySelector('.knowledge-modal').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
   for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
   expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/bases', expect.objectContaining({ name: '规范汇编', kind: 'shared', category_id: 4 }));
+});
+
+test('personal knowledge lists real users, filters a department, then opens that person’s files', async () => {
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(API.get).toHaveBeenCalledWith('/api/user/?p=0&size=100');
+  expect(container.querySelector('[aria-pressed="true"]').textContent).toContain('全部人员');
+  expect(container.textContent).toContain('爱丽丝');
+  expect(container.textContent).toContain('陈静');
+  expect(container.textContent).toContain('未分配部门');
+  const office = [...container.querySelectorAll('.knowledge-directory-nav button')].find(item => item.textContent.includes('办公室'));
+  await act(async () => { office.click(); });
+  expect(container.querySelector('.knowledge-people-head h2').textContent).toContain('办公室');
+  expect(container.querySelector('.knowledge-people-head h2').textContent).toContain('1人');
+  expect(container.querySelector('.knowledge-person-files')).toBeNull();
+  expect(container.textContent).toContain('陈静');
+  expect(container.textContent).not.toContain('爱丽丝');
+  await act(async () => { button('全部人员').click(); });
+  await act(async () => { button('爱丽丝').click(); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(container.textContent).toContain('爱丽丝 的文件清单');
+  expect(container.textContent).toContain('个人笔记');
+  expect(container.textContent).toContain('测绘标准规范合集_文件1.pdf');
+  expect(container.textContent).toContain('1个知识库');
+  expect(API.get).toHaveBeenCalledWith(expect.stringContaining('/api/knowledge-admin/bases/2/documents?page=1&page_size=100'));
+  const pdfBlob = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
+  API.get.mockImplementation(url => {
+    if (String(url).endsWith('/file')) return Promise.resolve({ data: pdfBlob, headers: { 'content-type': 'application/pdf' } });
+    return Promise.resolve(documentsResponse(url));
+  });
+  await act(async () => { button('预览').click(); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(API.get).toHaveBeenCalledWith('/api/knowledge-admin/bases/2/documents/doc1/file', { responseType: 'blob' });
+  expect(container.querySelector('.knowledge-viewer iframe')).toBeTruthy();
+});
+
+test('toggles personal libraries from the person file-list title and deletes via menu', async () => {
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  await act(async () => { button('爱丽丝').click(); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(container.textContent).toContain('爱丽丝 的文件清单');
+  expect(container.querySelector('[aria-label="个人知识库"]')).toBeNull();
+  await act(async () => { container.querySelector('.knowledge-person-file-title').click(); });
+  expect(container.querySelector('[aria-label="个人知识库"]')).toBeTruthy();
+  expect(container.textContent).toContain('个人笔记');
+  expect(container.querySelector('[aria-label="个人知识库"] .knowledge-card-menu-panel')).toBeNull();
+  await act(async () => { container.querySelector('[aria-label="更多操作 个人笔记"]').click(); });
+  expect(container.querySelector('[aria-label="个人知识库"] .knowledge-card-menu-panel')).toBeTruthy();
+  await act(async () => {
+    [...container.querySelectorAll('[aria-label="个人知识库"] [role="menuitem"]')]
+      .find(item => item.textContent.includes('删除')).click();
+  });
+  expect(container.textContent).toContain('确认删除个人知识库「个人笔记」');
+  API.get.mockImplementation(url => {
+    if (url === '/api/knowledge-admin/bases') {
+      return Promise.resolve({ data: { success: true, data: libraries.filter(item => item.id !== 2) } });
+    }
+    return Promise.resolve(documentsResponse(url));
+  });
+  await act(async () => {
+    [...container.querySelectorAll('.knowledge-modal footer button')].find(item => item.textContent === '删除').click();
+  });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(API.delete).toHaveBeenCalledWith('/api/knowledge-admin/bases/2');
+  expect(container.querySelector('[aria-label="更多操作 个人笔记"]')).toBeNull();
+  await act(async () => { container.querySelector('.knowledge-person-file-title').click(); });
+  expect(container.querySelector('[aria-label="个人知识库"]')).toBeNull();
+});
+
+test('personal knowledge stays on all people when users have no department', async () => {
+  API.get.mockImplementation(url => {
+    if (String(url).startsWith('/api/user/')) {
+      return Promise.resolve({ data: { success: true, data: [{ id: 2, username: 'alice', display_name: '爱丽丝', department_name: '', created_at: '2024-01-02T00:00:00Z', status: 1 }] } });
+    }
+    return Promise.resolve(documentsResponse(url));
+  });
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(container.textContent).toContain('当前没有部门数据，先按全部人员查看。');
+  expect(container.textContent).toContain('爱丽丝');
+  expect(button('办公室')).toBeUndefined();
 });

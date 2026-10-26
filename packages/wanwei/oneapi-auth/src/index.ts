@@ -24,6 +24,7 @@ import { fetchDeploymentSettings } from './deployment.ts'
 import { installFinalDeliverables } from './final-deliverables.ts'
 import { installDesktopLifecycle } from './desktop-lifecycle.ts'
 import { KnowledgeBaseApi } from './knowledge-base.ts'
+import { installKnowledgeRetrieval } from './knowledge-retrieval.ts'
 export type { NetworkPolicy } from './network.ts'
 export type {} from './desktop-lifecycle.ts'
 
@@ -36,6 +37,14 @@ const MAX_RESPONSE_BYTES = 1024 * 1024
 export interface Config {
   /** Idle time before an incomplete knowledge upload is removed from local temporary storage. */
   knowledgeUploadIdleTimeoutMs?: number
+  /** Chunks requested from RAGFlow when the composer knowledge toggle is on. */
+  knowledgeRetrievalPageSize?: number
+  /** RAGFlow similarity floor for composer knowledge retrieval. */
+  knowledgeRetrievalSimilarityThreshold?: number
+  /** Upper bound on retrieved chunk characters appended to one model turn. */
+  knowledgeRetrievalMaxChars?: number
+  /** Complete composer knowledge retrieval timeout in milliseconds. */
+  knowledgeRetrievalTimeoutMs?: number
   /** Explicit origin overrides launch-environment DSH_ONEAPI_URL, then loopback port 3000; excludes `/v1`. */
   baseURL?: string
   /** DSH provider route managed by this login plugin. */
@@ -72,6 +81,10 @@ export interface Config {
 /** Runtime schema for {@link Config}. */
 export const Config: z<Config> = z.object({
   knowledgeUploadIdleTimeoutMs: z.natural().min(1).default(900000),
+  knowledgeRetrievalPageSize: z.natural().min(1).max(30).default(8),
+  knowledgeRetrievalSimilarityThreshold: z.number().min(0).max(1).default(0.2),
+  knowledgeRetrievalMaxChars: z.natural().min(1).default(12000),
+  knowledgeRetrievalTimeoutMs: z.natural().min(1).default(20000),
   baseURL: z.string(),
   provider: z.string().default('dsh-server'),
   credentialRef: z.string().default('DSH_ONEAPI_TOKEN'),
@@ -597,6 +610,12 @@ export function apply(ctx: Context, config: Config): void {
   if (connection === undefined) throw new Error('桌面认证需要 Connection 服务')
   const knowledgeBases = new KnowledgeBaseApi(baseURL, async () => (await ctx.credentials.resolve(ref))?.value,
     config.knowledgeUploadIdleTimeoutMs ?? 900000)
+  installKnowledgeRetrieval(ctx, knowledgeBases, {
+    pageSize: config.knowledgeRetrievalPageSize ?? 8,
+    similarityThreshold: config.knowledgeRetrievalSimilarityThreshold ?? 0.2,
+    maxContextChars: config.knowledgeRetrievalMaxChars ?? 12000,
+    timeoutMs: config.knowledgeRetrievalTimeoutMs ?? 20000,
+  })
   const removeKnowledgeBases = connection.rpc.handle('/desktop-knowledge-base',
     (endpoint, payload, signal) => knowledgeBases.call(endpoint, payload, signal)
       .then(value => ({ ok: true as const, value }))

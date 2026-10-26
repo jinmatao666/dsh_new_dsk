@@ -1,8 +1,16 @@
 import { KnowledgeUpload } from './knowledge-upload.ts'
+import {
+  MAX_RETRIEVAL_LIBRARIES,
+  type KnowledgeRetrievalOptions,
+  type KnowledgeRetrievalSource,
+  type RetrievedKnowledgeChunk,
+} from './knowledge-retrieval.ts'
 
 /** Host-side proxy for authenticated knowledge-base operations. */
-export class KnowledgeBaseApi {
+export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
   private readonly uploads: KnowledgeUpload
+  /** Session id → libraries the desktop composer selected for model-turn retrieval. */
+  private readonly retrievalScopes = new Map<string, readonly number[]>()
 
   constructor(private readonly baseURL: string, private readonly resolveToken: () => Promise<string | undefined>,
     uploadIdleTimeoutMs: number) {
@@ -48,6 +56,16 @@ export class KnowledgeBaseApi {
       return this.uploads.call(operation, value, signal, (id, form, uploadSignal) =>
         this.request(`/api/knowledge-bases/${id}/documents`, { method: 'POST', body: form }, uploadSignal))
     }
+    if (operation === 'retrieval-scope') {
+      if (typeof value.sessionId !== 'string' || value.sessionId === '' || value.sessionId.length > 256) {
+        throw new Error('会话编号无效')
+      }
+      if (!Array.isArray(value.ids) || value.ids.length > MAX_RETRIEVAL_LIBRARIES) throw new Error('知识库选择无效')
+      const ids = [...new Set(value.ids.map(id => integer(id, '知识库编号')))]
+      if (ids.length === 0) this.retrievalScopes.delete(value.sessionId)
+      else this.retrievalScopes.set(value.sessionId, ids)
+      return null
+    }
     if (operation === 'list') return this.request('/api/knowledge-bases', {}, signal)
     if (operation === 'categories') return this.request('/api/knowledge-bases/categories', {}, signal)
     if (operation === 'plaza') {
@@ -72,6 +90,10 @@ export class KnowledgeBaseApi {
     if (operation === 'subscribe') {
       const id = integer(value.id, '知识库编号')
       return this.request(`/api/knowledge-bases/${id}/subscribe`, { method: 'POST' }, signal)
+    }
+    if (operation === 'unsubscribe') {
+      const id = integer(value.id, '知识库编号')
+      return this.request(`/api/knowledge-bases/${id}/subscribe`, { method: 'DELETE' }, signal)
     }
     if (operation === 'create') {
       return this.request('/api/knowledge-bases', {
@@ -125,6 +147,40 @@ export class KnowledgeBaseApi {
       }, signal)
     }
     throw new Error(`未知知识库操作：${operation}`)
+  }
+
+  /** @inheritdoc */
+  scopeOf(sessionId: string): readonly number[] | undefined {
+    return this.retrievalScopes.get(sessionId)
+  }
+
+  /** @inheritdoc */
+  async retrieve(ids: readonly number[], question: string, options: KnowledgeRetrievalOptions,
+    signal: AbortSignal): Promise<RetrievedKnowledgeChunk[]> {
+    const data = await this.request('/api/knowledge-bases/retrieval', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        knowledge_base_ids: ids,
+        question,
+        page_size: options.pageSize,
+        similarity_threshold: options.similarityThreshold,
+      }),
+    }, signal)
+    const chunks = typeof data === 'object' && data !== null ? (data as { chunks?: unknown }).chunks : undefined
+    if (!Array.isArray(chunks)) throw new Error('知识库检索响应无效')
+    return chunks.map((raw) => {
+      const chunk = typeof raw === 'object' && raw !== null ? raw as Record<string, unknown> : {}
+      if (typeof chunk.content !== 'string' || typeof chunk.knowledge_base_name !== 'string') {
+        throw new Error('知识库检索结果字段无效')
+      }
+      return {
+        content: chunk.content,
+        documentName: typeof chunk.document_name === 'string' ? chunk.document_name : '',
+        knowledgeBaseName: chunk.knowledge_base_name,
+        similarity: typeof chunk.similarity === 'number' ? chunk.similarity : 0,
+      }
+    })
   }
 
   /** Proxy a streaming knowledge-base completion to the desktop Fetch route.

@@ -39,6 +39,8 @@ kind: "package-reference"
 
 知识库上传使用有界 RPC 分片，每个已挂载的认证插件最多持有一个私有临时文件。`knowledgeUploadIdleTimeoutMs` 默认值为 900000 毫秒；空闲上传会过期，完成、失败、显式取消及插件卸载均会删除临时数据。multipart 转发时 OneAPI 凭证保留在 Host。上传和解析限制详见[知识库包](../knowledge-base/README.zh.md)。
 
+输入框知识库检索把每个会话所选的知识库编号保存在 Host 内存中，由 `/desktop-knowledge-base` 的 `retrieval-scope` 操作设置；传入空列表即移除范围。设置了范围的会话在用户轮次第一步之前，由 Host 把问题提交到 OneAPI `/api/knowledge-bases/retrieval`，并把切片追加为一条记入日志的 `notice` 消息。`knowledgeRetrievalPageSize`（默认 8，最大 30）和 `knowledgeRetrievalSimilarityThreshold`（默认 0.2）传给 RAGFlow；`knowledgeRetrievalMaxChars`（默认 12000）限制注入的切片字符数；`knowledgeRetrievalTimeoutMs`（默认 20000）限制请求时长。OneAPI 会拒绝调用者无权打开的知识库。检索失败时会告知模型，不中断该轮次。
+
 托管资源通道通过仅监听回环地址的代理和 WebSocket 路由复用已认证的 OneAPI 来源，无需新增公网端口。后台设置选择 `transport: tunnel`；省略接入方式时使用独立正向代理。可选直连主机扩展 NO_PROXY。HTTPS 目标仍校验证书，但 HTTP/WS 入口不保护中转凭证或连接信息。切换来源会撤销已有托管连接，插件卸载会关闭监听器。部署和验收详见[资源指南](../../../products/wanwei-desktop/resource-relay/README.zh.md)。
 
 网络环境及各环境独立的自动化、连接器入口可见性由配置的后台系统设置决定。Host 在登录前和认证刷新时读取 `/api/desktop-config`，并通过 `wanwei-network.mode` 缓存后台已确认的策略。窗口聚焦、页面恢复可见和既有五分钟认证计时器也会刷新。缺少功能配置时默认两种环境均开启自动化、仅互联网开启连接器；显式无效开关会拒绝刷新，不替换已提交的 Client 状态。配置读取失败时阻止登录，不假定为互联网。两种模式都允许专家服务请求、本机调度和已安装 SkillHub 技能；可用性由实际服务请求决定。`serviceTimeoutMs` 限制部署与专家请求时长，默认 15000 毫秒。纯内网模式仍限制公网搜索、通用公网网页读取及通用公网 HTTP(S) 链接。私有地址、本地 DNS 名称及配置的 OneAPI 来源仍可访问。额外内网域名需要明确补充分类规则。

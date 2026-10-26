@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent, PointerEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  citationLocateHint,
   splitAnswerCitations,
   type KnowledgeCitation,
 } from './citations.ts'
 import { MarkdownView } from './MarkdownView.tsx'
 import { PdfLocateViewer, type PdfLocateRequest } from './PdfLocateViewer.tsx'
 import { ViewerLoading } from './ViewerLoading.tsx'
+import { firstNavLibraryId, libraryNavGroups } from './library-groups.ts'
 import { productText } from './locales/product.ts'
 
 export interface KnowledgeBaseItem {
@@ -39,54 +41,6 @@ export interface KnowledgePlazaItem {
   category_name: string
   owner_username: string
   subscription_status: 'none' | 'pending' | 'approved'
-}
-
-interface LibraryGroup {
-  key: string
-  label: string
-  rows: KnowledgeBaseItem[]
-  create?: 'personal'
-  createLabel?: string
-}
-
-function categoryIdOf(item: KnowledgeBaseItem): number {
-  const id = item.category_id ?? 0
-  return id > 0 ? id : 0
-}
-
-/**
- * Nav: 个人知识库, non-empty open categories, then 订阅知识库 for every accessible
- * library filed under an auth-required category. Auth category names never appear as
- * sidebar groups; those libraries are discovered in 知识库广场 and land here after approval.
- */
-function libraryNavGroups(items: KnowledgeBaseItem[], categories: KnowledgeCategory[]): LibraryGroup[] {
-  const categoryById = new Map(categories.map(category => [category.id, category]))
-  const openCategoryGroups = categories.flatMap((category) => {
-    if (category.require_auth) return []
-    const rows = items.filter(item => categoryIdOf(item) === category.id)
-    if (rows.length === 0) return []
-    return [{
-      key: `category-${category.id}`,
-      label: category.name,
-      rows,
-    }]
-  })
-  const subscribed = items.filter((item) => {
-    const category = categoryById.get(categoryIdOf(item))
-    return category !== undefined && category.require_auth
-  })
-  const groups: LibraryGroup[] = [
-    {
-      key: 'personal', label: productText('个人知识库'), create: 'personal',
-      createLabel: productText('新建个人知识库'),
-      rows: items.filter(item => item.kind === 'personal' && categoryIdOf(item) === 0),
-    },
-    ...openCategoryGroups,
-  ]
-  if (subscribed.length !== 0) {
-    groups.push({ key: 'subscription', label: productText('订阅知识库'), rows: subscribed })
-  }
-  return groups
 }
 
 interface KnowledgeDocument {
@@ -152,6 +106,8 @@ export interface KnowledgeApi {
   plazaDocuments(id: number): Promise<KnowledgeDocument[]>
   /** Submit a subscription application for an auth-required category library. */
   subscribe(id: number): Promise<void>
+  /** Drop the caller's grant so the library returns to the plaza. */
+  unsubscribe(id: number): Promise<void>
   create(value: { name: string; description: string; kind: 'personal' }): Promise<KnowledgeBaseItem>
   documents(id: number): Promise<KnowledgeDocument[]>
   /** Load parsed document text for the desktop viewer. */
@@ -246,6 +202,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const [plazaDocuments, setPlazaDocuments] = useState<KnowledgeDocument[]>([])
   const [plazaFolders, setPlazaFolders] = useState<Set<string>>(new Set())
   const [subscribing, setSubscribing] = useState(false)
+  const [unsubscribing, setUnsubscribing] = useState(false)
   const [createKind, setCreateKind] = useState<'personal'>()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -262,6 +219,10 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const [contentLimit, setContentLimit] = useState(1200)
   const [resizing, setResizing] = useState(false)
   const [viewer, setViewer] = useState<DocumentViewer>()
+  const [previewAskOpen, setPreviewAskOpen] = useState(false)
+  const [previewQuestion, setPreviewQuestion] = useState('')
+  const [previewMessages, setPreviewMessages] = useState<Message[]>([])
+  const [previewHints, setPreviewHints] = useState(true)
   const [downloading, setDownloading] = useState(false)
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([])
   const [documentMenu, setDocumentMenu] = useState<DocumentMenu>()
@@ -270,24 +231,50 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const [deleteIds, setDeleteIds] = useState<string[]>()
   const [mutating, setMutating] = useState(false)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set())
+  const [collapsedNavGroups, setCollapsedNavGroups] = useState<Set<string>>(() => new Set())
   const fileInput = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement>(null)
   const uploadRoot = useRef<HTMLDivElement>(null)
   const layout = useRef<HTMLElement>(null)
   const messagesPane = useRef<HTMLDivElement>(null)
+  const previewMessagesPane = useRef<HTMLDivElement>(null)
+  const previewBodyRef = useRef<HTMLDivElement>(null)
   const answerAbort = useRef<AbortController>()
   const historyEpoch = useRef(0)
   const viewerRef = useRef<DocumentViewer>()
   viewerRef.current = viewer
 
   const selected = items.find(item => item.id === selectedId)
+  const selfUserId = items.find(item => item.kind === 'personal')?.owner_user_id
+  const selectedIsSubscribed = selected !== undefined
+    && (selfUserId === undefined || selected.owner_user_id !== selfUserId)
+    && categories.some(category =>
+      category.require_auth && category.id === (selected.category_id ?? 0))
   // Stick to the latest turn only while an answer is streaming; history opens at the top.
   useEffect(() => {
     if (!answering) return
-    const pane = messagesPane.current
+    const pane = previewAskOpen ? previewMessagesPane.current : messagesPane.current
     if (pane === null) return
     pane.scrollTop = pane.scrollHeight
-  }, [messages, answering])
+  }, [messages, previewMessages, answering, previewAskOpen])
+  useEffect(() => {
+    const quote = viewer?.locate?.quote?.trim() ?? ''
+    if (viewer === undefined || viewer.loading || viewer.mode === 'pdf' || quote === '') return
+    const root = previewBodyRef.current
+    if (root === null) return
+    const needle = quote.replace(/\s+/g, '').slice(0, 24)
+    if (needle.length < 2) return
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    let node = walker.nextNode()
+    while (node !== null) {
+      const text = node.textContent?.replace(/\s+/g, '') ?? ''
+      if (text.includes(needle) && node.parentElement !== null) {
+        node.parentElement.scrollIntoView({ block: 'center' })
+        return
+      }
+      node = walker.nextNode()
+    }
+  }, [viewer?.locate, viewer?.loading, viewer?.mode])
   useEffect(() => {
     const input = folderInput.current
     if (input === null) return
@@ -302,7 +289,9 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       if (disposed) return
       setItems(result)
       setCategories(nextCategories)
-      setSelectedId(result[0]?.id)
+      setSelectedId(firstNavLibraryId(result, nextCategories))
+      setPlazaOpen(false)
+      setCollapsedNavGroups(new Set())
     }).catch((cause) => { if (!disposed) setError(`${productText('加载失败')}：${String(cause)}`) })
       .finally(() => { if (!disposed) setLoading(false) })
     return () => { disposed = true }
@@ -314,7 +303,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       const rows = await api.plaza({
         ...(keyword !== undefined && keyword.trim() !== '' ? { keyword: keyword.trim() } : {}),
       })
-      setPlazaItems(rows)
+      setPlazaItems(rows.filter(item => item.subscription_status !== 'approved'))
     } catch (cause) {
       setError(`${productText('加载失败')}：${String(cause)}`)
     } finally {
@@ -365,6 +354,23 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     const [result, nextCategories] = await Promise.all([api.list(), api.categories()])
     setItems(result)
     setCategories(nextCategories)
+    setSelectedId((current) => {
+      if (current !== undefined && result.some(item => item.id === current)) return current
+      return firstNavLibraryId(result, nextCategories)
+    })
+  }
+  const submitUnsubscribe = async () => {
+    if (selectedId === undefined || unsubscribing || !selectedIsSubscribed) return
+    setUnsubscribing(true)
+    setError('')
+    try {
+      await api.unsubscribe(selectedId)
+      await reloadLibraries()
+    } catch (cause) {
+      setError(`${productText('取消订阅失败')}：${String(cause)}`)
+    } finally {
+      setUnsubscribing(false)
+    }
   }
   useEffect(() => {
     if (selectedId === undefined) {
@@ -507,7 +513,14 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     setDescription('')
     setError('')
   }
+  const resetPreviewAsk = () => {
+    setPreviewAskOpen(false)
+    setPreviewQuestion('')
+    setPreviewMessages([])
+    setPreviewHints(true)
+  }
   const closeViewer = () => {
+    resetPreviewAsk()
     setViewer((current) => {
       if (current?.objectUrl !== undefined) URL.revokeObjectURL(current.objectUrl)
       return undefined
@@ -518,11 +531,17 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     setError('')
     closeViewer()
   }
-  const openDocument = (document: KnowledgeDocument, locate?: PdfLocateRequest) => {
+  const openDocument = (document: KnowledgeDocument, locate?: PdfLocateRequest, keepAsk = false) => {
     if (selectedId === undefined) return
+    if (!keepAsk) resetPreviewAsk()
+    const kind = fileKind(document.name)
+    const loadingMode: DocumentViewer['mode'] = kind === 'pdf' ? 'pdf' : kind === 'image' ? 'image' : 'text'
     setViewer((current) => {
       if (current?.objectUrl !== undefined) URL.revokeObjectURL(current.objectUrl)
-      return { document, loading: true, mode: 'text', content: '', ...(locate === undefined ? {} : { locate }) }
+      return {
+        document, loading: true, mode: loadingMode, content: '',
+        ...(locate === undefined ? {} : { locate }),
+      }
     })
     setError('')
     void (async () => {
@@ -536,7 +555,6 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         })
       }
       try {
-        const kind = fileKind(document.name)
         if (kind === 'image' || kind === 'pdf' || isPlainTextName(document.name)) {
           const file = await api.download(selectedId, document.id)
           const bytes = Uint8Array.from(file.bytes)
@@ -576,7 +594,15 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       }
     })()
   }
-  const openCitation = (citation: KnowledgeCitation) => {
+  const citationLocate = (citation: KnowledgeCitation, answerHint = ''): PdfLocateRequest => ({
+    ...(citation.page !== undefined ? { page: citation.page } : {}),
+    ...(citation.quote !== '' ? { quote: citation.quote } : {}),
+    ...(answerHint.trim() !== '' ? { hint: answerHint.trim() } : {}),
+    ...(citation.positions !== undefined && citation.positions.length > 0
+      ? { positions: citation.positions }
+      : {}),
+  })
+  const openCitation = (citation: KnowledgeCitation, answerHint = '') => {
     const document = documents.find(item => item.id === citation.document_id)
       ?? {
         id: citation.document_id,
@@ -585,13 +611,28 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         run: 'DONE',
         progress: 1,
       }
-    openDocument(document, {
-      ...(citation.page !== undefined ? { page: citation.page } : {}),
-      ...(citation.quote !== '' ? { quote: citation.quote } : {}),
-      ...(citation.positions !== undefined && citation.positions.length > 0
-        ? { positions: citation.positions }
-        : {}),
-    })
+    openDocument(document, citationLocate(citation, answerHint))
+  }
+  const locateInPreview = (citation: KnowledgeCitation, answerHint = '') => {
+    const request = citationLocate(citation, answerHint)
+    const current = viewerRef.current
+    const sameDocument = current !== undefined && !current.loading && (
+      current.document.id === citation.document_id
+      || documentDisplayName(current.document) === citation.document_name
+    )
+    if (sameDocument) {
+      setViewer(open => open === undefined ? open : { ...open, locate: request })
+      return
+    }
+    const document = documents.find(item => item.id === citation.document_id)
+      ?? {
+        id: citation.document_id,
+        name: citation.document_name || citation.document_id,
+        size: 0,
+        run: 'DONE',
+        progress: 1,
+      }
+    openDocument(document, request, true)
   }
   const downloadDocument = async () => {
     if (selectedId === undefined || viewer === undefined || downloading) return
@@ -703,62 +744,64 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const stopAnswer = () => {
     answerAbort.current?.abort()
   }
-  const ask = async (event: FormEvent) => {
-    event.preventDefault()
-    let text = question.trim()
+  const writeAnswer = (
+    write: typeof setMessages,
+    progress: { answer: string; recommendations?: string[]; citations?: KnowledgeCitation[] },
+  ) => {
+    write((current) => {
+      if (current.length === 0) return current
+      const next = [...current]
+      const last = next[next.length - 1]
+      if (last === undefined || last.role !== 'assistant') return current
+      const emptyHit = /知识库中未找到相关内容/.test(progress.answer)
+      next[next.length - 1] = {
+        role: 'assistant',
+        content: progress.answer,
+        ...(progress.recommendations !== undefined ? { recommendations: progress.recommendations } : {}),
+        ...(emptyHit
+          ? { citations: [] }
+          : progress.citations !== undefined ? { citations: progress.citations } : {}),
+      }
+      return next
+    })
+  }
+  const submitKnowledgeQuestion = async (raw: string, sink: 'library' | 'preview') => {
+    let text = raw.trim()
     if (text === '' || selectedId === undefined || answering) return
-    const mention = /^@(\S+)\s+/.exec(text)
-    const mentioned = mention === null ? undefined : items.find(item => item.name === mention[1])
-    const targetKnowledgeBaseId = mentioned?.id ?? selectedId
-    if (mentioned !== undefined && mention !== null) text = text.slice(mention[0].length)
-    if (text === '') return
+    let targetKnowledgeBaseId = selectedId
+    if (sink === 'library') {
+      const mention = /^@(\S+)\s+/.exec(text)
+      const mentioned = mention === null ? undefined : items.find(item => item.name === mention[1])
+      targetKnowledgeBaseId = mentioned?.id ?? selectedId
+      if (mentioned !== undefined && mention !== null) text = text.slice(mention[0].length)
+      if (text === '') return
+    }
+    const write = sink === 'library' ? setMessages : setPreviewMessages
     answerAbort.current?.abort()
     const abort = new AbortController()
     answerAbort.current = abort
     historyEpoch.current += 1
-    setQuestion('')
-    setMessages(current => [...current, { role: 'user', content: text }, { role: 'assistant', content: '' }])
+    if (sink === 'library') setQuestion('')
+    else {
+      setPreviewQuestion('')
+      setPreviewHints(false)
+    }
+    write(current => [...current, { role: 'user', content: text }, { role: 'assistant', content: '' }])
     setAnswering(true)
     try {
       const answer = await api.complete(targetKnowledgeBaseId, text, (progress) => {
-        setMessages((current) => {
-          if (current.length === 0) return current
-          const next = [...current]
-          const last = next[next.length - 1]
-          if (last === undefined || last.role !== 'assistant') return current
-          next[next.length - 1] = {
-            role: 'assistant',
-            content: progress.answer,
-            ...(progress.recommendations !== undefined ? { recommendations: progress.recommendations } : {}),
-            ...(progress.citations !== undefined ? { citations: progress.citations } : {}),
-          }
-          return next
-        })
+        writeAnswer(write, progress)
       }, abort.signal)
-      setMessages((current) => {
-        if (current.length === 0) return current
-        const next = [...current]
-        const last = next[next.length - 1]
-        const citations = answer.citations ?? []
-        if (last === undefined || last.role !== 'assistant') {
-          return [...current, {
-            role: 'assistant', content: answer.answer, recommendations: answer.recommendations,
-            ...(citations.length > 0 ? { citations } : {}),
-          }]
-        }
-        next[next.length - 1] = {
-          role: 'assistant',
-          content: answer.answer,
-          recommendations: answer.recommendations,
-          ...(citations.length > 0 ? { citations } : {}),
-        }
-        return next
+      writeAnswer(write, {
+        answer: answer.answer,
+        recommendations: answer.recommendations,
+        ...(answer.citations !== undefined && answer.citations.length > 0 ? { citations: answer.citations } : {}),
       })
     } catch (cause) {
       const aborted = abort.signal.aborted
         || (cause instanceof DOMException && cause.name === 'AbortError')
         || (cause instanceof Error && cause.name === 'AbortError')
-      setMessages((current) => {
+      write((current) => {
         if (current.length === 0) return current
         const last = current[current.length - 1]
         if (last?.role === 'assistant' && last.content === '') return current.slice(0, -1)
@@ -769,6 +812,25 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       if (answerAbort.current === abort) answerAbort.current = undefined
       setAnswering(false)
     }
+  }
+  const ask = (event: FormEvent) => {
+    event.preventDefault()
+    void submitKnowledgeQuestion(question, 'library')
+  }
+  const askPreview = (event: FormEvent) => {
+    event.preventDefault()
+    if (viewer === undefined) return
+    const fileName = documentDisplayName(viewer.document)
+    const typed = previewQuestion.trim()
+    if (typed === '') return
+    // Keep the user question first so retrieval embeds the real ask, not the file wrapper.
+    void submitKnowledgeQuestion(
+      `${typed}\n请依据文件「${fileName}」中的内容完整作答；相关分项或编号列表须全部列出。`,
+      'preview',
+    )
+  }
+  const askPreviewPrompt = (prompt: string) => {
+    void submitKnowledgeQuestion(prompt, 'preview')
   }
   const applyContentWidth = (target: number) => {
     const span = contentSpan(layout.current?.getBoundingClientRect())
@@ -809,22 +871,36 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     style={{ '--dsh-knowledge-content-width': `${contentWidth}px` } as CSSProperties}>
     <aside className="dsh-knowledge-nav">
       <div className="dsh-knowledge-nav-groups">
-        {navGroups.map(group =>
-          <div key={group.key} className="dsh-knowledge-group">
+        {navGroups.map((group) => {
+          const expanded = !collapsedNavGroups.has(group.key)
+          return <div key={group.key} className="dsh-knowledge-group">
             <div className="dsh-knowledge-group-head">
-              <strong>{group.label}</strong>
+              <button type="button" className="dsh-knowledge-group-toggle"
+                aria-expanded={expanded}
+                aria-label={`${expanded ? productText('收起') : productText('展开')}${group.label}`}
+                onClick={() => setCollapsedNavGroups((current) => {
+                  const next = new Set(current)
+                  if (next.has(group.key)) next.delete(group.key)
+                  else next.add(group.key)
+                  return next
+                })}>
+                <span className={expanded ? 'dsh-knowledge-group-chevron open' : 'dsh-knowledge-group-chevron'}
+                  aria-hidden="true"><ChevronIcon /></span>
+                <strong>{group.label}</strong>
+              </button>
               {group.createLabel !== undefined && group.create === 'personal' &&
                 <button type="button" aria-label={group.createLabel}
                   onClick={() => openCreate('personal')}>
                   <PlusIcon />
                 </button>}
             </div>
-            {group.rows.map(item =>
+            {expanded && group.rows.map(item =>
               <button type="button" className={item.id === selectedId ? 'active' : ''} key={item.id}
                 onClick={() => { setPlazaOpen(false); choose(item.id) }}>
-                <span className="dsh-knowledge-nav-icon" aria-hidden="true"><BookIcon /></span>{item.name}
+                <span className="dsh-knowledge-nav-icon" aria-hidden="true"><LibraryFolderIcon /></span>{item.name}
               </button>)}
-          </div>)}
+          </div>
+        })}
       </div>
       <button type="button" className="dsh-knowledge-plaza-launch" onClick={() => openPlaza()}>
         {productText('知识库广场')} <span aria-hidden="true">»</span>
@@ -878,6 +954,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                   </span>
                 </button>)}
             </div>}
+        <p className="dsh-knowledge-hint">{productText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库不再出现在广场。')}</p>
       </> : <div className="dsh-knowledge-plaza-detail">
         <div className="dsh-knowledge-plaza-detail-main">
           <span className="dsh-knowledge-plaza-cover large" aria-hidden="true">
@@ -918,11 +995,25 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
               })}
             </div>}
         </div>
-        <p className="dsh-knowledge-hint">{productText('订阅后需管理员审核，通过后会出现在订阅知识库中。')}</p>
+        <p className="dsh-knowledge-hint">{productText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库不再出现在广场。')}</p>
       </div>}
     </div>}
     <main className={uploadOpen ? 'dsh-knowledge-content upload-open' : 'dsh-knowledge-content'}>
-      <header><div className="dsh-knowledge-cover" aria-hidden="true"><BookIcon /></div><div><h2>{selected?.name ?? productText('暂无知识库')}</h2><p>{selected?.description ?? ''}</p></div></header>
+      <header>
+        <div className="dsh-knowledge-cover" aria-hidden="true">
+          {selected === undefined ? <BookIcon />
+            : <LibraryFolderIcon />}
+        </div>
+        <div className="dsh-knowledge-header-copy">
+          <h2>{selected?.name ?? productText('暂无知识库')}</h2>
+          <p>{selected?.description ?? ''}</p>
+        </div>
+        {selectedIsSubscribed &&
+          <button type="button" className="dsh-knowledge-unsubscribe" disabled={unsubscribing}
+            onClick={() => void submitUnsubscribe()}>
+            {productText('取消订阅')}
+          </button>}
+      </header>
       <div className="dsh-knowledge-toolbar">
         <strong>{productText('内容')}({documents.length})</strong>
         <div className="dsh-knowledge-toolbar-actions">
@@ -1143,21 +1234,26 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     </form></div>}
     {viewer !== undefined && createPortal(<div className="dsh-knowledge-viewer-shell"
       onPointerDown={(event) => { event.stopPropagation() }}>
-      <section className="dsh-knowledge-viewer" role="dialog" aria-modal="true" aria-labelledby="dsh-knowledge-viewer-title">
+      <section className={previewAskOpen ? 'dsh-knowledge-viewer asking' : 'dsh-knowledge-viewer'} role="dialog" aria-modal="true" aria-labelledby="dsh-knowledge-viewer-title">
         <header>
-          <h2 id="dsh-knowledge-viewer-title">{documentDisplayName(viewer.document)}</h2>
-          <div className="dsh-knowledge-viewer-actions">
+          <div className="dsh-knowledge-viewer-title">
+            <h2 id="dsh-knowledge-viewer-title">{documentDisplayName(viewer.document)}</h2>
             <button type="button" className="icon-only" aria-label={productText('下载')} disabled={downloading || viewer.loading}
               onClick={() => void downloadDocument()}>
               {downloading ? <span className="dsh-knowledge-viewer-busy" aria-hidden="true" /> : <DownloadTrayIcon />}
             </button>
-            <button type="button" className="icon-only close" aria-label={productText('关闭')}
+          </div>
+          <div className="dsh-knowledge-viewer-actions">
+            {!previewAskOpen && <button type="button" className="dsh-knowledge-ask-launch" onClick={() => setPreviewAskOpen(true)}>
+              <AskWanweiIcon />{productText('问问万维')}
+            </button>}
+            {!previewAskOpen && <button type="button" className="icon-only close" aria-label={productText('关闭')}
               onClick={(event) => { event.stopPropagation(); closeViewer() }}>
               <CloseIcon />
-            </button>
+            </button>}
           </div>
         </header>
-        <div className={`dsh-knowledge-viewer-body ${viewer.mode}`}>
+        <div className={`dsh-knowledge-viewer-body ${viewer.mode}`} ref={previewBodyRef}>
           {viewer.loading ? <ViewerLoading label={productText('正在加载…')} />
             : viewer.mode === 'image' && viewer.objectUrl !== undefined
               ? <img src={viewer.objectUrl} alt={documentDisplayName(viewer.document)} />
@@ -1169,23 +1265,147 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                     ? <MarkdownView source={viewer.content ?? ''} />
                     : <article><pre>{viewer.content}</pre></article>}
         </div>
+        {previewAskOpen && <PreviewAskPane
+          fileName={documentDisplayName(viewer.document)}
+          mode={viewer.mode}
+          hints={previewHints}
+          messages={previewMessages}
+          question={previewQuestion}
+          answering={answering}
+          disabled={selectedId === undefined}
+          paneRef={previewMessagesPane}
+          onClose={() => setPreviewAskOpen(false)}
+          onDismissHints={() => setPreviewHints(false)}
+          onQuestion={setPreviewQuestion}
+          onSubmit={askPreview}
+          onPrompt={askPreviewPrompt}
+          onStop={stopAnswer}
+          onOpenCitation={locateInPreview}
+        />}
       </section>
     </div>, document.body)}
   </section>
 }
 
+function PreviewAskPane({
+  fileName, mode, hints, messages, question, answering, disabled, paneRef,
+  onClose, onDismissHints, onQuestion, onSubmit, onPrompt, onStop, onOpenCitation,
+}: {
+  fileName: string
+  mode: DocumentViewer['mode']
+  hints: boolean
+  messages: Message[]
+  question: string
+  answering: boolean
+  disabled: boolean
+  paneRef: { current: HTMLDivElement | null }
+  onClose: () => void
+  onDismissHints: () => void
+  onQuestion: (value: string) => void
+  onSubmit: (event: FormEvent) => void
+  onPrompt: (prompt: string) => void
+  onStop: () => void
+  onOpenCitation: (citation: KnowledgeCitation, answerHint?: string) => void
+}) {
+  const prompts = previewQuickPrompts(fileName, mode)
+  const showHints = hints && messages.length === 0
+  return <aside className="dsh-knowledge-preview-ask" role="complementary" aria-label={productText('问问万维')}>
+    <header>
+      <strong><AskWanweiIcon />{productText('问问万维')}</strong>
+      <button type="button" aria-label={productText('关闭问问万维')} onClick={onClose}><CloseIcon /></button>
+    </header>
+    <div className="dsh-knowledge-preview-ask-log" ref={paneRef}>
+      <p className="dsh-knowledge-preview-ask-hello">{productText('你好，我是你的智能助手万维，能帮你速读文章、答疑解惑，快向我提问吧！')}</p>
+      {showHints && mode === 'image' && prompts[0] !== undefined &&
+        <button type="button" className="dsh-knowledge-preview-ask-image" disabled={answering || disabled}
+          onClick={() => onPrompt(prompts[0]!.prompt)}>{productText(prompts[0].label)}</button>}
+      {messages.map((message, index) => {
+        const waiting = message.role === 'assistant' && message.content === '' && answering && index === messages.length - 1
+        const citations = message.citations ?? []
+        return <article className={message.role} key={`${message.role}-${index}`}>
+          {message.role === 'assistant' && <header className="dsh-knowledge-assistant-brand">
+            <img src="/brand-mark.svg" width={18} height={16} alt="" />
+            <strong>{productText('万维')}</strong>
+          </header>}
+          {waiting
+            ? <p className="dsh-knowledge-typing" role="status" aria-label={productText('正在回答…')}><span /><span /><span /></p>
+            : message.content !== '' && <p>{message.role === 'assistant'
+              ? renderAnswerBody(message.content, citations, onOpenCitation)
+              : message.content}</p>}
+        </article>
+      })}
+    </div>
+    {showHints && mode !== 'image' && <div className="dsh-knowledge-preview-ask-file">
+      <div>
+        <span className={`dsh-knowledge-file-icon ${mode === 'pdf' ? 'pdf' : 'file'}`} aria-hidden="true">
+          <TypeIcon kind={mode === 'pdf' ? 'pdf' : 'file'} />
+        </span>
+        <strong>{fileName}</strong>
+        <button type="button" aria-label={productText('移除当前文件')} onClick={onDismissHints}>×</button>
+      </div>
+      <div className="dsh-knowledge-preview-ask-chips">
+        {prompts.map(item =>
+          <button type="button" key={item.label} disabled={answering || disabled} onClick={() => onPrompt(item.prompt)}>
+            {productText(item.label)}
+          </button>)}
+      </div>
+    </div>}
+    <form className="dsh-knowledge-preview-ask-composer" onSubmit={onSubmit}>
+      <textarea value={question} disabled={disabled || answering} rows={2}
+        placeholder={productText('有问题尽管问万维')}
+        onChange={event => onQuestion(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault()
+            if (!answering) event.currentTarget.form?.requestSubmit()
+          }
+        }} />
+      {answering
+        ? <button type="button" className="dsh-knowledge-send stop" aria-label={productText('停止')} onClick={onStop}><StopIcon /></button>
+        : <button type="submit" className={question.trim() === '' ? 'dsh-knowledge-send idle' : 'dsh-knowledge-send ready'}
+          aria-label={productText('发送')} disabled={question.trim() === '' || disabled}><SendIcon /></button>}
+    </form>
+  </aside>
+}
+
+function previewQuickPrompts(fileName: string, mode: DocumentViewer['mode']): { label: '解读图片' | '总结' | '生成脑图' | '生成测验' | '生成播客'; prompt: string }[] {
+  if (mode === 'image') {
+    return [{ label: '解读图片', prompt: `请解读图片「${fileName}」的内容。` }]
+  }
+  return [
+    { label: '总结', prompt: `请总结文件「${fileName}」的主要内容。` },
+    { label: '生成脑图', prompt: `请根据文件「${fileName}」整理一份脑图大纲，用纯文本层级列出要点。` },
+    { label: '生成测验', prompt: `请根据文件「${fileName}」出几道测验题，并在每题后给出答案。` },
+    { label: '生成播客', prompt: `请把文件「${fileName}」整理成一段口语化的讲解稿。` },
+  ]
+}
+
+function AskWanweiIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M6 16.5 4 20l4.2-1.4A8 8 0 1 0 6 16.5Z" />
+  </svg>
+}
+
 function renderAnswerBody(
   content: string,
   citations: KnowledgeCitation[],
-  onOpen: (citation: KnowledgeCitation) => void,
+  onOpen: (citation: KnowledgeCitation, answerHint?: string) => void,
 ): ReactNode {
-  return splitAnswerCitations(content, citations).map((part, index) => {
-    if (part.type === 'text') return <span key={`t-${index}`}>{part.text}</span>
+  const parts = splitAnswerCitations(content, citations)
+  let preceding = ''
+  return parts.map((part, index) => {
+    if (part.type === 'text') {
+      preceding += part.text
+      return <span key={`t-${index}`}>{part.text}</span>
+    }
+    const marker = `【${part.citation.index}】`
+    const hint = citationLocateHint(preceding)
     return <button type="button" key={`c-${part.citation.chunk_index}-${index}`}
       className="dsh-knowledge-cite"
-      aria-label={`${productText('引用定位')} ${part.citation.index}`}
-      onClick={() => onOpen(part.citation)}>
-      {part.citation.index}
+      aria-label={`${productText('引用定位')} ${marker}`}
+      onClick={() => onOpen(part.citation, hint)}>
+      {marker}
     </button>
   })
 }
@@ -1264,46 +1484,26 @@ function PlazaMarkIcon() {
 }
 
 /**
- * Default plaza cover: a soft natural landscape. Seed shifts time-of-day color.
- * @param props.seed - Stable library id for palette variation.
+ * Theme-blue filled folder for sidebar rows and the content header — matches the
+ * product folder mark (tab + horizontal slot).
  */
-function PlazaCoverIcon({ seed }: { seed: number }) {
-  const shift = Math.abs(seed) % 5
-  const skyPalettes = [
-    ['#8ec5ff', '#d7ecff', '#f7fbff'],
-    ['#6aa8f0', '#b9dbff', '#eef6ff'],
-    ['#5b9be8', '#9fd0ff', '#e8f4ff'],
-    ['#7eb3f2', '#c5e3ff', '#f3f9ff'],
-    ['#4f92e4', '#a8d4ff', '#e6f3ff'],
-  ] as const
-  const hillPalettes = [
-    ['#6fbf8a', '#4f9f6d', '#3f7f58'],
-    ['#62b57f', '#458f63', '#356f4c'],
-    ['#78c793', '#57a674', '#447f5a'],
-    ['#6aba86', '#4d9a6a', '#3c7b54'],
-    ['#59ae76', '#418c5e', '#326e4a'],
-  ] as const
-  const skies = skyPalettes[shift] ?? skyPalettes[0]
-  const hills = hillPalettes[shift] ?? hillPalettes[0]
-  const gid = `plaza-sky-${seed}`
-  return <svg width="88" height="88" viewBox="0 0 88 88" aria-hidden="true">
-    <defs>
-      <linearGradient id={gid} x1="44" y1="0" x2="44" y2="88" gradientUnits="userSpaceOnUse">
-        <stop stopColor={skies[0]} />
-        <stop offset=".48" stopColor={skies[1]} />
-        <stop offset="1" stopColor={skies[2]} />
-      </linearGradient>
-    </defs>
-    <rect width="88" height="88" rx="16" fill={`url(#${gid})`} />
-    <circle cx="66" cy="22" r="10" fill="#fff6d8" opacity=".95" />
-    <circle cx="66" cy="22" r="16" fill="#fff6d8" opacity=".28" />
-    <path d="M0 58 C14 48 24 52 34 58 C46 66 54 62 66 54 C76 48 84 50 88 54 L88 88 L0 88 Z" fill={hills[0]} />
-    <path d="M0 68 C18 60 28 64 40 70 C52 76 62 72 74 66 C82 62 86 64 88 66 L88 88 L0 88 Z" fill={hills[1]} />
-    <path d="M0 78 C20 74 34 76 48 80 C62 84 74 80 88 76 L88 88 L0 88 Z" fill={hills[2]} />
-    <path d="M0 82 C24 86 48 84 72 80 C80 78 85 78 88 78 L88 88 L0 88 Z" fill="#7ec8e8" opacity=".55" />
-    <path d="M12 34c4-1 7 2 10 1 3-1 4-4 8-3" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" fill="none" opacity=".7" />
-    <path d="M18 40c5-1 8 2 12 1" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" fill="none" opacity=".45" />
+function LibraryFolderIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+    <path fill="currentColor"
+      d="M4 7.2C4 6 5 5 6.2 5h3.2l1.4 1.4H17.8C19 6.4 20 7.4 20 8.6v9.2c0 1.2-1 2.2-2.2 2.2H6.2C5 20 4 19 4 17.8V7.2Z" />
+    <rect x="7.2" y="9.6" width="9.6" height="1.8" rx="0.9" fill="#fff" />
   </svg>
+}
+
+/** Product-staged natural-resources cover for plaza cards and detail. */
+const PLAZA_NATURAL_RESOURCES_COVER = '/knowledge-covers/plaza-natural-resources.jpg'
+
+/**
+ * Full photo cover for plaza cards — natural-resources landscape.
+ * @param props.seed - Stable library id (kept for call-site compatibility).
+ */
+function PlazaCoverIcon({ seed: _seed }: { seed: number }) {
+  return <img src={PLAZA_NATURAL_RESOURCES_COVER} alt="" draggable={false} />
 }
 
 interface PlazaTreeHandlers {
@@ -1330,7 +1530,6 @@ function renderPlazaContentTree(nodes: ContentNode[], handlers: PlazaTreeHandler
           <span className="dsh-knowledge-plaza-file-icon folder" aria-hidden="true"><FolderIcon /></span>
           <strong>{node.name}</strong>
           <span className="dsh-knowledge-plaza-file-type">{productText('文件夹')}</span>
-          <span className="dsh-knowledge-plaza-file-meta">-</span>
           <span className="dsh-knowledge-plaza-file-date">-</span>
         </button>,
       )
@@ -1349,7 +1548,6 @@ function renderPlazaContentTree(nodes: ContentNode[], handlers: PlazaTreeHandler
         </span>
         <strong>{documentDisplayName(document)}</strong>
         <span className="dsh-knowledge-plaza-file-type">{productText(kindLabel(fileKind(documentDisplayName(document))))}</span>
-        <span className="dsh-knowledge-plaza-file-meta">-</span>
         <span className="dsh-knowledge-plaza-file-date">
           {stamp > 0 ? productText('{date}更新').replace('{date}', formatPlazaDate(stamp)) : '-'}
         </span>

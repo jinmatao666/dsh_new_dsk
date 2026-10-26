@@ -56,6 +56,10 @@ type ragflowRefChunk struct {
 // Index is 1-based for UI; ChunkIndex matches ##i$$ / [ID:i] markers in the answer.
 // Answers without markers return no citations so the desktop does not invent sources.
 func ParseCitations(reference json.RawMessage, answer string) []Citation {
+	trimmedAnswer := strings.TrimSpace(answer)
+	if trimmedAnswer == "" || strings.Contains(trimmedAnswer, "知识库中未找到相关内容") {
+		return []Citation{}
+	}
 	chunks := parseReferenceChunks(reference)
 	if len(chunks) == 0 {
 		return []Citation{}

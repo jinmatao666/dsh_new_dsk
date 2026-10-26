@@ -10,8 +10,12 @@ import {
   type KnowledgeCategory,
   type KnowledgePlazaItem,
 } from './KnowledgePage.tsx'
+import { KnowledgeComposerToggle } from './KnowledgeComposerToggle.tsx'
 import { productText } from './locales/product.ts'
+import { createRetrievalSelection, type RetrievalSelection } from './retrieval-selection.ts'
 import { uploadKnowledgeFile } from './upload.ts'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import './page.css'
 
 async function readKnowledgeStream(
@@ -162,6 +166,45 @@ function knowledgePlazaItem(raw: unknown): KnowledgePlazaItem {
 }
 
 export const inject = ['slots', 'connection', 'wanweiNetwork']
+
+/**
+ * Register the composer knowledge toggle and carry its selection into first-send Sessions.
+ * @param ctx - Product Client context.
+ * @param call - Host knowledge RPC.
+ * @param api - Library catalog access.
+ * @param openLibrary - Open the knowledge panel.
+ */
+function installComposerToggle(ctx: Context, call: (operation: string, payload?: unknown) => Promise<unknown>,
+  api: Pick<KnowledgeApi, 'list' | 'categories'>, openLibrary: () => void): void {
+  const selection = createRetrievalSelection()
+  const visible = ctx.wanweiNetwork.visibility('knowledgeBases')
+  const syncScope = async (sessionId: string, ids: readonly number[]) => {
+    await call('retrieval-scope', { sessionId, ids })
+  }
+  const loadCatalog = async () => {
+    const [items, categories] = await Promise.all([api.list(), api.categories()])
+    return { items, categories }
+  }
+  ctx.inject(['conversation'], (scope: Context) => {
+    scope.effect(() => scope.conversation.input.registerStagedSessionTransfer(async (sessionId) => {
+      const current = selection.getSnapshot()
+      if (visible.getSnapshot() && current.enabled && current.ids.length > 0) await syncScope(String(sessionId), current.ids)
+    }), 'knowledge retrieval staged transfer')
+  })
+  ctx.slots.inject('conversation.composer.tools', () => ctx.slots.register({
+    name: 'conversation.composer.tools',
+    id: 'wanwei-knowledge-retrieval',
+    order: 10,
+    inject: () => ({
+      hooks: { selection, visible },
+      setSelection: (next: RetrievalSelection) => { selection.set(next) },
+      loadCatalog,
+      syncScope,
+      openLibrary,
+    }),
+  }, KnowledgeComposerToggle))
+}
+
 /** Mount the authorized RAGFlow-backed knowledge library.
  * @param ctx - Product Client context.
  */
@@ -211,6 +254,7 @@ export function apply(ctx: Context): void {
       })
     },
     async subscribe(id) { await call('subscribe', { id }) },
+    async unsubscribe(id) { await call('unsubscribe', { id }) },
     async create(input) { return knowledgeItem(await call('create', input)) },
     async documents(id) {
       const raw = await call('documents', { id })
@@ -346,4 +390,5 @@ export function apply(ctx: Context): void {
     hooks: { network: ctx.wanweiNetwork },
     renderContent: () => <KnowledgePage api={api} />,
   })
+  installComposerToggle(ctx, call, api, () => { controller.open() })
 }
