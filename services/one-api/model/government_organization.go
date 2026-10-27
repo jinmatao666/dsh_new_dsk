@@ -24,7 +24,7 @@ type GovernmentOrganizationNode struct {
 
 // ListGovernmentOrganizationNodes 返回用于后台树和角色选择器的完整节点列表。
 func ListGovernmentOrganizationNodes() ([]GovernmentOrganizationNode, error) {
-	var nodes []GovernmentOrganizationNode
+	nodes := make([]GovernmentOrganizationNode, 0)
 	err := DB.Order("parent_id ASC, sort_order ASC, id ASC").Find(&nodes).Error
 	return nodes, err
 }

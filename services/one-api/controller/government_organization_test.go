@@ -42,6 +42,9 @@ func TestGovernmentOrganizationTreeAndRoleReferences(t *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
 		return response
 	}
+	empty := call("GET", "/organization", "")
+	require.Equal(t, true, empty["success"])
+	require.Equal(t, []interface{}{}, empty["data"])
 	root := call("POST", "/organization", `{"name":"浙政钉","kind":"平台"}`)
 	require.Equal(t, true, root["success"])
 	rootID := uint(root["data"].(map[string]interface{})["id"].(float64))

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, FolderTree, Pencil, Plus, Trash2 } from 'lucide-react';
-import { API, isRoot, showError, showSuccess } from '../helpers';
+import { API, isRoot, showSuccess } from '../helpers';
 import './GovernmentOrganization.css';
 
 export const loadGovernmentOrganizationNodes = async () => {
@@ -42,14 +42,17 @@ export default function GovernmentOrganization() {
   const [draft, setDraft] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const rootUser = isRoot();
 
   const reload = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
     try {
       const data = await loadGovernmentOrganizationNodes();
       setNodes(data);
     } catch (reason) {
-      showError(reason.message || '读取组织架构失败');
+      setLoadError(reason.response?.data?.message || reason.message || '读取组织架构失败');
     } finally {
       setLoading(false);
     }
@@ -128,15 +131,15 @@ export default function GovernmentOrganization() {
   return <div className='government-org'>
     <div className='government-org-heading'>
       <div><h2>组织架构</h2><p>按实际单位逐级创建，层级名称和深度都可自行设定。</p></div>
-      {rootUser && <button type='button' className='government-org-primary' onClick={() => add()}><Plus size={16} /> 新建顶层组织</button>}
+      {rootUser && <button type='button' className='government-org-primary' disabled={loading || Boolean(loadError)} onClick={() => add()}><Plus size={16} /> 新建顶层组织</button>}
     </div>
     <div className='government-org-columns'>
       <section className='government-org-tree' aria-label='组织架构树'>
-        <div className='government-org-section-title'>组织列表 <span>{nodes.length} 个节点</span></div>
-        {loading ? <p className='government-org-empty'>正在读取组织架构…</p> : nodes.length ? renderBranch() : <p className='government-org-empty'>还没有组织节点。请从顶层组织开始创建。</p>}
+        <div className='government-org-section-title'>组织列表 <span>{loading ? '读取中' : loadError ? '未加载' : `${nodes.length} 个节点`}</span></div>
+        {loading ? <p className='government-org-empty'>正在读取组织架构…</p> : loadError ? <div className='government-org-load-error' role='alert'><p>读取组织架构失败</p><small>{loadError}</small><button type='button' onClick={() => void reload()}>重新加载</button></div> : nodes.length ? renderBranch() : <p className='government-org-empty'>还没有组织节点。请从顶层组织开始创建。</p>}
       </section>
       <section className='government-org-detail'>
-        {draft ? <form onSubmit={save} className='government-org-form'>
+        {loadError || loading ? <p className='government-org-empty'>{loading ? '正在读取组织信息…' : '组织架构尚未加载，请重新加载后查看或创建节点。'}</p> : draft ? <form onSubmit={save} className='government-org-form'>
           <h3>{draft.id ? '编辑组织节点' : '新建组织节点'}</h3>
           <label>节点名称<input required maxLength={120} autoFocus value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} placeholder='例如：杭州市规划和自然资源局' /></label>
           <label>节点类型 <small>可选，自定义</small><input maxLength={60} value={draft.kind} onChange={event => setDraft(current => ({ ...current, kind: event.target.value }))} placeholder='例如：政府机构、下属单位、科室' /></label>

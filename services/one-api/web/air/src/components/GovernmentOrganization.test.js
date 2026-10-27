@@ -45,3 +45,28 @@ test('creates a top-level node and a child without prescribed hierarchy levels',
     delete global.IS_REACT_ACT_ENVIRONMENT;
   }
 });
+
+test('distinguishes a failed load from an empty organization and supports retry', async () => {
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  API.get.mockReset();
+  API.get.mockRejectedValueOnce(new Error('网络请求失败'));
+  API.get.mockResolvedValue({ data: { success: true, data: [] } });
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<GovernmentOrganization />));
+    expect(container.querySelector('[role="alert"]').textContent).toContain('网络请求失败');
+    expect(container.textContent).not.toContain('0 个节点');
+    expect(container.textContent).not.toContain('还没有组织节点');
+    const createButton = [...container.querySelectorAll('button')].find(button => button.textContent.includes('新建顶层组织'));
+    expect(createButton.disabled).toBe(true);
+    await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '重新加载').click());
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain('0 个节点');
+    expect(container.textContent).toContain('还没有组织节点');
+    expect(createButton.disabled).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    delete global.IS_REACT_ACT_ENVIRONMENT;
+  }
+});

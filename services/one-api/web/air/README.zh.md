@@ -50,3 +50,9 @@ npm run build
 
 1. https://github.com/OIerDb-ng/OIerDb
 2. https://github.com/cornflourblue/react-hooks-redux-registration-login-example
+
+### 用户行为画像
+
+点击用户行打开已记录行为画像。弹窗滚动时保留标题和关闭按钮，宽屏并排展示活动构成与趋势，窄屏纵向排列。图表包含接口返回的北京时间日期窗口首尾两天。已记录安装量按用户和技能去重，与可重复下载事件独立展示，不推断安装转化率。
+
+组织树和角色组织选择器使用同一个数组响应，详见[组织管理](../../docs/role-management.md)。组织读取失败时显示页面内重试状态，不显示零节点计数。

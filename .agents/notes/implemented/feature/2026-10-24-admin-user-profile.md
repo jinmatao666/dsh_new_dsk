@@ -12,6 +12,8 @@ The administrator's user list exposes account state and lifetime request totals 
 
 The administrator-only [profile endpoint](../../../../services/one-api/controller/user_profile.go) groups model consumption logs, skill invocation events, and expert task-start events by the selected local user ID for the last 30 Beijing-calendar days. Skill downloads and recorded installations use their existing cumulative per-user counters. The [user-list dialog](../../../../services/one-api/web/air/src/pages/Zjugis/UserProfile.js) shows the period, counts, daily activity, named rankings, and a rule-based summary. It does not read prompts, files, or conversations or infer personal attributes.
 
+The dialog uses a fixed title bar and one scrolling content area, a paired composition/trend layout, dated activity cells, and separate model/skill/expert ranking panels. Installation records are a cumulative unique-skill count, not a conversion percentage against repeatable download events. Calendar keys are generated from literal date strings so both ends of the Beijing date window remain visible. Small nonzero activity shares display as less than one percent instead of zero.
+
 ## Alternatives considered
 
 **Join the existing global usage API on username in the browser.** Usernames may change, the global API does not provide per-user model and download aggregates, and filtering client-side would expose unnecessary records.

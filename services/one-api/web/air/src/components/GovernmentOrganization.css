@@ -40,3 +40,9 @@
 .government-org-picker-item span { overflow-wrap: anywhere; }
 :is(.government-org, .government-org-picker) :is(button, input, select):focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 @media (max-width: 780px) { .government-org-columns { grid-template-columns: 1fr; } .government-org-heading { align-items: flex-start; flex-direction: column; } }
+
+.government-org-load-error { margin-top: 24px; padding: 16px; border: 1px solid #f0d9db; border-radius: 10px; background: #fff8f8; }
+.government-org-load-error p { margin: 0 0 8px; color: #a43c49; font-size: 13px; font-weight: 600; }
+.government-org-load-error small { display: block; margin-bottom: 14px; color: #876d76; overflow-wrap: anywhere; }
+.government-org-load-error button { padding: 7px 12px; border: 1px solid #dae4f4; border-radius: 7px; background: #fff; color: #2563eb; cursor: pointer; }
+.government-org button:disabled { opacity: .45; cursor: not-allowed; }

@@ -10,7 +10,7 @@ Public-sector customers organize people across varying jurisdictions, agencies, 
 
 ## Decision
 
-Keep a separate `government_organization_nodes` adjacency tree with administrator-defined names, optional types, parent IDs and sibling order. User Permissions exposes tree creation, editing and deletion to the built-in super-administrator, while other administrators can read it. Node writes reject missing parents and ancestry cycles; deletion requires a leaf with no role references. Roles store selected node IDs in `permissions.organization_node_ids`; writes validate those references. The tree starts empty rather than implying a particular jurisdiction.
+Keep a separate `government_organization_nodes` adjacency tree with administrator-defined names, optional types, parent IDs and sibling order. User Permissions exposes tree creation, editing and deletion to the built-in super-administrator, while other administrators can read it. Node writes reject missing parents and ancestry cycles; deletion requires a leaf with no role references. Roles store selected node IDs in `permissions.organization_node_ids`; writes validate those references. The tree starts empty rather than implying a particular jurisdiction. Empty lists serialize as `[]`, because `null` would violate the shared tree/role-picker response validation. Read failures retain an inline retry state instead of presenting an empty tree or allowing edits against unknown data.
 
 ## Alternatives considered
 

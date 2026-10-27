@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-24-government-organization-tree.md
-2026-10-24-government-organization-tree.md: abb4262a61a5dce1c0623d2cfe1709dbf5b23d1f
-2026-10-24-government-organization-tree.zh.md: 60955247de15798ecbf352561fbf877a511ca2dc
+2026-10-24-government-organization-tree.md: dbc16fcd43edf87368750fc4af08e08e7570de27
+2026-10-24-government-organization-tree.zh.md: 5c1c60ba1f1e2fec0255b0d0de2800fa0b79d6aa

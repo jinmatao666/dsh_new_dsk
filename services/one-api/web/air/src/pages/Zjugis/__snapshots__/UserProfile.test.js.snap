@@ -1,0 +1,16 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`charts include both Beijing date boundaries and show installations without an invalid conversion rate 1`] = `
+Object {
+  "downloads": Array [
+    "技能名称下载次数安装记录",
+    "文档处理0次已安装",
+  ],
+  "identity": "AAdmin超级管理员账号 AdminID #2个体账户分组 default已激活",
+  "insights": Array [
+    "活跃天数2/ 30 天统计期内有使用记录的天数",
+    "已安装技能49个累计安装记录，同一技能仅计一次",
+    "主要活动模型调用按统计期内记录数量比较",
+  ],
+}
+`;
