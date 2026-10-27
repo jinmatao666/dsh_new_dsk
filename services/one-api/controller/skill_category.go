@@ -68,7 +68,7 @@ type skillCategoryRequest struct {
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
 	Status      int     `json:"status"`
-	SortOrder   int     `json:"sort_order"`
+	SortOrder   *int    `json:"sort_order"`
 }
 
 func skillCategoryFromRequest(req skillCategoryRequest) model.SkillCategory {
@@ -119,7 +119,6 @@ func UpdateSkillCategory(c *gin.Context) {
 	category.TypeId = existing.TypeId
 	category.Code = existing.Code
 	category.Status = existing.Status
-	category.SortOrder = existing.SortOrder
 	if err := model.UpdateSkillCategory(&category); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return

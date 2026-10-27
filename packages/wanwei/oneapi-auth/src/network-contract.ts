@@ -2,10 +2,22 @@
 export type NetworkEnvironment = 'internet' | 'intranet'
 /** Committed network mode with deployment-owned internal origins. */
 export interface NetworkState {
+  /** Presentation of internet-dependent skills and experts when connectivity is unavailable. */
+  internetCatalogPolicy?: 'hide' | 'disable'
   mode: NetworkEnvironment
   internalOrigins: readonly string[]
   /** Direct connectivity confirmed by the current deployment probe; absent before confirmation. */
   directInternet?: boolean
+}
+
+/** Resolve catalog presentation using the existing terminal network decision.
+ * @param state - Last confirmed network mode and administrator policy.
+ * @param requiresInternet - Internet requirement from published skill or expert metadata.
+ * @returns Available, hidden, or disabled presentation for this item.
+ */
+export function internetCatalogAccess(state: NetworkState, requiresInternet: boolean): 'available' | 'hide' | 'disable' {
+  if (!requiresInternet || state.mode !== 'intranet' || state.directInternet === true) return 'available'
+  return state.internetCatalogPolicy ?? 'disable'
 }
 /** Classify literal private addresses, local DNS names and configured service origins.
  * @param address - HTTP or HTTPS address to classify.

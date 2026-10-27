@@ -3,7 +3,7 @@ import { API, showSuccess } from '../../helpers';
 import './SystemSettings.css';
 import ResourceSettings, { defaultResources, normalizeResources } from './ResourceSettings';
 
-const defaults = { network: 'internet', edition: 'operations', operator: '', phone: '', features: {
+const defaults = { network: 'internet', internetCatalogPolicy: 'disable', edition: 'operations', operator: '', phone: '', features: {
   internet: { automations: true, connectors: true, knowledgeBases: true },
   intranet: { automations: true, connectors: false, knowledgeBases: true },
 }, plugins: { browserAssistant: true } };
@@ -77,6 +77,7 @@ export default function SystemSettings() {
         }
       }
       if (typeof value.plugins?.browserAssistant !== 'boolean') throw new Error('插件设置无效，请联系管理员检查配置');
+      if (!['hide', 'disable'].includes(value.internetCatalogPolicy)) throw new Error('技能专家联网处理设置无效');
       if (!['government', 'operations'].includes(value.edition)) throw new Error('版本类型无效，请联系管理员检查配置');
       for (const mode of ['internet', 'intranet']) {
         for (const feature of ['automations', 'connectors', 'knowledgeBases']) {
@@ -148,6 +149,13 @@ export default function SystemSettings() {
               <label>运维人员<input value={settings.operator} maxLength={80} placeholder='请输入运维人员姓名' disabled={saving} onChange={event => change('operator', event.target.value)} /></label>
               <label>联系电话<input type='tel' value={settings.phone} maxLength={40} placeholder='请输入手机号或固定电话' disabled={saving} onChange={event => change('phone', event.target.value)} /></label>
             </div>}
+            {active === 'network' && settings.network === 'intranet' && <fieldset className='settings-network' disabled={saving}>
+              <legend>互联网类技能、专家处理方式</legend>
+              {[['hide', '隐藏', '终端无法访问外部资源时，隐藏需要联网的技能和专家。'], ['disable', '灰化', '保留展示并置灰，无法点击使用。']].map(([key, label, hint]) => <label key={key} className={`settings-network-option${settings.internetCatalogPolicy === key ? ' selected' : ''}`}>
+                <input type='radio' name='internet-catalog-policy' checked={settings.internetCatalogPolicy === key} onChange={() => change('internetCatalogPolicy', key)} />
+                <span><strong>{label}</strong><small>{hint}</small></span>
+              </label>)}
+            </fieldset>}
             {active === 'network' && settings.network === 'intranet' && <ResourceSettings value={settings.resources || defaultResources}
               disabled={saving} onChange={value => change('resources', value)} />}
             {active === 'network' && settings.network === 'intranet' && !settings.resources && <button type='button'

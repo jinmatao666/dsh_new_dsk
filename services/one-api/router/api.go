@@ -470,6 +470,7 @@ func SetApiRouter(router *gin.Engine) {
 			expertWebAdminRoute.Use(middleware.AdminAuth())
 			{
 				expertWebAdminRoute.GET("/list", controller.AdminListExpertWebsites)
+				expertWebAdminRoute.POST("/reorder", controller.ReorderCatalog("experts"))
 				expertWebAdminRoute.POST("/", controller.AdminCreateExpertWebsite)
 				expertWebAdminRoute.PUT("/:key", controller.AdminUpdateExpertWebsite)
 				expertWebAdminRoute.PUT("/:key/publish", controller.AdminPublishExpertWebsite)
@@ -486,6 +487,7 @@ func SetApiRouter(router *gin.Engine) {
 				expertAdminRoute.PUT("/:key/publish", controller.SetExpertPublished)
 				expertAdminRoute.PUT("/:key", controller.UpdateExpert)
 				expertAdminRoute.GET("/categories", controller.ListExpertCategories)
+				expertAdminRoute.POST("/categories/reorder", controller.ReorderCatalog("expert-categories"))
 				expertAdminRoute.POST("/categories", controller.CreateExpertCategory)
 				expertAdminRoute.PUT("/categories/:id", controller.UpdateExpertCategory)
 				expertAdminRoute.DELETE("/categories/:id", controller.DeleteExpertCategory)
@@ -508,6 +510,7 @@ func SetApiRouter(router *gin.Engine) {
 			skillAdminRoute.Use(middleware.AdminAuth())
 			{
 				skillAdminRoute.GET("/list", controller.AdminListSkills)
+				skillAdminRoute.POST("/reorder", controller.ReorderCatalog("skills"))
 				skillAdminRoute.POST("/import", controller.ImportSkillRelease)
 				skillAdminRoute.GET("/categories", controller.ListSkillCategories)
 				skillAdminRoute.POST("/batch", controller.BatchSkill)
@@ -538,6 +541,7 @@ func SetApiRouter(router *gin.Engine) {
 		skillCategoryRoute.Use(middleware.AdminAuth())
 		{
 			skillCategoryRoute.GET("/types", controller.ListSkillCategoryTypes)
+			skillCategoryRoute.POST("/reorder", controller.ReorderCatalog("skill-categories"))
 			skillCategoryRoute.POST("/types", controller.CreateSkillCategoryType)
 			skillCategoryRoute.PUT("/types/:id", controller.UpdateSkillCategoryType)
 			skillCategoryRoute.GET("/", controller.ListSkillCategoriesAdmin)

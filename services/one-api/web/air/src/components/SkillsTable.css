@@ -878,3 +878,6 @@
   .skill-list-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
   .skill-list-filters { flex-wrap: wrap; }
 }
+
+.catalog-order-actions button:disabled{opacity:.35;cursor:default}
+.zjugis-field input[type="checkbox"]{width:18px;height:18px;padding:0;accent-color:#2563eb}

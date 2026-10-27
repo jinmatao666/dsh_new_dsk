@@ -3,12 +3,23 @@ import { resolveResourceSettings, type ResourceSettings } from './resource-setti
 
 /** Public deployment metadata owned by the desktop's configured OneAPI server. */
 export interface DeploymentSettings {
+  internetCatalogPolicy?: 'hide' | 'disable'
   network: NetworkEnvironment
   operator: string
   phone: string
   features: DeploymentFeatures
   plugins: DeploymentPlugins
   resources?: ResourceSettings
+}
+
+/** Validate catalog presentation while retaining older deployment records.
+ * @param value - Administrator setting from the public deployment response.
+ * @returns Hidden or disabled presentation, defaulting to disabled.
+ */
+export function resolveInternetCatalogPolicy(value: unknown): 'hide' | 'disable' {
+  if (value === undefined) return 'disable'
+  if (value !== 'hide' && value !== 'disable') throw new Error('后台技能专家联网处理设置无效')
+  return value
 }
 
 /** Administrator-owned plugin permissions, independent of personal preferences. */
@@ -78,6 +89,7 @@ export async function fetchDeploymentSettings(baseURL: string, signal?: AbortSig
     typeof data.phone !== 'string' || data.phone.length > 80) throw new Error('后台系统设置字段无效')
   const resources = resolveResourceSettings(data.resources)
   return { network: data.network, operator: data.operator, phone: data.phone,
+    internetCatalogPolicy: resolveInternetCatalogPolicy(data.internetCatalogPolicy),
     ...(resources === undefined ? {} : { resources }),
     features: resolveDeploymentFeatures(data.features), plugins: resolveDeploymentPlugins(data.plugins) }
 }

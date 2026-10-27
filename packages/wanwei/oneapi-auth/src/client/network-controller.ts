@@ -1,6 +1,6 @@
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { NetworkState } from '../network-contract.ts'
-import { resolveDeploymentFeatures, resolveDeploymentPlugins } from '../deployment.ts'
+import { resolveDeploymentFeatures, resolveDeploymentPlugins, resolveInternetCatalogPolicy } from '../deployment.ts'
 import type { DeploymentFeatures } from '../deployment.ts'
 import type { DeploymentPlugins } from '../deployment.ts'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
@@ -62,12 +62,14 @@ export class NetworkController {
         directInternet?: unknown
         features?: unknown
         plugins?: unknown
+        internetCatalogPolicy?: unknown
       }
       if (value.mode !== 'internet' && value.mode !== 'intranet') throw new Error('网络环境状态无效')
       if (value.directInternet !== undefined && typeof value.directInternet !== 'boolean') throw new Error('网络检测状态无效')
       const features = resolveDeploymentFeatures(value.features)
       const plugins = resolveDeploymentPlugins(value.plugins)
       await this.synchronize({ mode: value.mode, internalOrigins: value.internalOrigins,
+        internetCatalogPolicy: resolveInternetCatalogPolicy(value.internetCatalogPolicy),
         ...(value.directInternet === undefined ? {} : { directInternet: value.directInternet }) }, features, plugins)
       return this.snapshot
     }

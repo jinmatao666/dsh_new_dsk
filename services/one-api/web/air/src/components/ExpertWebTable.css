@@ -13,3 +13,6 @@
 .expert-web-section-grid label+label{margin-top:10px}
 .expert-web-section-grid textarea{min-height:74px}
 @media(max-width:640px){.expert-web-section-grid{grid-template-columns:1fr}.expert-web-icon-editor{align-items:stretch;flex-direction:column}}
+
+.catalog-order-actions button:disabled{opacity:.35;cursor:default}
+.expert-web-dialog input[type="checkbox"]{width:18px;height:18px;padding:0;accent-color:#2563eb}

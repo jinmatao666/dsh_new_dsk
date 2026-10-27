@@ -9,6 +9,18 @@ import { isMarketInteraction } from '@deepseek-ai/dsh-wanwei-feature-panels/clie
 afterEach(cleanup)
 
 describe('catalog-local controls', () => {
+  it('preserves server order for the default view while allowing explicit popular sorting', () => {
+    const entries = [{ installs: '1', updatedAt: 10 }, { installs: '99', updatedAt: 20 }]
+    expect(pagePlatformCatalog(entries, 'recommended', 1).items).toEqual(entries)
+    expect(pagePlatformCatalog(entries, 'downloads', 1).items).toEqual([entries[1], entries[0]])
+    const onSort = vi.fn()
+    render(<CatalogToolbar searchLabel="搜索平台技能" keyword="" onKeyword={vi.fn()} onSearch={vi.fn()}
+      categories={[]} category="" onCategory={vi.fn()} sort="recommended" onSort={onSort}
+      page={1} pages={1} onPage={vi.fn()} />)
+    fireEvent.click(screen.getAllByRole('combobox')[1]!)
+    fireEvent.click(screen.getByRole('option', { name: '默认顺序' }))
+    expect(onSort).toHaveBeenCalledWith('recommended')
+  })
   it('shows only backend-managed categories without injecting a generic category', () => {
     const categories = buildMarketplaceCategories([{ name: '通用类' }, { name: '空间制图' }, { name: '空间制图' }])
     render(<CatalogToolbar searchLabel="搜索平台技能" keyword="" onKeyword={vi.fn()} onSearch={vi.fn()}

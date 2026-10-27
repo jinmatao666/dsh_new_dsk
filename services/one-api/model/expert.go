@@ -33,15 +33,15 @@ type ExpertCategory struct {
 	Name        string `json:"name" gorm:"size:80;uniqueIndex;not null"`
 	Description string `json:"description" gorm:"size:300"`
 	Status      int    `json:"status" gorm:"default:1"`
-	SortOrder   int    `json:"sort_order" gorm:"default:0"`
+	SortOrder   *int   `json:"sort_order"`
 	CreatedAt   int64  `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt   int64  `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
 func EnsureDefaultExpertCategories() error {
 	defaults := []ExpertCategory{
-		{Name: "空间分析", Description: "空间数据、自然资源和国土规划分析类专家", Status: 1, SortOrder: 10},
-		{Name: "办公工具", Description: "文档、会议和文件处理类专家", Status: 1, SortOrder: 20},
+		{Name: "空间分析", Description: "空间数据、自然资源和国土规划分析类专家", Status: 1},
+		{Name: "办公工具", Description: "文档、会议和文件处理类专家", Status: 1},
 	}
 	for _, category := range defaults {
 		var existing ExpertCategory

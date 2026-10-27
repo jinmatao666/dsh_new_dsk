@@ -37,7 +37,7 @@ type SkillCategory struct {
 	Description string  `json:"description" gorm:"size:500;default:''"`
 	Status      int     `json:"status" gorm:"default:1"`
 	IsDeleted   bool    `json:"is_deleted" gorm:"column:is_deleted;default:0"`
-	SortOrder   int     `json:"sort_order" gorm:"default:0"`
+	SortOrder   *int    `json:"sort_order"`
 	CreatedAt   int64   `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt   int64   `json:"updated_at" gorm:"autoUpdateTime"`
 }
@@ -61,7 +61,7 @@ type SkillCategoryView struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Status      int    `json:"status"`
-	SortOrder   int    `json:"sort_order"`
+	SortOrder   *int   `json:"sort_order"`
 	SkillCount  int    `json:"skill_count"`
 	IsDefault   bool   `json:"is_default"`
 }
@@ -147,7 +147,6 @@ func migrateLegacySkillCategories() error {
 			Code:      code,
 			Name:      code,
 			Status:    1,
-			SortOrder: 0,
 			CreatedAt: now,
 			UpdatedAt: now,
 		}
@@ -447,8 +446,8 @@ func ListSkillCategoriesByType(typeCode string, includeDisabled bool) ([]SkillCa
 		query = query.Where("c.status = ? AND t.status = ?", 1, 1)
 	}
 	err := query.
-		Group("c.id, c.type_id, t.code, t.name, t.sort_order, c.code, c.name, c.description, c.status, c.sort_order").
-		Order("t.sort_order ASC, c.sort_order ASC, c.id DESC").
+		Group("c.id, c.type_id, t.code, t.name, t.sort_order, c.code, c.name, c.description, c.status, c.sort_order, c.created_at").
+		Order("t.sort_order ASC, " + CatalogOrder("c.") + ", c.id DESC").
 		Find(&categories).Error
 	for index := range categories {
 		categories[index].IsDefault = categories[index].TypeCode == SkillCategoryTypePackage && strings.TrimSpace(categories[index].Name) == DefaultSkillCategoryName
@@ -536,14 +535,13 @@ func UpdateSkillCategory(category *SkillCategory) error {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		// Category management exposes only name and description. Keep the type,
-		// stable code, status, and ordering untouched so an edit cannot rewrite a
-		// legacy unique index or accidentally move a category between types.
+		// 分类编号和类型保持不变，排序可独立编辑或清空。
 		if err := tx.Model(&SkillCategory{}).Where("id = ?", category.Id).
-			Select("name", "description").
+			Select("name", "description", "sort_order").
 			Updates(map[string]interface{}{
 				"name":        category.Name,
 				"description": category.Description,
+				"sort_order":  category.SortOrder,
 			}).Error; err != nil {
 			return err
 		}
@@ -677,12 +675,12 @@ type SkillCategorySkillView struct {
 func ListSkillsForCategory(categoryId uint64) ([]SkillCategorySkillView, error) {
 	var skills []SkillCategorySkillView
 	err := DB.Table("skills AS s").
-		Distinct("s.id, s.name, s.display_name, s.version, s.status").
+		Distinct("s.id, s.name, s.display_name, s.version, s.status, s.sort_order, s.created_at, CASE WHEN s.sort_order IS NULL THEN 1 ELSE 0 END AS catalog_empty_order").
 		Joins("JOIN skill_category_relations AS r ON r.skill_id = s.id").
 		Joins("JOIN skill_categories AS c ON c.id = r.category_id").
 		Joins("JOIN skill_category_types AS t ON t.id = c.type_id AND t.code = ?", SkillCategoryTypePackage).
 		Where("c.id = ? AND s.is_deleted = ?", categoryId, false).
-		Order("s.display_name ASC, s.id ASC").
+		Order(CatalogOrder("s.") + ", s.id DESC").
 		Find(&skills).Error
 	return skills, err
 }
@@ -780,12 +778,12 @@ func BatchListSkillCategoriesForSkills(skillIds []int) (map[int][]SkillCategoryV
 	}
 	var rows []row
 	err := DB.Table("skill_category_relations AS r").
-		Distinct("r.skill_id, c.id, c.type_id, t.code AS type_code, t.name AS type_name, t.sort_order AS type_sort_order, c.code, c.name, c.description, c.sort_order").
+		Distinct("r.skill_id, c.id, c.type_id, t.code AS type_code, t.name AS type_name, t.sort_order AS type_sort_order, c.code, c.name, c.description, c.sort_order, c.created_at, CASE WHEN c.sort_order IS NULL THEN 1 ELSE 0 END AS catalog_empty_order").
 		Joins("JOIN skill_categories AS c ON c.id = r.category_id").
 		Joins("JOIN skill_category_types AS t ON t.id = c.type_id").
 		Where("r.skill_id IN ?", skillIds).
 		Where("c.is_deleted = ? AND c.status = ? AND t.status = ?", false, 1, 1).
-		Order("t.sort_order ASC, c.sort_order ASC, c.id ASC").
+		Order("t.sort_order ASC, " + CatalogOrder("c.") + ", c.id DESC").
 		Find(&rows).Error
 	if err != nil {
 		return nil, err
@@ -895,9 +893,9 @@ func ListFunctionCategoriesForStandaloneSkills() ([]SkillPackageInfo, error) {
 		Joins("LEFT JOIN skill_category_relations AS r ON r.category_id = c.id").
 		Joins("LEFT JOIN skills AS s ON s.id = r.skill_id AND s.is_deleted = ? AND s.status = ?", false, 1).
 		Where("c.is_deleted = ? AND c.status = ? AND t.status = ?", false, 1, 1).
-		Group("c.id, c.code, c.name, c.description").
+		Group("c.id, c.code, c.name, c.description, c.sort_order, c.created_at").
 		Having("COUNT(s.id) > 0").
-		Order("c.sort_order ASC, c.id DESC").
+		Order(CatalogOrder("c.") + ", c.id DESC").
 		Find(&results).Error
 	return results, err
 }

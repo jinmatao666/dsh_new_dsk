@@ -1,5 +1,7 @@
 /** Public expert metadata returned by the Wanwei administration service. */
 export type RemoteExpert = {
+  category_order?: unknown
+  requires_internet?: unknown
   key?: unknown
   name?: unknown
   subtitle?: unknown
@@ -19,6 +21,8 @@ export type ExpertDetailSection = { title: string; subtitle: string; content: st
 
 /** Projected catalog entry from a published independent website. */
 export type PublishedExpert = ExpertTemplate & {
+  categoryOrder: number
+  requiresInternet: boolean
   scenario?: string
   materials?: string
   detailSections?: readonly ExpertDetailSection[]
@@ -82,6 +86,8 @@ export function projectPublishedExperts(
     const detailSections = parseExpertDetailSections(entry.detail_sections)
     return [{
       id: entry.key,
+      categoryOrder: typeof entry.category_order === 'number' ? entry.category_order : 0,
+      requiresInternet: entry.requires_internet !== false,
       name: entry.name,
       role: typeof entry.subtitle === 'string' ? entry.subtitle : (template?.role ?? ''),
       category: typeof entry.category === 'string' ? entry.category : (template?.category ?? '其他'),

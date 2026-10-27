@@ -1192,3 +1192,6 @@
 .dsh-skill-refresh svg { transition: transform 0.45s ease; }
 
 .dsh-skill-refresh:active svg { transform: rotate(240deg); }
+
+.dsh-skill-card[aria-disabled="true"],.dsh-skill-featured-card[aria-disabled="true"]{opacity:.45;cursor:not-allowed;filter:grayscale(.65)}
+.dsh-skill-card[aria-disabled="true"]:hover,.dsh-skill-featured-card[aria-disabled="true"]:hover{transform:none;box-shadow:none}

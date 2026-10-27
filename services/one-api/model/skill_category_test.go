@@ -42,9 +42,9 @@ func TestSkillCategoryRelations_allowMultipleTypesAndPackages(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, categories, 3)
 	assert.Equal(t, SkillCategoryTypePackage, categories[0].TypeCode)
-	assert.Equal(t, "general", categories[0].Code)
+	assert.Equal(t, "planning-analysis", categories[0].Code)
 	assert.Equal(t, SkillCategoryTypePackage, categories[1].TypeCode)
-	assert.Equal(t, "planning-analysis", categories[1].Code)
+	assert.Equal(t, "general", categories[1].Code)
 	assert.Equal(t, SkillCategoryTypeFunction, categories[2].TypeCode)
 	assert.Equal(t, "office-study", categories[2].Code)
 }

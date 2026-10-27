@@ -7,6 +7,7 @@ it.each(['internet', 'intranet'])('reads %s mode and the public maintenance cont
   const fetcher = vi.fn(async () => new Response(JSON.stringify({ success: true, data })))
   vi.stubGlobal('fetch', fetcher)
   expect(await fetchDeploymentSettings('https://oneapi.example.test')).toEqual({ ...data,
+    internetCatalogPolicy: 'disable',
     features: resolveDeploymentFeatures(undefined), plugins: { browserAssistant: true } })
   expect(fetcher.mock.calls[0]).toEqual(['https://oneapi.example.test/api/desktop-config', { signal: null, cache: 'no-store', redirect: 'error' }])
 })

@@ -9,6 +9,8 @@ English | [中文](README.zh.md)
 
 ## Summary
 
+Card order follows the backend catalog; category navigation independently follows administrator-defined category positions. Published metadata retains each expert’s internet requirement flag. In intranet mode without confirmed connectivity, marked cards follow the administrator’s hide/disable choice; disabled cards show the network-unreachable tooltip and cannot open details or start a new workbench. Connectivity refresh restores them. Already running workbenches remain open.
+
 Users can inspect administrator-authored expert descriptions and open several workbenches in one tab row. Reopening an expert focuses its existing tab without obtaining another ticket. This page requires OneAPI and the desktop native bridge. Both deployment modes attempt the configured service; a failed catalog request shows an expert-card placeholder instead of disabled navigation or an empty catalog. Reopening the page loads the catalog again.
 
 ## Table of Contents

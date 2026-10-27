@@ -47,6 +47,8 @@ func ensureMarketplaceManifestID(assets, fallbackID string) (string, error) {
 }
 
 type skillResponse struct {
+	SortOrder               *int                      `json:"sort_order"`
+	RequiresInternet        *bool                     `json:"requires_internet"`
 	Id                      int                       `json:"id"`
 	Name                    string                    `json:"name"`
 	DisplayName             string                    `json:"display_name"`
@@ -77,26 +79,28 @@ func skillToResponse(s model.Skill, categories ...[]model.SkillCategoryView) ski
 		cats = categories[0]
 	}
 	return skillResponse{
-		Id:              s.Id,
-		Name:            s.Name,
-		DisplayName:     s.DisplayName,
-		Icon:            s.Icon,
-		Category:        s.Category,
-		Description:     s.Description,
-		Scenario:        s.Scenario,
-		UsageExample:    s.UsageExample,
-		Submitter:       s.Submitter,
-		Source:          s.Source,
-		Tags:            s.Tags,
-		Downloads:       s.Downloads,
-		Version:         s.Version,
-		Status:          s.Status,
-		IsDeleted:       s.IsDeleted,
-		CreatedAt:       s.CreatedAt,
-		UpdatedAt:       s.UpdatedAt,
-		BodyUpdatedAt:   s.BodyUpdatedAt,
-		AssetsUpdatedAt: s.AssetsUpdatedAt,
-		Categories:      cats,
+		SortOrder:        s.SortOrder,
+		RequiresInternet: s.RequiresInternet,
+		Id:               s.Id,
+		Name:             s.Name,
+		DisplayName:      s.DisplayName,
+		Icon:             s.Icon,
+		Category:         s.Category,
+		Description:      s.Description,
+		Scenario:         s.Scenario,
+		UsageExample:     s.UsageExample,
+		Submitter:        s.Submitter,
+		Source:           s.Source,
+		Tags:             s.Tags,
+		Downloads:        s.Downloads,
+		Version:          s.Version,
+		Status:           s.Status,
+		IsDeleted:        s.IsDeleted,
+		CreatedAt:        s.CreatedAt,
+		UpdatedAt:        s.UpdatedAt,
+		BodyUpdatedAt:    s.BodyUpdatedAt,
+		AssetsUpdatedAt:  s.AssetsUpdatedAt,
+		Categories:       cats,
 	}
 }
 
@@ -359,6 +363,18 @@ func CreateSkill(c *gin.Context) {
 	if v, ok := payload["name"]; ok {
 		_ = json.Unmarshal(v, &skill.Name)
 	}
+	if v, ok := payload["sort_order"]; ok {
+		if err := json.Unmarshal(v, &skill.SortOrder); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "排序必须是整数或空值"})
+			return
+		}
+	}
+	if v, ok := payload["requires_internet"]; ok {
+		if err := json.Unmarshal(v, &skill.RequiresInternet); err != nil || skill.RequiresInternet == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "联网标记必须是布尔值"})
+			return
+		}
+	}
 	if v, ok := payload["display_name"]; ok {
 		_ = json.Unmarshal(v, &skill.DisplayName)
 	}
@@ -518,6 +534,18 @@ func UpdateSkill(c *gin.Context) {
 
 	if v, ok := payload["name"]; ok {
 		_ = json.Unmarshal(v, &existing.Name)
+	}
+	if v, ok := payload["sort_order"]; ok {
+		if err := json.Unmarshal(v, &existing.SortOrder); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "排序必须是整数或空值"})
+			return
+		}
+	}
+	if v, ok := payload["requires_internet"]; ok {
+		if err := json.Unmarshal(v, &existing.RequiresInternet); err != nil || existing.RequiresInternet == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "联网标记必须是布尔值"})
+			return
+		}
 	}
 	if v, ok := payload["display_name"]; ok {
 		_ = json.Unmarshal(v, &existing.DisplayName)

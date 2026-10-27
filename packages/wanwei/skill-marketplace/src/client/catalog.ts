@@ -22,7 +22,7 @@ export function browseMarketplaceCatalog<T extends { marketplacePublished?: bool
 /** Sort a filtered platform catalog using server facts and return one twelve-card page.
  * Missing timestamps sort after dated entries; ties preserve the server's order.
  * @param skills - Filtered platform skill entries.
- * @param sort - Downloads ordering, or updated-time ordering otherwise.
+ * @param sort - Administrator order by default, or explicit downloads/updated-time order.
  * @param requestedPage - One-based page clamped to the available range.
  * @returns Current page entries, page number and total page count.
  */
@@ -34,7 +34,7 @@ export function pagePlatformCatalog<T extends { installs: string; updatedAt?: st
     const parsed = typeof value === 'string' ? Date.parse(value) : 0
     return Number.isFinite(parsed) ? parsed : 0
   }
-  const sorted = [...skills].sort((a, b) => sort === 'downloads'
+  const sorted = sort === 'recommended' ? [...skills] : [...skills].sort((a, b) => sort === 'downloads'
     ? (Number(b.installs) || 0) - (Number(a.installs) || 0)
     : time(b.updatedAt) - time(a.updatedAt))
   const pages = Math.max(1, Math.ceil(sorted.length / 12))

@@ -1,3 +1,4 @@
+import CatalogOrderActions, { catalogDragProps } from './CatalogOrderActions';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Modal, Table, Tag, Tooltip } from '@douyinfe/semi-ui';
 import { Bot, ChartColumn, Compass, FileText, Map, Zap } from 'lucide-react';
@@ -87,6 +88,8 @@ const filesFromDirectoryHandle = async (directory, root = directory.name, prefix
 };
 
 const EMPTY_FORM = {
+  sort_order: null,
+  requires_internet: true,
   name: '',
   display_name: '',
   category: '',
@@ -176,6 +179,8 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   const openEditor = (skill) => {
     setImported(null);
     setForm(skill ? {
+      sort_order: skill.sort_order ?? null,
+      requires_internet: skill.requires_internet !== false,
       name: skill.name || '',
       display_name: skill.display_name || '',
       icon: skill.icon || 'preset:assistant',
@@ -417,8 +422,9 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       ? <div className='skill-status-stack'><Tag color='orange' size='small'>{record.status === 1 ? '待更新' : '未上架'}</Tag>{record.status === 1 && <small>旧版本仍已上架</small>}</div>
       : <Tag color={STATUS_COLORS[record.status] || 'grey'} size='small'>{record.status === 1 ? STATUS_LABELS[record.status] : '未发布'}</Tag> },
     {
-      title: '操作', width: 160, render: (_, record) => (
+      title: '操作', width: 210, render: (_, record) => (
         <div className='skill-row-actions'>
+          {!isPrivateSkill(record) && <CatalogOrderActions kind='skills' item={record} items={items.filter(item => !isPrivateSkill(item))} reload={loadSkills} />}
           {!isPrivateSkill(record) && <button type='button' className='skill-text-action' disabled={batchBusy} onClick={() => openEditor(record)}>编辑</button>}
           {!isPrivateSkill(record) && <button type='button' className='skill-text-action' disabled={batchBusy} onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '上架'}</button>}
           <button type='button' className='skill-text-action' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</button>
@@ -444,6 +450,8 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       usage_example: form.usage_example,
       tags: splitLines(form.capabilities).length ? splitLines(form.capabilities) : ['通用能力'],
       icon: form.icon,
+      sort_order: form.sort_order,
+      requires_internet: form.requires_internet,
     };
     if (!editor.base) { showError('请先通过“导入技能”创建技能'); return; }
     try {
@@ -504,7 +512,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
         <summary>批量{SKILL_BATCH_LABELS[batchResult.action]}结果：成功 {batchResult.results.filter(result => result.state === 'success').length} 个，失败 {batchResult.results.filter(result => result.state === 'failed').length} 个，跳过 {batchResult.results.filter(result => result.state === 'skipped').length} 个</summary>
         <ul>{batchResult.results.map(result => <li key={result.key} className={result.state}><strong>{result.name}</strong>：{result.state === 'success' ? '成功' : result.state === 'failed' ? '失败' : '跳过'}{result.message ? `，${result.message}` : ''}</li>)}</ul>
       </details>}
-      <Table columns={columns} dataSource={filteredItems} rowKey='_rowKey' tableLayout='fixed'
+      <Table columns={columns} dataSource={filteredItems} onRow={row => isPrivateSkill(row) ? {} : catalogDragProps('skills', row, loadSkills)} rowKey='_rowKey' tableLayout='fixed'
         rowSelection={batchMode ? { selectedRowKeys: selectedKeys, onChange: keys => { if (!batchBusyRef.current) setSelectedKeys(keys); }, getCheckboxProps: () => ({ disabled: batchBusy }) } : undefined}
         pagination={{ pageSize: 20, currentPage, onPageChange: setCurrentPage }} empty='暂无技能' />
     </section>
@@ -649,6 +657,8 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
               </div>
               <input ref={iconInputRef} hidden type='file' accept='image/png,image/jpeg,image/webp,image/gif' onChange={chooseIconFile} />
             </label>
+            <label className='zjugis-field'><span>顺序（数字越大越靠前）</span><input type='number' step='1' value={form.sort_order ?? ''} placeholder='留空按创建时间倒序' onChange={event => setForm(previous => ({ ...previous, sort_order: event.target.value === '' ? null : Number(event.target.value) }))} /></label>
+            <label className='zjugis-field'><span>需要访问互联网</span><input type='checkbox' checked={form.requires_internet} onChange={event => setForm(previous => ({ ...previous, requires_internet: event.target.checked }))} /></label>
             {!editor.base && (
               <label className='zjugis-field full'>
                 <span>从文件夹导入技能（可选）</span>

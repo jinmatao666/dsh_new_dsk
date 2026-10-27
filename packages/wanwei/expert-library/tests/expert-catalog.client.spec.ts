@@ -7,6 +7,16 @@ const templates = [{
 }]
 
 describe('Wanwei published expert projection', () => {
+  it('retains server ordering and the category position and internet flag', () => {
+    const entries = [
+      { key: 'second-expert', name: 'Second', category_order: 2, requires_internet: false, workbench_url: 'https://example.com' },
+      { key: 'first-expert', name: 'First', category_order: 0, requires_internet: true, workbench_url: 'https://example.com' },
+    ]
+    const catalog = projectPublishedExperts(entries, [])
+    expect(catalog.map(item => item.id)).toEqual(['second-expert', 'first-expert'])
+    expect(catalog[0]).toMatchObject({ categoryOrder: 2, requiresInternet: false })
+    expect(catalog[1]).toMatchObject({ categoryOrder: 0, requiresInternet: true })
+  })
   it('uses the live published roster and administrator-configured detail panels', () => {
     const entries = [{
       key: 'geology-analysis', name: '地质条件研判', subtitle: '专业分析', category: '自然资源',

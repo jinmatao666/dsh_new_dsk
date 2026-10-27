@@ -3,6 +3,7 @@ package model
 // ExpertWebProfile is a published, independently deployed expert website.
 // It does not affect the legacy shipped-workbench roster.
 type ExpertWebProfile struct {
+	CategoryOrder      int    `json:"category_order" gorm:"-"`
 	Key                string `json:"key" gorm:"primaryKey;size:80"`
 	Name               string `json:"name" gorm:"size:100;not null"`
 	Subtitle           string `json:"subtitle" gorm:"size:160"`
@@ -17,7 +18,9 @@ type ExpertWebProfile struct {
 	Provider           string `json:"provider" gorm:"size:100;not null"`
 	WorkbenchURL       string `json:"workbench_url" gorm:"size:2048;not null"`
 	ProviderSecretHash string `json:"-" gorm:"size:64;not null"`
-	SortOrder          int    `json:"sort_order" gorm:"default:0"`
+	SortOrder          *int   `json:"sort_order"`
+	RequiresInternet   *bool  `json:"requires_internet" gorm:"not null;default:true"`
+	CreatedAt          int64  `json:"created_at" gorm:"autoCreateTime"`
 	Published          bool   `json:"published" gorm:"default:false"`
 	UpdatedAt          int64  `json:"updated_at" gorm:"autoUpdateTime"`
 }

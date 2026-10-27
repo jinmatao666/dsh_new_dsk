@@ -1,7 +1,7 @@
 import { productText } from './locales/product.ts'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
-import type { NetworkState } from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
+import { internetCatalogAccess, type NetworkState } from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connection/client'
@@ -33,6 +33,7 @@ import { CatalogToolbar, CatalogDownloadIcon, CatalogBackIcon as ArrowLeftIcon }
 
 type SkillParam = { name: string; type: string; required: boolean; description: string; defaultValue?: string }
 type Skill = {
+  requiresInternet?: boolean
   id: string
   name: string
   category: string
@@ -72,6 +73,7 @@ type MarketplaceSkillState = {
 }
 
 type RemoteSkill = {
+  requires_internet?: unknown
   id?: unknown
   name?: unknown
   display_name?: unknown
@@ -450,7 +452,8 @@ function SkillCategorySelect({
     onChange={onChange} className="dsh-skill-add-select-trigger" />
 }
 
-function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProps) {
+function SkillMarketplace({ controller, services, chooseDirectory, useNetwork }: OverlayProps) {
+  const network = useNetwork(value => value)
   const { skillhubRequest, loadRemoteSkills, startSkillConversation, loadRemoteCategories,
     loadRemoteSkillBundle, recordRemoteSkillInstall, submitPersonalSkill, loadPersonalSkills } = services
   const [open, setOpen] = useState(false)
@@ -458,7 +461,7 @@ function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProp
   const [category, setCategory] = useState(L.all)
   const [platformKeyword, setPlatformKeyword] = useState('')
   const [platformQuery, setPlatformQuery] = useState('')
-  const [platformSort, setPlatformSort] = useState('downloads')
+  const [platformSort, setPlatformSort] = useState('recommended')
   const [platformPage, setPlatformPage] = useState(1)
   const [view, setView] = useState<'list' | 'detail'>('list')
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
@@ -585,7 +588,7 @@ function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProp
 
   usePanelNavigation(controller, open)
 
-  const allSkills = useMemo<Skill[]>(() => {
+  const unfilteredSkills = useMemo<Skill[]>(() => {
     const published = remoteSkills?.flatMap((remote): Skill[] => {
       const slug = typeof remote.name === 'string' ? remote.name : ''
       if (slug === '') return []
@@ -598,6 +601,7 @@ function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProp
       const updatedAt = parseReviewTime(remote.updated_at)
       return [{
         id: `remote-${remoteId}`,
+        requiresInternet: remote.requires_internet !== false,
         ...(typeof remote.id === 'number' ? { remoteId: remote.id } : {}),
         slug,
         name: typeof remote.display_name === 'string' && remote.display_name !== '' ? remote.display_name : slug,
@@ -618,6 +622,23 @@ function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProp
     }) ?? null
     return buildMarketplaceCatalog(discoveredCustomSkills, published)
   }, [discoveredCustomSkills, remoteSkills])
+  const skillAccess = (skill: Skill) => internetCatalogAccess(network, skill.requiresInternet
+    ?? unfilteredSkills.find(item => item.marketplacePublished && skillSlug(item) === skillSlug(skill))?.requiresInternet ?? false)
+  const allSkills = useMemo(() => unfilteredSkills.filter(skill => internetCatalogAccess(network, skill.requiresInternet
+    ?? unfilteredSkills.find(item => item.marketplacePublished && skillSlug(item) === skillSlug(skill))?.requiresInternet ?? false) !== 'hide'),
+  [unfilteredSkills, network])
+  const skillAccessProps = (skill: Skill) => ({
+    role: 'button', tabIndex: skillAccess(skill) === 'available' ? 0 : -1,
+    'aria-disabled': skillAccess(skill) !== 'available',
+    title: skillAccess(skill) !== 'available' ? productText('当前网络环境不可达，请检查您的网络') : undefined,
+  })
+  useEffect(() => {
+    if (selectedSkill !== null && internetCatalogAccess(network, selectedSkill.requiresInternet
+      ?? unfilteredSkills.find(item => item.marketplacePublished && skillSlug(item) === skillSlug(selectedSkill))?.requiresInternet ?? false) !== 'available') {
+      setSelectedSkill(null)
+      setView('list')
+    }
+  }, [network, selectedSkill, unfilteredSkills])
   const uploadedSkills = useMemo<Skill[]>(() => personalSkills.flatMap((remote): Skill[] => {
     const slug = typeof remote.name === 'string' ? remote.name : ''
     const visibility = remote.visibility === 'public' ? 'public' : remote.visibility === 'private' ? 'private' : undefined
@@ -760,6 +781,7 @@ function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProp
   const closeMarket = () => { setOpen(false); controller.close() }
 
   const toggleInstall = async (skill: Skill) => {
+    if (skillAccess(skill) !== 'available') return
     if (installing !== null) return
     if (skill.installable !== true) {
       setInstallMessage({ kind: 'error', text: productText('该技能暂未提供可安装的技能包。') })
@@ -914,6 +936,7 @@ function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProp
   }
 
   const openDetail = (skill: Skill) => {
+    if (skillAccess(skill) !== 'available') return
     setSelectedSkill(skill)
     setView('detail')
   }
@@ -964,6 +987,7 @@ function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProp
               setInstallMessage({ kind: 'error', text: error instanceof Error ? error.message : String(error) })
             }) }}
             onUse={() => {
+              if (skillAccess(selectedSkill) !== 'available') return
               if (startSkillConversation === undefined) {
                 setInstallMessage({ kind: 'error', text: productText('对话服务尚未准备好，请稍后重试。') })
                 return
@@ -1047,7 +1071,7 @@ function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProp
                     {featuredSkills.map(skill => (
                       <article
                         key={skill.id}
-                        className="dsh-skill-featured-card"
+                        className="dsh-skill-featured-card" {...skillAccessProps(skill)}
                         onClick={() => { openDetail(skill) }}
                       >
                         <div className="dsh-skill-card-visual">
@@ -1137,7 +1161,7 @@ function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProp
                   {displayedSkills.map(skill => (
                     <article
                       key={skill.id}
-                      className="dsh-skill-card"
+                      className="dsh-skill-card" {...skillAccessProps(skill)}
                       onClick={() => { openDetail(skill) }}
                     >
                       <div className="dsh-skill-card-visual">
@@ -1201,7 +1225,7 @@ function SkillMarketplace({ controller, services, chooseDirectory }: OverlayProp
                 {...(libraryView === 'installed' ? { installedPlatforms: visible.map(skill => ({
                   id: skill.id, slug: skillSlug(skill), name: skill.name, summary: skill.summary,
                   searchText: `${skill.name} ${skill.summary} ${skill.category}`,
-                  card: <article key={`platform:${skill.id}`} className="dsh-skill-card" role="button" tabIndex={0}
+                  card: <article key={`platform:${skill.id}`} className="dsh-skill-card" {...skillAccessProps(skill)}
                     onClick={() => { openDetail(skill) }}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {

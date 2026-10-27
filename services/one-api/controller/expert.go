@@ -254,7 +254,7 @@ func ListExpertCategories(c *gin.Context) {
 		query = query.Where("status = ?", 1)
 	}
 	var categories []model.ExpertCategory
-	if err := query.Order("sort_order ASC, id ASC").Find(&categories).Error; err != nil {
+	if err := query.Order(model.CatalogOrder("") + ", id DESC").Find(&categories).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
 		return
 	}

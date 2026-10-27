@@ -53,6 +53,8 @@ Version settings shows a check result only after a manual check in that mounted 
 
 Forgot password reads the backend's maintenance contact into a separate dialog. SMS and QR login display an unavailable notice without replacing account login. The login card keeps its existing sizing; no registration or simulated authentication controls are provided.
 
+The network snapshot includes the administrator’s `internetCatalogPolicy` (`hide` or `disable`, default `disable`) for internet-dependent skill and expert catalogs. Their presentation uses the existing terminal connectivity decision and does not change automation, connector or native network policy.
+
 The network snapshot includes `directInternet` after deployment confirmation. Intranet confirmation reuses the resource route's cached direct probe without starting a tunnel. Disabled detection, offline resources or a failed probe report false; Internet mode reports true. The Client validates and publishes that result for automation and connector entry availability, without changing administrator visibility or native network mode.
 
 Private-network resource settings select either the backend wheel bundle or a forward proxy, without cross-source fallback. Offline mode configures pip with `PIP_NO_INDEX` and the backend wheel links; proxy mode configures proxy-aware child clients. Automatic detection requires every configured HTTPS endpoint to return 204, concurrently within 2.5 seconds, and caches the result for 60 seconds. Shell execution refreshes deployment settings at most once per minute and refuses new commands if refresh fails. Running children keep their environment. See [resource setup and acceptance](../../../products/wanwei-desktop/resource-relay/README.md).

@@ -185,3 +185,18 @@ test('bounds transient retries and cancels pending retries on unmount', async ()
   await act(async () => jest.advanceTimersByTime(2000));
   expect(API.get).toHaveBeenCalledTimes(4);
 });
+
+test('intranet catalog policy offers exclusive hide or disable choices and persists with deployment settings', async () => {
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[2].click());
+  expect(container.querySelector('[name="internet-catalog-policy"]')).toBeNull();
+  act(() => container.querySelector('[name="network"][value="intranet"]').click());
+  const choices = [...container.querySelectorAll('[name="internet-catalog-policy"]')];
+  expect(choices).toHaveLength(2);
+  expect(choices[1].checked).toBe(true);
+  act(() => choices[0].click());
+  expect(choices[0].checked).toBe(true);
+  expect(choices[1].checked).toBe(false);
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(JSON.parse(API.put.mock.calls[0][1].value).internetCatalogPolicy).toBe('hide');
+});

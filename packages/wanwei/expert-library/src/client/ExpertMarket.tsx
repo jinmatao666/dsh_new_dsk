@@ -1,5 +1,7 @@
 import { productText } from './locales/product.ts'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { internetCatalogAccess, type NetworkState } from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
+import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import { projectPublishedExperts } from './expert-catalog.ts'
 import type { ExpertDetailSection, RemoteExpert } from './expert-catalog.ts'
 import { ExpertWebview, type ExpertLaunch } from './expert-webview.tsx'
@@ -7,7 +9,10 @@ import { ExpertDetailDialog } from './ExpertDetailDialog.tsx'
 import { traceExpertAction } from './expert-diagnostics.ts'
 import { ServiceUnavailable } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 /* oxlint-disable @stylistic/max-len */
+const defaultNetwork: NetworkState = { mode: 'internet', internalOrigins: [] }
 type Expert = {
+  requiresInternet?: boolean
+  categoryOrder?: number
   id: string
   name: string
   role: string
@@ -77,11 +82,14 @@ type ExpertMarketDetail = { id: string; name: string; role: string; summary: str
  * @param props - Directory, launch and presentation operations supplied by the expert plugin.
  * @returns Catalog and mounted expert workbenches.
  */
-export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace }: {
+export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace, network }: {
+  network?: HostObservable<NetworkState>
   loadExperts?: () => Promise<readonly RemoteExpert[]>
   launchExpert?: (key: string) => Promise<{ url: string; ticket: string }>
   prepareExpertWorkspace?: () => Promise<void>
 } = {}) {
+  const networkState = useSyncExternalStore(listener => network ? network.subscribe(listener) : () => {},
+    () => network ? network.getSnapshot() : defaultNetwork)
   const [category, setCategory] = useState('全部')
   const [selected, setSelected] = useState<ExpertMarketDetail | null>(null)
   const [publishedExperts, setPublishedExperts] = useState<readonly Expert[]>([])
@@ -154,11 +162,20 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
       clearTimeout(timer)
     }
   }, [loadExperts])
-  const categories = ['全部', ...new Set(publishedExperts.map(expert => expert.category))]
-  const visibleExperts = category === '全部' ? publishedExperts : publishedExperts.filter(expert => expert.category === category)
+  const accessibleExperts = publishedExperts.filter(expert => internetCatalogAccess(networkState, expert.requiresInternet !== false) !== 'hide')
+  const categories = ['全部', ...new Set([...accessibleExperts]
+    .sort((left, right) => (left.categoryOrder ?? 0) - (right.categoryOrder ?? 0))
+    .map(expert => expert.category))]
+  const visibleExperts = category === '全部' ? accessibleExperts : accessibleExperts.filter(expert => expert.category === category)
+  useEffect(() => {
+    if (category !== '全部' && !publishedExperts.some(expert => expert.category === category
+      && internetCatalogAccess(networkState, expert.requiresInternet !== false) !== 'hide')) setCategory('全部')
+  }, [category, publishedExperts, networkState])
   const openExpert = (expert: Expert) =>{  setSelected({ id: expert.id, name: expert.name, role: expert.role, summary: expert.summary, icon: expert.icon, tags: expert.tags, examples: expert.examples, accent: expert.accent, ...(expert.scenario === undefined ? {} : { scenario: expert.scenario }), ...(expert.materials === undefined ? {} : { materials: expert.materials }), ...(expert.detailSections === undefined ? {} : { detailSections: expert.detailSections }), ...(expert.footerNote === undefined ? {} : { footerNote: expert.footerNote }) }) }
   const startExpert = async () => {
     traceExpertAction('start-enter')
+    const target = publishedExperts.find(expert => expert.id === selected?.id)
+    if (target && internetCatalogAccess(networkState, target.requiresInternet !== false) !== 'available') return
     if (selected === null || launchExpert === undefined || launchPending.current) {
       traceExpertAction('start-ignored')
       return
@@ -199,11 +216,20 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
       }
     }
   }
+  useEffect(() => {
+    const target = publishedExperts.find(expert => expert.id === selected?.id)
+    if (target && internetCatalogAccess(networkState, target.requiresInternet !== false) !== 'available') {
+      launchRevision.current++
+      launchPending.current = false
+      setLaunching(false)
+      setSelected(null)
+    }
+  }, [networkState, publishedExperts, selected])
   const catalog = <section className="dsh-expert-market">
     {catalogLoading ? <p role="status">{productText('正在连接服务…')}</p> : loadError !== null
       ? <ServiceUnavailable variant="experts" title={productText('暂时无法连接专家库')}
         description={productText('当前网络无法连接专家服务，请检查网络连接或联系管理员。')} /> :
-      <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() =>{  setCategory(item) }}>{item}</button>)}</div>{visibleExperts.length === 0 && <p>{productText('当前暂无已上架的专家。')}</p>}<div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} onClick={() =>{  openExpert(expert) }}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>
+      <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() =>{  setCategory(item) }}>{item}</button>)}</div>{visibleExperts.length === 0 && <p>{productText('当前暂无已上架的专家。')}</p>}<div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} disabled={internetCatalogAccess(networkState, expert.requiresInternet !== false) !== 'available'} title={internetCatalogAccess(networkState, expert.requiresInternet !== false) !== 'available' ? productText('当前网络环境不可达，请检查您的网络') : undefined} onClick={() =>{  openExpert(expert) }}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>
     }
     {selected !== null && <ExpertDetailDialog expert={selected} launching={launching} launchError={launchError} onClose={() => { setSelected(null) }} onStart={() => { void startExpert() }} />}
   </section>

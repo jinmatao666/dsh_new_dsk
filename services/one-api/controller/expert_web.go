@@ -28,20 +28,21 @@ var expertCredentialPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 var expertIconNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
 
 type expertWebInput struct {
-	Key            string `json:"key"`
-	Name           string `json:"name"`
-	Subtitle       string `json:"subtitle"`
-	Category       string `json:"category"`
-	Summary        string `json:"summary"`
-	Icon           string `json:"icon"`
-	Tags           string `json:"tags"`
-	Scenario       string `json:"scenario"`
-	Materials      string `json:"materials"`
-	DetailSections string `json:"detail_sections"`
-	FooterNote     string `json:"footer_note"`
-	Provider       string `json:"provider"`
-	WorkbenchURL   string `json:"workbench_url"`
-	SortOrder      int    `json:"sort_order"`
+	Key              string `json:"key"`
+	Name             string `json:"name"`
+	Subtitle         string `json:"subtitle"`
+	Category         string `json:"category"`
+	Summary          string `json:"summary"`
+	Icon             string `json:"icon"`
+	Tags             string `json:"tags"`
+	Scenario         string `json:"scenario"`
+	Materials        string `json:"materials"`
+	DetailSections   string `json:"detail_sections"`
+	FooterNote       string `json:"footer_note"`
+	Provider         string `json:"provider"`
+	WorkbenchURL     string `json:"workbench_url"`
+	SortOrder        *int   `json:"sort_order"`
+	RequiresInternet *bool  `json:"requires_internet"`
 }
 
 func expertWebDigest(value string) string {
@@ -97,9 +98,11 @@ func validateExpertWebInput(input expertWebInput) error {
 }
 
 func expertWebFromInput(input expertWebInput) model.ExpertWebProfile {
-	return model.ExpertWebProfile{
+	profile := model.ExpertWebProfile{
 		Key: input.Key, Name: strings.TrimSpace(input.Name), Subtitle: strings.TrimSpace(input.Subtitle), Category: strings.TrimSpace(input.Category), Summary: strings.TrimSpace(input.Summary), Icon: input.Icon, Tags: input.Tags, Scenario: input.Scenario, Materials: input.Materials, DetailSections: input.DetailSections, FooterNote: strings.TrimSpace(input.FooterNote), Provider: strings.TrimSpace(input.Provider), WorkbenchURL: input.WorkbenchURL, SortOrder: input.SortOrder,
 	}
+	profile.RequiresInternet = input.RequiresInternet
+	return profile
 }
 
 // ListExpertWebCatalog returns published websites without exposing provider secrets.
@@ -108,6 +111,22 @@ func ListExpertWebCatalog(c *gin.Context) {
 	if err := expertWebCatalogQuery(model.DB).Where("published = ?", true).Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取专家目录失败"})
 		return
+	}
+	var categories []model.ExpertCategory
+	if err := model.DB.Order(model.CatalogOrder("") + ", id DESC").Find(&categories).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取专家分类失败"})
+		return
+	}
+	positions := make(map[string]int, len(categories))
+	for index, category := range categories {
+		positions[category.Name] = index
+	}
+	for index := range items {
+		position, exists := positions[items[index].Category]
+		if !exists {
+			position = len(categories)
+		}
+		items[index].CategoryOrder = position
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
 }
@@ -169,7 +188,10 @@ func AdminUpdateExpertWebsite(c *gin.Context) {
 		return
 	}
 	updated := expertWebFromInput(input)
-	if err := model.DB.Model(&profile).Updates(map[string]interface{}{"name": updated.Name, "subtitle": updated.Subtitle, "category": updated.Category, "summary": updated.Summary, "icon": updated.Icon, "tags": updated.Tags, "scenario": updated.Scenario, "materials": updated.Materials, "detail_sections": updated.DetailSections, "footer_note": updated.FooterNote, "provider": updated.Provider, "workbench_url": updated.WorkbenchURL, "sort_order": updated.SortOrder}).Error; err != nil {
+	if input.RequiresInternet == nil {
+		updated.RequiresInternet = profile.RequiresInternet
+	}
+	if err := model.DB.Model(&profile).Updates(map[string]interface{}{"name": updated.Name, "subtitle": updated.Subtitle, "category": updated.Category, "summary": updated.Summary, "icon": updated.Icon, "tags": updated.Tags, "scenario": updated.Scenario, "materials": updated.Materials, "detail_sections": updated.DetailSections, "footer_note": updated.FooterNote, "provider": updated.Provider, "workbench_url": updated.WorkbenchURL, "sort_order": updated.SortOrder, "requires_internet": updated.RequiresInternet}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存专家失败"})
 		return
 	}
@@ -287,6 +309,6 @@ func RedeemExpertWebTicket(c *gin.Context) {
 
 // expertWebCatalogQuery quotes the reserved key column for every supported SQL dialect.
 func expertWebCatalogQuery(db *gorm.DB) *gorm.DB {
-	return db.Order(clause.OrderByColumn{Column: clause.Column{Name: "sort_order"}}).
-		Order(clause.OrderByColumn{Column: clause.Column{Name: "key"}})
+	return db.Order(model.CatalogOrder("")).
+		Order(clause.OrderByColumn{Column: clause.Column{Name: "key"}, Desc: true})
 }

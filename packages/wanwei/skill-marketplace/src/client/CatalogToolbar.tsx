@@ -58,7 +58,7 @@ export function CatalogToolbar({
       options={[{ value: '', label: categoryLabel }, ...categories.map(item => ({ value: item.key, label: item.name }))]}
       onChange={(value) => { preservePosition(() => { onCategory(value) }) }} />
     {onSort && <Select label={`${searchLabel} / ${productText('热门下载')}`} value={sort ?? 'downloads'}
-      options={[{ value: 'downloads', label: productText('热门下载') }, { value: 'updated_at', label: productText('最近更新') }]}
+      options={[{ value: 'recommended', label: productText('默认顺序') }, { value: 'downloads', label: productText('热门下载') }, { value: 'updated_at', label: productText('最近更新') }]}
       onChange={(value) => { preservePosition(() => { onSort(value) }) }} />}
     <div className="dsh-skill-catalog-pagination">
       <button type="button" disabled={loading || page <= 1} onClick={() => { preservePosition(() => { onPage(page - 1) }) }}>{productText('上一页')}</button>

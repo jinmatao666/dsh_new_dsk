@@ -10,19 +10,20 @@ import (
 )
 
 type desktopFeatureFlags struct {
-	Automations   bool `json:"automations"`
-	Connectors    bool `json:"connectors"`
+	Automations    bool `json:"automations"`
+	Connectors     bool `json:"connectors"`
 	KnowledgeBases bool `json:"knowledgeBases"`
 }
 
 type desktopDeploymentSettings struct {
-	Edition   string                         `json:"edition"`
-	Network   string                         `json:"network"`
-	Operator  string                         `json:"operator"`
-	Phone     string                         `json:"phone"`
-	Features  map[string]desktopFeatureFlags `json:"features"`
-	Plugins   desktopPluginSettings          `json:"plugins"`
-	Resources *desktopResourceSettings       `json:"resources,omitempty"`
+	InternetCatalogPolicy string                         `json:"internetCatalogPolicy"`
+	Edition               string                         `json:"edition"`
+	Network               string                         `json:"network"`
+	Operator              string                         `json:"operator"`
+	Phone                 string                         `json:"phone"`
+	Features              map[string]desktopFeatureFlags `json:"features"`
+	Plugins               desktopPluginSettings          `json:"plugins"`
+	Resources             *desktopResourceSettings       `json:"resources,omitempty"`
 }
 
 type desktopPluginSettings struct {
@@ -31,7 +32,7 @@ type desktopPluginSettings struct {
 
 // Existing deployment records without feature settings retain their current behavior.
 func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, error) {
-	settings := desktopDeploymentSettings{Network: "internet", Edition: "operations", Plugins: desktopPluginSettings{BrowserAssistant: true}, Features: map[string]desktopFeatureFlags{
+	settings := desktopDeploymentSettings{InternetCatalogPolicy: "disable", Network: "internet", Edition: "operations", Plugins: desktopPluginSettings{BrowserAssistant: true}, Features: map[string]desktopFeatureFlags{
 		"internet": {Automations: true, Connectors: true, KnowledgeBases: true},
 		"intranet": {Automations: true, Connectors: false, KnowledgeBases: true},
 	}}
@@ -41,6 +42,12 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
 		return settings, err
+	}
+	if field, present := fields["internetCatalogPolicy"]; present {
+		var policy interface{}
+		if err := json.Unmarshal(field, &policy); err != nil || (policy != "hide" && policy != "disable") {
+			return settings, fmt.Errorf("invalid internetCatalogPolicy")
+		}
 	}
 	var mode interface{}
 	if err := json.Unmarshal(fields["network"], &mode); err != nil {
@@ -98,6 +105,9 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 	}
 	if err := json.Unmarshal([]byte(raw), &settings); err != nil {
 		return settings, err
+	}
+	if settings.InternetCatalogPolicy != "hide" && settings.InternetCatalogPolicy != "disable" {
+		return settings, fmt.Errorf("invalid internetCatalogPolicy")
 	}
 	// 旧记录只补新增字段，不覆盖已有的功能开关。
 	for mode := range legacyKnowledge {

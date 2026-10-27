@@ -54,9 +54,11 @@ func SkillPackageSHA256(assets string) (string, error) {
 }
 
 type Skill struct {
-	Id          int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	Name        string `json:"name" gorm:"uniqueIndex;size:100;not null"`
-	DisplayName string `json:"display_name" gorm:"size:100;default:''"`
+	SortOrder        *int   `json:"sort_order"`
+	RequiresInternet *bool  `json:"requires_internet" gorm:"not null;default:true"`
+	Id               int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	Name             string `json:"name" gorm:"uniqueIndex;size:100;not null"`
+	DisplayName      string `json:"display_name" gorm:"size:100;default:''"`
 	// Icon is either a built-in glyph key (glyph:*) or a small raster data URL
 	// selected by the administrator. It is returned with marketplace metadata.
 	Icon                  string          `json:"icon" gorm:"type:text"`
@@ -317,11 +319,12 @@ func skillListOrder(sortField, sortOrder string) string {
 		"name":         "skills.name",
 		"display_name": "skills.display_name",
 		"downloads":    "skills.downloads",
+		"sort_order":   "skills.sort_order",
 		"updated_at":   "skills.updated_at",
 	}
 	column, ok := columns[sortField]
 	if !ok || (sortOrder != "asc" && sortOrder != "desc") {
-		return "skills.downloads DESC, skills.id DESC"
+		return CatalogOrder("skills.") + ", skills.id DESC"
 	}
 	direction := strings.ToUpper(sortOrder)
 	if column == "skills.id" {
@@ -353,7 +356,7 @@ func buildSkillSearchQuery(keyword string, filter SkillCategoryFilter, includeDi
 	return query
 }
 
-const skillListSelectColumns = "skills.id, skills.name, skills.display_name, skills.icon, skills.category, skills.description, skills.scenario, skills.usage_example, skills.submitter, skills.source, skills.source_personal_skill_id, skills.tags, skills.downloads, skills.version, skills.status, skills.is_deleted, skills.created_at, skills.updated_at, skills.body_updated_at, skills.assets_updated_at"
+const skillListSelectColumns = "skills.id, skills.sort_order, skills.requires_internet, skills.name, skills.display_name, skills.icon, skills.category, skills.description, skills.scenario, skills.usage_example, skills.submitter, skills.source, skills.source_personal_skill_id, skills.tags, skills.downloads, skills.version, skills.status, skills.is_deleted, skills.created_at, skills.updated_at, skills.body_updated_at, skills.assets_updated_at"
 
 func SearchSkillsWithOptions(keyword string, filter SkillCategoryFilter, page, perPage int, includeDisabled bool, deletedFilter SkillDeletedFilter, sortField, sortOrder string) ([]Skill, int64, error) {
 	return searchSkillsWithOptions(keyword, filter, page, perPage, includeDisabled, deletedFilter, sortField, sortOrder, false)
@@ -553,16 +556,19 @@ type SkillPackageInfo struct {
 
 // SkillBrief 技能包内单个 skill 的简要信息
 type SkillBrief struct {
-	Id          int                 `json:"id"`
-	Name        string              `json:"name"`
-	DisplayName string              `json:"display_name"`
-	Icon        string              `json:"icon"`
-	Category    string              `json:"category"`
-	Categories  []SkillCategoryView `json:"categories,omitempty" gorm:"-"`
-	Description string              `json:"description"`
-	Version     string              `json:"version"`
-	Downloads   int                 `json:"downloads"`
-	UpdatedAt   int64               `json:"updated_at"`
+	SortOrder        *int                `json:"sort_order"`
+	RequiresInternet *bool               `json:"requires_internet"`
+	CreatedAt        int64               `json:"created_at"`
+	Id               int                 `json:"id"`
+	Name             string              `json:"name"`
+	DisplayName      string              `json:"display_name"`
+	Icon             string              `json:"icon"`
+	Category         string              `json:"category"`
+	Categories       []SkillCategoryView `json:"categories,omitempty" gorm:"-"`
+	Description      string              `json:"description"`
+	Version          string              `json:"version"`
+	Downloads        int                 `json:"downloads"`
+	UpdatedAt        int64               `json:"updated_at"`
 }
 
 func fillSkillBriefCategories(skills []SkillBrief) ([]SkillBrief, error) {
@@ -589,8 +595,8 @@ func ListSkillPackages() ([]SkillPackageInfo, error) {
 		Joins("LEFT JOIN skill_category_relations AS r ON r.category_id = c.id").
 		Joins("LEFT JOIN skills AS s ON s.id = r.skill_id AND s.is_deleted = ? AND s.status = ?", false, 1).
 		Where("c.is_deleted = ? AND c.status = ? AND t.status = ?", false, 1, 1).
-		Group("c.id, c.code, c.name, c.description, c.sort_order").
-		Order("c.sort_order ASC, c.id DESC").
+		Group("c.id, c.code, c.name, c.description, c.sort_order, c.created_at").
+		Order(CatalogOrder("c.") + ", c.id DESC").
 		Find(&results).Error
 	return results, err
 }
@@ -600,13 +606,13 @@ func ListSkillPackages() ([]SkillPackageInfo, error) {
 func ListSkillsByCategory(category string) ([]SkillBrief, error) {
 	var results []SkillBrief
 	err := DB.Table("skills AS s").
-		Select("s.id, s.name, s.display_name, s.icon, s.category, s.description, s.version, s.downloads, s.updated_at").
+		Select("s.id, s.sort_order, s.requires_internet, s.created_at, s.name, s.display_name, s.icon, s.category, s.description, s.version, s.downloads, s.updated_at").
 		Joins("JOIN skill_category_relations AS r ON r.skill_id = s.id").
 		Joins("JOIN skill_categories AS c ON c.id = r.category_id").
 		Joins("JOIN skill_category_types AS t ON t.id = c.type_id AND t.code = ?", SkillCategoryTypePackage).
 		Where("s.is_deleted = ? AND s.status = ? AND c.is_deleted = ? AND c.status = ? AND t.status = ? AND c.code = ?",
 			false, 1, false, 1, 1, category).
-		Order("r.sort_order ASC, s.downloads DESC, s.id DESC").
+		Order(CatalogOrder("s.") + ", s.id DESC").
 		Find(&results).Error
 	if err != nil || len(results) > 0 {
 		if err != nil {
@@ -616,9 +622,9 @@ func ListSkillsByCategory(category string) ([]SkillBrief, error) {
 	}
 
 	err = DB.Model(&Skill{}).
-		Select("id, name, display_name, icon, category, description, version, downloads, updated_at").
+		Select("id, sort_order, requires_internet, created_at, name, display_name, icon, category, description, version, downloads, updated_at").
 		Where("is_deleted = ? AND status = ? AND category = ?", false, 1, category).
-		Order("id ASC").
+		Order(CatalogOrder("") + ", id DESC").
 		Find(&results).Error
 	if err != nil {
 		return results, err

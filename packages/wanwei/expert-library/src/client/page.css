@@ -133,3 +133,6 @@
 .dsh-expert-grid { grid-template-columns: minmax(0, 1fr); }
 
 }
+
+.dsh-expert-card:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.65)}
+.dsh-expert-card:disabled:hover{transform:none;box-shadow:none}

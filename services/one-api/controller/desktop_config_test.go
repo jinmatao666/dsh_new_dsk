@@ -46,7 +46,7 @@ func TestDesktopConfigPublicFields(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if !body.Success || len(body.Data) != 6 || body.Data["edition"] != "operations" || body.Data["network"] != "intranet" || body.Data["operator"] != "张运维" || body.Data["phone"] != "0571-12345678" {
+	if !body.Success || len(body.Data) != 7 || body.Data["internetCatalogPolicy"] != "disable" || body.Data["edition"] != "operations" || body.Data["network"] != "intranet" || body.Data["operator"] != "张运维" || body.Data["phone"] != "0571-12345678" {
 		t.Fatalf("unexpected public data: %+v", body)
 	}
 	config.OptionMapRWMutex.Lock()
@@ -116,6 +116,20 @@ func TestDesktopEditionSettings(t *testing.T) {
 	for _, value := range []string{`null`, `"unknown"`, `true`, `123`} {
 		if _, err := parseDesktopDeploymentSettings(`{"network":"internet","edition":` + value + `}`); err == nil {
 			t.Fatalf("accepted edition %s", value)
+		}
+	}
+}
+
+func TestDesktopInternetCatalogPolicy(t *testing.T) {
+	for _, policy := range []string{"hide", "disable"} {
+		settings, err := parseDesktopDeploymentSettings(`{"network":"intranet","internetCatalogPolicy":"` + policy + `"}`)
+		if err != nil || settings.InternetCatalogPolicy != policy {
+			t.Fatalf("policy %s: %v", policy, err)
+		}
+	}
+	for _, value := range []string{`null`, `true`, `1`, `"unknown"`} {
+		if _, err := parseDesktopDeploymentSettings(`{"network":"intranet","internetCatalogPolicy":` + value + `}`); err == nil {
+			t.Fatalf("accepted invalid policy %s", value)
 		}
 	}
 }

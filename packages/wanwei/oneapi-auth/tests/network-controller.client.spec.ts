@@ -5,6 +5,20 @@ import { NetworkController } from '../src/client/network-controller.ts'
 
 afterEach(() => { delete (window as unknown as Record<string, unknown>).__ZJUGIS_NATIVE_INVOKE__ })
 
+it('synchronizes the catalog policy and retains it when a malformed refresh is rejected', async () => {
+  let internetCatalogPolicy: unknown = 'hide'
+  const call = vi.fn(async () => ({ ok: true, value: { mode: 'intranet', internalOrigins: [], directInternet: false, internetCatalogPolicy } }))
+  const controller = new NetworkController({ rpc: { call } } as unknown as ConnectionHandle)
+  await controller.refresh()
+  expect(controller.getSnapshot().internetCatalogPolicy).toBe('hide')
+  internetCatalogPolicy = 'disable'
+  await controller.refresh()
+  expect(controller.getSnapshot().internetCatalogPolicy).toBe('disable')
+  internetCatalogPolicy = null
+  await expect(controller.refresh()).rejects.toThrow('后台技能专家联网处理设置无效')
+  expect(controller.getSnapshot().internetCatalogPolicy).toBe('disable')
+})
+
 it('publishes direct connectivity for entry policy and rejects malformed probe results', async () => {
   let directInternet: unknown = false
   const call = vi.fn(async () => ({ ok: true, value: { mode: 'intranet', internalOrigins: [], directInternet } }))

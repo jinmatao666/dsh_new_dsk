@@ -1,9 +1,10 @@
+import CatalogOrderActions, { catalogDragProps } from '../../components/CatalogOrderActions';
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Button, Input, Modal, Space, Table } from '@douyinfe/semi-ui';
 import { IconPlus, IconSearch } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess } from '../../helpers';
 
-const EMPTY = { id: null, name: '', description: '' };
+const EMPTY = { id: null, name: '', description: '', sort_order: null };
 const responseData = (response, fallback) => {
   if (response.data?.success) return response.data.data;
   throw new Error(response.data?.message || fallback);
@@ -49,7 +50,7 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
     }
     setSaving(true);
     try {
-      const payload = { name: editor.data.name.trim(), description: editor.data.description.trim() };
+      const payload = { name: editor.data.name.trim(), description: editor.data.description.trim(), sort_order: editor.data.sort_order };
       const response = editor.data.id
         ? await API.put(`/api/skill-category/${editor.data.id}`, payload)
         : await API.post('/api/skill-category/', payload);
@@ -172,9 +173,9 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
     { title: '描述', dataIndex: 'description', ellipsis: { showTitle: true } },
     { title: '技能数量', dataIndex: 'skill_count', width: 110, render: (value) => <span className='skill-category-count'>{Number(value || 0)}</span> },
     {
-      title: '操作', width: 146,
+      title: '操作', width: 205,
       render: (_, row) => (
-        <div className='skill-row-actions'>
+        <div className='skill-row-actions'><CatalogOrderActions kind='skill-categories' item={row} items={items} reload={load} />
           <button type='button' className='skill-text-action' onClick={() => setEditor({ visible: true, data: { ...EMPTY, ...row } })}>编辑</button>
           {isDefaultCategory(row)
             ? <span className='skill-category-default-tag'>默认分类</span>
@@ -192,7 +193,7 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
   return <div style={{ padding: embedded ? 0 : 24, height: embedded ? '100%' : undefined, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
     {!embedded && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}><Space><Button icon={<IconPlus />} theme='solid' type='primary' onClick={() => setEditor({ visible: true, data: EMPTY })}>新建分类</Button><Input prefix={<IconSearch />} placeholder='搜索名称或描述' value={localKeyword} onChange={setLocalKeyword} style={{ width: 280 }} showClear /></Space></div>}
     <div style={{ flex: 1, minHeight: 0 }}>
-      <Table columns={columns} dataSource={filteredItems} rowKey='row_key' loading={loading} pagination={{ pageSize: 20 }} expandedRowRender={renderExpandedSkills} expandedRowKeys={expanded.key ? [expanded.key] : []} expandIcon={false} />
+      <Table columns={columns} dataSource={filteredItems} rowKey='row_key' loading={loading} onRow={row => catalogDragProps('skill-categories', row, load)} pagination={{ pageSize: 20 }} expandedRowRender={renderExpandedSkills} expandedRowKeys={expanded.key ? [expanded.key] : []} expandIcon={false} />
     </div>
     {editor.visible && (
       <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) closeEditor(); }}>
@@ -208,7 +209,7 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
               {isDefaultCategory(editor.data) && <small className='skill-field-hint'>默认分类名称不可修改</small>}
             </label>
             <label className='zjugis-field'>
-              <span>描述（可选）</span>
+              <span>顺序（数字越大越靠前）</span><input type='number' step='1' value={editor.data.sort_order ?? ''} placeholder='留空按创建时间倒序' onChange={event => updateEditor('sort_order', event.target.value === '' ? null : Number(event.target.value))} /></label><label className='zjugis-field'><span>描述（可选）</span>
               <textarea rows='4' value={editor.data.description} onChange={(e) => updateEditor('description', e.target.value)} placeholder='说明该分类适用的技能' />
             </label>
             <div className='zjugis-modal-actions'>

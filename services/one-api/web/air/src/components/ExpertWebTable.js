@@ -1,9 +1,10 @@
+import CatalogOrderActions, { catalogDragProps } from './CatalogOrderActions';
 import React, { useEffect, useState } from 'react';
 import { API, showError, showSuccess } from '../helpers';
 import './ExpertWebTable.css';
 import CustomSelect from './CustomSelect';
 
-const blank = { key: '', name: '', subtitle: '', category: '', summary: '', icon: '', tags: '[]', scenario: '', materials: '', detail_sections: '[]', footer_note: '', provider: '', workbench_url: '', sort_order: 0 };
+const blank = { key: '', name: '', subtitle: '', category: '', summary: '', icon: '', tags: '[]', scenario: '', materials: '', detail_sections: '[]', footer_note: '', provider: '', workbench_url: '', sort_order: null, requires_internet: true };
 const lines = text => JSON.stringify(text.split('\n').map(item => item.trim()).filter(Boolean));
 const asLines = value => { try { return JSON.parse(value || '[]').join('\n'); } catch { return ''; } };
 const sectionDefaults = [
@@ -115,11 +116,11 @@ export default function ExpertWebTable() {
 
   return <section className='expert-web-admin'>
     <header><div><h2>专家</h2><p>配置卡片、介绍和网站地址。上架后桌面端自动显示；网页功能在各自独立网站中维护。</p></div><button type='button' className='primary' onClick={() => setEditing({ ...blank })}>新增专家</button></header>
-    <div className='expert-web-list'>{items.length === 0 && <p className='empty'>还没有专家。先登记网站及提供方，再上架。</p>}{items.map(item => <article key={item.key}>
+    <div className='expert-web-list'>{items.length === 0 && <p className='empty'>还没有专家。先登记网站及提供方，再上架。</p>}{items.map(item => <article key={item.key} {...catalogDragProps('experts', item, load)}>
       <div className='expert-web-icon'>{item.icon?.startsWith('data:image/') ? <img src={item.icon} alt='' /> : '✦'}</div>
       <div className='expert-web-info'><strong>{item.name}</strong><small>{item.key} · {item.provider}</small><p>{item.workbench_url}</p></div>
       <span className={item.published ? 'live' : 'draft'}>{item.published ? '已上架' : '未上架'}</span>
-      <div className='actions'><button type='button' onClick={() => setEditing({ ...item })}>编辑</button><button type='button' onClick={() => void rotate(item)}>重置凭据</button><button type='button' onClick={() => void publish(item)}>{item.published ? '下架' : '上架'}</button></div>
+      <div className='actions'><CatalogOrderActions kind='experts' item={item} items={items} reload={load} /><button type='button' onClick={() => setEditing({ ...item })}>编辑</button><button type='button' onClick={() => void rotate(item)}>重置凭据</button><button type='button' onClick={() => void publish(item)}>{item.published ? '下架' : '上架'}</button></div>
     </article>)}</div>
     {editing && <div className='expert-web-backdrop' onMouseDown={event => { if (event.target === event.currentTarget) setEditing(null); }}><section className='expert-web-dialog' role='dialog' aria-modal='true' aria-label='专家资料'>
       <header><h2>{items.some(item => item.key === editing.key) ? '编辑专家' : '新增专家'}</h2><button type='button' aria-label='关闭' onClick={() => setEditing(null)}>×</button></header>
@@ -129,6 +130,8 @@ export default function ExpertWebTable() {
         <label>提供方<input value={editing.provider} onChange={event => setEditing({ ...editing, provider: event.target.value })} /></label>
         <label>分类<CustomSelect aria-label='分类' value={editing.category} onChange={event => setEditing({ ...editing, category: event.target.value })}><option value=''>请选择分类</option>{categories.map(category => <option key={category.id} value={category.name}>{category.name}</option>)}</CustomSelect></label>
         <label className='wide'>HTTP/HTTPS 工作台地址<input type='url' value={editing.workbench_url} placeholder='http://ac.zjugis.com:3301/' onChange={event => setEditing({ ...editing, workbench_url: event.target.value })} /></label>
+        <label>顺序（数字越大越靠前）<input type='number' step='1' value={editing.sort_order ?? ''} placeholder='留空按创建时间倒序' onChange={event => setEditing({ ...editing, sort_order: event.target.value === '' ? null : Number(event.target.value) })} /></label>
+        <label><span>需要访问互联网</span><input type='checkbox' checked={editing.requires_internet !== false} onChange={event => setEditing({ ...editing, requires_internet: event.target.checked })} /></label>
         <label>副标题<input value={editing.subtitle} onChange={event => setEditing({ ...editing, subtitle: event.target.value })} /></label>
         <label className='wide'>专家主图标（卡片和介绍弹窗共用）<span className='expert-web-icon-editor'><input type='file' accept='image/png,image/jpeg,image/webp,image/gif' onChange={uploadIcon} />{editing.icon?.startsWith('data:image/') && <img className='expert-web-icon-preview' src={editing.icon} alt='专家图标预览' />}</span><small>上传 PNG、JPEG、WebP 或 GIF；保存后桌面端自动同步。</small></label>
         <label className='wide'>简介<textarea value={editing.summary} onChange={event => setEditing({ ...editing, summary: event.target.value })} /></label>

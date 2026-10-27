@@ -15,6 +15,7 @@ import { NetworkController } from './network-controller.ts'
 import { NetworkGuard } from './NetworkGuard.tsx'
 export type { NetworkController } from './network-controller.ts'
 export type { NetworkState, NetworkEnvironment } from '../network-contract.ts'
+export { internetCatalogAccess } from '../network-contract.ts'
 declare module '@deepseek-ai/cordis' {
   interface Context { wanweiNetwork: NetworkController }
 }

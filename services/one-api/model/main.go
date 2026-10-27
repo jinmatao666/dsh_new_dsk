@@ -296,6 +296,9 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&ExpertWebProfile{}, &ExpertWebTicket{}); err != nil {
 		return err
 	}
+	if err = MigrateCatalogMetadata(); err != nil {
+		return err
+	}
 	if err = DB.AutoMigrate(&UsageEvent{}); err != nil {
 		return err
 	}
