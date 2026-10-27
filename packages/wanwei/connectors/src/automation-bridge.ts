@@ -4,7 +4,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { buildDingTalkDwsStatus, resolveProductDshHome } from './dingtalk-dws.ts'
 import { buildWeChatStatus, sendWeChatNotification } from './wechat-ilink.ts'
-import { parseFeishuAuthenticated, resolveLarkCommand, runLark } from './feishu-cli.ts'
+import { parseFeishuAuthenticated, prepareFeishuSkills, resolveLarkCommand, runLark } from './feishu-cli.ts'
 
 const entries = [
   { id: 'feishu', name: '飞书', icon: '/connector-icons/feishu.png', tool: 'feishu_cli' },
@@ -45,8 +45,11 @@ export function registerAutomationConnectors(ctx: Context): void {
             const state = await buildDingTalkDwsStatus(home, { fresh: true })
             connected = state.authed && state.skillInstalled
           } else if (entry.id === 'wechat') connected = buildWeChatStatus(home, { fresh: true }).authed
-          else connected = resolveLarkCommand() !== undefined
-            && parseFeishuAuthenticated((await runLark(['auth', 'status', '--json'], signal)).stdout)
+          else {
+            const command = resolveLarkCommand()
+            connected = !!command && parseFeishuAuthenticated((await runLark(['auth', 'status', '--json'], signal)).stdout)
+            if (connected && command) prepareFeishuSkills(command)
+          }
         } catch (error) {
           signal.throwIfAborted()
           ctx.logger.debug(`连接器 ${entry.id} 状态探测失败：${String(error)}`)
@@ -70,7 +73,7 @@ export function registerAutomationConnectors(ctx: Context): void {
       })
       return ids.length === 0 ? '本任务未选择连接器，不要调用连接器工具。' :
         `本任务仅选择连接器：${entries.filter(entry => ids.includes(entry.id)).map(entry => entry.name).join('、')}。`
-        + '飞书使用 feishu_cli，先查看 --help，并用 --as user 访问个人资源；钉钉使用 dingtalk_dws，先读取 dws-cli 技能。'
+        + '飞书使用 feishu_cli，先读取 lark-shared 和对应 lark-* 业务技能，查看 --help，并用 --as user 访问个人资源；钉钉使用 dingtalk_dws，先读取 dws-cli 技能。'
         + '微信仅可用 wechat_notify 向已绑定的本人会话发送任务明确要求的文字，不支持任意联系人、群聊或历史检索。'
         + '选择只开放能力，不代表要求推送；仅按任务指定的收件人和内容操作。授权过期或需要额外确认时报告 waiting，不自动登录、不绕过确认。'
     },

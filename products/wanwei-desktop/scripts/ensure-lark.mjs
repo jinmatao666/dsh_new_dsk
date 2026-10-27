@@ -4,6 +4,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSy
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { ensureLarkSkills } from './lark-skills.mjs'
 
 export const LARK_VERSION = '1.0.98'
 const hashes = {
@@ -23,9 +24,13 @@ export async function ensureLark(destination) {
   const name = process.platform === 'win32' ? 'lark-cli.exe' : 'lark-cli'
   const target = join(destination, 'assets', `lark-${LARK_VERSION}`, name)
   const local = join(resolve(import.meta.dirname, '..'), 'assets', `lark-${LARK_VERSION}`, name)
-  if (existsSync(target)) return target
+  if (existsSync(target)) { ensureLarkSkills(target, LARK_VERSION); return target }
   mkdirSync(dirname(target), { recursive: true })
-  if (target !== local && existsSync(local)) { copyFileSync(local, target); return target }
+  if (target !== local && existsSync(local)) {
+    copyFileSync(local, target)
+    ensureLarkSkills(target, LARK_VERSION)
+    return target
+  }
   const expected = hashes[`${process.platform}-${process.arch}`]
   if (!expected) throw new Error(`Unsupported Feishu CLI platform: ${process.platform}-${process.arch}`)
   const platform = process.platform === 'win32' ? 'windows' : process.platform
@@ -50,6 +55,7 @@ export async function ensureLark(destination) {
     copyFileSync(join(staging, name), target)
     if (process.platform !== 'win32') chmodSync(target, 0o755)
   } finally { rmSync(staging, { recursive: true, force: true }) }
+  ensureLarkSkills(target, LARK_VERSION)
   return target
 }
 

@@ -16,6 +16,14 @@ export interface FeishuStatus {
 /** UI operations owned by the Host connector. */
 export interface FeishuApi { call(operation: 'status' | 'configure' | 'login' | 'disconnect'): Promise<FeishuStatus> }
 
+/** Business examples share the existing connector card presentation. */
+export const FEISHU_EXAMPLE_PROMPTS = [
+  '查看我今天的飞书日程，按时间列出会议和待办',
+  '给飞书联系人张三发一条消息：明天下午 3 点开项目评审会，请提前准备材料',
+  '在飞书云文档中查找【项目周报】，总结本周进展、风险和待办事项',
+  '在飞书中创建一项待办：周五下午 5 点前整理项目评审材料',
+] as const
+
 /** Bind Feishu connector RPC with validated non-secret flags.
  * @param connection - Desktop Host transport.
  * @returns Connector operations.
@@ -64,25 +72,40 @@ export function FeishuPanel({ api, onStatus, onTry }: {
     catch (failure) { setError(String(failure)) }
     finally { setBusy(false) }
   }
-  return <div className="dsh-connector-dingtalk">
+  return <div className="dsh-connector-dingtalk dsh-connector-feishu">
+    <div className="dsh-connector-dingtalk-brand" aria-hidden="true">
+      <span className="dsh-connector-dingtalk-brand-wanwei">{text('WB')}</span>
+      <span className="dsh-connector-dingtalk-brand-dots">···</span>
+      <img src="/connector-icons/feishu.png" alt="" width={40} height={40} />
+    </div>
     <p className="dsh-connector-dingtalk-desc">{text('连接飞书后，可在对话和自动化中使用消息、文档、日历与待办。')}</p>
-    <p className="dsh-connector-dingtalk-hint">{text('首次使用先配置飞书应用，再完成个人授权。仅在授权范围内访问。')}</p>
     {!status?.installed && status && <p role="alert" className="dsh-connector-dingtalk-error">{text('未找到随包飞书 CLI，请使用完整安装包')}</p>}
     {(error || status?.error) && <p role="alert" className="dsh-connector-dingtalk-error">{error || status?.error}</p>}
-    {status?.authorizing && <p role="status" className="dsh-connector-dingtalk-hint">{text('请在飞书完成授权，完成后此页面自动更新')}</p>}
-    {status?.authorizationUrl && <div className="dsh-connector-feishu-auth">
-      <a href={status.authorizationUrl} target="_blank" rel="noreferrer">{text('打开飞书授权页面')}</a>
-      {status.qrDataUrl && <img src={status.qrDataUrl} alt={text('飞书授权二维码')} width={200} height={200} />}
+    {status?.authorizing && <div className="dsh-connector-feishu-auth">
+      <p role="status" className="dsh-connector-dingtalk-hint">{text('请在飞书完成授权，完成后此页面自动更新')}</p>
+      {status.qrDataUrl && <div className="dsh-connector-feishu-qr">
+        <img src={status.qrDataUrl} alt={text('飞书授权二维码')} width={176} height={176} />
+      </div>}
+      {status.authorizationUrl && <a href={status.authorizationUrl} target="_blank" rel="noreferrer">{text('打开飞书授权页面')}</a>}
     </div>}
     <div className="dsh-connector-dingtalk-actions">
-      <button type="button" className="secondary" disabled={busy || !status?.installed || status.authorizing || status.authed}
+      {status?.authed ? <>
+        <button type="button" disabled={busy} onClick={() => { onTry(text(FEISHU_EXAMPLE_PROMPTS[0])) }}>{text('去试试')}</button>
+        <button type="button" className="secondary" disabled={busy} onClick={() => { void operate('disconnect') }}>{text('解绑')}</button>
+      </> : <button type="button" disabled={busy || !status?.installed || status.authorizing}
+        onClick={() => { void operate('login') }}>{status?.authorizing ? text('等待授权…') : text('连接')}</button>}
+    </div>
+    {status && !status.authed && <div className="dsh-connector-dingtalk-hint dsh-connector-feishu-setup">
+      {text('首次连接将引导你配置飞书应用并完成个人授权。')}
+      <button type="button" disabled={busy || !status.installed || status.authorizing}
         onClick={() => { void operate('configure') }}>{text('配置飞书应用')}</button>
-      <button type="button" disabled={busy || !status?.installed || status.authorizing}
-        onClick={() => { void operate(status?.authed ? 'disconnect' : 'login') }}>{status?.authed ? text('解绑') : text('连接')}</button>
-    </div>
-    <div className="dsh-connector-dingtalk-examples"><h3>{text('试试这样用')}</h3>
-      <button type="button" className="dsh-connector-dingtalk-example" disabled={!status?.authed}
-        onClick={() => { onTry(text('查看我今天的飞书日程，按时间列出会议和待办')) }}>{text('查看我今天的飞书日程，按时间列出会议和待办')}</button>
-    </div>
+    </div>}
+    <section className="dsh-connector-dingtalk-examples" aria-label={text('试试这样用')}>
+      <h3>{text('试试这样用')}</h3>
+      <ul>{FEISHU_EXAMPLE_PROMPTS.map(prompt => <li key={prompt}>
+        <button type="button" className="dsh-connector-dingtalk-example" disabled={!status?.authed || busy || status.authorizing}
+          onClick={() => { onTry(text(prompt)) }}><span>{text('“')}{text(prompt)}{text('”')}</span></button>
+      </li>)}</ul>
+    </section>
   </div>
 }

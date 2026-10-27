@@ -1,0 +1,15 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`loads the installed official skill through a Loader-composed filesystem provider 1`] = `
+"<!-- wanwei-feishu-tool -->
+## 万维桌面端执行方式（优先于下方通用终端说明）
+
+本技能及参考文档中的每条 \`lark-cli ...\` 命令，都通过 \`feishu_cli\` 工具执行，args 是可执行文件名之后的参数数组，不要通过 bash/pwsh 启动。例如 \`lark-cli calendar +agenda --as user\` 对应 \`{"args":["calendar","+agenda","--as","user"]}\`。
+
+先读 lark-shared 和当前业务对应的官方 Skill/参考文档，再执行命令。个人资源使用 --as user。工具返回 stdout、stderr、exitCode；stdout 中的 JSON 信封仍按官方规则解析。配置应用、登录、退出、升级和安装由连接器页面管理，不执行这些命令，不读取或输出凭据。不支持的额外脚本或机器资源不要猜测或自动下载安装。
+
+保留官方高风险确认规则：退出码 10 时停止并向用户展示操作和关键参数；取得明确同意后才能按官方 hint 重试。自动化无人确认时停止并报告，不自行追加确认参数。
+
+# Official calendar
+Read references/events.md."
+`;

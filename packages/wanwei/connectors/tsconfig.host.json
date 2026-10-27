@@ -9,6 +9,7 @@
     "src/index.ts",
     "src/automation-bridge.ts",
     "src/feishu-cli.ts",
+    "src/feishu-skills.ts",
     "src/invariant.ts",
     "src/copy-tree.ts",
     "src/dingtalk-dws.ts",

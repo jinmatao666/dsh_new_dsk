@@ -1,5 +1,14 @@
 .dsh-connectors-page { position: relative; min-height: 0; }
-.dsh-connector-feishu-auth { display: flex; flex-direction: column; align-items: center; gap: 12px; margin: 16px 22px; }
+.dsh-connector-feishu-auth { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 12px 22px 18px; }
+.dsh-connector-feishu-auth .dsh-connector-dingtalk-hint { margin: 0; }
+.dsh-connector-feishu-auth a { color: #3370ff; font-size: 13px; text-decoration: none; }
+.dsh-connector-feishu-auth a:hover { text-decoration: underline; }
+.dsh-connector-feishu-qr { padding: 10px; border: 1px solid #e7edf5; border-radius: 12px; background: #fff; }
+.dsh-connector-feishu-qr img { display: block; max-width: 100%; height: auto; }
+.dsh-connector-feishu-setup { margin-top: -4px; margin-bottom: 22px; }
+.dsh-connector-feishu-setup button { display: block; margin: 5px auto 0; padding: 2px 6px; border: 0; background: transparent; color: #3370ff; font: inherit; cursor: pointer; }
+.dsh-connector-feishu-setup button:hover:not(:disabled) { text-decoration: underline; }
+.dsh-connector-feishu-setup button:disabled { opacity: .5; cursor: default; }
 
 .dsh-connectors-header-action {
   display: inline-flex;
