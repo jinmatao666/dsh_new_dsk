@@ -25,6 +25,8 @@ export interface UiWorkspace {
    * @param workspaceId - explicit target; absent inherits the current or most recent Workspace.
    */
   startSession(workspaceId?: WorkspaceId): void
+  /** Show an unbound composer without creating a Workspace or Session. */
+  startUnboundSession(): void
   /**
    * Archive a Session and clear it when it is the current selection.
    * @param sessionId - Session to archive.
@@ -71,6 +73,7 @@ export class DirectoryBrowseError extends Error {
 /** Implements Workspace archive and directory UI operations. */
 class UiWorkspaceService extends Service implements UiWorkspace {
   private readonly connecting = new Map<WorkspaceId, Promise<SessionId>>()
+  private navigationRevision = 0
 
   /**
    * @param ctx - Client root Context.
@@ -113,6 +116,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   }
 
   startSession(workspaceId?: WorkspaceId): void {
+    const revision = ++this.navigationRevision
     const workspace = this.workspaces.list.getSnapshot()
     const sessions = this.sessions.list.getSnapshot()
     const current = sessions.current
@@ -128,9 +132,14 @@ class UiWorkspaceService extends Service implements UiWorkspace {
       return
     }
     void this.connectWorkspace(target).then(
-      (sessionId) => { this.sessions.open(sessionId) },
+      (sessionId) => { if (revision === this.navigationRevision) this.sessions.open(sessionId) },
       (reason: unknown) => { console.warn('new session failed:', reason) },
     )
+  }
+
+  startUnboundSession(): void {
+    this.navigationRevision++
+    this.sessions.clear()
   }
 
   async archiveSession(sessionId: SessionId): Promise<void> {
@@ -174,6 +183,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
         return
       }
       if (initial !== 'waiting') return
+      if (this.navigationRevision > 0) { initial = 'done'; return }
       if (workspace.phase !== 'ready' || sessions.phase !== 'ready') return
       if (sessions.current !== undefined) {
         initial = 'done'
@@ -185,10 +195,11 @@ class UiWorkspaceService extends Service implements UiWorkspace {
         return
       }
       initial = 'connecting'
+      const revision = this.navigationRevision
       void this.connectWorkspace(target).then(
         (sessionId) => {
           if (disposed) return
-          if (this.sessions.list.getSnapshot().current === undefined) {
+          if (revision === this.navigationRevision && this.sessions.list.getSnapshot().current === undefined) {
             this.sessions.open(sessionId)
           }
           initial = 'done'

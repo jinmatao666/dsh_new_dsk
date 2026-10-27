@@ -10,7 +10,7 @@ async function bench(declare = true) {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
   const layout = { toggleSidebar: vi.fn() }
-  const uiWorkspace = { startSession: vi.fn() }
+  const uiWorkspace = { startSession: vi.fn(), startUnboundSession: vi.fn() }
   ctx.provide('layout', layout)
   ctx.provide('uiWorkspace', uiWorkspace as never)
   ctx.provide('locale', new LocaleRuntime(ctx))
@@ -42,11 +42,12 @@ describe('ui-sidebar apply', () => {
     expect(b.slots.entries('sidebar')[0]!.locale).toBe('sidebar')
     const injected = (b.slots.entries('sidebar')[0]!.inject as () => SidebarRootInjected)()
     expect(Object.keys(injected)).toEqual(['startSession', 'toggleSidebar'])
-    // Both arms delegate to the Workspace UI's shared New Session action.
+    // Only an explicit Workspace delegates; the global action must not inherit one.
     injected.startSession('workspace' as never)
     expect(b.uiWorkspace.startSession).toHaveBeenCalledWith('workspace')
     injected.startSession()
-    expect(b.uiWorkspace.startSession).toHaveBeenLastCalledWith(undefined)
+    expect(b.uiWorkspace.startSession).toHaveBeenCalledTimes(1)
+    expect(b.uiWorkspace.startUnboundSession).toHaveBeenCalledOnce()
     injected.toggleSidebar()
     expect(b.layout.toggleSidebar).toHaveBeenCalledOnce()
   })

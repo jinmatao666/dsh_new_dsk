@@ -289,6 +289,31 @@ describe('UiWorkspaceService', () => {
     })
   })
 
+  it('starts unbound despite current or recent Workspaces and ignores a pending connect', async () => {
+    const current = summary('current', { cwd: '/w/home' })
+    const b = bench({ sessions: sessionState([current], current.id), workspaces: workspaceState([workspace('home', [current.id])]) })
+    b.uiWorkspace.startUnboundSession()
+    expect(b.sessions.list.getSnapshot().current).toBeUndefined()
+    expect(b.sessions.create).not.toHaveBeenCalled()
+    let finish!: (id: SessionId) => void
+    b.sessions.create.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    b.uiWorkspace.startSession(wid('home'))
+    b.uiWorkspace.startUnboundSession()
+    finish(sid('late'))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(b.sessions.list.getSnapshot().current).toBeUndefined()
+    expect(b.sessions.open).not.toHaveBeenCalledWith(sid('late'))
+  })
+
+  it('does not auto-select a recent Workspace after an early unbound action', () => {
+    const b = bench()
+    b.uiWorkspace.startUnboundSession()
+    b.workspaces.list.set(workspaceState([workspace('recent')]))
+    b.sessions.list.set(sessionState())
+    expect(b.sessions.create).not.toHaveBeenCalled()
+    expect(b.sessions.list.getSnapshot().current).toBeUndefined()
+  })
+
   it('opens the recent Workspace after both baselines arrive', async () => {
     const b = bench()
     b.sessions.create.mockResolvedValue(sid('initial'))

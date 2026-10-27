@@ -28,6 +28,7 @@ const NS = 'sidebar'
 
 interface WorkspaceNavigation {
   startSession(workspaceId?: Parameters<SidebarRootInjected['startSession']>[0]): void
+  startUnboundSession(): void
 }
 
 /** Services required by the sidebar plugin. */
@@ -41,9 +42,11 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-sidebar: dictionaries')
 
   const injectProps = (): SidebarRootInjected => ({
-    // The shell's New Session button rides the Workspace UI's shared action
-    // (current Session Workspace, then recent Workspace).
-    startSession: (workspaceId) => { workspaceNavigation.startSession(workspaceId) },
+    // Global New Session stays unbound; explicit Workspace actions retain their target.
+    startSession: (workspaceId) => {
+      if (workspaceId === undefined) workspaceNavigation.startUnboundSession()
+      else workspaceNavigation.startSession(workspaceId)
+    },
     toggleSidebar: () => { ctx.layout.toggleSidebar() },
   })
   ctx.effect(

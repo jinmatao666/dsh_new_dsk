@@ -40,7 +40,7 @@ afterEach(() => {
 async function bench(options: { locale?: 'en' } = {}) {
   const runtime = await SlotTestRuntime.create()
   runtime.ctx.provide('layout', { toggleSidebar: vi.fn() })
-  runtime.ctx.provide('uiWorkspace', { startSession: vi.fn() } as never)
+  runtime.ctx.provide('uiWorkspace', { startSession: vi.fn(), startUnboundSession: vi.fn() } as never)
   const locale = new LocaleRuntime(runtime.ctx)
   locale.register('common', { zh: commonZh, en: commonEn })
   if (options.locale === 'en') locale.setLocale('en')
