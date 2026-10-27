@@ -42,7 +42,7 @@ The desktop mounts the host `skill-filesystem/policy` service so every preset's 
 
 Desktop skill discovery uses only the selected workspace's `.dsh/skills` and `.agents/skills`, plus `<DSH_HOME>/skills` for installed/imported skills. It does not climb to parent Git repositories or automatically include shared `~/.agents/skills`. Explicit custom and bundled roots remain supported. This product policy leaves the generic provider defaults unchanged and does not delete existing files.
 
-The desktop product mounts the browser-assistant plugin with visible browser windows and an enabled default. Its Settings → Plugins card starts collapsed and reveals the automatically saved permission switch when expanded. Saved user preferences override the default; pure intranet mode still denies browser tools.
+The desktop product mounts the enabled browser-assistant plugin with `headless: true`: source reading and browser operations do not open browser windows. Tool activity and failures remain visible in the conversation. Its Settings → Plugins card starts collapsed and reveals the automatically saved permission switch when expanded. Saved activation preferences override the default; pure intranet mode still denies browser tools. Sites requiring visible login or CAPTCHA interaction need an explicitly configured headed deployment; headless mode does not bypass those checks.
 
 The product enables [cross-step failure recovery](../../guard/repeat-tool-reminder/README.md) with three invalid-input attempts and memory for 128 failed call identities. It coaches correction and suppresses only unchanged inputs already confirmed invalid; it does not terminate tasks or block transient network retries.
 

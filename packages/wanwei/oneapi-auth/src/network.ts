@@ -53,6 +53,7 @@ export function installNetworkPolicy(ctx: Context, baseURL: string,
   let refreshPrompt = () => {}
   let confirmedAt = 0
   let directInternet: boolean | undefined
+  let resourceRelay = false
   let refreshing: Promise<void> | undefined
   const scope = ctx.settings.register(settingsNamespace('wanwei-network'), z.object({
     mode: z.union(['internet', 'intranet'] as const).default('internet'),
@@ -62,6 +63,7 @@ export function installNetworkPolicy(ctx: Context, baseURL: string,
       await policy.setMode(settings.network)
       policy.setPlugins(settings.plugins)
       resources.configure(settings.network, settings.resources)
+      resourceRelay = settings.resources?.source === 'proxy'
       directInternet = await resources.directAvailable()
       confirmedAt = Date.now()
       refreshPrompt()
@@ -110,7 +112,9 @@ export function installNetworkPolicy(ctx: Context, baseURL: string,
         const args = typeof exec.arguments === 'object' && exec.arguments !== null ? exec.arguments as Record<string, unknown> : {}
         if (exec.name === 'web_search' || (exec.name === 'web_fetch'
           && (typeof args.url !== 'string' || !internalLink(args.url, policy.getSnapshot().internalOrigins)))) {
-          return { kind: 'deny' as const, reason: '纯内网环境不可用' }
+          return { kind: 'deny' as const, reason: exec.name === 'web_fetch' && resourceRelay
+            ? '指定网站资源请使用 Shell：python -m wanwei_resource "网址"；下载追加 --output "工作区内文件路径"。该命令复用后台选择的资源路由，不需要安装依赖。'
+            : '纯内网环境不可用' }
         }
       }
       return next()

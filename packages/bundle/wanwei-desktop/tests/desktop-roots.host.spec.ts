@@ -12,6 +12,14 @@ import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
 import SkillFileSystemPolicy from '@deepseek-ai/dsh-skill-filesystem/policy'
 import AgentPresets from '@deepseek-ai/dsh-agent-presets'
 
+it('keeps the shipped browser assistant headless so source reading does not open windows', async () => {
+  const patches = parse(await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8'), {
+    customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (value: string) => value }],
+  }) as Array<{ insert?: Array<{ id: string; config?: { headless?: boolean } }> }>
+  const browser = patches.flatMap(patch => patch.insert ?? []).find(row => row.id === 'wanwei-browser-use')
+  expect(browser?.config?.headless).toBe(true)
+})
+
 it('boots the shipped desktop skill discovery policy through Loader', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-skill-roots-'))
   const ctx = new Context()

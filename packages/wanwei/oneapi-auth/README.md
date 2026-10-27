@@ -81,6 +81,8 @@ This is diagnostic feedback, not a firewall or shell sandbox. Unrecognized diagn
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 
+In intranet relay mode, the Host exposes `python -m wanwei_resource` to new Shell commands for specified website inspection and workspace file downloads. It uses the selected route, not the offline wheel library; no Python package installation is required. Public `web_fetch` remains blocked and points the model to this client. See [specified-resource retrieval](../../../products/wanwei-desktop/resource-relay/README.md) for limits and acceptance. The source-specific prompt adds this command contract; fetched content enters ordinary Shell tool results and downloads require `deliver_files` for final delivery.
+
 <details>
 <summary>Implementation internals — click to expand</summary>
 

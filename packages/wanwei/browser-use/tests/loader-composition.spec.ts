@@ -31,13 +31,16 @@ const chromium = process.env.DSH_BROWSER_TEST_EXECUTABLE
   ?? (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : '')
 
 it.skipIf(!existsSync(chromium))('boots the official provider through Loader, navigates and unloads', async () => {
+  const desktopPatch = await readFile(new URL('../../../bundle/wanwei-desktop/cordis.patch.yml', import.meta.url), 'utf8')
+  const shippedHeadless = desktopPatch.match(/headless: (true|false)/)?.[1]
+  expect(shippedHeadless).toBe('true')
   root = await mkdtemp(join(tmpdir(), 'wanwei-browser-composition-'))
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [
     '- name: test-prompt', '- name: test-tools', '- name: test-agents',
     '- name: test-settings', '  config:', `    path: ${JSON.stringify(join(root, 'settings.yaml'))}`, '    watch: false',
     "- name: '@deepseek-ai/dsh-wanwei-browser-use'", '  config:',
-    `    headless: ${process.env.DSH_BROWSER_TEST_HEADED !== '1'}`,
+    `    headless: ${process.env.DSH_BROWSER_TEST_HEADED === '1' ? 'false' : shippedHeadless}`,
     ...process.env.DSH_BROWSER_TEST_EXECUTABLE === undefined ? [] : [`    executablePath: ${JSON.stringify(chromium)}`], '',
   ].join('\n'))
   ctx = new Context()

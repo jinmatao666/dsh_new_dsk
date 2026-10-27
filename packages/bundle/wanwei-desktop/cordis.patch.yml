@@ -33,7 +33,7 @@
       disabled: false
       config:
         enabled: !!js process.env.DSH_BROWSER_USE_ENABLED !== '0'
-        headless: false
+        headless: true
         executablePath: !!js process.env.DSH_BROWSER_EXECUTABLE
     - id: wanwei-chinese
       name: '@deepseek-ai/dsh-wanwei-chinese'

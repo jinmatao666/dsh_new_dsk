@@ -45,7 +45,7 @@ describe('Wanwei OneAPI web search', () => {
     expect(init.headers).toEqual({ authorization: 'Bearer user-token', 'content-type': 'application/json', 'x-dsh-web-search': '1' })
     expect(JSON.parse(init.body as string)).toEqual({
       model: 'qwen3.6-plus', stream: false,
-      messages: [{ role: 'user', content: '搜索网页并整理以下问题：latest news。只依据检索到的资料作答，区分事件日期与发布日期。引用使用真实网页标题作为可点击的链接文字，链接必须指向支持对应信息的具体原文页面，不得编造标题、网址或用无关网页代替。' }],
+      messages: [{ role: 'user', content: '搜索网页并整理以下问题：latest news。只依据检索到的资料作答，区分事件日期与发布日期。每条正文以句末标点结束，空格后添加“来源：”和真实网页标题的可点击链接，格式为 正文。 来源：[网页真实标题](原文URL)。链接必须指向支持对应信息的具体原文页面，不得编造标题、网址或用无关网页代替。' }],
     })
   })
 
@@ -65,7 +65,10 @@ describe('Wanwei OneAPI web search', () => {
     expect(result.sources).toEqual([
       { title: '官方公告', url: 'https://news.example.com/release' }, { url: 'https://second.example.com/' },
     ])
-    expect(result.content).toContain('在每条相关事实或结论旁提供可点击的原文链接')
+    expect(result.content).toContain('正文末尾先用句号、问号或叹号等句末标点结束')
+    expect(result.content).toContain('正文。 来源：[网页真实标题](原文URL)')
+    expect(result.content).toContain('正文。 来源：[原文URL](原文URL)')
+    expect(result.content).toContain('多条信息逐条附上对应来源')
     expect(result.content).toContain('[网页真实标题](原文URL)')
     expect(result.content).toContain('返回的原始标题')
     expect(result.content).toContain('没有真实标题时显示可点击的原文 URL')

@@ -79,6 +79,8 @@ kind: "package-reference"
 <a id="understand-the-implementation"></a>
 ## 理解实现
 
+内网中转模式下，Host 向新 Shell 命令提供 `python -m wanwei_resource`，用于指定网站读取及工作区文件下载。客户端使用所选路由，不读取离线 wheel 库，无需安装 Python 包。公网 `web_fetch` 仍被拦截，并提示模型使用此客户端。限制与验收见[指定资源获取](../../../products/wanwei-desktop/resource-relay/README.zh.md)。资源来源提示词增加此命令契约；网页内容进入普通 Shell 工具结果，下载文件需用 `deliver_files` 声明最终交付。
+
 <details>
 <summary>实现细节 — 点击展开</summary>
 

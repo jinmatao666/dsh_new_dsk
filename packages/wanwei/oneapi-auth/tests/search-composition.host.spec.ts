@@ -49,6 +49,8 @@ it('passes real sources into model output and the replayable clickable search vi
     await ctx.loader.await()
     const policy = (await ctx.systemPrompt.assemble()).sections.find(section => section.name === 'wanwei:web-source-citations')
     expect(policy?.text).toContain('[网页真实标题](原文URL)')
+    expect(policy?.text).toContain('正文。 来源：[网页真实标题](原文URL)')
+    expect(policy?.text).toContain('不要将链接直接紧贴正文')
     expect(policy?.text).toContain('正文不支持结论')
     expect(policy?.text).toMatchSnapshot()
     const result = await ctx.tools.execute({ name: 'web_search', callId: ToolCallId('search'),
@@ -61,7 +63,7 @@ it('passes real sources into model output and the replayable clickable search vi
     const view = presentSearchResult({ queries: ['今日公告'] }, JSON.parse(JSON.stringify(result)) as typeof result)
     expect(view).toMatchInlineSnapshot(`
       {
-        "answer": "网页搜索返回的是候选网页，不代表已核实正文。回答前先用 web_fetch 或可用的浏览器工具读取具体原文，逐条核对事实、事件日期和发布日期。在每条相关事实或结论旁提供可点击的原文链接，格式为 [网页真实标题](原文URL)。链接文字使用检索或实际页面返回的原始标题，不得编造标题，也不要用 source、来源、源网站或只有编号的引用代替。没有真实标题时显示可点击的原文 URL，不猜测标题。链接只能来自本次或后续检索、网页读取工具实际返回的 URL；不能猜测或拼接网址，不能用站点首页或无关网页支撑具体消息。读取失败、正文不支持结论或资料不足时，明确标注未核实或不采用该条，不得声称已验证。没有来源时明确说明未找到可核验的原文网页。",
+        "answer": "网页搜索返回的是候选网页，不代表已核实正文。回答前先用 web_fetch 或可用的浏览器工具读取具体原文，逐条核对事实、事件日期和发布日期。在每条相关事实或结论的正文末尾先用句号、问号或叹号等句末标点结束，再留一个空格并添加“来源：”及可点击的原文链接，格式为 正文。 来源：[网页真实标题](原文URL)。不要将链接直接紧贴正文，也不要用 source、源网站或只有编号的引用代替“来源：”。链接文字使用检索或实际页面返回的原始标题，不得编造标题。没有真实标题时显示可点击的原文 URL，格式为 正文。 来源：[原文URL](原文URL)，不猜测标题。多条信息逐条附上对应来源；同一条有多个来源时用顿号分隔链接。链接只能来自本次或后续检索、网页读取工具实际返回的 URL；不能猜测或拼接网址，不能用站点首页或无关网页支撑具体消息。读取失败、正文不支持结论或资料不足时，明确标注未核实或不采用该条，不得声称已验证。没有来源时明确说明未找到可核验的原文网页。",
         "card": "web",
         "kind": "search",
         "sources": [

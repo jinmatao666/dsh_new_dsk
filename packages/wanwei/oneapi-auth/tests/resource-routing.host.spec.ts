@@ -6,7 +6,7 @@ import { ResourceRouting } from '../src/resource-routing.ts'
 import { resolveResourceSettings, type ResourceSettings } from '../src/resource-settings.ts'
 
 let route: ResourceRouting | undefined
-afterEach(() => { route?.restore(); route = undefined; vi.useRealTimers() })
+afterEach(async () => { await route?.dispose(); route = undefined; vi.useRealTimers() })
 const offline: ResourceSettings = { source: 'offline', proxyUrl: '', autoDetect: false, probeUrls: [] }
 const proxy: ResourceSettings = { source: 'proxy', proxyUrl: 'http://relay.lan:3128', autoDetect: false,
   probeUrls: ['https://one.example/204', 'https://two.example/204'] }
