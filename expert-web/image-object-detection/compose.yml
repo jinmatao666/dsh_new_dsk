@@ -1,0 +1,29 @@
+# Same-host Linux host network. Confirm 3313 is free; only this expert is changed.
+services:
+  expert:
+    build: .
+    image: wanwei-expert/image-object-detection:0.2.0
+    init: true
+    restart: unless-stopped
+    network_mode: host
+    env_file: .env
+    environment:
+      HOST: 127.0.0.1
+      PORT: "3313"
+      EXPERT_DATA_DIR: /data
+    volumes:
+      - detect-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2048m
+    cpus: 2
+    pids_limit: 96
+    stop_grace_period: 250s
+volumes:
+  detect-data:
+    name: wanwei-image-object-detection-data

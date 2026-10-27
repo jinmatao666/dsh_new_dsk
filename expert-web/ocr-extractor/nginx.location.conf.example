@@ -1,0 +1,16 @@
+# Insert only inside existing ac.zjugis.com:3300 server, same-host host gateway.
+location = /experts/ocr-extractor { return 308 /experts/ocr-extractor/; }
+location ^~ /experts/ocr-extractor/ {
+    client_max_body_size 15m;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host:$server_port;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header Authorization "";
+    proxy_set_header Cookie "expert_ocr_extractor_session=$cookie_expert_ocr_extractor_session";
+    proxy_cookie_path / /experts/ocr-extractor/;
+    proxy_connect_timeout 10s;
+    proxy_read_timeout 160s;
+    proxy_pass http://127.0.0.1:3315/;
+}
