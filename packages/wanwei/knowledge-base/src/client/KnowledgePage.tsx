@@ -603,7 +603,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
           const bytes = file.bytes
           const contentType = mimeFor(document.name, file.contentType)
           if (kind === 'image' || contentType.startsWith('image/')) {
-            const objectUrl = URL.createObjectURL(new Blob([bytes], { type: contentType }))
+            const objectUrl = URL.createObjectURL(new Blob([bytes.slice()], { type: contentType }))
             apply({ document, loading: false, mode: 'image', objectUrl }, objectUrl)
             return
           }
@@ -684,7 +684,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       const cached = readDownloadCache(selectedId, viewer.document.id)
       const file = cached ?? await api.download(selectedId, viewer.document.id)
       if (cached === undefined) writeDownloadCache(selectedId, viewer.document.id, file)
-      const url = URL.createObjectURL(new Blob([file.bytes], {
+      const url = URL.createObjectURL(new Blob([file.bytes.slice()], {
         type: mimeFor(viewer.document.name, file.contentType),
       }))
       const link = window.document.createElement('a')
