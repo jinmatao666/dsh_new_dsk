@@ -36,13 +36,17 @@ The default output is `../delivery/oneapi/0.0.77-release.1/`. Use a new version 
 
 If an npm lockfile is missing or stale, update it in its frontend directory, review the dependency changes, and commit it with the matching package manifest. Use `git add -f` for a lockfile excluded by repository ignore rules. Never copy a lockfile from a different repository without checking dependency compatibility.
 
-The package contains `release.json`, `SHA256SUMS`, `deploy-oneapi.sh`, a source tar, an operation guide and version-specific `COMMANDS.txt`. Only committed backend files are archived. Environment files, credentials with recognized filenames, caches and runtime data are excluded; this filename filter is not a full secret scanner, so review committed source before release.
+The package contains `release.json`, `SHA256SUMS`, `deploy-oneapi.sh`, `organize-oneapi.py`, a source tar, an operation guide and version-specific `COMMANDS.txt`. Only committed backend files are archived. Environment files, credentials with recognized filenames, caches and runtime data are excluded; this filename filter is not a full secret scanner, so review committed source before release.
 
 -----
 
 <a id="update-the-server"></a>
 
 ## Update the server
+
+Server-owned OneAPI files use `/root/dsh`: `releases/` holds version packages, `builds/` holds temporary Docker build sources, `updates/` holds deployment state and diagnostics, `backups/database/` holds operator-created SQL backups, `backups/gateway/` holds gateway rollback files, and `backups/migrations/` holds migration archives and private configuration snapshots. `data/` holds persistent installer uploads and offline resources. Runtime preparation rejects symlinked storage parents. Existing container mounts and the container-side upload/download paths remain authoritative; this layout does not rewrite current mounts or database artifact records.
+
+The release includes `organize-oneapi.py` in its checksum list. On the Linux server, run `python3 organize-oneapi.py check` to list recognized legacy `/root/dsh-one-api-build.*`, update-state and backup entries, then `python3 organize-oneapi.py apply` to move the reviewed entries into this layout. The tool shares deployment/gateway locks, inspects mounts on running and stopped containers, rejects overlapping mounts and destination conflicts, and retains a private move journal under `updates/`. It renames files rather than deleting them, reverses completed moves after a rename failure, and leaves unrelated services and `/root/dsh/data` untouched. No server invocation is performed by local packaging or these offline tests.
 
 Upload the entire output directory into `/root/dsh/releases/0.0.77-release.1/`. The server needs Linux, root access, a local Docker daemon, Bash, Python 3, curl, sha256sum, tar, flock and network access for build dependencies. Use the commands generated in `COMMANDS.txt`; the following example uses a real, existing database backup path supplied by the operator.
 
@@ -51,10 +55,10 @@ cd /root/dsh/releases/0.0.77-release.1
 sha256sum -c SHA256SUMS
 bash deploy-oneapi.sh verify --package ./dsh-server-source-0.0.77-release.1.tar.gz
 bash deploy-oneapi.sh check --package ./dsh-server-source-0.0.77-release.1.tar.gz
-bash deploy-oneapi.sh update --package ./dsh-server-source-0.0.77-release.1.tar.gz --db-backup /absolute/backup.sql
+bash deploy-oneapi.sh update --package ./dsh-server-source-0.0.77-release.1.tar.gz --db-backup /root/dsh/backups/database/backup.sql
 ```
 
-`verify` checks the package without Docker. `check` checks the existing container, persistence and gateway/expert readiness without replacing containers. `update` builds the image and deploys it. `build` and `deploy` are also available separately. Only after explicitly accepting database migration risk may the operator replace `--db-backup /absolute/backup.sql` with `--skip-db-backup`; the script does not create or restore a database backup.
+`verify` checks the package without Docker. `check` checks the existing container, persistence and gateway/expert readiness without replacing containers. `update` builds the image and deploys it. `build` and `deploy` are also available separately. Only after explicitly accepting database migration risk may the operator replace `--db-backup /root/dsh/backups/database/backup.sql` with `--skip-db-backup`; the script does not create or restore a database backup.
 
 A successful update prints `Updated: zjugis-one-api:<version>`, retains the stopped old container and prints a private recovery directory. The new `/api/status` must report the expected version and success. After deployment, the operator verifies admin login, the changed feature, usage statistics and expert submissions. Never share the private recovery directory: it contains the container environment and may contain credentials.
 

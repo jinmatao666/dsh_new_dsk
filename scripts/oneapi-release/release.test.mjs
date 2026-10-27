@@ -42,6 +42,7 @@ function fixture(t) {
   put('services/one-api/.env.example', 'EXAMPLE=\n')
   put('services/one-api/web/air/node_modules/mock.js', 'must-not-ship\n')
   put('scripts/oneapi-release/deploy-oneapi.sh', readFileSync(join(here, 'deploy-oneapi.sh')))
+  put('scripts/oneapi-release/organize-oneapi.py', readFileSync(join(here, 'organize-oneapi.py')))
   put('docs/developer/oneapi-release.zh.md', 'Test fixture guide\n')
   function commit() {
     git(repo, 'add', '-A')
@@ -87,6 +88,9 @@ test('packages actual Git archive, manifest, checksums and fixed commands withou
   assert.ok(manifest.archive.bytes > 0)
   assert.equal(existsSync(join(result.destination, 'INCOMPLETE.txt')), false)
   assert.ok(existsSync(join(result.destination, 'PACKAGING-COMPLETE.txt')))
+  assert.equal(readFileSync(join(result.destination, 'organize-oneapi.py'), 'utf8'), readFileSync(join(here, 'organize-oneapi.py'), 'utf8'))
+  assert.match(readFileSync(join(result.destination, 'SHA256SUMS'), 'utf8'), /[a-f0-9]{64}  organize-oneapi\.py/)
+  assert.match(readFileSync(join(result.destination, 'COMMANDS.txt'), 'utf8'), /organize-oneapi\.py check/)
   assert.match(readFileSync(join(result.destination, 'COMMANDS.txt'), 'utf8'), /update --package .* --db-backup/)
   assert.deepEqual(readFileSync(join(f.repo, '.git/index')), indexBefore)
   assert.equal(git(f.repo, 'status', '--porcelain'), '')
@@ -165,6 +169,8 @@ test('CLI help exits successfully without Docker or repository mutation', () => 
 
 test('server topology, preservation, rollback and archive regression checks', () => {
   const python = process.platform === 'win32' ? 'python' : 'python3'
-  const result = spawnSync(python, [join(here, 'test_deploy.py')], { encoding: 'utf8', windowsHide: true })
-  assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`)
+  for (const suite of ['test_deploy.py', 'test_organize.py']) {
+    const result = spawnSync(python, ['-B', join(here, suite)], { encoding: 'utf8', windowsHide: true })
+    assert.equal(result.status, 0, `${suite}: ${result.error ?? ''}\n${result.stdout}\n${result.stderr}`)
+  }
 })

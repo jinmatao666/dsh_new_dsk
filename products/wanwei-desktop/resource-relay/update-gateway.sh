@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Usage: bash update-gateway.sh check|apply /absolute/host/nginx.conf public-hostname
-# Rollback: bash update-gateway.sh rollback /root/dsh-gateway-tunnel.XXXXXXXX
+# Rollback: bash update-gateway.sh rollback /root/dsh/backups/gateway/dsh-gateway-tunnel.XXXXXXXX
 set -Eeuo pipefail
 umask 077
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
@@ -52,7 +52,7 @@ health() {
 }
 if test "$ACTION" = rollback; then
   STATE=${2:-}
-  test "$(realpath -e -- "$STATE")" = "$STATE" && [[ "$STATE" =~ ^/root/dsh-gateway-tunnel\.[A-Za-z0-9]+$ ]] || die 'Invalid backup directory.'
+  test "$(realpath -e -- "$STATE")" = "$STATE" && [[ "$STATE" =~ ^/root/dsh/backups/gateway/dsh-gateway-tunnel\.[A-Za-z0-9]+$ || "$STATE" =~ ^/root/dsh-gateway-tunnel\.[A-Za-z0-9]+$ ]] || die 'Invalid backup directory.'
   test -s "$STATE/original.conf" && test -s "$STATE/config-path" || die 'Missing rollback files.'
   CONFIG=$(<"$STATE/config-path")
   verify_binding
@@ -70,7 +70,12 @@ HOSTNAME_ARG=${3:?Specify the public server_name}
 verify_binding
 docker exec "$GATEWAY" nginx -t
 health
-STATE=$(mktemp -d /root/dsh-gateway-tunnel.XXXXXXXX)
+for directory in /root/dsh /root/dsh/backups /root/dsh/backups/gateway; do
+  test ! -L "$directory" || die "Backup directory must not be a symlink: $directory"
+  mkdir -p -- "$directory"
+  test "$(realpath -e -- "$directory")" = "$directory" || die 'Invalid backup parent.'
+done
+STATE=$(mktemp -d /root/dsh/backups/gateway/dsh-gateway-tunnel.XXXXXXXX)
 cp -p -- "$CONFIG" "$STATE/original.conf"
 printf '%s\n' "$CONFIG" > "$STATE/config-path"
 python3 -I "$HERE/patch-gateway.py" "$CONFIG" "$STATE/candidate.conf" --hostname "$HOSTNAME_ARG"

@@ -20,11 +20,13 @@ python products/wanwei-desktop/resource-relay/build-offline-python.py --output E
 
 OneAPI 将资源包存放在 `/data/desktop-resources`，或 `DESKTOP_RESOURCE_DIR`。必须持久化此目录。旧的按内容寻址资源包会保留供进行中的下载使用；运维负责磁盘容量监控和保留策略。依赖下载在服务内公开，所以只上传依赖制品，不上传客户私密文件。
 
+Compose 从 `DSH_DESKTOP_RESOURCE_HOST_DIR` 挂载离线资源目录，默认 `/root/dsh/data/desktop-resources`。已有源码发布部署保留检查到的资源挂载，包括 `/root/dsh/data` 下独立创建的随机后缀目录。重新创建 Compose 容器时须保留现有文件及宿主机目录变量；新的空子挂载会隐藏原先存放在 `/data` 卷中的资源。
+
 ## 复用现有入口的托管通道
 
 选择内网 → 联网中转 → 复用后台入口，地址留空使用登录后台，强制中转测试时关闭自动检测。填写地址时须与登录后台同源，不会向其他来源发送登录凭证。独立资源服务器可由同一公网网关转发接入。桌面端内置仅监听回环地址的 HTTP 代理，将 HTTP/CONNECT 流量通过 WebSocket 发送到 `/api/desktop-resources/tunnel`。OneAPI 提供认证后的 TCP 中转，不需要 Squid 或新增公网端口。
 
-网关须在该精确路径转发 WebSocket Upgrade 头，路由片段为 `gateway-tunnel.location.conf`。发布运维先通过 `docker inspect dsh-experts-gateway --format '{{json .Mounts}}'` 确认宿主机主配置文件的真实路径。以下命令由运维在服务器执行，本 Windows 环境未运行：`bash update-gateway.sh check /absolute/host/nginx.conf ac.zjugis.com` 生成私有候选文件；`bash update-gateway.sh apply /absolute/host/nginx.conf ac.zjugis.com` 备份原文件、验证挂载和配置、重载 Nginx，并检查后台和六个专家服务，失败则恢复原配置。可将输出的备份目录传给 `bash update-gateway.sh rollback /root/dsh-gateway-tunnel.XXXXXXXX` 回退。Python 辅助脚本和路由片段须与 sh 放在同一目录，不重启容器。
+网关须在该精确路径转发 WebSocket Upgrade 头，路由片段为 `gateway-tunnel.location.conf`。发布运维先通过 `docker inspect dsh-experts-gateway --format '{{json .Mounts}}'` 确认宿主机主配置文件的真实路径。以下命令由运维在服务器执行，本 Windows 环境未运行：`bash update-gateway.sh check /absolute/host/nginx.conf ac.zjugis.com` 生成私有候选文件；`bash update-gateway.sh apply /absolute/host/nginx.conf ac.zjugis.com` 备份原文件、验证挂载和配置、重载 Nginx，并检查后台和六个专家服务，失败则恢复原配置。新私有备份位于 `/root/dsh/backups/gateway`；可将输出的目录传给 `bash update-gateway.sh rollback /root/dsh/backups/gateway/dsh-gateway-tunnel.XXXXXXXX` 回退。回滚也接受保留的 `/root/dsh-gateway-tunnel.XXXXXXXX` 历史备份。Python 辅助脚本和路由片段须与 sh 放在同一目录，不重启容器。
 
 中转只连接公网目标的 80/443 端口，校验 DNS 全部结果，并固定实际连接的 IP。拒绝带浏览器 Origin 的握手和未认证连接。部署限制为 `DSH_RELAY_CONNECTIONS`（64）、`DSH_RELAY_PER_USER`（8）、`DSH_RELAY_BYTES`（单连接双向合计 1 GiB）、`DSH_RELAY_IDLE_SECONDS`（90）及 `DSH_RELAY_LIFETIME_SECONDS`（3600），配置非法时拒绝新通道。日志只记录用户 ID、目标主机/端口及字节数，不记录请求正文或认证头。
 

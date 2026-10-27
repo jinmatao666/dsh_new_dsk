@@ -10,6 +10,8 @@ Version-specific packaging and deployment scripts require manual edits and can s
 
 ## Decision
 
+Server-owned build sources, deployment state, backup files and uploaded artifacts belong beneath `/root/dsh`. The deployment script creates verified directory parents, and the optional checksummed organizer relocates recognized legacy files without touching mounts or restarting containers. Compose host defaults for desktop updates and offline resources use this root; existing release deployments retain their inspected mounts. Container-side paths and relative artifact IDs remain stable so a host directory cleanup does not invalidate upload records or download URLs. Gateway rollback accepts both the consolidated backup directory and retained legacy backups.
+
 The [release command](../../../../scripts/oneapi-release/release.mjs) packages committed OneAPI files from an explicit Git ref and refuses uncommitted backend changes. It uses a private temporary Git index for archive filtering, leaving the user's staging area intact. The selected commit owns both npm lockfiles, the deployment script and build checks; missing or incompatible lockfiles fail preflight rather than generating floating dependencies during packaging.
 
 Each version has an exclusive output directory, source tar, commit metadata, checksums and generated server commands. The [fixed deployer](../../../../scripts/oneapi-release/deploy-oneapi.sh) parses metadata without shell evaluation, verifies archive contents and image provenance, preserves the established container configuration, and accepts startup only when status reports the requested version. Frontend and backend regression checks live in the committed Dockerfile rather than release-time text substitutions.

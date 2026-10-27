@@ -13,6 +13,26 @@ snippet = Path(__file__).with_name('gateway-tunnel.location.conf').read_text(enc
 
 
 class GatewayTests(unittest.TestCase):
+    def test_rollback_accepts_new_backup_location_and_preserves_legacy_backups(self):
+        import os
+        import re
+        import shutil
+        import subprocess
+        script = Path(__file__).with_name('update-gateway.sh').read_text(encoding='utf-8')
+        condition = re.search(r'\[\[ "\$STATE" =~ (.*?) \]\]', script).group(0)
+        bash = Path(shutil.which('git')).parent.parent / 'bin/bash.exe' if os.name == 'nt' else Path(shutil.which('bash'))
+        kwargs = {'capture_output': True, 'text': True}
+        if os.name == 'nt':
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+        for state, expected in (
+            ('/root/dsh/backups/gateway/dsh-gateway-tunnel.Abcd1234', 0),
+            ('/root/dsh-gateway-tunnel.Abcd1234', 0),
+            ('/root/dsh/backups/gateway/../../etc', 1),
+            ('/root/unrelated', 1),
+        ):
+            result = subprocess.run([str(bash), '-c', 'STATE=$1; ' + condition, 'fixture', state], **kwargs)
+            self.assertEqual(result.returncode, expected, result.stderr)
+
     def test_only_named_server_changes_and_repeated_apply_is_idempotent(self):
         default = 'server { listen 3300 default_server; server_name _; return 444; }'
         expert = 'location /experts/ { proxy_pass http://127.0.0.1:3301; }'

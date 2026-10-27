@@ -73,6 +73,14 @@ UPDATE_BIND=''
 UPDATE_PUBLIC_KEY='dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE1RDdEQURENzA4OTRFRTcKUldUblRvbHczZHJYRlg3S00xdk1maXZiVWtnb3cyd1ZQa1loZDV6Q3VWZzZSK2J2aks5S09mN2wK'
 CHANGING=0
 die() { echo "ERROR: $*" >&2; exit 1; }
+prepare_layout() {
+  local path
+  for path in /root/dsh /root/dsh/builds /root/dsh/updates /root/dsh/backups /root/dsh/backups/database /root/dsh/backups/migrations /root/dsh/data /root/dsh/releases; do
+    test ! -L "$path" || die "Storage directory must not be a symlink: $path"
+    mkdir -p -- "$path"
+    test -d "$path" && test "$(realpath -e -- "$path")" = "$path" || die "Invalid storage directory: $path"
+  done
+}
 validate_archive() {
   python3 -I - "$ARCHIVE" <<'SAFE'
 import pathlib, sys, tarfile
@@ -91,7 +99,7 @@ SAFE
 }
 validate_archive
 if test "$ACTION" = verify; then echo "Verified: $VERSION commit=$COMMIT source=$SOURCE_SHA"; exit 0; fi
-for cmd in docker curl python3 sha256sum tar flock; do command -v "$cmd" >/dev/null || die "Missing command: $cmd"; done
+for cmd in docker curl python3 sha256sum tar flock realpath; do command -v "$cmd" >/dev/null || die "Missing command: $cmd"; done
 test -S /var/run/docker.sock || die 'Requires local Docker socket /var/run/docker.sock.'
 # All CLI operations must address the same local daemon as the Python Docker API.
 unset DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH
@@ -99,6 +107,7 @@ export DOCKER_HOST=unix:///var/run/docker.sock
 test "$(id -u)" = 0 || die 'Run as root (or sudo bash).'
 exec 9>/var/lock/dsh-one-api-update.lock
 flock -n 9 || die 'Another OneAPI build/update is in progress.'
+prepare_layout
 
 inspect_and_validate() {
   docker inspect "$CONTAINER" > "$1"
@@ -189,7 +198,7 @@ build() {
   test -s "$ARCHIVE" && test -s "$HERE/SHA256SUMS" || die 'Missing source archive or checksum.'
   (cd "$HERE" && sha256sum -c SHA256SUMS)
   local context
-  context=$(mktemp -d /root/dsh-one-api-build.XXXXXXXX)
+  context=$(mktemp -d /root/dsh/builds/one-api-build.XXXXXXXX)
   tar -xzf "$ARCHIVE" -C "$context"
   docker build --pull --build-arg "PARVIS_VERSION=$VERSION" \
     --label "org.opencontainers.image.revision=$COMMIT" \
@@ -243,7 +252,7 @@ deploy() {
   validate_db_backup "$@"
   docker image inspect "$IMAGE" >/dev/null || die 'Build the image first.'
   image_matches || die 'Image provenance mismatch; refusing deployment.'
-  STATE=$(mktemp -d /root/dsh-one-api-update.XXXXXXXX)
+  STATE=$(mktemp -d /root/dsh/updates/one-api-update.XXXXXXXX)
   inspect_and_validate "$STATE/old-container.json" allow-init
   if test "$(docker inspect -f '{{len .Mounts}}' "$CONTAINER")" = 0; then
     # Never hide pre-existing files in the writable container layer.
@@ -377,7 +386,7 @@ PY
 }
 case "$ACTION" in
   check)
-    CHECK=$(mktemp /root/dsh-one-api-check.XXXXXXXX)
+    CHECK=$(mktemp /root/dsh/updates/one-api-check.XXXXXXXX)
     trap 'rm -f -- "$CHECK"' EXIT
     inspect_and_validate "$CHECK" allow-init
     echo 'Gateway topology and six readyz checks passed; no deployment performed.';;

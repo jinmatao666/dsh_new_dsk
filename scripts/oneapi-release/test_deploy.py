@@ -59,6 +59,31 @@ class ReleaseTests(unittest.TestCase):
     def test_expected_topology_passes(self):
         self.run_block(BLOCKS[0], [])
 
+    def test_layout_preparation_executes_under_one_storage_root(self):
+        function = re.search(r'prepare_layout\(\) \{\n.*?\n\}', SCRIPT, re.S).group(0)
+        root = (pathlib.Path(self.temp.name) / 'dsh').as_posix()
+        if os.name == 'nt':
+            root = '/' + root[0].lower() + root[2:]
+            bash = pathlib.Path(shutil.which('git')).parent.parent / 'bin/bash.exe'
+        else:
+            bash = pathlib.Path(shutil.which('bash'))
+        code = 'set -eu\numask 077\ndie() { echo "$*" >&2; exit 1; }\n' + function.replace('/root/dsh', root) + '\nprepare_layout\n'
+        kwargs = {'capture_output': True, 'text': True}
+        if os.name == 'nt':
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+        result = subprocess.run([str(bash), '-c', code], **kwargs)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for name in ('builds', 'updates', 'backups/database', 'backups/migrations', 'data', 'releases'):
+            self.assertTrue((pathlib.Path(self.temp.name) / 'dsh' / name).is_dir())
+
+    def test_compose_upload_paths_persist_both_artifact_kinds_under_dsh(self):
+        compose = pathlib.Path(__file__).resolve().parents[2] / 'services/docker-compose.yml'
+        content = compose.read_text(encoding='utf-8')
+        for kind, variable in (('updates', 'UPDATE'), ('resources', 'RESOURCE')):
+            container = '/data/desktop-' + kind
+            self.assertIn('DESKTOP_' + variable + '_DIR: ' + container, content)
+            self.assertIn('${DSH_DESKTOP_' + variable + '_HOST_DIR:-/root/dsh/data/desktop-' + kind + '}:' + container, content)
+
     def test_missing_or_readonly_resource_storage_rejected(self):
         for mounts in ([], [{'Type': 'bind', 'Destination': '/data', 'RW': False}],
                        [{'Type': 'bind', 'Destination': '/data-other', 'RW': True}]):

@@ -36,13 +36,17 @@ node scripts/oneapi-release/release.mjs --version 0.0.77-release.1 --ref HEAD
 
 若缺少 npm 锁文件或锁文件已过期，请在对应前端目录更新，审查依赖变化后，将其与匹配的依赖清单一起提交。对于被仓库忽略规则排除的锁文件，使用 `git add -f`。未核对依赖兼容性时，不要从其他仓库复制锁文件。
 
-交付包包含 `release.json`、`SHA256SUMS`、`deploy-oneapi.sh`、源码 tar、操作说明和针对该版本的 `COMMANDS.txt`。归档只包含已提交的后台文件。环境文件、能按文件名识别的凭证、缓存和运行数据会被排除；文件名过滤不是完整的秘密扫描，发布前仍需审查已提交源码。
+交付包包含 `release.json`、`SHA256SUMS`、`deploy-oneapi.sh`、`organize-oneapi.py`、源码 tar、操作说明和针对该版本的 `COMMANDS.txt`。归档只包含已提交的后台文件。环境文件、能按文件名识别的凭证、缓存和运行数据会被排除；文件名过滤不是完整的秘密扫描，发布前仍需审查已提交源码。
 
 -----
 
 <a id="update-the-server"></a>
 
 ## 更新服务器
+
+OneAPI 的服务器文件统一放在 `/root/dsh`：`releases/` 保存各版本发布包，`builds/` 保存 Docker 临时构建源码，`updates/` 保存部署状态与诊断记录，`backups/database/` 保存操作员生成的 SQL 备份，`backups/gateway/` 保存网关回滚文件，`backups/migrations/` 保存迁移归档与私有配置快照。`data/` 保存安装包上传和离线资源等持久化文件。运行时目录准备拒绝符号链接父目录。已有容器挂载及容器内上传下载路径仍为准；目录整理不改写现有挂载或数据库中的制品记录。
+
+发布包把 `organize-oneapi.py` 纳入校验清单。在 Linux 服务器执行 `python3 organize-oneapi.py check`，查看可识别的旧 `/root/dsh-one-api-build.*`、升级状态和备份条目，再执行 `python3 organize-oneapi.py apply` 将核对后的条目移入新目录。工具与部署及网关脚本共用锁，检查运行中和已停止容器的挂载，拒绝挂载重叠和目标冲突，并在 `updates/` 下保存私有迁移清单。工具仅重命名、不删除文件，重命名失败后逆序恢复已移动条目，不处理其他服务和 `/root/dsh/data`。本地打包和离线测试不执行服务器上的整理操作。
 
 将整个输出目录上传至 `/root/dsh/releases/0.0.77-release.1/`。服务器需要 Linux、root 权限、本地 Docker 服务、Bash、Python 3、curl、sha256sum、tar、flock，以及下载构建依赖所需的网络。使用生成的 `COMMANDS.txt`；以下示例中的数据库备份路径须由操作员替换为真实存在的文件。
 
@@ -51,10 +55,10 @@ cd /root/dsh/releases/0.0.77-release.1
 sha256sum -c SHA256SUMS
 bash deploy-oneapi.sh verify --package ./dsh-server-source-0.0.77-release.1.tar.gz
 bash deploy-oneapi.sh check --package ./dsh-server-source-0.0.77-release.1.tar.gz
-bash deploy-oneapi.sh update --package ./dsh-server-source-0.0.77-release.1.tar.gz --db-backup /absolute/backup.sql
+bash deploy-oneapi.sh update --package ./dsh-server-source-0.0.77-release.1.tar.gz --db-backup /root/dsh/backups/database/backup.sql
 ```
 
-`verify` 无需 Docker 即可校验交付包。`check` 检查现有容器、持久化目录和网关及专家就绪状态，不替换容器。`update` 构建镜像并部署，也可分别执行 `build` 和 `deploy`。只有明确接受数据库迁移风险时，操作员才可将 `--db-backup /absolute/backup.sql` 改为 `--skip-db-backup`；脚本不会生成或恢复数据库备份。
+`verify` 无需 Docker 即可校验交付包。`check` 检查现有容器、持久化目录和网关及专家就绪状态，不替换容器。`update` 构建镜像并部署，也可分别执行 `build` 和 `deploy`。只有明确接受数据库迁移风险时，操作员才可将 `--db-backup /root/dsh/backups/database/backup.sql` 改为 `--skip-db-backup`；脚本不会生成或恢复数据库备份。
 
 更新成功会打印 `Updated: zjugis-one-api:<version>`，保留已停止的旧容器，并打印私有恢复目录。新版本 `/api/status` 必须返回预期版本号和成功状态。部署后由操作员验收后台登录、改动功能、使用统计和专家提交。不要分享私有恢复目录：其中包含容器环境，可能含有凭证。
 

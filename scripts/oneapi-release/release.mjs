@@ -111,6 +111,7 @@ export function inspectRelease(options) {
   }
   for (const folder of ['air', 'org-admin']) validateLock(repo, commit, folder)
   const deployer = runGit(repo, ['show', `${commit}:${toolRoot}/deploy-oneapi.sh`])
+  const organizer = runGit(repo, ['show', `${commit}:${toolRoot}/organize-oneapi.py`])
   if (deployer.includes('\r') || !deployer.startsWith('#!/usr/bin/env bash\n')) throw new Error('Committed deployment script must be UTF-8 with LF line endings.')
   const guide = runGit(repo, ['show', `${commit}:docs/developer/oneapi-release.zh.md`])
   const outputBase = resolve(options.output ?? join(repo, '..', 'delivery', 'oneapi'))
@@ -118,14 +119,14 @@ export function inspectRelease(options) {
   const withinRepo = relative(repo, destination)
   if (!withinRepo.startsWith('..') && !isAbsolute(withinRepo)) throw new Error('Release output must be outside the source repository.')
   if (existsSync(destination)) throw new Error(`Release already exists; use a new version: ${destination}`)
-  return { repo, commit, branch, counts, files, excluded: entries.filter(e => !included(e.path)), deployer, guide, outputBase, destination }
+  return { repo, commit, branch, counts, files, excluded: entries.filter(e => !included(e.path)), deployer, organizer, guide, outputBase, destination }
 }
 
 /** Create one immutable version directory; partial failures remain clearly marked, never overwritten. */
 export function packageRelease(options) {
   const inspected = inspectRelease(options)
   if (options.status || options.check) return inspected
-  const { repo, commit, files, outputBase, destination, deployer, guide } = inspected
+  const { repo, commit, files, outputBase, destination, deployer, organizer, guide } = inspected
   mkdirSync(outputBase, { recursive: true })
   mkdirSync(destination)
   const incomplete = join(destination, 'INCOMPLETE.txt')
@@ -151,18 +152,21 @@ export function packageRelease(options) {
   }
   const archiveHash = sha256(readFileSync(archive))
   const deploymentHash = sha256(Buffer.from(deployer, 'utf8'))
+  const organizerHash = sha256(Buffer.from(organizer, 'utf8'))
   writeFileSync(join(destination, 'deploy-oneapi.sh'), deployer, { flag: 'wx' })
+  writeFileSync(join(destination, 'organize-oneapi.py'), organizer, { flag: 'wx' })
   const manifest = {
     schemaVersion: 1, kind: 'oneapi-source', version: options.version,
     commit, sourceTree: runGit(repo, ['rev-parse', `${commit}:${sourceRoot}`]).trim(),
     createdAt: new Date().toISOString(), sourceFiles: files.length,
     archive: { file: archiveName, sha256: archiveHash, bytes: statSync(archive).size },
     deployer: { file: 'deploy-oneapi.sh', sha256: deploymentHash },
+    organizer: { file: 'organize-oneapi.py', sha256: organizerHash },
     verification: 'Packaging checks only. Docker build runs committed frontend/backend checks on the server. No production deployment performed.',
   }
   writeFileSync(join(destination, 'release.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' })
   const manifestHash = sha256(readFileSync(join(destination, 'release.json')))
-  writeFileSync(join(destination, 'SHA256SUMS'), `${archiveHash}  ${archiveName}\n${deploymentHash}  deploy-oneapi.sh\n${manifestHash}  release.json\n`, { flag: 'wx' })
+  writeFileSync(join(destination, 'SHA256SUMS'), `${archiveHash}  ${archiveName}\n${deploymentHash}  deploy-oneapi.sh\n${organizerHash}  organize-oneapi.py\n${manifestHash}  release.json\n`, { flag: 'wx' })
   writeFileSync(join(destination, 'README.zh.md'), guide, { flag: 'wx' })
   const commands = [
     '# Upload this complete directory into /root/dsh/releases/' + options.version,
@@ -170,8 +174,11 @@ export function packageRelease(options) {
     'sha256sum -c SHA256SUMS',
     `bash deploy-oneapi.sh verify --package ./${archiveName}`,
     `bash deploy-oneapi.sh check --package ./${archiveName}`,
+    '# Optional legacy directory organization: check first, then apply the reviewed plan:',
+    '# python3 organize-oneapi.py check',
+    '# python3 organize-oneapi.py apply',
     '# Replace the backup path with an existing nonempty database backup file:',
-    `bash deploy-oneapi.sh update --package ./${archiveName} --db-backup /absolute/backup.sql`,
+    `bash deploy-oneapi.sh update --package ./${archiveName} --db-backup /root/dsh/backups/database/backup.sql`,
     '# Alternative ONLY if deliberately accepting database migration risk:',
     `# bash deploy-oneapi.sh update --package ./${archiveName} --skip-db-backup`,
     '',
