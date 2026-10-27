@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { KnowledgePage, type KnowledgeApi } from '../src/client/KnowledgePage.tsx'
+import { clearKnowledgeDownloadCache, KnowledgePage, type KnowledgeApi } from '../src/client/KnowledgePage.tsx'
 
 vi.mock('pdfjs-dist', () => ({
   GlobalWorkerOptions: { workerSrc: '' },
+  AnnotationMode: { DISABLE: 0, ENABLE: 1, ENABLE_FORMS: 2, ENABLE_STORAGE: 3 },
   Util: {
     transform: (_viewport: number[], item: number[]) => item,
   },
@@ -27,7 +28,10 @@ vi.mock('pdfjs-dist/build/pdf.worker.min.mjs', () => ({
   WorkerMessageHandler: { setup() {} },
 }))
 
-afterEach(cleanup)
+afterEach(() => {
+  clearKnowledgeDownloadCache()
+  cleanup()
+})
 
 function stubCanvas() {
   HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
@@ -42,6 +46,9 @@ function stubCanvas() {
     setTransform() {},
   })) as unknown as typeof HTMLCanvasElement.prototype.getContext
   HTMLCanvasElement.prototype.toDataURL = vi.fn(() => 'data:image/png;base64,AA==')
+  HTMLCanvasElement.prototype.toBlob = vi.fn(function toBlob(callback: BlobCallback) {
+    callback(new Blob(['x'], { type: 'image/jpeg' }))
+  }) as unknown as typeof HTMLCanvasElement.prototype.toBlob
 }
 
 function api(): KnowledgeApi {
@@ -61,12 +68,13 @@ function api(): KnowledgeApi {
     create: vi.fn(async input => ({ id: 2, owner_user_id: 7, ...input })),
     documents: vi.fn(async () => [{ id: 'doc-1', name: '说明.pdf', size: 2048, run: 'DONE', progress: 1 }]),
     chunks: vi.fn(async () => [{ id: 'chunk-1', content: '文档正文内容' }]),
-    download: vi.fn(async () => ({ contentType: 'application/pdf', bytes: [37, 80, 68, 70] })),
+    download: vi.fn(async () => ({ contentType: 'application/pdf', bytes: new Uint8Array([37, 80, 68, 70]) })),
     upload: vi.fn(async () => {}),
     delete: vi.fn(async () => {}),
     copy: vi.fn(async () => {}),
     move: vi.fn(async () => {}),
     messages: vi.fn(async () => []),
+    clearMessages: vi.fn(async () => {}),
     complete: vi.fn(async () => ({ answer: '知识库回答', recommendations: ['继续提问'] })),
   }
 }
@@ -305,6 +313,37 @@ it('restores saved Q&A turns when opening a knowledge base', async () => {
   expect(pane.scrollTop).toBe(0)
 })
 
+it('clears saved Q&A turns and leaves the empty knowledge chat', async () => {
+  const service = api()
+  service.messages = vi.fn(async () => [
+    { role: 'user' as const, content: '上次的问题' },
+    { role: 'assistant' as const, content: '上次的回答' },
+  ])
+  render(<KnowledgePage api={service} />)
+  expect(await screen.findByText('上次的问题')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '清空会话' }))
+  await waitFor(() => expect(service.clearMessages).toHaveBeenCalledWith(1))
+  await waitFor(() => expect(screen.queryByText('上次的问题')).toBeNull())
+  expect(screen.queryByText('上次的回答')).toBeNull()
+  expect(screen.getByText('基于知识库问答')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: '清空会话' })).toBeNull()
+})
+
+it('restores Q&A turns when clearing the session fails', async () => {
+  const service = api()
+  service.messages = vi.fn(async () => [
+    { role: 'user' as const, content: '上次的问题' },
+    { role: 'assistant' as const, content: '上次的回答' },
+  ])
+  service.clearMessages = vi.fn(async () => { throw new Error('网络中断') })
+  render(<KnowledgePage api={service} />)
+  expect(await screen.findByText('上次的问题')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '清空会话' }))
+  expect((await screen.findByRole('alert')).textContent ?? '').toContain('清空失败')
+  expect(await screen.findByText('上次的问题')).toBeTruthy()
+  expect(screen.getByText('上次的回答')).toBeTruthy()
+})
+
 it('asks the selected knowledge base through chat completions and renders recommendations', async () => {
   const service = api()
   service.complete = vi.fn(async (_id, _question, onProgress) => {
@@ -320,7 +359,9 @@ it('asks the selected knowledge base through chat completions and renders recomm
   expect(screen.getByRole('button', { name: '发送' }).className).toContain('ready')
   fireEvent.click(screen.getByRole('button', { name: '发送' }))
   await waitFor(() => expect(service.complete).toHaveBeenCalled())
-  expect(service.complete).toHaveBeenCalledWith(1, '请概括文档', expect.any(Function), expect.any(AbortSignal))
+  expect(service.complete).toHaveBeenCalledWith(
+    1, '请概括文档', expect.any(Function), expect.any(AbortSignal), undefined,
+  )
   expect(await screen.findByText('知识库回答')).toBeTruthy()
   expect(screen.getByText('万维')).toBeTruthy()
   expect(screen.getByText('继续提问')).toBeTruthy()
@@ -372,9 +413,10 @@ it('opens a PDF preview with pdf.js when a content list item is clicked', async 
   expect(screen.getByRole('dialog', { name: '说明.pdf' })).toBeTruthy()
   expect(await screen.findByAltText('PDF 1')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: '下载' }))
-  await waitFor(() => expect(service.download).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(click).toHaveBeenCalled())
+  // Preview already cached the original bytes; save should not download again.
+  expect(service.download).toHaveBeenCalledTimes(1)
   expect(createObjectURL).toHaveBeenCalled()
-  expect(click).toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: '关闭' }))
   expect(screen.queryByRole('dialog', { name: '说明.pdf' })).toBeNull()
 })
@@ -382,6 +424,8 @@ it('opens a PDF preview with pdf.js when a content list item is clicked', async 
 it('opens 问问万维 beside a preview and asks the current knowledge base about that file', async () => {
   const service = api()
   stubCanvas()
+  Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:doc') })
+  Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
   service.complete = vi.fn(async (_id, _question, onProgress) => {
     const answer = { answer: '这是文件摘要', recommendations: [] as string[] }
     onProgress?.({ ...answer, done: true })
@@ -396,7 +440,8 @@ it('opens 问问万维 beside a preview and asks the current knowledge base abou
   expect(within(ask).queryByText('DS 快速')).toBeNull()
   fireEvent.click(within(ask).getByRole('button', { name: '总结' }))
   await waitFor(() => expect(service.complete).toHaveBeenCalledWith(
-    1, '请总结文件「说明.pdf」的主要内容。', expect.any(Function), expect.any(AbortSignal),
+    1, '请总结文档的主要内容、关键步骤与要点（文件：说明.pdf）。',
+    expect.any(Function), expect.any(AbortSignal), 'doc-1',
   ))
   expect(await within(ask).findByText('这是文件摘要')).toBeTruthy()
   fireEvent.click(within(ask).getByRole('button', { name: '关闭问问万维' }))
@@ -407,6 +452,8 @@ it('opens 问问万维 beside a preview and asks the current knowledge base abou
 it('locates a preview answer citation in the open preview without loading it again', async () => {
   const service = api()
   stubCanvas()
+  Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:doc') })
+  Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
   service.complete = vi.fn(async (_id, _question, onProgress) => {
     const answer = {
       answer: '依据制度执行。##0$$',
@@ -435,6 +482,8 @@ it('locates a preview answer citation in the open preview without loading it aga
 it('opens a cited PDF when a blue answer citation number is clicked', async () => {
   const service = api()
   stubCanvas()
+  Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:doc') })
+  Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
   service.complete = vi.fn(async (_id, _question, onProgress) => {
     const answer = {
       answer: '依据制度执行。##0$$',
@@ -461,6 +510,8 @@ it('opens a cited PDF when a blue answer citation number is clicked', async () =
 it('turns answer [ID:i] markers into inline locate controls without trailing source chips', async () => {
   const service = api()
   stubCanvas()
+  Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:doc') })
+  Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
   service.complete = vi.fn(async (_id, _question, onProgress) => {
     const answer = {
       answer: '准备工作包括：[ID:0]',
@@ -491,7 +542,7 @@ it('turns answer [ID:i] markers into inline locate controls without trailing sou
 it('previews images through the original file blob', async () => {
   const service = api()
   service.documents = vi.fn(async () => [{ id: 'img-1', name: '截图.png', size: 128, run: 'DONE', progress: 1 }])
-  service.download = vi.fn(async () => ({ contentType: 'image/png', bytes: [137, 80, 78, 71] }))
+  service.download = vi.fn(async () => ({ contentType: 'image/png', bytes: new Uint8Array([137, 80, 78, 71]) }))
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:image') })
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
   render(<KnowledgePage api={service} />)

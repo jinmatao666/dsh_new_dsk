@@ -1,11 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent, PointerEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import {
-  citationLocateHint,
-  splitAnswerCitations,
-  type KnowledgeCitation,
-} from './citations.ts'
+import { type KnowledgeCitation } from './citations.ts'
+import { AnswerBody } from './AnswerBody.tsx'
 import { MarkdownView } from './MarkdownView.tsx'
 import { PdfLocateViewer, type PdfLocateRequest } from './PdfLocateViewer.tsx'
 import { ViewerLoading } from './ViewerLoading.tsx'
@@ -80,7 +77,34 @@ export interface KnowledgeAnswerProgress {
 
 interface KnowledgeFileBytes {
   contentType: string
-  bytes: number[]
+  bytes: Uint8Array
+}
+
+const DOWNLOAD_CACHE_TTL_MS = 30 * 60 * 1000
+const downloadCache = new Map<string, { file: KnowledgeFileBytes; at: number }>()
+
+function downloadCacheKey(knowledgeBaseId: number, documentId: string): string {
+  return `${knowledgeBaseId}:${documentId}`
+}
+
+function readDownloadCache(knowledgeBaseId: number, documentId: string): KnowledgeFileBytes | undefined {
+  const key = downloadCacheKey(knowledgeBaseId, documentId)
+  const hit = downloadCache.get(key)
+  if (hit === undefined) return undefined
+  if (Date.now() - hit.at > DOWNLOAD_CACHE_TTL_MS) {
+    downloadCache.delete(key)
+    return undefined
+  }
+  return hit.file
+}
+
+function writeDownloadCache(knowledgeBaseId: number, documentId: string, file: KnowledgeFileBytes): void {
+  downloadCache.set(downloadCacheKey(knowledgeBaseId, documentId), { file, at: Date.now() })
+}
+
+/** Clear the in-memory original-file cache. Exported for unit tests only. */
+export function clearKnowledgeDownloadCache(): void {
+  downloadCache.clear()
 }
 
 type Message = {
@@ -133,6 +157,8 @@ export interface KnowledgeApi {
   ): Promise<void>
   /** Load the caller's saved Q&A turns for one authorized knowledge base. */
   messages(knowledgeBaseId: number): Promise<Message[]>
+  /** Replace the caller's session so earlier turns for this knowledge base are no longer loaded. */
+  clearMessages(knowledgeBaseId: number): Promise<void>
   /**
    * Ask the authorized knowledge base through its server-owned chat/completions session.
    * @param onProgress - Optional cumulative plain-text updates while the answer streams.
@@ -143,6 +169,7 @@ export interface KnowledgeApi {
     question: string,
     onProgress?: (progress: KnowledgeAnswerProgress) => void,
     signal?: AbortSignal,
+    documentId?: string,
   ): Promise<KnowledgeAnswer>
 }
 
@@ -211,6 +238,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const [question, setQuestion] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
   const [answering, setAnswering] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -241,6 +269,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const previewBodyRef = useRef<HTMLDivElement>(null)
   const answerAbort = useRef<AbortController>()
   const historyEpoch = useRef(0)
+  const clearingChat = useRef(false)
   const viewerRef = useRef<DocumentViewer>()
   viewerRef.current = viewer
 
@@ -531,6 +560,18 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     setError('')
     closeViewer()
   }
+  const prefetchDocument = (document: KnowledgeDocument) => {
+    if (selectedId === undefined) return
+    const kind = fileKind(document.name)
+    if (kind !== 'pdf' && kind !== 'image' && !isPlainTextName(document.name)) return
+    if (readDownloadCache(selectedId, document.id) !== undefined) return
+    const libraryId = selectedId
+    void api.download(libraryId, document.id).then((file) => {
+      writeDownloadCache(libraryId, document.id, file)
+    }).catch(() => {
+      // Named: hover prefetch is best-effort and must not surface as a page error.
+    })
+  }
   const openDocument = (document: KnowledgeDocument, locate?: PdfLocateRequest, keepAsk = false) => {
     if (selectedId === undefined) return
     if (!keepAsk) resetPreviewAsk()
@@ -556,8 +597,10 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       }
       try {
         if (kind === 'image' || kind === 'pdf' || isPlainTextName(document.name)) {
-          const file = await api.download(selectedId, document.id)
-          const bytes = Uint8Array.from(file.bytes)
+          const cached = readDownloadCache(selectedId, document.id)
+          const file = cached ?? await api.download(selectedId, document.id)
+          if (cached === undefined) writeDownloadCache(selectedId, document.id, file)
+          const bytes = file.bytes
           const contentType = mimeFor(document.name, file.contentType)
           if (kind === 'image' || contentType.startsWith('image/')) {
             const objectUrl = URL.createObjectURL(new Blob([bytes], { type: contentType }))
@@ -638,8 +681,10 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     if (selectedId === undefined || viewer === undefined || downloading) return
     setDownloading(true)
     try {
-      const file = await api.download(selectedId, viewer.document.id)
-      const url = URL.createObjectURL(new Blob([Uint8Array.from(file.bytes)], {
+      const cached = readDownloadCache(selectedId, viewer.document.id)
+      const file = cached ?? await api.download(selectedId, viewer.document.id)
+      if (cached === undefined) writeDownloadCache(selectedId, viewer.document.id, file)
+      const url = URL.createObjectURL(new Blob([file.bytes], {
         type: mimeFor(viewer.document.name, file.contentType),
       }))
       const link = window.document.createElement('a')
@@ -765,9 +810,13 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       return next
     })
   }
-  const submitKnowledgeQuestion = async (raw: string, sink: 'library' | 'preview') => {
+  const submitKnowledgeQuestion = async (
+    raw: string,
+    sink: 'library' | 'preview',
+    documentId?: string,
+  ) => {
     let text = raw.trim()
-    if (text === '' || selectedId === undefined || answering) return
+    if (text === '' || selectedId === undefined || answering || clearing) return
     let targetKnowledgeBaseId = selectedId
     if (sink === 'library') {
       const mention = /^@(\S+)\s+/.exec(text)
@@ -791,7 +840,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     try {
       const answer = await api.complete(targetKnowledgeBaseId, text, (progress) => {
         writeAnswer(write, progress)
-      }, abort.signal)
+      }, abort.signal, documentId)
       writeAnswer(write, {
         answer: answer.answer,
         recommendations: answer.recommendations,
@@ -817,20 +866,46 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     event.preventDefault()
     void submitKnowledgeQuestion(question, 'library')
   }
+  const clearSession = async () => {
+    if (selectedId === undefined || answering || clearingChat.current || messages.length === 0) return
+    const id = selectedId
+    clearingChat.current = true
+    setClearing(true)
+    const epoch = ++historyEpoch.current
+    setMessages([])
+    setError('')
+    try {
+      await api.clearMessages(id)
+    } catch (cause) {
+      if (historyEpoch.current !== epoch) return
+      setError(`${productText('清空失败')}：${String(cause)}`)
+      try {
+        const restored = await api.messages(id)
+        if (historyEpoch.current === epoch) setMessages(restored)
+      } catch {
+        // Named: a failed reload leaves the pane empty; the alert already reports the clear failure.
+      }
+    } finally {
+      clearingChat.current = false
+      setClearing(false)
+    }
+  }
   const askPreview = (event: FormEvent) => {
     event.preventDefault()
     if (viewer === undefined) return
     const fileName = documentDisplayName(viewer.document)
     const typed = previewQuestion.trim()
     if (typed === '') return
-    // Keep the user question first so retrieval embeds the real ask, not the file wrapper.
+    // Task first for retrieval; file name is a keyword hint. Scope chunks to this document.
     void submitKnowledgeQuestion(
-      `${typed}\n请依据文件「${fileName}」中的内容完整作答；相关分项或编号列表须全部列出。`,
+      `${typed}\n请依据该文档完整作答，相关分项或编号列表须全部列出（文件：${fileName}）。`,
       'preview',
+      viewer.document.id,
     )
   }
   const askPreviewPrompt = (prompt: string) => {
-    void submitKnowledgeQuestion(prompt, 'preview')
+    if (viewer === undefined) return
+    void submitKnowledgeQuestion(prompt, 'preview', viewer.document.id)
   }
   const applyContentWidth = (target: number) => {
     const span = contentSpan(layout.current?.getBoundingClientRect())
@@ -1053,6 +1128,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
             onToggleFolder: toggleFolder,
             onToggleDocumentSelection: toggleDocumentSelection,
             onOpenDocument: openDocument,
+            onPrefetchDocument: prefetchDocument,
             onOpenMenu: openDocumentMenu,
           })}</div>}
       </div>
@@ -1061,6 +1137,12 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       aria-label={productText('调整内容宽度')} aria-valuemin={CONTENT_MIN} aria-valuemax={contentLimit} aria-valuenow={contentWidth}
       onPointerDown={resizeContent} onKeyDown={nudgeContent} />
     <section className="dsh-knowledge-chat" aria-label={productText('基于知识库问答')}>
+      {messages.length > 0 && <div className="dsh-knowledge-chat-head">
+        <button type="button" className="dsh-knowledge-clear" disabled={answering || clearing}
+          onClick={() => void clearSession()}>
+          {productText('清空会话')}
+        </button>
+      </div>}
       <div className="dsh-knowledge-messages" ref={messagesPane}>
         {messages.length === 0 && <div className="dsh-knowledge-chat-empty"><p><span><ChatIcon /></span>{productText('基于知识库问答')}</p></div>}
         {messages.map((message, index) => {
@@ -1076,7 +1158,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
               ? <p className="dsh-knowledge-typing" role="status" aria-label={productText('正在回答…')}>
                 <span /><span /><span />
               </p>
-              : message.content !== '' && <p>{renderAnswerBody(message.content, citations, openCitation)}</p>}
+              : message.content !== '' && <AnswerBody content={message.content} citations={citations} onOpen={openCitation} />}
             {message.recommendations && message.recommendations.length > 0 &&
               <div className="dsh-knowledge-related"><small>{productText('相关问题')}</small>
                 {message.recommendations.map(value =>
@@ -1085,7 +1167,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         })}
       </div>
       <form className="dsh-knowledge-composer" onSubmit={ask}>
-        <textarea value={question} disabled={selectedId === undefined || answering} rows={2}
+        <textarea value={question} disabled={selectedId === undefined || answering || clearing} rows={2}
           onChange={event => setQuestion(event.target.value)} placeholder={productText('基于知识库提问')}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
@@ -1101,7 +1183,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
               </button>
               : <button type="submit" className={question.trim() === '' ? 'dsh-knowledge-send idle' : 'dsh-knowledge-send ready'}
                 aria-label={productText('发送')}
-                disabled={question.trim() === '' || selectedId === undefined}>
+                disabled={question.trim() === '' || selectedId === undefined || clearing}>
                 <SendIcon />
               </button>}
           </div>
@@ -1329,9 +1411,9 @@ function PreviewAskPane({
           </header>}
           {waiting
             ? <p className="dsh-knowledge-typing" role="status" aria-label={productText('正在回答…')}><span /><span /><span /></p>
-            : message.content !== '' && <p>{message.role === 'assistant'
-              ? renderAnswerBody(message.content, citations, onOpenCitation)
-              : message.content}</p>}
+            : message.content !== '' && (message.role === 'assistant'
+              ? <AnswerBody content={message.content} citations={citations} onOpen={onOpenCitation} />
+              : <p>{message.content}</p>)}
         </article>
       })}
     </div>
@@ -1373,10 +1455,10 @@ function previewQuickPrompts(fileName: string, mode: DocumentViewer['mode']): { 
     return [{ label: '解读图片', prompt: `请解读图片「${fileName}」的内容。` }]
   }
   return [
-    { label: '总结', prompt: `请总结文件「${fileName}」的主要内容。` },
-    { label: '生成脑图', prompt: `请根据文件「${fileName}」整理一份脑图大纲，用纯文本层级列出要点。` },
-    { label: '生成测验', prompt: `请根据文件「${fileName}」出几道测验题，并在每题后给出答案。` },
-    { label: '生成播客', prompt: `请把文件「${fileName}」整理成一段口语化的讲解稿。` },
+    { label: '总结', prompt: `请总结文档的主要内容、关键步骤与要点（文件：${fileName}）。` },
+    { label: '生成脑图', prompt: `请整理文档脑图大纲，用 Markdown 标题与列表列出要点（文件：${fileName}）。` },
+    { label: '生成测验', prompt: `请根据文档出几道测验题，并在每题后给出答案（文件：${fileName}）。` },
+    { label: '生成播客', prompt: `请把文档整理成一段口语化的讲解稿（文件：${fileName}）。` },
   ]
 }
 
@@ -1385,29 +1467,6 @@ function AskWanweiIcon() {
     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M6 16.5 4 20l4.2-1.4A8 8 0 1 0 6 16.5Z" />
   </svg>
-}
-
-function renderAnswerBody(
-  content: string,
-  citations: KnowledgeCitation[],
-  onOpen: (citation: KnowledgeCitation, answerHint?: string) => void,
-): ReactNode {
-  const parts = splitAnswerCitations(content, citations)
-  let preceding = ''
-  return parts.map((part, index) => {
-    if (part.type === 'text') {
-      preceding += part.text
-      return <span key={`t-${index}`}>{part.text}</span>
-    }
-    const marker = `【${part.citation.index}】`
-    const hint = citationLocateHint(preceding)
-    return <button type="button" key={`c-${part.citation.chunk_index}-${index}`}
-      className="dsh-knowledge-cite"
-      aria-label={`${productText('引用定位')} ${marker}`}
-      onClick={() => onOpen(part.citation, hint)}>
-      {marker}
-    </button>
-  })
 }
 
 function PlusIcon() {
@@ -1689,6 +1748,7 @@ type ContentTreeHandlers = {
   onToggleFolder: (path: string) => void
   onToggleDocumentSelection: (documentId: string) => void
   onOpenDocument: (document: KnowledgeDocument) => void
+  onPrefetchDocument: (document: KnowledgeDocument) => void
   onOpenMenu: (documentId: string, x: number, y: number) => void
 }
 
@@ -1731,6 +1791,7 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
         className={selectedDoc ? 'selected' : ''}
         style={{ paddingLeft: `${4 + handlers.depth * 14}px` }}
         aria-pressed={selectedDoc}
+        onMouseEnter={() => handlers.onPrefetchDocument(document)}
         onClick={(event) => {
           if (event.metaKey || event.ctrlKey) {
             handlers.onToggleDocumentSelection(document.id)

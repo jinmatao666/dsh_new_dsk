@@ -196,6 +196,7 @@ func SetApiRouter(router *gin.Engine) {
 			knowledgeRoute.GET("/:id/documents/:documentId/chunks", controller.ListKnowledgeDocumentChunks)
 			knowledgeRoute.GET("/:id/documents/:documentId/file", controller.DownloadKnowledgeDocument)
 			knowledgeRoute.GET("/:id/chat/messages", controller.ListKnowledgeConversationMessages)
+			knowledgeRoute.DELETE("/:id/chat/messages", controller.ClearKnowledgeConversationMessages)
 			knowledgeRoute.POST("/:id/chat/completions", controller.ChatCompletionsKnowledgeBase)
 			knowledgeRoute.POST("/conversations", controller.CreateKnowledgeConversation)
 			knowledgeRoute.PUT("/conversations/:conversationId", controller.UpdateKnowledgeConversation)
@@ -208,6 +209,9 @@ func SetApiRouter(router *gin.Engine) {
 			knowledgeAdminRoute.POST("/bases", controller.CreateManagedKnowledgeBase)
 			knowledgeAdminRoute.GET("/categories", controller.ListKnowledgeCategories)
 			knowledgeAdminRoute.POST("/categories", controller.CreateManagedKnowledgeCategory)
+			knowledgeAdminRoute.PUT("/categories/:id", controller.UpdateManagedKnowledgeCategory)
+			knowledgeAdminRoute.DELETE("/categories/:id", controller.DeleteManagedKnowledgeCategory)
+
 			knowledgeAdminRoute.GET("/subscription-applications", controller.ListManagedKnowledgeSubscriptionApplications)
 			knowledgeAdminRoute.POST("/subscription-applications/:id/review", controller.ReviewManagedKnowledgeSubscription)
 			knowledgeAdminRoute.PUT("/bases/:id", controller.UpdateManagedKnowledgeBase)
@@ -218,6 +222,7 @@ func SetApiRouter(router *gin.Engine) {
 			knowledgeAdminRoute.POST("/bases/:id/documents/:documentId/parse", controller.ParseManagedKnowledgeDocument)
 			knowledgeAdminRoute.GET("/bases/:id/documents/:documentId/file", controller.DownloadManagedKnowledgeDocument)
 			knowledgeAdminRoute.GET("/bases/:id/documents/:documentId/chunks", controller.ListManagedKnowledgeChunks)
+			knowledgeAdminRoute.GET("/bases/:id/documents/:documentId/chunk-viewer", controller.GetManagedKnowledgeChunkViewer)
 			knowledgeAdminRoute.PUT("/bases/:id/documents/:documentId/summary", controller.UpdateManagedKnowledgeSummary)
 		}
 		// 线上数据同步工具(后台工具箱,高危操作全部走 RootAuth)

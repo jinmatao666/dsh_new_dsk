@@ -2,9 +2,9 @@
 
 [English](README.md) | 中文
 
-本目录包含六个可独立构建的专家网站和一个接入测试网站。接入测试网站用于验证协议，不属于生产专家。文件转换网站包含工作台原型、持久化认证任务和经过测试的转换引擎；部署加固、Word 转换和视觉验收仍未完成。六个专家均尚未达到生产就绪标准。范围和交付标准见[专家网站接入计划](../WANWEI_EXPERT_WEB_INTEGRATION_PLAN.md)。
+本目录包含可独立构建的专家网站和一个接入测试网站。接入测试网站用于验证协议，不属于生产专家。GIS 相关能力已按编号拆为 `coordinate-transform`（3307）、`gis-format-converter`（3308）、`cad-redline-extractor`（3309）三个独立项目，部署到 `http://ac.zjugis.com:3300/experts/<编号>/`。文件转换等站点的部署加固与视觉验收仍未完成。范围和交付标准见[专家网站接入计划](../WANWEI_EXPERT_WEB_INTEGRATION_PLAN.md)。
 
-六个项目均在各自的 `web/assets/` 中保存旧版侧栏插画和工作台背景副本。一次性使用的 `import-legacy-assets.mjs` 是迁移工具，不是构建或运行依赖。部署的网站不读取旧仓库。素材清单记录来源名称和哈希；添加素材不代表视觉验收完成。
+九个生产专家均在各自的 `web/assets/` 中保存旧版侧栏插画和工作台背景副本。一次性使用的 `import-legacy-assets.mjs` 是迁移工具，不是构建或运行依赖。部署的网站不读取旧仓库。素材清单记录来源名称和哈希；添加素材不代表视觉验收完成。
 
 在各专家目录运行 `node --test test_frontend.mjs` 执行前端回归测试，覆盖从确认页返回时保留文件和参数以及文件排序边界，但不能替代浏览器视觉检查。后端测试命令为 `python -m unittest discover -p 'test_*.py'`。GIS HTTP 测试验证任务创建前拒绝不匹配或重复的 Shape 配套文件及混合独立数据集。
 
@@ -15,3 +15,5 @@
 `meeting-minutes` 提供持久化认证任务、音频归一化和转写、配置模型驱动的纪要生成、最终 Word 输出、工作台原型和部署配置。FFmpeg 归一化已在本地测试；真实 ASR/模型接入、旧版视觉、Word 渲染和部署验收仍未完成。
 
 `geology`、`third-survey` 和 `planning-review` 分别拥有工作台、认证任务、多边形解析、GIS 适配器、Office/JSON 报告及部署配置。本地协议测试覆盖实际 HTTP 请求和 Word 下载，但不能证明生产 GIS 行为。旧版视觉、容器执行和桌面嵌入仍未完成验收。
+
+`coordinate-transform`、`gis-format-converter`、`cad-redline-extractor` 是按专家网页开发与部署文档拆分的独立 GIS 专家；各自拥有 Cookie、Compose 项目名、数据卷和 `nginx.location.conf.example`。

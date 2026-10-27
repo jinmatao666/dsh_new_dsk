@@ -19,6 +19,9 @@ func TestKnowledgeAdminRoutesRegister(t *testing.T) {
 		"POST /api/knowledge-admin/bases",
 		"GET /api/knowledge-admin/categories",
 		"POST /api/knowledge-admin/categories",
+		"PUT /api/knowledge-admin/categories/:id",
+		"DELETE /api/knowledge-admin/categories/:id",
+
 		"GET /api/knowledge-admin/subscription-applications",
 		"POST /api/knowledge-admin/subscription-applications/:id/review",
 		"GET /api/knowledge-bases/categories",
@@ -29,6 +32,7 @@ func TestKnowledgeAdminRoutesRegister(t *testing.T) {
 		"DELETE /api/knowledge-bases/:id/subscribe",
 		"PUT /api/knowledge-admin/bases/:id",
 		"DELETE /api/knowledge-admin/bases/:id/documents/:documentId",
+		"GET /api/knowledge-admin/bases/:id/documents/:documentId/chunk-viewer",
 		"GET /api/knowledge-bases",
 		"POST /api/knowledge-bases/retrieval",
 		"GET /api/knowledge-bases/:id/documents",
@@ -38,6 +42,7 @@ func TestKnowledgeAdminRoutesRegister(t *testing.T) {
 		"GET /api/knowledge-bases/:id/documents/:documentId/chunks",
 		"GET /api/knowledge-bases/:id/documents/:documentId/file",
 		"GET /api/knowledge-bases/:id/chat/messages",
+		"DELETE /api/knowledge-bases/:id/chat/messages",
 		"POST /api/knowledge-bases/:id/chat/completions",
 	} {
 		if !found[route] {

@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+data/
+data-preview/
+tmp/
+.env
+tools/
+*.dll
+*.DLL
+*.exe
+*.EXE
+*.zip
+_cleanup_disk.ps1
+_restart_preview.ps1
+_find_python.ps1

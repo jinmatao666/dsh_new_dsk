@@ -1,0 +1,21 @@
+# Standalone TLS example. Production gateway uses nginx.location.conf.example under :3300.
+limit_req_zone $binary_remote_addr zone=coordinate_transform_requests:10m rate=3r/s;
+limit_conn_zone $binary_remote_addr zone=coordinate_transform_connections:10m;
+
+server {
+    listen 443 ssl;
+    server_name coordinate-transform.example.com;
+    ssl_certificate /etc/letsencrypt/live/coordinate-transform.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/coordinate-transform.example.com/privkey.pem;
+    client_max_body_size 20m;
+    client_body_timeout 30s;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    location / {
+        limit_req zone=coordinate_transform_requests burst=10 nodelay;
+        limit_conn coordinate_transform_connections 4;
+        proxy_pass http://127.0.0.1:3307;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 190s;
+    }
+}

@@ -1,20 +1,32 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ArrowLeft, ClipboardList, Download, Eye, FileText, Folder, FolderPlus, Layers, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Tag, Trash2, Upload, Users } from 'lucide-react';
 import { API } from '../../helpers';
 import CustomSelect from '../../components/CustomSelect';
 import './index.css';
 
-/** Category dialog visibility: maps to type + require_auth for the workbench/desktop. */
+/** Category dialog: type is the library kind; 授权访问 independently sets require_auth. */
 const CATEGORY_VISIBILITY = [
-  ['personal', '个人', '仅自己可见'],
-  ['public', '公开', '所有人可见'],
-  ['authorized', '授权', '订阅后可见'],
+  ['personal', '个人'],
+  ['public', '公开'],
+  ['authorized', '授权'],
 ];
 
-function categoryPayload(visibility, name) {
-  if (visibility === 'public') return { name, type: 'common', require_auth: false };
-  if (visibility === 'authorized') return { name, type: 'shared', require_auth: true };
-  return { name, type: 'personal', require_auth: true };
+const EMPTY_CATEGORY_FORM = { id: 0, name: '', visibility: 'personal', requireAuth: false };
+
+function categoryPayload(visibility, name, requireAuth) {
+  const type = visibility === 'public' ? 'common' : visibility === 'authorized' ? 'shared' : 'personal';
+  return { name, type, require_auth: Boolean(requireAuth) };
+}
+
+function categoryFormFromRow(category) {
+  const visibility = category.type === 'common' ? 'public' : category.type === 'shared' ? 'authorized' : 'personal';
+  return {
+    id: Number(category.id) || 0,
+    name: category.name || '',
+    visibility,
+    requireAuth: Boolean(category.require_auth),
+  };
 }
 
 const FILE_PAGE_SIZE = 20;
@@ -233,7 +245,7 @@ const KnowledgeLibrary = () => {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', kind: 'personal', tags: '', category_id: 0 });
   const [categoryOpen, setCategoryOpen] = useState(false);
-  const [categoryForm, setCategoryForm] = useState({ name: '', visibility: 'personal' });
+  const [categoryForm, setCategoryForm] = useState(EMPTY_CATEGORY_FORM);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewItems, setReviewItems] = useState([]);
   const [reviewTotal, setReviewTotal] = useState(0);
@@ -253,10 +265,10 @@ const KnowledgeLibrary = () => {
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(null);
   const [cardMenuId, setCardMenuId] = useState(null);
+  const [tabMenu, setTabMenu] = useState(null);
   const [summaryFile, setSummaryFile] = useState(null);
   const [summaryText, setSummaryText] = useState('');
   const [viewer, setViewer] = useState(null);
-  const [chunks, setChunks] = useState(null);
   const [busy, setBusy] = useState('');
   const fileInput = useRef(null);
   // Only mark a library settled after stats resolve. Marking before the request
@@ -387,8 +399,8 @@ const KnowledgeLibrary = () => {
     return counts;
   }, [libraries, categories]);
   const tabs = [
-    { key: 'personal', label: '个人知识库' },
-    ...categories.map(category => ({ key: `c:${category.id}`, label: category.name })),
+    { key: 'personal', label: '个人知识库', category: null },
+    ...categories.map(category => ({ key: `c:${category.id}`, label: category.name, category })),
   ];
   const activeCategory = categories.find(category => `c:${category.id}` === scope);
 
@@ -546,7 +558,6 @@ const KnowledgeLibrary = () => {
 
   const openPerson = async user => {
     closeViewer();
-    setChunks(null);
     setOpened(null);
     setPerson(user);
     setPersonFiles([]);
@@ -754,12 +765,14 @@ const KnowledgeLibrary = () => {
 
   const openChunks = async file => {
     const libraryId = Number(file?.library_id || opened?.id || 0);
-    if (!libraryId) return;
+    if (!libraryId || !file?.id) return;
     setBusy(`${file.id}:chunks`);
     setError('');
     try {
-      const rows = unwrap(await API.get(`/api/knowledge-admin/bases/${libraryId}/documents/${file.id}/chunks`));
-      setChunks({ name: file.name, items: Array.isArray(rows) ? rows : [] });
+      const data = unwrap(await API.get(`/api/knowledge-admin/bases/${libraryId}/documents/${file.id}/chunk-viewer`));
+      const url = typeof data?.url === 'string' ? data.url.trim() : '';
+      if (!url) throw new Error('切片页面地址无效');
+      window.open(url, '_blank', 'noopener,noreferrer');
     } catch (cause) {
       setError(await errorMessage(cause));
     } finally {
@@ -835,7 +848,6 @@ const KnowledgeLibrary = () => {
 
   const selectDepartment = key => {
     closeViewer();
-    setChunks(null);
     setPerson(null);
     setDeptKey(key);
     setPeopleQuery('');
@@ -870,19 +882,60 @@ const KnowledgeLibrary = () => {
     </span>
   );
 
-  const createCategory = async event => {
+  const openCreateCategory = () => {
+    setCreating(false);
+    setEditing(null);
+    setReviewOpen(false);
+    setTabMenu(null);
+    setCategoryForm(EMPTY_CATEGORY_FORM);
+    setCategoryOpen(true);
+  };
+
+  const openEditCategory = category => {
+    setCreating(false);
+    setEditing(null);
+    setReviewOpen(false);
+    setTabMenu(null);
+    setCategoryForm(categoryFormFromRow(category));
+    setCategoryOpen(true);
+  };
+
+  const saveCategory = async event => {
     event.preventDefault();
     setSaving(true);
     setError('');
     try {
-      const created = unwrap(await API.post('/api/knowledge-admin/categories',
-        categoryPayload(categoryForm.visibility, categoryForm.name.trim())));
+      const payload = categoryPayload(categoryForm.visibility, categoryForm.name.trim(), categoryForm.requireAuth);
+      const saved = categoryForm.id
+        ? unwrap(await API.put(`/api/knowledge-admin/categories/${categoryForm.id}`, payload))
+        : unwrap(await API.post('/api/knowledge-admin/categories', payload));
       setCategoryOpen(false);
-      setCategoryForm({ name: '', visibility: 'personal' });
+      setCategoryForm(EMPTY_CATEGORY_FORM);
       await loadCategories();
-      if (created?.id) setScope(`c:${created.id}`);
+      if (saved?.id) setScope(`c:${saved.id}`);
     } catch (cause) {
       setError(await errorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeCategory = async category => {
+    setSaving(true);
+    setError('');
+    try {
+      unwrap(await API.delete(`/api/knowledge-admin/categories/${category.id}`));
+      setConfirming(null);
+      setTabMenu(null);
+      await Promise.all([loadCategories(), loadLibraries()]);
+      if (scope === `c:${category.id}`) {
+        setScope('personal');
+        setPerson(null);
+        setDeptKey('all');
+      }
+    } catch (cause) {
+      setError(await errorMessage(cause));
+      setConfirming(null);
     } finally {
       setSaving(false);
     }
@@ -941,13 +994,107 @@ const KnowledgeLibrary = () => {
 
   const reviewPageCount = Math.max(1, Math.ceil(reviewTotal / REVIEW_PAGE_SIZE) || 1);
 
+  const showChrome = !reviewOpen && !opened;
+
   return <div className='knowledge-admin'>
-    <header className='knowledge-page-head'>
-      <div className='knowledge-page-title'>
-        <h1>知识库</h1>
-        {!reviewOpen && <p>按分类管理知识库与人员目录中的文件</p>}
-      </div>
-    </header>
+    <div className='knowledge-sticky'>
+      <header className='knowledge-page-head'>
+        <div className='knowledge-page-title'>
+          <h1>知识库</h1>
+          {!reviewOpen && <p>按分类管理知识库与人员目录中的文件</p>}
+        </div>
+      </header>
+      {showChrome && <div className='knowledge-chrome'>
+        <div
+          className='knowledge-tabs'
+          role='tablist'
+          aria-label='知识库分类'
+          onScroll={() => { if (tabMenu) setTabMenu(null); }}
+        >
+          {tabs.map(tab => {
+            const menuOpen = tabMenu?.key === tab.key;
+            const classes = [
+              'knowledge-tab',
+              scope === tab.key ? 'active' : '',
+              menuOpen ? 'is-menu-open' : '',
+            ].filter(Boolean).join(' ');
+            return <div key={tab.key} className={classes}>
+              <button
+                type='button'
+                role='tab'
+                aria-selected={scope === tab.key}
+                onClick={() => { setPerson(null); setDeptKey('all'); setTabMenu(null); setScope(tab.key); }}
+              >
+                {tab.label}<span>{countsByScope[tab.key] || 0}</span>
+              </button>
+              {tab.category && <div className='knowledge-tab-menu'>
+                <button
+                  type='button'
+                  className='knowledge-tab-more'
+                  aria-label={`更多操作 ${tab.label}`}
+                  aria-haspopup='menu'
+                  aria-expanded={menuOpen}
+                  tabIndex={-1}
+                  onClick={event => {
+                    event.stopPropagation();
+                    setCardMenuId(null);
+                    if (menuOpen) {
+                      setTabMenu(null);
+                      return;
+                    }
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setTabMenu({
+                      key: tab.key,
+                      category: tab.category,
+                      top: Math.round(rect.bottom + 4),
+                      left: Math.round(Math.min(rect.left, window.innerWidth - 130)),
+                    });
+                  }}
+                >
+                  <MoreHorizontal size={14} />
+                </button>
+              </div>}
+            </div>;
+          })}
+        </div>
+        <div className='knowledge-chrome-actions'>
+          <button type='button' className='knowledge-ghost' onClick={openReviews}>
+            <ClipboardList size={15} />订阅审核
+            {reviewTotal > 0 && <i className='knowledge-review-count' aria-label={`待审核 ${reviewTotal} 条`}>{reviewTotal > 99 ? '99+' : reviewTotal}</i>}
+          </button>
+          <button type='button' className='knowledge-secondary' onClick={openCreateCategory}>
+            <FolderPlus size={15} />新建知识库分类
+          </button>
+        </div>
+      </div>}
+    </div>
+    {tabMenu?.category && createPortal(
+      <>
+        <button type='button' className='knowledge-card-menu-dismiss knowledge-tab-menu-dismiss' aria-label='关闭菜单' onClick={() => setTabMenu(null)} />
+        <div
+          className='knowledge-card-menu-panel knowledge-tab-menu-panel'
+          role='menu'
+          style={{ top: tabMenu.top, left: tabMenu.left }}
+        >
+          <button type='button' role='menuitem' onClick={() => openEditCategory(tabMenu.category)}>
+            <Pencil size={14} />编辑
+          </button>
+          <button
+            type='button'
+            role='menuitem'
+            className='danger'
+            onClick={() => {
+              const category = tabMenu.category;
+              setTabMenu(null);
+              setConfirming({ type: 'category', category });
+            }}
+          >
+            <Trash2 size={14} />删除
+          </button>
+        </div>
+      </>,
+      document.body,
+    )}
     {error && <div className='knowledge-alert' role='alert'>{error}<button type='button' onClick={() => setError('')}>关闭</button></div>}
     {reviewOpen ? <section className='knowledge-files' aria-label='订阅审核'>
       <header>
@@ -984,7 +1131,7 @@ const KnowledgeLibrary = () => {
       </div>
     </section> : opened ? <section className='knowledge-files'>
       <header>
-        <button type='button' className='knowledge-back' onClick={() => { closeViewer(); setChunks(null); setOpened(null); }}><ArrowLeft size={16} />返回</button>
+        <button type='button' className='knowledge-back' onClick={() => { closeViewer(); setOpened(null); }}><ArrowLeft size={16} />返回</button>
         <h2>{opened.name} - 文件清单</h2>
         <button type='button' className='knowledge-primary' disabled={busy === 'upload'} onClick={() => fileInput.current?.click()}>
           <Upload size={15} />{busy === 'upload' ? '正在上传' : '上传文件'}
@@ -1063,26 +1210,6 @@ const KnowledgeLibrary = () => {
         </div>
       </div>
     </section> : <>
-      <div className='knowledge-chrome'>
-        <div className='knowledge-tabs' role='tablist' aria-label='知识库分类'>
-          {tabs.map(tab => <button key={tab.key} type='button' role='tab' aria-selected={scope === tab.key} className={scope === tab.key ? 'active' : ''} onClick={() => { setPerson(null); setDeptKey('all'); setScope(tab.key); }}>
-            {tab.label}<span>{countsByScope[tab.key] || 0}</span>
-          </button>)}
-        </div>
-        <div className='knowledge-chrome-actions'>
-          <button type='button' className='knowledge-ghost' onClick={openReviews}>
-            <ClipboardList size={15} />订阅审核
-            {reviewTotal > 0 && <i className='knowledge-review-count' aria-label={`待审核 ${reviewTotal} 条`}>{reviewTotal > 99 ? '99+' : reviewTotal}</i>}
-          </button>
-          <button
-            type='button'
-            className='knowledge-secondary'
-            onClick={() => { setCreating(false); setEditing(null); setReviewOpen(false); setCategoryForm({ name: '', visibility: 'personal' }); setCategoryOpen(true); }}
-          >
-            <FolderPlus size={15} />新建知识库分类
-          </button>
-        </div>
-      </div>
       {scope === 'personal' ? <div className='knowledge-directory'>
         <aside className='knowledge-directory-nav' aria-label='人员部门'>
           <p>人员</p>
@@ -1097,7 +1224,7 @@ const KnowledgeLibrary = () => {
         <div className='knowledge-directory-main'>
           {person ? <section className='knowledge-files knowledge-person-files' aria-label='个人文件清单'>
             <header className='knowledge-person-file-head'>
-              <button type='button' className='knowledge-back' onClick={() => { closeViewer(); setChunks(null); setPerson(null); setPersonLibrariesOpen(false); setCardMenuId(null); }}><ArrowLeft size={16} />返回</button>
+              <button type='button' className='knowledge-back' onClick={() => { closeViewer(); setPerson(null); setPersonLibrariesOpen(false); setCardMenuId(null); }}><ArrowLeft size={16} />返回</button>
               <button
                 type='button'
                 className={personLibrariesOpen ? 'knowledge-person-file-title open' : 'knowledge-person-file-title'}
@@ -1177,6 +1304,7 @@ const KnowledgeLibrary = () => {
                         <td className='knowledge-ops'>
                           <button type='button' disabled={busy === `${file.id}:browse`} onClick={() => runFileAction(file, 'browse')}><Eye size={14} />预览</button>
                           <button type='button' disabled={busy === `${file.id}:download`} onClick={() => runFileAction(file, 'download')}><Download size={14} />下载</button>
+                          <button type='button' disabled={busy === `${file.id}:chunks`} onClick={() => runFileAction(file, 'chunks')}><Layers size={14} />切片</button>
                           <button type='button' className='danger' onClick={() => setConfirming({ type: 'file', file })}><Trash2 size={14} />删除</button>
                         </td>
                       </tr>)}
@@ -1292,14 +1420,26 @@ const KnowledgeLibrary = () => {
       </div>}
       </>}
     </>}
-    {categoryOpen && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' onSubmit={createCategory}>
-      <header><h2>新建知识库分类</h2><button type='button' onClick={() => setCategoryOpen(false)}>×</button></header>
-      <label>类型<CustomSelect aria-label='分类类型' value={categoryForm.visibility} onChange={event => setCategoryForm(current => ({ ...current, visibility: event.target.value }))}>
+    {categoryOpen && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' onSubmit={saveCategory}>
+      <header><h2>{categoryForm.id ? '编辑知识库分类' : '新建知识库分类'}</h2><button type='button' onClick={() => setCategoryOpen(false)}>×</button></header>
+      {error && <div className='knowledge-alert' role='alert'>{error}<button type='button' onClick={() => setError('')}>关闭</button></div>}
+      <label>类型<CustomSelect aria-label='分类类型' value={categoryForm.visibility} onChange={event => {
+        const visibility = event.target.value;
+        setCategoryForm(current => ({ ...current, visibility, requireAuth: visibility === 'authorized' }));
+      }}>
         {CATEGORY_VISIBILITY.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
       </CustomSelect></label>
-      <p className='knowledge-hint'>{CATEGORY_VISIBILITY.find(([key]) => key === categoryForm.visibility)?.[2]}</p>
+      <label className='knowledge-switch-row'>授权访问<span className='knowledge-switch'>
+        <input type='checkbox' role='switch' aria-label='授权访问' checked={categoryForm.requireAuth} onChange={event => setCategoryForm(current => ({ ...current, requireAuth: event.target.checked }))} />
+        <i />
+      </span></label>
       <label>名称<input autoFocus required maxLength={64} value={categoryForm.name} onChange={event => setCategoryForm(current => ({ ...current, name: event.target.value }))} placeholder='请输入分类名称' /></label>
-      <footer><button type='button' onClick={() => setCategoryOpen(false)}>取消</button><button type='submit' className='knowledge-primary' disabled={saving || categoryForm.name.trim() === ''}>{saving ? '正在创建' : '确定'}</button></footer>
+      <footer>
+        <button type='button' onClick={() => setCategoryOpen(false)}>取消</button>
+        <button type='submit' className='knowledge-primary' disabled={saving || categoryForm.name.trim() === ''}>
+          {saving ? (categoryForm.id ? '正在保存' : '正在创建') : '确定'}
+        </button>
+      </footer>
     </form></div>}
     {creating && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' onSubmit={createLibrary}>
       <header><h2>新建知识库</h2><button type='button' onClick={() => setCreating(false)}>×</button></header>
@@ -1346,22 +1486,27 @@ const KnowledgeLibrary = () => {
         </div>
       </section>
     </div>}
-    {chunks && <div className='knowledge-modal-backdrop'><section className='knowledge-modal knowledge-chunks-modal' role='dialog' aria-label='切片列表'>
-      <header><h2>{chunks.name} - 切片列表</h2><button type='button' onClick={() => setChunks(null)}>×</button></header>
-      {chunks.items.length === 0
-        ? <p className='knowledge-hint'>这个文件还没有切片。</p>
-        : <ol className='knowledge-chunks'>{chunks.items.map(item => <li key={item.id || item.content}>{item.content}</li>)}</ol>}
-    </section></div>}
     {confirming && <div className='knowledge-modal-backdrop'><section className='knowledge-modal' role='dialog' aria-label='确认删除'>
       <header><h2>确认删除</h2><button type='button' onClick={() => setConfirming(null)}>×</button></header>
       <p>{confirming.type === 'library'
         ? (isPersonalLibrary(confirming.library)
           ? `确认删除个人知识库「${confirming.library.name}」？库内文件将一并移除，桌面端不再可用。`
           : `删除后将移除「${confirming.library.name}」及其文件，桌面端不再可用。`)
-        : `删除文件「${confirming.file.name}」？`}</p>
+        : confirming.type === 'category'
+          ? `确认删除「${confirming.category.name}」？分类下知识库也会同步删除。`
+          : `删除文件「${confirming.file.name}」？`}</p>
       <footer>
         <button type='button' onClick={() => setConfirming(null)}>取消</button>
-        <button type='button' className='remove' onClick={() => confirming.type === 'library' ? removeLibrary(confirming.library) : runFileAction(confirming.file, 'delete')}>删除</button>
+        <button
+          type='button'
+          className='remove'
+          disabled={saving}
+          onClick={() => {
+            if (confirming.type === 'library') return removeLibrary(confirming.library);
+            if (confirming.type === 'category') return removeCategory(confirming.category);
+            return runFileAction(confirming.file, 'delete');
+          }}
+        >删除</button>
       </footer>
     </section></div>}
     {reviewing && <div className='knowledge-modal-backdrop'><section className='knowledge-modal' role='dialog' aria-label='订阅审核'>

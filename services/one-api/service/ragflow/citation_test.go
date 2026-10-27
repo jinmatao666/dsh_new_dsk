@@ -75,7 +75,7 @@ func TestParseCitationsOmitsEmptyRetrievalAnswers(t *testing.T) {
 
 func TestPlainTextAnswerKeepsCitationMarkers(t *testing.T) {
 	got := PlainTextAnswer("结论如下：##0$$ 以及 **强调**。")
-	if !strings.Contains(got, "##0$$") || !strings.Contains(got, "强调") {
+	if !strings.Contains(got, "##0$$") || !strings.Contains(got, "**强调**") {
 		t.Fatalf("got=%q", got)
 	}
 	gotId := PlainTextAnswer("准备工作包括：[ID:0]")

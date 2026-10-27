@@ -1,0 +1,5 @@
+{
+  "name": "GIS 格式转换",
+  "icons": ["coordinate-transform.png", "format-convert.png", "redline-extract.png"],
+  "note": "Tool icons use transparent PNG cutouts (CSV/TXT, SHP/GDB/DXF, DWG redline); not Word/PDF artwork."
+}

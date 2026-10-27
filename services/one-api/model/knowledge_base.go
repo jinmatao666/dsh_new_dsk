@@ -209,13 +209,20 @@ func GetKnowledgeCategory(id int) (*KnowledgeCategory, error) {
 	return &row, err
 }
 
-// SaveKnowledgeCategory inserts one category. Names are unique after trimming.
-func SaveKnowledgeCategory(row *KnowledgeCategory) error {
+func normalizeKnowledgeCategory(row *KnowledgeCategory) error {
 	row.Name = strings.TrimSpace(row.Name)
 	row.Type = strings.TrimSpace(row.Type)
 	if row.Name == "" || utf8.RuneCountInString(row.Name) > 64 ||
 		(row.Type != KnowledgeBasePersonal && row.Type != KnowledgeBaseShared && row.Type != KnowledgeBaseCommon) {
 		return ErrKnowledgeCategoryInvalid
+	}
+	return nil
+}
+
+// SaveKnowledgeCategory inserts one category. Names are unique after trimming.
+func SaveKnowledgeCategory(row *KnowledgeCategory) error {
+	if err := normalizeKnowledgeCategory(row); err != nil {
+		return err
 	}
 	var count int64
 	if err := DB.Model(&KnowledgeCategory{}).Where("name = ?", row.Name).Count(&count).Error; err != nil {
@@ -225,6 +232,60 @@ func SaveKnowledgeCategory(row *KnowledgeCategory) error {
 		return ErrKnowledgeCategoryDuplicate
 	}
 	return DB.Create(row).Error
+}
+
+// UpdateKnowledgeCategory saves name, type, and require_auth for an existing category.
+func UpdateKnowledgeCategory(row *KnowledgeCategory) error {
+	if row.Id <= 0 {
+		return ErrKnowledgeCategoryInvalid
+	}
+	if err := normalizeKnowledgeCategory(row); err != nil {
+		return err
+	}
+	var count int64
+	if err := DB.Model(&KnowledgeCategory{}).Where("name = ? AND id <> ?", row.Name, row.Id).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return ErrKnowledgeCategoryDuplicate
+	}
+	result := DB.Model(&KnowledgeCategory{}).Where("id = ?", row.Id).Updates(map[string]interface{}{
+		"name":         row.Name,
+		"type":         row.Type,
+		"require_auth": row.RequireAuth,
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return DB.First(row, row.Id).Error
+}
+
+// ListKnowledgeBasesByCategory returns every library filed under one workbench category.
+func ListKnowledgeBasesByCategory(categoryId int) ([]KnowledgeBase, error) {
+	if categoryId <= 0 {
+		return nil, ErrKnowledgeCategoryInvalid
+	}
+	var rows []KnowledgeBase
+	err := DB.Where("category_id = ?", categoryId).Order("id ASC").Find(&rows).Error
+	return rows, err
+}
+
+// DeleteKnowledgeCategory removes one category row. Callers must remove filed libraries first.
+func DeleteKnowledgeCategory(id int) error {
+	if id <= 0 {
+		return ErrKnowledgeCategoryInvalid
+	}
+	result := DB.Delete(&KnowledgeCategory{}, id)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // knowledgeUsageDay is the server-local calendar day used for DailyUsage buckets.

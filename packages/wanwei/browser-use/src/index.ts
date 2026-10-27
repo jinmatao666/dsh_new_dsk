@@ -54,6 +54,23 @@ async function awaitReady(ready: Promise<void>, signal?: AbortSignal): Promise<v
 }
 
 /**
+ * Wait for browser startup; turn cancellation still rejects, but a failed browser
+ * mount resolves false so prompt assembly can continue without browser tools.
+ * @param ready - Session-owned browser activation promise.
+ * @param signal - optional turn cancellation.
+ * @returns true when browser tools finished registering.
+ */
+async function settleReady(ready: Promise<void>, signal?: AbortSignal): Promise<boolean> {
+  try {
+    await awaitReady(ready, signal)
+    return true
+  } catch (error) {
+    if (signal?.aborted) throw error
+    return false
+  }
+}
+
+/**
  * Supply the two legacy lifecycle differences only to the official provider.
  * Its published implementation and the shared Agent registry remain unchanged.
  * @param ctx - the plugin's own reversible effect scope.
@@ -78,11 +95,11 @@ export function browserCompatibilityContext(ctx: Context, browserAllowed: () => 
     if (request.agent !== undefined && !activations.has(request.agent)) initialize?.(request.agent)
     const activation = request.agent === undefined ? undefined : activations.get(request.agent)
     if (activation !== undefined && !activation.settled) {
-      await awaitReady(activation.ready, request.signal)
-      // Assembly collected schemas before its waterfall; recollect after MCP registration.
-      return ctx.systemPrompt.assemble(request)
+      // Recollect only after a successful mount; a failed browser must not fail the turn.
+      if (await settleReady(activation.ready, request.signal)) return ctx.systemPrompt.assemble(request)
+      return next()
     }
-    if (activation !== undefined) await awaitReady(activation.ready, request.signal)
+    if (activation !== undefined) await settleReady(activation.ready, request.signal)
     return next()
   }, { prepend: true })
   ctx.effect(() => async () => {
@@ -98,6 +115,8 @@ export function browserCompatibilityContext(ctx: Context, browserAllowed: () => 
       if (key === 'on') return (event: string, listener: Initializer, options?: { prepend?: boolean }) => {
         if (event !== 'agent/created') return Reflect.apply(target.on.bind(target), target, [event, listener, options]) as unknown
         initialize = (agent: Agent) => {
+          // agent/created and first assemble can both observe a new Agent; one mount only.
+          if (activations.has(agent)) return
           const controller = new AbortController()
           const ready = Promise.resolve().then(() => listener({ agent, signal: controller.signal }))
           const activation = { controller, ready, settled: false }
@@ -108,7 +127,7 @@ export function browserCompatibilityContext(ctx: Context, browserAllowed: () => 
           })
           agent.ctx.effect(() => async () => {
             controller.abort()
-            await ready.catch(() => {}) // Initialization failure is reported and remains visible to assembly.
+            await ready.catch(() => {}) // Initialization failure is already logged above.
             activations.delete(agent)
           })
         }
