@@ -55,6 +55,8 @@ class Engine(BaseHTTPRequestHandler):
                       'objects': [] if body.get('text') == 'nothing' else [obj]}
             if self.path == '/malformed':
                 result['width'] += 1
+            if self.path == '/missing-mask':
+                obj.pop('mask_png', None)
         data = json.dumps(result).encode()
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
@@ -158,6 +160,11 @@ class Integration(unittest.TestCase):
         self.login()
         with patch.dict(os.environ, {'SAM3_URL': ''}):
             self.assertEqual(self.upload()[0], 503)
+
+    def test_precise_mode_never_substitutes_a_box_for_missing_mask(self):
+        with patch.dict(os.environ, {'SAM3_URL': os.environ['SAM3_URL'].replace('/segment', '/missing-mask')}):
+            with self.assertRaises(OCRError):
+                sam_segment(Image.new('RGB', (120, 100)), prompt='car', precise=True)
 
     def test_no_detection_or_change_is_explicit_empty_result(self):
         if MODE == 'detect':
