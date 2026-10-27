@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -117,8 +118,33 @@ func TestChatPromptKeepsRetrievalBounded(t *testing.T) {
 	if prompt["top_k"] != 512 {
 		t.Fatalf("top_k=%v", prompt["top_k"])
 	}
-	if prompt["top_n"] != 6 {
+	if prompt["top_n"] != 8 {
 		t.Fatalf("top_n=%v", prompt["top_n"])
+	}
+	text, _ := prompt["prompt"].(string)
+	if !strings.Contains(text, "回答须完整") {
+		t.Fatalf("prompt missing completeness rule: %q", text)
+	}
+}
+
+func TestChatLLMRaisesMaxTokens(t *testing.T) {
+	llm := chatLLM("qwen")
+	if llm["model_name"] != "qwen" {
+		t.Fatalf("model_name=%v", llm["model_name"])
+	}
+	if llm["max_tokens"] != 4096 || llm["max_token"] != 4096 {
+		t.Fatalf("max tokens=%#v", llm)
+	}
+	payload := chatPayload("chat", "dataset-1", "qwen")
+	if payload["llm"] == nil {
+		t.Fatal("expected llm on create payload")
+	}
+	setting, _ := payload["llm_setting"].(map[string]interface{})
+	if setting["max_token"] != 4096 {
+		t.Fatalf("llm_setting=%#v", payload["llm_setting"])
+	}
+	if payload["llm_id"] != "qwen" {
+		t.Fatalf("llm_id=%v", payload["llm_id"])
 	}
 }
 

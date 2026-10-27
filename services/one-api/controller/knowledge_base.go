@@ -175,6 +175,34 @@ func SubscribeKnowledgeBase(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
 }
 
+// UnsubscribeKnowledgeBase drops the caller's user grant and clears the subscription application.
+func UnsubscribeKnowledgeBase(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库编号无效"})
+		return
+	}
+	err = model.CancelKnowledgeSubscription(c.GetInt("id"), id)
+	if err != nil {
+		if errors.Is(err, model.ErrKnowledgeSubscriptionInvalid) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		if errors.Is(err, model.ErrKnowledgeSubscriptionInactive) {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "知识库不存在"})
+			return
+		}
+		logger.Errorf(c.Request.Context(), "unsubscribe knowledge base: %s", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "取消订阅失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
 // CreateKnowledgeBase creates RAGFlow first and compensates it when the local transaction fails.
 func CreateKnowledgeBase(c *gin.Context) {
 	var input createKnowledgeBaseInput
@@ -255,6 +283,13 @@ func CreateKnowledgeBase(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
 }
 
+// recordKnowledgeUsage best-effort increments visit_count / daily_usage for workbench stats.
+func recordKnowledgeUsage(id int) {
+	if err := model.RecordKnowledgeBaseUsage(id); err != nil {
+		logger.SysError(fmt.Sprintf("record knowledge usage for %d: %s", id, err.Error()))
+	}
+}
+
 func authorizedKnowledgeBase(c *gin.Context) (*model.KnowledgeBase, bool) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
@@ -280,6 +315,7 @@ func ListKnowledgeDocuments(c *gin.Context) {
 	if !ok {
 		return
 	}
+	recordKnowledgeUsage(row.Id)
 	writeKnowledgeDocuments(c, row, false)
 }
 
@@ -1037,6 +1073,7 @@ func ChatCompletionsKnowledgeBase(c *gin.Context) {
 	if !ok {
 		return
 	}
+	recordKnowledgeUsage(base.Id)
 	answerKnowledgeConversation(c, client, base, conversation, input.Question, input.Stream)
 }
 
@@ -1061,6 +1098,7 @@ func CompleteKnowledgeConversation(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "无权使用该知识库"})
 		return
 	}
+	recordKnowledgeUsage(base.Id)
 	client, ok := knowledgeClient(c)
 	if !ok {
 		return

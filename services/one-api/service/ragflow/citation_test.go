@@ -65,6 +65,14 @@ func TestParseCitationsOmitsSourcesWithoutMarkers(t *testing.T) {
 	}
 }
 
+func TestParseCitationsOmitsEmptyRetrievalAnswers(t *testing.T) {
+	reference := json.RawMessage(`{"chunks":[{"id":"c0","content":"旧内容","document_id":"doc-a","document_name":"a.pdf","positions":[[1,1,2,3,4]]}]}`)
+	citations := ParseCitations(reference, "知识库中未找到相关内容。##0$$")
+	if len(citations) != 0 {
+		t.Fatalf("citations=%#v", citations)
+	}
+}
+
 func TestPlainTextAnswerKeepsCitationMarkers(t *testing.T) {
 	got := PlainTextAnswer("结论如下：##0$$ 以及 **强调**。")
 	if !strings.Contains(got, "##0$$") || !strings.Contains(got, "强调") {

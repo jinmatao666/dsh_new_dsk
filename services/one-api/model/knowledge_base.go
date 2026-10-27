@@ -35,8 +35,13 @@ type KnowledgeBase struct {
 	Shelf            string    `json:"shelf" gorm:"type:varchar(16);not null;default:published;index"`
 	Tags             string    `json:"tags" gorm:"type:varchar(200)"`
 	CategoryId       int       `json:"category_id" gorm:"index;default:0"`
-	CreatedAt        time.Time `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt        time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+	// VisitCount is the lifetime number of authorized opens/uses (documents, chat, retrieval).
+	VisitCount int64 `json:"visit_count" gorm:"not null;default:0"`
+	// DailyUsage is the number of authorized opens/uses on DailyUsageDate (server local calendar day).
+	DailyUsage     int64  `json:"daily_usage" gorm:"not null;default:0"`
+	DailyUsageDate string `json:"-" gorm:"type:varchar(10);not null;default:''"`
+	CreatedAt      time.Time `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt      time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
 // ErrKnowledgeCategoryDuplicate is returned when a category name is already stored.
@@ -104,6 +109,9 @@ var ErrKnowledgeSubscriptionDuplicate = errors.New("订阅申请已存在")
 
 // ErrKnowledgeSubscriptionNotPending is returned when an application is no longer awaiting review.
 var ErrKnowledgeSubscriptionNotPending = errors.New("订阅申请已处理")
+
+// ErrKnowledgeSubscriptionInactive is returned when the caller has no grant or application to cancel.
+var ErrKnowledgeSubscriptionInactive = errors.New("当前未订阅该知识库")
 
 // KnowledgeDocumentNote stores the administrator-written summary for one RAGFlow document.
 type KnowledgeDocumentNote struct {
@@ -217,6 +225,37 @@ func SaveKnowledgeCategory(row *KnowledgeCategory) error {
 		return ErrKnowledgeCategoryDuplicate
 	}
 	return DB.Create(row).Error
+}
+
+// knowledgeUsageDay is the server-local calendar day used for DailyUsage buckets.
+func knowledgeUsageDay(now time.Time) string {
+	return now.Format("2006-01-02")
+}
+
+// RecordKnowledgeBaseUsage increments lifetime visit_count and today's daily_usage.
+// A new local calendar day resets daily_usage to 1.
+// @param id - Local knowledge_bases.id.
+// @returns Database error when the library is missing or the update fails.
+func RecordKnowledgeBaseUsage(id int) error {
+	if id <= 0 {
+		return gorm.ErrRecordNotFound
+	}
+	today := knowledgeUsageDay(time.Now())
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var row KnowledgeBase
+		if err := tx.Select("id", "visit_count", "daily_usage", "daily_usage_date").First(&row, id).Error; err != nil {
+			return err
+		}
+		daily := int64(1)
+		if row.DailyUsageDate == today {
+			daily = row.DailyUsage + 1
+		}
+		return tx.Model(&KnowledgeBase{}).Where("id = ?", id).Updates(map[string]interface{}{
+			"visit_count":      gorm.Expr("visit_count + 1"),
+			"daily_usage":      daily,
+			"daily_usage_date": today,
+		}).Error
+	})
 }
 
 // ListManagedKnowledgeBases returns every library for the workbench, including offline and common ones.
@@ -371,8 +410,9 @@ func userDisplayNames(userIds []int) (map[int]string, error) {
 }
 
 // ListKnowledgePlaza returns published libraries in categories that require authorization.
-// Owners already see their libraries in the desktop category group, so plaza omits own libraries.
-// Callers without a grant still see others' cards so they can apply; subscription_status reflects the applicant.
+// Owners already see their libraries under 订阅知识库, so plaza omits own libraries.
+// Approved subscriptions also omit their cards — those libraries live only under 订阅知识库.
+// Callers without a grant still see others' cards so they can apply; subscription_status is none or pending.
 func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]KnowledgePlazaItem, error) {
 	// Personal categories are owner-only and never listed for subscription.
 	query := DB.Model(&KnowledgeBase{}).
@@ -442,18 +482,21 @@ func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]Knowledge
 	for _, grant := range grants {
 		statusByBase[grant.KnowledgeBaseId] = KnowledgeSubscriptionApproved
 	}
-	items := make([]KnowledgePlazaItem, len(bases))
-	for i, base := range bases {
+	items := make([]KnowledgePlazaItem, 0, len(bases))
+	for _, base := range bases {
 		status := statusByBase[base.Id]
 		if status == "" {
 			status = KnowledgeSubscriptionStatusNone
 		}
-		items[i] = KnowledgePlazaItem{
+		if status == KnowledgeSubscriptionApproved {
+			continue
+		}
+		items = append(items, KnowledgePlazaItem{
 			KnowledgeBase:      base,
 			CategoryName:       categories[base.CategoryId],
 			OwnerUsername:      owners[base.OwnerUserId],
 			SubscriptionStatus: status,
-		}
+		})
 	}
 	return items, nil
 }
@@ -470,6 +513,60 @@ func GetKnowledgePlazaItem(userId, id int) (*KnowledgePlazaItem, error) {
 		}
 	}
 	return nil, gorm.ErrRecordNotFound
+}
+
+// CancelKnowledgeSubscription removes the caller's user grant and clears a pending or approved
+// application so the library returns to the plaza for a fresh subscribe.
+func CancelKnowledgeSubscription(userId, knowledgeBaseId int) error {
+	base, err := GetKnowledgeBase(knowledgeBaseId)
+	if err != nil {
+		return err
+	}
+	if base.CategoryId == 0 || base.Shelf == KnowledgeShelfOffline {
+		return ErrKnowledgeSubscriptionInvalid
+	}
+	category, err := GetKnowledgeCategory(base.CategoryId)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrKnowledgeSubscriptionInvalid
+		}
+		return err
+	}
+	if !category.RequireAuth {
+		return ErrKnowledgeSubscriptionInvalid
+	}
+	if base.OwnerUserId == userId {
+		return ErrKnowledgeSubscriptionInvalid
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("knowledge_base_id = ? AND subject_type = ? AND subject_id = ?",
+			knowledgeBaseId, KnowledgeGrantUser, userId).Delete(&KnowledgeBaseGrant{})
+		if result.Error != nil {
+			return result.Error
+		}
+		cleared := result.RowsAffected > 0
+		var app KnowledgeSubscriptionApplication
+		err := tx.Where("knowledge_base_id = ? AND applicant_user_id = ?", knowledgeBaseId, userId).First(&app).Error
+		if err == nil {
+			if app.Status == KnowledgeSubscriptionApproved || app.Status == KnowledgeSubscriptionPending {
+				now := time.Now()
+				if err := tx.Model(&app).Updates(map[string]interface{}{
+					"status":      KnowledgeSubscriptionRejected,
+					"reviewed_by": 0,
+					"reviewed_at": now,
+				}).Error; err != nil {
+					return err
+				}
+				cleared = true
+			}
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if !cleared {
+			return ErrKnowledgeSubscriptionInactive
+		}
+		return nil
+	})
 }
 
 // ApplyKnowledgeSubscription creates or reopens a pending application for an auth-required category library.

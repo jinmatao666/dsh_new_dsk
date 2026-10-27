@@ -147,29 +147,56 @@ func jsonBody(value interface{}) (io.Reader, error) {
 // Retrieval stays below Elasticsearch nested-clause limits that RAGFlow hybrid search can hit.
 func chatPrompt(datasetId string) map[string]interface{} {
 	return map[string]interface{}{
-		"similarity_threshold":       0.2,
+		"similarity_threshold":       0.15,
 		"keywords_similarity_weight": 0.3,
-		"top_n":                      6,
+		"top_n":                      8,
 		"top_k":                      512,
 		"rerank_model":               "",
 		"empty_response":             "知识库中未找到相关内容。",
 		"show_quote":                 true,
 		"variables":                  []map[string]interface{}{{"key": "knowledge", "optional": true}},
 		"prompt": "你是知识库助手。仅依据下列知识用纯文本回答用户问题；禁止 Markdown、加粗、标题符号与代码围栏；可用普通编号列表；知识不足时明确说明。" +
-			"引用知识时，在相关句末标注 ##i$$，其中 i 为知识片段从 0 开始的序号；不要输出其它引用格式。" +
+			"回答须完整：知识中与问题相关的概述、分项、编号列表应全部写出，不要只摘首句或中途停止；若知识同时有总述与修订/分项列表，两者都要回答。" +
+			"引用知识时，在相关句末标注 ##i$$，其中 i 为知识片段从 0 开始的序号；同一序号在全文只标注一次，不要在每条列举后重复；不要输出其它引用格式。" +
 			"\n知识：\n{knowledge}\n以上是知识。",
 		"dataset_ids": []string{datasetId},
 	}
 }
 
+// chatLLM keeps list-style answers from stopping mid-item under RAGFlow's 512 default.
+func chatLLM(model string) map[string]interface{} {
+	settings := map[string]interface{}{
+		"temperature":       0.2,
+		"top_p":             0.3,
+		"presence_penalty":  0.2,
+		"frequency_penalty": 0.3,
+		"max_tokens":        4096,
+		"max_token":         4096,
+	}
+	if model != "" {
+		settings["model_name"] = model
+	}
+	return settings
+}
+
 func chatPayload(name, datasetId, model string) map[string]interface{} {
+	llm := chatLLM(model)
 	payload := map[string]interface{}{
 		"name":        name,
 		"dataset_ids": []string{datasetId},
 		"prompt":      chatPrompt(datasetId),
+		"llm":         llm,
+		// Newer RAGFlow builds read llm_setting.max_token; keep both shapes.
+		"llm_setting": map[string]interface{}{
+			"temperature":       llm["temperature"],
+			"top_p":             llm["top_p"],
+			"presence_penalty":  llm["presence_penalty"],
+			"frequency_penalty": llm["frequency_penalty"],
+			"max_token":         4096,
+		},
 	}
 	if model != "" {
-		payload["llm"] = map[string]string{"model_name": model}
+		payload["llm_id"] = model
 	}
 	return payload
 }
@@ -311,6 +338,54 @@ func (c *Client) ListChunks(ctx context.Context, datasetId, documentId string) (
 		}
 	}
 	return all, nil
+}
+
+// RetrievalOptions bounds one dataset retrieval request.
+type RetrievalOptions struct {
+	PageSize            int
+	SimilarityThreshold float64
+}
+
+// RetrievedChunk is one chunk returned by POST /api/v1/retrieval.
+// RAGFlow names the owning dataset `kb_id` in older releases and `dataset_id` in newer ones.
+type RetrievedChunk struct {
+	Id           string  `json:"id"`
+	Content      string  `json:"content"`
+	DocumentId   string  `json:"document_id"`
+	DocumentName string  `json:"document_keyword"`
+	KbId         string  `json:"kb_id"`
+	DatasetId    string  `json:"dataset_id"`
+	Similarity   float64 `json:"similarity"`
+}
+
+// OwnerDatasetId returns the dataset id under either RAGFlow field name.
+func (chunk RetrievedChunk) OwnerDatasetId() string {
+	if chunk.DatasetId != "" {
+		return chunk.DatasetId
+	}
+	return chunk.KbId
+}
+
+// Retrieve returns the chunks most relevant to question across the given datasets.
+func (c *Client) Retrieve(ctx context.Context, question string, datasetIds []string, options RetrievalOptions) ([]RetrievedChunk, error) {
+	body, err := jsonBody(map[string]interface{}{
+		"question":             question,
+		"dataset_ids":          datasetIds,
+		"page":                 1,
+		"page_size":            options.PageSize,
+		"similarity_threshold": options.SimilarityThreshold,
+		"highlight":            false,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Chunks []RetrievedChunk `json:"chunks"`
+	}
+	if err := c.request(ctx, http.MethodPost, "/api/v1/retrieval", "application/json", body, &result); err != nil {
+		return nil, err
+	}
+	return result.Chunks, nil
 }
 
 const maxDownloadBytes = 20 << 20
@@ -524,13 +599,8 @@ func NormalizeSessionHistory(messages []SessionMessage) []SessionMessage {
 
 // UpdateChat switches the assistant's dataset or model and keeps retrieval within ES clause limits.
 func (c *Client) UpdateChat(ctx context.Context, chatId, datasetId, model string) error {
-	payload := map[string]interface{}{
-		"dataset_ids": []string{datasetId},
-		"prompt":      chatPrompt(datasetId),
-	}
-	if model != "" {
-		payload["llm"] = map[string]string{"model_name": model}
-	}
+	payload := chatPayload("knowledge", datasetId, model)
+	delete(payload, "name")
 	body, _ := jsonBody(payload)
 	return c.request(ctx, http.MethodPut, "/api/v1/chats/"+url.PathEscape(chatId), "application/json", body, nil)
 }

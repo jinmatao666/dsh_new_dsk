@@ -15,9 +15,25 @@ This Client plugin adds the administrator-controlled Knowledge Base entry. OneAP
 
 Mount the plugin after `dsh-wanwei-oneapi-auth` and `dsh-wanwei-feature-panels`. Configure `RAGFLOW_BASE_URL` and `RAGFLOW_API_KEY` on the OneAPI server. Each new conversation creates an isolated RAGFlow chat assistant and session.
 
-Personal knowledge bases are visible to their owner. Shared knowledge bases are visible to their owner and to user or department grants stored by OneAPI. Published common libraries are visible to every signed-in user. Workbench tabs are Personal plus each created category. The desktop sidebar shows Personal, non-empty open categories, and 订阅知识库 for every accessible library filed under an auth-required category; auth category names never appear as sidebar groups. Others discover those libraries in the Knowledge Plaza (which omits libraries the caller owns), subscribe, get approved on the workbench audit list, then see them under 订阅知识库. Administrators see the full catalog in the workbench and on the desktop. Uploads are limited to 20 MB.
+Personal knowledge bases are visible to their owner. Shared knowledge bases are visible to their owner and to user or department grants stored by OneAPI. Published common libraries are visible to every signed-in user. Workbench tabs are Personal plus each created category. The desktop sidebar shows Personal, non-empty open categories, and 订阅知识库 for every accessible library filed under an auth-required category; auth category names never appear as sidebar groups. Others discover those libraries in the Knowledge Plaza (which omits libraries the caller owns and libraries already approved for them), subscribe, get approved on the workbench audit list, then see them under 订阅知识库. Opening a subscribed library offers 取消订阅 so it returns to the plaza. Administrators see the full catalog in the workbench and on the desktop. Uploads are limited to 20 MB.
+
+The composer tool row carries a 知识库 switch. Turning it on opens a picker that groups libraries exactly like the desktop sidebar (Personal, non-empty open categories, 订阅知识库) and accepts up to 20 libraries across groups. The plugin sends the selection for the current Session to the Host with the `retrieval-scope` operation and transfers it to a Session created by a first send. Turning the switch off hides the picker and clears the Session scope, so later turns run unchanged. The switch is hidden when the deployment hides knowledge libraries on the current network.
 
 ## Model Experience
+
+### Composer knowledge retrieval
+
+#### What the model sees
+
+When the current Session has a library scope, the `dsh-wanwei-oneapi-auth` Host plugin retrieves chunks for the user's question through OneAPI `POST /api/knowledge-bases/retrieval` (RAGFlow `POST /api/v1/retrieval`) before the first step of each user turn. It logs one `notice` user message from `wanwei-knowledge-retrieval` after the question with the numbered chunks, their file and library names, and an instruction to cite sources. An empty result or a retrieval failure is logged as a short statement instead. The Session's own model writes the answer; RAGFlow chat assistants are not involved.
+
+#### Token effect
+
+Each scoped user turn adds up to `knowledgeRetrievalMaxChars` characters of chunk text plus a fixed instruction. Turns without a scope add nothing.
+
+#### KV Cache effect
+
+The retrieval message is appended after the user message, so the prefix before the turn stays cacheable.
 
 ### Browser-owned knowledge conversation
 

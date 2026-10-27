@@ -5,7 +5,7 @@
     "outDir": "lib/types",
     "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
   },
-  "files": ["src/index.ts", "src/invariant.ts", "src/contract.ts", "src/expert-catalog.ts", "src/knowledge-base.ts", "src/search-provider.ts", "src/usage.ts", "src/network.ts", "src/network-contract.ts", "src/deployment.ts", "src/resource-routing.ts", "src/resource-settings.ts", "src/dependency-policy.ts", "src/final-deliverables.ts", "src/desktop-lifecycle.ts"],
+  "files": ["src/index.ts", "src/invariant.ts", "src/contract.ts", "src/expert-catalog.ts", "src/knowledge-base.ts", "src/knowledge-retrieval.ts", "src/search-provider.ts", "src/usage.ts", "src/network.ts", "src/network-contract.ts", "src/deployment.ts", "src/resource-routing.ts", "src/resource-settings.ts", "src/dependency-policy.ts", "src/final-deliverables.ts", "src/desktop-lifecycle.ts"],
   "include": ["src/resource-tunnel.ts", "src/pip-mirrors.ts", "src/resource-client.ts", "src/knowledge-upload.ts"],
   "references": [
     { "path": "../../core/agent" },

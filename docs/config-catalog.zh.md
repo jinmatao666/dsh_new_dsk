@@ -3308,6 +3308,14 @@ export interface Config {
 export interface Config {
   /** Idle time before an incomplete knowledge upload is removed from local temporary storage. */
   knowledgeUploadIdleTimeoutMs?: number
+  /** Chunks requested from RAGFlow when the composer knowledge toggle is on. */
+  knowledgeRetrievalPageSize?: number
+  /** RAGFlow similarity floor for composer knowledge retrieval. */
+  knowledgeRetrievalSimilarityThreshold?: number
+  /** Upper bound on retrieved chunk characters appended to one model turn. */
+  knowledgeRetrievalMaxChars?: number
+  /** Complete composer knowledge retrieval timeout in milliseconds. */
+  knowledgeRetrievalTimeoutMs?: number
   /** Explicit origin overrides launch-environment DSH_ONEAPI_URL, then loopback port 3000; excludes `/v1`. */
   baseURL?: string
   /** DSH provider route managed by this login plugin. */
@@ -3342,7 +3350,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/wanwei/oneapi-auth/src/index.ts:36`](../packages/wanwei/oneapi-auth/src/index.ts)
+来源：[`packages/wanwei/oneapi-auth/src/index.ts:37`](../packages/wanwei/oneapi-auth/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-skillhub"></a>
 
@@ -3666,7 +3674,7 @@ export interface Config {
 - `@deepseek-ai/dsh-tool-cordis` — 需要 `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect`（[`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts)）
 - `@deepseek-ai/dsh-tool-subagent-control` — 需要 `tools` · `subagents`（[`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts)）
 - `@deepseek-ai/dsh-user-questions`（[`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts)）
-- `@deepseek-ai/dsh-wanwei-connectors` — 依赖 `connection` · `sessionController` · `sessions` · `agents` · `workspaceRegistry` · `permissionPresets`（[`packages/wanwei/connectors/src/index.ts`](../packages/wanwei/connectors/src/index.ts)）
+- `@deepseek-ai/dsh-wanwei-connectors` — 依赖 `connection` · `tools` · `sessionController` · `sessions` · `agents` · `workspaceRegistry` · `permissionPresets`（[`packages/wanwei/connectors/src/index.ts`](../packages/wanwei/connectors/src/index.ts)）
 - `@deepseek-ai/dsh-wanwei-expert-library`（[`packages/wanwei/expert-library/src/index.ts`](../packages/wanwei/expert-library/src/index.ts)）
 - `@deepseek-ai/dsh-wanwei-feature-panels`（[`packages/wanwei/feature-panels/src/index.ts`](../packages/wanwei/feature-panels/src/index.ts)）
 - `@deepseek-ai/dsh-wanwei-knowledge-base`（[`packages/wanwei/knowledge-base/src/index.ts`](../packages/wanwei/knowledge-base/src/index.ts)）

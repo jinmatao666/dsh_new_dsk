@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Download, Eye, FileText, Layers, Pencil, Plus, RefreshCw, Search, Tag, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, ClipboardList, Download, Eye, FileText, Folder, FolderPlus, Layers, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Tag, Trash2, Upload, Users } from 'lucide-react';
 import { API } from '../../helpers';
 import CustomSelect from '../../components/CustomSelect';
 import './index.css';
@@ -47,6 +47,27 @@ function documentsQuery({ page = 1, pageSize = FILE_PAGE_SIZE, keywords = '' } =
   return params.toString();
 }
 
+const STATS_PAGE_SIZE = 100;
+const STATS_MAX_PAGES = 50;
+
+/** Loads document total and summed byte size for one library card. */
+async function loadLibraryDocumentStats(libraryId) {
+  let page = 1;
+  let total = 0;
+  let bytes = 0;
+  let seen = 0;
+  for (; page <= STATS_MAX_PAGES; page += 1) {
+    const result = unwrapDocumentPage(await API.get(
+      `/api/knowledge-admin/bases/${libraryId}/documents?${documentsQuery({ page, pageSize: STATS_PAGE_SIZE })}`,
+    ));
+    total = result.total;
+    for (const file of result.items) bytes += Number(file.size) || 0;
+    seen += result.items.length;
+    if (result.items.length === 0 || seen >= total) break;
+  }
+  return { total, bytes, complete: seen >= total || total === 0 };
+}
+
 async function errorMessage(error) {
   const data = error?.response?.data;
   if (data instanceof Blob) {
@@ -85,6 +106,32 @@ function formatSize(bytes) {
   if (number >= 1024 * 1024) return `${(number / 1024 / 1024).toFixed(1)}M`;
   if (number >= 1024) return `${Math.ceil(number / 1024)}K`;
   return `${number}B`;
+}
+
+function formatSizeLabel(bytes) {
+  const number = Number(bytes);
+  if (!Number.isFinite(number) || number < 0) return '—';
+  if (number >= 1024 * 1024) return `${(number / 1024 / 1024).toFixed(1)}MB`;
+  if (number >= 1024) return `${(number / 1024).toFixed(1)}KB`;
+  return `${number}B`;
+}
+
+const AVATAR_COLORS = ['#2f6fe0', '#0f766e', '#7c3aed', '#c2410c', '#0369a1', '#be123c'];
+
+function avatarColor(name) {
+  const text = String(name || '');
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) hash = (hash + text.charCodeAt(index)) % AVATAR_COLORS.length;
+  return AVATAR_COLORS[hash];
+}
+
+function personInitial(name) {
+  const text = String(name || '').trim();
+  return text ? text.slice(0, 1) : '人';
+}
+
+function isPersonalLibrary(library) {
+  return library?.kind === 'personal' && !Number(library.category_id || 0);
 }
 
 function fileExtension(name) {
@@ -193,18 +240,34 @@ const KnowledgeLibrary = () => {
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewing, setReviewing] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [deptKey, setDeptKey] = useState('all');
+  const [peopleQuery, setPeopleQuery] = useState('');
+  const [person, setPerson] = useState(null);
+  const [personFiles, setPersonFiles] = useState([]);
+  const [personFilesLoading, setPersonFilesLoading] = useState(false);
+  const [personFileQuery, setPersonFileQuery] = useState('');
+  const [personFilePage, setPersonFilePage] = useState(1);
+  const [personLibrariesOpen, setPersonLibrariesOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(null);
+  const [cardMenuId, setCardMenuId] = useState(null);
   const [summaryFile, setSummaryFile] = useState(null);
   const [summaryText, setSummaryText] = useState('');
   const [viewer, setViewer] = useState(null);
   const [chunks, setChunks] = useState(null);
   const [busy, setBusy] = useState('');
   const fileInput = useRef(null);
-  const counted = useRef(new Set());
+  // Only mark a library settled after stats resolve. Marking before the request
+  // breaks under React Strict Mode: the first effect is cancelled, ids stay
+  // "counted", and the remount never fetches again — cards stuck on "…".
+  const settledStats = useRef(new Set());
+  const inflightStats = useRef(new Set());
   const viewerRef = useRef(null);
   const loadDocumentsRef = useRef(null);
   const pollRef = useRef({ library: null, page: 1, keywords: '' });
+  const personLoadRef = useRef(0);
   viewerRef.current = viewer;
 
   useEffect(() => () => { revokeViewerUrl(viewerRef.current); }, []);
@@ -226,41 +289,75 @@ const KnowledgeLibrary = () => {
     setCategories(Array.isArray(rows) ? rows : []);
   };
 
+  const loadUsers = async () => {
+    const pageSize = 100;
+    const rows = [];
+    try {
+      for (let page = 0; page < 30; page += 1) {
+        const batch = unwrap(await API.get(`/api/user/?p=${page}&size=${pageSize}`));
+        const list = Array.isArray(batch) ? batch : [];
+        list.forEach(user => {
+          const id = Number(user?.id);
+          if (!Number.isFinite(id) || id <= 0 || Number(user.status) === 3) return;
+          rows.push(user);
+        });
+        if (list.length < pageSize) break;
+      }
+      setUsers(rows);
+    } catch (cause) {
+      setUsers([]);
+      setError(await errorMessage(cause));
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([loadLibraries(), loadCategories()])
+    setUsersLoading(true);
+    Promise.all([loadLibraries(), loadCategories(), loadUsers(), loadReviewCount()])
       .catch(async cause => {
         const message = await errorMessage(cause);
         if (!cancelled) setError(message);
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+          setUsersLoading(false);
+        }
+      });
     return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    const pending = libraries.filter(item => !counted.current.has(item.id));
-    pending.forEach(item => counted.current.add(item.id));
+    const pending = libraries.filter(item => (
+      !settledStats.current.has(item.id) && !inflightStats.current.has(item.id)
+    ));
+    pending.forEach(item => inflightStats.current.add(item.id));
     void mapPool(pending, 3, async item => {
       try {
-        const page = unwrapDocumentPage(await API.get(`/api/knowledge-admin/bases/${item.id}/documents?${documentsQuery({ page: 1, pageSize: 100 })}`));
+        const stats = await loadLibraryDocumentStats(item.id);
         if (cancelled) return;
-        setCounts(current => ({ ...current, [item.id]: page.total }));
-        const known = page.items.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
+        settledStats.current.add(item.id);
+        setCounts(current => ({ ...current, [item.id]: stats.total }));
         setSizes(current => ({
           ...current,
-          [item.id]: page.items.length >= page.total ? known : null,
+          [item.id]: stats.complete ? stats.bytes : null,
         }));
       } catch {
         // 单个知识库的文件数量失败时保留目录，卡片显示占位。
-        if (!cancelled) {
-          setCounts(current => ({ ...current, [item.id]: null }));
-          setSizes(current => ({ ...current, [item.id]: null }));
-        }
+        if (cancelled) return;
+        settledStats.current.add(item.id);
+        setCounts(current => ({ ...current, [item.id]: null }));
+        setSizes(current => ({ ...current, [item.id]: null }));
+      } finally {
+        inflightStats.current.delete(item.id);
       }
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      pending.forEach(item => inflightStats.current.delete(item.id));
+    };
   }, [libraries]);
 
   const visible = useMemo(() => {
@@ -294,6 +391,61 @@ const KnowledgeLibrary = () => {
     ...categories.map(category => ({ key: `c:${category.id}`, label: category.name })),
   ];
   const activeCategory = categories.find(category => `c:${category.id}` === scope);
+
+  const people = useMemo(() => {
+    const map = new Map();
+    users.forEach(user => {
+      const id = Number(user.id);
+      if (!Number.isFinite(id) || id <= 0) return;
+      const name = String(user.display_name || user.username || '').trim() || `用户 ${id}`;
+      map.set(id, {
+        id,
+        name,
+        username: String(user.username || ''),
+        department: String(user.department_name || '').trim(),
+        createdAt: user.created_at || '',
+        status: Number(user.status) || 1,
+      });
+    });
+    libraries.filter(isPersonalLibrary).forEach(library => {
+      const id = Number(library.owner_user_id);
+      if (!Number.isFinite(id) || id <= 0 || map.has(id)) return;
+      const name = String(library.owner_username || '').trim() || `用户 ${id}`;
+      map.set(id, { id, name, username: name, department: '', createdAt: '', status: 1 });
+    });
+    return [...map.values()].sort((left, right) => left.name.localeCompare(right.name, 'zh'));
+  }, [users, libraries]);
+
+  const departments = useMemo(() => {
+    const grouped = new Map();
+    people.forEach(item => {
+      if (!item.department) return;
+      grouped.set(item.department, (grouped.get(item.department) || 0) + 1);
+    });
+    return [...grouped.entries()].sort((left, right) => left[0].localeCompare(right[0], 'zh'));
+  }, [people]);
+
+  const visiblePeople = useMemo(() => {
+    const text = peopleQuery.trim().toLowerCase();
+    return people.filter(item => {
+      if (deptKey !== 'all' && item.department !== deptKey) return false;
+      if (!text) return true;
+      return [item.name, item.username, item.department].some(value => String(value || '').toLowerCase().includes(text));
+    });
+  }, [people, deptKey, peopleQuery]);
+
+  const personLibraries = person
+    ? libraries.filter(library => isPersonalLibrary(library) && Number(library.owner_user_id) === person.id)
+    : [];
+
+  const shownPersonFiles = useMemo(() => {
+    const text = personFileQuery.trim().toLowerCase();
+    if (!text) return personFiles;
+    return personFiles.filter(file => [file.name, file.library_name, file.summary]
+      .some(value => String(value || '').toLowerCase().includes(text)));
+  }, [personFiles, personFileQuery]);
+  const personFilePageCount = Math.max(1, Math.ceil(shownPersonFiles.length / FILE_PAGE_SIZE) || 1);
+  const personFileRows = shownPersonFiles.slice((personFilePage - 1) * FILE_PAGE_SIZE, personFilePage * FILE_PAGE_SIZE);
 
   const filePageCount = Math.max(1, Math.ceil(documentTotal / FILE_PAGE_SIZE) || 1);
 
@@ -351,7 +503,62 @@ const KnowledgeLibrary = () => {
     return () => window.clearInterval(timer);
   }, [opened, pendingParse]);
 
+  const listLibraryDocuments = async library => {
+    const rows = [];
+    let page = 1;
+    let total = 0;
+    do {
+      const result = unwrapDocumentPage(await API.get(
+        `/api/knowledge-admin/bases/${library.id}/documents?${documentsQuery({ page, pageSize: 100 })}`,
+      ));
+      total = result.total;
+      rows.push(...result.items.map(file => ({
+        ...file,
+        library_id: library.id,
+        library_name: library.name,
+      })));
+      page += 1;
+      if (result.items.length === 0) break;
+    } while (rows.length < total && page <= 20);
+    return rows;
+  };
+
+  const loadPersonFiles = async user => {
+    const token = personLoadRef.current + 1;
+    personLoadRef.current = token;
+    setPersonFilesLoading(true);
+    setError('');
+    try {
+      const owned = libraries.filter(library => isPersonalLibrary(library) && Number(library.owner_user_id) === user.id);
+      const groups = await Promise.all(owned.map(library => listLibraryDocuments(library)));
+      if (personLoadRef.current !== token) return;
+      const rows = groups.flat().sort((left, right) => Number(right.create_time || right.update_time || 0) - Number(left.create_time || left.update_time || 0));
+      setPersonFiles(rows);
+      setPersonFilePage(current => Math.min(current, Math.max(1, Math.ceil(rows.length / FILE_PAGE_SIZE) || 1)));
+    } catch (cause) {
+      if (personLoadRef.current !== token) return;
+      setPersonFiles([]);
+      setError(await errorMessage(cause));
+    } finally {
+      if (personLoadRef.current === token) setPersonFilesLoading(false);
+    }
+  };
+
+  const openPerson = async user => {
+    closeViewer();
+    setChunks(null);
+    setOpened(null);
+    setPerson(user);
+    setPersonFiles([]);
+    setPersonFileQuery('');
+    setPersonFilePage(1);
+    setPersonLibrariesOpen(false);
+    setCardMenuId(null);
+    await loadPersonFiles(user);
+  };
+
   const openFiles = async library => {
+    setPerson(null);
     setOpened(library);
     setDocuments([]);
     setDocumentTotal(0);
@@ -373,6 +580,7 @@ const KnowledgeLibrary = () => {
       setConfirming(null);
       setEditing(current => current?.id === library.id ? null : current);
       if (opened?.id === library.id) setOpened(null);
+      setPersonFiles(current => current.filter(file => Number(file.library_id) !== Number(library.id)));
       await loadLibraries();
     } catch (cause) {
       setError(await errorMessage(cause));
@@ -474,14 +682,15 @@ const KnowledgeLibrary = () => {
   };
 
   const openBrowse = async file => {
-    if (!opened) return;
+    const libraryId = Number(file?.library_id || opened?.id || 0);
+    if (!libraryId) return;
     const documentId = file.id;
-    const base = `/api/knowledge-admin/bases/${opened.id}/documents/${documentId}`;
+    const base = `/api/knowledge-admin/bases/${libraryId}/documents/${documentId}`;
     setBusy(`${documentId}:browse`);
     setError('');
     setViewer(current => {
       revokeViewerUrl(current);
-      return { id: documentId, name: file.name, loading: true, mode: 'text', content: '' };
+      return { id: documentId, library_id: libraryId, name: file.name, loading: true, mode: 'text', content: '' };
     });
     try {
       const kind = fileKind(file.name);
@@ -497,7 +706,7 @@ const KnowledgeLibrary = () => {
               return current;
             }
             revokeViewerUrl(current);
-            return { id: documentId, name: file.name, loading: false, mode: 'image', objectUrl };
+            return { id: documentId, library_id: libraryId, name: file.name, loading: false, mode: 'image', objectUrl };
           });
           return;
         }
@@ -509,7 +718,7 @@ const KnowledgeLibrary = () => {
               return current;
             }
             revokeViewerUrl(current);
-            return { id: documentId, name: file.name, loading: false, mode: 'pdf', objectUrl };
+            return { id: documentId, library_id: libraryId, name: file.name, loading: false, mode: 'pdf', objectUrl };
           });
           return;
         }
@@ -517,7 +726,7 @@ const KnowledgeLibrary = () => {
         setViewer(current => {
           if (!current || current.id !== documentId) return current;
           revokeViewerUrl(current);
-          return { id: documentId, name: file.name, loading: false, mode: 'text', content };
+          return { id: documentId, library_id: libraryId, name: file.name, loading: false, mode: 'text', content };
         });
         return;
       }
@@ -529,7 +738,7 @@ const KnowledgeLibrary = () => {
       setViewer(current => {
         if (!current || current.id !== documentId) return current;
         revokeViewerUrl(current);
-        return { id: documentId, name: file.name, loading: false, mode: 'text', content };
+        return { id: documentId, library_id: libraryId, name: file.name, loading: false, mode: 'text', content };
       });
     } catch (cause) {
       setViewer(current => {
@@ -544,11 +753,12 @@ const KnowledgeLibrary = () => {
   };
 
   const openChunks = async file => {
-    if (!opened) return;
+    const libraryId = Number(file?.library_id || opened?.id || 0);
+    if (!libraryId) return;
     setBusy(`${file.id}:chunks`);
     setError('');
     try {
-      const rows = unwrap(await API.get(`/api/knowledge-admin/bases/${opened.id}/documents/${file.id}/chunks`));
+      const rows = unwrap(await API.get(`/api/knowledge-admin/bases/${libraryId}/documents/${file.id}/chunks`));
       setChunks({ name: file.name, items: Array.isArray(rows) ? rows : [] });
     } catch (cause) {
       setError(await errorMessage(cause));
@@ -558,7 +768,8 @@ const KnowledgeLibrary = () => {
   };
 
   const runFileAction = async (file, action) => {
-    if (!opened) return;
+    const libraryId = Number(file?.library_id || opened?.id || 0);
+    if (!libraryId) return;
     if (action === 'browse') {
       await openBrowse(file);
       return;
@@ -570,7 +781,7 @@ const KnowledgeLibrary = () => {
     setBusy(`${file.id}:${action}`);
     setError('');
     try {
-      const base = `/api/knowledge-admin/bases/${opened.id}/documents/${file.id}`;
+      const base = `/api/knowledge-admin/bases/${libraryId}/documents/${file.id}`;
       if (action === 'download') {
         const response = await API.get(`${base}/file`, { responseType: 'blob' });
         const url = URL.createObjectURL(response.data);
@@ -585,7 +796,8 @@ const KnowledgeLibrary = () => {
       } else if (action === 'delete') {
         unwrap(await API.delete(base));
         setConfirming(null);
-        await refreshOpened(opened);
+        if (file?.library_id && person) await loadPersonFiles(person);
+        else await refreshOpened(opened);
       }
     } catch (cause) {
       setError(await errorMessage(cause));
@@ -596,13 +808,15 @@ const KnowledgeLibrary = () => {
 
   const saveSummary = async event => {
     event.preventDefault();
-    if (!opened || !summaryFile) return;
+    const libraryId = Number(summaryFile?.library_id || opened?.id || 0);
+    if (!libraryId || !summaryFile) return;
     setSaving(true);
     setError('');
     try {
-      unwrap(await API.put(`/api/knowledge-admin/bases/${opened.id}/documents/${summaryFile.id}/summary`, { summary: summaryText.trim() }));
+      unwrap(await API.put(`/api/knowledge-admin/bases/${libraryId}/documents/${summaryFile.id}/summary`, { summary: summaryText.trim() }));
       setSummaryFile(null);
-      await refreshOpened(opened);
+      if (summaryFile.library_id && person) await loadPersonFiles(person);
+      else await refreshOpened(opened);
     } catch (cause) {
       setError(await errorMessage(cause));
     } finally {
@@ -610,14 +824,31 @@ const KnowledgeLibrary = () => {
     }
   };
 
+  const personUsage = userId => {
+    const owned = libraries.filter(library => isPersonalLibrary(library) && Number(library.owner_user_id) === Number(userId));
+    if (owned.length === 0) return { libraries: 0, size: '0B' };
+    if (owned.some(library => !(library.id in sizes))) return { libraries: owned.length, size: '…' };
+    if (owned.some(library => sizes[library.id] == null)) return { libraries: owned.length, size: '—' };
+    const bytes = owned.reduce((sum, library) => sum + (Number(sizes[library.id]) || 0), 0);
+    return { libraries: owned.length, size: formatSizeLabel(bytes) };
+  };
+
+  const selectDepartment = key => {
+    closeViewer();
+    setChunks(null);
+    setPerson(null);
+    setDeptKey(key);
+    setPeopleQuery('');
+  };
+
   const fileCount = id => {
     if (!(id in counts)) return '…';
-    return counts[id] == null ? '—' : `${counts[id]}`;
+    return counts[id] == null ? '—' : `${counts[id]}个`;
   };
 
   const librarySize = id => {
     if (!(id in sizes)) return '…';
-    return sizes[id] == null ? '—' : formatSize(sizes[id]);
+    return sizes[id] == null ? '—' : formatSizeLabel(sizes[id]);
   };
 
   const libraryCreator = library => library.owner_username || (library.owner_user_id ? `#${library.owner_user_id}` : '—');
@@ -631,6 +862,13 @@ const KnowledgeLibrary = () => {
     const value = library.daily_usage ?? library.daily_use_count;
     return Number.isFinite(Number(value)) ? String(Number(value)) : '—';
   };
+
+  const metaRow = (label, value) => (
+    <span className='knowledge-meta-row' key={label}>
+      <span className='knowledge-meta-label'>{label}</span>
+      <span className='knowledge-meta-value'>{value}</span>
+    </span>
+  );
 
   const createCategory = async event => {
     event.preventDefault();
@@ -647,6 +885,15 @@ const KnowledgeLibrary = () => {
       setError(await errorMessage(cause));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const loadReviewCount = async () => {
+    try {
+      const data = unwrap(await API.get('/api/knowledge-admin/subscription-applications?page=1&page_size=1&status=pending'));
+      setReviewTotal(Number(data?.total) || 0);
+    } catch {
+      // Count is advisory chrome; keep the last known total on refresh failure.
     }
   };
 
@@ -669,6 +916,7 @@ const KnowledgeLibrary = () => {
 
   const openReviews = () => {
     setOpened(null);
+    setPerson(null);
     setCreating(false);
     setEditing(null);
     setCategoryOpen(false);
@@ -695,10 +943,9 @@ const KnowledgeLibrary = () => {
 
   return <div className='knowledge-admin'>
     <header className='knowledge-page-head'>
-      <h1>知识库</h1>
-      <div className='knowledge-page-actions'>
-        <button type='button' className='knowledge-back' onClick={openReviews}>订阅审核</button>
-        <button type='button' className='knowledge-primary' onClick={() => { setCreating(false); setEditing(null); setReviewOpen(false); setCategoryForm({ name: '', visibility: 'personal' }); setCategoryOpen(true); }}><Plus size={16} />新建知识库分类</button>
+      <div className='knowledge-page-title'>
+        <h1>知识库</h1>
+        {!reviewOpen && <p>按分类管理知识库与人员目录中的文件</p>}
       </div>
     </header>
     {error && <div className='knowledge-alert' role='alert'>{error}<button type='button' onClick={() => setError('')}>关闭</button></div>}
@@ -816,11 +1063,177 @@ const KnowledgeLibrary = () => {
         </div>
       </div>
     </section> : <>
-      <div className='knowledge-tabs' role='tablist' aria-label='知识库分类'>
-        {tabs.map(tab => <button key={tab.key} type='button' role='tab' aria-selected={scope === tab.key} className={scope === tab.key ? 'active' : ''} onClick={() => setScope(tab.key)}>
-          {tab.label}<span>{countsByScope[tab.key] || 0}</span>
-        </button>)}
+      <div className='knowledge-chrome'>
+        <div className='knowledge-tabs' role='tablist' aria-label='知识库分类'>
+          {tabs.map(tab => <button key={tab.key} type='button' role='tab' aria-selected={scope === tab.key} className={scope === tab.key ? 'active' : ''} onClick={() => { setPerson(null); setDeptKey('all'); setScope(tab.key); }}>
+            {tab.label}<span>{countsByScope[tab.key] || 0}</span>
+          </button>)}
+        </div>
+        <div className='knowledge-chrome-actions'>
+          <button type='button' className='knowledge-ghost' onClick={openReviews}>
+            <ClipboardList size={15} />订阅审核
+            {reviewTotal > 0 && <i className='knowledge-review-count' aria-label={`待审核 ${reviewTotal} 条`}>{reviewTotal > 99 ? '99+' : reviewTotal}</i>}
+          </button>
+          <button
+            type='button'
+            className='knowledge-secondary'
+            onClick={() => { setCreating(false); setEditing(null); setReviewOpen(false); setCategoryForm({ name: '', visibility: 'personal' }); setCategoryOpen(true); }}
+          >
+            <FolderPlus size={15} />新建知识库分类
+          </button>
+        </div>
       </div>
+      {scope === 'personal' ? <div className='knowledge-directory'>
+        <aside className='knowledge-directory-nav' aria-label='人员部门'>
+          <p>人员</p>
+          <button type='button' aria-pressed={deptKey === 'all'} className={deptKey === 'all' ? 'active' : ''} onClick={() => selectDepartment('all')}>
+            <span>全部人员</span><i>{people.length}</i>
+          </button>
+          {departments.length > 0 && <p>部门</p>}
+          {departments.map(([name, count]) => <button key={name} type='button' aria-pressed={deptKey === name} className={deptKey === name ? 'active' : ''} onClick={() => selectDepartment(name)}>
+            <span>{name}</span><i>{count}</i>
+          </button>)}
+        </aside>
+        <div className='knowledge-directory-main'>
+          {person ? <section className='knowledge-files knowledge-person-files' aria-label='个人文件清单'>
+            <header className='knowledge-person-file-head'>
+              <button type='button' className='knowledge-back' onClick={() => { closeViewer(); setChunks(null); setPerson(null); setPersonLibrariesOpen(false); setCardMenuId(null); }}><ArrowLeft size={16} />返回</button>
+              <button
+                type='button'
+                className={personLibrariesOpen ? 'knowledge-person-file-title open' : 'knowledge-person-file-title'}
+                aria-expanded={personLibrariesOpen}
+                aria-controls='knowledge-person-libraries'
+                onClick={() => {
+                  setPersonLibrariesOpen(current => !current);
+                  setCardMenuId(null);
+                }}
+              >
+                <h2>{person.name} 的文件清单</h2>
+                <p>{person.department || '未分配部门'} · {personLibraries.length}个知识库 · {personFilesLoading ? '…' : personFiles.length}个文件</p>
+              </button>
+            </header>
+            {personLibrariesOpen && <section id='knowledge-person-libraries' className='knowledge-person-libraries' aria-label='个人知识库'>
+              <div className='knowledge-person-libraries-head'>
+                <h3>个人知识库</h3>
+                <span>通过更多菜单编辑或删除知识库</span>
+              </div>
+              {personLibraries.length === 0
+                ? <p className='knowledge-person-libraries-empty'>该人员暂无个人知识库</p>
+                : <div className='knowledge-person-library-grid'>
+                  {personLibraries.map(library => {
+                    const filesInLibrary = personFiles.filter(file => Number(file.library_id) === Number(library.id)).length;
+                    const menuOpen = cardMenuId === library.id;
+                    return <article key={library.id} className={menuOpen ? 'knowledge-person-library is-menu-open' : 'knowledge-person-library'}>
+                      <span className='knowledge-person-library-icon' aria-hidden='true'><Folder size={18} /></span>
+                      <span className='knowledge-person-library-copy'>
+                        <strong title={library.name}>{library.name}</strong>
+                        <em>{personFilesLoading ? '…' : `${filesInLibrary} 个文件`}</em>
+                      </span>
+                      <div className='knowledge-card-menu'>
+                        <button
+                          type='button'
+                          className='knowledge-card-more'
+                          aria-label={`更多操作 ${library.name}`}
+                          aria-haspopup='menu'
+                          aria-expanded={menuOpen}
+                          onClick={() => setCardMenuId(menuOpen ? null : library.id)}
+                        >
+                          <MoreHorizontal size={16} />
+                        </button>
+                        {menuOpen && <>
+                          <button type='button' className='knowledge-card-menu-dismiss' aria-label='关闭菜单' onClick={() => setCardMenuId(null)} />
+                          <div className='knowledge-card-menu-panel' role='menu'>
+                            <button type='button' role='menuitem' onClick={() => { setCardMenuId(null); openEdit(library); }}>
+                              <Pencil size={14} />编辑
+                            </button>
+                            <button type='button' role='menuitem' className='danger' onClick={() => { setCardMenuId(null); setConfirming({ type: 'library', library }); }}>
+                              <Trash2 size={14} />删除
+                            </button>
+                          </div>
+                        </>}
+                      </div>
+                    </article>;
+                  })}
+                </div>}
+            </section>}
+            <div className='knowledge-files-toolbar'>
+              <label className='knowledge-search'>
+                <Search size={16} />
+                <input value={personFileQuery} onChange={event => { setPersonFileQuery(event.target.value); setPersonFilePage(1); }} placeholder='搜索文件名称...' />
+              </label>
+            </div>
+            <div className='knowledge-table-wrap'>
+              <table>
+                <thead><tr><th>文件名称</th><th>所属知识库</th><th>大小</th><th>上传时间</th><th>摘要</th><th>操作</th></tr></thead>
+                <tbody>
+                  {personFilesLoading ? <tr><td colSpan={6}>正在加载文件</td></tr>
+                    : personFileRows.length === 0 ? <tr><td colSpan={6}>{personFileQuery.trim() ? '没有匹配的文件' : '暂无文件'}</td></tr>
+                      : personFileRows.map(file => <tr key={`${file.library_id}:${file.id}`}>
+                        <td className='knowledge-file-name'><FileText size={15} />{file.name}</td>
+                        <td>{file.library_name || '—'}</td>
+                        <td>{formatSizeLabel(file.size)}</td>
+                        <td>{formatUnix(file.create_time || file.update_time)}</td>
+                        <td className='knowledge-summary' title={file.summary || ''}>{file.summary || '—'}</td>
+                        <td className='knowledge-ops'>
+                          <button type='button' disabled={busy === `${file.id}:browse`} onClick={() => runFileAction(file, 'browse')}><Eye size={14} />预览</button>
+                          <button type='button' disabled={busy === `${file.id}:download`} onClick={() => runFileAction(file, 'download')}><Download size={14} />下载</button>
+                          <button type='button' className='danger' onClick={() => setConfirming({ type: 'file', file })}><Trash2 size={14} />删除</button>
+                        </td>
+                      </tr>)}
+                </tbody>
+              </table>
+            </div>
+            <div className='zjugis-table-pagination knowledge-files-pagination'>
+              <span>共 {shownPersonFiles.length} 条，每页 {FILE_PAGE_SIZE} 条</span>
+              <div>
+                <button type='button' aria-label='上一页' disabled={personFilesLoading || personFilePage <= 1} onClick={() => setPersonFilePage(page => page - 1)}>上一页</button>
+                <span>{Math.min(personFilePage, personFilePageCount)} / {personFilePageCount}</span>
+                <button type='button' aria-label='下一页' disabled={personFilesLoading || personFilePage >= personFilePageCount} onClick={() => setPersonFilePage(page => page + 1)}>下一页</button>
+              </div>
+            </div>
+          </section> : <>
+            <header className='knowledge-people-head'>
+              <div>
+                <h2>{deptKey === 'all' ? '全部人员' : deptKey} <span>({visiblePeople.length}人)</span></h2>
+                <p>{departments.length === 0 ? '当前没有部门数据，先按全部人员查看。' : '选择部门查看该部门人员，点开人员查看个人知识库文件。'}</p>
+              </div>
+              <div className='knowledge-people-tools'>
+                <label className='knowledge-search'>
+                  <Search size={16} />
+                  <input value={peopleQuery} onChange={event => setPeopleQuery(event.target.value)} placeholder='搜索姓名、用户名或部门' />
+                </label>
+                <button type='button' className='knowledge-primary' onClick={() => { setCategoryOpen(false); setEditing(null); setForm({ name: '', description: '', kind: 'personal', tags: '', category_id: 0 }); setCreating(true); }}><Plus size={16} />新建知识库</button>
+              </div>
+            </header>
+            {usersLoading && people.length === 0 ? <p className='knowledge-empty' role='status'>正在加载人员</p>
+              : visiblePeople.length === 0 ? <p className='knowledge-empty'>{peopleQuery.trim() ? '没有匹配的人员' : '暂无人员'}</p>
+                : <div className='knowledge-people-grid'>
+                  {visiblePeople.map(item => {
+                    const usage = personUsage(item.id);
+                    const color = avatarColor(item.name);
+                    return <button key={item.id} type='button' className='knowledge-person' onClick={() => void openPerson(item)}>
+                      <span className='knowledge-person-top'>
+                        <i className='knowledge-avatar' style={{ color, background: `${color}18` }}>{personInitial(item.name)}</i>
+                        <span>
+                          <strong>{item.name}</strong>
+                          <em>{item.username || '—'}</em>
+                        </span>
+                      </span>
+                      <span className='knowledge-person-meta'>
+                        <span>部门 {item.department || '未分配部门'}</span>
+                        <span>注册 {formatDate(item.createdAt).slice(0, 10)}</span>
+                        {item.status === 2 && <span className='muted'>账号已禁用</span>}
+                      </span>
+                      <span className='knowledge-person-stats'>
+                        <span><b>{usage.libraries}</b>知识库</span>
+                        <span><b>{usage.size}</b>总大小</span>
+                      </span>
+                    </button>;
+                  })}
+                </div>}
+          </>}
+        </div>
+      </div> : <>
       <div className='knowledge-toolbar'>
         <label className='knowledge-search'><Search size={16} /><input value={keyword} onChange={event => setKeyword(event.target.value)} placeholder='搜索知识库...' /></label>
         <CustomSelect aria-label='排序' value={order} onChange={event => setOrder(event.target.value)}>
@@ -832,28 +1245,52 @@ const KnowledgeLibrary = () => {
       {loading ? <p className='knowledge-empty' role='status'>正在加载知识库</p> : visible.length === 0 ? <p className='knowledge-empty'>
         {libraries.length > 0 ? '当前分类暂无知识库。' : '暂无知识库'}
       </p> : <div className='knowledge-grid'>
-        {visible.map(library => <article key={library.id} className='knowledge-card'>
-          <header>
-            <h2>{library.name}</h2>
-            <button type='button' className='knowledge-card-edit' aria-label='编辑知识库' onClick={() => openEdit(library)}>
-              <Pencil size={14} />编辑
-            </button>
-          </header>
-          <p>{library.description || '暂无描述'}</p>
-          <div className='knowledge-tags'>{splitTags(library.tags).map(tag => <span key={tag}><Tag size={12} />{tag}</span>)}</div>
-          <div className='knowledge-meta'>
-            <span>创建人 {libraryCreator(library)}</span>
-            <span>文件量 {fileCount(library.id)}</span>
-            <span>大小 {librarySize(library.id)}</span>
-            <span>用户访问量 {visitCount(library)}</span>
-            <span>每天使用量 {dailyUsage(library)}</span>
-          </div>
-          <div className='knowledge-card-actions'>
-            <button type='button' onClick={() => openFiles(library)}>文件清单</button>
-            <button type='button' className='remove' onClick={() => setConfirming({ type: 'library', library })}>删除</button>
-          </div>
-        </article>)}
+        {visible.map(library => {
+          const menuOpen = cardMenuId === library.id;
+          return <article key={library.id} className={menuOpen ? 'knowledge-card is-menu-open' : 'knowledge-card'}>
+            <header>
+              <span className='knowledge-card-mark' aria-hidden='true'><Folder size={18} /></span>
+              <h2 title={library.name}>{library.name}</h2>
+              <div className='knowledge-card-menu'>
+                <button
+                  type='button'
+                  className='knowledge-card-more'
+                  aria-label='更多操作'
+                  aria-haspopup='menu'
+                  aria-expanded={menuOpen}
+                  onClick={() => setCardMenuId(menuOpen ? null : library.id)}
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+                {menuOpen && <>
+                  <button type='button' className='knowledge-card-menu-dismiss' aria-label='关闭菜单' onClick={() => setCardMenuId(null)} />
+                  <div className='knowledge-card-menu-panel' role='menu'>
+                    <button type='button' role='menuitem' onClick={() => { setCardMenuId(null); openEdit(library); }}>
+                      <Pencil size={14} />编辑
+                    </button>
+                    <button type='button' role='menuitem' className='danger' onClick={() => { setCardMenuId(null); setConfirming({ type: 'library', library }); }}>
+                      <Trash2 size={14} />删除
+                    </button>
+                  </div>
+                </>}
+              </div>
+            </header>
+            <p className={`knowledge-card-desc${library.description ? '' : ' is-empty'}`}>{library.description || '暂无描述'}</p>
+            <div className='knowledge-tags'>{splitTags(library.tags).map(tag => <span key={tag}><Tag size={12} />{tag}</span>)}</div>
+            <div className='knowledge-meta'>
+              {metaRow('创建人', libraryCreator(library))}
+              {metaRow('文件量', fileCount(library.id))}
+              {metaRow('大小', librarySize(library.id))}
+              {metaRow('用户访问量', visitCount(library))}
+              {metaRow('每天使用量', dailyUsage(library))}
+            </div>
+            <div className='knowledge-card-actions'>
+              <button type='button' onClick={() => openFiles(library)}><FileText size={14} />文件清单</button>
+            </div>
+          </article>;
+        })}
       </div>}
+      </>}
     </>}
     {categoryOpen && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' onSubmit={createCategory}>
       <header><h2>新建知识库分类</h2><button type='button' onClick={() => setCategoryOpen(false)}>×</button></header>
@@ -893,7 +1330,7 @@ const KnowledgeLibrary = () => {
         <header>
           <h2>{viewer.name}</h2>
           <div className='knowledge-viewer-actions'>
-            <button type='button' disabled={viewer.loading || !opened} onClick={() => runFileAction({ id: viewer.id, name: viewer.name }, 'download')}><Download size={16} />下载</button>
+            <button type='button' disabled={viewer.loading || !(viewer.library_id || opened)} onClick={() => runFileAction({ id: viewer.id, name: viewer.name, library_id: viewer.library_id }, 'download')}><Download size={16} />下载</button>
             <button type='button' className='close' onClick={closeViewer}>×</button>
           </div>
         </header>
@@ -917,7 +1354,11 @@ const KnowledgeLibrary = () => {
     </section></div>}
     {confirming && <div className='knowledge-modal-backdrop'><section className='knowledge-modal' role='dialog' aria-label='确认删除'>
       <header><h2>确认删除</h2><button type='button' onClick={() => setConfirming(null)}>×</button></header>
-      <p>{confirming.type === 'library' ? `删除后将移除「${confirming.library.name}」及其文件，桌面端不再可用。` : `删除文件「${confirming.file.name}」？`}</p>
+      <p>{confirming.type === 'library'
+        ? (isPersonalLibrary(confirming.library)
+          ? `确认删除个人知识库「${confirming.library.name}」？库内文件将一并移除，桌面端不再可用。`
+          : `删除后将移除「${confirming.library.name}」及其文件，桌面端不再可用。`)
+        : `删除文件「${confirming.file.name}」？`}</p>
       <footer>
         <button type='button' onClick={() => setConfirming(null)}>取消</button>
         <button type='button' className='remove' onClick={() => confirming.type === 'library' ? removeLibrary(confirming.library) : runFileAction(confirming.file, 'delete')}>删除</button>

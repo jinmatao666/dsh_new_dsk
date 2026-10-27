@@ -2,6 +2,7 @@ package model
 
 import (
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
@@ -151,8 +152,48 @@ func TestKnowledgeSubscriptionApplicationApprovalGrantsAccess(t *testing.T) {
 	require.ElementsMatch(t, []string{"地方法规"}, namesOf(visible))
 	plazaAfter, err := ListKnowledgePlaza(1, category.Id, "地方")
 	require.NoError(t, err)
-	require.Len(t, plazaAfter, 1)
-	require.Equal(t, KnowledgeSubscriptionApproved, plazaAfter[0].SubscriptionStatus)
+	require.Empty(t, plazaAfter)
+
+	require.NoError(t, CancelKnowledgeSubscription(1, base.Id))
+	visibleAfterCancel, err := ListAuthorizedKnowledgeBases(1)
+	require.NoError(t, err)
+	require.Empty(t, visibleAfterCancel)
+	plazaRestored, err := ListKnowledgePlaza(1, category.Id, "地方")
+	require.NoError(t, err)
+	require.Len(t, plazaRestored, 1)
+	require.Equal(t, KnowledgeSubscriptionStatusNone, plazaRestored[0].SubscriptionStatus)
+	_, err = ApplyKnowledgeSubscription(1, base.Id)
+	require.NoError(t, err)
+}
+
+func TestRecordKnowledgeBaseUsageIncrementsAndResetsDaily(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:knowledge-usage?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previous := DB
+	DB = db
+	t.Cleanup(func() { DB = previous })
+	require.NoError(t, db.AutoMigrate(&KnowledgeBase{}))
+	base := KnowledgeBase{
+		Name: "stats", RagflowDatasetId: "ds-stats", OwnerUserId: 1,
+		Kind: KnowledgeBasePersonal, Shelf: KnowledgeShelfPublished,
+		DailyUsageDate: "1999-01-01", DailyUsage: 9,
+	}
+	require.NoError(t, db.Create(&base).Error)
+
+	require.NoError(t, RecordKnowledgeBaseUsage(base.Id))
+	var first KnowledgeBase
+	require.NoError(t, db.First(&first, base.Id).Error)
+	today := knowledgeUsageDay(time.Now())
+	require.Equal(t, int64(1), first.VisitCount)
+	require.Equal(t, int64(1), first.DailyUsage)
+	require.Equal(t, today, first.DailyUsageDate)
+
+	require.NoError(t, RecordKnowledgeBaseUsage(base.Id))
+	var second KnowledgeBase
+	require.NoError(t, db.First(&second, base.Id).Error)
+	require.Equal(t, int64(2), second.VisitCount)
+	require.Equal(t, int64(2), second.DailyUsage)
+	require.Equal(t, today, second.DailyUsageDate)
 }
 
 func namesOf(rows []KnowledgeBase) []string {

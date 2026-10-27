@@ -5,12 +5,15 @@ import { KnowledgePage, type KnowledgeApi } from '../src/client/KnowledgePage.ts
 
 vi.mock('pdfjs-dist', () => ({
   GlobalWorkerOptions: { workerSrc: '' },
+  Util: {
+    transform: (_viewport: number[], item: number[]) => item,
+  },
   getDocument: () => ({
     promise: Promise.resolve({
       numPages: 1,
       async getPage() {
         return {
-          getViewport: () => ({ width: 120, height: 160 }),
+          getViewport: () => ({ width: 120, height: 160, transform: [1, 0, 0, 1, 0, 0] }),
           render: () => ({ promise: Promise.resolve() }),
           getTextContent: async () => ({ items: [] }),
         }
@@ -54,6 +57,7 @@ function api(): KnowledgeApi {
     }),
     plazaDocuments: vi.fn(async () => []),
     subscribe: vi.fn(async () => {}),
+    unsubscribe: vi.fn(async () => {}),
     create: vi.fn(async input => ({ id: 2, owner_user_id: 7, ...input })),
     documents: vi.fn(async () => [{ id: 'doc-1', name: '说明.pdf', size: 2048, run: 'DONE', progress: 1 }]),
     chunks: vi.fn(async () => [{ id: 'chunk-1', content: '文档正文内容' }]),
@@ -86,6 +90,26 @@ it('loads authorized knowledge bases and creates a personal library', async () =
   expect(screen.getByRole('menuitem', { name: '本地文件夹' })).toBeTruthy()
   expect(screen.getByRole('menuitem', { name: '新建文件夹' })).toBeTruthy()
   expect(screen.getByText('PDF')).toBeTruthy()
+})
+
+it('selects the first library of the first sidebar group on open', async () => {
+  const service = api()
+  service.categories = vi.fn(async () => [
+    { id: 3, name: '公开规范', type: 'common' as const, require_auth: false },
+  ])
+  service.list = vi.fn(async () => [
+    { id: 9, name: '公开库甲', description: '公开', kind: 'common' as const, owner_user_id: 2, category_id: 3 },
+    { id: 1, name: '我的资料', description: '个人', kind: 'personal' as const, owner_user_id: 7 },
+    { id: 2, name: '我的第二库', description: '个人', kind: 'personal' as const, owner_user_id: 7 },
+  ])
+  service.documents = vi.fn(async (id: number) => [{
+    id: `doc-${id}`, name: `库${id}.pdf`, size: 1024, run: 'DONE' as const, progress: 1,
+  }])
+  render(<KnowledgePage api={service} />)
+  expect(await screen.findByText('库1.pdf')).toBeTruthy()
+  const personal = screen.getByText('个人知识库').closest('.dsh-knowledge-group') as HTMLElement
+  expect(within(personal).getByText('我的资料').closest('button')?.className).toContain('active')
+  expect(service.documents).toHaveBeenCalledWith(1)
 })
 
 it('hides auth category names from the sidebar and discovers them only in the plaza', async () => {
@@ -124,6 +148,7 @@ it('hides auth category names from the sidebar and discovers them only in the pl
   expect(within(open as HTMLElement).getByText('公开汇编')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: /知识库广场/ }))
   expect(await screen.findByText('地方法规知识库')).toBeTruthy()
+  expect(screen.getByText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库不再出现在广场。')).toBeTruthy()
   expect(screen.queryByRole('tab')).toBeNull()
   expect(service.plaza).toHaveBeenCalledWith({})
   fireEvent.click(screen.getByRole('button', { name: /地方法规知识库/ }))
@@ -150,6 +175,50 @@ it('places approved auth-category libraries under 订阅知识库 instead of the
   expect(screen.queryByText('法律')).toBeNull()
   const subscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group')
   expect(within(subscription as HTMLElement).getByText('已订法规')).toBeTruthy()
+})
+
+it('collapses and expands each sidebar knowledge group', async () => {
+  const service = api()
+  service.categories = vi.fn(async () => [
+    { id: 4, name: '法律', type: 'shared' as const, require_auth: true },
+  ])
+  service.list = vi.fn(async () => [
+    { id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7 },
+    { id: 8, name: '已订法规', description: '已通过', kind: 'shared' as const, owner_user_id: 2, category_id: 4 },
+  ])
+  render(<KnowledgePage api={service} />)
+  expect(await screen.findByText('已订法规')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '收起订阅知识库' }))
+  expect(screen.queryByText('已订法规')).toBeNull()
+  expect(screen.getByRole('button', { name: '展开订阅知识库' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '展开订阅知识库' }))
+  expect(screen.getByText('已订法规')).toBeTruthy()
+  const personal = screen.getByText('个人知识库').closest('.dsh-knowledge-group') as HTMLElement
+  expect(within(personal).getByText('我的资料')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '收起个人知识库' }))
+  expect(within(personal).queryByText('我的资料')).toBeNull()
+})
+
+it('unsubscribes a subscribed library so it leaves 订阅知识库', async () => {
+  const service = api()
+  service.categories = vi.fn(async () => [
+    { id: 4, name: '法律', type: 'shared' as const, require_auth: true },
+  ])
+  service.list = vi.fn(async () => [
+    { id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7 },
+    { id: 8, name: '已订法规', description: '已通过', kind: 'shared' as const, owner_user_id: 2, category_id: 4 },
+  ])
+  service.unsubscribe = vi.fn(async () => {
+    service.list = vi.fn(async () => [
+      { id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7 },
+    ])
+  })
+  render(<KnowledgePage api={service} />)
+  fireEvent.click(await screen.findByText('已订法规'))
+  expect(await screen.findByRole('button', { name: '取消订阅' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '取消订阅' }))
+  await waitFor(() => expect(service.unsubscribe).toHaveBeenCalledWith(8))
+  await waitFor(() => expect(screen.queryByText('订阅知识库')).toBeNull())
 })
 
 it('hides empty open categories from the sidebar', async () => {
@@ -310,6 +379,59 @@ it('opens a PDF preview with pdf.js when a content list item is clicked', async 
   expect(screen.queryByRole('dialog', { name: '说明.pdf' })).toBeNull()
 })
 
+it('opens 问问万维 beside a preview and asks the current knowledge base about that file', async () => {
+  const service = api()
+  stubCanvas()
+  service.complete = vi.fn(async (_id, _question, onProgress) => {
+    const answer = { answer: '这是文件摘要', recommendations: [] as string[] }
+    onProgress?.({ ...answer, done: true })
+    return answer
+  })
+  render(<KnowledgePage api={service} />)
+  fireEvent.click(await screen.findByRole('button', { name: /说明\.pdf/ }))
+  const dialog = await screen.findByRole('dialog', { name: '说明.pdf' })
+  fireEvent.click(within(dialog).getByRole('button', { name: '问问万维' }))
+  const ask = within(dialog).getByRole('complementary', { name: '问问万维' })
+  expect(within(ask).getByText('你好，我是你的智能助手万维，能帮你速读文章、答疑解惑，快向我提问吧！')).toBeTruthy()
+  expect(within(ask).queryByText('DS 快速')).toBeNull()
+  fireEvent.click(within(ask).getByRole('button', { name: '总结' }))
+  await waitFor(() => expect(service.complete).toHaveBeenCalledWith(
+    1, '请总结文件「说明.pdf」的主要内容。', expect.any(Function), expect.any(AbortSignal),
+  ))
+  expect(await within(ask).findByText('这是文件摘要')).toBeTruthy()
+  fireEvent.click(within(ask).getByRole('button', { name: '关闭问问万维' }))
+  expect(within(dialog).queryByRole('complementary', { name: '问问万维' })).toBeNull()
+  expect(within(dialog).getByRole('button', { name: '问问万维' })).toBeTruthy()
+})
+
+it('locates a preview answer citation in the open preview without loading it again', async () => {
+  const service = api()
+  stubCanvas()
+  service.complete = vi.fn(async (_id, _question, onProgress) => {
+    const answer = {
+      answer: '依据制度执行。##0$$',
+      recommendations: [] as string[],
+      citations: [{
+        index: 1, chunk_index: 0, document_id: 'doc-1', document_name: '说明.pdf',
+        quote: '适用范围', page: 1,
+        positions: [{ page: 1, left: 0.1, right: 0.5, top: 0.2, bottom: 0.3 }],
+      }],
+    }
+    onProgress?.({ ...answer, done: true })
+    return answer
+  })
+  render(<KnowledgePage api={service} />)
+  fireEvent.click(await screen.findByRole('button', { name: /说明\.pdf/ }))
+  const dialog = await screen.findByRole('dialog', { name: '说明.pdf' })
+  await screen.findByAltText('PDF 1')
+  fireEvent.click(within(dialog).getByRole('button', { name: '问问万维' }))
+  fireEvent.click(within(dialog).getByRole('button', { name: '总结' }))
+  fireEvent.click(await within(dialog).findByRole('button', { name: '引用定位 【1】' }))
+  expect(service.download).toHaveBeenCalledTimes(1)
+  expect(within(dialog).getByRole('complementary', { name: '问问万维' })).toBeTruthy()
+  await waitFor(() => expect(dialog.querySelector('.dsh-knowledge-pdf-hit')).toBeTruthy())
+})
+
 it('opens a cited PDF when a blue answer citation number is clicked', async () => {
   const service = api()
   stubCanvas()
@@ -330,8 +452,8 @@ it('opens a cited PDF when a blue answer citation number is clicked', async () =
   const input = await screen.findByPlaceholderText('基于知识库提问')
   fireEvent.change(input, { target: { value: '制度要求是什么' } })
   fireEvent.click(screen.getByRole('button', { name: '发送' }))
-  expect(await screen.findByRole('button', { name: '引用定位 1' })).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: '引用定位 1' }))
+  expect(await screen.findByRole('button', { name: '引用定位 【1】' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '引用定位 【1】' }))
   await waitFor(() => expect(service.download).toHaveBeenCalledWith(1, 'doc-1'))
   expect(screen.getByRole('dialog', { name: '说明.pdf' })).toBeTruthy()
 })
@@ -359,10 +481,10 @@ it('turns answer [ID:i] markers into inline locate controls without trailing sou
   const input = await screen.findByPlaceholderText('基于知识库提问')
   fireEvent.change(input, { target: { value: '准备工作是什么' } })
   fireEvent.click(screen.getByRole('button', { name: '发送' }))
-  expect(await screen.findByRole('button', { name: '引用定位 1' })).toBeTruthy()
-  expect(screen.queryByRole('button', { name: '引用定位 2' })).toBeNull()
+  expect(await screen.findByRole('button', { name: '引用定位 【1】' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: '引用定位 【2】' })).toBeNull()
   expect(screen.queryByText(/\[ID:0\]/)).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: '引用定位 1' }))
+  fireEvent.click(screen.getByRole('button', { name: '引用定位 【1】' }))
   await waitFor(() => expect(service.download).toHaveBeenCalledWith(1, 'doc-1'))
 })
 
