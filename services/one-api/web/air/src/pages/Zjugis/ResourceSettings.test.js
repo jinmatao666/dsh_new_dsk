@@ -22,6 +22,7 @@ test('source selection is exclusive and automatic detection exists only for prox
   expect(change).toHaveBeenCalledWith({ ...defaultResources, source: 'proxy' });
   await act(async () => root.render(<ResourceSettings value={{ ...defaultResources, source: 'proxy' }} onChange={change} />));
   expect(container.querySelector('input[type="file"]')).toBeNull();
+  expect(container.textContent).toContain('读取指定网站并下载文件到桌面端工作区');
   act(() => container.querySelector('input[type="checkbox"]').click());
   expect(change).toHaveBeenLastCalledWith({ ...defaultResources, source: 'proxy', autoDetect: true });
 });

@@ -25,6 +25,10 @@
 .role-model-bulk-actions button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 .role-model-bulk-actions button:disabled { color: #94a3b8; cursor: not-allowed; }
 .role-model-bulk-actions span { color: #c1ccda; font-size: 12px; }
+.role-organization-edit { margin: 8px 0 14px; }
+.role-organization-edit strong { display: block; margin-bottom: 7px; color: #243958; font-size: 13px; }
+.role-organization-edit p { margin: 0 0 8px; color: #7185a0; font-size: 12px; }
+.zjugis-role-permissions .role-organization-summary { color: #567396; }
 @media (max-width: 600px) {
   .zjugis-role-permissions .zjugis-role-row { flex-wrap: wrap; }
   .zjugis-role-permissions .zjugis-role-row-info { min-width: 60%; }

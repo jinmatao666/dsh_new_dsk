@@ -3,7 +3,9 @@ import { API, copy } from '../../helpers';
 import { fetchManagedRoles } from '../../helpers/roles';
 import CustomSelect from '../../components/CustomSelect';
 import RolePermissions from '../../components/RolePermissions';
+import GovernmentOrganization from '../../components/GovernmentOrganization';
 import SystemSettings from './SystemSettings';
+import UserProfile from './UserProfile';
 import { ChannelModelBatch, ChannelModelPicker, channelModelNames, filterChannelModels, filterModelSources } from './ChannelModelTools';
 
 const emptyChannel = {
@@ -150,13 +152,13 @@ function PageHead({ kicker, title, description, action }) {
     </div>
   );
 }
-function Modal({ title, children, onClose, wide = false }) {
+function Modal({ title, children, onClose, wide = false, className = '' }) {
   return (
     <div
       className='zjugis-modal-backdrop'
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className={`zjugis-modal${wide ? ' wide' : ''}`}>
+      <div className={`zjugis-modal${wide ? ' wide' : ''}${className ? ` ${className}` : ''}`} role='dialog' aria-modal='true' aria-label={title}>
         <div className='zjugis-modal-head'>
           <h2>{title}</h2>
           <button onClick={onClose} aria-label='关闭'>
@@ -322,10 +324,6 @@ export function ModelConfigPage() {
       }
     }
     const configuredModels = splitModels(form.models);
-    if (configuredModels.length === 0) {
-      dialog.notice('请至少选择一个渠道模型');
-      return;
-    }
     const payload = {
       ...form,
       models: configuredModels.join(','),
@@ -511,10 +509,11 @@ export function ModelConfigPage() {
     );
   const saveModel = async (e) => {
     e.preventDefault();
-    const m = modelEdit;
-    if (!m.id && (!selectedModelChannel || !selectableModelNames.includes(m.name))) {
-      return dialog.notice('请先选择来源渠道，再选择该渠道已配置的模型');
+    const m = { ...modelEdit, name: String(modelEdit.name || '').trim() };
+    if (!m.id && !selectedModelChannel) {
+      return dialog.notice('请先选择来源渠道');
     }
+    if (!m.name) return dialog.notice('请填写模型 ID');
     const body = {
       name: m.name,
       display_name: m.display_name || '',
@@ -1469,7 +1468,7 @@ export function ModelConfigPage() {
                 </div>
               ) : (
                 <small className='preview-muted'>
-                  点击“自动获取模型”后，在这里勾选需要向用户提供的模型。
+                  可选：自动获取并勾选模型，也可先保存渠道，再到模型配置手动添加模型 ID。
                 </small>
               )}
             </label>
@@ -1542,7 +1541,7 @@ export function ModelConfigPage() {
             {!modelEdit.id && <div className='zjugis-field full'><span>来源渠道</span>
               <CustomSelect value={String(modelEdit.sourceChannelIds?.[0] || '')} onChange={e => setModelEdit(current => ({ ...current, sourceChannelIds: e.target.value ? [Number(e.target.value)] : [], name: '', display_name: '' }))}>
                 <option value=''>请选择来源渠道</option>{modelChannels.map(row => <option key={row.id} value={row.id}>{row.name}（{row.id}）</option>)}
-              </CustomSelect><small className='preview-muted'>先选择渠道，再从该渠道已配置的模型清单中选择；不依赖获取上游模型。</small>
+              </CustomSelect><small className='preview-muted'>先选择渠道，再选择已有模型或手动填写模型 ID；无需先获取模型列表。</small>
             </div>}
             <div className='form-grid zjugis-model-identity-grid'>
               <label className='zjugis-field'>
@@ -1553,7 +1552,7 @@ export function ModelConfigPage() {
                   }} />}
                 {!modelEdit.id && (
                   <small className='preview-muted'>
-                    仅显示所选渠道已配置的模型；选中后填充显示名称与默认上下文。
+                    可选择渠道已有模型，也可手动填写上游支持的模型 ID；保存时关联所选渠道。
                   </small>
                 )}
               </label>
@@ -1696,6 +1695,7 @@ export function UsersPage() {
   const list = useList('/api/user/', 'p=0&size=100&order=');
   const [modal, setModal] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [edit, setEdit] = useState(null);
   const [editConfirmation, setEditConfirmation] = useState(false);
   const [editPassword, setEditPassword] = useState('');
@@ -1924,13 +1924,26 @@ export function UsersPage() {
         <PageHead
           kicker='ACCOUNT CENTER'
           title='用户权限'
-          description='管理用户账号与角色可见模型。'
+          description='管理用户账号、角色和组织架构。'
         />
         <div className='zjugis-user-permission-tabs'>
           <button onClick={() => setTab('users')}>用户管理</button>
           <button className='active'>角色权限</button>
+          <button onClick={() => setTab('organization')}>组织架构</button>
         </div>
         <RolePermissions />
+      </div>
+    );
+  if (tab === 'organization')
+    return (
+      <div className='zjugis-new-page'>
+        <PageHead kicker='ACCOUNT CENTER' title='用户权限' description='管理用户账号、角色和组织架构。' />
+        <div className='zjugis-user-permission-tabs'>
+          <button onClick={() => setTab('users')}>用户管理</button>
+          <button onClick={() => setTab('roles')}>角色权限</button>
+          <button className='active'>组织架构</button>
+        </div>
+        <GovernmentOrganization />
       </div>
     );
   return (
@@ -1938,7 +1951,7 @@ export function UsersPage() {
       <PageHead
         kicker='ACCOUNT CENTER'
         title='用户权限'
-        description='管理用户账号与角色可见模型。'
+        description='管理用户账号、角色和组织架构。'
         action={
           <button
             className='preview-button primary'
@@ -1951,6 +1964,7 @@ export function UsersPage() {
       <div className='zjugis-user-permission-tabs'>
         <button className='active'>用户管理</button>
         <button onClick={() => setTab('roles')}>角色权限</button>
+        <button onClick={() => setTab('organization')}>组织架构</button>
       </div>
       <div className='preview-stat-grid'>
         <div>
@@ -2000,7 +2014,15 @@ export function UsersPage() {
             </thead>
             <tbody>
               {shown.map((u) => (
-                <tr key={u.id}>
+                <tr key={u.id} className='user-profile-row' tabIndex={0}
+                  aria-label={`查看${u.display_name || u.username}的用户画像`}
+                  onClick={() => setProfile(u)}
+                  onKeyDown={(event) => {
+                    if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                      event.preventDefault();
+                      setProfile(u);
+                    }
+                  }}>
                   <td>
                     <strong>{u.account_id || `#${u.id}`}</strong>
                     <small>
@@ -2034,7 +2056,7 @@ export function UsersPage() {
                         : '未知'}
                     </span>
                   </td>
-                  <td>
+                  <td onClick={(event) => event.stopPropagation()}>
                     <button
                       className='link-button'
                       onClick={() => openDetail(u)}
@@ -2071,6 +2093,9 @@ export function UsersPage() {
           )}
         </div>
       </section>
+      {profile && <Modal title='用户画像' className='user-profile-modal' onClose={() => setProfile(null)}>
+        <UserProfile user={profile} />
+      </Modal>}
       {modal && (
         <Modal title='添加用户' onClose={() => setModal(null)}>
           <form className='zjugis-form' onSubmit={save}>

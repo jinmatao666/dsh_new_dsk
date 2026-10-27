@@ -45,7 +45,7 @@ export default function ResourceSettings({ value = defaultResources, onChange, d
   return <section className='settings-resources' aria-label='内网资源配置'>
     <fieldset className='settings-network' disabled={disabled || uploading}><legend>资源获取方式（二选一）</legend>
       {[['offline', '离线依赖包', '仅使用已有依赖和后台依赖包，不切换到中转服务器。'],
-        ['proxy', '联网中转服务器', '通过服务器获取依赖和网络资源，不读取离线包。']].map(([key, label, hint]) =>
+        ['proxy', '联网中转服务器', '通过服务器获取依赖、读取指定网站并下载文件到桌面端工作区，不读取离线包。需配套新版桌面端；登录、验证码及动态网页可能无法获取。']].map(([key, label, hint]) =>
         <label key={key} className={`settings-network-option${value.source === key ? ' selected' : ''}`}>
           <input type='radio' name='resource-source' checked={value.source === key} onChange={() => change({ source: key })} />
           <span><strong>{label}</strong><small>{hint}</small></span>

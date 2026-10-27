@@ -106,6 +106,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/", controller.GetAllUsers)
 				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/:id", controller.GetUser)
+				adminRoute.GET("/:id/profile", controller.GetUserProfile)
 				adminRoute.GET("/:id/activity-logs", controller.GetUserActivityLogs)
 				adminRoute.POST("/", middleware.RootAuth(), controller.CreateUser)
 				adminRoute.POST("/timed_quota/batch", controller.BatchAdminTimedQuota)
@@ -240,6 +241,14 @@ func SetApiRouter(router *gin.Engine) {
 			roleRoute.POST("/", controller.CreateRole)
 			roleRoute.PUT("/:role", controller.UpdateRole)
 			roleRoute.DELETE("/:role", controller.DeleteRole)
+		}
+		governmentOrganizationRoute := apiRouter.Group("/government-organization")
+		governmentOrganizationRoute.Use(middleware.AdminAuth())
+		{
+			governmentOrganizationRoute.GET("/", controller.ListGovernmentOrganizationNodes)
+			governmentOrganizationRoute.POST("/", controller.CreateGovernmentOrganizationNode)
+			governmentOrganizationRoute.PUT("/:id", controller.UpdateGovernmentOrganizationNode)
+			governmentOrganizationRoute.DELETE("/:id", controller.DeleteGovernmentOrganizationNode)
 		}
 		channelRoute := apiRouter.Group("/channel")
 		channelRoute.Use(middleware.AdminAuth())

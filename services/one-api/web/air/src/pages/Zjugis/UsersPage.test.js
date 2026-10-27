@@ -12,6 +12,7 @@ jest.mock('../../helpers/roles', () => ({
   fetchManagedRoles: jest.fn(async () => [{ role: 1, name: '普通成员' }]),
 }));
 jest.mock('../../components/RolePermissions', () => () => null);
+jest.mock('../../components/GovernmentOrganization', () => () => <div>组织树内容</div>);
 jest.mock('../../components/CustomSelect', () => ({ children, ...props }) => (
   <select {...props}>{children}</select>
 ));
@@ -61,6 +62,15 @@ async function change(input, value) {
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
+test('opens organization structure from the active user permissions page', async () => {
+  await click('组织架构');
+  expect(container.textContent).toContain('组织树内容');
+  await click('角色权限');
+  expect(container.textContent).not.toContain('组织树内容');
+  await click('组织架构');
+  await click('用户管理');
+  expect(container.textContent).toContain('用户总数');
+});
 test('asks for administrator password only after saving; cancellation does not submit', async () => {
   await click('编辑');
   expect(container.textContent).not.toContain(
@@ -108,4 +118,27 @@ test('submits edited name with confirmation password and keeps failed edits avai
     })
   );
   expect(container.textContent).not.toContain('确认保存用户');
+});
+
+test('opens an observed-data profile from the user row without changing token actions', async () => {
+  API.get.mockImplementation(async (path) => ({
+    data: { success: true, data: path === '/api/user/2/profile' ? {
+      from: '2026-09-25', to: '2026-10-24',
+      models: { count: 3, prompt_tokens: 120, completion_tokens: 30, top: [{ name: 'qwen', count: 3 }], days: [] },
+      skills: { count: 2, top: [{ name: '文档处理', count: 2 }], days: [] },
+      experts: { count: 0, top: [], days: [] },
+      downloads: { count: 1, installed_count: 1, top: [{ name: '文档处理', count: 1, installed: true }] },
+    } : path === '/api/user/2' ? user : [user] },
+  }));
+  await act(async () => container.querySelector('.user-profile-row').click());
+  expect(API.get).toHaveBeenCalledWith('/api/user/2/profile');
+  expect(container.textContent).toContain('用户画像');
+  expect(container.textContent).toContain('常用模型');
+  expect(container.textContent).toContain('文档处理');
+  expect(container.textContent).not.toContain('令牌列表');
+  await act(async () => container.querySelector('.user-profile-modal .zjugis-modal-head button').click());
+  expect(container.querySelector('.user-profile-modal')).toBeNull();
+  await click('详情 / 令牌');
+  expect(container.querySelector('.user-profile-modal')).toBeNull();
+  expect(API.get).toHaveBeenCalledWith('/api/admin/token/user/2');
 });

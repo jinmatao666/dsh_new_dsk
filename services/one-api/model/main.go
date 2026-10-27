@@ -227,6 +227,9 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&Role{}); err != nil {
 		return err
 	}
+	if err = DB.AutoMigrate(&GovernmentOrganizationNode{}); err != nil {
+		return err
+	}
 	if err = SeedBuiltinRoles(); err != nil {
 		return err
 	}

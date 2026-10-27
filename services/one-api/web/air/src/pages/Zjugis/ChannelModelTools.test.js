@@ -88,11 +88,38 @@ test('batch starts unselected, skips already-bound models and retries failures w
   expect(button('重试失败项').disabled).toBe(true);
 });
 
-test('picker typing is a search, never a freeform model selection', async () => {
+test('picker accepts a manual model ID when discovery has no matching result', async () => {
   const onChange = jest.fn();
   await act(async () => root.render(<ChannelModelPicker names={['known']} value='' onChange={onChange} disabled={false} />));
   const input = container.querySelector('input'); act(() => input.focus());
   await changeInput(input, 'unknown');
-  expect(onChange).not.toHaveBeenCalled();
+  expect(onChange).toHaveBeenLastCalledWith('unknown');
   expect(container.textContent).toContain('无匹配模型');
+  expect(container.textContent).toContain('可直接填写模型 ID 后保存');
+});
+
+test('a channel saves without fetching or selecting any models', async () => {
+  API.post.mockResolvedValue({ data: { success: true } });
+  await act(async () => root.render(<ModelConfigPage />));
+  await click('＋ 添加模型渠道');
+  await changeInput(container.querySelector('.zjugis-modal input'), 'manual-only');
+  await act(async () => container.querySelector('.zjugis-modal form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(API.post).toHaveBeenCalledWith('/api/channel/', expect.objectContaining({ name: 'manual-only', models: '' }));
+  expect(API.post).not.toHaveBeenCalledWith('/api/channel/fetch_models', expect.anything());
+});
+
+test('a manual model ID saves and binds to a channel with an empty model list', async () => {
+  API.get.mockImplementation(async path => ({ data: { success: true, data: path === '/api/model_definition/channels' ? [{ ...channels[0], models: '' }] : path === '/api/model_definition/aggregated' ? definitions : [] } }));
+  API.post.mockResolvedValue({ data: { success: true, data: {} } });
+  API.put.mockResolvedValue({ data: { success: true } });
+  await act(async () => root.render(<ModelConfigPage />));
+  await click('模型配置'); await click('＋ 添加模型');
+  await changeSelect(container.querySelector('.zjugis-modal select'), '1');
+  const input = container.querySelector('[role=combobox]');
+  act(() => input.focus()); await changeInput(input, '  manual-id  ');
+  act(() => input.blur());
+  expect(input.value).toBe('  manual-id  ');
+  await act(async () => container.querySelector('.zjugis-modal form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(API.post).toHaveBeenCalledWith('/api/model_definition/', expect.objectContaining({ name: 'manual-id', source_channel_id: 1 }));
+  expect(API.post).toHaveBeenCalledWith('/api/model_definition/source', { model: 'manual-id', channel_id: 1, group: 'default' });
 });

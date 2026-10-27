@@ -3,7 +3,6 @@ package controller
 import (
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common/config"
@@ -94,9 +93,9 @@ func AddModelDefinition(c *gin.Context) {
 			respondError(c, "请先选择来源渠道")
 			return
 		}
-		channel, err := model.GetChannelById(*req.SourceChannelID, false)
-		if err != nil || !model.ChannelHasConfiguredModel(channel, strings.TrimSpace(def.Name)) {
-			respondError(c, "模型不在所选渠道的已配置清单中")
+		_, err := model.GetChannelById(*req.SourceChannelID, false)
+		if err != nil {
+			respondError(c, "所选来源渠道不存在或读取失败")
 			return
 		}
 	}

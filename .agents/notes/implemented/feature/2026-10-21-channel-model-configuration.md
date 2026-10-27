@@ -10,6 +10,8 @@ The model page combines candidates from every channel, uses a browser-controlled
 
 ## Decision
 
+The single-create membership restriction is superseded by [manual model IDs](2026-10-24-manual-channel-models.md); the batch registration decision below remains applicable.
+
 Use saved channel configuration as the candidate source, with an unpaginated secret-free catalog. Single creation gates a searchable equal-width menu on channel selection and validates that selection server-side. A channel filter controls model rows, displayed sources and connectivity test scope. The batch dialog requires explicit selection and per-model review before submitting one transactional registration per item.
 
 Each registration verifies membership in the current channel configuration, creates a disabled definition and billing ratios atomically, or adds only a missing default-group binding to an existing definition. Repeats are no-ops. Failures remain visible and retry excludes completed items. The UI retains the existing admin palette and spacing; successful registration does not infer upstream access or vision capability.

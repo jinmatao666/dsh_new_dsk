@@ -110,13 +110,6 @@ func AddChannel(c *gin.Context) {
 		})
 		return
 	}
-	if strings.TrimSpace(channel.Models) == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "新建渠道必须选择至少一个模型",
-		})
-		return
-	}
 	channel.CreatedTime = helper.GetTimestamp()
 	// T2.1 渠道新增默认不启用(草稿要求),需启用时由「启用」操作单独开启
 	channel.Status = model.ChannelStatusManuallyDisabled

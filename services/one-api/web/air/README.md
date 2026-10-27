@@ -2,6 +2,8 @@
 
 English | [中文](README.zh.md)
 
+Channel discovery is optional: a channel can be saved with an empty model list. After selecting a source channel, the model definition form accepts a manually entered model ID as well as suggestions from the saved list. Saving associates that ID with the selected channel; upstream availability is verified separately by connectivity tests.
+
 ## Basic Usages
 
 ```shell

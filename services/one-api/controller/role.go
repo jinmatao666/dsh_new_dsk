@@ -18,6 +18,9 @@ type roleRequest struct {
 }
 
 func roleFromRequest(role int, req roleRequest) (model.Role, error) {
+	if err := model.ValidateGovernmentOrganizationNodes(req.Permissions.OrganizationNodeIDs); err != nil {
+		return model.Role{}, err
+	}
 	permissions, err := json.Marshal(req.Permissions)
 	if err != nil {
 		return model.Role{}, err

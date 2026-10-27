@@ -5,6 +5,7 @@ import { API, isRoot, showError, showSuccess } from '../helpers';
 import { cacheManagedRole, fetchManagedRoles, removeManagedRole } from '../helpers/roles';
 import './RolePermissions.css';
 import CustomSelect from './CustomSelect';
+import { loadGovernmentOrganizationNodes, OrganizationNodePicker } from './GovernmentOrganization';
 
 const MOCK_MODELS = [
   { name: 'deepseek-chat', display_name: 'DeepSeek Chat', model_type: 'chat' },
@@ -16,7 +17,7 @@ const MOCK_MODELS = [
 ];
 const ROLE_ICONS = { 1: Users, 100: ShieldCheck };
 
-const toRoleView = (role) => ({ ...role, models: role.permissions?.models || [] });
+const toRoleView = (role) => ({ ...role, models: role.permissions?.models || [], organizationNodeIds: role.permissions?.organization_node_ids || [] });
 
 export default function RolePermissions() {
   const [roles, setRoles] = useState([]);
@@ -25,8 +26,10 @@ export default function RolePermissions() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
   const [draftModels, setDraftModels] = useState([]);
+  const [organizationNodes, setOrganizationNodes] = useState([]);
+  const [draftOrganizationNodeIds, setDraftOrganizationNodeIds] = useState([]);
   const [createModal, setCreateModal] = useState(false);
-  const [draft, setDraft] = useState({ role_type: 'member', name: '', description: '' });
+  const [draft, setDraft] = useState({ role_type: 'member', name: '', description: '', organization_node_ids: [] });
   const [deleting, setDeleting] = useState(null);
   const [mutationError, setMutationError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -63,7 +66,16 @@ export default function RolePermissions() {
     return () => { cancelled = true; };
   }, []);
 
-  const openEditor = (role) => { setDraftModels([...role.models]); setEditingId(role.role); };
+  useEffect(() => {
+    loadGovernmentOrganizationNodes().then(setOrganizationNodes).catch(error => showError(error.message));
+  }, []);
+
+  const openEditor = (role) => {
+    setDraftModels([...role.models]);
+    setDraftOrganizationNodeIds([...role.organizationNodeIds]);
+    loadGovernmentOrganizationNodes().then(setOrganizationNodes).catch(error => showError(error.message));
+    setEditingId(role.role);
+  };
   const toggleDraft = (name) => setDraftModels((current) => current.includes(name) ? current.filter((m) => m !== name) : [...current, name]);
   const selectAllModels = () => setDraftModels(current => [...new Set([...current, ...models.map(model => model.name)])]);
   const invertModels = () => setDraftModels(current => {
@@ -78,14 +90,14 @@ export default function RolePermissions() {
         name: editing.name,
         description: editing.description,
         status: editing.status,
-        permissions: { models: draftModels },
+        permissions: { ...editing.permissions, models: draftModels, organization_node_ids: draftOrganizationNodeIds },
       });
       if (!res.data?.success) throw new Error(res.data?.message || '保存失败');
       cacheManagedRole(res.data.data);
       const updated = toRoleView(res.data.data);
       setRoles((current) => current.map((role) => role.role === updated.role ? updated : role));
       setEditingId(null);
-      showSuccess(`「${updated.name}」的可用模型已更新`);
+      showSuccess(`「${updated.name}」的配置已更新`);
     } catch (error) {
       showError(error.message || '保存失败');
     }
@@ -96,11 +108,11 @@ export default function RolePermissions() {
     if (!name || pending.current) return;
     pending.current = true; setSubmitting(true); setMutationError('');
     try {
-      const res = await API.post('/api/role/', { role_type: draft.role_type, name, description: draft.description.trim(), permissions: { models: [] } });
+      const res = await API.post('/api/role/', { role_type: draft.role_type, name, description: draft.description.trim(), permissions: { models: [], organization_node_ids: draft.organization_node_ids } });
       if (!res.data?.success) throw new Error(res.data?.message || '新建角色失败');
       cacheManagedRole(res.data.data);
       setRoles((current) => [...current, toRoleView(res.data.data)].sort((a, b) => a.role - b.role));
-      setDraft({ role_type: 'member', name: '', description: '' });
+      setDraft({ role_type: 'member', name: '', description: '', organization_node_ids: [] });
       setCreateModal(false);
       showSuccess('角色已创建');
     } catch (error) {
@@ -130,7 +142,7 @@ export default function RolePermissions() {
     <div className='zjugis-role-permissions'>
       <div className='zjugis-role-toolbar'>
         <span className='zjugis-role-toolbar-title'>角色列表</span>
-        <button type='button' className='zjugis-role-edit-btn' onClick={() => { setMutationError(''); setCreateModal(true); }}>
+        <button type='button' className='zjugis-role-edit-btn' onClick={() => { setMutationError(''); loadGovernmentOrganizationNodes().then(setOrganizationNodes).catch(error => showError(error.message)); setCreateModal(true); }}>
           <Plus size={13} strokeWidth={2} /> 新建角色
         </button>
       </div>
@@ -144,9 +156,10 @@ export default function RolePermissions() {
               <div className='zjugis-role-row-info'>
                 <strong>{role.name} <small className='role-kind'>{role.role === 100 ? '超级管理员 · 内置' : role.role >= 10 ? '管理员' : '普通成员'}</small></strong>
                 <span>{role.description}</span>
+                {role.organizationNodeIds.length > 0 && <span className='role-organization-summary'>归属组织：{role.organizationNodeIds.map(id => organizationNodes.find(node => node.id === id)?.name || `节点 ${id}`).join('、')}</span>}
               </div>
               <button type='button' className='zjugis-role-edit-btn' onClick={() => openEditor(role)}>
-                <Pencil size={13} strokeWidth={2} /> 可用模型
+                <Pencil size={13} strokeWidth={2} /> 配置角色
               </button>
               {canDelete(role) && <button type='button' className='zjugis-role-edit-btn role-delete' aria-label={`删除角色 ${role.name}`}
                 onClick={() => { setMutationError(''); setDeleting(role); }}><Trash2 size={13} /> 删除</button>}
@@ -161,12 +174,15 @@ export default function RolePermissions() {
             <div className='zjugis-role-modal-head'>
               <div>
                 <span>AVAILABLE MODELS</span>
-                <h3>配置可用模型 · {editing.name}</h3>
+                <h3>配置角色 · {editing.name}</h3>
                 <p>{editing.description}</p>
               </div>
               <button type='button' className='zjugis-role-modal-close' onClick={() => setEditingId(null)} aria-label='关闭'>
                 <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' aria-hidden='true'><path d='M18 6 6 18M6 6l12 12' /></svg>
               </button>
+            </div>
+            <div className='role-organization-edit'><strong>归属组织</strong><p>可选择多个节点；组织层级由“组织架构”维护。</p>
+              <OrganizationNodePicker nodes={organizationNodes} value={draftOrganizationNodeIds} onChange={setDraftOrganizationNodeIds} />
             </div>
             <div className='role-model-bulk-actions' role='group' aria-label='模型批量选择'>
               <button type='button' disabled={loading || models.length === 0} onClick={selectAllModels}>全选</button>
@@ -204,6 +220,9 @@ export default function RolePermissions() {
           <p className='role-form-hint'>{draft.role_type === 'admin' ? '管理员可进入后台管理，请谨慎分配。' : '普通成员用于日常使用，可单独配置可用模型。'}编号由系统分配，超级管理员为内置角色。</p>
           <label>角色名称<input required maxLength={64} disabled={submitting} type='text' value={draft.name} onChange={(e) => setDraft((current) => ({ ...current, name: e.target.value }))} placeholder='例如：审核员' /></label>
           <label>角色说明<textarea maxLength={255} disabled={submitting} value={draft.description} onChange={(e) => setDraft((current) => ({ ...current, description: e.target.value }))} placeholder='说明该角色的适用范围（可选）' rows={3} /></label>
+          <div className='role-organization-edit'><strong>归属组织</strong>
+            <OrganizationNodePicker nodes={organizationNodes} value={draft.organization_node_ids} disabled={submitting} onChange={ids => setDraft(current => ({ ...current, organization_node_ids: ids }))} />
+          </div>
           {mutationError && <p role='alert' className='role-form-error'>{mutationError}</p>}
           <div className='zjugis-role-modal-actions'>
             <button type='button' className='zjugis-modal-btn cancel' disabled={submitting} onClick={closeMutation}>取消</button>

@@ -1,0 +1,88 @@
+.user-profile-modal.zjugis-modal { width: min(1040px, 100%); }
+.user-profile-row { cursor: pointer; }
+.user-profile-row:hover td, .user-profile-row:focus-visible td { background: #f0f6ff; }
+.user-profile-row:focus-visible { outline: 2px solid #3676e4; outline-offset: -2px; }
+.user-profile { color: #213957; }
+.user-profile { --profile-model: #3875df; --profile-skill: #35a3a0; --profile-expert: #e7a54f; }
+.user-profile-identity { display: flex; align-items: center; gap: 16px; padding: 4px 0 20px; border-bottom: 1px solid #e5edf7; }
+.user-profile-avatar { display: grid; flex: none; width: 50px; height: 50px; place-items: center; border-radius: 14px; background: #e5efff; color: #2670e5; font-size: 23px; font-weight: 700; }
+.user-profile-identity h3 { margin: 0 0 4px; font-size: 21px; }
+.user-profile-identity p { margin: 0; color: #758aa5; font-size: 13px; }
+.user-profile-status { margin-left: auto; padding: 5px 10px; border-radius: 8px; color: #72849a; background: #eef2f6; white-space: nowrap; font-size: 12px; }
+.user-profile-status.active { background: #e5f7ee; color: #21835a; }
+.user-profile-period { margin: 18px 0 14px; color: #788da6; font-size: 13px; }
+.user-profile-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.user-profile-metrics > div { min-width: 0; padding: 17px 14px; border: 1px solid #e4ecf7; border-radius: 12px; background: #f8fbff; }
+.user-profile-metrics span, .user-profile-metrics small { display: block; color: #7186a0; font-size: 12px; }
+.user-profile-metrics strong { display: block; margin: 7px 0; color: #163e81; font-size: 29px; font-variant-numeric: tabular-nums; }
+.user-profile-metrics small { line-height: 1.45; }
+.user-profile-insights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 13px; }
+.user-profile-insights > div { position: relative; overflow: hidden; padding: 15px 17px; border: 1px solid #e3ebf6; border-radius: 13px; background: linear-gradient(135deg, #fff 0%, #f5f9ff 100%); }
+.user-profile-insights > div::after { position: absolute; right: -22px; bottom: -30px; width: 80px; height: 80px; border: 12px solid #e5efff; border-radius: 50%; content: ''; }
+.user-profile-insights span { color: #7186a0; font-size: 12px; }
+.user-profile-insights strong { display: block; margin-top: 5px; color: #19478e; font-size: 26px; font-variant-numeric: tabular-nums; }
+.user-profile-insights strong small { margin-left: 2px; color: #6b84a4; font-size: 13px; }
+.user-profile-insights p { margin: 4px 0 0; color: #7b90a9; font-size: 11px; }
+.user-profile-mix { margin-top: 28px; padding: 18px 20px; border: 1px solid #e3ebf6; border-radius: 15px; background: linear-gradient(110deg, #f8fbff, #fff); }
+.user-profile-mix-body { display: flex; align-items: center; gap: 30px; }
+.user-profile-donut { display: grid; flex: none; width: 148px; height: 148px; place-items: center; border-radius: 50%; transform: rotate(-8deg); }
+.user-profile-donut > div { display: grid; width: 94px; height: 94px; place-content: center; border-radius: 50%; background: #fff; text-align: center; transform: rotate(8deg); box-shadow: 0 4px 15px rgba(47, 85, 138, .08); }
+.user-profile-donut strong { color: #183f7e; font-size: 23px; font-variant-numeric: tabular-nums; }
+.user-profile-donut small { color: #8194ad; font-size: 11px; }
+.user-profile-mix-list { flex: 1; }
+.user-profile-mix-list > div { display: grid; grid-template-columns: 10px minmax(0, 1fr) 50px 40px; align-items: center; gap: 9px; padding: 8px 0; border-bottom: 1px solid #edf2f8; color: #607a98; font-size: 12px; }
+.user-profile-mix-list > div:last-child { border-bottom: 0; }
+.user-profile-mix-list i, .user-profile-legend i.model { background: var(--profile-model); }
+.user-profile-mix-list i.skill, .user-profile-legend i.skill { background: var(--profile-skill); }
+.user-profile-mix-list i.expert, .user-profile-legend i.expert { background: var(--profile-expert); }
+.user-profile-mix-list i { width: 8px; height: 8px; border-radius: 50%; }
+.user-profile-mix-list b { color: #294f83; text-align: right; font-variant-numeric: tabular-nums; }
+.user-profile-mix-list small { color: #93a3b8; text-align: right; }
+.user-profile h3 { color: #243c5c; }
+.user-profile-trend { margin-top: 27px; }
+.user-profile-section-head { display: flex; justify-content: space-between; align-items: baseline; }
+.user-profile-section-head h3, .user-profile-ranking h3, .user-profile-downloads h3, .user-profile-summary h3 { margin: 0 0 15px; font-size: 16px; }
+.user-profile-section-head span { color: #8394a9; font-size: 12px; }
+.user-profile-bars { display: flex; align-items: end; gap: 4px; height: 125px; padding: 8px 5px 0; border-bottom: 1px solid #dce6f2; background: repeating-linear-gradient(to top, #edf2f8 0 1px, transparent 1px 40px); }
+.user-profile-bar { display: flex; flex: 1; min-width: 0; flex-direction: column; justify-content: end; height: 100%; }
+.user-profile-bar i { display: block; min-height: 0; }
+.user-profile-bar .model, .user-profile-legend .model { background: #3875df; }
+.user-profile-bar .skill, .user-profile-legend .skill { background: #35a3a0; }
+.user-profile-bar .expert, .user-profile-legend .expert { background: #e7a54f; }
+.user-profile-axis { display: flex; justify-content: space-between; margin-top: 7px; color: #8da0b6; font-size: 11px; }
+.user-profile-legend { display: flex; gap: 20px; margin-top: 12px; color: #637b98; font-size: 12px; }
+.user-profile-legend span { display: flex; align-items: center; gap: 6px; }
+.user-profile-legend i { width: 9px; height: 9px; border-radius: 2px; }
+.user-profile-legend b { margin-left: auto; color: #8194ad; font-weight: 500; }
+.user-profile-heatmap { margin-top: 25px; padding: 17px 20px; border: 1px solid #e3ebf6; border-radius: 15px; background: #fff; }
+.user-profile-heatmap-grid { display: grid; grid-template-columns: repeat(15, minmax(12px, 1fr)); gap: 6px; margin-top: 5px; }
+.user-profile-heatmap-grid i { display: block; aspect-ratio: 1; border-radius: 4px; background: #4381e6; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .45); }
+.user-profile-heatmap-grid i.empty { background: #eef3f9; opacity: 1 !important; }
+.user-profile-heatmap-axis { display: flex; justify-content: space-between; margin-top: 8px; color: #93a3b8; font-size: 11px; }
+.user-profile-rankings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 25px; margin: 31px 0; }
+.user-profile-ranking ol { margin: 0; padding: 0; list-style: none; }
+.user-profile-ranking li { display: grid; grid-template-columns: minmax(0, 1fr) 70px 35px; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid #edf2f8; font-size: 12px; }
+.user-profile-ranking li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-profile-ranking li strong { color: #48678e; text-align: right; font-variant-numeric: tabular-nums; }
+.user-profile-track { height: 6px; border-radius: 4px; background: #edf2f8; }
+.user-profile-track i { display: block; height: 100%; border-radius: inherit; background: #5c91e8; }
+.user-profile-downloads { padding-top: 20px; border-top: 1px solid #e5edf7; }
+.user-profile-downloads p { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0; padding: 9px 0; border-bottom: 1px solid #edf2f8; font-size: 13px; }
+.user-profile-downloads p span { flex: 1; min-width: 120px; }
+.user-profile-downloads b { font-weight: 500; color: #55769d; }
+.user-profile-downloads em { font-style: normal; color: #21835a; }
+.user-profile-summary { margin-top: 25px; padding: 18px 20px; border-left: 3px solid #4d85e8; border-radius: 0 10px 10px 0; background: #f5f9ff; }
+.user-profile-summary h3 { margin-bottom: 8px; }
+.user-profile-summary p { margin: 0 0 10px; line-height: 1.7; }
+.user-profile-summary small, .user-profile-empty { color: #7187a1; line-height: 1.6; }
+.user-profile-error { color: #bb3f48; }
+@media (max-width: 760px) {
+  .user-profile-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .user-profile-insights { grid-template-columns: 1fr; }
+  .user-profile-mix-body { gap: 15px; }
+  .user-profile-donut { width: 125px; height: 125px; }
+  .user-profile-donut > div { width: 80px; height: 80px; }
+  .user-profile-heatmap-grid { grid-template-columns: repeat(10, minmax(12px, 1fr)); }
+  .user-profile-rankings { grid-template-columns: 1fr; gap: 18px; }
+  .user-profile-identity p { overflow-wrap: anywhere; }
+}

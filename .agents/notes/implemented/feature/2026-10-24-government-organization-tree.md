@@ -1,0 +1,29 @@
+# Agent Note: Configurable government organization tree
+
+Status: implemented
+
+English | [中文](2026-10-24-government-organization-tree.zh.md)
+
+## Problem
+
+Public-sector customers organize people across varying jurisdictions, agencies, subordinate units and internal teams. A fixed number of department levels cannot represent these hierarchies. The existing `organizations` table represents billable enterprise accounts and has different ownership and lifecycle rules.
+
+## Decision
+
+Keep a separate `government_organization_nodes` adjacency tree with administrator-defined names, optional types, parent IDs and sibling order. User Permissions exposes tree creation, editing and deletion to the built-in super-administrator, while other administrators can read it. Node writes reject missing parents and ancestry cycles; deletion requires a leaf with no role references. Roles store selected node IDs in `permissions.organization_node_ids`; writes validate those references. The tree starts empty rather than implying a particular jurisdiction.
+
+## Alternatives considered
+
+**Fixed province/city/agency columns** would fail for customers with additional or fewer layers and would encode one organizational template into the schema.
+
+**Reuse billable organizations or their departments** would join public-sector affiliation to enterprise account transfer, billing and quota behavior. The two structures remain separate.
+
+**Apply organization selection as an authorization filter immediately** would silently change user and data access without a defined member assignment or inheritance policy. This release stores the relationship for administration only.
+
+## Consequences
+
+Different branches can have different depths and node types. A role can refer to multiple nodes, but those references do not yet restrict data, model access or user visibility. Operators must remove child nodes and role references before deleting a parent. Backend startup creates the new table through its existing migration path; production rollout requires the updated backend and frontend together.
+
+## Testing
+
+Gin requests with an isolated database exercise creation, cycles, missing parents, role references and editor privileges. React tests exercise role selection and persistence alongside model permissions.

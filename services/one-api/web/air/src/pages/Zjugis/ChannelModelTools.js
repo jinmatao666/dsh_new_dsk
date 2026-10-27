@@ -7,32 +7,32 @@ export const channelModelNames = (channel) => [...new Set(String(channel?.models
 export const filterModelSources = (model, channel) => (model.sources || []).filter(source => channel === 'all' || String(source.channel_id) === channel);
 export const filterChannelModels = (models, channel) => models.filter(model => channel === 'all' || (channel === 'unbound' ? !(model.sources || []).length : filterModelSources(model, channel).length > 0));
 
-// 模型 ID 只能从渠道清单选择；搜索文字不作为可保存的模型 ID。
+// 渠道清单提供建议，输入框同时接受手动填写的上游模型 ID。
 export function ChannelModelPicker({ names, value, onChange, disabled }) {
   const id = useId();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [active, setActive] = useState(0);
+  const [active, setActive] = useState(-1);
   const options = names.filter(name => name.toLowerCase().includes(query.toLowerCase()));
   const pick = name => { onChange(name); setOpen(false); setQuery(''); };
   return <div className='channel-model-picker'>
     <input role='combobox' aria-label='模型 ID' aria-expanded={open} aria-controls={id} aria-autocomplete='list'
       aria-activedescendant={open && options[active] ? `${id}-${active}` : undefined}
-      disabled={disabled} value={open ? query : value} placeholder={disabled ? '请先选择来源渠道' : '搜索并选择渠道模型'}
-      onFocus={() => { setOpen(true); setQuery(''); setActive(0); }}
-      onBlur={() => setOpen(false)} onChange={e => { setQuery(e.target.value); setOpen(true); setActive(0); }}
+      disabled={disabled} value={value} placeholder={disabled ? '请先选择来源渠道' : '输入模型 ID 或选择已有模型'}
+      onFocus={() => { setOpen(true); setQuery(''); setActive(-1); }}
+      onBlur={() => setOpen(false)} onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); setActive(-1); }}
       onKeyDown={e => {
         if (e.key === 'Escape') { e.preventDefault(); setOpen(false); }
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
           e.preventDefault(); setOpen(true);
           setActive(current => Math.max(0, Math.min(options.length - 1, current + (e.key === 'ArrowDown' ? 1 : -1))));
         }
-        if (e.key === 'Enter' && open) { e.preventDefault(); if (options[active]) pick(options[active]); }
+        if (e.key === 'Enter' && open) { e.preventDefault(); if (options[active]) pick(options[active]); else setOpen(false); }
       }} />
     {open && !disabled && <div id={id} role='listbox' aria-label='渠道模型清单' className='channel-model-picker-menu'>
       {options.map((name, index) => <button type='button' role='option' id={`${id}-${index}`} key={name} aria-selected={value === name}
         className={index === active ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => pick(name)}>{name}</button>)}
-      {options.length === 0 && <p>无匹配模型，请先在渠道设置中维护模型清单。</p>}
+      {options.length === 0 && <p>无匹配模型，可直接填写模型 ID 后保存。</p>}
     </div>}
   </div>;
 }

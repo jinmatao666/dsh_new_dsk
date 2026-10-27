@@ -37,7 +37,7 @@ test('creation selects a type without exposing role codes and submits only once'
   API.post.mockReturnValue(new Promise(resolve => { finish = resolve; }));
   act(() => { button('创建角色').click(); document.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
   expect(API.post).toHaveBeenCalledTimes(1);
-  expect(API.post.mock.calls[0][1]).toEqual({ role_type: 'admin', name: '业务管理员', description: '', permissions: { models: [] } });
+  expect(API.post.mock.calls[0][1]).toEqual({ role_type: 'admin', name: '业务管理员', description: '', permissions: { models: [], organization_node_ids: [] } });
   await act(async () => finish({ data: { success: false, message: '角色名称已存在' } }));
   expect(document.querySelector('[role="alert"]').textContent).toBe('角色名称已存在');
   expect(input.value).toBe('业务管理员');
@@ -71,7 +71,7 @@ test('select all and invert operate on the complete model list and only save exp
   API.get.mockResolvedValueOnce({ data: { success: true, data: [{ name: 'a' }, { name: 'b' }, { name: 'c' }] } });
   fetchManagedRoles.mockResolvedValueOnce([{ role: 3, name: '业务成员', permissions: { models: ['a', 'legacy'] } }]);
   await act(async () => root.render(<RolePermissions />));
-  act(() => button('可用模型').click());
+  act(() => button('配置角色').click());
   const checkedNames = () => [...document.querySelectorAll('.zjugis-model-option.checked .zjugis-model-option-info span')].map(el => el.textContent);
   expect(checkedNames()).toEqual(['a']);
   act(() => button('反选').click());
@@ -85,7 +85,7 @@ test('select all and invert operate on the complete model list and only save exp
   expect(checkedNames()).toEqual([]);
   expect(API.put).not.toHaveBeenCalled();
   act(() => button('取消').click());
-  act(() => button('可用模型').click());
+  act(() => button('配置角色').click());
   expect(checkedNames()).toEqual(['a']);
   act(() => button('全选').click());
   API.put.mockImplementationOnce(async (url, body) => ({ data: { success: true, data: { role: 3, ...body } } }));
@@ -98,10 +98,26 @@ test('bulk selection is disabled while loading and when the model list is empty'
   let finish;
   API.get.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
   await act(async () => root.render(<RolePermissions />));
-  act(() => button('可用模型').click());
+  act(() => button('配置角色').click());
   expect(button('全选').disabled).toBe(true);
   expect(button('反选').disabled).toBe(true);
   await act(async () => finish({ data: { success: true, data: [] } }));
   expect(button('全选').disabled).toBe(true);
   expect(button('反选').disabled).toBe(true);
+});
+
+test('role editor saves selected organization nodes alongside model permissions', async () => {
+  API.get.mockImplementation(url => Promise.resolve({ data: { success: true, data: url.includes('government-organization')
+    ? [{ id: 1, parent_id: 0, name: '浙政钉' }, { id: 2, parent_id: 1, name: '杭州市' }]
+    : [] } }));
+  fetchManagedRoles.mockResolvedValueOnce([{ role: 3, name: '业务成员', permissions: { models: ['a'], organization_node_ids: [1] } }]);
+  await act(async () => root.render(<RolePermissions />));
+  act(() => button('配置角色').click());
+  const checkboxes = [...document.querySelectorAll('.government-org-picker-item input')];
+  expect(checkboxes.map(input => input.checked)).toEqual([true, false]);
+  act(() => checkboxes[1].click());
+  API.put.mockImplementationOnce(async (url, body) => ({ data: { success: true, data: { role: 3, name: '业务成员', ...body } } }));
+  await act(async () => button('保存').click());
+  expect(API.put.mock.calls[0][1].permissions.organization_node_ids).toEqual([1, 2]);
+  expect(API.put.mock.calls[0][1].permissions.models).toEqual(['a']);
 });

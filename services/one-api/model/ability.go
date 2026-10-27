@@ -52,6 +52,10 @@ func (channel *Channel) AddAbilities() error {
 	groups_ := strings.Split(channel.Group, ",")
 	abilities := make([]Ability, 0, len(models_))
 	for _, model := range models_ {
+		model = strings.TrimSpace(model)
+		if model == "" {
+			continue
+		}
 		for _, group := range groups_ {
 			ability := Ability{
 				Group:     group,
@@ -62,6 +66,9 @@ func (channel *Channel) AddAbilities() error {
 			}
 			abilities = append(abilities, ability)
 		}
+	}
+	if len(abilities) == 0 {
+		return nil
 	}
 	return DB.Create(&abilities).Error
 }

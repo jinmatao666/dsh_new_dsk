@@ -22,9 +22,11 @@ type Role struct {
 	UpdatedAt   time.Time       `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
-// RolePermissions is the currently supported subset of a role configuration.
+// RolePermissions 保存模型白名单和角色所属的政务组织节点。
+// 组织关联是管理元数据，不参与现有模型或数据鉴权。
 type RolePermissions struct {
-	Models []string `json:"models"`
+	Models              []string `json:"models"`
+	OrganizationNodeIDs []uint   `json:"organization_node_ids,omitempty"`
 }
 
 func defaultRolePermissions() json.RawMessage {

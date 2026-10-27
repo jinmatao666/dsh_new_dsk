@@ -66,6 +66,8 @@ func TestChannelModelRegistration(t *testing.T) {
 	engine := gin.New()
 	engine.POST("/from_channel", RegisterChannelModel)
 	engine.POST("/definition", AddModelDefinition)
+	engine.POST("/channel", AddChannel)
+	engine.POST("/source", AddModelChannelSource)
 	engine.GET("/test", TestModelChannels)
 	engine.GET("/channels", GetConfiguredModelChannels)
 	call := func(method, path string, body interface{}) map[string]interface{} {
@@ -137,7 +139,20 @@ func TestChannelModelRegistration(t *testing.T) {
 	}, 3*time.Second, 10*time.Millisecond)
 	payload["definition"] = map[string]interface{}{"name": "new-model", "model_type": "chat"}
 	require.Equal(t, false, call("POST", "/from_channel", payload)["success"])
-	require.Equal(t, false, call("POST", "/definition", map[string]interface{}{"source_channel_id": second.Id, "name": "new-model"})["success"])
+	require.Equal(t, true, call("POST", "/definition", map[string]interface{}{"source_channel_id": second.Id, "name": "new-model"})["success"])
+	require.Equal(t, false, call("POST", "/definition", map[string]interface{}{"source_channel_id": -1, "name": "invalid-channel"})["success"])
+	require.Equal(t, false, call("POST", "/definition", map[string]interface{}{"source_channel_id": 999999, "name": "missing-channel"})["success"])
+	require.Equal(t, false, call("POST", "/definition", map[string]interface{}{"source_channel_id": second.Id, "name": "   "})["success"])
+	// 未获取模型的渠道可先保存，再手动登记并绑定模型。
+	require.Equal(t, true, call("POST", "/channel", map[string]interface{}{"name": "manual-only", "type": 1, "models": "", "group": "default"})["success"])
+	var emptyChannel model.Channel
+	require.NoError(t, db.Where("name = ?", "manual-only").First(&emptyChannel).Error)
+	require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", emptyChannel.Id).Count(&count).Error)
+	require.Zero(t, count)
+	require.Equal(t, true, call("POST", "/definition", map[string]interface{}{"source_channel_id": emptyChannel.Id, "name": "manual-model"})["success"])
+	require.Equal(t, true, call("POST", "/source", map[string]interface{}{"channel_id": emptyChannel.Id, "model": "manual-model", "group": "default"})["success"])
+	require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ? AND model = ?", emptyChannel.Id, "manual-model").Count(&count).Error)
+	require.EqualValues(t, 1, count)
 	require.Equal(t, false, call("GET", "/test?channel_id=not-a-number&model=qwen", nil)["success"])
 	// 倍率写入失败时，定义与来源必须一起回滚，不能出现半保存。
 	require.NoError(t, db.Model(&model.Option{}).Where("key = ?", "CompletionRatio").Update("value", "invalid-json").Error)
