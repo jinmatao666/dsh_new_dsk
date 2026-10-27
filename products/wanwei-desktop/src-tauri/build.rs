@@ -8,6 +8,23 @@ fn main() {
         panic!("DSH_RELEASE_VERSION contains an unsupported runtime directory character");
     }
     println!("cargo:rerun-if-env-changed=DSH_RELEASE_VERSION");
+    for name in ["GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA"] {
+        println!("cargo:rerun-if-env-changed={name}");
+    }
+    println!("cargo:rerun-if-changed=src");
+    let build_id = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system clock precedes Unix epoch")
+        .as_nanos();
+    // 同版本重建也拥有独立身份，重启后才能确认真正运行了新的安装包。
+    println!("cargo:rustc-env=DSH_DESKTOP_BUILD_ID={build_id}");
+    let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("Cargo OUT_DIR"));
+    let profile_dir = out.ancestors().nth(3).expect("Cargo profile directory");
+    std::fs::write(
+        profile_dir.join("desktop-build-id.txt"),
+        build_id.to_string(),
+    )
+    .expect("write desktop update build identity");
     println!("cargo:rustc-env=DSH_DESKTOP_RUNTIME_DIR=runtime-{release_version}");
     tauri_build::build();
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {

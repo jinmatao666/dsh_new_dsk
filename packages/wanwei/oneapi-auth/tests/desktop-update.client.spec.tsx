@@ -18,15 +18,53 @@ beforeEach(() => {
 afterEach(() => { cleanup(); disposers.splice(0).forEach((stop) => { stop() }); vi.useRealTimers() })
 
 function bench(phase = 'idle', configured = true, total = 104857600) {
-  const state = { configured, automatic: true, currentVersion: '2.1.1', phase, message: '', received: 26214400, total }
+  const state = { configured, automatic: true, currentVersion: '2.1.1', phase, message: '', received: 26214400, total,
+    completed: null as null | { version: string; sha256: string; notes: string; dismissed: boolean } }
   const invoke = vi.fn(async (command: string, args: unknown) => {
     if (command === 'desktop_update_automatic') state.automatic = (args as { enabled: boolean }).enabled
+    if (command === 'desktop_update_dismiss') state.completed = null
     return { ...state }
   })
   const updates = new DesktopUpdateController(invoke)
   disposers.push(updates.start())
   return { updates, invoke, state }
 }
+
+it.each(['close', 'escape', 'continue'])('shows installed release notes above the app and persists dismissal via %s', async (action) => {
+  vi.useFakeTimers()
+  const { updates, state, invoke } = bench()
+  state.completed = { version: '2.1.1', sha256: 'a'.repeat(64), notes: '修复同版本更新。\n优化文件引用。\n<script>不执行</script>', dismissed: false }
+  render(<DesktopUpdateOverlay t={t} updates={updates} />)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+  const dialog = screen.getByRole('dialog', { name: zh.updatesCompletedTitle })
+  expect(dialog.parentElement).toBe(document.body)
+  expect(dialog.hasAttribute('open')).toBe(true)
+  expect(dialog.textContent).toContain('2.1.1')
+  expect(dialog.textContent).toContain(state.completed.notes)
+  expect(dialog.querySelector('script')).toBeNull()
+  if (action === 'close') expect(dialog.textContent).toMatchSnapshot()
+  if (action === 'escape') fireEvent(dialog, new Event('cancel', { cancelable: true }))
+  else fireEvent.click(screen.getByRole('button', { name: action === 'close' ? zh.supportClose : zh.updatesCompletedClose }))
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+  expect(invoke).toHaveBeenCalledWith('desktop_update_dismiss', { sha256: 'a'.repeat(64) })
+  expect(screen.queryByRole('dialog')).toBeNull()
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+it('keeps release notes visible when dismissal could not be saved', async () => {
+  const updates = new DesktopUpdateController(async (command) => {
+    if (command === 'desktop_update_dismiss') throw new Error('Cannot save dismissal')
+    return { configured: true, automatic: true, currentVersion: '2.1.1', phase: 'idle', message: '', received: 0, total: 0,
+      completed: { version: '2.1.1', sha256: 'b'.repeat(64), notes: '', dismissed: false } }
+  })
+  disposers.push(updates.start())
+  render(<DesktopUpdateOverlay t={t} updates={updates} />)
+  await screen.findByText(zh.updatesNoReleaseNotes)
+  fireEvent.click(screen.getByRole('button', { name: zh.supportClose }))
+  expect((await screen.findByRole('alert')).textContent).toContain('Cannot save dismissal')
+  expect(screen.getByRole('dialog')).toBeTruthy()
+})
 
 it('has no executable update controls in a standalone browser', () => {
   const updates = new DesktopUpdateController(undefined)

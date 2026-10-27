@@ -40,6 +40,7 @@ type desktopUpdateManifest struct {
 	SHA256    string `json:"sha256"`
 	Size      int64  `json:"size"`
 	Signature string `json:"signature"`
+	BuildID   string `json:"build_id,omitempty"`
 }
 
 var desktopUpdateUploadGate = make(chan struct{}, 1)
@@ -47,6 +48,7 @@ var desktopUpdatePublication sync.Mutex
 var desktopUpdateOlderConfirmation = errors.New("发布版本低于该平台历史发布版本，请确认是否继续发布")
 var desktopUpdateID = regexp.MustCompile(`^[a-f0-9]{32}$`)
 var desktopUpdateFilename = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$`)
+var desktopUpdateBuildID = regexp.MustCompile(`^[0-9]{1,40}$`)
 
 func desktopUpdateRoot() string {
 	if root := os.Getenv("DESKTOP_UPDATE_DIR"); root != "" {
@@ -164,7 +166,8 @@ func unpackDesktopUpdate(path, destination string, limit int64, key minisign.Pub
 	v, err := semver.StrictNewVersion(manifest.Version)
 	if err != nil || v.Prerelease() != "" || v.Metadata() != "" || manifest.Schema != 1 || manifest.Product != "com.wanwei.harness" ||
 		!desktopUpdateFilename.MatchString(manifest.File) || !validDesktopPlatform(manifest.Platform, manifest.File) ||
-		manifest.Size <= 0 || manifest.Size > limit || len(manifest.Signature) > 4096 {
+		manifest.Size <= 0 || manifest.Size > limit || len(manifest.Signature) > 4096 ||
+		(manifest.BuildID != "" && !desktopUpdateBuildID.MatchString(manifest.BuildID)) {
 		return manifest, "", "", errors.New("发布清单字段无效（正式通道只接受 x.y.z 版本）")
 	}
 	artifact := entries[manifest.File]
@@ -306,7 +309,7 @@ func AdminUploadDesktopUpdate(c *gin.Context) {
 	}
 	if err := model.DB.Create(&record).Error; err != nil {
 		_ = os.RemoveAll(final)
-		desktopUpdateFailure(c, errors.New("保存版本失败：该平台版本可能已上传"))
+		desktopUpdateFailure(c, errors.New("保存更新包失败"))
 		return
 	}
 	c.JSON(200, gin.H{"success": true, "data": record})
@@ -485,7 +488,7 @@ func CheckDesktopUpdate(c *gin.Context) {
 		c.Status(503)
 		return
 	}
-	if !latest.GreaterThan(current) {
+	if latest.LessThan(current) {
 		c.Status(204)
 		return
 	}
@@ -502,7 +505,7 @@ func CheckDesktopUpdate(c *gin.Context) {
 	}
 	downloadPath := "desktop-updates/files/" + record.ID
 	downloadURL := url.URL{Scheme: scheme, Host: c.Request.Host, Path: "/" + downloadPath}
-	c.JSON(200, gin.H{"version": record.Version, "notes": record.Notes, "pub_date": channel.UpdatedAt.UTC().Format(time.RFC3339), "url": downloadURL.String(), "download_path": downloadPath, "signature": manifest.Signature, "manifest": record.Manifest, "manifest_signature": record.ManifestSignature})
+	c.JSON(200, gin.H{"version": record.Version, "notes": record.Notes, "release_id": record.ID, "pub_date": channel.UpdatedAt.UTC().Format(time.RFC3339), "url": downloadURL.String(), "download_path": downloadPath, "signature": manifest.Signature, "manifest": record.Manifest, "manifest_signature": record.ManifestSignature})
 }
 
 // DownloadDesktopUpdate exposes only the active published artifact, never an arbitrary storage path.

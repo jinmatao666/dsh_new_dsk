@@ -47,5 +47,10 @@
 .bytes { margin: 10px 0 0; color: var(--dsw-alias-label-secondary, #65758b); font-size: 12px; font-variant-numeric: tabular-nums; }
 .dialogFooter { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--dsw-alias-border-l1, #e5eaf2); }
 .dialogFooter > span { max-width: 210px; color: var(--dsw-alias-label-secondary, #65758b); font-size: 12px; line-height: 1.6; }
+.releaseDialog { width: min(520px, calc(100vw - 40px)); max-height: calc(100dvh - 48px); overflow-y: auto; box-sizing: border-box; }
+.releaseNotes { margin-top: 22px; padding: 18px 20px; border: 1px solid var(--dsw-alias-border-l1, #e5eaf2); border-radius: 12px; background: var(--dsw-alias-bg-layer-1, #f5f7fb); }
+.releaseNotes h3 { margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-secondary, #65758b); }
+.releaseNotes p { margin: 0; color: var(--dsw-alias-label-primary, #182236); font-size: 14px; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere; }
+.releaseFooter { justify-content: flex-end; }
 @media (max-width: 520px) { .versionCard { gap: 10px; padding: 12px 14px; } .preference, .checkRow { gap: 12px; } .checkRow { align-items: flex-start; flex-wrap: wrap; } .dialog { padding: 22px; } .dialogFooter { align-items: flex-start; flex-direction: column; } }
 @media (prefers-reduced-motion: reduce) { .switch, .switch span { transition: none; } }

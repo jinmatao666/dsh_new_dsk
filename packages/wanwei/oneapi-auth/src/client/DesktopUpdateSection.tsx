@@ -52,12 +52,55 @@ export function DesktopUpdateSection({ t, updates }: UpdateProps) {
   </section>
 }
 
-/** Keep progress visible independently of settings navigation.
+/** Show progress and persisted completion notes independently of settings navigation.
  * @param props - Shared monitor and localized dialog copy.
- * @returns Body-portaled modal when native downloading or installation begins.
+ * @returns Body-portaled top-layer dialogs for native update progress or unread completion notes.
  */
 export function DesktopUpdateOverlay({ t, updates }: UpdateProps) {
   const { snapshot: view, progressOpen, error } = useSyncExternalStore(updates.subscribe, updates.getSnapshot)
+  return <>
+    <CompletedUpdateDialog t={t} updates={updates} />
+    <DownloadUpdateDialog t={t} updates={updates} view={view}
+      progressOpen={progressOpen && (view?.completed === undefined || view.completed === null || view.completed.dismissed)} error={error} />
+  </>
+}
+
+function CompletedUpdateDialog({ t, updates }: UpdateProps) {
+  const { snapshot: view, pending, error } = useSyncExternalStore(updates.subscribe, updates.getSnapshot)
+  const completed = view?.completed
+  const dialog = useRef<HTMLDialogElement>(null)
+  const visible = completed !== undefined && completed !== null && !completed.dismissed
+  useEffect(() => {
+    const element = dialog.current
+    if (visible && element !== null && !element.open) element.showModal()
+  }, [visible])
+  if (!visible) return null
+  const close = () => { void updates.dismissCompleted() }
+  return createPortal(<dialog ref={dialog} className={`${css.dialog} ${css.releaseDialog}`}
+    aria-labelledby="wanwei-update-completed-title" aria-describedby="wanwei-update-completed-intro"
+    onCancel={(event) => { event.preventDefault(); close() }}>
+    <div className={css.dialogHeader}>
+      <span className={css.versionIcon}><img src="/brand-mark.svg" width={32} height={32} alt="" aria-hidden="true" /></span>
+      <button type="button" className={css.close} disabled={pending} aria-label={t('supportClose')} onClick={close}>×</button>
+    </div>
+    <h2 id="wanwei-update-completed-title">{t('updatesCompletedTitle')}</h2>
+    <p id="wanwei-update-completed-intro" className={css.dialogHint}>{t('updatesCompletedVersion')} <strong>{completed.version}</strong></p>
+    <section className={css.releaseNotes} aria-label={t('updatesReleaseNotes')}>
+      <h3>{t('updatesReleaseNotes')}</h3>
+      <p>{completed.notes.trim() || t('updatesNoReleaseNotes')}</p>
+    </section>
+    {error === undefined ? null : <p role="alert" className={css.error}>{error}</p>}
+    <div className={`${css.dialogFooter} ${css.releaseFooter}`}>
+      <button type="button" className={css.primary} disabled={pending} onClick={close}>{t('updatesCompletedClose')}</button>
+    </div>
+  </dialog>, document.body)
+}
+
+function DownloadUpdateDialog({ t, updates, view, progressOpen, error }: UpdateProps & {
+  view: ReturnType<DesktopUpdateController['getSnapshot']>['snapshot']
+  progressOpen: boolean
+  error: string | undefined
+}) {
   const dialog = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     const element = dialog.current

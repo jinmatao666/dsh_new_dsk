@@ -21,6 +21,7 @@ test('real Tauri signatures and upload ZIP are accepted by the backend', async (
     process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
     const folder = join(temporary, 'bundle/nsis')
     await mkdir(folder, { recursive: true })
+    await writeFile(join(temporary, 'desktop-build-id.txt'), '123456789')
     const artifact = join(folder, 'test.exe')
     await writeFile(artifact, 'test-only signed installer')
     const sign = spawnSync(process.execPath, [cli, 'signer', 'sign', artifact], { encoding: 'utf8', windowsHide: true })
@@ -44,6 +45,8 @@ test('real Tauri signatures and upload ZIP are accepted by the backend', async (
     }
     await assert.rejects(packageUpdate({ platform: 'windows-x64', version: '1.2.0', output: temporary, bundleRoot: join(temporary, 'bundle') }), /生成更新 ZIP 失败/u)
     await assert.rejects(packageUpdate({ platform: 'windows-x64', version: '1.2.0-beta', output: temporary }), /正式版本号/u)
+    await writeFile(join(temporary, 'desktop-build-id.txt'), 'invalid-build-id')
+    await assert.rejects(packageUpdate({ platform: 'windows-x64', version: '1.2.0', output: temporary, bundleRoot: join(temporary, 'bundle') }), /构建标识/u)
   } finally {
     if (previousKey === undefined) delete process.env.TAURI_SIGNING_PRIVATE_KEY; else process.env.TAURI_SIGNING_PRIVATE_KEY = previousKey
     if (previousPassword === undefined) delete process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD; else process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD = previousPassword

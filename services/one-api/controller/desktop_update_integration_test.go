@@ -87,9 +87,12 @@ func signedText(t *testing.T, key minisign.PrivateKey, content []byte) string {
 	return base64.StdEncoding.EncodeToString(r.Sign(key))
 }
 
-func updateZIP(t *testing.T, key minisign.PrivateKey, version, platform string, tamper bool) []byte {
+func updateZIP(t *testing.T, key minisign.PrivateKey, version, platform string, tamper bool, payloads ...[]byte) []byte {
 	t.Helper()
 	content := []byte("test-only signed installer")
+	if len(payloads) > 0 {
+		content = payloads[0]
+	}
 	hash := sha256.Sum256(content)
 	name := "update.exe"
 	if platform != "windows-x86_64" {
@@ -132,8 +135,7 @@ func requestUpdate(t *testing.T, r *gin.Engine, method, path, role string, archi
 			t.Fatal(err)
 		}
 		file.Write(archive)
-		m.WriteField("notes", "更新说明")
-		fields := map[string]string{"version": "1.2.0", "platform": "windows-x86_64"}
+		fields := map[string]string{"version": "1.2.0", "platform": "windows-x86_64", "notes": "更新说明"}
 		if z, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive))); err == nil {
 			for _, entry := range z.File {
 				if entry.Name != "release.json" {
@@ -294,7 +296,7 @@ func TestDesktopUpdateDeletedHistoryDoesNotRequireConfirmation(t *testing.T) {
 	if w := requestUpdate(t, r, "POST", "/api/desktop-updates/"+id+"/publish", "root", nil); w.Code != 200 {
 		t.Fatal("deleted version prompted for confirmation", w.Code, w.Body.String())
 	}
-	for _, version := range []string{"0.0.6", "2.1.1"} {
+	for _, version := range []string{"2.1.1"} {
 		if w := requestUpdate(t, r, "GET", "/desktop-updates/windows/x86_64/"+version, "", nil); w.Code != 204 {
 			t.Fatal("equal/newer client offered update", version, w.Code)
 		}
@@ -323,7 +325,7 @@ func TestDesktopUpdateOlderPublicationRequiresConfirmation(t *testing.T) {
 	if w := requestUpdate(t, r, "POST", path+"?confirm_older=1.2.0", "root", nil); w.Code != 200 {
 		t.Fatal("confirmed older publication failed", w.Body.String())
 	}
-	for _, version := range []string{"1.2.0", "2.0.0", "2.1.1", "3.0.0"} {
+	for _, version := range []string{"2.0.0", "2.1.1", "3.0.0"} {
 		if w := requestUpdate(t, r, "GET", "/desktop-updates/windows/x86_64/"+version, "", nil); w.Code != 204 {
 			t.Fatal("older release advertised to newer client", version, w.Body.String())
 		}
@@ -335,6 +337,36 @@ func TestDesktopUpdateOlderPublicationRequiresConfirmation(t *testing.T) {
 	model.DB.First(&channel, "platform = ?", "windows-x86_64")
 	if channel.Version != "2.1.1" || channel.ReleaseID != older {
 		t.Fatal("history and active release not separated", channel)
+	}
+}
+
+func TestDesktopUpdateSameVersionReplacementKeepsHistory(t *testing.T) {
+	r, key, _ := updateRouter(t)
+	bundle := updateZIP(t, key, "1.2.0", "windows-x86_64", false)
+	first := uploadedID(t, requestUpdate(t, r, "POST", "/api/desktop-updates", "root", bundle))
+	replacement := []byte("test-only same-version replacement installer")
+	second := uploadedID(t, requestUpdate(t, r, "POST", "/api/desktop-updates", "root", updateZIP(t, key, "1.2.0", "windows-x86_64", false, replacement), map[string]string{"notes": "同版本修复"}))
+	for _, id := range []string{first, second} {
+		if w := requestUpdate(t, r, "POST", "/api/desktop-updates/"+id+"/publish", "root", nil); w.Code != 200 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+		w := requestUpdate(t, r, "GET", "/desktop-updates/windows/x86_64/1.2.0", "", nil)
+		if w.Code != 200 || !bytes.Contains(w.Body.Bytes(), []byte(`"release_id":"`+id+`"`)) {
+			t.Fatal("same-version check did not return active release", w.Code, w.Body.String())
+		}
+	}
+	if w := requestUpdate(t, r, "GET", "/desktop-updates/files/"+first, "", nil); w.Code != 404 {
+		t.Fatal("superseded same-version artifact remains public", w.Code)
+	}
+	if w := requestUpdate(t, r, "GET", "/desktop-updates/files/"+second, "", nil); w.Code != 200 || !bytes.Equal(w.Body.Bytes(), replacement) {
+		t.Fatal("same-version download did not return replacement bytes", w.Code)
+	}
+	if w := requestUpdate(t, r, "GET", "/desktop-updates/windows/x86_64/1.2.0", "", nil); !bytes.Contains(w.Body.Bytes(), []byte(`"notes":"同版本修复"`)) {
+		t.Fatal("same-version release notes did not follow publication", w.Body.String())
+	}
+	var count int64
+	if err := model.DB.Model(&model.DesktopUpdate{}).Where("platform = ? AND version = ?", "windows-x86_64", "1.2.0").Count(&count).Error; err != nil || count != 2 {
+		t.Fatal("same-version history lost", count, err)
 	}
 }
 
@@ -364,7 +396,7 @@ func TestDesktopUpdateLifecycle(t *testing.T) {
 	if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" || !bytes.Contains(w.Body.Bytes(), []byte(`"download_path":"desktop-updates/files/`+id+`"`)) {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	for _, path := range []string{"/desktop-updates/windows/x86_64/1.2.0", "/desktop-updates/windows/x86_64/2.0.0", "/desktop-updates/darwin/aarch64/1.0.0"} {
+	for _, path := range []string{"/desktop-updates/windows/x86_64/2.0.0", "/desktop-updates/darwin/aarch64/1.0.0"} {
 		if w := requestUpdate(t, r, "GET", path, "", nil); w.Code != 204 {
 			t.Fatal(path, w.Code)
 		}
@@ -372,8 +404,12 @@ func TestDesktopUpdateLifecycle(t *testing.T) {
 	if w := requestUpdate(t, r, "GET", "/desktop-updates/files/"+id, "", nil); w.Code != 200 || w.Body.String() != "test-only signed installer" {
 		t.Fatal("download failed")
 	}
-	if w := requestUpdate(t, r, "POST", "/api/desktop-updates", "root", bundle); w.Code == 200 {
-		t.Fatal("duplicate version accepted")
+	if w := requestUpdate(t, r, "GET", "/desktop-updates/windows/x86_64/1.2.0", "", nil); w.Code != 200 {
+		t.Fatal("same-version update unavailable", w.Code, w.Body.String())
+	}
+	replacement := uploadedID(t, requestUpdate(t, r, "POST", "/api/desktop-updates", "root", bundle))
+	if replacement == id {
+		t.Fatal("same-version uploads must retain distinct release records")
 	}
 	if w := requestUpdate(t, r, "POST", "/api/desktop-updates/"+id+"/withdraw", "root", nil); w.Code != 200 {
 		t.Fatal(w.Body.String())

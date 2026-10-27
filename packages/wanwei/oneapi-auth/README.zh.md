@@ -39,6 +39,8 @@ kind: "package-reference"
 
 ### 配置
 
+原生壳确认更新安装完成后，共享监视器在挂载到 body 的顶层弹窗展示版本和更新说明。弹窗沿用品牌样式，以纯文本保留换行，长说明可滚动，支持关闭按钮、Escape 和“开始使用”。原生壳先持久化关闭状态再隐藏弹窗；保存失败则保留说明并显示错误。同版本和更高版本更新均显示说明，不依赖设置页导航。
+
 知识库上传使用有界 RPC 分片，每个已挂载的认证插件最多持有一个私有临时文件。`knowledgeUploadIdleTimeoutMs` 默认值为 900000 毫秒；空闲上传会过期，完成、失败、显式取消及插件卸载均会删除临时数据。multipart 转发时 OneAPI 凭证保留在 Host。上传和解析限制详见[知识库包](../knowledge-base/README.zh.md)。
 
 输入框知识库检索把每个会话所选的知识库编号保存在 Host 内存中，由 `/desktop-knowledge-base` 的 `retrieval-scope` 操作设置；传入空列表即移除范围。设置了范围的会话在用户轮次第一步之前，由 Host 把问题提交到 OneAPI `/api/knowledge-bases/retrieval`，并把切片追加为一条记入日志的 `notice` 消息。`knowledgeRetrievalPageSize`（默认 8，最大 30）和 `knowledgeRetrievalSimilarityThreshold`（默认 0.2）传给 RAGFlow；`knowledgeRetrievalMaxChars`（默认 12000）限制注入的切片字符数；`knowledgeRetrievalTimeoutMs`（默认 20000）限制请求时长。OneAPI 会拒绝调用者无权打开的知识库。检索失败时会告知模型，不中断该轮次。

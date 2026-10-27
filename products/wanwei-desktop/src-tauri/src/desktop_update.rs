@@ -16,6 +16,7 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 use url::Url;
 
 const MAX_PACKAGE: u64 = 2 * 1024 * 1024 * 1024;
+const MAX_RECEIPT_BYTES: usize = 256 * 1024;
 const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 
 #[derive(Clone, Serialize)]
@@ -28,17 +29,71 @@ pub struct Snapshot {
     received: u64,
     total: u64,
     message: String,
+    completed: Option<CompletedUpdate>,
 }
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct CompletedUpdate {
+    version: String,
+    sha256: String,
+    notes: String,
+    dismissed: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PendingUpdate {
+    release: CompletedUpdate,
+    from_build: String,
+    target_build: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct UpdateReceipt {
+    installed: Option<CompletedUpdate>,
+    pending: Option<PendingUpdate>,
+}
+
+impl UpdateReceipt {
+    fn reconcile(&mut self, version: &str, build: &str) -> bool {
+        let applied = self.pending.as_ref().is_some_and(|pending| {
+            pending.release.version == version
+                && pending.from_build != build
+                && pending
+                    .target_build
+                    .as_deref()
+                    .is_none_or(|target| target == build)
+        });
+        if applied {
+            self.installed = self.pending.take().map(|pending| pending.release);
+        }
+        applied
+    }
+
+    fn completed(&self) -> Option<CompletedUpdate> {
+        self.installed
+            .as_ref()
+            .filter(|release| !release.dismissed)
+            .cloned()
+    }
+
+    fn already_installed(&self, version: &str, hash: &str) -> bool {
+        self.installed
+            .as_ref()
+            .is_some_and(|release| release.version == version && release.sha256 == hash)
+    }
+}
+
 struct Inner {
     snapshot: Snapshot,
     busy: bool,
     cached: Option<(String, Vec<u8>)>,
+    receipt: UpdateReceipt,
 }
 pub struct DesktopUpdate {
     inner: Mutex<Inner>,
     endpoint: Url,
     public_key: String,
     preference: PathBuf,
+    receipt_path: PathBuf,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,6 +106,7 @@ struct Manifest {
     size: u64,
     sha256: String,
     signature: String,
+    build_id: Option<String>,
 }
 
 fn decode_text(value: &str) -> Result<String, String> {
@@ -93,6 +149,9 @@ fn verify_manifest(
         || manifest.file.is_empty()
         || manifest.sha256.len() != 64
         || !manifest.sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || manifest.build_id.as_ref().is_some_and(|id| {
+            id.is_empty() || id.len() > 40 || !id.bytes().all(|byte| byte.is_ascii_digit())
+        })
     {
         return Err("更新清单与当前版本或平台不匹配".into());
     }
@@ -186,6 +245,19 @@ pub fn setup(app: &tauri::AppHandle, base_url: &str) -> Result<(), Box<dyn std::
         "{}/desktop-updates/{{{{target}}}}/{{{{arch}}}}/{{{{current_version}}}}",
         base_url.trim_end_matches('/')
     ))?;
+    let receipt_path = preference.with_file_name("desktop-update-receipt.json");
+    let mut receipt: UpdateReceipt = match fs::read(&receipt_path) {
+        Ok(data) if data.len() <= MAX_RECEIPT_BYTES => serde_json::from_slice(&data)?,
+        Ok(_) => return Err("更新记录超过大小限制".into()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => UpdateReceipt::default(),
+        Err(error) => return Err(error.into()),
+    };
+    if receipt.reconcile(
+        &app.package_info().version.to_string(),
+        env!("DSH_DESKTOP_BUILD_ID"),
+    ) {
+        save_receipt(&receipt_path, &receipt)?;
+    }
     app.manage(DesktopUpdate {
         inner: Mutex::new(Inner {
             snapshot: Snapshot {
@@ -196,13 +268,16 @@ pub fn setup(app: &tauri::AppHandle, base_url: &str) -> Result<(), Box<dyn std::
                 received: 0,
                 total: 0,
                 message: preference_message,
+                completed: receipt.completed(),
             },
             busy: false,
             cached: None,
+            receipt,
         }),
         endpoint,
         public_key: key,
         preference,
+        receipt_path,
     });
     let app = app.clone();
     std::thread::spawn(move || {
@@ -263,6 +338,18 @@ pub fn desktop_update_automatic(
 }
 
 fn save_preference(path: &Path, enabled: bool) -> Result<(), String> {
+    save_file(path, if enabled { b"true" } else { b"false" })
+}
+
+fn save_receipt(path: &Path, receipt: &UpdateReceipt) -> Result<(), String> {
+    let data = serde_json::to_vec(receipt).map_err(|error| error.to_string())?;
+    if data.len() > MAX_RECEIPT_BYTES {
+        return Err("更新记录超过大小限制".into());
+    }
+    save_file(path, &data)
+}
+
+fn save_file(path: &Path, data: &[u8]) -> Result<(), String> {
     let temporary = path.with_extension(format!(
         "{}.tmp",
         SystemTime::now()
@@ -281,7 +368,7 @@ fn save_preference(path: &Path, enabled: bool) -> Result<(), String> {
         .open(&temporary)
         .map_err(|error| error.to_string())?;
     let result = (|| -> std::io::Result<()> {
-        file.write_all(if enabled { b"true" } else { b"false" })?;
+        file.write_all(data)?;
         file.sync_all()?;
         drop(file);
         fs::rename(&temporary, path)
@@ -290,6 +377,30 @@ fn save_preference(path: &Path, enabled: bool) -> Result<(), String> {
         let _ = fs::remove_file(&temporary);
     }
     result.map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn desktop_update_dismiss(
+    webview: Webview,
+    sha256: String,
+    state: State<'_, DesktopUpdate>,
+) -> Result<(), String> {
+    if !is_main_update_caller(webview.label(), webview.window().label()) {
+        return Err("仅主窗口可以关闭更新说明".into());
+    }
+    let mut inner = state.inner.lock().map_err(|_| "更新状态不可用")?;
+    let mut receipt = inner.receipt.clone();
+    if let Some(release) = receipt
+        .installed
+        .as_mut()
+        .filter(|release| release.sha256 == sha256)
+    {
+        release.dismissed = true;
+        save_receipt(&state.receipt_path, &receipt)?;
+        inner.receipt = receipt;
+        inner.snapshot.completed = None;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -339,6 +450,7 @@ async fn perform(app: &tauri::AppHandle, manual: bool) -> Result<(), String> {
         .endpoints(vec![state.endpoint.clone()])
         .map_err(|error| error.to_string())?
         .timeout(Duration::from_secs(20))
+        .version_comparator(|current, release| release.version >= current)
         .configure_client(|client| client.redirect(reqwest::redirect::Policy::none()))
         .build()
         .map_err(|error| error.to_string())?
@@ -352,11 +464,7 @@ async fn perform(app: &tauri::AppHandle, manual: bool) -> Result<(), String> {
         } else {
             String::new()
         };
-        update_state(
-            app,
-            "idle",
-            &message,
-        );
+        update_state(app, "idle", &message);
         return Ok(());
     };
     let manifest = verify_manifest(
@@ -366,6 +474,32 @@ async fn perform(app: &tauri::AppHandle, manual: bool) -> Result<(), String> {
         &update.signature,
         &platform(),
     )?;
+    if update
+        .body
+        .as_ref()
+        .is_some_and(|notes| notes.len() > 16000)
+    {
+        return Err("更新说明超过大小限制".into());
+    }
+    if manifest.build_id.as_deref() == Some(env!("DSH_DESKTOP_BUILD_ID"))
+        || state
+            .inner
+            .lock()
+            .map_err(|_| "更新状态不可用")?
+            .receipt
+            .already_installed(&update.version, &manifest.sha256)
+    {
+        update_state(
+            app,
+            "idle",
+            if manual {
+                "当前发布的更新包已安装。"
+            } else {
+                ""
+            },
+        );
+        return Ok(());
+    }
     update.download_url = download_url(&state.endpoint, &update.raw_json)?;
     // No off-server redirects or foreign origins, even when metadata arrives over HTTP.
     if update.download_url.origin() != state.endpoint.origin()
@@ -383,11 +517,15 @@ async fn perform(app: &tauri::AppHandle, manual: bool) -> Result<(), String> {
     let bytes = match cached {
         Some((hash, bytes)) if hash == manifest.sha256 => bytes,
         _ => {
-            update_state(app, "available", &format!("发现新版本 {}", update.version));
+            update_state(
+                app,
+                "available",
+                &format!("发现可用更新 {}", update.version),
+            );
             if !confirm(
                 app,
                 format!(
-                    "发现新版本 {}，大小 {:.1} MB。是否下载？\n下载不会停止当前任务。",
+                    "发现可用更新 {}，大小 {:.1} MB。是否下载？\n下载不会停止当前任务。",
                     update.version,
                     manifest.size as f64 / 1048576.0
                 ),
@@ -409,12 +547,29 @@ async fn perform(app: &tauri::AppHandle, manual: bool) -> Result<(), String> {
         return Ok(());
     }
     let handle = app.clone();
+    {
+        let mut inner = state.inner.lock().map_err(|_| "更新状态不可用")?;
+        let mut receipt = inner.receipt.clone();
+        receipt.pending = Some(PendingUpdate {
+            release: CompletedUpdate {
+                version: update.version.clone(),
+                sha256: manifest.sha256.clone(),
+                notes: update.body.clone().unwrap_or_default(),
+                dismissed: false,
+            },
+            from_build: env!("DSH_DESKTOP_BUILD_ID").into(),
+            target_build: manifest.build_id.clone(),
+        });
+        save_receipt(&state.receipt_path, &receipt)?;
+        inner.receipt = receipt;
+    }
     let stopped = tauri::async_runtime::spawn_blocking(move || {
         handle.state::<crate::Sidecar>().prepare_update()
     })
     .await
     .map_err(|error| error.to_string())?;
     if let Err(error) = stopped {
+        clear_pending(&state)?;
         state.inner.lock().map_err(|_| "更新状态不可用")?.cached = Some((manifest.sha256, bytes));
         return Err(error);
     }
@@ -422,6 +577,7 @@ async fn perform(app: &tauri::AppHandle, manual: bool) -> Result<(), String> {
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         if let Err(error) = update.install(bytes) {
+            let _ = clear_pending(&handle.state::<DesktopUpdate>());
             // The sidecar has already exited. Relaunch the current app rather than leave a broken UI.
             handle
                 .dialog()
@@ -432,6 +588,15 @@ async fn perform(app: &tauri::AppHandle, manual: bool) -> Result<(), String> {
     })
     .await
     .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn clear_pending(state: &DesktopUpdate) -> Result<(), String> {
+    let mut inner = state.inner.lock().map_err(|_| "更新状态不可用")?;
+    let mut receipt = inner.receipt.clone();
+    receipt.pending = None;
+    save_receipt(&state.receipt_path, &receipt)?;
+    inner.receipt = receipt;
     Ok(())
 }
 
@@ -490,6 +655,54 @@ mod tests {
     use super::*;
     use std::io::Read;
 
+    fn pending_receipt() -> UpdateReceipt {
+        UpdateReceipt {
+            installed: None,
+            pending: Some(PendingUpdate {
+                release: CompletedUpdate {
+                    version: "1.2.0".into(),
+                    sha256: "a".repeat(64),
+                    notes: "修复同版本更新\n保留工作区".into(),
+                    dismissed: false,
+                },
+                from_build: "old-build".into(),
+                target_build: Some("new-build".into()),
+            }),
+        }
+    }
+
+    #[test]
+    fn same_version_receipt_requires_new_running_build_and_preserves_notes() {
+        let mut receipt = pending_receipt();
+        assert!(!receipt.reconcile("1.2.0", "old-build"));
+        assert!(!receipt.reconcile("1.1.0", "new-build"));
+        assert!(!receipt.reconcile("1.2.0", "another-build"));
+        assert!(receipt.completed().is_none());
+        assert!(!receipt.already_installed("1.2.0", &"a".repeat(64)));
+        assert!(receipt.reconcile("1.2.0", "new-build"));
+        assert!(receipt.pending.is_none());
+        assert_eq!(
+            receipt.completed().unwrap().notes,
+            "修复同版本更新\n保留工作区"
+        );
+        assert!(receipt.already_installed("1.2.0", &"a".repeat(64)));
+        assert!(!receipt.already_installed("1.2.0", &"b".repeat(64)));
+        assert!(!receipt.already_installed("1.3.0", &"a".repeat(64)));
+        assert!(!receipt.reconcile("1.2.0", "new-build"));
+    }
+
+    #[test]
+    fn dismissed_completion_survives_serialization_and_does_not_reopen() {
+        let mut receipt = pending_receipt();
+        receipt.reconcile("1.2.0", "new-build");
+        receipt.installed.as_mut().unwrap().dismissed = true;
+        let mut restored: UpdateReceipt =
+            serde_json::from_slice(&serde_json::to_vec(&receipt).unwrap()).unwrap();
+        assert!(!restored.reconcile("1.2.0", "new-build"));
+        assert!(restored.completed().is_none());
+        assert!(restored.already_installed("1.2.0", &"a".repeat(64)));
+    }
+
     #[test]
     fn update_caller_checks_webview_and_window_without_requiring_single_webview() {
         assert!(is_main_update_caller("main", "main"));
@@ -545,7 +758,7 @@ mod tests {
     }
 
     #[test]
-    fn preference_replaces_existing_value_without_leaving_temporary_files() {
+    fn preference_and_receipt_replace_existing_values_without_leaving_temporary_files() {
         let root = std::env::temp_dir().join(format!(
             "wanwei-update-pref-{}-{}",
             std::process::id(),
@@ -560,6 +773,22 @@ mod tests {
         save_preference(&file, false).unwrap();
         assert!(!serde_json::from_slice::<bool>(&fs::read(&file).unwrap()).unwrap());
         assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        let journal = root.join("receipt.json");
+        let mut receipt = pending_receipt();
+        receipt.pending.as_mut().unwrap().release.notes = "\0".repeat(16000);
+        receipt.installed = receipt
+            .pending
+            .as_ref()
+            .map(|pending| pending.release.clone());
+        save_receipt(&journal, &receipt).unwrap();
+        receipt.reconcile("1.2.0", "new-build");
+        receipt.installed.as_mut().unwrap().dismissed = true;
+        save_receipt(&journal, &receipt).unwrap();
+        let restored: UpdateReceipt = serde_json::from_slice(&fs::read(&journal).unwrap()).unwrap();
+        assert!(restored.completed().is_none());
+        assert_eq!(restored.installed.unwrap().notes.len(), 16000);
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 2);
+        fs::remove_file(journal).unwrap();
         fs::remove_file(file).unwrap();
         fs::remove_dir(root).unwrap();
     }
@@ -608,6 +837,7 @@ mod tests {
             "windows-x86_64",
         )
         .unwrap();
+        assert_eq!(verified.build_id.as_deref(), Some("123456789"));
         let mut bytes = Vec::new();
         archive
             .by_name(&verified.file)

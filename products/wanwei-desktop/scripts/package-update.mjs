@@ -24,6 +24,8 @@ export async function packageUpdate({ platform, version, output, bundleRoot = jo
   const spec = platforms[platform]
   if (!spec || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(version)) throw new Error('更新发布平台或正式版本号无效')
   const [target, directory, extension] = spec
+  const buildId = (await readFile(join(bundleRoot, '..', 'desktop-build-id.txt'), 'utf8')).trim()
+  if (!/^\d{1,40}$/u.test(buildId)) throw new Error('缺少有效的桌面构建标识，请重新构建安装包')
   const folder = join(bundleRoot, directory)
   const candidates = (await readdir(folder)).filter(name => name.endsWith(extension))
   if (candidates.length !== 1) throw new Error('预期恰好一个自动更新产物；请清理旧构建结果')
@@ -39,7 +41,7 @@ export async function packageUpdate({ platform, version, output, bundleRoot = jo
   try {
     const manifest = join(temporary, 'release.json')
     await writeFile(manifest, `${JSON.stringify({ schema: 1, product: 'com.wanwei.harness', version, platform: target,
-      file: filename, size, sha256: hash.digest('hex'), signature })}\n`, { flag: 'wx' })
+      file: filename, size, sha256: hash.digest('hex'), signature, build_id: buildId })}\n`, { flag: 'wx' })
     await sign(manifest)
     const archive = resolve(output, `wanwei-update-${version}-${target}.zip`)
     // Python's standard-library ZIP writer streams large artifacts and never receives signing credentials.

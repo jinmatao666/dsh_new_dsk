@@ -11,7 +11,7 @@ import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
 import * as clientPlugin from '../src/client/index.ts'
 import { DesktopUpdateSection, DesktopUpdateOverlay } from '../src/client/DesktopUpdateSection.tsx'
@@ -22,9 +22,11 @@ it('loads the real client registrations and shares one monitor across the versio
   const directory = await mkdtemp(join(tmpdir(), 'wanwei-update-settings-'))
   const ctx = new Context()
   const bridge = window as Window & { __ZJUGIS_NATIVE_INVOKE__?: (command: string) => Promise<unknown> }
-  const state = { configured: true, automatic: true, currentVersion: '2.1.1', phase: 'idle', message: '', received: 10, total: 100 }
+  const state = { configured: true, automatic: true, currentVersion: '2.1.1', phase: 'idle', message: '', received: 10, total: 100,
+    completed: null as null | { version: string; sha256: string; notes: string; dismissed: boolean } }
   const native = vi.fn(async (command: string) => {
     if (command === 'desktop_update_check') state.phase = 'downloading'
+    if (command === 'desktop_update_dismiss') state.completed = null
     return { ...state }
   })
   bridge.__ZJUGIS_NATIVE_INVOKE__ = native
@@ -72,6 +74,13 @@ it('loads the real client registrations and shares one monitor across the versio
     expect(screen.getByRole('dialog').textContent).toContain('10%')
     settings.unmount()
     expect(screen.getByRole('dialog')).toBeTruthy()
+    updates.showProgress(false)
+    state.completed = { version: '2.1.1', sha256: 'c'.repeat(64), notes: '同版本修复文件引用', dismissed: false }
+    await act(async () => { await updates.setAutomatic(true) })
+    const completed = await screen.findByRole('dialog', { name: zh.updatesCompletedTitle })
+    expect(completed.textContent).toContain('同版本修复文件引用')
+    fireEvent.click(screen.getByRole('button', { name: zh.updatesCompletedClose }))
+    await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
   } finally {
     cleanup()
     await ctx.fiber.dispose()

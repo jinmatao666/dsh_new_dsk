@@ -1,4 +1,4 @@
 [[permission]]
 identifier = "allow-desktop-update"
 description = "Allow the main loopback window to check and configure signed updates."
-commands.allow = ["desktop_update_status", "desktop_update_check", "desktop_update_automatic"]
+commands.allow = ["desktop_update_status", "desktop_update_check", "desktop_update_automatic", "desktop_update_dismiss"]

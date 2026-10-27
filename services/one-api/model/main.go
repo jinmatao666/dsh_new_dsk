@@ -209,7 +209,7 @@ func InitDB() {
 
 func migrateDB() error {
 	var err error
-	if err = DB.AutoMigrate(&DesktopUpdate{}, &DesktopUpdateChannel{}); err != nil {
+	if err = migrateDesktopUpdates(DB); err != nil {
 		return err
 	}
 	if err = DB.AutoMigrate(&Channel{}); err != nil {

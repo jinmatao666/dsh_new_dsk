@@ -1,3 +1,9 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`shows a dedicated version page, persists its switch and delegates checking to native 1`] = `"版本查看当前版本，管理桌面端更新。万维 Buddy2.1.1当前版本桌面端自动检查更新启动时及每六小时检查新版本。检查新版本获取管理员发布的最新桌面版本。检查更新"`;
+exports[`shows a dedicated version page, persists its switch and delegates checking to native 1`] = `"版本查看当前版本，管理桌面端更新。万维 Buddy2.1.1当前版本桌面端自动检查更新启动时及每六小时检查可用更新。检查可用更新获取管理员发布的桌面更新，包括同版本修复。检查更新"`;
+
+exports[`shows installed release notes above the app and persists dismissal via close 1`] = `
+"×更新已完成当前版本 2.1.1本次更新内容修复同版本更新。
+优化文件引用。
+<script>不执行</script>开始使用"
+`;

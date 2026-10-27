@@ -1,4 +1,4 @@
-/** Plugin-owned native updater state shared by version settings and the progress overlay. */
+/** Native updater state shared by version settings, progress and completion notes. */
 interface Snapshot {
   configured: boolean
   automatic: boolean
@@ -7,6 +7,7 @@ interface Snapshot {
   message: string
   received: number
   total: number
+  completed?: { version: string; sha256: string; notes: string; dismissed: boolean } | null
 }
 
 /** Immutable update presentation; executable bytes remain in the native shell. */
@@ -26,6 +27,15 @@ function snapshot(value: unknown): Snapshot {
     || !('received' in value) || typeof value.received !== 'number' || !Number.isFinite(value.received) || value.received < 0
     || !('total' in value) || typeof value.total !== 'number' || !Number.isFinite(value.total) || value.total < 0) {
     throw new Error('Invalid native update status')
+  }
+  if ('completed' in value && value.completed !== null && value.completed !== undefined) {
+    const completed = value.completed
+    if (typeof completed !== 'object' || !('version' in completed) || typeof completed.version !== 'string'
+      || !('sha256' in completed) || typeof completed.sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(completed.sha256)
+      || !('notes' in completed) || typeof completed.notes !== 'string'
+      || !('dismissed' in completed) || typeof completed.dismissed !== 'boolean') {
+      throw new Error('Invalid completed update status')
+    }
   }
   return value as Snapshot
 }
@@ -77,6 +87,12 @@ export class DesktopUpdateController {
    * @param enabled - Whether startup and periodic checks are enabled.
    */
   setAutomatic = async (enabled: boolean): Promise<void> => { await this.perform('desktop_update_automatic', { enabled }) }
+
+  /** Persist dismissal of the installed package's release notes. */
+  dismissCompleted = async (): Promise<void> => {
+    const completed = this.view.snapshot?.completed
+    if (completed) await this.perform('desktop_update_dismiss', { sha256: completed.sha256 })
+  }
 
   private publish(next: DesktopUpdateView): void {
     if (!this.alive) return
