@@ -86,3 +86,5 @@ kind: "package-reference"
 无。
 
 </details>
+
+目录访问判断通过注入的 `wanweiNetwork.catalogAccess` 服务方法跨插件传递。客户端入口只提供网络类型；消费者不导入认证插件的运行时辅助函数。

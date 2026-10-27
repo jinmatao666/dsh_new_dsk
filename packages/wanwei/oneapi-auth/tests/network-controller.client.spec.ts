@@ -11,6 +11,8 @@ it('synchronizes the catalog policy and retains it when a malformed refresh is r
   const controller = new NetworkController({ rpc: { call } } as unknown as ConnectionHandle)
   await controller.refresh()
   expect(controller.getSnapshot().internetCatalogPolicy).toBe('hide')
+  expect(controller.catalogAccess(controller.getSnapshot(), true)).toBe('hide')
+  expect(controller.catalogAccess(controller.getSnapshot(), false)).toBe('available')
   internetCatalogPolicy = 'disable'
   await controller.refresh()
   expect(controller.getSnapshot().internetCatalogPolicy).toBe('disable')
@@ -28,9 +30,11 @@ it('publishes direct connectivity for entry policy and rejects malformed probe r
   directInternet = true
   await controller.refresh()
   expect(controller.getSnapshot().directInternet).toBe(true)
+  expect(controller.catalogAccess(controller.getSnapshot(), true)).toBe('available')
   directInternet = 'true'
   await expect(controller.refresh()).rejects.toThrow('网络检测状态无效')
   expect(controller.getSnapshot().directInternet).toBe(true)
+  expect(controller.catalogAccess(controller.getSnapshot(), true)).toBe('available')
 })
 it('publishes administrator permissions on refresh and retains a denial across network failures', async () => {
   let browserAssistant = false

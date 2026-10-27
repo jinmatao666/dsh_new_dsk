@@ -1,6 +1,6 @@
 import { productText } from './locales/product.ts'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { internetCatalogAccess, type NetworkState } from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
+import type { NetworkController, NetworkState } from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import { projectPublishedExperts } from './expert-catalog.ts'
 import type { ExpertDetailSection, RemoteExpert } from './expert-catalog.ts'
@@ -83,11 +83,13 @@ type ExpertMarketDetail = { id: string; name: string; role: string; summary: str
  * @returns Catalog and mounted expert workbenches.
  */
 export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace, network }: {
-  network?: HostObservable<NetworkState>
+  network?: HostObservable<NetworkState> & Pick<NetworkController, 'catalogAccess'>
   loadExperts?: () => Promise<readonly RemoteExpert[]>
   launchExpert?: (key: string) => Promise<{ url: string; ticket: string }>
   prepareExpertWorkspace?: () => Promise<void>
 } = {}) {
+  const internetCatalogAccess = (state: NetworkState, requiresInternet: boolean) =>
+    network?.catalogAccess(state, requiresInternet) ?? 'available'
   const networkState = useSyncExternalStore(listener => network ? network.subscribe(listener) : () => {},
     () => network ? network.getSnapshot() : defaultNetwork)
   const [category, setCategory] = useState('全部')

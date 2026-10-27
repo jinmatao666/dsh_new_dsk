@@ -1,7 +1,7 @@
 import { productText } from './locales/product.ts'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
-import { internetCatalogAccess, type NetworkState } from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
+import type { NetworkController, NetworkState } from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connection/client'
@@ -338,7 +338,7 @@ const DownloadIcon = CatalogDownloadIcon
 
 /** Visual identity for each marketplace capability in the sidebar and cards. */
 
-type NetworkInjected = { controller: PanelController; services: MarketplaceServices; hooks: { network: HostObservable<NetworkState> } }
+type NetworkInjected = { catalogAccess: NetworkController['catalogAccess']; controller: PanelController; services: MarketplaceServices; hooks: { network: HostObservable<NetworkState> } }
 type OverlayProps = PropsRuntime<'shell.overlay'> & InjectFace<NetworkInjected> & {
   marketplaceUrl: string
   chooseDirectory: () => Promise<string | null>
@@ -452,7 +452,7 @@ function SkillCategorySelect({
     onChange={onChange} className="dsh-skill-add-select-trigger" />
 }
 
-function SkillMarketplace({ controller, services, chooseDirectory, useNetwork }: OverlayProps) {
+function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, catalogAccess }: OverlayProps) {
   const network = useNetwork(value => value)
   const { skillhubRequest, loadRemoteSkills, startSkillConversation, loadRemoteCategories,
     loadRemoteSkillBundle, recordRemoteSkillInstall, submitPersonalSkill, loadPersonalSkills } = services
@@ -622,23 +622,23 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork }:
     }) ?? null
     return buildMarketplaceCatalog(discoveredCustomSkills, published)
   }, [discoveredCustomSkills, remoteSkills])
-  const skillAccess = (skill: Skill) => internetCatalogAccess(network, skill.requiresInternet
+  const skillAccess = (skill: Skill) => catalogAccess(network, skill.requiresInternet
     ?? unfilteredSkills.find(item => item.marketplacePublished && skillSlug(item) === skillSlug(skill))?.requiresInternet ?? false)
-  const allSkills = useMemo(() => unfilteredSkills.filter(skill => internetCatalogAccess(network, skill.requiresInternet
+  const allSkills = useMemo(() => unfilteredSkills.filter(skill => catalogAccess(network, skill.requiresInternet
     ?? unfilteredSkills.find(item => item.marketplacePublished && skillSlug(item) === skillSlug(skill))?.requiresInternet ?? false) !== 'hide'),
-  [unfilteredSkills, network])
+  [unfilteredSkills, network, catalogAccess])
   const skillAccessProps = (skill: Skill) => ({
     role: 'button', tabIndex: skillAccess(skill) === 'available' ? 0 : -1,
     'aria-disabled': skillAccess(skill) !== 'available',
     title: skillAccess(skill) !== 'available' ? productText('当前网络环境不可达，请检查您的网络') : undefined,
   })
   useEffect(() => {
-    if (selectedSkill !== null && internetCatalogAccess(network, selectedSkill.requiresInternet
+    if (selectedSkill !== null && catalogAccess(network, selectedSkill.requiresInternet
       ?? unfilteredSkills.find(item => item.marketplacePublished && skillSlug(item) === skillSlug(selectedSkill))?.requiresInternet ?? false) !== 'available') {
       setSelectedSkill(null)
       setView('list')
     }
-  }, [network, selectedSkill, unfilteredSkills])
+  }, [network, selectedSkill, unfilteredSkills, catalogAccess])
   const uploadedSkills = useMemo<Skill[]>(() => personalSkills.flatMap((remote): Skill[] => {
     const slug = typeof remote.name === 'string' ? remote.name : ''
     const visibility = remote.visibility === 'public' ? 'public' : remote.visibility === 'private' ? 'private' : undefined
@@ -1465,13 +1465,13 @@ export function apply(ctx: Context): void {
   )
   ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register(
-      { name: 'sidebar.footer.action', id: 'skill-marketplace', order: 40, inject: () => ({ controller, services, hooks: networkHooks }) },
+      { name: 'sidebar.footer.action', id: 'skill-marketplace', order: 40, inject: () => ({ controller, services, catalogAccess: network.catalogAccess, hooks: networkHooks }) },
       SkillMarketplaceAction,
     ),
   )
   ctx.slots.inject('shell.overlay', () =>
     ctx.slots.register(
-      { name: 'shell.overlay', id: 'skill-marketplace-skills', order: 100, inject: () => ({ marketplaceUrl, controller, services, chooseDirectory, hooks: networkHooks }) },
+      { name: 'shell.overlay', id: 'skill-marketplace-skills', order: 100, inject: () => ({ marketplaceUrl, controller, services, chooseDirectory, catalogAccess: network.catalogAccess, hooks: networkHooks }) },
       SkillMarketplace,
     ),
   )

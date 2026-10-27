@@ -86,3 +86,5 @@ No direct changes to model context or cache reuse.
 None.
 
 </details>
+
+Catalog access decisions cross plugin boundaries through the injected `wanweiNetwork.catalogAccess` service method. Client entrypoints expose network types only; consumers do not import the authentication plugin's runtime helpers.

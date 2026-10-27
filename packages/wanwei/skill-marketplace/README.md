@@ -132,3 +132,5 @@ No cache changes occur before sending. After send, normal prompt changes may aff
 None.
 
 </details>
+
+Catalog access decisions cross plugin boundaries through the injected `wanweiNetwork.catalogAccess` service method. Client entrypoints expose network types only; consumers do not import the authentication plugin's runtime helpers.

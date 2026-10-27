@@ -25,3 +25,5 @@ Manual moves assign explicit ranks to the full active list, including entries ou
 ## Verification
 
 Database tests cover legacy-column migration, repeat migration after choosing false, explicit zero and negative ranks, empty ranks, complete-list moves, invalid targets, category joins and PostgreSQL DISTINCT ordering. Client and administrator tests cover default ordering, metadata projection, arrow and drag requests, and nullable form fields. TypeScript checks cover both host and client programs.
+
+Catalog policy remains owned by the authentication network service. Client consumers invoke its injected `catalogAccess` method rather than importing a runtime helper across feature plugins. The browser bundler continues rejecting undeclared cross-plugin value imports.

@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ExpertMarket } from '../src/client/ExpertMarket.tsx'
 import type { NetworkState } from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
+import { internetCatalogAccess } from '../../oneapi-auth/src/network-contract.ts'
 
 afterEach(cleanup)
 it.each(['hide', 'disable'] as const)('uses %s for internet experts and restores them after a successful probe', async (internetCatalogPolicy) => {
@@ -14,7 +15,7 @@ it.each(['hide', 'disable'] as const)('uses %s for internet experts and restores
   const state: NetworkState = { mode: 'intranet', internalOrigins: [], directInternet: false, internetCatalogPolicy }
   const subscribe = () => () => {}
   const view = render(<ExpertMarket loadExperts={loadExperts} launchExpert={launchExpert}
-    network={{ subscribe, getSnapshot: () => state }} />)
+    network={{ subscribe, catalogAccess: internetCatalogAccess, getSnapshot: () => state }} />)
   expect(await screen.findByRole('button', { name: '内网专家' })).toBeTruthy()
   if (internetCatalogPolicy === 'hide') expect(screen.queryByRole('button', { name: '联网专家' })).toBeNull()
   else {
@@ -29,6 +30,6 @@ it.each(['hide', 'disable'] as const)('uses %s for internet experts and restores
     .map(button => ({ name: button.textContent, disabled: button.disabled, hint: button.title }))).toMatchSnapshot()
   const onlineState = { ...state, directInternet: true }
   view.rerender(<ExpertMarket loadExperts={loadExperts} launchExpert={launchExpert}
-    network={{ subscribe, getSnapshot: () => onlineState }} />)
-  await waitFor(() => expect((screen.getByRole('button', { name: '联网专家' }) as HTMLButtonElement).disabled).toBe(false))
+    network={{ subscribe, catalogAccess: internetCatalogAccess, getSnapshot: () => onlineState }} />)
+  await waitFor(() => { expect(screen.getByRole('button', { name: '联网专家' })).toHaveProperty('disabled', false) })
 })

@@ -1,5 +1,5 @@
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-import type { NetworkState } from '../network-contract.ts'
+import { internetCatalogAccess, type NetworkState } from '../network-contract.ts'
 import { resolveDeploymentFeatures, resolveDeploymentPlugins, resolveInternetCatalogPolicy } from '../deployment.ts'
 import type { DeploymentFeatures } from '../deployment.ts'
 import type { DeploymentPlugins } from '../deployment.ts'
@@ -8,6 +8,13 @@ import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 /** One observable mirror of the Host's durable deployment policy. */
 export class NetworkController {
   private snapshot: NetworkState = { mode: 'internet', internalOrigins: [] }
+  /** Resolve catalog access for the network snapshot observed by a consumer.
+   * @param state - Committed state from this service's observable.
+   * @param requiresInternet - Published item's internet requirement.
+   * @returns Available, hidden, or disabled presentation.
+   */
+  catalogAccess = (state: NetworkState, requiresInternet: boolean): 'available' | 'hide' | 'disable' =>
+    internetCatalogAccess(state, requiresInternet)
   private readonly listeners = new Set<() => void>()
   private tail: Promise<unknown> = Promise.resolve()
   private features: DeploymentFeatures = resolveDeploymentFeatures(undefined)
