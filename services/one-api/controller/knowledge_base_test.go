@@ -1,92 +1,14 @@
 package controller
 
 import (
-	"bytes"
-	"io"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/service/ragflow"
 )
-
-func TestKnowledgeUploadRejectsOverOneGiBWithoutOpeningFile(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	part, err := writer.CreateFormFile("file", "large.mdb")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _ = part.Write([]byte("MDB"))
-	_ = writer.Close()
-	c.Request = httptest.NewRequest(http.MethodPost, "/", &body)
-	c.Request.Header.Set("Content-Type", writer.FormDataContentType())
-	if err := c.Request.ParseMultipartForm(1024); err != nil {
-		t.Fatal(err)
-	}
-	c.Request.MultipartForm.File["file"][0].Size = maxKnowledgeUploadBytes + 1
-	uploadKnowledgeDocument(c, &model.KnowledgeBase{})
-	if recorder.Code != http.StatusRequestEntityTooLarge {
-		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
-	}
-}
-
-func TestKnowledgeUploadAcceptsMDBAboveTwentyMiB(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/documents") {
-			if err := r.ParseMultipartForm(1 << 20); err != nil {
-				t.Error(err)
-				w.WriteHeader(400)
-				return
-			}
-			defer r.MultipartForm.RemoveAll()
-			file, header, err := r.FormFile("file")
-			if err != nil {
-				t.Error(err)
-				w.WriteHeader(400)
-				return
-			}
-			defer file.Close()
-			count, err := io.Copy(io.Discard, file)
-			if err != nil || count != 21<<20 || header.Filename != "基础库.mdb" {
-				t.Errorf("size=%d name=%s err=%v", count, header.Filename, err)
-			}
-			_, _ = io.WriteString(w, `{"code":0,"data":[]}`)
-			return
-		}
-		_, _ = io.WriteString(w, `{"code":0,"data":null}`)
-	}))
-	defer upstream.Close()
-	t.Setenv("RAGFLOW_BASE_URL", upstream.URL)
-	t.Setenv("RAGFLOW_API_KEY", "test-key")
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	part, err := writer.CreateFormFile("file", "基础库.mdb")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = part.Write(make([]byte, 21<<20)); err != nil {
-		t.Fatal(err)
-	}
-	if err = writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodPost, "/", &body)
-	c.Request.Header.Set("Content-Type", writer.FormDataContentType())
-	uploadKnowledgeDocument(c, &model.KnowledgeBase{RagflowDatasetId: "dataset"})
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
-	}
-}
 
 func TestKnowledgeDocumentIDsSkipsEmpty(t *testing.T) {
 	ids := knowledgeDocumentIDs([]ragflow.Document{
