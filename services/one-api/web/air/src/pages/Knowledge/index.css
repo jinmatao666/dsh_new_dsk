@@ -1,9 +1,18 @@
 .knowledge-admin { position: relative; color: #24344d; }
+/* Stick title + category chrome to the content scrollport; bleed into content padding. */
+.knowledge-sticky {
+  position: sticky;
+  top: -24px;
+  z-index: 25;
+  margin: -24px calc(-1 * clamp(20px, 4vw, 54px)) 0;
+  padding: 16px clamp(20px, 4vw, 54px) 0;
+  background: #f4f7fb;
+}
 .knowledge-page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .knowledge-page-title { min-width: 0; }
 .knowledge-page-head h1 { margin: 0; color: #1f2d3d; font-size: 22px; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; }
 .knowledge-page-title p { margin: 6px 0 0; color: #8b9bb0; font-size: 13px; line-height: 1.4; }
-.knowledge-chrome { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 20px; margin-bottom: 4px; border-bottom: 1px solid #e6edf5; }
+.knowledge-chrome { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 20px; margin-bottom: 4px; border-bottom: 1px solid #e6edf5; background: #f4f7fb; }
 .knowledge-chrome-actions { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 8px; padding-bottom: 8px; }
 .knowledge-ghost, .knowledge-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px; white-space: nowrap; transition: background .15s ease, border-color .15s ease, color .15s ease; }
 .knowledge-ghost { border: 1px solid #dbe3ee; color: #4d627c; background: #fff; }
@@ -24,13 +33,51 @@
 .knowledge-switch input:checked + i { background: #2f6fe0; }
 .knowledge-switch input:checked + i::after { transform: translateX(18px); }
 .knowledge-switch input:focus-visible + i { outline: 2px solid #2f6fe0; outline-offset: 2px; }
+.knowledge-modal .knowledge-switch input { width: 40px; height: 22px; padding: 0; border: 0; border-radius: 0; }
 .knowledge-alert { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; padding: 10px 12px; border-radius: 8px; color: #9f1239; background: #fff1f2; }
 .knowledge-alert button, .knowledge-modal header button { border: 0; background: transparent; color: inherit; cursor: pointer; }
-.knowledge-tabs { display: flex; flex: 1; min-width: 0; gap: 22px; overflow: auto; border-bottom: 0; }
-.knowledge-tabs button { display: inline-flex; align-items: center; gap: 8px; padding: 12px 2px 10px; border: 0; border-bottom: 2px solid transparent; color: #7d8da3; background: transparent; cursor: pointer; font-size: 15px; white-space: nowrap; }
-.knowledge-tabs button.active { border-color: #2f6fe0; color: #2f6fe0; font-weight: 650; }
-.knowledge-tabs span { min-width: 18px; padding: 0 6px; border-radius: 999px; color: #2f6fe0; background: #e8f1ff; font-size: 12px; line-height: 18px; text-align: center; }
-.knowledge-tabs button.active span { color: #fff; background: #2f6fe0; }
+.knowledge-tabs { display: flex; flex: 1; min-width: 0; gap: 18px; overflow-x: auto; overflow-y: hidden; border-bottom: 0; scrollbar-gutter: stable; }
+.knowledge-tab { position: relative; display: inline-flex; align-items: center; gap: 2px; flex: none; border-bottom: 2px solid transparent; }
+.knowledge-tab > button[role='tab'] { display: inline-flex; align-items: center; gap: 8px; padding: 12px 2px 10px; border: 0; color: #7d8da3; background: transparent; cursor: pointer; font-size: 15px; white-space: nowrap; }
+.knowledge-tab.active { border-color: #2f6fe0; }
+.knowledge-tab.active > button[role='tab'] { color: #2f6fe0; font-weight: 650; }
+.knowledge-tab > button[role='tab'] span { min-width: 18px; padding: 0 6px; border-radius: 999px; color: #2f6fe0; background: #e8f1ff; font-size: 12px; line-height: 18px; text-align: center; }
+.knowledge-tab.active > button[role='tab'] span { color: #fff; background: #2f6fe0; }
+/* Reserve a slot after the count so hover never covers the badge. */
+.knowledge-tab-menu {
+  display: inline-grid; place-items: center; flex: none;
+  width: 22px; height: 22px;
+  opacity: 0; pointer-events: none;
+  transition: opacity .15s ease;
+}
+.knowledge-tab-more {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0;
+  border: 1px solid transparent; border-radius: 8px; color: #8b9bb0; background: transparent; cursor: pointer;
+}
+.knowledge-tab-more:hover { border-color: #dbe3ee; color: #2f6fe0; background: #f5f8fd; }
+.knowledge-tab:hover .knowledge-tab-menu,
+.knowledge-tab.is-menu-open .knowledge-tab-menu {
+  opacity: 1; pointer-events: auto;
+}
+.knowledge-tab-menu-dismiss { z-index: 39; }
+.knowledge-tab-menu-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: auto;
+  width: max-content;
+  min-width: 7.5rem;
+  max-width: 10rem;
+  z-index: 40;
+}
+.knowledge-tab-menu-panel button {
+  width: auto;
+  min-width: 100%;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .knowledge-tab-menu { transition: none; }
+}
 .knowledge-toolbar { display: flex; align-items: center; gap: 12px; margin: 16px 0; padding: 12px; border: 1px solid rgba(255, 255, 255, .8); border-radius: 14px; background: rgba(255, 255, 255, .72); box-shadow: 0 10px 28px rgba(55, 84, 130, .05); }
 .knowledge-search { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 180px; height: 36px; padding: 0 12px; border: 1px solid #e3ebf5; border-radius: 10px; color: #93a3b8; background: #fff; }
 .knowledge-search:focus-within { border-color: #94b6f2; box-shadow: 0 0 0 3px rgba(47, 111, 224, .12); }

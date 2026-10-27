@@ -625,6 +625,11 @@ export function apply(ctx: Context, config: Config): void {
     methods: ['POST'],
     fetch: request => knowledgeBases.streamChat(request),
   })
+  const removeKnowledgeFile = connection.fetch.register({
+    path: '/api/desktop-knowledge-file',
+    methods: ['GET'],
+    fetch: request => knowledgeBases.streamFile(request),
+  })
   const remove = connection.rpc.handle('/desktop-auth', async (endpoint, payload, signal) => {
     const serviceSignal = () => AbortSignal.any([signal, AbortSignal.timeout(config.serviceTimeoutMs ?? 15000)])
     if (endpoint === 'network-get' || endpoint === 'deployment-get') {
@@ -726,6 +731,8 @@ export function apply(ctx: Context, config: Config): void {
     return internal(`未知认证操作：${endpoint}`)
   })
   ctx.effect(() => async () => {
-    await Promise.all([remove(), removeKnowledgeBases(), removeKnowledgeChat(), knowledgeBases.dispose()])
+    await Promise.all([
+      remove(), removeKnowledgeBases(), removeKnowledgeChat(), removeKnowledgeFile(), knowledgeBases.dispose(),
+    ])
   }, 'ui-oneapi-auth: loopback RPC')
 }

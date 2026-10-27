@@ -31,7 +31,7 @@ type PageGeom = {
   pageNumber: number
   width: number
   height: number
-  dataUrl: string
+  imageUrl: string
   pageWidth: number
   pageHeight: number
   scale: number
@@ -42,7 +42,7 @@ type PageLayer = {
   pageNumber: number
   width: number
   height: number
-  dataUrl: string
+  imageUrl: string
   highlights: HighlightBox[]
 }
 
@@ -64,6 +64,7 @@ export function PdfLocateViewer({
   const targetPage = useRef<number>()
   const locateRef = useRef(locate)
   const geometryRef = useRef<PageGeom[]>([])
+  const imageUrls = useRef<string[]>([])
   locateRef.current = locate
 
   useEffect(() => {
@@ -73,13 +74,19 @@ export function PdfLocateViewer({
     setPages([])
     geometryRef.current = []
     targetPage.current = undefined
+    for (const url of imageUrls.current) URL.revokeObjectURL(url)
+    imageUrls.current = []
     void (async () => {
       try {
         ensureMainThreadPdfWorker()
+        // Full in-memory bytes: skip streaming/fetch helpers that slow open.
+        // Copy so a cached Uint8Array is not detached when pdf.js transfers the buffer.
         const task = pdfjs.getDocument({
           data: bytes.slice(),
           useWorkerFetch: false,
           isEvalSupported: false,
+          disableAutoFetch: true,
+          disableStream: true,
         })
         const pdf = await task.promise
         const byNumber = new Map<number, PageGeom>()
@@ -98,12 +105,13 @@ export function PdfLocateViewer({
           }
           const geom = await renderPage(pdf, pageNumber, locateRef.current)
           if (geom === undefined) continue
+          imageUrls.current.push(geom.imageUrl)
           byNumber.set(pageNumber, geom)
           publish()
           if (byNumber.size === 1) setLoading(false)
           // Yield so the first pages paint before the rest finish encoding.
           await new Promise<void>((resolve) => {
-            requestAnimationFrame(() => resolve())
+            window.setTimeout(() => resolve(), 0)
           })
         }
         await pdf.destroy()
@@ -115,7 +123,11 @@ export function PdfLocateViewer({
         }
       }
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      for (const url of imageUrls.current) URL.revokeObjectURL(url)
+      imageUrls.current = []
+    }
   }, [bytes])
 
   useEffect(() => {
@@ -140,7 +152,7 @@ export function PdfLocateViewer({
     {pages.map(page =>
       <div className="dsh-knowledge-pdf-page" data-page={page.pageNumber} key={page.pageNumber}
         style={{ width: page.width, height: page.height }}>
-        <img src={page.dataUrl} alt={`${productText('PDF')} ${page.pageNumber}`}
+        <img src={page.imageUrl} alt={`${productText('PDF')} ${page.pageNumber}`}
           width={page.width} height={page.height}
           style={{ width: page.width, height: page.height }} />
         {page.highlights.map((box, index) =>
@@ -173,7 +185,8 @@ async function renderPage(
 ): Promise<PageGeom | undefined> {
   const page = await pdf.getPage(pageNumber)
   const viewport = page.getViewport({ scale: 1 })
-  const scale = Math.min(1.15, 860 / Math.max(viewport.width, 1))
+  // Keep first paint light; 780 CSS px is enough for the desktop viewer width.
+  const scale = Math.min(1, 780 / Math.max(viewport.width, 1))
   const draw = page.getViewport({ scale })
   const canvas = document.createElement('canvas')
   canvas.width = Math.ceil(draw.width)
@@ -182,21 +195,40 @@ async function renderPage(
   if (context === null) return undefined
   context.fillStyle = '#fff'
   context.fillRect(0, 0, canvas.width, canvas.height)
-  await page.render({ canvasContext: context, viewport: draw }).promise
+  const renderTask = page.render({
+    canvasContext: context,
+    viewport: draw,
+    intent: 'display',
+    annotationMode: pdfjs.AnnotationMode?.DISABLE ?? 0,
+  })
+  await renderTask.promise
   const pieces = needsTextLayer(locate, pageNumber)
     ? await textPieces(page, viewport)
     : []
+  const imageUrl = await canvasToObjectUrl(canvas)
   return {
     pageNumber,
     width: canvas.width,
     height: canvas.height,
-    // JPEG is much cheaper than PNG for full-page bitmaps.
-    dataUrl: canvas.toDataURL('image/jpeg', 0.82),
+    imageUrl,
     pageWidth: viewport.width,
     pageHeight: viewport.height,
     scale,
     pieces,
   }
+}
+
+/** Encode the page off the critical path of building a huge base64 data URL.
+ * @param canvas - Rendered page canvas.
+ * @returns Object URL for an image/jpeg blob.
+ */
+async function canvasToObjectUrl(canvas: HTMLCanvasElement): Promise<string> {
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, 'image/jpeg', 0.72)
+  })
+  if (blob !== null) return URL.createObjectURL(blob)
+  // Named: some test canvases omit toBlob; fall back to a short data URL.
+  return canvas.toDataURL('image/jpeg', 0.72)
 }
 
 /** Text search is only needed when a page has a quote and no chunk boxes.
@@ -216,7 +248,7 @@ function paintLocate(geometry: PageGeom[], locate: PdfLocateRequest | undefined)
     pageNumber: page.pageNumber,
     width: page.width,
     height: page.height,
-    dataUrl: page.dataUrl,
+    imageUrl: page.imageUrl,
     highlights: [],
   }))
   if (locate === undefined || geometry.length === 0) return { pages }

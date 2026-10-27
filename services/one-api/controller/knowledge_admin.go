@@ -111,6 +111,88 @@ func CreateManagedKnowledgeCategory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
 }
 
+func managedKnowledgeCategoryID(c *gin.Context) (int, bool) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库分类编号无效"})
+		return 0, false
+	}
+	return id, true
+}
+
+// UpdateManagedKnowledgeCategory renames or retunes an existing workbench category tab.
+func UpdateManagedKnowledgeCategory(c *gin.Context) {
+	id, ok := managedKnowledgeCategoryID(c)
+	if !ok {
+		return
+	}
+	var input createKnowledgeCategoryInput
+	if c.ShouldBindJSON(&input) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库分类参数无效"})
+		return
+	}
+	row := model.KnowledgeCategory{Id: id, Name: input.Name, Type: input.Type, RequireAuth: input.RequireAuth}
+	if err := model.UpdateKnowledgeCategory(&row); err != nil {
+		if errors.Is(err, model.ErrKnowledgeCategoryDuplicate) || errors.Is(err, model.ErrKnowledgeCategoryInvalid) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "知识库分类不存在"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存知识库分类失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
+}
+
+// DeleteManagedKnowledgeCategory removes a workbench category and every library filed under it.
+func DeleteManagedKnowledgeCategory(c *gin.Context) {
+	id, ok := managedKnowledgeCategoryID(c)
+	if !ok {
+		return
+	}
+	libraries, err := model.ListKnowledgeBasesByCategory(id)
+	if err != nil {
+		if errors.Is(err, model.ErrKnowledgeCategoryInvalid) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取分类知识库失败"})
+		return
+	}
+	if len(libraries) > 0 {
+		client, ok := knowledgeClient(c)
+		if !ok {
+			return
+		}
+		for _, library := range libraries {
+			if err := client.DeleteDataset(c.Request.Context(), library.RagflowDatasetId); err != nil && !remoteKnowledgeMissing(err) {
+				c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
+				return
+			}
+			if err := model.DeleteKnowledgeBaseRecords(library.Id); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "删除分类下知识库失败"})
+				return
+			}
+		}
+	}
+	if err := model.DeleteKnowledgeCategory(id); err != nil {
+		if errors.Is(err, model.ErrKnowledgeCategoryInvalid) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "知识库分类不存在"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "删除知识库分类失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
 // CreateManagedKnowledgeBase allows the workbench to create a common library.
 func CreateManagedKnowledgeBase(c *gin.Context) {
 	c.Set("knowledge_admin", true)
@@ -396,6 +478,24 @@ func ListManagedKnowledgeChunks(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": chunks})
+}
+
+// GetManagedKnowledgeChunkViewer returns the RAGFlow UI URL for one file's slices.
+func GetManagedKnowledgeChunkViewer(c *gin.Context) {
+	row, ok := managedKnowledgeBase(c)
+	if !ok {
+		return
+	}
+	documentId, ok := managedDocumentID(c)
+	if !ok {
+		return
+	}
+	viewerURL, err := ragflow.ChunkViewerURL(row.RagflowDatasetId, documentId)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"url": viewerURL}})
 }
 
 type knowledgeSummaryInput struct {

@@ -6,11 +6,23 @@ import {
   type RetrievedKnowledgeChunk,
 } from './knowledge-retrieval.ts'
 
+type CachedKnowledgeFile = {
+  body: ArrayBuffer
+  contentType: string
+  at: number
+}
+
+const FILE_CACHE_TTL_MS = 30 * 60 * 1000
+const FILE_CACHE_MAX_BYTES = 64 * 1024 * 1024
+
 /** Host-side proxy for authenticated knowledge-base operations. */
 export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
   private readonly uploads: KnowledgeUpload
   /** Session id → libraries the desktop composer selected for model-turn retrieval. */
   private readonly retrievalScopes = new Map<string, readonly number[]>()
+  /** Recent original-file downloads keyed by library/document id. */
+  private readonly fileCache = new Map<string, CachedKnowledgeFile>()
+  private fileCacheBytes = 0
 
   constructor(private readonly baseURL: string, private readonly resolveToken: () => Promise<string | undefined>,
     uploadIdleTimeoutMs: number) {
@@ -112,7 +124,10 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
     if (operation === 'download') {
       const id = integer(value.id, '知识库编号')
       const documentId = documentIdOf(value.documentId)
-      return this.downloadFile(`/api/knowledge-bases/${id}/documents/${encodeURIComponent(documentId)}/file`, signal)
+      return this.downloadFileRpc(
+        `/api/knowledge-bases/${id}/documents/${encodeURIComponent(documentId)}/file`,
+        signal,
+      )
     }
     if (operation === 'delete') {
       const id = integer(value.id, '知识库编号')
@@ -137,11 +152,18 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
       const id = integer(value.id, '知识库编号')
       return this.request(`/api/knowledge-bases/${id}/chat/messages`, {}, signal)
     }
+    if (operation === 'clear-messages') {
+      const id = integer(value.id, '知识库编号')
+      return this.request(`/api/knowledge-bases/${id}/chat/messages`, { method: 'DELETE' }, signal)
+    }
     if (operation === 'chat-completions' || operation === 'complete') {
       const id = integer(value.id, '知识库编号')
       if (typeof value.question !== 'string') throw new Error('问题无效')
       const body: Record<string, string> = { question: value.question }
       if (typeof value.model === 'string' && value.model.trim() !== '') body.model = value.model.trim()
+      if (typeof value.documentId === 'string' && value.documentId.trim() !== '') {
+        body.document_id = value.documentId.trim()
+      }
       return this.request(`/api/knowledge-bases/${id}/chat/completions`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
       }, signal)
@@ -183,6 +205,88 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
     })
   }
 
+  /** Proxy an original document download as raw bytes (avoids JSON number-array RPC).
+   * @param request - Authenticated GET with `id` and `documentId` query params.
+   * @returns Upstream file bytes, or a JSON error response.
+   */
+  async streamFile(request: Request): Promise<Response> {
+    const url = new URL(request.url)
+    let id: number
+    let documentId: string
+    try {
+      id = integer(Number(url.searchParams.get('id')), '知识库编号')
+      documentId = documentIdOf(url.searchParams.get('documentId'))
+    } catch (error) {
+      return Response.json({ success: false, message: error instanceof Error ? error.message : '参数无效' }, { status: 400 })
+    }
+    const cacheKey = `${id}:${documentId}`
+    const cached = this.fileCache.get(cacheKey)
+    if (cached !== undefined && Date.now() - cached.at <= FILE_CACHE_TTL_MS) {
+      return new Response(cached.body.slice(0), {
+        status: 200,
+        headers: {
+          'content-type': cached.contentType,
+          'content-length': String(cached.body.byteLength),
+          'cache-control': 'no-store',
+        },
+      })
+    }
+    const token = await this.resolveToken()
+    if (token === undefined || token === '') {
+      return Response.json({ success: false, message: '请先登录后再使用知识库' }, { status: 401 })
+    }
+    const upstream = await fetch(
+      `${this.baseURL}/api/knowledge-bases/${id}/documents/${encodeURIComponent(documentId)}/file`,
+      {
+        headers: { authorization: `Bearer ${token}` },
+        signal: request.signal,
+        redirect: 'error',
+      },
+    )
+    if (!upstream.ok) {
+      const text = await upstream.text()
+      let message = '知识库文件下载失败'
+      try {
+        const parsed: unknown = JSON.parse(text)
+        if (typeof parsed === 'object' && parsed !== null) {
+          const next = (parsed as { message?: unknown }).message
+          if (typeof next === 'string' && next !== '') message = next
+        }
+      } catch {
+        // Named: upstream error bodies may be empty or non-JSON.
+      }
+      return Response.json({ success: false, message }, { status: upstream.status })
+    }
+    const body = await upstream.arrayBuffer()
+    if (body.byteLength > 20 * 1024 * 1024) {
+      return Response.json({ success: false, message: '知识库文件超过 20MB' }, { status: 413 })
+    }
+    const contentType = upstream.headers.get('content-type') ?? 'application/octet-stream'
+    this.rememberFile(cacheKey, body, contentType)
+    return new Response(body.slice(0), {
+      status: 200,
+      headers: {
+        'content-type': contentType,
+        'content-length': String(body.byteLength),
+        'cache-control': 'no-store',
+      },
+    })
+  }
+
+  private rememberFile(key: string, body: ArrayBuffer, contentType: string): void {
+    const previous = this.fileCache.get(key)
+    if (previous !== undefined) this.fileCacheBytes -= previous.body.byteLength
+    while (this.fileCacheBytes + body.byteLength > FILE_CACHE_MAX_BYTES && this.fileCache.size > 0) {
+      const oldest = this.fileCache.keys().next().value
+      if (oldest === undefined) break
+      const row = this.fileCache.get(oldest)
+      this.fileCache.delete(oldest)
+      if (row !== undefined) this.fileCacheBytes -= row.body.byteLength
+    }
+    this.fileCache.set(key, { body, contentType, at: Date.now() })
+    this.fileCacheBytes += body.byteLength
+  }
+
   /** Proxy a streaming knowledge-base completion to the desktop Fetch route.
    * @param request - Authenticated browser request with JSON `{ id, question, model? }`.
    * @returns Upstream SSE response, or a JSON error response.
@@ -206,6 +310,9 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
     }
     const payload: Record<string, unknown> = { question: value.question, stream: true }
     if (typeof value.model === 'string' && value.model.trim() !== '') payload.model = value.model.trim()
+    if (typeof value.document_id === 'string' && value.document_id.trim() !== '') {
+      payload.document_id = value.document_id.trim()
+    }
     const token = await this.resolveToken()
     if (token === undefined || token === '') {
       return Response.json({ success: false, message: '请先登录后再使用知识库' }, { status: 401 })
@@ -244,7 +351,13 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
     })
   }
 
-  private async downloadFile(path: string, signal: AbortSignal): Promise<{ contentType: string; bytes: number[] }> {
+  /** Legacy RPC download for older Client bundles that still call `download`.
+   * Prefer `/api/desktop-knowledge-file` for new Clients (binary, no JSON byte arrays).
+   */
+  private async downloadFileRpc(
+    path: string,
+    signal: AbortSignal,
+  ): Promise<{ contentType: string; bytes: number[] }> {
     const token = await this.resolveToken()
     if (token === undefined || token === '') throw new Error('请先登录后再使用知识库')
     const response = await fetch(`${this.baseURL}${path}`, {
@@ -272,6 +385,7 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
       bytes: [...new Uint8Array(buffer)],
     }
   }
+
 }
 
 function integer(value: unknown, label: string): number {

@@ -140,11 +140,24 @@ describe('official browser lifecycle compatibility', () => {
     unregister()
   })
 
-  it('reports failed initialization to assembly instead of admitting incomplete tools', async () => {
+  it('continues assembly without browser tools when initialization fails', async () => {
     const { agent, scope, facade } = await setup()
     Reflect.apply(facade.on.bind(facade), facade, ['agent/created', async () => { throw new Error('startup failed') }])
     const unregister = ctx.agents.register(agent)
-    await expect(ctx.systemPrompt.assemble(assembleContextFor(agent))).rejects.toThrow('startup failed')
+    const assembly = await ctx.systemPrompt.assemble(assembleContextFor(agent))
+    expect(assembly.tools.map(tool => tool.name)).not.toContain('browser-test-tool')
+    await scope.dispose()
+    unregister()
+  })
+
+  it('starts Session browser initialization only once per Agent', async () => {
+    const { agent, scope, facade } = await setup()
+    let starts = 0
+    Reflect.apply(facade.on.bind(facade), facade, ['agent/created', async () => { starts++ }])
+    const unregister = ctx.agents.register(agent)
+    await ctx.systemPrompt.assemble(assembleContextFor(agent))
+    await ctx.systemPrompt.assemble(assembleContextFor(agent))
+    expect(starts).toBe(1)
     await scope.dispose()
     unregister()
   })

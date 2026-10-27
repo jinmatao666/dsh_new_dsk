@@ -293,15 +293,28 @@ export function apply(ctx: Context): void {
       })
     },
     async download(knowledgeBaseId, documentId) {
-      const raw = await call('download', { id: knowledgeBaseId, documentId })
-      if (typeof raw !== 'object' || raw === null) throw new Error('知识库文件下载无效')
-      const file = raw as { contentType?: unknown; bytes?: unknown }
-      if (typeof file.contentType !== 'string' || !Array.isArray(file.bytes) ||
-        file.bytes.length > 20 * 1024 * 1024 ||
-        !file.bytes.every(byte => Number.isInteger(byte) && (byte as number) >= 0 && (byte as number) <= 255)) {
-        throw new Error('知识库文件下载字段无效')
+      const response = await fetch(
+        `/api/desktop-knowledge-file?id=${knowledgeBaseId}&documentId=${encodeURIComponent(documentId)}`,
+      )
+      if (!response.ok) {
+        let message = '知识库文件下载失败'
+        try {
+          const body: unknown = await response.json()
+          if (typeof body === 'object' && body !== null) {
+            const next = (body as { message?: unknown }).message
+            if (typeof next === 'string' && next !== '') message = next
+          }
+        } catch {
+          // Named: download failures may return empty or non-JSON bodies.
+        }
+        throw new Error(message)
       }
-      return { contentType: file.contentType, bytes: file.bytes as number[] }
+      const buffer = await response.arrayBuffer()
+      if (buffer.byteLength > 20 * 1024 * 1024) throw new Error('知识库文件超过 20MB')
+      return {
+        contentType: response.headers.get('content-type') ?? 'application/octet-stream',
+        bytes: new Uint8Array(buffer),
+      }
     },
     async upload(id, file) {
       await uploadKnowledgeFile(call, id, file)
@@ -321,6 +334,9 @@ export function apply(ctx: Context): void {
         ...(conflictPolicy === undefined ? {} : { conflictPolicy }),
       })
     },
+    async clearMessages(knowledgeBaseId) {
+      await call('clear-messages', { id: knowledgeBaseId })
+    },
     async messages(knowledgeBaseId) {
       const raw = await call('messages', { id: knowledgeBaseId })
       if (!Array.isArray(raw)) throw new Error('知识库对话历史无效')
@@ -338,11 +354,15 @@ export function apply(ctx: Context): void {
         }
       })
     },
-    async complete(knowledgeBaseId, question, onProgress, signal) {
+    async complete(knowledgeBaseId, question, onProgress, signal, documentId) {
+      const payload: Record<string, unknown> = { id: knowledgeBaseId, question }
+      if (typeof documentId === 'string' && documentId.trim() !== '') {
+        payload.document_id = documentId.trim()
+      }
       const response = await fetch('/api/desktop-knowledge-chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: knowledgeBaseId, question }),
+        body: JSON.stringify(payload),
         credentials: 'same-origin',
         ...(signal === undefined ? {} : { signal }),
       })
@@ -363,7 +383,11 @@ export function apply(ctx: Context): void {
         }
         throw new Error(message)
       }
-      const raw = await call('chat-completions', { id: knowledgeBaseId, question })
+      const raw = await call('chat-completions', {
+        id: knowledgeBaseId, question,
+        ...(typeof documentId === 'string' && documentId.trim() !== ''
+          ? { documentId: documentId.trim() } : {}),
+      })
       if (typeof raw !== 'object' || raw === null) throw new Error('知识库回答无效')
       const result = raw as { answer?: unknown; recommendations?: unknown; citations?: unknown }
       if (typeof result.answer !== 'string' || !Array.isArray(result.recommendations) ||

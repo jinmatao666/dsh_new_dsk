@@ -77,16 +77,43 @@ type SessionMessage struct {
 
 // NewFromEnvironment resolves deployment-owned RAGFlow connection settings.
 func NewFromEnvironment() (*Client, error) {
-	rawURL := strings.TrimRight(strings.TrimSpace(os.Getenv("RAGFLOW_BASE_URL")), "/")
-	apiKey := strings.TrimSpace(os.Getenv("RAGFLOW_API_KEY"))
-	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		return nil, errors.New("RAGFLOW_BASE_URL 未配置或无效")
+	rawURL, err := BaseURLFromEnvironment()
+	if err != nil {
+		return nil, err
 	}
+	apiKey := strings.TrimSpace(os.Getenv("RAGFLOW_API_KEY"))
 	if apiKey == "" {
 		return nil, errors.New("RAGFLOW_API_KEY 未配置")
 	}
 	return &Client{baseURL: rawURL, apiKey: apiKey, http: &http.Client{Timeout: 90 * time.Second}}, nil
+}
+
+// BaseURLFromEnvironment returns the configured RAGFlow origin without a trailing slash.
+func BaseURLFromEnvironment() (string, error) {
+	rawURL := strings.TrimRight(strings.TrimSpace(os.Getenv("RAGFLOW_BASE_URL")), "/")
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return "", errors.New("RAGFLOW_BASE_URL 未配置或无效")
+	}
+	return rawURL, nil
+}
+
+// ChunkViewerURL builds the RAGFlow UI page for one document's parsed chunks.
+// Format: {RAGFLOW_BASE_URL}/chunk/parsed/chunks?id={datasetId}&doc_id={documentId}
+func ChunkViewerURL(datasetId, documentId string) (string, error) {
+	base, err := BaseURLFromEnvironment()
+	if err != nil {
+		return "", err
+	}
+	datasetId = strings.TrimSpace(datasetId)
+	documentId = strings.TrimSpace(documentId)
+	if datasetId == "" || documentId == "" {
+		return "", errors.New("知识库或文件编号无效")
+	}
+	query := url.Values{}
+	query.Set("id", datasetId)
+	query.Set("doc_id", documentId)
+	return base + "/chunk/parsed/chunks?" + query.Encode(), nil
 }
 
 func (c *Client) request(ctx context.Context, method, endpoint, contentType string, body io.Reader, result interface{}) error {
@@ -147,17 +174,22 @@ func jsonBody(value interface{}) (io.Reader, error) {
 // Retrieval stays below Elasticsearch nested-clause limits that RAGFlow hybrid search can hit.
 func chatPrompt(datasetId string) map[string]interface{} {
 	return map[string]interface{}{
-		"similarity_threshold":       0.15,
-		"keywords_similarity_weight": 0.3,
-		"top_n":                      8,
+		// Filename-heavy preview asks (总结「x.pdf」) need a lower vector floor and
+		// stronger keyword weight; empty_response "" avoids short-circuiting when
+		// retrieval still returns usable-but-below-threshold neighbors.
+		"similarity_threshold":       0.05,
+		"keywords_similarity_weight": 0.55,
+		"top_n":                      12,
 		"top_k":                      512,
 		"rerank_model":               "",
-		"empty_response":             "知识库中未找到相关内容。",
+		"empty_response":             "",
 		"show_quote":                 true,
 		"variables":                  []map[string]interface{}{{"key": "knowledge", "optional": true}},
-		"prompt": "你是知识库助手。仅依据下列知识用纯文本回答用户问题；禁止 Markdown、加粗、标题符号与代码围栏；可用普通编号列表；知识不足时明确说明。" +
+		"prompt": "你是知识库助手。仅依据下列知识回答用户问题；知识不足时明确说明。" +
+			"用 Markdown 组织层次：一级要点用 ## 标题，二级用 ###，分项用有序/无序列表，关键术语可加粗；不要使用代码围栏。" +
 			"回答须完整：知识中与问题相关的概述、分项、编号列表应全部写出，不要只摘首句或中途停止；若知识同时有总述与修订/分项列表，两者都要回答。" +
 			"引用知识时，在相关句末标注 ##i$$，其中 i 为知识片段从 0 开始的序号；同一序号在全文只标注一次，不要在每条列举后重复；不要输出其它引用格式。" +
+			"注意：##i$$ 是引用标记，与 Markdown 标题 ## 空格 标题 不同，二者不要混淆。" +
 			"\n知识：\n{knowledge}\n以上是知识。",
 		"dataset_ids": []string{datasetId},
 	}
@@ -546,6 +578,16 @@ func (c *Client) CreateSession(ctx context.Context, chatId, name string) (Datase
 	return session, err
 }
 
+// DeleteSession removes one RAGFlow chat session and the turns stored in it.
+func (c *Client) DeleteSession(ctx context.Context, chatId, sessionId string) error {
+	body, err := jsonBody(map[string][]string{"ids": {sessionId}})
+	if err != nil {
+		return err
+	}
+	return c.request(ctx, http.MethodDelete, "/api/v1/chats/"+url.PathEscape(chatId)+"/sessions",
+		"application/json", body, nil)
+}
+
 // ListSessionMessages returns the user and assistant turns stored for one session.
 func (c *Client) ListSessionMessages(ctx context.Context, chatId, sessionId string) ([]SessionMessage, error) {
 	var sessions []struct {
@@ -606,8 +648,15 @@ func (c *Client) UpdateChat(ctx context.Context, chatId, datasetId, model string
 }
 
 // Complete asks a question through the conversation-owned assistant.
-func (c *Client) Complete(ctx context.Context, chatId, sessionId, question string) (Completion, error) {
-	body, _ := jsonBody(map[string]interface{}{"question": question, "session_id": sessionId, "stream": false})
+// docIds optionally limits retrieval to those RAGFlow document ids (preview asks).
+// RAGFlow dialog_service does kwargs["doc_ids"].split(",") — a JSON array yields
+// AttributeError("'list' object has no attribute 'split'").
+func (c *Client) Complete(ctx context.Context, chatId, sessionId, question string, docIds ...string) (Completion, error) {
+	payload := map[string]interface{}{"question": question, "session_id": sessionId, "stream": false}
+	if filtered := nonEmptyDocIds(docIds); len(filtered) > 0 {
+		payload["doc_ids"] = strings.Join(filtered, ",")
+	}
+	body, _ := jsonBody(payload)
 	var completion Completion
 	err := c.request(ctx, http.MethodPost, "/api/v1/chats/"+url.PathEscape(chatId)+"/completions",
 		"application/json", body, &completion)
@@ -619,10 +668,14 @@ func (c *Client) Complete(ctx context.Context, chatId, sessionId, question strin
 
 // CompleteStream asks through the conversation-owned assistant and emits cumulative plain-text answers.
 // emit receives the latest full answer so far; reference is set when RAGFlow includes source chunks;
-// the final call sets done to true.
+// the final call sets done to true. docIds optionally limits retrieval to those RAGFlow document ids.
 func (c *Client) CompleteStream(ctx context.Context, chatId, sessionId, question string,
-	emit func(answer string, reference json.RawMessage, done bool) error) error {
-	body, err := jsonBody(map[string]interface{}{"question": question, "session_id": sessionId, "stream": true})
+	emit func(answer string, reference json.RawMessage, done bool) error, docIds ...string) error {
+	payload := map[string]interface{}{"question": question, "session_id": sessionId, "stream": true}
+	if filtered := nonEmptyDocIds(docIds); len(filtered) > 0 {
+		payload["doc_ids"] = strings.Join(filtered, ",")
+	}
+	body, err := jsonBody(payload)
 	if err != nil {
 		return err
 	}
@@ -703,6 +756,23 @@ func (c *Client) CompleteStream(ctx context.Context, chatId, sessionId, question
 		return emit(lastAnswer, lastReference, true)
 	}
 	return nil
+}
+
+func nonEmptyDocIds(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	seen := map[string]struct{}{}
+	for _, id := range ids {
+		trimmed := strings.TrimSpace(id)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	return out
 }
 
 // Recommend calls the deployment's API-key-compatible related-question endpoint.

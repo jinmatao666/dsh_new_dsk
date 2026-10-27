@@ -1,0 +1,4 @@
+pyproj==3.7.2
+ezdxf==1.4.2
+pyshp==3.0.2.post1
+access-parser==0.0.6

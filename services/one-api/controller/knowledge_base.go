@@ -772,9 +772,10 @@ func UpdateKnowledgeConversation(c *gin.Context) {
 }
 
 type knowledgeCompletionInput struct {
-	Question string `json:"question"`
-	Model    string `json:"model"`
-	Stream   bool   `json:"stream"`
+	Question   string `json:"question"`
+	Model      string `json:"model"`
+	Stream     bool   `json:"stream"`
+	DocumentId string `json:"document_id"`
 }
 
 func parseKnowledgeQuestion(c *gin.Context) (knowledgeCompletionInput, bool) {
@@ -785,8 +786,13 @@ func parseKnowledgeQuestion(c *gin.Context) (knowledgeCompletionInput, bool) {
 	}
 	input.Question = strings.TrimSpace(input.Question)
 	input.Model = strings.TrimSpace(input.Model)
+	input.DocumentId = strings.TrimSpace(input.DocumentId)
 	if len([]rune(input.Model)) > 128 {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "模型名称无效"})
+		return input, false
+	}
+	if len([]rune(input.DocumentId)) > 128 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "文档编号无效"})
 		return input, false
 	}
 	if input.Question == "" || len([]rune(input.Question)) > 8000 {
@@ -830,7 +836,7 @@ func recreateKnowledgeConversation(c *gin.Context, client *ragflow.Client, base 
 	return conversation, true
 }
 
-func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, conversation model.KnowledgeConversation, question string, stream bool) {
+func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, conversation model.KnowledgeConversation, question string, stream bool, docIds ...string) {
 	// Refresh the assistant prompt so older chats also emit citation markers.
 	if err := client.UpdateChat(c.Request.Context(), conversation.RagflowChatId, base.RagflowDatasetId, conversation.Model); err != nil &&
 		!ragflow.ChatOwnershipLost(err) {
@@ -838,10 +844,10 @@ func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *m
 		return
 	}
 	if stream {
-		answerKnowledgeConversationStream(c, client, base, conversation, question)
+		answerKnowledgeConversationStream(c, client, base, conversation, question, docIds...)
 		return
 	}
-	completion, err := completeWithRecovery(c, client, base, conversation, question)
+	completion, err := completeWithRecovery(c, client, base, conversation, question, docIds...)
 	if err != nil {
 		if c.Writer.Written() {
 			return
@@ -864,15 +870,15 @@ func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *m
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": data})
 }
 
-func completeWithRecovery(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, conversation model.KnowledgeConversation, question string) (ragflow.Completion, error) {
-	completion, err := client.Complete(c.Request.Context(), conversation.RagflowChatId, conversation.RagflowSessionId, question)
+func completeWithRecovery(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, conversation model.KnowledgeConversation, question string, docIds ...string) (ragflow.Completion, error) {
+	completion, err := client.Complete(c.Request.Context(), conversation.RagflowChatId, conversation.RagflowSessionId, question, docIds...)
 	if err != nil && ragflow.ChatOwnershipLost(err) {
 		recreated, ok := recreateKnowledgeConversation(c, client, base, conversation.UserId, conversation.Model, &conversation)
 		if !ok {
 			return ragflow.Completion{}, err
 		}
 		conversation = recreated
-		completion, err = client.Complete(c.Request.Context(), conversation.RagflowChatId, conversation.RagflowSessionId, question)
+		completion, err = client.Complete(c.Request.Context(), conversation.RagflowChatId, conversation.RagflowSessionId, question, docIds...)
 	}
 	if err != nil && ragflow.TooManyNestedClauses(err) {
 		if updateErr := client.UpdateChat(c.Request.Context(), conversation.RagflowChatId, base.RagflowDatasetId, conversation.Model); updateErr != nil {
@@ -886,12 +892,12 @@ func completeWithRecovery(c *gin.Context, client *ragflow.Client, base *model.Kn
 				return ragflow.Completion{}, err
 			}
 		}
-		completion, err = client.Complete(c.Request.Context(), conversation.RagflowChatId, conversation.RagflowSessionId, question)
+		completion, err = client.Complete(c.Request.Context(), conversation.RagflowChatId, conversation.RagflowSessionId, question, docIds...)
 	}
 	return completion, err
 }
 
-func answerKnowledgeConversationStream(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, conversation model.KnowledgeConversation, question string) {
+func answerKnowledgeConversationStream(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, conversation model.KnowledgeConversation, question string, docIds ...string) {
 	flusher, canFlush := c.Writer.(http.Flusher)
 	headersStarted := false
 	writeEvent := func(payload gin.H) bool {
@@ -938,7 +944,7 @@ func answerKnowledgeConversationStream(c *gin.Context, client *ragflow.Client, b
 					return errors.New("写入流式响应失败")
 				}
 				return nil
-			})
+			}, docIds...)
 	}
 	err := run(conversation)
 	if err != nil && ragflow.ChatOwnershipLost(err) && !headersStarted {
@@ -1049,6 +1055,63 @@ func ListKnowledgeConversationMessages(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": messages})
 }
 
+// ClearKnowledgeConversationMessages replaces the caller's session so earlier turns are no longer loaded.
+func ClearKnowledgeConversationMessages(c *gin.Context) {
+	knowledgeBaseId, err := strconv.Atoi(c.Param("id"))
+	if err != nil || knowledgeBaseId <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库编号无效"})
+		return
+	}
+	base, err := model.GetAuthorizedKnowledgeBase(c.GetInt("id"), knowledgeBaseId, knowledgeAdmin(c))
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "无权使用该知识库"})
+		return
+	}
+	var conversation model.KnowledgeConversation
+	err = model.DB.Where("user_id = ? AND knowledge_base_id = ?", c.GetInt("id"), base.Id).
+		Order("id DESC").First(&conversation).Error
+	if err == gorm.ErrRecordNotFound {
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{}})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取对话失败"})
+		return
+	}
+	client, ok := knowledgeClient(c)
+	if !ok {
+		return
+	}
+	name := fmt.Sprintf("knowledge-%d-%d", c.GetInt("id"), time.Now().UnixMilli())
+	session, sessionErr := client.CreateSession(c.Request.Context(), conversation.RagflowChatId, name)
+	if sessionErr != nil {
+		if ragflow.ChatOwnershipLost(sessionErr) {
+			if _, recreated := recreateKnowledgeConversation(c, client, base, c.GetInt("id"), conversation.Model, &conversation); !recreated {
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{}})
+			return
+		}
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": sessionErr.Error()})
+		return
+	}
+	if session.Id == "" {
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": "新建对话失败"})
+		return
+	}
+	previous := conversation.RagflowSessionId
+	if saveErr := model.DB.Model(&conversation).Update("ragflow_session_id", session.Id).Error; saveErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存对话失败"})
+		return
+	}
+	if previous != "" && previous != session.Id {
+		if deleteErr := client.DeleteSession(c.Request.Context(), conversation.RagflowChatId, previous); deleteErr != nil {
+			logger.SysErrorf("knowledge session delete failed for chat %s: %s", conversation.RagflowChatId, deleteErr.Error())
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{}})
+}
+
 // ChatCompletionsKnowledgeBase answers against the authorized knowledge base through its isolated chat session.
 func ChatCompletionsKnowledgeBase(c *gin.Context) {
 	knowledgeBaseId, err := strconv.Atoi(c.Param("id"))
@@ -1074,7 +1137,7 @@ func ChatCompletionsKnowledgeBase(c *gin.Context) {
 		return
 	}
 	recordKnowledgeUsage(base.Id)
-	answerKnowledgeConversation(c, client, base, conversation, input.Question, input.Stream)
+	answerKnowledgeConversation(c, client, base, conversation, input.Question, input.Stream, input.DocumentId)
 }
 
 // CompleteKnowledgeConversation asks RAGFlow and then attempts related-question generation.
@@ -1103,5 +1166,5 @@ func CompleteKnowledgeConversation(c *gin.Context) {
 	if !ok {
 		return
 	}
-	answerKnowledgeConversation(c, client, base, conversation, input.Question, input.Stream)
+	answerKnowledgeConversation(c, client, base, conversation, input.Question, input.Stream, input.DocumentId)
 }

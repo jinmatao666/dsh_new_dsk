@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 314" role="img" aria-label="CSV TXT TSV to CSV">
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="140%">
+      <feDropShadow dx="2" dy="4" stdDeviation="3.5" flood-color="#14325a" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+
+  <!-- Three input docs side-by-side so every label stays fully readable -->
+  <g filter="url(#shadow)">
+    <path d="M28 96h78l24 24v120H28z" fill="#34b45f"/>
+    <path d="M106 96v24h24z" fill="#27964c"/>
+    <rect x="42" y="132" width="68" height="36" rx="8" fill="#1f7f3f"/>
+    <text x="76" y="157" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700" fill="#ffffff">CSV</text>
+    <rect x="44" y="186" width="56" height="9" rx="4.5" fill="#e8ffef"/>
+    <rect x="44" y="202" width="44" height="9" rx="4.5" fill="#d7f8e2"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <path d="M118 78h78l24 24v138H118z" fill="#2aa79a"/>
+    <path d="M196 78v24h24z" fill="#1f8a80"/>
+    <rect x="132" y="120" width="68" height="36" rx="8" fill="#17756d"/>
+    <text x="166" y="145" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700" fill="#ffffff">TXT</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <path d="M208 96h78l24 24v120H208z" fill="#4d647c"/>
+    <path d="M286 96v24h24z" fill="#3b4f64"/>
+    <rect x="222" y="132" width="68" height="36" rx="8" fill="#2f4054"/>
+    <text x="256" y="157" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700" fill="#ffffff">TSV</text>
+  </g>
+
+  <!-- Arrow -->
+  <g filter="url(#shadow)">
+    <rect x="322" y="142" width="52" height="28" rx="14" fill="#3f82f2"/>
+    <path d="M368 126l40 30-40 30z" fill="#2f74ef"/>
+    <rect x="332" y="148" width="28" height="5" rx="2.5" fill="#c9ddff" fill-opacity="0.8"/>
+  </g>
+
+  <!-- Output CSV -->
+  <g filter="url(#shadow)">
+    <path d="M416 52h92l30 30v150H416z" fill="#408cf5"/>
+    <path d="M508 52v30h30z" fill="#2d6fd2"/>
+    <rect x="436" y="92" width="78" height="40" rx="9" fill="#1f5fbe"/>
+    <text x="475" y="119" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700" fill="#ffffff">CSV</text>
+    <g stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" fill="none">
+      <line x1="438" y1="188" x2="520" y2="188"/>
+      <line x1="479" y1="226" x2="479" y2="150"/>
+    </g>
+    <path d="M512 181l8 7-8 7z" fill="#ffffff"/>
+    <path d="M472 158l7-8 7 8z" fill="#ffffff"/>
+    <g fill="#ffffff">
+      <circle cx="450" cy="188" r="4"/>
+      <circle cx="464" cy="188" r="4"/>
+      <circle cx="494" cy="188" r="4"/>
+      <circle cx="508" cy="188" r="4"/>
+    </g>
+    <g stroke="#ffffff" stroke-width="2.4" stroke-linecap="round">
+      <line x1="445" y1="181" x2="455" y2="195"/>
+      <line x1="455" y1="181" x2="445" y2="195"/>
+      <line x1="459" y1="181" x2="469" y2="195"/>
+      <line x1="469" y1="181" x2="459" y2="195"/>
+      <line x1="489" y1="181" x2="499" y2="195"/>
+      <line x1="499" y1="181" x2="489" y2="195"/>
+      <line x1="503" y1="181" x2="513" y2="195"/>
+      <line x1="513" y1="181" x2="503" y2="195"/>
+    </g>
+  </g>
+</svg>

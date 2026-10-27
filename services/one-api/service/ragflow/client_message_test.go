@@ -118,12 +118,21 @@ func TestChatPromptKeepsRetrievalBounded(t *testing.T) {
 	if prompt["top_k"] != 512 {
 		t.Fatalf("top_k=%v", prompt["top_k"])
 	}
-	if prompt["top_n"] != 8 {
+	if prompt["top_n"] != 12 {
 		t.Fatalf("top_n=%v", prompt["top_n"])
 	}
 	text, _ := prompt["prompt"].(string)
 	if !strings.Contains(text, "回答须完整") {
 		t.Fatalf("prompt missing completeness rule: %q", text)
+	}
+	if !strings.Contains(text, "Markdown") || !strings.Contains(text, "## 标题") {
+		t.Fatalf("prompt missing markdown hierarchy rule: %q", text)
+	}
+	if prompt["similarity_threshold"] != 0.05 {
+		t.Fatalf("similarity_threshold=%v", prompt["similarity_threshold"])
+	}
+	if prompt["empty_response"] != "" {
+		t.Fatalf("empty_response=%v", prompt["empty_response"])
 	}
 }
 
@@ -157,7 +166,38 @@ func TestChatOwnershipLost(t *testing.T) {
 	}
 }
 
-func TestNormalizeSessionHistoryDropsPrologueAndMarkdown(t *testing.T) {
+func TestChunkViewerURLJoinsBaseAndIds(t *testing.T) {
+	t.Setenv("RAGFLOW_BASE_URL", "http://ac.zjugis.com:9381/")
+	got, err := ChunkViewerURL("dataset-1", "doc-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "http://ac.zjugis.com:9381/chunk/parsed/chunks?doc_id=doc-2&id=dataset-1" {
+		t.Fatalf("url=%q", got)
+	}
+}
+
+func TestCompleteSendsDocIdsAsCommaSeparatedString(t *testing.T) {
+	var gotBody map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":0,"data":{"answer":"ok","reference":null},"message":"ok"}`))
+	}))
+	defer server.Close()
+
+	client := &Client{baseURL: server.URL, apiKey: "secret", http: server.Client()}
+	if _, err := client.Complete(context.Background(), "chat-1", "sess-1", "总结", "doc-a", "doc-b"); err != nil {
+		t.Fatal(err)
+	}
+	// RAGFlow dialog_service calls kwargs["doc_ids"].split(",") — arrays crash.
+	if gotBody["doc_ids"] != "doc-a,doc-b" {
+		t.Fatalf("doc_ids=%#v", gotBody["doc_ids"])
+	}
+}
+
+func TestNormalizeSessionHistoryDropsPrologueAndKeepsMarkdown(t *testing.T) {
 	got := NormalizeSessionHistory([]SessionMessage{
 		{Role: "assistant", Content: "Hi! I am your assistant."},
 		{Role: "user", Content: "  什么是知识库？  "},
@@ -171,7 +211,7 @@ func TestNormalizeSessionHistoryDropsPrologueAndMarkdown(t *testing.T) {
 	if got[0].Role != "user" || got[0].Content != "什么是知识库？" {
 		t.Fatalf("user=%#v", got[0])
 	}
-	if got[1].Role != "assistant" || got[1].Content != "知识库是资料集合。" {
+	if got[1].Role != "assistant" || got[1].Content != "**知识库**是资料集合。" {
 		t.Fatalf("assistant=%#v", got[1])
 	}
 }
@@ -196,6 +236,30 @@ func TestNormalizeSessionHistoryKeepsCitationMarkersAndCitations(t *testing.T) {
 	}
 	if len(got[1].Reference) != 0 {
 		t.Fatalf("raw reference should be cleared, got %#v", got[1].Reference)
+	}
+}
+
+func TestDeleteSessionRemovesOneSession(t *testing.T) {
+	var gotMethod, gotPath, gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		data, _ := io.ReadAll(r.Body)
+		gotBody = string(data)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":0,"data":true,"message":"ok"}`))
+	}))
+	defer server.Close()
+
+	client := &Client{baseURL: server.URL, apiKey: "secret", http: server.Client()}
+	if err := client.DeleteSession(context.Background(), "chat-1", "sess-1"); err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/api/v1/chats/chat-1/sessions" {
+		t.Fatalf("request=%s %s", gotMethod, gotPath)
+	}
+	if gotBody != `{"ids":["sess-1"]}` {
+		t.Fatalf("body=%s", gotBody)
 	}
 }
 

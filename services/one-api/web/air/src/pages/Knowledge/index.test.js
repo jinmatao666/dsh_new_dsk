@@ -149,9 +149,13 @@ test('knowledge catalog filters scopes and opens the file list', async () => {
   expect(container.textContent).toContain('共 1 条，每页 20 条');
   expect(API.get).toHaveBeenCalledWith(expect.stringContaining('/api/knowledge-admin/bases/1/documents?page=1&page_size=20'));
   const pdfBlob = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
+  const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null);
   API.get.mockImplementation(url => {
     if (String(url).endsWith('/file')) {
       return Promise.resolve({ data: pdfBlob, headers: { 'content-type': 'application/pdf' } });
+    }
+    if (String(url).endsWith('/chunk-viewer')) {
+      return Promise.resolve({ data: { success: true, data: { url: 'http://ac.zjugis.com:9381/chunk/parsed/chunks?id=ds-1&doc_id=doc1' } } });
     }
     if (String(url).endsWith('/chunks')) {
       return Promise.resolve({ data: { success: true, data: [{ id: 'c1', content: '已解析切片一' }, { id: 'c2', content: '已解析切片二' }] } });
@@ -177,10 +181,13 @@ test('knowledge catalog filters scopes and opens the file list', async () => {
   for (let i = 0; i < 5; i += 1) {
     await act(async () => { await Promise.resolve(); });
   }
-  expect(API.get).toHaveBeenCalledWith('/api/knowledge-admin/bases/1/documents/doc1/chunks');
-  expect(container.textContent).toContain('测绘标准规范合集_文件1.pdf - 切片列表');
-  expect(container.textContent).toContain('已解析切片一');
-  expect(container.textContent).toContain('已解析切片二');
+  expect(API.get).toHaveBeenCalledWith('/api/knowledge-admin/bases/1/documents/doc1/chunk-viewer');
+  expect(openSpy).toHaveBeenCalledWith(
+    'http://ac.zjugis.com:9381/chunk/parsed/chunks?id=ds-1&doc_id=doc1',
+    '_blank',
+    'noopener,noreferrer',
+  );
+  openSpy.mockRestore();
   await act(async () => { button('返回').click(); });
   expect(button('新建知识库')).toBeTruthy();
   await act(async () => { button('新建知识库').click(); });
@@ -345,7 +352,7 @@ test('creates a category beside personal and files the next library under it', a
   act(() => { button('新建知识库分类').click(); });
   act(() => { container.querySelector('[aria-label="分类类型"]').click(); });
   act(() => { document.querySelector('[role="option"][value="authorized"]').click(); });
-  expect(container.textContent).toContain('订阅后可见');
+  expect(container.querySelector('[aria-label="授权访问"]').checked).toBe(true);
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
   const name = container.querySelector('input[placeholder="请输入分类名称"]');
   act(() => {
@@ -369,6 +376,97 @@ test('creates a category beside personal and files the next library under it', a
   await act(async () => { container.querySelector('.knowledge-modal').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
   for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
   expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/bases', expect.objectContaining({ name: '规范汇编', kind: 'shared', category_id: 4 }));
+});
+
+test('edits and deletes a category from the hidden tab menu', async () => {
+  const stored = [{ id: 1, name: '测绘规范', type: 'common', require_auth: false }];
+  API.get.mockImplementation(url => {
+    if (url === '/api/knowledge-admin/categories') return Promise.resolve({ data: { success: true, data: stored } });
+    return Promise.resolve(documentsResponse(url));
+  });
+  API.put.mockImplementation((url, body) => {
+    if (url === '/api/knowledge-admin/categories/1') {
+      stored[0] = { ...stored[0], name: body.name, type: body.type, require_auth: body.require_auth };
+      return Promise.resolve({ data: { success: true, data: stored[0] } });
+    }
+    return Promise.resolve({ data: { success: true, data: {} } });
+  });
+  API.delete.mockImplementation(url => {
+    if (url === '/api/knowledge-admin/categories/1') {
+      stored.splice(0, 1);
+      return Promise.resolve({ data: { success: true } });
+    }
+    return Promise.resolve({ data: { success: true } });
+  });
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(document.querySelector('.knowledge-tab-menu-panel')).toBeNull();
+  await act(async () => { container.querySelector('[aria-label="更多操作 测绘规范"]').click(); });
+  expect(document.querySelector('.knowledge-tab-menu-panel')).toBeTruthy();
+  await act(async () => {
+    [...document.querySelectorAll('.knowledge-tab-menu-panel [role="menuitem"]')]
+      .find(item => item.textContent.includes('编辑')).click();
+  });
+  expect(container.textContent).toContain('编辑知识库分类');
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+  const name = container.querySelector('input[placeholder="请输入分类名称"]');
+  await act(async () => {
+    setValue.call(name, '规范汇编');
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => { container.querySelector('.knowledge-modal').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(API.put).toHaveBeenCalledWith('/api/knowledge-admin/categories/1', { name: '规范汇编', type: 'common', require_auth: false });
+  expect(button('规范汇编')).toBeTruthy();
+
+  await act(async () => { container.querySelector('[aria-label="更多操作 规范汇编"]').click(); });
+  await act(async () => {
+    [...document.querySelectorAll('.knowledge-tab-menu-panel [role="menuitem"]')]
+      .find(item => item.textContent.includes('删除')).click();
+  });
+  expect(container.textContent).toContain('确认删除「规范汇编」？分类下知识库也会同步删除。');
+  await act(async () => {
+    [...container.querySelectorAll('.knowledge-modal footer button')].find(item => item.textContent === '删除').click();
+  });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(API.delete).toHaveBeenCalledWith('/api/knowledge-admin/categories/1');
+  expect(container.querySelector('[aria-label="更多操作 规范汇编"]')).toBeNull();
+  expect(button('个人知识库').getAttribute('aria-selected')).toBe('true');
+});
+
+test('public category can still require authorization', async () => {
+  const stored = [];
+  API.get.mockImplementation(url => {
+    if (url === '/api/knowledge-admin/categories') return Promise.resolve({ data: { success: true, data: stored } });
+    return Promise.resolve(documentsResponse(url));
+  });
+  API.post.mockImplementation((url, body) => {
+    if (url === '/api/knowledge-admin/categories') {
+      const row = { id: 8, name: body.name, type: body.type, require_auth: body.require_auth };
+      stored.push(row);
+      return Promise.resolve({ data: { success: true, data: row } });
+    }
+    return Promise.resolve({ data: { success: true, data: { id: 9 } } });
+  });
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+  act(() => { button('新建知识库分类').click(); });
+  expect(container.querySelector('[aria-label="授权访问"]').checked).toBe(false);
+  act(() => { container.querySelector('[aria-label="分类类型"]').click(); });
+  act(() => { document.querySelector('[role="option"][value="public"]').click(); });
+  const authSwitch = container.querySelector('[aria-label="授权访问"]');
+  expect(authSwitch.checked).toBe(false);
+  act(() => { authSwitch.click(); });
+  expect(container.querySelector('[aria-label="授权访问"]').checked).toBe(true);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+  const name = container.querySelector('input[placeholder="请输入分类名称"]');
+  act(() => {
+    setValue.call(name, '公开规范');
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => { container.querySelector('.knowledge-modal').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/categories', { name: '公开规范', type: 'common', require_auth: true });
 });
 
 test('personal knowledge lists real users, filters a department, then opens that person’s files', async () => {
@@ -395,14 +493,27 @@ test('personal knowledge lists real users, filters a department, then opens that
   expect(container.textContent).toContain('1个知识库');
   expect(API.get).toHaveBeenCalledWith(expect.stringContaining('/api/knowledge-admin/bases/2/documents?page=1&page_size=100'));
   const pdfBlob = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
+  const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null);
   API.get.mockImplementation(url => {
     if (String(url).endsWith('/file')) return Promise.resolve({ data: pdfBlob, headers: { 'content-type': 'application/pdf' } });
+    if (String(url).endsWith('/chunk-viewer')) {
+      return Promise.resolve({ data: { success: true, data: { url: 'http://ac.zjugis.com:9381/chunk/parsed/chunks?id=ds-2&doc_id=doc1' } } });
+    }
     return Promise.resolve(documentsResponse(url));
   });
   await act(async () => { button('预览').click(); });
   for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
   expect(API.get).toHaveBeenCalledWith('/api/knowledge-admin/bases/2/documents/doc1/file', { responseType: 'blob' });
   expect(container.querySelector('.knowledge-viewer iframe')).toBeTruthy();
+  await act(async () => { button('切片').click(); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(API.get).toHaveBeenCalledWith('/api/knowledge-admin/bases/2/documents/doc1/chunk-viewer');
+  expect(openSpy).toHaveBeenCalledWith(
+    'http://ac.zjugis.com:9381/chunk/parsed/chunks?id=ds-2&doc_id=doc1',
+    '_blank',
+    'noopener,noreferrer',
+  );
+  openSpy.mockRestore();
 });
 
 test('toggles personal libraries from the person file-list title and deletes via menu', async () => {
