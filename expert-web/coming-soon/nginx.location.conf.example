@@ -1,0 +1,14 @@
+# Inside the existing 3300 server, not a complete nginx.conf.
+# The HTML file must already be available at this CONTAINER path.
+# Preserve other gateway locations. Change this alias to the verified mount.
+location = /experts/coming-soon { return 308 /experts/coming-soon/; }
+location = /experts/coming-soon/ {
+    alias /usr/share/nginx/wanwei-coming-soon/index.html;
+    default_type text/html;
+    charset utf-8;
+    add_header Cache-Control "no-store" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    # These hashes must be regenerated if the inline script or style changes.
+    add_header Content-Security-Policy "default-src 'none'; script-src 'sha256-RLq5A/CL8xR2yhpZZS3lLI257Y57KRlp6gVxrQ+lh2Y='; style-src 'sha256-wS4m1ByH0jQNhndIULRM9+XGFbIENSsWqdJL+tuS+PU='; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
+}
