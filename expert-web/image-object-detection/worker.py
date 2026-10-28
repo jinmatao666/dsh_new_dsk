@@ -12,7 +12,7 @@ from ocr import OCRError, extract
 
 
 class Worker:
-    def __init__(self, store, timeout=240):
+    def __init__(self, store, timeout=1800):
         self.store = store
         self.timeout = timeout
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ocr")
@@ -76,7 +76,7 @@ class Worker:
                 if cancelled:
                     self._stop(process)
                 try:
-                    stdout, _ = process.communicate(json.dumps({"task": task, "model": {key: os.environ.get(key, "") for key in ("EXPERT_MODEL_URL", "EXPERT_MODEL", "EXPERT_MODEL_KEY", "EXPERT_ALLOW_HTTP_MODEL", "SAM3_URL", "SAM3_KEY", "EXPERT_ALLOW_HTTP_ENGINE")}}), timeout=self.timeout)
+                    stdout, _ = process.communicate(json.dumps({"task": task, "model": {key: os.environ.get(key, "adapter_v1" if key == "SAM3_API" else "") for key in ("EXPERT_MODEL_URL", "EXPERT_MODEL", "EXPERT_MODEL_KEY", "EXPERT_ALLOW_HTTP_MODEL", "SAM3_URL", "SAM3_API", "SAM3_KEY", "EXPERT_ALLOW_HTTP_ENGINE")}}), timeout=self.timeout)
                 except subprocess.TimeoutExpired:
                     self._stop(process)
                     process.communicate()

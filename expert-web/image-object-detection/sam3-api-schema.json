@@ -1,0 +1,419 @@
+{
+  "openapi": "3.1.0",
+  "components": {
+    "schemas": {
+      "ConceptRequest": {
+        "properties": {
+          "mask_format": {
+            "type": "string",
+            "enum": [
+              "png_base64",
+              "coco_rle"
+            ],
+            "title": "Mask Format",
+            "description": "掩膜格式：png_base64 为灰度 PNG 的 Base64；coco_rle 为 COCO 列优先压缩 RLE。默认 png_base64。",
+            "default": "png_base64"
+          },
+          "mask_space": {
+            "type": "string",
+            "enum": [
+              "roi",
+              "original"
+            ],
+            "title": "Mask Space",
+            "description": "掩膜坐标空间：roi 返回裁切区域尺寸；original 返回原图尺寸，ROI 外补零。未指定 ROI 时二者等价，默认 roi。",
+            "default": "roi"
+          },
+          "debug": {
+            "type": "boolean",
+            "title": "Debug",
+            "description": "是否返回诊断信息，包括模型输入尺寸、候选分数和推理耗时；GPU 同步计时可能增加开销。默认 false。",
+            "default": false
+          },
+          "mode": {
+            "type": "string",
+            "const": "concept",
+            "title": "Mode",
+            "description": "分割模式 concept。单图接口可省略，批量 items 中必须显式填写。",
+            "default": "concept"
+          },
+          "prompt": {
+            "type": "string",
+            "title": "Prompt",
+            "description": "简短文本概念，例如 person、apple。可省略，但此时必须提供正向示例框。字符和模型 token 上限见模型信息；超限报错，不截断。",
+            "default": "",
+            "examples": [
+              "person"
+            ]
+          },
+          "positive_boxes": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 4,
+              "minItems": 4
+            },
+            "type": "array",
+            "title": "Positive Boxes",
+            "description": "正向概念示例框列表，每框为原图像素 [xmin,ymin,xmax,ymax]，须完全位于 ROI 内。可能匹配框外相似对象；与负向框共用数量上限。",
+            "examples": [
+              [
+                [
+                  60,
+                  145,
+                  175,
+                  355
+                ]
+              ]
+            ]
+          },
+          "negative_boxes": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 4,
+              "minItems": 4
+            },
+            "type": "array",
+            "title": "Negative Boxes",
+            "description": "负向概念示例框列表，提供不希望匹配的对象示例；坐标同正向框，不能在没有文本和正向框时单独使用。"
+          },
+          "confidence_threshold": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence Threshold",
+            "description": "置信度阈值，范围 0–1；仅保留分数严格大于该值的检测，默认 0.5。",
+            "default": 0.5
+          },
+          "max_detections": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Detections",
+            "description": "最多返回的实例数。省略或 null 时使用服务默认值；默认配置为 20，上限 100，实际值见模型信息。会话检测还受每会话对象上限约束。",
+            "examples": [
+              20
+            ]
+          },
+          "roi_xyxy": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 4,
+                "minItems": 4
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roi Xyxy",
+            "description": "可选实际裁切区域 [xmin,ymin,xmax,ymax]，使用 EXIF 校正后原图的整数像素边界，须位于原图内。省略时处理整图；它与提示框不同。"
+          },
+          "image_base64": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Image Base64",
+            "description": "PNG/JPEG/WebP 图片文件的标准 Base64 字符串，不含 data: 前缀和换行。不接受 URL 或文件路径。大小限制按解码后的字节数计算。"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "image_base64"
+        ],
+        "title": "ConceptRequest",
+        "description": "图片 Base64 和概念参数直接放在同一个 JSON 对象中。"
+      },
+      "SegmentationResult": {
+        "properties": {
+          "original_size": {
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Original Size",
+            "description": "EXIF 方向校正后原图的 [宽,高]。",
+            "examples": [
+              [
+                750,
+                1056
+              ]
+            ]
+          },
+          "roi_xyxy": {
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Roi Xyxy",
+            "description": "实际推理裁切区域，原图整数像素 [xmin,ymin,xmax,ymax]。"
+          },
+          "mask_size": {
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Mask Size",
+            "description": "返回掩膜的 [宽,高]，与 mask_coordinate_space 对应。"
+          },
+          "mask_coordinate_space": {
+            "type": "string",
+            "enum": [
+              "roi",
+              "original"
+            ],
+            "title": "Mask Coordinate Space",
+            "description": "roi 表示掩膜相对 ROI 左上角；original 表示掩膜与原图同尺寸。ROI 掩膜像素 (x,y) 对应原图 (x+roi_xmin,y+roi_ymin)。"
+          },
+          "box_coordinate_space": {
+            "type": "string",
+            "const": "original",
+            "title": "Box Coordinate Space",
+            "description": "检测框坐标空间，固定为 original，即原图像素。",
+            "default": "original"
+          },
+          "total_detections": {
+            "type": "integer",
+            "title": "Total Detections",
+            "description": "模型阈值过滤后的实例数，在接口返回数量截取之前统计；可能大于 instances 的长度。"
+          },
+          "instances": {
+            "items": {
+              "$ref": "#/components/schemas/Instance"
+            },
+            "type": "array",
+            "title": "Instances",
+            "description": "本次返回的实例列表，按分数降序；没有目标时为空数组。"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "会话提示接口返回的会话 ID；无状态分割不返回此字段。"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id",
+            "description": "create/refine 操作对应的目标对象 ID，即使该次没有输出掩膜也可能存在此 ID。"
+          },
+          "debug": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Debug",
+            "description": "仅 debug=true 时返回的诊断数据，如实际输入尺寸、候选/概念分数、目标是否注册和推理耗时。"
+          }
+        },
+        "type": "object",
+        "required": [
+          "original_size",
+          "roi_xyxy",
+          "mask_size",
+          "mask_coordinate_space",
+          "total_detections",
+          "instances"
+        ],
+        "title": "SegmentationResult",
+        "description": "单图分割结果；无目标时正常返回空实例列表。"
+      },
+      "Instance": {
+        "properties": {
+          "object_id": {
+            "type": "integer",
+            "title": "Object Id",
+            "description": "实例对象 ID。会话结果中可用于后续精修；无状态请求的 ID 只对本次结果有意义。"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score",
+            "description": "实例分数。必须结合 score_source 理解；交互对象分数可能为 1.0，不代表边界准确率。"
+          },
+          "score_source": {
+            "type": "string",
+            "enum": [
+              "detector",
+              "tracker_assigned"
+            ],
+            "title": "Score Source",
+            "description": "分数来源：detector 为概念检测分数；tracker_assigned 为交互对象赋值，不能等同于检测置信度。"
+          },
+          "box_xyxy": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Box Xyxy",
+            "description": "最终掩膜的包围框 [xmin,ymin,xmax,ymax]，始终使用 EXIF 校正后原图像素坐标。"
+          },
+          "mask": {
+            "$ref": "#/components/schemas/Mask",
+            "description": "该实例的二值掩膜，支持 PNG Base64 或 COCO 压缩 RLE。"
+          }
+        },
+        "type": "object",
+        "required": [
+          "object_id",
+          "score",
+          "score_source",
+          "box_xyxy",
+          "mask"
+        ],
+        "title": "Instance",
+        "description": "一个分割实例及其原图位置。"
+      },
+      "Mask": {
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": [
+              "png_base64",
+              "coco_rle"
+            ],
+            "title": "Format",
+            "description": "掩膜编码格式，与请求中的 mask_format 一致。"
+          },
+          "size": {
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Size",
+            "description": "掩膜 [高,宽]，与外层 mask_size 的 [宽,高] 顺序不同；RLE 按列优先解码。",
+            "examples": [
+              [
+                1056,
+                750
+              ]
+            ]
+          },
+          "data": {
+            "type": "string",
+            "title": "Data",
+            "description": "png_base64：灰度 PNG 的 Base64 字符串，255 为前景、0 为背景；coco_rle：ASCII 压缩 counts 字符串，结合 size 按 COCO 规范解码。"
+          }
+        },
+        "type": "object",
+        "required": [
+          "format",
+          "size",
+          "data"
+        ],
+        "title": "Mask",
+        "description": "二值实例掩膜，位置由结果中的坐标空间和 ROI 决定。"
+      }
+    }
+  }
+}

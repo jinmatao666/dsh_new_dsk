@@ -76,6 +76,13 @@ def encode_image(image):
 
 
 def english_target(target):
+    common = {'人': 'person', '行人': 'person', '汽车': 'car', '车辆': 'vehicle',
+              '小汽车': 'car', '建筑': 'building', '建筑物': 'building', '房屋': 'house',
+              '树': 'tree', '树木': 'tree', '船': 'boat', '船舶': 'ship',
+              '飞机': 'airplane', '自行车': 'bicycle', '摩托车': 'motorcycle',
+              '卡车': 'truck', '公交车': 'bus', '道路': 'road', '桥梁': 'bridge'}
+    if target in common:
+        return common[target]
     if not any('\u3400' <= c <= '\u9fff' for c in target):
         return target
     if not model_configuration():
@@ -98,7 +105,14 @@ def sam_segment(image, *, prompt='', boxes=None, precise=True, score=0.35):
     payload = {'schema_version': 1, 'image': encode_image(image), 'text': prompt,
                'boxes': boxes or [], 'return_masks': precise, 'score_threshold': score}
     try:
-        result = post_json(os.environ.get('SAM3_URL', ''), payload, os.environ.get('SAM3_KEY', ''), timeout=55)
+        api = os.environ.get('SAM3_API', 'adapter_v1')
+        if api == 'deployed_v1':
+            from sam3_deployed import recognize
+            result = recognize(image, payload['image'], prompt, boxes, score)
+        elif api == 'adapter_v1':
+            result = post_json(os.environ.get('SAM3_URL', ''), payload, os.environ.get('SAM3_KEY', ''), timeout=55)
+        else:
+            raise ValueError('unsupported SAM3_API')
         if result.get('schema_version') != 1 or result.get('width') != image.width or result.get('height') != image.height:
             raise ValueError('wrong response version or image size')
         objects = result['objects']
@@ -125,8 +139,32 @@ def sam_segment(image, *, prompt='', boxes=None, precise=True, score=0.35):
                 mask = values > 0
             parsed.append({'box': box, 'score': confidence, 'mask': mask})
         return parsed
-    except (ServiceError, ValueError, TypeError, KeyError, OSError, IndexError):
+    except ServiceError as error:
+        raise OCRError(str(error)) from None
+    except (ValueError, TypeError, KeyError, OSError, IndexError):
         raise OCRError('SAM3调用失败或响应不匹配；需部署配套SAM3 HTTP适配服务，精准分割要求真实二值掩膜') from None
+
+
+def deduplicate(objects):
+    """Suppress near-identical detections; preserve overlapping distinct masks."""
+    kept = []
+    for obj in sorted(objects, key=lambda item: item['score'], reverse=True):
+        a = obj['box']
+        duplicate = False
+        for previous in kept:
+            b = previous['box']
+            intersection = max(0, min(a[2], b[2]) - max(a[0], b[0])) * max(0, min(a[3], b[3]) - max(a[1], b[1]))
+            union = (a[2]-a[0])*(a[3]-a[1]) + (b[2]-b[0])*(b[3]-b[1]) - intersection
+            if intersection / union <= .9:
+                continue
+            if obj['mask'] is not None and previous['mask'] is not None:
+                if np.logical_and(obj['mask'], previous['mask']).sum() / np.logical_or(obj['mask'], previous['mask']).sum() <= .9:
+                    continue
+            duplicate = True
+            break
+        if not duplicate:
+            kept.append(obj)
+    return kept
 
 
 def contours(mask):
@@ -152,20 +190,39 @@ def aligned_pair(before, after, align):
         return np.asarray(before), np.ones((after.height, after.width), dtype='uint8') * 255, None
     a, b = np.asarray(before), np.asarray(after)
     gray_a, gray_b = cv2.cvtColor(a, cv2.COLOR_RGB2GRAY), cv2.cvtColor(b, cv2.COLOR_RGB2GRAY)
-    orb = cv2.ORB_create(nfeatures=2500)
-    ka, da = orb.detectAndCompute(gray_a, None)
-    kb, db = orb.detectAndCompute(gray_b, None)
-    if da is None or db is None:
-        raise OCRError('图片纹理不足，无法自动对齐；请上传已配准图片并关闭自动对齐')
-    matches = cv2.BFMatcher(cv2.NORM_HAMMING).knnMatch(da, db, k=2)
-    good = [pair[0] for pair in matches if len(pair) == 2 and pair[0].distance < 0.72 * pair[1].distance]
-    if len(good) < 12:
-        raise OCRError('两期图片缺少足够对应点，无法可靠比较')
-    pa = np.float32([ka[m.queryIdx].pt for m in good])
-    pb = np.float32([kb[m.trainIdx].pt for m in good])
-    matrix, inliers = cv2.findHomography(pa, pb, cv2.RANSAC, 3)
-    if matrix is None or not np.isfinite(matrix).all() or inliers is None or inliers.sum() < 12 or inliers.mean() < 0.55:
-        raise OCRError('两期图片对齐不可靠，未输出变化结论')
+    # Satellite pairs often change appearance substantially. SIFT handles scale and
+    # radiometry better than ORB; constrain registration to a similarity transform.
+    detector = cv2.SIFT_create(nfeatures=7000, contrastThreshold=.02)
+    ka, da = detector.detectAndCompute(gray_a, None)
+    kb, db = detector.detectAndCompute(gray_b, None)
+    matrix = None
+    if da is not None and db is not None:
+        matches = cv2.BFMatcher().knnMatch(da, db, k=2)
+        good = [pair[0] for pair in matches if len(pair)==2 and pair[0].distance < .75*pair[1].distance]
+        if len(good) >= 8:
+            pa = np.float32([ka[m.queryIdx].pt for m in good])
+            pb = np.float32([kb[m.trainIdx].pt for m in good])
+            affine, inliers = cv2.estimateAffinePartial2D(pa, pb, method=cv2.RANSAC, ransacReprojThreshold=3, maxIters=5000)
+            if affine is not None and inliers is not None and inliers.sum() >= 8 and inliers.mean() >= .12:
+                stable = pa[inliers.ravel()>0]
+                spread = np.ptp(stable, axis=0) / [before.width, before.height]
+                if min(spread) >= .15:
+                    matrix = np.vstack([affine, [0,0,1]])
+    if matrix is None and before.size == after.size:
+        # Bounded translation fallback, accepted only with meaningful correlation.
+        scale = min(1, 512 / max(before.size))
+        size = (round(before.width*scale), round(before.height*scale))
+        try:
+            score, warp = cv2.findTransformECC(cv2.resize(gray_b,size).astype('float32')/255,
+                cv2.resize(gray_a,size).astype('float32')/255, np.eye(2,3,dtype='float32'),
+                cv2.MOTION_TRANSLATION, (cv2.TERM_CRITERIA_EPS|cv2.TERM_CRITERIA_COUNT,150,1e-5), None, 7)
+            if score >= .35 and np.max(np.abs(warp[:,2])) <= min(size)*.05:
+                warp[:,2] /= scale
+                matrix = np.linalg.inv(np.vstack([warp,[0,0,1]]))
+        except cv2.error:
+            pass
+    if matrix is None or not np.isfinite(matrix).all():
+        raise OCRError('自动对齐未找到足够稳定的对应区域。若两图来自同一已配准影像范围，请关闭自动对齐后重试；否则需先配准或裁出共同范围。')
     corners = np.float32([[0, 0], [before.width, 0], [before.width, before.height], [0, before.height]]).reshape(-1, 1, 2)
     warped_corners = cv2.perspectiveTransform(corners, matrix)
     ratio = abs(cv2.contourArea(warped_corners)) / (after.width * after.height)
@@ -193,9 +250,17 @@ def change_candidates(before, after, options):
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
     count, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
     accepted = [i for i in range(1, count) if stats[i, cv2.CC_STAT_AREA] >= max(16, mask.size * options['minArea'])]
-    if len(accepted) > 8:
-        raise OCRError('疑似变化区域超过8处，请裁小范围或调整灵敏度后重试')
-    components = [labels == i for i in accepted]
+    # Avoid a fatal eight-region limit and preserve every accepted pixel.
+    if len(accepted) > 128:
+        combined = np.isin(labels, accepted)
+        components = []
+        for ys in np.array_split(np.arange(mask.shape[0]),8):
+            for xs in np.array_split(np.arange(mask.shape[1]),8):
+                part = np.zeros_like(combined)
+                part[np.ix_(ys,xs)] = combined[np.ix_(ys,xs)]
+                if part.any(): components.append(part)
+    else:
+        components = [labels == i for i in accepted]
     return components, Image.fromarray(aligned), valid, matrix
 
 
@@ -218,7 +283,9 @@ def extract(paths, destination, options):
         prompt = english_target(options['target'])
         meta.update(target=options['target'], model_prompt=prompt)
         detected = sam_segment(image, prompt=prompt, precise=options['precise'], score=options['score'])
-        for obj in detected:
+        filtered = deduplicate(detected)
+        meta.update(raw_count=len(detected), duplicate_count=len(detected) - len(filtered))
+        for obj in filtered:
             if options['precise']:
                 masks.append(obj['mask'])
                 objects.append(region(obj['mask'], len(objects) + 1, obj['score']))
@@ -234,7 +301,10 @@ def extract(paths, destination, options):
         extras.append(path)
         if seeds and options['precise']:
             boxes = [region(mask, i)['box'] for i, mask in enumerate(seeds)]
-            sam_objects = sam_segment(image, boxes=boxes, score=options['score']) + sam_segment(aligned, boxes=boxes, score=options['score'])
+            sam_objects = []
+            for start in range(0,len(boxes),8):
+                for source in (image, aligned):
+                    sam_objects.extend(sam_segment(source, boxes=boxes[start:start+8], score=options['score']))
             combined = np.logical_or.reduce(seeds)
             neighborhood = cv2.dilate(combined.astype('uint8'), np.ones((11, 11), dtype='uint8')) > 0
             predicted = [obj['mask'] for obj in sam_objects]
@@ -247,8 +317,10 @@ def extract(paths, destination, options):
             seeds = [labels == i for i in range(1, count) if (labels == i).sum() >= 16]
         for mask in seeds:
             objects.append(region(mask, len(objects) + 1))
-            if options['precise']:
-                masks.append(mask)
+            masks.append(mask)
+    for obj in objects:
+        obj['box_original_pixels'] = [round(value * original[i % 2], 2) for i, value in enumerate(obj['box'])]
+    meta['pixel_coordinate_reference'] = 'EXIF-oriented original image, continuous xyxy, right/bottom exclusive'
     annotated = image.copy()
     union = np.zeros((image.height, image.width), dtype=bool)
     if masks:
@@ -266,11 +338,34 @@ def extract(paths, destination, options):
         draw.text((box[0] + 3, box[1] + 3), str(obj['id']), fill='#ed5a37')
     meta['count'] = len(objects)
     meta['message'] = '未发现符合当前参数的目标或疑似变化' if not objects else '结果需人工核对'
+    # Coordinates and statistics accompany the visual preview.
+    import csv
+    csv_path = output / 'objects.csv'
+    with csv_path.open('w',encoding='utf-8-sig',newline='') as stream:
+        writer=csv.writer(stream)
+        writer.writerow(['id','xmin_relative','ymin_relative','xmax_relative','ymax_relative','confidence','area_ratio',
+                         'xmin_original_px','ymin_original_px','xmax_original_px','ymax_original_px'])
+        for obj in objects:
+            writer.writerow([obj['id'],*obj['box'],obj.get('score'),obj.get('area_ratio'),*obj['box_original_pixels']])
+    extras.append(csv_path)
+    original_path = output / 'source.png'
+    image.save(original_path)
+    extras.append(original_path)
+    if MODE == 'change':
+        comparison = Image.new('RGB',(image.width*2,image.height))
+        comparison.paste(aligned,(0,0));comparison.paste(annotated,(image.width,0))
+        comparison_path=output/'comparison.png';comparison.save(comparison_path);extras.append(comparison_path)
+        rawdiff=np.max(np.abs(np.asarray(aligned).astype('float32')-np.asarray(image).astype('float32')),axis=2)
+        heat=cv2.cvtColor(cv2.applyColorMap(rawdiff.astype('uint8'),cv2.COLORMAP_TURBO),cv2.COLOR_BGR2RGB)
+        heat_path=output/'difference-heatmap.png';Image.fromarray(heat).save(heat_path);extras.append(heat_path)
+        meta['changed_area_ratio']=float(union.mean())
+        meta['overlap_ratio']=float((valid>0).mean())
+        meta['region_count_note']='候选超过128处时按8×8网格合并展示，保留全部差异像素；区域数并非真实地物数量。'
     result = output / 'result.json'
     result.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding='utf-8')
     preview = output / 'annotated.png'
     annotated.save(preview)
-    if options['precise']:
+    if options['precise'] or MODE == 'change':
         mask_path = output / 'mask.png'
         Image.fromarray(union.astype('uint8') * 255).save(mask_path)
         extras.append(mask_path)

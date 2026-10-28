@@ -201,6 +201,13 @@ def create_server(root, address=("127.0.0.1", 3314), redeem_ticket=redeem, publi
                         return self.reply(503, {"error": "服务未配置就绪，请管理员配置票据服务及SAM3接口"})
                     store.cleanup(retention)
                     body = self.body()
+                    replace_id = body.get('replace_id')
+                    if replace_id:
+                        previous = store.task(user, replace_id) if isinstance(replace_id, str) else None
+                        if not previous or previous['state'] in ('queued', 'running'):
+                            raise ValueError("原任务不存在或仍在运行")
+                        if not body.get('files'):
+                            body['files'] = [{'name': name, 'content': base64.b64encode((store.root / replace_id / 'input' / stored).read_bytes()).decode()} for name, stored in zip(previous['input_names'], previous['inputs'])]
                     tool, files, options = body.get("tool"), body.get("files"), body.get("options", {})
                     if not isinstance(tool, str) or tool not in TOOLS or not isinstance(files, list) or len(files) != 2 or not isinstance(options, dict):
                         raise ValueError("工具、文件或参数无效")
@@ -236,7 +243,7 @@ def create_server(root, address=("127.0.0.1", 3314), redeem_ticket=redeem, publi
                         target.chmod(0o600)
                     try:
                         store.create(user, tool, options, [name for name, _ in contents], task_id,
-                                     input_names=[file["name"] for file in files])
+                                     input_names=[file["name"] for file in files], replace_id=replace_id)
                     except Exception:
                         # This exact service-created task has no database owner yet.
                         if directory.parent.resolve().parent == store.root:
@@ -245,11 +252,18 @@ def create_server(root, address=("127.0.0.1", 3314), redeem_ticket=redeem, publi
                     worker.submit(user, task_id)
                     threading.Thread(target=report_usage, args=(user, task_id), daemon=True).start()
                     return self.reply(201, {"id": task_id})
-                match = re.fullmatch(r"/api/tasks/([a-f0-9]{32})/(cancel|files/([0-9]+))", path)
+                match = re.fullmatch(r"/api/tasks/([a-f0-9]{32})/(cancel|delete|files/([0-9]+))", path)
                 if match:
                     task = store.task(user, match[1])
                     if not task:
                         return self.reply(404, {"error": "任务不存在"})
+                    if method == "POST" and match[2] == "delete":
+                        self.body()
+                        with worker._lock:
+                            if match[1] in worker._active:
+                                return self.reply(409, {"error": "任务仍在停止，请稍后删除"})
+                            deleted = store.delete(user, match[1])
+                        return self.reply(200, {"deleted": deleted})
                     if method == "POST" and match[2] == "cancel":
                         self.body()
                         cancelled = store.cancel(user, match[1])
@@ -269,8 +283,8 @@ def create_server(root, address=("127.0.0.1", 3314), redeem_ticket=redeem, publi
                                 self.wfile.write(chunk)
                         return
                 self.reply(404, {"error": "接口不存在"})
-            except (ValueError, binascii.Error):
-                self.reply(400, {"error": "请求无效，请检查文件格式、参数和上传大小"})
+            except (ValueError, binascii.Error) as error:
+                self.reply(400, {"error": str(error) if isinstance(error, ValueError) and not isinstance(error, binascii.Error) else "文件编码无效"})
             except (BrokenPipeError, ConnectionResetError):
                 pass  # Client disconnected; never retry response writes.
             except Exception:

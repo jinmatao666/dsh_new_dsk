@@ -65,13 +65,24 @@ class Store:
         with self.connect() as db:
             db.execute("DELETE FROM sessions WHERE digest=?", (hashlib.sha256(token.encode()).hexdigest(),))
 
-    def create(self, user, tool, options, inputs, task_id, input_names=None):
+    def create(self, user, tool, options, inputs, task_id, input_names=None, replace_id=None):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             # Bound disk/CPU intake while the single worker drains queued tasks.
             active = db.execute("SELECT COUNT(*) FROM tasks WHERE state IN ('queued','running')").fetchone()[0]
             if active >= 20:
                 raise ValueError("当前任务较多，请稍后重试")
+            previous = None
+            if replace_id:
+                previous = db.execute("SELECT * FROM tasks WHERE id=? AND user_id=?", (replace_id, user)).fetchone()
+                if not previous:
+                    raise ValueError("原任务不存在或已删除")
+            elif options.get('taskName'):
+                previous = db.execute("SELECT * FROM tasks WHERE user_id=? AND json_extract(options, '$.taskName')=? ORDER BY created DESC LIMIT 1", (user, options['taskName'])).fetchone()
+            if previous:
+                if previous['state'] in ('queued', 'running'):
+                    raise ValueError("同名任务正在运行，请等待完成后再修改")
+                db.execute("DELETE FROM tasks WHERE id=?", (previous['id'],))
             db.execute("INSERT INTO tasks(id,user_id,tool,options,inputs,created,state,input_names) VALUES(?,?,?,?,?,?,'queued',?)",
                        (task_id, user, tool, json.dumps(options), json.dumps(inputs), time.time(), json.dumps(input_names or inputs)))
 
@@ -107,6 +118,22 @@ class Store:
             return db.execute("UPDATE tasks SET state='cancelled' WHERE user_id=? AND id=? AND state IN ('queued','running')",
                               (user, task_id)).rowcount == 1
 
+    def delete(self, user, task_id):
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT state FROM tasks WHERE id=? AND user_id=?", (task_id, user)).fetchone()
+            if not row:
+                return False
+            if row['state'] in ('queued', 'running'):
+                raise ValueError("任务正在运行，请先取消再删除")
+            directory = self.root / task_id
+            if not re.fullmatch(r"[a-f0-9]{32}", task_id) or directory.is_symlink() or directory.is_junction() or directory.resolve().parent != self.root:
+                raise ValueError("任务目录无效")
+            if directory.exists():
+                shutil.rmtree(directory)
+            db.execute("DELETE FROM tasks WHERE id=? AND user_id=?", (task_id, user))
+            return True
+
     def cleanup(self, retention_days=30):
         """Remove expired terminal task directories only; never follow links."""
         if not 1 <= retention_days <= 365:
@@ -127,3 +154,9 @@ class Store:
                     shutil.rmtree(directory)
                 db.execute("DELETE FROM tasks WHERE id=?", (task_id,))
             db.execute("DELETE FROM sessions WHERE expires<=?", (time.time(),))
+            # Replaced runs use fresh directories so an old worker can never publish
+            # into the new run. Remove unreferenced directories after a full day.
+            known = {row[0] for row in db.execute('SELECT id FROM tasks')}
+            for directory in self.root.iterdir():
+                if re.fullmatch(r'[a-f0-9]{32}', directory.name) and directory.name not in known and not directory.is_symlink() and not directory.is_junction() and directory.is_dir() and directory.stat().st_mtime < time.time()-86400:
+                    shutil.rmtree(directory)

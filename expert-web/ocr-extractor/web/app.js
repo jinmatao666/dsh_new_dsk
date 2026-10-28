@@ -7,6 +7,7 @@ let authenticated = false;
 let expired = false;
 let config = { ready: false, preview: false };
 let file = null;
+let selectedFiles = [];
 let imageUrl = null;
 let tasks = [];
 let activeTask = null;
@@ -62,7 +63,7 @@ async function api(path, data) {
 function updateButton() {
   const mode = $('#ocr-form input[name="mode"]:checked').value;
   const busy = submitting || (activeTask && ['queued', 'running'].includes(activeTask.state));
-  $('#start-button').disabled = !authenticated || !config.ready || !file || busy || (mode === 'custom' && !$('#instruction').value.trim());
+  $('#start-button').disabled = !authenticated || !config.ready || (!file && !activeTask) || busy || (mode === 'custom' && !$('#instruction').value.trim());
   $('#start-button').lastChild.textContent = submitting ? ' 正在上传…' : '开始识别';
 }
 function resetResult() {
@@ -84,7 +85,7 @@ function setPage(next) {
   if (next === 'history' || next === 'files') renderTasks();
 }
 function newTask() {
-  selection++; activeTask = null; file = null;
+  selection++; activeTask = null; file = null; selectedFiles = [];
   clearImage(); resetResult(); $('#drop-zone').hidden = false;
   $('#image-input').value = ''; $('#file-bar>span').textContent = '清晰、完整的原图有助于准确提取';
   $('#replace-image').hidden = true;
@@ -93,22 +94,29 @@ function newTask() {
 }
 function chooseFile(next) {
   if (!authenticated) { toast('请先从专家库登录，或使用本地预览入口'); return; }
-  if (!next || !/\.(png|jpe?g|webp)$/i.test(next.name) || next.size > 10 * 1024 * 1024 || !next.size) { toast('请选择不超过10 MB的PNG、JPG或WebP图片'); return; }
-  selection++; activeTask = null; file = next;
+  if (!next || !/\.(png|jpe?g|webp|pdf|bmp|tiff?)$/i.test(next.name) || next.size > 50 * 1024 * 1024 || !next.size) { toast('请选择图片或PDF，任务总大小不超过50 MB'); return; }
+  selection++; activeTask = null; file = next; selectedFiles = [next];
   clearImage(); resetResult();
-  imageUrl = URL.createObjectURL(next); $('#source-image').src = imageUrl; $('#source-image').hidden = false;
+  imageUrl = URL.createObjectURL(next); $('#source-image').src = imageUrl; $('#source-image').hidden = /\.(pdf|tiff?)$/i.test(next.name);
   $('#drop-zone').hidden = true; $('#replace-image').hidden = false;
   $('#file-bar>span').textContent = `${next.name} · ${(next.size / 1024).toFixed(0)} KB`;
   updateButton();
 }
-$('#image-input').addEventListener('change', event => chooseFile(event.target.files[0]));
+function chooseFiles(values) {
+  const list = Array.from(values);
+  if (!list.length || list.length > 20 || list.reduce((n,f)=>n+f.size,0)>50*1024*1024 || list.some(f=>!f.size||!/\.(png|jpe?g|webp|pdf|bmp|tiff?)$/i.test(f.name))) return toast('请选择1至20个图片或PDF文件，总大小不超过50 MB');
+  chooseFile(list[0]); if (!authenticated) return;
+  selectedFiles = list;
+  $('#file-bar>span').textContent = list.map(f=>f.name).join(' / ');
+}
+$('#image-input').addEventListener('change', event => chooseFiles(event.target.files));
 $('#replace-image').addEventListener('click', () => $('#image-input').click());
 $('#new-task').addEventListener('click', newTask);
 document.querySelectorAll('nav [data-page]').forEach(button => button.addEventListener('click', () => setPage(button.dataset.page)));
 $('.expert-brand').addEventListener('click', event => { event.preventDefault(); setPage('home'); });
 $('#image-stage').addEventListener('dragover', event => { event.preventDefault(); $('#drop-zone').classList.add('drag-over'); });
 $('#image-stage').addEventListener('dragleave', () => $('#drop-zone').classList.remove('drag-over'));
-$('#image-stage').addEventListener('drop', event => { event.preventDefault(); $('#drop-zone').classList.remove('drag-over'); if (event.dataTransfer.files.length !== 1) return toast('每次只接受一张图片'); chooseFile(event.dataTransfer.files[0]); });
+$('#image-stage').addEventListener('drop', event => { event.preventDefault(); $('#drop-zone').classList.remove('drag-over'); chooseFiles(event.dataTransfer.files); });
 document.querySelectorAll('input[name="mode"]').forEach(input => input.addEventListener('change', () => {
   const custom = input.value === 'custom' && input.checked;
   $('#instruction').disabled = !custom;
@@ -118,19 +126,19 @@ document.querySelectorAll('input[name="mode"]').forEach(input => input.addEventL
 }));
 $('#instruction').addEventListener('input', () => { $('#instruction-count').textContent = `${$('#instruction').value.length} / 2000`; updateButton(); });
 document.querySelectorAll('input[name="format"]').forEach(input => input.addEventListener('change', () => {
-  $('#format-help').textContent = { text: '适合直接复制使用，导出为TXT文件。', markdown: '保留段落和表格结构，导出为Markdown文件。', json: '按字段整理为JSON；无效结构不会作为成功结果发布。', csv: '首行为字段名，导出适合表格软件打开的CSV文件。' }[input.value];
+  $('#format-help').textContent = { text: '适合直接复制使用，导出为TXT文件。', markdown: '保留段落和表格结构，导出为Markdown文件。', json: '按字段整理为JSON；无效结构不会作为成功结果发布。', csv: '首行为字段名，导出CSV表格。', docx:'导出可编辑Word文档，保留识别文字与段落，不还原原稿版式。', pdf:'导出可搜索的文字版PDF，不还原原稿版式。' }[input.value];
 }));
 const base64 = image => new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = () => reject(new Error('图片读取失败')); reader.readAsDataURL(image); });
 $('#ocr-form').addEventListener('submit', async event => {
   event.preventDefault();
-  if (!authenticated || !config.ready || !file || submitting) return;
+  if (!authenticated || !config.ready || (!file && !activeTask) || submitting) return;
   const current = file; const revision = selection;
   submitting = true; updateButton();
   const options = { taskName: $('#task-name').value.trim(), mode: $('#ocr-form input[name="mode"]:checked').value, format: $('#ocr-form input[name="format"]:checked').value, instruction: $('#instruction').value.trim() };
   try {
-    const content = await base64(current);
+    const uploaded = current ? await Promise.all(selectedFiles.map(async f=>({name:f.name,content:await base64(f)}))) : [];
     if (revision !== selection || expired) return;
-    const result = await api('api/tasks', { tool: 'ocr', files: [{ name: current.name, content }], options });
+    const result = await api('api/tasks', { tool: 'ocr', files: uploaded, options, replace_id: activeTask?.id });
     await refreshTasks();
     if (revision === selection) await openTask(result.id);
     toast('识别任务已提交');
@@ -140,7 +148,7 @@ $('#ocr-form').addEventListener('submit', async event => {
 
 function renderTasks() {
   $('#task-count').textContent = String(tasks.length);
-  $('#task-list').innerHTML = tasks.length ? tasks.map(task => `<article class="panel task-row"><span class="task-glyph"><svg class="icon"><use href="#file"/></svg></span><div class="task-info"><strong>${escape(task.options.taskName || task.input_names[0] || '文字识别任务')}</strong><small>${escape(new Date(task.created * 1000).toLocaleString())} · ${escape(formats[task.options.format])}${task.error ? ' · ' + escape(task.error) : ''}</small></div><span class="task-state ${escape(task.state)}">${escape(states[task.state] || task.state)}</span><button data-open="${escape(task.id)}">查看任务</button></article>`).join('') : '<div class="panel empty-list">暂无识别任务，从一张图片开始。</div>';
+  $('#task-list').innerHTML = tasks.length ? tasks.map(task => `<article class="panel task-row"><span class="task-glyph"><svg class="icon"><use href="#file"/></svg></span><div class="task-info"><strong>${escape(task.options.taskName || task.input_names[0] || '文字识别任务')}</strong><small>${escape(new Date(task.created * 1000).toLocaleString())} · ${escape(formats[task.options.format])}${task.error ? ' · ' + escape(task.error) : ''}</small></div><span class="task-state ${escape(task.state)}">${escape(states[task.state] || task.state)}</span><button data-open="${escape(task.id)}">查看任务</button><button data-delete="${escape(task.id)}" class="delete-task">删除</button></article>`).join('') : '<div class="panel empty-list">暂无识别任务，从一张图片开始。</div>';
   const outputs = tasks.filter(task => task.state === 'succeeded').flatMap(task => task.outputs.map((name, index) => ({ task, name, index })));
   $('#output-list').innerHTML = outputs.length ? outputs.map(({ task, name, index }) => `<article class="panel task-row"><span class="task-glyph"><svg class="icon"><use href="#file"/></svg></span><div class="task-info"><strong>${escape(name)}</strong><small>${escape(task.options.taskName || task.input_names[0])} · ${escape(new Date(task.created * 1000).toLocaleString())}</small></div><button data-save="api/tasks/${escape(task.id)}/files/${index}" data-name="${escape(name)}">下载文件</button></article>`).join('') : '<div class="panel empty-list">暂无成果文件。只有实际完成的任务才会出现在这里。</div>';
 }
@@ -163,7 +171,11 @@ async function openTask(id, navigate = true) {
   if (navigate) setPage('home');
   $('#source-image').src = `api/tasks/${task.id}/image`; $('#source-image').hidden = false;
   $('#drop-zone').hidden = true; $('#replace-image').hidden = false;
-  $('#file-bar>span').textContent = task.input_names[0];
+  $('#file-bar>span').textContent = task.input_names.join(' / ');
+  if (navigate) {
+    for (const key of ['mode','format']) { const radio = $(`#ocr-form input[name="${key}"][value="${task.options[key]}"]`); if(radio){radio.checked=true;radio.dispatchEvent(new Event('change'));} }
+    $('#instruction').value=task.options.instruction || ''; $('#instruction').dispatchEvent(new Event('input'));
+  }
   $('#task-name').value = task.options.taskName || '';
   $('#result-badge').textContent = states[task.state];
   if (['queued', 'running'].includes(task.state)) {
@@ -189,7 +201,16 @@ async function openTask(id, navigate = true) {
 $('#refresh-tasks').addEventListener('click', () => refreshTasks().then(() => toast('任务记录已刷新')).catch(error => toast(error.message)));
 $('#task-list').addEventListener('click', event => { const button = event.target.closest('[data-open]'); if (button) openTask(button.dataset.open).catch(error => toast(error.message)); });
 $('#cancel-task').addEventListener('click', async () => { if (!activeTask) return; try { await api(`api/tasks/${activeTask.id}/cancel`, {}); await refreshTasks(); } catch (error) { if (!expired) toast(error.message); } });
-$('#copy-result').addEventListener('click', async () => { if (!resultText || expired) return; try { await navigator.clipboard.writeText(resultText); toast(example ? '示例文字已复制，不是实际识别结果' : '识别结果已复制'); } catch { toast('当前环境无法写入剪贴板，请选中结果文字手动复制。'); } });
+$('#copy-result').addEventListener('click', async () => {
+  if (!resultText || expired) return;
+  const area = document.createElement('textarea'); area.value=resultText; area.setAttribute('aria-label','待复制的识别文字'); area.className='clipboard-buffer'; document.body.append(area); area.select();
+  let copied=false;
+  try { copied=document.execCommand('copy'); } catch {}
+  area.remove();
+  if(!copied && navigator.clipboard) { try { await navigator.clipboard.writeText(resultText); copied=true; } catch {} }
+  if(copied) toast('识别结果已复制');
+  else { const range=document.createRange(); range.selectNodeContents($('#result-content')); const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);toast('结果已全选，请按 Ctrl+C 复制'); }
+});
 async function saveFile(path, name) {
   if (expired || !authenticated) return;
   const controller = new AbortController(); controllers.add(controller);
@@ -215,7 +236,7 @@ $('#download-result').addEventListener('click', event => { event.preventDefault(
 $('#output-list').addEventListener('click', event => { const button = event.target.closest('[data-save]'); if (button) saveFile(button.dataset.save, button.dataset.name); });
 $('#sample-button').addEventListener('click', () => {
   if (expired) return toast('请先重新登录');
-  selection++; activeTask = null; file = null; clearImage(); resetResult(); example = true;
+  selection++; activeTask = null; file = null; selectedFiles = []; clearImage(); resetResult(); example = true;
   $('#source-image').src = 'assets/sample-form.svg'; $('#source-image').hidden = false;
   $('#drop-zone').hidden = true; $('#replace-image').hidden = !authenticated;
   $('#file-bar>span').textContent = '展示示例 · 非真实业务材料';
@@ -246,3 +267,9 @@ async function initialize() {
 }
 setInterval(() => { if (authenticated && !expired && !document.hidden && tasks.some(task => ['queued', 'running'].includes(task.state))) refreshTasks().catch(error => { if (!expired) toast(error.message); }); }, 4000);
 initialize();
+
+$('#task-list').addEventListener('click', async event=>{
+  const button=event.target.closest('[data-delete]'); if(!button)return;
+  if(!confirm('删除此任务及其成果文件？删除后无法恢复。'))return;
+  try{await api(`api/tasks/${button.dataset.delete}/delete`,{});if(activeTask?.id===button.dataset.delete)newTask();await refreshTasks();toast('任务已删除');}catch(error){toast(error.message);}
+});

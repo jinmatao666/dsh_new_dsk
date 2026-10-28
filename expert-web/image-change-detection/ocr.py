@@ -46,7 +46,7 @@ def validate_options(options):
     name = options.get('taskName', '')
     precise = options.get('precise', False)
     align = options.get('align', True)
-    threshold = options.get('threshold', 28)
+    threshold = options.get('threshold', 36)
     area = options.get('minArea', 0.001)
     score = options.get('score', 0.35)
     if not isinstance(target, str) or len(target) > 200 or (MODE == 'detect' and not target.strip()):
@@ -98,7 +98,14 @@ def sam_segment(image, *, prompt='', boxes=None, precise=True, score=0.35):
     payload = {'schema_version': 1, 'image': encode_image(image), 'text': prompt,
                'boxes': boxes or [], 'return_masks': precise, 'score_threshold': score}
     try:
-        result = post_json(os.environ.get('SAM3_URL', ''), payload, os.environ.get('SAM3_KEY', ''), timeout=55)
+        api = os.environ.get('SAM3_API', 'adapter_v1')
+        if api == 'deployed_v1':
+            from sam3_deployed import recognize
+            result = recognize(image, payload['image'], prompt, boxes, score)
+        elif api == 'adapter_v1':
+            result = post_json(os.environ.get('SAM3_URL', ''), payload, os.environ.get('SAM3_KEY', ''), timeout=55)
+        else:
+            raise ValueError('unsupported SAM3_API')
         if result.get('schema_version') != 1 or result.get('width') != image.width or result.get('height') != image.height:
             raise ValueError('wrong response version or image size')
         objects = result['objects']
@@ -125,7 +132,9 @@ def sam_segment(image, *, prompt='', boxes=None, precise=True, score=0.35):
                 mask = values > 0
             parsed.append({'box': box, 'score': confidence, 'mask': mask})
         return parsed
-    except (ServiceError, ValueError, TypeError, KeyError, OSError, IndexError):
+    except ServiceError as error:
+        raise OCRError(str(error)) from None
+    except (ValueError, TypeError, KeyError, OSError, IndexError):
         raise OCRError('SAM3调用失败或响应不匹配；需部署配套SAM3 HTTP适配服务，精准分割要求真实二值掩膜') from None
 
 
@@ -151,51 +160,101 @@ def aligned_pair(before, after, align):
             raise OCRError('关闭自动对齐时，两期图片尺寸须相同且已经配准')
         return np.asarray(before), np.ones((after.height, after.width), dtype='uint8') * 255, None
     a, b = np.asarray(before), np.asarray(after)
-    gray_a, gray_b = cv2.cvtColor(a, cv2.COLOR_RGB2GRAY), cv2.cvtColor(b, cv2.COLOR_RGB2GRAY)
-    orb = cv2.ORB_create(nfeatures=2500)
-    ka, da = orb.detectAndCompute(gray_a, None)
-    kb, db = orb.detectAndCompute(gray_b, None)
-    if da is None or db is None:
-        raise OCRError('图片纹理不足，无法自动对齐；请上传已配准图片并关闭自动对齐')
-    matches = cv2.BFMatcher(cv2.NORM_HAMMING).knnMatch(da, db, k=2)
-    good = [pair[0] for pair in matches if len(pair) == 2 and pair[0].distance < 0.72 * pair[1].distance]
-    if len(good) < 12:
-        raise OCRError('两期图片缺少足够对应点，无法可靠比较')
-    pa = np.float32([ka[m.queryIdx].pt for m in good])
-    pb = np.float32([kb[m.trainIdx].pt for m in good])
-    matrix, inliers = cv2.findHomography(pa, pb, cv2.RANSAC, 3)
-    if matrix is None or not np.isfinite(matrix).all() or inliers is None or inliers.sum() < 12 or inliers.mean() < 0.55:
-        raise OCRError('两期图片对齐不可靠，未输出变化结论')
+    gray_a = cv2.cvtColor(a, cv2.COLOR_RGB2GRAY)
+    gray_b = cv2.cvtColor(b, cv2.COLOR_RGB2GRAY)
+    matrix = None
+    # First estimate a global translation. It is stable for orthophotos whose
+    # framing is the same and avoids false homographies from changed buildings.
+    if before.size == after.size:
+        scale = min(1.0, 768 / max(before.size))
+        size = (max(64, round(before.width * scale)), max(64, round(before.height * scale)))
+        try:
+            template = cv2.GaussianBlur(cv2.resize(gray_b, size), (9, 9), 0).astype('float32') / 255
+            source = cv2.GaussianBlur(cv2.resize(gray_a, size), (9, 9), 0).astype('float32') / 255
+            score, warp = cv2.findTransformECC(template, source, np.eye(2, 3, dtype='float32'), cv2.MOTION_TRANSLATION,
+                (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 250, 1e-6), None, 7)
+            if score >= .35 and np.max(np.abs(warp[:, 2])) <= min(size) * .15:
+                warp[:, 2] /= scale
+                matrix = np.linalg.inv(np.vstack([warp, [0, 0, 1]]))
+        except cv2.error:
+            pass
+    # If translation is insufficient, accept a similarity transform only when
+    # RANSAC has broad spatial support and a strong inlier ratio.
+    if matrix is None:
+        detector = cv2.SIFT_create(nfeatures=7000, contrastThreshold=.02)
+        ka, da = detector.detectAndCompute(gray_a, None)
+        kb, db = detector.detectAndCompute(gray_b, None)
+        if da is not None and db is not None:
+            matches = cv2.BFMatcher().knnMatch(da, db, k=2)
+            good = [pair[0] for pair in matches if len(pair) == 2 and pair[0].distance < .7 * pair[1].distance]
+            if len(good) >= 12:
+                pa = np.float32([ka[m.queryIdx].pt for m in good])
+                pb = np.float32([kb[m.trainIdx].pt for m in good])
+                affine, inliers = cv2.estimateAffinePartial2D(pa, pb, method=cv2.RANSAC, ransacReprojThreshold=3, maxIters=5000)
+                if affine is not None and inliers is not None and inliers.sum() >= 12 and inliers.mean() >= .45:
+                    stable = pa[inliers.ravel() > 0]
+                    spread = np.ptp(stable, axis=0) / [before.width, before.height]
+                    if min(spread) >= .15:
+                        matrix = np.vstack([affine, [0, 0, 1]])
+    if matrix is None:
+        if before.size != after.size:
+            raise OCRError('自动对齐未找到共同范围，且两图尺寸不同；请裁成同一范围后重试。')
+        matrix = np.eye(3, dtype='float64')
     corners = np.float32([[0, 0], [before.width, 0], [before.width, before.height], [0, before.height]]).reshape(-1, 1, 2)
     warped_corners = cv2.perspectiveTransform(corners, matrix)
     ratio = abs(cv2.contourArea(warped_corners)) / (after.width * after.height)
-    if not 0.5 <= ratio <= 2:
+    if not .5 <= ratio <= 2:
         raise OCRError('对齐变形过大，未输出变化结论')
-    size = after.size
-    aligned = cv2.warpPerspective(a, matrix, size)
-    valid = cv2.warpPerspective(np.ones(gray_a.shape, dtype='uint8') * 255, matrix, size)
+    aligned = cv2.warpPerspective(a, matrix, after.size)
+    valid = cv2.warpPerspective(np.ones(gray_a.shape, dtype='uint8') * 255, matrix, after.size)
     valid = cv2.erode(valid, np.ones((9, 9), dtype='uint8'))
-    if (valid > 0).mean() < 0.6:
+    if (valid > 0).mean() < .6:
         raise OCRError('两期图片有效重叠区域不足60%，未输出变化结论')
     return aligned, valid, matrix.tolist()
 
 
 def change_candidates(before, after, options):
+    """Find persistent visual differences after registration and radiometric normalization."""
     cv2.setNumThreads(2)
     aligned, valid, matrix = aligned_pair(before, after, options['align'])
     a = cv2.cvtColor(aligned, cv2.COLOR_RGB2LAB).astype('float32')
     b = cv2.cvtColor(np.asarray(after), cv2.COLOR_RGB2LAB).astype('float32')
-    a += np.median(b[valid > 0] - a[valid > 0], axis=0)
-    diff = np.max(np.abs(cv2.GaussianBlur(a, (5, 5), 0) - cv2.GaussianBlur(b, (5, 5), 0)), axis=2)
-    mask = ((diff >= options['threshold']) & (valid > 0)).astype('uint8')
-    kernel = np.ones((3, 3), dtype='uint8')
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    valid_pixels = valid > 0
+    for channel in range(3):
+        av = a[:, :, channel][valid_pixels]
+        bv = b[:, :, channel][valid_pixels]
+        am, bm = np.median(av), np.median(bv)
+        asd = np.percentile(av, 75) - np.percentile(av, 25)
+        bsd = np.percentile(bv, 75) - np.percentile(bv, 25)
+        if asd > 1 and bsd > 1:
+            a[:, :, channel] = (a[:, :, channel] - am) * (bsd / asd) + bm
+        else:
+            a[:, :, channel] += bm - am
+    aa = cv2.GaussianBlur(a, (9, 9), 0)
+    bb = cv2.GaussianBlur(b, (9, 9), 0)
+    delta = cv2.GaussianBlur(np.max(np.abs(aa - bb), axis=2), (9, 9), 0)
+    mask = ((delta >= options['threshold']) & valid_pixels).astype('uint8')
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), dtype='uint8'))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((11, 11), dtype='uint8'))
     count, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
-    accepted = [i for i in range(1, count) if stats[i, cv2.CC_STAT_AREA] >= max(16, mask.size * options['minArea'])]
-    if len(accepted) > 8:
-        raise OCRError('疑似变化区域超过8处，请裁小范围或调整灵敏度后重试')
-    components = [labels == i for i in accepted]
+    min_pixels = max(64, int(mask.size * options['minArea']))
+    accepted = []
+    for i in range(1, count):
+        area = stats[i, cv2.CC_STAT_AREA]
+        width, height = stats[i, cv2.CC_STAT_WIDTH], stats[i, cv2.CC_STAT_HEIGHT]
+        if area < min_pixels or area / max(1, width * height) < 0.035:
+            continue
+        accepted.append(i)
+    if len(accepted) > 128:
+        combined = np.isin(labels, accepted)
+        components = []
+        for ys in np.array_split(np.arange(mask.shape[0]), 8):
+            for xs in np.array_split(np.arange(mask.shape[1]), 8):
+                part = np.zeros_like(combined)
+                part[np.ix_(ys, xs)] = combined[np.ix_(ys, xs)]
+                if part.any(): components.append(part)
+    else:
+        components = [labels == i for i in accepted]
     return components, Image.fromarray(aligned), valid, matrix
 
 
@@ -228,13 +287,17 @@ def extract(paths, destination, options):
         before = loaded[0][0]
         seeds, aligned, valid, matrix = change_candidates(before, image, options)
         meta.update(alignment_matrix_before_to_after=matrix,
+                    alignment_note='自动对齐未找到稳定特征时采用同尺寸原位比较，请人工核对配准质量。',
                     warning='疑似视觉变化，不代表变化原因；阴影、季节、视角等可能造成误报。精准模式为SAM3轮廓与差异邻域相交结果，不是专门训练的语义变化模型。')
         path = output / 'aligned-before.png'
         aligned.save(path)
         extras.append(path)
         if seeds and options['precise']:
             boxes = [region(mask, i)['box'] for i, mask in enumerate(seeds)]
-            sam_objects = sam_segment(image, boxes=boxes, score=options['score']) + sam_segment(aligned, boxes=boxes, score=options['score'])
+            sam_objects = []
+            for start in range(0,len(boxes),8):
+                for source in (image, aligned):
+                    sam_objects.extend(sam_segment(source, boxes=boxes[start:start+8], score=options['score']))
             combined = np.logical_or.reduce(seeds)
             neighborhood = cv2.dilate(combined.astype('uint8'), np.ones((11, 11), dtype='uint8')) > 0
             predicted = [obj['mask'] for obj in sam_objects]
@@ -247,8 +310,7 @@ def extract(paths, destination, options):
             seeds = [labels == i for i in range(1, count) if (labels == i).sum() >= 16]
         for mask in seeds:
             objects.append(region(mask, len(objects) + 1))
-            if options['precise']:
-                masks.append(mask)
+            masks.append(mask)
     annotated = image.copy()
     union = np.zeros((image.height, image.width), dtype=bool)
     if masks:
@@ -266,11 +328,33 @@ def extract(paths, destination, options):
         draw.text((box[0] + 3, box[1] + 3), str(obj['id']), fill='#ed5a37')
     meta['count'] = len(objects)
     meta['message'] = '未发现符合当前参数的目标或疑似变化' if not objects else '结果需人工核对'
+    # Coordinates and statistics accompany the visual preview.
+    import csv
+    csv_path = output / 'objects.csv'
+    with csv_path.open('w',encoding='utf-8-sig',newline='') as stream:
+        writer=csv.writer(stream)
+        writer.writerow(['id','xmin_relative','ymin_relative','xmax_relative','ymax_relative','confidence','area_ratio'])
+        for obj in objects:
+            writer.writerow([obj['id'],*obj['box'],obj.get('score'),obj.get('area_ratio')])
+    extras.append(csv_path)
+    original_path = output / 'source.png'
+    image.save(original_path)
+    extras.append(original_path)
+    if MODE == 'change':
+        comparison = Image.new('RGB',(image.width*2,image.height))
+        comparison.paste(aligned,(0,0));comparison.paste(annotated,(image.width,0))
+        comparison_path=output/'comparison.png';comparison.save(comparison_path);extras.append(comparison_path)
+        rawdiff=np.max(np.abs(np.asarray(aligned).astype('float32')-np.asarray(image).astype('float32')),axis=2)
+        heat=cv2.cvtColor(cv2.applyColorMap(rawdiff.astype('uint8'),cv2.COLORMAP_TURBO),cv2.COLOR_BGR2RGB)
+        heat_path=output/'difference-heatmap.png';Image.fromarray(heat).save(heat_path);extras.append(heat_path)
+        meta['changed_area_ratio']=float(union.mean())
+        meta['overlap_ratio']=float((valid>0).mean())
+        meta['region_count_note']='候选超过128处时按8×8网格合并展示，保留全部差异像素；区域数并非真实地物数量。'
     result = output / 'result.json'
     result.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding='utf-8')
     preview = output / 'annotated.png'
     annotated.save(preview)
-    if options['precise']:
+    if options['precise'] or MODE == 'change':
         mask_path = output / 'mask.png'
         Image.fromarray(union.astype('uint8') * 255).save(mask_path)
         extras.append(mask_path)

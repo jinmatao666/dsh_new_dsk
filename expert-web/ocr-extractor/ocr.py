@@ -14,7 +14,7 @@ from service_http import post_json, ServiceError
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_PIXELS = 20_000_000
-FORMATS = {"text": ".txt", "markdown": ".md", "json": ".json", "csv": ".csv"}
+FORMATS = {"text": ".txt", "markdown": ".md", "json": ".json", "csv": ".csv", "docx": ".docx", "pdf": ".pdf"}
 MIMES = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
 
 
@@ -203,22 +203,44 @@ def format_recognized(raw, options):
         raise OCRError('文字整理失败或结果截断，未发布替代内容；请检查文字模型或改用全文识别') from None
 
 
-def extract(path, destination, options):
+def extract(path, destination, options, input_names=None):
     options = validate_options(options)
-    raw = Path(path).read_bytes()
-    inspect_image(raw)
-    with Image.open(io.BytesIO(raw)) as original:
-        image = ImageOps.exif_transpose(original).convert('RGB')
-    recognized = paddle_recognize(image)
+    from documents import pages, pdf_text_layer
+    paths = path if isinstance(path, list) else [path]
+    sources = {Path(p).name: (Path(p), input_names[i] if input_names else Path(p).name)
+               for i, p in enumerate(paths)}
+    all_pages = []
+    try:
+        for image, name, page_number in pages(paths):
+            source, display_name = sources[name]
+            result = pdf_text_layer(source, page_number) or paddle_recognize(image)
+            result.update(source_file=display_name, page_number=page_number)
+            all_pages.append(result)
+    except (ValueError, OSError) as error:
+        raise OCRError(str(error)) from None
+    if not all_pages:
+        raise OCRError('未找到可识别页面')
+    recognized = dict(all_pages[0])
+    if len(all_pages) > 1:
+        recognized['pages'] = all_pages
+        recognized['lines'] = []
+        for page in all_pages:
+            for line in page['lines']:
+                recognized['lines'].append(dict(line, id=len(recognized['lines']) + 1,
+                    source_file=page['source_file'], page_number=page['page_number']))
+        recognized['text'] = '\n\n'.join(f"{page['source_file']} · 第{page['page_number']}页\n{page['text']}" for page in all_pages)
+        recognized['markdown'] = '\n\n'.join(f"## {page['source_file']} · 第{page['page_number']}页\n\n{page.get('markdown') or page['text']}" for page in all_pages)
     if options['mode'] == 'custom' and recognized['lines']:
-        text = format_recognized(recognized['text'], options)
+        text = format_recognized(recognized['text'], dict(options, format='text' if options['format'] in ('docx','pdf') else options['format']))
     elif options['format'] == 'json':
         text = json.dumps(recognized, ensure_ascii=False, indent=2)
     elif options['format'] == 'csv':
         out = io.StringIO(newline='')
         writer = csv.writer(out)
-        writer.writerow(['line', 'text', 'confidence'])
-        writer.writerows((line['id'], line['text'], line['confidence']) for line in recognized['lines'])
+        writer.writerow(['line', 'source_file', 'page_number', 'text', 'confidence'])
+        writer.writerows((line['id'], line.get('source_file', recognized['source_file']),
+                          line.get('page_number', recognized['page_number']), line['text'], line['confidence'])
+                         for line in recognized['lines'])
         text = normalize_output(out.getvalue(), 'csv')
     else:
         text = recognized['text'] or '未识别到可辨识文字。'
@@ -227,7 +249,12 @@ def extract(path, destination, options):
     output = Path(destination)
     output.mkdir(parents=True, exist_ok=True)
     result = output / ('识别结果' + FORMATS[options['format']])
-    result.write_text(text, encoding='utf-8-sig' if options['format'] == 'csv' else 'utf-8')
+    if options['format'] in ('docx', 'pdf'):
+        from documents import export_document
+        export_document(text, result, options['format'])
+    else:
+        result.write_text(text, encoding='utf-8-sig' if options['format'] == 'csv' else 'utf-8')
+    (output / 'preview.txt').write_text(text, encoding='utf-8')
     evidence = output / 'OCR原始识别.json'
     evidence.write_text(json.dumps(recognized, ensure_ascii=False, indent=2), encoding='utf-8')
     source = output / 'OCR原文.txt'

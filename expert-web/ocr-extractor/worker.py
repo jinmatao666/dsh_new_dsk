@@ -12,7 +12,7 @@ from ocr import OCRError, extract
 
 
 class Worker:
-    def __init__(self, store, timeout=390):
+    def __init__(self, store, timeout=1800):
         self.store = store
         self.timeout = timeout
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ocr")
@@ -128,9 +128,9 @@ if __name__ == "__main__":
         os.environ[key] = value
     try:
         paths = [root / "input" / name for name in task["inputs"]]
-        if task["tool"] != "ocr" or len(paths) != 1:
-            raise OCRError("OCR任务只接受一张图片")
-        outputs = extract(paths[0], root / "output", task["options"])
+        if task["tool"] != "ocr" or not 1 <= len(paths) <= 20:
+            raise OCRError("OCR任务接受1至20个文件")
+        outputs = extract(paths, root / "output", task["options"], input_names=task["input_names"])
         print(json.dumps({"outputs": [path.name for path in outputs]}))
     except OCRError as error:
         print(json.dumps({"error": str(error)}))

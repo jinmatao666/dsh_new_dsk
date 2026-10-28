@@ -19,11 +19,12 @@ from store import Store
 from worker import Worker
 from deployment import ready
 from ocr import inspect_image, validate_options
+from documents import inspect_document
 
 PROJECT = Path(__file__).resolve().parent
-MAX_BODY = 15 * 1024 * 1024
-MAX_FILES = 10 * 1024 * 1024
-TOOLS = {"ocr": {".png", ".jpg", ".jpeg", ".webp"}}
+MAX_BODY = 75 * 1024 * 1024
+MAX_FILES = 50 * 1024 * 1024
+TOOLS = {"ocr": {".png", ".jpg", ".jpeg", ".webp", ".pdf", ".bmp", ".tif", ".tiff"}}
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -181,13 +182,20 @@ def create_server(root, address=("127.0.0.1", 3315), redeem_ticket=redeem, publi
                         return self.reply(404, {"error": "任务不存在"})
                     if match[2] == "image":
                         data = (store.root / task["id"] / "input" / task["inputs"][0]).read_bytes()
+                        if Path(task['inputs'][0]).suffix.lower() in ('.pdf', '.tif', '.tiff', '.bmp'):
+                            from documents import pages
+                            import io
+                            image, _, _ = next(pages([store.root / task['id'] / 'input' / task['inputs'][0]]))
+                            stream = io.BytesIO()
+                            image.save(stream, 'PNG')
+                            data = stream.getvalue()
                         mime = inspect_image(data)["mime"]
                         self.response_headers(200, mime, Content_Length=str(len(data)))
                         self.wfile.write(data)
                         return
                     if task["state"] != "succeeded":
                         return self.reply(409, {"error": "任务尚未成功，无可用识别结果"})
-                    text = (store.root / task["id"] / "output" / task["outputs"][0]).read_text(encoding="utf-8-sig")
+                    text = (store.root / task["id"] / "output" / "preview.txt").read_text(encoding="utf-8-sig")
                     return self.reply(200, {"text": text, "format": task["options"]["format"]})
                 if method == "GET" and path == "/api/tasks":
                     items = store.list(user)
@@ -199,14 +207,22 @@ def create_server(root, address=("127.0.0.1", 3315), redeem_ticket=redeem, publi
                         return self.reply(503, {"error": "OCR服务未配置就绪，请管理员配置票据服务及PaddleOCR识别服务"})
                     store.cleanup(retention)
                     body = self.body()
+                    replace_id = body.get('replace_id')
+                    if replace_id:
+                        previous = store.task(user, replace_id) if isinstance(replace_id, str) else None
+                        if not previous or previous['state'] in ('queued', 'running'):
+                            raise ValueError("原任务不存在或仍在运行")
+                        if not body.get('files'):
+                            body['files'] = [{'name': name, 'content': base64.b64encode((store.root / replace_id / 'input' / stored).read_bytes()).decode()} for name, stored in zip(previous['input_names'], previous['inputs'])]
                     tool, files, options = body.get("tool"), body.get("files"), body.get("options", {})
-                    if not isinstance(tool, str) or tool not in TOOLS or not isinstance(files, list) or len(files) != 1 or not isinstance(options, dict):
+                    if not isinstance(tool, str) or tool not in TOOLS or not isinstance(files, list) or not 1 <= len(files) <= 20 or not isinstance(options, dict):
                         raise ValueError("工具、文件或参数无效")
                     options = validate_options(options)
                     contents, total = [], 0
                     task_name = options.get("taskName", "")
                     if not isinstance(task_name, str) or len(task_name) > 180 or any(ord(char) < 32 for char in task_name):
                         raise ValueError("任务名称无效")
+                    page_count = 0
                     for index, file in enumerate(files):
                         if not isinstance(file, dict) or not isinstance(file.get("name"), str) or not isinstance(file.get("content"), str):
                             raise ValueError("上传文件格式无效")
@@ -218,11 +234,13 @@ def create_server(root, address=("127.0.0.1", 3315), redeem_ticket=redeem, publi
                         data = base64.b64decode(file["content"], validate=True)
                         total += len(data)
                         if not data or total > MAX_FILES:
-                            raise ValueError("文件为空或大小超过10 MB")
-                        image_info = inspect_image(data)
-                        expected = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}[suffix]
-                        if image_info["mime"] != expected:
-                            raise ValueError("图片扩展名与实际内容不一致")
+                            raise ValueError("文件为空或总大小超过50 MB")
+                        try:
+                            page_count += inspect_document(data, suffix)['pages']
+                        except Exception:
+                            raise ValueError('文件损坏、格式不符、加密或超过页数限制') from None
+                        if page_count > 20:
+                            raise ValueError('每个任务最多20页，请拆分提交')
                         contents.append((f"{index:03d}{suffix}", data))
                     task_id = secrets.token_hex(16)
                     directory = store.root / task_id / "input"
@@ -234,7 +252,7 @@ def create_server(root, address=("127.0.0.1", 3315), redeem_ticket=redeem, publi
                         target.chmod(0o600)
                     try:
                         store.create(user, tool, options, [name for name, _ in contents], task_id,
-                                     input_names=[file["name"] for file in files])
+                                     input_names=[file["name"] for file in files], replace_id=replace_id)
                     except Exception:
                         # This exact service-created task has no database owner yet.
                         if directory.parent.resolve().parent == store.root:
@@ -243,11 +261,18 @@ def create_server(root, address=("127.0.0.1", 3315), redeem_ticket=redeem, publi
                     worker.submit(user, task_id)
                     threading.Thread(target=report_usage, args=(user, task_id), daemon=True).start()
                     return self.reply(201, {"id": task_id})
-                match = re.fullmatch(r"/api/tasks/([a-f0-9]{32})/(cancel|files/([0-9]+))", path)
+                match = re.fullmatch(r"/api/tasks/([a-f0-9]{32})/(cancel|delete|files/([0-9]+))", path)
                 if match:
                     task = store.task(user, match[1])
                     if not task:
                         return self.reply(404, {"error": "任务不存在"})
+                    if method == "POST" and match[2] == "delete":
+                        self.body()
+                        with worker._lock:
+                            if match[1] in worker._active:
+                                return self.reply(409, {"error": "任务仍在停止，请稍后删除"})
+                            deleted = store.delete(user, match[1])
+                        return self.reply(200, {"deleted": deleted})
                     if method == "POST" and match[2] == "cancel":
                         self.body()
                         cancelled = store.cancel(user, match[1])
@@ -267,8 +292,8 @@ def create_server(root, address=("127.0.0.1", 3315), redeem_ticket=redeem, publi
                                 self.wfile.write(chunk)
                         return
                 self.reply(404, {"error": "接口不存在"})
-            except (ValueError, binascii.Error):
-                self.reply(400, {"error": "请求无效，请检查文件格式、参数和上传大小"})
+            except (ValueError, binascii.Error) as error:
+                self.reply(400, {"error": str(error) if isinstance(error, ValueError) and not isinstance(error, binascii.Error) else "文件编码无效"})
             except (BrokenPipeError, ConnectionResetError):
                 pass  # Client disconnected; never retry response writes.
             except Exception:

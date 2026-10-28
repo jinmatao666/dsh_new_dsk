@@ -2,7 +2,7 @@
 services:
   expert:
     build: .
-    image: wanwei-expert/image-change-detection:0.2.0
+    image: wanwei-expert/image-change-detection:0.3.0
     init: true
     restart: unless-stopped
     network_mode: host
@@ -23,7 +23,7 @@ services:
     mem_limit: 2048m
     cpus: 2
     pids_limit: 96
-    stop_grace_period: 250s
+    stop_grace_period: 1810s
 volumes:
   change-data:
     name: wanwei-image-change-detection-data

@@ -2,20 +2,22 @@
 
 [English](README.md) | 中文
 
-本独立工作台通过管理员部署的PaddleOCR通用产线识别单张PNG/JPEG/WebP。Qwen只用于自定义文字字段提取，不接收图片。全文TXT、Markdown、JSON和CSV不依赖Qwen；Markdown按文字顺序导出，不还原复杂表格。成功任务同时保存OCR原文和结构化识别依据，字段整理结果需人工核对。
+独立的 Buddy 工作台支持 PNG、JPEG、WebP、BMP、TIFF 和无密码 PDF：每次最多20个文件、合计20页、合计50 MB，单张栅格图片不超过2000万像素。PDF 在本地渲染，最长边不超过2000像素。纯文字 PDF 页直接读取已有文字层；含图片或矢量绘图的页面交给 PaddleOCR，避免漏掉内容。文字层本身也可能出错，结果需要核对。
+
+## 识别与导出
+
+设置 `PADDLEOCR_API=layout`，填写 PP-StructureV3 的完整 POST 地址，例如 `http://127.0.0.1:18082/layout-parsing`。通用 `/ocr` 产线则使用 `PADDLEOCR_API=ocr`。可选的引擎凭据为 `PADDLEOCR_KEY`。版面解析请求超时300秒，任务进程时限1800秒。自定义字段提取需要配置 `EXPERT_MODEL_*` 文字模型；图片不会发给文字整理模型。不编造缺失值或置信度。
+
+支持 TXT、Markdown、JSON、CSV、Word 和 PDF，并附原文及结构化识别证据。Word/PDF 导出为可读文字，不还原原始版式。Markdown 尽量保留版面服务返回内容。多页证据和 CSV 保留原始文件名及页码。全文提取无需 Qwen。自定义文字整理失败时不发布替代结果。
+
+## 任务与权限
+
+任务完成后可复用原文件、修改设置后重跑。显式指定替换任务，或同一用户使用相同非空任务名，会以新运行目录替换历史记录。运行中的任务不能替换或删除；删除已结束任务会移除记录和文件。被替换的旧目录24小时后清理。历史和下载按用户隔离。复制先尝试浏览器复制命令，再尝试安全上下文剪贴板接口，最后提供手动选择复制。
 
 ## 部署
 
-将`.env.example`复制为私有`.env`，填写本专家提供方凭据、完整的`PADDLEOCR_URL`（POST `/ocr`）和可选`PADDLEOCR_KEY`。`EXPERT_MODEL_*`只用于自定义文字整理。本机回环HTTP可用，非回环HTTP引擎需显式设置`EXPERT_ALLOW_HTTP_ENGINE=1`。在本目录执行`docker compose -p wanwei-ocr-extractor build`和`docker compose -p wanwei-ocr-extractor up -d`；Dockerfile支持`PYTHON_IMAGE`和`PIP_INDEX_URL`下载源参数，不打包或提交真实`.env`。
+将 `.env.example` 复制为私有 `.env`，配置本专家的提供方凭据及引擎地址。允许回环 HTTP；非回环 HTTP 引擎须设置 `EXPERT_ALLOW_HTTP_ENGINE=1`。镜像包含本地文档渲染及导出模块。通过 `PYTHON_IMAGE` 和 `PIP_INDEX_URL` 构建参数选择下载源。更新时保留 Compose 项目名 `wanwei-ocr-extractor` 和卷 `wanwei-ocr-extractor-data`；禁止使用 `down -v` 更新。服务监听 `127.0.0.1:3315`，网关路径为 `/experts/ocr-extractor/`。不要打包 `.env` 或任务数据。
 
-Linux host网络监听`127.0.0.1:3315`，数据卷为`wanwei-ocr-extractor-data`。更新保留项目名、数据卷、旧镜像和私有配置；原有已完成记录可继续读取。网关路径为`/experts/ocr-extractor/`，Cookie为`expert_ocr_extractor_session`。更新不执行`down -v`。
+## 验证
 
-## 引擎接口
-
-POST JSON `{"file":"<base64图片>","fileType":1}`，可选引擎Bearer凭据。响应必须包含`result.ocrResults[0].prunedResult`及长度一致的`rec_texts`、`rec_scores`、`rec_polys`；多边形使用方向校正后的输入图像像素坐标。畸形响应、重定向、截断或文字整理失败不发布替代成果；无文字明确返回未识别到文字。参见[官方产线接口](https://www.paddleocr.ai/main/en/version3.x/pipeline_usage/OCR.html)。
-
-## 检查与限制
-
-执行`python -m unittest -q test_ocr`、`node --check web/app.js`和`node --test test_frontend.mjs`。测试使用HTTP替身和真实工作子进程，不加载Paddle权重。生产验收需真实图片、Buddy票据、任务隔离、统计和原生下载。`/healthz`检查进程，`/readyz`只检查配置。输入上限10MB、2000万像素；页面示例不代表实际识别。取消阻止成果发布，不能撤回远端已受理请求。
-
-已部署的PP-StructureV3服务使用 `PADDLEOCR_API=layout`、`PADDLEOCR_URL=http://127.0.0.1:18082/layout-parsing`。请求仅发送base64 `file`与`fileType:1`；读取 `result.layoutParsingResults`、`markdown.text`和`prunedResult.parsing_res_list`。全文Markdown保留服务返回的结构，原始版面数据完整保留，缺失置信度和归一化多边形保持null。文档解析请求超时300秒，工作任务期限390秒；通用 `/ocr` 接口可用 `PADDLEOCR_API=ocr` 选择。仍只支持单张图片，本次不开放PDF上传。
+在本目录运行 `python -m unittest -q`、`node --check web/app.js` 和 `node --test test_frontend.mjs`。测试使用真实任务子进程和 HTTP 模拟服务，不验证真实 Paddle 权重。`/healthz` 检查进程存活，`/readyz` 检查配置。生产验收仍需真实模型推理、Buddy 票据兑换及原生下载。取消会阻止结果发布，但不能撤回已经受理的远程推理请求。

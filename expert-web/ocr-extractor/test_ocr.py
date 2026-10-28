@@ -251,5 +251,42 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(self.app.store.task("1", task_id)["state"], "cancelled")
         self.assertEqual(self.request(f"/api/tasks/{task_id}/files/0")[0], 404)
 
+    def test_rerun_delete(self):
+        self.login()
+        status,body,_=self.upload({'taskName':'同名任务'})
+        self.assertEqual(status,201,body)
+        first=json.loads(body)['id'];self.wait(first)
+        status,body,_=self.request('/api/tasks',{'tool':'ocr','replace_id':first,'files':[], 'options':{'taskName':'同名任务','format':'docx'}})
+        self.assertEqual(status,201,body)
+        second=json.loads(body)['id'];task=self.wait(second)
+        self.assertEqual(task['state'],'succeeded',task)
+        self.assertEqual(len(json.loads(self.request('/api/tasks')[1])['items']),1)
+        self.assertTrue(self.request(f'/api/tasks/{second}/files/0')[1].startswith(b'PK'))
+        self.assertIn('fixture OCR',json.loads(self.request(f'/api/tasks/{second}/result')[1])['text'])
+        other=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        self.login('b'*64,other)
+        self.assertEqual(self.request(f'/api/tasks/{second}/delete',{},client=other)[0],404)
+        self.assertEqual(self.request(f'/api/tasks/{second}/delete',{})[0],200)
+        self.assertFalse((Path(self.tmp.name)/second).exists())
+        self.assertEqual(json.loads(self.request('/api/tasks')[1])['items'],[])
 
-if __name__ == "__main__": unittest.main()
+
+    def test_pdf_export(self):
+        import pymupdf
+        self.login()
+        doc=pymupdf.open()
+        for _ in range(2):doc.new_page().insert_text((50,50),'fixture page')
+        data=doc.tobytes();doc.close()
+        status,body,_=self.upload({'format':'pdf'},'材料.pdf',data)
+        self.assertEqual(status,201,body)
+        task=self.wait(json.loads(body)['id']);self.assertEqual(task['state'],'succeeded',task)
+        result=self.request(f"/api/tasks/{task['id']}/files/0")[1]
+        with pymupdf.open(stream=result,filetype='pdf') as pdf:self.assertGreater(len(pdf),0)
+        evidence=json.loads(self.request(f"/api/tasks/{task['id']}/files/1")[1])
+        self.assertEqual(len(evidence['pages']),2)
+        self.assertEqual(self.request(f"/api/tasks/{task['id']}/image")[0],200)
+        self.assertEqual(self.upload({},'损坏.pdf',b'%PDF-not-a-pdf')[0],400)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,7 +1,7 @@
 # Insert only inside existing ac.zjugis.com:3300 server, same-host host gateway.
 location = /experts/ocr-extractor { return 308 /experts/ocr-extractor/; }
 location ^~ /experts/ocr-extractor/ {
-    client_max_body_size 15m;
+    client_max_body_size 80m;
     proxy_http_version 1.1;
     proxy_set_header Host $host:$server_port;
     proxy_set_header X-Forwarded-Host $host;

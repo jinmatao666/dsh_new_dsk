@@ -2,7 +2,7 @@
 services:
   expert:
     build: .
-    image: wanwei-expert/ocr-extractor:0.2.1
+    image: wanwei-expert/ocr-extractor:0.3.0
     init: true
     restart: unless-stopped
     network_mode: host
@@ -23,7 +23,7 @@ services:
     mem_limit: 1536m
     cpus: 2
     pids_limit: 96
-    stop_grace_period: 400s
+    stop_grace_period: 1810s
 volumes:
   ocr-data:
     name: wanwei-ocr-extractor-data

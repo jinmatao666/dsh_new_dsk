@@ -42,9 +42,9 @@ class Engine(BaseHTTPRequestHandler):
         elif self.path == '/format':
             result = {'choices': [{'finish_reason': 'stop', 'message': {'content': 'car'}}]}
         else:
-            image = Image.open(io.BytesIO(base64.b64decode(body['image'])))
+            image = Image.open(io.BytesIO(base64.b64decode(body.get('image', body.get('image_base64')))))
             obj = {'box': [0.2, 0.2, 0.7, 0.7], 'score': 0.9}
-            if body['return_masks']:
+            if body.get('return_masks', True):
                 from PIL import ImageDraw
                 mask = Image.new('L', image.size)
                 ImageDraw.Draw(mask).rectangle((24, 20, 83, 69), fill=255)
@@ -57,6 +57,13 @@ class Engine(BaseHTTPRequestHandler):
                 result['width'] += 1
             if self.path == '/missing-mask':
                 obj.pop('mask_png', None)
+            if self.path == '/v1/images/segment':
+                result = {'original_size': list(image.size), 'roi_xyxy': [0, 0, *image.size],
+                          'mask_size': list(image.size), 'mask_coordinate_space': 'original',
+                          'box_coordinate_space': 'original', 'total_detections': 1,
+                          'instances': [{'object_id': 1, 'score': .9, 'score_source': 'detector',
+                            'box_xyxy': [24, 20, 84, 70],
+                            'mask': {'format': 'png_base64', 'size': [image.height, image.width], 'data': obj['mask_png']}}]}
         data = json.dumps(result).encode()
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
@@ -166,6 +173,42 @@ class Integration(unittest.TestCase):
             with self.assertRaises(OCRError):
                 sam_segment(Image.new('RGB', (120, 100)), prompt='car', precise=True)
 
+    def test_deployed_service_actual_worker_and_coordinate_conversion(self):
+        self.login()
+        Engine.requests_seen = []
+        endpoint = os.environ['SAM3_URL'].replace('/segment', '/v1/images/segment')
+        with patch.dict(os.environ, {'SAM3_API': 'deployed_v1', 'SAM3_URL': endpoint}):
+            status, raw = self.upload(precise=True)
+            self.assertEqual(status, 201, raw)
+            task = self.wait(json.loads(raw)['id'])
+        self.assertIn('mask.png', task['outputs'])
+        calls = [body for path, body, _ in Engine.requests_seen if path == '/v1/images/segment']
+        self.assertTrue(calls)
+        self.assertEqual(calls[0]['mask_space'], 'original')
+        self.assertNotIn('schema_version', calls[0])
+        self.assertIn('image_base64', calls[0])
+        spec = json.loads((Path(__file__).parent / 'sam3-api-schema.json').read_text(encoding='utf-8'))['components']['schemas']['ConceptRequest']
+        for call in calls:
+            self.assertTrue(set(call).issubset(spec['properties']))
+            self.assertTrue(set(spec['required']).issubset(call))
+        if MODE == 'change':
+            self.assertEqual(calls[0]['prompt'], '')
+            self.assertGreater(calls[0]['positive_boxes'][0][2], 1)
+        else:
+            self.assertEqual(calls[0]['prompt'], 'car')
+
+    def test_deployed_rejects_pixel_mask_orientation_and_truncated_result(self):
+        from sam3_deployed import recognize
+        base = {'original_size': [120,100], 'roi_xyxy': [0,0,120,100], 'mask_size': [120,100],
+                'mask_coordinate_space': 'original', 'total_detections': 0, 'instances': []}
+        from service_http import ServiceError
+        with patch('sam3_deployed.post_json', return_value=base):
+            self.assertEqual(recognize(Image.new('RGB',(120,100)), '', 'car', [], .35)['objects'], [])
+        for changes in ({'original_size':[100,120]}, {'mask_coordinate_space':'roi'}, {'total_detections':1}):
+            with patch('sam3_deployed.post_json', return_value={**base, **changes}):
+                with self.assertRaises(ServiceError):
+                    recognize(Image.new('RGB',(120,100)), '', 'car', [], .35)
+
     def test_no_detection_or_change_is_explicit_empty_result(self):
         if MODE == 'detect':
             result = sam_segment(Image.new('RGB', (120, 100)), prompt='nothing')
@@ -181,6 +224,24 @@ class Integration(unittest.TestCase):
         with self.assertRaises(OCRError):
             change_candidates(Image.new('RGB', (120, 100), 'white'), Image.new('RGB', (120, 100), 'white'), validate_options({}))
 
+    def test_replace_delete(self):
+        self.login()
+        status,raw=self.upload()
+        self.assertEqual(status,201,raw)
+        first=json.loads(raw)['id'];self.wait(first)
+        status,raw=self.request('/api/tasks',{'tool':MODE,'replace_id':first,'files':[], 'options':{'taskName':'重跑任务','target':'car','align':False,'score':.6}})
+        self.assertEqual(status,201,raw)
+        second=json.loads(raw)['id'];task=self.wait(second)
+        self.assertEqual(task['options']['score'],.6)
+        self.assertIn('objects.csv',task['outputs'])
+        self.assertEqual(len(self.app.store.list('1')),1)
+        other=urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        self.request('/api/session',{'ticket':'b'*64},other)
+        self.assertEqual(self.request(f'/api/tasks/{second}/delete',{},other)[0],404)
+        self.assertEqual(self.request(f'/api/tasks/{second}/delete',{})[0],200)
+        self.assertEqual(self.app.store.list('1'),[])
+        self.assertFalse((self.app.store.root/second).exists())
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
