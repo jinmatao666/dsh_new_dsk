@@ -16,18 +16,18 @@ function currentUserId() {
   }
 }
 
-/** Category dialog: type is the library kind; 授权访问 independently sets require_auth. */
+/** Category dialog: 个人/公开/授权 maps to type + require_auth (self-only / everyone / subscribe). */
 const CATEGORY_VISIBILITY = [
   ['personal', '个人'],
   ['public', '公开'],
   ['authorized', '授权'],
 ];
 
-const EMPTY_CATEGORY_FORM = { id: 0, name: '', visibility: 'personal', requireAuth: false };
+const EMPTY_CATEGORY_FORM = { id: 0, name: '', visibility: 'personal' };
 
-function categoryPayload(visibility, name, requireAuth) {
+function categoryPayload(visibility, name) {
   const type = visibility === 'public' ? 'common' : visibility === 'authorized' ? 'shared' : 'personal';
-  return { name, type, require_auth: Boolean(requireAuth) };
+  return { name, type, require_auth: type !== 'common' };
 }
 
 function categoryFormFromRow(category) {
@@ -36,7 +36,6 @@ function categoryFormFromRow(category) {
     id: Number(category.id) || 0,
     name: category.name || '',
     visibility,
-    requireAuth: Boolean(category.require_auth),
   };
 }
 
@@ -318,7 +317,8 @@ const KnowledgeLibrary = () => {
 
   const loadCategories = async () => {
     const rows = unwrap(await API.get(knowledgeCategoriesUrl()));
-    setCategories(Array.isArray(rows) ? rows : []);
+    // Copy so later in-place mock/store mutations cannot clear the rendered tab list.
+    setCategories(Array.isArray(rows) ? rows.map(row => ({ ...row })) : []);
   };
 
   const loadUsers = async () => {
@@ -351,20 +351,28 @@ const KnowledgeLibrary = () => {
     let cancelled = false;
     setLoading(true);
     setUsersLoading(true);
-    const tasks = [loadLibraries(), loadCategories(), loadReviewCount()];
-    if (isAdmin()) tasks.push(loadUsers());
-    else setUsers([]);
-    Promise.all(tasks)
-      .catch(async cause => {
-        const message = await errorMessage(cause);
-        if (!cancelled) setError(message);
-      })
-      .finally(() => {
+    const boot = async () => {
+      try {
+        // Fetch before setState so a slow boot cannot wipe categories saved after mount.
+        const categoryRows = unwrap(await API.get(knowledgeCategoriesUrl()));
+        const libraryRows = unwrap(await API.get(knowledgeBasesRoot()));
+        if (cancelled) return;
+        setCategories(Array.isArray(categoryRows) ? categoryRows.map(row => ({ ...row })) : []);
+        setLibraries(Array.isArray(libraryRows) ? libraryRows : []);
+        await loadReviewCount();
+        if (cancelled) return;
+        if (isAdmin()) await loadUsers();
+        else setUsers([]);
+      } catch (cause) {
+        if (!cancelled) setError(await errorMessage(cause));
+      } finally {
         if (!cancelled) {
           setLoading(false);
           setUsersLoading(false);
         }
-      });
+      }
+    };
+    void boot();
     return () => { cancelled = true; };
   }, []);
 
@@ -404,29 +412,6 @@ const KnowledgeLibrary = () => {
   const manageAllPersonal = isAdmin();
   const viewerId = currentUserId();
 
-  const visible = useMemo(() => {
-    const text = keyword.trim().toLowerCase();
-    const categoryId = scope.startsWith('c:') ? Number(scope.slice(2)) : 0;
-    return libraries
-      .filter(item => (categoryId
-        ? Number(item.category_id || 0) === categoryId
-        : item.kind === scope && !Number(item.category_id || 0)))
-      .filter(item => {
-        if (scope === 'personal' && !manageAllPersonal) {
-          return viewerId > 0 && Number(item.owner_user_id) === viewerId;
-        }
-        return true;
-      })
-      .filter(item => {
-        if (!text) return true;
-        return [item.name, item.description, item.tags, item.owner_username].some(value => String(value || '').toLowerCase().includes(text));
-      })
-      .sort((left, right) => {
-        const delta = new Date(left.updated_at || left.created_at).getTime() - new Date(right.updated_at || right.created_at).getTime();
-        return order === 'asc' ? delta : -delta;
-      });
-  }, [libraries, scope, keyword, order, manageAllPersonal, viewerId]);
-
   const countsByScope = useMemo(() => {
     const personalRows = libraries.filter(item => item.kind === 'personal' && !Number(item.category_id || 0));
     const counts = {
@@ -439,11 +424,43 @@ const KnowledgeLibrary = () => {
     });
     return counts;
   }, [libraries, categories, manageAllPersonal, viewerId]);
-  const tabs = [
+  // Administrators see every category tab. Ordinary users only see public (common) categories
+  // or other categories that already contain a library they may open — never empty foreign tabs.
+  // Use type, not require_auth, so stale personal+require_auth=false rows stay hidden when empty.
+  const tabs = useMemo(() => [
     { key: 'personal', label: '个人知识库', category: null },
-    ...categories.map(category => ({ key: `c:${category.id}`, label: category.name, category })),
-  ];
-  const activeCategory = categories.find(category => `c:${category.id}` === scope);
+    ...categories
+      .filter(category => manageAllPersonal
+        || category.type === 'common'
+        || (countsByScope[`c:${category.id}`] || 0) > 0)
+      .map(category => ({ key: `c:${category.id}`, label: category.name, category })),
+  ], [categories, manageAllPersonal, countsByScope]);
+  // Clamp without setState so creating a tab cannot race a reset back to personal.
+  const activeScope = tabs.some(tab => tab.key === scope) ? scope : 'personal';
+  const activeCategory = categories.find(category => `c:${category.id}` === activeScope);
+
+  const visible = useMemo(() => {
+    const text = keyword.trim().toLowerCase();
+    const categoryId = activeScope.startsWith('c:') ? Number(activeScope.slice(2)) : 0;
+    return libraries
+      .filter(item => (categoryId
+        ? Number(item.category_id || 0) === categoryId
+        : item.kind === activeScope && !Number(item.category_id || 0)))
+      .filter(item => {
+        if (activeScope === 'personal' && !manageAllPersonal) {
+          return viewerId > 0 && Number(item.owner_user_id) === viewerId;
+        }
+        return true;
+      })
+      .filter(item => {
+        if (!text) return true;
+        return [item.name, item.description, item.tags, item.owner_username].some(value => String(value || '').toLowerCase().includes(text));
+      })
+      .sort((left, right) => {
+        const delta = new Date(left.updated_at || left.created_at).getTime() - new Date(right.updated_at || right.created_at).getTime();
+        return order === 'asc' ? delta : -delta;
+      });
+  }, [libraries, activeScope, keyword, order, manageAllPersonal, viewerId]);
 
   const people = useMemo(() => {
     const map = new Map();
@@ -979,14 +996,23 @@ const KnowledgeLibrary = () => {
     setSaving(true);
     setError('');
     try {
-      const payload = categoryPayload(categoryForm.visibility, categoryForm.name.trim(), categoryForm.requireAuth);
+      const payload = categoryPayload(categoryForm.visibility, categoryForm.name.trim());
       const saved = categoryForm.id
         ? unwrap(await API.put(`/api/knowledge-admin/categories/${categoryForm.id}`, payload))
         : unwrap(await API.post('/api/knowledge-admin/categories', payload));
       setCategoryOpen(false);
       setCategoryForm(EMPTY_CATEGORY_FORM);
+      // Apply the saved row immediately so the new tab appears even if a slow initial
+      // categories fetch resolves afterward with a stale empty list.
+      if (saved?.id) {
+        setCategories(current => {
+          const next = current.filter(row => Number(row.id) !== Number(saved.id));
+          next.push({ ...saved });
+          return next.sort((left, right) => Number(left.id) - Number(right.id));
+        });
+        setScope(`c:${saved.id}`);
+      }
       await loadCategories();
-      if (saved?.id) setScope(`c:${saved.id}`);
     } catch (cause) {
       setError(await errorMessage(cause));
     } finally {
@@ -1091,14 +1117,14 @@ const KnowledgeLibrary = () => {
             const menuOpen = tabMenu?.key === tab.key;
             const classes = [
               'knowledge-tab',
-              scope === tab.key ? 'active' : '',
+              activeScope === tab.key ? 'active' : '',
               menuOpen ? 'is-menu-open' : '',
             ].filter(Boolean).join(' ');
             return <div key={tab.key} className={classes}>
               <button
                 type='button'
                 role='tab'
-                aria-selected={scope === tab.key}
+                aria-selected={activeScope === tab.key}
                 onClick={() => { setPerson(null); setDeptKey('all'); setTabMenu(null); setScope(tab.key); }}
               >
                 {tab.label}<span>{countsByScope[tab.key] || 0}</span>
@@ -1286,7 +1312,7 @@ const KnowledgeLibrary = () => {
         </div>
       </div>
     </section> : <>
-      {scope === 'personal' && manageAllPersonal ? <div className='knowledge-directory'>
+      {activeScope === 'personal' && manageAllPersonal ? <div className='knowledge-directory'>
         <aside className='knowledge-directory-nav' aria-label='人员部门'>
           <p>人员</p>
           <button type='button' aria-pressed={deptKey === 'all'} className={deptKey === 'all' ? 'active' : ''} onClick={() => selectDepartment('all')}>
@@ -1500,15 +1526,15 @@ const KnowledgeLibrary = () => {
       <header><h2>{categoryForm.id ? '编辑知识库分类' : '新建知识库分类'}</h2><button type='button' onClick={() => setCategoryOpen(false)}>×</button></header>
       {error && <div className='knowledge-alert' role='alert'>{error}<button type='button' onClick={() => setError('')}>关闭</button></div>}
       <label>类型<CustomSelect aria-label='分类类型' value={categoryForm.visibility} onChange={event => {
-        const visibility = event.target.value;
-        setCategoryForm(current => ({ ...current, visibility, requireAuth: visibility === 'authorized' }));
+        setCategoryForm(current => ({ ...current, visibility: event.target.value }));
       }}>
         {CATEGORY_VISIBILITY.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
       </CustomSelect></label>
-      <label className='knowledge-switch-row'>授权访问<span className='knowledge-switch'>
-        <input type='checkbox' role='switch' aria-label='授权访问' checked={categoryForm.requireAuth} onChange={event => setCategoryForm(current => ({ ...current, requireAuth: event.target.checked }))} />
-        <i />
-      </span></label>
+      <p className='knowledge-hint'>{categoryForm.visibility === 'public'
+        ? '公开：所有登录用户可见该分类下知识库'
+        : categoryForm.visibility === 'authorized'
+          ? '授权：订阅审核通过后，申请人可见'
+          : '个人：仅创建者可见，其他人看不到该分类下知识库'}</p>
       <label>名称<input autoFocus required maxLength={64} value={categoryForm.name} onChange={event => setCategoryForm(current => ({ ...current, name: event.target.value }))} placeholder='请输入分类名称' /></label>
       <footer>
         <button type='button' onClick={() => setCategoryOpen(false)}>取消</button>

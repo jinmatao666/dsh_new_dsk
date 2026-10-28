@@ -66,11 +66,15 @@ export function libraryNavGroups(
     const categoryId = categoryIdOf(item)
     if (categoryId === 0) return item.kind === 'common'
     const category = categoryById.get(categoryId)
-    return category !== undefined && !category.require_auth
+    // Only common+open categories are public; personal/shared never ride a stale require_auth=false.
+    return category !== undefined && category.type === 'common' && !category.require_auth
   })
   const authRows = items.filter((item) => {
-    const category = categoryById.get(categoryIdOf(item))
-    return category !== undefined && category.require_auth
+    const categoryId = categoryIdOf(item)
+    if (categoryId === 0) return false
+    const category = categoryById.get(categoryId)
+    if (category === undefined) return false
+    return category.type !== 'common' || category.require_auth
   })
   const ownedAuth = authRows.filter(item => libraryOwnedByViewer(item, selfUserId))
   const subscribed = authRows.filter(item => librarySubscribedByViewer(item, selfUserId))

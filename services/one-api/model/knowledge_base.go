@@ -53,8 +53,8 @@ var ErrKnowledgeCategoryDuplicate = errors.New("知识库分类名称已存在")
 var ErrKnowledgeCategoryInvalid = errors.New("知识库分类无效")
 
 // KnowledgeCategory is an administrator-defined tab beside Personal on the workbench and desktop.
-// Type is the library kind created inside the tab. RequireAuth false shows every published library
-// in the category; true keeps the shared owner-or-grant rule.
+// Type is the library kind created inside the tab. Only common categories with RequireAuth false
+// are open to every signed-in user; personal and shared categories always use owner-or-grant.
 type KnowledgeCategory struct {
 	Id          int       `json:"id" gorm:"primaryKey"`
 	Name        string    `json:"name" gorm:"type:varchar(64);uniqueIndex;not null"`
@@ -217,8 +217,9 @@ func MergeAdminPersonalKnowledgeBases(rows []KnowledgeBase) ([]KnowledgeBase, er
 // ListAuthorizedKnowledgeBases returns published libraries the user may open.
 // Uncategorized personal libraries stay with their owner, uncategorized shared libraries
 // require ownership or a grant, and every uncategorized common library is included.
-// A library in a workbench category follows that category instead: without require_auth
-// every user sees it, and with require_auth only the owner or a grant does.
+// A library in a workbench category is open to everyone only when that category is common
+// and does not require auth; otherwise only the owner or a grant holder may open it.
+// Personal-type categories never become world-readable via a stale require_auth=false row.
 func ListAuthorizedKnowledgeBases(userId int) ([]KnowledgeBase, error) {
 	deptIds, err := knowledgeViewerDeptIds(userId)
 	if err != nil {
@@ -237,7 +238,8 @@ func ListAuthorizedKnowledgeBases(userId int) ([]KnowledgeBase, error) {
 		`(knowledge_bases.kind = ? AND knowledge_bases.owner_user_id = ?) OR ` +
 		`(knowledge_bases.kind = ? AND (knowledge_bases.owner_user_id = ? OR ` + grant + `)))) OR ` +
 		`(COALESCE(knowledge_bases.category_id, 0) <> 0 AND knowledge_categories.id IS NOT NULL AND (` +
-		`knowledge_categories.require_auth = ? OR knowledge_bases.owner_user_id = ? OR ` + grant + `)))`
+		`(knowledge_categories.type = ? AND knowledge_categories.require_auth = ?) OR ` +
+		`knowledge_bases.owner_user_id = ? OR ` + grant + `)))`
 	args := []interface{}{
 		KnowledgeShelfOffline,
 		KnowledgeBaseCommon,
@@ -245,7 +247,7 @@ func ListAuthorizedKnowledgeBases(userId int) ([]KnowledgeBase, error) {
 		KnowledgeBaseShared, userId,
 	}
 	args = append(args, grantArgs...)
-	args = append(args, false, userId)
+	args = append(args, KnowledgeBaseCommon, false, userId)
 	args = append(args, grantArgs...)
 	var rows []KnowledgeBase
 	err = DB.Model(&KnowledgeBase{}).Distinct("knowledge_bases.*").
@@ -278,6 +280,8 @@ func normalizeKnowledgeCategory(row *KnowledgeCategory) error {
 		(row.Type != KnowledgeBasePersonal && row.Type != KnowledgeBaseShared && row.Type != KnowledgeBaseCommon) {
 		return ErrKnowledgeCategoryInvalid
 	}
+	// Visibility is named by type: 个人/授权 always require auth; 公开 never does.
+	row.RequireAuth = row.Type != KnowledgeBaseCommon
 	return nil
 }
 
