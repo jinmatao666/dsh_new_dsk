@@ -5,6 +5,7 @@ WORKDIR /app
 COPY requirements.txt ./
 ARG PIP_INDEX_URL=https://pypi.org/simple
 RUN python -m pip install --no-cache-dir --index-url "$PIP_INDEX_URL" --timeout 120 --retries 3 -r requirements.txt
+RUN python -c "import cv2, numpy; from PIL import Image"
 COPY server.py store.py worker.py ocr.py deployment.py service_http.py ./
 COPY web ./web
 RUN mkdir -p /data && chown expert:expert /data

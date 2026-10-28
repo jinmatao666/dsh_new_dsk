@@ -71,6 +71,16 @@ class Provider(BaseHTTPRequestHandler):
             }}]}}
             if Provider.response_mode == 'bad_paddle':
                 value['result']['ocrResults'][0]['prunedResult']['rec_scores'] = []
+        if self.path == '/layout-parsing':
+            value = {'errorCode': 0, 'result': {'layoutParsingResults': [{
+                'markdown': {'text': '# fixture\n\n|项目|值|\n|---|---|\n|编号|123|'},
+                'prunedResult': {'parsing_res_list': [
+                    {'block_label': 'text', 'block_content': 'fixture OCR content', 'block_bbox': [0, 0, 60, 20]}
+                ]}}]}}
+            if Provider.response_mode == 'bad_layout':
+                value['result']['layoutParsingResults'][0]['markdown']['text'] = None
+            if Provider.response_mode == 'layout_error':
+                value['errorCode'] = 500
         data = json.dumps(value).encode()
         self.send_response(200); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
 
@@ -210,6 +220,28 @@ class HTTPTests(unittest.TestCase):
             task = self.wait(json.loads(self.upload({'mode': 'custom', 'instruction': '项目名称'})[1])['id'])
         self.assertEqual(task['state'], 'failed')
         self.assertEqual(task['outputs'], [])
+
+    def test_layout_worker_keeps_markdown_and_raw_evidence(self):
+        self.login()
+        with patch.dict(os.environ, {'PADDLEOCR_API': 'layout', 'PADDLEOCR_URL': f'http://127.0.0.1:{self.model.server_port}/layout-parsing'}):
+            task = self.wait(json.loads(self.upload({'format': 'markdown'})[1])['id'])
+        self.assertEqual(task['state'], 'succeeded', task)
+        text = self.request(f'/api/tasks/{task["id"]}/result')[1]
+        self.assertIn('|项目|值|', json.loads(text)['text'])
+        raw = json.loads(self.request(f'/api/tasks/{task["id"]}/files/1')[1])
+        self.assertEqual(raw['engine'], 'PaddleOCR PP-StructureV3')
+        self.assertIsNone(raw['lines'][0]['confidence'])
+        self.assertIsNone(raw['lines'][0]['polygon'])
+        self.assertIn('parsing_res_list', raw['layout'])
+
+    def test_layout_errors_do_not_publish_results(self):
+        self.login()
+        with patch.dict(os.environ, {'PADDLEOCR_API': 'layout', 'PADDLEOCR_URL': f'http://127.0.0.1:{self.model.server_port}/layout-parsing'}):
+            for mode in ('bad_layout', 'layout_error'):
+                Provider.response_mode = mode
+                task = self.wait(json.loads(self.upload()[1])['id'])
+                self.assertEqual(task['state'], 'failed')
+                self.assertEqual(task['outputs'], [])
 
     def test_cancelled_task_never_exposes_outputs(self):
         self.login()

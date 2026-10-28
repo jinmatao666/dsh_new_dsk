@@ -17,3 +17,5 @@ POST JSON `{"file":"<base64图片>","fileType":1}`，可选引擎Bearer凭据。
 ## 检查与限制
 
 执行`python -m unittest -q test_ocr`、`node --check web/app.js`和`node --test test_frontend.mjs`。测试使用HTTP替身和真实工作子进程，不加载Paddle权重。生产验收需真实图片、Buddy票据、任务隔离、统计和原生下载。`/healthz`检查进程，`/readyz`只检查配置。输入上限10MB、2000万像素；页面示例不代表实际识别。取消阻止成果发布，不能撤回远端已受理请求。
+
+已部署的PP-StructureV3服务使用 `PADDLEOCR_API=layout`、`PADDLEOCR_URL=http://127.0.0.1:18082/layout-parsing`。请求仅发送base64 `file`与`fileType:1`；读取 `result.layoutParsingResults`、`markdown.text`和`prunedResult.parsing_res_list`。全文Markdown保留服务返回的结构，原始版面数据完整保留，缺失置信度和归一化多边形保持null。文档解析请求超时300秒，工作任务期限390秒；通用 `/ocr` 接口可用 `PADDLEOCR_API=ocr` 选择。仍只支持单张图片，本次不开放PDF上传。

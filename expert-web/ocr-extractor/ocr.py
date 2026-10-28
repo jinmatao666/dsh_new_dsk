@@ -100,6 +100,11 @@ def normalize_output(text, output_format):
 
 def paddle_recognize(image):
     """Read the official PaddleOCR general pipeline POST /ocr response."""
+    api = os.environ.get('PADDLEOCR_API', 'ocr')
+    if api == 'layout':
+        return layout_recognize(image)
+    if api != 'ocr':
+        raise OCRError('PADDLEOCR_API仅支持ocr或layout')
     stream = io.BytesIO()
     image.save(stream, 'PNG')
     try:
@@ -135,6 +140,47 @@ def paddle_recognize(image):
                 'text': '\n'.join(line['text'] for line in lines)}
     except (ServiceError, ValueError, TypeError, KeyError, IndexError):
         raise OCRError('PaddleOCR调用失败或返回结构不符；需要官方通用OCR产线的POST /ocr接口') from None
+
+
+def layout_recognize(image):
+    """Consume PP-StructureV3 layout-parsing; never invent OCR scores or geometry."""
+    stream = io.BytesIO()
+    image.save(stream, 'PNG')
+    try:
+        response = post_json(os.environ.get('PADDLEOCR_URL', ''),
+            {'file': base64.b64encode(stream.getvalue()).decode(), 'fileType': 1},
+            os.environ.get('PADDLEOCR_KEY', ''), timeout=300)
+        if response.get('errorCode') != 0:
+            raise ValueError('engine error')
+        pages = response['result']['layoutParsingResults']
+        if not isinstance(pages, list) or len(pages) != 1:
+            raise ValueError('single-image page required')
+        page = pages[0]
+        markdown = page['markdown']['text']
+        pruned = page['prunedResult']
+        if not isinstance(markdown, str) or not isinstance(pruned, dict):
+            raise ValueError('invalid markdown or structured result')
+        blocks = pruned.get('parsing_res_list', [])
+        if not isinstance(blocks, list) or len(blocks) > 20000:
+            raise ValueError('invalid block list')
+        lines = []
+        for block in blocks:
+            if not isinstance(block, dict) or not isinstance(block.get('block_content'), str):
+                raise ValueError('invalid block content')
+            lines.append({'id': len(lines) + 1, 'text': block['block_content'],
+                          'confidence': None, 'polygon': None,
+                          'block_label': block.get('block_label')})
+        # A service may provide Markdown without text blocks; preserve that source verbatim.
+        if not lines and markdown.strip():
+            lines = [{'id': 1, 'text': markdown, 'confidence': None, 'polygon': None}]
+        text = '\n\n'.join(line['text'] for line in lines)
+        return {'engine': 'PaddleOCR PP-StructureV3', 'api': 'layout-parsing',
+                'image': {'width': image.width, 'height': image.height},
+                'coordinate_system': None, 'lines': lines, 'text': text,
+                'markdown': markdown, 'layout': pruned,
+                'note': '版面块坐标如有返回，属于服务处理后的页面坐标；未转换为原图相对坐标。缺失置信度不伪造。'}
+    except (ServiceError, ValueError, TypeError, KeyError, IndexError):
+        raise OCRError('PaddleOCR文档解析失败或返回结构不符；需要PP-StructureV3的POST /layout-parsing接口') from None
 
 
 def format_recognized(raw, options):
@@ -177,7 +223,7 @@ def extract(path, destination, options):
     else:
         text = recognized['text'] or '未识别到可辨识文字。'
         if options['format'] == 'markdown':
-            text = '\n\n'.join(recognized['text'].splitlines()) or text
+            text = recognized.get('markdown') or '\n\n'.join(recognized['text'].splitlines()) or text
     output = Path(destination)
     output.mkdir(parents=True, exist_ok=True)
     result = output / ('识别结果' + FORMATS[options['format']])

@@ -37,6 +37,7 @@ def checks():
         "identity_endpoint": valid_url(os.environ.get("EXPERT_PLATFORM_REDEEM_URL", ""), allow_http=True),
         "provider_credential": bool(os.environ.get("EXPERT_PROVIDER_CREDENTIAL", "")) and not os.environ.get("EXPERT_PROVIDER_CREDENTIAL", "").startswith("replace-with-"),
         "paddleocr_configured": valid_service_url(os.environ.get('PADDLEOCR_URL', '')),
+        "paddleocr_api": os.environ.get('PADDLEOCR_API', 'ocr') in ('ocr', 'layout'),
     }
 
 
