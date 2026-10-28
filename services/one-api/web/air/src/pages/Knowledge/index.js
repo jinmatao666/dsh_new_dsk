@@ -664,27 +664,40 @@ const KnowledgeLibrary = () => {
   };
 
   const uploadFile = async event => {
-    const file = event.target.files?.[0];
+    const selected = [...(event.target.files || [])];
     event.target.value = '';
-    if (!file || !opened) return;
-    if (isSkippedUploadName(file.name)) {
+    if (selected.length === 0 || !opened) return;
+    const candidates = selected.filter(file => !isSkippedUploadName(file.name));
+    if (candidates.length === 0) {
       setError('不支持上传该文件');
       return;
     }
-    if (file.size > MAX_UPLOAD_BYTES) {
+    if (candidates.some(file => file.size > MAX_UPLOAD_BYTES)) {
       setError('文件不能超过 20MB');
       return;
     }
     setBusy('upload');
     setError('');
+    const failures = [];
     try {
-      const body = new FormData();
-      body.append('file', file);
-      unwrap(await API.post(`/api/knowledge-admin/bases/${opened.id}/documents`, body));
+      for (const file of candidates) {
+        try {
+          const body = new FormData();
+          body.append('file', file);
+          unwrap(await API.post(`/api/knowledge-admin/bases/${opened.id}/documents`, body));
+        } catch (cause) {
+          failures.push(`${file.name}：${await errorMessage(cause)}`);
+        }
+      }
       setFileKeyword('');
       setFileSearch('');
       setFilePage(1);
       await loadDocuments(opened, { page: 1, keywords: '' });
+      if (failures.length > 0) {
+        setError(failures.length === candidates.length
+          ? failures.join('；')
+          : `部分文件上传失败：${failures.join('；')}`);
+      }
     } catch (cause) {
       setError(await errorMessage(cause));
     } finally {
@@ -1136,9 +1149,9 @@ const KnowledgeLibrary = () => {
         <button type='button' className='knowledge-primary' disabled={busy === 'upload'} onClick={() => fileInput.current?.click()}>
           <Upload size={15} />{busy === 'upload' ? '正在上传' : '上传文件'}
         </button>
-        <input ref={fileInput} className='knowledge-file-input' type='file' aria-label='上传文件' tabIndex={-1} disabled={busy === 'upload'} onChange={uploadFile} />
+        <input ref={fileInput} className='knowledge-file-input' type='file' multiple aria-label='上传文件' tabIndex={-1} disabled={busy === 'upload'} onChange={uploadFile} />
       </header>
-      <p className='knowledge-hint knowledge-upload-hint'>一次上传一个文件，不超过 20MB。上传后在后台解析，列表会显示解析进度。</p>
+      <p className='knowledge-hint knowledge-upload-hint'>可一次选择多个文件，每个不超过 20MB。上传后在后台解析，列表会显示解析进度。</p>
       <div className='knowledge-files-toolbar'>
         <label className='knowledge-search'>
           <Search size={16} />

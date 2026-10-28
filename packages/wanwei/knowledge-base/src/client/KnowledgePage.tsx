@@ -6,7 +6,9 @@ import { AnswerBody } from './AnswerBody.tsx'
 import { MarkdownView } from './MarkdownView.tsx'
 import { PdfLocateViewer, type PdfLocateRequest } from './PdfLocateViewer.tsx'
 import { ViewerLoading } from './ViewerLoading.tsx'
-import { firstNavLibraryId, libraryNavGroups } from './library-groups.ts'
+import {
+  firstNavLibraryId, libraryIsGrantedSubscription, libraryNavGroups,
+} from './library-groups.ts'
 import { productText } from './locales/product.ts'
 
 export interface KnowledgeBaseItem {
@@ -17,6 +19,10 @@ export interface KnowledgeBaseItem {
   owner_user_id: number
   /** Workbench category that owns this library. Absent or 0 means a built-in tab. */
   category_id?: number
+  /** True when the signed-in user owns this library (desktop list annotation). */
+  owned_by_viewer?: boolean
+  /** True when the caller holds a non-ownership grant (subscription / direct / department). */
+  subscribed_by_viewer?: boolean
 }
 
 /** Administrator-defined category. Open categories may appear after Personal; auth-required ones feed the plaza and 订阅知识库. */
@@ -37,7 +43,7 @@ export interface KnowledgePlazaItem {
   category_id: number
   category_name: string
   owner_username: string
-  subscription_status: 'none' | 'pending' | 'approved'
+  subscription_status: 'none' | 'pending' | 'approved' | 'owned'
 }
 
 interface KnowledgeDocument {
@@ -274,9 +280,12 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   viewerRef.current = viewer
 
   const selected = items.find(item => item.id === selectedId)
-  const selfUserId = items.find(item => item.kind === 'personal')?.owner_user_id
+  // Uncategorized personal libraries are always the caller's; prefer them over
+  // categorized personal-kind rows that another owner may have filed in an open tab.
+  const selfUserId = items.find(item => item.kind === 'personal' && (item.category_id ?? 0) === 0)?.owner_user_id
+  // Cancel subscription only when the caller is known not to own the auth-category library.
   const selectedIsSubscribed = selected !== undefined
-    && (selfUserId === undefined || selected.owner_user_id !== selfUserId)
+    && libraryIsGrantedSubscription(selected, selfUserId)
     && categories.some(category =>
       category.require_auth && category.id === (selected.category_id ?? 0))
   // Stick to the latest turn only while an answer is streaming; history opens at the top.
@@ -318,7 +327,8 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       if (disposed) return
       setItems(result)
       setCategories(nextCategories)
-      setSelectedId(firstNavLibraryId(result, nextCategories))
+      const viewerId = result.find(item => item.kind === 'personal' && (item.category_id ?? 0) === 0)?.owner_user_id
+      setSelectedId(firstNavLibraryId(result, nextCategories, viewerId))
       setPlazaOpen(false)
       setCollapsedNavGroups(new Set())
     }).catch((cause) => { if (!disposed) setError(`${productText('加载失败')}：${String(cause)}`) })
@@ -383,9 +393,10 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     const [result, nextCategories] = await Promise.all([api.list(), api.categories()])
     setItems(result)
     setCategories(nextCategories)
+    const viewerId = result.find(item => item.kind === 'personal' && (item.category_id ?? 0) === 0)?.owner_user_id
     setSelectedId((current) => {
       if (current !== undefined && result.some(item => item.id === current)) return current
-      return firstNavLibraryId(result, nextCategories)
+      return firstNavLibraryId(result, nextCategories, viewerId)
     })
   }
   const submitUnsubscribe = async () => {
@@ -443,7 +454,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   }, [documentMenu])
   const transferTargets = items.filter(item =>
     (item.kind === 'personal' || item.kind === 'shared') && item.id !== selectedId)
-  const navGroups = libraryNavGroups(items, categories)
+  const navGroups = libraryNavGroups(items, categories, selfUserId)
   /** Toggle multi-select without opening preview or the action panel. */
   const toggleDocumentSelection = (documentId: string) => {
     setDocumentMenu(undefined)
@@ -1046,9 +1057,10 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
           <button type="button" className="dsh-knowledge-plaza-subscribe"
             disabled={subscribing || plazaDetail.subscription_status !== 'none'}
             onClick={() => void submitSubscribe()}>
-            {plazaDetail.subscription_status === 'approved' ? productText('已订阅')
-              : plazaDetail.subscription_status === 'pending' ? productText('审核中')
-                : productText('订阅')}
+            {plazaDetail.subscription_status === 'owned' ? productText('我的')
+              : plazaDetail.subscription_status === 'approved' ? productText('已订阅')
+                : plazaDetail.subscription_status === 'pending' ? productText('审核中')
+                  : productText('订阅')}
           </button>
         </div>
         <div className="dsh-knowledge-plaza-content">

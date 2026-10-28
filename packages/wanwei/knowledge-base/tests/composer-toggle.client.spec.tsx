@@ -11,7 +11,10 @@ const catalog = {
   items: [
     { id: 1, name: '我的笔记', description: '', kind: 'personal' as const, owner_user_id: 9 },
     { id: 2, name: '制度库', description: '公司制度', kind: 'common' as const, owner_user_id: 1, category_id: 5 },
-    { id: 3, name: '课程库', description: '订阅课程', kind: 'shared' as const, owner_user_id: 1, category_id: 6 },
+    {
+      id: 3, name: '课程库', description: '订阅课程', kind: 'shared' as const,
+      owner_user_id: 1, category_id: 6, owned_by_viewer: false, subscribed_by_viewer: true,
+    },
   ],
   categories: [
     { id: 5, name: '公共资料', type: 'common' as const, require_auth: false },
@@ -48,7 +51,7 @@ it('groups libraries by desktop type and scopes the Session to the checked ones'
   fireEvent.click(screen.getByRole('switch', { name: /知识库/ }))
   const picker = await screen.findByRole('dialog', { name: '选择知识库' })
   const tabs = within(picker).getByRole('navigation', { name: '知识库类型' })
-  expect(within(tabs).getAllByRole('button').map(button => button.textContent)).toEqual(['个人知识库', '公共资料', '订阅知识库'])
+  expect(within(tabs).getAllByRole('button').map(button => button.textContent)).toEqual(['个人知识库', '公共知识库', '订阅知识库'])
 
   fireEvent.click(await within(picker).findByRole('option', { name: /我的笔记/ }))
   fireEvent.click(within(tabs).getByRole('button', { name: '订阅知识库' }))

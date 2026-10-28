@@ -9,6 +9,11 @@ services:
       HOST: 127.0.0.1
       PORT: "3307"
       EXPERT_DATA_DIR: /data
+      # Container pids_limit is tight; OpenBLAS/numpy default to many threads and crash imports.
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
     volumes:
       - coordinate_transform_data:/data
     read_only: true

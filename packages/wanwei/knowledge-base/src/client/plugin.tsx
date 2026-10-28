@@ -121,7 +121,20 @@ function knowledgeItem(raw: unknown): KnowledgeBaseItem {
     }
     categoryId = item.category_id as number
   }
-  return { ...(item as unknown as KnowledgeBaseItem), category_id: categoryId }
+  const owned = item.owned_by_viewer
+  if (owned !== undefined && typeof owned !== 'boolean') {
+    throw new Error('知识库响应字段无效')
+  }
+  const subscribed = item.subscribed_by_viewer
+  if (subscribed !== undefined && typeof subscribed !== 'boolean') {
+    throw new Error('知识库响应字段无效')
+  }
+  return {
+    ...(item as unknown as KnowledgeBaseItem),
+    category_id: categoryId,
+    ...(typeof owned === 'boolean' ? { owned_by_viewer: owned } : {}),
+    ...(typeof subscribed === 'boolean' ? { subscribed_by_viewer: subscribed } : {}),
+  }
 }
 
 function knowledgeCategory(raw: unknown): KnowledgeCategory {
@@ -149,7 +162,7 @@ function knowledgePlazaItem(raw: unknown): KnowledgePlazaItem {
     !Number.isInteger(item.owner_user_id) || !Number.isInteger(item.category_id) ||
     typeof item.category_name !== 'string' || typeof item.owner_username !== 'string' ||
     (item.subscription_status !== 'none' && item.subscription_status !== 'pending' &&
-      item.subscription_status !== 'approved')) {
+      item.subscription_status !== 'approved' && item.subscription_status !== 'owned')) {
     throw new Error('知识库广场字段无效')
   }
   return {

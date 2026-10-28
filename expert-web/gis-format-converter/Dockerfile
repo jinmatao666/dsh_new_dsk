@@ -14,7 +14,8 @@ COPY processors.py store.py worker.py server.py deployment.py ./
 COPY web ./web
 RUN mkdir -p /data && chown expert:expert /data
 USER expert
-ENV HOST=127.0.0.1 PORT=3308 EXPERT_DATA_DIR=/data PYTHONUNBUFFERED=1
+ENV HOST=127.0.0.1 PORT=3308 EXPERT_DATA_DIR=/data PYTHONUNBUFFERED=1 \
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 EXPOSE 3308
 CMD ["python", "server.py"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ['PORT'] + '/healthz', timeout=3).close()"
