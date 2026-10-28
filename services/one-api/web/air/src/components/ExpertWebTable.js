@@ -120,7 +120,7 @@ export default function ExpertWebTable() {
       <div className='expert-web-icon'>{item.icon?.startsWith('data:image/') ? <img src={item.icon} alt='' /> : '✦'}</div>
       <div className='expert-web-info'><strong>{item.name}</strong><small>{item.key} · {item.provider}</small><p>{item.workbench_url}</p></div>
       <span className={item.published ? 'live' : 'draft'}>{item.published ? '已上架' : '未上架'}</span>
-      <div className='actions'><CatalogOrderActions kind='experts' item={item} items={items} reload={load} /><button type='button' onClick={() => setEditing({ ...item })}>编辑</button><button type='button' onClick={() => void rotate(item)}>重置凭据</button><button type='button' onClick={() => void publish(item)}>{item.published ? '下架' : '上架'}</button></div>
+      <div className='actions'><button type='button' onClick={() => setEditing({ ...item })}>编辑</button><button type='button' onClick={() => void rotate(item)}>重置凭据</button><button type='button' onClick={() => void publish(item)}>{item.published ? '下架' : '上架'}</button><CatalogOrderActions kind='experts' item={item} items={items} reload={load} /></div>
     </article>)}</div>
     {editing && <div className='expert-web-backdrop' onMouseDown={event => { if (event.target === event.currentTarget) setEditing(null); }}><section className='expert-web-dialog' role='dialog' aria-modal='true' aria-label='专家资料'>
       <header><h2>{items.some(item => item.key === editing.key) ? '编辑专家' : '新增专家'}</h2><button type='button' aria-label='关闭' onClick={() => setEditing(null)}>×</button></header>

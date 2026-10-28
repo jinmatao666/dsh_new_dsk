@@ -563,6 +563,8 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
       setSelectedSkill(null)
       setQuery('')
       setCategory(L.all)
+      setPlatformSort('recommended')
+      setPlatformPage(1)
       void refreshInstallStates()
       if (loadRemoteSkills !== undefined) {
         setRemoteSkillsLoaded(false)
@@ -587,6 +589,23 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
   }), [])
 
   usePanelNavigation(controller, open)
+
+  const refreshPlatformCatalog = async () => {
+    setPlatformSort('recommended')
+    setPlatformPage(1)
+    setRemoteSkillsLoaded(false)
+    try {
+      const [skills, categories] = await Promise.all([
+        loadRemoteSkills?.(), loadRemoteCategories?.(),
+      ])
+      if (skills !== undefined) setRemoteSkills(skills)
+      if (categories !== undefined) setRemoteCategories(categories)
+    } catch (error) {
+      setInstallMessage({ kind: 'error', text: String(error) })
+    } finally {
+      setRemoteSkillsLoaded(true)
+    }
+  }
 
   const unfilteredSkills = useMemo<Skill[]>(() => {
     const published = remoteSkills?.flatMap((remote): Skill[] => {
@@ -1104,7 +1123,8 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
                     categories={categories.filter(item => item !== L.all).map(item => ({ key: item, name: item }))}
                     category={category === L.all ? '' : category} onCategory={(value) => { setCategory(value || L.all); setPlatformPage(1) }}
                     sort={platformSort} onSort={(value) => { setPlatformSort(value); setPlatformPage(1) }}
-                    page={platform.page} pages={platform.pages} onPage={setPlatformPage} />
+                    page={platform.page} pages={platform.pages} onPage={setPlatformPage}
+                    loading={!remoteSkillsLoaded} onRefresh={() => { void refreshPlatformCatalog() }} />
                 </section>
               )}
 

@@ -14,6 +14,8 @@ The administrator-only [profile endpoint](../../../../services/one-api/controlle
 
 The dialog uses a fixed title bar and one scrolling content area, a paired composition/trend layout, dated activity cells, and separate model/skill/expert ranking panels. Installation records are a cumulative unique-skill count, not a conversion percentage against repeatable download events. Calendar keys are generated from literal date strings so both ends of the Beijing date window remain visible. Small nonzero activity shares display as less than one percent instead of zero.
 
+For readability, the profile uses larger, darker text with separate heading, body, and annotation sizes. Consistent Lucide icons distinguish model, skill, expert, download, calendar, and installation information. These presentation changes preserve the observed counts and reporting windows.
+
 ## Alternatives considered
 
 **Join the existing global usage API on username in the browser.** Usernames may change, the global API does not provide per-user model and download aggregates, and filtering client-side would expose unnecessary records.

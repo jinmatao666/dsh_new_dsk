@@ -33,3 +33,23 @@ it.each(['hide', 'disable'] as const)('uses %s for internet experts and restores
     network={{ subscribe, catalogAccess: internetCatalogAccess, getSnapshot: () => onlineState }} />)
   await waitFor(() => { expect(screen.getByRole('button', { name: '联网专家' })).toHaveProperty('disabled', false) })
 })
+
+it('refreshes administrator card and category ordering without restarting the library', async () => {
+  const first = { key: 'first-expert', name: '首位专家', category: '办公工具', category_order: 1, workbench_url: 'https://example.com/first' }
+  const second = { key: 'second-expert', name: '次位专家', category: '空间分析', category_order: 0, workbench_url: 'https://example.com/second' }
+  let entries = [first, second]
+  const loadExperts = vi.fn(async () => entries)
+  const view = render(<ExpertMarket loadExperts={loadExperts} />)
+  await screen.findByRole('button', { name: '首位专家' })
+  const cards = () => [...view.container.querySelectorAll('.dsh-expert-card strong')].map(node => node.textContent)
+  const categories = () => [...view.container.querySelectorAll('.dsh-expert-category-row button')].map(node => node.textContent)
+  expect(cards()).toEqual(['首位专家', '次位专家'])
+  expect(categories()).toEqual(['全部', '空间分析', '办公工具'])
+  entries = [{ ...second, category_order: 1 }, { ...first, category_order: 0 }]
+  fireEvent.click(screen.getByRole('button', { name: '刷新目录' }))
+  await waitFor(() => { expect(cards()).toEqual(['次位专家', '首位专家']) })
+  expect(categories()).toEqual(['全部', '办公工具', '空间分析'])
+  expect(loadExperts).toHaveBeenCalledTimes(2)
+  fireEvent.click(screen.getByRole('button', { name: '办公工具', exact: true }))
+  expect(cards()).toEqual(['首位专家'])
+})

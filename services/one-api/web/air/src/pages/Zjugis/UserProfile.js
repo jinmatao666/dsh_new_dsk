@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { API } from '../../helpers';
-import { Activity, Cpu, Zap, Briefcase, Download, Calendar, Check } from 'lucide-react';
+import { ChartNoAxesCombined as Activity, BrainCircuit as Cpu, Layers3 as Zap, Bot as Briefcase, Download, CalendarDays as Calendar, BadgeCheck as Check } from 'lucide-react';
 import './UserProfile.css';
 
 const number = (value) => Number(value || 0).toLocaleString('zh-CN');
@@ -88,9 +88,9 @@ function InsightCards({ data }) {
   const days = activityDays(data);
   const activeDays = days.filter(item => item.model + item.skill + item.expert > 0).length;
   return <div className='user-profile-insights'>
-    <div><Calendar size={17} aria-hidden='true' /><span>活跃天数</span><strong>{activeDays}<small>/ {days.length} 天</small></strong><p>统计期内有使用记录的天数</p></div>
-    <div><Check size={17} aria-hidden='true' /><span>已安装技能</span><strong>{number(data.downloads.installed_count)}<small>个</small></strong><p>累计安装记录，同一技能仅计一次</p></div>
-    <div><Activity size={17} aria-hidden='true' /><span>主要活动</span><strong>{total ? (data.models.count >= data.skills.count && data.models.count >= data.experts.count ? '模型调用' : data.skills.count >= data.experts.count ? '技能调用' : '专家任务') : '—'}</strong><p>按统计期内记录数量比较</p></div>
+    <div><Calendar size={20} aria-hidden='true' /><span>活跃天数</span><strong>{activeDays}<small>/ {days.length} 天</small></strong><p>统计期内有使用记录的天数</p></div>
+    <div><Check size={20} aria-hidden='true' /><span>已安装技能</span><strong>{number(data.downloads.installed_count)}<small>个</small></strong><p>累计安装记录，同一技能仅计一次</p></div>
+    <div><Activity size={20} aria-hidden='true' /><span>主要活动</span><strong>{total ? (data.models.count >= data.skills.count && data.models.count >= data.experts.count ? '模型调用' : data.skills.count >= data.experts.count ? '技能调用' : '专家任务') : '—'}</strong><p>按统计期内记录数量比较</p></div>
   </div>;
 }
 
@@ -101,7 +101,7 @@ function Summary({ data }) {
   if (data.experts.count > 0) sentences.push(`启动专家任务 ${number(data.experts.count)} 次${data.experts.top?.[0]?.name ? `，主要使用 ${data.experts.top[0].name}` : ''}。`);
   if (data.downloads.count > 0 || data.downloads.installed_count > 0) sentences.push(`累计下载技能 ${number(data.downloads.count)} 次，有 ${number(data.downloads.installed_count)} 个技能留下安装记录。`);
   return <section className='user-profile-summary'>
-    <h3><Activity size={17} aria-hidden='true' />数据摘要</h3>
+    <h3><Activity size={20} aria-hidden='true' />数据摘要</h3>
     <p>{sentences.length ? sentences.join('') : '尚无可用于生成画像的使用记录。'}</p>
     <small>仅汇总已记录的操作，不读取对话内容或文件；模型调用日志关闭时，模型统计可能不完整。下载与安装为累计口径，其余数据为最近 30 天。</small>
   </section>;
@@ -128,12 +128,12 @@ export default function UserProfile({ user }) {
     </header>
     {state.loading ? <p className='user-profile-empty' role='status'>正在汇总用户数据…</p> : state.error
       ? <p className='user-profile-error' role='alert'>{state.error}</p> : <>
-        <div className='user-profile-period'><span><Calendar size={14} aria-hidden='true' />{state.data.from} 至 {state.data.to}</span><span>北京时间 · 下载与安装为累计数据</span></div>
+        <div className='user-profile-period'><span><Calendar size={18} aria-hidden='true' />{state.data.from} 至 {state.data.to}</span><span>北京时间 · 下载与安装为累计数据</span></div>
         <div className='user-profile-metrics'>
-          <div className='model'><span><Cpu size={16} aria-hidden='true' />模型调用</span><strong>{number(state.data.models.count)}<em>次</em></strong><small>输入 {number(state.data.models.prompt_tokens)} / 输出 {number(state.data.models.completion_tokens)} token</small></div>
-          <div className='skill'><span><Zap size={16} aria-hidden='true' />技能调用</span><strong>{number(state.data.skills.count)}<em>次</em></strong><small>按实际调用事件统计</small></div>
-          <div className='expert'><span><Briefcase size={16} aria-hidden='true' />专家任务</span><strong>{number(state.data.experts.count)}<em>次</em></strong><small>按任务启动事件统计</small></div>
-          <div className='download'><span><Download size={16} aria-hidden='true' />技能下载</span><strong>{number(state.data.downloads.count)}<em>次</em></strong><small>累计下载，允许重复计次</small></div>
+          <div className='model'><span><Cpu size={22} aria-hidden='true' />模型调用</span><strong>{number(state.data.models.count)}<em>次</em></strong><small>输入 {number(state.data.models.prompt_tokens)} / 输出 {number(state.data.models.completion_tokens)} token</small></div>
+          <div className='skill'><span><Zap size={22} aria-hidden='true' />技能调用</span><strong>{number(state.data.skills.count)}<em>次</em></strong><small>按实际调用事件统计</small></div>
+          <div className='expert'><span><Briefcase size={22} aria-hidden='true' />专家任务</span><strong>{number(state.data.experts.count)}<em>次</em></strong><small>按任务启动事件统计</small></div>
+          <div className='download'><span><Download size={22} aria-hidden='true' />技能下载</span><strong>{number(state.data.downloads.count)}<em>次</em></strong><small>累计下载，允许重复计次</small></div>
         </div>
         <InsightCards data={state.data} />
         <div className='user-profile-charts'><ActivityMix data={state.data} /><ActivityTrend data={state.data} /></div>
@@ -144,7 +144,7 @@ export default function UserProfile({ user }) {
           <Ranking title='常用专家' items={state.data.experts.top} empty='暂无专家任务记录' />
         </div>
         <section className='user-profile-downloads'><div className='user-profile-section-head'><h3>技能下载与安装</h3><span>累计记录 · 前 {state.data.downloads.top?.length || 0} 项</span></div>
-          {state.data.downloads.top?.length ? <div className='user-profile-table-scroll'><table><thead><tr><th>技能名称</th><th>下载次数</th><th>安装记录</th></tr></thead><tbody>{state.data.downloads.top.map((item, index) => <tr key={`${item.name}-${index}`}><td>{item.name}</td><td>{number(item.count)}<small>次</small></td><td><span className={`user-profile-install-state${item.installed ? ' installed' : ''}`}>{item.installed && <Check size={12} aria-hidden='true' />}{item.installed ? '已安装' : '未记录安装'}</span></td></tr>)}</tbody></table></div>
+          {state.data.downloads.top?.length ? <div className='user-profile-table-scroll'><table><thead><tr><th>技能名称</th><th>下载次数</th><th>安装记录</th></tr></thead><tbody>{state.data.downloads.top.map((item, index) => <tr key={`${item.name}-${index}`}><td>{item.name}</td><td>{number(item.count)}<small>次</small></td><td><span className={`user-profile-install-state${item.installed ? ' installed' : ''}`}>{item.installed && <Check size={16} aria-hidden='true' />}{item.installed ? '已安装' : '未记录安装'}</span></td></tr>)}</tbody></table></div>
             : <p className='user-profile-empty'>暂无技能下载记录</p>}
         </section>
         <Summary data={state.data} />

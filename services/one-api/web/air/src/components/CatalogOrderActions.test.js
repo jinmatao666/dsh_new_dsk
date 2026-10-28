@@ -7,47 +7,67 @@ jest.mock('../helpers', () => ({ API: { post: jest.fn() }, showError: jest.fn() 
 beforeEach(() => { global.IS_REACT_ACT_ENVIRONMENT = true; jest.clearAllMocks(); });
 afterEach(() => { delete global.IS_REACT_ACT_ENVIRONMENT; });
 
-test('arrow moves use neighboring identifiers and wait for the server before refreshing', async () => {
-  const reload = jest.fn();
+test('single handle supports keyboard moves and reports failed saves without reloading', async () => {
   API.post.mockResolvedValue({ data: { success: true } });
-  const items = [{ id: 7 }, { id: 3 }, { id: 9 }];
+  const reload = jest.fn();
   const container = document.createElement('div');
   const root = createRoot(container);
-  await act(async () => { root.render(<CatalogOrderActions kind='skills' item={items[0]} items={items} reload={reload} />); });
-  expect([...container.querySelectorAll('button')].map(button => ({ label: button.getAttribute('aria-label'), disabled: button.disabled }))).toMatchInlineSnapshot(`
-Array [
-  Object {
-    "disabled": true,
-    "label": "上移",
-  },
-  Object {
-    "disabled": false,
-    "label": "下移",
-  },
-]
-`);
-  await act(async () => { container.querySelector('[aria-label="下移"]').click(); });
+  await act(async () => { root.render(<CatalogOrderActions kind='skills' item={{ id: 7 }} items={[{ id: 7 }, { id: 3 }]} reload={reload} />); });
+  expect(container.querySelectorAll('button')).toHaveLength(1);
+  const handle = container.querySelector('[aria-label="拖动排序"]');
+  expect(handle.draggable).toBe(true);
+  await act(async () => { handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })); });
+  expect(API.post).not.toHaveBeenCalled();
+  await act(async () => { handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); });
   expect(API.post).toHaveBeenCalledWith('/api/skill/admin/reorder', { key: '7', target_key: '3', after: true });
   expect(reload).toHaveBeenCalledTimes(1);
   API.post.mockResolvedValue({ data: { success: false, message: '保存失败' } });
-  await moveCatalogItem('skills', items[0], items[1], false, reload);
+  await moveCatalogItem('skills', { id: 7 }, { id: 3 }, false, reload);
   expect(reload).toHaveBeenCalledTimes(1);
   expect(showError).toHaveBeenCalledWith('保存失败');
   await act(async () => { root.unmount(); });
 });
 
-test('category drag keeps its type and moves before or after the target row', async () => {
+test.each([
+  ['skills', '/api/skill/admin/reorder'],
+  ['experts', '/api/expert-web/admin/reorder'],
+  ['skill-categories', '/api/skill-category/reorder'],
+  ['expert-categories', '/api/expert/admin/categories/reorder'],
+])('only the handle starts a %s drag and both drop positions persist', async (kind, endpoint) => {
   API.post.mockResolvedValue({ data: { success: true } });
   const reload = jest.fn();
   const values = {};
   const dataTransfer = { types: ['application/x-catalog-order'], setData: (key, value) => { values[key] = value; }, getData: key => values[key] || '' };
-  catalogDragProps('skill-categories', { id: 11 }, reload).onDragStart({ dataTransfer });
-  const props = catalogDragProps('skill-categories', { id: 22 }, reload);
-  await act(async () => {
-    props.onDrop({ dataTransfer, preventDefault: jest.fn(), clientY: 80, currentTarget: { getBoundingClientRect: () => ({ top: 0, height: 100 }) } });
-  });
-  expect(API.post).toHaveBeenCalledWith('/api/skill-category/reorder', { key: '11', target_key: '22', after: true });
-  expect(reload).toHaveBeenCalledTimes(1);
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => { root.render(<div {...catalogDragProps(kind, { id: 11 }, reload)}><CatalogOrderActions kind={kind} item={{ id: 11 }} items={[{ id: 11 }, { id: 22 }]} reload={reload} /></div>); });
+  const row = container.firstChild;
+  expect(row.draggable).toBe(false);
+  const start = new Event('dragstart', { bubbles: true });
+  Object.defineProperty(start, 'dataTransfer', { value: dataTransfer });
+  await act(async () => { container.querySelector('button').dispatchEvent(start); });
+  expect(row.dataset.catalogDragging).toBe('true');
+  const props = catalogDragProps(kind, { id: 22 }, reload);
+  const target = document.createElement('div');
+  target.getBoundingClientRect = () => ({ top: 0, height: 100 });
+  const event = { dataTransfer, preventDefault: jest.fn(), clientY: 80, currentTarget: target };
+  props.onDragOver(event);
+  expect(target.dataset.catalogDrop).toBe('after');
+  await act(async () => { props.onDrop(event); });
+  expect(API.post).toHaveBeenLastCalledWith(endpoint, { key: '11', target_key: '22', after: true });
+  expect(target.dataset.catalogDrop).toBeUndefined();
+  await act(async () => { props.onDrop({ ...event, clientY: 20 }); });
+  expect(API.post).toHaveBeenLastCalledWith(endpoint, { key: '11', target_key: '22', after: false });
+  expect(reload).toHaveBeenCalledTimes(2);
+  API.post.mockClear();
+  values['application/x-catalog-order'] = JSON.stringify({ kind: 'another-list', key: '11' });
+  props.onDrop(event);
   values['application/x-catalog-order'] = '{broken';
-  expect(() => props.onDrop({ dataTransfer, preventDefault: jest.fn() })).not.toThrow();
+  expect(() => props.onDrop(event)).not.toThrow();
+  expect(API.post).not.toHaveBeenCalled();
+  await act(async () => { container.querySelector('button').dispatchEvent(new Event('dragend', { bubbles: true })); });
+  expect(row.dataset.catalogDragging).toBeUndefined();
+  await act(async () => { root.unmount(); });
+  container.remove();
 });

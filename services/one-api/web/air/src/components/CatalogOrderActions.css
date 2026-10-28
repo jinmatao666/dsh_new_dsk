@@ -1,0 +1,10 @@
+.catalog-order-actions { display: inline-flex; flex: none; margin-left: auto; padding-left: 10px; vertical-align: middle; }
+.catalog-order-actions.catalog-order-actions > button.catalog-order-handle { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; min-height: 32px; padding: 0; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #64748b; cursor: grab; line-height: 1; }
+.catalog-order-actions > button.catalog-order-handle:hover { color: #2563eb; background: #eff6ff; border-color: #dbe7fa; }
+.catalog-order-actions > button.catalog-order-handle:active { cursor: grabbing; }
+.catalog-order-actions > button.catalog-order-handle:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.catalog-order-actions > button.catalog-order-handle:disabled { opacity: .4; cursor: default; }
+[data-catalog-dragging='true'] { opacity: .5; }
+[data-catalog-drop='before'] { box-shadow: inset 0 2px #347ce8; }
+[data-catalog-drop='after'] { box-shadow: inset 0 -2px #347ce8; }
+.expert-category-actions { display: flex; align-items: center; gap: 10px; white-space: nowrap; }

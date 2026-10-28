@@ -17,7 +17,7 @@ function visiblePages(page: number, pages: number): (number | 'gap')[] {
 /** Search, filters and pagination belong to one catalog, not the surrounding page. */
 export function CatalogToolbar({
   searchLabel, keyword, onKeyword, onSearch, categories, category, onCategory, sort, onSort, page, pages, loading = false, onPage,
-  categoryLabel = productText('全部分类'),
+  categoryLabel = productText('全部分类'), onRefresh,
 }: {
   searchLabel: string
   keyword: string
@@ -32,6 +32,7 @@ export function CatalogToolbar({
   page: number
   pages: number
   loading?: boolean
+  onRefresh?: () => void
   onPage: (value: number) => void
 }) {
   const [jump, setJump] = useState('')
@@ -57,9 +58,10 @@ export function CatalogToolbar({
     <Select label={`${searchLabel} / ${categoryLabel}`} value={category}
       options={[{ value: '', label: categoryLabel }, ...categories.map(item => ({ value: item.key, label: item.name }))]}
       onChange={(value) => { preservePosition(() => { onCategory(value) }) }} />
-    {onSort && <Select label={`${searchLabel} / ${productText('热门下载')}`} value={sort ?? 'downloads'}
+    {onSort && <Select label={`${searchLabel} / ${productText('热门下载')}`} value={sort ?? 'recommended'}
       options={[{ value: 'recommended', label: productText('默认顺序') }, { value: 'downloads', label: productText('热门下载') }, { value: 'updated_at', label: productText('最近更新') }]}
       onChange={(value) => { preservePosition(() => { onSort(value) }) }} />}
+    {onRefresh && <button type="button" disabled={loading} onClick={() => { preservePosition(onRefresh) }}>{productText('刷新目录')}</button>}
     <div className="dsh-skill-catalog-pagination">
       <button type="button" disabled={loading || page <= 1} onClick={() => { preservePosition(() => { onPage(page - 1) }) }}>{productText('上一页')}</button>
       <span className="dsh-skill-page-count" aria-live="polite">{productText('第')}{page}{productText(' 页')} / {pages}</span>

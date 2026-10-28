@@ -97,6 +97,7 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
   const [publishedExperts, setPublishedExperts] = useState<readonly Expert[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [catalogLoading, setCatalogLoading] = useState(true)
+  const [catalogRevision, setCatalogRevision] = useState(0)
   const [expertTabs, setExpertTabs] = useState<readonly ExpertLaunch[]>([])
   const [activeExpertTab, setActiveExpertTab] = useState<string | null>(null)
   const workspaceRef = useRef<HTMLElement>(null)
@@ -163,7 +164,7 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
       cancelled = true
       clearTimeout(timer)
     }
-  }, [loadExperts])
+  }, [loadExperts, catalogRevision])
   const accessibleExperts = publishedExperts.filter(expert => internetCatalogAccess(networkState, expert.requiresInternet !== false) !== 'hide')
   const categories = ['全部', ...new Set([...accessibleExperts]
     .sort((left, right) => (left.categoryOrder ?? 0) - (right.categoryOrder ?? 0))
@@ -228,6 +229,7 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
     }
   }, [networkState, publishedExperts, selected])
   const catalog = <section className="dsh-expert-market">
+    <div className="dsh-expert-catalog-actions"><button type="button" disabled={catalogLoading} onClick={() => { setCatalogRevision(value => value + 1) }}>{productText('刷新目录')}</button></div>
     {catalogLoading ? <p role="status">{productText('正在连接服务…')}</p> : loadError !== null
       ? <ServiceUnavailable variant="experts" title={productText('暂时无法连接专家库')}
         description={productText('当前网络无法连接专家服务，请检查网络连接或联系管理员。')} /> :

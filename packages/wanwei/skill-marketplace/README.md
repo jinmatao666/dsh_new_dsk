@@ -9,6 +9,8 @@ English | [中文](README.zh.md)
 
 ## Summary
 
+Reopening the platform catalog resets manual popularity/update sorting and pagination to administrator order. Refresh catalog fetches the current skills and categories and restores that order without restarting the desktop.
+
 Platform browsing defaults to the administrator-defined server order. Users can explicitly select popularity or update time instead. Category navigation preserves backend category order. Published metadata retains the administrator’s internet requirement flag. In intranet mode without confirmed connectivity, marked entries follow the administrator’s hide/disable choice across recommendations, public browsing and installed platform cards. Disabled entries show the network-unreachable tooltip and cannot open details, install or start a conversation. Unmarked local skills remain available.
 
 Staged and Session-backed skill references share a name button that opens details and a red top-right cross that removes only the reference, not the installation. Draft text remains intact when opening or closing details. Published skill details display the administrator's `usage_example` text below the description, preserving line breaks; empty examples are omitted. Updating this metadata does not require reinstalling the skill.

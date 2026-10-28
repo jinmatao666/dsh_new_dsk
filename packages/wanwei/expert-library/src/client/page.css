@@ -136,3 +136,8 @@
 
 .dsh-expert-card:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.65)}
 .dsh-expert-card:disabled:hover{transform:none;box-shadow:none}
+
+.dsh-expert-catalog-actions { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.dsh-expert-catalog-actions button { padding: 8px 14px; border: 1px solid #dbe4f0; border-radius: 8px; background: #fff; color: #334e6c; cursor: pointer; font: inherit; }
+.dsh-expert-catalog-actions button:hover { background: #f1f6ff; border-color: #a8c5ef; }
+.dsh-expert-catalog-actions button:disabled { opacity: .5; cursor: default; }

@@ -424,11 +424,11 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     {
       title: '操作', width: 210, render: (_, record) => (
         <div className='skill-row-actions'>
-          {!isPrivateSkill(record) && <CatalogOrderActions kind='skills' item={record} items={items.filter(item => !isPrivateSkill(item))} reload={loadSkills} />}
           {!isPrivateSkill(record) && <button type='button' className='skill-text-action' disabled={batchBusy} onClick={() => openEditor(record)}>编辑</button>}
           {!isPrivateSkill(record) && <button type='button' className='skill-text-action' disabled={batchBusy} onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '上架'}</button>}
           <button type='button' className='skill-text-action' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</button>
           {!isPrivateSkill(record) && <button type='button' className='skill-text-action danger' disabled={batchBusy} onClick={() => removeSkill(record)}>删除</button>}
+          {!isPrivateSkill(record) && <CatalogOrderActions kind='skills' item={record} items={items.filter(item => !isPrivateSkill(item))} reload={loadSkills} disabled={batchBusy} />}
         </div>
       )
     }

@@ -144,5 +144,3 @@
     align-self: auto;
   }
 }
-
-.catalog-order-actions button:disabled{opacity:.35;cursor:default}

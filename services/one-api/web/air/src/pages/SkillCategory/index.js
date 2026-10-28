@@ -175,11 +175,12 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
     {
       title: '操作', width: 205,
       render: (_, row) => (
-        <div className='skill-row-actions'><CatalogOrderActions kind='skill-categories' item={row} items={items} reload={load} />
+        <div className='skill-row-actions'>
           <button type='button' className='skill-text-action' onClick={() => setEditor({ visible: true, data: { ...EMPTY, ...row } })}>编辑</button>
           {isDefaultCategory(row)
             ? <span className='skill-category-default-tag'>默认分类</span>
             : <button type='button' className='skill-text-action danger' onClick={() => remove(row)}>删除</button>}
+          <CatalogOrderActions kind='skill-categories' item={row} items={items} reload={load} />
         </div>
       )
     }
