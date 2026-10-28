@@ -21,7 +21,7 @@ const (
 	KnowledgeSubscriptionApproved     = "approved"
 	KnowledgeSubscriptionRejected     = "rejected"
 	KnowledgeSubscriptionStatusNone   = "none"
-	// KnowledgeSubscriptionStatusOwned marks the caller's own auth-category library on the plaza.
+	// KnowledgeSubscriptionStatusOwned is retained for older clients; plaza no longer returns owned rows.
 	KnowledgeSubscriptionStatusOwned = "owned"
 )
 
@@ -533,8 +533,7 @@ func userDisplayNames(userIds []int) (map[int]string, error) {
 }
 
 // ListKnowledgePlaza returns published libraries in categories that require authorization.
-// The caller's own libraries appear with subscription_status owned (no subscribe control).
-// Approved subscriptions omit their cards — those libraries live only under 订阅知识库.
+// The caller's own libraries and approved grants omit their cards — those live under 订阅知识库.
 // Callers without a grant still see others' cards so they can apply; subscription_status is none or pending.
 func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]KnowledgePlazaItem, error) {
 	// Personal categories are owner-only and never listed for subscription.
@@ -610,8 +609,10 @@ func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]Knowledge
 	for _, base := range bases {
 		status := statusByBase[base.Id]
 		if base.OwnerUserId == userId {
-			status = KnowledgeSubscriptionStatusOwned
-		} else if status == "" {
+			// Owners open self-built auth libraries from 订阅知识库, not the plaza.
+			continue
+		}
+		if status == "" {
 			status = KnowledgeSubscriptionStatusNone
 		}
 		if status == KnowledgeSubscriptionApproved {

@@ -40,6 +40,24 @@ func TestParseCitationsFromMarkedAnswer(t *testing.T) {
 	}
 }
 
+func TestParseCitationsFromSingleHashMarkers(t *testing.T) {
+	reference := json.RawMessage(`{
+		"chunks": [
+			{"id":"c0","content":"材料一","document_id":"doc-a","document_name":"a.pdf"},
+			{"id":"c1","content":"材料二","document_id":"doc-b","document_name":"b.pdf"},
+			{"id":"c2","content":"材料三","document_id":"doc-c","document_name":"c.pdf"}
+		]
+	}`)
+	// Model sometimes emits #i$ instead of ##i$$; ##0$$ must still win when both forms appear.
+	citations := ParseCitations(reference, "申请材料清单#2$#1$#0$: 以及正式标记##0$$")
+	if len(citations) != 3 {
+		t.Fatalf("citations=%#v", citations)
+	}
+	if citations[0].ChunkIndex != 2 || citations[1].ChunkIndex != 1 || citations[2].ChunkIndex != 0 {
+		t.Fatalf("order=%#v", citations)
+	}
+}
+
 func TestParseCitationsFromIdMarkers(t *testing.T) {
 	reference := json.RawMessage(`{"chunks":[
 		{"id":"c0","content":"正文","document_id":"doc-a","document_name":"a.pdf","position_int":[[0,0.1,0.8,0.2,0.3]]},

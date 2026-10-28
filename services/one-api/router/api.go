@@ -202,18 +202,22 @@ func SetApiRouter(router *gin.Engine) {
 			knowledgeRoute.PUT("/conversations/:conversationId", controller.UpdateKnowledgeConversation)
 			knowledgeRoute.POST("/conversations/:conversationId/completions", controller.CompleteKnowledgeConversation)
 		}
+		// Category CRUD and subscription review are available to every signed-in workbench user.
+		knowledgeWorkbenchRoute := apiRouter.Group("/knowledge-admin")
+		knowledgeWorkbenchRoute.Use(middleware.UserAuth())
+		{
+			knowledgeWorkbenchRoute.GET("/categories", controller.ListKnowledgeCategories)
+			knowledgeWorkbenchRoute.POST("/categories", controller.CreateManagedKnowledgeCategory)
+			knowledgeWorkbenchRoute.PUT("/categories/:id", controller.UpdateManagedKnowledgeCategory)
+			knowledgeWorkbenchRoute.DELETE("/categories/:id", controller.DeleteManagedKnowledgeCategory)
+			knowledgeWorkbenchRoute.GET("/subscription-applications", controller.ListManagedKnowledgeSubscriptionApplications)
+			knowledgeWorkbenchRoute.POST("/subscription-applications/:id/review", controller.ReviewManagedKnowledgeSubscription)
+		}
 		knowledgeAdminRoute := apiRouter.Group("/knowledge-admin")
 		knowledgeAdminRoute.Use(middleware.AdminAuth())
 		{
 			knowledgeAdminRoute.GET("/bases", controller.ListManagedKnowledgeBases)
 			knowledgeAdminRoute.POST("/bases", controller.CreateManagedKnowledgeBase)
-			knowledgeAdminRoute.GET("/categories", controller.ListKnowledgeCategories)
-			knowledgeAdminRoute.POST("/categories", controller.CreateManagedKnowledgeCategory)
-			knowledgeAdminRoute.PUT("/categories/:id", controller.UpdateManagedKnowledgeCategory)
-			knowledgeAdminRoute.DELETE("/categories/:id", controller.DeleteManagedKnowledgeCategory)
-
-			knowledgeAdminRoute.GET("/subscription-applications", controller.ListManagedKnowledgeSubscriptionApplications)
-			knowledgeAdminRoute.POST("/subscription-applications/:id/review", controller.ReviewManagedKnowledgeSubscription)
 			knowledgeAdminRoute.PUT("/bases/:id", controller.UpdateManagedKnowledgeBase)
 			knowledgeAdminRoute.DELETE("/bases/:id", controller.DeleteManagedKnowledgeBase)
 			knowledgeAdminRoute.GET("/bases/:id/documents", controller.ListManagedKnowledgeDocuments)

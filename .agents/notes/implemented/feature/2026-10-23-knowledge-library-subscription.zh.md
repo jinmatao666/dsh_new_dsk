@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-`require_auth` 为 true 的分类中，已上架知识库通过 `GET /api/knowledge-bases/plaza` 向登录用户展示。调用者自己拥有的库以 `subscription_status: owned` 出现（详情页为禁用的「我的」）。调用者已有用户或部门授权的库从广场省略——那些库只出现在「订阅知识库」。其余调用者看到 `none` 或 `pending`。桌面 `GET /api/knowledge-bases` 始终走 `ListAuthorizedKnowledgeBases`，并为每行标注 `owned_by_viewer` 与 `subscribed_by_viewer`（非所有者且持有授权）；管理员全量目录只在 `/api/knowledge-admin/bases`，不得灌进桌面列表。桌面侧栏不以授权分类名建分组：固定「个人知识库」；「公共知识库」合并全部无需授权的公开库（有库才显示）；「订阅知识库」仅含 `subscribed_by_viewer` 的授权分类库（有库才显示）。自建未订阅的授权库不进侧栏，只在广场以 `owned` 展示。广场状态为 `none` 的库不得同时出现在「订阅知识库」。点击卡片进入详情，状态为 `none` 时「订阅」调用 `POST /api/knowledge-bases/:id/subscribe`。从「订阅知识库」打开某库时提供「取消订阅」。
+`require_auth` 为 true 的分类中，已上架知识库通过 `GET /api/knowledge-bases/plaza` 向登录用户展示，但省略调用者自己拥有的库以及已有用户/部门授权的库——那些库只出现在「订阅知识库」。其余调用者看到 `none` 或 `pending`。桌面 `GET /api/knowledge-bases` 始终走 `ListAuthorizedKnowledgeBases`，并为每行标注 `owned_by_viewer` 与 `subscribed_by_viewer`（非所有者且持有授权）；管理员全量目录只在 `/api/knowledge-admin/bases`，不得灌进桌面列表。桌面侧栏不以授权分类名建分组：固定「个人知识库」；「公共知识库」合并全部无需授权的公开库（有库才显示）；「订阅知识库」先列自建授权分类库，再列 `subscribed_by_viewer` 行（有库才显示）。广场状态为 `none` 的库不得同时出现在「订阅知识库」。点击卡片进入详情，状态为 `none` 时「订阅」调用 `POST /api/knowledge-bases/:id/subscribe`。从「订阅知识库」打开已授权（非自建）库时提供「取消订阅」；自建库不提供该按钮。
 
 管理工作台知识库页提供「审核」，分页读取 `GET /api/knowledge-admin/subscription-applications` 的待审列表。通过 `POST /api/knowledge-admin/subscription-applications/:id/review` 且 `decision: approve` 时写入用户授权，使 `ListAuthorizedKnowledgeBases` 对该申请人包含该库；`reject` 则标记拒绝并保持不可访问。文档与问答路由仍要求授权；广场只暴露目录元数据。
 

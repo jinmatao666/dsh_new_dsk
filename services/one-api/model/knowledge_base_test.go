@@ -130,9 +130,7 @@ func TestKnowledgeSubscriptionApplicationApprovalGrantsAccess(t *testing.T) {
 	require.Equal(t, KnowledgeSubscriptionStatusNone, plaza[0].SubscriptionStatus)
 	ownerPlaza, err := ListKnowledgePlaza(2, 0, "")
 	require.NoError(t, err)
-	require.Len(t, ownerPlaza, 1)
-	require.Equal(t, "地方法规", ownerPlaza[0].Name)
-	require.Equal(t, KnowledgeSubscriptionStatusOwned, ownerPlaza[0].SubscriptionStatus)
+	require.Empty(t, ownerPlaza)
 
 	app, err := ApplyKnowledgeSubscription(1, base.Id)
 	require.NoError(t, err)
