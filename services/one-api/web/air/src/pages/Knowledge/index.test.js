@@ -224,9 +224,9 @@ test('uploads one file, shows parse progress, and opens the new library', async 
     await act(async () => { button('文件清单').click(); });
     for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
     expect(container.textContent).toContain('解析中 40%');
-    expect(container.textContent).toContain('一次上传一个文件，不超过 20MB');
+    expect(container.textContent).toContain('可一次选择多个文件，每个不超过 20MB');
     const input = container.querySelector('input[type="file"]');
-    expect(input.multiple).toBe(false);
+    expect(input.multiple).toBe(true);
     expect(input.hidden).toBe(false);
     expect(getComputedStyle(input).display).not.toBe('none');
     const upload = [...container.querySelectorAll('button')].find(item => item.textContent.includes('上传文件'));
@@ -235,20 +235,22 @@ test('uploads one file, shows parse progress, and opens the new library', async 
     expect(clicked).toHaveBeenCalled();
     clicked.mockRestore();
     const file = new File(['hello'], '说明.txt', { type: 'text/plain' });
+    const second = new File(['world'], '附录.md', { type: 'text/markdown' });
     API.post.mockClear();
     await act(async () => {
-      Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+      Object.defineProperty(input, 'files', { configurable: true, value: [file, second] });
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
-    expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/bases/1/documents', expect.any(FormData));
-    expect(API.post.mock.calls.at(-1)[1].get('file').name).toBe('说明.txt');
+    for (let i = 0; i < 8; i += 1) await act(async () => { await Promise.resolve(); });
+    const documentPosts = API.post.mock.calls.filter(call => call[0] === '/api/knowledge-admin/bases/1/documents');
+    expect(documentPosts).toHaveLength(2);
+    expect(documentPosts.map(call => call[1].get('file').name)).toEqual(['说明.txt', '附录.md']);
 
     const oversized = new File(['x'], 'big.bin');
     Object.defineProperty(oversized, 'size', { value: 20 * 1024 * 1024 + 1 });
     API.post.mockClear();
     await act(async () => {
-      Object.defineProperty(input, 'files', { configurable: true, value: [oversized] });
+      Object.defineProperty(input, 'files', { configurable: true, value: [file, oversized] });
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
     expect(container.textContent).toContain('文件不能超过 20MB');
