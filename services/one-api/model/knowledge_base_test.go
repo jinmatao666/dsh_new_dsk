@@ -55,15 +55,23 @@ func TestListAuthorizedKnowledgeBasesScopesPersonalSharedCommon(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"dept-shared", "common-1"}, namesOf(departmentVisible))
 
-	openCategory := KnowledgeCategory{Name: "部门规范", Type: KnowledgeBasePersonal, RequireAuth: false}
+	// Stale personal+require_auth=false rows must not open to everyone; only common+open does.
+	leakyPersonal := KnowledgeCategory{Name: "随便建的", Type: KnowledgeBasePersonal, RequireAuth: false}
+	openCategory := KnowledgeCategory{Name: "部门规范", Type: KnowledgeBaseCommon, RequireAuth: false}
 	closedCategory := KnowledgeCategory{Name: "内部规范", Type: KnowledgeBasePersonal, RequireAuth: true}
+	require.NoError(t, SaveKnowledgeCategory(&leakyPersonal))
+	require.True(t, leakyPersonal.RequireAuth)
 	require.NoError(t, SaveKnowledgeCategory(&openCategory))
+	require.False(t, openCategory.RequireAuth)
 	require.NoError(t, SaveKnowledgeCategory(&closedCategory))
-	require.ErrorIs(t, SaveKnowledgeCategory(&KnowledgeCategory{Name: "部门规范", Type: KnowledgeBasePersonal}), ErrKnowledgeCategoryDuplicate)
+	require.ErrorIs(t, SaveKnowledgeCategory(&KnowledgeCategory{Name: "部门规范", Type: KnowledgeBaseCommon}), ErrKnowledgeCategoryDuplicate)
 	require.Error(t, SaveKnowledgeCategory(&KnowledgeCategory{Name: "", Type: KnowledgeBasePersonal}))
+	// Simulate a historical personal category that was stored with require_auth=false.
+	require.NoError(t, db.Model(&KnowledgeCategory{}).Where("id = ?", leakyPersonal.Id).Update("require_auth", false).Error)
 	categorized := []KnowledgeBase{
-		{Name: "open-foreign", RagflowDatasetId: "ds-9", OwnerUserId: 2, Kind: KnowledgeBasePersonal, Shelf: KnowledgeShelfPublished, CategoryId: openCategory.Id},
+		{Name: "open-foreign", RagflowDatasetId: "ds-9", OwnerUserId: 2, Kind: KnowledgeBaseCommon, Shelf: KnowledgeShelfPublished, CategoryId: openCategory.Id},
 		{Name: "closed-foreign", RagflowDatasetId: "ds-10", OwnerUserId: 2, Kind: KnowledgeBasePersonal, Shelf: KnowledgeShelfPublished, CategoryId: closedCategory.Id},
+		{Name: "leaky-personal", RagflowDatasetId: "ds-12", OwnerUserId: 2, Kind: KnowledgeBasePersonal, Shelf: KnowledgeShelfPublished, CategoryId: leakyPersonal.Id},
 		{Name: "closed-offline", RagflowDatasetId: "ds-11", OwnerUserId: 1, Kind: KnowledgeBaseCommon, Shelf: KnowledgeShelfOffline, CategoryId: openCategory.Id},
 	}
 	require.NoError(t, db.Create(&categorized).Error)
@@ -106,11 +114,12 @@ func TestKnowledgeSubscriptionApplicationApprovalGrantsAccess(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{}, &OrgMember{}, &User{}))
 	require.NoError(t, db.Create(&User{Id: 1, Username: "alice", AccessToken: "tok-a", AffCode: "aff-a", Role: RoleCommonUser, Status: UserStatusEnabled}).Error)
 	require.NoError(t, db.Create(&User{Id: 2, Username: "bob", DisplayName: "鲍勃", AccessToken: "tok-b", AffCode: "aff-b", Role: RoleCommonUser, Status: UserStatusEnabled}).Error)
-	category := KnowledgeCategory{Name: "法律", Type: KnowledgeBaseCommon, RequireAuth: true}
+	category := KnowledgeCategory{Name: "法律", Type: KnowledgeBaseShared, RequireAuth: true}
 	require.NoError(t, SaveKnowledgeCategory(&category))
+	require.True(t, category.RequireAuth)
 	base := KnowledgeBase{
 		Name: "地方法规", RagflowDatasetId: "ds-law", OwnerUserId: 2,
-		Kind: KnowledgeBaseCommon, Shelf: KnowledgeShelfPublished, CategoryId: category.Id,
+		Kind: KnowledgeBaseShared, Shelf: KnowledgeShelfPublished, CategoryId: category.Id,
 	}
 	require.NoError(t, db.Create(&base).Error)
 

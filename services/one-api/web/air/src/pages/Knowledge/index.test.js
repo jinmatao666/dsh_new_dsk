@@ -349,14 +349,15 @@ test('reviews a pending subscription application from the workbench audit list',
 test('creates a category beside personal and files the next library under it', async () => {
   const stored = [];
   API.get.mockImplementation(url => {
-    if (url === '/api/knowledge-admin/categories') return Promise.resolve({ data: { success: true, data: stored } });
+    // Copy so React state updates are not skipped on the same array reference.
+    if (url === '/api/knowledge-admin/categories') return Promise.resolve({ data: { success: true, data: stored.map(row => ({ ...row })) } });
     return Promise.resolve(documentsResponse(url));
   });
   API.post.mockImplementation((url, body) => {
     if (url === '/api/knowledge-admin/categories') {
       const row = { id: 4, name: body.name, type: body.type, require_auth: body.require_auth };
       stored.push(row);
-      return Promise.resolve({ data: { success: true, data: row } });
+      return Promise.resolve({ data: { success: true, data: { ...row } } });
     }
     return Promise.resolve({ data: { success: true, data: { id: 9, name: body.name, kind: body.kind, category_id: body.category_id } } });
   });
@@ -365,7 +366,7 @@ test('creates a category beside personal and files the next library under it', a
   act(() => { button('新建知识库分类').click(); });
   act(() => { container.querySelector('[aria-label="分类类型"]').click(); });
   act(() => { document.querySelector('[role="option"][value="authorized"]').click(); });
-  expect(container.querySelector('[aria-label="授权访问"]').checked).toBe(true);
+  expect(container.textContent).toContain('授权：订阅审核通过后，申请人可见');
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
   const name = container.querySelector('input[placeholder="请输入分类名称"]');
   act(() => {
@@ -394,13 +395,13 @@ test('creates a category beside personal and files the next library under it', a
 test('edits and deletes a category from the hidden tab menu', async () => {
   const stored = [{ id: 1, name: '测绘规范', type: 'common', require_auth: false }];
   API.get.mockImplementation(url => {
-    if (url === '/api/knowledge-admin/categories') return Promise.resolve({ data: { success: true, data: stored } });
+    if (url === '/api/knowledge-admin/categories') return Promise.resolve({ data: { success: true, data: stored.map(row => ({ ...row })) } });
     return Promise.resolve(documentsResponse(url));
   });
   API.put.mockImplementation((url, body) => {
     if (url === '/api/knowledge-admin/categories/1') {
       stored[0] = { ...stored[0], name: body.name, type: body.type, require_auth: body.require_auth };
-      return Promise.resolve({ data: { success: true, data: stored[0] } });
+      return Promise.resolve({ data: { success: true, data: { ...stored[0] } } });
     }
     return Promise.resolve({ data: { success: true, data: {} } });
   });
@@ -447,39 +448,33 @@ test('edits and deletes a category from the hidden tab menu', async () => {
   expect(button('个人知识库').getAttribute('aria-selected')).toBe('true');
 });
 
-test('public category can still require authorization', async () => {
+test('personal category defaults to self-only require_auth', async () => {
   const stored = [];
   API.get.mockImplementation(url => {
-    if (url === '/api/knowledge-admin/categories') return Promise.resolve({ data: { success: true, data: stored } });
+    if (url === '/api/knowledge-admin/categories') return Promise.resolve({ data: { success: true, data: stored.map(row => ({ ...row })) } });
     return Promise.resolve(documentsResponse(url));
   });
   API.post.mockImplementation((url, body) => {
     if (url === '/api/knowledge-admin/categories') {
       const row = { id: 8, name: body.name, type: body.type, require_auth: body.require_auth };
       stored.push(row);
-      return Promise.resolve({ data: { success: true, data: row } });
+      return Promise.resolve({ data: { success: true, data: { ...row } } });
     }
     return Promise.resolve({ data: { success: true, data: { id: 9 } } });
   });
   await act(async () => { root.render(<KnowledgeLibrary />); });
   for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
   act(() => { button('新建知识库分类').click(); });
-  expect(container.querySelector('[aria-label="授权访问"]').checked).toBe(false);
-  act(() => { container.querySelector('[aria-label="分类类型"]').click(); });
-  act(() => { document.querySelector('[role="option"][value="public"]').click(); });
-  const authSwitch = container.querySelector('[aria-label="授权访问"]');
-  expect(authSwitch.checked).toBe(false);
-  act(() => { authSwitch.click(); });
-  expect(container.querySelector('[aria-label="授权访问"]').checked).toBe(true);
+  expect(container.textContent).toContain('个人：仅创建者可见，其他人看不到该分类下知识库');
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
   const name = container.querySelector('input[placeholder="请输入分类名称"]');
   act(() => {
-    setValue.call(name, '公开规范');
+    setValue.call(name, '随便建的');
     name.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await act(async () => { container.querySelector('.knowledge-modal').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
   for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
-  expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/categories', { name: '公开规范', type: 'common', require_auth: true });
+  expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/categories', { name: '随便建的', type: 'personal', require_auth: true });
 });
 
 test('personal knowledge lists real users, filters a department, then opens that person’s files', async () => {
