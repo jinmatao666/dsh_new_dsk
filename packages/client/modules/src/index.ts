@@ -178,8 +178,17 @@ type BatchArtifact = ComboArtifact & { descriptor: WebBootBatch }
 
 /** Versioned code is immutable; mismatched revisions are rejected instead of serving newer bytes. */
 const IMMUTABLE_CACHE = 'public, max-age=31536000, immutable'
-/** Generated request URLs stay below conservative browser and intermediary request-target limits. */
-const MAX_COMBO_URL_BYTES = 3 * 1024
+/**
+ * Generated request URLs stay under the classic ~2083-byte request-target ceiling still
+ * observed by some Windows WebView stacks, while leaving headroom for the `rev` query.
+ */
+const MAX_COMBO_URL_BYTES = 2 * 1024
+/**
+ * Cap each startup combo's executable bytes so one fat client (for example an inlined
+ * pdf.js worker) cannot force every other application plugin into a single multi-megabyte
+ * classic script that embedded WebViews fail to load.
+ */
+const MAX_COMBO_BODY_BYTES = 2 * 1024 * 1024
 const HASH_REVISION_LENGTH = 12
 const COMBO_REVISION_PLACEHOLDER = '0'.repeat(HASH_REVISION_LENGTH)
 
@@ -265,20 +274,37 @@ function projectedComboUrlBytes(records: readonly WebPluginRecord[]): number {
   ))
 }
 
-/** Partition one phase in graph order without allowing a generated URL above the protocol limit. */
+/** Sum raw client-bundle bytes for one candidate combo (wrappers add only a small constant). */
+function projectedComboBodyBytes(records: readonly WebPluginRecord[]): number {
+  let total = 0
+  for (const record of records) total += record.bundle.byteLength
+  return total
+}
+
+/**
+ * Partition one phase in graph order without allowing a generated URL or combined body
+ * above the protocol limits. A single oversized body still forms its own chunk; a single
+ * oversized URL remains fatal because the route cannot address it.
+ */
 function partitionComboRecords(records: readonly WebPluginRecord[]): WebPluginRecord[][] {
   const chunks: WebPluginRecord[][] = []
   let current: WebPluginRecord[] = []
   for (const record of records) {
     const candidate = [...current, record]
-    if (projectedComboUrlBytes(candidate) <= MAX_COMBO_URL_BYTES) {
+    const fitsUrl = projectedComboUrlBytes(candidate) <= MAX_COMBO_URL_BYTES
+    const fitsBody = projectedComboBodyBytes(candidate) <= MAX_COMBO_BODY_BYTES
+    if (fitsUrl && fitsBody) {
       current = candidate
       continue
     }
     if (current.length === 0) {
-      throw new Error(
-        `client-modules: ${record.entry.id} exceeds the ${String(MAX_COMBO_URL_BYTES)}-byte combo URL limit`,
-      )
+      if (projectedComboUrlBytes([record]) > MAX_COMBO_URL_BYTES) {
+        throw new Error(
+          `client-modules: ${record.entry.id} exceeds the ${String(MAX_COMBO_URL_BYTES)}-byte combo URL limit`,
+        )
+      }
+      chunks.push([record])
+      continue
     }
     chunks.push(current)
     current = [record]

@@ -560,7 +560,7 @@ describe('client bundle activation', () => {
     expect(service.artifactBaseline('@fixture/unknown')).toBeUndefined()
   })
 
-  it('splits startup combos before the map-form URL exceeds 3 KiB', async () => {
+  it('splits startup combos before the map-form URL exceeds 2 KiB', async () => {
     const packageNames = Array.from({ length: 48 }, (_, index) => (
       `@fixture/combo-url-${String(index).padStart(3, '0')}-${'x'.repeat(40)}`
     ))
@@ -582,14 +582,34 @@ describe('client bundle activation', () => {
     expect(batches.length).toBeGreaterThan(1)
     expect(batches.flatMap(batch => batch.entries)).toEqual(packageNames)
     for (const batch of batches) {
-      expect(Buffer.byteLength(batch.url)).toBeLessThanOrEqual(3 * 1024)
-      expect(Buffer.byteLength(mapUrl(batch.url))).toBeLessThanOrEqual(3 * 1024)
+      expect(Buffer.byteLength(batch.url)).toBeLessThanOrEqual(2 * 1024)
+      expect(Buffer.byteLength(mapUrl(batch.url))).toBeLessThanOrEqual(2 * 1024)
       expect((await routeRequest(route, batch.url)).status).toBe(200)
       expect((await routeRequest(route, mapUrl(batch.url))).status).toBe(200)
     }
     for (let index = 0; index < batches.length - 1; index += 1) {
       const entries = [...batches[index]!.entries, batches[index + 1]!.entries[0]!]
-      expect(Buffer.byteLength(mapUrl(comboUrl(entries, '0'.repeat(12))))).toBeGreaterThan(3 * 1024)
+      expect(Buffer.byteLength(mapUrl(comboUrl(entries, '0'.repeat(12))))).toBeGreaterThan(2 * 1024)
+    }
+  })
+
+  it('splits startup combos before combined client bodies exceed 2 MiB', async () => {
+    const packageNames = Array.from({ length: 4 }, (_, index) => `@fixture/combo-body-${String(index)}`)
+    const fatBundle = `module.exports = ${JSON.stringify('x'.repeat(900 * 1024))}\n`
+    for (const packageName of packageNames) {
+      const clientPath = writePackage(packageName)
+      mkdirSync(dirname(clientPath), { recursive: true })
+      writeFileSync(clientPath, fatBundle)
+    }
+
+    const { service, route } = constructWithRoute(packageNames)
+    const batches = service.graph().batches.filter(batch => batch.phase === 'application')
+    expect(batches.length).toBeGreaterThan(1)
+    expect(batches.flatMap(batch => batch.entries)).toEqual(packageNames)
+    for (const batch of batches) {
+      const response = await routeRequest(route, batch.url)
+      expect(response.status).toBe(200)
+      expect(response.body.byteLength).toBeLessThanOrEqual(2 * 1024 * 1024 + 64 * 1024)
     }
   })
 
