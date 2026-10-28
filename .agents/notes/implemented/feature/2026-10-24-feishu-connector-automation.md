@@ -24,11 +24,15 @@ English | [中文](2026-10-24-feishu-connector-automation.zh.md)
 
 ## Consequences
 
+The pinned CLI can save an identity, emit an `authorization_complete` event with missing scopes, and exit 3. Authorization streams are decoded separately and identity/scopes are checked independently. Missing permission names are safe connector state; raw output and device codes remain private. The CLI intentionally excludes `im:message.send_as_user` from recommended batch grants, so the connector offers an explicit message-send grant and supplementary grants after business failures. Missing-scope failures stop retries until `auth check` confirms the requested permissions. Creating an application and authorizing its user show separate QR-stage guidance.
+
 Connect handles an unconfigured CLI as a setup prerequisite: application initialization runs before user authorization, while existing configurations skip initialization. A single background operation owns both stages and rejects duplicate starts. Complete verification URLs are preserved as opaque strings; failures expose validated categories and subtypes without forwarding raw authentication output.
 
 The build exports official Skill Markdown and references embedded in the pinned CLI, retaining sibling links without a runtime download. Authorized status checks install those files in the product's own skills root and prepend desktop tool instructions after YAML frontmatter. Per-directory ownership markers prevent replacement or removal of unrelated skills. Business tools and automation direct the model to read the shared and relevant business skills; authentication stays on the connector page. Machine assets and scripts are outside the embedded export.
 
 飞书在互联网环境中可通过官方 CLI 覆盖消息、文档、日历和待办等业务域；首次使用需要配置应用并完成用户授权。CLI 二进制和授权状态探测不依赖 WebView 内的 shell。
+
+Feishu bidirectional tasks use the bot identity of the same self-built app to subscribe to `im.message.receive_v1` over a long connection. The Host verifies each event against the authorized user, accepts only that user's one-to-one text messages, reuses or creates a desktop Session, and replies through the bot. The app must enable the bot, event subscription, and bot message receive/send permissions; stopping or unbinding closes the channel and never forwards arbitrary group or other-user messages.
 
 自动化任务可能因连接器未授权、服务不可达或用户确认缺失而进入失败或等待状态。连接器选择只开放工具能力，不会在任务完成时自动推送结果。
 

@@ -65,7 +65,7 @@ export function Connectors({ dingTalk, weChat, feishu, onTryPrompt, checkConnect
     }
     void dingTalk.status().then((value) => { remember('dingtalk', value.authed && value.skillInstalled) }).catch(() => { remember('dingtalk', false) })
     void weChat.status().then((value) => { remember('wechat', value.authed) }).catch(() => { remember('wechat', false) })
-    if (feishu) void feishu.call('status').then((value) => { remember('feishu', value.authed) }).catch(() => { remember('feishu', false) })
+    if (feishu) void feishu.call('status').then((value) => { remember('feishu', value.authed && !value.authorizing && value.missingScopes.length === 0) }).catch(() => { remember('feishu', false) })
     return () => { disposed = true }
   }, [dingTalk, weChat, feishu, selected])
   const tryPrompt = (id: string, prompt: string) => { setSelected(null); onTryPrompt(prompt, id) }
@@ -95,7 +95,9 @@ export function Connectors({ dingTalk, weChat, feishu, onTryPrompt, checkConnect
         <header><div><span className="dsh-connector-brand"><img src={entry.icon} width={28} height={28} alt="" /></span><h2>{entry.name}</h2></div>
           <button type="button" aria-label={text('关闭')} onClick={() => { setSelected(null) }}>×</button></header>
         {entry.id === 'feishu' && feishu ? <FeishuPanel api={feishu}
-          onStatus={(value) => { setConnected(current => ({ ...current, feishu: value.authed })) }}
+          onStatus={(value) => {
+            setConnected(current => ({ ...current, feishu: value.authed && !value.authorizing && value.missingScopes.length === 0 }))
+          }}
           onTry={(prompt) => { tryPrompt('feishu', prompt) }} />
           : entry.id === 'dingtalk' ? <DingTalkPanel api={dingTalk} onNotice={setNotice} onTry={(prompt) => { tryPrompt('dingtalk', prompt) }} />
             : <WeChatPanel api={weChat} onNotice={setNotice} onTry={(prompt) => { tryPrompt('wechat', prompt) }} />}
@@ -128,7 +130,7 @@ export function apply(ctx: Context): void {
     controller.close()
     if (id === 'wechat') {
       void weChat.ensureSession().then((value) => { sessions.open(SessionId(value.sessionId)); conversation.input.setStagedDraft(prompt) })
-        .catch((error) => { console.error(error) })
+        .catch((error: unknown) => { console.error(error) })
       return
     }
     const current = sessions.list.getSnapshot().current
@@ -164,8 +166,9 @@ export function apply(ctx: Context): void {
           } catch { /* A later focus refresh retries local transport failures. */ }
         }
         void refresh()
-        window.addEventListener('focus', refresh)
-        return () => { disposed = true; window.removeEventListener('focus', refresh) }
+        const onFocus = () => { void refresh() }
+        window.addEventListener('focus', onFocus)
+        return () => { disposed = true; window.removeEventListener('focus', onFocus) }
       }, [])
       useEffect(() => {
         removeActiveConnectorId('wecom')

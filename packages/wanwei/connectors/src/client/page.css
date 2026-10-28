@@ -87,7 +87,7 @@
   gap: 12px;
   min-width: 0;
   margin: 0;
-  padding: 0 36px 0 0;
+  padding: 0 64px 0 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -167,9 +167,12 @@
 
 /* Keep a usable hit area while pulling the glyph next to the status dot. */
 .dsh-connector-status-dot + .dsh-connector-try {
-  width: 18px;
-  height: 18px;
+  width: auto;
+  min-width: 48px;
+  height: 24px;
   margin-left: 5px;
+  padding: 0 6px;
+  white-space: nowrap;
 }
 
 .dsh-connector-add {
@@ -192,7 +195,7 @@
 .dsh-connector-modal-backdrop { position: fixed; z-index: 18; inset: 0; display: grid; padding: 24px; place-items: center; background: rgb(15 23 42 / 45%); backdrop-filter: blur(4px); animation: dsh-modal-fade-in 0.2s ease; }
 
 .dsh-connector-detail,
-.dsh-connector-custom { width: min(100%, 580px); border: 1px solid var(--dsw-alias-border-l1); border-radius: 18px; background: var(--dsw-alias-bg-base); box-shadow: 0 24px 60px rgb(15 23 42 / 22%); animation: dsh-modal-slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+.dsh-connector-custom { max-height: calc(100dvh - 48px); overflow-y: auto; overscroll-behavior: contain; width: min(100%, 580px); border: 1px solid var(--dsw-alias-border-l1); border-radius: 18px; background: var(--dsw-alias-bg-base); box-shadow: 0 24px 60px rgb(15 23 42 / 22%); animation: dsh-modal-slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
 
 .dsh-connector-detail > header,
 .dsh-connector-custom > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 21px 22px 17px; border-bottom: 1px solid #e8eef7; }
@@ -585,3 +588,8 @@
 }
 
 .dsh-composer-connector-manage:hover { color: #1677ff; background: #f8fafc; }
+
+.dsh-connector-feishu-channel { margin: 18px 22px; padding: 16px; border: 1px solid #dbe7f6; border-radius: 12px; background: #f7faff; color: #475d76; font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.dsh-connector-feishu-channel h3 { margin: 0 0 8px; color: #243956; font-size: 15px; }
+.dsh-connector-feishu-channel p { margin: 8px 0; }
+.dsh-connector-feishu-channel a { color: #2563eb; }

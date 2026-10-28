@@ -8,6 +8,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import QRCode from 'qrcode'
 import { resolveProductDshHome } from './dingtalk-dws.ts'
 import { installFeishuSkills, removeFeishuSkills } from './feishu-skills.ts'
+import { createFeishuChannel, type FeishuBridgeStatus } from './feishu-channel.ts'
 
 /** Public status never includes CLI credentials or device codes. */
 export interface FeishuStatus {
@@ -17,6 +18,9 @@ export interface FeishuStatus {
   authorizationUrl: string | null
   qrDataUrl: string | null
   error: string | null
+  missingScopes: string[]
+  authorizationStage: 'configure' | 'login' | null
+  bridge: FeishuBridgeStatus
 }
 
 /** Locate only native executables; model arguments never pass through a shell.
@@ -59,7 +63,7 @@ export function runLark(args: readonly string[], signal: AbortSignal, cwd?: stri
   return new Promise((resolve, reject) => {
     execFile(command, [...args], { windowsHide: true, env: cliEnvironment(), signal,
       timeout: 60000, maxBuffer: 2 * 1024 * 1024, ...(cwd ? { cwd } : {}) }, (error, stdout, stderr) => {
-      if (error && (typeof error.code !== 'number' || error.killed)) reject(error)
+      if (error && (typeof error.code !== 'number' || error.killed)) reject(error instanceof Error ? error : new Error(JSON.stringify(error)))
       else resolve({ stdout, stderr, exitCode: typeof error?.code === 'number' ? error.code : 0 })
     })
   })
@@ -90,19 +94,57 @@ export function parseFeishuAuthenticated(raw: string): boolean {
   } catch { return false }
 }
 
-/**
- * Read only non-secret error classification from CLI JSON; never expose raw auth output.
- * @param raw - Captured stdout or stderr.
- * @returns Validated upstream error classification, or undefined for non-JSON output.
+// CLI progress is NDJSON on stdout and human-readable text on stderr. Never join
+// the streams before decoding a final event, which may coexist with progress.
+function jsonEvents(raw: string): Record<string, unknown>[] {
+  const events: Record<string, unknown>[] = []
+  let start = -1; let depth = 0; let quoted = false; let escaped = false
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]
+    if (start < 0) { if (ch === '{') { start = i; depth = 1 }; continue }
+    if (quoted) {
+      if (escaped) escaped = false
+      else if (ch === '\\') escaped = true
+      else if (ch === '"') quoted = false
+    } else if (ch === '"') quoted = true
+    else if (ch === '{') depth++
+    else if (ch === '}' && --depth === 0) {
+      try { events.push(JSON.parse(raw.slice(start, i + 1)) as Record<string, unknown>) } catch { /* Ignore non-JSON progress. */ }
+      start = -1
+    }
+  }
+  return events
+}
+
+/** Parse only safe scope names and completed-login events, never token payloads.
+ * @param raw - One bounded CLI output stream.
+ * @returns Completion flag and validated missing permission names.
+ */
+export function parseFeishuAuthorizationResult(raw: string): { completed: boolean; missingScopes: string[] } {
+  let completed = false
+  const missing = new Set<string>()
+  for (const event of jsonEvents(raw)) {
+    const error = event.error as { missing_scopes?: unknown } | undefined
+    if (event.event === 'authorization_complete') completed = true
+    const scopes = event.event === 'authorization_complete' || event.ok === false ? event.missing ?? error?.missing_scopes : undefined
+    if (Array.isArray(scopes)) for (const scope of scopes) {
+      if (typeof scope === 'string' && /^[a-z][a-z0-9_.:-]{0,199}$/.test(scope)) missing.add(scope)
+    }
+  }
+  return { completed, missingScopes: [...missing] }
+}
+
+/** Read only non-secret CLI error classification.
+ * @param raw - One captured stdout or stderr stream.
+ * @returns Validated upstream error classification, or undefined.
  */
 export function parseFeishuError(raw: string): { type: string; subtype: string } | undefined {
-  const start = [...raw.matchAll(/\{\s*"ok"\s*:\s*false/g)].at(-1)?.index
-  try {
-    const value = JSON.parse(start === undefined ? raw : raw.slice(start)) as { error?: { type?: unknown; subtype?: unknown } }
-    const { type, subtype } = value.error ?? {}
+  for (const event of jsonEvents(raw).reverse()) {
+    const error = event.error as { type?: unknown; subtype?: unknown } | undefined
+    const { type, subtype } = error ?? {}
     if (typeof type === 'string' && typeof subtype === 'string'
       && /^[a-z_-]{1,64}$/.test(type) && /^[a-z_-]{1,64}$/.test(subtype)) return { type, subtype }
-  } catch { /* Non-JSON progress output has no structured error classification. */ }
+  }
   return undefined
 }
 
@@ -146,31 +188,53 @@ export function registerFeishu(ctx: Context): void {
   let authorizationUrl: string | null = null
   let qrDataUrl: string | null = null
   let failure: string | null = null
+  let missingScopes: string[] = []
+  let authorizationStage: 'configure' | 'login' | null = null
   const lifetime = new AbortController()
+  const channel = createFeishuChannel(ctx, resolveProductDshHome, {
+    command: resolveLarkCommand, environment: cliEnvironment, run: runLark,
+  })
   const status = async (): Promise<FeishuStatus> => {
     const revision = authRevision
     const command = resolveLarkCommand()
     const authorized = !flight && !!command
       && parseFeishuAuthenticated((await runLark(['auth', 'status', '--json'], lifetime.signal)).stdout)
     const authed = authorized && revision === authRevision && !flight
-    if (authed && command) prepareFeishuSkills(command)
-    return { installed: !!command, authed, authorizing: flight !== undefined,
-      authorizationUrl, qrDataUrl, error: failure }
+    if (authed && command) {
+      failure = null
+      if (missingScopes.length > 0) {
+        const expected = missingScopes
+        const check = await runLark(['auth', 'check', '--scope', expected.join(' '), '--json'], lifetime.signal)
+        if (revision === authRevision && !flight && expected === missingScopes) {
+          if (check.exitCode === 0) missingScopes = []
+          else {
+            const result = parseFeishuAuthorizationResult(check.stdout)
+            if (result.missingScopes.length > 0) missingScopes = result.missingScopes
+          }
+        }
+      }
+      if (revision === authRevision && !flight) prepareFeishuSkills(command)
+    }
+    return { installed: !!command, authed: authed && revision === authRevision && !flight, authorizing: flight !== undefined,
+      authorizationUrl, qrDataUrl, error: failure, missingScopes: [...missingScopes], authorizationStage, bridge: channel.snapshot() }
   }
-  const authorize = (operation: 'configure' | 'login') => {
+  const authorize = (operation: 'configure' | 'login' | 'authorize-messages') => {
     if (flight) return
     authRevision++
+    if (operation === 'authorize-messages') missingScopes = [...new Set([...missingScopes, 'im:message.send_as_user'])]
     authorizationUrl = null; qrDataUrl = null; failure = null
     const command = resolveLarkCommand()
     if (!command) throw new Error('未找到随包飞书 CLI，请使用完整安装包')
     const runStep = (args: string[]) => new Promise<void>((resolve, reject) => {
       authorizationUrl = null; qrDataUrl = null
+      authorizationStage = args[0] === 'config' ? 'configure' : 'login'
       const child = spawn(command, args, { windowsHide: true, shell: false, env: cliEnvironment(),
         stdio: ['ignore', 'pipe', 'pipe'], signal: lifetime.signal })
-      let output = ''
-      const collect = (chunk: Buffer) => {
-        output = (output + chunk.toString('utf8')).slice(-65536)
-        const url = parseFeishuAuthorizationUrl(output)
+      let stdout = ''; let stderr = ''
+      const collect = (stream: 'stdout' | 'stderr', chunk: Buffer) => {
+        if (stream === 'stdout') stdout = (stdout + chunk.toString('utf8')).slice(-65536)
+        else stderr = (stderr + chunk.toString('utf8')).slice(-65536)
+        const url = parseFeishuAuthorizationUrl(stream === 'stdout' ? stdout : stderr)
         if (url && authorizationUrl !== url) {
           authorizationUrl = url
           const current = authorizationUrl
@@ -178,13 +242,21 @@ export function registerFeishu(ctx: Context): void {
             .catch(() => { /* The original authorization link remains usable. */ })
         }
       }
-      child.stdout.on('data', collect); child.stderr.on('data', collect)
+      child.stdout.on('data', (chunk: Buffer) => { collect('stdout', chunk) })
+      child.stderr.on('data', (chunk: Buffer) => { collect('stderr', chunk) })
       const timer = setTimeout(() => { failure = '飞书授权超时，请重试'; child.kill() }, 300000)
-      child.once('error', reject)
+      child.once('error', (error) => { clearTimeout(timer); reject(error) })
       child.once('close', (code) => {
         clearTimeout(timer)
+        const result = parseFeishuAuthorizationResult(stdout)
+        const scopes = [...new Set([...result.missingScopes, ...parseFeishuAuthorizationResult(stderr).missingScopes])]
+        if (scopes.length > 0) missingScopes = scopes
+        // Official CLI saves a valid identity, emits authorization_complete, then
+        // exits 3 when only some requested scopes were granted. Probe the identity
+        // through status() and expose missing permissions separately from failure.
+        if (code === 3 && result.completed) { resolve(); return }
         if (code !== 0) {
-          const error = parseFeishuError(output)
+          const error = parseFeishuError(stderr) ?? parseFeishuError(stdout)
           const message = error?.subtype === 'not_configured' ? '飞书应用尚未配置，请先完成应用配置'
             : error ? `飞书授权失败（${error.type}/${error.subtype}），请检查网络、应用权限或重试`
               : `飞书授权进程退出（${code ?? 'signal'}），请重试连接`
@@ -199,19 +271,32 @@ export function registerFeishu(ctx: Context): void {
         const probe = await runLark(['auth', 'status', '--json'], lifetime.signal)
         const error = parseFeishuError(probe.stdout) ?? parseFeishuError(probe.stderr)
         if (error?.subtype === 'not_configured') await runStep(['config', 'init', '--new'])
-        await runStep(['auth', 'login', '--recommend', '--json'])
+        const scopes = operation === 'authorize-messages' ? ['im:message.send_as_user'] : missingScopes
+        await runStep(scopes.length > 0
+          ? ['auth', 'login', '--scope', scopes.join(' '), '--json']
+          : ['auth', 'login', '--recommend', '--json'])
       }
     })().catch((error: unknown) => { failure = error instanceof Error ? error.message : String(error) })
-      .finally(() => { flight = undefined; authorizationUrl = null; qrDataUrl = null })
+      .finally(() => {
+        flight = undefined; authorizationUrl = null; qrDataUrl = null; authorizationStage = null
+        void channel.resume()
+      })
   }
   ctx.effect(() => ctx.connection.rpc.handle('/wanwei-feishu', async (operation) => {
     try {
-      if (operation === 'configure' || operation === 'login') authorize(operation)
+      if (operation === 'configure' || operation === 'login' || operation === 'authorize-messages') {
+        if (!flight) { await channel.pause(); authorize(operation) }
+      } else if (operation === 'bridge-enable') {
+        if (flight) throw new Error('请先完成飞书授权，再开启双向任务。')
+        await channel.enable()
+      } else if (operation === 'bridge-disable') await channel.disable()
       else if (operation === 'disconnect') {
         if (flight) throw new Error('请先完成或等待当前授权结束')
+        await channel.disable()
         authRevision++
         flight = runLark(['auth', 'logout', '--json'], lifetime.signal).then((result) => {
           if (result.exitCode !== 0) throw new Error('飞书解绑失败，请重试')
+          missingScopes = []; failure = null
           removeFeishuSkills(resolveProductDshHome())
         })
         try { await flight } finally { flight = undefined }
@@ -220,22 +305,34 @@ export function registerFeishu(ctx: Context): void {
     } catch (error) { return { ok: false as const, error: { code: 'INTERNAL' as const,
       message: error instanceof Error ? error.message : String(error), details: {} } } }
   }))
-  ctx.effect(() => async () => { lifetime.abort(); await flight })
+  ctx.effect(() => {
+    void channel.restore()
+    return async () => { lifetime.abort(); await channel.dispose(); await flight }
+  })
   ctx.effect(() => ctx.tools.register(defineTool({
     name: 'feishu_cli',
     description: 'Read lark-shared and the relevant installed lark-* business skill first. '
       + 'Use official lark-cli with the Feishu connector login. First inspect service --help; '
       + 'pass argv after lark-cli. Use --as user for personal resources. Login, config and credential commands '
       + 'belong to the connector page. Confirm recipient and intent before writes; never bypass high-risk confirmation. '
+      + 'On missing_scope, stop and direct the user to the Feishu connector supplementary authorization; do not retry the write. '
       + 'Example: ["calendar", "+agenda", "--as", "user"].',
     parameters: { args: { type: 'array', items: { type: 'string' }, required: true } },
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
     async execute(args, exec) {
-      if (args.args.length === 0 || ['auth', 'config', 'update', 'install'].includes(args.args[0] ?? '')) {
-        throw new Error('授权、凭据和配置操作请在飞书连接器中完成')
+      if (args.args.length === 0 || ['auth', 'config', 'update', 'install'].includes(args.args[0] ?? '')
+        || (args.args[0] === 'event' && ['consume', 'stop'].includes(args.args[1] ?? ''))) {
+        throw new Error('授权、凭据、消息监听和配置操作请在飞书连接器中完成')
       }
       if (!(await status()).authed) throw new Error('请先在连接器页面完成飞书授权')
+      if (missingScopes.length > 0) throw new Error('飞书缺少业务权限，请在飞书连接器点击“补充授权”，完成后再执行。不要重复重试或在对话中运行登录命令。')
       const result = await runLark(args.args, exec.signal, exec.agent?.session.header.cwd)
+      const scopes = [...new Set([...parseFeishuAuthorizationResult(result.stdout).missingScopes,
+        ...parseFeishuAuthorizationResult(result.stderr).missingScopes])]
+      if (result.exitCode !== 0 && scopes.length > 0) {
+        missingScopes = [...new Set([...missingScopes, ...scopes])]
+        return JSON.stringify({ ...result, connectorAction: '请在飞书连接器点击“补充授权”，完成后再执行；当前操作未完成，不要重复重试或通过终端登录。' })
+      }
       return JSON.stringify(result)
     },
   })))
