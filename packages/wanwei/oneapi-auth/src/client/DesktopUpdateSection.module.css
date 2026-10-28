@@ -1,7 +1,7 @@
 .section { padding: 12px 0 28px; color: var(--dsw-alias-label-primary, #182236); }
 .section h1 { margin: 0; font-size: 22px; font-weight: 500; }
 .intro { margin: 8px 0 26px; color: var(--dsw-alias-label-secondary, #65758b); font-size: 14px; line-height: 1.6; }
-.versionCard { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 12px; background: var(--dsw-alias-bg-layer-1); }
+.versionCard { display: flex; align-items: center; gap: 14px; padding: 16px 20px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 14px; background: var(--dsw-alias-bg-layer-1); }
 .versionIcon, .downloadIcon { display: grid; place-items: center; width: 52px; height: 52px; flex: none; border-radius: 16px; color: var(--dsw-alias-primary, #2563eb); background: var(--dsw-alias-bg-base, #fff); }
 .versionIcon { width: 40px; height: 40px; border-radius: 10px; background: none; }
 .versionIcon img { display: block; object-fit: contain; }
@@ -10,7 +10,11 @@
 .versionLine { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
 .versionInfo strong { font-size: 24px; line-height: 28px; font-weight: 600; letter-spacing: -.5px; font-variant-numeric: lining-nums tabular-nums; overflow-wrap: anywhere; min-width: 0; }
 .versionInfo small { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; white-space: nowrap; }
-.desktopBadge { margin-left: auto; padding: 3px 8px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; white-space: nowrap; }
+.testingBadge, .officialBadge { display: inline-flex; align-items: center; padding: 2px 7px; border: 1px solid var(--dsw-alias-border-l1, #d9dee6); border-radius: 6px; font-size: 11px; line-height: 17px; font-weight: 500; white-space: nowrap; }
+.testingBadge { background: var(--dsw-alias-bg-base, #f5f6f8); color: var(--dsw-alias-label-secondary, #65758b); }
+.officialBadge { border-color: #b8dfc3; background: #eaf7ee; color: #18733a; font-weight: 600; }
+.versionMeta { display: flex; align-items: center; gap: 10px; margin-left: auto; padding-left: 20px; border-left: 1px solid var(--dsw-alias-border-l1, #e5eaf2); }
+.desktopBadge { padding: 4px 9px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 7px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; white-space: nowrap; }
 .preference, .checkRow { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 24px 0; border-bottom: 1px solid var(--dsw-alias-border-l1, #e5eaf2); }
 .section h2 { margin: 0 0 7px; font-size: 14px; font-weight: 500; }
 .preference p, .checkRow p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--dsw-alias-label-secondary, #65758b); }
@@ -52,5 +56,5 @@
 .releaseNotes h3 { margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-secondary, #65758b); }
 .releaseNotes p { margin: 0; color: var(--dsw-alias-label-primary, #182236); font-size: 14px; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere; }
 .releaseFooter { justify-content: flex-end; }
-@media (max-width: 520px) { .versionCard { gap: 10px; padding: 12px 14px; } .preference, .checkRow { gap: 12px; } .checkRow { align-items: flex-start; flex-wrap: wrap; } .dialog { padding: 22px; } .dialogFooter { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 520px) { .versionCard { gap: 10px; padding: 12px 14px; } .versionMeta { gap: 6px; padding-left: 10px; } .preference, .checkRow { gap: 12px; } .checkRow { align-items: flex-start; flex-wrap: wrap; } .dialog { padding: 22px; } .dialogFooter { align-items: flex-start; flex-direction: column; } }
 @media (prefers-reduced-motion: reduce) { .switch, .switch span { transition: none; } }

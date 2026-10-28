@@ -3,6 +3,7 @@ interface Snapshot {
   configured: boolean
   automatic: boolean
   currentVersion: string
+  currentOfficial?: boolean
   phase: string
   message: string
   received: number
@@ -36,6 +37,9 @@ function snapshot(value: unknown): Snapshot {
       || !('dismissed' in completed) || typeof completed.dismissed !== 'boolean') {
       throw new Error('Invalid completed update status')
     }
+  }
+  if ('currentOfficial' in value && typeof value.currentOfficial !== 'boolean') {
+    throw new Error('Invalid native update release status')
   }
   return value as Snapshot
 }

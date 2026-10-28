@@ -15,6 +15,11 @@ on:
         default: '1.0.2'
         required: true
         type: string
+      official_release:
+        description: Mark this build as an official release (unchecked means gray testing)
+        required: true
+        default: false
+        type: boolean
       publish_github_release:
         description: Publish the generated installers as a GitHub Release
         required: true
@@ -33,6 +38,7 @@ concurrency:
 env:
   PRIMARY_NODE_VERSION: '22.19.0'
   DSH_RELEASE_VERSION: ${{ inputs.version }}
+  DSH_RELEASE_OFFICIAL: ${{ inputs.official_release }}
   DSH_DESKTOP_SERVER_URL: ${{ vars.DSH_ONEAPI_URL || 'http://ac.zjugis.com:3300' }}
   DSH_TELEMETRY_DISABLED: '1'
 

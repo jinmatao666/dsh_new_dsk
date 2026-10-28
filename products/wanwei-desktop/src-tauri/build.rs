@@ -8,6 +8,12 @@ fn main() {
         panic!("DSH_RELEASE_VERSION contains an unsupported runtime directory character");
     }
     println!("cargo:rerun-if-env-changed=DSH_RELEASE_VERSION");
+    println!("cargo:rerun-if-env-changed=DSH_RELEASE_OFFICIAL");
+    let official = std::env::var("DSH_RELEASE_OFFICIAL").unwrap_or_else(|_| "false".into());
+    if official != "true" && official != "false" {
+        panic!("DSH_RELEASE_OFFICIAL must be true or false");
+    }
+    println!("cargo:rustc-env=DSH_RELEASE_OFFICIAL={official}");
     for name in ["GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA"] {
         println!("cargo:rerun-if-env-changed={name}");
     }

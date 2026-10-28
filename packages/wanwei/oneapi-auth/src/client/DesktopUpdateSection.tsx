@@ -31,7 +31,11 @@ export function DesktopUpdateSection({ t, updates }: UpdateProps) {
       <span className={css.versionIcon}><img src="/brand-mark.svg" width={32} height={32} alt="" aria-hidden="true" /></span>
       <div className={css.versionInfo}><span>{t('productName')}</span>
         <div className={css.versionLine}><strong>{view?.currentVersion ?? '—'}</strong><small>{t('updatesVersionLabel')}</small></div></div>
-      <span className={css.desktopBadge}>{t('updatesDesktop')}</span>
+      <div className={css.versionMeta}>
+        {view?.currentOfficial === false ? <span className={css.testingBadge}>{t('updatesGrayTesting')}</span> : null}
+        {view?.currentOfficial === true ? <span className={css.officialBadge}>{t('updatesOfficialRelease')}</span> : null}
+        <span className={css.desktopBadge}>{t('updatesDesktop')}</span>
+      </div>
     </div>
     <div className={css.preference}>
       <div><h2>{t('updatesAutomatic')}</h2><p>{t('updatesSchedule')}</p></div>

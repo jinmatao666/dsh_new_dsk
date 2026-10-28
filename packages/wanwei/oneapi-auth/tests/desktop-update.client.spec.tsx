@@ -17,8 +17,8 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); disposers.splice(0).forEach((stop) => { stop() }); vi.useRealTimers() })
 
-function bench(phase = 'idle', configured = true, total = 104857600) {
-  const state = { configured, automatic: true, currentVersion: '2.1.1', phase, message: '', received: 26214400, total,
+function bench(phase = 'idle', configured = true, total = 104857600, currentOfficial = false) {
+  const state = { configured, automatic: true, currentVersion: '2.1.1', currentOfficial, phase, message: '', received: 26214400, total,
     completed: null as null | { version: string; sha256: string; notes: string; dismissed: boolean } }
   const invoke = vi.fn(async (command: string, args: unknown) => {
     if (command === 'desktop_update_automatic') state.automatic = (args as { enabled: boolean }).enabled
@@ -70,6 +70,13 @@ it('has no executable update controls in a standalone browser', () => {
   const updates = new DesktopUpdateController(undefined)
   const { container } = render(<DesktopUpdateSection t={t} updates={updates} />)
   expect(container.textContent).toBe('')
+})
+
+it.each([[false, zh.updatesGrayTesting], [true, zh.updatesOfficialRelease]])('shows the built release status %s beside the current version', async (official, label) => {
+  const { updates } = bench('idle', true, 104857600, official)
+  render(<DesktopUpdateSection t={t} updates={updates} />)
+  await screen.findByText(label)
+  expect(screen.getByText(label)).toBeTruthy()
 })
 
 it('shows a dedicated version page, persists its switch and delegates checking to native', async () => {
