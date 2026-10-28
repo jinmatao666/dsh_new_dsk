@@ -3,7 +3,16 @@
 .government-org-heading { margin: 8px 0 24px; }
 .government-org-heading h2 { margin: 0 0 5px; font-size: 19px; }
 .government-org-heading p { margin: 0; color: #7185a0; font-size: 13px; }
-.government-org-columns { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(340px, 1fr); gap: 20px; }
+.government-org-columns { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(340px, 1fr); gap: 20px; align-items: start; }
+.government-org-tree { display: flex; flex-direction: column; max-height: min(640px, 65vh); }
+.government-org-tree-scroll { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; flex: 1; }
+.government-org-member { display: flex; gap: 10px; padding-top: 8px; padding-bottom: 8px; color: #536d8b; font-size: 13px; }
+.government-org-member small { color: #8aa2c0; }
+.government-org-members-editor { display: grid; gap: 12px; margin: 18px 0; }
+.government-org-members-editor > button { justify-self: start; }
+.government-org-members-editor > input { padding: 10px; border: 1px solid #d5dfec; border-radius: 8px; }
+.user-organization-assignments { margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid #e2ebf6; }
+.user-organization-assignments p { color: #7185a0; font-size: 12px; }
 .government-org-tree, .government-org-detail { min-height: 360px; padding: 20px; border: 1px solid #e2ebf6; border-radius: 14px; background: #fff; }
 .government-org-section-title { margin-bottom: 18px; font-size: 15px; font-weight: 600; }
 .government-org-section-title span { color: #8aa2c0; font-size: 12px; font-weight: 400; }

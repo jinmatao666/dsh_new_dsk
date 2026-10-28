@@ -1,5 +1,7 @@
 # Role management
 
+User organization affiliations are stored separately in `government_organization_members` with a composite user/node key. A user may have zero or multiple direct affiliations. User editing provides an independent organization save action without password confirmation; account and credential edits retain their existing confirmation. The organization page lists direct members and offers root administrators a searchable batch member selector. Saving either view replaces only that user's affiliations or that node's members, preserving other concurrent posts and permission roles. The membership endpoint validates all selected records before replacing relationships in one database transaction, checks administrator authority, and writes an operation log. Nodes with active members cannot be deleted. Clicking an organization row toggles its children and members; the independently scrollable tree does not stretch the detail card.
+
 English | [中文](role-management.zh.md)
 
 Role definitions are stored in the main OneAPI database's `public.roles` table. `users.role` stores the assigned code; these definitions are not in the account-center database.

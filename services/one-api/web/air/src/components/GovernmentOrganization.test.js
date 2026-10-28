@@ -11,6 +11,27 @@ jest.mock('../helpers', () => ({
   showSuccess: jest.fn(),
 }));
 
+test('whole organization rows toggle members and batch editing saves direct memberships', async () => {
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  API.get.mockImplementation(async path => ({ data: { success: true, data: path.endsWith('memberships') ? { users: [{ id: 8, username: 'zhang', display_name: '张三' }], memberships: [{ node_id: 2, user_id: 8 }] } : [{ id: 1, name: '规划局', parent_id: 0 }, { id: 2, name: '规划科', parent_id: 1 }] } }));
+  API.put.mockResolvedValue({ data: { success: true } });
+  const container = document.createElement('div'); const root = createRoot(container);
+  try {
+    await act(async () => root.render(<GovernmentOrganization />));
+    const label = name => [...container.querySelectorAll('.government-org-node-label')].find(button => button.textContent.includes(name));
+    expect(container.querySelector('.government-org-member').textContent).toContain('张三');
+    await act(async () => label('规划局').click());
+    expect(container.querySelector('.government-org-member')).toBeNull();
+    await act(async () => label('规划局').click());
+    await act(async () => label('规划科').click());
+    await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '批量管理成员').click());
+    await act(async () => container.querySelector('.government-org-members-editor input[type=checkbox]').click());
+    await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '保存成员').click());
+    expect(API.put).toHaveBeenCalledWith('/api/government-organization/memberships', { node_id: 2, ids: [] });
+    expect(container.querySelector('.government-org-tree-scroll')).not.toBeNull();
+  } finally { await act(async () => root.unmount()); delete global.IS_REACT_ACT_ENVIRONMENT; }
+});
+
 test('creates a top-level node and a child without prescribed hierarchy levels', async () => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   const nodes = [];

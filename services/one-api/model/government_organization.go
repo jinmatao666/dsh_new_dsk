@@ -77,6 +77,13 @@ func DeleteGovernmentOrganizationNode(id uint) error {
 		if children != 0 {
 			return errors.New("请先删除下级节点")
 		}
+		var members int64
+		if err := tx.Model(&GovernmentOrganizationMember{}).Joins("JOIN users ON users.id = government_organization_members.user_id").Where("node_id = ? AND users.status != ?", id, UserStatusDeleted).Count(&members).Error; err != nil {
+			return err
+		}
+		if members != 0 {
+			return errors.New("请先移除该组织的成员")
+		}
 		var roles []Role
 		if err := tx.Select("role", "permissions").Find(&roles).Error; err != nil {
 			return err
@@ -91,6 +98,9 @@ func DeleteGovernmentOrganizationNode(id uint) error {
 					return errors.New("该节点仍被角色使用，请先调整角色的组织范围")
 				}
 			}
+		}
+		if err := tx.Where("node_id = ?", id).Delete(&GovernmentOrganizationMember{}).Error; err != nil {
+			return err
 		}
 		result := tx.Delete(&GovernmentOrganizationNode{}, id)
 		if result.Error != nil {

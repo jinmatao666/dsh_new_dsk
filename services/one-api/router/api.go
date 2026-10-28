@@ -253,6 +253,8 @@ func SetApiRouter(router *gin.Engine) {
 		governmentOrganizationRoute.Use(middleware.AdminAuth())
 		{
 			governmentOrganizationRoute.GET("/", controller.ListGovernmentOrganizationNodes)
+			governmentOrganizationRoute.GET("/memberships", controller.ListGovernmentMembers)
+			governmentOrganizationRoute.PUT("/memberships", controller.SaveGovernmentMembers)
 			governmentOrganizationRoute.POST("/", controller.CreateGovernmentOrganizationNode)
 			governmentOrganizationRoute.PUT("/:id", controller.UpdateGovernmentOrganizationNode)
 			governmentOrganizationRoute.DELETE("/:id", controller.DeleteGovernmentOrganizationNode)

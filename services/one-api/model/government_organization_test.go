@@ -2,13 +2,19 @@ package model
 
 import (
 	"encoding/json"
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestGovernmentOrganizationEmptyListIsJSONArray(t *testing.T) {
-	db := catalogTestDB(t)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	previous := DB
+	DB = db
+	t.Cleanup(func() { DB = previous })
 	require.NoError(t, db.AutoMigrate(&GovernmentOrganizationNode{}))
 	nodes, err := ListGovernmentOrganizationNodes()
 	require.NoError(t, err)

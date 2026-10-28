@@ -4,6 +4,7 @@ import { fetchManagedRoles } from '../../helpers/roles';
 import CustomSelect from '../../components/CustomSelect';
 import RolePermissions from '../../components/RolePermissions';
 import GovernmentOrganization from '../../components/GovernmentOrganization';
+import UserOrganizationAssignments from '../../components/UserOrganizationAssignments';
 import SystemSettings from './SystemSettings';
 import UserProfile from './UserProfile';
 import { ChannelModelBatch, ChannelModelPicker, channelModelNames, filterChannelModels, filterModelSources } from './ChannelModelTools';
@@ -2195,6 +2196,7 @@ export function UsersPage() {
           onClose={() => setEdit(null)}
         >
           <form className='zjugis-form' onSubmit={saveEdit}>
+            <UserOrganizationAssignments key={edit.id} userId={edit.id} />
             <div className='form-grid'>
               <Field
                 label='用户名'

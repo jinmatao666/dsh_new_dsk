@@ -12,6 +12,7 @@ on:
         type: string
       version:
         description: Release version without the v prefix (for example 2.1.0)
+        default: '1.0.2'
         required: true
         type: string
       publish_github_release:

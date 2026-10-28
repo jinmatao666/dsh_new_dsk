@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/model"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -23,7 +23,7 @@ func TestGovernmentOrganizationTreeAndRoleReferences(t *testing.T) {
 	previous := model.DB
 	model.DB = db
 	t.Cleanup(func() { model.DB = previous })
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Role{}, &model.GovernmentOrganizationNode{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Role{}, &model.GovernmentOrganizationNode{}, &model.GovernmentOrganizationMember{}))
 	require.NoError(t, model.SeedBuiltinRoles())
 	actor := model.RoleRootUser
 	engine := gin.New()

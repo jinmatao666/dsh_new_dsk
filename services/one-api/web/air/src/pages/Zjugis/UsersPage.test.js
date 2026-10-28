@@ -12,6 +12,7 @@ jest.mock('../../helpers/roles', () => ({
   fetchManagedRoles: jest.fn(async () => [{ role: 1, name: '普通成员' }]),
 }));
 jest.mock('../../components/RolePermissions', () => () => null);
+jest.mock('../../components/UserOrganizationAssignments', () => () => null);
 jest.mock('../../components/GovernmentOrganization', () => () => <div>组织树内容</div>);
 jest.mock('../../components/CustomSelect', () => ({ children, ...props }) => (
   <select {...props}>{children}</select>

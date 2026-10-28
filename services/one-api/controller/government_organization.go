@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -8,6 +9,48 @@ import (
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/model"
 )
+
+// ListGovernmentMembers supplies minimal account labels and organization membership to administrators.
+func ListGovernmentMembers(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	directory, err := model.ListGovernmentMembers()
+	if err != nil {
+		respondError(c, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": directory})
+}
+
+// SaveGovernmentMembers changes organization affiliation only; it never changes roles or credentials.
+func SaveGovernmentMembers(c *gin.Context) {
+	var request struct {
+		UserID int    `json:"user_id"`
+		NodeID uint   `json:"node_id"`
+		IDs    []uint `json:"ids"`
+	}
+	if c.ShouldBindJSON(&request) != nil || request.IDs == nil || len(request.IDs) > 10000 {
+		respondError(c, "组织成员参数无效，清空请传空数组")
+		return
+	}
+	role := c.GetInt(ctxkey.Role)
+	if role != model.RoleRootUser {
+		if request.UserID <= 0 {
+			respondError(c, "仅超级管理员可以批量管理组织成员")
+			return
+		}
+		user, err := model.GetUserById(request.UserID, false)
+		if err != nil || role <= user.Role {
+			respondError(c, "无权修改该用户的组织归属")
+			return
+		}
+	}
+	if err := model.SaveGovernmentMemberships(request.UserID, request.NodeID, request.IDs); err != nil {
+		respondError(c, err.Error())
+		return
+	}
+	model.RecordLog(c.Request.Context(), c.GetInt(ctxkey.Id), model.LogTypeManage, fmt.Sprintf("调整组织成员：用户=%d，节点=%d，所选编号=%v", request.UserID, request.NodeID, request.IDs))
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
 
 type governmentOrganizationRequest struct {
 	ParentID  uint   `json:"parent_id"`
