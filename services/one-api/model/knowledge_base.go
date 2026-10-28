@@ -21,6 +21,8 @@ const (
 	KnowledgeSubscriptionApproved     = "approved"
 	KnowledgeSubscriptionRejected     = "rejected"
 	KnowledgeSubscriptionStatusNone   = "none"
+	// KnowledgeSubscriptionStatusOwned marks the caller's own auth-category library on the plaza.
+	KnowledgeSubscriptionStatusOwned = "owned"
 )
 
 // KnowledgeBase binds an authorized OneAPI resource to one RAGFlow dataset.
@@ -150,16 +152,76 @@ type KnowledgeBaseListItem struct {
 	OwnerUsername string `json:"owner_username"`
 }
 
+// knowledgeViewerDeptIds returns enabled department ids for the caller.
+func knowledgeViewerDeptIds(userId int) ([]int, error) {
+	var deptIds []int
+	err := DB.Model(&OrgMember{}).
+		Where("user_id = ? AND status = ? AND dept_id <> 0", userId, OrgMemberStatusEnabled).
+		Pluck("dept_id", &deptIds).Error
+	return deptIds, err
+}
+
+// KnowledgeBaseGrantIDs returns knowledge_base ids where the caller holds a user or department grant.
+// Ownership alone does not count; desktop 订阅知识库 uses this set.
+func KnowledgeBaseGrantIDs(userId int) (map[int]struct{}, error) {
+	deptIds, err := knowledgeViewerDeptIds(userId)
+	if err != nil {
+		return nil, err
+	}
+	query := DB.Model(&KnowledgeBaseGrant{}).Select("knowledge_base_id").
+		Where("subject_type = ? AND subject_id = ?", KnowledgeGrantUser, userId)
+	if len(deptIds) != 0 {
+		query = query.Or("subject_type = ? AND subject_id IN ?", KnowledgeGrantDept, deptIds)
+	}
+	var ids []int
+	if err := query.Distinct("knowledge_base_id").Pluck("knowledge_base_id", &ids).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[int]struct{}, len(ids))
+	for _, id := range ids {
+		out[id] = struct{}{}
+	}
+	return out, nil
+}
+
+// ListUncategorizedPersonalKnowledgeBases returns every published personal library
+// that is not filed under a workbench category (desktop 个人知识库 for administrators).
+func ListUncategorizedPersonalKnowledgeBases() ([]KnowledgeBase, error) {
+	var rows []KnowledgeBase
+	err := DB.Where("kind = ? AND COALESCE(category_id, 0) = 0 AND COALESCE(shelf, '') <> ?",
+		KnowledgeBasePersonal, KnowledgeShelfOffline).
+		Order("updated_at DESC").Find(&rows).Error
+	return rows, err
+}
+
+// MergeAdminPersonalKnowledgeBases appends every uncategorized personal library missing
+// from an authorized desktop list so administrators can open other users' personal libraries.
+func MergeAdminPersonalKnowledgeBases(rows []KnowledgeBase) ([]KnowledgeBase, error) {
+	personal, err := ListUncategorizedPersonalKnowledgeBases()
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[int]struct{}, len(rows))
+	for _, row := range rows {
+		seen[row.Id] = struct{}{}
+	}
+	for _, row := range personal {
+		if _, ok := seen[row.Id]; ok {
+			continue
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
 // ListAuthorizedKnowledgeBases returns published libraries the user may open.
 // Uncategorized personal libraries stay with their owner, uncategorized shared libraries
 // require ownership or a grant, and every uncategorized common library is included.
 // A library in a workbench category follows that category instead: without require_auth
 // every user sees it, and with require_auth only the owner or a grant does.
 func ListAuthorizedKnowledgeBases(userId int) ([]KnowledgeBase, error) {
-	var deptIds []int
-	if err := DB.Model(&OrgMember{}).
-		Where("user_id = ? AND status = ? AND dept_id <> 0", userId, OrgMemberStatusEnabled).
-		Pluck("dept_id", &deptIds).Error; err != nil {
+	deptIds, err := knowledgeViewerDeptIds(userId)
+	if err != nil {
 		return nil, err
 	}
 	// An empty shelf is the pre-migration published state.
@@ -186,7 +248,7 @@ func ListAuthorizedKnowledgeBases(userId int) ([]KnowledgeBase, error) {
 	args = append(args, false, userId)
 	args = append(args, grantArgs...)
 	var rows []KnowledgeBase
-	err := DB.Model(&KnowledgeBase{}).Distinct("knowledge_bases.*").
+	err = DB.Model(&KnowledgeBase{}).Distinct("knowledge_bases.*").
 		Joins("LEFT JOIN knowledge_base_grants ON knowledge_base_grants.knowledge_base_id = knowledge_bases.id").
 		Joins("LEFT JOIN knowledge_categories ON knowledge_categories.id = knowledge_bases.category_id").
 		Where(clause, args...).
@@ -471,15 +533,15 @@ func userDisplayNames(userIds []int) (map[int]string, error) {
 }
 
 // ListKnowledgePlaza returns published libraries in categories that require authorization.
-// Owners already see their libraries under 订阅知识库, so plaza omits own libraries.
-// Approved subscriptions also omit their cards — those libraries live only under 订阅知识库.
+// The caller's own libraries appear with subscription_status owned (no subscribe control).
+// Approved subscriptions omit their cards — those libraries live only under 订阅知识库.
 // Callers without a grant still see others' cards so they can apply; subscription_status is none or pending.
 func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]KnowledgePlazaItem, error) {
 	// Personal categories are owner-only and never listed for subscription.
 	query := DB.Model(&KnowledgeBase{}).
 		Joins("INNER JOIN knowledge_categories ON knowledge_categories.id = knowledge_bases.category_id").
-		Where("knowledge_categories.require_auth = ? AND knowledge_categories.type <> ? AND COALESCE(knowledge_bases.shelf, '') <> ? AND knowledge_bases.owner_user_id <> ?",
-			true, KnowledgeBasePersonal, KnowledgeShelfOffline, userId)
+		Where("knowledge_categories.require_auth = ? AND knowledge_categories.type <> ? AND COALESCE(knowledge_bases.shelf, '') <> ?",
+			true, KnowledgeBasePersonal, KnowledgeShelfOffline)
 	if categoryId > 0 {
 		query = query.Where("knowledge_bases.category_id = ?", categoryId)
 	}
@@ -535,18 +597,21 @@ func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]Knowledge
 			statusByBase[app.KnowledgeBaseId] = app.Status
 		}
 	}
-	var grants []KnowledgeBaseGrant
-	if err := DB.Where("subject_type = ? AND subject_id = ? AND knowledge_base_id IN ?",
-		KnowledgeGrantUser, userId, baseIds).Find(&grants).Error; err != nil {
+	granted, err := KnowledgeBaseGrantIDs(userId)
+	if err != nil {
 		return nil, err
 	}
-	for _, grant := range grants {
-		statusByBase[grant.KnowledgeBaseId] = KnowledgeSubscriptionApproved
+	for _, id := range baseIds {
+		if _, ok := granted[id]; ok {
+			statusByBase[id] = KnowledgeSubscriptionApproved
+		}
 	}
 	items := make([]KnowledgePlazaItem, 0, len(bases))
 	for _, base := range bases {
 		status := statusByBase[base.Id]
-		if status == "" {
+		if base.OwnerUserId == userId {
+			status = KnowledgeSubscriptionStatusOwned
+		} else if status == "" {
 			status = KnowledgeSubscriptionStatusNone
 		}
 		if status == KnowledgeSubscriptionApproved {

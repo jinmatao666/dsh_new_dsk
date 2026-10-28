@@ -6,11 +6,11 @@ Status: implemented
 
 ## 问题
 
-管理工作台里「需要授权」的分类下的知识库，不应以该分类名出现在其他人的桌面侧栏。其他人只能通过广场发现并申请订阅；所有者本人在侧栏「订阅知识库」中直接可见，无需再进广场。仅在管理员同意后，申请人才在「订阅知识库」中看到该库，并应能取消订阅，使该库重新回到广场。
+管理工作台里「需要授权」的分类下的知识库，不应以该分类名出现在其他人的桌面侧栏。其他人只能通过广场发现并申请订阅；仅在管理员同意后，申请人才在「订阅知识库」中看到该库，并应能取消订阅，使该库重新回到广场。
 
 ## 决策
 
-`require_auth` 为 true 的分类中，已上架知识库通过 `GET /api/knowledge-bases/plaza` 向登录用户展示（排除调用者自己拥有的库，以及已对调用者批准订阅或已有用户授权的库），`subscription_status` 仅为 `none` 或 `pending`。已订阅库只出现在侧栏「订阅知识库」。桌面侧栏不以授权分类名建分组：个人知识库之后只展示有库的公开分类，并把当前用户可访问的授权分类库统一放在「订阅知识库」。侧栏底部「知识库广场」打开广场。点击卡片进入详情，「订阅」调用 `POST /api/knowledge-bases/:id/subscribe`，写入一条指向该知识库（及其所有者语境）的待审 `knowledge_subscription_applications` 记录。从「订阅知识库」打开某库时提供「取消订阅」，调用 `DELETE /api/knowledge-bases/:id/subscribe`，删除该用户授权并将申请标为拒绝，使该库重新出现在广场以便再次订阅。
+`require_auth` 为 true 的分类中，已上架知识库通过 `GET /api/knowledge-bases/plaza` 向登录用户展示。调用者自己拥有的库以 `subscription_status: owned` 出现（详情页为禁用的「我的」）。调用者已有用户或部门授权的库从广场省略——那些库只出现在「订阅知识库」。其余调用者看到 `none` 或 `pending`。桌面 `GET /api/knowledge-bases` 始终走 `ListAuthorizedKnowledgeBases`，并为每行标注 `owned_by_viewer` 与 `subscribed_by_viewer`（非所有者且持有授权）；管理员全量目录只在 `/api/knowledge-admin/bases`，不得灌进桌面列表。桌面侧栏不以授权分类名建分组：固定「个人知识库」；「公共知识库」合并全部无需授权的公开库（有库才显示）；「订阅知识库」仅含 `subscribed_by_viewer` 的授权分类库（有库才显示）。自建未订阅的授权库不进侧栏，只在广场以 `owned` 展示。广场状态为 `none` 的库不得同时出现在「订阅知识库」。点击卡片进入详情，状态为 `none` 时「订阅」调用 `POST /api/knowledge-bases/:id/subscribe`。从「订阅知识库」打开某库时提供「取消订阅」。
 
 管理工作台知识库页提供「审核」，分页读取 `GET /api/knowledge-admin/subscription-applications` 的待审列表。通过 `POST /api/knowledge-admin/subscription-applications/:id/review` 且 `decision: approve` 时写入用户授权，使 `ListAuthorizedKnowledgeBases` 对该申请人包含该库；`reject` 则标记拒绝并保持不可访问。文档与问答路由仍要求授权；广场只暴露目录元数据。
 
@@ -25,6 +25,8 @@ Status: implemented
 **广场详情在无授权时也可打开文档：**不采用。浏览正文会绕过分类记录的授权开关。
 
 **已批准库仍留在广场并以禁用的「已订阅」展示：**不采用。订阅集合已在「订阅知识库」；广场重复卡片干扰发现与取消订阅。
+
+**管理员桌面列表返回托管全量目录：**不采用。授权分类库会未订阅就进入「订阅知识库」，创建者广场为空，取消订阅报「该知识库不支持订阅申请」。
 
 ## 后果
 

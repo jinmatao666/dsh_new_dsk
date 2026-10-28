@@ -52,26 +52,52 @@ func knowledgeAdmin(c *gin.Context) bool {
 	return c.GetBool("knowledge_admin") || c.GetInt("role") >= model.RoleAdminUser
 }
 
-// ListKnowledgeBases returns only resources authorized for the current user.
-// Administrators receive the full catalog so the desktop and workbench stay aligned.
+// knowledgeBaseDesktopItem is one authorized library with ownership and grant flags.
+// Desktop sidebar uses SubscribedByViewer for 订阅知识库; owned auth libraries stay off the
+// sidebar and appear only on 知识库广场.
+type knowledgeBaseDesktopItem struct {
+	model.KnowledgeBase
+	OwnedByViewer      bool `json:"owned_by_viewer"`
+	SubscribedByViewer bool `json:"subscribed_by_viewer"`
+}
+
+// ListKnowledgeBases returns desktop sidebar libraries: grant-scoped for everyone, with
+// administrators also receiving every uncategorized personal library. Auth-category libraries
+// still require ownership or a grant so they do not fill 订阅知识库 without approval.
+// Full workbench catalog stays on /api/knowledge-admin/bases.
 func ListKnowledgeBases(c *gin.Context) {
-	if knowledgeAdmin(c) {
-		rows, err := model.ListManagedKnowledgeBases()
-		if err != nil {
-			logger.Errorf(c.Request.Context(), "list managed knowledge bases: %s", err.Error())
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"success": true, "data": rows})
-		return
-	}
-	rows, err := model.ListAuthorizedKnowledgeBases(c.GetInt("id"))
+	userId := c.GetInt("id")
+	rows, err := model.ListAuthorizedKnowledgeBases(userId)
 	if err != nil {
 		logger.Errorf(c.Request.Context(), "list authorized knowledge bases: %s", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": rows})
+	if knowledgeAdmin(c) {
+		rows, err = model.MergeAdminPersonalKnowledgeBases(rows)
+		if err != nil {
+			logger.Errorf(c.Request.Context(), "list admin personal knowledge bases: %s", err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
+			return
+		}
+	}
+	granted, err := model.KnowledgeBaseGrantIDs(userId)
+	if err != nil {
+		logger.Errorf(c.Request.Context(), "list knowledge grants: %s", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
+		return
+	}
+	items := make([]knowledgeBaseDesktopItem, len(rows))
+	for i, row := range rows {
+		owned := row.OwnerUserId == userId
+		_, hasGrant := granted[row.Id]
+		items[i] = knowledgeBaseDesktopItem{
+			KnowledgeBase:      row,
+			OwnedByViewer:      owned,
+			SubscribedByViewer: !owned && hasGrant,
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
 }
 
 // ListKnowledgeCategories returns workbench categories for the desktop and admin tabs.

@@ -101,10 +101,12 @@ export function KnowledgeComposerToggle({
     if (selection.enabled && catalog === null && !loading) load()
   }, [selection.enabled])
 
-  const groups = useMemo(
-    () => catalog === null ? [] : libraryNavGroups(catalog.items, catalog.categories),
-    [catalog],
-  )
+  const groups = useMemo(() => {
+    if (catalog === null) return []
+    const selfUserId = catalog.items.find(item =>
+      item.kind === 'personal' && (item.category_id ?? 0) === 0)?.owner_user_id
+    return libraryNavGroups(catalog.items, catalog.categories, selfUserId)
+  }, [catalog])
   const currentGroup = groups.find(group => group.key === activeGroup) ?? groups[0]
   const selected = useMemo(() => new Set(selection.ids), [selection.ids])
   const names = useMemo(() => {
