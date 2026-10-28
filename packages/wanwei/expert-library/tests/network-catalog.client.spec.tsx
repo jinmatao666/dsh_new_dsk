@@ -50,6 +50,6 @@ it('refreshes administrator card and category ordering without restarting the li
   await waitFor(() => { expect(cards()).toEqual(['次位专家', '首位专家']) })
   expect(categories()).toEqual(['全部', '办公工具', '空间分析'])
   expect(loadExperts).toHaveBeenCalledTimes(2)
-  fireEvent.click(screen.getByRole('button', { name: '办公工具', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: '办公工具' }))
   expect(cards()).toEqual(['首位专家'])
 })

@@ -41,7 +41,7 @@ it('restores backend order on reopen and fetches changed ordering through Refres
   await waitFor(() => { expect(names()).toEqual(['后台首位技能', '下载更多技能']) })
   const sort = () => screen.getByRole('combobox', { name: '搜索平台技能 / 热门下载' })
   fireEvent.click(sort())
-  fireEvent.click(screen.getByRole('option', { name: '热门下载', exact: true }))
+  fireEvent.click(screen.getByRole('option', { name: '热门下载' }))
   expect(names()).toEqual(['下载更多技能', '后台首位技能'])
   await act(async () => { controller.close(); controller.open() })
   await waitFor(() => { expect(names()).toEqual(['后台首位技能', '下载更多技能']) })
