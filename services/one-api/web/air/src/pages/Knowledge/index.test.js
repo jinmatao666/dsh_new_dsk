@@ -2,9 +2,12 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import KnowledgeLibrary from './index';
-import { API } from '../../helpers';
+import { API, isAdmin } from '../../helpers';
 
-jest.mock('../../helpers', () => ({ API: { get: jest.fn(), post: jest.fn(), put: jest.fn(), delete: jest.fn() } }));
+jest.mock('../../helpers', () => ({
+  API: { get: jest.fn(), post: jest.fn(), put: jest.fn(), delete: jest.fn() },
+  isAdmin: jest.fn(() => true),
+}));
 
 const categories = [
   { id: 1, name: '测绘规范', type: 'common', require_auth: false },
@@ -23,13 +26,18 @@ const users = [
 ];
 
 function documentsResponse(url) {
-  if (String(url).startsWith('/api/user/')) return { data: { success: true, data: users } };
-  if (url === '/api/knowledge-admin/categories') return { data: { success: true, data: categories } };
-  if (url === '/api/knowledge-admin/bases') return { data: { success: true, data: libraries } };
-  if (String(url).startsWith('/api/knowledge-admin/subscription-applications')) {
+  const path = String(url);
+  if (path.startsWith('/api/user/')) return { data: { success: true, data: users } };
+  if (path === '/api/knowledge-admin/categories' || path === '/api/knowledge-bases/categories') {
+    return { data: { success: true, data: categories } };
+  }
+  if (path === '/api/knowledge-admin/bases' || path === '/api/knowledge-bases') {
+    return { data: { success: true, data: libraries } };
+  }
+  if (path.startsWith('/api/knowledge-admin/subscription-applications')) {
     return { data: { success: true, data: { items: [], total: 0, page: 1, page_size: 1 } } };
   }
-  if (String(url).includes('/documents?') || /\/documents$/.test(String(url))) {
+  if (path.includes('/documents?') || /\/documents$/.test(path)) {
     return { data: { success: true, data: documentPage } };
   }
   return { data: { success: true, data: documents } };
@@ -44,6 +52,8 @@ beforeEach(() => {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
+  isAdmin.mockReturnValue(true);
+  localStorage.setItem('user', JSON.stringify({ id: 1, role: 100, username: 'root' }));
   API.get.mockImplementation(url => Promise.resolve(documentsResponse(url)));
   API.post.mockResolvedValue({ data: { success: true, data: { id: 9 } } });
   API.put.mockResolvedValue({ data: { success: true, data: {} } });
@@ -53,6 +63,7 @@ afterEach(() => {
   act(() => root.unmount());
   container.remove();
   jest.clearAllMocks();
+  localStorage.removeItem('user');
   delete global.IS_REACT_ACT_ENVIRONMENT;
 });
 
@@ -564,4 +575,21 @@ test('personal knowledge stays on all people when users have no department', asy
   expect(container.textContent).toContain('当前没有部门数据，先按全部人员查看。');
   expect(container.textContent).toContain('爱丽丝');
   expect(button('办公室')).toBeUndefined();
+});
+
+test('ordinary user personal tab shows only own libraries via user APIs', async () => {
+  isAdmin.mockReturnValue(false);
+  localStorage.setItem('user', JSON.stringify({ id: 2, role: 1, username: 'alice' }));
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(container.textContent).not.toContain('全部人员');
+  expect(container.textContent).not.toContain('爱丽丝');
+  expect(container.textContent).not.toContain('陈静');
+  expect(container.textContent).toContain('个人笔记');
+  expect(API.get).toHaveBeenCalledWith('/api/knowledge-bases');
+  expect(API.get).toHaveBeenCalledWith('/api/knowledge-bases/categories');
+  expect(API.get).not.toHaveBeenCalledWith(expect.stringMatching(/^\/api\/user\//));
+  expect(API.get).toHaveBeenCalledWith('/api/knowledge-bases');
+  expect(button('订阅审核')).toBeTruthy();
+  expect(button('新建知识库分类')).toBeTruthy();
 });

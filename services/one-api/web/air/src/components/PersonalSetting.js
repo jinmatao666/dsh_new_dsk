@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API, copy, isRoot, showError, showInfo, showSuccess } from '../helpers';
+import { API, copy, isAdmin, isRoot, showError, showInfo, showSuccess } from '../helpers';
 import Turnstile from 'react-turnstile';
 import { UserContext } from '../context/User';
 import { onGitHubOAuthClicked } from './utils';
@@ -252,7 +252,7 @@ const PersonalSetting = () => {
                     {typeof getUsername() === 'string' && getUsername().slice(0, 1)}
                   </Avatar>}
                   title={<Typography.Text>{getUsername()}</Typography.Text>}
-                  description={isRoot() ? <Tag color="red">管理员</Tag> : <Tag color="blue">普通用户</Tag>}
+                  description={isRoot() ? <Tag color="red">超级管理员</Tag> : isAdmin() ? <Tag color="red">管理员</Tag> : <Tag color="blue">普通用户</Tag>}
                 ></Card.Meta>
               }
               headerExtraContent={

@@ -26,6 +26,37 @@ it('maps ##i$$ markers onto locatable citation numbers', () => {
   ])
 })
 
+it('maps single-hash #i$ misspellings onto the same citation slots as ##i$$', () => {
+  const citations = parseCitations([
+    { index: 1, chunk_index: 0, document_id: 'doc-a', document_name: 'a.pdf', quote: '条款' },
+    { index: 2, chunk_index: 2, document_id: 'doc-b', document_name: 'b.pdf', quote: '说明' },
+    { index: 3, chunk_index: 5, document_id: 'doc-c', document_name: 'c.pdf', quote: '范围' },
+  ])
+  const parts = splitAnswerCitations(
+    '3.申请材料清单申请时需提交以下材料 #2$#0$#5$:\n1. 表格',
+    citations,
+  )
+  expect(parts).toEqual([
+    { type: 'text', text: '3.申请材料清单申请时需提交以下材料 ' },
+    { type: 'citation', citation: citations[1] },
+    { type: 'citation', citation: citations[0] },
+    { type: 'citation', citation: citations[2] },
+    { type: 'text', text: ':\n1. 表格' },
+  ])
+  expect(parts.some(part => part.type === 'text' && /#\d+\$/.test(part.text))).toBe(false)
+})
+
+it('does not split ##0$$ when matching the shorter #i$ form', () => {
+  const citations = parseCitations([
+    { index: 1, chunk_index: 0, document_id: 'doc-a', document_name: 'a.pdf', quote: '条款' },
+  ])
+  const parts = splitAnswerCitations('依据制度执行。##0$$', citations)
+  expect(parts).toEqual([
+    { type: 'text', text: '依据制度执行。' },
+    { type: 'citation', citation: citations[0] },
+  ])
+})
+
 it('maps RAGFlow [ID:i] markers onto the same citation slots', () => {
   const citations = parseCitations([
     { index: 1, chunk_index: 0, document_id: 'doc-a', document_name: 'a.pdf', quote: '条款' },

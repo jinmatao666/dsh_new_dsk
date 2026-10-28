@@ -252,10 +252,7 @@ func CreateKnowledgeBase(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库分类无效"})
 		return
 	}
-	if input.CategoryId > 0 && !knowledgeAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "只有管理员可以指定知识库分类"})
-		return
-	}
+	// Any signed-in workbench user may file a library under a category they can see.
 	if input.CategoryId > 0 {
 		category, err := model.GetKnowledgeCategory(input.CategoryId)
 		if err != nil {

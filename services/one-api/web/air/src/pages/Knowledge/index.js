@@ -1,9 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, ClipboardList, Download, Eye, FileText, Folder, FolderPlus, Layers, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Tag, Trash2, Upload, Users } from 'lucide-react';
-import { API } from '../../helpers';
+import { API, isAdmin } from '../../helpers';
 import CustomSelect from '../../components/CustomSelect';
 import './index.css';
+
+/** Signed-in user id from localStorage; 0 when missing or invalid. */
+function currentUserId() {
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    const id = Number(user?.id);
+    return Number.isFinite(id) && id > 0 ? id : 0;
+  } catch {
+    return 0;
+  }
+}
 
 /** Category dialog: type is the library kind; 授权访问 independently sets require_auth. */
 const CATEGORY_VISIBILITY = [
@@ -62,6 +73,15 @@ function documentsQuery({ page = 1, pageSize = FILE_PAGE_SIZE, keywords = '' } =
 const STATS_PAGE_SIZE = 100;
 const STATS_MAX_PAGES = 50;
 
+/** Workbench catalog APIs: admin managed routes vs signed-in user routes. */
+function knowledgeBasesRoot() {
+  return isAdmin() ? '/api/knowledge-admin/bases' : '/api/knowledge-bases';
+}
+
+function knowledgeCategoriesUrl() {
+  return isAdmin() ? '/api/knowledge-admin/categories' : '/api/knowledge-bases/categories';
+}
+
 /** Loads document total and summed byte size for one library card. */
 async function loadLibraryDocumentStats(libraryId) {
   let page = 1;
@@ -70,7 +90,7 @@ async function loadLibraryDocumentStats(libraryId) {
   let seen = 0;
   for (; page <= STATS_MAX_PAGES; page += 1) {
     const result = unwrapDocumentPage(await API.get(
-      `/api/knowledge-admin/bases/${libraryId}/documents?${documentsQuery({ page, pageSize: STATS_PAGE_SIZE })}`,
+      `${knowledgeBasesRoot()}/${libraryId}/documents?${documentsQuery({ page, pageSize: STATS_PAGE_SIZE })}`,
     ));
     total = result.total;
     for (const file of result.items) bytes += Number(file.size) || 0;
@@ -292,16 +312,21 @@ const KnowledgeLibrary = () => {
   };
 
   const loadLibraries = async () => {
-    const rows = unwrap(await API.get('/api/knowledge-admin/bases'));
+    const rows = unwrap(await API.get(knowledgeBasesRoot()));
     setLibraries(Array.isArray(rows) ? rows : []);
   };
 
   const loadCategories = async () => {
-    const rows = unwrap(await API.get('/api/knowledge-admin/categories'));
+    const rows = unwrap(await API.get(knowledgeCategoriesUrl()));
     setCategories(Array.isArray(rows) ? rows : []);
   };
 
   const loadUsers = async () => {
+    // Administrators browse every account's personal libraries; ordinary users skip the roster.
+    if (!isAdmin()) {
+      setUsers([]);
+      return;
+    }
     const pageSize = 100;
     const rows = [];
     try {
@@ -326,7 +351,10 @@ const KnowledgeLibrary = () => {
     let cancelled = false;
     setLoading(true);
     setUsersLoading(true);
-    Promise.all([loadLibraries(), loadCategories(), loadUsers(), loadReviewCount()])
+    const tasks = [loadLibraries(), loadCategories(), loadReviewCount()];
+    if (isAdmin()) tasks.push(loadUsers());
+    else setUsers([]);
+    Promise.all(tasks)
       .catch(async cause => {
         const message = await errorMessage(cause);
         if (!cancelled) setError(message);
@@ -372,6 +400,10 @@ const KnowledgeLibrary = () => {
     };
   }, [libraries]);
 
+  // Administrators browse every personal library via the people directory; ordinary users only see own cards.
+  const manageAllPersonal = isAdmin();
+  const viewerId = currentUserId();
+
   const visible = useMemo(() => {
     const text = keyword.trim().toLowerCase();
     const categoryId = scope.startsWith('c:') ? Number(scope.slice(2)) : 0;
@@ -380,6 +412,12 @@ const KnowledgeLibrary = () => {
         ? Number(item.category_id || 0) === categoryId
         : item.kind === scope && !Number(item.category_id || 0)))
       .filter(item => {
+        if (scope === 'personal' && !manageAllPersonal) {
+          return viewerId > 0 && Number(item.owner_user_id) === viewerId;
+        }
+        return true;
+      })
+      .filter(item => {
         if (!text) return true;
         return [item.name, item.description, item.tags, item.owner_username].some(value => String(value || '').toLowerCase().includes(text));
       })
@@ -387,17 +425,20 @@ const KnowledgeLibrary = () => {
         const delta = new Date(left.updated_at || left.created_at).getTime() - new Date(right.updated_at || right.created_at).getTime();
         return order === 'asc' ? delta : -delta;
       });
-  }, [libraries, scope, keyword, order]);
+  }, [libraries, scope, keyword, order, manageAllPersonal, viewerId]);
 
   const countsByScope = useMemo(() => {
+    const personalRows = libraries.filter(item => item.kind === 'personal' && !Number(item.category_id || 0));
     const counts = {
-      personal: libraries.filter(item => item.kind === 'personal' && !Number(item.category_id || 0)).length,
+      personal: manageAllPersonal
+        ? personalRows.length
+        : personalRows.filter(item => viewerId > 0 && Number(item.owner_user_id) === viewerId).length,
     };
     categories.forEach(category => {
       counts[`c:${category.id}`] = libraries.filter(item => Number(item.category_id || 0) === category.id).length;
     });
     return counts;
-  }, [libraries, categories]);
+  }, [libraries, categories, manageAllPersonal, viewerId]);
   const tabs = [
     { key: 'personal', label: '个人知识库', category: null },
     ...categories.map(category => ({ key: `c:${category.id}`, label: category.name, category })),
@@ -469,13 +510,13 @@ const KnowledgeLibrary = () => {
     }
     try {
       const result = unwrapDocumentPage(await API.get(
-        `/api/knowledge-admin/bases/${library.id}/documents?${documentsQuery({ page, keywords })}`,
+        `${knowledgeBasesRoot()}/${library.id}/documents?${documentsQuery({ page, keywords })}`,
       ));
       let nextPage = result.page || page;
       const totalPages = Math.max(1, Math.ceil(result.total / FILE_PAGE_SIZE) || 1);
       if (result.total > 0 && nextPage > totalPages) {
         const fallback = unwrapDocumentPage(await API.get(
-          `/api/knowledge-admin/bases/${library.id}/documents?${documentsQuery({ page: totalPages, keywords })}`,
+          `${knowledgeBasesRoot()}/${library.id}/documents?${documentsQuery({ page: totalPages, keywords })}`,
         ));
         setDocuments(fallback.items);
         setDocumentTotal(fallback.total);
@@ -521,7 +562,7 @@ const KnowledgeLibrary = () => {
     let total = 0;
     do {
       const result = unwrapDocumentPage(await API.get(
-        `/api/knowledge-admin/bases/${library.id}/documents?${documentsQuery({ page, pageSize: 100 })}`,
+        `${knowledgeBasesRoot()}/${library.id}/documents?${documentsQuery({ page, pageSize: 100 })}`,
       ));
       total = result.total;
       rows.push(...result.items.map(file => ({
@@ -635,7 +676,7 @@ const KnowledgeLibrary = () => {
     setError('');
     try {
       const kind = form.category_id ? form.kind : 'personal';
-      const created = unwrap(await API.post('/api/knowledge-admin/bases', {
+      const created = unwrap(await API.post(knowledgeBasesRoot(), {
         name: form.name.trim(),
         description: form.description.trim(),
         kind,
@@ -684,7 +725,7 @@ const KnowledgeLibrary = () => {
         try {
           const body = new FormData();
           body.append('file', file);
-          unwrap(await API.post(`/api/knowledge-admin/bases/${opened.id}/documents`, body));
+          unwrap(await API.post(`${knowledgeBasesRoot()}/${opened.id}/documents`, body));
         } catch (cause) {
           failures.push(`${file.name}：${await errorMessage(cause)}`);
         }
@@ -709,7 +750,7 @@ const KnowledgeLibrary = () => {
     const libraryId = Number(file?.library_id || opened?.id || 0);
     if (!libraryId) return;
     const documentId = file.id;
-    const base = `/api/knowledge-admin/bases/${libraryId}/documents/${documentId}`;
+    const base = `${knowledgeBasesRoot()}/${libraryId}/documents/${documentId}`;
     setBusy(`${documentId}:browse`);
     setError('');
     setViewer(current => {
@@ -782,10 +823,29 @@ const KnowledgeLibrary = () => {
     setBusy(`${file.id}:chunks`);
     setError('');
     try {
-      const data = unwrap(await API.get(`/api/knowledge-admin/bases/${libraryId}/documents/${file.id}/chunk-viewer`));
-      const url = typeof data?.url === 'string' ? data.url.trim() : '';
-      if (!url) throw new Error('切片页面地址无效');
-      window.open(url, '_blank', 'noopener,noreferrer');
+      if (isAdmin()) {
+        const data = unwrap(await API.get(`/api/knowledge-admin/bases/${libraryId}/documents/${file.id}/chunk-viewer`));
+        const url = typeof data?.url === 'string' ? data.url.trim() : '';
+        if (!url) throw new Error('切片页面地址无效');
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      const rows = unwrap(await API.get(`${knowledgeBasesRoot()}/${libraryId}/documents/${file.id}/chunks`));
+      const content = (Array.isArray(rows) ? rows : [])
+        .map(item => String(item?.content || '').trim())
+        .filter(Boolean)
+        .join('\n\n');
+      setViewer(current => {
+        revokeViewerUrl(current);
+        return {
+          id: file.id,
+          library_id: libraryId,
+          name: file.name,
+          loading: false,
+          mode: 'text',
+          content: content || '暂无切片',
+        };
+      });
     } catch (cause) {
       setError(await errorMessage(cause));
     } finally {
@@ -807,7 +867,7 @@ const KnowledgeLibrary = () => {
     setBusy(`${file.id}:${action}`);
     setError('');
     try {
-      const base = `/api/knowledge-admin/bases/${libraryId}/documents/${file.id}`;
+      const base = `${knowledgeBasesRoot()}/${libraryId}/documents/${file.id}`;
       if (action === 'download') {
         const response = await API.get(`${base}/file`, { responseType: 'blob' });
         const url = URL.createObjectURL(response.data);
@@ -817,7 +877,8 @@ const KnowledgeLibrary = () => {
         link.click();
         URL.revokeObjectURL(url);
       } else if (action === 'parse') {
-        unwrap(await API.post(`${base}/parse`));
+        if (!isAdmin()) throw new Error('无权重新解析');
+        unwrap(await API.post(`/api/knowledge-admin/bases/${libraryId}/documents/${file.id}/parse`));
         await refreshOpened(opened);
       } else if (action === 'delete') {
         unwrap(await API.delete(base));
@@ -1014,7 +1075,9 @@ const KnowledgeLibrary = () => {
       <header className='knowledge-page-head'>
         <div className='knowledge-page-title'>
           <h1>知识库</h1>
-          {!reviewOpen && <p>按分类管理知识库与人员目录中的文件</p>}
+          {!reviewOpen && <p>{manageAllPersonal
+            ? '按分类管理知识库与人员目录中的文件'
+            : '管理自己的个人知识库与已授权分类中的文件'}</p>}
         </div>
       </header>
       {showChrome && <div className='knowledge-chrome'>
@@ -1197,8 +1260,8 @@ const KnowledgeLibrary = () => {
                 <button type='button' disabled={busy === `${file.id}:browse`} onClick={() => runFileAction(file, 'browse')}><Eye size={14} />浏览</button>
                 <button type='button' disabled={busy === `${file.id}:download`} onClick={() => runFileAction(file, 'download')}><Download size={14} />下载</button>
                 <button type='button' disabled={busy === `${file.id}:chunks`} onClick={() => runFileAction(file, 'chunks')}><Layers size={14} />切片</button>
-                {state.retry && <button type='button' disabled={busy === `${file.id}:parse`} onClick={() => runFileAction(file, 'parse')}><RefreshCw size={14} />重新解析</button>}
-                <button type='button' onClick={() => { setSummaryFile(file); setSummaryText(file.summary || ''); }}><FileText size={14} />摘要</button>
+                {isAdmin() && state.retry && <button type='button' disabled={busy === `${file.id}:parse`} onClick={() => runFileAction(file, 'parse')}><RefreshCw size={14} />重新解析</button>}
+                {isAdmin() && <button type='button' onClick={() => { setSummaryFile(file); setSummaryText(file.summary || ''); }}><FileText size={14} />摘要</button>}
                 <button type='button' className='danger' onClick={() => setConfirming({ type: 'file', file })}><Trash2 size={14} />删除</button>
               </td>
             </tr>;
@@ -1223,7 +1286,7 @@ const KnowledgeLibrary = () => {
         </div>
       </div>
     </section> : <>
-      {scope === 'personal' ? <div className='knowledge-directory'>
+      {scope === 'personal' && manageAllPersonal ? <div className='knowledge-directory'>
         <aside className='knowledge-directory-nav' aria-label='人员部门'>
           <p>人员</p>
           <button type='button' aria-pressed={deptKey === 'all'} className={deptKey === 'all' ? 'active' : ''} onClick={() => selectDepartment('all')}>
@@ -1392,7 +1455,7 @@ const KnowledgeLibrary = () => {
             <header>
               <span className='knowledge-card-mark' aria-hidden='true'><Folder size={18} /></span>
               <h2 title={library.name}>{library.name}</h2>
-              <div className='knowledge-card-menu'>
+              {isAdmin() && <div className='knowledge-card-menu'>
                 <button
                   type='button'
                   className='knowledge-card-more'
@@ -1414,7 +1477,7 @@ const KnowledgeLibrary = () => {
                     </button>
                   </div>
                 </>}
-              </div>
+              </div>}
             </header>
             <p className={`knowledge-card-desc${library.description ? '' : ' is-empty'}`}>{library.description || '暂无描述'}</p>
             <div className='knowledge-tags'>{splitTags(library.tags).map(tag => <span key={tag}><Tag size={12} />{tag}</span>)}</div>

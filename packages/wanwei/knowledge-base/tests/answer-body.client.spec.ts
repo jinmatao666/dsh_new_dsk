@@ -29,3 +29,19 @@ it('keeps citation buttons after markdown rendering', () => {
   expect(html).toContain('【1】')
   expect(slots[0]?.document_id).toBe('doc-a')
 })
+
+it('turns leaked #i$ markers into citation buttons instead of raw text', () => {
+  const citations = parseCitations([
+    { index: 3, chunk_index: 2, document_id: 'doc-a', document_name: 'a.pdf', quote: '材料' },
+    { index: 2, chunk_index: 1, document_id: 'doc-b', document_name: 'b.pdf', quote: '证明' },
+    { index: 6, chunk_index: 5, document_id: 'doc-c', document_name: 'c.pdf', quote: '范围' },
+  ])
+  const { html } = prepareAnswerHtml(
+    '### 3.申请材料清单申请时需提交以下材料 #2$#1$#5$:',
+    citations,
+  )
+  expect(html).not.toMatch(/#\d+\$/)
+  expect(html).toContain('【3】')
+  expect(html).toContain('【2】')
+  expect(html).toContain('【6】')
+})

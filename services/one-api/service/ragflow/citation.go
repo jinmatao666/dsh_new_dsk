@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	// ##i$$ and [ID:i] both address the 0-based RAGFlow reference chunk index.
-	citationMarker = regexp.MustCompile(`(?i)##(\d+)\$\$|\[ID:(\d+)\]`)
+	// ##i$$, #i$, and [ID:i] address the 0-based RAGFlow reference chunk index.
+	// #i$ is a model misspelling of ##i$$; match ##i$$ before #i$ so ##0$$ is not split.
+	citationMarker = regexp.MustCompile(`(?i)##(\d+)\$\$|#(\d+)\$|\[ID:(\d+)\]`)
 	pageInContent  = regexp.MustCompile(`第\s*(\d+)\s*页`)
 )
 
@@ -53,7 +54,7 @@ type ragflowRefChunk struct {
 }
 
 // ParseCitations maps RAGFlow completion.reference chunks into desktop citation rows.
-// Index is 1-based for UI; ChunkIndex matches ##i$$ / [ID:i] markers in the answer.
+// Index is 1-based for UI; ChunkIndex matches ##i$$ / #i$ / [ID:i] markers in the answer.
 // Answers without markers return no citations so the desktop does not invent sources.
 func ParseCitations(reference json.RawMessage, answer string) []Citation {
 	trimmedAnswer := strings.TrimSpace(answer)
@@ -136,6 +137,9 @@ func citedChunkIndexes(answer string, chunkCount int) []int {
 		raw := match[1]
 		if raw == "" {
 			raw = match[2]
+		}
+		if raw == "" {
+			raw = match[3]
 		}
 		index, err := strconv.Atoi(raw)
 		if err != nil || index < 0 || index >= chunkCount {

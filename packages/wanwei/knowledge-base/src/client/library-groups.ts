@@ -48,8 +48,8 @@ export function libraryIsGrantedSubscription(item: KnowledgeBaseItem, selfUserId
 /**
  * Nav: 个人知识库 is always present; 公共知识库 and 订阅知识库 appear only when they have
  * rows. 公共知识库 merges every open category plus uncategorized common libraries. 订阅知识库
- * holds grant-backed auth-category libraries only. Auth category names and owned-but-
- * unsubscribed auth libraries never appear as sidebar groups; those are in 知识库广场.
+ * holds owned auth-category libraries first, then grant-backed subscriptions. Auth category
+ * names never appear as sidebar groups; others discover non-owned libraries in 知识库广场.
  * @param items - Libraries the caller may open.
  * @param categories - Administrator-defined categories.
  * @param selfUserId - Optional fallback owner id when ownership annotation is absent.
@@ -68,11 +68,13 @@ export function libraryNavGroups(
     const category = categoryById.get(categoryId)
     return category !== undefined && !category.require_auth
   })
-  const subscribed = items.filter((item) => {
+  const authRows = items.filter((item) => {
     const category = categoryById.get(categoryIdOf(item))
     return category !== undefined && category.require_auth
-      && librarySubscribedByViewer(item, selfUserId)
   })
+  const ownedAuth = authRows.filter(item => libraryOwnedByViewer(item, selfUserId))
+  const subscribed = authRows.filter(item => librarySubscribedByViewer(item, selfUserId))
+  const subscriptionRows = [...ownedAuth, ...subscribed]
   const groups: LibraryGroup[] = [
     {
       key: 'personal', label: productText('个人知识库'), create: 'personal',
@@ -83,8 +85,8 @@ export function libraryNavGroups(
   if (publicRows.length !== 0) {
     groups.push({ key: 'public', label: productText('公共知识库'), rows: publicRows })
   }
-  if (subscribed.length !== 0) {
-    groups.push({ key: 'subscription', label: productText('订阅知识库'), rows: subscribed })
+  if (subscriptionRows.length !== 0) {
+    groups.push({ key: 'subscription', label: productText('订阅知识库'), rows: subscriptionRows })
   }
   return groups
 }

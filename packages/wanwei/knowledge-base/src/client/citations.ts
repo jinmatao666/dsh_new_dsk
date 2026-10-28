@@ -19,8 +19,11 @@ export interface KnowledgeCitation {
   positions?: CitationPosition[]
 }
 
-/** RAGFlow ##i$$ and [ID:i] markers; i is the 0-based reference chunk index. */
-const MARKER_GLOBAL = /##(\d+)\$\$|\[ID:(\d+)\]/gi
+/**
+ * RAGFlow citation markers; i is the 0-based reference chunk index.
+ * `#i$` is a model misspelling of `##i$$` — match `##i$$` first so `##0$$` is not split.
+ */
+const MARKER_GLOBAL = /##(\d+)\$\$|#(\d+)\$|\[ID:(\d+)\]/gi
 
 /** Answers that mean retrieval missed; never render locate controls for them. */
 const EMPTY_ANSWER = /知识库中未找到相关内容/
@@ -68,7 +71,7 @@ export function splitAnswerCitations(
   for (const match of answer.matchAll(MARKER_GLOBAL)) {
     const index = match.index ?? 0
     if (index > cursor) parts.push({ type: 'text', text: answer.slice(cursor, index) })
-    const chunkIndex = Number(match[1] ?? match[2])
+    const chunkIndex = Number(match[1] || match[2] || match[3])
     const citation = byChunk.get(chunkIndex)
     if (citation !== undefined && citationLocatable(citation) && !shown.has(citation.index)) {
       shown.add(citation.index)

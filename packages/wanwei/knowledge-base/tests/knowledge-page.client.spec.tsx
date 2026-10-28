@@ -157,7 +157,7 @@ it('hides auth category names from the sidebar and discovers them only in the pl
   expect(within(open as HTMLElement).getByText('公开汇编')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: /知识库广场/ }))
   expect(await screen.findByText('地方法规知识库')).toBeTruthy()
-  expect(screen.getByText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库不再出现在广场。')).toBeTruthy()
+  expect(screen.getByText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；自建与已订阅的知识库不再出现在广场。')).toBeTruthy()
   expect(screen.queryByRole('tab')).toBeNull()
   expect(service.plaza).toHaveBeenCalledWith({})
   fireEvent.click(screen.getByRole('button', { name: /地方法规知识库/ }))
@@ -216,7 +216,7 @@ it('keeps admin-created auth libraries out of 订阅知识库 until a grant exis
   expect(within(plaza).getByRole('button', { name: /平台法规/ })).toBeTruthy()
 })
 
-it('keeps owned auth-category libraries off the sidebar until discovered in the plaza', async () => {
+it('places owned auth-category libraries under 订阅知识库 above grants without 取消订阅', async () => {
   const service = api()
   service.categories = vi.fn(async () => [
     { id: 4, name: '法律', type: 'shared' as const, require_auth: true },
@@ -224,28 +224,28 @@ it('keeps owned auth-category libraries off the sidebar until discovered in the 
   service.list = vi.fn(async () => [
     { id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7 },
     {
+      id: 9, name: '已订法规', description: '已通过', kind: 'shared' as const,
+      owner_user_id: 2, category_id: 4, owned_by_viewer: false, subscribed_by_viewer: true,
+    },
+    {
       id: 8, name: '我建的法规', description: '自建', kind: 'shared' as const,
       owner_user_id: 7, category_id: 4, owned_by_viewer: true, subscribed_by_viewer: false,
     },
   ])
-  const plazaItem = {
-    id: 8, name: '我建的法规', description: '自建', kind: 'shared' as const,
-    owner_user_id: 7, category_id: 4, category_name: '法律',
-    owner_username: 'alice', subscription_status: 'owned' as const,
-  }
-  service.plaza = vi.fn(async () => [plazaItem])
-  service.plazaItem = vi.fn(async () => plazaItem)
-  service.plazaDocuments = vi.fn(async () => [])
+  service.plaza = vi.fn(async () => [])
   render(<KnowledgePage api={service} />)
-  expect(await screen.findByRole('button', { name: '我的资料' })).toBeTruthy()
-  expect(screen.queryByText('我创建的')).toBeNull()
-  expect(screen.queryByText('订阅知识库')).toBeNull()
-  expect(screen.queryByText('我建的法规')).toBeNull()
+  expect(await screen.findByText('订阅知识库')).toBeTruthy()
+  const subscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
+  const labels = within(subscription).getAllByRole('button')
+    .map(button => button.textContent || '')
+    .filter(text => text.includes('法规'))
+  expect(labels[0]).toContain('我建的法规')
+  expect(labels[1]).toContain('已订法规')
+  fireEvent.click(within(subscription).getByText('我建的法规'))
+  expect(screen.queryByRole('button', { name: '取消订阅' })).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: /知识库广场/ }))
   const plaza = await screen.findByRole('region', { name: '知识库广场' })
-  expect(within(plaza).getByRole('button', { name: /我建的法规/ })).toBeTruthy()
-  fireEvent.click(within(plaza).getByRole('button', { name: /我建的法规/ }))
-  expect((await screen.findByRole('button', { name: '我的' })).hasAttribute('disabled')).toBe(true)
+  expect(within(plaza).queryByRole('button', { name: /我建的法规/ })).toBeNull()
 })
 
 it('collapses and expands each sidebar knowledge group', async () => {
