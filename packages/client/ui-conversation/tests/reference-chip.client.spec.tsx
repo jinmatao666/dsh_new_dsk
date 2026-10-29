@@ -53,7 +53,9 @@ describe('ReferenceChip', () => {
     const onOpen = vi.fn()
     const onRemove = vi.fn()
     const bubble = vi.fn()
-    const view = render(<div onClick={bubble}><ReferenceChip label="Excel 数据处理" appearance="skill" invalid={false} onOpen={onOpen} onRemove={onRemove} /></div>)
+    const keyBubble = vi.fn()
+    const view = render(<div onClick={bubble} onKeyDown={keyBubble}><ReferenceChip label="Excel 数据处理" appearance="skill" invalid={false} onOpen={onOpen} onRemove={onRemove} /></div>)
+    expect(view.container.firstElementChild).toMatchSnapshot()
     fireEvent.click(view.getByRole('button', { name: 'Excel 数据处理' }))
     expect(onOpen).toHaveBeenCalledOnce()
     expect(onRemove).not.toHaveBeenCalled()
@@ -61,6 +63,12 @@ describe('ReferenceChip', () => {
     expect(onRemove).toHaveBeenCalledOnce()
     expect(onOpen).toHaveBeenCalledOnce()
     expect(bubble).not.toHaveBeenCalled()
+    const remove = view.getByRole('button', { name: '× Excel 数据处理' })
+    fireEvent.keyDown(remove, { key: 'Enter' })
+    fireEvent.keyDown(remove, { key: ' ' })
+    expect(keyBubble).not.toHaveBeenCalled()
+    fireEvent.keyDown(remove, { key: 'ArrowLeft' })
+    expect(keyBubble).toHaveBeenCalledOnce()
   })
   it('renders the domain icon and the label', () => {
     const { container, getByTitle } = render(

@@ -366,7 +366,7 @@ describe('inline draft prefix', () => {
     fireEvent.paste(editor, { clipboardData: { items: [], getData: () => '测试abc' } })
     await vi.waitFor(() => { expect(staged.container.querySelector('output')?.textContent).toBe('测试abc/helper') })
     expect(editor.querySelector('[data-composer-chip="skill"]')).toBe(chip)
-    expect(editor.textContent).toBe('测试abc助手×')
+    expect(editor.textContent).toBe('测试abc助手')
     expect(editor.textContent).not.toMatch(/[\uE100-\uE11D\uFFFC]/u)
   })
 
@@ -375,7 +375,7 @@ describe('inline draft prefix', () => {
     const { shell, view, sink } = bench({ draft: '/helper 你好', lexicon: new Map(), draftPrefix: (props) => { owner = props; return props.renderInput() } })
     act(() => { expect(owner?.settlePrefix(7, { source: 'skill', ref: '/helper', clipboardText: '/helper', label: '助手', appearance: 'skill' })).toBe(true) })
     expect(view.getByText('助手')).toBeTruthy()
-    expect(view.container.querySelector('[data-composer-input]')?.textContent).toBe('助手× 你好')
+    expect(view.container.querySelector('[data-composer-input]')?.textContent).toBe('助手 你好')
     expect(shell.snapshot.draft).toBe('/helper 你好')
     expect(owner?.settlePrefix(7, { source: 'skill', ref: '/helper', clipboardText: '/helper', label: '助手', appearance: 'skill' })).toBe(false)
     await act(async () => { shell.submit() })
@@ -412,7 +412,7 @@ describe('inline draft prefix', () => {
     const editor = staged.container.querySelector<HTMLElement>('[data-composer-input]')!
     act(() => { expect(prefixOwner?.settlePrefix(7, { source: 'skill', ref: '/helper', clipboardText: '/helper', label: '助手', appearance: 'skill' })).toBe(true) })
     expect(editor.querySelector('[data-composer-chip="skill"]')).not.toBeNull()
-    expect(editor.textContent).toBe('助手× 你好')
+    expect(editor.textContent).toBe('助手 你好')
     expect(staged.container.querySelector('[data-composer-staged-prefix]')).toBeNull()
     expect(stage).not.toHaveBeenCalled()
     fireEvent.click(staged.getByRole('button', { name: '× 助手' }))

@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-[引用外层](../../../../packages/client/ui-conversation/src/client/input/editor/chip-node.tsx)使用行内块，两侧各预留三像素水平内边距；技能外层在胶囊和移除角标周围预留额外的前后间距。引用布局仅预留视觉空间，不添加文字或可编辑节点。
+[引用外层](../../../../packages/client/ui-conversation/src/client/input/editor/chip-node.tsx)使用行内块，两侧各预留三像素水平内边距；技能外层在胶囊周围预留额外的前后间距。引用布局仅预留视觉空间，不添加文字或可编辑节点。
 
 [键盘映射](../../../../packages/client/ui-conversation/src/client/input/editor/keymap.ts)让折叠光标在一次不带修饰键的水平方向键操作中跨过一个引用及其后的单个 ASCII 空格。连续多个空格、选区手势、带修饰键的方向键和输入法组合输入交给原编辑器处理。剪贴板文本、引用实例标识和提交编码器保持不变。
 
@@ -31,3 +31,5 @@ Status: implemented
 ## 影响
 
 技能胶囊为移除按钮预留额外宽度，长名称因此更早截断。键盘用户仍有可见的按钮焦点。专项编辑器测试覆盖导航、光标装饰清理及文本不变；Chromium 和 WebKit 检查覆盖连续向外方向键、两种引用类型、输入和删除。macOS WKWebView 仍需发布实机验收，因为 Windows 上运行的 WebKit 无法复现全部原生光标绘制缺陷。修改不增加模型可见内容或网络请求。
+
+技能移除按钮位于标签左侧图标位置并参与行内布局；悬停标签或聚焦按钮时，技能图标切换为叉号且宽度不变，触屏直接显示叉号。Enter 和空格仅激活按钮，不进入编辑器发送键盘处理。名称在剩余宽度内截断。

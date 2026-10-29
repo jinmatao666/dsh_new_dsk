@@ -10,7 +10,7 @@ Inline reference capsules contain non-editable icons and interactive skill butto
 
 ## Decision
 
-The [reference host](../../../../packages/client/ui-conversation/src/client/input/editor/chip-node.tsx) is an inline block with three pixels of horizontal padding on each side; skill hosts reserve additional leading and trailing space around the capsule and removal badge. Reference layout reserves visual space without adding text or editable nodes.
+The [reference host](../../../../packages/client/ui-conversation/src/client/input/editor/chip-node.tsx) is an inline block with three pixels of horizontal padding on each side; skill hosts reserve additional leading and trailing space around the capsule. Reference layout reserves visual space without adding text or editable nodes.
 
 The [keymap](../../../../packages/client/ui-conversation/src/client/input/editor/keymap.ts) moves a collapsed caret across one reference and its single following ASCII space in one unmodified horizontal-arrow gesture. Repeated spaces, selection gestures, modified arrows and composition pass through. Clipboard text, occurrence identity and submission codecs are unchanged.
 
@@ -30,4 +30,4 @@ Draft-safe source variants run through the same trigger controller with an expli
 
 ## Consequences
 
-Skill capsules reserve additional width for their removal button, so long labels truncate earlier. Keyboard users retain visible button focus. Focused editor tests cover navigation, caret-decoration cleanup and unchanged text; Chromium and WebKit checks cover repeated outward arrows, both reference types, typing and deletion. macOS WKWebView release acceptance remains required because Windows-hosted WebKit does not reproduce every native caret-painting defect. The change adds no model-visible content or network requests.
+Skill capsules keep their removal button in flow at the leading icon position; hovering the capsule or focusing its buttons swaps the skill glyph for a cross without changing width. Touch devices show the cross directly. Enter and Space stay within the button instead of reaching the editor submit keymap. Long labels truncate within the remaining width. Keyboard users retain visible button focus. Focused editor tests cover navigation, caret-decoration cleanup and unchanged text; Chromium and WebKit checks cover repeated outward arrows, both reference types, typing and deletion. macOS WKWebView release acceptance remains required because Windows-hosted WebKit does not reproduce every native caret-painting defect. The change adds no model-visible content or network requests.
