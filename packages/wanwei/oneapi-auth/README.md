@@ -35,6 +35,8 @@ Users sign in to the configured OneAPI service and use the models permitted for 
 
 The Wanwei product bundle mounts the Host and Client halves. The browser receives authentication state and model identifiers, not passwords or generated tokens.
 
+Each desktop agent with a selected workspace receives session-specific guidance to keep generated helper scripts and intermediate processing files in `.dsh-work/<session-id>/scripts` under that workspace. The directory is created when a helper file is first needed. Requested final documents remain at the workspace root unless the user specifies another destination. Existing input files are not moved. The guidance does not relocate files written before this version or enforce shell and filesystem writes; assistants can still write outside the suggested folder if they disregard it.
+
 Version settings appears before Account and shows the current version, automatic-check switch and manual check button when the desktop bridge is present. A plugin-owned monitor shows download and installation progress in a separate modal independently of settings navigation. Hiding download progress does not cancel the download; Version can reopen it. Unknown sizes use indeterminate progress, and installation progress cannot be dismissed. Native download and installation confirmations remain unchanged. The Host's parent-only update protocol rejects busy agents, maintenance, tools, jobs and registered automation intervals, then awaits whole-tree disposal before acknowledging shutdown. Browser-only deployments have no installer controls. Native scheduling, signing configuration and platform acceptance belong to the [desktop shell](../../../products/wanwei-desktop/README.md).
 
 ### Configuration
@@ -131,6 +133,10 @@ Authentication alone does not change a prompt or cache key. Model selection and 
 
 The `oneapi-bailian` search provider returns structured retrieval sources through the existing DSH web tool path, without forwarding the search model's generated summary or its prose-written links. Product-owned prompt guidance requires reading the source page, matching each claim and date to its text, and citing the actual URL beside the claim using the retrieved or inspected page's real title as the clickable label. Missing titles use the clickable original URL rather than an invented title or a generic source label. The search card exposes retrieval-supplied HTTP(S) URLs, not independently verified pages. Missing sources produce an explicit verification warning, never synthesized source metadata. The server-selected search model and token do not appear as prompt text. HTTP 400 failures show a bounded error code and explain recognized endpoint or streaming mismatches without replaying raw upstream diagnostics. The tool asks the model to stop repeated searches and report a backend configuration issue; this is guidance, not a deterministic retry lock.
 
+Multi-item news answers require a different supporting article URL for each item and prefer different publishers. The provider reports the distinct URL count; a roundup page counts as one source. When searches do not yield enough independently verified pages, the model is instructed to report fewer items instead of reusing one citation. This remains model guidance, not a deterministic final-answer validator.
+
+The provider reports distinct links and website hostnames separately, grouping www aliases. Single-website results explicitly request another web_search for other sites. General roundups with at least three news items require checking at least three publishing websites; syndicated copies do not count as independent sources. Explicit single-site requests retain their requested scope. These instructions do not mechanically validate the final answer.
+
 #### Token effect
 
 Search requests use the configured OneAPI service. Citation guidance adds fixed system-prompt text. Any tool-result tokens enter the normal model context when the agent uses the result. Source-page inspection can require additional tool calls and page-content tokens.
@@ -192,3 +198,5 @@ None.
 </details>
 
 Catalog access decisions cross plugin boundaries through the injected `wanweiNetwork.catalogAccess` service method. Client entrypoints expose network types only; consumers do not import the authentication plugin's runtime helpers.
+
+Internet-dependent skill and expert presentation is configured independently with `internetSkillPolicy` and `internetExpertPolicy`. Missing values inherit the legacy shared policy; updated desktop clients are required to apply the independent choices.

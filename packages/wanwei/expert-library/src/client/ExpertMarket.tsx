@@ -89,7 +89,7 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
   prepareExpertWorkspace?: () => Promise<void>
 } = {}) {
   const internetCatalogAccess = (state: NetworkState, requiresInternet: boolean) =>
-    network?.catalogAccess(state, requiresInternet) ?? 'available'
+    network?.catalogAccess(state, requiresInternet, 'expert') ?? 'available'
   const networkState = useSyncExternalStore(listener => network ? network.subscribe(listener) : () => {},
     () => network ? network.getSnapshot() : defaultNetwork)
   const [category, setCategory] = useState('全部')

@@ -4,6 +4,8 @@ export type NetworkEnvironment = 'internet' | 'intranet'
 export interface NetworkState {
   /** Presentation of internet-dependent skills and experts when connectivity is unavailable. */
   internetCatalogPolicy?: 'hide' | 'disable'
+  internetSkillPolicy?: 'hide' | 'disable'
+  internetExpertPolicy?: 'hide' | 'disable'
   mode: NetworkEnvironment
   internalOrigins: readonly string[]
   /** Direct connectivity confirmed by the current deployment probe; absent before confirmation. */
@@ -13,11 +15,12 @@ export interface NetworkState {
 /** Resolve catalog presentation using the existing terminal network decision.
  * @param state - Last confirmed network mode and administrator policy.
  * @param requiresInternet - Internet requirement from published skill or expert metadata.
+ * @param kind - Catalog whose administrator policy applies.
  * @returns Available, hidden, or disabled presentation for this item.
  */
-export function internetCatalogAccess(state: NetworkState, requiresInternet: boolean): 'available' | 'hide' | 'disable' {
+export function internetCatalogAccess(state: NetworkState, requiresInternet: boolean, kind: 'skill' | 'expert'): 'available' | 'hide' | 'disable' {
   if (!requiresInternet || state.mode !== 'intranet' || state.directInternet === true) return 'available'
-  return state.internetCatalogPolicy ?? 'disable'
+  return (kind === 'skill' ? state.internetSkillPolicy : state.internetExpertPolicy) ?? state.internetCatalogPolicy ?? 'disable'
 }
 /** Classify literal private addresses, local DNS names and configured service origins.
  * @param address - HTTP or HTTPS address to classify.

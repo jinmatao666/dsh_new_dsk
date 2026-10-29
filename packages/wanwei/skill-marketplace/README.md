@@ -13,7 +13,7 @@ Reopening the platform catalog resets manual popularity/update sorting and pagin
 
 Platform browsing defaults to the administrator-defined server order. Users can explicitly select popularity or update time instead. Category navigation preserves backend category order. Published metadata retains the administrator’s internet requirement flag. In intranet mode without confirmed connectivity, marked entries follow the administrator’s hide/disable choice across recommendations, public browsing and installed platform cards. Disabled entries show the network-unreachable tooltip and cannot open details, install or start a conversation. Unmarked local skills remain available.
 
-Staged and Session-backed skill references share a name button that opens details and a red top-right cross that removes only the reference, not the installation. Draft text remains intact when opening or closing details. Published skill details display the administrator's `usage_example` text below the description, preserving line breaks; empty examples are omitted. Updating this metadata does not require reinstalling the skill.
+Staged and Session-backed skill references share a name button that opens details and a leading skill icon that becomes a removal cross when the capsule is hovered or keyboard-focused; it removes only the reference, not the installation. Draft text remains intact when opening or closing details. Published skill details display the administrator's `usage_example` text below the description, preserving line breaks; empty examples are omitted. Updating this metadata does not require reinstalling the skill.
 
 Use skill stages an editable draft without creating a directory or inheriting the previous conversation's Workspace. Its first send allocates a persistent timestamped directory through the desktop shell. The normal Workspace registry and Session controller publish the resulting Workspace in the sidebar and execute the skill there. Choosing a Workspace manually after launching the skill and before sending bypasses automatic allocation. Failed creation keeps the draft and reuses any directory already allocated on retry.
 
@@ -136,3 +136,5 @@ None.
 </details>
 
 Catalog access decisions cross plugin boundaries through the injected `wanweiNetwork.catalogAccess` service method. Client entrypoints expose network types only; consumers do not import the authentication plugin's runtime helpers.
+
+Internet-dependent skill and expert presentation is configured independently with `internetSkillPolicy` and `internetExpertPolicy`. Missing values inherit the legacy shared policy; updated desktop clients are required to apply the independent choices.

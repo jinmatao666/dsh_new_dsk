@@ -16,6 +16,8 @@ type desktopFeatureFlags struct {
 }
 
 type desktopDeploymentSettings struct {
+	InternetSkillPolicy   string                         `json:"internetSkillPolicy"`
+	InternetExpertPolicy  string                         `json:"internetExpertPolicy"`
 	InternetCatalogPolicy string                         `json:"internetCatalogPolicy"`
 	Edition               string                         `json:"edition"`
 	Network               string                         `json:"network"`
@@ -32,7 +34,7 @@ type desktopPluginSettings struct {
 
 // Existing deployment records without feature settings retain their current behavior.
 func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, error) {
-	settings := desktopDeploymentSettings{InternetCatalogPolicy: "disable", Network: "internet", Edition: "operations", Plugins: desktopPluginSettings{BrowserAssistant: true}, Features: map[string]desktopFeatureFlags{
+	settings := desktopDeploymentSettings{InternetCatalogPolicy: "disable", InternetSkillPolicy: "disable", InternetExpertPolicy: "disable", Network: "internet", Edition: "operations", Plugins: desktopPluginSettings{BrowserAssistant: true}, Features: map[string]desktopFeatureFlags{
 		"internet": {Automations: true, Connectors: true, KnowledgeBases: true},
 		"intranet": {Automations: true, Connectors: false, KnowledgeBases: true},
 	}}
@@ -43,10 +45,12 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
 		return settings, err
 	}
-	if field, present := fields["internetCatalogPolicy"]; present {
-		var policy interface{}
-		if err := json.Unmarshal(field, &policy); err != nil || (policy != "hide" && policy != "disable") {
-			return settings, fmt.Errorf("invalid internetCatalogPolicy")
+	for _, key := range []string{"internetCatalogPolicy", "internetSkillPolicy", "internetExpertPolicy"} {
+		if field, present := fields[key]; present {
+			var policy interface{}
+			if err := json.Unmarshal(field, &policy); err != nil || (policy != "hide" && policy != "disable") {
+				return settings, fmt.Errorf("invalid %s", key)
+			}
 		}
 	}
 	var mode interface{}
@@ -108,6 +112,13 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 	}
 	if settings.InternetCatalogPolicy != "hide" && settings.InternetCatalogPolicy != "disable" {
 		return settings, fmt.Errorf("invalid internetCatalogPolicy")
+	}
+	// 缺少独立策略的旧记录沿用原来的统一策略，显式设置保持独立。
+	if _, present := fields["internetSkillPolicy"]; !present {
+		settings.InternetSkillPolicy = settings.InternetCatalogPolicy
+	}
+	if _, present := fields["internetExpertPolicy"]; !present {
+		settings.InternetExpertPolicy = settings.InternetCatalogPolicy
 	}
 	// 旧记录只补新增字段，不覆盖已有的功能开关。
 	for mode := range legacyKnowledge {

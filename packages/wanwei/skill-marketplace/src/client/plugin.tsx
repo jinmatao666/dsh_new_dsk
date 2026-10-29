@@ -642,9 +642,9 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
     return buildMarketplaceCatalog(discoveredCustomSkills, published)
   }, [discoveredCustomSkills, remoteSkills])
   const skillAccess = (skill: Skill) => catalogAccess(network, skill.requiresInternet
-    ?? unfilteredSkills.find(item => item.marketplacePublished && skillSlug(item) === skillSlug(skill))?.requiresInternet ?? false)
+    ?? unfilteredSkills.find(item => item.marketplacePublished && skillSlug(item) === skillSlug(skill))?.requiresInternet ?? false, 'skill')
   const allSkills = useMemo(() => unfilteredSkills.filter(skill => catalogAccess(network, skill.requiresInternet
-    ?? unfilteredSkills.find(item => item.marketplacePublished && skillSlug(item) === skillSlug(skill))?.requiresInternet ?? false) !== 'hide'),
+    ?? unfilteredSkills.find(item => item.marketplacePublished && skillSlug(item) === skillSlug(skill))?.requiresInternet ?? false, 'skill') !== 'hide'),
   [unfilteredSkills, network, catalogAccess])
   const skillAccessProps = (skill: Skill) => ({
     role: 'button', tabIndex: skillAccess(skill) === 'available' ? 0 : -1,
@@ -653,7 +653,7 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
   })
   useEffect(() => {
     if (selectedSkill !== null && catalogAccess(network, selectedSkill.requiresInternet
-      ?? unfilteredSkills.find(item => item.marketplacePublished && skillSlug(item) === skillSlug(selectedSkill))?.requiresInternet ?? false) !== 'available') {
+      ?? unfilteredSkills.find(item => item.marketplacePublished && skillSlug(item) === skillSlug(selectedSkill))?.requiresInternet ?? false, 'skill') !== 'available') {
       setSelectedSkill(null)
       setView('list')
     }

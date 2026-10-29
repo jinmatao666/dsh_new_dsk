@@ -3,7 +3,7 @@ import { API, showSuccess } from '../../helpers';
 import './SystemSettings.css';
 import ResourceSettings, { defaultResources, normalizeResources } from './ResourceSettings';
 
-const defaults = { network: 'internet', internetCatalogPolicy: 'disable', edition: 'operations', operator: '', phone: '', features: {
+const defaults = { network: 'internet', internetCatalogPolicy: 'disable', internetSkillPolicy: 'disable', internetExpertPolicy: 'disable', edition: 'operations', operator: '', phone: '', features: {
   internet: { automations: true, connectors: true, knowledgeBases: true },
   intranet: { automations: true, connectors: false, knowledgeBases: true },
 }, plugins: { browserAssistant: true } };
@@ -66,7 +66,12 @@ export default function SystemSettings() {
       const options = await loadSettingsResponse('/api/option/', controller.signal);
       if (!Array.isArray(options)) throw new Error('系统配置返回异常，请重新加载');
       const raw = options.find(item => item.key === 'SystemDeploymentSettings')?.value;
-      const value = raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
+      const stored = raw ? JSON.parse(raw) : {};
+      const value = { ...defaults, ...stored };
+      for (const key of ['internetSkillPolicy', 'internetExpertPolicy']) {
+        value[key] = stored[key] === undefined ? value.internetCatalogPolicy : stored[key];
+        if (!['hide', 'disable'].includes(value[key])) throw new Error('技能专家联网处理设置无效');
+      }
       // 仅兼容旧记录缺少的知识库开关，错误值和缺失的原有字段仍交给校验拒绝。
       if (value.features && typeof value.features === 'object') {
         for (const mode of ['internet', 'intranet']) {
@@ -149,13 +154,23 @@ export default function SystemSettings() {
               <label>运维人员<input value={settings.operator} maxLength={80} placeholder='请输入运维人员姓名' disabled={saving} onChange={event => change('operator', event.target.value)} /></label>
               <label>联系电话<input type='tel' value={settings.phone} maxLength={40} placeholder='请输入手机号或固定电话' disabled={saving} onChange={event => change('phone', event.target.value)} /></label>
             </div>}
-            {active === 'network' && settings.network === 'intranet' && <fieldset className='settings-network' disabled={saving}>
-              <legend>互联网类技能、专家处理方式</legend>
-              {[['hide', '隐藏', '终端无法访问外部资源时，隐藏需要联网的技能和专家。'], ['disable', '灰化', '保留展示并置灰，无法点击使用。']].map(([key, label, hint]) => <label key={key} className={`settings-network-option${settings.internetCatalogPolicy === key ? ' selected' : ''}`}>
-                <input type='radio' name='internet-catalog-policy' checked={settings.internetCatalogPolicy === key} onChange={() => change('internetCatalogPolicy', key)} />
-                <span><strong>{label}</strong><small>{hint}</small></span>
-              </label>)}
-            </fieldset>}
+            {active === 'network' && settings.network === 'intranet' && <section className='settings-catalog-policies' aria-label='互联网内容处理'>
+              <h3>互联网内容处理</h3>
+              <p>终端无法访问外部资源时，分别控制需要联网的技能和专家如何展示。</p>
+              {[
+                ['internetSkillPolicy', '互联网类技能处理方式', '技能'],
+                ['internetExpertPolicy', '互联网类专家处理方式', '专家'],
+              ].map(([field, title, item]) => <fieldset key={field} className='settings-network settings-catalog-policy' disabled={saving}>
+                <legend>{title}</legend>
+                {[
+                  ['hide', '隐藏', `不展示需要联网的${item}。`],
+                  ['disable', '灰化', `保留${item}展示并置灰，无法点击使用。`],
+                ].map(([key, label, hint]) => <label key={key} className={`settings-network-option${settings[field] === key ? ' selected' : ''}`}>
+                  <input type='radio' name={field} value={key} checked={settings[field] === key} onChange={() => change(field, key)} />
+                  <span><strong>{label}</strong><small>{hint}</small></span>
+                </label>)}
+              </fieldset>)}
+            </section>}
             {active === 'network' && settings.network === 'intranet' && <ResourceSettings value={settings.resources || defaultResources}
               disabled={saving} onChange={value => change('resources', value)} />}
             {active === 'network' && settings.network === 'intranet' && !settings.resources && <button type='button'

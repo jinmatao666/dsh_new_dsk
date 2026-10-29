@@ -12,7 +12,8 @@ it.each(['hide', 'disable'] as const)('uses %s for internet experts and restores
     { key: 'offline-expert', name: '内网专家', requires_internet: false, workbench_url: 'http://expert.lan/' },
   ]
   const launchExpert = vi.fn(async () => ({ url: 'https://example.com/', ticket: 'ticket' }))
-  const state: NetworkState = { mode: 'intranet', internalOrigins: [], directInternet: false, internetCatalogPolicy }
+  const state: NetworkState = { mode: 'intranet', internalOrigins: [], directInternet: false, internetCatalogPolicy: 'disable',
+    internetExpertPolicy: internetCatalogPolicy, internetSkillPolicy: internetCatalogPolicy === 'hide' ? 'disable' : 'hide' }
   const subscribe = () => () => {}
   const view = render(<ExpertMarket loadExperts={loadExperts} launchExpert={launchExpert}
     network={{ subscribe, catalogAccess: internetCatalogAccess, getSnapshot: () => state }} />)

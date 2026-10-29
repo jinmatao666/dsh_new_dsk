@@ -42,3 +42,9 @@
 .settings-features input:checked::after { left: 19px; }
 .settings-features input:disabled { opacity: .5; cursor: not-allowed; }
 @media (max-width: 800px) { .settings-contact-fields { grid-template-columns: 1fr; } .settings-network { flex-direction: column; } .system-settings-surface .preview-tabs { gap: 12px; flex-wrap: wrap; } .settings-footer { flex-wrap: wrap; } }
+
+.settings-catalog-policies { max-width: 820px; margin-top: 30px; padding-top: 24px; border-top: 1px solid #dce7f7; }
+.settings-catalog-policies h3 { margin: 0 0 8px; color: #17365d; font-size: 16px; font-weight: 600; }
+.settings-catalog-policies > p { margin: 0 0 22px; color: #7389aa; font-size: 13px; line-height: 1.7; }
+.settings-catalog-policies .settings-catalog-policy + .settings-catalog-policy { margin-top: 24px; }
+.settings-catalog-policy legend { margin-bottom: 12px; }

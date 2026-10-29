@@ -8,6 +8,22 @@ function jsonResponse(body: unknown): Response {
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('Wanwei OneAPI web search', () => {
+  it('distinguishes different article links from different source websites', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ data: { search_model: 'qwen-plus' } }))
+      .mockResolvedValueOnce(jsonResponse({ search_info: { search_results: [
+        { url: 'https://news.example.com/first' }, { url: 'https://www.news.example.com/second' },
+      ] } })))
+    const result = await new OneApiSearchProvider({ baseURL: 'https://oneapi.test', resolveToken: async () => 'token' })
+      .search({ query: '今天的人工智能新闻' })
+    expect(result.sources).toHaveLength(2)
+    expect(result.content).toContain('2 个链接，1 个网站')
+    expect(result.content).toContain('所有链接都来自同一个网站')
+    expect(result.content).toContain('继续调用 web_search 检索其他网站')
+    expect(result.content).toContain('至少检索并核对三个不同发布网站')
+    expect(result.content).toContain('转载或镜像不算独立来源')
+    expect(result.content).toContain('用户明确限定某个网站')
+  })
   it('explains endpoint rejection without exposing the raw upstream response or credentials', async () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(jsonResponse({ data: { search_model: 'qwen3.6-plus' } }))
@@ -45,7 +61,7 @@ describe('Wanwei OneAPI web search', () => {
     expect(init.headers).toEqual({ authorization: 'Bearer user-token', 'content-type': 'application/json', 'x-dsh-web-search': '1' })
     expect(JSON.parse(init.body as string)).toEqual({
       model: 'qwen3.6-plus', stream: false,
-      messages: [{ role: 'user', content: '搜索网页并整理以下问题：latest news。只依据检索到的资料作答，区分事件日期与发布日期。每条正文以句末标点结束，空格后添加“来源：”和真实网页标题的可点击链接，格式为 正文。 来源：[网页真实标题](原文URL)。链接必须指向支持对应信息的具体原文页面，不得编造标题、网址或用无关网页代替。' }],
+      messages: [{ role: 'user', content: '搜索网页并整理以下问题：latest news。尽量返回不同发布网站的独立原文页面，避免只返回一篇热点汇总。只依据检索到的资料作答，区分事件日期与发布日期。每条正文以句末标点结束，空格后添加“来源：”和真实网页标题的可点击链接，格式为 正文。 来源：[网页真实标题](原文URL)。链接必须指向支持对应信息的具体原文页面，不得编造标题、网址或用无关网页代替。' }],
     })
   })
 
@@ -102,6 +118,7 @@ describe('Wanwei OneAPI web search', () => {
     expect(result.content).not.toContain('fake.example.com')
     expect(result.content).toContain('正文不支持结论')
     expect(result.content).toContain('明确标注未核实')
+    expect(result.content).toContain('当前只有一个来源，不能据此列出多条独立新闻')
   })
 
   it('accepts structured retrieval metadata without a generated summary', async () => {
@@ -112,6 +129,7 @@ describe('Wanwei OneAPI web search', () => {
       .search({ query: '新闻' })
     expect(result.sources).toHaveLength(1)
     expect(result.content).toContain('[网页真实标题]')
+    expect(result.content).toContain('本次仅检索到 1 个不同的原文链接')
   })
 
   it('does not contact OneAPI before login or when no search model is configured', async () => {

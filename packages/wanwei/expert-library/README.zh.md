@@ -90,3 +90,5 @@ kind: "package-reference"
 </details>
 
 目录访问判断通过注入的 `wanweiNetwork.catalogAccess` 服务方法跨插件传递。客户端入口只提供网络类型；消费者不导入认证插件的运行时辅助函数。
+
+需要联网的技能与专家分别按 `internetSkillPolicy` 和 `internetExpertPolicy` 独立控制展示。缺失值沿用旧统一策略；需使用新版桌面端才能应用独立选择。

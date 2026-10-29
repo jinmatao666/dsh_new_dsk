@@ -7,7 +7,7 @@ it.each(['internet', 'intranet'])('reads %s mode and the public maintenance cont
   const fetcher = vi.fn(async () => new Response(JSON.stringify({ success: true, data })))
   vi.stubGlobal('fetch', fetcher)
   expect(await fetchDeploymentSettings('https://oneapi.example.test')).toEqual({ ...data,
-    internetCatalogPolicy: 'disable',
+    internetCatalogPolicy: 'disable', internetSkillPolicy: 'disable', internetExpertPolicy: 'disable',
     features: resolveDeploymentFeatures(undefined), plugins: { browserAssistant: true } })
   expect(fetcher.mock.calls[0]).toEqual(['https://oneapi.example.test/api/desktop-config', { signal: null, cache: 'no-store', redirect: 'error' }])
 })
@@ -48,4 +48,14 @@ it('rejects unavailable or invalid configuration without assuming internet mode'
   await expect(fetchDeploymentSettings('http://server.lan')).rejects.toThrow('无法读取后台系统设置')
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, data: { network: 'unknown', operator: '', phone: '' } }))))
   await expect(fetchDeploymentSettings('http://server.lan')).rejects.toThrow('后台系统设置字段无效')
+})
+
+it('reads split catalog policies, inherits omitted legacy values, and rejects explicit invalid policies', async () => {
+  const data: Record<string, unknown> = { network: 'intranet', operator: '', phone: '', internetCatalogPolicy: 'hide' }
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, data }))))
+  expect(await fetchDeploymentSettings('https://example.test')).toMatchObject({ internetSkillPolicy: 'hide', internetExpertPolicy: 'hide' })
+  data.internetExpertPolicy = 'disable'
+  expect(await fetchDeploymentSettings('https://example.test')).toMatchObject({ internetSkillPolicy: 'hide', internetExpertPolicy: 'disable' })
+  data.internetExpertPolicy = null
+  await expect(fetchDeploymentSettings('https://example.test')).rejects.toThrow()
 })

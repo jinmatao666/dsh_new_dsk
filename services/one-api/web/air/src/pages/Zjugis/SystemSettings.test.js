@@ -186,17 +186,35 @@ test('bounds transient retries and cancels pending retries on unmount', async ()
   expect(API.get).toHaveBeenCalledTimes(4);
 });
 
-test('intranet catalog policy offers exclusive hide or disable choices and persists with deployment settings', async () => {
+test('intranet skill and expert policies persist independently', async () => {
   await act(async () => root.render(<SystemSettings />));
   act(() => container.querySelectorAll('[role="tab"]')[2].click());
-  expect(container.querySelector('[name="internet-catalog-policy"]')).toBeNull();
+  expect(container.querySelector('[name="internetSkillPolicy"]')).toBeNull();
   act(() => container.querySelector('[name="network"][value="intranet"]').click());
-  const choices = [...container.querySelectorAll('[name="internet-catalog-policy"]')];
-  expect(choices).toHaveLength(2);
-  expect(choices[1].checked).toBe(true);
-  act(() => choices[0].click());
-  expect(choices[0].checked).toBe(true);
-  expect(choices[1].checked).toBe(false);
+  const skills = [...container.querySelectorAll('[name="internetSkillPolicy"]')];
+  const experts = [...container.querySelectorAll('[name="internetExpertPolicy"]')];
+  expect(skills).toHaveLength(2);
+  expect(experts).toHaveLength(2);
+  expect(skills[1].checked).toBe(true);
+  expect(experts[1].checked).toBe(true);
+  act(() => skills[0].click());
+  expect(skills[0].checked).toBe(true);
+  expect(experts[1].checked).toBe(true);
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-  expect(JSON.parse(API.put.mock.calls[0][1].value).internetCatalogPolicy).toBe('hide');
+  const saved = JSON.parse(API.put.mock.calls[0][1].value);
+  expect(saved.internetSkillPolicy).toBe('hide');
+  expect(saved.internetExpertPolicy).toBe('disable');
+});
+
+test('legacy shared hide policy initializes both independent choices', async () => {
+  API.get.mockImplementation(path => Promise.resolve({ data: { success: true, data: path === '/api/user/self'
+    ? { role: 100 } : [{ key: 'SystemDeploymentSettings', value: JSON.stringify({ network: 'intranet', internetCatalogPolicy: 'hide' }) }] } }));
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[2].click());
+  expect(container.querySelector('[name="internetSkillPolicy"][value="hide"]').checked).toBe(true);
+  expect(container.querySelector('[name="internetExpertPolicy"][value="hide"]').checked).toBe(true);
+  act(() => container.querySelector('[name="internetExpertPolicy"][value="disable"]').click());
+  expect(container.querySelector('[name="internetSkillPolicy"][value="hide"]').checked).toBe(true);
+  act(() => [...container.querySelectorAll('button')].find(button => button.textContent === '取消修改').click());
+  expect(container.querySelector('[name="internetExpertPolicy"][value="hide"]').checked).toBe(true);
 });

@@ -4,6 +4,8 @@ import { resolveResourceSettings, type ResourceSettings } from './resource-setti
 /** Public deployment metadata owned by the desktop's configured OneAPI server. */
 export interface DeploymentSettings {
   internetCatalogPolicy?: 'hide' | 'disable'
+  internetSkillPolicy?: 'hide' | 'disable'
+  internetExpertPolicy?: 'hide' | 'disable'
   network: NetworkEnvironment
   operator: string
   phone: string
@@ -90,6 +92,10 @@ export async function fetchDeploymentSettings(baseURL: string, signal?: AbortSig
   const resources = resolveResourceSettings(data.resources)
   return { network: data.network, operator: data.operator, phone: data.phone,
     internetCatalogPolicy: resolveInternetCatalogPolicy(data.internetCatalogPolicy),
+    internetSkillPolicy: resolveInternetCatalogPolicy(
+      data.internetSkillPolicy === undefined ? data.internetCatalogPolicy : data.internetSkillPolicy),
+    internetExpertPolicy: resolveInternetCatalogPolicy(
+      data.internetExpertPolicy === undefined ? data.internetCatalogPolicy : data.internetExpertPolicy),
     ...(resources === undefined ? {} : { resources }),
     features: resolveDeploymentFeatures(data.features), plugins: resolveDeploymentPlugins(data.plugins) }
 }

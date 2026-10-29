@@ -11,10 +11,11 @@ export class NetworkController {
   /** Resolve catalog access for the network snapshot observed by a consumer.
    * @param state - Committed state from this service's observable.
    * @param requiresInternet - Published item's internet requirement.
+   * @param kind - Skill or expert catalog to evaluate.
    * @returns Available, hidden, or disabled presentation.
    */
-  catalogAccess = (state: NetworkState, requiresInternet: boolean): 'available' | 'hide' | 'disable' =>
-    internetCatalogAccess(state, requiresInternet)
+  catalogAccess = (state: NetworkState, requiresInternet: boolean, kind: 'skill' | 'expert'): 'available' | 'hide' | 'disable' =>
+    internetCatalogAccess(state, requiresInternet, kind)
   private readonly listeners = new Set<() => void>()
   private tail: Promise<unknown> = Promise.resolve()
   private features: DeploymentFeatures = resolveDeploymentFeatures(undefined)
@@ -70,6 +71,8 @@ export class NetworkController {
         features?: unknown
         plugins?: unknown
         internetCatalogPolicy?: unknown
+        internetSkillPolicy?: unknown
+        internetExpertPolicy?: unknown
       }
       if (value.mode !== 'internet' && value.mode !== 'intranet') throw new Error('网络环境状态无效')
       if (value.directInternet !== undefined && typeof value.directInternet !== 'boolean') throw new Error('网络检测状态无效')
@@ -77,6 +80,10 @@ export class NetworkController {
       const plugins = resolveDeploymentPlugins(value.plugins)
       await this.synchronize({ mode: value.mode, internalOrigins: value.internalOrigins,
         internetCatalogPolicy: resolveInternetCatalogPolicy(value.internetCatalogPolicy),
+        internetSkillPolicy: resolveInternetCatalogPolicy(
+          value.internetSkillPolicy === undefined ? value.internetCatalogPolicy : value.internetSkillPolicy),
+        internetExpertPolicy: resolveInternetCatalogPolicy(
+          value.internetExpertPolicy === undefined ? value.internetCatalogPolicy : value.internetExpertPolicy),
         ...(value.directInternet === undefined ? {} : { directInternet: value.directInternet }) }, features, plugins)
       return this.snapshot
     }

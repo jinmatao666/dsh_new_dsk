@@ -12,6 +12,8 @@ const CITATION_GUIDANCE = [
   '在每条相关事实或结论的正文末尾先用句号、问号或叹号等句末标点结束，再留一个空格并添加“来源：”及可点击的原文链接，格式为 正文。 来源：[网页真实标题](原文URL)。不要将链接直接紧贴正文，也不要用 source、源网站或只有编号的引用代替“来源：”。链接文字使用检索或实际页面返回的原始标题，不得编造标题。没有真实标题时显示可点击的原文 URL，格式为 正文。 来源：[原文URL](原文URL)，不猜测标题。多条信息逐条附上对应来源；同一条有多个来源时用顿号分隔链接。',
   '链接只能来自本次或后续检索、网页读取工具实际返回的 URL；不能猜测或拼接网址，不能用站点首页或无关网页支撑具体消息。',
   '读取失败、正文不支持结论或资料不足时，明确标注未核实或不采用该条，不得声称已验证。没有来源时明确说明未找到可核验的原文网页。',
+  '用户要求多条新闻时，每条新闻必须有支持该事件的独立原文页面和不同的原文 URL；优先检索不同发布网站。热点汇总页或同一篇文章只能算一个来源，不能拆成多条新闻反复引用。来源不足时继续用不同关键词检索并核对原文；仍不足就只报告已核实的条目和数量，不补齐、不编造。',
+  '综合新闻或热点汇总的来源必须分散到不同发布网站；汇总三条及以上新闻时，至少检索并核对三个不同发布网站的相关原文。更换同站文章链接、同一稿件的转载或镜像不算独立来源。单站结果只能作为检索线索，必须根据具体事件继续调用 web_search 查找其他网站的原文；最终仍不足时明确写出来源网站数量和覆盖局限，不能声称是全面新闻汇总。用户明确限定某个网站或要求总结某篇文章时，按其范围处理。',
 ].join('')
 
 /** Install product-owned citation guidance independently of untrusted search content.
@@ -95,7 +97,7 @@ export class OneApiSearchProvider implements WebSearchProvider {
       body: JSON.stringify({
         model,
         stream: false,
-        messages: [{ role: 'user', content: `搜索网页并整理以下问题：${request.query}。只依据检索到的资料作答，区分事件日期与发布日期。每条正文以句末标点结束，空格后添加“来源：”和真实网页标题的可点击链接，格式为 正文。 来源：[网页真实标题](原文URL)。链接必须指向支持对应信息的具体原文页面，不得编造标题、网址或用无关网页代替。` }],
+        messages: [{ role: 'user', content: `搜索网页并整理以下问题：${request.query}。尽量返回不同发布网站的独立原文页面，避免只返回一篇热点汇总。只依据检索到的资料作答，区分事件日期与发布日期。每条正文以句末标点结束，空格后添加“来源：”和真实网页标题的可点击链接，格式为 正文。 来源：[网页真实标题](原文URL)。链接必须指向支持对应信息的具体原文页面，不得编造标题、网址或用无关网页代替。` }],
       }),
       ...signalInit,
     })
@@ -110,11 +112,16 @@ export class OneApiSearchProvider implements WebSearchProvider {
       throw new WebError(`网页搜索失败（HTTP ${String(response.status)}${code}）。${reason}${guidance}`, 'WEB_PROVIDER_REQUEST_FAILED')
     }
     const sources = searchSources(result.search_info?.search_results)
+    const websites = new Set(sources.map(source => new URL(source.url).hostname.replace(/^www\./, '')))
+    const diversity = sources.length > 0
+      ? `来源分布：${sources.length} 个链接，${websites.size} 个网站（按域名统计，不代表独立发布机构）。${websites.size === 1
+        ? '所有链接都来自同一个网站，尚不满足综合新闻的多来源要求；请继续调用 web_search 检索其他网站。' : ''}`
+      : ''
     // Generated prose can contain invented claims and URLs even alongside genuine search results.
     // Pass retrieval metadata only; the conversation model must inspect the source pages itself.
     const citationInstruction = sources.length > 0
-      ? CITATION_GUIDANCE
+      ? `本次仅检索到 ${sources.length} 个不同的原文链接。${sources.length === 1 ? '当前只有一个来源，不能据此列出多条独立新闻；如需更多条目，请继续检索不同网站的原文。' : '多条新闻需逐条对应不同的原文 URL，不要把同一来源拆成多条。'}${CITATION_GUIDANCE}`
       : '本次搜索未返回可核验的来源链接。不要使用搜索模型生成的摘要或网址代替检索证据；请向用户明确说明未找到可核验的原文网页，不要编造标题或链接，也不要据此生成已核实的新闻或事实。'
-    return { content: citationInstruction, sources, truncated: false }
+    return { content: diversity + citationInstruction, sources, truncated: false }
   }
 }

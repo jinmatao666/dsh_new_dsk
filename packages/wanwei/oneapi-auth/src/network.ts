@@ -54,6 +54,8 @@ export function installNetworkPolicy(ctx: Context, baseURL: string,
   let confirmedAt = 0
   let directInternet: boolean | undefined
   let internetCatalogPolicy: 'hide' | 'disable' = 'disable'
+  let internetSkillPolicy: 'hide' | 'disable' = 'disable'
+  let internetExpertPolicy: 'hide' | 'disable' = 'disable'
   let resourceRelay = false
   let refreshing: Promise<void> | undefined
   const scope = ctx.settings.register(settingsNamespace('wanwei-network'), z.object({
@@ -67,13 +69,15 @@ export function installNetworkPolicy(ctx: Context, baseURL: string,
       resourceRelay = settings.resources?.source === 'proxy'
       directInternet = await resources.directAvailable()
       internetCatalogPolicy = settings.internetCatalogPolicy ?? 'disable'
+      internetSkillPolicy = settings.internetSkillPolicy ?? internetCatalogPolicy
+      internetExpertPolicy = settings.internetExpertPolicy ?? internetCatalogPolicy
       confirmedAt = Date.now()
       refreshPrompt()
     },
     pluginAllowed: plugin => plugins[plugin],
     setPlugins: (value) => { plugins = value },
     getSnapshot: () => ({ mode: scope.get().mode, internalOrigins: [new URL(baseURL).origin],
-      internetCatalogPolicy,
+      internetCatalogPolicy, internetSkillPolicy, internetExpertPolicy,
       ...(directInternet === undefined ? {} : { directInternet }) }),
     async setMode(mode) {
       if (mode !== 'internet' && mode !== 'intranet') throw new Error('网络环境无效')

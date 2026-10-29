@@ -11,8 +11,8 @@ it('synchronizes the catalog policy and retains it when a malformed refresh is r
   const controller = new NetworkController({ rpc: { call } } as unknown as ConnectionHandle)
   await controller.refresh()
   expect(controller.getSnapshot().internetCatalogPolicy).toBe('hide')
-  expect(controller.catalogAccess(controller.getSnapshot(), true)).toBe('hide')
-  expect(controller.catalogAccess(controller.getSnapshot(), false)).toBe('available')
+  expect(controller.catalogAccess(controller.getSnapshot(), true, 'skill')).toBe('hide')
+  expect(controller.catalogAccess(controller.getSnapshot(), false, 'skill')).toBe('available')
   internetCatalogPolicy = 'disable'
   await controller.refresh()
   expect(controller.getSnapshot().internetCatalogPolicy).toBe('disable')
@@ -30,11 +30,11 @@ it('publishes direct connectivity for entry policy and rejects malformed probe r
   directInternet = true
   await controller.refresh()
   expect(controller.getSnapshot().directInternet).toBe(true)
-  expect(controller.catalogAccess(controller.getSnapshot(), true)).toBe('available')
+  expect(controller.catalogAccess(controller.getSnapshot(), true, 'skill')).toBe('available')
   directInternet = 'true'
   await expect(controller.refresh()).rejects.toThrow('网络检测状态无效')
   expect(controller.getSnapshot().directInternet).toBe(true)
-  expect(controller.catalogAccess(controller.getSnapshot(), true)).toBe('available')
+  expect(controller.catalogAccess(controller.getSnapshot(), true, 'skill')).toBe('available')
 })
 it('publishes administrator permissions on refresh and retains a denial across network failures', async () => {
   let browserAssistant = false
@@ -105,4 +105,18 @@ it('publishes independent visibility flags only after a successful deployment re
   call.mockRejectedValueOnce(new Error('offline'))
   await expect(controller.refresh()).rejects.toThrow('offline')
   expect(connectors.getSnapshot()).toBe(true)
+})
+
+it('publishes independent catalog policies and rejects malformed refreshes without changing state', async () => {
+  let internetExpertPolicy: unknown = 'disable'
+  const call = vi.fn(async () => ({ ok: true, value: { mode: 'intranet', internalOrigins: [], directInternet: false,
+    internetCatalogPolicy: 'hide', internetSkillPolicy: 'hide', internetExpertPolicy } }))
+  const controller = new NetworkController({ rpc: { call } } as unknown as ConnectionHandle)
+  await controller.refresh()
+  const state = controller.getSnapshot()
+  expect(controller.catalogAccess(state, true, 'skill')).toBe('hide')
+  expect(controller.catalogAccess(state, true, 'expert')).toBe('disable')
+  internetExpertPolicy = null
+  await expect(controller.refresh()).rejects.toThrow()
+  expect(controller.getSnapshot()).toBe(state)
 })

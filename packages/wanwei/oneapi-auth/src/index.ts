@@ -22,6 +22,7 @@ import { registerSkillUsage } from './usage.ts'
 import { installNetworkPolicy } from './network.ts'
 import { fetchDeploymentSettings } from './deployment.ts'
 import { installFinalDeliverables } from './final-deliverables.ts'
+import { installScriptWorkspaceGuidance } from './script-workspace.ts'
 import { installDesktopLifecycle } from './desktop-lifecycle.ts'
 import { KnowledgeBaseApi } from './knowledge-base.ts'
 import { installKnowledgeRetrieval } from './knowledge-retrieval.ts'
@@ -342,6 +343,7 @@ export function apply(ctx: Context, config: Config): void {
       indexes: config.pipMirrorUrls, attemptSeconds: config.pipMirrorAttemptSeconds ?? 30,
     })
   installFinalDeliverables(ctx)
+  installScriptWorkspaceGuidance(ctx)
   installSearchCitationPolicy(ctx)
   installDesktopLifecycle(ctx)
   const usernameRef = credentialRef('DSH_LOGIN_USERNAME')

@@ -46,7 +46,7 @@ func TestDesktopConfigPublicFields(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if !body.Success || len(body.Data) != 7 || body.Data["internetCatalogPolicy"] != "disable" || body.Data["edition"] != "operations" || body.Data["network"] != "intranet" || body.Data["operator"] != "张运维" || body.Data["phone"] != "0571-12345678" {
+	if !body.Success || len(body.Data) != 9 || body.Data["internetCatalogPolicy"] != "disable" || body.Data["edition"] != "operations" || body.Data["network"] != "intranet" || body.Data["operator"] != "张运维" || body.Data["phone"] != "0571-12345678" {
 		t.Fatalf("unexpected public data: %+v", body)
 	}
 	config.OptionMapRWMutex.Lock()
@@ -130,6 +130,26 @@ func TestDesktopInternetCatalogPolicy(t *testing.T) {
 	for _, value := range []string{`null`, `true`, `1`, `"unknown"`} {
 		if _, err := parseDesktopDeploymentSettings(`{"network":"intranet","internetCatalogPolicy":` + value + `}`); err == nil {
 			t.Fatalf("accepted invalid policy %s", value)
+		}
+	}
+}
+
+func TestDesktopIndependentCatalogPolicies(t *testing.T) {
+	for _, legacy := range []string{"hide", "disable"} {
+		settings, err := parseDesktopDeploymentSettings(`{"network":"intranet","internetCatalogPolicy":"` + legacy + `"}`)
+		if err != nil || settings.InternetSkillPolicy != legacy || settings.InternetExpertPolicy != legacy {
+			t.Fatalf("legacy policy lost: %+v %v", settings, err)
+		}
+	}
+	settings, err := parseDesktopDeploymentSettings(`{"network":"intranet","internetSkillPolicy":"hide","internetExpertPolicy":"disable"}`)
+	if err != nil || settings.InternetSkillPolicy != "hide" || settings.InternetExpertPolicy != "disable" {
+		t.Fatalf("independent policies lost: %+v %v", settings, err)
+	}
+	for _, key := range []string{"internetSkillPolicy", "internetExpertPolicy"} {
+		for _, value := range []string{`null`, `true`, `1`, `"unknown"`} {
+			if _, err := parseDesktopDeploymentSettings(`{"network":"intranet","` + key + `":` + value + `}`); err == nil {
+				t.Fatalf("accepted invalid %s: %s", key, value)
+			}
 		}
 	}
 }
