@@ -31,6 +31,8 @@ class Store:
             columns = {row["name"] for row in db.execute("PRAGMA table_info(tasks)")}
             if "input_names" not in columns:
                 db.execute("ALTER TABLE tasks ADD COLUMN input_names TEXT NOT NULL DEFAULT '[]'")
+            if "finished" not in columns:
+                db.execute("ALTER TABLE tasks ADD COLUMN finished REAL")
             # A restarted service cannot claim an interrupted conversion succeeded.
             db.execute("UPDATE tasks SET state='failed', error=? WHERE state IN ('queued','running')",
                        ("服务重启，任务已中断，请重新提交",))
@@ -65,7 +67,7 @@ class Store:
         with self.connect() as db:
             db.execute("DELETE FROM sessions WHERE digest=?", (hashlib.sha256(token.encode()).hexdigest(),))
 
-    def create(self, user, tool, options, inputs, task_id, input_names=None, replace_id=None):
+    def create(self, user, tool, options, inputs, task_id, input_names=None, replace_id=None, replace_by_name=True):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             # Bound disk/CPU intake while the single worker drains queued tasks.
@@ -77,7 +79,7 @@ class Store:
                 previous = db.execute("SELECT * FROM tasks WHERE id=? AND user_id=?", (replace_id, user)).fetchone()
                 if not previous:
                     raise ValueError("原任务不存在或已删除")
-            elif options.get('taskName'):
+            elif replace_by_name and options.get('taskName'):
                 previous = db.execute("SELECT * FROM tasks WHERE user_id=? AND json_extract(options, '$.taskName')=? ORDER BY created DESC LIMIT 1", (user, options['taskName'])).fetchone()
             if previous:
                 if previous['state'] in ('queued', 'running'):
@@ -93,7 +95,7 @@ class Store:
 
     def list(self, user):
         with self.connect() as db:
-            rows = db.execute("SELECT * FROM tasks WHERE user_id=? ORDER BY created DESC LIMIT 100", (user,)).fetchall()
+            rows = db.execute("SELECT * FROM tasks WHERE user_id=? ORDER BY COALESCE(finished, created) DESC LIMIT 100", (user,)).fetchall()
         return [self.decode(row) for row in rows]
 
     @staticmethod
@@ -109,8 +111,8 @@ class Store:
 
     def finish(self, task_id, outputs=None, error=None):
         with self.connect() as db:
-            db.execute("UPDATE tasks SET state=?,outputs=?,error=? WHERE id=? AND state='running'",
-                       ("failed" if error else "succeeded", json.dumps(outputs or []), error, task_id))
+            db.execute("UPDATE tasks SET state=?,outputs=?,error=?,finished=? WHERE id=? AND state='running'",
+                       ("failed" if error else "succeeded", json.dumps(outputs or []), error, time.time(), task_id))
 
     def cancel(self, user, task_id):
         with self.connect() as db:
@@ -132,6 +134,22 @@ class Store:
             if directory.exists():
                 shutil.rmtree(directory)
             db.execute("DELETE FROM tasks WHERE id=? AND user_id=?", (task_id, user))
+            return True
+
+    def delete_outputs(self, user, task_id):
+        """只删除成果，保留任务记录和原图供历史查询。"""
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT state, outputs FROM tasks WHERE id=? AND user_id=?", (task_id, user)).fetchone()
+            if not row or row['state'] != 'succeeded' or not json.loads(row['outputs']):
+                return False
+            directory = self.root / task_id / 'output'
+            if (not re.fullmatch(r'[a-f0-9]{32}', task_id) or directory.is_symlink()
+                    or directory.is_junction() or directory.resolve().parent != self.root / task_id):
+                raise ValueError('成果目录无效')
+            if directory.exists():
+                shutil.rmtree(directory)
+            db.execute("UPDATE tasks SET outputs='[]' WHERE id=? AND user_id=?", (task_id, user))
             return True
 
     def cleanup(self, retention_days=30):

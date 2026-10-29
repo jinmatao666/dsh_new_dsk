@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import unittest
+import zipfile
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -241,6 +242,41 @@ class Integration(unittest.TestCase):
         self.assertEqual(self.request(f'/api/tasks/{second}/delete',{})[0],200)
         self.assertEqual(self.app.store.list('1'),[])
         self.assertFalse((self.app.store.root/second).exists())
+
+    def test_bundle_and_delete_only_outputs(self):
+        self.login()
+        status, raw = self.upload(precise=True)
+        self.assertEqual(status, 201, raw)
+        task_id = json.loads(raw)['id']
+        task = self.wait(task_id)
+        self.assertRegex(task['options']['taskName'], r'^before \d{12}$')
+        status, blob = self.request(f'/api/tasks/{task_id}/bundle')
+        self.assertEqual(status, 200)
+        with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+            self.assertEqual(set(archive.namelist()), {'分析结果.json', '标注图.png',
+                              '目标坐标表.csv', '分析原图.png', '分割掩膜.png'})
+            self.assertEqual(json.loads(archive.read('分析结果.json'))['expert'], MODE)
+        other = urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                                            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        self.request('/api/session', {'ticket': 'b' * 64}, other)
+        self.assertEqual(self.request(f'/api/tasks/{task_id}/bundle', client=other)[0], 404)
+        self.assertEqual(self.request(f'/api/tasks/{task_id}/outputs/delete', {}, other)[0], 404)
+        self.assertEqual(self.request(f'/api/tasks/{task_id}/outputs/delete', {})[0], 200)
+        remaining = self.app.store.task('1', task_id)
+        self.assertEqual(remaining['state'], 'succeeded')
+        self.assertEqual(remaining['outputs'], [])
+        self.assertTrue((self.app.store.root / task_id / 'input').exists())
+        self.assertEqual(self.request(f'/api/tasks/{task_id}/result')[0], 410)
+        self.assertEqual(self.request(f'/api/tasks/{task_id}/bundle')[0], 404)
+        self.assertEqual(self.request(f'/api/tasks/{task_id}/image')[0], 200)
+
+    def test_auto_named_runs_do_not_replace_each_other(self):
+        self.login()
+        for _ in range(2):
+            status, raw = self.upload()
+            self.assertEqual(status, 201, raw)
+            self.wait(json.loads(raw)['id'])
+        self.assertEqual(len(self.app.store.list('1')), 2)
 
 
 if __name__ == "__main__":

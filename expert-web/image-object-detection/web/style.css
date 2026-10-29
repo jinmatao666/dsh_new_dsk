@@ -117,3 +117,26 @@ button:disabled{opacity:1;cursor:not-allowed}.primary:disabled{background:#dce5f
 .delete-task{color:#a52c24!important}.clipboard-buffer{position:fixed;left:-10000px;top:0}.format-options>div{flex-wrap:wrap}
 
 .visual-summary{padding:20px 24px;color:#15191f}.result-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}.result-metrics>div{padding:16px;border:1px solid #dce5f3;border-radius:10px}.result-metrics span{display:block;font-size:13px}.result-metrics strong{display:block;font-size:22px;margin-top:6px}.result-views{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}.result-views button{background:#edf3ff;border:1px solid #cad9f2;border-radius:7px;padding:9px 12px;color:#15191f}.result-views button.selected{background:#2465d7;color:white}.object-table-scroll{overflow:auto;margin-top:18px;max-height:360px}.object-table{width:100%;border-collapse:collapse;font-size:13px;text-align:left;white-space:nowrap}.object-table th,.object-table td{padding:11px;border-bottom:1px solid #dce5f3}.object-table th{background:#f3f6fc;position:sticky;top:0}.confidence-chart{padding:16px;background:#f5f8fe;border-radius:10px}.confidence-chart>div{display:flex;gap:20px;align-items:center;margin-top:7px}.confidence-chart span{width:130px}.confidence-chart progress{flex:1;accent-color:#2465d7}@media(max-width:600px){.result-metrics{grid-template-columns:1fr}.visual-summary{padding:16px}}
+
+/* 成果以任务为单位列出，预览切换紧贴图片。 */
+.vision-check{display:flex;flex-direction:row;align-items:flex-start}
+.vision-check>input{flex:0 0 16px;margin:3px 0 0}
+.vision-check>span{display:block;min-width:0}
+.vision-check strong{display:inline}
+.vision-result .result-views{margin:18px 0 10px}
+.file-table-wrap{overflow-x:auto}
+.file-table{width:100%;border-collapse:collapse;min-width:580px;text-align:left}
+.file-table th,.file-table td{padding:16px 18px;border-bottom:1px solid #e0e8f6}
+.file-table th{font-weight:600;color:#526781;background:#f5f8fc}
+.file-table tr:last-child td{border-bottom:0}
+.file-table td:nth-child(2){overflow-wrap:anywhere}
+.file-actions{white-space:nowrap}
+.file-actions button{border:1px solid #cbdaf0;background:#fff;color:#1760d2;border-radius:8px;padding:8px 12px;margin-right:8px;cursor:pointer}
+.file-actions button:last-child{margin-right:0}
+.file-table .empty-list{text-align:center;padding:28px}
+
+/* 文件下载只显示一次动作提示，文件名本身就是可点击入口。 */
+.vision-result .vision-downloads{display:flex;flex-direction:row;align-items:baseline;flex-wrap:wrap;gap:5px 14px;margin-top:14px}
+.vision-result .vision-downloads:not(:empty)::before{content:'下载';font-size:14px;font-weight:600;color:#526781;margin-right:2px}
+.vision-result .vision-downloads button{border:0;background:transparent;padding:2px 0;border-radius:0;color:#1760d2;font-size:14px}
+.vision-result .vision-downloads button:hover{text-decoration:underline}

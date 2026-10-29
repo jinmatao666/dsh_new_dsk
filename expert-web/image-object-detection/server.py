@@ -1,6 +1,7 @@
 """Independent expert website; run behind a reviewed HTTP/HTTPS reverse proxy."""
 import base64
 import binascii
+from datetime import datetime
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -10,7 +11,9 @@ import re
 import secrets
 import shutil
 import signal
+import tempfile
 import threading
+import zipfile
 import urllib.error
 import urllib.request
 from urllib.parse import urlsplit, quote
@@ -24,6 +27,9 @@ PROJECT = Path(__file__).resolve().parent
 MAX_BODY = 30 * 1024 * 1024
 MAX_FILES = 20 * 1024 * 1024
 TOOLS = {"detect": {".png", ".jpg", ".jpeg", ".webp"}}
+DOWNLOAD_NAMES = {'result.json': '分析结果.json', 'annotated.png': '标注图.png',
+                  'objects.csv': '目标坐标表.csv', 'source.png': '分析原图.png',
+                  'mask.png': '分割掩膜.png'}
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -187,6 +193,8 @@ def create_server(root, address=("127.0.0.1", 3313), redeem_ticket=redeem, publi
                         self.response_headers(200, mime, Content_Length=str(len(data)))
                         self.wfile.write(data)
                         return
+                    if task["state"] == "succeeded" and not task['outputs']:
+                        return self.reply(410, {"error": "成果已删除"})
                     if task["state"] != "succeeded":
                         return self.reply(409, {"error": "任务尚未成功，无可用识别结果"})
                     text = (store.root / task["id"] / "output" / task["outputs"][0]).read_text(encoding="utf-8-sig")
@@ -233,6 +241,10 @@ def create_server(root, address=("127.0.0.1", 3313), redeem_ticket=redeem, publi
                         if image_info["mime"] != expected:
                             raise ValueError("图片扩展名与实际内容不一致")
                         contents.append((f"{index:03d}{suffix}", data))
+                    # 默认名称供列表检索；自动命名不触发同名任务替换。
+                    if not task_name:
+                        stem = Path(files[0]['name']).stem[:80]
+                        options['taskName'] = f"{stem} {datetime.now().strftime('%Y%m%d%H%M')}"
                     task_id = secrets.token_hex(16)
                     directory = store.root / task_id / "input"
                     directory.mkdir(parents=True, mode=0o700)
@@ -243,7 +255,8 @@ def create_server(root, address=("127.0.0.1", 3313), redeem_ticket=redeem, publi
                         target.chmod(0o600)
                     try:
                         store.create(user, tool, options, [name for name, _ in contents], task_id,
-                                     input_names=[file["name"] for file in files], replace_id=replace_id)
+                                     input_names=[file["name"] for file in files], replace_id=replace_id,
+                                     replace_by_name=bool(task_name))
                     except Exception:
                         # This exact service-created task has no database owner yet.
                         if directory.parent.resolve().parent == store.root:
@@ -252,7 +265,7 @@ def create_server(root, address=("127.0.0.1", 3313), redeem_ticket=redeem, publi
                     worker.submit(user, task_id)
                     threading.Thread(target=report_usage, args=(user, task_id), daemon=True).start()
                     return self.reply(201, {"id": task_id})
-                match = re.fullmatch(r"/api/tasks/([a-f0-9]{32})/(cancel|delete|files/([0-9]+))", path)
+                match = re.fullmatch(r"/api/tasks/([a-f0-9]{32})/(cancel|delete|outputs/delete|bundle|files/([0-9]+))", path)
                 if match:
                     task = store.task(user, match[1])
                     if not task:
@@ -264,12 +277,30 @@ def create_server(root, address=("127.0.0.1", 3313), redeem_ticket=redeem, publi
                                 return self.reply(409, {"error": "任务仍在停止，请稍后删除"})
                             deleted = store.delete(user, match[1])
                         return self.reply(200, {"deleted": deleted})
+                    if method == 'POST' and match[2] == 'outputs/delete':
+                        self.body()
+                        deleted = store.delete_outputs(user, match[1])
+                        return self.reply(200, {'deleted': deleted})
                     if method == "POST" and match[2] == "cancel":
                         self.body()
                         cancelled = store.cancel(user, match[1])
                         if cancelled:
                             worker.cancel(match[1])
                         return self.reply(200, {"cancelled": cancelled})
+                    if method == 'GET' and match[2] == 'bundle' and task['state'] == 'succeeded' and task['outputs']:
+                        with tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024) as stream:
+                            with zipfile.ZipFile(stream, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+                                for name in task['outputs']:
+                                    if name not in DOWNLOAD_NAMES:
+                                        raise ValueError('成果文件名称无效')
+                                    archive.write(store.root / task['id'] / 'output' / name, DOWNLOAD_NAMES[name])
+                            size = stream.tell()
+                            stream.seek(0)
+                            self.response_headers(200, 'application/zip', Content_Length=str(size),
+                                                  Content_Disposition=f"attachment; filename*=UTF-8''{quote('分析结果.zip')}")
+                            while chunk := stream.read(65536):
+                                self.wfile.write(chunk)
+                        return
                     if method == "GET" and match[3] is not None and task["state"] == "succeeded":
                         index = int(match[3])
                         if index >= len(task["outputs"]):
@@ -277,7 +308,7 @@ def create_server(root, address=("127.0.0.1", 3313), redeem_ticket=redeem, publi
                         name = task["outputs"][index]
                         file_path = store.root / task["id"] / "output" / name
                         self.response_headers(200, "application/octet-stream", Content_Length=str(file_path.stat().st_size),
-                                     Content_Disposition=f"attachment; filename*=UTF-8''{quote(name)}")
+                                     Content_Disposition=f"attachment; filename*=UTF-8''{quote(DOWNLOAD_NAMES.get(name, name))}")
                         with file_path.open("rb") as file:
                             while chunk := file.read(65536):
                                 self.wfile.write(chunk)
