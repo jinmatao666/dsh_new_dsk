@@ -71,7 +71,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.request("/api/session", {"ticket": "a" * 64}, origin="https://evil.test")[0], 403)
         status, data, headers = self.request("/")
         self.assertEqual(status, 200)
-        self.assertIn("土地利用规划审查".encode(), data)
+        self.assertIn("空间合规性审查专家".encode(), data)
         self.assertIn("frame-src 'none'", headers["Content-Security-Policy"])
 
     def test_mismatched_shape_companions_rejected(self):
