@@ -1,4 +1,4 @@
-"""SAM3 image detection and registered-pair change analysis. No model-generated coordinates."""
+"""SAM3 image detection and registered-pair change analysis. Semantic model coordinates are estimates; SAM3 supplies optional real masks."""
 import base64
 import io
 import json
@@ -213,51 +213,6 @@ def aligned_pair(before, after, align):
     return aligned, valid, matrix.tolist()
 
 
-def change_candidates(before, after, options):
-    """Find persistent visual differences after registration and radiometric normalization."""
-    cv2.setNumThreads(2)
-    aligned, valid, matrix = aligned_pair(before, after, options['align'])
-    a = cv2.cvtColor(aligned, cv2.COLOR_RGB2LAB).astype('float32')
-    b = cv2.cvtColor(np.asarray(after), cv2.COLOR_RGB2LAB).astype('float32')
-    valid_pixels = valid > 0
-    for channel in range(3):
-        av = a[:, :, channel][valid_pixels]
-        bv = b[:, :, channel][valid_pixels]
-        am, bm = np.median(av), np.median(bv)
-        asd = np.percentile(av, 75) - np.percentile(av, 25)
-        bsd = np.percentile(bv, 75) - np.percentile(bv, 25)
-        if asd > 1 and bsd > 1:
-            a[:, :, channel] = (a[:, :, channel] - am) * (bsd / asd) + bm
-        else:
-            a[:, :, channel] += bm - am
-    aa = cv2.GaussianBlur(a, (9, 9), 0)
-    bb = cv2.GaussianBlur(b, (9, 9), 0)
-    delta = cv2.GaussianBlur(np.max(np.abs(aa - bb), axis=2), (9, 9), 0)
-    mask = ((delta >= options['threshold']) & valid_pixels).astype('uint8')
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), dtype='uint8'))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((11, 11), dtype='uint8'))
-    count, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
-    min_pixels = max(64, int(mask.size * options['minArea']))
-    accepted = []
-    for i in range(1, count):
-        area = stats[i, cv2.CC_STAT_AREA]
-        width, height = stats[i, cv2.CC_STAT_WIDTH], stats[i, cv2.CC_STAT_HEIGHT]
-        if area < min_pixels or area / max(1, width * height) < 0.035:
-            continue
-        accepted.append(i)
-    if len(accepted) > 128:
-        combined = np.isin(labels, accepted)
-        components = []
-        for ys in np.array_split(np.arange(mask.shape[0]), 8):
-            for xs in np.array_split(np.arange(mask.shape[1]), 8):
-                part = np.zeros_like(combined)
-                part[np.ix_(ys, xs)] = combined[np.ix_(ys, xs)]
-                if part.any(): components.append(part)
-    else:
-        components = [labels == i for i in accepted]
-    return components, Image.fromarray(aligned), valid, matrix
-
-
 def extract(paths, destination, options):
     options = validate_options(options)
     paths = paths if isinstance(paths, list) else [paths]
@@ -285,32 +240,38 @@ def extract(paths, destination, options):
                 objects.append({'id': len(objects) + 1, 'box': obj['box'], 'score': obj['score']})
     else:
         before = loaded[0][0]
-        seeds, aligned, valid, matrix = change_candidates(before, image, options)
-        meta.update(alignment_matrix_before_to_after=matrix,
-                    alignment_note='自动对齐未找到稳定特征时采用同尺寸原位比较，请人工核对配准质量。',
-                    warning='疑似视觉变化，不代表变化原因；阴影、季节、视角等可能造成误报。精准模式为SAM3轮廓与差异邻域相交结果，不是专门训练的语义变化模型。')
+        aligned_array, valid, matrix = aligned_pair(before, image, options['align'])
+        aligned = Image.fromarray(aligned_array)
+        from semantic_change import discover
+        if not model_configuration():
+            raise OCRError('请配置支持双图输入的视觉模型，再进行变化识别')
+        try:
+            changes, evidence = discover(aligned, image)
+        except ValueError as error:
+            raise OCRError(str(error)) from None
+        meta.update(analysis_method='vision_discovery_then_localization',
+                    alignment_matrix_before_to_after=matrix,
+                    warning='结果为视觉模型判断，需人工核对；模型坐标是估计位置，不是测绘结论。')
         path = output / 'aligned-before.png'
         aligned.save(path)
         extras.append(path)
-        if seeds and options['precise']:
-            boxes = [region(mask, i)['box'] for i, mask in enumerate(seeds)]
-            sam_objects = []
-            for start in range(0,len(boxes),8):
-                for source in (image, aligned):
-                    sam_objects.extend(sam_segment(source, boxes=boxes[start:start+8], score=options['score']))
-            combined = np.logical_or.reduce(seeds)
-            neighborhood = cv2.dilate(combined.astype('uint8'), np.ones((11, 11), dtype='uint8')) > 0
-            predicted = [obj['mask'] for obj in sam_objects]
-            if not predicted:
-                raise OCRError('已发现差异候选，但SAM3未返回分割结果；请调整图片或改用矩形框模式')
-            final = np.logical_or.reduce(predicted) & neighborhood & (valid > 0)
-            if not final.any():
-                raise OCRError('SAM3轮廓与差异区域不相交，未发布精准分割结果')
-            count, labels = cv2.connectedComponents(final.astype('uint8'))
-            seeds = [labels == i for i in range(1, count) if (labels == i).sum() >= 16]
-        for mask in seeds:
-            objects.append(region(mask, len(objects) + 1))
-            masks.append(mask)
+        evidence_path = output / 'model-evidence.json'
+        evidence_path.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding='utf-8')
+        extras.append(evidence_path)
+        for change in changes:
+            if options['precise']:
+                source = aligned if change['change_type'] == 'disappeared' else image
+                prompt_box = change['bbox_before'] if change['change_type'] == 'disappeared' else change['box']
+                segmented = sam_segment(source, boxes=[prompt_box], score=options['score'])
+                if not segmented:
+                    raise OCRError('SAM3未返回该变化的真实掩膜，未生成替代轮廓')
+                mask = np.logical_or.reduce([obj['mask'] for obj in segmented]) & (valid > 0)
+                if not mask.any():
+                    raise OCRError('SAM3变化掩膜为空，未生成替代轮廓')
+                objects.append({**change, **region(mask, len(objects)+1), 'model_box': change['box']})
+                masks.append(mask)
+            else:
+                objects.append({**change, 'id': len(objects)+1})
     annotated = image.copy()
     union = np.zeros((image.height, image.width), dtype=bool)
     if masks:
@@ -333,9 +294,9 @@ def extract(paths, destination, options):
     csv_path = output / 'objects.csv'
     with csv_path.open('w',encoding='utf-8-sig',newline='') as stream:
         writer=csv.writer(stream)
-        writer.writerow(['id','xmin_relative','ymin_relative','xmax_relative','ymax_relative','confidence','area_ratio'])
+        writer.writerow(['id','xmin_relative','ymin_relative','xmax_relative','ymax_relative','confidence','area_ratio','change_type','category','description'])
         for obj in objects:
-            writer.writerow([obj['id'],*obj['box'],obj.get('score'),obj.get('area_ratio')])
+            writer.writerow([obj['id'],*obj['box'],obj.get('score'),obj.get('area_ratio'),obj.get('change_type'),obj.get('category'),obj.get('description')])
     extras.append(csv_path)
     original_path = output / 'source.png'
     image.save(original_path)
@@ -347,14 +308,14 @@ def extract(paths, destination, options):
         rawdiff=np.max(np.abs(np.asarray(aligned).astype('float32')-np.asarray(image).astype('float32')),axis=2)
         heat=cv2.cvtColor(cv2.applyColorMap(rawdiff.astype('uint8'),cv2.COLORMAP_TURBO),cv2.COLOR_BGR2RGB)
         heat_path=output/'difference-heatmap.png';Image.fromarray(heat).save(heat_path);extras.append(heat_path)
-        meta['changed_area_ratio']=float(union.mean())
+        meta['changed_area_ratio']=float(union.mean()) if options['precise'] else None
         meta['overlap_ratio']=float((valid>0).mean())
-        meta['region_count_note']='候选超过128处时按8×8网格合并展示，保留全部差异像素；区域数并非真实地物数量。'
+        meta['region_count_note']='以语义变化事件为单位输出区域，不按像素碎片或规则网格拆分。'
     result = output / 'result.json'
     result.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding='utf-8')
     preview = output / 'annotated.png'
     annotated.save(preview)
-    if options['precise'] or MODE == 'change':
+    if options['precise']:
         mask_path = output / 'mask.png'
         Image.fromarray(union.astype('uint8') * 255).save(mask_path)
         extras.append(mask_path)

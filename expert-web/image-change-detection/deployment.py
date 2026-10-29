@@ -37,7 +37,7 @@ def checks():
         "identity_endpoint": valid_url(os.environ.get("EXPERT_PLATFORM_REDEEM_URL", ""), allow_http=True),
         "provider_credential": bool(os.environ.get("EXPERT_PROVIDER_CREDENTIAL", "")) and not os.environ.get("EXPERT_PROVIDER_CREDENTIAL", "").startswith("replace-with-"),
         "sam3_api": os.environ.get("SAM3_API", "adapter_v1") in ("adapter_v1", "deployed_v1"),
-        "sam3_configured": valid_service_url(os.environ.get('SAM3_URL', '')),
+        "vision_configured": model_configuration(),
     }
 
 

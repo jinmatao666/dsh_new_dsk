@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 import numpy as np
 from PIL import Image
-from ocr import MODE, OCRError, change_candidates, extract, sam_segment, validate_options
+from ocr import MODE, OCRError, aligned_pair, extract, sam_segment, validate_options
 from server import create_server
 
 
@@ -40,7 +40,14 @@ class Engine(BaseHTTPRequestHandler):
         if self.path.endswith('/usage'):
             result = {'success': True}
         elif self.path == '/format':
-            result = {'choices': [{'finish_reason': 'stop', 'message': {'content': 'car'}}]}
+            content = body['messages'][0]['content']
+            text = content[0]['text']
+            if '定位这个变化候选' in text:
+                value = {'objects': [{'bbox_before': None, 'bbox_after': [200, 200, 700, 700]}]}
+            else:
+                same = content[1]['image_url']['url'] == content[2]['image_url']['url']
+                value = {'candidates': [] if same else [{'change_type':'new','category':'建筑','description':'新增建筑','approximate_region':'中央'}]}
+            result = {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(value)}}]}
         else:
             image = Image.open(io.BytesIO(base64.b64decode(body.get('image', body.get('image_base64')))))
             obj = {'box': [0.2, 0.2, 0.7, 0.7], 'score': 0.9}
@@ -165,7 +172,7 @@ class Integration(unittest.TestCase):
 
     def test_missing_service_blocks_submission(self):
         self.login()
-        with patch.dict(os.environ, {'SAM3_URL': ''}):
+        with patch.dict(os.environ, {'EXPERT_MODEL_URL': ''}):
             self.assertEqual(self.upload()[0], 503)
 
     def test_precise_mode_never_substitutes_a_box_for_missing_mask(self):
@@ -214,19 +221,14 @@ class Integration(unittest.TestCase):
             result = sam_segment(Image.new('RGB', (120, 100)), prompt='nothing')
             self.assertEqual(result, [])
         else:
-            options = validate_options({'align': False})
-            parts, *_ = change_candidates(Image.open(io.BytesIO(png())), Image.open(io.BytesIO(png())), options)
-            self.assertEqual(parts, [])
+            from semantic_change import discover
+            changes, _ = discover(Image.new('RGB',(120,100),'white'), Image.new('RGB',(120,100),'white'))
+            self.assertEqual(changes, [])
 
     def test_unalignable_pair_is_rejected(self):
-        if MODE != 'change':
-            self.skipTest('change-only registration')
-        components, aligned, valid, matrix = change_candidates(
-            Image.new('RGB', (120, 100), 'white'),
-            Image.new('RGB', (120, 100), 'white'), validate_options({}))
-        self.assertEqual(aligned.size, (120, 100))
-        self.assertEqual(valid.shape, (100, 120))
-        self.assertEqual(len(matrix), 3)
+        aligned, valid, matrix = aligned_pair(Image.new('RGB',(120,100),'white'), Image.new('RGB',(120,100),'white'), True)
+        self.assertEqual(aligned.shape, (100,120,3))
+        self.assertEqual(valid.shape, (100,120))
 
     def test_replace_delete(self):
         self.login()

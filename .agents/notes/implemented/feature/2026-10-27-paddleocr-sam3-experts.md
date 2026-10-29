@@ -16,12 +16,14 @@ This extends the image-service integration described in [the independent OCR not
 
 ## Alternatives considered
 
-Directly treating arbitrary SAM3 HTTP deployments as interchangeable hides incompatible input and mask formats. Having Qwen generate coordinates or treating a difference rectangle as a segmentation mask misrepresents the underlying inference. A shared source directory would prevent the expert directories from being deployed independently.
+Directly treating arbitrary SAM3 HTTP deployments as interchangeable hides incompatible input and mask formats. Treating model coordinate estimates as surveyed geometry or a rectangle as a segmentation mask misrepresents the underlying inference. A shared source directory would prevent the expert directories from being deployed independently.
 
 ## Consequences
 
-The SAM3 adapter loads administrator-provided local weights in a separate CUDA environment and serializes model requests. Code revision is recorded, but driver compatibility, VRAM and real model accuracy require target-host acceptance. Change discovery uses conservative registration and visual differences; its precise result intersects SAM3 masks with candidate neighborhoods. It cannot identify semantic causes of change, and shadows, seasons and parallax remain false-positive sources. Empty results are explicit; model failure is not converted to successful sample output. Existing OCR task storage and volume identity are retained.
+The SAM3 adapter loads administrator-provided local weights in a separate CUDA environment and serializes model requests. Code revision is recorded, but driver compatibility, VRAM and real model accuracy require target-host acceptance. Change discovery uses two-image semantic discovery followed by per-candidate model localization. Optional SAM3 masks refine the regions. These are model judgments requiring review; shadows, seasons and parallax remain false-positive sources. Empty results are explicit; model failure is not converted to successful sample output. Existing OCR task storage and volume identity are retained.
 
 ## Verification
 
 HTTP fixtures exercise all three real worker subprocesses, generated artifacts, coordinate validation, two-image ownership, missing services, malformed engine responses, empty results and registration refusal. The SAM3 adapter is tested without Torch for request validation, bearer authentication and concurrent-request refusal. Headless Edge exercises detection and change login fixtures, uploads, result images, downloads, history and mobile overflow. These checks do not load PaddleOCR/SAM3 weights or prove real Buddy tickets, native downloads, CUDA performance or production deployment.
+
+Change discovery now follows semantic vision-model discovery and per-candidate localization, inspired by the local qwen_change_app_bailian_local workflow. Pixel-difference candidates and grid grouping are removed. SAM3 only refines optional precise contours; model coordinates are estimates. See the change expert README for current limits and configuration. Fixture tests do not establish real model accuracy.
