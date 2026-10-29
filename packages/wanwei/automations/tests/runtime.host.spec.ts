@@ -70,7 +70,7 @@ it.each(['internet', 'intranet'])('loads the plugin, persists and executes real 
     const notify = vi.fn(async (channel: string, _text: string) => {
       if (channel === 'dingtalk' && notify.mock.calls.filter(call => call[0] === 'dingtalk').length === 1) throw new Error('授权已失效')
     })
-    const prepare = vi.fn(async () => '推送由系统负责，不调用连接器发送结果。')
+    const prepare = vi.fn(async (_ids: readonly string[]) => '推送由系统负责，不调用连接器发送结果。')
     ctx.provide('wanweiConnectors', { options: async () => [], prepare, notify })
     ctx.provide('wanweiNetworkPolicy', { getSnapshot: () => ({ mode }) } as never)
     ctx.provide('shell', { sandboxMode: 'workspace-write' } as never)
