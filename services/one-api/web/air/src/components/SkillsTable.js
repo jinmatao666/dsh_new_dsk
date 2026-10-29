@@ -517,7 +517,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
         pagination={{ pageSize: 20, currentPage, onPageChange: setCurrentPage }} empty='暂无技能' />
     </section>
     <SkillBrowseDrawer visible={browse.visible} kind={isPrivateSkill(browse.skill || {}) ? 'personal' : 'public'} id={browse.skill?.id} skill={browse.skill} onClose={() => setBrowse({ visible: false, skill: null })} />
-    {importSuccess && <div className='zjugis-modal-backdrop skill-release-backdrop' onMouseDown={(event) => { if (event.target === event.currentTarget) setImportSuccess(null); }}>
+    {importSuccess && <div className='zjugis-modal-backdrop skill-release-backdrop'>
       <div className='zjugis-modal skill-import-success-dialog' role='dialog' aria-modal='true' aria-label='技能上传完成'>
         <div className='zjugis-modal-head'>
           <div><h2>技能导入结果</h2><p>成功 {importSuccess.results.filter(item => item.success).length} 个，失败 {importSuccess.results.filter(item => !item.success).length} 个</p></div>
@@ -537,7 +537,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       </div>
     </div>}
     {importDialogVisible && (
-      <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) setImportDialogVisible(false); }}>
+      <div className='zjugis-modal-backdrop'>
         <div className='zjugis-modal'>
           <div className='zjugis-modal-head'>
             <h2>导入技能</h2>
@@ -584,7 +584,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
         </div>
       </div>
     )}
-    {releases.skill && <div className='zjugis-modal-backdrop skill-release-backdrop' onMouseDown={(event) => { if (event.target === event.currentTarget) closeReleases(); }}>
+    {releases.skill && <div className='zjugis-modal-backdrop skill-release-backdrop'>
       <div className='zjugis-modal wide skill-release-dialog' role='dialog' aria-modal='true' aria-label='版本管理'>
         <div className='zjugis-modal-head'>
           <div><h2>版本管理</h2><p>{releases.skill.display_name || releases.skill.name}</p></div>
@@ -614,7 +614,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       </div>
     </div>}
     {editor && (
-      <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) closeEditor(); }}>
+      <div className='zjugis-modal-backdrop'>
         <div className='zjugis-modal wide'>
           <div className='zjugis-modal-head'>
             <h2>{editor.base ? '编辑技能' : '新增技能'}</h2>

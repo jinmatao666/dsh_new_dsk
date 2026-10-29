@@ -2764,6 +2764,7 @@ pub fn run() {
             desktop_update::desktop_update_automatic,
             desktop_update::desktop_update_dismiss,
             network_policy::set_network_environment,
+            network_policy::open_external_link,
             set_auth_window_state,
             save_session_log_archive,
             save_expert_artifact,

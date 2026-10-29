@@ -157,7 +157,6 @@ function Modal({ title, children, onClose, wide = false, className = '' }) {
   return (
     <div
       className='zjugis-modal-backdrop'
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className={`zjugis-modal${wide ? ' wide' : ''}${className ? ` ${className}` : ''}`} role='dialog' aria-modal='true' aria-label={title}>
         <div className='zjugis-modal-head'>

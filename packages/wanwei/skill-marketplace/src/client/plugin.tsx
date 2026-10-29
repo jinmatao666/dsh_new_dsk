@@ -763,13 +763,18 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
   const featuredPool = useMemo(() => browseMarketplaceCatalog(allSkills).filter(skill => skill.source === 'official'), [allSkills])
   const [featuredOffset, setFeaturedOffset] = useState(() => Math.floor(Math.random() * 10_000))
   const featuredSkills = useMemo(() => {
-    if (featuredPool.length <= 3) return featuredPool
-    const start = featuredOffset % featuredPool.length
-    const step = Math.max(1, Math.floor(featuredPool.length / 3))
-    return [0, 1, 2]
-      .map(i => featuredPool[(start + i * step) % featuredPool.length])
-      .filter((skill): skill is Skill => skill !== undefined)
-  }, [featuredPool, featuredOffset])
+    const pick = (pool: Skill[], count: number) => {
+      if (pool.length <= count) return pool
+      const start = featuredOffset % pool.length
+      const step = Math.max(1, Math.floor(pool.length / count))
+      return Array.from({ length: count }, (_, i) => pool[(start + i * step) % pool.length])
+        .filter((skill): skill is Skill => skill !== undefined)
+    }
+    const available = featuredPool.filter(skill => skillAccess(skill) === 'available')
+    const disabled = featuredPool.filter(skill => skillAccess(skill) !== 'available')
+    const first = pick(available, 3)
+    return [...first, ...pick(disabled, 3 - first.length)]
+  }, [featuredPool, featuredOffset, network, unfilteredSkills, catalogAccess])
 
   const visible = useMemo(() => {
     if (libraryView === 'uploads') {
@@ -791,8 +796,10 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
     return skills
   }, [allSkills, category, query, platformQuery, libraryView, uploadView, reviewFilter, uploadedSkills, installStates])
 
-  const platform = useMemo(() => pagePlatformCatalog(visible, platformSort, platformPage), [visible, platformSort, platformPage])
-  const displayedSkills = libraryView === 'market' ? platform.items : visible
+  const platform = useMemo(() => pagePlatformCatalog(visible, platformSort, platformPage,
+    skill => skillAccess(skill) === 'available' ? 0 : 1), [visible, platformSort, platformPage, network, unfilteredSkills, catalogAccess])
+  const displayedSkills = libraryView === 'market' ? platform.items : libraryView === 'installed'
+    ? [...visible].sort((a, b) => Number(skillAccess(a) !== 'available') - Number(skillAccess(b) !== 'available')) : visible
   useEffect(() => { setPlatformPage(1) }, [category, platformQuery, platformSort])
 
   if (!open) return null
@@ -1241,8 +1248,9 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
                 </div>
               )}
               {libraryView !== 'uploads' && <SkillHubSection
-                active installedOnly={libraryView === 'installed'} installedQuery={query}
-                {...(libraryView === 'installed' ? { installedPlatforms: visible.map(skill => ({
+                active access={catalogAccess(network, true, 'skill')}
+                installedOnly={libraryView === 'installed'} installedQuery={query}
+                {...(libraryView === 'installed' ? { installedPlatforms: displayedSkills.map(skill => ({
                   id: skill.id, slug: skillSlug(skill), name: skill.name, summary: skill.summary,
                   searchText: `${skill.name} ${skill.summary} ${skill.category}`,
                   card: <article key={`platform:${skill.id}`} className="dsh-skill-card" {...skillAccessProps(skill)}

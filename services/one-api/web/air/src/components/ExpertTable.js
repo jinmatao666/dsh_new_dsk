@@ -133,7 +133,7 @@ export default function ExpertTable() {
       <span className={item.published ? 'expert-admin-live' : 'expert-admin-draft'}>{item.published ? '已上架' : '未上架'}</span>
       <div className='expert-admin-actions'><button type='button' className={item.published ? 'unpublish' : 'publish'} onClick={() => void togglePublished(item)}>{item.published ? '下架' : '上架'}</button><button type='button' onClick={() => setEditing({ ...item, detailSections: readSections(item) })}>管理</button></div>
     </article>)}</div>
-    {editing && <div className='expert-admin-backdrop' onMouseDown={event => { if (event.target === event.currentTarget) setEditing(null); }}><section className='expert-admin-dialog' role='dialog' aria-modal='true' aria-label='管理专家'>
+    {editing && <div className='expert-admin-backdrop'><section className='expert-admin-dialog' role='dialog' aria-modal='true' aria-label='管理专家'>
       <header><div><h2>管理{editing.name}</h2><p>工作台页面和分析流程由桌面端代码提供；这里仅管理展示资料。</p></div><button type='button' onClick={() => setEditing(null)} aria-label='关闭'>×</button></header>
       <div className='expert-admin-fields'>
         <label>专家名称<input value={editing.name} onChange={event => setEditing({ ...editing, name: event.target.value })} /></label>

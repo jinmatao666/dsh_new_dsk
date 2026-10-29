@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-Windows 产品固定使用 Tauri CLI 2.11.4 的 NSIS 模板，仅作两处产品调整：移除卸载页的数据删除复选框，以及对应的 APPDATA/LOCALAPPDATA 删除代码。程序文件清理、更新处理和进程钩子保留上游行为。正式版标识保持 `com.wanwei.harness`。
+Windows 产品固定使用 Tauri CLI 2.11.4 的 NSIS 模板，仅作两处产品调整：移除卸载页的数据删除复选框，以及对应的 APPDATA/LOCALAPPDATA 删除代码。程序文件清理、更新处理和进程钩子保留上游扩展点。安装或卸载前，产品钩子按所选安装目录识别并结束程序，包括残留的 Node 和飞书 CLI 进程，等待进程退出后才继续。清理失败时停止安装并提示重试。钩子使用原生 Windows PowerShell，确保 32 位安装器仍能读取 64 位程序路径；安装目录以外的进程和安装器自身均排除。正式版标识保持 `com.wanwei.harness`。
 
 安装器数据检查拒绝数据删除控件、模板或钩子中的用户数据删除命令、默认模板及标识变化。安装包 CI 和两条 Runner 打包命令执行该检查。原生迁移回归验证迁移后新增或保留的技能、会话、设置和标记经重复启动迁移仍保留。现有[正式版数据迁移](../feature/2026-10-10-wanwei-formal-data-migration.zh.md)继续负责历史导入。
 

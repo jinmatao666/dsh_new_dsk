@@ -46,6 +46,7 @@ func expertWebTestRouter(t *testing.T) *gin.Engine {
 	router := gin.New()
 	router.GET("/catalog", ListExpertWebCatalog)
 	router.POST("/create", AdminCreateExpertWebsite)
+	router.DELETE("/:key", AdminDeleteExpertWebsite)
 	router.PUT("/:key/publish", AdminPublishExpertWebsite)
 	router.POST("/:key/rotate", AdminRotateExpertWebCredential)
 	router.POST("/:key/launch", func(c *gin.Context) { c.Set("id", 123); LaunchExpertWebsite(c) })

@@ -173,6 +173,8 @@ Host 提供 `deliver_files`，在最终回复前声明完整的最终成果清�
 
 ## Known Limitations and Deferred Work
 
+桌面端以新窗口打开的 HTTP(S) 链接使用原生浏览器命令，失败时显示提示。命令与 Client 均保留内网模式的外部链接限制。右键、下载、本地文件链接和非桌面端的浏览器行为保持原样；资源中转不代理系统浏览器。
+
 平台技能下载和安装确认使用独立的登录认证接口。Host 收到完整技能包后创建下载事件，并将事件 ID 传给原生安装完成后的回调。OneAPI 保存按用户、技能汇总的统计及去重事件，不新增后台页面。详见[统计决策](../../../.agents/notes/implemented/feature/2026-10-10-skill-download-installation-counts.zh.md)。
 
 <a id="known-limitations-and-deferred-work"></a>

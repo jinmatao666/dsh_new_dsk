@@ -3,14 +3,14 @@
 exports[`uses disable for internet experts and restores them after a successful probe 1`] = `
 [
   {
-    "disabled": true,
-    "hint": "当前网络环境不可达，请检查您的网络",
-    "name": "联网专家",
-  },
-  {
     "disabled": false,
     "hint": "",
     "name": "内网专家",
+  },
+  {
+    "disabled": true,
+    "hint": "当前网络环境不可达，请检查您的网络",
+    "name": "联网专家",
   },
 ]
 `;

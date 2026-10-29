@@ -20,6 +20,8 @@ The product Host observes `user/message` entries resolved by the official skill 
 
 ## Consequences
 
+Deleting an independent expert registration preserves its usage events and recorded item names. Registration and launch-ticket deletion is transactional; it does not remove files or established sessions in the separately deployed expert service. The [expert API reference](../../../../services/one-api/docs/expert-web.md) defines the administrator operation.
+
 Only an identical event ID is deduplicated. The desktop binds each pending skill event to the token active at capture time; it retries while running but does not persist an offline outbox across restart. Expert task reporting retries three times without blocking the accepted task.
 
 ## Testing

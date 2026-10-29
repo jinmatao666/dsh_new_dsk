@@ -1,4 +1,5 @@
 /** Task-owned connector selection; scheduler consumes the Host service, not connector UI. */
+import { deliverAutomationNotification } from './automation-delivery.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -21,6 +22,13 @@ export interface AutomationConnectors {
    * @returns Default connector entries.
    */
   options(signal: AbortSignal): Promise<ConnectorOption[]>
+  /** Deliver a saved result to the signed-in connector owner.
+   * @param channel - Explicitly enabled notification channel.
+   * @param text - Saved task result.
+   * @param key - Stable execution delivery key.
+   * @param signal - Delivery cancellation.
+   */
+  notify(channel: string, text: string, key: string, signal: AbortSignal): Promise<void>
   /** Check selections and restrict connector tools for this agent's lifetime.
    * @param ids - Saved task selection; empty denies all connector tools.
    * @param agent - Task-owned fresh Session agent.
@@ -57,6 +65,7 @@ export function registerAutomationConnectors(ctx: Context): void {
         return { id: entry.id, name: entry.name, icon: entry.icon, connected }
       }))
     },
+    notify: (channel, text, key, signal) => deliverAutomationNotification(channel, text, key, signal),
     async prepare(ids, agent, signal) {
       const unknown = ids.find(id => !entries.some(entry => entry.id === id))
       if (unknown) throw new Error(`不支持的连接器：${unknown}`)

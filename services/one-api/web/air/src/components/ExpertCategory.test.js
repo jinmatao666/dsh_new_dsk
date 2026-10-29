@@ -39,6 +39,12 @@ test('new and edited categories share the modal and preserve their save endpoint
     await click('保存分类');
     expect(API.put).toHaveBeenCalledWith('/api/expert/admin/categories/1', expect.objectContaining({ name: '办公工具' }));
     await click('＋ 新建分类');
+    const backdrop = container.querySelector('.expert-admin-backdrop');
+    await act(async () => {
+      backdrop.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      backdrop.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(container.querySelector('[role=dialog]')).not.toBeNull();
     await click('取消');
     expect(container.querySelector('[role=dialog]')).toBeNull();
   } finally {

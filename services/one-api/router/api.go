@@ -486,6 +486,7 @@ func SetApiRouter(router *gin.Engine) {
 				expertWebAdminRoute.POST("/reorder", controller.ReorderCatalog("experts"))
 				expertWebAdminRoute.POST("/", controller.AdminCreateExpertWebsite)
 				expertWebAdminRoute.PUT("/:key", controller.AdminUpdateExpertWebsite)
+				expertWebAdminRoute.DELETE("/:key", controller.AdminDeleteExpertWebsite)
 				expertWebAdminRoute.PUT("/:key/publish", controller.AdminPublishExpertWebsite)
 				expertWebAdminRoute.POST("/:key/credential", controller.AdminRotateExpertWebCredential)
 			}

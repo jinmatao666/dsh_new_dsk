@@ -169,7 +169,7 @@ export default function RolePermissions() {
         {!rolesLoading && roles.length === 0 && <div className='preview-empty'>暂时无法读取角色，请稍后重试</div>}
       </div>
       {editing && (
-        <div className='zjugis-role-modal-mask' onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingId(null); }}>
+        <div className='zjugis-role-modal-mask'>
           <div className='zjugis-role-modal' role='dialog' aria-modal='true'>
             <div className='zjugis-role-modal-head'>
               <div>
@@ -212,7 +212,7 @@ export default function RolePermissions() {
         </div>
       )}
       <Modal title='新建角色' centered width={480} className='role-management-dialog' visible={createModal} onCancel={closeMutation}
-        maskClosable={!submitting} closable={!submitting} closeOnEsc={!submitting} footer={null}>
+        maskClosable={false} closable={!submitting} closeOnEsc={!submitting} footer={null}>
         <form className='zjugis-role-form' onSubmit={createRole}>
           <label>角色类型<CustomSelect aria-label='角色类型' value={draft.role_type} disabled={submitting} onChange={e => setDraft(current => ({ ...current, role_type: e.target.value }))}>
             <option value='member'>普通成员</option><option value='admin' disabled={!rootUser}>管理员</option>
@@ -231,7 +231,7 @@ export default function RolePermissions() {
         </form>
       </Modal>
       <Modal title='删除角色' centered width={440} className='role-management-dialog' visible={Boolean(deleting)} onCancel={closeMutation}
-        maskClosable={!submitting} closable={!submitting} closeOnEsc={!submitting} footer={null}>
+        maskClosable={false} closable={!submitting} closeOnEsc={!submitting} footer={null}>
         <p className='role-delete-message'>确定删除「{deleting?.name}」吗？删除后无法恢复。如有用户仍在使用，请先为其更换角色。</p>
         {mutationError && <p role='alert' className='role-form-error'>{mutationError}</p>}
         <div className='zjugis-role-modal-actions'>

@@ -24,7 +24,10 @@
   },
   "dsh": {
     "client": {
-      "external": ["@deepseek-ai/dsh-wanwei-feature-panels/client"],
+      "external": [
+        "@deepseek-ai/dsh-wanwei-feature-panels/client",
+        "@deepseek-ai/dsh-wanwei-connectors/client"
+      ],
       "inject": [
         "@deepseek-ai/dsh-api-remotes",
         "@deepseek-ai/dsh-api-workspace-controller",
@@ -32,7 +35,8 @@
         "@deepseek-ai/dsh-wanwei-oneapi-auth",
         "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-sidebar",
-        "@deepseek-ai/dsh-wanwei-feature-panels"
+        "@deepseek-ai/dsh-wanwei-feature-panels",
+        "@deepseek-ai/dsh-wanwei-connectors"
       ],
       "platform": "web"
     },
@@ -99,7 +103,9 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
-  "dependencies": { "zod": "^4.4.3" },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
   "files": [
     "lib/index.js",
     "lib/invariant.js",

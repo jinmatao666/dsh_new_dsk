@@ -26,4 +26,6 @@ Search requests retain the original query under separate retrieval instructions.
 
 ## Consequences
 
+Desktop HTTP(S) citations with a new-window target call the main-window-only `open_external_link` command directly. The native command checks the same network policy as the WebView popup callback before opening the system browser. The click cancels WebView navigation to avoid duplicate windows; right-click, local file links, downloads and ordinary browser use retain their existing handling. Native failures produce a visible notice instead of a silent click. Intranet public-link restrictions remain in effect; server resource relaying does not provide a browser proxy.
+
 Source inspection can increase latency and tokens. Filtering generated summaries deterministically removes that upstream path for fabricated prose and URLs; it does not prove retrieval URLs are reachable or that the final conversation model follows the citation instructions. No live-news truthfulness guarantee is claimed. Focused tests cover generated fake links with and without structured sources, missing summary text, URL filtering and a Loader-mounted prompt/tool presentation snapshot.

@@ -1,3 +1,4 @@
+import { NotificationConnectionDialog } from '@deepseek-ai/dsh-wanwei-connectors/client'
 import { createPanelController, registerFeaturePanel, Toast, type WanweiNotice } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 import type { Context } from '@deepseek-ai/cordis'
 import { useState } from 'react'
@@ -57,6 +58,9 @@ export function apply(ctx: Context): void {
       const result = await ctx.remote.session.modelCatalog()
       if (!result.ok) throw new Error(result.error.message)
       return result.value
+    },
+    connectionDialog(channel, complete) {
+      return <NotificationConnectionDialog connection={connection} channel={channel} complete={complete} />
     },
     async listConnectors() {
       const result = await connection.rpc.call('/wanwei-connectors', 'options', {})

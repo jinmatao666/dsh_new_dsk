@@ -17,10 +17,13 @@
     "src/dingtalk-dws.ts",
     "src/dingtalk-dws-tool.ts",
     "src/dingtalk-personal-dm.ts",
-    "src/wechat-ilink.ts"
+    "src/wechat-ilink.ts",
+    "src/automation-delivery.ts"
   ],
   "references": [
-    { "path": "../../interaction/user-questions" },
+    {
+      "path": "../../interaction/user-questions"
+    },
     {
       "path": "../../../vendor/cordis"
     },

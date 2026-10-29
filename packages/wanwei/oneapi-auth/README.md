@@ -175,6 +175,8 @@ Static guidance can reuse the prompt prefix. Delivery paths vary with the task.
 
 ## Known Limitations and Deferred Work
 
+Desktop new-window HTTP(S) links use the native browser command and show a notice on failure. The command and Client retain intranet public-link restrictions. Right-click, downloads, local-file links and non-desktop browser behavior remain unchanged; resource relaying does not proxy the system browser.
+
 Platform skill downloads and installation confirmations use separate authenticated endpoints. The Host creates a download event after receiving the complete bundle and passes its ID to the native-install completion callback. OneAPI stores per-user, per-skill summaries and deduplicated events without adding an administrator page. See the [statistics decision](../../../.agents/notes/implemented/feature/2026-10-10-skill-download-installation-counts.md).
 
 <a id="known-limitations-and-deferred-work"></a>

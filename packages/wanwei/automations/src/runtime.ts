@@ -50,6 +50,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   await store.update((state) => {
     for (const task of state.tasks) if (task.nextRunAt <= Date.now()) advanceSchedule(task, Date.now())
     for (const run of state.runs) {
+      for (const delivery of run.deliveries ?? []) if (delivery.status === 'pending') { delivery.status = 'failed'; delivery.error = '推送过程被中断，请检查接收情况后重试' }
       if (run.status !== 'running') continue
       if (run.pid === process.pid) {
         run.status = 'interrupted'; run.endedAt = Date.now(); run.error = '自动化插件重新加载，任务未自动重跑'
@@ -70,6 +71,31 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         if (error !== undefined) run.error = error.slice(0, 8000)
       }
     })
+  }
+  const delivering = new Set<string>()
+  const deliver = async (id: string, username: string, retry = false): Promise<void> => {
+    if (delivering.has(id)) throw new Error('结果正在推送，请稍后重试')
+    delivering.add(id)
+    try {
+      const run = (await store.read()).runs.find(item => item.id === id && item.owner === username)
+      if (!run || !run.deliveryText) return
+      for (const item of run.deliveries ?? []) {
+        if (item.status === 'sent' || (retry && item.status !== 'failed')) continue
+        let failure: string | undefined
+        try {
+          lifetime.signal.throwIfAborted()
+          if (await owner() !== username) throw new Error('账号已变化，推送已停止')
+          const connectors = ctx.get('wanweiConnectors')
+          if (!connectors) throw new Error('连接器服务未加载')
+          await connectors.notify(item.channel, run.deliveryText, `${id}:${item.channel}`, lifetime.signal)
+        } catch (error) { failure = error instanceof Error ? error.message : String(error) }
+        await store.update((state) => {
+          const saved = state.runs.find(record => record.id === id && record.owner === username)
+          const delivery = saved?.deliveries?.find(row => row.channel === item.channel)
+          if (delivery) { delivery.status = failure ? 'failed' : 'sent'; delivery.error = failure }
+        })
+      }
+    } finally { delivering.delete(id) }
   }
   const execute = async (task: AutomationTask, run: AutomationRun, username: string): Promise<void> => {
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -110,11 +136,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       lifetime.signal.throwIfAborted()
       if (hasTimedOut()) throw new Error('任务初始化超时')
       const connectors = ctx.get('wanweiConnectors')
-      if (task.connectors?.length && connectors === undefined) throw new Error('连接器插件未加载，任务未执行')
-      const connectorInstructions = await connectors?.prepare(task.connectors ?? [], agent, runSignal)
+      const connectorInstructions = (await connectors?.prepare([], agent, runSignal) ?? '')
+        + '任务结果由系统按推送设置自动发送，你只需完成任务，不要自行发送结果通知。'
       await ctx.sessionController.prompt({
         sessionId: created.sessionId, requestId: run.id as SessionRequestId, mode: 'queue',
-        content: [{ type: 'text', text: `${RUN_INSTRUCTIONS}\n\n${connectorInstructions ?? ''}\n\n${await workspaceEvidence(task.cwd)}\n\n用户任务：\n${task.prompt}` }],
+        content: [{ type: 'text', text: `${RUN_INSTRUCTIONS}\n\n${connectorInstructions}\n\n${await workspaceEvidence(task.cwd)}\n\n用户任务：\n${task.prompt}` }],
         clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       }, lifetime.signal)
       // This fresh Session owns the whole interval; idle alone does not prove success.
@@ -140,7 +166,26 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       await finish(run.id, lifetime.signal.aborted ? 'interrupted' : 'failed', hasTimedOut()
         ? '任务执行超时，已停止；进度和文件已保留，可打开会话继续处理'
         : error instanceof Error ? error.message : String(error))
-    } finally { removeProtocol?.(); if (timer !== undefined) clearTimeout(timer) }
+    } finally {
+      removeProtocol?.(); if (timer !== undefined) clearTimeout(timer)
+      const channels = task.pushChannels ?? []
+      if (channels.length) {
+        const record = (await store.read()).runs.find(item => item.id === run.id)
+        if (record) {
+          const message = agent?.session.events.findLast(event => event.type === 'assistant/message')
+          const answer = message?.type === 'assistant/message'
+            ? message.data.message.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n').trim() : ''
+          const status = { running: '执行中', success: '已完成', failed: '执行失败', interrupted: '已中断', waiting: '等待确认', incomplete: '未完成' }[record.status]
+          const body = [`定时任务：${task.name}`, `状态：${status}`, record.error, answer || record.checkpoint?.summary,
+            record.checkpoint?.files.length ? `产物（保存在电脑）：\n${record.checkpoint.files.join('\n')}` : ''].filter(Boolean).join('\n\n')
+          await store.update((state) => {
+            const saved = state.runs.find(item => item.id === run.id)
+            if (saved) { saved.deliveryText = body; saved.deliveries = channels.map(channel => ({ channel, status: 'pending' as const })) }
+          })
+          await deliver(run.id, username)
+        }
+      }
+    }
   }
   const launch = (task: AutomationTask, run: AutomationRun, username: string) => {
     const tracked: { promise: Promise<void>; owner: string; agent?: Agent } = { promise: Promise.resolve(), owner: username }
@@ -234,12 +279,18 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
             })
           }
         })
+      } else if (endpoint === 'retry-delivery') {
+        const input = z.object({ id: z.string().min(1) }).strict().parse(payload)
+        const run = (await store.read()).runs.find(item => item.id === input.id && item.owner === username)
+        if (!run || run.status === 'running') throw new Error('运行记录不存在或任务尚未结束')
+        await deliver(input.id, username, true)
       } else if (endpoint === 'delete-run') {
         const input = z.object({ id: z.string().min(1) }).strict().parse(payload)
         await store.update((state) => {
           const run = state.runs.find(run => run.id === input.id && run.owner === username)
           if (run === undefined) throw new Error('运行记录不存在')
           if (run.status === 'running') throw new Error('执行中的记录暂不可删除')
+          if (delivering.has(run.id)) throw new Error('推送中的记录暂不可删除')
           state.runs = state.runs.filter(item => item.id !== run.id)
         })
       } else if (endpoint === 'run') {

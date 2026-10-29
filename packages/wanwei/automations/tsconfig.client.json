@@ -11,9 +11,15 @@
     "src/contract.ts"
   ],
   "references": [
-    { "path": "../../api/remotes/tsconfig.client.json" },
-    { "path": "../../api/workspace-controller/tsconfig.client.json" },
-    { "path": "../../client/ui-conversation" },
+    {
+      "path": "../../api/remotes/tsconfig.client.json"
+    },
+    {
+      "path": "../../api/workspace-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../../client/ui-conversation"
+    },
     {
       "path": "../../../vendor/cordis"
     },
@@ -40,6 +46,9 @@
     },
     {
       "path": "../../client/ui-session"
+    },
+    {
+      "path": "../connectors/tsconfig.client.json"
     }
   ]
 }

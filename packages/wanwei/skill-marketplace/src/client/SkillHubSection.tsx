@@ -23,6 +23,8 @@ type Page = { items: Skill[]; total: number; pageSize: number }
 /** Only product-owned RPC and native commands cross this presentation boundary. */
 export interface SkillHubSectionProps {
   active: boolean
+  /** The internet-skill policy also governs SkillHub catalog and installed receipts. */
+  access?: 'available' | 'disable' | 'hide'
   installedOnly: boolean
   installedQuery?: string
   installedPlatforms?: readonly { id: string; slug: string; name: string; summary: string; searchText: string; card: ReactNode }[]
@@ -57,7 +59,7 @@ function SkillHubIcon({ skill, request }: { skill: Skill; request: SkillHubSecti
 
 /** Isolated remote catalog; local receipts remain available without the upstream. */
 export function SkillHubSection({
-  active, installedOnly, installedQuery = '', installedPlatforms, request: remoteRequest, invoke, onUse, onCount, onNotice,
+  active, access = 'available', installedOnly, installedQuery = '', installedPlatforms, request: remoteRequest, invoke, onUse, onCount, onNotice,
 }: SkillHubSectionProps) {
   const request = remoteRequest
   const sectionRef = useRef<HTMLElement>(null)
@@ -118,16 +120,16 @@ export function SkillHubSection({
   }, [active, invoke, retry])
 
   useEffect(() => {
-    if (!active || installedOnly) return
+    if (!active || installedOnly || access !== 'available') return
     let disposed = false
     void request('categories', {}).then((value) => {
       if (!disposed) setCategories((value as { items: { key: string; name: string }[] }).items)
     }).catch(() => { /* The searchable list remains usable if optional categories fail. */ })
     return () => { disposed = true }
-  }, [active, installedOnly, request, retry])
+  }, [active, access, installedOnly, request, retry])
 
   useEffect(() => {
-    if (!active || installedOnly) return
+    if (!active || installedOnly || access !== 'available') return
     const current = ++generation.current
     setLoading(true)
     setError('')
@@ -136,7 +138,7 @@ export function SkillHubSection({
     }).catch((e: unknown) => { if (current === generation.current) setError(errorText(e)) })
       .finally(() => { if (current === generation.current) setLoading(false) })
     return () => { generation.current++ }
-  }, [active, installedOnly, query, category, sort, page, retry, request])
+  }, [active, access, installedOnly, query, category, sort, page, retry, request])
 
   useEffect(() => {
     detailGeneration.current++
@@ -228,7 +230,7 @@ export function SkillHubSection({
   }
   const ownRecord = (skill: Skill) => installed.find(item => item.slug === skill.slug)
   const cards: Skill[] = installedOnly
-    ? installed.filter(item => `${item.name} ${item.summary}`.toLowerCase().includes(installedQuery.toLowerCase()))
+    ? installed.filter(item => access !== 'hide' && `${item.name} ${item.summary}`.toLowerCase().includes(installedQuery.toLowerCase()))
       .map(item => ({ ...item, author: '', category: '', paid: false, requiresApiKey: false }))
     : data.items.slice(0, 12)
   const selectedRecord = selected ? ownRecord(selected) : undefined
@@ -241,22 +243,26 @@ export function SkillHubSection({
     || (platform.name.trim().toLocaleLowerCase() === receipt.name.trim().toLocaleLowerCase()
       && platform.summary.trim() === receipt.summary.trim())
   const installedCards: { key: string; text: string; source: string; card?: ReactNode; skill?: Skill }[] = [
-    ...(installedPlatforms ?? []).filter(item => installedSource === 'platform'
+    ...(installedPlatforms ?? []).filter(item => access !== 'available' || installedSource === 'platform'
       || !installed.some(receipt => sameSkill(item, receipt)))
       .map(item => ({ key: `platform:${item.id}`, text: item.searchText, source: 'platform', card: item.card })),
-    ...cards.map(skill => ({ key: `skillhub:${skill.slug}`, text: `${skill.name} ${skill.summary}`, source: 'skillhub', skill })),
+    ...(access === 'hide' ? [] : cards.map(skill => ({ key: `skillhub:${skill.slug}`, text: `${skill.name} ${skill.summary}`, source: 'skillhub', skill }))),
   ].filter(item => (installedSource === '' || item.source === installedSource)
     && item.text.toLowerCase().includes(installedSearch.toLowerCase()))
   const installedPages = Math.max(1, Math.ceil(installedCards.length / 12))
+  useEffect(() => { if (access === 'hide' && installedSource === 'skillhub') setInstalledSource('') }, [access, installedSource])
   const currentInstalledPage = Math.min(installedPage, installedPages)
   useEffect(() => { setInstalledPage(currentInstalledPage) }, [currentInstalledPage])
   const visibleCards = integrated
     ? installedCards.slice((currentInstalledPage - 1) * 12, currentInstalledPage * 12)
     : cards.map((skill, index) => ({ key: `${skill.slug}:${index}`, skill, card: undefined }))
   const renderHubCard = (skill: Skill, key: string) => <button type="button" className="dsh-skill-card wanwei-skillhub-card"
-    key={key} onClick={() => { void openDetail(skill) }}>
+    key={key} disabled={access !== 'available'}
+    title={access !== 'available' ? productText('当前网络环境不可达，请检查您的网络') : undefined}
+    onClick={() => { void openDetail(skill) }}>
     <span className="dsh-skill-card-visual">
-      <span className="dsh-skill-card-icon wanwei-skillhub-icon"><SkillHubIcon skill={skill} request={request} /></span>
+      <span className="dsh-skill-card-icon wanwei-skillhub-icon">{access === 'available'
+        ? <SkillHubIcon skill={skill} request={request} /> : <span aria-hidden="true">✦</span>}</span>
       {ownRecord(skill) && <span className="dsh-skill-installed-badge">{productText('已安装')}</span>}
     </span>
     <span className="dsh-skill-card-body"><span className="dsh-skill-card-meta">
@@ -267,6 +273,14 @@ export function SkillHubSection({
   </button>
 
   if (!active) return null
+  if (!installedOnly && access === 'hide') return null
+  if (!installedOnly && access === 'disable') return (
+    <section className="wanwei-skillhub" aria-label={productText('SkillHub 技能')} aria-disabled="true">
+      <div className="dsh-skill-section-header"><h2>{productText('SkillHub 技能')}</h2></div>
+      <ServiceUnavailable variant="skillhub" title={productText('SkillHub 技能暂不可用')}
+        description={productText('当前内网设置已灰化需要互联网的技能。')} />
+    </section>
+  )
   if (error && !loading && !installedOnly) return (
     <section className="wanwei-skillhub" aria-label={productText('SkillHub 技能')}>
       <div className="dsh-skill-section-header"><h2>{productText('SkillHub 技能')}</h2></div>
@@ -281,7 +295,8 @@ export function SkillHubSection({
     {integrated && <CatalogToolbar searchLabel={productText('搜索技能')} keyword={installedKeyword} onKeyword={setInstalledKeyword}
       onSearch={() => { setInstalledSearch(installedKeyword.trim()); setInstalledPage(1) }}
       categoryLabel={productText('全部技能')} categories={[
-        { key: 'platform', name: productText('平台技能') }, { key: 'skillhub', name: productText('SkillHub技能') },
+        { key: 'platform', name: productText('平台技能') },
+        ...(access === 'hide' ? [] : [{ key: 'skillhub', name: productText('SkillHub技能') }]),
       ]} category={installedSource} onCategory={(value) => { setInstalledSource(value); setInstalledPage(1) }}
       page={currentInstalledPage} pages={installedPages} onPage={setInstalledPage} />}
     {localError && <div role="status" className="wanwei-skillhub-status">{productText('本地安装状态暂不可用：')}{localError}<button type="button" onClick={() => { setRetry(v => v + 1) }}>{productText('重试')}</button></div>}

@@ -9,6 +9,8 @@ English | [中文](README.zh.md)
 
 ## Summary
 
+The automation editor offers separate Feishu, DingTalk and WeChat delivery switches below its schedule, all off by default. Authorization reuses connector panels without losing the draft. The Host sends the final answer or failure/waiting status independently of model tools; run records retain delivery status and allow delivery-only retry. Feishu sends as the bot to its authenticated owner, DingTalk sends as the signed-in user to their own account, and WeChat uses the latest bound-owner inbound conversation. WeChat requires an initial inbound message; expired reply contexts fail delivery. Files are listed by desktop path; attachments are not uploaded. Legacy connector tool selections do not enable delivery.
+
 Users can browse connector categories and inspect demonstration dialogs. The DingTalk card connects personal DingTalk Workspace CLI (`dws`) auth and installs the `dws-cli` skill under `$DSH_HOME/skills`. The WeChat Assistant card binds personal WeChat through Tencent iLink QR (in-app modal) and runs an inbound chat bridge so phone messages drive desktop Sessions with replies returned to WeChat; WeChat shows 「对方正在输入…」 while the desktop task runs. System Settings controls the page entry for Internet and intranet deployments; the default enables Internet and hides intranet.
 
 ## Table of Contents

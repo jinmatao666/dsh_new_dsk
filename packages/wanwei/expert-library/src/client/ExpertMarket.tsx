@@ -166,6 +166,8 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
     }
   }, [loadExperts, catalogRevision])
   const accessibleExperts = publishedExperts.filter(expert => internetCatalogAccess(networkState, expert.requiresInternet !== false) !== 'hide')
+    .sort((a, b) => Number(internetCatalogAccess(networkState, a.requiresInternet !== false) !== 'available')
+      - Number(internetCatalogAccess(networkState, b.requiresInternet !== false) !== 'available'))
   const categories = ['全部', ...new Set([...accessibleExperts]
     .sort((left, right) => (left.categoryOrder ?? 0) - (right.categoryOrder ?? 0))
     .map(expert => expert.category))]
@@ -233,7 +235,13 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
     {catalogLoading ? <p role="status">{productText('正在连接服务…')}</p> : loadError !== null
       ? <ServiceUnavailable variant="experts" title={productText('暂时无法连接专家库')}
         description={productText('当前网络无法连接专家服务，请检查网络连接或联系管理员。')} /> :
-      <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() =>{  setCategory(item) }}>{item}</button>)}</div>{visibleExperts.length === 0 && <p>{productText('当前暂无已上架的专家。')}</p>}<div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} disabled={internetCatalogAccess(networkState, expert.requiresInternet !== false) !== 'available'} title={internetCatalogAccess(networkState, expert.requiresInternet !== false) !== 'available' ? productText('当前网络环境不可达，请检查您的网络') : undefined} onClick={() =>{  openExpert(expert) }}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>
+      <><div className="dsh-expert-category-row">{categories.map(item => <button type="button" key={item} className={category === item ? 'active' : ''} onClick={() =>{ setCategory(item) }}>{item}</button>)}</div>
+        {visibleExperts.length === 0 && <ServiceUnavailable variant="experts"
+          title={productText('当前没有可用的专家')}
+          description={accessibleExperts.length === 0 && publishedExperts.length > 0 && networkState.mode === 'intranet'
+            ? productText('当前内网设置隐藏了需要互联网的专家。可离线使用的专家发布后会显示在这里。')
+            : productText('当前暂无已上架的专家。')} />}
+        <div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} disabled={internetCatalogAccess(networkState, expert.requiresInternet !== false) !== 'available'} title={internetCatalogAccess(networkState, expert.requiresInternet !== false) !== 'available' ? productText('当前网络环境不可达，请检查您的网络') : undefined} onClick={() =>{ openExpert(expert) }}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>
     }
     {selected !== null && <ExpertDetailDialog expert={selected} launching={launching} launchError={launchError} onClose={() => { setSelected(null) }} onStart={() => { void startExpert() }} />}
   </section>

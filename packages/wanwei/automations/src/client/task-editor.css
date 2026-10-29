@@ -85,3 +85,8 @@
   .automation-calendar-months section:last-child { display: none; }
   .automation-validity-menu { width: 340px; }
 }
+
+.automation-push-options { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 12px 28px; }
+.automation-push-option { display: inline-flex; align-items: center; gap: 10px; color: #334155; font-size: 14px; }
+.automation-push-option small { color: #64748b; }
+.automation-push-options > p { flex-basis: 100%; margin: 0; font-size: 12px; color: #64748b; }

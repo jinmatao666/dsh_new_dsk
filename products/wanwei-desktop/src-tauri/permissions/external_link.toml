@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-open-external-link"
+description = "Allows the main desktop UI to open HTTP(S) links through the native network policy."
+commands.allow = ["open_external_link"]

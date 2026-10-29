@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 use tauri::{Manager, State};
+use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
 pub struct NetworkPolicy(pub Mutex<(bool, Vec<String>)>);
@@ -46,6 +47,19 @@ pub fn may_open(app: &tauri::AppHandle, url: &Url) -> bool {
         .unwrap_or(false)
 }
 #[tauri::command]
+pub fn open_external_link(app: tauri::AppHandle, address: String) -> Result<(), String> {
+    let url = Url::parse(&address).map_err(|_| "链接地址无效".to_string())?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err("仅支持打开 HTTP 或 HTTPS 网页".into());
+    }
+    if !may_open(&app, &url) {
+        return Err("纯内网环境不可用".into());
+    }
+    app.opener()
+        .open_url(url.as_str(), None::<&str>)
+        .map_err(|error| format!("无法打开系统浏览器：{error}"))
+}
+#[tauri::command]
 pub fn set_network_environment(
     mode: String,
     internal_origins: Vec<String>,
@@ -72,6 +86,19 @@ pub fn set_network_environment(
 mod tests {
     use super::internal_link;
     use url::Url;
+    #[test]
+    fn only_main_window_has_the_external_link_command() {
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/desktop.json")).unwrap();
+        assert_eq!(capability["webviews"], serde_json::json!(["main"]));
+        assert!(capability["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|permission| permission == "allow-open-external-link"));
+        let permission = include_str!("../permissions/external_link.toml");
+        assert!(permission.contains("commands.allow = [\"open_external_link\"]"));
+    }
     #[test]
     fn main_window_can_synchronize_network_environment() {
         let capability: serde_json::Value =

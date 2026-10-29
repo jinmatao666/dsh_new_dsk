@@ -98,6 +98,13 @@ test('submits edited name with confirmation password and keeps failed edits avai
     .find((label) => label.textContent === '显示名称')
     .querySelector('input');
   await change(input, '新昵称');
+  const backdrop = container.querySelector('.zjugis-modal-backdrop');
+  await act(async () => {
+    backdrop.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    backdrop.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  expect(container.textContent).toContain('编辑用户');
+  expect(input.value).toBe('新昵称');
   await click('保存用户');
   API.put.mockResolvedValueOnce({
     data: { success: false, message: '管理员密码错误' },

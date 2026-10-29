@@ -198,6 +198,30 @@ func AdminUpdateExpertWebsite(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
+// AdminDeleteExpertWebsite removes the registration and launch tickets while retaining usage history.
+func AdminDeleteExpertWebsite(c *gin.Context) {
+	key := c.Param("key")
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where(clause.Eq{Column: "key", Value: key}).Delete(&model.ExpertWebProfile{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return tx.Where("expert_key = ?", key).Delete(&model.ExpertWebTicket{}).Error
+	})
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "专家不存在"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "删除专家失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
 // AdminPublishExpertWebsite changes whether the website appears in the desktop catalog.
 func AdminPublishExpertWebsite(c *gin.Context) {
 	var input struct {

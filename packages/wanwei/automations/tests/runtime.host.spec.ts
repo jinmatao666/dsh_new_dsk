@@ -67,6 +67,11 @@ it.each(['internet', 'intranet'])('loads the plugin, persists and executes real 
     ctx.provide('connection', { rpc: { handle: (_channel: string, next: ConnectionRpcHandler) => {
       handler = next; return async () => { handler = undefined }
     } } } as never)
+    const notify = vi.fn(async (channel: string, _text: string) => {
+      if (channel === 'dingtalk' && notify.mock.calls.filter(call => call[0] === 'dingtalk').length === 1) throw new Error('授权已失效')
+    })
+    const prepare = vi.fn(async () => '推送由系统负责，不调用连接器发送结果。')
+    ctx.provide('wanweiConnectors', { options: async () => [], prepare, notify })
     ctx.provide('wanweiNetworkPolicy', { getSnapshot: () => ({ mode }) } as never)
     ctx.provide('shell', { sandboxMode: 'workspace-write' } as never)
     ctx.provide('approval', { config: { policy: 'ask' } } as never)
@@ -98,7 +103,7 @@ it.each(['internet', 'intranet'])('loads the plugin, persists and executes real 
       return result.value
     }
     const saved = await call('save', { task: { name: '测试任务', prompt: '只回复完成', cwd: dir,
-      cadence: 'daily', time: '09:00', enabled: false, model: { provider: 'mock', model: 'task-model' } } })
+      cadence: 'daily', time: '09:00', enabled: false, pushChannels: ['feishu', 'dingtalk', 'wechat'], model: { provider: 'mock', model: 'task-model' } } })
     expect(saved.tasks).toHaveLength(1)
     expect((await new AutomationStore(join(dir, 'tasks.json')).snapshot('account-a')).tasks).toHaveLength(1)
     await call('run', { id: saved.tasks[0]!.id })
@@ -109,6 +114,14 @@ it.each(['internet', 'intranet'])('loads the plugin, persists and executes real 
     expect(ctx.sessions.get(SessionId(run.sessionId!))?.header.cwd).toBe(dir)
     expect(archiveSession).not.toHaveBeenCalled()
     expect(adapter.requests).toHaveLength(3)
+    await expect.poll(async () => (await call('list', {})).runs[0]?.deliveries?.map(row => row.status)).toEqual(['sent', 'failed', 'sent'])
+    expect(notify.mock.calls[0]?.[1]).toContain('真实执行链路结果')
+    expect(prepare.mock.calls[0]?.[0]).toEqual([])
+    await call('retry-delivery', { id: run.id })
+    expect((await call('list', {})).runs[0]?.deliveries?.map(row => row.status)).toEqual(['sent', 'sent', 'sent'])
+    expect(notify.mock.calls.filter(row => row[0] === 'feishu')).toHaveLength(1)
+    expect(adapter.requests).toHaveLength(3)
+
     expect(adapter.requests[0]).toMatchObject({ model: 'task-model' })
     expect(saveDefault).not.toHaveBeenCalled()
     expect(setPermission).toHaveBeenCalledWith(ctx.sessions.get(SessionId(run.sessionId!)), 'danger-full-access')

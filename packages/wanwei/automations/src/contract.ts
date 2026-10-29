@@ -18,8 +18,10 @@ export interface AutomationTask {
   model?: ModelSelection | undefined
   /** Absent defaults to full access. */
   fullAccess?: boolean | undefined
-  /** Explicit connector capability selection; absent means no connectors. */
+  /** Legacy tool selection retained for reading saved tasks; does not enable result delivery. */
   connectors?: ('feishu' | 'dingtalk' | 'wechat')[] | undefined
+  /** Automatic delivery channels; absent means all switches are off. */
+  pushChannels?: ('feishu' | 'dingtalk' | 'wechat')[] | undefined
   enabled: boolean
   /** Zero means no eligible future occurrence. */
   nextRunAt: number
@@ -35,6 +37,9 @@ export interface AutomationRun {
   trigger: 'scheduled' | 'manual'
   sessionId?: string | undefined
   error?: string | undefined
+  /** Delivery is independent of task execution status. */
+  deliveries?: { channel: 'feishu' | 'dingtalk' | 'wechat'; status: 'pending' | 'sent' | 'failed'; error?: string | undefined }[] | undefined
+  deliveryText?: string | undefined
   /** Latest committed progress; retained for continuation in the original Session. */
   checkpoint?: AutomationCheckpoint | undefined
 }

@@ -197,7 +197,7 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
       <Table columns={columns} dataSource={filteredItems} rowKey='row_key' loading={loading} onRow={row => catalogDragProps('skill-categories', row, load)} pagination={{ pageSize: 20 }} expandedRowRender={renderExpandedSkills} expandedRowKeys={expanded.key ? [expanded.key] : []} expandIcon={false} />
     </div>
     {editor.visible && (
-      <div className='zjugis-modal-backdrop' onMouseDown={(e) => { if (e.target === e.currentTarget) closeEditor(); }}>
+      <div className='zjugis-modal-backdrop'>
         <div className='zjugis-modal'>
           <div className='zjugis-modal-head'>
             <h2>{editor.data.id ? '编辑分类' : '新建分类'}</h2>
@@ -222,7 +222,7 @@ const SkillCategory = forwardRef(({ embedded = false, keyword = '' }, ref) => {
       </div>
     )}
     {removeTarget && (
-      <div className='zjugis-modal-backdrop' onMouseDown={(event) => { if (!removing && event.target === event.currentTarget) setRemoveTarget(null); }}>
+      <div className='zjugis-modal-backdrop'>
         <div className='zjugis-modal skill-category-confirm-modal' role='dialog' aria-modal='true' aria-labelledby='remove-skill-title'>
           <div className='zjugis-modal-head'>
             <div className='skill-category-confirm-heading'>

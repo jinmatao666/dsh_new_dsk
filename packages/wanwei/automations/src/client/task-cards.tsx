@@ -1,5 +1,5 @@
 /** Desktop task cards backed exclusively by authenticated Host data. */
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { productText as text } from './locales/product.ts'
 import type { AutomationSnapshot, AutomationTask } from '../contract.ts'
 import { CreationPicker } from './creation.tsx'
@@ -18,6 +18,7 @@ export interface AutomationApi {
   listWorkspaces(): Promise<{ title: string; path: string }[]>
   chooseDirectory(): Promise<string | null>
   listModels(): Promise<ModelCatalog>
+  connectionDialog?(channel: string, complete: (connected: boolean) => void): ReactNode
   listConnectors?(): Promise<{ id: 'feishu' | 'dingtalk' | 'wechat'; name: string; icon: string; connected: boolean }[]>
 }
 
@@ -157,7 +158,7 @@ export function AutomationCards({ notify, api }: { notify: (message: string) => 
         </article>)}</div>
         {loaded && !visible.length && <div className="dsh-automation-empty"><h2>{tasks.length ? text('没有符合条件的任务') : text('尚未配置自动化')}</h2><button type="button" onClick={create}>{text('手动新建')}</button></div>}
       </>}
-      {tab === 'history' && <RunHistory heading={tabs} runs={snapshot.runs} openSession={(id) => { api.openSession(id) }} remove={setDeleteRunId} />}
+      {tab === 'history' && <RunHistory heading={tabs} runs={snapshot.runs} retryDelivery={(id) => { void mutate('retry-delivery', { id }, text('已重试推送')) }} openSession={(id) => { api.openSession(id) }} remove={setDeleteRunId} />}
       {batch && tab === 'tasks' && <footer className="automation-batch-bar" role="toolbar" aria-label={text('批量管理')}>
         <div className="automation-batch-selection">
           <label><input type="checkbox" checked={visible.length > 0 && visible.every(task => selection.includes(task.id))} onChange={(event) => { setSelection(event.target.checked ? visible.map(task => task.id) : []) }} />{text('全选当前任务')}</label>

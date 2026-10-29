@@ -25,6 +25,7 @@ export const taskInput = z.object({
   fullAccess: z.boolean().optional(),
   connectors: z.array(z.enum(['feishu', 'dingtalk', 'wechat'])).max(3)
     .refine(value => new Set(value).size === value.length, '连接器不能重复').optional(),
+  pushChannels: z.array(z.enum(['feishu', 'dingtalk', 'wechat'])).max(3).refine(v => new Set(v).size === v.length).optional(),
   enabled: z.boolean(),
 }).strict().superRefine((task, ctx) => {
   if (task.startDate !== undefined && task.endDate !== undefined && task.endDate < task.startDate) {
@@ -44,6 +45,8 @@ const runSchema = z.object({
   endedAt: z.number().int().nonnegative().optional(),
   status: z.enum(['running', 'success', 'failed', 'interrupted', 'waiting', 'incomplete']),
   trigger: z.enum(['scheduled', 'manual']), sessionId: z.string().optional(), error: z.string().optional(),
+  deliveryText: z.string().optional(),
+  deliveries: z.array(z.object({ channel: z.enum(['feishu', 'dingtalk', 'wechat']), status: z.enum(['pending', 'sent', 'failed']), error: z.string().optional() }).strict()).max(3).optional(),
   checkpoint: z.object({
     stage: z.enum(['preflight', 'progress', 'completed', 'waiting', 'incomplete']),
     summary: z.string().min(1).max(8000), nextSteps: z.array(z.string().max(2000)).max(50),

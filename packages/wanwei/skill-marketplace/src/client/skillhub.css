@@ -12,6 +12,8 @@
 .wanwei-skillhub-detail-page button:focus-visible { outline: 2px solid var(--dsw-alias-primary, #2563eb); outline-offset: 2px; }
 .wanwei-skillhub button:disabled, .wanwei-skillhub-detail-page button:disabled { opacity: .55; cursor: not-allowed; }
 .wanwei-skillhub-card { width: 100%; min-width: 0; min-height: 106px; text-align: left; font: inherit; color: inherit; }
+.wanwei-skillhub-card:disabled { opacity: .45; filter: grayscale(.65); cursor: not-allowed; }
+.wanwei-skillhub-card:disabled:hover { transform: none; box-shadow: none; }
 .wanwei-skillhub-card .dsh-skill-card-body { display: block; }
 .wanwei-skillhub-card .dsh-skill-card-meta { align-items: center; }
 .wanwei-skillhub-card .dsh-skill-card-category { background: rgb(37 99 235 / 8%); color: var(--dsw-alias-primary, #2563eb); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

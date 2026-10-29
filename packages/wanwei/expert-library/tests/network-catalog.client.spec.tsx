@@ -27,12 +27,23 @@ it.each(['hide', 'disable'] as const)('uses %s for internet experts and restores
     expect(screen.queryByRole('dialog')).toBeNull()
   }
   expect(launchExpert).not.toHaveBeenCalled()
+  expect([...view.container.querySelectorAll('.dsh-expert-card strong')].map(node => node.textContent)[0]).toBe('内网专家')
   expect([...view.container.querySelectorAll<HTMLButtonElement>('.dsh-expert-card')]
     .map(button => ({ name: button.textContent, disabled: button.disabled, hint: button.title }))).toMatchSnapshot()
   const onlineState = { ...state, directInternet: true }
   view.rerender(<ExpertMarket loadExperts={loadExperts} launchExpert={launchExpert}
     network={{ subscribe, catalogAccess: internetCatalogAccess, getSnapshot: () => onlineState }} />)
   await waitFor(() => { expect(screen.getByRole('button', { name: '联网专家' })).toHaveProperty('disabled', false) })
+})
+
+it('shows the expert illustration when an intranet hides every published expert', async () => {
+  const state: NetworkState = { mode: 'intranet', internalOrigins: [], directInternet: false,
+    internetCatalogPolicy: 'hide', internetExpertPolicy: 'hide', internetSkillPolicy: 'hide' }
+  render(<ExpertMarket loadExperts={async () => [
+    { key: 'online-only', name: '联网专家', requires_internet: true, workbench_url: 'https://example.com/' },
+  ]} network={{ subscribe: () => () => {}, catalogAccess: internetCatalogAccess, getSnapshot: () => state }} />)
+  expect(await screen.findByRole('heading', { name: '当前没有可用的专家' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: '联网专家' })).toBeNull()
 })
 
 it('refreshes administrator card and category ordering without restarting the library', async () => {

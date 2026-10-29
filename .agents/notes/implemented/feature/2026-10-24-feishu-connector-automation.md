@@ -12,7 +12,7 @@ English | [中文](2026-10-24-feishu-connector-automation.zh.md)
 
 桌面 runtime 随包固定版本的官方 `lark-cli`，构建时校验 SHA-256，运行时通过原生 argv 调用，不把密钥交给子进程环境。飞书授权、配置和退出登录由连接器页面管理；业务命令由 `feishu_cli` 工具执行。
 
-自动化任务保存连接器 ID。执行前重新检查授权状态，只向任务会话开放已选择的连接器工具。任务不选择连接器时，连接器工具全部不可用。微信只提供向最近一次入站消息对应的已绑定本人会话发送文字的工具，不提供任意联系人或群聊发送。
+自动化采用[自动化结果推送](2026-10-29-automation-result-delivery.md)中的独立推送配置；连接器身份、业务技能和双向会话机制仍由本记录描述。
 
 ## Alternatives considered
 
@@ -40,7 +40,7 @@ Feishu bidirectional tasks use the bot identity of the same self-built app to su
 
 The channel starts automatically for an authorized identity without a saved preference. A saved disabled state remains authoritative across reauthorization and restart. The connector sheet separates personal authorization from bot-channel readiness: a compact status remains visible, while setup guidance appears only for channel errors.
 
-自动化任务可能因连接器未授权、服务不可达或用户确认缺失而进入失败或等待状态。连接器选择只开放工具能力，不会在任务完成时自动推送结果。
+自动化任务可能因连接器未授权、服务不可达或用户确认缺失而进入失败或等待状态。自动化的任务结束推送由[自动化结果推送](2026-10-29-automation-result-delivery.md)负责。
 
 ## Verification
 

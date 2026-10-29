@@ -10,7 +10,7 @@ Deleting the formal application data directory removes recent skills and Session
 
 ## Decision
 
-The Windows product pins the Tauri CLI 2.11.4 NSIS template with two product changes: remove the uninstall data-deletion checkbox and remove the corresponding APPDATA/LOCALAPPDATA deletion block. Program-file cleanup, update handling and process hooks retain the upstream behavior. The release identifier stays `com.wanwei.harness`.
+The Windows product pins the Tauri CLI 2.11.4 NSIS template with two product changes: remove the uninstall data-deletion checkbox and remove the corresponding APPDATA/LOCALAPPDATA deletion block. Program-file cleanup, update handling and process hooks retain the upstream extension points. Before installation or removal, the product hook stops executables located inside the selected installation directory, including orphaned Node and Feishu CLI processes, and waits for exit. Cleanup failure stops installation with a retry prompt. The hook uses native Windows PowerShell so 64-bit executable paths remain visible from the 32-bit installer; processes outside the installation directory and the installer itself are excluded. The release identifier stays `com.wanwei.harness`.
 
 The installer-data check rejects data-deletion controls, user-data removal commands in the template or hooks, the default template and identity changes. Installer CI and both runner packaging commands execute it. A native migration regression verifies that skills, Sessions, settings and the marker added or retained after migration survive repeated startup migration calls. The existing [formal data migration](../feature/2026-10-10-wanwei-formal-data-migration.md) remains responsible for historical imports.
 

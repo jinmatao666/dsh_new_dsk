@@ -13,10 +13,11 @@ const statusLabel = (status: AutomationRun['status']) => status === 'running' ? 
  * @param props - Committed records and existing execution controls.
  * @returns Filterable record table.
  */
-export function RunHistory({ runs, openSession, remove, heading }: {
+export function RunHistory({ runs, openSession, remove, retryDelivery, heading }: {
   runs: AutomationRun[]
   openSession: (id: string) => void
   remove: (id: string) => void
+  retryDelivery?: (id: string) => void
   heading?: ReactNode
 }) {
   const [status, setStatus] = useState('all')
@@ -52,7 +53,10 @@ export function RunHistory({ runs, openSession, remove, heading }: {
             <ul>{run.checkpoint.nextSteps.map((step, index) => <li key={index}>{step}</li>)}</ul>
           </details>}
         </td>
-        <td><span className={`automation-run-status ${run.status}`}><i aria-hidden="true" />{statusLabel(run.status)}</span></td>
+        <td>{run.deliveries?.map(item => <div key={item.channel} title={item.error}>
+          {{ feishu: '飞书', dingtalk: '钉钉', wechat: '微信' }[item.channel]}：{text(item.status === 'sent' ? '推送成功' : item.status === 'failed' ? '推送失败' : '正在推送')}
+          {item.status === 'failed' && retryDelivery && <button type="button" onClick={(event) => { event.stopPropagation(); retryDelivery(run.id) }}>{text('重试推送')}</button>}
+        </div>)}<span className={`automation-run-status ${run.status}`}><i aria-hidden="true" />{statusLabel(run.status)}</span></td>
         <td>{new Date(run.startedAt).toLocaleString()}</td>
         <td>{run.endedAt === undefined ? (run.status === 'running' ? text('执行中') : '—') : text('{0} 秒', [Math.max(0, Math.round((run.endedAt - run.startedAt) / 1000))])}</td>
         <td>{text('本地')}</td>

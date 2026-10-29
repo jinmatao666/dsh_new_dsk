@@ -17,6 +17,31 @@ const record = { ...skill, source: 'skillhub', localSlug: 'pdf-helper', sha256: 
 const page = { items: [skill], total: 13, pageSize: 12 }
 
 describe('SkillHub marketplace workflow', () => {
+  it('hides SkillHub on an intranet while keeping installed platform skills visible', async () => {
+    const request = vi.fn()
+    const invoke = vi.fn(async () => [record])
+    const props = { active: true, access: 'hide' as const, request, invoke, onUse: vi.fn(), onCount: vi.fn() }
+    const view = render(<SkillHubSection {...props} installedOnly={false} />)
+    expect(screen.queryByLabelText('SkillHub 技能')).toBeNull()
+    view.rerender(<SkillHubSection {...props} installedOnly installedPlatforms={[
+      { id: 'local', slug: 'local', name: '本地技能', summary: '可离线使用', searchText: '本地技能', card: <div key="local">本地技能卡片</div> },
+    ]} />)
+    expect(await screen.findByText('本地技能卡片')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /PDF 助手/ })).toBeNull()
+    expect(request).not.toHaveBeenCalled()
+  })
+  it('grays out SkillHub without requesting the remote catalog', async () => {
+    const request = vi.fn()
+    const invoke = vi.fn(async () => [record])
+    const props = { active: true, access: 'disable' as const, request, invoke, onUse: vi.fn(), onCount: vi.fn() }
+    const view = render(<SkillHubSection {...props} installedOnly={false} />)
+    expect(screen.getByRole('heading', { name: 'SkillHub 技能暂不可用' })).toBeTruthy()
+    expect(request).not.toHaveBeenCalled()
+    view.rerender(<SkillHubSection {...props} installedOnly installedPlatforms={[]} />)
+    const card = await screen.findByRole('button', { name: /PDF 助手/ }) as HTMLButtonElement
+    expect(card.disabled).toBe(true)
+    expect(request).not.toHaveBeenCalled()
+  })
   it('shows a SkillHub illustration only after request failure and reloads on reopening', async () => {
     let offline = true
     const request = vi.fn(async (operation: string) => operation === 'categories' ? { items: [] } : page)

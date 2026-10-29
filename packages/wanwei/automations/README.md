@@ -9,6 +9,8 @@ English | [中文](README.zh.md)
 
 ## Summary
 
+The automation editor offers separate Feishu, DingTalk and WeChat delivery switches below its schedule, all off by default. Authorization reuses connector panels without losing the draft. The Host sends the final answer or failure/waiting status independently of model tools; run records retain delivery status and allow delivery-only retry. Feishu sends as the bot to its authenticated owner, DingTalk sends as the signed-in user to their own account, and WeChat uses the latest bound-owner inbound conversation. WeChat requires an initial inbound message; expired reply contexts fail delivery. Files are listed by desktop path; attachments are not uploaded. Legacy connector tool selections do not enable delivery.
+
 Users can create local tasks, pause them, run them immediately and open their execution Sessions. Tasks and run records survive page closure and desktop restart. The desktop must remain running and logged in; missed schedules are not replayed. Administrator entry visibility remains effective, but the intranet label does not disable local scheduling. Model and task dependencies must actually be reachable; this package does not enable cloud scheduling.
 
 In intranet mode, the sidebar entry requires an enabled successful direct-connectivity probe; otherwise it is grey and non-clickable with the shared network-unreachable tooltip. This entry policy does not pause or delete existing tasks. Administrator visibility remains effective, and Internet mode is unchanged.

@@ -24,10 +24,11 @@ export function browseMarketplaceCatalog<T extends { marketplacePublished?: bool
  * @param skills - Filtered platform skill entries.
  * @param sort - Administrator order by default, or explicit downloads/updated-time order.
  * @param requestedPage - One-based page clamped to the available range.
+ * @param priority - Optional availability rank applied before pagination, while preserving the selected order within each rank.
  * @returns Current page entries, page number and total page count.
  */
 export function pagePlatformCatalog<T extends { installs: string; updatedAt?: string | number }>(
-  skills: readonly T[], sort: string, requestedPage: number,
+  skills: readonly T[], sort: string, requestedPage: number, priority: (skill: T) => number = () => 0,
 ): { items: T[]; page: number; pages: number } {
   const time = (value: string | number | undefined) => {
     if (typeof value === 'number') return value < 1e12 ? value * 1000 : value
@@ -37,6 +38,8 @@ export function pagePlatformCatalog<T extends { installs: string; updatedAt?: st
   const sorted = sort === 'recommended' ? [...skills] : [...skills].sort((a, b) => sort === 'downloads'
     ? (Number(b.installs) || 0) - (Number(a.installs) || 0)
     : time(b.updatedAt) - time(a.updatedAt))
+  // 可用技能先于灰化技能，原有排序只决定各组内部顺序。
+  sorted.sort((a, b) => priority(a) - priority(b))
   const pages = Math.max(1, Math.ceil(sorted.length / 12))
   const page = Math.max(1, Math.min(requestedPage, pages))
   return { items: sorted.slice((page - 1) * 12, page * 12), page, pages }

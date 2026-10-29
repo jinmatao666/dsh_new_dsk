@@ -4,7 +4,7 @@ import { API, showError, showSuccess } from '../helpers';
 import './ExpertWebTable.css';
 import CustomSelect from './CustomSelect';
 
-const blank = { key: '', name: '', subtitle: '', category: '', summary: '', icon: '', tags: '[]', scenario: '', materials: '', detail_sections: '[]', footer_note: '', provider: '', workbench_url: '', sort_order: null, requires_internet: true };
+const blank = { key: '', name: '', subtitle: '', category: '', summary: '', icon: '', tags: '', scenario: '', materials: '', detail_sections: '[]', footer_note: '', provider: '', workbench_url: '', sort_order: null, requires_internet: true };
 const lines = text => JSON.stringify(text.split('\n').map(item => item.trim()).filter(Boolean));
 const asLines = value => { try { return JSON.parse(value || '[]').join('\n'); } catch { return ''; } };
 const sectionDefaults = [
@@ -28,6 +28,7 @@ export default function ExpertWebTable() {
   const [categories, setCategories] = useState([]);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [deletingKey, setDeletingKey] = useState(null);
   const [credential, setCredential] = useState('');
   const updateSection = (index, field, value) => setEditing(current => {
     if (!current) return current;
@@ -83,7 +84,7 @@ export default function ExpertWebTable() {
     setSaving(true);
     try {
       const sections = detailSections(editing);
-      const payload = { ...editing, key: editing.key.trim(), name: editing.name.trim(), provider: editing.provider.trim(), workbench_url: editing.workbench_url.trim(), detail_sections: JSON.stringify(sections), scenario: sections[0]?.content || '', materials: sections[1]?.content || '' };
+      const payload = { ...editing, tags: lines(editing.tags), key: editing.key.trim(), name: editing.name.trim(), provider: editing.provider.trim(), workbench_url: editing.workbench_url.trim(), detail_sections: JSON.stringify(sections), scenario: sections[0]?.content || '', materials: sections[1]?.content || '' };
       const response = items.some(item => item.key === payload.key)
         ? await API.put(`/api/expert-web/admin/${encodeURIComponent(payload.key)}`, payload)
         : await API.post('/api/expert-web/admin/', payload);
@@ -114,15 +115,27 @@ export default function ExpertWebTable() {
     } catch (error) { showError(error.response?.data?.message || error.message || '重置失败'); }
   };
 
+  const remove = async item => {
+    if (deletingKey !== null || !window.confirm(`确定删除「${item.name}」？删除后将从专家库移除，接入凭据和未使用的启动票据失效。历史使用统计会保留，服务器上的专家文件不会删除。`)) return;
+    setDeletingKey(item.key);
+    try {
+      const response = await API.delete(`/api/expert-web/admin/${encodeURIComponent(item.key)}`);
+      if (!response.data?.success) throw new Error(response.data?.message || '删除失败');
+      showSuccess('专家已删除');
+      await load();
+    } catch (error) { showError(error.response?.data?.message || error.message || '删除失败'); }
+    finally { setDeletingKey(null); }
+  };
+
   return <section className='expert-web-admin'>
     <header><div><h2>专家</h2><p>配置卡片、介绍和网站地址。上架后桌面端自动显示；网页功能在各自独立网站中维护。</p></div><button type='button' className='primary' onClick={() => setEditing({ ...blank })}>新增专家</button></header>
     <div className='expert-web-list'>{items.length === 0 && <p className='empty'>还没有专家。先登记网站及提供方，再上架。</p>}{items.map(item => <article key={item.key} {...catalogDragProps('experts', item, load)}>
       <div className='expert-web-icon'>{item.icon?.startsWith('data:image/') ? <img src={item.icon} alt='' /> : '✦'}</div>
       <div className='expert-web-info'><strong>{item.name}</strong><small>{item.key} · {item.provider}</small><p>{item.workbench_url}</p></div>
       <span className={item.published ? 'live' : 'draft'}>{item.published ? '已上架' : '未上架'}</span>
-      <div className='actions'><button type='button' onClick={() => setEditing({ ...item })}>编辑</button><button type='button' onClick={() => void rotate(item)}>重置凭据</button><button type='button' onClick={() => void publish(item)}>{item.published ? '下架' : '上架'}</button><CatalogOrderActions kind='experts' item={item} items={items} reload={load} /></div>
+      <div className='actions'><button type='button' disabled={deletingKey === item.key} onClick={() => setEditing({ ...item, tags: asLines(item.tags) })}>编辑</button><button type='button' disabled={deletingKey === item.key} onClick={() => void rotate(item)}>重置凭据</button><button type='button' disabled={deletingKey === item.key} onClick={() => void publish(item)}>{item.published ? '下架' : '上架'}</button><button type='button' className='danger' disabled={deletingKey !== null} onClick={() => void remove(item)}>{deletingKey === item.key ? '删除中…' : '删除'}</button><CatalogOrderActions kind='experts' item={item} items={items} reload={load} /></div>
     </article>)}</div>
-    {editing && <div className='expert-web-backdrop' onMouseDown={event => { if (event.target === event.currentTarget) setEditing(null); }}><section className='expert-web-dialog' role='dialog' aria-modal='true' aria-label='专家资料'>
+    {editing && <div className='expert-web-backdrop'><section className='expert-web-dialog' role='dialog' aria-modal='true' aria-label='专家资料'>
       <header><h2>{items.some(item => item.key === editing.key) ? '编辑专家' : '新增专家'}</h2><button type='button' aria-label='关闭' onClick={() => setEditing(null)}>×</button></header>
       <div className='fields'>
         <label>专家编号<input value={editing.key} disabled={items.some(item => item.key === editing.key)} placeholder='geology-analysis' onChange={event => setEditing({ ...editing, key: event.target.value })} /></label>
@@ -135,7 +148,7 @@ export default function ExpertWebTable() {
         <label>副标题<input value={editing.subtitle} onChange={event => setEditing({ ...editing, subtitle: event.target.value })} /></label>
         <label className='wide'>专家主图标（卡片和介绍弹窗共用）<span className='expert-web-icon-editor'><input type='file' accept='image/png,image/jpeg,image/webp,image/gif' onChange={uploadIcon} />{editing.icon?.startsWith('data:image/') && <img className='expert-web-icon-preview' src={editing.icon} alt='专家图标预览' />}</span><small>上传 PNG、JPEG、WebP 或 GIF；保存后桌面端自动同步。</small></label>
         <label className='wide'>简介<textarea value={editing.summary} onChange={event => setEditing({ ...editing, summary: event.target.value })} /></label>
-        <label className='wide'>标签（每行一个）<textarea value={asLines(editing.tags)} onChange={event => setEditing({ ...editing, tags: lines(event.target.value) })} /></label>
+        <label className='wide'>标签（每行一个）<textarea value={editing.tags} onChange={event => setEditing({ ...editing, tags: event.target.value })} /></label>
         <div className='wide expert-web-section-editor'><h3>介绍弹窗的四块内容</h3><p>卡片使用上方的名称、副标题、简介和标签；这里的内容只显示在点击卡片后的弹窗中。</p><div className='expert-web-section-grid'>{detailSections(editing).map((section, index) => <fieldset key={index}><legend>第 {index + 1} 块</legend><label>标题<input value={section.title} onChange={event => updateSection(index, 'title', event.target.value)} /></label><label>右侧小标题<input value={section.subtitle} onChange={event => updateSection(index, 'subtitle', event.target.value)} /></label><label>正文<textarea value={section.content} onChange={event => updateSection(index, 'content', event.target.value)} /></label></fieldset>)}</div></div>
         <label className='wide'>弹窗底部说明<input value={editing.footer_note || ''} onChange={event => setEditing({ ...editing, footer_note: event.target.value })} placeholder='例如：录音转写和材料整理完成后生成正式纪要' /></label>
       </div>
