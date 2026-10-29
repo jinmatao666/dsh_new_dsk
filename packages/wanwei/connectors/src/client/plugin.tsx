@@ -65,7 +65,7 @@ export function Connectors({ dingTalk, weChat, feishu, onTryPrompt, checkConnect
     }
     void dingTalk.status().then((value) => { remember('dingtalk', value.authed && value.skillInstalled) }).catch(() => { remember('dingtalk', false) })
     void weChat.status().then((value) => { remember('wechat', value.authed) }).catch(() => { remember('wechat', false) })
-    if (feishu) void feishu.call('status').then((value) => { remember('feishu', value.authed && !value.authorizing && value.missingScopes.length === 0) }).catch(() => { remember('feishu', false) })
+    if (feishu) void feishu.call('status').then((value) => { remember('feishu', value.authed && !value.authorizing && value.missingScopes.length === 0 && value.bridge.state === 'ready') }).catch(() => { remember('feishu', false) })
     return () => { disposed = true }
   }, [dingTalk, weChat, feishu, selected])
   const tryPrompt = (id: string, prompt: string) => { setSelected(null); onTryPrompt(prompt, id) }
@@ -96,7 +96,7 @@ export function Connectors({ dingTalk, weChat, feishu, onTryPrompt, checkConnect
           <button type="button" aria-label={text('关闭')} onClick={() => { setSelected(null) }}>×</button></header>
         {entry.id === 'feishu' && feishu ? <FeishuPanel api={feishu}
           onStatus={(value) => {
-            setConnected(current => ({ ...current, feishu: value.authed && !value.authorizing && value.missingScopes.length === 0 }))
+            setConnected(current => ({ ...current, feishu: value.authed && !value.authorizing && value.missingScopes.length === 0 && value.bridge.state === 'ready' }))
           }}
           onTry={(prompt) => { tryPrompt('feishu', prompt) }} />
           : entry.id === 'dingtalk' ? <DingTalkPanel api={dingTalk} onNotice={setNotice} onTry={(prompt) => { tryPrompt('dingtalk', prompt) }} />

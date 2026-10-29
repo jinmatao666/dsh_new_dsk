@@ -10,6 +10,7 @@
     "src/automation-bridge.ts",
     "src/feishu-cli.ts",
     "src/feishu-channel.ts",
+    "src/feishu-questions.ts",
     "src/feishu-skills.ts",
     "src/invariant.ts",
     "src/copy-tree.ts",
@@ -19,6 +20,7 @@
     "src/wechat-ilink.ts"
   ],
   "references": [
+    { "path": "../../interaction/user-questions" },
     {
       "path": "../../../vendor/cordis"
     },

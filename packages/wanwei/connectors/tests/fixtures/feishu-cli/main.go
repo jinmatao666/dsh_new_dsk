@@ -21,13 +21,11 @@ func main() {
   fmt.Fprintln(os.Stderr, "[event] ready event_key=im.message.receive_v1")
   done := make(chan struct{})
   go func(){ io.Copy(io.Discard, os.Stdin); close(done) }()
-  sent := false
+  sent := ""
   for {
    select { case <-done: return; default: }
-   if !sent {
-    if b, err := os.ReadFile(filepath.Join(root,"incoming.json")); err == nil {
-     fmt.Println(string(b)); fmt.Println(string(b)); sent = true
-    }
+   if b, err := os.ReadFile(filepath.Join(root,"incoming.json")); err == nil && string(b) != sent {
+     fmt.Println(string(b)); fmt.Println(string(b)); sent = string(b)
    }
    time.Sleep(50*time.Millisecond)
   }

@@ -31,6 +31,12 @@ const backend = createServer(async (request, response) => {
   assert(input.messages.some(message => JSON.stringify(message).includes('FROM_FEISHU_ONLY_ONCE')))
   modelCalls++
   response.setHeader('Content-Type', 'text/event-stream')
+  if (modelCalls === 1) {
+   response.end('data: '+JSON.stringify({ id:'question', object:'chat.completion.chunk', choices:[{index:0,delta:{role:'assistant',tool_calls:[{index:0,id:'ask_scope',type:'function',function:{name:'ask_user_question',arguments:JSON.stringify({questions:[{id:'scope',question:'选择新闻范围？',options:[{label:'国内新闻'},{label:'国际新闻'}]}]})}}]},finish_reason:null}]})+'\n\n'
+    +'data: '+JSON.stringify({id:'question',object:'chat.completion.chunk',choices:[{index:0,delta:{},finish_reason:'tool_calls'}]})+'\n\ndata: [DONE]\n\n')
+   return
+  }
+  if (modelCalls === 2) assert(input.messages.some(message => message.role === 'tool' && message.content.includes('国内新闻')))
   response.end('data: '+JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', choices: [{ index: 0, delta: { role: 'assistant', content: 'FEISHU_DESKTOP_RESULT' }, finish_reason: null }] })+'\n\n'
    +'data: '+JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })+'\n\ndata: [DONE]\n\n')
   return
@@ -74,7 +80,17 @@ try {
  assert.equal(modelCalls, 1, JSON.stringify({ lines, requests }))
  assert.equal(lines.length, 1)
  assert.equal(lines[0].target, 'om_fixture')
- assert.equal(JSON.parse(lines[0].content).text, 'FEISHU_DESKTOP_RESULT')
+ assert(JSON.parse(lines[0].content).text.includes('选择新闻范围'))
+ await writeFile(join(fixture, 'incoming.json'), JSON.stringify({type:'im.message.receive_v1',sender_type:'user',chat_type:'p2p',message_type:'text',message_id:'om_answer',chat_id:'oc_fixture',sender_id:'ou_owner',create_time:String(Date.now()),content:'1'}))
+ let initialReplies = []
+ const answerDeadline = Date.now() + 30000
+ while (initialReplies.length < 3 && Date.now() < answerDeadline) {
+  initialReplies = (await readFile(join(fixture, 'replies.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+  await new Promise(done => setTimeout(done, 100))
+ }
+ assert.equal(modelCalls, 2, JSON.stringify(initialReplies))
+ assert.equal(initialReplies.length, 3)
+ assert.equal(JSON.parse(initialReplies[2].content).text, 'FEISHU_DESKTOP_RESULT')
  const records = []
  async function scan(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -93,11 +109,32 @@ try {
  assert.equal(records.filter(event => event.type === 'user/message' && JSON.stringify(event.data.content).includes('FROM_FEISHU_ONLY_ONCE')).length, 1,
   JSON.stringify(records.map(event => ({ type: event.type, data: event.data }))))
  assert(records.some(event => event.type === 'assistant/message' && JSON.stringify(event.data).includes('FEISHU_DESKTOP_RESULT')))
- console.log('Real desktop profile: duplicate Feishu events produced one persisted task and one reply to the original message.')
+ await page.getByText('飞书助理', { exact: true }).first().waitFor()
+ if (await page.getByText('飞书助理', { exact: true }).count() === 1) await page.getByText('飞书助理', { exact: true }).first().click()
+ await page.getByText('飞书助理', { exact: true }).nth(1).click()
+ await page.getByText('FROM_FEISHU_ONLY_ONCE', { exact: true }).waitFor()
+ const editor = page.locator('[contenteditable="true"]').first()
+ await editor.fill('使用国内新闻 DESKTOP_FOLLOWUP')
+ await page.getByRole('button', { name: '发送消息', exact: true }).click()
+ let mirrored = []
+ const followupDeadline = Date.now() + 30000
+ while (mirrored.length < 5 && Date.now() < followupDeadline) {
+  mirrored = (await readFile(join(fixture, 'replies.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+  await new Promise(done => setTimeout(done, 100))
+ }
+ assert.equal(modelCalls, 3, JSON.stringify({ mirrored, page: (await page.locator('body').innerText()).slice(-5000) }))
+ assert.equal(mirrored.length, 5, JSON.stringify(mirrored))
+ assert(JSON.parse(mirrored[3].content).text.includes('DESKTOP_FOLLOWUP'))
+ assert.equal(JSON.parse(mirrored[4].content).text, 'FEISHU_DESKTOP_RESULT')
+ console.log('Real desktop profile: duplicate Feishu input ran once; desktop followup and assistant reply each synchronized once.')
+} catch (error) {
+ console.error(error)
+ throw error
 } finally {
  await browser?.close()
+ if (process.platform === 'win32' && child.exitCode === null) spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true })
  child.kill(); await Promise.race([exited, new Promise(done => setTimeout(done, 3000))])
  backend.closeAllConnections(); await new Promise(done => backend.close(done))
  assert(fixture.startsWith(join(tmpdir(), 'wanwei-feishu-composition-')))
- await rm(fixture, { recursive: true, force: true })
+ await rm(fixture, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
 }

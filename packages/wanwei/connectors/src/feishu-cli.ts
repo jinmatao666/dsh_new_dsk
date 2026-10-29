@@ -189,6 +189,7 @@ export function registerFeishu(ctx: Context): void {
   let qrDataUrl: string | null = null
   let failure: string | null = null
   let missingScopes: string[] = []
+  let messageScopeRevision = -1
   let authorizationStage: 'configure' | 'login' | null = null
   const lifetime = new AbortController()
   const channel = createFeishuChannel(ctx, resolveProductDshHome, {
@@ -202,18 +203,25 @@ export function registerFeishu(ctx: Context): void {
     const authed = authorized && revision === authRevision && !flight
     if (authed && command) {
       failure = null
-      if (missingScopes.length > 0) {
+      if (missingScopes.length > 0 || messageScopeRevision !== revision) {
+        if (!missingScopes.includes('im:message.send_as_user')) missingScopes = [...missingScopes, 'im:message.send_as_user']
         const expected = missingScopes
         const check = await runLark(['auth', 'check', '--scope', expected.join(' '), '--json'], lifetime.signal)
         if (revision === authRevision && !flight && expected === missingScopes) {
-          if (check.exitCode === 0) missingScopes = []
+          if (check.exitCode === 0) { missingScopes = []; messageScopeRevision = revision }
           else {
             const result = parseFeishuAuthorizationResult(check.stdout)
             if (result.missingScopes.length > 0) missingScopes = result.missingScopes
           }
         }
       }
-      if (revision === authRevision && !flight) prepareFeishuSkills(command)
+      if (revision === authRevision && !flight) {
+        prepareFeishuSkills(command)
+        if (missingScopes.length === 0) {
+          if (!channel.snapshot().enabled) await channel.enable()
+          else await channel.resume()
+        }
+      }
     }
     return { installed: !!command, authed: authed && revision === authRevision && !flight, authorizing: flight !== undefined,
       authorizationUrl, qrDataUrl, error: failure, missingScopes: [...missingScopes], authorizationStage, bridge: channel.snapshot() }
@@ -266,20 +274,29 @@ export function registerFeishu(ctx: Context): void {
       })
     })
     flight = (async () => {
-      if (operation === 'configure') await runStep(['config', 'init', '--new'])
-      else {
+      {
+        if (operation === 'configure') await runStep(['config', 'init', '--new'])
         const probe = await runLark(['auth', 'status', '--json'], lifetime.signal)
         const error = parseFeishuError(probe.stdout) ?? parseFeishuError(probe.stderr)
-        if (error?.subtype === 'not_configured') await runStep(['config', 'init', '--new'])
+        if (operation !== 'configure' && error?.subtype === 'not_configured') await runStep(['config', 'init', '--new'])
         const scopes = operation === 'authorize-messages' ? ['im:message.send_as_user'] : missingScopes
         await runStep(scopes.length > 0
           ? ['auth', 'login', '--scope', scopes.join(' '), '--json']
           : ['auth', 'login', '--recommend', '--json'])
+        if (missingScopes.length === 0) {
+          const check = await runLark(['auth', 'check', '--scope', 'im:message.send_as_user', '--json'], lifetime.signal)
+          if (check.exitCode !== 0) {
+            missingScopes = ['im:message.send_as_user']
+            await runStep(['auth', 'login', '--scope', 'im:message.send_as_user', '--json'])
+          }
+        }
       }
     })().catch((error: unknown) => { failure = error instanceof Error ? error.message : String(error) })
       .finally(() => {
         flight = undefined; authorizationUrl = null; qrDataUrl = null; authorizationStage = null
-        void channel.enableIfUnconfigured().then(() => channel.resume()).catch(() => {})
+        if (!lifetime.signal.aborted && failure === null) {
+          void status().catch((error: unknown) => { failure = error instanceof Error ? error.message : String(error) })
+        }
       })
   }
   ctx.effect(() => ctx.connection.rpc.handle('/wanwei-feishu', async (operation) => {

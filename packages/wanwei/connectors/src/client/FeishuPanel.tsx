@@ -109,8 +109,7 @@ export function FeishuPanel({ api, onStatus, onTry }: {
         : status?.authed ? <>
           {needsAuthorization
             ? <button type="button" disabled={busy} onClick={() => { void operate('login') }}>{text('补充授权')}</button>
-            : <button type="button" disabled={busy} onClick={() => { onTry(text(FEISHU_EXAMPLE_PROMPTS[0])) }}>{text('去试试')}</button>}
-          {!needsAuthorization && <button type="button" className="secondary" disabled={busy} onClick={() => { void operate('authorize-messages') }}>{text('授权发送消息')}</button>}
+            : <button type="button" disabled={busy || status.bridge.state !== 'ready'} onClick={() => { onTry(text(FEISHU_EXAMPLE_PROMPTS[0])) }}>{text('去试试')}</button>}
           <button type="button" className="secondary" disabled={busy} onClick={() => { void operate('disconnect') }}>{text('解绑')}</button>
         </> : <button type="button" disabled={busy || !status?.installed}
           onClick={() => { void operate('login') }}>{text('连接')}</button>}
@@ -120,30 +119,25 @@ export function FeishuPanel({ api, onStatus, onTry }: {
       <button type="button" disabled={busy || !status.installed || status.authorizing}
         onClick={() => { void operate('configure') }}>{text('配置飞书应用')}</button>
     </div>}
-    {status?.authed && <>
+    {status?.authed && !status.authorizing && !needsAuthorization && <>
       <p className={`dsh-connector-feishu-status${status.bridge.state === 'ready' ? ' is-ready' : ''}`} role="status">
-        <span aria-hidden="true" />{status.bridge.state === 'ready' ? text('正在接收飞书指令')
-          : status.bridge.state === 'connecting' ? text('正在连接飞书消息通道…')
-            : status.bridge.enabled ? text('飞书消息通道未连接') : text('双向任务未开启')}
+        <span aria-hidden="true" />{status.bridge.state === 'ready' ? text('已连接')
+          : status.bridge.state === 'error' ? text('飞书消息通道未连接') : text('正在连接飞书消息通道…')}
       </p>
-      {!status.bridge.enabled && status.bridge.state === 'stopped' && <button type="button" className="dsh-connector-feishu-disable" disabled={busy || status.authorizing}
-        onClick={() => { void operate('bridge-enable') }}>{text('开启双向任务')}</button>}
       {status.bridge.state === 'error' && <section className="dsh-connector-feishu-channel" aria-label={text('飞书消息通道')}>
         {status.bridge.error && <p role="alert" className="dsh-connector-dingtalk-error">{status.bridge.error}</p>}
         <p>{text('首次使用需在飞书开放平台开启机器人能力，使用长连接订阅“接收消息”事件，并开通接收单聊与机器人发送消息权限。')}</p>
         <a href="https://open.feishu.cn/app" target="_blank" rel="noreferrer">{text('打开飞书应用管理')}</a>
         <div className="dsh-connector-dingtalk-actions">
           <button type="button" disabled={busy || status.authorizing}
-            onClick={() => { void operate('bridge-enable') }}>{status.bridge.enabled ? text('重新连接消息通道') : text('开启双向任务')}</button>
+            onClick={() => { void operate('bridge-enable') }}>{text('重新连接消息通道')}</button>
         </div>
       </section>}
-      {status.bridge.enabled && <button type="button" className="dsh-connector-feishu-disable" disabled={busy}
-        onClick={() => { void operate('bridge-disable') }}>{text('关闭双向任务')}</button>}
     </>}
     <section className="dsh-connector-dingtalk-examples" aria-label={text('试试这样用')}>
       <h3>{text('试试这样用')}</h3>
       <ul>{FEISHU_EXAMPLE_PROMPTS.map(prompt => <li key={prompt}>
-        <button type="button" className="dsh-connector-dingtalk-example" disabled={!status?.authed || busy || status.authorizing || needsAuthorization}
+        <button type="button" className="dsh-connector-dingtalk-example" disabled={!status?.authed || busy || status.authorizing || needsAuthorization || status.bridge.state !== 'ready'}
           onClick={() => { onTry(text(prompt)) }}><span>{text('“')}{text(prompt)}{text('”')}</span></button>
       </li>)}</ul>
     </section>

@@ -9802,6 +9802,9 @@ importers:
       '@deepseek-ai/dsh-wanwei-oneapi-auth':
         specifier: workspace:^
         version: link:../oneapi-auth
+      '@deepseek-ai/dsh-user-questions':
+        specifier: workspace:^
+        version: link:../../interaction/user-questions
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:^
         version: link:../../workspace/workspace

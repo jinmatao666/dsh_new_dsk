@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-24-feishu-connector-automation.md
-2026-10-24-feishu-connector-automation.md: af7e4b268c64b9455ca9509a8c1b9dcebff6cd76
-2026-10-24-feishu-connector-automation.zh.md: 37cfad1e352f98737d9dbd6d319c0daf3d8116d9
+2026-10-24-feishu-connector-automation.md: 64828a5350f0ded175998b1bdb4a38bf18ce8f65
+2026-10-24-feishu-connector-automation.zh.md: 4765d5e12df48db352490baeb37ee1183d879636

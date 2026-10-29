@@ -24,7 +24,7 @@ it('opens authorization from the main action and shows the QR only during author
 
 it('stages a connected example and keeps unbind as a secondary action', async () => {
   const onTry = vi.fn()
-  const call = vi.fn(async () => ({ ...base, authed: true }))
+  const call = vi.fn(async () => ({ ...base, authed: true, bridge: { enabled: true, state: 'ready' as const, error: null } }))
   render(<FeishuPanel api={{ call }} onStatus={vi.fn()} onTry={onTry} />)
   fireEvent.click(await screen.findByRole('button', { name: '去试试' }))
   expect(onTry).toHaveBeenCalledWith(FEISHU_EXAMPLE_PROMPTS[0])
@@ -45,30 +45,18 @@ it('shows targeted authorization instead of try actions when business permission
   expect(onTry).not.toHaveBeenCalled()
 })
 
-it('offers explicit user-message permission and shows a waiting state while supplementing it', async () => {
-  const call = vi.fn(async (operation: string) => ({ ...base, authed: true, authorizing: operation === 'authorize-messages', authorizationStage: operation === 'authorize-messages' ? 'login' as const : null }))
-  render(<FeishuPanel api={{ call }} onStatus={vi.fn()} onTry={vi.fn()} />)
-  fireEvent.click(await screen.findByRole('button', { name: '授权发送消息' }))
-  expect(call).toHaveBeenCalledWith('authorize-messages')
-  expect(await screen.findByRole('button', { name: '等待授权…' })).toHaveProperty('disabled', true)
-  expect(screen.queryByRole('button', { name: '去试试' })).toBeNull()
-})
-
-it('enables and disables the inbound channel with actual readiness separate from login', async () => {
-  let bridge: FeishuStatus['bridge'] = { enabled: false, state: 'stopped', error: null }
+it('keeps successful connection actions simple and exposes recovery only on channel failure', async () => {
+  let bridge: FeishuStatus['bridge'] = { enabled: true, state: 'error', error: '连接失败' }
   const call = vi.fn(async (operation: string) => {
     if (operation === 'bridge-enable') bridge = { enabled: true, state: 'ready', error: null }
-    if (operation === 'bridge-disable') bridge = { enabled: false, state: 'stopped', error: null }
     return { ...base, authed: true, bridge }
   })
   render(<FeishuPanel api={{ call }} onStatus={vi.fn()} onTry={vi.fn()} />)
+  fireEvent.click(await screen.findByRole('button', { name: '重新连接消息通道' }))
+  expect(await screen.findByText('已连接')).toBeTruthy()
+  expect(screen.getByRole('button', { name: '去试试' })).toHaveProperty('disabled', false)
   expect(screen.queryByRole('region', { name: '飞书消息通道' })).toBeNull()
-  fireEvent.click(await screen.findByRole('button', { name: '开启双向任务' }))
-  expect(await screen.findByText('正在接收飞书指令')).toBeTruthy()
-  expect(screen.queryByRole('region', { name: '飞书消息通道' })).toBeNull()
-  expect(call).toHaveBeenCalledWith('bridge-enable')
-  fireEvent.click(screen.getByRole('button', { name: '关闭双向任务' }))
-  expect(await screen.findByText('双向任务未开启')).toBeTruthy()
-  expect(screen.queryByRole('region', { name: '飞书消息通道' })).toBeNull()
-  expect(call).toHaveBeenCalledWith('bridge-disable')
+  for (const name of ['授权发送消息', '开启双向任务', '关闭双向任务']) expect(screen.queryByRole('button', { name })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '解绑' }))
+  expect(call).toHaveBeenCalledWith('disconnect')
 })

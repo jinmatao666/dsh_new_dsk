@@ -5,6 +5,12 @@ import { registerFeishu, type FeishuStatus } from '../src/feishu-cli.ts'
 
 const native = vi.hoisted(() => ({ execFile: vi.fn(), spawn: vi.fn() }))
 vi.mock('node:child_process', () => native)
+const bridge = vi.hoisted(() => ({ enable: vi.fn(async () => {}), resume: vi.fn(async () => {}) }))
+vi.mock('../src/feishu-channel.ts', () => ({ createFeishuChannel: () => ({
+  ...bridge, snapshot: () => ({ enabled: false, state: 'stopped', error: null }),
+  pause: async () => {}, disable: async () => {}, restore: async () => {}, dispose: async () => {},
+}) }))
+
 vi.mock('../src/feishu-skills.ts', () => ({ installFeishuSkills: vi.fn(), removeFeishuSkills: vi.fn() }))
 afterEach(() => { vi.unstubAllEnvs(); vi.clearAllMocks() })
 
@@ -48,13 +54,17 @@ it('first connect completes app setup before starting user authorization and ret
       expect(state.error).toContain('authentication/permission_denied')
       expect(state.error).not.toContain('SECRET')
     })
-    native.execFile.mockImplementation((_command, _args, _options, callback) => {
+    native.execFile.mockImplementation((_command, args, _options, callback) => {
+      if (args[1] === 'check') { callback({ code: 1 }, '{"ok":false}', ''); return }
       callback(null, JSON.stringify({ ok: true, identities: { user: { available: false, status: 'not_logged_in' } } }), '')
     })
     await rpc('login')
     await vi.waitFor(() => expect(native.spawn).toHaveBeenCalledTimes(3))
     expect(native.spawn.mock.calls[2]![1]).toEqual(['auth', 'login', '--recommend', '--json'])
     children[2]!.emit('close', 0)
+    await vi.waitFor(() => { expect(children).toHaveLength(4) })
+    expect(native.spawn.mock.calls[3]![1]).toEqual(['auth', 'login', '--scope', 'im:message.send_as_user', '--json'])
+    children[3]!.emit('close', 0)
     await vi.waitFor(async () => { expect((await rpc('status')).value.authorizing).toBe(false) })
   } finally {
     children.forEach(child => child.emit('close', 0))
@@ -104,6 +114,7 @@ it('treats exit 3 with a completed identity as partial authorization and repairs
     granted = true
     children[1]!.emit('close', 0)
     await vi.waitFor(async () => expect((await rpc('status')).value).toMatchObject({ authed: true, missingScopes: [], error: null }))
+    expect(bridge.enable).toHaveBeenCalled()
     businessFailure = true
     granted = false
     const result = await tool.execute({ args: ['im', '+messages-send', '--as', 'user'] }, { signal: new AbortController().signal })

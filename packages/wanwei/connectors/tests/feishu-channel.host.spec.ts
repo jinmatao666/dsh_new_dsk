@@ -39,16 +39,17 @@ function fixture() {
     workspaces.get(workspaceId)!.sessionIds.push(id)
     return { sessionId: id }
   })
-  const prompt = vi.fn(async () => {
+  const prompt = vi.fn(async (_request: { requestId: string }) => {
     events.push({ type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '@literal-result.txt\n整理完成' }] } } },
       { type: 'turn/end', data: { reason: { kind: 'completed' } } })
   })
   const cancel = vi.fn()
-  const ctx = { workspaceRegistry: { create: createWorkspace, archivedSessionIds: [] },
+  let publish: (session: { id: string }, event: unknown) => void = () => {}
+  const ctx = { on: (name: string, callback: typeof publish) => { if (name === 'session/event') publish = callback; return () => { if (name === 'session/event') publish = () => {} } }, workspaceRegistry: { create: createWorkspace, archivedSessionIds: [] },
     sessionController: { create: createSession, resolveAgent: async () => ({ agent }), rename: vi.fn(async () => {}), prompt, cancel },
     permissionPresets: { set: vi.fn() }, sessions: { flush: vi.fn(async () => {}) } } as unknown as Context
   const make = () => createFeishuChannel(ctx, () => home, { command: () => 'lark-cli.exe', environment: () => ({}), run })
-  return { home, make, children, run, prompt, cancel, createWorkspace, createSession, agent,
+  return { home, make, children, run, prompt, publish: (event: unknown, id = 'session-1') => { publish({ id }, event) }, cancel, createWorkspace, createSession, agent,
     changeOwner: () => { owner = 'ou_someone_else' }, cleanup: () => { expect(home.startsWith(join(tmpdir(), 'wanwei-feishu-channel-'))).toBe(true); rmSync(home, { recursive: true, force: true }) } }
 }
 
@@ -141,5 +142,32 @@ it('cancels an active desktop task when disabled and never sends a late reply', 
     expect(f.cancel).toHaveBeenCalledTimes(1)
     finish()
     expect(f.run.mock.calls.some(([args]) => args[1] === '+messages-reply')).toBe(false)
+  } finally { await channel.dispose(); f.cleanup() }
+})
+
+it('mirrors desktop followups and clarification answers only in the bound Feishu session', async () => {
+  const f = fixture(); const channel = f.make()
+  try {
+    await channel.enable()
+    f.children[0]!.stderr.emit('data', Buffer.from('[event] ready event_key=im.message.receive_v1\n'))
+    f.children[0]!.stdout.emit('data', Buffer.from(JSON.stringify(event()) + '\n'))
+    await vi.waitFor(() => { expect(f.run.mock.calls.filter(([args]) => args[0] === 'im')).toHaveLength(1) })
+    const answer = { type: 'user/message', seq: 10, data: { source: { kind: 'user' }, content: [{ type: 'text', text: '使用国内新闻' }] } }
+    f.publish({ ...answer, seq: 8, data: { ...answer.data, source: { kind: 'user', rpcId: f.prompt.mock.calls[0]![0].requestId } } })
+    f.publish({ ...answer, seq: 9, data: { ...answer.data, source: { kind: 'plugin', plugin: 'context' } } })
+    f.publish(answer, 'unrelated-session')
+    f.publish(answer)
+    f.publish(answer)
+    f.publish({ type: 'assistant/message', seq: 11, data: { message: { content: [{ type: 'text', text: '这是今天的国内新闻' }] } } })
+    f.publish({ type: 'tool/call', seq: 12, data: { name: 'ask_user_question', callId: 'ask-1', arguments: JSON.stringify({ questions: [{ question: '选择新闻范围？', options: [{ label: '国内新闻' }] }] }) } })
+    f.publish({ type: 'tool/result', seq: 13, data: { message: { content: [{ type: 'tool-result', toolCallId: 'ask-1', content: [{ type: 'text', text: '国内新闻' }] }] } } })
+    await vi.waitFor(() => { expect(f.run.mock.calls.filter(([args]) => args[0] === 'im')).toHaveLength(4) })
+    const replies = f.run.mock.calls.filter(([args]) => args[0] === 'im').map(([args]) => args[args.indexOf('--content') + 1])
+    expect(replies.join(' ')).toContain('使用国内新闻')
+    expect(replies.join(' ')).toContain('这是今天的国内新闻')
+    expect(replies.join(' ')).toContain('已回答')
+    await channel.disable()
+    f.publish({ ...answer, seq: 14 })
+    expect(f.run.mock.calls.filter(([args]) => args[0] === 'im')).toHaveLength(4)
   } finally { await channel.dispose(); f.cleanup() }
 })
