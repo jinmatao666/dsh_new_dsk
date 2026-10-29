@@ -22,7 +22,7 @@ function fixture() {
     binding: () => ({ sessionId: SessionId('bound'), messageId: 'om_owner', signal: controller.signal }), verify, send,
   })
   const ask = (questions: AskUserQuestionRequest['questions'], id = 'bound') => ctx.waterfall('user-questions/request', {
-    agent: { session: { id: SessionId(id) } } as AskUserQuestionRequest['agent'], questions,
+    agent: { session: { id: SessionId(id) } } as NonNullable<AskUserQuestionRequest['agent']>, questions,
   }, async () => ({ answers: [] }))
   return { ctx, bridge, controller, send, verify, ask, local: (answer: AskUserQuestionAnswer) => { localResolve(answer) },
     signal: () => desktopSignal }
