@@ -199,6 +199,37 @@ func CreateManagedKnowledgeBase(c *gin.Context) {
 	CreateKnowledgeBase(c)
 }
 
+// ListManagedRagflowDatasets returns RAGFlow datasets not yet bound to a local library.
+// Available to every signed-in user. OneAPI calls GET {RAGFLOW_BASE_URL}/api/v1/datasets with the configured API key.
+func ListManagedRagflowDatasets(c *gin.Context) {
+	client, ok := knowledgeClient(c)
+	if !ok {
+		return
+	}
+	datasets, err := client.ListAllDatasets(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	boundIds, err := model.ListBoundRagflowDatasetIds()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
+		return
+	}
+	bound := make(map[string]struct{}, len(boundIds))
+	for _, id := range boundIds {
+		bound[id] = struct{}{}
+	}
+	available := make([]ragflow.Dataset, 0, len(datasets))
+	for _, dataset := range datasets {
+		if _, used := bound[dataset.Id]; used {
+			continue
+		}
+		available = append(available, dataset)
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": available})
+}
+
 // ListManagedKnowledgeBases returns the full catalog, including offline and common libraries.
 func ListManagedKnowledgeBases(c *gin.Context) {
 	rows, err := model.ListManagedKnowledgeBases()
@@ -262,6 +293,9 @@ type updateManagedKnowledgeBaseInput struct {
 	Description string `json:"description"`
 	Tags        string `json:"tags"`
 	Shelf       string `json:"shelf"`
+	// Cover is present when the workbench edit dialog sends a replacement or an empty clear.
+	// A missing field leaves the stored cover unchanged.
+	Cover *string `json:"cover"`
 }
 
 // UpdateManagedKnowledgeBase saves workbench metadata and optional shelf visibility.
@@ -295,6 +329,14 @@ func UpdateManagedKnowledgeBase(c *gin.Context) {
 			return
 		}
 		updates["shelf"] = input.Shelf
+	}
+	if input.Cover != nil {
+		normalizedCover, coverErr := model.NormalizeKnowledgeCover(*input.Cover)
+		if coverErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": coverErr.Error()})
+			return
+		}
+		updates["cover"] = normalizedCover
 	}
 	if len(updates) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库参数无效"})

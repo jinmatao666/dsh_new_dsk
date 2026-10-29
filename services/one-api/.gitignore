@@ -2,6 +2,8 @@
 .vscode
 upload
 *.exe
+*.exe~
+one-api.prev.*.exe
 *.db
 build
 *.db-journal
@@ -15,3 +17,7 @@ cmd.md
 /one-api
 temp
 .DS_Store
+# Local OneAPI restart / embed debug helpers (do not commit)
+_*.mjs
+_oneapi_boot.*
+_oneapi_pid.txt

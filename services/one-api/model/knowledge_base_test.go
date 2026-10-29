@@ -161,7 +161,9 @@ func TestKnowledgeSubscriptionApplicationApprovalGrantsAccess(t *testing.T) {
 	require.ElementsMatch(t, []string{"地方法规"}, namesOf(visible))
 	plazaAfter, err := ListKnowledgePlaza(1, category.Id, "地方")
 	require.NoError(t, err)
-	require.Empty(t, plazaAfter)
+	require.Len(t, plazaAfter, 1)
+	require.Equal(t, KnowledgeSubscriptionApproved, plazaAfter[0].SubscriptionStatus)
+	require.Equal(t, 1, plazaAfter[0].SubscriberCount)
 
 	require.NoError(t, CancelKnowledgeSubscription(1, base.Id))
 	visibleAfterCancel, err := ListAuthorizedKnowledgeBases(1)
@@ -171,6 +173,7 @@ func TestKnowledgeSubscriptionApplicationApprovalGrantsAccess(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, plazaRestored, 1)
 	require.Equal(t, KnowledgeSubscriptionStatusNone, plazaRestored[0].SubscriptionStatus)
+	require.Equal(t, 0, plazaRestored[0].SubscriberCount)
 	_, err = ApplyKnowledgeSubscription(1, base.Id)
 	require.NoError(t, err)
 }

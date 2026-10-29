@@ -23,6 +23,8 @@ export interface KnowledgeBaseItem {
   owned_by_viewer?: boolean
   /** True when the caller holds a non-ownership grant (subscription / direct / department). */
   subscribed_by_viewer?: boolean
+  /** Compact JPEG data URL for the plaza, when the library has a cover. */
+  cover?: string
 }
 
 /** Administrator-defined category. Open categories may appear after Personal; auth-required ones feed the plaza and 订阅知识库. */
@@ -44,6 +46,13 @@ export interface KnowledgePlazaItem {
   category_name: string
   owner_username: string
   subscription_status: 'none' | 'pending' | 'approved' | 'owned'
+  /** ISO timestamp from the library row. */
+  updated_at?: string
+  document_count?: number
+  document_bytes?: number
+  subscriber_count?: number
+  /** Compact JPEG data URL. Absent libraries keep the staged plaza photo. */
+  cover?: string
 }
 
 interface KnowledgeDocument {
@@ -118,6 +127,66 @@ type Message = {
   content: string
   recommendations?: string[]
   citations?: KnowledgeCitation[]
+  /** Wall-clock ms when the assistant turn started answering. */
+  startedAt?: number
+  /** Wall-clock ms when the assistant turn finished (or stopped with content). */
+  endedAt?: number
+}
+
+const MAX_RELATED_QUESTIONS = 3
+
+/** Clock label for answer timing footers (local 24h HH:mm:ss).
+ * @param at - Epoch milliseconds.
+ */
+export function formatAnswerClock(at: number): string {
+  return new Date(at).toLocaleTimeString('zh-CN', {
+    hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit',
+  })
+}
+
+/** Duration label in seconds for answer timing footers.
+ * @param startedAt - Epoch milliseconds when answering began.
+ * @param endedAt - Epoch milliseconds when answering finished.
+ */
+export function formatAnswerDurationSeconds(startedAt: number, endedAt: number): string {
+  const seconds = Math.max(0, endedAt - startedAt) / 1000
+  return seconds < 10 ? seconds.toFixed(1) : String(Math.round(seconds))
+}
+
+/** One-line start/end/duration copy shown under a finished assistant answer.
+ * @param startedAt - Epoch milliseconds when answering began.
+ * @param endedAt - Epoch milliseconds when answering finished.
+ */
+export function formatAnswerTiming(startedAt: number, endedAt: number): string {
+  return productText('开始时间 {start} · 结束时间 {end} · 回答耗时 {duration}秒')
+    .replace('{start}', formatAnswerClock(startedAt))
+    .replace('{end}', formatAnswerClock(endedAt))
+    .replace('{duration}', formatAnswerDurationSeconds(startedAt, endedAt))
+}
+
+/** Append a Chinese question mark when a related prompt has none.
+ * @param value - Trimmed recommendation text.
+ */
+export function ensureRelatedQuestionMark(value: string): string {
+  if (value.endsWith('？') || value.endsWith('?')) return value
+  return `${value}？`
+}
+
+/** Keep at most three related-question suggestions for the answer footer.
+ * @param values - Server recommendations.
+ */
+export function relatedQuestions(values: readonly string[] | undefined): string[] {
+  if (values === undefined || values.length === 0) return []
+  const out: string[] = []
+  for (const value of values) {
+    const trimmed = value.trim()
+    if (trimmed === '') continue
+    const text = ensureRelatedQuestionMark(trimmed)
+    if (out.includes(text)) continue
+    out.push(text)
+    if (out.length >= MAX_RELATED_QUESTIONS) break
+  }
+  return out
 }
 
 /** Conflict handling when the destination already has the same file name. */
@@ -138,7 +207,7 @@ export interface KnowledgeApi {
   subscribe(id: number): Promise<void>
   /** Drop the caller's grant so the library returns to the plaza. */
   unsubscribe(id: number): Promise<void>
-  create(value: { name: string; description: string; kind: 'personal' }): Promise<KnowledgeBaseItem>
+  create(value: { name: string; description: string; kind: 'personal'; cover?: string }): Promise<KnowledgeBaseItem>
   documents(id: number): Promise<KnowledgeDocument[]>
   /** Load parsed document text for the desktop viewer. */
   chunks(knowledgeBaseId: number, documentId: string): Promise<KnowledgeChunk[]>
@@ -342,7 +411,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       const rows = await api.plaza({
         ...(keyword !== undefined && keyword.trim() !== '' ? { keyword: keyword.trim() } : {}),
       })
-      setPlazaItems(rows.filter(item => item.subscription_status !== 'approved'))
+      setPlazaItems(rows)
     } catch (cause) {
       setError(`${productText('加载失败')}：${String(cause)}`)
     } finally {
@@ -367,6 +436,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       ])
       setPlazaDetail(detail)
       setPlazaDocuments(documents)
+      if (detail.subscription_status === 'approved') setSelectedId(detail.id)
     } catch (cause) {
       setError(`${productText('加载失败')}：${String(cause)}`)
     } finally {
@@ -571,20 +641,24 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     setError('')
     closeViewer()
   }
-  const prefetchDocument = (document: KnowledgeDocument) => {
-    if (selectedId === undefined) return
+  const prefetchDocument = (document: KnowledgeDocument, libraryId = selectedId) => {
+    if (libraryId === undefined) return
     const kind = fileKind(document.name)
     if (kind !== 'pdf' && kind !== 'image' && !isPlainTextName(document.name)) return
-    if (readDownloadCache(selectedId, document.id) !== undefined) return
-    const libraryId = selectedId
+    if (readDownloadCache(libraryId, document.id) !== undefined) return
     void api.download(libraryId, document.id).then((file) => {
       writeDownloadCache(libraryId, document.id, file)
     }).catch(() => {
       // Named: hover prefetch is best-effort and must not surface as a page error.
     })
   }
-  const openDocument = (document: KnowledgeDocument, locate?: PdfLocateRequest, keepAsk = false) => {
-    if (selectedId === undefined) return
+  const openDocument = (
+    document: KnowledgeDocument,
+    locate?: PdfLocateRequest,
+    keepAsk = false,
+    libraryId = selectedId,
+  ) => {
+    if (libraryId === undefined) return
     if (!keepAsk) resetPreviewAsk()
     const kind = fileKind(document.name)
     const loadingMode: DocumentViewer['mode'] = kind === 'pdf' ? 'pdf' : kind === 'image' ? 'image' : 'text'
@@ -608,9 +682,9 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       }
       try {
         if (kind === 'image' || kind === 'pdf' || isPlainTextName(document.name)) {
-          const cached = readDownloadCache(selectedId, document.id)
-          const file = cached ?? await api.download(selectedId, document.id)
-          if (cached === undefined) writeDownloadCache(selectedId, document.id, file)
+          const cached = readDownloadCache(libraryId, document.id)
+          const file = cached ?? await api.download(libraryId, document.id)
+          if (cached === undefined) writeDownloadCache(libraryId, document.id, file)
           const bytes = file.bytes
           const contentType = mimeFor(document.name, file.contentType)
           if (kind === 'image' || contentType.startsWith('image/')) {
@@ -632,7 +706,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
           })
           return
         }
-        const chunks = await api.chunks(selectedId, document.id)
+        const chunks = await api.chunks(libraryId, document.id)
         apply({
           document, loading: false, mode: 'text',
           content: chunks.map(chunk => chunk.content.trim()).filter(Boolean).join('\n\n'),
@@ -802,7 +876,12 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   }
   const writeAnswer = (
     write: typeof setMessages,
-    progress: { answer: string; recommendations?: string[]; citations?: KnowledgeCitation[] },
+    progress: {
+      answer: string
+      recommendations?: string[]
+      citations?: KnowledgeCitation[]
+      endedAt?: number
+    },
   ) => {
     write((current) => {
       if (current.length === 0) return current
@@ -810,13 +889,21 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       const last = next[next.length - 1]
       if (last === undefined || last.role !== 'assistant') return current
       const emptyHit = /知识库中未找到相关内容/.test(progress.answer)
+      const recommendations = progress.recommendations !== undefined
+        ? relatedQuestions(progress.recommendations)
+        : last.recommendations
       next[next.length - 1] = {
         role: 'assistant',
         content: progress.answer,
-        ...(progress.recommendations !== undefined ? { recommendations: progress.recommendations } : {}),
+        ...(last.startedAt !== undefined ? { startedAt: last.startedAt } : {}),
+        ...(progress.endedAt !== undefined
+          ? { endedAt: progress.endedAt }
+          : last.endedAt !== undefined ? { endedAt: last.endedAt } : {}),
+        ...(recommendations !== undefined && recommendations.length > 0 ? { recommendations } : {}),
         ...(emptyHit
           ? { citations: [] }
-          : progress.citations !== undefined ? { citations: progress.citations } : {}),
+          : progress.citations !== undefined ? { citations: progress.citations }
+            : last.citations !== undefined ? { citations: last.citations } : {}),
       }
       return next
     })
@@ -846,7 +933,8 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       setPreviewQuestion('')
       setPreviewHints(false)
     }
-    write(current => [...current, { role: 'user', content: text }, { role: 'assistant', content: '' }])
+    const startedAt = Date.now()
+    write(current => [...current, { role: 'user', content: text }, { role: 'assistant', content: '', startedAt }])
     setAnswering(true)
     try {
       const answer = await api.complete(targetKnowledgeBaseId, text, (progress) => {
@@ -855,6 +943,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       writeAnswer(write, {
         answer: answer.answer,
         recommendations: answer.recommendations,
+        endedAt: Date.now(),
         ...(answer.citations !== undefined && answer.citations.length > 0 ? { citations: answer.citations } : {}),
       })
     } catch (cause) {
@@ -865,6 +954,11 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         if (current.length === 0) return current
         const last = current[current.length - 1]
         if (last?.role === 'assistant' && last.content === '') return current.slice(0, -1)
+        if (last?.role === 'assistant' && last.content !== '' && last.endedAt === undefined) {
+          const next = [...current]
+          next[next.length - 1] = { ...last, endedAt: Date.now() }
+          return next
+        }
         return current
       })
       if (!aborted) setError(`${productText('对话失败')}：${String(cause)}`)
@@ -980,16 +1074,23 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                   <PlusIcon />
                 </button>}
             </div>
-            {expanded && group.rows.map(item =>
-              <button type="button" className={item.id === selectedId ? 'active' : ''} key={item.id}
-                onClick={() => { setPlazaOpen(false); choose(item.id) }}>
-                <span className="dsh-knowledge-nav-icon" aria-hidden="true"><LibraryFolderIcon /></span>{item.name}
-              </button>)}
+            {expanded && (group.rows.length === 0
+              ? <p className="dsh-knowledge-nav-empty">{productText('暂无知识库')}</p>
+              : group.rows.map(item =>
+                <button type="button" className={item.id === selectedId ? 'active' : ''} key={item.id}
+                  onClick={() => { setPlazaOpen(false); choose(item.id) }}>
+                  <span className="dsh-knowledge-nav-icon" aria-hidden="true"><LibraryFolderIcon /></span>{item.name}
+                </button>))}
           </div>
         })}
       </div>
       <button type="button" className="dsh-knowledge-plaza-launch" onClick={() => openPlaza()}>
-        {productText('知识库广场')} <span aria-hidden="true">»</span>
+        <span className="dsh-knowledge-plaza-launch-icon" aria-hidden="true"><PlazaIcon /></span>
+        <span className="dsh-knowledge-plaza-launch-copy">
+          <strong>{productText('知识库广场')}</strong>
+          <small>{productText('发现优质行业知识')}</small>
+        </span>
+        <span className="dsh-knowledge-plaza-launch-arrow" aria-hidden="true"><ChevronIcon /></span>
       </button>
     </aside>
     {plazaOpen && <div className="dsh-knowledge-plaza" role="region" aria-label={productText('知识库广场')}>
@@ -1007,10 +1108,15 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
           }}>
           <BackIcon />
         </button>
-        <h2>
-          <span className="dsh-knowledge-plaza-title-mark" aria-hidden="true"><PlazaMarkIcon /></span>
-          {plazaDetail === undefined ? productText('知识库广场') : plazaDetail.name}
-        </h2>
+        <div className="dsh-knowledge-plaza-heading">
+          <span className="dsh-knowledge-plaza-heading-icon" aria-hidden="true"><PlazaIcon /></span>
+          <div>
+            <small>{plazaDetail === undefined ? productText('知识资源中心') : productText('知识库详情')}</small>
+            <h2>{plazaDetail === undefined ? productText('知识库广场') : plazaDetail.name}</h2>
+            {plazaDetail === undefined &&
+              <p>{productText('发现并订阅专业知识库，让可靠资料随时参与工作')}</p>}
+          </div>
+        </div>
         {plazaDetail === undefined &&
           <label className="dsh-knowledge-plaza-search">
             <SearchIcon />
@@ -1025,71 +1131,168 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       {plazaDetail === undefined ? <>
         {plazaLoading ? <p role="status">{productText('正在加载…')}</p>
           : plazaItems.length === 0 ? <p className="dsh-knowledge-empty">{productText('暂无可订阅知识库')}</p>
-            : <div className="dsh-knowledge-plaza-grid">
-              {plazaItems.map(item =>
-                <button type="button" key={item.id} className="dsh-knowledge-plaza-card"
-                  onClick={() => void openPlazaItem(item.id)}>
-                  <span className="dsh-knowledge-plaza-cover" aria-hidden="true"><PlazaCoverIcon seed={item.id} /></span>
-                  <span className="dsh-knowledge-plaza-card-body">
-                    <strong>{item.name}</strong>
-                    <p>{item.description || productText('暂无描述')}</p>
-                    <small>
-                      <span>@{item.owner_username || productText('未知作者')}</span>
-                      {item.category_name !== '' && <span>· {item.category_name}</span>}
-                    </small>
-                  </span>
-                </button>)}
+            : <section className="dsh-knowledge-plaza-catalog">
+              <header className="dsh-knowledge-plaza-catalog-head">
+                <div>
+                  <strong>{productText('精选知识库')}</strong>
+                  <span>{productText('共 {count} 个').replace('{count}', String(plazaItems.length))}</span>
+                </div>
+              </header>
+              <div className="dsh-knowledge-plaza-grid">
+                {plazaItems.map(item =>
+                  <button type="button" key={item.id} className="dsh-knowledge-plaza-card"
+                    onClick={() => void openPlazaItem(item.id)}>
+                    <span className="dsh-knowledge-plaza-cover" aria-hidden="true">
+                      <PlazaCover cover={item.cover} />
+                      <span className="dsh-knowledge-plaza-category">{item.category_name}</span>
+                      {item.subscription_status === 'approved' &&
+                        <em className="dsh-knowledge-plaza-status">{productText('已订阅')}</em>}
+                      {item.subscription_status === 'pending' &&
+                        <em className="dsh-knowledge-plaza-status pending">{productText('审核中')}</em>}
+                    </span>
+                    <span className="dsh-knowledge-plaza-card-body">
+                      <strong>{item.name}</strong>
+                      <p>{item.description || productText('暂无描述')}</p>
+                      {renderPlazaMeta(item)}
+                    </span>
+                    <span className="dsh-knowledge-plaza-card-arrow" aria-hidden="true"><ChevronIcon /></span>
+                  </button>)}
+              </div>
+            </section>}
+        <p className="dsh-knowledge-hint">{productText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库仍可在广场查看与问答。')}</p>
+      </> : (() => {
+        const plazaCanUse = plazaDetail.subscription_status === 'approved'
+        return <div className={plazaCanUse ? 'dsh-knowledge-plaza-detail with-chat' : 'dsh-knowledge-plaza-detail'}>
+          <div className="dsh-knowledge-plaza-detail-left">
+            <div className="dsh-knowledge-plaza-detail-main">
+              <span className="dsh-knowledge-plaza-cover large" aria-hidden="true">
+                <PlazaCover cover={plazaDetail.cover} />
+              </span>
+              <div className="dsh-knowledge-plaza-detail-row">
+                <div className="dsh-knowledge-plaza-detail-copy">
+                  {plazaDetail.category_name !== '' &&
+                    <span className="dsh-knowledge-plaza-detail-category">{plazaDetail.category_name}</span>}
+                  <h3>{plazaDetail.name}</h3>
+                  <p className="dsh-knowledge-plaza-owner">
+                    @{plazaDetail.owner_username || productText('未知作者')}
+                  </p>
+                  <p>{plazaDetail.description || productText('暂无描述')}</p>
+                  {renderPlazaMeta(plazaDetail, {
+                    documentCount: plazaDocuments.length > 0
+                      ? Math.max(plazaDetail.document_count ?? 0, plazaDocuments.length)
+                      : plazaDetail.document_count,
+                    documentBytes: (plazaDetail.document_bytes ?? 0) > 0
+                      ? plazaDetail.document_bytes
+                      : plazaDocuments.reduce((sum, document) => sum + document.size, 0),
+                  })}
+                </div>
+                <button type="button"
+                  className={`dsh-knowledge-plaza-subscribe ${plazaDetail.subscription_status}`}
+                  disabled={subscribing || plazaDetail.subscription_status !== 'none'}
+                  onClick={() => void submitSubscribe()}>
+                  {plazaDetail.subscription_status === 'owned' ? productText('我的')
+                    : plazaDetail.subscription_status === 'approved' ? productText('已订阅')
+                      : plazaDetail.subscription_status === 'pending' ? productText('审核中')
+                        : productText('订阅')}
+                </button>
+              </div>
+            </div>
+            <div className="dsh-knowledge-plaza-content">
+              <div className="dsh-knowledge-plaza-content-tabs">
+                <strong>{productText('内容')}{plazaDocuments.length > 0 ? ` ${plazaDocuments.length}` : ''}</strong>
+              </div>
+              {plazaDocuments.length === 0
+                ? <p className="dsh-knowledge-empty">{productText('暂无内容')}</p>
+                : <div className="dsh-knowledge-plaza-files" role="list">
+                  {renderPlazaContentTree(buildContentTree(plazaDocuments, true), {
+                    depth: 0,
+                    expandedFolders: plazaFolders,
+                    onToggleFolder: path => setPlazaFolders((current) => {
+                      const next = new Set(current)
+                      if (next.has(path)) next.delete(path)
+                      else next.add(path)
+                      return next
+                    }),
+                    ...(plazaCanUse ? {
+                      onOpenDocument: (document) => openDocument(document, undefined, false, plazaDetail.id),
+                      onPrefetchDocument: (document) => prefetchDocument(document, plazaDetail.id),
+                    } : {}),
+                  })}
+                </div>}
+            </div>
+            <p className="dsh-knowledge-hint">{productText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库仍可在广场查看与问答。')}</p>
+          </div>
+          {plazaCanUse && <section className="dsh-knowledge-plaza-detail-chat" aria-label={productText('基于知识库问答')}>
+            {messages.length > 0 && <div className="dsh-knowledge-chat-head">
+              <button type="button" className="dsh-knowledge-clear" disabled={answering || clearing}
+                onClick={() => void clearSession()}>
+                {productText('清空会话')}
+              </button>
             </div>}
-        <p className="dsh-knowledge-hint">{productText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库不再出现在广场。')}</p>
-      </> : <div className="dsh-knowledge-plaza-detail">
-        <div className="dsh-knowledge-plaza-detail-main">
-          <span className="dsh-knowledge-plaza-cover large" aria-hidden="true">
-            <PlazaCoverIcon seed={plazaDetail.id} />
-          </span>
-          <div className="dsh-knowledge-plaza-detail-copy">
-            <h3>{plazaDetail.name}</h3>
-            <p className="dsh-knowledge-plaza-owner">
-              @{plazaDetail.owner_username || productText('未知作者')}
-              {plazaDetail.category_name !== '' && <span> · {plazaDetail.category_name}</span>}
-            </p>
-            <p>{plazaDetail.description || productText('暂无描述')}</p>
-          </div>
-          <button type="button" className="dsh-knowledge-plaza-subscribe"
-            disabled={subscribing || plazaDetail.subscription_status !== 'none'}
-            onClick={() => void submitSubscribe()}>
-            {plazaDetail.subscription_status === 'owned' ? productText('我的')
-              : plazaDetail.subscription_status === 'approved' ? productText('已订阅')
-                : plazaDetail.subscription_status === 'pending' ? productText('审核中')
-                  : productText('订阅')}
-          </button>
-        </div>
-        <div className="dsh-knowledge-plaza-content">
-          <div className="dsh-knowledge-plaza-content-tabs">
-            <strong>{productText('内容')}{plazaDocuments.length > 0 ? ` ${plazaDocuments.length}` : ''}</strong>
-          </div>
-          {plazaDocuments.length === 0
-            ? <p className="dsh-knowledge-empty">{productText('暂无内容')}</p>
-            : <div className="dsh-knowledge-plaza-files" role="list">
-              {renderPlazaContentTree(buildContentTree(plazaDocuments, true), {
-                depth: 0,
-                expandedFolders: plazaFolders,
-                onToggleFolder: path => setPlazaFolders((current) => {
-                  const next = new Set(current)
-                  if (next.has(path)) next.delete(path)
-                  else next.add(path)
-                  return next
-                }),
+            <div className="dsh-knowledge-messages">
+              {messages.length === 0 && <div className="dsh-knowledge-chat-empty"><p><span><ChatIcon /></span>{productText('基于知识库问答')}</p></div>}
+              {messages.map((message, index) => {
+                const waiting = message.role === 'assistant' && message.content === ''
+                  && answering && index === messages.length - 1
+                const citations = message.citations ?? []
+                const related = relatedQuestions(message.recommendations)
+                const timing = message.role === 'assistant'
+                  && message.content !== ''
+                  && message.startedAt !== undefined
+                  && message.endedAt !== undefined
+                  ? formatAnswerTiming(message.startedAt, message.endedAt)
+                  : undefined
+                return <article className={message.role} key={`plaza-${message.role}-${index}`}>
+                  {message.role === 'assistant' && <header className="dsh-knowledge-assistant-brand">
+                    <img src="/brand-mark.svg" width={18} height={16} alt="" />
+                    <strong>{productText('万维Buddy')}</strong>
+                  </header>}
+                  {waiting
+                    ? <p className="dsh-knowledge-typing" role="status" aria-label={productText('正在回答…')}>
+                      <span /><span /><span />
+                    </p>
+                    : message.content !== '' && <AnswerBody content={message.content} citations={citations} onOpen={openCitation} />}
+                  {timing !== undefined && <p className="dsh-knowledge-answer-meta">{timing}</p>}
+                  {related.length > 0 &&
+                    <div className="dsh-knowledge-related"><small>{productText('推荐关联问题')}</small>
+                      {related.map(value =>
+                        <button type="button" key={value} onClick={() => setQuestion(value)}>{value}</button>)}</div>}
+                </article>
               })}
-            </div>}
+            </div>
+            <form className="dsh-knowledge-composer" onSubmit={ask}>
+              <textarea value={question} disabled={answering || clearing} rows={2}
+                onChange={event => setQuestion(event.target.value)} placeholder={productText('基于知识库提问')}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    if (!answering) event.currentTarget.form?.requestSubmit()
+                  }
+                }} />
+              <div className="dsh-knowledge-composer-bar">
+                <div className="dsh-knowledge-composer-actions">
+                  {answering
+                    ? <button type="button" className="dsh-knowledge-send stop" aria-label={productText('停止')} onClick={stopAnswer}>
+                      <StopIcon />
+                    </button>
+                    : <button type="submit" className={question.trim() === '' ? 'dsh-knowledge-send idle' : 'dsh-knowledge-send ready'}
+                      aria-label={productText('发送')}
+                      disabled={question.trim() === '' || clearing}>
+                      <SendIcon />
+                    </button>}
+                </div>
+              </div>
+            </form>
+          </section>}
         </div>
-        <p className="dsh-knowledge-hint">{productText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库不再出现在广场。')}</p>
-      </div>}
+      })()}
     </div>}
     <main className={uploadOpen ? 'dsh-knowledge-content upload-open' : 'dsh-knowledge-content'}>
       <header>
         <div className="dsh-knowledge-cover" aria-hidden="true">
-          {selected === undefined ? <BookIcon />
-            : <LibraryFolderIcon />}
+          {selected?.cover?.startsWith('data:image/') ? <img src={selected.cover} alt="" />
+            : selected === undefined ? <BookIcon />
+              : <LibraryFolderIcon />}
         </div>
         <div className="dsh-knowledge-header-copy">
           <h2>{selected?.name ?? productText('暂无知识库')}</h2>
@@ -1161,19 +1364,27 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
           const waiting = message.role === 'assistant' && message.content === ''
             && answering && index === messages.length - 1
           const citations = message.citations ?? []
+          const related = relatedQuestions(message.recommendations)
+          const timing = message.role === 'assistant'
+            && message.content !== ''
+            && message.startedAt !== undefined
+            && message.endedAt !== undefined
+            ? formatAnswerTiming(message.startedAt, message.endedAt)
+            : undefined
           return <article className={message.role} key={`${message.role}-${index}`}>
             {message.role === 'assistant' && <header className="dsh-knowledge-assistant-brand">
               <img src="/brand-mark.svg" width={18} height={16} alt="" />
-              <strong>{productText('万维')}</strong>
+              <strong>{productText('万维Buddy')}</strong>
             </header>}
             {waiting
               ? <p className="dsh-knowledge-typing" role="status" aria-label={productText('正在回答…')}>
                 <span /><span /><span />
               </p>
               : message.content !== '' && <AnswerBody content={message.content} citations={citations} onOpen={openCitation} />}
-            {message.recommendations && message.recommendations.length > 0 &&
-              <div className="dsh-knowledge-related"><small>{productText('相关问题')}</small>
-                {message.recommendations.map(value =>
+            {timing !== undefined && <p className="dsh-knowledge-answer-meta">{timing}</p>}
+            {related.length > 0 &&
+              <div className="dsh-knowledge-related"><small>{productText('推荐关联问题')}</small>
+                {related.map(value =>
                   <button type="button" key={value} onClick={() => setQuestion(value)}>{value}</button>)}</div>}
           </article>
         })}
@@ -1416,16 +1627,28 @@ function PreviewAskPane({
       {messages.map((message, index) => {
         const waiting = message.role === 'assistant' && message.content === '' && answering && index === messages.length - 1
         const citations = message.citations ?? []
+        const related = relatedQuestions(message.recommendations)
+        const timing = message.role === 'assistant'
+          && message.content !== ''
+          && message.startedAt !== undefined
+          && message.endedAt !== undefined
+          ? formatAnswerTiming(message.startedAt, message.endedAt)
+          : undefined
         return <article className={message.role} key={`${message.role}-${index}`}>
           {message.role === 'assistant' && <header className="dsh-knowledge-assistant-brand">
             <img src="/brand-mark.svg" width={18} height={16} alt="" />
-            <strong>{productText('万维')}</strong>
+            <strong>{productText('万维Buddy')}</strong>
           </header>}
           {waiting
             ? <p className="dsh-knowledge-typing" role="status" aria-label={productText('正在回答…')}><span /><span /><span /></p>
             : message.content !== '' && (message.role === 'assistant'
               ? <AnswerBody content={message.content} citations={citations} onOpen={onOpenCitation} />
               : <p>{message.content}</p>)}
+          {timing !== undefined && <p className="dsh-knowledge-answer-meta">{timing}</p>}
+          {related.length > 0 &&
+            <div className="dsh-knowledge-related"><small>{productText('推荐关联问题')}</small>
+              {related.map(value =>
+                <button type="button" key={value} onClick={() => onQuestion(value)}>{value}</button>)}</div>}
         </article>
       })}
     </div>
@@ -1546,11 +1769,12 @@ function BookIcon() {
   </svg>
 }
 
-/** Title mark beside the plaza heading. */
-function PlazaMarkIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M12 3.2 14.7 9h6.1l-4.9 3.7 1.9 6.1L12 15.4 6.2 18.8l1.9-6.1L3.2 9h6.1L12 3.2Z"
-      fill="#2f6fe0" opacity=".9" />
+function PlazaIcon() {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 10.5 12 4l8 6.5" />
+    <path d="M6.5 9.5V20h11V9.5M9.5 20v-5h5v5" />
+    <path d="M3 20h18" />
   </svg>
 }
 
@@ -1569,23 +1793,25 @@ function LibraryFolderIcon() {
 /** Product-staged natural-resources cover for plaza cards and detail. */
 const PLAZA_NATURAL_RESOURCES_COVER = '/knowledge-covers/plaza-natural-resources.jpg'
 
-/**
- * Full photo cover for plaza cards — natural-resources landscape.
- * @param props.seed - Stable library id (kept for call-site compatibility).
+/** Plaza photo: the library cover, or the staged landscape when none is stored.
+ * @param props.cover - JPEG data URL from the library row.
  */
-function PlazaCoverIcon({ seed: _seed }: { seed: number }) {
-  return <img src={PLAZA_NATURAL_RESOURCES_COVER} alt="" draggable={false} />
+function PlazaCover({ cover }: { cover?: string | undefined }) {
+  const src = cover !== undefined && cover.startsWith('data:image/') ? cover : PLAZA_NATURAL_RESOURCES_COVER
+  return <img src={src} alt="" draggable={false} />
 }
 
 interface PlazaTreeHandlers {
   depth: number
   expandedFolders: Set<string>
   onToggleFolder: (path: string) => void
+  onOpenDocument?: (document: KnowledgeDocument) => void
+  onPrefetchDocument?: (document: KnowledgeDocument) => void
 }
 
 /** Render plaza catalog rows as a name / type / updated table.
  * @param nodes - Tree nodes at the current depth.
- * @param handlers - Folder expansion handlers.
+ * @param handlers - Folder expansion and optional file-open handlers.
  * @returns Flattened row elements.
  */
 function renderPlazaContentTree(nodes: ContentNode[], handlers: PlazaTreeHandlers): ReactNode[] {
@@ -1611,19 +1837,28 @@ function renderPlazaContentTree(nodes: ContentNode[], handlers: PlazaTreeHandler
     }
     const document = node.document
     const stamp = documentTime(document)
-    rows.push(
-      <div key={`plaza-file:${document.id}`} className="dsh-knowledge-plaza-file" role="listitem"
+    const openable = handlers.onOpenDocument !== undefined
+    const fileBody = <>
+      <span className={`dsh-knowledge-plaza-file-icon ${fileKind(documentDisplayName(document))}`} aria-hidden="true">
+        <TypeIcon kind={fileKind(documentDisplayName(document))} />
+      </span>
+      <strong>{documentDisplayName(document)}</strong>
+      <span className="dsh-knowledge-plaza-file-type">{productText(kindLabel(fileKind(documentDisplayName(document))))}</span>
+      <span className="dsh-knowledge-plaza-file-date">
+        {stamp > 0 ? productText('{date}更新').replace('{date}', formatPlazaDate(stamp)) : '-'}
+      </span>
+    </>
+    rows.push(openable
+      ? <button type="button" key={`plaza-file:${document.id}`} className="dsh-knowledge-plaza-file" role="listitem"
+        style={{ paddingLeft: `${14 + handlers.depth * 16}px` }}
+        onClick={() => handlers.onOpenDocument?.(document)}
+        onMouseEnter={() => handlers.onPrefetchDocument?.(document)}>
+        {fileBody}
+      </button>
+      : <div key={`plaza-file:${document.id}`} className="dsh-knowledge-plaza-file" role="listitem"
         style={{ paddingLeft: `${14 + handlers.depth * 16}px` }}>
-        <span className={`dsh-knowledge-plaza-file-icon ${fileKind(documentDisplayName(document))}`} aria-hidden="true">
-          <TypeIcon kind={fileKind(documentDisplayName(document))} />
-        </span>
-        <strong>{documentDisplayName(document)}</strong>
-        <span className="dsh-knowledge-plaza-file-type">{productText(kindLabel(fileKind(documentDisplayName(document))))}</span>
-        <span className="dsh-knowledge-plaza-file-date">
-          {stamp > 0 ? productText('{date}更新').replace('{date}', formatPlazaDate(stamp)) : '-'}
-        </span>
-      </div>,
-    )
+        {fileBody}
+      </div>)
   }
   return rows
 }
@@ -1637,6 +1872,48 @@ function formatPlazaDate(stamp: number): string {
   const date = new Date(ms)
   if (Number.isNaN(date.getTime())) return ''
   return `${date.getMonth() + 1}/${date.getDate()}`
+}
+
+/** Calendar day for a plaza card's updated_at.
+ * @param value - RFC3339 timestamp from OneAPI.
+ * @returns `YYYY-MM-DD`, or an em dash when missing.
+ */
+function formatPlazaUpdated(value: string | undefined): string {
+  if (value === undefined || value === '') return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime()) || date.getFullYear() < 2000) return '—'
+  const pad = (number: number) => String(number).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+/** File size label in megabytes for a plaza card.
+ * @param bytes - Summed document size.
+ * @returns Text such as `2.4MB`.
+ */
+function formatPlazaMegabytes(bytes: number | undefined): string {
+  const number = Number(bytes)
+  if (!Number.isFinite(number) || number <= 0) return '0MB'
+  const megabytes = number / (1024 * 1024)
+  return `${megabytes >= 10 ? megabytes.toFixed(0) : megabytes.toFixed(1)}MB`
+}
+
+/** Shared plaza card / detail stats rows.
+ * @param item - Marketplace library.
+ * @param overrides - Optional document totals when the detail catalog already loaded.
+ */
+function renderPlazaMeta(
+  item: KnowledgePlazaItem,
+  overrides?: { documentCount?: number | undefined; documentBytes?: number | undefined },
+): ReactNode {
+  const documentCount = overrides?.documentCount ?? item.document_count ?? 0
+  const documentBytes = overrides?.documentBytes ?? item.document_bytes ?? 0
+  return <span className="dsh-knowledge-plaza-meta">
+    <span><em>{productText('维护者')}</em>{item.owner_username || productText('未知作者')}</span>
+    <span><em>{productText('更新时间')}</em>{formatPlazaUpdated(item.updated_at)}</span>
+    <span><em>{productText('文件数量')}</em>{documentCount}{productText('个')}</span>
+    <span><em>{productText('文件大小')}</em>{formatPlazaMegabytes(documentBytes)}</span>
+    <span><em>{productText('已订阅')}</em>{item.subscriber_count ?? 0}{productText('人')}</span>
+  </span>
 }
 
 function FileIcon() {

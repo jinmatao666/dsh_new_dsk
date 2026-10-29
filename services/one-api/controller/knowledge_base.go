@@ -10,6 +10,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -27,12 +28,14 @@ type knowledgeGrantInput struct {
 }
 
 type createKnowledgeBaseInput struct {
-	Name        string                `json:"name"`
-	Description string                `json:"description"`
-	Kind        string                `json:"kind"`
-	Tags        string                `json:"tags"`
-	CategoryId  int                   `json:"category_id"`
-	Grants      []knowledgeGrantInput `json:"grants"`
+	Name             string                `json:"name"`
+	Description      string                `json:"description"`
+	Kind             string                `json:"kind"`
+	Tags             string                `json:"tags"`
+	CategoryId       int                   `json:"category_id"`
+	Cover            string                `json:"cover"`
+	RagflowDatasetId string                `json:"ragflow_dataset_id"`
+	Grants           []knowledgeGrantInput `json:"grants"`
 }
 
 func validKnowledgeKind(kind string) bool {
@@ -121,7 +124,61 @@ func ListKnowledgePlaza(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库广场失败"})
 		return
 	}
+	fillPlazaDocumentStats(c.Request.Context(), rows)
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": rows})
+}
+
+// fillPlazaDocumentStats sets file count and byte size from RAGFlow.
+// A missing RAGFlow client leaves those fields at zero so the plaza still lists.
+func fillPlazaDocumentStats(ctx context.Context, rows []model.KnowledgePlazaItem) {
+	if len(rows) == 0 {
+		return
+	}
+	client, err := ragflow.NewFromEnvironment()
+	if err != nil {
+		return
+	}
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 4)
+	for i := range rows {
+		datasetId := rows[i].RagflowDatasetId
+		if datasetId == "" {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(index int, datasetId string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			count, bytes := plazaDatasetStats(ctx, client, datasetId)
+			rows[index].DocumentCount = count
+			rows[index].DocumentBytes = bytes
+		}(i, datasetId)
+	}
+	wg.Wait()
+}
+
+func plazaDatasetStats(ctx context.Context, client *ragflow.Client, datasetId string) (int, int64) {
+	const pageSize = 100
+	const maxPages = 10
+	var totalBytes int64
+	total := 0
+	for page := 1; page <= maxPages; page++ {
+		docs, count, err := client.ListDocumentsPage(ctx, datasetId, page, pageSize, "")
+		if err != nil {
+			return total, totalBytes
+		}
+		if page == 1 {
+			total = count
+		}
+		for _, doc := range docs {
+			totalBytes += doc.Size
+		}
+		if len(docs) == 0 || page*pageSize >= total {
+			break
+		}
+	}
+	return total, totalBytes
 }
 
 // GetKnowledgePlazaItem returns one marketplace library card when it is published and auth-required.
@@ -141,7 +198,9 @@ func GetKnowledgePlazaItem(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
+	filled := []model.KnowledgePlazaItem{*row}
+	fillPlazaDocumentStats(c.Request.Context(), filled)
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": filled[0]})
 }
 
 // ListKnowledgePlazaDocuments returns marketplace document metadata for one plaza library.
@@ -244,6 +303,11 @@ func CreateKnowledgeBase(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库名称、描述或类型无效"})
 		return
 	}
+	normalizedCover, coverErr := model.NormalizeKnowledgeCover(input.Cover)
+	if coverErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": coverErr.Error()})
+		return
+	}
 	if input.Kind == model.KnowledgeBaseCommon && !knowledgeAdmin(c) {
 		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "只有管理员可以创建共性知识库"})
 		return
@@ -266,21 +330,50 @@ func CreateKnowledgeBase(c *gin.Context) {
 		// Workbench tabs copy visibility from the category; keep kind aligned.
 		input.Kind = category.Type
 	}
+	existingDatasetId := strings.TrimSpace(input.RagflowDatasetId)
+	if existingDatasetId != "" {
+		if len(existingDatasetId) > 64 {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库编号无效"})
+			return
+		}
+		bound, boundErr := model.KnowledgeBaseBoundToRagflowDataset(existingDatasetId)
+		if boundErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
+			return
+		}
+		if bound {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "message": "该知识库已关联到管理工作台"})
+			return
+		}
+	}
 	client, ok := knowledgeClient(c)
 	if !ok {
 		return
 	}
 	userId := c.GetInt("id")
-	dataset, err := client.CreateDataset(c.Request.Context(),
-		fmt.Sprintf("%s-%d-%d", input.Name, userId, time.Now().UnixMilli()), input.Description)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
-		return
+	var dataset ragflow.Dataset
+	createdRemote := false
+	if existingDatasetId != "" {
+		var err error
+		dataset, err = client.GetDataset(c.Request.Context(), existingDatasetId)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+	} else {
+		var err error
+		dataset, err = client.CreateDataset(c.Request.Context(),
+			fmt.Sprintf("%s-%d-%d", input.Name, userId, time.Now().UnixMilli()), input.Description)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		createdRemote = true
 	}
 	row := model.KnowledgeBase{Name: input.Name, Description: input.Description, Tags: input.Tags,
-		RagflowDatasetId: dataset.Id, OwnerUserId: userId, Kind: input.Kind, Shelf: model.KnowledgeShelfPublished,
-		CategoryId: input.CategoryId}
-	err = model.DB.Transaction(func(tx *gorm.DB) error {
+		Cover: normalizedCover, RagflowDatasetId: dataset.Id, OwnerUserId: userId, Kind: input.Kind,
+		Shelf: model.KnowledgeShelfPublished, CategoryId: input.CategoryId}
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
@@ -299,7 +392,9 @@ func CreateKnowledgeBase(c *gin.Context) {
 		return nil
 	})
 	if err != nil {
-		_ = client.DeleteDataset(c.Request.Context(), dataset.Id)
+		if createdRemote {
+			_ = client.DeleteDataset(c.Request.Context(), dataset.Id)
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存知识库失败"})
 		return
 	}
@@ -801,6 +896,174 @@ type knowledgeCompletionInput struct {
 	DocumentId string `json:"document_id"`
 }
 
+const maxKnowledgeRecommendations = 3
+const knowledgeParsingAnswer = "文件正在解析，请稍后重试"
+const knowledgeNoParsedAnswer = "知识库尚无可检索内容，请等待文件解析完成后再试"
+
+// ensureKnowledgeQuestionMark appends a Chinese question mark when the prompt has none.
+func ensureKnowledgeQuestionMark(value string) string {
+	if strings.HasSuffix(value, "？") || strings.HasSuffix(value, "?") {
+		return value
+	}
+	return value + "？"
+}
+
+// limitKnowledgeRecommendations keeps up to three unique non-empty related questions.
+func limitKnowledgeRecommendations(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	out := make([]string, 0, maxKnowledgeRecommendations)
+	seen := make(map[string]struct{}, maxKnowledgeRecommendations)
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		trimmed = ensureKnowledgeQuestionMark(trimmed)
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+		if len(out) >= maxKnowledgeRecommendations {
+			break
+		}
+	}
+	return out
+}
+
+// knowledgeAskDeferral is why OneAPI answers without creating or updating a RAGFlow chat.
+// RAGFlow CreateChat/UpdateChat reject datasets with chunk_num == 0 ("doesn't own parsed file").
+type knowledgeAskDeferral string
+
+const (
+	knowledgeAskReady    knowledgeAskDeferral = ""
+	knowledgeAskParsing  knowledgeAskDeferral = "parsing"
+	knowledgeAskNoChunks knowledgeAskDeferral = "no-chunks"
+)
+
+// knowledgeDocumentsStillParsing reports whether the ask target is still chunking.
+// With document ids, any still-parsing id blocks the ask. Without ids, the library
+// blocks only when it has files and none are ready while at least one is still parsing.
+func knowledgeDocumentsStillParsing(ctx context.Context, client *ragflow.Client, datasetId string, docIds ...string) (bool, error) {
+	deferral, err := knowledgeAskDeferralFor(ctx, client, datasetId, docIds...)
+	return deferral == knowledgeAskParsing, err
+}
+
+// knowledgeAskDeferralFor reports whether chat create/update must wait for chunks.
+// RAGFlow refuses assistants until the dataset has at least one parsed chunk, so this
+// check runs before ensureKnowledgeConversation; otherwise CreateChat surfaces a gateway error.
+func knowledgeAskDeferralFor(ctx context.Context, client *ragflow.Client, datasetId string, docIds ...string) (knowledgeAskDeferral, error) {
+	filtered := make([]string, 0, len(docIds))
+	for _, id := range docIds {
+		if trimmed := strings.TrimSpace(id); trimmed != "" {
+			filtered = append(filtered, trimmed)
+		}
+	}
+	if len(filtered) > 0 {
+		anyChunks := false
+		anyParsing := false
+		for _, id := range filtered {
+			doc, err := client.GetDocument(ctx, datasetId, id)
+			if err != nil {
+				return knowledgeAskReady, err
+			}
+			if ragflow.DocumentHasChunks(doc) {
+				anyChunks = true
+				continue
+			}
+			if ragflow.DocumentParsing(doc) {
+				anyParsing = true
+			}
+		}
+		if anyChunks {
+			return knowledgeAskReady, nil
+		}
+		if anyParsing {
+			return knowledgeAskParsing, nil
+		}
+		return knowledgeAskNoChunks, nil
+	}
+	docs, err := client.ListDocuments(ctx, datasetId)
+	if err != nil {
+		return knowledgeAskReady, err
+	}
+	if len(docs) == 0 {
+		return knowledgeAskNoChunks, nil
+	}
+	anyChunks := false
+	anyParsing := false
+	for _, doc := range docs {
+		if ragflow.DocumentHasChunks(doc) {
+			anyChunks = true
+			break
+		}
+		if ragflow.DocumentParsing(doc) {
+			anyParsing = true
+		}
+	}
+	if anyChunks {
+		return knowledgeAskReady, nil
+	}
+	if anyParsing {
+		return knowledgeAskParsing, nil
+	}
+	return knowledgeAskNoChunks, nil
+}
+
+func writeKnowledgeDeferredAnswer(c *gin.Context, stream bool, answer string) {
+	payload := gin.H{
+		"answer": answer, "recommendations": []string{},
+		"citations": []ragflow.Citation{},
+	}
+	if !stream {
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": payload})
+		return
+	}
+	flusher, canFlush := c.Writer.(http.Flusher)
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Status(http.StatusOK)
+	payload["done"] = true
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", data)
+	if canFlush {
+		flusher.Flush()
+	}
+}
+
+func writeKnowledgeParsingAnswer(c *gin.Context, stream bool) {
+	writeKnowledgeDeferredAnswer(c, stream, knowledgeParsingAnswer)
+}
+
+func writeKnowledgeNoParsedAnswer(c *gin.Context, stream bool) {
+	writeKnowledgeDeferredAnswer(c, stream, knowledgeNoParsedAnswer)
+}
+
+// deferKnowledgeAskIfNeeded answers with a product tip when RAGFlow cannot own a chat yet.
+func deferKnowledgeAskIfNeeded(c *gin.Context, client *ragflow.Client, datasetId string, stream bool, docIds ...string) bool {
+	deferral, err := knowledgeAskDeferralFor(c.Request.Context(), client, datasetId, docIds...)
+	if err != nil {
+		logger.SysErrorf("knowledge ask deferral check failed for dataset %s: %s", datasetId, err.Error())
+		return false
+	}
+	switch deferral {
+	case knowledgeAskParsing:
+		writeKnowledgeParsingAnswer(c, stream)
+		return true
+	case knowledgeAskNoChunks:
+		writeKnowledgeNoParsedAnswer(c, stream)
+		return true
+	default:
+		return false
+	}
+}
+
 func parseKnowledgeQuestion(c *gin.Context) (knowledgeCompletionInput, bool) {
 	var input knowledgeCompletionInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -825,10 +1088,14 @@ func parseKnowledgeQuestion(c *gin.Context) (knowledgeCompletionInput, bool) {
 	return input, true
 }
 
-func recreateKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, userId int, modelName string, existing *model.KnowledgeConversation) (model.KnowledgeConversation, bool) {
+func recreateKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, userId int, modelName string, existing *model.KnowledgeConversation, stream bool) (model.KnowledgeConversation, bool) {
 	name := fmt.Sprintf("knowledge-%d-%d", userId, time.Now().UnixMilli())
 	chat, createErr := client.CreateChat(c.Request.Context(), name, base.RagflowDatasetId, modelName)
 	if createErr != nil {
+		if ragflow.NoParsedFiles(createErr) {
+			writeKnowledgeNoParsedAnswer(c, stream)
+			return model.KnowledgeConversation{}, false
+		}
 		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": createErr.Error()})
 		return model.KnowledgeConversation{}, false
 	}
@@ -860,11 +1127,19 @@ func recreateKnowledgeConversation(c *gin.Context, client *ragflow.Client, base 
 }
 
 func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, conversation model.KnowledgeConversation, question string, stream bool, docIds ...string) {
-	// Refresh the assistant prompt so older chats also emit citation markers.
-	if err := client.UpdateChat(c.Request.Context(), conversation.RagflowChatId, base.RagflowDatasetId, conversation.Model); err != nil &&
-		!ragflow.ChatOwnershipLost(err) {
-		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
+	if deferKnowledgeAskIfNeeded(c, client, base.RagflowDatasetId, stream, docIds...) {
 		return
+	}
+	// Refresh the assistant prompt so older chats also emit citation markers.
+	if err := client.UpdateChat(c.Request.Context(), conversation.RagflowChatId, base.RagflowDatasetId, conversation.Model); err != nil {
+		if ragflow.NoParsedFiles(err) {
+			writeKnowledgeNoParsedAnswer(c, stream)
+			return
+		}
+		if !ragflow.ChatOwnershipLost(err) {
+			c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
+			return
+		}
 	}
 	if stream {
 		answerKnowledgeConversationStream(c, client, base, conversation, question, docIds...)
@@ -879,9 +1154,7 @@ func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *m
 		return
 	}
 	recommendations, recommendationErr := client.Recommend(c.Request.Context(), question)
-	if recommendations == nil {
-		recommendations = []string{}
-	}
+	recommendations = limitKnowledgeRecommendations(recommendations)
 	citations := ragflow.ParseCitations(completion.Reference, completion.Answer)
 	data := gin.H{
 		"answer": completion.Answer, "reference": completion.Reference,
@@ -896,7 +1169,7 @@ func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *m
 func completeWithRecovery(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, conversation model.KnowledgeConversation, question string, docIds ...string) (ragflow.Completion, error) {
 	completion, err := client.Complete(c.Request.Context(), conversation.RagflowChatId, conversation.RagflowSessionId, question, docIds...)
 	if err != nil && ragflow.ChatOwnershipLost(err) {
-		recreated, ok := recreateKnowledgeConversation(c, client, base, conversation.UserId, conversation.Model, &conversation)
+		recreated, ok := recreateKnowledgeConversation(c, client, base, conversation.UserId, conversation.Model, &conversation, false)
 		if !ok {
 			return ragflow.Completion{}, err
 		}
@@ -906,7 +1179,7 @@ func completeWithRecovery(c *gin.Context, client *ragflow.Client, base *model.Kn
 	if err != nil && ragflow.TooManyNestedClauses(err) {
 		if updateErr := client.UpdateChat(c.Request.Context(), conversation.RagflowChatId, base.RagflowDatasetId, conversation.Model); updateErr != nil {
 			if ragflow.ChatOwnershipLost(updateErr) {
-				recreated, ok := recreateKnowledgeConversation(c, client, base, conversation.UserId, conversation.Model, &conversation)
+				recreated, ok := recreateKnowledgeConversation(c, client, base, conversation.UserId, conversation.Model, &conversation, false)
 				if !ok {
 					return ragflow.Completion{}, err
 				}
@@ -948,9 +1221,7 @@ func answerKnowledgeConversationStream(c *gin.Context, client *ragflow.Client, b
 			func(answer string, reference json.RawMessage, done bool) error {
 				if done {
 					recommendations, recommendationErr := client.Recommend(c.Request.Context(), question)
-					if recommendations == nil {
-						recommendations = []string{}
-					}
+					recommendations = limitKnowledgeRecommendations(recommendations)
 					event := gin.H{
 						"answer": answer, "recommendations": recommendations,
 						"citations": ragflow.ParseCitations(reference, answer), "done": true,
@@ -971,7 +1242,7 @@ func answerKnowledgeConversationStream(c *gin.Context, client *ragflow.Client, b
 	}
 	err := run(conversation)
 	if err != nil && ragflow.ChatOwnershipLost(err) && !headersStarted {
-		recreated, ok := recreateKnowledgeConversation(c, client, base, conversation.UserId, conversation.Model, &conversation)
+		recreated, ok := recreateKnowledgeConversation(c, client, base, conversation.UserId, conversation.Model, &conversation, true)
 		if !ok {
 			return
 		}
@@ -981,7 +1252,7 @@ func answerKnowledgeConversationStream(c *gin.Context, client *ragflow.Client, b
 	if err != nil && ragflow.TooManyNestedClauses(err) && !headersStarted {
 		if updateErr := client.UpdateChat(c.Request.Context(), conversation.RagflowChatId, base.RagflowDatasetId, conversation.Model); updateErr != nil {
 			if ragflow.ChatOwnershipLost(updateErr) {
-				recreated, ok := recreateKnowledgeConversation(c, client, base, conversation.UserId, conversation.Model, &conversation)
+				recreated, ok := recreateKnowledgeConversation(c, client, base, conversation.UserId, conversation.Model, &conversation, true)
 				if !ok {
 					return
 				}
@@ -1002,7 +1273,7 @@ func answerKnowledgeConversationStream(c *gin.Context, client *ragflow.Client, b
 	}
 }
 
-func ensureKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, modelName string) (model.KnowledgeConversation, bool) {
+func ensureKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, modelName string, stream bool) (model.KnowledgeConversation, bool) {
 	userId := c.GetInt("id")
 	var conversation model.KnowledgeConversation
 	err := model.DB.Where("user_id = ? AND knowledge_base_id = ?", userId, base.Id).
@@ -1014,8 +1285,12 @@ func ensureKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *m
 		}
 		// Refresh retrieval caps so older assistants stop hitting Elasticsearch nested-clause limits.
 		if updateErr := client.UpdateChat(c.Request.Context(), conversation.RagflowChatId, base.RagflowDatasetId, modelToUse); updateErr != nil {
+			if ragflow.NoParsedFiles(updateErr) {
+				writeKnowledgeNoParsedAnswer(c, stream)
+				return conversation, false
+			}
 			if ragflow.ChatOwnershipLost(updateErr) {
-				return recreateKnowledgeConversation(c, client, base, userId, modelToUse, &conversation)
+				return recreateKnowledgeConversation(c, client, base, userId, modelToUse, &conversation, stream)
 			}
 			c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": updateErr.Error()})
 			return conversation, false
@@ -1033,7 +1308,7 @@ func ensureKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *m
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取对话失败"})
 		return conversation, false
 	}
-	return recreateKnowledgeConversation(c, client, base, userId, modelName, nil)
+	return recreateKnowledgeConversation(c, client, base, userId, modelName, nil, stream)
 }
 
 // ListKnowledgeConversationMessages returns the caller's saved Q&A turns for one authorized knowledge base.
@@ -1109,7 +1384,7 @@ func ClearKnowledgeConversationMessages(c *gin.Context) {
 	session, sessionErr := client.CreateSession(c.Request.Context(), conversation.RagflowChatId, name)
 	if sessionErr != nil {
 		if ragflow.ChatOwnershipLost(sessionErr) {
-			if _, recreated := recreateKnowledgeConversation(c, client, base, c.GetInt("id"), conversation.Model, &conversation); !recreated {
+			if _, recreated := recreateKnowledgeConversation(c, client, base, c.GetInt("id"), conversation.Model, &conversation, false); !recreated {
 				return
 			}
 			c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{}})
@@ -1155,7 +1430,11 @@ func ChatCompletionsKnowledgeBase(c *gin.Context) {
 	if !ok {
 		return
 	}
-	conversation, ok := ensureKnowledgeConversation(c, client, base, input.Model)
+	// Defer before CreateChat/UpdateChat: RAGFlow rejects datasets with zero chunks.
+	if deferKnowledgeAskIfNeeded(c, client, base.RagflowDatasetId, input.Stream, input.DocumentId) {
+		return
+	}
+	conversation, ok := ensureKnowledgeConversation(c, client, base, input.Model, input.Stream)
 	if !ok {
 		return
 	}
@@ -1191,3 +1470,4 @@ func CompleteKnowledgeConversation(c *gin.Context) {
 	}
 	answerKnowledgeConversation(c, client, base, conversation, input.Question, input.Stream, input.DocumentId)
 }
+

@@ -36,6 +36,8 @@ type KnowledgeBase struct {
 	Kind             string    `json:"kind" gorm:"type:varchar(16);index;not null"`
 	Shelf            string    `json:"shelf" gorm:"type:varchar(16);not null;default:published;index"`
 	Tags             string    `json:"tags" gorm:"type:varchar(200)"`
+	// Cover is an optional plaza image: a compact JPEG data URL from NormalizeKnowledgeCover, empty when unset.
+	Cover            string    `json:"cover,omitempty" gorm:"type:text"`
 	CategoryId       int       `json:"category_id" gorm:"index;default:0"`
 	// VisitCount is the lifetime number of authorized opens/uses (documents, chat, retrieval).
 	VisitCount int64 `json:"visit_count" gorm:"not null;default:0"`
@@ -87,11 +89,16 @@ type KnowledgeSubscriptionApplication struct {
 }
 
 // KnowledgePlazaItem is one marketplace card for libraries in auth-required categories.
+// DocumentCount and DocumentBytes are filled by the controller from RAGFlow; SubscriberCount
+// is the number of user grants.
 type KnowledgePlazaItem struct {
 	KnowledgeBase
 	CategoryName       string `json:"category_name"`
 	OwnerUsername      string `json:"owner_username"`
 	SubscriptionStatus string `json:"subscription_status"`
+	DocumentCount      int    `json:"document_count"`
+	DocumentBytes      int64  `json:"document_bytes"`
+	SubscriberCount    int    `json:"subscriber_count"`
 }
 
 // KnowledgeSubscriptionApplicationItem is one workbench audit row.
@@ -428,6 +435,24 @@ func GetKnowledgeBase(id int) (*KnowledgeBase, error) {
 	return &row, err
 }
 
+// ListBoundRagflowDatasetIds returns every RAGFlow dataset id already linked to a local library.
+func ListBoundRagflowDatasetIds() ([]string, error) {
+	var ids []string
+	err := DB.Model(&KnowledgeBase{}).Pluck("ragflow_dataset_id", &ids).Error
+	return ids, err
+}
+
+// KnowledgeBaseBoundToRagflowDataset reports whether any local library already uses this RAGFlow dataset.
+func KnowledgeBaseBoundToRagflowDataset(datasetId string) (bool, error) {
+	datasetId = strings.TrimSpace(datasetId)
+	if datasetId == "" {
+		return false, nil
+	}
+	var count int64
+	err := DB.Model(&KnowledgeBase{}).Where("ragflow_dataset_id = ?", datasetId).Count(&count).Error
+	return count > 0, err
+}
+
 // SaveKnowledgeDocumentSummary inserts or replaces the summary shown in the workbench file list.
 func SaveKnowledgeDocumentSummary(baseId int, documentId, summary string) error {
 	var note KnowledgeDocumentNote
@@ -537,8 +562,9 @@ func userDisplayNames(userIds []int) (map[int]string, error) {
 }
 
 // ListKnowledgePlaza returns published libraries in categories that require authorization.
-// The caller's own libraries and approved grants omit their cards — those live under 订阅知识库.
-// Callers without a grant still see others' cards so they can apply; subscription_status is none or pending.
+// The caller's own libraries omit their cards — those live under 订阅知识库.
+// Other callers see every published auth library, including ones they already hold a grant for
+// (subscription_status approved); applicants without a grant see none or pending.
 func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]KnowledgePlazaItem, error) {
 	// Personal categories are owner-only and never listed for subscription.
 	query := DB.Model(&KnowledgeBase{}).
@@ -609,6 +635,10 @@ func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]Knowledge
 			statusByBase[id] = KnowledgeSubscriptionApproved
 		}
 	}
+	subscribers, err := knowledgeUserSubscriberCounts(baseIds)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]KnowledgePlazaItem, 0, len(bases))
 	for _, base := range bases {
 		status := statusByBase[base.Id]
@@ -619,17 +649,39 @@ func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]Knowledge
 		if status == "" {
 			status = KnowledgeSubscriptionStatusNone
 		}
-		if status == KnowledgeSubscriptionApproved {
-			continue
-		}
 		items = append(items, KnowledgePlazaItem{
 			KnowledgeBase:      base,
 			CategoryName:       categories[base.CategoryId],
 			OwnerUsername:      owners[base.OwnerUserId],
 			SubscriptionStatus: status,
+			SubscriberCount:    subscribers[base.Id],
 		})
 	}
 	return items, nil
+}
+
+// knowledgeUserSubscriberCounts returns user-grant totals keyed by knowledge base id.
+func knowledgeUserSubscriberCounts(baseIds []int) (map[int]int, error) {
+	out := map[int]int{}
+	if len(baseIds) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		KnowledgeBaseId int
+		Count           int
+	}
+	err := DB.Model(&KnowledgeBaseGrant{}).
+		Select("knowledge_base_id, COUNT(*) AS count").
+		Where("knowledge_base_id IN ? AND subject_type = ?", baseIds, KnowledgeGrantUser).
+		Group("knowledge_base_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.KnowledgeBaseId] = row.Count
+	}
+	return out, nil
 }
 
 // GetKnowledgePlazaItem reads one marketplace library when it sits in an auth-required published category.

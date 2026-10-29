@@ -12,7 +12,7 @@ WorkBuddy’s **微信助理** lets users scan once in the connectors UI, then c
 
 Add a live connectors catalog row **微信助理** (`wechat-channel`) whose success state is **Tencent iLink QR bind + stored bot credentials under `$DSH_HOME/wechat-assistant` + a Host long-poll bridge**.
 
-Host RPC `/wanwei-wechat` exposes `status` / `loginStart` / `loginPoll` / `disconnect`. **连接** opens an **in-app** QR modal (PNG data URL), polls until `confirmed`, then starts `getupdates` → desktop `sessionController.prompt` → `sendmessage`. **取消连接** clears credentials and stops the bridge. Secrets never reach the Client.
+Host RPC `/wanwei-wechat` exposes `status` / `loginStart` / `loginPoll` / `disconnect`. **连接** opens an **in-app** QR modal (PNG data URL), polls until `confirmed`, then starts `getupdates` → desktop `sessionController.prompt` → `sendmessage`. While the desktop task runs, the bridge shows 「对方正在输入…」 in WeChat through `getconfig` (`typing_ticket`, cached per user for the bridge lifetime and evicted on a rejected send) and `sendtyping` status `1` every 5 seconds, then status `2` in the background once the task ends; the reply never waits on typing requests, and a failed typing send is logged and stops the keepalive. **取消连接** clears credentials and stops the bridge. Secrets never reach the Client.
 
 This is intentionally different from [Desktop DWS skills](2026-10-16-wanwei-dingtalk-desktop-dws-skills.md): that path rejects Stream/webhook as “已连接” for a skill ask; WeChat Assistant’s product ask *is* the remote channel. WeCom CLI packaging was later removed; see [Remove the Wanwei WeCom connector](../simplification/2026-10-23-remove-wanwei-wecom-connector.md).
 

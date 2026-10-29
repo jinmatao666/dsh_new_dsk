@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -156,6 +157,89 @@ func TestStartKnowledgeDocumentParseNoopsWithoutIds(t *testing.T) {
 	startKnowledgeDocumentParse(nil, "dataset", nil)
 	startKnowledgeDocumentParse(nil, "dataset", []string{})
 	startKnowledgeDocumentParse(nil, "", []string{"doc-1"})
+}
+
+func TestLimitKnowledgeRecommendationsKeepsThreeUnique(t *testing.T) {
+	got := limitKnowledgeRecommendations([]string{"甲", "", "乙", "甲", "丙", "丁"})
+	if len(got) != 3 || got[0] != "甲？" || got[1] != "乙？" || got[2] != "丙？" {
+		t.Fatalf("unexpected recommendations: %#v", got)
+	}
+	kept := limitKnowledgeRecommendations([]string{"已有问号？", "ascii?"})
+	if len(kept) != 2 || kept[0] != "已有问号？" || kept[1] != "ascii?" {
+		t.Fatalf("existing marks: %#v", kept)
+	}
+	if got := limitKnowledgeRecommendations(nil); len(got) != 0 {
+		t.Fatalf("nil input: %#v", got)
+	}
+}
+
+func TestKnowledgeDocumentsStillParsingUsesDocumentStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.Contains(r.URL.RawQuery, "id=doc-run"):
+			_, _ = w.Write([]byte(`{"code":0,"data":{"docs":[{"id":"doc-run","name":"a.pdf","run":"1","progress":0.2,"chunk_count":0}]}}`))
+		case strings.Contains(r.URL.RawQuery, "id=doc-done"):
+			_, _ = w.Write([]byte(`{"code":0,"data":{"docs":[{"id":"doc-done","name":"b.pdf","run":"DONE","progress":1,"chunk_count":3}]}}`))
+		default:
+			_, _ = w.Write([]byte(`{"code":0,"data":{"docs":[
+				{"id":"doc-run","name":"a.pdf","run":"RUNNING","progress":0.2,"chunk_count":0},
+				{"id":"doc-wait","name":"c.pdf","run":"UNSTART","progress":0,"chunk_count":0}
+			],"total":2}}`))
+		}
+	}))
+	defer server.Close()
+	t.Setenv("RAGFLOW_BASE_URL", server.URL)
+	t.Setenv("RAGFLOW_API_KEY", "test-key")
+	client, err := ragflow.NewFromEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsing, err := knowledgeDocumentsStillParsing(context.Background(), client, "ds-1", "doc-run")
+	if err != nil || !parsing {
+		t.Fatalf("targeted parsing: parsing=%v err=%v", parsing, err)
+	}
+	parsing, err = knowledgeDocumentsStillParsing(context.Background(), client, "ds-1", "doc-done")
+	if err != nil || parsing {
+		t.Fatalf("targeted ready: parsing=%v err=%v", parsing, err)
+	}
+	parsing, err = knowledgeDocumentsStillParsing(context.Background(), client, "ds-1")
+	if err != nil || !parsing {
+		t.Fatalf("library all pending: parsing=%v err=%v", parsing, err)
+	}
+	deferral, err := knowledgeAskDeferralFor(context.Background(), client, "ds-1", "doc-done")
+	if err != nil || deferral != knowledgeAskReady {
+		t.Fatalf("targeted chunks ready: deferral=%q err=%v", deferral, err)
+	}
+	deferral, err = knowledgeAskDeferralFor(context.Background(), client, "ds-1", "doc-run")
+	if err != nil || deferral != knowledgeAskParsing {
+		t.Fatalf("targeted still parsing: deferral=%q err=%v", deferral, err)
+	}
+	deferral, err = knowledgeAskDeferralFor(context.Background(), client, "ds-1")
+	if err != nil || deferral != knowledgeAskParsing {
+		t.Fatalf("library all pending deferral: deferral=%q err=%v", deferral, err)
+	}
+}
+
+func TestKnowledgeAskDeferralNoChunks(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":0,"data":{"docs":[
+			{"id":"doc-empty","name":"empty.pdf","run":"DONE","progress":1,"chunk_count":0},
+			{"id":"doc-fail","name":"fail.pdf","run":"FAIL","progress":0,"chunk_count":0}
+		],"total":2}}`))
+	}))
+	defer server.Close()
+	t.Setenv("RAGFLOW_BASE_URL", server.URL)
+	t.Setenv("RAGFLOW_API_KEY", "test-key")
+	client, err := ragflow.NewFromEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	deferral, err := knowledgeAskDeferralFor(context.Background(), client, "ds-empty")
+	if err != nil || deferral != knowledgeAskNoChunks {
+		t.Fatalf("done-without-chunks: deferral=%q err=%v", deferral, err)
+	}
 }
 
 func TestChatCompletionsKnowledgeBaseRejectsInvalidId(t *testing.T) {

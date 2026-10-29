@@ -28,9 +28,10 @@ type Client struct {
 }
 
 type envelope struct {
-	Code    int             `json:"code"`
-	Data    json.RawMessage `json:"data"`
-	Message string          `json:"message"`
+	Code          int             `json:"code"`
+	Data          json.RawMessage `json:"data"`
+	Message       string          `json:"message"`
+	TotalDatasets int             `json:"total_datasets"`
 }
 
 // Dataset is the subset of RAGFlow dataset metadata owned by OneAPI.
@@ -116,10 +117,10 @@ func ChunkViewerURL(datasetId, documentId string) (string, error) {
 	return base + "/chunk/parsed/chunks?" + query.Encode(), nil
 }
 
-func (c *Client) request(ctx context.Context, method, endpoint, contentType string, body io.Reader, result interface{}) error {
+func (c *Client) exchange(ctx context.Context, method, endpoint, contentType string, body io.Reader) (envelope, error) {
 	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+endpoint, body)
 	if err != nil {
-		return err
+		return envelope{}, err
 	}
 	request.Header.Set("Authorization", "Bearer "+c.apiKey)
 	if contentType != "" {
@@ -127,22 +128,22 @@ func (c *Client) request(ctx context.Context, method, endpoint, contentType stri
 	}
 	response, err := c.http.Do(request)
 	if err != nil {
-		return err
+		return envelope{}, err
 	}
 	defer response.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
 	if err != nil {
-		return err
+		return envelope{}, err
 	}
 	if len(data) > maxResponseBytes {
-		return errors.New("RAGFlow 响应过大")
+		return envelope{}, errors.New("RAGFlow 响应过大")
 	}
 	var wrapped envelope
 	if err := json.Unmarshal(data, &wrapped); err != nil {
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
-			return fmt.Errorf("RAGFlow 请求失败（HTTP %d）", response.StatusCode)
+			return envelope{}, fmt.Errorf("RAGFlow 请求失败（HTTP %d）", response.StatusCode)
 		}
-		return errors.New("RAGFlow 响应无效")
+		return envelope{}, errors.New("RAGFlow 响应无效")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 || wrapped.Code != 0 {
 		message := wrapped.Message
@@ -152,7 +153,15 @@ func (c *Client) request(ctx context.Context, method, endpoint, contentType stri
 		if message == "" {
 			message = fmt.Sprintf("请求失败（HTTP %d）", response.StatusCode)
 		}
-		return fmt.Errorf("RAGFlow：%s", mapRagflowMessage(message))
+		return envelope{}, fmt.Errorf("RAGFlow：%s", mapRagflowMessage(message))
+	}
+	return wrapped, nil
+}
+
+func (c *Client) request(ctx context.Context, method, endpoint, contentType string, body io.Reader, result interface{}) error {
+	wrapped, err := c.exchange(ctx, method, endpoint, contentType, body)
+	if err != nil {
+		return err
 	}
 	if result == nil {
 		return nil
@@ -238,6 +247,9 @@ func mapRagflowMessage(message string) string {
 		return "知识库检索条件过多，请缩短问题或减少资料后再试；若仍失败，请管理员提高 Elasticsearch 的 indices.query.bool.max_clause_count"
 	}
 	lower := strings.ToLower(message)
+	if strings.Contains(lower, "doesn't own parsed file") || strings.Contains(lower, "does not own parsed file") {
+		return "知识库尚无可检索内容，请等待文件解析完成后再试"
+	}
 	if strings.Contains(lower, "do not own the chat") || strings.Contains(lower, "don't own the chat") ||
 		strings.Contains(lower, "not own the chat") {
 		return "知识库对话已失效，正在重新建立"
@@ -268,12 +280,100 @@ func ChatOwnershipLost(err error) bool {
 		strings.Contains(text, "知识库对话已失效")
 }
 
+// NoParsedFiles reports whether RAGFlow rejected a chat because the dataset has zero chunks.
+func NoParsedFiles(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "doesn't own parsed file") ||
+		strings.Contains(text, "does not own parsed file") ||
+		strings.Contains(text, "尚无可检索内容")
+}
+
+// DocumentHasChunks reports whether the file already contributes retrieval chunks.
+func DocumentHasChunks(doc Document) bool {
+	return doc.ChunkCount > 0
+}
+
 // CreateDataset creates one RAGFlow dataset.
 func (c *Client) CreateDataset(ctx context.Context, name, description string) (Dataset, error) {
 	body, _ := jsonBody(map[string]interface{}{"name": name, "description": description})
 	var dataset Dataset
 	err := c.request(ctx, http.MethodPost, "/api/v1/datasets", "application/json", body, &dataset)
 	return dataset, err
+}
+
+// ListDatasetsPage lists one page of datasets from the configured RAGFlow origin
+// (GET {RAGFLOW_BASE_URL}/api/v1/datasets). total_datasets sits on the response envelope.
+func (c *Client) ListDatasetsPage(ctx context.Context, page, pageSize int) ([]Dataset, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 30
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	query := url.Values{}
+	query.Set("page", strconv.Itoa(page))
+	query.Set("page_size", strconv.Itoa(pageSize))
+	query.Set("orderby", "update_time")
+	query.Set("desc", "true")
+	wrapped, err := c.exchange(ctx, http.MethodGet, "/api/v1/datasets?"+query.Encode(), "", nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	var datasets []Dataset
+	if len(wrapped.Data) == 0 || string(wrapped.Data) == "null" {
+		return []Dataset{}, wrapped.TotalDatasets, nil
+	}
+	if err := json.Unmarshal(wrapped.Data, &datasets); err != nil {
+		return nil, 0, errors.New("RAGFlow 响应字段无效")
+	}
+	total := wrapped.TotalDatasets
+	if total == 0 && len(datasets) > 0 {
+		total = (page-1)*pageSize + len(datasets)
+	}
+	return datasets, total, nil
+}
+
+// ListAllDatasets walks RAGFlow dataset pages until the reported total is reached.
+func (c *Client) ListAllDatasets(ctx context.Context) ([]Dataset, error) {
+	const pageSize = 100
+	var all []Dataset
+	for page := 1; page <= 50; page++ {
+		items, total, err := c.ListDatasetsPage(ctx, page, pageSize)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, items...)
+		if len(items) == 0 || len(all) >= total {
+			return all, nil
+		}
+	}
+	return all, nil
+}
+
+// GetDataset loads one dataset by id through the list filter.
+func (c *Client) GetDataset(ctx context.Context, id string) (Dataset, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return Dataset{}, errors.New("知识库编号无效")
+	}
+	query := url.Values{}
+	query.Set("id", id)
+	query.Set("page", "1")
+	query.Set("page_size", "1")
+	var datasets []Dataset
+	if err := c.request(ctx, http.MethodGet, "/api/v1/datasets?"+query.Encode(), "", nil, &datasets); err != nil {
+		return Dataset{}, err
+	}
+	if len(datasets) == 0 || strings.TrimSpace(datasets[0].Id) == "" {
+		return Dataset{}, errors.New("知识库不存在")
+	}
+	return datasets[0], nil
 }
 
 // DeleteDataset compensates a failed local database insert.
@@ -286,6 +386,62 @@ func (c *Client) DeleteDataset(ctx context.Context, id string) error {
 func (c *Client) ListDocuments(ctx context.Context, datasetId string) ([]Document, error) {
 	docs, _, err := c.ListDocumentsPage(ctx, datasetId, 1, 100, "")
 	return docs, err
+}
+
+// GetDocument loads one file by id. Falls back to scanning the first list page when the id filter is ignored.
+func (c *Client) GetDocument(ctx context.Context, datasetId, documentId string) (Document, error) {
+	documentId = strings.TrimSpace(documentId)
+	if documentId == "" {
+		return Document{}, errors.New("文档编号无效")
+	}
+	var result struct {
+		Docs []Document `json:"docs"`
+	}
+	query := url.Values{}
+	query.Set("id", documentId)
+	query.Set("page", "1")
+	query.Set("page_size", "1")
+	endpoint := "/api/v1/datasets/" + url.PathEscape(datasetId) + "/documents?" + query.Encode()
+	if err := c.request(ctx, http.MethodGet, endpoint, "", nil, &result); err != nil {
+		return Document{}, err
+	}
+	for _, doc := range result.Docs {
+		if doc.Id == documentId {
+			return doc, nil
+		}
+	}
+	docs, err := c.ListDocuments(ctx, datasetId)
+	if err != nil {
+		return Document{}, err
+	}
+	for _, doc := range docs {
+		if doc.Id == documentId {
+			return doc, nil
+		}
+	}
+	return Document{}, errors.New("文档不存在")
+}
+
+// DocumentReady reports whether RAGFlow has finished chunking the file.
+func DocumentReady(doc Document) bool {
+	run := strings.ToUpper(strings.TrimSpace(doc.Run))
+	if run == "3" || run == "DONE" {
+		return true
+	}
+	return doc.ChunkCount > 0
+}
+
+// DocumentParsing reports whether the file is waiting for or still running chunking.
+func DocumentParsing(doc Document) bool {
+	if DocumentReady(doc) {
+		return false
+	}
+	run := strings.ToUpper(strings.TrimSpace(doc.Run))
+	switch run {
+	case "0", "UNSTART", "1", "RUNNING":
+		return true
+	}
+	return run == "" && doc.ChunkCount == 0
 }
 
 // ListDocumentsPage lists one page of files. keywords matches document titles in RAGFlow.
@@ -775,10 +931,30 @@ func nonEmptyDocIds(ids []string) []string {
 	return out
 }
 
-// Recommend calls the deployment's API-key-compatible related-question endpoint.
+// relatedQuestionEndpoints are tried in order. Current deployments still expose
+// /sessions/related_questions; newer docs use /chat/recommendation, and an older
+// misspelling /chat/recommandation also existed. A missing route returns
+// envelope code != 0 (often HTTP 200 with NotFound), so callers must fall through.
+var relatedQuestionEndpoints = []string{
+	"/api/v1/sessions/related_questions",
+	"/api/v1/chat/recommendation",
+	"/api/v1/chat/recommandation",
+}
+
+// Recommend calls an API-key-compatible related-question endpoint on the deployment.
 func (c *Client) Recommend(ctx context.Context, question string) ([]string, error) {
-	body, _ := jsonBody(map[string]string{"question": question})
-	var questions []string
-	err := c.request(ctx, http.MethodPost, "/api/v1/chat/recommandation", "application/json", body, &questions)
-	return questions, err
+	payload, err := json.Marshal(map[string]string{"question": question})
+	if err != nil {
+		return nil, err
+	}
+	var lastErr error
+	for _, endpoint := range relatedQuestionEndpoints {
+		var questions []string
+		err := c.request(ctx, http.MethodPost, endpoint, "application/json", bytes.NewReader(payload), &questions)
+		if err == nil {
+			return questions, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
 }

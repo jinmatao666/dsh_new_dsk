@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { clearKnowledgeDownloadCache, KnowledgePage, type KnowledgeApi } from '../src/client/KnowledgePage.tsx'
+import {
+  clearKnowledgeDownloadCache,
+  formatAnswerDurationSeconds,
+  formatAnswerTiming,
+  KnowledgePage,
+  relatedQuestions,
+  type KnowledgeApi,
+} from '../src/client/KnowledgePage.tsx'
 
 vi.mock('pdfjs-dist', () => ({
   GlobalWorkerOptions: { workerSrc: '' },
@@ -86,7 +93,8 @@ it('loads authorized knowledge bases and creates a personal library', async () =
   expect(screen.queryByRole('button', { name: '新建订阅知识库' })).toBeNull()
   expect(screen.queryByRole('button', { name: '新建共享知识库' })).toBeNull()
   expect(screen.queryByText('共享知识库')).toBeNull()
-  expect(screen.queryByText('订阅知识库')).toBeNull()
+  const subscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
+  expect(within(subscription).getByText('暂无知识库')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: '新建个人知识库' }))
   expect(screen.getByRole('dialog', { name: '新建个人知识库' })).toBeTruthy()
   fireEvent.change(screen.getByPlaceholderText('请输入知识库名称'), { target: { value: '协作资料' } })
@@ -98,6 +106,45 @@ it('loads authorized knowledge bases and creates a personal library', async () =
   expect(screen.getByRole('menuitem', { name: '本地文件夹' })).toBeTruthy()
   expect(screen.getByRole('menuitem', { name: '新建文件夹' })).toBeTruthy()
   expect(screen.getByText('PDF')).toBeTruthy()
+})
+
+it('hides cover upload on the desktop create dialog', async () => {
+  render(<KnowledgePage api={api()} />)
+  fireEvent.click(await screen.findByRole('button', { name: '新建个人知识库' }))
+  expect(screen.getByRole('dialog', { name: '新建个人知识库' })).toBeTruthy()
+  expect(screen.queryByLabelText('上传封面')).toBeNull()
+  expect(screen.queryByText('封面')).toBeNull()
+})
+
+it('shows an uploaded cover on the plaza card and detail', async () => {
+  const service = api()
+  const cover = 'data:image/jpeg;base64,aaaa'
+  const plazaItem = {
+    id: 9,
+    name: '地方法规知识库',
+    description: '地方法规合集',
+    kind: 'common' as const,
+    owner_user_id: 2,
+    category_id: 4,
+    category_name: '法律',
+    owner_username: '法务平台',
+    subscription_status: 'none' as const,
+    cover,
+  }
+  service.plaza = vi.fn(async () => [plazaItem])
+  service.plazaItem = vi.fn(async () => plazaItem)
+  render(<KnowledgePage api={service} />)
+  const plazaLaunch = await screen.findByRole('button', { name: /知识库广场/ })
+  expect(plazaLaunch.textContent).toContain('发现优质行业知识')
+  expect(plazaLaunch.querySelector('.dsh-knowledge-plaza-launch-icon')).toBeTruthy()
+  fireEvent.click(plazaLaunch)
+  expect(screen.getByText('知识资源中心')).toBeTruthy()
+  expect(screen.getByText('发现并订阅专业知识库，让可靠资料随时参与工作')).toBeTruthy()
+  const card = await screen.findByRole('button', { name: /地方法规知识库/ })
+  expect(card.querySelector('img')?.getAttribute('src')).toBe(cover)
+  fireEvent.click(card)
+  expect(await screen.findByRole('button', { name: '订阅' })).toBeTruthy()
+  expect(document.querySelector('.dsh-knowledge-plaza-cover.large img')?.getAttribute('src')).toBe(cover)
 })
 
 it('selects the first library of the first sidebar group on open', async () => {
@@ -132,6 +179,10 @@ it('hides auth category names from the sidebar and discovers them only in the pl
     category_name: '法律',
     owner_username: '法务平台',
     subscription_status: 'none' as const,
+    updated_at: '2026-10-12T08:00:00Z',
+    document_count: 12,
+    document_bytes: 2_516_582,
+    subscriber_count: 8,
   }
   service.categories = vi.fn(async () => [
     { id: 3, name: '公开规范', type: 'common' as const, require_auth: false },
@@ -152,22 +203,100 @@ it('hides auth category names from the sidebar and discovers them only in the pl
   expect(await screen.findByText('公共知识库')).toBeTruthy()
   expect(screen.queryByText('公开规范')).toBeNull()
   expect(screen.queryByText('法律')).toBeNull()
-  expect(screen.queryByText('订阅知识库')).toBeNull()
+  const emptySubscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
+  expect(within(emptySubscription).getByText('暂无知识库')).toBeTruthy()
   const open = screen.getByText('公共知识库').closest('.dsh-knowledge-group')
   expect(within(open as HTMLElement).getByText('公开汇编')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: /知识库广场/ }))
-  expect(await screen.findByText('地方法规知识库')).toBeTruthy()
-  expect(screen.getByText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；自建与已订阅的知识库不再出现在广场。')).toBeTruthy()
+  const card = await screen.findByRole('button', { name: /地方法规知识库/ })
+  expect(card.querySelector('img')?.getAttribute('src')).toBe('/knowledge-covers/plaza-natural-resources.jpg')
+  expect(card.textContent).toContain('维护者')
+  expect(card.textContent).toContain('法务平台')
+  expect(card.textContent).toContain('更新时间')
+  expect(card.textContent).toContain('2026-10-12')
+  expect(card.textContent).toContain('文件数量')
+  expect(card.textContent).toContain('12个')
+  expect(card.textContent).toContain('文件大小')
+  expect(card.textContent).toContain('2.4MB')
+  expect(card.textContent).toContain('已订阅')
+  expect(card.textContent).toContain('8人')
+  expect(screen.getByText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库仍可在广场查看与问答。自建库不出现在广场。')).toBeTruthy()
   expect(screen.queryByRole('tab')).toBeNull()
   expect(service.plaza).toHaveBeenCalledWith({})
   fireEvent.click(screen.getByRole('button', { name: /地方法规知识库/ }))
   expect(await screen.findByRole('button', { name: '订阅' })).toBeTruthy()
+  const detail = screen.getByRole('button', { name: '订阅' }).closest('.dsh-knowledge-plaza-detail-main') as HTMLElement
+  expect(detail.textContent).toContain('维护者')
+  expect(detail.textContent).toContain('12个')
+  expect(detail.textContent).toContain('2.4MB')
+  expect(detail.textContent).toContain('8人')
   expect(await screen.findByText('浙江省')).toBeTruthy()
   expect(screen.getByText('安徽省')).toBeTruthy()
+  expect(document.querySelector('.dsh-knowledge-plaza-detail-chat')).toBeNull()
   expect(service.plazaDocuments).toHaveBeenCalledWith(9)
   fireEvent.click(screen.getByRole('button', { name: '订阅' }))
   await waitFor(() => expect(service.subscribe).toHaveBeenCalledWith(9))
   expect(await screen.findByRole('button', { name: '审核中' })).toBeTruthy()
+})
+
+it('keeps approved libraries on the plaza with Q&A and openable files', async () => {
+  const service = api()
+  const plazaItem = {
+    id: 9,
+    name: '地方法规知识库',
+    description: '地方法规合集',
+    kind: 'common' as const,
+    owner_user_id: 2,
+    category_id: 4,
+    category_name: '法律',
+    owner_username: '法务平台',
+    subscription_status: 'approved' as const,
+    updated_at: '2026-10-12T08:00:00Z',
+    document_count: 2,
+    document_bytes: 2048,
+    subscriber_count: 8,
+  }
+  service.categories = vi.fn(async () => [
+    { id: 4, name: '法律', type: 'shared' as const, require_auth: true },
+  ])
+  service.list = vi.fn(async () => [
+    { id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7 },
+    {
+      id: 9, name: '地方法规知识库', description: '地方法规合集', kind: 'common' as const,
+      owner_user_id: 2, category_id: 4, owned_by_viewer: false, subscribed_by_viewer: true,
+    },
+  ])
+  service.plaza = vi.fn(async () => [plazaItem])
+  service.plazaItem = vi.fn(async () => plazaItem)
+  service.plazaDocuments = vi.fn(async () => [
+    { id: 'doc-1', name: '说明.pdf', size: 2048, run: 'DONE', progress: 1 },
+  ])
+  service.complete = vi.fn(async (_id, _question, onProgress) => {
+    onProgress?.({ answer: '广场回答', recommendations: [], done: true })
+    return { answer: '广场回答', recommendations: [] }
+  })
+  service.download = vi.fn(async () => ({
+    contentType: 'application/pdf',
+    bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+  }))
+  render(<KnowledgePage api={service} />)
+  fireEvent.click(await screen.findByRole('button', { name: /知识库广场/ }))
+  const plaza = await screen.findByRole('region', { name: '知识库广场' })
+  const card = within(plaza).getByRole('button', { name: /地方法规知识库/ })
+  expect(card.textContent).toContain('已订阅')
+  expect(card.textContent).toContain('8人')
+  fireEvent.click(card)
+  expect(await within(plaza).findByRole('button', { name: '已订阅' })).toBeTruthy()
+  const chat = plaza.querySelector('.dsh-knowledge-plaza-detail-chat') as HTMLElement
+  expect(within(chat).getByPlaceholderText('基于知识库提问')).toBeTruthy()
+  fireEvent.click(within(plaza).getByText('说明.pdf'))
+  await waitFor(() => expect(service.download).toHaveBeenCalledWith(9, 'doc-1'))
+  fireEvent.change(within(chat).getByPlaceholderText('基于知识库提问'), { target: { value: '概括一下' } })
+  fireEvent.click(within(chat).getByRole('button', { name: '发送' }))
+  await waitFor(() => expect(service.complete).toHaveBeenCalledWith(
+    9, '概括一下', expect.any(Function), expect.any(AbortSignal), undefined,
+  ))
+  expect(await within(chat).findByText('广场回答')).toBeTruthy()
 })
 
 it('places approved auth-category libraries under 订阅知识库 instead of the category name', async () => {
@@ -209,8 +338,9 @@ it('keeps admin-created auth libraries out of 订阅知识库 until a grant exis
   }])
   render(<KnowledgePage api={service} />)
   expect(await screen.findByRole('button', { name: '我的资料' })).toBeTruthy()
-  expect(screen.queryByText('订阅知识库')).toBeNull()
-  expect(screen.queryByText('平台法规')).toBeNull()
+  const subscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
+  expect(within(subscription).getByText('暂无知识库')).toBeTruthy()
+  expect(within(subscription).queryByText('平台法规')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: /知识库广场/ }))
   const plaza = await screen.findByRole('region', { name: '知识库广场' })
   expect(within(plaza).getByRole('button', { name: /平台法规/ })).toBeTruthy()
@@ -295,10 +425,14 @@ it('unsubscribes a subscribed library so it leaves 订阅知识库', async () =>
   expect(await screen.findByRole('button', { name: '取消订阅' })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: '取消订阅' }))
   await waitFor(() => expect(service.unsubscribe).toHaveBeenCalledWith(8))
-  await waitFor(() => expect(screen.queryByText('订阅知识库')).toBeNull())
+  await waitFor(() => {
+    const subscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
+    expect(within(subscription).getByText('暂无知识库')).toBeTruthy()
+    expect(within(subscription).queryByText('已订法规')).toBeNull()
+  })
 })
 
-it('hides 公共知识库 and 订阅知识库 when those groups are empty', async () => {
+it('keeps 个人知识库 and 订阅知识库 visible when empty and hides empty 公共知识库', async () => {
   const service = api()
   service.categories = vi.fn(async () => [
     { id: 3, name: '公开规范', type: 'common' as const, require_auth: false },
@@ -310,8 +444,11 @@ it('hides 公共知识库 and 订阅知识库 when those groups are empty', asyn
   render(<KnowledgePage api={service} />)
   expect(await screen.findAllByText('我的资料')).not.toHaveLength(0)
   expect(screen.queryByText('公共知识库')).toBeNull()
-  expect(screen.queryByText('订阅知识库')).toBeNull()
   expect(screen.queryByText('公开规范')).toBeNull()
+  const personal = screen.getByText('个人知识库').closest('.dsh-knowledge-group') as HTMLElement
+  expect(within(personal).getByText('我的资料')).toBeTruthy()
+  const subscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
+  expect(within(subscription).getByText('暂无知识库')).toBeTruthy()
 })
 
 it('uploads every file from a local folder into the selected knowledge base', async () => {
@@ -381,7 +518,7 @@ it('restores saved Q&A turns when opening a knowledge base', async () => {
   await waitFor(() => expect(service.messages).toHaveBeenCalledWith(1))
   expect(await screen.findByText('上次的问题')).toBeTruthy()
   expect(screen.getByText('上次的回答')).toBeTruthy()
-  expect(screen.getByText('万维')).toBeTruthy()
+  expect(screen.getByText('万维Buddy')).toBeTruthy()
   expect(pane.scrollTop).toBe(0)
 })
 
@@ -416,12 +553,27 @@ it('restores Q&A turns when clearing the session fails', async () => {
   expect(screen.getByText('上次的回答')).toBeTruthy()
 })
 
+it('formats answer timing and keeps three related questions', () => {
+  expect(formatAnswerDurationSeconds(1_000, 1_450)).toBe('0.5')
+  expect(formatAnswerDurationSeconds(1_000, 12_000)).toBe('11')
+  expect(formatAnswerTiming(1_700_000_000_000, 1_700_000_008_200)).toMatch(/^开始时间 .+ · 结束时间 .+ · 回答耗时 8\.2秒$/)
+  expect(relatedQuestions(['甲', '', '乙', '甲', '丙', '丁'])).toEqual(['甲？', '乙？', '丙？'])
+  expect(relatedQuestions(['已有问号？', 'ascii?'])).toEqual(['已有问号？', 'ascii?'])
+})
+
 it('asks the selected knowledge base through chat completions and renders recommendations', async () => {
   const service = api()
   service.complete = vi.fn(async (_id, _question, onProgress) => {
     onProgress?.({ answer: '知', done: false })
-    onProgress?.({ answer: '知识库回答', recommendations: ['继续提问'], done: true })
-    return { answer: '知识库回答', recommendations: ['继续提问'] }
+    onProgress?.({
+      answer: '知识库回答',
+      recommendations: ['继续提问', '第二问', '第三问', '第四问'],
+      done: true,
+    })
+    return {
+      answer: '知识库回答',
+      recommendations: ['继续提问', '第二问', '第三问', '第四问'],
+    }
   })
   const { container } = render(<KnowledgePage api={service} />)
   const pane = container.querySelector('.dsh-knowledge-messages') as HTMLDivElement
@@ -435,8 +587,13 @@ it('asks the selected knowledge base through chat completions and renders recomm
     1, '请概括文档', expect.any(Function), expect.any(AbortSignal), undefined,
   )
   expect(await screen.findByText('知识库回答')).toBeTruthy()
-  expect(screen.getByText('万维')).toBeTruthy()
-  expect(screen.getByText('继续提问')).toBeTruthy()
+  expect(screen.getByText('万维Buddy')).toBeTruthy()
+  expect(screen.getByText('推荐关联问题')).toBeTruthy()
+  expect(screen.getByText('继续提问？')).toBeTruthy()
+  expect(screen.getByText('第二问？')).toBeTruthy()
+  expect(screen.getByText('第三问？')).toBeTruthy()
+  expect(screen.queryByText('第四问？')).toBeNull()
+  expect(container.querySelector('.dsh-knowledge-answer-meta')?.textContent).toMatch(/开始时间 .+ · 结束时间 .+ · 回答耗时 .+秒/)
   expect(screen.getByRole('button', { name: '发送' }).className).toContain('idle')
   await waitFor(() => expect(pane.scrollTop).toBe(960))
 })
@@ -458,7 +615,7 @@ it('shows typing dots and a stop control while waiting for the first answer chun
   fireEvent.click(screen.getByRole('button', { name: '发送' }))
   expect(await screen.findByRole('status', { name: '正在回答…' })).toBeTruthy()
   expect(screen.getByRole('button', { name: '停止' })).toBeTruthy()
-  expect(screen.getByText('万维')).toBeTruthy()
+  expect(screen.getByText('万维Buddy')).toBeTruthy()
   finish({ answer: '知识库回答', recommendations: [] })
   expect(await screen.findByText('知识库回答')).toBeTruthy()
   expect(screen.getByRole('button', { name: '发送' }).className).toContain('idle')

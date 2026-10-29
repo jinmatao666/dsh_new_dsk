@@ -11,6 +11,42 @@ import (
 	"testing"
 )
 
+func TestDocumentParsingAndReady(t *testing.T) {
+	if !DocumentParsing(Document{Run: "1", ChunkCount: 0}) || DocumentReady(Document{Run: "1"}) {
+		t.Fatal("running should be parsing")
+	}
+	if !DocumentReady(Document{Run: "DONE", ChunkCount: 0}) || DocumentParsing(Document{Run: "DONE"}) {
+		t.Fatal("DONE should be ready")
+	}
+	if !DocumentReady(Document{Run: "FAIL", ChunkCount: 2}) {
+		t.Fatal("chunk_count marks ready")
+	}
+	if DocumentParsing(Document{Run: "FAIL", ChunkCount: 0}) {
+		t.Fatal("FAIL is not parsing")
+	}
+}
+
+func TestGetDocumentUsesIdFilter(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path + "?" + r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":0,"data":{"docs":[{"id":"doc-1","name":"a.pdf","run":"RUNNING","chunk_count":0}]}}`))
+	}))
+	defer server.Close()
+	client := &Client{baseURL: server.URL, apiKey: "secret", http: server.Client()}
+	doc, err := client.GetDocument(context.Background(), "ds-1", "doc-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Id != "doc-1" || !DocumentParsing(doc) {
+		t.Fatalf("doc=%#v", doc)
+	}
+	if !strings.Contains(gotPath, "id=doc-1") {
+		t.Fatalf("path=%s", gotPath)
+	}
+}
+
 func TestListDocumentsPagePassesKeywordsAndPaging(t *testing.T) {
 	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +202,26 @@ func TestChatOwnershipLost(t *testing.T) {
 	}
 }
 
+func TestNoParsedFilesAndMapMessage(t *testing.T) {
+	raw := "The dataset 72963144d35b11f1afeff6009ef8e3f8 doesn't own parsed file"
+	mapped := mapRagflowMessage(raw)
+	if mapped != "知识库尚无可检索内容，请等待文件解析完成后再试" {
+		t.Fatalf("mapped=%q", mapped)
+	}
+	if !NoParsedFiles(errors.New("RAGFlow：" + mapped)) {
+		t.Fatal("expected no parsed files")
+	}
+	if !NoParsedFiles(errors.New("RAGFlow：" + raw)) {
+		t.Fatal("expected raw no parsed files")
+	}
+	if NoParsedFiles(errors.New("RAGFlow：timeout")) {
+		t.Fatal("timeout is not no parsed files")
+	}
+	if !DocumentHasChunks(Document{ChunkCount: 1}) || DocumentHasChunks(Document{ChunkCount: 0}) {
+		t.Fatal("chunk presence")
+	}
+}
+
 func TestChunkViewerURLJoinsBaseAndIds(t *testing.T) {
 	t.Setenv("RAGFLOW_BASE_URL", "http://ac.zjugis.com:9381/")
 	got, err := ChunkViewerURL("dataset-1", "doc-2")
@@ -260,6 +316,77 @@ func TestDeleteSessionRemovesOneSession(t *testing.T) {
 	}
 	if gotBody != `{"ids":["sess-1"]}` {
 		t.Fatalf("body=%s", gotBody)
+	}
+}
+
+func TestListDatasetsPageReadsEnvelopeTotal(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path + "?" + r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":0,"data":[{"id":"ds-a","name":"规范"},{"id":"ds-b","name":"资料"}],"total_datasets":5}`))
+	}))
+	defer server.Close()
+
+	client := &Client{baseURL: server.URL, apiKey: "secret", http: server.Client()}
+	datasets, total, err := client.ListDatasetsPage(context.Background(), 1, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 5 || len(datasets) != 2 || datasets[0].Id != "ds-a" {
+		t.Fatalf("datasets=%#v total=%d", datasets, total)
+	}
+	if gotPath != "/api/v1/datasets?desc=true&orderby=update_time&page=1&page_size=30" {
+		t.Fatalf("path=%s", gotPath)
+	}
+}
+
+func TestGetDatasetUsesIdFilter(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path + "?" + r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":0,"data":[{"id":"ds-pick","name":"已有库"}]}`))
+	}))
+	defer server.Close()
+
+	client := &Client{baseURL: server.URL, apiKey: "secret", http: server.Client()}
+	dataset, err := client.GetDataset(context.Background(), "ds-pick")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dataset.Id != "ds-pick" || dataset.Name != "已有库" {
+		t.Fatalf("dataset=%#v", dataset)
+	}
+	if !strings.Contains(gotPath, "id=ds-pick") {
+		t.Fatalf("path=%s", gotPath)
+	}
+}
+
+func TestListAllDatasetsWalksPages(t *testing.T) {
+	var pages []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pages = append(pages, r.URL.Query().Get("page"))
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("page") {
+		case "1":
+			_, _ = w.Write([]byte(`{"code":0,"data":[{"id":"ds-1","name":"一"}],"total_datasets":2}`))
+		default:
+			_, _ = w.Write([]byte(`{"code":0,"data":[{"id":"ds-2","name":"二"}],"total_datasets":2}`))
+		}
+	}))
+	defer server.Close()
+
+	client := &Client{baseURL: server.URL, apiKey: "secret", http: server.Client()}
+	all, err := client.ListAllDatasets(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 || all[1].Id != "ds-2" {
+		t.Fatalf("all=%#v pages=%v", all, pages)
+	}
+	if len(pages) != 2 || pages[0] != "1" || pages[1] != "2" {
+		t.Fatalf("pages=%v", pages)
 	}
 }
 

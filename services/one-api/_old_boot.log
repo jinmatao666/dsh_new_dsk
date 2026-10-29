@@ -1,0 +1,12 @@
+[INFO] 2026/10/29 - 16:31:32 | main.go:42 [main] One API v0.0.0 started 
+[INFO] 2026/10/29 - 16:31:32 | model/main.go:148 [openSQLite] SQL_DSN not set, using SQLite as database 
+[INFO] 2026/10/29 - 16:31:32 | model/main.go:188 [InitDB] database migration started 
+[INFO] 2026/10/29 - 16:31:32 | model/main.go:193 [InitDB] database migrated 
+[INFO] 2026/10/29 - 16:31:32 | model/main.go:207 [InitDB] user provider initialized: current 
+[INFO] 2026/10/29 - 16:31:32 | model/main.go:737 [InitAccountDB] ACCOUNT_SQL_DSN 未配置，账号中心未启用 
+[INFO] 2026/10/29 - 16:31:32 | model/account_migration.go:28 [MigrateAccountsV0] 账号中心未启用（ACCOUNT_SQL_DSN 未配置），跳过 MigrateAccountsV0 
+[INFO] 2026/10/29 - 16:31:32 | model/skill.go:148 [InitSkillCache] loaded 0 skills into cache 
+[INFO] 2026/10/29 - 16:31:32 | common/redis.go:20 [InitRedisClient] REDIS_CONN_STRING not set, Redis is not enabled 
+[INFO] 2026/10/29 - 16:31:32 | main.go:120 [main] using theme air 
+[INFO] 2026/10/29 - 16:31:32 | model/explicit_cache_cache.go:40 [InitExplicitCacheModelCache] explicit cache models synced from database 
+[INFO] 2026/10/29 - 16:31:32 | relay/adaptor/openai/token.go:23 [InitTokenEncoders] initializing token encoders 

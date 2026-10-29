@@ -129,11 +129,13 @@ function knowledgeItem(raw: unknown): KnowledgeBaseItem {
   if (subscribed !== undefined && typeof subscribed !== 'boolean') {
     throw new Error('知识库响应字段无效')
   }
+  const cover = optionalCover(item.cover, '知识库响应字段无效')
   return {
     ...(item as unknown as KnowledgeBaseItem),
     category_id: categoryId,
     ...(typeof owned === 'boolean' ? { owned_by_viewer: owned } : {}),
     ...(typeof subscribed === 'boolean' ? { subscribed_by_viewer: subscribed } : {}),
+    ...(cover !== undefined ? { cover } : {}),
   }
 }
 
@@ -165,6 +167,13 @@ function knowledgePlazaItem(raw: unknown): KnowledgePlazaItem {
       item.subscription_status !== 'approved' && item.subscription_status !== 'owned')) {
     throw new Error('知识库广场字段无效')
   }
+  const count = optionalCount(item.document_count)
+  const bytes = optionalCount(item.document_bytes)
+  const subscribers = optionalCount(item.subscriber_count)
+  if (count === undefined || bytes === undefined || subscribers === undefined) {
+    throw new Error('知识库广场字段无效')
+  }
+  const cover = optionalCover(item.cover, '知识库广场字段无效')
   return {
     id: item.id as number,
     name: item.name,
@@ -175,7 +184,33 @@ function knowledgePlazaItem(raw: unknown): KnowledgePlazaItem {
     category_name: item.category_name,
     owner_username: item.owner_username,
     subscription_status: item.subscription_status,
+    document_count: count,
+    document_bytes: bytes,
+    subscriber_count: subscribers,
+    ...(typeof item.updated_at === 'string' ? { updated_at: item.updated_at } : {}),
+    ...(cover !== undefined ? { cover } : {}),
   }
+}
+
+/** Keep a plaza or library cover only when it is an image data URL.
+ * @param value - JSON field.
+ * @param invalid - Error text when the field is present but not an image data URL.
+ * @returns The data URL, or undefined when the library has no cover.
+ */
+function optionalCover(value: unknown, invalid: string): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined
+  if (typeof value !== 'string' || !value.startsWith('data:image/')) throw new Error(invalid)
+  return value
+}
+
+/** Absent catalog stats are zero; a present non-integer is invalid.
+ * @param value - JSON field.
+ * @returns Count, or undefined when the field is present but not a non-negative integer.
+ */
+function optionalCount(value: unknown): number | undefined {
+  if (value === undefined || value === null) return 0
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined
+  return Math.trunc(value)
 }
 
 export const inject = ['slots', 'connection', 'wanweiNetwork']

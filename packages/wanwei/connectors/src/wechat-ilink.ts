@@ -42,6 +42,11 @@ const ACTIVE_LOGIN_TTL_MS = 5 * 60_000
 const DEFAULT_GET_UPDATES_TIMEOUT_MS = 35_000
 const MESSAGE_TYPE_USER = 1
 const MESSAGE_ITEM_TEXT = 1
+/** iLink `sendtyping` status values (OpenClaw Weixin `TypingStatus`). */
+const TYPING_STATUS_TYPING = 1
+const TYPING_STATUS_CANCEL = 2
+/** WeChat clears 「对方正在输入…」 shortly after the last typing signal; resend at OpenClaw's cadence. */
+const TYPING_KEEPALIVE_MS = 5_000
 
 /** Non-secret WeChat Assistant status for the connectors page. */
 export type WeChatStatus = {
@@ -773,6 +778,91 @@ async function sendTextReply(
   )
 }
 
+async function fetchTypingTicket(
+  credentials: StoredCredentials,
+  userId: string,
+  contextToken: string | undefined,
+): Promise<string> {
+  const raw = await httpPost(
+    `${ensureTrailingSlash(credentials.baseUrl)}ilink/bot/getconfig`,
+    { ilink_user_id: userId, context_token: contextToken, base_info: baseInfo() },
+    { token: credentials.botToken, timeoutMs: 10_000 },
+  )
+  const parsed = JSON.parse(raw) as { ret?: number; errmsg?: string; typing_ticket?: string }
+  if (parsed.ret !== 0 || typeof parsed.typing_ticket !== 'string' || parsed.typing_ticket === '') {
+    throw new Error(`getconfig ret=${parsed.ret} ${parsed.errmsg ?? ''}`)
+  }
+  return parsed.typing_ticket
+}
+
+async function sendTyping(
+  credentials: StoredCredentials,
+  userId: string,
+  ticket: string,
+  status: typeof TYPING_STATUS_TYPING | typeof TYPING_STATUS_CANCEL,
+): Promise<void> {
+  const raw = await httpPost(
+    `${ensureTrailingSlash(credentials.baseUrl)}ilink/bot/sendtyping`,
+    { ilink_user_id: userId, typing_ticket: ticket, status, base_info: baseInfo() },
+    { token: credentials.botToken, timeoutMs: 10_000 },
+  )
+  const parsed = JSON.parse(raw) as { ret?: number; errmsg?: string }
+  if (parsed.ret !== undefined && parsed.ret !== 0) {
+    throw new Error(`sendtyping ret=${parsed.ret} ${parsed.errmsg ?? ''}`)
+  }
+}
+
+/**
+ * Show 「对方正在输入…」 in the user's WeChat chat until the returned stop resolves.
+ * Typing is best-effort: ticket or send failures are logged and never delay the task.
+ * @param ctx - Host context for warnings.
+ * @param credentials - bridge credentials.
+ * @param userId - bound WeChat user receiving the indicator.
+ * @param contextToken - inbound message context token for `getconfig`.
+ * @param tickets - per-bridge typing ticket cache keyed by user id; failed tickets are evicted.
+ * @returns stop function that ends keepalive and sends the cancel status in the background.
+ */
+function startTypingIndicator(
+  ctx: Context,
+  credentials: StoredCredentials,
+  userId: string,
+  contextToken: string | undefined,
+  tickets: Map<string, string>,
+): () => void {
+  let stopped = false
+  let keepalive: ReturnType<typeof setInterval> | undefined
+  const send = (ticket: string, status: typeof TYPING_STATUS_TYPING | typeof TYPING_STATUS_CANCEL) =>
+    sendTyping(credentials, userId, ticket, status).catch((error: unknown) => {
+      clearInterval(keepalive)
+      // A late failure from an earlier message must not evict a newer ticket.
+      if (tickets.get(userId) === ticket) tickets.delete(userId)
+      ctx.logger.warn(`微信输入状态发送失败：${error instanceof Error ? error.message : String(error)}`)
+    })
+  const cached = tickets.get(userId)
+  const ready: Promise<string | null> = (cached === undefined
+    ? fetchTypingTicket(credentials, userId, contextToken).then((ticket) => {
+      tickets.set(userId, ticket)
+      return ticket
+    })
+    : Promise.resolve(cached)
+  ).then((ticket) => {
+    if (stopped) return ticket
+    void send(ticket, TYPING_STATUS_TYPING)
+    keepalive = setInterval(() => { void send(ticket, TYPING_STATUS_TYPING) }, TYPING_KEEPALIVE_MS)
+    return ticket
+  }, (error: unknown) => {
+    ctx.logger.warn(`微信输入状态不可用：${error instanceof Error ? error.message : String(error)}`)
+    return null
+  })
+  return () => {
+    stopped = true
+    clearInterval(keepalive)
+    void ready.then((ticket) => {
+      if (ticket !== null) void send(ticket, TYPING_STATUS_CANCEL)
+    })
+  }
+}
+
 function extractUserText(message: {
   item_list?: Array<{ type?: number; text_item?: { text?: string }; voice_item?: { text?: string } }>
 }): string {
@@ -848,6 +938,7 @@ async function runBridgeLoop(ctx: Context, dshHome: string, signal: AbortSignal)
   let credentials = loadWeChatCredentials(dshHome)
   if (credentials === null) return
   let active: StoredCredentials = credentials
+  const typingTickets = new Map<string, string>()
   await notifyLifecycle(credentials, 'start', signal)
   try {
     while (!signal.aborted) {
@@ -915,13 +1006,18 @@ async function runBridgeLoop(ctx: Context, dshHome: string, signal: AbortSignal)
             })
           continue
         }
+        const stopTyping = startTypingIndicator(ctx, credentials, from, message.context_token, typingTickets)
+        let reply: string
         try {
-          const reply = await runDesktopTask(ctx, dshHome, text, signal)
-          await sendTextReply(credentials, from, reply, message.context_token)
+          reply = await runDesktopTask(ctx, dshHome, text, signal)
         } catch (error) {
-          const detail = error instanceof Error ? error.message : String(error)
-          await sendTextReply(credentials, from, `执行失败：${detail}`, message.context_token).catch(() => {})
+          reply = `执行失败：${error instanceof Error ? error.message : String(error)}`
+        } finally {
+          stopTyping()
         }
+        await sendTextReply(credentials, from, reply, message.context_token).catch((error: unknown) => {
+          ctx.logger.warn(`微信回复失败：${error instanceof Error ? error.message : String(error)}`)
+        })
       }
     }
   } finally {

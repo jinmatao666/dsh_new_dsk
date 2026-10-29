@@ -1,9 +1,41 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ClipboardList, Download, Eye, FileText, Folder, FolderPlus, Layers, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Tag, Trash2, Upload, Users } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, ClipboardList, Download, Eye, FileText, Folder, FolderPlus, FolderTree, Layers, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Tag, Trash2, Upload } from 'lucide-react';
 import { API, isAdmin } from '../../helpers';
 import CustomSelect from '../../components/CustomSelect';
 import './index.css';
+
+/** @param {Array<{ id: number, parent_id?: number, sort_order?: number }>} nodes */
+function orgChildrenByParent(nodes) {
+  const result = new Map();
+  for (const node of nodes) {
+    const parentId = Number(node.parent_id) || 0;
+    result.set(parentId, [...(result.get(parentId) || []), node]);
+  }
+  for (const list of result.values()) {
+    list.sort((left, right) => (Number(left.sort_order) || 0) - (Number(right.sort_order) || 0)
+      || Number(left.id) - Number(right.id));
+  }
+  return result;
+}
+
+/** Inclusive descendant set for one government-organization node. */
+function orgDescendantIds(nodes, rootId) {
+  const children = orgChildrenByParent(nodes);
+  const ids = new Set([Number(rootId)]);
+  const stack = [Number(rootId)];
+  while (stack.length) {
+    const current = stack.pop();
+    for (const child of children.get(current) || []) {
+      const id = Number(child.id);
+      if (!ids.has(id)) {
+        ids.add(id);
+        stack.push(id);
+      }
+    }
+  }
+  return ids;
+}
 
 /** Signed-in user id from localStorage; 0 when missing or invalid. */
 function currentUserId() {
@@ -42,7 +74,61 @@ function categoryFormFromRow(category) {
 const FILE_PAGE_SIZE = 20;
 const REVIEW_PAGE_SIZE = 20;
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+const MAX_COVER_BYTES = 8 * 1024 * 1024;
 const PARSE_POLL_MS = 2500;
+const COVER_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const EMPTY_LIBRARY_FORM = { name: '', description: '', kind: 'personal', tags: '', category_id: 0, cover: '', source: 'create', ragflow_dataset_id: '' };
+
+/** Read a local image as a data URL. OneAPI stores a compact JPEG.
+ * @param {File} file
+ * @returns {Promise<string>}
+ */
+function readCoverFile(file) {
+  if (!COVER_MIME.has(file.type)) return Promise.reject(new Error('请上传 PNG、JPEG、WebP 或 GIF 图片'));
+  if (file.size > MAX_COVER_BYTES) return Promise.reject(new Error('封面图片不能超过 8MB'));
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = reader.result;
+      if (typeof value !== 'string' || !value.startsWith('data:image/')) {
+        reject(new Error('封面图片无效'));
+        return;
+      }
+      resolve(value);
+    };
+    reader.onerror = () => reject(new Error('封面图片无效'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function CoverPicker({ value, onChange, onError, onReading }) {
+  return (
+    <div className='knowledge-cover-field'>
+      <span className='knowledge-cover-label'>封面</span>
+      {value
+        ? <img src={value} alt='' />
+        : <p className='knowledge-hint'>未选择图片。上传后显示在知识库广场。</p>}
+      <div className='knowledge-cover-actions'>
+        <label className='knowledge-cover-pick'>
+          选择图片
+          <input
+            type='file'
+            accept='image/png,image/jpeg,image/webp,image/gif'
+            aria-label='上传封面'
+            onChange={event => {
+              const file = event.target.files && event.target.files[0];
+              event.target.value = '';
+              if (!file) return;
+              onReading(true);
+              readCoverFile(file).then(onChange).catch(cause => onError(cause instanceof Error ? cause.message : '封面图片无效')).finally(() => onReading(false));
+            }}
+          />
+        </label>
+        {value ? <button type='button' onClick={() => onChange('')}>移除封面</button> : null}
+      </div>
+    </div>
+  );
+}
 
 function unwrap(response) {
   if (!response?.data?.success) throw new Error(response?.data?.message || '请求失败');
@@ -79,6 +165,10 @@ function knowledgeBasesRoot() {
 
 function knowledgeCategoriesUrl() {
   return isAdmin() ? '/api/knowledge-admin/categories' : '/api/knowledge-bases/categories';
+}
+
+function ragflowDatasetsUrl() {
+  return isAdmin() ? '/api/knowledge-admin/ragflow-datasets' : '/api/knowledge-bases/ragflow-datasets';
 }
 
 /** Loads document total and summed byte size for one library card. */
@@ -253,7 +343,7 @@ const KnowledgeLibrary = () => {
   const [counts, setCounts] = useState({});
   const [sizes, setSizes] = useState({});
   const [editing, setEditing] = useState(null);
-  const [editForm, setEditForm] = useState({ name: '', description: '', tags: '' });
+  const [editForm, setEditForm] = useState({ name: '', description: '', tags: '', cover: '' });
   const [opened, setOpened] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [documentTotal, setDocumentTotal] = useState(0);
@@ -262,7 +352,10 @@ const KnowledgeLibrary = () => {
   const [fileSearch, setFileSearch] = useState('');
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: '', description: '', kind: 'personal', tags: '', category_id: 0 });
+  const [coverReading, setCoverReading] = useState(false);
+  const [form, setForm] = useState(EMPTY_LIBRARY_FORM);
+  const [ragflowDatasets, setRagflowDatasets] = useState([]);
+  const [ragflowDatasetsLoading, setRagflowDatasetsLoading] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [categoryForm, setCategoryForm] = useState(EMPTY_CATEGORY_FORM);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -272,9 +365,13 @@ const KnowledgeLibrary = () => {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewing, setReviewing] = useState(null);
   const [users, setUsers] = useState([]);
-  const [departmentDirectory, setDepartmentDirectory] = useState({ nodes: [], memberships: [] });
   const [usersLoading, setUsersLoading] = useState(true);
-  const [deptKey, setDeptKey] = useState('all');
+  const [orgNodes, setOrgNodes] = useState([]);
+  const [orgMemberships, setOrgMemberships] = useState([]);
+  const [orgLoading, setOrgLoading] = useState(true);
+  const [orgError, setOrgError] = useState('');
+  const [selectedOrgId, setSelectedOrgId] = useState(null);
+  const [orgExpanded, setOrgExpanded] = useState({});
   const [peopleQuery, setPeopleQuery] = useState('');
   const [person, setPerson] = useState(null);
   const [personFiles, setPersonFiles] = useState([]);
@@ -341,16 +438,6 @@ const KnowledgeLibrary = () => {
         });
         if (list.length < pageSize) break;
       }
-      // 与组织架构共用成员关系，避免旧的用户资料文本覆盖真实部门。
-      const [nodesResponse, membersResponse] = await Promise.all([
-        API.get('/api/government-organization/'),
-        API.get('/api/government-organization/memberships'),
-      ]);
-      if (!nodesResponse.data?.success || !Array.isArray(nodesResponse.data.data) ||
-          !membersResponse.data?.success || !Array.isArray(membersResponse.data.data?.memberships)) {
-        throw new Error('读取部门归属失败');
-      }
-      setDepartmentDirectory({ nodes: nodesResponse.data.data, memberships: membersResponse.data.data.memberships });
       setUsers(rows);
     } catch (cause) {
       setUsers([]);
@@ -358,10 +445,39 @@ const KnowledgeLibrary = () => {
     }
   };
 
+  const loadOrganization = async () => {
+    if (!isAdmin()) {
+      setOrgNodes([]);
+      setOrgMemberships([]);
+      setOrgError('');
+      return;
+    }
+    setOrgError('');
+    try {
+      const [nodesResponse, membersResponse] = await Promise.all([
+        API.get('/api/government-organization/'),
+        API.get('/api/government-organization/memberships'),
+      ]);
+      if (!nodesResponse.data?.success || !Array.isArray(nodesResponse.data.data)) {
+        throw new Error(nodesResponse.data?.message || '读取组织架构失败');
+      }
+      if (!membersResponse.data?.success || !Array.isArray(membersResponse.data.data?.memberships)) {
+        throw new Error(membersResponse.data?.message || '读取组织成员失败');
+      }
+      setOrgNodes(nodesResponse.data.data);
+      setOrgMemberships(membersResponse.data.data.memberships);
+    } catch (cause) {
+      setOrgNodes([]);
+      setOrgMemberships([]);
+      setOrgError(cause.response?.data?.message || cause.message || '读取组织架构失败');
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setUsersLoading(true);
+    setOrgLoading(true);
     const boot = async () => {
       try {
         // Fetch before setState so a slow boot cannot wipe categories saved after mount.
@@ -372,20 +488,49 @@ const KnowledgeLibrary = () => {
         setLibraries(Array.isArray(libraryRows) ? libraryRows : []);
         await loadReviewCount();
         if (cancelled) return;
-        if (isAdmin()) await loadUsers();
-        else setUsers([]);
+        if (isAdmin()) {
+          await Promise.all([loadUsers(), loadOrganization()]);
+        } else {
+          setUsers([]);
+          setOrgNodes([]);
+          setOrgMemberships([]);
+        }
       } catch (cause) {
         if (!cancelled) setError(await errorMessage(cause));
       } finally {
         if (!cancelled) {
           setLoading(false);
           setUsersLoading(false);
+          setOrgLoading(false);
         }
       }
     };
     void boot();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (!creating) {
+      return undefined;
+    }
+    let cancelled = false;
+    setRagflowDatasetsLoading(true);
+    const load = async () => {
+      try {
+        const rows = unwrap(await API.get(ragflowDatasetsUrl()));
+        if (!cancelled) setRagflowDatasets(Array.isArray(rows) ? rows : []);
+      } catch (cause) {
+        if (!cancelled) {
+          setRagflowDatasets([]);
+          setError(await errorMessage(cause));
+        }
+      } finally {
+        if (!cancelled) setRagflowDatasetsLoading(false);
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [creating]);
 
   useEffect(() => {
     let cancelled = false;
@@ -473,32 +618,69 @@ const KnowledgeLibrary = () => {
       });
   }, [libraries, activeScope, keyword, order, manageAllPersonal, viewerId]);
 
-  const people = useMemo(() => {
+  const orgById = useMemo(() => new Map(orgNodes.map(node => [Number(node.id), node])), [orgNodes]);
+  const orgChildren = useMemo(() => orgChildrenByParent(orgNodes), [orgNodes]);
+  const rootOrgNodes = useMemo(() => orgChildren.get(0) || [], [orgChildren]);
+
+  // Default the personal directory to the first top-level organization node.
+  useEffect(() => {
+    if (orgLoading || selectedOrgId != null) return;
+    const first = rootOrgNodes[0];
+    if (!first) return;
+    setSelectedOrgId(Number(first.id));
+  }, [orgLoading, selectedOrgId, rootOrgNodes]);
+  const membershipsByUser = useMemo(() => {
     const map = new Map();
-    const byId = new Map(departmentDirectory.nodes.map(node => [Number(node.id), node]));
-    const namesByUser = new Map();
-    departmentDirectory.memberships.forEach(item => {
-      const node = byId.get(Number(item.node_id));
-      if (!node) return;
+    orgMemberships.forEach(row => {
+      const userId = Number(row.user_id);
+      const nodeId = Number(row.node_id);
+      if (!Number.isFinite(userId) || userId <= 0 || !Number.isFinite(nodeId) || nodeId <= 0) return;
+      map.set(userId, [...(map.get(userId) || []), nodeId]);
+    });
+    return map;
+  }, [orgMemberships]);
+  const membersByNode = useMemo(() => {
+    const map = new Map();
+    orgMemberships.forEach(row => {
+      const userId = Number(row.user_id);
+      const nodeId = Number(row.node_id);
+      if (!Number.isFinite(userId) || userId <= 0 || !Number.isFinite(nodeId) || nodeId <= 0) return;
+      map.set(nodeId, [...(map.get(nodeId) || []), userId]);
+    });
+    return map;
+  }, [orgMemberships]);
+
+  const orgPathLabel = useMemo(() => {
+    const cache = new Map();
+    const labelFor = nodeId => {
+      if (cache.has(nodeId)) return cache.get(nodeId);
       const names = [];
       const seen = new Set();
-      for (let current = node; current && !seen.has(Number(current.id)); current = byId.get(Number(current.parent_id))) {
-        seen.add(Number(current.id));
+      for (let current = orgById.get(nodeId); current && !seen.has(current.id); current = orgById.get(Number(current.parent_id) || 0)) {
+        seen.add(current.id);
         names.unshift(current.name);
       }
-      const userId = Number(item.user_id);
-      namesByUser.set(userId, [...(namesByUser.get(userId) || []), names.join(' / ')]);
-    });
+      const label = names.join(' / ');
+      cache.set(nodeId, label);
+      return label;
+    };
+    return labelFor;
+  }, [orgById]);
+
+  const people = useMemo(() => {
+    const map = new Map();
     users.forEach(user => {
       const id = Number(user.id);
       if (!Number.isFinite(id) || id <= 0) return;
       const name = String(user.display_name || user.username || '').trim() || `用户 ${id}`;
+      const nodeIds = membershipsByUser.get(id) || [];
+      const department = nodeIds.map(orgPathLabel).filter(Boolean).join('；') || '';
       map.set(id, {
         id,
         name,
         username: String(user.username || ''),
-        departments: namesByUser.get(id) || [],
-        department: (namesByUser.get(id) || []).join('、'),
+        department,
+        nodeIds,
         createdAt: user.created_at || '',
         status: Number(user.status) || 1,
       });
@@ -507,28 +689,64 @@ const KnowledgeLibrary = () => {
       const id = Number(library.owner_user_id);
       if (!Number.isFinite(id) || id <= 0 || map.has(id)) return;
       const name = String(library.owner_username || '').trim() || `用户 ${id}`;
-      const departments = namesByUser.get(id) || [];
-      map.set(id, { id, name, username: name, departments, department: departments.join('、'), createdAt: '', status: 1 });
+      const nodeIds = membershipsByUser.get(id) || [];
+      map.set(id, {
+        id,
+        name,
+        username: name,
+        department: nodeIds.map(orgPathLabel).filter(Boolean).join('；') || '',
+        nodeIds,
+        createdAt: '',
+        status: 1,
+      });
     });
     return [...map.values()].sort((left, right) => left.name.localeCompare(right.name, 'zh'));
-  }, [users, libraries, departmentDirectory]);
+  }, [users, libraries, membershipsByUser, orgPathLabel]);
 
-  const departments = useMemo(() => {
-    const grouped = new Map();
-    people.forEach(item => {
-      item.departments.forEach(name => grouped.set(name, (grouped.get(name) || 0) + 1));
-    });
-    return [...grouped.entries()].sort((left, right) => left[0].localeCompare(right[0], 'zh'));
-  }, [people]);
+  const assignedUserIds = useMemo(() => {
+    const ids = new Set();
+    membershipsByUser.forEach((_, userId) => ids.add(userId));
+    return ids;
+  }, [membershipsByUser]);
+
+  const unassignedPeople = useMemo(
+    () => people.filter(item => !assignedUserIds.has(item.id)),
+    [people, assignedUserIds],
+  );
+
+  const subtreeMemberCount = useMemo(() => {
+    const counts = new Map();
+    const countFor = nodeId => {
+      if (counts.has(nodeId)) return counts.get(nodeId);
+      const ids = new Set(membersByNode.get(nodeId) || []);
+      for (const child of orgChildren.get(nodeId) || []) {
+        for (const userId of countFor(Number(child.id))) ids.add(userId);
+      }
+      counts.set(nodeId, ids);
+      return ids;
+    };
+    orgNodes.forEach(node => countFor(Number(node.id)));
+    return counts;
+  }, [orgNodes, orgChildren, membersByNode]);
+
+  const selectedOrgNode = selectedOrgId === 'unassigned' || selectedOrgId == null
+    ? null
+    : orgById.get(Number(selectedOrgId));
 
   const visiblePeople = useMemo(() => {
     const text = peopleQuery.trim().toLowerCase();
-    return people.filter(item => {
-      if (deptKey !== 'all' && !item.departments.includes(deptKey)) return false;
+    let scoped = [];
+    if (selectedOrgId === 'unassigned') {
+      scoped = unassignedPeople;
+    } else if (selectedOrgId != null && Number.isFinite(Number(selectedOrgId))) {
+      const allowed = orgDescendantIds(orgNodes, Number(selectedOrgId));
+      scoped = people.filter(item => (item.nodeIds || []).some(nodeId => allowed.has(nodeId)));
+    }
+    return scoped.filter(item => {
       if (!text) return true;
       return [item.name, item.username, item.department].some(value => String(value || '').toLowerCase().includes(text));
     });
-  }, [people, deptKey, peopleQuery]);
+  }, [people, unassignedPeople, selectedOrgId, peopleQuery, orgNodes]);
 
   const personLibraries = person
     ? libraries.filter(library => isPersonalLibrary(library) && Number(library.owner_user_id) === person.id)
@@ -690,6 +908,7 @@ const KnowledgeLibrary = () => {
       name: library.name || '',
       description: library.description || '',
       tags: library.tags || '',
+      cover: typeof library.cover === 'string' ? library.cover : '',
     });
   };
 
@@ -703,6 +922,7 @@ const KnowledgeLibrary = () => {
         name: editForm.name.trim(),
         description: editForm.description.trim(),
         tags: editForm.tags.trim(),
+        cover: editForm.cover,
       }));
       setEditing(null);
       await loadLibraries();
@@ -715,6 +935,10 @@ const KnowledgeLibrary = () => {
 
   const createLibrary = async event => {
     event.preventDefault();
+    if (form.source === 'existing' && !form.ragflow_dataset_id) {
+      setError('请选择已有知识库');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -725,6 +949,10 @@ const KnowledgeLibrary = () => {
         kind,
         tags: form.tags.trim(),
         ...(form.category_id ? { category_id: form.category_id } : {}),
+        ...(form.cover ? { cover: form.cover } : {}),
+        ...(form.source === 'existing' && form.ragflow_dataset_id
+          ? { ragflow_dataset_id: form.ragflow_dataset_id }
+          : {}),
       }));
       const categoryId = form.category_id || created?.category_id || 0;
       const library = {
@@ -736,7 +964,8 @@ const KnowledgeLibrary = () => {
         category_id: categoryId,
       };
       setCreating(false);
-      setForm({ name: '', description: '', kind: 'personal', tags: '', category_id: 0 });
+      setForm(EMPTY_LIBRARY_FORM);
+      setRagflowDatasets([]);
       setScope(categoryId ? `c:${categoryId}` : 'personal');
       await loadLibraries();
       await openFiles(library);
@@ -963,12 +1192,53 @@ const KnowledgeLibrary = () => {
     return { libraries: owned.length, size: formatSizeLabel(bytes) };
   };
 
-  const selectDepartment = key => {
+  const selectOrgNode = key => {
     closeViewer();
     setPerson(null);
-    setDeptKey(key);
+    setSelectedOrgId(key);
     setPeopleQuery('');
   };
+
+  const toggleOrgExpanded = nodeId => {
+    setOrgExpanded(current => ({ ...current, [nodeId]: current[nodeId] === false }));
+  };
+
+  const renderOrgBranch = (parentId = 0, depth = 0) => (orgChildren.get(parentId) || []).map(node => {
+    const nodeId = Number(node.id);
+    const childNodes = orgChildren.get(nodeId) || [];
+    const hasChildren = childNodes.length > 0;
+    const open = orgExpanded[nodeId] !== false;
+    const count = subtreeMemberCount.get(nodeId)?.size || 0;
+    const active = Number(selectedOrgId) === nodeId;
+    return <React.Fragment key={nodeId}>
+      <div className={active ? 'knowledge-org-node active' : 'knowledge-org-node'} style={{ paddingLeft: 8 + depth * 14 }}>
+        <button
+          type='button'
+          className='knowledge-org-expand'
+          disabled={!hasChildren}
+          aria-label={`${open ? '收起' : '展开'}${node.name}`}
+          onClick={() => hasChildren && toggleOrgExpanded(nodeId)}
+        >
+          {hasChildren ? (open ? <ChevronDown size={14} /> : <ChevronRight size={14} />) : <span />}
+        </button>
+        <button
+          type='button'
+          className='knowledge-org-label'
+          aria-pressed={active}
+          onClick={() => {
+            selectOrgNode(nodeId);
+            if (hasChildren && orgExpanded[nodeId] === false) toggleOrgExpanded(nodeId);
+          }}
+        >
+          <FolderTree size={15} />
+          <span>{node.name}</span>
+          {node.kind ? <small>{node.kind}</small> : null}
+          <i>{count}</i>
+        </button>
+      </div>
+      {hasChildren && open ? renderOrgBranch(nodeId, depth + 1) : null}
+    </React.Fragment>;
+  });
 
   const fileCount = id => {
     if (!(id in counts)) return '…';
@@ -1057,7 +1327,7 @@ const KnowledgeLibrary = () => {
       if (scope === `c:${category.id}`) {
         setScope('personal');
         setPerson(null);
-        setDeptKey('all');
+        setSelectedOrgId(null);
       }
     } catch (cause) {
       setError(await errorMessage(cause));
@@ -1151,7 +1421,7 @@ const KnowledgeLibrary = () => {
                 type='button'
                 role='tab'
                 aria-selected={activeScope === tab.key}
-                onClick={() => { setPerson(null); setDeptKey('all'); setTabMenu(null); setScope(tab.key); }}
+                onClick={() => { setPerson(null); setSelectedOrgId(null); setTabMenu(null); setScope(tab.key); }}
               >
                 {tab.label}<span>{countsByScope[tab.key] || 0}</span>
               </button>
@@ -1339,15 +1609,25 @@ const KnowledgeLibrary = () => {
       </div>
     </section> : <>
       {activeScope === 'personal' && manageAllPersonal ? <div className='knowledge-directory'>
-        <aside className='knowledge-directory-nav' aria-label='人员部门'>
-          <p>人员</p>
-          <button type='button' aria-pressed={deptKey === 'all'} className={deptKey === 'all' ? 'active' : ''} onClick={() => selectDepartment('all')}>
-            <span>全部人员</span><i>{people.length}</i>
-          </button>
-          {departments.length > 0 && <p>部门</p>}
-          {departments.map(([name, count]) => <button key={name} type='button' aria-pressed={deptKey === name} className={deptKey === name ? 'active' : ''} onClick={() => selectDepartment(name)}>
-            <span>{name}</span><i>{count}</i>
-          </button>)}
+        <aside className='knowledge-directory-nav knowledge-org-nav' aria-label='组织架构'>
+          <p>组织架构</p>
+          {orgLoading ? <p className='knowledge-org-hint' role='status'>正在加载组织架构</p>
+            : orgError ? <div className='knowledge-org-error' role='alert'>
+              <p>读取组织架构失败</p>
+              <small>{orgError}</small>
+              <button type='button' onClick={() => { setOrgLoading(true); void loadOrganization().finally(() => setOrgLoading(false)); }}>重新加载</button>
+            </div>
+              : orgNodes.length === 0
+                ? <p className='knowledge-org-hint'>暂无组织节点。请先在用户权限 → 组织架构中创建。</p>
+                : <div className='knowledge-org-tree'>{renderOrgBranch()}</div>}
+          {!orgLoading && !orgError && unassignedPeople.length > 0 && <button
+            type='button'
+            aria-pressed={selectedOrgId === 'unassigned'}
+            className={selectedOrgId === 'unassigned' ? 'knowledge-org-unassigned active' : 'knowledge-org-unassigned'}
+            onClick={() => selectOrgNode('unassigned')}
+          >
+            <span>未分配组织</span><i>{unassignedPeople.length}</i>
+          </button>}
         </aside>
         <div className='knowledge-directory-main'>
           {person ? <section className='knowledge-files knowledge-person-files' aria-label='个人文件清单'>
@@ -1450,43 +1730,53 @@ const KnowledgeLibrary = () => {
           </section> : <>
             <header className='knowledge-people-head'>
               <div>
-                <h2>{deptKey === 'all' ? '全部人员' : deptKey} <span>({visiblePeople.length}人)</span></h2>
-                <p>{departments.length === 0 ? '当前没有部门数据，先按全部人员查看。' : '选择部门查看该部门人员，点开人员查看个人知识库文件。'}</p>
+                <h2>{selectedOrgId == null
+                  ? '选择组织'
+                  : selectedOrgId === 'unassigned'
+                    ? '未分配组织'
+                    : (selectedOrgNode?.name || '组织')} <span>{selectedOrgId == null ? '' : `(${visiblePeople.length}人)`}</span></h2>
+                <p>{orgLoading ? '正在加载组织架构…'
+                  : orgError ? '组织架构未能加载，请在左侧重试。'
+                    : orgNodes.length === 0 ? '请先在用户权限 → 组织架构中创建节点并分配成员。'
+                      : selectedOrgId == null ? '按组织架构查看人员；点开人员查看个人知识库文件。'
+                        : '点开人员查看个人知识库文件。'}</p>
               </div>
               <div className='knowledge-people-tools'>
                 <label className='knowledge-search'>
                   <Search size={16} />
-                  <input value={peopleQuery} onChange={event => setPeopleQuery(event.target.value)} placeholder='搜索姓名、用户名或部门' />
+                  <input value={peopleQuery} onChange={event => setPeopleQuery(event.target.value)} placeholder='搜索姓名、用户名或组织' disabled={selectedOrgId == null} />
                 </label>
-                <button type='button' className='knowledge-primary' onClick={() => { setCategoryOpen(false); setEditing(null); setForm({ name: '', description: '', kind: 'personal', tags: '', category_id: 0 }); setCreating(true); }}><Plus size={16} />新建知识库</button>
+                <button type='button' className='knowledge-primary' onClick={() => { setCategoryOpen(false); setEditing(null); setForm(EMPTY_LIBRARY_FORM); setCreating(true); }}><Plus size={16} />新建知识库</button>
               </div>
             </header>
-            {usersLoading && people.length === 0 ? <p className='knowledge-empty' role='status'>正在加载人员</p>
-              : visiblePeople.length === 0 ? <p className='knowledge-empty'>{peopleQuery.trim() ? '没有匹配的人员' : '暂无人员'}</p>
-                : <div className='knowledge-people-grid'>
-                  {visiblePeople.map(item => {
-                    const usage = personUsage(item.id);
-                    const color = avatarColor(item.name);
-                    return <button key={item.id} type='button' className='knowledge-person' onClick={() => void openPerson(item)}>
-                      <span className='knowledge-person-top'>
-                        <i className='knowledge-avatar' style={{ color, background: `${color}18` }}>{personInitial(item.name)}</i>
-                        <span>
-                          <strong>{item.name}</strong>
-                          <em>{item.username || '—'}</em>
+            {selectedOrgId == null
+              ? <p className='knowledge-empty'>请从左侧选择组织节点</p>
+              : usersLoading && people.length === 0 ? <p className='knowledge-empty' role='status'>正在加载人员</p>
+                : visiblePeople.length === 0 ? <p className='knowledge-empty'>{peopleQuery.trim() ? '没有匹配的人员' : '该组织下暂无人员'}</p>
+                  : <div className='knowledge-people-grid'>
+                    {visiblePeople.map(item => {
+                      const usage = personUsage(item.id);
+                      const color = avatarColor(item.name);
+                      return <button key={item.id} type='button' className='knowledge-person' onClick={() => void openPerson(item)}>
+                        <span className='knowledge-person-top'>
+                          <i className='knowledge-avatar' style={{ color, background: `${color}18` }}>{personInitial(item.name)}</i>
+                          <span>
+                            <strong>{item.name}</strong>
+                            <em>{item.username || '—'}</em>
+                          </span>
                         </span>
-                      </span>
-                      <span className='knowledge-person-meta'>
-                        <span>部门 {item.department || '未分配部门'}</span>
-                        <span>注册 {formatDate(item.createdAt).slice(0, 10)}</span>
-                        {item.status === 2 && <span className='muted'>账号已禁用</span>}
-                      </span>
-                      <span className='knowledge-person-stats'>
-                        <span><b>{usage.libraries}</b>知识库</span>
-                        <span><b>{usage.size}</b>总大小</span>
-                      </span>
-                    </button>;
-                  })}
-                </div>}
+                        <span className='knowledge-person-meta'>
+                          <span>组织 {item.department || '未分配组织'}</span>
+                          <span>注册 {formatDate(item.createdAt).slice(0, 10)}</span>
+                          {item.status === 2 && <span className='muted'>账号已禁用</span>}
+                        </span>
+                        <span className='knowledge-person-stats'>
+                          <span><b>{usage.libraries}</b>知识库</span>
+                          <span><b>{usage.size}</b>总大小</span>
+                        </span>
+                      </button>;
+                    })}
+                  </div>}
           </>}
         </div>
       </div> : <>
@@ -1496,7 +1786,7 @@ const KnowledgeLibrary = () => {
           <option value='desc'>按时间降序</option>
           <option value='asc'>按时间升序</option>
         </CustomSelect>
-        <button type='button' className='knowledge-primary' onClick={() => { setCategoryOpen(false); setEditing(null); setForm({ name: '', description: '', kind: activeCategory?.type || 'personal', tags: '', category_id: activeCategory?.id || 0 }); setCreating(true); }}><Plus size={16} />新建知识库</button>
+        <button type='button' className='knowledge-primary' onClick={() => { setCategoryOpen(false); setEditing(null); setForm({ ...EMPTY_LIBRARY_FORM, kind: activeCategory?.type || 'personal', category_id: activeCategory?.id || 0 }); setCreating(true); }}><Plus size={16} />新建知识库</button>
       </div>
       {loading ? <p className='knowledge-empty' role='status'>正在加载知识库</p> : visible.length === 0 ? <p className='knowledge-empty'>
         {libraries.length > 0 ? '当前分类暂无知识库。' : '暂无知识库'}
@@ -1505,7 +1795,11 @@ const KnowledgeLibrary = () => {
           const menuOpen = cardMenuId === library.id;
           return <article key={library.id} className={menuOpen ? 'knowledge-card is-menu-open' : 'knowledge-card'}>
             <header>
-              <span className='knowledge-card-mark' aria-hidden='true'><Folder size={18} /></span>
+              <span className={typeof library.cover === 'string' && library.cover.startsWith('data:image/') ? 'knowledge-card-mark has-cover' : 'knowledge-card-mark'} aria-hidden='true'>
+                {typeof library.cover === 'string' && library.cover.startsWith('data:image/')
+                  ? <img src={library.cover} alt='' />
+                  : <Folder size={18} />}
+              </span>
               <h2 title={library.name}>{library.name}</h2>
               {isAdmin() && <div className='knowledge-card-menu'>
                 <button
@@ -1570,22 +1864,63 @@ const KnowledgeLibrary = () => {
       </footer>
     </form></div>}
     {creating && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' onSubmit={createLibrary}>
-      <header><h2>新建知识库</h2><button type='button' onClick={() => setCreating(false)}>×</button></header>
-      <label>名称<input autoFocus required maxLength={128} value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} placeholder='请输入知识库名称' /></label>
-      <label>描述<textarea maxLength={500} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} placeholder='填写知识库覆盖的内容和用途' /></label>
-      {form.category_id
-        ? <p className='knowledge-hint'>将创建到当前分类，可见性与该分类一致。</p>
-        : <p className='knowledge-hint'>将创建为个人知识库，仅自己可见。</p>}
-      <label>标签<input maxLength={200} value={form.tags} onChange={event => setForm(current => ({ ...current, tags: event.target.value }))} placeholder='多个标签用逗号分隔' /></label>
-      <footer><button type='button' onClick={() => setCreating(false)}>取消</button><button type='submit' className='knowledge-primary' disabled={saving || form.name.trim() === ''}>{saving ? '正在创建' : '确定'}</button></footer>
+      <header><h2>新建知识库</h2><button type='button' onClick={() => { setCreating(false); setForm(EMPTY_LIBRARY_FORM); setRagflowDatasets([]); }}>×</button></header>
+      <div className='knowledge-modal-body'>
+        <label>创建方式<select aria-label='创建方式' value={form.source} onChange={event => setForm(current => ({
+          ...current,
+          source: event.target.value,
+          ragflow_dataset_id: event.target.value === 'existing' ? current.ragflow_dataset_id : '',
+        }))}>
+          <option value='create'>新建空白知识库</option>
+          <option value='existing'>选择已有知识库</option>
+        </select></label>
+        {form.source === 'existing' && <label>已有知识库<select
+          aria-label='已有知识库'
+          required
+          value={form.ragflow_dataset_id}
+          disabled={ragflowDatasetsLoading}
+          onChange={event => {
+            const id = event.target.value;
+            const selected = ragflowDatasets.find(item => item.id === id);
+            setForm(current => ({
+              ...current,
+              ragflow_dataset_id: id,
+              name: current.name.trim() === '' && selected?.name ? selected.name : current.name,
+            }));
+          }}
+        >
+          <option value=''>{ragflowDatasetsLoading ? '正在加载…' : '请选择已有知识库'}</option>
+          {ragflowDatasets.map(item => (
+            <option key={item.id} value={item.id}>{item.name || item.id}</option>
+          ))}
+        </select></label>}
+        {form.source === 'existing' && !ragflowDatasetsLoading && ragflowDatasets.length === 0
+          && <p className='knowledge-hint'>暂无可关联的已有知识库。请先在知识库管理平台创建，或选择新建空白知识库。</p>}
+        <label>名称<input autoFocus required maxLength={128} value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} placeholder='请输入知识库名称' /></label>
+        <label>描述<textarea maxLength={500} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} placeholder='填写知识库覆盖的内容和用途' /></label>
+        <CoverPicker value={form.cover} onChange={cover => setForm(current => ({ ...current, cover }))} onError={setError} onReading={setCoverReading} />
+        <label>标签<input maxLength={200} value={form.tags} onChange={event => setForm(current => ({ ...current, tags: event.target.value }))} placeholder='多个标签用逗号分隔' /></label>
+        {error && <div className='knowledge-alert' role='alert'>{error}<button type='button' onClick={() => setError('')}>关闭</button></div>}
+      </div>
+      <footer>
+        <button type='button' onClick={() => { setCreating(false); setForm(EMPTY_LIBRARY_FORM); setRagflowDatasets([]); }}>取消</button>
+        <button
+          type='submit'
+          className='knowledge-primary'
+          disabled={saving || coverReading || form.name.trim() === '' || (form.source === 'existing' && !form.ragflow_dataset_id)}
+        >{saving ? '正在创建' : '确定'}</button>
+      </footer>
     </form></div>}
     {editing && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' onSubmit={saveLibrary} aria-labelledby='dsh-knowledge-edit-title'>
       <header><h2 id='dsh-knowledge-edit-title'>编辑知识库</h2><button type='button' onClick={() => setEditing(null)}>×</button></header>
-      {error && <div className='knowledge-alert' role='alert'>{error}<button type='button' onClick={() => setError('')}>关闭</button></div>}
-      <label>名称<input autoFocus required maxLength={128} value={editForm.name} onChange={event => setEditForm(current => ({ ...current, name: event.target.value }))} placeholder='请输入知识库名称' /></label>
-      <label>描述<textarea maxLength={500} value={editForm.description} onChange={event => setEditForm(current => ({ ...current, description: event.target.value }))} placeholder='填写知识库覆盖的内容和用途' /></label>
-      <label>标签<input maxLength={200} value={editForm.tags} onChange={event => setEditForm(current => ({ ...current, tags: event.target.value }))} placeholder='多个标签用逗号分隔' /></label>
-      <footer><button type='button' onClick={() => setEditing(null)}>取消</button><button type='submit' className='knowledge-primary' disabled={saving || editForm.name.trim() === ''}>{saving ? '正在保存' : '保存'}</button></footer>
+      <div className='knowledge-modal-body'>
+        {error && <div className='knowledge-alert' role='alert'>{error}<button type='button' onClick={() => setError('')}>关闭</button></div>}
+        <label>名称<input autoFocus required maxLength={128} value={editForm.name} onChange={event => setEditForm(current => ({ ...current, name: event.target.value }))} placeholder='请输入知识库名称' /></label>
+        <label>描述<textarea maxLength={500} value={editForm.description} onChange={event => setEditForm(current => ({ ...current, description: event.target.value }))} placeholder='填写知识库覆盖的内容和用途' /></label>
+        <CoverPicker value={editForm.cover} onChange={cover => setEditForm(current => ({ ...current, cover }))} onError={setError} onReading={setCoverReading} />
+        <label>标签<input maxLength={200} value={editForm.tags} onChange={event => setEditForm(current => ({ ...current, tags: event.target.value }))} placeholder='多个标签用逗号分隔' /></label>
+      </div>
+      <footer><button type='button' onClick={() => setEditing(null)}>取消</button><button type='submit' className='knowledge-primary' disabled={saving || coverReading || editForm.name.trim() === ''}>{saving ? '正在保存' : '保存'}</button></footer>
     </form></div>}
     {summaryFile && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' onSubmit={saveSummary}>
       <header><h2>编辑摘要</h2><button type='button' onClick={() => setSummaryFile(null)}>×</button></header>

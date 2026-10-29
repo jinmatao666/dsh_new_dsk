@@ -12,7 +12,7 @@ WorkBuddy 的**微信助理**让用户在连接器里扫码一次，即可在微
 
 新增连接器目录实卡**微信助理**（`wechat-channel`），其成功态为 **腾讯 iLink 扫码绑定 + `$DSH_HOME/wechat-assistant` 凭据 + Host 长轮询桥接**。
 
-Host RPC `/wanwei-wechat` 提供 `status` / `loginStart` / `loginPoll` / `disconnect`。**连接**打开**应用内**二维码弹窗（PNG data URL），轮询至 `confirmed`，然后启动 `getupdates` → 桌面 `sessionController.prompt` → `sendmessage`。**取消连接**清除凭据并停止桥接。密钥不进入 Client。
+Host RPC `/wanwei-wechat` 提供 `status` / `loginStart` / `loginPoll` / `disconnect`。**连接**打开**应用内**二维码弹窗（PNG data URL），轮询至 `confirmed`，然后启动 `getupdates` → 桌面 `sessionController.prompt` → `sendmessage`。桌面任务执行期间，桥接通过 `getconfig`（`typing_ticket`，在桥接生命周期内按用户缓存，发送被拒时清除）和每 5 秒一次的 `sendtyping` 状态 `1` 在微信显示「对方正在输入…」，任务结束后在后台发送状态 `2` 取消；回复从不等待输入状态请求，输入状态发送失败会记日志并停止保活。**取消连接**清除凭据并停止桥接。密钥不进入 Client。
 
 这有意不同于[桌面 DWS 技能](2026-10-16-wanwei-dingtalk-desktop-dws-skills.zh.md)：该路径在技能诉求下否决把 Stream/webhook 当作「已连接」；微信助理的产品诉求*就是*远程通道。企业微信 CLI 随包随后已删除，见[移除万维企业微信连接器](../simplification/2026-10-23-remove-wanwei-wecom-connector.zh.md)。
 

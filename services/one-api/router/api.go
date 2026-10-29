@@ -181,6 +181,7 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			knowledgeRoute.GET("", controller.ListKnowledgeBases)
 			knowledgeRoute.GET("/categories", controller.ListKnowledgeCategories)
+			knowledgeRoute.GET("/ragflow-datasets", controller.ListManagedRagflowDatasets)
 			knowledgeRoute.GET("/plaza", controller.ListKnowledgePlaza)
 			knowledgeRoute.GET("/plaza/:id", controller.GetKnowledgePlazaItem)
 			knowledgeRoute.GET("/plaza/:id/documents", controller.ListKnowledgePlazaDocuments)
@@ -207,6 +208,7 @@ func SetApiRouter(router *gin.Engine) {
 		knowledgeWorkbenchRoute.Use(middleware.UserAuth())
 		{
 			knowledgeWorkbenchRoute.GET("/categories", controller.ListKnowledgeCategories)
+			knowledgeWorkbenchRoute.GET("/ragflow-datasets", controller.ListManagedRagflowDatasets)
 			knowledgeWorkbenchRoute.POST("/categories", controller.CreateManagedKnowledgeCategory)
 			knowledgeWorkbenchRoute.PUT("/categories/:id", controller.UpdateManagedKnowledgeCategory)
 			knowledgeWorkbenchRoute.DELETE("/categories/:id", controller.DeleteManagedKnowledgeCategory)

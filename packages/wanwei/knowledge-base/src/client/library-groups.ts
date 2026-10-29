@@ -46,14 +46,15 @@ export function libraryIsGrantedSubscription(item: KnowledgeBaseItem, selfUserId
 }
 
 /**
- * Nav: 个人知识库 is always present; 公共知识库 and 订阅知识库 appear only when they have
- * rows. 公共知识库 merges every open category plus uncategorized common libraries. 订阅知识库
- * holds owned auth-category libraries first, then grant-backed subscriptions. Auth category
- * names never appear as sidebar groups; others discover non-owned libraries in 知识库广场.
+ * Nav: 个人知识库 and 订阅知识库 are always present (empty groups stay visible). 公共知识库
+ * merges every open category plus uncategorized common libraries and appears only when
+ * non-empty. 订阅知识库 holds owned auth-category libraries first, then grant-backed
+ * subscriptions. Auth category names never appear as sidebar groups; others discover
+ * non-owned libraries in 知识库广场.
  * @param items - Libraries the caller may open.
  * @param categories - Administrator-defined categories.
  * @param selfUserId - Optional fallback owner id when ownership annotation is absent.
- * @returns Groups in display order; Personal is always present.
+ * @returns Groups in display order; Personal and Subscription are always present.
  */
 export function libraryNavGroups(
   items: KnowledgeBaseItem[],
@@ -89,9 +90,7 @@ export function libraryNavGroups(
   if (publicRows.length !== 0) {
     groups.push({ key: 'public', label: productText('公共知识库'), rows: publicRows })
   }
-  if (subscriptionRows.length !== 0) {
-    groups.push({ key: 'subscription', label: productText('订阅知识库'), rows: subscriptionRows })
-  }
+  groups.push({ key: 'subscription', label: productText('订阅知识库'), rows: subscriptionRows })
   return groups
 }
 

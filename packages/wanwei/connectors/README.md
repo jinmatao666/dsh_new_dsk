@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Users can browse connector categories and inspect demonstration dialogs. The DingTalk card connects personal DingTalk Workspace CLI (`dws`) auth and installs the `dws-cli` skill under `$DSH_HOME/skills`. The WeChat Assistant card binds personal WeChat through Tencent iLink QR (in-app modal) and runs an inbound chat bridge so phone messages drive desktop Sessions with replies returned to WeChat. System Settings controls the page entry for Internet and intranet deployments; the default enables Internet and hides intranet.
+Users can browse connector categories and inspect demonstration dialogs. The DingTalk card connects personal DingTalk Workspace CLI (`dws`) auth and installs the `dws-cli` skill under `$DSH_HOME/skills`. The WeChat Assistant card binds personal WeChat through Tencent iLink QR (in-app modal) and runs an inbound chat bridge so phone messages drive desktop Sessions with replies returned to WeChat; WeChat shows 「对方正在输入…」 while the desktop task runs. System Settings controls the page entry for Internet and intranet deployments; the default enables Internet and hides intranet.
 
 ## Table of Contents
 
