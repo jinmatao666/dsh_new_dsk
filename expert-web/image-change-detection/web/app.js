@@ -54,12 +54,12 @@ function renderSummary(summary,task){
  const objects=summary.objects||[], precise=summary.precise===true;
  const metrics=document.createElement('div');metrics.className='result-metrics';
  const values=[['变化事件',String(summary.count)+' 项'],['图像尺寸',`${summary.image.width} × ${summary.image.height}`]];
- if(precise&&typeof summary.changed_area_ratio==='number')values.push(['变化像素占比',(summary.changed_area_ratio*100).toFixed(2)+'%']);
+ if(precise&&typeof summary.changed_area_ratio==='number')values.push([summary.segmentation_complete===false?'已分割像素占比':'变化像素占比',(summary.changed_area_ratio*100).toFixed(2)+'%']);
  for(const [name,value] of values){const cell=document.createElement('div');const label=document.createElement('span'),number=document.createElement('strong');label.textContent=name;number.textContent=value;cell.append(label,number);metrics.append(cell);}panel.append(metrics);
  const container=document.createElement('div');container.className='object-table-scroll';const table=document.createElement('table');table.className='object-table';
  table.innerHTML='<thead><tr><th>编号</th><th>左上角 x / y</th><th>右下角 x / y</th><th>变化类型</th><th>类别与描述</th>'+(precise?'<th>面积占比</th>':'')+'</tr></thead>';
  const types={new:'新增',disappeared:'消失',expanded:'扩张',shrunk:'缩减',modified:'修改'},body=document.createElement('tbody');
- for(const obj of objects){const row=document.createElement('tr');const cells=[obj.id,obj.box.slice(0,2).map(v=>v.toFixed(4)).join(' / '),obj.box.slice(2).map(v=>v.toFixed(4)).join(' / '),types[obj.change_type]||obj.change_type,[obj.category,obj.description].filter(Boolean).join('：')];if(precise)cells.push(typeof obj.area_ratio==='number'?(obj.area_ratio*100).toFixed(2)+'%':'—');for(const value of cells){const td=document.createElement('td');td.textContent=value;row.append(td);}body.append(row);}table.append(body);container.append(table);panel.append(container);
+ for(const obj of objects){const row=document.createElement('tr');const cells=[obj.id,obj.box.slice(0,2).map(v=>v.toFixed(4)).join(' / '),obj.box.slice(2).map(v=>v.toFixed(4)).join(' / '),types[obj.change_type]||obj.change_type,[obj.category,obj.description].filter(Boolean).join('：')];if(precise)cells.push(typeof obj.area_ratio==='number'?(obj.area_ratio*100).toFixed(2)+'%':obj.segmentation_status==='unavailable'?'仅定位，未分割':'—');for(const value of cells){const td=document.createElement('td');td.textContent=value;row.append(td);}body.append(row);}table.append(body);container.append(table);panel.append(container);
  const note=document.createElement('p');note.className='vision-help';note.textContent=precise?'数量按变化事件统计；面积按轮廓像素计算，总占比对重叠像素去重。':'数量按变化事件统计；矩形框仅表示估计位置。';panel.append(note);
  const views=document.createElement('div');views.className='result-views';
  const names={'annotated.png':'标注图','source.png':'原始图','mask.png':'分割掩膜','comparison.png':'前后并排对比','difference-heatmap.png':'像素差异热力图','aligned-before.png':'配准前期图'};

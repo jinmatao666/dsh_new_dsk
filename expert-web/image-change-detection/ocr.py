@@ -138,6 +138,46 @@ def sam_segment(image, *, prompt='', boxes=None, precise=True, score=0.35):
         raise OCRError('SAM3调用失败或响应不匹配；需部署配套SAM3 HTTP适配服务，精准分割要求真实二值掩膜') from None
 
 
+class EmptyChangeMask(OCRError):
+    """Localization exists but SAM3 could not confirm a usable change mask."""
+
+
+def segment_change(source, box, category, score, valid, attempts):
+    """Try the original prompt, then one contextual crop at the same confidence."""
+    if box is None:
+        raise EmptyChangeMask('缺少前后对应位置')
+    parts = sam_segment(source, boxes=[box], score=score)
+    attempts.append({'method': 'original_box', 'count': len(parts), 'score': score})
+    if parts:
+        mask = np.logical_or.reduce([obj['mask'] for obj in parts]) & (valid > 0)
+        if mask.any():
+            return mask
+    w, h = source.size
+    x0, y0, x1, y1 = box
+    px, py = max(8, (x1-x0)*w*.15), max(8, (y1-y0)*h*.15)
+    bounds = (max(0, math.floor(x0*w-px)), max(0, math.floor(y0*h-py)),
+              min(w, math.ceil(x1*w+px)), min(h, math.ceil(y1*h+py)))
+    left, top, right, bottom = bounds
+    crop = source.crop(bounds)
+    local_box = [(x0*w-left)/crop.width, (y0*h-top)/crop.height,
+                 (x1*w-left)/crop.width, (y1*h-top)/crop.height]
+    names = {'建筑': 'building', '道路': 'road', '水体': 'water', '植被': 'vegetation',
+             '停车场': 'parking lot', '建筑物': 'building', '裸地': 'bare ground'}
+    prompt = names.get(category, '')
+    if not prompt and category.isascii():
+        prompt = category[:200]
+    parts = sam_segment(crop, prompt=prompt, boxes=[local_box], score=score)
+    attempts.append({'method': 'context_crop', 'count': len(parts), 'score': score,
+                     'prompt': prompt, 'crop_xyxy': list(bounds)})
+    if parts:
+        mask = np.zeros((h, w), dtype=bool)
+        mask[top:bottom, left:right] = np.logical_or.reduce([obj['mask'] for obj in parts])
+        mask &= valid > 0
+        if mask.any():
+            return mask
+    raise EmptyChangeMask('SAM3重试后仍未返回真实掩膜')
+
+
 def contours(mask):
     found, hierarchy = cv2.findContours(mask.astype('uint8'), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
     if hierarchy is None:
@@ -278,25 +318,37 @@ def extract(paths, destination, options):
         evidence_path = output / 'model-evidence.json'
         evidence_path.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding='utf-8')
         extras.append(evidence_path)
-        for change in changes:
+        unsegmented = []
+        evidence['segmentation'] = []
+        for event_index, change in enumerate(changes, 1):
             if options['precise']:
-                def segment_at(source, box):
-                    if box is None:
-                        raise OCRError('该变化缺少前后对应位置，无法计算真实变化轮廓')
-                    parts = sam_segment(source, boxes=[box], score=options['score'])
-                    if not parts:
-                        raise OCRError('SAM3未返回该变化的真实掩膜')
-                    return np.logical_or.reduce([obj['mask'] for obj in parts]) & (valid > 0)
+                diagnostic = {'event': event_index, 'category': change['category'], 'phases': []}
+                evidence['segmentation'].append(diagnostic)
+                def segment_at(source, box, phase):
+                    attempts = []
+                    diagnostic['phases'].append({'phase': phase, 'attempts': attempts})
+                    try:
+                        return segment_change(source, box, change['category'], options['score'], valid, attempts)
+                    finally:
+                        evidence_path.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding='utf-8')
                 kind = change['change_type']
-                if kind in ('expanded', 'shrunk', 'modified'):
-                    old_mask = segment_at(aligned, change.get('bbox_before'))
-                    new_mask = segment_at(image, change.get('bbox_after'))
-                    mask = (new_mask & ~old_mask) if kind == 'expanded' else (old_mask & ~new_mask) if kind == 'shrunk' else (old_mask ^ new_mask)
-                else:
-                    mask = segment_at(aligned if kind == 'disappeared' else image,
-                        change.get('bbox_before') if kind == 'disappeared' else change['box'])
-                if not mask.any():
-                    raise OCRError('两期分割轮廓未确认该项变化，请人工核对或使用框模式')
+                try:
+                    if kind in ('expanded', 'shrunk', 'modified'):
+                        old_mask = segment_at(aligned, change.get('bbox_before'), 'before')
+                        new_mask = segment_at(image, change.get('bbox_after'), 'after')
+                        mask = (new_mask & ~old_mask) if kind == 'expanded' else (old_mask & ~new_mask) if kind == 'shrunk' else (old_mask ^ new_mask)
+                    else:
+                        mask = segment_at(aligned if kind == 'disappeared' else image,
+                            change.get('bbox_before') if kind == 'disappeared' else change['box'],
+                            'before' if kind == 'disappeared' else 'after')
+                    if not mask.any():
+                        raise EmptyChangeMask('两期分割轮廓未确认变化')
+                except EmptyChangeMask as error:
+                    diagnostic.update(status='unavailable', reason=str(error))
+                    unsegmented.append({**change, 'segmentation_status': 'unavailable',
+                                        'segmentation_note': str(error), 'area_ratio': None})
+                    continue
+                diagnostic['status'] = 'segmented'
                 duplicate = None
                 for i, old in enumerate(objects):
                     if old['change_type'] == kind and old['category'] == change['category']:
@@ -308,10 +360,18 @@ def extract(paths, destination, options):
                     masks[duplicate] |= mask
                     objects[duplicate].update(region(masks[duplicate], duplicate + 1))
                 else:
-                    objects.append({**change, **region(mask, len(objects)+1), 'model_box': change['box']})
+                    objects.append({**change, **region(mask, len(objects)+1), 'model_box': change['box'], 'segmentation_status': 'segmented'})
                     masks.append(mask)
             else:
                 objects.append({**change, 'id': len(objects)+1})
+        for change in unsegmented:
+            objects.append({**change, 'id': len(objects)+1})
+        if options['precise']:
+            meta['segmentation_complete'] = not unsegmented
+            meta['unsegmented_count'] = len(unsegmented)
+            if unsegmented:
+                meta['warning'] += f" {len(unsegmented)}项仅定位、未分割；面积只统计已分割部分，未分割项不代表没有变化。"
+        evidence_path.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding='utf-8')
     annotated = image.copy()
     union = np.zeros((image.height, image.width), dtype=bool)
     if masks:
@@ -333,7 +393,7 @@ def extract(paths, destination, options):
     for obj in objects:
         x0, y0, x1, y1 = obj['box']
         box = (x0 * image.width, y0 * image.height, min(image.width - 1, x1 * image.width), min(image.height - 1, y1 * image.height))
-        if not options['precise']:
+        if not options['precise'] or obj.get('segmentation_status') == 'unavailable':
             draw.rectangle(box, outline='#ed5a37', width=3)
         draw.text((box[0] + 3, box[1] + 3), str(obj['id']), fill=palette[(obj['id']-1) % len(palette)])
     meta['count'] = len(objects)
@@ -343,9 +403,9 @@ def extract(paths, destination, options):
     csv_path = output / 'objects.csv'
     with csv_path.open('w',encoding='utf-8-sig',newline='') as stream:
         writer=csv.writer(stream)
-        writer.writerow(['id','xmin_relative','ymin_relative','xmax_relative','ymax_relative','confidence','area_ratio','change_type','category','description'])
+        writer.writerow(['id','xmin_relative','ymin_relative','xmax_relative','ymax_relative','confidence','area_ratio','change_type','category','description','segmentation_status','segmentation_note'])
         for obj in objects:
-            writer.writerow([obj['id'],*obj['box'],obj.get('score'),obj.get('area_ratio'),obj.get('change_type'),obj.get('category'),obj.get('description')])
+            writer.writerow([obj['id'],*obj['box'],obj.get('score'),obj.get('area_ratio'),obj.get('change_type'),obj.get('category'),obj.get('description'),obj.get('segmentation_status'),obj.get('segmentation_note')])
     extras.append(csv_path)
     original_path = output / 'source.png'
     image.save(original_path)
@@ -357,14 +417,14 @@ def extract(paths, destination, options):
         rawdiff=np.max(np.abs(np.asarray(aligned).astype('float32')-np.asarray(image).astype('float32')),axis=2)
         heat=cv2.cvtColor(cv2.applyColorMap(rawdiff.astype('uint8'),cv2.COLORMAP_TURBO),cv2.COLOR_BGR2RGB)
         heat_path=output/'difference-heatmap.png';Image.fromarray(heat).save(heat_path);extras.append(heat_path)
-        meta['changed_area_ratio']=float(union.mean()) if options['precise'] else None
+        meta['changed_area_ratio']=float(union.mean()) if options['precise'] and (masks or not unsegmented) else None
         meta['overlap_ratio']=float((valid>0).mean())
         meta['region_count_note']='以语义变化事件为单位输出区域，不按像素碎片或规则网格拆分。'
     result = output / 'result.json'
     result.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding='utf-8')
     preview = output / 'annotated.png'
     annotated.save(preview)
-    if options['precise']:
+    if options['precise'] and (MODE != 'change' or masks or not unsegmented):
         mask_path = output / 'mask.png'
         Image.fromarray(union.astype('uint8') * 255).save(mask_path)
         extras.append(mask_path)
