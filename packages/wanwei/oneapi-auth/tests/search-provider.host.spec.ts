@@ -18,11 +18,9 @@ describe('Wanwei OneAPI web search', () => {
       .search({ query: '今天的人工智能新闻' })
     expect(result.sources).toHaveLength(2)
     expect(result.content).toContain('2 个链接，1 个网站')
-    expect(result.content).toContain('所有链接都来自同一个网站')
-    expect(result.content).toContain('继续调用 web_search 检索其他网站')
-    expect(result.content).toContain('至少检索并核对三个不同发布网站')
-    expect(result.content).toContain('转载或镜像不算独立来源')
-    expect(result.content).toContain('用户明确限定某个网站')
+    expect(result.content).toContain('下一步先用 web_fetch')
+    expect(result.content).not.toContain('至少检索并核对三个不同发布网站')
+    expect(result.content).not.toContain('请继续调用 web_search')
   })
   it('explains endpoint rejection without exposing the raw upstream response or credentials', async () => {
     vi.stubGlobal('fetch', vi.fn()
@@ -61,7 +59,10 @@ describe('Wanwei OneAPI web search', () => {
     expect(init.headers).toEqual({ authorization: 'Bearer user-token', 'content-type': 'application/json', 'x-dsh-web-search': '1' })
     expect(JSON.parse(init.body as string)).toEqual({
       model: 'qwen3.6-plus', stream: false,
-      messages: [{ role: 'user', content: '搜索网页并整理以下问题：latest news。尽量返回不同发布网站的独立原文页面，避免只返回一篇热点汇总。只依据检索到的资料作答，区分事件日期与发布日期。每条正文以句末标点结束，空格后添加“来源：”和真实网页标题的可点击链接，格式为 正文。 来源：[网页真实标题](原文URL)。链接必须指向支持对应信息的具体原文页面，不得编造标题、网址或用无关网页代替。' }],
+      messages: [
+        { role: 'system', content: '执行联网检索，保留用户查询中的日期、语言和站点条件。返回相关的具体原文页面，优先原始发布者。不要用站点首页替代文章，不编造来源。' },
+        { role: 'user', content: 'latest news' },
+      ],
     })
   })
 
@@ -81,14 +82,8 @@ describe('Wanwei OneAPI web search', () => {
     expect(result.sources).toEqual([
       { title: '官方公告', url: 'https://news.example.com/release' }, { url: 'https://second.example.com/' },
     ])
-    expect(result.content).toContain('正文末尾先用句号、问号或叹号等句末标点结束')
-    expect(result.content).toContain('正文。 来源：[网页真实标题](原文URL)')
-    expect(result.content).toContain('正文。 来源：[原文URL](原文URL)')
-    expect(result.content).toContain('多条信息逐条附上对应来源')
-    expect(result.content).toContain('[网页真实标题](原文URL)')
-    expect(result.content).toContain('返回的原始标题')
-    expect(result.content).toContain('没有真实标题时显示可点击的原文 URL')
     expect(result.content).toContain('先用 web_fetch')
+    expect(result.content).toContain('摘要仅供筛选')
     expect(result.content).not.toContain('网页答案')
     expect(result.content).not.toContain('未返回可核验')
   })
@@ -116,9 +111,9 @@ describe('Wanwei OneAPI web search', () => {
     expect(result.content).not.toContain('虚构消息')
     expect(result.content).not.toContain('made-up.example.com')
     expect(result.content).not.toContain('fake.example.com')
-    expect(result.content).toContain('正文不支持结论')
-    expect(result.content).toContain('明确标注未核实')
-    expect(result.content).toContain('当前只有一个来源，不能据此列出多条独立新闻')
+    expect(result.content).toContain('核对事件和发布日期')
+    expect(result.content).toContain('不是正文核验')
+    expect(result.content).toContain('1 个链接，1 个网站')
   })
 
   it('accepts structured retrieval metadata without a generated summary', async () => {
@@ -128,8 +123,8 @@ describe('Wanwei OneAPI web search', () => {
     const result = await new OneApiSearchProvider({ baseURL: 'https://oneapi.test', resolveToken: async () => 'token' })
       .search({ query: '新闻' })
     expect(result.sources).toHaveLength(1)
-    expect(result.content).toContain('[网页真实标题]')
-    expect(result.content).toContain('本次仅检索到 1 个不同的原文链接')
+    expect(result.content).toContain('先用 web_fetch')
+    expect(result.content).toContain('1 个链接')
   })
 
   it('does not contact OneAPI before login or when no search model is configured', async () => {
@@ -154,4 +149,35 @@ describe('Wanwei OneAPI web search', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0]?.[0]).toBe('https://oneapi.test/api/status')
   })
+})
+
+it('preserves retrieval snippets and supplied ISO dates without adopting generated prose', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(jsonResponse({ data:{ search_model:'qwen-plus' } }))
+    .mockResolvedValueOnce(jsonResponse({ choices:[{ message:{ content:'unsupported generated claim' } }],search_info:{ search_results:[
+      { url:'https://example.com/a',snippet:'Actual search excerpt',published_at:'2026-10-29' },
+      { url:'https://example.com/b',snippet:12,publishedAt:'today' },
+    ] } })))
+  const result = await new OneApiSearchProvider({ baseURL:'https://oneapi.test',resolveToken:async ()=>'token' }).search({ query:'today AI' })
+  expect(result.sources).toEqual([{ url:'https://example.com/a',snippet:'Actual search excerpt',publishedAt:'2026-10-29' },
+    { url:'https://example.com/b' }])
+  expect(result.content).not.toContain('unsupported generated claim')
+})
+it('does not pass off unrelated domains as successful site-restricted results', async () => {
+  const fetcher = vi.fn().mockResolvedValueOnce(jsonResponse({ data:{ search_model:'qwen-plus' } }))
+    .mockResolvedValueOnce(jsonResponse({ search_info:{ search_results:[{ url:'https://sina.com/news' }] } }))
+  vi.stubGlobal('fetch',fetcher)
+  const provider = new OneApiSearchProvider({ baseURL:'https://oneapi.test',resolveToken:async ()=>'token' })
+  await expect(provider.search({ query:'AI news site:reuters.com' })).rejects.toMatchObject({ code:'WEB_PROVIDER_SCOPE_MISMATCH' })
+  const body = JSON.parse((fetcher.mock.calls[1] as [string, RequestInit])[1].body as string) as { messages: { content: string }[] }
+  expect(body.messages.at(-1)?.content)
+    .toBe('AI news site:reuters.com')
+})
+it('retains matching domains and subdomains while filtering suffix lookalikes', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(jsonResponse({ data:{ search_model:'qwen-plus' } }))
+    .mockResolvedValueOnce(jsonResponse({ search_info:{ search_results:[
+      { url:'https://reuters.com/a' },{ url:'https://www.reuters.com/b' },{ url:'https://notreuters.com/c' },
+    ] } })))
+  const result = await new OneApiSearchProvider({ baseURL:'https://oneapi.test',resolveToken:async ()=>'token' })
+    .search({ query:'AI site:reuters.com' })
+  expect(result.sources.map(source => source.url)).toEqual(['https://reuters.com/a','https://www.reuters.com/b'])
 })

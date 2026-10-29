@@ -22,7 +22,7 @@ For multi-item news requests, each item requires a distinct supporting article U
 
 **Parse links out of generated prose.** A syntactically valid link is not retrieval evidence. Structured metadata avoids depending on every Markdown or HTML link spelling.
 
-Source distribution distinguishes article URLs from website hostnames and folds www aliases. A single-site result carries an explicit request to search other sites. General roundups of at least three news items require checking at least three publishing websites, while explicit single-site requests retain their scope. Reprints do not establish publisher independence.
+Search requests retain the original query under separate retrieval instructions. Structured snippets and valid ISO publication dates are preserved when supplied; generated answer prose is excluded. Results direct the agent to read relevant articles before targeted supplementary searches. Publisher diversity is a quality goal, not a three-website answer prerequisite. Consecutive supplementary rounds without new effective sources must stop and explain the failing stage. A single positive site term is checked against returned hostnames; a completely mismatched response raises WEB_PROVIDER_SCOPE_MISMATCH rather than claiming the site has no news. Compound OR queries are left intact. These instructions do not mechanically validate the final answer or prove live search completeness.
 
 ## Consequences
 

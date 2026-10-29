@@ -135,7 +135,7 @@ The `oneapi-bailian` search provider returns structured retrieval sources throug
 
 Multi-item news answers require a different supporting article URL for each item and prefer different publishers. The provider reports the distinct URL count; a roundup page counts as one source. When searches do not yield enough independently verified pages, the model is instructed to report fewer items instead of reusing one citation. This remains model guidance, not a deterministic final-answer validator.
 
-The provider reports distinct links and website hostnames separately, grouping www aliases. Single-website results explicitly request another web_search for other sites. General roundups with at least three news items require checking at least three publishing websites; syndicated copies do not count as independent sources. Explicit single-site requests retain their requested scope. These instructions do not mechanically validate the final answer.
+Search requests retain the original query under separate retrieval instructions. Structured snippets and valid ISO publication dates are preserved when supplied; generated answer prose is excluded. Results direct the agent to read relevant articles before targeted supplementary searches. Publisher diversity is a quality goal, not a three-website answer prerequisite. Consecutive supplementary rounds without new effective sources must stop and explain the failing stage. A single positive site term is checked against returned hostnames; a completely mismatched response raises WEB_PROVIDER_SCOPE_MISMATCH rather than claiming the site has no news. Compound OR queries are left intact. These instructions do not mechanically validate the final answer or prove live search completeness.
 
 #### Token effect
 
