@@ -31,6 +31,10 @@ class Store:
             columns = {row["name"] for row in db.execute("PRAGMA table_info(tasks)")}
             if "input_names" not in columns:
                 db.execute("ALTER TABLE tasks ADD COLUMN input_names TEXT NOT NULL DEFAULT '[]'")
+            if 'outputs_deleted' not in columns:
+                db.execute('ALTER TABLE tasks ADD COLUMN outputs_deleted INTEGER NOT NULL DEFAULT 0')
+            if 'finished_at' not in columns:
+                db.execute('ALTER TABLE tasks ADD COLUMN finished_at REAL')
             # A restarted service cannot claim an interrupted conversion succeeded.
             db.execute("UPDATE tasks SET state='failed', error=? WHERE state IN ('queued','running')",
                        ("服务重启，任务已中断，请重新提交",))
@@ -109,8 +113,24 @@ class Store:
 
     def finish(self, task_id, outputs=None, error=None):
         with self.connect() as db:
-            db.execute("UPDATE tasks SET state=?,outputs=?,error=? WHERE id=? AND state='running'",
-                       ("failed" if error else "succeeded", json.dumps(outputs or []), error, task_id))
+            db.execute("UPDATE tasks SET state=?,outputs=?,error=?,finished_at=?,outputs_deleted=0 WHERE id=? AND state='running'",
+                       ("failed" if error else "succeeded", json.dumps(outputs or []), error, time.time(), task_id))
+
+    def delete_outputs(self, user, task_id):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT state FROM tasks WHERE id=? AND user_id=?', (task_id, user)).fetchone()
+            if not row:
+                return False
+            if row['state'] != 'succeeded':
+                raise ValueError('仅已完成任务可以删除成果')
+            directory = self.root / task_id / 'output'
+            if not re.fullmatch(r'[a-f0-9]{32}', task_id) or directory.parent.is_symlink() or directory.parent.is_junction() or directory.parent.resolve().parent != self.root or directory.is_symlink() or directory.is_junction() or directory.resolve().parent != directory.parent.resolve():
+                raise ValueError('成果目录无效')
+            if directory.exists():
+                shutil.rmtree(directory)
+            db.execute("UPDATE tasks SET outputs='[]',outputs_deleted=1 WHERE id=? AND user_id=?", (task_id, user))
+            return True
 
     def cancel(self, user, task_id):
         with self.connect() as db:

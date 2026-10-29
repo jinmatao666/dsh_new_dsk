@@ -2,7 +2,7 @@
 services:
   expert:
     build: .
-    image: wanwei-expert/image-change-detection:0.3.0
+    image: wanwei-expert/image-change-detection:0.3.2
     init: true
     restart: unless-stopped
     network_mode: host

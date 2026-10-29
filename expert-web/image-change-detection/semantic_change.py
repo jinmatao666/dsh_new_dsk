@@ -77,7 +77,7 @@ def discover(before, after):
                 raise ValueError('模型变化描述缺失或过长')
         answer = ask(images, '定位这个变化候选：' + json.dumps(candidate, ensure_ascii=False) + """
 只定位该候选，不新增其他事件。同一连续变化区域使用一个紧致框，明显分离的区域才分开。
-每个框是完整单张图片上的[x1,y1,x2,y2]，左上原点，0至999坐标。新增目标bbox_before为null；消失目标须提供前期目标框，后期框指向原目标所在地。其他类型尽量提供前后框。
+每个框是完整单张图片上的[x1,y1,x2,y2]，左上原点，0至999坐标。新增目标bbox_before为null；消失目标须提供前期目标框，后期框指向原目标所在地。扩张、缩减和修改必须提供同一目标的前后框。框须紧贴该变化地物，不得为包含道路或建筑而把大片未变化背景框入。
 每项必须有bbox_after。无法可靠定位返回objects空数组，不猜测坐标。
 只返回JSON：{"objects":[{"bbox_before":null,"bbox_after":[100,100,300,300]}]}。""")
         evidence['localizations'].append(answer)
@@ -93,8 +93,8 @@ def discover(before, after):
                 raise ValueError('消失目标缺少前期位置')
             item = {**candidate, 'box': after_box, 'bbox_after': after_box, 'bbox_before': before_box}
             duplicate = next((old for old in objects if old['change_type'] == item['change_type']
-                and old['category'] == item['category'] and (overlap(old['box'], after_box)[0] >= .6
-                or overlap(old['box'], after_box)[1] >= .9)), None)
+                and old['category'] == item['category'] and old['description'] == item['description'] and (overlap(old['box'], after_box)[0] >= .95
+                or overlap(old['box'], after_box)[1] >= .99)), None)
             if duplicate is None:
                 objects.append(item)
     return objects, evidence

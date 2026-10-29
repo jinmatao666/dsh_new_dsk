@@ -1,6 +1,7 @@
 """Independent expert website; run behind a reviewed HTTP/HTTPS reverse proxy."""
 import base64
 import binascii
+from datetime import datetime, timedelta, timezone
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -15,6 +16,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit, quote
 
+from artifacts import NAMES, build_bundle, bundle_name
 from store import Store
 from worker import Worker
 from deployment import ready
@@ -174,6 +176,25 @@ def create_server(root, address=("127.0.0.1", 3314), redeem_ticket=redeem, publi
                     return self.reply(401, {"error": "请从桌面专家库重新打开工作台"})
                 if method == "GET" and path == "/api/config":
                     return self.reply(200, {"ready": ready(), "preview": preview, "max_bytes": MAX_FILES})
+                artifact_match = re.fullmatch(r'/api/tasks/([a-f0-9]{32})/(bundle|outputs/delete)', path)
+                if artifact_match:
+                    with worker._lock:
+                        task = store.task(user, artifact_match[1])
+                        if not task:
+                            return self.reply(404, {'error': '任务不存在'})
+                        if method == 'POST' and artifact_match[2] == 'outputs/delete':
+                            self.body()
+                            if task['id'] in worker._active:
+                                return self.reply(409, {'error': '任务尚未结束，请稍后删除成果'})
+                            return self.reply(200, {'deleted': store.delete_outputs(user, task['id'])})
+                        if method == 'GET' and artifact_match[2] == 'bundle':
+                            if task['state'] != 'succeeded' or not task['outputs']:
+                                return self.reply(410, {'error': '成果未生成或已删除'})
+                            data = build_bundle(store.root / task['id'] / 'output', task['outputs'])
+                            self.response_headers(200, 'application/zip', Content_Length=str(len(data)),
+                                Content_Disposition="attachment; filename*=UTF-8''" + quote(bundle_name(task)))
+                            self.wfile.write(data)
+                            return
                 match = re.fullmatch(r"/api/tasks/([a-f0-9]{32})/(image|image2|result)", path)
                 if method == "GET" and match:
                     task = store.task(user, match[1])
@@ -189,6 +210,8 @@ def create_server(root, address=("127.0.0.1", 3314), redeem_ticket=redeem, publi
                         return
                     if task["state"] != "succeeded":
                         return self.reply(409, {"error": "任务尚未成功，无可用识别结果"})
+                    if not task['outputs']:
+                        return self.reply(410, {'error': '成果已删除，可复用原图重新分析'})
                     text = (store.root / task["id"] / "output" / task["outputs"][0]).read_text(encoding="utf-8-sig")
                     return self.reply(200, {"text": text, "format": task["options"]["format"]})
                 if method == "GET" and path == "/api/tasks":
@@ -233,6 +256,9 @@ def create_server(root, address=("127.0.0.1", 3314), redeem_ticket=redeem, publi
                         if image_info["mime"] != expected:
                             raise ValueError("图片扩展名与实际内容不一致")
                         contents.append((f"{index:03d}{suffix}", data))
+                    if not options['taskName']:
+                        stamp = datetime.now(timezone(timedelta(hours=8))).strftime('%Y%m%d%H%M')
+                        options['taskName'] = (Path(files[0]['name']).stem or '变化分析')[:87] + '_' + stamp
                     task_id = secrets.token_hex(16)
                     directory = store.root / task_id / "input"
                     directory.mkdir(parents=True, mode=0o700)
@@ -277,7 +303,7 @@ def create_server(root, address=("127.0.0.1", 3314), redeem_ticket=redeem, publi
                         name = task["outputs"][index]
                         file_path = store.root / task["id"] / "output" / name
                         self.response_headers(200, "application/octet-stream", Content_Length=str(file_path.stat().st_size),
-                                     Content_Disposition=f"attachment; filename*=UTF-8''{quote(name)}")
+                                     Content_Disposition=f"attachment; filename*=UTF-8''{quote(NAMES.get(name, name))}")
                         with file_path.open("rb") as file:
                             while chunk := file.read(65536):
                                 self.wfile.write(chunk)

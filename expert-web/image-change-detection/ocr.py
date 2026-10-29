@@ -199,6 +199,8 @@ def aligned_pair(before, after, align):
     if matrix is None:
         if before.size != after.size:
             raise OCRError('自动对齐未找到共同范围，且两图尺寸不同；请裁成同一范围后重试。')
+        if not np.array_equal(a, b):
+            raise OCRError('自动对齐失败，无法可靠比较；请提供同一范围且具有清晰共同地物的两期图像。')
         matrix = np.eye(3, dtype='float64')
     corners = np.float32([[0, 0], [before.width, 0], [before.width, before.height], [0, before.height]]).reshape(-1, 1, 2)
     warped_corners = cv2.perspectiveTransform(corners, matrix)
@@ -260,16 +262,36 @@ def extract(paths, destination, options):
         extras.append(evidence_path)
         for change in changes:
             if options['precise']:
-                source = aligned if change['change_type'] == 'disappeared' else image
-                prompt_box = change['bbox_before'] if change['change_type'] == 'disappeared' else change['box']
-                segmented = sam_segment(source, boxes=[prompt_box], score=options['score'])
-                if not segmented:
-                    raise OCRError('SAM3未返回该变化的真实掩膜，未生成替代轮廓')
-                mask = np.logical_or.reduce([obj['mask'] for obj in segmented]) & (valid > 0)
+                def segment_at(source, box):
+                    if box is None:
+                        raise OCRError('该变化缺少前后对应位置，无法计算真实变化轮廓')
+                    parts = sam_segment(source, boxes=[box], score=options['score'])
+                    if not parts:
+                        raise OCRError('SAM3未返回该变化的真实掩膜')
+                    return np.logical_or.reduce([obj['mask'] for obj in parts]) & (valid > 0)
+                kind = change['change_type']
+                if kind in ('expanded', 'shrunk', 'modified'):
+                    old_mask = segment_at(aligned, change.get('bbox_before'))
+                    new_mask = segment_at(image, change.get('bbox_after'))
+                    mask = (new_mask & ~old_mask) if kind == 'expanded' else (old_mask & ~new_mask) if kind == 'shrunk' else (old_mask ^ new_mask)
+                else:
+                    mask = segment_at(aligned if kind == 'disappeared' else image,
+                        change.get('bbox_before') if kind == 'disappeared' else change['box'])
                 if not mask.any():
-                    raise OCRError('SAM3变化掩膜为空，未生成替代轮廓')
-                objects.append({**change, **region(mask, len(objects)+1), 'model_box': change['box']})
-                masks.append(mask)
+                    raise OCRError('两期分割轮廓未确认该项变化，请人工核对或使用框模式')
+                duplicate = None
+                for i, old in enumerate(objects):
+                    if old['change_type'] == kind and old['category'] == change['category']:
+                        intersection = np.logical_and(masks[i], mask).sum()
+                        if intersection / np.logical_or(masks[i], mask).sum() >= .85:
+                            duplicate = i
+                            break
+                if duplicate is not None:
+                    masks[duplicate] |= mask
+                    objects[duplicate].update(region(masks[duplicate], duplicate + 1))
+                else:
+                    objects.append({**change, **region(mask, len(objects)+1), 'model_box': change['box']})
+                    masks.append(mask)
             else:
                 objects.append({**change, 'id': len(objects)+1})
     annotated = image.copy()
@@ -278,15 +300,24 @@ def extract(paths, destination, options):
         union = np.logical_or.reduce(masks)
         rgba = annotated.convert('RGBA')
         tint = np.zeros((image.height, image.width, 4), dtype='uint8')
-        tint[union] = [45, 113, 235, 100]
+        palette = [(38,112,235),(230,132,30),(145,76,205),(25,151,107),(211,73,93)]
+        for i, mask in enumerate(masks):
+            tint[mask] = [*palette[i % len(palette)], 95]
         annotated = Image.alpha_composite(rgba, Image.fromarray(tint)).convert('RGB')
     draw = ImageDraw.Draw(annotated)
+    palette = ['#2670eb','#e6841e','#914ccd','#19976b','#d3495d']
+    for i, mask in enumerate(masks):
+        outlines, _ = cv2.findContours(mask.astype('uint8'), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        for outline in outlines:
+            points = [tuple(map(int, point)) for point in outline.reshape(-1, 2)]
+            if len(points) > 1:
+                draw.line(points + [points[0]], fill=palette[i % len(palette)], width=2)
     for obj in objects:
         x0, y0, x1, y1 = obj['box']
         box = (x0 * image.width, y0 * image.height, min(image.width - 1, x1 * image.width), min(image.height - 1, y1 * image.height))
         if not options['precise']:
             draw.rectangle(box, outline='#ed5a37', width=3)
-        draw.text((box[0] + 3, box[1] + 3), str(obj['id']), fill='#ed5a37')
+        draw.text((box[0] + 3, box[1] + 3), str(obj['id']), fill=palette[(obj['id']-1) % len(palette)])
     meta['count'] = len(objects)
     meta['message'] = '未发现符合当前参数的目标或疑似变化' if not objects else '结果需人工核对'
     # Coordinates and statistics accompany the visual preview.

@@ -249,5 +249,35 @@ class Integration(unittest.TestCase):
         self.assertFalse((self.app.store.root/second).exists())
 
 
+    def test_bundle_delete_preserves_inputs(self):
+        import zipfile
+        self.login()
+        status, raw = self.upload()
+        self.assertEqual(status,201)
+        task_id = json.loads(raw)['id']
+        task = self.wait(task_id)
+        self.assertEqual(task['state'],'succeeded',task)
+        status,data = self.request(f'/api/tasks/{task_id}/bundle')
+        self.assertEqual(status,200)
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            self.assertIn('分析结果.json',archive.namelist())
+            self.assertIn('变化明细.csv',archive.namelist())
+            self.assertNotIn('分割掩膜.png',archive.namelist())
+        other = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        self.request('/api/session',{'ticket':'b'*64},other)
+        self.assertEqual(self.request(f'/api/tasks/{task_id}/outputs/delete',{},other)[0],404)
+        self.assertEqual(self.request(f'/api/tasks/{task_id}/bundle',client=other)[0],404)
+        self.assertEqual(self.request(f'/api/tasks/{task_id}/outputs/delete',{})[0],200)
+        task = self.app.store.task('1',task_id)
+        self.assertTrue(task['outputs_deleted'])
+        self.assertEqual(task['outputs'],[])
+        self.assertTrue((self.app.store.root/task_id/'input'/task['inputs'][0]).is_file())
+        self.assertEqual(self.request(f'/api/tasks/{task_id}/result')[0],410)
+        self.assertEqual(self.request(f'/api/tasks/{task_id}/bundle')[0],410)
+        status,raw = self.request('/api/tasks',{'tool':'change','replace_id':task_id,'files':[], 'options':{'align':False}})
+        self.assertEqual(status,201,raw)
+        rerun=self.wait(json.loads(raw)['id']);self.assertEqual(rerun['state'],'succeeded',rerun)
+
+
 if __name__ == "__main__":
     unittest.main()
