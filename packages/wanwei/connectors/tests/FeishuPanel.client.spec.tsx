@@ -62,10 +62,13 @@ it('enables and disables the inbound channel with actual readiness separate from
     return { ...base, authed: true, bridge }
   })
   render(<FeishuPanel api={{ call }} onStatus={vi.fn()} onTry={vi.fn()} />)
+  expect(screen.queryByRole('region', { name: '飞书消息通道' })).toBeNull()
   fireEvent.click(await screen.findByRole('button', { name: '开启双向任务' }))
   expect(await screen.findByText('正在接收飞书指令')).toBeTruthy()
+  expect(screen.queryByRole('region', { name: '飞书消息通道' })).toBeNull()
   expect(call).toHaveBeenCalledWith('bridge-enable')
   fireEvent.click(screen.getByRole('button', { name: '关闭双向任务' }))
   expect(await screen.findByText('双向任务未开启')).toBeTruthy()
+  expect(screen.queryByRole('region', { name: '飞书消息通道' })).toBeNull()
   expect(call).toHaveBeenCalledWith('bridge-disable')
 })

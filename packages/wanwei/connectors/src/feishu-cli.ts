@@ -279,7 +279,7 @@ export function registerFeishu(ctx: Context): void {
     })().catch((error: unknown) => { failure = error instanceof Error ? error.message : String(error) })
       .finally(() => {
         flight = undefined; authorizationUrl = null; qrDataUrl = null; authorizationStage = null
-        void channel.resume()
+        void channel.enableIfUnconfigured().then(() => channel.resume()).catch(() => {})
       })
   }
   ctx.effect(() => ctx.connection.rpc.handle('/wanwei-feishu', async (operation) => {
@@ -306,7 +306,7 @@ export function registerFeishu(ctx: Context): void {
       message: error instanceof Error ? error.message : String(error), details: {} } } }
   }))
   ctx.effect(() => {
-    void channel.restore()
+    void channel.restore().then(() => channel.enableIfUnconfigured()).catch(() => {})
     return async () => { lifetime.abort(); await channel.dispose(); await flight }
   })
   ctx.effect(() => ctx.tools.register(defineTool({

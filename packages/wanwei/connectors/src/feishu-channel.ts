@@ -251,6 +251,15 @@ export function createFeishuChannel(ctx: Context, home: () => string, cli: Cli) 
     await queue
     child = undefined; abort = undefined; state = 'stopped'
   }
+  const enableCurrent = async () => {
+    if (disposed) throw new Error('飞书连接器已关闭。')
+    await stop()
+    const current = await identity(lifetime.signal)
+    lifetime.signal.throwIfAborted()
+    const same = saved?.appId === current.appId && saved.openId === current.openId
+    saved = { ...current, enabled: true, since: Date.now(), seen: same && saved ? saved.seen : [] }
+    persist(); startup = start(); await startup
+  }
   return {
     snapshot(): FeishuBridgeStatus { return { enabled: saved?.enabled === true, state, error } },
     async restore() {
@@ -264,14 +273,11 @@ export function createFeishuChannel(ctx: Context, home: () => string, cli: Cli) 
         startup = start(); await startup
       } catch (failure) { state = 'error'; error = failure instanceof Error ? failure.message : '飞书双向任务恢复失败。' }
     },
-    enable() { return change(async () => {
-      if (disposed) throw new Error('飞书连接器已关闭。')
-      await stop()
-      const current = await identity(lifetime.signal)
-      lifetime.signal.throwIfAborted()
-      const same = saved?.appId === current.appId && saved.openId === current.openId
-      saved = { ...current, enabled: true, since: Date.now(), seen: same && saved ? saved.seen : [] }
-      persist(); startup = start(); await startup
+    enable() { return change(enableCurrent) },
+    enableIfUnconfigured() { return change(async () => {
+      // 已保存的关闭状态属于用户选择，不在授权或重启时覆盖。
+      if (saved || disposed || existsSync(path())) return
+      await enableCurrent()
     }) },
     async resume() {
       if (saved?.enabled && !child && !abort && !retry) { startup = start(); await startup }

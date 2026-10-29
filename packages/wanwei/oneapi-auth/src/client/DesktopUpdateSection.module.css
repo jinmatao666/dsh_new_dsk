@@ -10,11 +10,11 @@
 .versionLine { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
 .versionInfo strong { font-size: 24px; line-height: 28px; font-weight: 600; letter-spacing: -.5px; font-variant-numeric: lining-nums tabular-nums; overflow-wrap: anywhere; min-width: 0; }
 .versionInfo small { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; white-space: nowrap; }
-.testingBadge, .officialBadge { display: inline-flex; align-items: center; padding: 2px 7px; border: 1px solid var(--dsw-alias-border-l1, #d9dee6); border-radius: 6px; font-size: 11px; line-height: 17px; font-weight: 500; white-space: nowrap; }
-.testingBadge { background: var(--dsw-alias-bg-base, #f5f6f8); color: var(--dsw-alias-label-secondary, #65758b); }
+.testingBadge, .officialBadge, .desktopBadge { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; height: 28px; padding: 0 9px; border: 1px solid var(--dsw-alias-border-l1, #d9dee6); border-radius: 7px; font-size: 12px; line-height: 18px; font-weight: 500; white-space: nowrap; }
+.testingBadge { border-color: #aab5c4; background: #e3e8ef; color: #334155; font-weight: 600; }
 .officialBadge { border-color: #b8dfc3; background: #eaf7ee; color: #18733a; font-weight: 600; }
 .versionMeta { display: flex; align-items: center; gap: 10px; margin-left: auto; padding-left: 20px; border-left: 1px solid var(--dsw-alias-border-l1, #e5eaf2); }
-.desktopBadge { padding: 4px 9px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 7px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; white-space: nowrap; }
+.desktopBadge { color: var(--dsw-alias-label-secondary); }
 .preference, .checkRow { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 24px 0; border-bottom: 1px solid var(--dsw-alias-border-l1, #e5eaf2); }
 .section h2 { margin: 0 0 7px; font-size: 14px; font-weight: 500; }
 .preference p, .checkRow p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--dsw-alias-label-secondary, #65758b); }

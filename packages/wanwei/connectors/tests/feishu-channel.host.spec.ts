@@ -60,6 +60,23 @@ it('accepts only bounded user text DMs in the pinned event format', () => {
   }
 })
 
+it('starts the channel after first authorization but preserves an explicit disable', async () => {
+  const f = fixture(); let channel = f.make()
+  try {
+    await channel.restore()
+    await channel.enableIfUnconfigured()
+    expect(channel.snapshot().enabled).toBe(true)
+    expect(f.children).toHaveLength(1)
+    await channel.disable()
+    await channel.dispose()
+    channel = f.make()
+    await channel.restore()
+    await channel.enableIfUnconfigured()
+    expect(channel.snapshot()).toMatchObject({ enabled: false, state: 'stopped' })
+    expect(f.children).toHaveLength(1)
+  } finally { await channel.dispose(); f.cleanup() }
+})
+
 it('waits for ready, executes one desktop task, replies to the original message and preserves deduplication across restarts', async () => {
   const f = fixture(); let channel = f.make()
   try {

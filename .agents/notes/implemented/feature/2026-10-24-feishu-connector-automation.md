@@ -34,6 +34,8 @@ The build exports official Skill Markdown and references embedded in the pinned 
 
 Feishu bidirectional tasks use the bot identity of the same self-built app to subscribe to `im.message.receive_v1` over a long connection. The Host verifies each event against the authorized user, accepts only that user's one-to-one text messages, reuses or creates a desktop Session, and replies through the bot. The app must enable the bot, event subscription, and bot message receive/send permissions; stopping or unbinding closes the channel and never forwards arbitrary group or other-user messages.
 
+The channel starts automatically for an authorized identity without a saved preference. A saved disabled state remains authoritative across reauthorization and restart. The connector sheet separates personal authorization from bot-channel readiness: a compact status remains visible, while setup guidance appears only for channel errors.
+
 自动化任务可能因连接器未授权、服务不可达或用户确认缺失而进入失败或等待状态。连接器选择只开放工具能力，不会在任务完成时自动推送结果。
 
 ## Verification

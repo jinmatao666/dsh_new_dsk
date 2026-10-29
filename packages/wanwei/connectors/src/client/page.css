@@ -593,3 +593,10 @@
 .dsh-connector-feishu-channel h3 { margin: 0 0 8px; color: #243956; font-size: 15px; }
 .dsh-connector-feishu-channel p { margin: 8px 0; }
 .dsh-connector-feishu-channel a { color: #2563eb; }
+.dsh-connector-feishu-status { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 0 22px 12px; color: #64748b; font-size: 13px; }
+.dsh-connector-feishu-status > span { width: 7px; height: 7px; border-radius: 50%; background: #94a3b8; }
+.dsh-connector-feishu-status.is-ready { color: #16834a; }
+.dsh-connector-feishu-status.is-ready > span { background: #22b86a; }
+.dsh-connector-feishu-disable { display: block; margin: 0 auto 14px; padding: 0; border: 0; background: none; color: #64748b; cursor: pointer; font: inherit; font-size: 12px; }
+.dsh-connector-feishu-disable:hover { color: #334155; }
+.dsh-connector-feishu-channel .dsh-connector-dingtalk-actions { margin: 12px 0 0; }
