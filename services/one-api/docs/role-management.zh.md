@@ -17,3 +17,5 @@
 新建或配置角色时可以选择多个组织节点。所选编号保存在 `roles.permissions.organization_node_ids`，写入前核对节点是否存在。这项关联属于管理元数据，不改变现有用户鉴权、模型权限、企业账务组织或数据可见范围。用户的角色分配仍使用 `users.role`。
 
 验证命令：`go test ./controller -run 'TestManagedRoleLifecycle|TestGovernmentOrganizationTreeAndRoleReferences' -count=1`，以及前端 `RolePermissions.test.js`。Go 测试使用独立 SQLite；设置 `DSH_SKILL_INSTALLATION_TEST_POSTGRES_DSN` 时使用临时 PostgreSQL 模式，测试禁止使用生产凭据。
+
+用户部门归属使用单个下拉框，在框内逐级展开组织树并选择。点击有下级的整行展开或收起，只有最底层部门可选，选中后收起下拉框。再次打开可添加兼任部门，已选项显示勾选标记和可移除标签。已有的上级组织归属继续显示，只有明确移除才会删除。加载失败时保留原选择，成功重试前不提交部门归属。登录失效、权限不足和接口返回非 JSON 内容分别提示。

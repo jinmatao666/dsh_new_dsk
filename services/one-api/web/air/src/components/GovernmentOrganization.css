@@ -17,11 +17,22 @@
 .department-selections, .department-path-picker { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .department-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 6px 8px; border-radius: 6px; background: #edf4ff; color: #315c99; font-size: 12px; overflow-wrap: anywhere; }
 .department-chip button { display: grid; place-items: center; flex: none; border: 0; background: transparent; color: inherit; cursor: pointer; }
-.department-path-picker label { position: relative; min-width: 145px; max-width: 220px; flex: 1; }
-.department-path-picker select { width: 100%; height: 38px; padding: 0 28px 0 10px; appearance: none; border: 1px solid #d5dfec; border-radius: 7px; background: #fff; color: #243958; font: inherit; font-size: 12px; cursor: pointer; }
-.department-path-picker label > svg { position: absolute; right: 9px; top: 12px; pointer-events: none; color: #7185a0; }
-.department-add { display: inline-flex; align-items: center; gap: 4px; height: 38px; padding: 0 10px; border: 1px solid #cfe0f6; border-radius: 7px; background: #fff; color: #2563eb; cursor: pointer; }
-.department-add:disabled { opacity: .45; cursor: not-allowed; }
+ .department-control { position: relative; min-width: 0; }
+.department-trigger { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 40px; padding: 9px 12px; border: 1px solid #d5e2f3; border-radius: 10px; background: #f7faff; color: #243958; font: inherit; font-size: 13px; cursor: pointer; }
+.department-trigger:focus-visible { outline: 2px solid #3478ed; outline-offset: 2px; }
+.department-trigger:disabled { color: #7185a0; cursor: default; }
+.department-selections { margin-top: 8px; }
+.department-dropdown { position: absolute; z-index: 20; top: 44px; left: 0; right: 0; max-height: 280px; overflow: auto; padding: 8px; border: 1px solid #d5e2f3; border-radius: 10px; background: #fff; box-shadow: 0 8px 24px #2439581a; color: #243958; }
+.department-dropdown ul { list-style: none; margin: 0; padding: 0; }
+.department-dropdown ul ul { padding-left: 20px; }
+.department-tree-row { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 36px; padding: 7px 8px; border: 0; border-radius: 6px; background: transparent; color: #243958; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.department-tree-row:hover { background: #edf4ff; }
+.department-tree-row:focus-visible { outline: 2px solid #3478ed; outline-offset: -2px; }
+.department-tree-row.is-selected { background: #edf4ff; color: #2563eb; font-weight: 600; }
+.department-branch-icon { display: grid; place-items: center; width: 18px; flex: none; color: #637b9a; }
+.department-selected-icon { margin-left: auto; flex: none; }
+.department-error { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: #b42318; font-size: 13px; }
+.department-error button { padding: 5px 10px; border: 1px solid #d5e2f3; border-radius: 7px; background: #fff; color: #315c99; cursor: pointer; font: inherit; }
 .government-org-tree, .government-org-detail { min-height: 360px; padding: 20px; border: 1px solid #e2ebf6; border-radius: 14px; background: #fff; }
 .government-org-section-title { margin-bottom: 18px; font-size: 15px; font-weight: 600; }
 .government-org-section-title span { color: #8aa2c0; font-size: 12px; font-weight: 400; }

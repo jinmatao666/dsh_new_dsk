@@ -2,6 +2,19 @@
 export default function systemSettingsMock() {
   const user = { id: 1, username: 'root', display_name: '系统管理员', role: 100, status: 1, group: 'default', email: 'admin@example.test' };
   let settings = { network: 'internet', operator: '张运维', phone: '0571-12345678' };
+  const colleague = { ...user, id: 7, username: 'caixuebo', display_name: '蔡雪波', role: 10 };
+  const nodes = [
+    { id: 1, parent_id: 0, name: '浙江万维空间信息技术有限公司' },
+    { id: 2, parent_id: 1, name: '技术中心' },
+    { id: 3, parent_id: 2, name: '研发部' },
+    { id: 4, parent_id: 3, name: '智能体研发组' },
+    { id: 5, parent_id: 2, name: 'GIS研发部' },
+    { id: 6, parent_id: 1, name: '项目中心' },
+    { id: 7, parent_id: 6, name: '数字规划专班' },
+    { id: 8, parent_id: 1, name: '综合管理部' },
+    { id: 9, parent_id: 0, name: '杭州分公司' },
+    { id: 10, parent_id: 9, name: '实施交付部' },
+  ];
   return {
     name: 'system-settings-mock',
     apply: 'serve',
@@ -16,6 +29,16 @@ export default function systemSettingsMock() {
         response.setHeader('X-Preview-Data', 'mock');
         let payload = { success: true, data: [], totalItems: 0 };
         if (pathname === '/api/user/self') payload.data = user;
+        if (pathname === '/api/user/') { payload.data = [colleague, user]; payload.total = 2; }
+        if (pathname === '/api/user/7') payload.data = colleague;
+        if (pathname === '/api/user/1') payload.data = user;
+        if (pathname.startsWith('/api/role')) payload.data = [
+          { role: 10, name: '点石员工', status: 1 }, { role: 100, name: '超级管理员', status: 1 },
+        ];
+        if (pathname === '/api/government-organization/') payload.data = nodes;
+        if (pathname === '/api/government-organization/memberships') payload.data = {
+          users: [colleague, user], memberships: [{ user_id: 7, node_id: 4 }, { user_id: 7, node_id: 7 }],
+        };
         if (pathname === '/api/desktop-config') payload.data = settings;
         if (pathname === '/api/status') payload.data = { system_name: '万维Buddy', logo: '/brand-mark.svg', register_enabled: false };
         if (pathname === '/api/option/') {

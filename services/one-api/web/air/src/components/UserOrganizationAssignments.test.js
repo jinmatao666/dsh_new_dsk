@@ -19,15 +19,49 @@ test('selects a department level by level and adds another affiliation', async (
     await act(async () => root.render(render()));
     expect(selected).toEqual([2]);
     expect(ready).toHaveBeenLastCalledWith(true);
-    const change = (select, id) => { select.value = String(id); select.dispatchEvent(new Event('change', { bubbles: true })); };
-    await act(async () => change(container.querySelector('select'), 1));
-    expect(container.querySelectorAll('select')).toHaveLength(2);
-    await act(async () => change(container.querySelectorAll('select')[1], 3));
-    await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent.includes('添加部门')).click());
+    await act(async () => container.querySelector('[aria-label="选择部门"]').click());
+    expect(container.querySelectorAll('.department-trigger')).toHaveLength(1);
+    expect(container.querySelectorAll('select')).toHaveLength(0);
+    await act(async () => container.querySelector('[aria-label="展开 规划局"]').click());
+    expect(selected).toEqual([2]);
+    await act(async () => container.querySelector('[aria-label="收起 规划局"]').click());
+    expect(container.querySelector('[aria-label="选择 专班"]')).toBeNull();
+    await act(async () => container.querySelector('[aria-label="展开 规划局"]').click());
+    expect(container.querySelectorAll('input[type=checkbox]')).toHaveLength(0);
+    await act(async () => container.querySelector('[aria-label="选择 专班"]').click());
+    expect(container.querySelector('.department-dropdown')).toBeNull();
     expect(selected).toEqual([2, 3]);
     expect(container.textContent).toContain('规划局 / 专班');
     await act(async () => container.querySelector('[aria-label="移除部门 2"]').click());
     expect(selected).toEqual([3]);
+    await act(async () => container.querySelector('[aria-label="选择部门"]').click());
+    expect(container.querySelector('[aria-label="选择 专班"]').getAttribute('aria-pressed')).toBe('true');
+    await act(async () => container.querySelector('[aria-label="选择 专班"]').click());
+    expect(selected).toEqual([]);
     expect(API.put).not.toHaveBeenCalled();
+  } finally { await act(async () => root.unmount()); delete global.IS_REACT_ACT_ENVIRONMENT; }
+});
+
+ test('keeps existing affiliations on API failure and recovers through retry', async () => {
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  let fail = true;
+  API.get.mockImplementation(async path => {
+    if (fail) throw { response: { status: 403 } };
+    return { data: { success: true, data: path.endsWith('memberships') ? { memberships: [] } : [] } };
+  });
+  const container = document.createElement('div'); const root = createRoot(container);
+  const onChange = jest.fn(); const ready = jest.fn();
+  try {
+    await act(async () => root.render(<UserOrganizationAssignments userId={7} value={[2]} onChange={onChange} onReady={ready} />));
+    expect(container.textContent).toContain('没有读取组织架构的权限');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(ready).toHaveBeenLastCalledWith(false);
+    expect(container.querySelector('[aria-label="选择部门"]').disabled).toBe(true);
+    fail = false;
+    await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '重新加载').click());
+    expect(onChange).toHaveBeenCalledWith([]);
+    expect(ready).toHaveBeenLastCalledWith(true);
+    await act(async () => container.querySelector('[aria-label="选择部门"]').click());
+    expect(container.textContent).toContain('暂无组织架构');
   } finally { await act(async () => root.unmount()); delete global.IS_REACT_ACT_ENVIRONMENT; }
 });

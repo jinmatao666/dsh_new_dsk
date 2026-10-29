@@ -5,6 +5,9 @@ import './GovernmentOrganization.css';
 
 export const loadGovernmentOrganizationNodes = async () => {
   const response = await API.get('/api/government-organization/');
+  if (typeof response.data === 'string') {
+    throw new Error('组织架构接口未返回 JSON，请检查后台版本及 /api 代理配置');
+  }
   if (!response.data?.success || !Array.isArray(response.data.data)) {
     throw new Error(response.data?.message || '读取组织架构失败');
   }
