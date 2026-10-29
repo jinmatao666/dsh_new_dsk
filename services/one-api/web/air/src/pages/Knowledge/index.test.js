@@ -27,6 +27,8 @@ const users = [
 
 function documentsResponse(url) {
   const path = String(url);
+  if (path === '/api/government-organization/') return { data: { success: true, data: [{ id: 1, parent_id: 0, name: '办公室' }, { id: 2, parent_id: 0, name: '项目组' }] } };
+  if (path === '/api/government-organization/memberships') return { data: { success: true, data: { memberships: [{ user_id: 8, node_id: 1 }, { user_id: 8, node_id: 2 }] } } };
   if (path.startsWith('/api/user/')) return { data: { success: true, data: users } };
   if (path === '/api/knowledge-admin/categories' || path === '/api/knowledge-bases/categories') {
     return { data: { success: true, data: categories } };
@@ -485,6 +487,7 @@ test('personal knowledge lists real users, filters a department, then opens that
   expect(container.textContent).toContain('爱丽丝');
   expect(container.textContent).toContain('陈静');
   expect(container.textContent).toContain('未分配部门');
+  expect(container.textContent).toContain('项目组');
   const office = [...container.querySelectorAll('.knowledge-directory-nav button')].find(item => item.textContent.includes('办公室'));
   await act(async () => { office.click(); });
   expect(container.querySelector('.knowledge-people-head h2').textContent).toContain('办公室');
@@ -560,6 +563,7 @@ test('toggles personal libraries from the person file-list title and deletes via
 
 test('personal knowledge stays on all people when users have no department', async () => {
   API.get.mockImplementation(url => {
+    if (url === '/api/government-organization/memberships') return Promise.resolve({ data: { success: true, data: { memberships: [] } } });
     if (String(url).startsWith('/api/user/')) {
       return Promise.resolve({ data: { success: true, data: [{ id: 2, username: 'alice', display_name: '爱丽丝', department_name: '', created_at: '2024-01-02T00:00:00Z', status: 1 }] } });
     }

@@ -1698,6 +1698,8 @@ export function UsersPage() {
   const [detail, setDetail] = useState(null);
   const [profile, setProfile] = useState(null);
   const [edit, setEdit] = useState(null);
+  const [departmentIds, setDepartmentIds] = useState([]);
+  const [departmentsReady, setDepartmentsReady] = useState(false);
   const [editConfirmation, setEditConfirmation] = useState(false);
   const [editPassword, setEditPassword] = useState('');
   const [editError, setEditError] = useState('');
@@ -1808,6 +1810,8 @@ export function UsersPage() {
   };
   const openEdit = async (u) => {
     try {
+      setDepartmentsReady(false);
+      setDepartmentIds([]);
       const res = await API.get(`/api/user/${u.id}`);
       if (!res.data?.success) throw new Error(res.data?.message);
       setEdit({ ...res.data.data, password: '', admin_password: '' });
@@ -1817,6 +1821,10 @@ export function UsersPage() {
   };
   const saveEdit = (e) => {
     e.preventDefault();
+    if (!departmentsReady) {
+      dialog.notice('部门信息尚未加载，请稍后重试');
+      return;
+    }
     setEditPassword('');
     setEditError('');
     setEditConfirmation(true);
@@ -1835,6 +1843,7 @@ export function UsersPage() {
         role: edit.role,
         phone: edit.phone,
         group: edit.group,
+        organization_node_ids: departmentIds,
         admin_password: editPassword,
       });
       if (res.data?.success) {
@@ -2196,7 +2205,6 @@ export function UsersPage() {
           onClose={() => setEdit(null)}
         >
           <form className='zjugis-form' onSubmit={saveEdit}>
-            <UserOrganizationAssignments key={edit.id} userId={edit.id} />
             <div className='form-grid'>
               <Field
                 label='用户名'
@@ -2248,6 +2256,7 @@ export function UsersPage() {
                 ))}
               </SelectField>
             </div>
+            <UserOrganizationAssignments key={edit.id} userId={edit.id} value={departmentIds} onChange={setDepartmentIds} onReady={setDepartmentsReady} />
             <div className='zjugis-modal-actions'>
               <button
                 type='button'
@@ -2256,7 +2265,7 @@ export function UsersPage() {
               >
                 取消
               </button>
-              <button className='preview-button primary'>保存用户</button>
+              <button className='preview-button primary' disabled={!departmentsReady}>保存用户</button>
             </div>
           </form>
           <form className='zjugis-form topup-form' onSubmit={grant}>

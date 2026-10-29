@@ -12,7 +12,10 @@ jest.mock('../../helpers/roles', () => ({
   fetchManagedRoles: jest.fn(async () => [{ role: 1, name: '普通成员' }]),
 }));
 jest.mock('../../components/RolePermissions', () => () => null);
-jest.mock('../../components/UserOrganizationAssignments', () => () => null);
+jest.mock('../../components/UserOrganizationAssignments', () => ({ onChange, onReady }) => {
+  require('react').useEffect(() => { onChange([5]); onReady(true); }, [onChange, onReady]);
+  return <div>部门</div>;
+});
 jest.mock('../../components/GovernmentOrganization', () => () => <div>组织树内容</div>);
 jest.mock('../../components/CustomSelect', () => ({ children, ...props }) => (
   <select {...props}>{children}</select>
@@ -115,6 +118,7 @@ test('submits edited name with confirmation password and keeps failed edits avai
     '/api/user/',
     expect.objectContaining({
       display_name: '新昵称',
+      organization_node_ids: [5],
       admin_password: 'correct',
     })
   );

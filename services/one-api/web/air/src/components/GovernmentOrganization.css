@@ -11,8 +11,17 @@
 .government-org-members-editor { display: grid; gap: 12px; margin: 18px 0; }
 .government-org-members-editor > button { justify-self: start; }
 .government-org-members-editor > input { padding: 10px; border: 1px solid #d5dfec; border-radius: 8px; }
-.user-organization-assignments { margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid #e2ebf6; }
-.user-organization-assignments p { color: #7185a0; font-size: 12px; }
+.department-field { display: grid; gap: 9px; margin-top: 14px; }
+.department-field-label { color: #637b9a; font-size: 13px; font-weight: 600; }
+.department-field p { margin: 0; color: #b42318; font-size: 12px; }
+.department-selections, .department-path-picker { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.department-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 6px 8px; border-radius: 6px; background: #edf4ff; color: #315c99; font-size: 12px; overflow-wrap: anywhere; }
+.department-chip button { display: grid; place-items: center; flex: none; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.department-path-picker label { position: relative; min-width: 145px; max-width: 220px; flex: 1; }
+.department-path-picker select { width: 100%; height: 38px; padding: 0 28px 0 10px; appearance: none; border: 1px solid #d5dfec; border-radius: 7px; background: #fff; color: #243958; font: inherit; font-size: 12px; cursor: pointer; }
+.department-path-picker label > svg { position: absolute; right: 9px; top: 12px; pointer-events: none; color: #7185a0; }
+.department-add { display: inline-flex; align-items: center; gap: 4px; height: 38px; padding: 0 10px; border: 1px solid #cfe0f6; border-radius: 7px; background: #fff; color: #2563eb; cursor: pointer; }
+.department-add:disabled { opacity: .45; cursor: not-allowed; }
 .government-org-tree, .government-org-detail { min-height: 360px; padding: 20px; border: 1px solid #e2ebf6; border-radius: 14px; background: #fff; }
 .government-org-section-title { margin-bottom: 18px; font-size: 15px; font-weight: 600; }
 .government-org-section-title span { color: #8aa2c0; font-size: 12px; font-weight: 400; }

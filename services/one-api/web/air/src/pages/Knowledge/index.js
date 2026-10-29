@@ -272,6 +272,7 @@ const KnowledgeLibrary = () => {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewing, setReviewing] = useState(null);
   const [users, setUsers] = useState([]);
+  const [departmentDirectory, setDepartmentDirectory] = useState({ nodes: [], memberships: [] });
   const [usersLoading, setUsersLoading] = useState(true);
   const [deptKey, setDeptKey] = useState('all');
   const [peopleQuery, setPeopleQuery] = useState('');
@@ -340,6 +341,16 @@ const KnowledgeLibrary = () => {
         });
         if (list.length < pageSize) break;
       }
+      // 与组织架构共用成员关系，避免旧的用户资料文本覆盖真实部门。
+      const [nodesResponse, membersResponse] = await Promise.all([
+        API.get('/api/government-organization/'),
+        API.get('/api/government-organization/memberships'),
+      ]);
+      if (!nodesResponse.data?.success || !Array.isArray(nodesResponse.data.data) ||
+          !membersResponse.data?.success || !Array.isArray(membersResponse.data.data?.memberships)) {
+        throw new Error('读取部门归属失败');
+      }
+      setDepartmentDirectory({ nodes: nodesResponse.data.data, memberships: membersResponse.data.data.memberships });
       setUsers(rows);
     } catch (cause) {
       setUsers([]);
@@ -464,6 +475,20 @@ const KnowledgeLibrary = () => {
 
   const people = useMemo(() => {
     const map = new Map();
+    const byId = new Map(departmentDirectory.nodes.map(node => [Number(node.id), node]));
+    const namesByUser = new Map();
+    departmentDirectory.memberships.forEach(item => {
+      const node = byId.get(Number(item.node_id));
+      if (!node) return;
+      const names = [];
+      const seen = new Set();
+      for (let current = node; current && !seen.has(Number(current.id)); current = byId.get(Number(current.parent_id))) {
+        seen.add(Number(current.id));
+        names.unshift(current.name);
+      }
+      const userId = Number(item.user_id);
+      namesByUser.set(userId, [...(namesByUser.get(userId) || []), names.join(' / ')]);
+    });
     users.forEach(user => {
       const id = Number(user.id);
       if (!Number.isFinite(id) || id <= 0) return;
@@ -472,7 +497,8 @@ const KnowledgeLibrary = () => {
         id,
         name,
         username: String(user.username || ''),
-        department: String(user.department_name || '').trim(),
+        departments: namesByUser.get(id) || [],
+        department: (namesByUser.get(id) || []).join('、'),
         createdAt: user.created_at || '',
         status: Number(user.status) || 1,
       });
@@ -481,16 +507,16 @@ const KnowledgeLibrary = () => {
       const id = Number(library.owner_user_id);
       if (!Number.isFinite(id) || id <= 0 || map.has(id)) return;
       const name = String(library.owner_username || '').trim() || `用户 ${id}`;
-      map.set(id, { id, name, username: name, department: '', createdAt: '', status: 1 });
+      const departments = namesByUser.get(id) || [];
+      map.set(id, { id, name, username: name, departments, department: departments.join('、'), createdAt: '', status: 1 });
     });
     return [...map.values()].sort((left, right) => left.name.localeCompare(right.name, 'zh'));
-  }, [users, libraries]);
+  }, [users, libraries, departmentDirectory]);
 
   const departments = useMemo(() => {
     const grouped = new Map();
     people.forEach(item => {
-      if (!item.department) return;
-      grouped.set(item.department, (grouped.get(item.department) || 0) + 1);
+      item.departments.forEach(name => grouped.set(name, (grouped.get(name) || 0) + 1));
     });
     return [...grouped.entries()].sort((left, right) => left[0].localeCompare(right[0], 'zh'));
   }, [people]);
@@ -498,7 +524,7 @@ const KnowledgeLibrary = () => {
   const visiblePeople = useMemo(() => {
     const text = peopleQuery.trim().toLowerCase();
     return people.filter(item => {
-      if (deptKey !== 'all' && item.department !== deptKey) return false;
+      if (deptKey !== 'all' && !item.departments.includes(deptKey)) return false;
       if (!text) return true;
       return [item.name, item.username, item.department].some(value => String(value || '').toLowerCase().includes(text));
     });

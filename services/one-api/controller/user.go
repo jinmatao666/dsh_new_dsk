@@ -612,6 +612,25 @@ func UpdateUser(c *gin.Context) {
 	}
 	var rawPayload map[string]json.RawMessage
 	_ = json.Unmarshal(body, &rawPayload)
+	var organizationNodeIDs []uint
+	if raw, provided := rawPayload["organization_node_ids"]; provided {
+		if len(raw) == 0 || string(raw) == "null" || json.Unmarshal(raw, &organizationNodeIDs) != nil || organizationNodeIDs == nil || len(organizationNodeIDs) > 10000 {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "部门参数无效，清空请传空数组"})
+			return
+		}
+		seen := make(map[uint]bool, len(organizationNodeIDs))
+		for _, id := range organizationNodeIDs {
+			if id == 0 || seen[id] {
+				c.JSON(http.StatusOK, gin.H{"success": false, "message": "部门编号无效或重复"})
+				return
+			}
+			seen[id] = true
+		}
+		if err := model.ValidateGovernmentOrganizationNodes(organizationNodeIDs); err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "所选部门不存在"})
+			return
+		}
+	}
 	_, quotaProvided := rawPayload["quota"]
 	_, phoneProvided := rawPayload["phone"]
 	if updatedUser.Password == "" {
@@ -763,6 +782,13 @@ func UpdateUser(c *gin.Context) {
 			return
 		}
 		model.RecordLog(ctx, originUser.Id, model.LogTypeManage, fmt.Sprintf("管理员将用户额度从 %s修改为 %s", common.LogQuota(originQuota), common.LogQuota(updatedUser.Quota)))
+	}
+	// 用户编辑与组织架构使用同一份成员关系；未提供字段时保持原归属。
+	if _, provided := rawPayload["organization_node_ids"]; provided {
+		if err := model.SaveGovernmentMemberships(originUser.Id, 0, organizationNodeIDs); err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "部门保存失败：" + err.Error()})
+			return
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
