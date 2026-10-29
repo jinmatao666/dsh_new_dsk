@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-29-desktop-auth-cookie-overflow.md
+2026-10-29-desktop-auth-cookie-overflow.md: d9a756fb4d6aa8056888c6004fb80bd2c1b3ddfb
+2026-10-29-desktop-auth-cookie-overflow.zh.md: 520085dbbca25b4cdfd83df0924cad78c0744a50

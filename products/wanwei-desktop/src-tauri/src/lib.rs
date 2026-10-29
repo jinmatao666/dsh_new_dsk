@@ -2656,13 +2656,19 @@ pub fn run() {
                 .build(app)?;
 
             let browser_opener = app.handle().clone();
-            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+            // 先创建空白 WebView，再清理旧端口的认证 Cookie，避免首个请求因 Cookie 过多返回 431。
+            let window = WebviewWindowBuilder::new(
+                app,
+                "main",
+                WebviewUrl::External(Url::parse("about:blank")?),
+            )
                 .title("万维Buddy")
                 .inner_size(1120.0, 720.0)
                 .min_inner_size(900.0, 580.0)
                 .resizable(false)
                 .maximizable(false)
                 .center()
+                .visible(false)
                 .on_new_window(move |target, _features| {
                     if may_open_in_browser(&target) && network_policy::may_open(&browser_opener, &target) {
                         if let Err(error) = browser_opener
@@ -2708,6 +2714,29 @@ pub fn run() {
                     let _ = window.set_title("万维Buddy");
                 })
                 .build()?;
+            let startup_window = window.clone();
+            let startup_log = log_path.clone();
+            std::thread::spawn(move || {
+                match startup_window.cookies_for_url(url.clone()) {
+                    Ok(cookies) => {
+                        let mut removed = 0usize;
+                        for cookie in cookies {
+                            if cookie.name().starts_with("dsh-auth-") {
+                                match startup_window.delete_cookie(cookie) {
+                                    Ok(()) => removed += 1,
+                                    Err(error) => append_log(&startup_log, format!("[cookie cleanup] {error}")),
+                                }
+                            }
+                        }
+                        append_log(&startup_log, format!("cleared {removed} local authentication cookies"));
+                    }
+                    Err(error) => append_log(&startup_log, format!("[cookie cleanup] {error}")),
+                }
+                if let Err(error) = startup_window.navigate(url) {
+                    append_log(&startup_log, format!("[navigate] {error}"));
+                }
+                let _ = startup_window.show();
+            });
             let window_for_events = window.clone();
             window.on_window_event(move |event| match event {
                 WindowEvent::CloseRequested { api, .. } => {

@@ -6,6 +6,8 @@ This private product directory owns the Wanwei desktop shell and installer. It d
 
 ## Current boundary
 
+The main window starts with a blank WebView, clears stale `dsh-auth-*` authentication cookies for the local loopback host on a background thread, then opens the tokenized URL emitted by this Sidecar launch. The Sidecar may select a different port on each run, while cookies are sent by host; cleanup prevents accumulated cookies from causing HTTP 431. It removes only product authentication cookies and leaves workspace data intact.
+
 Expert views navigate natively without the login fragment. A document-start script restores the one-use ticket only in the top-level document matching the registered origin, path and query, before website scripts read it. A per-launch session-storage marker prevents replay after reload. No ticket is added to an HTTP path or query. This avoids the observed Mac `%23ticket=` request path without changing server authentication; the affected Mac still requires installed-package acceptance.
 
 Windows snapshots also read cursor hit ownership, the main UI thread's focus/capture handles, and up to 64 descendant native windows with geometry, visibility and enabled state. Controller parent handles link WebView2 records to those native windows. Window classes are reduced to fixed categories; titles and text are never read, and an external cursor hit does not enumerate the other application's windows. Sampling does not alter focus or synthesize input; a snapshot taken after a click may observe a later cursor position.
