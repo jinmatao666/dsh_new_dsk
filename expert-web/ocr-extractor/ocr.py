@@ -14,7 +14,7 @@ from service_http import post_json, ServiceError
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_PIXELS = 20_000_000
-FORMATS = {"text": ".txt", "markdown": ".md", "json": ".json", "csv": ".csv", "docx": ".docx", "pdf": ".pdf"}
+FORMATS = {"text": ".txt", "markdown": ".md", "json": ".json", "csv": ".csv", "docx": ".docx"}
 MIMES = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
 
 
@@ -231,7 +231,7 @@ def extract(path, destination, options, input_names=None):
         recognized['text'] = '\n\n'.join(f"{page['source_file']} · 第{page['page_number']}页\n{page['text']}" for page in all_pages)
         recognized['markdown'] = '\n\n'.join(f"## {page['source_file']} · 第{page['page_number']}页\n\n{page.get('markdown') or page['text']}" for page in all_pages)
     if options['mode'] == 'custom' and recognized['lines']:
-        text = format_recognized(recognized['text'], dict(options, format='text' if options['format'] in ('docx','pdf') else options['format']))
+        text = format_recognized(recognized['text'], dict(options, format='text' if options['format'] == 'docx' else options['format']))
     elif options['format'] == 'json':
         text = json.dumps(recognized, ensure_ascii=False, indent=2)
     elif options['format'] == 'csv':
@@ -249,7 +249,7 @@ def extract(path, destination, options, input_names=None):
     output = Path(destination)
     output.mkdir(parents=True, exist_ok=True)
     result = output / ('识别结果' + FORMATS[options['format']])
-    if options['format'] in ('docx', 'pdf'):
+    if options['format'] == 'docx':
         from documents import export_document
         export_document(text, result, options['format'])
     else:

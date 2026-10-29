@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pymupdf
 from PIL import Image
-from documents import inspect_document, pdf_text_layer
+from documents import inspect_document, pdf_text_layer, render_preview
 from ocr import extract
 
 
@@ -51,6 +51,16 @@ class DocumentTests(unittest.TestCase):
         Image.new('RGB', (20, 20)).save(stream, 'TIFF', save_all=True,
                                      append_images=[Image.new('RGB', (20, 20), 'white')])
         self.assertEqual(inspect_document(stream.getvalue(), '.tiff')['pages'], 2)
+
+    def test_tiff_preview_renders_the_selected_frame(self):
+        import io
+        stream = io.BytesIO()
+        Image.new('RGB', (20, 20), 'red').save(stream, 'TIFF', save_all=True,
+                                           append_images=[Image.new('RGB', (20, 20), 'blue')])
+        data, count = render_preview(stream.getvalue(), '.tiff', 1)
+        self.assertEqual(count, 2)
+        with Image.open(io.BytesIO(data)) as image:
+            self.assertEqual(image.getpixel((10, 10)), (0, 0, 255))
 
 
 if __name__ == '__main__':

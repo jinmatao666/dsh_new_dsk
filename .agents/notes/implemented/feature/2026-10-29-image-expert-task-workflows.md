@@ -12,7 +12,7 @@ The image workbenches need usable repeated analysis, deletable history and inter
 
 Each expert owns its copied assets, authentication, SQLite records and worker processes. Completed task inputs can be reused with different settings; same-user replacement creates a new run directory and replaces the history entry. Running records cannot be replaced or deleted. Deleting a terminal record removes its files; orphaned replacement directories expire after a day.
 
-OCR renders bounded document pages locally, preserves original filenames/page numbers, and reads existing text only from text-only PDF pages. Mixed pages use PaddleOCR. Word/PDF exports contain text rather than reconstructed layout. Object detection translates common exact Chinese categories locally, removes near-identical duplicates conservatively, and exports original-image pixel boxes alongside relative coordinates.
+OCR renders bounded document pages locally, preserves original filenames/page numbers, and reads existing text only from text-only PDF pages. Mixed pages use PaddleOCR. Word exports contain text rather than reconstructed layout. Object detection translates common exact Chinese categories locally, removes near-identical duplicates conservatively, and exports original-image pixel boxes alongside relative coordinates.
 
 Change screening estimates bounded translation before a similarity transform, with a same-position fallback for same-sized pairs. ECC inverse mapping is converted to the published before-to-after transform. Candidate batching removes the eight-region failure; grid grouping bounds the number of displayed regions. Color compensation and filtering reduce noise without claiming semantic accuracy. Comparison images and heatmaps expose the evidence for manual review.
 

@@ -271,21 +271,79 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(json.loads(self.request('/api/tasks')[1])['items'],[])
 
 
-    def test_pdf_export(self):
+    def test_pdf_input_word_export(self):
         import pymupdf
         self.login()
         doc=pymupdf.open()
         for _ in range(2):doc.new_page().insert_text((50,50),'fixture page')
         data=doc.tobytes();doc.close()
-        status,body,_=self.upload({'format':'pdf'},'材料.pdf',data)
+        status,body,_=self.upload({'format':'docx'},'材料.pdf',data)
         self.assertEqual(status,201,body)
         task=self.wait(json.loads(body)['id']);self.assertEqual(task['state'],'succeeded',task)
         result=self.request(f"/api/tasks/{task['id']}/files/0")[1]
-        with pymupdf.open(stream=result,filetype='pdf') as pdf:self.assertGreater(len(pdf),0)
+        from docx import Document
+        self.assertIn('fixture page', '\n'.join(p.text for p in Document(io.BytesIO(result)).paragraphs))
         evidence=json.loads(self.request(f"/api/tasks/{task['id']}/files/1")[1])
         self.assertEqual(len(evidence['pages']),2)
         self.assertEqual(self.request(f"/api/tasks/{task['id']}/image")[0],200)
         self.assertEqual(self.upload({},'损坏.pdf',b'%PDF-not-a-pdf')[0],400)
+
+    def test_preview_is_available_before_recognition_without_creating_task(self):
+        import pymupdf
+        document = pymupdf.open()
+        for text in ('FIRST PAGE', 'SECOND PAGE'):
+            document.new_page().insert_text((40, 60), text)
+        data = document.tobytes()
+        document.close()
+        payload = {'file': {'name': '材料.pdf', 'content': base64.b64encode(data).decode()}, 'page': 0}
+        self.assertEqual(self.request('/api/preview', payload)[0], 401)
+        self.login()
+        with patch('server.ready', return_value=False):
+            first = self.request('/api/preview', payload)
+            second = self.request('/api/preview', dict(payload, page=1))
+        self.assertEqual(first[0], 200, first[1][:200])
+        self.assertEqual(first[2]['X-Page-Count'], '2')
+        self.assertEqual(first[2]['Content-Type'], 'image/png')
+        self.assertNotEqual(first[1], second[1])
+        self.assertEqual(self.app.store.list('1'), [])
+        self.assertEqual(Provider.calls, [])
+        for page in (-1, 2, True, '1'):
+            self.assertEqual(self.request('/api/preview', dict(payload, page=page))[0], 400)
+        self.assertEqual(self.request('/api/preview', payload, origin='http://other.test')[0], 403)
+        payload['file']['content'] = base64.b64encode(b'%PDF broken').decode()
+        self.assertEqual(self.request('/api/preview', payload)[0], 400)
+
+    def test_empty_name_is_derived_from_filename_and_pdf_output_is_rejected(self):
+        self.login()
+        with patch.object(self.app.worker, 'submit'):
+            status, body, _ = self.upload({'taskName': '  '}, name='联系单.png')
+        self.assertEqual(status, 201, body)
+        task = self.app.store.task('1', json.loads(body)['id'])
+        self.assertRegex(task['options']['taskName'], r'^联系单_\d{12}$')
+        self.assertEqual(self.upload({'format': 'pdf'})[0], 400)
+
+    def test_saved_input_preview_supports_file_and_page_selection_with_ownership(self):
+        import pymupdf
+        document = pymupdf.open()
+        for text in ('PAGE ONE', 'PAGE TWO'):
+            document.new_page().insert_text((40, 60), text)
+        data = document.tobytes()
+        document.close()
+        self.login()
+        with patch.object(self.app.worker, 'submit'):
+            status, body, _ = self.request('/api/tasks', {'tool': 'ocr', 'files': [
+                {'name': 'photo.png', 'content': base64.b64encode(png()).decode()},
+                {'name': 'pages.pdf', 'content': base64.b64encode(data).decode()}]})
+        self.assertEqual(status, 201, body)
+        task_id = json.loads(body)['id']
+        status, body, headers = self.request(f'/api/tasks/{task_id}/image?file=1&page=1')
+        self.assertEqual(status, 200, body[:100])
+        self.assertEqual(headers['X-Page-Count'], '2')
+        self.assertTrue(body.startswith(b'\x89PNG'))
+        self.assertEqual(self.request(f'/api/tasks/{task_id}/image?file=2')[0], 400)
+        other = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        self.login('b' * 64, other)
+        self.assertEqual(self.request(f'/api/tasks/{task_id}/image?file=1', client=other)[0], 404)
 
 
 if __name__ == "__main__":

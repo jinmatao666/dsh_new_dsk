@@ -108,3 +108,25 @@ button:disabled{opacity:1;cursor:not-allowed}.primary:disabled{background:#dce5f
 .settings-panel input::placeholder,.settings-panel textarea::placeholder{color:#596579;opacity:1}
 
 .delete-task{color:#a52c24!important}.clipboard-buffer{position:fixed;left:-10000px;top:0}.format-options>div{flex-wrap:wrap}
+
+.preview-tools{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:14px 20px;border-bottom:1px solid var(--line);color:#000}
+.preview-tools select,.file-filters select{min-height:38px;padding:6px 10px;border:1px solid #c9d7e8;border-radius:6px;background:#fff;color:#000;font:inherit;max-width:100%}
+.preview-tools select{flex:1;min-width:100px;width:180px}
+.preview-pagination{display:flex;align-items:center;gap:10px;font-size:14px}
+.preview-tools button,.preview-dialog button{border:1px solid #c9d7e8;border-radius:6px;background:#fff;color:#145ac4;padding:7px 10px;font:inherit;cursor:pointer}
+.preview-tools button:disabled{color:#667085;cursor:default;background:#f5f7fa}
+.preview-status{margin:0;padding:12px 20px;color:#000;font-size:14px}.preview-status:empty{display:none}
+.image-stage #source-image{max-height:540px;object-fit:contain}
+.preview-dialog{width:min(1200px,94vw);max-width:94vw;max-height:94vh;padding:0;border:1px solid #d5dfec;border-radius:12px;color:#000;background:#fff}
+.preview-dialog::backdrop{background:rgba(0,0,0,.55)}
+.preview-dialog header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line)}
+.preview-dialog h2{margin:0;font-size:20px;color:#000}
+.large-preview-stage{overflow:auto;max-height:calc(94vh - 75px);background:#edf0f4;padding:20px;text-align:center}
+.large-preview-stage img{display:block;width:auto;max-width:100%;height:auto;margin:0 auto;background:#fff}
+.workbench-files{padding:20px 28px;border-top:1px solid var(--line);color:#000}
+.workbench-files h3{margin:0 0 14px;font-size:18px;color:#000}
+.workbench-files .task-row{padding:14px;margin-bottom:10px;gap:12px}
+.workbench-files .task-info{min-width:0}.workbench-files strong{overflow-wrap:anywhere}
+.file-filters{display:flex;align-items:center;flex-wrap:wrap;gap:12px;color:#000}
+.file-filters label,.file-filters span{font-size:14px;color:#000}
+@media(max-width:600px){.preview-tools{padding:12px;gap:8px}.preview-tools>label{width:100%}.preview-tools select{flex-basis:100%;width:100%}.preview-pagination{flex:1;justify-content:space-between}.workbench-files{padding:16px}.workbench-files .task-row{flex-wrap:wrap}.file-filters{width:100%}.file-filters select{flex:1}.result-panel>.panel-heading{flex-wrap:wrap}}

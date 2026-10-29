@@ -1,6 +1,7 @@
 """Independent expert website; run behind a reviewed HTTP/HTTPS reverse proxy."""
 import base64
 import binascii
+from datetime import datetime, timedelta, timezone
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -13,13 +14,13 @@ import signal
 import threading
 import urllib.error
 import urllib.request
-from urllib.parse import urlsplit, quote
+from urllib.parse import urlsplit, quote, parse_qs
 
 from store import Store
 from worker import Worker
 from deployment import ready
-from ocr import inspect_image, validate_options
-from documents import inspect_document
+from ocr import validate_options
+from documents import inspect_document, render_preview
 
 PROJECT = Path(__file__).resolve().parent
 MAX_BODY = 75 * 1024 * 1024
@@ -175,22 +176,39 @@ def create_server(root, address=("127.0.0.1", 3315), redeem_ticket=redeem, publi
                     return self.reply(401, {"error": "请从桌面专家库重新打开工作台"})
                 if method == "GET" and path == "/api/config":
                     return self.reply(200, {"ready": ready(), "preview": preview, "max_bytes": MAX_FILES, "formatter_ready": __import__("deployment").model_configuration()})
+                if method == "POST" and path == "/api/preview":
+                    body = self.body()
+                    file = body.get('file')
+                    if not isinstance(file, dict) or not isinstance(file.get('name'), str) or not isinstance(file.get('content'), str):
+                        raise ValueError('预览文件无效')
+                    suffix = Path(file['name']).suffix.lower()
+                    data = base64.b64decode(file['content'], validate=True)
+                    if suffix not in TOOLS['ocr'] or not 0 < len(data) <= MAX_FILES:
+                        raise ValueError('预览仅支持图片或PDF，文件不超过50 MB')
+                    try:
+                        image, count = render_preview(data, suffix, body.get('page', 0))
+                    except Exception:
+                        raise ValueError('无法预览该页面，请检查文件是否损坏、加密或页码超限') from None
+                    self.response_headers(200, 'image/png', Content_Length=str(len(image)), X_Page_Count=str(count))
+                    self.wfile.write(image)
+                    return
                 match = re.fullmatch(r"/api/tasks/([a-f0-9]{32})/(image|result)", path)
                 if method == "GET" and match:
                     task = store.task(user, match[1])
                     if not task:
                         return self.reply(404, {"error": "任务不存在"})
                     if match[2] == "image":
-                        data = (store.root / task["id"] / "input" / task["inputs"][0]).read_bytes()
-                        if Path(task['inputs'][0]).suffix.lower() in ('.pdf', '.tif', '.tiff', '.bmp'):
-                            from documents import pages
-                            import io
-                            image, _, _ = next(pages([store.root / task['id'] / 'input' / task['inputs'][0]]))
-                            stream = io.BytesIO()
-                            image.save(stream, 'PNG')
-                            data = stream.getvalue()
-                        mime = inspect_image(data)["mime"]
-                        self.response_headers(200, mime, Content_Length=str(len(data)))
+                        query = parse_qs(urlsplit(self.path).query)
+                        index = int(query.get('file', ['0'])[0])
+                        page_number = int(query.get('page', ['0'])[0])
+                        if not 0 <= index < len(task['inputs']):
+                            raise ValueError('预览文件序号无效')
+                        source = store.root / task['id'] / 'input' / task['inputs'][index]
+                        try:
+                            data, count = render_preview(source.read_bytes(), source.suffix.lower(), page_number)
+                        except Exception:
+                            raise ValueError('无法预览该页面，请检查文件或页码') from None
+                        self.response_headers(200, 'image/png', Content_Length=str(len(data)), X_Page_Count=str(count))
                         self.wfile.write(data)
                         return
                     if task["state"] != "succeeded":
@@ -242,6 +260,10 @@ def create_server(root, address=("127.0.0.1", 3315), redeem_ticket=redeem, publi
                         if page_count > 20:
                             raise ValueError('每个任务最多20页，请拆分提交')
                         contents.append((f"{index:03d}{suffix}", data))
+                    if not options['taskName']:
+                        stem = Path(files[0]['name']).stem or '识别任务'
+                        stamp = datetime.now(timezone(timedelta(hours=8))).strftime('%Y%m%d%H%M')
+                        options['taskName'] = stem[:87] + '_' + stamp
                     task_id = secrets.token_hex(16)
                     directory = store.root / task_id / "input"
                     directory.mkdir(parents=True, mode=0o700)
