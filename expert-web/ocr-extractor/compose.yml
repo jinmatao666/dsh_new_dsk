@@ -2,7 +2,7 @@
 services:
   expert:
     build: .
-    image: wanwei-expert/ocr-extractor:0.3.1
+    image: wanwei-expert/ocr-extractor:0.3.2
     init: true
     restart: unless-stopped
     network_mode: host

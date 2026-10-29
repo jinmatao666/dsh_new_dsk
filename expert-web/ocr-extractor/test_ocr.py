@@ -185,7 +185,7 @@ class HTTPTests(unittest.TestCase):
         body = self.upload({"format": "json", "mode": "custom", "instruction": "项目名称"})[1]
         task = self.wait(json.loads(body)["id"])
         self.assertEqual(task["state"], "succeeded", task)
-        self.assertEqual(task["outputs"], ["识别结果.json", "OCR原始识别.json", "OCR原文.txt"])
+        self.assertEqual(task["outputs"], ["识别结果.json"])
         self.assertTrue(all(isinstance(m['content'], str) for m in Provider.calls[-1]['messages']))
         Provider.response_mode = "truncated"
         body = self.upload({'mode': 'custom', 'instruction': '提取内容'})[1]; task = self.wait(json.loads(body)["id"])
@@ -205,7 +205,9 @@ class HTTPTests(unittest.TestCase):
             task = self.wait(json.loads(self.upload()[1])['id'])
         self.assertEqual(task['state'], 'succeeded')
         self.assertTrue(all('messages' not in call for call in Provider.calls))
-        self.assertIn('OCR原始识别.json', task['outputs'])
+        self.assertEqual(task['outputs'], ['识别结果.txt'])
+        self.assertTrue((Path(self.tmp.name)/task['id']/'output'/'OCR原始识别.json').is_file())
+        self.assertEqual(self.request(f"/api/tasks/{task['id']}/files/1")[0], 404)
 
     def test_bad_paddle_arrays_fail_without_results(self):
         self.login()
@@ -228,7 +230,7 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(task['state'], 'succeeded', task)
         text = self.request(f'/api/tasks/{task["id"]}/result')[1]
         self.assertIn('|项目|值|', json.loads(text)['text'])
-        raw = json.loads(self.request(f'/api/tasks/{task["id"]}/files/1')[1])
+        raw = json.loads((Path(self.tmp.name)/task['id']/'output'/'OCR原始识别.json').read_text(encoding='utf-8'))
         self.assertEqual(raw['engine'], 'PaddleOCR PP-StructureV3')
         self.assertIsNone(raw['lines'][0]['confidence'])
         self.assertIsNone(raw['lines'][0]['polygon'])
@@ -283,7 +285,7 @@ class HTTPTests(unittest.TestCase):
         result=self.request(f"/api/tasks/{task['id']}/files/0")[1]
         from docx import Document
         self.assertIn('fixture page', '\n'.join(p.text for p in Document(io.BytesIO(result)).paragraphs))
-        evidence=json.loads(self.request(f"/api/tasks/{task['id']}/files/1")[1])
+        evidence=json.loads((Path(self.tmp.name)/task['id']/'output'/'OCR原始识别.json').read_text(encoding='utf-8'))
         self.assertEqual(len(evidence['pages']),2)
         self.assertEqual(self.request(f"/api/tasks/{task['id']}/image")[0],200)
         self.assertEqual(self.upload({},'损坏.pdf',b'%PDF-not-a-pdf')[0],400)

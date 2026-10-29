@@ -12,7 +12,7 @@ Users need to inspect selected documents before recognizing them, download all o
 
 PNG/JPEG/WebP/BMP previews use browser file objects. PDF/TIFF previews use an authenticated, origin-checked local rendering endpoint with the existing upload/page limits. Rendering does not create a task or call a model. File and page selectors also retrieve user-owned saved inputs. A request revision and abort controller prevent an earlier response from replacing a later selection; expired sessions close the expanded view and clear materials.
 
-The workbench renders every published task output as a download action using the existing native-save/browser-download path. The files page filters actual output extensions and reports the filtered count. TXT, Markdown, JSON, CSV and Word remain selectable outputs; historical PDF artifacts remain downloadable. Blank names use the first file stem and minute timestamp, with a China Standard Time server fallback and the existing 100-character limit.
+Only the requested deliverable is published; raw recognition JSON and text remain private server evidence. Historical task lists also hide auxiliary artifacts. The workbench renders the deliverable as a download action using the existing native-save/browser-download path. The files page filters deliverable extensions and reports the filtered count through a keyboard-accessible custom listbox without a PDF option. TXT, Markdown, JSON, CSV and Word remain selectable outputs; historical PDF artifacts remain downloadable. Blank names use the first file stem and minute timestamp, with a China Standard Time server fallback and the existing 100-character limit.
 
 ## Alternatives considered
 

@@ -259,4 +259,4 @@ def extract(path, destination, options, input_names=None):
     evidence.write_text(json.dumps(recognized, ensure_ascii=False, indent=2), encoding='utf-8')
     source = output / 'OCR原文.txt'
     source.write_text(recognized['text'], encoding='utf-8')
-    return [result, evidence, source]
+    return [result]

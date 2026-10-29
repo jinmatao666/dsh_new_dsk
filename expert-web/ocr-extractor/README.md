@@ -8,11 +8,11 @@ This standalone Buddy workbench accepts PNG, JPEG, WebP, BMP, TIFF and unencrypt
 
 Configure `PADDLEOCR_API=layout` with the full PP-StructureV3 POST URL, such as `http://127.0.0.1:18082/layout-parsing`. The alternative general `/ocr` pipeline uses `PADDLEOCR_API=ocr`. The optional engine credential is `PADDLEOCR_KEY`. Layout inference has a 300-second request timeout; task workers have an 1800-second deadline. Custom field extraction requires a configured `EXPERT_MODEL_*` text model; images are never sent to that formatter. Missing values and confidence scores are not invented.
 
-Exports include TXT, Markdown, JSON, CSV and Word, plus original text and structured evidence. Word exports contain readable text, not a reconstruction of the original layout. Markdown retains the layout service output where available. Multi-page evidence and CSV preserve original filenames and page numbers. Full-text extraction works without Qwen. Custom text formatting failures do not publish substitute results.
+Exports include TXT, Markdown, JSON, CSV and Word, with original text and structured evidence retained privately on the server. Word exports contain readable text, not a reconstruction of the original layout. Markdown retains the layout service output where available. Multi-page evidence and CSV preserve original filenames and page numbers. Full-text extraction works without Qwen. Custom text formatting failures do not publish substitute results.
 
 ## Preview and downloads
 
-Selected pictures are visible immediately. PDF/TIFF pages use the authenticated local preview endpoint without creating a recognition task or calling PaddleOCR. The file picker, page controls and expanded view also work for saved task inputs. Previews are not retained as tasks. Downloads are available on the recognition workbench and in the files page, where extension filters include historical PDF artifacts. New tasks cannot request PDF output.
+Selected pictures are visible immediately. PDF/TIFF pages use the authenticated local preview endpoint without creating a recognition task or calling PaddleOCR. The file picker, page controls and expanded view also work for saved task inputs. Previews are not retained as tasks. Only the requested output is published for download on the recognition workbench and in the files page, where extension filters select the requested deliverable format. New tasks cannot request PDF output.
 
 Task names are optional. Empty names become the first filename without its extension plus `_YYYYMMDDHHmm`; the server fallback uses China Standard Time. Explicit names are preserved. The same naming and replacement rules apply to reruns.
 

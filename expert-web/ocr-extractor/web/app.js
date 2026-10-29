@@ -242,13 +242,47 @@ function artifactRow(task, name, index) {
 }
 function renderOutputs() {
   const extension = $('#file-format-filter').value;
-  const outputs = tasks.filter(task => task.state === 'succeeded').flatMap(task => task.outputs.map((name, index) => ({ task, name, index })))
+  const outputs = tasks.filter(task => task.state === 'succeeded').flatMap(task => task.outputs.slice(0, 1).map((name, index) => ({ task, name, index })))
     .filter(item => extension === 'all' || item.name.toLowerCase().endsWith('.' + extension));
   $('#output-count').textContent = `共 ${outputs.length} 个文件`;
   $('#output-list').innerHTML = outputs.length ? outputs.map(({ task, name, index }) => artifactRow(task, name, index)).join('')
     : `<div class="panel empty-list">${extension === 'all' ? '暂无成果文件。完成识别后可在这里下载。' : '没有符合此格式的成果文件，请切换筛选条件。'}</div>`;
 }
 $('#file-format-filter').addEventListener('change', renderOutputs);
+const filterToggle = $('#format-filter-toggle');
+const filterOptions = $('#format-filter-options');
+const formatButtons = [...filterOptions.querySelectorAll('[data-format]')];
+function closeFormatFilter(focus = false) {
+  filterOptions.hidden = true; filterToggle.setAttribute('aria-expanded', 'false');
+  if (focus) filterToggle.focus();
+}
+function openFormatFilter() {
+  filterOptions.hidden = false; filterToggle.setAttribute('aria-expanded', 'true');
+  (formatButtons.find(button => button.dataset.format === $('#file-format-filter').value) || formatButtons[0]).focus();
+}
+filterToggle.addEventListener('click', () => filterOptions.hidden ? openFormatFilter() : closeFormatFilter());
+filterToggle.addEventListener('keydown', event => {
+  if (['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); openFormatFilter(); }
+});
+filterOptions.addEventListener('click', event => {
+  const button = event.target.closest('[data-format]'); if (!button) return;
+  $('#file-format-filter').value = button.dataset.format;
+  $('#format-filter-label').textContent = button.textContent;
+  formatButtons.forEach(option => option.setAttribute('aria-selected', String(option === button)));
+  renderOutputs(); closeFormatFilter(true);
+});
+filterOptions.addEventListener('keydown', event => {
+  const index = formatButtons.indexOf(document.activeElement);
+  if (event.key === 'Escape') { event.preventDefault(); closeFormatFilter(true); }
+  if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+    event.preventDefault();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? formatButtons.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + formatButtons.length) % formatButtons.length;
+    formatButtons[next].focus();
+  }
+});
+document.addEventListener('click', event => { if (!event.target.closest('.format-filter')) closeFormatFilter(); });
+document.addEventListener('focusin', event => { if (!event.target.closest('.format-filter')) closeFormatFilter(); });
+
 async function refreshTasks() {
   const revision = ++pollRequest;
   const value = await api('api/tasks');
@@ -282,7 +316,7 @@ async function openTask(id, navigate = true) {
     $('#result-empty strong').textContent = task.state === 'failed' ? '本次识别未完成，没有发布成果。' : '任务已取消，没有发布成果。';
     $('#result-empty p').textContent = task.error || '请新建任务后重新提交。';
   } else if (task.state === 'succeeded') {
-    $('#workbench-files').innerHTML = '<h3>本次成果文件</h3>' + task.outputs.map((name, index) => artifactRow(task, name, index)).join('');
+    $('#workbench-files').innerHTML = '<h3>本次成果文件</h3>' + task.outputs.slice(0, 1).map((name, index) => artifactRow(task, name, index)).join('');
     $('#workbench-files').hidden = false;
     try {
       const result = await api(`api/tasks/${task.id}/result`);
