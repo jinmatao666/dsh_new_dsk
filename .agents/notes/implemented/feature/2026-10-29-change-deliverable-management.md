@@ -10,7 +10,7 @@ Large overlapping boxes obscure change imagery, box counts do not explain segmen
 
 ## Decision
 
-The workbench defaults to registration with explicit failure, fills blank names from the before image and minute timestamp, and places image-view controls next to the image. Counts represent semantic events. Precise results show colored masks and outlines, compare temporal masks for expansion/shrinkage/modification, merge near-identical same-class event masks, and deduplicate pixels in total area. Box mode hides area statistics.
+The workbench defaults to conservative registration with an explicit same-position assumption for equal-sized pre-registered inputs, fills blank names from the before image and minute timestamp, and places image-view controls next to the image. Counts represent semantic events. Precise results show colored masks and outlines, compare temporal masks for expansion/shrinkage/modification, merge near-identical same-class event masks, and deduplicate pixels in total area. Box mode hides area statistics.
 
 Chinese artifact names are shared by HTTP downloads and ZIP entries. The files page groups each task into one row ordered by completion time. ZIPs contain actual published outputs. Authenticated output deletion holds the worker lock and a SQLite transaction, clears the output directory/list, and retains source inputs and the task for rerunning. Existing tasks gain completion/deletion metadata by additive migration. Deleted result and bundle requests return 410; ownership checks precede mutation.
 

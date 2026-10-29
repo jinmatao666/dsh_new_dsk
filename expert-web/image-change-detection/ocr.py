@@ -154,12 +154,19 @@ def region(mask, index, score=None):
             'area_ratio': float(mask.mean()), 'score': score, 'contours': contours(mask)}
 
 
-def aligned_pair(before, after, align):
+def aligned_pair(before, after, align, details=None):
+    details = details if details is not None else {}
+    def original_positions(reason):
+        details.update(method="assumed_coregistered", note=reason)
+        return np.asarray(before), np.ones((after.height,after.width),dtype="uint8")*255, np.eye(3).tolist()
     if not align:
         if before.size != after.size:
             raise OCRError('关闭自动对齐时，两期图片尺寸须相同且已经配准')
         return np.asarray(before), np.ones((after.height, after.width), dtype='uint8') * 255, None
     a, b = np.asarray(before), np.asarray(after)
+    if before.size == after.size and np.array_equal(a,b):
+        return original_positions('两期图像相同，按原图位置比较。')
+    method = 'feature_registration'
     gray_a = cv2.cvtColor(a, cv2.COLOR_RGB2GRAY)
     gray_b = cv2.cvtColor(b, cv2.COLOR_RGB2GRAY)
     matrix = None
@@ -173,9 +180,10 @@ def aligned_pair(before, after, align):
             source = cv2.GaussianBlur(cv2.resize(gray_a, size), (9, 9), 0).astype('float32') / 255
             score, warp = cv2.findTransformECC(template, source, np.eye(2, 3, dtype='float32'), cv2.MOTION_TRANSLATION,
                 (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 250, 1e-6), None, 7)
-            if score >= .35 and np.max(np.abs(warp[:, 2])) <= min(size) * .15:
+            if score >= .8 and np.max(np.abs(warp[:, 2])) <= min(size) * .05:
                 warp[:, 2] /= scale
                 matrix = np.linalg.inv(np.vstack([warp, [0, 0, 1]]))
+                method = 'translation_corrected'
         except cv2.error:
             pass
     # If translation is insufficient, accept a similarity transform only when
@@ -199,19 +207,22 @@ def aligned_pair(before, after, align):
     if matrix is None:
         if before.size != after.size:
             raise OCRError('自动对齐未找到共同范围，且两图尺寸不同；请裁成同一范围后重试。')
-        if not np.array_equal(a, b):
-            raise OCRError('自动对齐失败，无法可靠比较；请提供同一范围且具有清晰共同地物的两期图像。')
-        matrix = np.eye(3, dtype='float64')
+        return original_positions('未采用可靠的额外校正，按同尺寸、同范围影像的原位置比较；请核对两期范围一致。')
     corners = np.float32([[0, 0], [before.width, 0], [before.width, before.height], [0, before.height]]).reshape(-1, 1, 2)
     warped_corners = cv2.perspectiveTransform(corners, matrix)
     ratio = abs(cv2.contourArea(warped_corners)) / (after.width * after.height)
     if not .5 <= ratio <= 2:
+        if before.size == after.size:
+            return original_positions('额外校正变形较大，保留原图位置比较；请核对两期范围一致。')
         raise OCRError('对齐变形过大，未输出变化结论')
     aligned = cv2.warpPerspective(a, matrix, after.size)
     valid = cv2.warpPerspective(np.ones(gray_a.shape, dtype='uint8') * 255, matrix, after.size)
     valid = cv2.erode(valid, np.ones((9, 9), dtype='uint8'))
     if (valid > 0).mean() < .6:
+        if before.size == after.size:
+            return original_positions('额外校正重叠范围不足，保留原图位置比较；请核对两期范围一致。')
         raise OCRError('两期图片有效重叠区域不足60%，未输出变化结论')
+    details.update(method=method, note='已执行可信的位置校正，比较共同覆盖范围。')
     return aligned, valid, matrix.tolist()
 
 
@@ -242,16 +253,23 @@ def extract(paths, destination, options):
                 objects.append({'id': len(objects) + 1, 'box': obj['box'], 'score': obj['score']})
     else:
         before = loaded[0][0]
-        aligned_array, valid, matrix = aligned_pair(before, image, options['align'])
+        alignment = {}
+        aligned_array, valid, matrix = aligned_pair(before, image, options['align'], alignment)
         aligned = Image.fromarray(aligned_array)
         from semantic_change import discover
         if not model_configuration():
             raise OCRError('请配置支持双图输入的视觉模型，再进行变化识别')
         try:
-            changes, evidence = discover(aligned, image)
+            model_before = aligned_array.copy()
+            model_after = np.asarray(image).copy()
+            model_before[valid == 0] = 127
+            model_after[valid == 0] = 127
+            changes, evidence = discover(Image.fromarray(model_before), Image.fromarray(model_after))
         except ValueError as error:
             raise OCRError(str(error)) from None
         meta.update(analysis_method='vision_discovery_then_localization',
+                    alignment_method=alignment.get('method', 'original_positions'),
+                    alignment_note=alignment.get('note', '按原图位置比较。'),
                     alignment_matrix_before_to_after=matrix,
                     warning='结果为视觉模型判断，需人工核对；模型坐标是估计位置，不是测绘结论。')
         path = output / 'aligned-before.png'

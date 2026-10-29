@@ -24,6 +24,11 @@ class MaskTests(unittest.TestCase):
             self.assertAlmostEqual(result['objects'][0]['area_ratio'],.04)
             self.assertEqual(np.count_nonzero(np.asarray(Image.open(root/'out'/'mask.png'))),400)
 
-    def test_unalignable_different_images_do_not_silently_compare(self):
+    def test_equal_size_without_features_can_use_registered_positions(self):
+        details={}
+        aligned, valid, matrix=aligned_pair(Image.new('RGB',(100,100),'white'),Image.new('RGB',(100,100),'black'),True,details)
+        self.assertEqual(details['method'],'assumed_coregistered')
+        self.assertTrue(np.all(aligned==255))
+        self.assertTrue(np.all(valid==255))
         with self.assertRaises(OCRError):
-            aligned_pair(Image.new('RGB',(100,100),'white'),Image.new('RGB',(100,100),'black'),True)
+            aligned_pair(Image.new('RGB',(100,100),'white'),Image.new('RGB',(200,100),'black'),True)

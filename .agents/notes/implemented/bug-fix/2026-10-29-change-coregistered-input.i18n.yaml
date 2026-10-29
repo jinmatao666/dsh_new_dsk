@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-29-change-coregistered-input.md
+2026-10-29-change-coregistered-input.md: 0a1a2e0902a9bcbc93257b432da3894c53562dd7
+2026-10-29-change-coregistered-input.zh.md: 93646150e0e7b13680c9ba6dd7c738446be2f03d

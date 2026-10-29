@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-29-change-deliverable-management.md
-2026-10-29-change-deliverable-management.md: a9bb9ec82c316fa562aeb538cb50f607aee877f3
-2026-10-29-change-deliverable-management.zh.md: 28e7df5072986d76f669188346bbeed9fee5d37d
+2026-10-29-change-deliverable-management.md: d34270a3cc84217c179f51ee61bc2c9cd6e4d55f
+2026-10-29-change-deliverable-management.zh.md: 154584f5f0ded20a194c2c97072331f368ae3063
