@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal } from '@douyinfe/semi-ui';
-import { API, isRoot, showError, showSuccess } from '../../helpers';
+import { API, showError, showSuccess } from '../../helpers';
 import { FileArchive, ShieldCheck, RefreshCw } from 'lucide-react';
 import CustomSelect from '../../components/CustomSelect';
 
@@ -27,7 +27,6 @@ export default function DesktopUpdates() {
   const [page, setPage] = useState(1);
   const mounted = useRef(false);
   const uploadInput = useRef(null);
-  const root = isRoot();
   const refresh = async (signal) => {
     try {
       const { data } = await API.get('/api/desktop-updates', { signal });
@@ -38,14 +37,13 @@ export default function DesktopUpdates() {
   useEffect(() => {
     mounted.current = true;
     const controller = new AbortController();
-    if (root) refresh(controller.signal);
+    refresh(controller.signal);
     return () => { mounted.current = false; controller.abort(); };
-  }, [root]);
+  }, []);
   useEffect(() => { setPage(1); }, [systemFilter, architectureFilter]);
   const records = snapshot.items.filter(record => (systemFilter === 'all' || record.platform.startsWith(`${systemFilter}-`)) && (architectureFilter === 'all' || record.platform.endsWith(`-${architectureFilter}`)));
   const pageCount = Math.max(1, Math.ceil(records.length / 12));
   useEffect(() => { setPage(value => Math.min(value, pageCount)); }, [pageCount]);
-  if (!root) return <p>仅系统超级管理员可以管理桌面端更新包。</p>;
   const upload = async () => {
     if (!file || busy || !stableVersion.test(version.trim())) return;
     setBusy(true); setProgress(0); setFailure('');

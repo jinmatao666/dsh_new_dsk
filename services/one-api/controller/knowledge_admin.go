@@ -92,14 +92,17 @@ func ReviewManagedKnowledgeSubscription(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
 }
 
-// CreateManagedKnowledgeCategory adds a workbench tab that the desktop lists after Personal.
+// CreateManagedKnowledgeCategory adds a workbench tab owned by the caller.
 func CreateManagedKnowledgeCategory(c *gin.Context) {
 	var input createKnowledgeCategoryInput
 	if c.ShouldBindJSON(&input) != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库分类参数无效"})
 		return
 	}
-	row := model.KnowledgeCategory{Name: input.Name, Type: input.Type, RequireAuth: input.RequireAuth}
+	row := model.KnowledgeCategory{
+		Name: input.Name, Type: input.Type, RequireAuth: input.RequireAuth,
+		OwnerUserId: c.GetInt("id"),
+	}
 	if err := model.SaveKnowledgeCategory(&row); err != nil {
 		if errors.Is(err, model.ErrKnowledgeCategoryDuplicate) || errors.Is(err, model.ErrKnowledgeCategoryInvalid) {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
@@ -126,12 +129,26 @@ func UpdateManagedKnowledgeCategory(c *gin.Context) {
 	if !ok {
 		return
 	}
+	existing, err := model.GetKnowledgeCategory(id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "知识库分类不存在"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库分类失败"})
+		return
+	}
+	root := c.GetInt("role") >= model.RoleRootUser
+	if !model.CanManageKnowledgeCategory(existing, c.GetInt("id"), root) {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "只能管理自己创建的知识库分类"})
+		return
+	}
 	var input createKnowledgeCategoryInput
 	if c.ShouldBindJSON(&input) != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库分类参数无效"})
 		return
 	}
-	row := model.KnowledgeCategory{Id: id, Name: input.Name, Type: input.Type, RequireAuth: input.RequireAuth}
+	row := model.KnowledgeCategory{Id: id, Name: input.Name, Type: input.Type, RequireAuth: input.RequireAuth, OwnerUserId: existing.OwnerUserId}
 	if err := model.UpdateKnowledgeCategory(&row); err != nil {
 		if errors.Is(err, model.ErrKnowledgeCategoryDuplicate) || errors.Is(err, model.ErrKnowledgeCategoryInvalid) {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
@@ -151,6 +168,20 @@ func UpdateManagedKnowledgeCategory(c *gin.Context) {
 func DeleteManagedKnowledgeCategory(c *gin.Context) {
 	id, ok := managedKnowledgeCategoryID(c)
 	if !ok {
+		return
+	}
+	existing, err := model.GetKnowledgeCategory(id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "知识库分类不存在"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库分类失败"})
+		return
+	}
+	root := c.GetInt("role") >= model.RoleRootUser
+	if !model.CanManageKnowledgeCategory(existing, c.GetInt("id"), root) {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "只能管理自己创建的知识库分类"})
 		return
 	}
 	libraries, err := model.ListKnowledgeBasesByCategory(id)
@@ -231,7 +262,12 @@ func ListManagedRagflowDatasets(c *gin.Context) {
 }
 
 // ListManagedKnowledgeBases returns the full catalog, including offline and common libraries.
+// Only the root operator may load the unfiltered workbench catalog.
 func ListManagedKnowledgeBases(c *gin.Context) {
+	if c.GetInt("role") < model.RoleRootUser {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "仅超级管理员可查看全部知识库"})
+		return
+	}
 	rows, err := model.ListManagedKnowledgeBases()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
@@ -246,12 +282,13 @@ func managedKnowledgeBase(c *gin.Context) (*model.KnowledgeBase, bool) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库编号无效"})
 		return nil, false
 	}
-	row, err := model.GetKnowledgeBase(id)
+	root := c.GetInt("role") >= model.RoleRootUser
+	row, err := model.GetAuthorizedKnowledgeBase(c.GetInt("id"), id, root)
 	if err != nil {
 		status := http.StatusInternalServerError
 		message := "读取知识库失败"
 		if err == gorm.ErrRecordNotFound {
-			status, message = http.StatusNotFound, "知识库不存在"
+			status, message = http.StatusForbidden, "无权访问该知识库"
 		}
 		c.JSON(status, gin.H{"success": false, "message": message})
 		return nil, false

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, ChevronDown, ChevronRight, ClipboardList, Download, Eye, FileText, Folder, FolderPlus, FolderTree, Layers, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Tag, Trash2, Upload } from 'lucide-react';
-import { API, isAdmin } from '../../helpers';
+import { API, isAdmin, isRoot } from '../../helpers';
 import CustomSelect from '../../components/CustomSelect';
 import './index.css';
 
@@ -46,6 +46,14 @@ function currentUserId() {
   } catch {
     return 0;
   }
+}
+
+/** Root may manage every tab; others only tabs they created (any display name). */
+function canManageCategory(category) {
+  if (!category) return false;
+  if (isRoot()) return true;
+  const ownerId = Number(category.owner_user_id);
+  return ownerId > 0 && ownerId === currentUserId();
 }
 
 /** Category dialog: 个人/公开/授权 maps to type + require_auth (self-only / everyone / subscribe). */
@@ -158,17 +166,18 @@ function documentsQuery({ page = 1, pageSize = FILE_PAGE_SIZE, keywords = '' } =
 const STATS_PAGE_SIZE = 100;
 const STATS_MAX_PAGES = 50;
 
-/** Workbench catalog APIs: admin managed routes vs signed-in user routes. */
+/** Workbench catalog APIs: root full catalog vs signed-in scoped routes. */
 function knowledgeBasesRoot() {
-  return isAdmin() ? '/api/knowledge-admin/bases' : '/api/knowledge-bases';
+  return isRoot() ? '/api/knowledge-admin/bases' : '/api/knowledge-bases';
 }
 
 function knowledgeCategoriesUrl() {
-  return isAdmin() ? '/api/knowledge-admin/categories' : '/api/knowledge-bases/categories';
+  // Both paths filter by the caller; keep the workbench alias for consistency.
+  return '/api/knowledge-admin/categories';
 }
 
 function ragflowDatasetsUrl() {
-  return isAdmin() ? '/api/knowledge-admin/ragflow-datasets' : '/api/knowledge-bases/ragflow-datasets';
+  return '/api/knowledge-bases/ragflow-datasets';
 }
 
 /** Loads document total and summed byte size for one library card. */
@@ -420,9 +429,8 @@ const KnowledgeLibrary = () => {
   };
 
   const loadUsers = async () => {
-    // Administrators browse every account's personal libraries; ordinary users skip the roster.
-    if (!isAdmin()) {
-      setUsers([]);
+    // Root browses every account; ordinary users receive peer labels from the scoped directory.
+    if (!isRoot()) {
       return;
     }
     const pageSize = 100;
@@ -446,29 +454,38 @@ const KnowledgeLibrary = () => {
   };
 
   const loadOrganization = async () => {
-    if (!isAdmin()) {
-      setOrgNodes([]);
-      setOrgMemberships([]);
-      setOrgError('');
-      return;
-    }
     setOrgError('');
     try {
-      const [nodesResponse, membersResponse] = await Promise.all([
-        API.get('/api/government-organization/'),
-        API.get('/api/government-organization/memberships'),
-      ]);
-      if (!nodesResponse.data?.success || !Array.isArray(nodesResponse.data.data)) {
-        throw new Error(nodesResponse.data?.message || '读取组织架构失败');
+      if (isRoot()) {
+        const [nodesResponse, membersResponse] = await Promise.all([
+          API.get('/api/government-organization/'),
+          API.get('/api/government-organization/memberships'),
+        ]);
+        if (!nodesResponse.data?.success || !Array.isArray(nodesResponse.data.data)) {
+          throw new Error(nodesResponse.data?.message || '读取组织架构失败');
+        }
+        if (!membersResponse.data?.success || !Array.isArray(membersResponse.data.data?.memberships)) {
+          throw new Error(membersResponse.data?.message || '读取组织成员失败');
+        }
+        setOrgNodes(nodesResponse.data.data);
+        setOrgMemberships(membersResponse.data.data.memberships);
+        return;
       }
-      if (!membersResponse.data?.success || !Array.isArray(membersResponse.data.data?.memberships)) {
-        throw new Error(membersResponse.data?.message || '读取组织成员失败');
-      }
-      setOrgNodes(nodesResponse.data.data);
-      setOrgMemberships(membersResponse.data.data.memberships);
+      const directory = unwrap(await API.get('/api/knowledge-bases/organization-directory'));
+      setOrgNodes(Array.isArray(directory?.nodes) ? directory.nodes : []);
+      setOrgMemberships(Array.isArray(directory?.memberships) ? directory.memberships : []);
+      const peerUsers = Array.isArray(directory?.users) ? directory.users : [];
+      setUsers(peerUsers.map(user => ({
+        id: user.id,
+        username: user.username,
+        display_name: user.display_name,
+        status: 1,
+        created_at: '',
+      })));
     } catch (cause) {
       setOrgNodes([]);
       setOrgMemberships([]);
+      if (!isRoot()) setUsers([]);
       setOrgError(cause.response?.data?.message || cause.message || '读取组织架构失败');
     }
   };
@@ -488,12 +505,10 @@ const KnowledgeLibrary = () => {
         setLibraries(Array.isArray(libraryRows) ? libraryRows : []);
         await loadReviewCount();
         if (cancelled) return;
-        if (isAdmin()) {
+        if (isRoot()) {
           await Promise.all([loadUsers(), loadOrganization()]);
         } else {
-          setUsers([]);
-          setOrgNodes([]);
-          setOrgMemberships([]);
+          await loadOrganization();
         }
       } catch (cause) {
         if (!cancelled) setError(await errorMessage(cause));
@@ -564,33 +579,26 @@ const KnowledgeLibrary = () => {
     };
   }, [libraries]);
 
-  // Administrators browse every personal library via the people directory; ordinary users only see own cards.
-  const manageAllPersonal = isAdmin();
+  // Root browses every personal library; others browse the same directory UI scoped to their org peers.
+  const manageAllPersonal = isRoot();
   const viewerId = currentUserId();
+  const canManagePersonalLibrary = library => (
+    manageAllPersonal || (Number(library?.owner_user_id) === viewerId && isAdmin())
+  );
 
   const countsByScope = useMemo(() => {
     const personalRows = libraries.filter(item => item.kind === 'personal' && !Number(item.category_id || 0));
-    const counts = {
-      personal: manageAllPersonal
-        ? personalRows.length
-        : personalRows.filter(item => viewerId > 0 && Number(item.owner_user_id) === viewerId).length,
-    };
+    const counts = { personal: personalRows.length };
     categories.forEach(category => {
       counts[`c:${category.id}`] = libraries.filter(item => Number(item.category_id || 0) === category.id).length;
     });
     return counts;
-  }, [libraries, categories, manageAllPersonal, viewerId]);
-  // Administrators see every category tab. Ordinary users only see public (common) categories
-  // or other categories that already contain a library they may open — never empty foreign tabs.
-  // Use type, not require_auth, so stale personal+require_auth=false rows stay hidden when empty.
+  }, [libraries, categories]);
+  // Categories already come scoped from the API (owned / public / accessible). Do not filter by tab name.
   const tabs = useMemo(() => [
     { key: 'personal', label: '个人知识库', category: null },
-    ...categories
-      .filter(category => manageAllPersonal
-        || category.type === 'common'
-        || (countsByScope[`c:${category.id}`] || 0) > 0)
-      .map(category => ({ key: `c:${category.id}`, label: category.name, category })),
-  ], [categories, manageAllPersonal, countsByScope]);
+    ...categories.map(category => ({ key: `c:${category.id}`, label: category.name, category })),
+  ], [categories]);
   // Clamp without setState so creating a tab cannot race a reset back to personal.
   const activeScope = tabs.some(tab => tab.key === scope) ? scope : 'personal';
   const activeCategory = categories.find(category => `c:${category.id}` === activeScope);
@@ -603,12 +611,6 @@ const KnowledgeLibrary = () => {
         ? Number(item.category_id || 0) === categoryId
         : item.kind === activeScope && !Number(item.category_id || 0)))
       .filter(item => {
-        if (activeScope === 'personal' && !manageAllPersonal) {
-          return viewerId > 0 && Number(item.owner_user_id) === viewerId;
-        }
-        return true;
-      })
-      .filter(item => {
         if (!text) return true;
         return [item.name, item.description, item.tags, item.owner_username].some(value => String(value || '').toLowerCase().includes(text));
       })
@@ -616,19 +618,22 @@ const KnowledgeLibrary = () => {
         const delta = new Date(left.updated_at || left.created_at).getTime() - new Date(right.updated_at || right.created_at).getTime();
         return order === 'asc' ? delta : -delta;
       });
-  }, [libraries, activeScope, keyword, order, manageAllPersonal, viewerId]);
+  }, [libraries, activeScope, keyword, order]);
 
   const orgById = useMemo(() => new Map(orgNodes.map(node => [Number(node.id), node])), [orgNodes]);
   const orgChildren = useMemo(() => orgChildrenByParent(orgNodes), [orgNodes]);
   const rootOrgNodes = useMemo(() => orgChildren.get(0) || [], [orgChildren]);
 
-  // Default the personal directory to the first top-level organization node.
+  // Default the personal directory to the first top-level organization node (or unassigned when none).
   useEffect(() => {
     if (orgLoading || selectedOrgId != null) return;
     const first = rootOrgNodes[0];
-    if (!first) return;
-    setSelectedOrgId(Number(first.id));
-  }, [orgLoading, selectedOrgId, rootOrgNodes]);
+    if (first) {
+      setSelectedOrgId(Number(first.id));
+      return;
+    }
+    if (!manageAllPersonal) setSelectedOrgId('unassigned');
+  }, [orgLoading, selectedOrgId, rootOrgNodes, manageAllPersonal]);
   const membershipsByUser = useMemo(() => {
     const map = new Map();
     orgMemberships.forEach(row => {
@@ -672,6 +677,8 @@ const KnowledgeLibrary = () => {
     users.forEach(user => {
       const id = Number(user.id);
       if (!Number.isFinite(id) || id <= 0) return;
+      // Ordinary users only browse themselves; root keeps the full roster.
+      if (!manageAllPersonal && viewerId > 0 && id !== viewerId) return;
       const name = String(user.display_name || user.username || '').trim() || `用户 ${id}`;
       const nodeIds = membershipsByUser.get(id) || [];
       const department = nodeIds.map(orgPathLabel).filter(Boolean).join('；') || '';
@@ -688,6 +695,7 @@ const KnowledgeLibrary = () => {
     libraries.filter(isPersonalLibrary).forEach(library => {
       const id = Number(library.owner_user_id);
       if (!Number.isFinite(id) || id <= 0 || map.has(id)) return;
+      if (!manageAllPersonal && viewerId > 0 && id !== viewerId) return;
       const name = String(library.owner_username || '').trim() || `用户 ${id}`;
       const nodeIds = membershipsByUser.get(id) || [];
       map.set(id, {
@@ -701,7 +709,7 @@ const KnowledgeLibrary = () => {
       });
     });
     return [...map.values()].sort((left, right) => left.name.localeCompare(right.name, 'zh'));
-  }, [users, libraries, membershipsByUser, orgPathLabel]);
+  }, [users, libraries, membershipsByUser, orgPathLabel, manageAllPersonal, viewerId]);
 
   const assignedUserIds = useMemo(() => {
     const ids = new Set();
@@ -1399,7 +1407,7 @@ const KnowledgeLibrary = () => {
           <h1>知识库</h1>
           {!reviewOpen && <p>{manageAllPersonal
             ? '按分类管理知识库与人员目录中的文件'
-            : '管理自己的个人知识库与已授权分类中的文件'}</p>}
+            : '管理本组织与自己的个人知识库，以及自己创建或已获授权的分类知识库'}</p>}
         </div>
       </header>
       {showChrome && <div className='knowledge-chrome'>
@@ -1425,7 +1433,7 @@ const KnowledgeLibrary = () => {
               >
                 {tab.label}<span>{countsByScope[tab.key] || 0}</span>
               </button>
-              {tab.category && <div className='knowledge-tab-menu'>
+              {tab.category && canManageCategory(tab.category) && <div className='knowledge-tab-menu'>
                 <button
                   type='button'
                   className='knowledge-tab-more'
@@ -1608,7 +1616,7 @@ const KnowledgeLibrary = () => {
         </div>
       </div>
     </section> : <>
-      {activeScope === 'personal' && manageAllPersonal ? <div className='knowledge-directory'>
+      {activeScope === 'personal' ? <div className='knowledge-directory'>
         <aside className='knowledge-directory-nav knowledge-org-nav' aria-label='组织架构'>
           <p>组织架构</p>
           {orgLoading ? <p className='knowledge-org-hint' role='status'>正在加载组织架构</p>
@@ -1618,9 +1626,11 @@ const KnowledgeLibrary = () => {
               <button type='button' onClick={() => { setOrgLoading(true); void loadOrganization().finally(() => setOrgLoading(false)); }}>重新加载</button>
             </div>
               : orgNodes.length === 0
-                ? <p className='knowledge-org-hint'>暂无组织节点。请先在用户权限 → 组织架构中创建。</p>
+                ? <p className='knowledge-org-hint'>{manageAllPersonal
+                  ? '暂无组织节点。请先在用户权限 → 组织架构中创建。'
+                  : '您尚未分配到组织节点，可在「未分配组织」中查看自己的个人知识库。'}</p>
                 : <div className='knowledge-org-tree'>{renderOrgBranch()}</div>}
-          {!orgLoading && !orgError && unassignedPeople.length > 0 && <button
+          {!orgLoading && !orgError && unassignedPeople.length > 0 && (manageAllPersonal || orgNodes.length === 0) && <button
             type='button'
             aria-pressed={selectedOrgId === 'unassigned'}
             className={selectedOrgId === 'unassigned' ? 'knowledge-org-unassigned active' : 'knowledge-org-unassigned'}
@@ -1664,7 +1674,7 @@ const KnowledgeLibrary = () => {
                         <strong title={library.name}>{library.name}</strong>
                         <em>{personFilesLoading ? '…' : `${filesInLibrary} 个文件`}</em>
                       </span>
-                      <div className='knowledge-card-menu'>
+                      {canManagePersonalLibrary(library) && <div className='knowledge-card-menu'>
                         <button
                           type='button'
                           className='knowledge-card-more'
@@ -1686,7 +1696,7 @@ const KnowledgeLibrary = () => {
                             </button>
                           </div>
                         </>}
-                      </div>
+                      </div>}
                     </article>;
                   })}
                 </div>}
@@ -1703,7 +1713,10 @@ const KnowledgeLibrary = () => {
                 <tbody>
                   {personFilesLoading ? <tr><td colSpan={6}>正在加载文件</td></tr>
                     : personFileRows.length === 0 ? <tr><td colSpan={6}>{personFileQuery.trim() ? '没有匹配的文件' : '暂无文件'}</td></tr>
-                      : personFileRows.map(file => <tr key={`${file.library_id}:${file.id}`}>
+                      : personFileRows.map(file => {
+                        const ownedLibrary = personLibraries.find(library => Number(library.id) === Number(file.library_id));
+                        const canDeleteFile = canManagePersonalLibrary(ownedLibrary || { owner_user_id: person?.id });
+                        return <tr key={`${file.library_id}:${file.id}`}>
                         <td className='knowledge-file-name'><FileText size={15} />{file.name}</td>
                         <td>{file.library_name || '—'}</td>
                         <td>{formatSizeLabel(file.size)}</td>
@@ -1713,9 +1726,10 @@ const KnowledgeLibrary = () => {
                           <button type='button' disabled={busy === `${file.id}:browse`} onClick={() => runFileAction(file, 'browse')}><Eye size={14} />预览</button>
                           <button type='button' disabled={busy === `${file.id}:download`} onClick={() => runFileAction(file, 'download')}><Download size={14} />下载</button>
                           <button type='button' disabled={busy === `${file.id}:chunks`} onClick={() => runFileAction(file, 'chunks')}><Layers size={14} />切片</button>
-                          <button type='button' className='danger' onClick={() => setConfirming({ type: 'file', file })}><Trash2 size={14} />删除</button>
+                          {canDeleteFile && <button type='button' className='danger' onClick={() => setConfirming({ type: 'file', file })}><Trash2 size={14} />删除</button>}
                         </td>
-                      </tr>)}
+                      </tr>;
+                      })}
                 </tbody>
               </table>
             </div>
@@ -1737,7 +1751,10 @@ const KnowledgeLibrary = () => {
                     : (selectedOrgNode?.name || '组织')} <span>{selectedOrgId == null ? '' : `(${visiblePeople.length}人)`}</span></h2>
                 <p>{orgLoading ? '正在加载组织架构…'
                   : orgError ? '组织架构未能加载，请在左侧重试。'
-                    : orgNodes.length === 0 ? '请先在用户权限 → 组织架构中创建节点并分配成员。'
+                    : orgNodes.length === 0
+                      ? (manageAllPersonal
+                        ? '请先在用户权限 → 组织架构中创建节点并分配成员。'
+                        : '点开人员查看个人知识库文件。')
                       : selectedOrgId == null ? '按组织架构查看人员；点开人员查看个人知识库文件。'
                         : '点开人员查看个人知识库文件。'}</p>
               </div>

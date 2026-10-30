@@ -52,7 +52,6 @@ import PersonalSettingPage from './pages/PersonalSetting';
 import SystemSettingPage from './pages/SystemSetting';
 import AdminPermissions from './pages/AdminPermissions';
 import Toolbox from './pages/Toolbox';
-import PermissionGuard from './components/PermissionGuard';
 import { ModelConfigPage as ZjugisModelConfigPage, UsersPage as ZjugisUsersPage, LogsPage as ZjugisLogsPage, AccountPage as ZjugisAccountPage } from './pages/Zjugis';
 
 const LarkOAuth = lazy(() => import('./components/LarkOAuth'));
@@ -96,7 +95,7 @@ function App() {
             path="/channel"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="channel"><ZjugisModelConfigPage /></PermissionGuard>
+                <ZjugisModelConfigPage />
               </PrivateRoute>
             }
           />
@@ -120,7 +119,7 @@ function App() {
             path="/user"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="user"><ZjugisUsersPage /></PermissionGuard>
+                <ZjugisUsersPage />
               </PrivateRoute>
             }
           />
@@ -220,7 +219,7 @@ function App() {
             path="/setting/admin-permissions"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="admin_permissions"><AdminPermissions /></PermissionGuard>
+                <AdminPermissions />
               </PrivateRoute>
             }
           />
@@ -234,7 +233,7 @@ function App() {
           />
           <Route
             path="/usage"
-            element={<PrivateRoute><PermissionGuard permKey="skill"><Usage /></PermissionGuard></PrivateRoute>}
+            element={<PrivateRoute><Usage /></PrivateRoute>}
           />
           <Route
             path="/log"
@@ -288,7 +287,7 @@ function App() {
             path="/organization"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="organization"><Organization /></PermissionGuard>
+                <Organization />
               </PrivateRoute>
             }
           />
@@ -312,7 +311,7 @@ function App() {
             path="/parvis-dashboard"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="parvis_dashboard"><ParvisDashboard /></PermissionGuard>
+                <ParvisDashboard />
               </PrivateRoute>
             }
           />
@@ -320,7 +319,7 @@ function App() {
             path="/transaction/products"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="product"><ProductManagement /></PermissionGuard>
+                <ProductManagement />
               </PrivateRoute>
             }
           />
@@ -328,7 +327,7 @@ function App() {
             path="/transaction/products/new"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="product"><EditProduct /></PermissionGuard>
+                <EditProduct />
               </PrivateRoute>
             }
           />
@@ -336,7 +335,7 @@ function App() {
             path="/transaction/products/:id"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="product"><EditProduct /></PermissionGuard>
+                <EditProduct />
               </PrivateRoute>
             }
           />
@@ -348,7 +347,7 @@ function App() {
             path="/transaction/orders"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="order"><OrderManagement /></PermissionGuard>
+                <OrderManagement />
               </PrivateRoute>
             }
           />
@@ -364,7 +363,7 @@ function App() {
             path="/skill"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="skill"><Skill /></PermissionGuard>
+                <Skill />
               </PrivateRoute>
             }
           />
@@ -380,7 +379,7 @@ function App() {
             path="/expert"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="skill"><Expert /></PermissionGuard>
+                <Expert />
               </PrivateRoute>
             }
           />
@@ -393,11 +392,11 @@ function App() {
             path="/skill/reviews"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="skill"><Skill /></PermissionGuard>
+                <Skill />
               </PrivateRoute>
             }
           />
-          <Route path="/skill/reviews/:id/test" element={<PrivateRoute><RootRoute><PermissionGuard permKey="skill"><SkillTest /></PermissionGuard></RootRoute></PrivateRoute>} />
+          <Route path="/skill/reviews/:id/test" element={<PrivateRoute><RootRoute><SkillTest /></RootRoute></PrivateRoute>} />
           <Route
             path="/config"
             element={
@@ -410,7 +409,7 @@ function App() {
             path="/config/model"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="model_config"><ZjugisModelConfigPage /></PermissionGuard>
+                <ZjugisModelConfigPage />
               </PrivateRoute>
             }
           />
@@ -434,7 +433,7 @@ function App() {
             path="/operation/dashboard"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="operation_dashboard"><OperationDashboard /></PermissionGuard>
+                <OperationDashboard />
               </PrivateRoute>
             }
           />
@@ -442,7 +441,7 @@ function App() {
             path="/operation/activity"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="activity"><ActivityConfig /></PermissionGuard>
+                <ActivityConfig />
               </PrivateRoute>
             }
           />
@@ -450,7 +449,7 @@ function App() {
             path="/operation/influencer-code"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="activity"><InfluencerCode /></PermissionGuard>
+                <InfluencerCode />
               </PrivateRoute>
             }
           />
@@ -458,7 +457,7 @@ function App() {
             path="/operation/user-crowd"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="activity"><UserCrowdConfig /></PermissionGuard>
+                <UserCrowdConfig />
               </PrivateRoute>
             }
           />
@@ -466,7 +465,7 @@ function App() {
             path="/operation/user"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="user_operation"><UserOperation /></PermissionGuard>
+                <UserOperation />
               </PrivateRoute>
             }
           />
@@ -474,7 +473,7 @@ function App() {
             path="/operation/message"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="message_notification"><MessageNotification /></PermissionGuard>
+                <MessageNotification />
               </PrivateRoute>
             }
           />
@@ -482,7 +481,7 @@ function App() {
             path="/operation/notification"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="message_notification"><NotificationManage /></PermissionGuard>
+                <NotificationManage />
               </PrivateRoute>
             }
           />
@@ -490,16 +489,16 @@ function App() {
             path="/operation/version-release"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="version_note"><VersionRelease /></PermissionGuard>
+                <VersionRelease />
               </PrivateRoute>
             }
           />
-          <Route path="/operation/version-release/legacy" element={<PrivateRoute><PermissionGuard permKey="version_note"><LegacyVersionRelease /></PermissionGuard></PrivateRoute>} />
+          <Route path="/operation/version-release/legacy" element={<PrivateRoute><LegacyVersionRelease /></PrivateRoute>} />
           <Route
             path="/monitor-board"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="monitor_board"><MonitorBoard /></PermissionGuard>
+                <MonitorBoard />
               </PrivateRoute>
             }
           />
@@ -507,7 +506,7 @@ function App() {
             path="/admin-operation-log"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="admin_operation_log"><AdminOperationLog /></PermissionGuard>
+                <AdminOperationLog />
               </PrivateRoute>
             }
           />
@@ -515,7 +514,7 @@ function App() {
             path="/feedback"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="feedback"><Feedback /></PermissionGuard>
+                <Feedback />
               </PrivateRoute>
             }
           />
@@ -523,7 +522,7 @@ function App() {
             path="/data-board/custom"
             element={
               <PrivateRoute>
-                <PermissionGuard permKey="custom_board"><DataCustom /></PermissionGuard>
+                <DataCustom />
               </PrivateRoute>
             }
           />

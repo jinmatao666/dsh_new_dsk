@@ -2,19 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { API, showSuccess } from '../../helpers';
 import './SystemSettings.css';
 import ResourceSettings, { defaultResources, normalizeResources } from './ResourceSettings';
+import KnowledgeQuotaSettings, { defaultKnowledgeQuota, normalizeKnowledgeQuota } from './KnowledgeQuotaSettings';
 
 const defaults = { network: 'internet', internetCatalogPolicy: 'disable', internetSkillPolicy: 'disable', internetExpertPolicy: 'disable', edition: 'operations', operator: '', phone: '', features: {
   internet: { automations: true, connectors: true, knowledgeBases: true },
   intranet: { automations: true, connectors: false, knowledgeBases: true },
-}, plugins: { browserAssistant: true } };
-const tabs = [['account', '账户设置'], ['security', '安全设置'], ['network', '网络设置'], ['edition', '版本类型'], ['features', '功能设置'], ['operations', '运维设置'], ['plugins', '插件设置']];
+}, plugins: { browserAssistant: true }, knowledgeQuota: defaultKnowledgeQuota };
+const tabs = [['account', '账户设置'], ['security', '安全设置'], ['network', '网络设置'], ['edition', '版本类型'], ['features', '功能设置'], ['knowledge', '知识库设置'], ['operations', '运维设置'], ['plugins', '插件设置']];
 const descriptions = {
   network: '设置桌面端使用的部署网络环境。',
   edition: '选择本系统的版本类型，网络环境与功能开关保持独立。',
   features: '内网与互联网独立配置。关闭后隐藏桌面端入口，桌面端启动、登录或切回窗口刷新后生效；开启不代表外部服务在内网可访问。',
+  knowledge: '限制个人知识库存储总量，并可按组织架构为具体人员分配额度。关闭后不限制个人知识库总容量。',
   operations: '填写负责本系统日常维护的人员及联系电话。',
   plugins: '统一控制桌面端插件。关闭后用户无法开启；开启后用户可自行启停。桌面端启动、登录或切回窗口刷新后生效，不强制中断已开始的操作。原有网络限制仍然有效。',
 };
+const deploymentTabs = ['network', 'edition', 'features', 'knowledge', 'operations', 'plugins'];
 
 async function loadSettingsResponse(path, signal) {
   for (let attempt = 0; ; attempt++) {
@@ -44,7 +47,7 @@ async function loadSettingsResponse(path, signal) {
   }
 }
 
-/** Deployment metadata uses the existing root-only options API, not browser storage. */
+/** Deployment metadata uses /api/option/, not browser storage. */
 export default function SystemSettings() {
   const [active, setActive] = useState('account');
   const [user, setUser] = useState(null);
@@ -62,7 +65,7 @@ export default function SystemSettings() {
     loadSettingsResponse('/api/user/self', controller.signal).then(async profile => {
       if (!profile || typeof profile.role !== 'number') throw new Error('账户信息返回异常，请重新加载');
       if (!disposed) setUser(profile);
-      if (profile.role !== 100 || disposed) return;
+      if (disposed) return;
       const options = await loadSettingsResponse('/api/option/', controller.signal);
       if (!Array.isArray(options)) throw new Error('系统配置返回异常，请重新加载');
       const raw = options.find(item => item.key === 'SystemDeploymentSettings')?.value;
@@ -89,6 +92,14 @@ export default function SystemSettings() {
           if (typeof value.features?.[mode]?.[feature] !== 'boolean') throw new Error('功能设置无效，请联系管理员检查配置');
         }
       }
+      value.knowledgeQuota = normalizeKnowledgeQuota(value.knowledgeQuota);
+      if (value.knowledgeQuota.enabled && value.knowledgeQuota.totalBytes <= 0) {
+        throw new Error('知识库容量限制已开启但未设置总量，请联系管理员检查配置');
+      }
+      const allocated = value.knowledgeQuota.allocations.reduce((sum, item) => sum + item.quotaBytes, 0);
+      if (value.knowledgeQuota.enabled && allocated > value.knowledgeQuota.totalBytes) {
+        throw new Error('知识库人员分配超过总量，请联系管理员检查配置');
+      }
       if (!disposed) { setSettings(value); setSaved(value); }
     }).catch(error => { if (!disposed) setLoadError(error.message || '设置加载失败，请刷新重试'); })
       .finally(() => { if (!disposed) setLoading(false); });
@@ -97,9 +108,17 @@ export default function SystemSettings() {
   const change = (key, value) => { setSettings(previous => ({ ...previous, [key]: value })); setFeedback(''); };
   const save = async event => {
     event.preventDefault();
-    if (loading || loadError || saving || user?.role !== 100) return;
+    if (loading || loadError || saving || !user) return;
     setSaving(true); setFeedback('');
-    const value = { ...settings, operator: settings.operator.trim(), phone: settings.phone.trim() };
+    const value = { ...settings, operator: settings.operator.trim(), phone: settings.phone.trim(),
+      knowledgeQuota: normalizeKnowledgeQuota(settings.knowledgeQuota) };
+    if (value.knowledgeQuota.enabled && value.knowledgeQuota.totalBytes <= 0) {
+      setSaving(false); setFeedback('请先点击设置，填写个人知识库总量后再保存'); return;
+    }
+    const allocated = value.knowledgeQuota.allocations.reduce((sum, item) => sum + item.quotaBytes, 0);
+    if (value.knowledgeQuota.enabled && allocated > value.knowledgeQuota.totalBytes) {
+      setSaving(false); setFeedback('各人员分配容量之和不能超过个人知识库总量'); return;
+    }
     if (value.network === 'intranet' && !value.resources) value.resources = defaultResources;
     if (value.resources) value.resources = normalizeResources({ ...value.resources, probeUrls: value.resources.probeUrls.map(url => url.trim()).filter(Boolean) });
     try {
@@ -120,21 +139,23 @@ export default function SystemSettings() {
       <div className='preview-tabs' role='tablist' aria-label='系统设置'>
         {tabs.map(([key, label]) => <button type='button' role='tab' id={`settings-tab-${key}`} aria-controls={`settings-panel-${key}`} aria-selected={active === key} key={key} className={active === key ? 'active' : ''} onClick={() => { setActive(key); setFeedback(''); }}>{label}</button>)}
       </div>
-      {loading ? <p role='status'>正在加载设置，网络异常时会自动重试…</p> : loadError && (!user || ['network', 'edition', 'features', 'operations', 'plugins'].includes(active)) ? <div><p role='alert'>{loadError}</p><button type='button' className='settings-secondary' onClick={() => setReload(value => value + 1)}>重新加载</button></div> :
+      {loading ? <p role='status'>正在加载设置，网络异常时会自动重试…</p> : loadError && (!user || deploymentTabs.includes(active)) ? <div><p role='alert'>{loadError}</p><button type='button' className='settings-secondary' onClick={() => setReload(value => value + 1)}>重新加载</button></div> :
         <div role='tabpanel' id={`settings-panel-${active}`} aria-labelledby={`settings-tab-${active}`} className='system-settings-panel'>
           {active === 'account' && <><h2>账户信息</h2><p className='settings-description'>当前登录的后台管理账户。</p><div className='settings-account-details'>
             <div className='account-row'><span>登录账号</span><strong>{user?.username || '—'}</strong></div>
-            <div className='account-row'><span>账户角色</span><strong className='green'>{user?.role === 100 ? '超级管理员' : '管理员'}</strong></div>
+            <div className='account-row'><span>账户角色</span><strong className='green'>{user?.role === 100 ? '超级管理员' : user?.role >= 10 ? '管理员' : '普通用户'}</strong></div>
             <div className='account-row'><span>登录状态</span><strong className='green'>已登录</strong></div>
           </div></>}
           {active === 'security' && <><h2>安全设置</h2><p className='settings-description'>查看当前登录会话与安全状态。</p><div className='settings-account-details'>
             <div className='account-row'><span>会话有效期</span><strong>默认</strong></div>
             <div className='account-row'><span>登录保护</span><strong className='green'>已启用</strong></div>
           </div><button type='button' className='settings-secondary settings-logout' onClick={logout}>退出登录</button></>}
-          {['network', 'edition', 'features', 'operations', 'plugins'].includes(active) && (user?.role !== 100 ? <p>仅超级管理员可查看和修改系统部署配置。</p> : <form onSubmit={save}>
-            <h2>{active === 'network' ? '网络环境' : active === 'edition' ? '版本类型' : active === 'features' ? '功能入口' : active === 'plugins' ? '插件控制' : '运维联系信息'}</h2>
+          {deploymentTabs.includes(active) && <form onSubmit={save}>
+            <h2>{active === 'network' ? '网络环境' : active === 'edition' ? '版本类型' : active === 'features' ? '功能入口' : active === 'knowledge' ? '知识库设置' : active === 'plugins' ? '插件控制' : '运维联系信息'}</h2>
             <p className='settings-description'>{descriptions[active]}</p>
-            {active === 'plugins' ? <>
+            {active === 'knowledge' ? <KnowledgeQuotaSettings value={settings.knowledgeQuota || defaultKnowledgeQuota} disabled={saving}
+              saving={saving} onChange={value => change('knowledgeQuota', normalizeKnowledgeQuota(value))} />
+              : active === 'plugins' ? <>
               <table className='settings-features'><thead><tr><th scope='col'>插件</th><th scope='col'>统一开关</th></tr></thead><tbody><tr><th scope='row'>浏览器助手</th><td><label>
                 <input type='checkbox' role='switch' aria-label='统一启用浏览器助手' checked={settings.plugins.browserAssistant} disabled={saving} onChange={event => change('plugins', { ...settings.plugins, browserAssistant: event.target.checked })} />
                 <span>{settings.plugins.browserAssistant ? '开启' : '关闭'}</span>
@@ -176,7 +197,7 @@ export default function SystemSettings() {
             {active === 'network' && settings.network === 'intranet' && !settings.resources && <button type='button'
               className='settings-secondary' disabled={saving} onClick={() => change('resources', defaultResources)}>启用此资源配置（保存后生效）</button>}
             <div className='settings-footer'><span>{dirty ? '有未保存的修改' : ''}</span><div><button type='button' className='settings-secondary' disabled={!dirty || saving} onClick={() => { setSettings(saved); setFeedback(''); }}>取消修改</button><button type='submit' className='settings-primary' disabled={!dirty || saving}>{saving ? '保存中…' : '保存设置'}</button></div></div>
-          </form>)}
+          </form>}
         </div>}
       {feedback && <p className='settings-feedback' role='status'>{feedback}</p>}
     </section>

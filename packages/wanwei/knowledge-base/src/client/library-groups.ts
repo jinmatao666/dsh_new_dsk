@@ -95,6 +95,15 @@ export function libraryNavGroups(
 }
 
 /**
+ * Sidebar groups that start collapsed. Only 个人知识库 is expanded on open.
+ * @param groups - Current nav groups (public is omitted when empty).
+ * @returns Keys to keep collapsed until the user expands them.
+ */
+export function defaultCollapsedNavGroups(groups: LibraryGroup[]): Set<string> {
+  return new Set(groups.map(group => group.key).filter(key => key !== 'personal'))
+}
+
+/**
  * Default sidebar selection: first library in the first non-empty nav group.
  * @param items - Libraries the caller may open.
  * @param categories - Administrator-defined categories.

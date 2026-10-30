@@ -2,11 +2,12 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import KnowledgeLibrary from './index';
-import { API, isAdmin } from '../../helpers';
+import { API, isAdmin, isRoot } from '../../helpers';
 
 jest.mock('../../helpers', () => ({
   API: { get: jest.fn(), post: jest.fn(), put: jest.fn(), delete: jest.fn() },
   isAdmin: jest.fn(() => true),
+  isRoot: jest.fn(() => true),
 }));
 
 const categories = [
@@ -43,6 +44,18 @@ function documentsResponse(url) {
   if (path === '/api/government-organization/memberships') {
     return { data: { success: true, data: orgMemberships } };
   }
+  if (path === '/api/knowledge-bases/organization-directory') {
+    return {
+      data: {
+        success: true,
+        data: {
+          nodes: orgNodes,
+          users: orgMemberships.users,
+          memberships: orgMemberships.memberships,
+        },
+      },
+    };
+  }
   if (path === '/api/knowledge-admin/categories' || path === '/api/knowledge-bases/categories') {
     return { data: { success: true, data: categories } };
   }
@@ -71,6 +84,7 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   isAdmin.mockReturnValue(true);
+  isRoot.mockReturnValue(true);
   localStorage.setItem('user', JSON.stringify({ id: 1, role: 100, username: 'root' }));
   API.get.mockImplementation(url => Promise.resolve(documentsResponse(url)));
   API.post.mockResolvedValue({ data: { success: true, data: { id: 9 } } });
@@ -617,7 +631,7 @@ test('create dialog can bind an existing RAGFlow dataset', async () => {
   await act(async () => { button('个人知识库').click(); });
   act(() => { button('新建知识库').click(); });
   for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
-  expect(API.get).toHaveBeenCalledWith('/api/knowledge-admin/ragflow-datasets');
+  expect(API.get).toHaveBeenCalledWith('/api/knowledge-bases/ragflow-datasets');
   const modal = container.querySelector('.knowledge-modal');
   const source = modal.querySelector('[aria-label="创建方式"]');
   expect(source).not.toBeNull();
@@ -691,23 +705,78 @@ test('create and edit send a cover image', async () => {
   }));
 });
 
-test('ordinary user personal tab shows only own libraries via user APIs', async () => {
+test('ordinary user personal tab uses scoped organization directory like root', async () => {
   isAdmin.mockReturnValue(false);
-  localStorage.setItem('user', JSON.stringify({ id: 2, role: 1, username: 'alice' }));
+  isRoot.mockReturnValue(false);
+  localStorage.setItem('user', JSON.stringify({ id: 8, role: 1, username: 'chen' }));
+  API.get.mockImplementation(url => {
+    if (String(url) === '/api/knowledge-bases/organization-directory') {
+      return Promise.resolve({
+        data: {
+          success: true,
+          data: {
+            nodes: [
+              { id: 1, name: '浙江万维空间信息技术有限公司', parent_id: 0, kind: '公司', sort_order: 0 },
+              { id: 2, name: '办公室', parent_id: 1, kind: '', sort_order: 0 },
+            ],
+            users: [
+              { id: 8, username: 'chen', display_name: '陈静' },
+            ],
+            memberships: [
+              { user_id: 8, node_id: 2 },
+            ],
+          },
+        },
+      });
+    }
+    if (String(url) === '/api/knowledge-bases') {
+      return Promise.resolve({
+        data: {
+          success: true,
+          data: [
+            {
+              id: 2, name: '个人笔记', kind: 'personal', shelf: 'published',
+              owner_user_id: 8, owner_username: 'chen',
+              updated_at: '2024-01-02T00:00:00Z', created_at: '2024-01-02T00:00:00Z',
+            },
+            {
+              id: 5, name: '同事资料', kind: 'personal', shelf: 'published',
+              owner_user_id: 9, owner_username: 'jmt',
+              updated_at: '2024-01-03T00:00:00Z', created_at: '2024-01-03T00:00:00Z',
+            },
+          ],
+        },
+      });
+    }
+    return Promise.resolve(documentsResponse(url));
+  });
   await act(async () => { root.render(<KnowledgeLibrary />); });
-  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
-  expect(container.textContent).not.toContain('全部人员');
-  expect(container.textContent).not.toContain('组织架构');
-  expect(container.textContent).not.toContain('爱丽丝');
-  expect(container.textContent).not.toContain('陈静');
-  expect(container.textContent).toContain('个人笔记');
+  for (let i = 0; i < 8; i += 1) await act(async () => { await Promise.resolve(); });
   expect(API.get).toHaveBeenCalledWith('/api/knowledge-bases');
-  expect(API.get).toHaveBeenCalledWith('/api/knowledge-bases/categories');
+  expect(API.get).toHaveBeenCalledWith('/api/knowledge-bases/organization-directory');
+  expect(API.get).toHaveBeenCalledWith('/api/knowledge-admin/categories');
   expect(API.get).not.toHaveBeenCalledWith(expect.stringMatching(/^\/api\/user\//));
   expect(API.get).not.toHaveBeenCalledWith('/api/government-organization/');
-  expect(API.get).toHaveBeenCalledWith('/api/knowledge-bases');
+  expect(container.textContent).toContain('组织架构');
+  expect(container.textContent).toContain('办公室');
+  expect(container.textContent).not.toContain('全部人员');
+  expect(container.textContent).not.toContain('个人笔记');
+  await act(async () => { button('办公室').click(); });
+  expect(container.textContent).toContain('陈静');
+  expect(container.querySelector('.knowledge-people-grid')?.textContent).not.toContain('jmt');
+  expect(container.querySelector('.knowledge-people-grid')?.textContent).not.toContain('爱丽丝');
+  expect(container.querySelector('.knowledge-people-head h2').textContent).toContain('1人');
+  await act(async () => { button('陈静').click(); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  expect(container.textContent).toContain('陈静 的文件清单');
+  expect(API.get).toHaveBeenCalledWith(expect.stringContaining('/api/knowledge-bases/2/documents?'));
+  await act(async () => { container.querySelector('.knowledge-person-file-title').click(); });
+  expect(container.querySelector('[aria-label="个人知识库"]')).toBeTruthy();
+  expect(container.textContent).toContain('个人笔记');
+  expect(container.textContent).not.toContain('同事资料');
+  expect(container.querySelector('[aria-label="更多操作 个人笔记"]')).toBeNull();
   expect(button('订阅审核')).toBeTruthy();
-  expect(button('新建知识库分类')).toBeTruthy();
+  await act(async () => { button('返回').click(); });
   act(() => { button('新建知识库').click(); });
   for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
   expect(API.get).toHaveBeenCalledWith('/api/knowledge-bases/ragflow-datasets');

@@ -26,6 +26,8 @@ type desktopDeploymentSettings struct {
 	Features              map[string]desktopFeatureFlags `json:"features"`
 	Plugins               desktopPluginSettings          `json:"plugins"`
 	Resources             *desktopResourceSettings       `json:"resources,omitempty"`
+	// KnowledgeQuota is workbench-only personal storage policy; desktop clients ignore it.
+	KnowledgeQuota *knowledgePersonalQuotaSettings `json:"knowledgeQuota,omitempty"`
 }
 
 type desktopPluginSettings struct {
@@ -110,6 +112,13 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 	if err := json.Unmarshal([]byte(raw), &settings); err != nil {
 		return settings, err
 	}
+	if field, present := fields["knowledgeQuota"]; present {
+		quota, err := parseKnowledgePersonalQuota(field)
+		if err != nil {
+			return settings, err
+		}
+		settings.KnowledgeQuota = &quota
+	}
 	if settings.InternetCatalogPolicy != "hide" && settings.InternetCatalogPolicy != "disable" {
 		return settings, fmt.Errorf("invalid internetCatalogPolicy")
 	}
@@ -163,6 +172,8 @@ func GetDesktopConfig(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "系统部署配置无效，请联系管理员"})
 		return
 	}
+	// Personal quota is workbench admin policy; do not publish it on the pre-login desktop surface.
+	settings.KnowledgeQuota = nil
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": settings})
 }

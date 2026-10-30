@@ -39,7 +39,7 @@ func SaveGovernmentMembers(c *gin.Context) {
 			return
 		}
 		user, err := model.GetUserById(request.UserID, false)
-		if err != nil || role <= user.Role {
+		if err != nil || managementActorRole(c) <= user.Role {
 			respondError(c, "无权修改该用户的组织归属")
 			return
 		}

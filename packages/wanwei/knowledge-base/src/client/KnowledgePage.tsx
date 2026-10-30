@@ -7,7 +7,7 @@ import { MarkdownView } from './MarkdownView.tsx'
 import { PdfLocateViewer, type PdfLocateRequest } from './PdfLocateViewer.tsx'
 import { ViewerLoading } from './ViewerLoading.tsx'
 import {
-  firstNavLibraryId, libraryIsGrantedSubscription, libraryNavGroups,
+  defaultCollapsedNavGroups, firstNavLibraryId, libraryIsGrantedSubscription, libraryNavGroups,
 } from './library-groups.ts'
 import { productText } from './locales/product.ts'
 
@@ -275,13 +275,18 @@ type DocumentViewer = {
 }
 
 const CONTENT_MIN = 260
-const CONTENT_DEFAULT = 400
-const CHAT_MIN = 180
+const CONTENT_DEFAULT = 280
+const CHAT_MIN = 280
 const SPLIT_WIDTH = 8
+/** Sidebar tracks in `page.css` (`.dsh-knowledge` / `@media (max-width: 980px)`). */
+const NAV_DESKTOP = 224
+const NAV_NARROW = 180
 
 function contentSpan(box: DOMRect | undefined): { nav: number; max: number } {
   const width = box !== undefined && box.width > 0 ? box.width : 1200
-  const nav = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 980px)').matches ? 180 : 210
+  const nav = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 980px)').matches
+    ? NAV_NARROW
+    : NAV_DESKTOP
   return { nav, max: Math.max(CONTENT_MIN, Math.floor(width - nav - CHAT_MIN - SPLIT_WIDTH)) }
 }
 
@@ -334,7 +339,9 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const [deleteIds, setDeleteIds] = useState<string[]>()
   const [mutating, setMutating] = useState(false)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set())
-  const [collapsedNavGroups, setCollapsedNavGroups] = useState<Set<string>>(() => new Set())
+  const [collapsedNavGroups, setCollapsedNavGroups] = useState<Set<string>>(
+    () => new Set(['subscription', 'public']),
+  )
   const fileInput = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement>(null)
   const uploadRoot = useRef<HTMLDivElement>(null)
@@ -399,7 +406,9 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       const viewerId = result.find(item => item.kind === 'personal' && (item.category_id ?? 0) === 0)?.owner_user_id
       setSelectedId(firstNavLibraryId(result, nextCategories, viewerId))
       setPlazaOpen(false)
-      setCollapsedNavGroups(new Set())
+      setCollapsedNavGroups(defaultCollapsedNavGroups(
+        libraryNavGroups(result, nextCategories, viewerId),
+      ))
     }).catch((cause) => { if (!disposed) setError(`${productText('加载失败')}：${String(cause)}`) })
       .finally(() => { if (!disposed) setLoading(false) })
     return () => { disposed = true }
@@ -1214,8 +1223,8 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                       return next
                     }),
                     ...(plazaCanUse ? {
-                      onOpenDocument: (document) => openDocument(document, undefined, false, plazaDetail.id),
-                      onPrefetchDocument: (document) => prefetchDocument(document, plazaDetail.id),
+                      onOpenDocument: document => openDocument(document, undefined, false, plazaDetail.id),
+                      onPrefetchDocument: document => prefetchDocument(document, plazaDetail.id),
                     } : {}),
                   })}
                 </div>}

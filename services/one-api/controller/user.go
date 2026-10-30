@@ -258,7 +258,7 @@ func GetUser(c *gin.Context) {
 		})
 		return
 	}
-	myRole := c.GetInt(ctxkey.Role)
+	myRole := managementActorRole(c)
 	if myRole <= user.Role && myRole != model.RoleRootUser {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -670,7 +670,7 @@ func UpdateUser(c *gin.Context) {
 		})
 		return
 	}
-	myRole := c.GetInt(ctxkey.Role)
+	myRole := managementActorRole(c)
 	if myRole <= originUser.Role && myRole != model.RoleRootUser {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -868,7 +868,7 @@ func DeleteUser(c *gin.Context) {
 		})
 		return
 	}
-	myRole := c.GetInt("role")
+	myRole := managementActorRole(c)
 	if myRole <= originUser.Role {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -1018,7 +1018,7 @@ func ManageUser(c *gin.Context) {
 		})
 		return
 	}
-	myRole := c.GetInt("role")
+	myRole := managementActorRole(c)
 	if myRole <= user.Role && myRole != model.RoleRootUser {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -1198,7 +1198,7 @@ func BatchManageUser(c *gin.Context) {
 		return
 	}
 
-	myRole := c.GetInt("role")
+	myRole := managementActorRole(c)
 	var successIds []int
 	type failItem struct {
 		Id      int    `json:"id"`
