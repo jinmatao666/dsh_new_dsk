@@ -17,7 +17,7 @@ const profile = () => ({
   models: { count: 13, prompt_tokens: 100, completion_tokens: 20, top: [{ name: 'qwen', count: 13 }], days: [{ day: '2026-09-28', count: 1 }, { day: '2026-10-27', count: 12 }] },
   skills: { count: 1, top: [{ name: '文档处理', count: 1 }], days: [{ day: '2026-10-27', count: 1 }] },
   experts: { count: 0, top: [], days: [] },
-  downloads: { count: 2, installed_count: 49, top: [{ name: '文档处理', count: 0, installed: true }] },
+  downloads: { count: 2, installed_count: 12, top: Array.from({ length: 12 }, (_, index) => ({ name: `技能 ${index + 1}`, download_count: index < 2 ? 2 : 1 })) },
 });
 
 test('charts include both Beijing date boundaries and show installations without an invalid conversion rate', async () => {
@@ -34,7 +34,12 @@ test('charts include both Beijing date boundaries and show installations without
   expect(container.querySelector('.user-profile-trend-summary strong').textContent).toBe('14次活动');
   expect(container.querySelector('.user-profile-insights').textContent).not.toContain('2450');
   expect(container.querySelector('.user-profile-insights').textContent).not.toContain('转化');
-  expect(container.querySelector('.user-profile-insights').textContent).toContain('49个');
+  expect(container.querySelector('.user-profile-insights').textContent).toContain('12个');
+  expect(container.querySelectorAll('.user-profile-installed-grid tbody tr')).toHaveLength(10);
+  expect([...container.querySelectorAll('.user-profile-installed-grid tbody')].map(body => body.querySelectorAll('tr').length)).toEqual([5, 5]);
+  await act(async () => container.querySelector('.user-profile-installed-toggle').click());
+  expect(container.querySelectorAll('.user-profile-installed-grid tbody tr')).toHaveLength(12);
+  expect(container.querySelector('.user-profile-installed-toggle').textContent).toBe('收起');
   expect({
     identity: container.querySelector('.user-profile-identity').textContent,
     insights: [...container.querySelectorAll('.user-profile-insights > div')].map(item => item.textContent),

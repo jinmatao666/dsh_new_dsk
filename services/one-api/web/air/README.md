@@ -54,6 +54,6 @@ System Settings → Plugin settings stores the global browser-assistant permissi
 
 ### User activity profiles
 
-Selecting a user row opens the observed-activity profile. The dialog keeps its title and close control visible while scrolling; composition and trends share a row on wide screens and stack on narrow screens. Charts cover both endpoints of the returned Beijing date window. Recorded installations count unique user/skill pairs independently from repeatable download events; the profile does not infer an installation conversion rate.
+Selecting a user row opens the observed-activity profile. The dialog keeps its title and close control visible while scrolling; composition and trends share a row on wide screens and stack on narrow screens. Charts cover both endpoints of the returned Beijing date window. Recorded installations count unique user/skill pairs independently from repeatable download events; the profile does not infer an installation conversion rate. Installed skills appear in two columns, ordered by per-skill download count, with ten shown initially and an option to expand all. A historical installation without a download count displays one download in that list; the cumulative download metric still counts observed download events only.
 
 The organization tree and role organization picker use the same array response; see [organization management](../../docs/role-management.md). A failed tree read displays an inline retry state rather than a zero-node count.

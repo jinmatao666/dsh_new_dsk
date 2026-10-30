@@ -100,18 +100,19 @@
 .user-profile-track i { display: block; height: 100%; border-radius: inherit; background: var(--profile-model); }
 .user-profile-ranking:nth-child(2) .user-profile-track i { background: var(--profile-skill); }
 .user-profile-ranking:nth-child(3) .user-profile-track i { background: var(--profile-expert); }
-.user-profile-table-scroll { overflow-x: auto; }
+.user-profile-installed-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.user-profile-installed-grid table { min-width: 0; }
 .user-profile-downloads table { width: 100%; border-collapse: collapse; font-size: 15px; text-align: left; }
 .user-profile-downloads th { padding: 10px 12px; background: #f6f9fe; color: #475d76; font-size: 13px; font-weight: 500; }
 .user-profile-downloads th:first-child { border-radius: 7px 0 0 7px; }
 .user-profile-downloads th:last-child { border-radius: 0 7px 7px 0; }
 .user-profile-downloads td { padding: 12px; border-bottom: 1px solid #eff3f8; color: #334e6c; }
 .user-profile-downloads tr:last-child td { border-bottom: 0; }
-.user-profile-downloads td:first-child { width: 62%; min-width: 140px; }
-.user-profile-downloads td:nth-child(2) { white-space: nowrap; }
+.user-profile-downloads td:first-child { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-profile-downloads th:nth-child(2), .user-profile-downloads td:nth-child(2) { width: 100px; white-space: nowrap; text-align: right; }
 .user-profile-downloads td small { margin-left: 4px; color: #526479; font-size: 12px; }
-.user-profile-install-state { display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border-radius: 5px; background: #f2f5f9; color: #7e8fa7; font-size: 12px; white-space: nowrap; }
-.user-profile-install-state.installed { background: #edf8f4; color: #288367; }
+.user-profile-installed-toggle { display: block; margin: 16px auto 0; padding: 7px 14px; border: 1px solid #d8e5f7; border-radius: 7px; background: #fff; color: #2864c9; cursor: pointer; }
+.user-profile-installed-toggle:hover { background: #f4f8ff; }
 .user-profile-summary { margin-top: 18px; padding: 18px 20px; border: 1px solid #dde9fc; border-radius: 12px; background: #f5f9ff; }
 .user-profile-summary h3 { display: flex; align-items: center; gap: 7px; margin: 0 0 10px; color: #365f97; font-size: 15px; }
 .user-profile-summary p { margin: 0 0 10px; color: #334e6c; font-size: 15px; line-height: 1.9; }
@@ -124,6 +125,7 @@
   .user-profile-ranking li { grid-template-columns: 20px minmax(0, 1fr) minmax(60px, 20%) 40px; }
 }
 @media (max-width: 640px) {
+  .user-profile-installed-grid { grid-template-columns: 1fr; gap: 0; }
   .user-profile-modal > .zjugis-modal-head { padding: 16px 18px; }
   .user-profile { padding: 18px; }
   .user-profile-identity { align-items: start; gap: 12px; }

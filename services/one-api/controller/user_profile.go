@@ -33,9 +33,8 @@ type profileModelUsage struct {
 }
 
 type profileDownload struct {
-	Name      string `json:"name"`
-	Count     int64  `json:"count"`
-	Installed bool   `json:"installed"`
+	Name          string `json:"name"`
+	DownloadCount int64  `json:"download_count"`
 }
 
 type profileDownloads struct {
@@ -125,20 +124,17 @@ func GetUserProfile(c *gin.Context) {
 		return
 	}
 	downloads := profileDownloads{Top: []profileDownload{}}
-	base := model.DB.Model(&model.SkillUserStat{}).Where("user_id = ?", id)
-	var downloadTotals struct {
-		Count          int64
-		InstalledCount int64
-	}
-	if err := base.Select("COALESCE(SUM(download_count), 0) AS count, COALESCE(SUM(CASE WHEN installed THEN 1 ELSE 0 END), 0) AS installed_count").Scan(&downloadTotals).Error; err != nil {
+	// 历史安装没有下载事件时，列表中按一次展示；实际下载总量仍只统计下载事件。
+	if err := model.DB.Table("skill_user_stats AS stats").
+		Joins("LEFT JOIN skills ON skills.id = stats.skill_id").
+		Where("stats.user_id = ? AND stats.installed = ?", id, true).
+		Select("COALESCE(NULLIF(skills.display_name, ''), NULLIF(skills.name, ''), '已下架技能') AS name, CASE WHEN stats.download_count > 0 THEN stats.download_count ELSE 1 END AS download_count").
+		Order("download_count DESC, name ASC, stats.skill_id ASC").Scan(&downloads.Top).Error; err != nil {
 		c.JSON(500, gin.H{"success": false, "message": "下载统计读取失败"})
 		return
 	}
-	downloads.Count, downloads.InstalledCount = downloadTotals.Count, downloadTotals.InstalledCount
-	if err := model.DB.Table("skill_user_stats AS stats").
-		Joins("LEFT JOIN skills ON skills.id = stats.skill_id").Where("stats.user_id = ?", id).
-		Select("COALESCE(NULLIF(skills.display_name, ''), skills.name, '已下架技能') AS name, stats.download_count AS count, stats.installed").
-		Order("stats.download_count DESC, stats.skill_id ASC").Limit(5).Scan(&downloads.Top).Error; err != nil {
+	downloads.InstalledCount = int64(len(downloads.Top))
+	if err := model.DB.Model(&model.SkillDownloadEvent{}).Where("user_id = ?", id).Count(&downloads.Count).Error; err != nil {
 		c.JSON(500, gin.H{"success": false, "message": "下载统计读取失败"})
 		return
 	}

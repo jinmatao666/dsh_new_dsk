@@ -24,7 +24,7 @@ func TestUserProfileScopesObservedEventsToSelectedUser(t *testing.T) {
 	previousDB, previousLogDB := model.DB, model.LOG_DB
 	model.DB, model.LOG_DB = db, db
 	t.Cleanup(func() { model.DB, model.LOG_DB = previousDB, previousLogDB; _ = sqlDB.Close() })
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Log{}, &model.UsageEvent{}, &model.Skill{}, &model.SkillUserStat{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Log{}, &model.UsageEvent{}, &model.Skill{}, &model.SkillUserStat{}, &model.SkillDownloadEvent{}))
 	require.NoError(t, db.Create(&model.User{Id: 7, Username: "alice", AccessToken: "alice-token", AffCode: "alice"}).Error)
 	require.NoError(t, db.Create(&model.User{Id: 8, Username: "bob", AccessToken: "bob-token", AffCode: "bob"}).Error)
 	now := time.Now()
@@ -36,7 +36,14 @@ func TestUserProfileScopesObservedEventsToSelectedUser(t *testing.T) {
 	require.NoError(t, db.Create(&model.UsageEvent{EventID: "expert-event-1", Kind: "expert", UserID: 7, ItemID: "expert", ItemName: "文档专家", Day: today}).Error)
 	require.NoError(t, db.Create(&model.UsageEvent{EventID: "skill-event-2", Kind: "skill", UserID: 8, ItemID: "other", ItemName: "其他", Day: today}).Error)
 	require.NoError(t, db.Create(&model.UsageEvent{EventID: "skill-event-old", Kind: "skill", UserID: 7, ItemID: "old", ItemName: "旧记录", Day: now.AddDate(0, 0, -31).In(time.FixedZone("CST", 8*60*60)).Format("2006-01-02")}).Error)
+	require.NoError(t, db.Create(&model.Skill{Id: 99, Name: "报告技能", DisplayName: "报告生成"}).Error)
 	require.NoError(t, db.Create(&model.SkillUserStat{UserID: 7, SkillID: 99, DownloadCount: 2, Installed: true}).Error)
+	require.NoError(t, db.Create(&model.SkillUserStat{UserID: 7, SkillID: 100, Installed: true}).Error)
+	require.NoError(t, db.Create(&model.SkillUserStat{UserID: 7, SkillID: 101, DownloadCount: 4}).Error)
+	require.NoError(t, db.Create(&model.SkillUserStat{UserID: 8, SkillID: 102, Installed: true}).Error)
+	require.NoError(t, db.Create(&model.SkillDownloadEvent{UserID: 7, SkillID: 99, EventID: "download-a", Version: "1.0.0", DownloadedAt: now}).Error)
+	require.NoError(t, db.Create(&model.SkillDownloadEvent{UserID: 7, SkillID: 99, EventID: "download-b", Version: "1.0.0", DownloadedAt: now.Add(time.Second), InstalledAt: &now}).Error)
+	require.NoError(t, db.Create(&model.SkillDownloadEvent{UserID: 8, SkillID: 99, EventID: "other-download", DownloadedAt: now}).Error)
 	call := func(id string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -72,5 +79,10 @@ func TestUserProfileScopesObservedEventsToSelectedUser(t *testing.T) {
 	require.Equal(t, int64(1), result.Data.Skills.Count)
 	require.Equal(t, int64(1), result.Data.Experts.Count)
 	require.Equal(t, int64(2), result.Data.Downloads.Count)
-	require.Equal(t, int64(1), result.Data.Downloads.InstalledCount)
+	require.Equal(t, int64(2), result.Data.Downloads.InstalledCount)
+	require.Len(t, result.Data.Downloads.Top, 2)
+	require.Equal(t, "报告生成", result.Data.Downloads.Top[0].Name)
+	require.Equal(t, int64(2), result.Data.Downloads.Top[0].DownloadCount)
+	require.Equal(t, "已下架技能", result.Data.Downloads.Top[1].Name)
+	require.Equal(t, int64(1), result.Data.Downloads.Top[1].DownloadCount)
 }

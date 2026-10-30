@@ -89,7 +89,7 @@ function InsightCards({ data }) {
   const activeDays = days.filter(item => item.model + item.skill + item.expert > 0).length;
   return <div className='user-profile-insights'>
     <div><Calendar size={20} aria-hidden='true' /><span>活跃天数</span><strong>{activeDays}<small>/ {days.length} 天</small></strong><p>统计期内有使用记录的天数</p></div>
-    <div><Check size={20} aria-hidden='true' /><span>已安装技能</span><strong>{number(data.downloads.installed_count)}<small>个</small></strong><p>累计安装记录，同一技能仅计一次</p></div>
+    <div><Check size={20} aria-hidden='true' /><span>曾安装技能</span><strong>{number(data.downloads.installed_count)}<small>个</small></strong><p>含历史记录，同一技能仅计一次</p></div>
     <div><Activity size={20} aria-hidden='true' /><span>主要活动</span><strong>{total ? (data.models.count >= data.skills.count && data.models.count >= data.experts.count ? '模型调用' : data.skills.count >= data.experts.count ? '技能调用' : '专家任务') : '—'}</strong><p>按统计期内记录数量比较</p></div>
   </div>;
 }
@@ -109,8 +109,10 @@ function Summary({ data }) {
 
 export default function UserProfile({ user }) {
   const [state, setState] = useState({ loading: true, error: '', data: null });
+  const [showAllInstalled, setShowAllInstalled] = useState(false);
   useEffect(() => {
     let active = true;
+    setShowAllInstalled(false);
     setState({ loading: true, error: '', data: null });
     API.get(`/api/user/${user.id}/profile`).then((response) => {
       if (!active) return;
@@ -143,9 +145,22 @@ export default function UserProfile({ user }) {
           <Ranking title='常用技能' items={state.data.skills.top} empty='暂无技能调用记录' />
           <Ranking title='常用专家' items={state.data.experts.top} empty='暂无专家任务记录' />
         </div>
-        <section className='user-profile-downloads'><div className='user-profile-section-head'><h3>技能下载与安装</h3><span>累计记录 · 前 {state.data.downloads.top?.length || 0} 项</span></div>
-          {state.data.downloads.top?.length ? <div className='user-profile-table-scroll'><table><thead><tr><th>技能名称</th><th>下载次数</th><th>安装记录</th></tr></thead><tbody>{state.data.downloads.top.map((item, index) => <tr key={`${item.name}-${index}`}><td>{item.name}</td><td>{number(item.count)}<small>次</small></td><td><span className={`user-profile-install-state${item.installed ? ' installed' : ''}`}>{item.installed && <Check size={16} aria-hidden='true' />}{item.installed ? '已安装' : '未记录安装'}</span></td></tr>)}</tbody></table></div>
-            : <p className='user-profile-empty'>暂无技能下载记录</p>}
+        <section className='user-profile-downloads'><div className='user-profile-section-head'><h3>已安装技能</h3><span>共 {number(state.data.downloads.installed_count)} 个</span></div>
+          {state.data.downloads.top?.length ? <>
+            <div className='user-profile-installed-grid'>
+              {(() => {
+                const visible = showAllInstalled ? state.data.downloads.top : state.data.downloads.top.slice(0, 10);
+                const middle = Math.ceil(visible.length / 2);
+                return [visible.slice(0, middle), visible.slice(middle)].map((column, index) => <table key={index}>
+                  <thead><tr><th>技能名称</th><th>下载次数</th></tr></thead>
+                  <tbody>{column.map((item, row) => <tr key={`${index}-${row}-${item.name}`}><td title={item.name}>{item.name}</td><td>{number(item.download_count)} 次</td></tr>)}</tbody>
+                </table>);
+              })()}
+            </div>
+            {state.data.downloads.top.length > 10 && <button className='user-profile-installed-toggle' type='button' onClick={() => setShowAllInstalled(value => !value)}>
+              {showAllInstalled ? '收起' : `展开全部（${number(state.data.downloads.top.length)}）`}
+            </button>}
+          </> : <p className='user-profile-empty'>暂无已安装技能</p>}
         </section>
         <Summary data={state.data} />
       </>}
