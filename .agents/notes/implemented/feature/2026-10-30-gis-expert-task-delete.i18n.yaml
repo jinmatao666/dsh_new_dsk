@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-30-gis-expert-task-delete.md
+2026-10-30-gis-expert-task-delete.md: 3f1425e59277ed155271958448a57671b5d88548
+2026-10-30-gis-expert-task-delete.zh.md: 7616ab14dd440888a058d8d4577137658864b3fe

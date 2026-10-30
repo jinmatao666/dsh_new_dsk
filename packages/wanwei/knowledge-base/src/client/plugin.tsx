@@ -130,13 +130,37 @@ function knowledgeItem(raw: unknown): KnowledgeBaseItem {
     throw new Error('知识库响应字段无效')
   }
   const cover = optionalCover(item.cover, '知识库响应字段无效')
+  const documentCount = item.document_count
+  if (documentCount !== undefined && (!Number.isInteger(documentCount) || (documentCount as number) < 0)) {
+    throw new Error('知识库响应字段无效')
+  }
+  const documentBytes = optionalCount(item.document_bytes)
+  const subscriberCount = optionalCount(item.subscriber_count)
+  if (documentBytes === undefined || subscriberCount === undefined ||
+    (item.owner_username !== undefined && typeof item.owner_username !== 'string')) {
+    throw new Error('知识库响应字段无效')
+  }
   return {
     ...(item as unknown as KnowledgeBaseItem),
     category_id: categoryId,
     ...(typeof owned === 'boolean' ? { owned_by_viewer: owned } : {}),
     ...(typeof subscribed === 'boolean' ? { subscribed_by_viewer: subscribed } : {}),
     ...(cover !== undefined ? { cover } : {}),
+    ...(documentCount !== undefined ? { document_count: documentCount as number } : {}),
+    document_bytes: documentBytes,
+    subscriber_count: subscriberCount,
+    ...(typeof item.owner_username === 'string' ? { owner_username: item.owner_username } : {}),
+    ...(typeof item.updated_at === 'string' ? { updated_at: item.updated_at } : {}),
   }
+}
+
+/** Keep the uploader name only when the server sent a non-empty string.
+ * @param document - Raw document JSON object.
+ * @returns Spread-ready creator field, empty when the file has no foreign uploader.
+ */
+function creatorField(document: Record<string, unknown>): { creator_name?: string } {
+  return typeof document.creator_name === 'string' && document.creator_name !== ''
+    ? { creator_name: document.creator_name } : {}
 }
 
 function knowledgeCategory(raw: unknown): KnowledgeCategory {
@@ -298,6 +322,7 @@ export function apply(ctx: Context): void {
           ...(location !== undefined && location !== '' ? { location } : {}),
           ...(typeof document.create_time === 'number' ? { create_time: document.create_time } : {}),
           ...(typeof document.update_time === 'number' ? { update_time: document.update_time } : {}),
+          ...creatorField(document),
         }
       })
     },
@@ -327,6 +352,7 @@ export function apply(ctx: Context): void {
           ...(location !== undefined && location !== '' ? { location } : {}),
           ...(typeof document.create_time === 'number' ? { create_time: document.create_time } : {}),
           ...(typeof document.update_time === 'number' ? { update_time: document.update_time } : {}),
+          ...creatorField(document),
         }
       })
     },
@@ -460,6 +486,7 @@ export function apply(ctx: Context): void {
     visibility: ctx.wanweiNetwork.visibility('knowledgeBases'),
     Icon: KnowledgeIcon,
     hooks: { network: ctx.wanweiNetwork },
+    bodyClassName: 'dsh-knowledge-host',
     renderContent: () => <KnowledgePage api={api} />,
   })
   installComposerToggle(ctx, call, api, () => { controller.open() })

@@ -12,9 +12,11 @@ from processors import (
     ConversionError,
     convert,
     convert_dwg_to_dxf,
+    decode_cad_layer_name,
     decode_esri_shape,
     export_personal_geodatabase,
     find_dataset,
+    layer_matches,
     unzip_archive,
 )
 import struct
@@ -76,6 +78,32 @@ class ProcessorTests(unittest.TestCase):
         ezdxf.new().saveas(dxf)
         with self.assertRaises(ConversionError):
             convert("redline-extract", [dxf], self.root / "out-miss", {"layer": "不存在"})
+
+    def test_decode_oda_mif_layer_name_and_match(self):
+        # ODA DXF escape for 可建设用地范围线 (GBK bytes after \\M+5).
+        encoded = (
+            r"\M+5BFC9\M+5BDA8\M+5C9E8\M+5D3C3"
+            r"\M+5B5D8\M+5B7B6\M+5CEA7\M+5CFDF"
+        )
+        self.assertEqual(decode_cad_layer_name(encoded), "可建设用地范围线")
+        self.assertTrue(layer_matches(encoded, ""))
+        self.assertTrue(layer_matches(encoded, "可建设范围线"))
+        self.assertTrue(layer_matches(encoded, "可建设用地范围线"))
+
+    def test_redline_extract_oda_encoded_layer(self):
+        encoded = (
+            r"\M+5BFC9\M+5BDA8\M+5C9E8\M+5D3C3"
+            r"\M+5B5D8\M+5B7B6\M+5CEA7\M+5CFDF"
+        )
+        dxf = self.root / "encoded.dxf"
+        document = ezdxf.new()
+        document.layers.add(encoded)
+        document.modelspace().add_lwpolyline(
+            [(0, 0), (4, 0), (4, 3), (0, 3)], close=True, dxfattribs={"layer": encoded})
+        document.saveas(dxf)
+        paths = convert("redline-extract", [dxf], self.root / "out-enc", {"exportFormat": "geojson"})
+        geojson = json.loads(paths[0].read_text(encoding="utf-8"))
+        self.assertEqual(geojson["features"][0]["properties"]["layer"], "可建设用地范围线")
 
     def test_find_dataset_returns_directory_for_multiple_shapefiles(self):
         folder = self.root / "layers"

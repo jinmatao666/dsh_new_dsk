@@ -19,7 +19,7 @@ function categoryIdOf(item: KnowledgeBaseItem): number {
  * @param item - Authorized library row.
  * @param selfUserId - Caller id inferred from an uncategorized personal library when annotation is absent.
  */
-export function libraryOwnedByViewer(item: KnowledgeBaseItem, selfUserId?: number): boolean {
+function libraryOwnedByViewer(item: KnowledgeBaseItem, selfUserId?: number): boolean {
   if (item.owned_by_viewer === true) return true
   if (item.owned_by_viewer === false) return false
   return selfUserId !== undefined && item.owner_user_id === selfUserId
@@ -29,7 +29,7 @@ export function libraryOwnedByViewer(item: KnowledgeBaseItem, selfUserId?: numbe
  * @param item - Authorized library row.
  * @param selfUserId - Caller id fallback when annotations are absent.
  */
-export function librarySubscribedByViewer(item: KnowledgeBaseItem, selfUserId?: number): boolean {
+function librarySubscribedByViewer(item: KnowledgeBaseItem, selfUserId?: number): boolean {
   if (libraryOwnedByViewer(item, selfUserId)) return false
   if (item.subscribed_by_viewer === true) return true
   if (item.subscribed_by_viewer === false) return false
@@ -48,9 +48,9 @@ export function libraryIsGrantedSubscription(item: KnowledgeBaseItem, selfUserId
 /**
  * Nav: 个人知识库 and 订阅知识库 are always present (empty groups stay visible). 公共知识库
  * merges every open category plus uncategorized common libraries and appears only when
- * non-empty. 订阅知识库 holds owned auth-category libraries first, then grant-backed
- * subscriptions. Auth category names never appear as sidebar groups; others discover
- * non-owned libraries in 知识库广场.
+ * non-empty. 订阅知识库 holds only grant-backed subscriptions (not self-built auth libraries).
+ * Auth category names never appear as sidebar groups; self-built and discoverable auth
+ * libraries appear in 知识库广场 (owned cards sort last with status 我的).
  * @param items - Libraries the caller may open.
  * @param categories - Administrator-defined categories.
  * @param selfUserId - Optional fallback owner id when ownership annotation is absent.
@@ -77,9 +77,7 @@ export function libraryNavGroups(
     if (category === undefined) return false
     return category.type !== 'common' || category.require_auth
   })
-  const ownedAuth = authRows.filter(item => libraryOwnedByViewer(item, selfUserId))
-  const subscribed = authRows.filter(item => librarySubscribedByViewer(item, selfUserId))
-  const subscriptionRows = [...ownedAuth, ...subscribed]
+  const subscriptionRows = authRows.filter(item => librarySubscribedByViewer(item, selfUserId))
   const groups: LibraryGroup[] = [
     {
       key: 'personal', label: productText('个人知识库'), create: 'personal',

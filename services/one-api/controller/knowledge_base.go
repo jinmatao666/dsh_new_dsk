@@ -60,11 +60,17 @@ func knowledgeAdmin(c *gin.Context) bool {
 
 // knowledgeBaseDesktopItem is one authorized library with ownership and grant flags.
 // Desktop sidebar uses SubscribedByViewer for 订阅知识库; owned auth libraries stay off the
-// sidebar and appear only on 知识库广场.
+// sidebar and appear only on 知识库广场. DocumentCount and DocumentBytes are the RAGFlow dataset
+// totals, or 0 when RAGFlow is unconfigured or the request fails. OwnerUsername and
+// SubscriberCount carry the same maintainer and subscription figures as the plaza card.
 type knowledgeBaseDesktopItem struct {
 	model.KnowledgeBase
-	OwnedByViewer      bool `json:"owned_by_viewer"`
-	SubscribedByViewer bool `json:"subscribed_by_viewer"`
+	OwnedByViewer      bool   `json:"owned_by_viewer"`
+	SubscribedByViewer bool   `json:"subscribed_by_viewer"`
+	DocumentCount      int    `json:"document_count"`
+	DocumentBytes      int64  `json:"document_bytes"`
+	OwnerUsername      string `json:"owner_username"`
+	SubscriberCount    int    `json:"subscriber_count"`
 }
 
 // ListKnowledgeBases returns desktop sidebar libraries: grant-scoped for everyone.
@@ -103,7 +109,69 @@ func ListKnowledgeBases(c *gin.Context) {
 			SubscribedByViewer: !owned && hasGrant,
 		}
 	}
+	fillDesktopCatalogMeta(c.Request.Context(), items)
+	fillDesktopDocumentStats(c.Request.Context(), items)
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
+}
+
+// fillDesktopCatalogMeta sets each sidebar library's maintainer name and subscriber total.
+// A failed lookup leaves the fields empty so the sidebar still lists.
+func fillDesktopCatalogMeta(ctx context.Context, items []knowledgeBaseDesktopItem) {
+	if len(items) == 0 {
+		return
+	}
+	baseIds := make([]int, 0, len(items))
+	ownerIds := make([]int, 0, len(items))
+	seenOwner := map[int]struct{}{}
+	for _, item := range items {
+		baseIds = append(baseIds, item.Id)
+		if _, ok := seenOwner[item.OwnerUserId]; !ok {
+			seenOwner[item.OwnerUserId] = struct{}{}
+			ownerIds = append(ownerIds, item.OwnerUserId)
+		}
+	}
+	owners, err := model.KnowledgeUserDisplayNames(ownerIds)
+	if err != nil {
+		logger.Errorf(ctx, "list knowledge owner names: %s", err.Error())
+	}
+	subscribers, err := model.KnowledgeSubscriberCounts(baseIds)
+	if err != nil {
+		logger.Errorf(ctx, "list knowledge subscriber counts: %s", err.Error())
+	}
+	for i := range items {
+		items[i].OwnerUsername = owners[items[i].OwnerUserId]
+		items[i].SubscriberCount = subscribers[items[i].Id]
+	}
+}
+
+// fillDesktopDocumentStats sets each sidebar library's file count and byte size from RAGFlow.
+// A missing RAGFlow client or a failed request leaves those figures at zero so the sidebar still lists.
+func fillDesktopDocumentStats(ctx context.Context, items []knowledgeBaseDesktopItem) {
+	if len(items) == 0 {
+		return
+	}
+	client, err := ragflow.NewFromEnvironment()
+	if err != nil {
+		return
+	}
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 4)
+	for i := range items {
+		datasetId := items[i].RagflowDatasetId
+		if datasetId == "" {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(index int, datasetId string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			count, bytes := plazaDatasetStats(ctx, client, datasetId)
+			items[index].DocumentCount = count
+			items[index].DocumentBytes = bytes
+		}(i, datasetId)
+	}
+	wg.Wait()
 }
 
 // ListKnowledgeOrganizationDirectory returns the caller's membership org tree and same-node peers
@@ -533,6 +601,7 @@ func DeleteKnowledgeDocument(c *gin.Context) {
 		return
 	}
 	_ = model.DeleteKnowledgeDocumentPath(row.Id, documentId)
+	_ = model.DeleteKnowledgeDocumentCreators(row.Id, []string{documentId})
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "已删除文件"})
 }
 
@@ -648,6 +717,7 @@ func transferKnowledgeDocument(c *gin.Context, removeSource bool) {
 		}
 		_ = model.DB.Where("knowledge_base_id = ? AND document_id IN ?", target.Id, ids).
 			Delete(&model.KnowledgeDocumentPath{}).Error
+		_ = model.DeleteKnowledgeDocumentCreators(target.Id, ids)
 	} else if len(conflicts) > 0 && input.ConflictPolicy == "keep" {
 		uploadName = uniqueKnowledgeDocumentName(filename, targetDocuments)
 	}
@@ -657,6 +727,12 @@ func transferKnowledgeDocument(c *gin.Context, removeSource bool) {
 		return
 	}
 	sourcePaths, _ := model.ListKnowledgeDocumentPaths(source.Id)
+	sourceCreators, _ := model.ListKnowledgeDocumentCreators(source.Id)
+	// The copy keeps the original uploader; files without one belong to whoever transferred them.
+	creatorId := sourceCreators[documentId]
+	if creatorId <= 0 {
+		creatorId = c.GetInt("id")
+	}
 	relativePath := sourcePaths[documentId]
 	parentPath := ""
 	if relativePath != "" {
@@ -672,6 +748,12 @@ func transferKnowledgeDocument(c *gin.Context, removeSource bool) {
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
 		return
+	}
+	for index := range uploaded {
+		if uploaded[index].Id == "" {
+			continue
+		}
+		_ = model.SaveKnowledgeDocumentCreator(target.Id, uploaded[index].Id, creatorId)
 	}
 	if relativePath != "" {
 		for index := range uploaded {
@@ -694,6 +776,7 @@ func transferKnowledgeDocument(c *gin.Context, removeSource bool) {
 			return
 		}
 		_ = model.DeleteKnowledgeDocumentPath(source.Id, documentId)
+		_ = model.DeleteKnowledgeDocumentCreators(source.Id, []string{documentId})
 	}
 	message := "已复制文件"
 	if removeSource {
@@ -742,6 +825,7 @@ func writeKnowledgeDocuments(c *gin.Context, row *model.KnowledgeBase, includeSu
 		return
 	}
 	applyKnowledgeDocumentPaths(row.Id, documents)
+	applyKnowledgeDocumentCreators(c.Request.Context(), row.Id, c.GetInt("id"), documents)
 	if !includeSummary {
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": documents})
 		return
@@ -767,6 +851,41 @@ func applyKnowledgeDocumentPaths(baseId int, documents []ragflow.Document) {
 		if path := paths[documents[index].Id]; path != "" {
 			documents[index].Location = path
 		}
+	}
+}
+
+// applyKnowledgeDocumentCreators annotates documents with the display name of the OneAPI user who uploaded them.
+// Files without a recorded uploader, and files uploaded by viewerId, keep an empty creator name;
+// a failed lookup leaves every file unannotated.
+func applyKnowledgeDocumentCreators(ctx context.Context, baseId int, viewerId int, documents []ragflow.Document) {
+	creators, err := model.ListKnowledgeDocumentCreators(baseId)
+	if err != nil {
+		logger.Errorf(ctx, "list knowledge document creators: %s", err.Error())
+		return
+	}
+	if len(creators) == 0 {
+		return
+	}
+	userIds := make([]int, 0, len(creators))
+	seen := map[int]struct{}{}
+	for _, document := range documents {
+		userId := creators[document.Id]
+		if _, ok := seen[userId]; userId > 0 && userId != viewerId && !ok {
+			seen[userId] = struct{}{}
+			userIds = append(userIds, userId)
+		}
+	}
+	names, err := model.KnowledgeUserDisplayNames(userIds)
+	if err != nil {
+		logger.Errorf(ctx, "list knowledge creator names: %s", err.Error())
+		return
+	}
+	for index := range documents {
+		userId := creators[documents[index].Id]
+		if userId <= 0 || userId == viewerId {
+			continue
+		}
+		documents[index].CreatorName = names[userId]
 	}
 }
 
@@ -796,6 +915,14 @@ func uploadKnowledgeDocument(c *gin.Context, row *model.KnowledgeBase) {
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
 		return
+	}
+	for index := range documents {
+		if documents[index].Id == "" {
+			continue
+		}
+		if saveErr := model.SaveKnowledgeDocumentCreator(row.Id, documents[index].Id, c.GetInt("id")); saveErr != nil {
+			logger.Errorf(c.Request.Context(), "save knowledge document creator: %s", saveErr.Error())
+		}
 	}
 	if parent != "" {
 		relative := parent + "/" + base

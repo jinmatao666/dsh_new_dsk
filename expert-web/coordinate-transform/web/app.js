@@ -143,7 +143,7 @@ function progressMarkup(task, compact = false) {
 function historyMarkup() {
   return tasks.length ? `<div class="history-list">${tasks.map(task => {
     const active = ['queued', 'running'].includes(task.state)
-    return `<button class="history-row ${active ? 'is-active' : ''}" data-task="${escape(task.id)}"><img src="${toolIcon(task.tool)}" alt=""><span><strong>${escape(task.options.taskName || task.options.title || tools.find(tool => tool.id === task.tool)?.name || task.tool)}</strong><small>${escape(new Date(task.created * 1000).toLocaleString())} · ${task.inputs.length} 个文件 · ${escape(tools.find(tool => tool.id === task.tool)?.name || task.tool)}</small>${active ? progressMarkup(task, true) : ''}</span><em class="${escape(task.state)}">${escape(stateLabels[task.state] || task.state)}</em></button>`
+    return `<div class="history-row ${active ? 'is-active' : ''}"><button type="button" class="history-open" data-task="${escape(task.id)}"><img src="${toolIcon(task.tool)}" alt=""><span><strong>${escape(task.options.taskName || task.options.title || tools.find(tool => tool.id === task.tool)?.name || task.tool)}</strong><small>${escape(new Date(task.created * 1000).toLocaleString())} · ${task.inputs.length} 个文件 · ${escape(tools.find(tool => tool.id === task.tool)?.name || task.tool)}</small>${active ? progressMarkup(task, true) : ''}</span><em class="${escape(task.state)}">${escape(stateLabels[task.state] || task.state)}</em></button>${active ? '' : `<button type="button" class="secondary delete-task" data-delete="${escape(task.id)}">删除</button>`}</div>`
   }).join('')}</div>` : emptyMarkup('history')
 }
 function filesMarkup() {
@@ -162,7 +162,7 @@ function taskMarkup() {
     return `<div><span>${escape(name)}${previewable ? '<small class="muted">支持页内预览</small>' : '<small class="muted">压缩包/二进制请下载后查看</small>'}</span><span class="result-file-actions"><a class="primary" href="api/tasks/${escape(task.id)}/files/${index}" download>下载文件</a></span></div>`
   }).join('') : '<p class="muted">尚未找到符合本任务要求的成果文件。</p>'}</div>${success && task.outputs.length ? '<div id="result-preview" class="result-preview"><p class="muted">正在加载可预览成果…</p></div>' : ''}`
   const details = `<dl class="conversion-details"><dt>任务名称</dt><dd>${escape(task.options.taskName || task.options.title || tool?.name || task.tool)}</dd><dt>所选工具</dt><dd>${escape(tool?.name || task.tool)}</dd><dt>创建时间</dt><dd>${escape(new Date(task.created * 1000).toLocaleString())}</dd><dt>输入文件</dt><dd>${(task.input_names?.length ? task.input_names : task.inputs).map(name => escape(name)).join('<br>')}</dd>${(tool?.params || []).map(([key, label, values]) => `<dt>${escape(label)}</dt><dd>${escape(parameterText(tool, key, values, task.options[key]))}</dd>`).join('')}</dl>`
-  return `<div class="conversion-flow"><button class="text-action" data-page="history">← 返回处理记录</button>${taskHeader}<section class="conversion-result ${escape(task.state)}"><header class="conversion-result-head"><div><small>真实任务状态</small><h3>${escape(stateLabels[task.state] || task.state)}</h3></div></header>${active ? progressMarkup(task) : ''}${task.error ? `<p class="error conversion-result-error">${escape(task.error)}</p>` : ''}${outputFiles}</section><details class="conversion-task-details"><summary>任务详情</summary>${details}</details><div class="actions">${active ? `<button class="secondary" data-cancel="${escape(task.id)}">取消任务</button>` : !success && tool ? `<button class="primary" data-tool="${escape(tool.id)}">重新创建处理</button>` : ''}<button class="secondary" data-page="history">查看处理记录</button></div></div>`
+  return `<div class="conversion-flow"><button class="text-action" data-page="history">← 返回处理记录</button>${taskHeader}<section class="conversion-result ${escape(task.state)}"><header class="conversion-result-head"><div><small>真实任务状态</small><h3>${escape(stateLabels[task.state] || task.state)}</h3></div></header>${active ? progressMarkup(task) : ''}${task.error ? `<p class="error conversion-result-error">${escape(task.error)}</p>` : ''}${outputFiles}</section><details class="conversion-task-details"><summary>任务详情</summary>${details}</details><div class="actions">${active ? `<button class="secondary" data-cancel="${escape(task.id)}">取消任务</button>` : `${!success && tool ? `<button class="primary" data-tool="${escape(tool.id)}">重新创建处理</button>` : ''}<button class="secondary delete-task" data-delete="${escape(task.id)}">删除记录</button>`}<button class="secondary" data-page="history">查看处理记录</button></div></div>`
 }
 function stopProgressTicker() {
   clearInterval(progressTimer)
@@ -331,6 +331,17 @@ function bind() {
   main.querySelectorAll('[data-page]').forEach(node => node.onclick = () => { currentPage = node.dataset.page; render() })
   main.querySelectorAll('[data-tool]').forEach(node => node.onclick = () => form(tools.find(tool => tool.id === node.dataset.tool)))
   main.querySelectorAll('[data-cancel]').forEach(node => node.onclick = async () => { try { await api(`/api/tasks/${node.dataset.cancel}/cancel`, {}); await refresh(); toast('任务已取消') } catch (error) { toast(error.message) } })
+  main.querySelectorAll('[data-delete]').forEach(node => node.onclick = async event => {
+    event.stopPropagation()
+    if (!confirm('删除此任务记录及其文件？删除后无法恢复。')) return
+    try {
+      await api(`/api/tasks/${node.dataset.delete}/delete`, {})
+      if (selectedTask === node.dataset.delete) selectedTask = undefined
+      currentPage = 'history'
+      await refresh()
+      toast('任务已删除')
+    } catch (error) { toast(error.message) }
+  })
 }
 async function saveArtifact(link) {
   const response = await authenticatedFetch(link.getAttribute('href'))

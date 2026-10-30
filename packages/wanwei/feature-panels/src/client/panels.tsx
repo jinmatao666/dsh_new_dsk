@@ -81,6 +81,11 @@ export interface PanelInjected {
   renderContent: () => ReactNode
   /** Optional controls rendered in the fixed header before the back button. */
   renderHeaderActions?: () => ReactNode
+  /**
+   * Extra class names on `.dsh-skill-market-body` for features that must fill the panel height
+   * (for example knowledge-base pagination). Prefer an explicit class over CSS `:has()`.
+   */
+  bodyClassName?: string
   hooks: { network: HostObservable<NetworkState> }
 }
 export type PanelProps = PropsRuntime<'shell.overlay'> & InjectFace<PanelInjected>
@@ -127,6 +132,7 @@ export function usePanelNavigation(controller: PanelController, open: boolean): 
  */
 export function FeaturePanel({
   title, subtitle, controller, requiresDirectInternet, useNetwork, renderContent, renderHeaderActions, visibility,
+  bodyClassName,
 }: PanelProps) {
   const visible = useSyncExternalStore(
     listener => visibility ? visibility.subscribe(listener) : () => {}, () => visibility ? visibility.getSnapshot() : true,
@@ -137,6 +143,7 @@ export function FeaturePanel({
   usePanelNavigation(controller, open)
   useEffect(() => { if (unavailable || !visible) controller.close() }, [controller, unavailable, visible, open])
   if (!open || unavailable || !visible) return null
+  const bodyClass = ['dsh-skill-market-body', bodyClassName].filter(Boolean).join(' ')
   return <div className="dsh-skill-market-overlay" role="dialog" aria-modal="true" aria-label={title}>
     <div className="dsh-skill-market-panel">
       <header className="dsh-skill-market-header">
@@ -152,7 +159,7 @@ export function FeaturePanel({
           </button>
         </div>
       </header>
-      <div className="dsh-skill-market-body">{renderContent()}</div>
+      <div className={bodyClass}>{renderContent()}</div>
     </div>
   </div>
 }

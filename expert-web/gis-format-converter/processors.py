@@ -589,8 +589,10 @@ def convert_dwg_to_dxf(source: Path, destination: Path) -> Path:
                     input_dir.mkdir()
                     output_dir.mkdir()
                     shutil.copy2(staged_source, input_dir / "input.dwg")
+                    # Audit off (last flag 0): audit=1 rewrites entities onto
+                    # $TD_AUDIT_GENERATED_* layers and breaks redline name matching.
                     run_checked(
-                        [oda, str(input_dir), str(output_dir), "ACAD2018", "DXF", "0", "1"],
+                        [oda, str(input_dir), str(output_dir), "ACAD2018", "DXF", "0", "0"],
                         timeout=180,
                     )
                     produced = next(output_dir.rglob("*.dxf"), None)
@@ -873,11 +875,57 @@ def convert_formats(inputs: list[Path], output: Path, options: dict) -> list[Pat
     package_directory(target_dir, archive)
     return [archive]
 
+_MIF_CHAR = re.compile(r"\\[Mm]\+([0-9A-Fa-f])([0-9A-Fa-f]{4})")
+_UPLUS_CHAR = re.compile(r"\\[Uu]\+([0-9A-Fa-f]{4,6})")
+
+
+def decode_cad_layer_name(name: str) -> str:
+    """Decode ODA/AutoCAD DXF layer escapes such as \\M+5BFC9 (GBK) and \\U+53EF."""
+    if not name or ("\\M+" not in name.upper() and "\\U+" not in name.upper()):
+        return name
+
+    def mif(match: re.Match[str]) -> str:
+        raw = bytes.fromhex(match.group(2))
+        for encoding in ("gbk", "gb2312", "big5"):
+            try:
+                return raw.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+        return match.group(0)
+
+    def uplus(match: re.Match[str]) -> str:
+        try:
+            return chr(int(match.group(1), 16))
+        except ValueError:
+            return match.group(0)
+
+    decoded = _MIF_CHAR.sub(mif, name)
+    return _UPLUS_CHAR.sub(uplus, decoded)
+
+
+def _chars_in_order(needle: str, haystack: str) -> bool:
+    """True when needle characters appear in order inside haystack (not necessarily contiguous)."""
+    if not needle:
+        return False
+    cursor = 0
+    for char in needle:
+        cursor = haystack.find(char, cursor)
+        if cursor < 0:
+            return False
+        cursor += 1
+    return True
+
+
 def layer_matches(name: str, requested: str) -> bool:
-    normalized = name.strip().upper()
+    display = decode_cad_layer_name(name).strip()
+    normalized = display.upper()
     if requested:
-        return normalized == requested.strip().upper() or requested.strip() in name
-    return any(hint.upper() in normalized or hint in name for hint in REDLINE_LAYER_HINTS)
+        want = requested.strip()
+        want_upper = want.upper()
+        if normalized == want_upper or want in display or want_upper in normalized:
+            return True
+        return len(want) >= 4 and _chars_in_order(want_upper, normalized)
+    return any(hint.upper() in normalized or hint in display for hint in REDLINE_LAYER_HINTS)
 
 
 def polyline_points(entity):
@@ -968,12 +1016,12 @@ def extract_redline(inputs: list[Path], output: Path, options: dict) -> list[Pat
         rings.append(points)
         features.append({
             "type": "Feature",
-            "properties": {"layer": layer, "id": len(features) + 1},
+            "properties": {"layer": decode_cad_layer_name(layer) or layer, "id": len(features) + 1},
             "geometry": {"type": "Polygon", "coordinates": [points]},
         })
     if not features:
         closed_layers = sorted({
-            (entity.dxf.layer if entity.dxf.hasattr("layer") else "")
+            decode_cad_layer_name(entity.dxf.layer if entity.dxf.hasattr("layer") else "")
             for entity in model
             if entity.dxftype() in {"LWPOLYLINE", "POLYLINE"} and polyline_points(entity)
         })

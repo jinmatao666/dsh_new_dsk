@@ -1,6 +1,7 @@
 import base64
 from http.cookies import SimpleCookie
 import json
+from pathlib import Path
 import tempfile
 import threading
 import time
@@ -80,6 +81,25 @@ class ServerTests(unittest.TestCase):
             "files": [{"name": "../x.dxf", "content": base64.b64encode(b"0\nSECTION\n").decode()}],
         }, cookie)
         self.assertEqual(status, 400)
+
+    def test_delete_terminal_task_and_ownership(self):
+        cookie_a, cookie_b = self.login("a"), self.login("b")
+        task_id = "c" * 32
+        directory = Path(self.temp.name) / task_id
+        directory.mkdir()
+        (directory / "marker.txt").write_text("x", encoding="utf-8")
+        self.server.store.create("a", "redline-extract", {}, ["a.dxf"], task_id)
+        status, data, _ = self.request(f"/api/tasks/{task_id}/delete", {}, cookie_a)
+        self.assertEqual(status, 400)
+        self.assertIn("取消", json.loads(data)["error"])
+        self.server.store.claim(task_id)
+        self.server.store.finish(task_id, error="failed")
+        self.assertEqual(self.request(f"/api/tasks/{task_id}/delete", {}, cookie_b)[0], 404)
+        status, data, _ = self.request(f"/api/tasks/{task_id}/delete", {}, cookie_a)
+        self.assertEqual(status, 200)
+        self.assertTrue(json.loads(data)["deleted"])
+        self.assertEqual(json.loads(self.request("/api/tasks", cookie=cookie_a)[1])["items"], [])
+        self.assertFalse(directory.exists())
 
 
 if __name__ == "__main__":
