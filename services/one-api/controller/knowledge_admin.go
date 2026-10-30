@@ -491,6 +491,7 @@ func DeleteManagedKnowledgeDocument(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "文件已从知识库移除，但摘要清理失败"})
 		return
 	}
+	_ = model.DeleteKnowledgeDocumentCreators(row.Id, []string{documentId})
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "已删除文件"})
 }
 

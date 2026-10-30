@@ -19,7 +19,7 @@ function categoryIdOf(item: KnowledgeBaseItem): number {
  * @param item - Authorized library row.
  * @param selfUserId - Caller id inferred from an uncategorized personal library when annotation is absent.
  */
-export function libraryOwnedByViewer(item: KnowledgeBaseItem, selfUserId?: number): boolean {
+function libraryOwnedByViewer(item: KnowledgeBaseItem, selfUserId?: number): boolean {
   if (item.owned_by_viewer === true) return true
   if (item.owned_by_viewer === false) return false
   return selfUserId !== undefined && item.owner_user_id === selfUserId
@@ -29,7 +29,7 @@ export function libraryOwnedByViewer(item: KnowledgeBaseItem, selfUserId?: numbe
  * @param item - Authorized library row.
  * @param selfUserId - Caller id fallback when annotations are absent.
  */
-export function librarySubscribedByViewer(item: KnowledgeBaseItem, selfUserId?: number): boolean {
+function librarySubscribedByViewer(item: KnowledgeBaseItem, selfUserId?: number): boolean {
   if (libraryOwnedByViewer(item, selfUserId)) return false
   if (item.subscribed_by_viewer === true) return true
   if (item.subscribed_by_viewer === false) return false

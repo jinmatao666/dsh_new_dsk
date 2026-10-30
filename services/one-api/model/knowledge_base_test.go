@@ -17,7 +17,7 @@ func TestListAuthorizedKnowledgeBasesScopesPersonalSharedCommon(t *testing.T) {
 	t.Cleanup(func() { DB = previous })
 	require.NoError(t, db.AutoMigrate(
 		&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{},
-		&KnowledgeConversation{}, &KnowledgeDocumentNote{}, &KnowledgeDocumentPath{},
+		&KnowledgeConversation{}, &KnowledgeDocumentNote{}, &KnowledgeDocumentPath{}, &KnowledgeDocumentCreator{},
 		&GovernmentOrganizationMember{}, &OrgMember{}, &User{},
 	))
 
@@ -218,6 +218,33 @@ func TestRecordKnowledgeBaseUsageIncrementsAndResetsDaily(t *testing.T) {
 	require.Equal(t, int64(2), second.VisitCount)
 	require.Equal(t, int64(2), second.DailyUsage)
 	require.Equal(t, today, second.DailyUsageDate)
+}
+
+func TestKnowledgeDocumentCreatorsReplaceListAndDelete(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:knowledge-creators?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previous := DB
+	DB = db
+	t.Cleanup(func() { DB = previous })
+	require.NoError(t, db.AutoMigrate(&KnowledgeDocumentCreator{}))
+
+	require.NoError(t, SaveKnowledgeDocumentCreator(7, "doc-1", 1))
+	require.NoError(t, SaveKnowledgeDocumentCreator(7, "doc-2", 2))
+	require.NoError(t, SaveKnowledgeDocumentCreator(7, "doc-1", 3))
+	require.NoError(t, SaveKnowledgeDocumentCreator(7, "doc-3", 0))
+	require.NoError(t, SaveKnowledgeDocumentCreator(8, "doc-1", 9))
+
+	creators, err := ListKnowledgeDocumentCreators(7)
+	require.NoError(t, err)
+	require.Equal(t, map[string]int{"doc-1": 3, "doc-2": 2}, creators)
+
+	require.NoError(t, DeleteKnowledgeDocumentCreators(7, []string{"doc-1"}))
+	creators, err = ListKnowledgeDocumentCreators(7)
+	require.NoError(t, err)
+	require.Equal(t, map[string]int{"doc-2": 2}, creators)
+	other, err := ListKnowledgeDocumentCreators(8)
+	require.NoError(t, err)
+	require.Equal(t, map[string]int{"doc-1": 9}, other)
 }
 
 func namesOf(rows []KnowledgeBase) []string {

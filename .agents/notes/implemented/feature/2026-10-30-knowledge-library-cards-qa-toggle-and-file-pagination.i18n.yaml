@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-30-knowledge-library-cards-qa-toggle-and-file-pagination.md
+2026-10-30-knowledge-library-cards-qa-toggle-and-file-pagination.md: f9bca612296643571742c0ac640ba218307a8cc9
+2026-10-30-knowledge-library-cards-qa-toggle-and-file-pagination.zh.md: 491b7fed3ef100cde4f0762fefb2132863908340

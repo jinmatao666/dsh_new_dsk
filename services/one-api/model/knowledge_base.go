@@ -143,6 +143,17 @@ type KnowledgeDocumentPath struct {
 	UpdatedAt       time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
+// KnowledgeDocumentCreator records which OneAPI user uploaded one RAGFlow document.
+// RAGFlow lists every file under a shared service account, so the desktop reads this table
+// to show 创建人. Files uploaded before this table existed have no row.
+type KnowledgeDocumentCreator struct {
+	Id              int       `json:"id" gorm:"primaryKey"`
+	KnowledgeBaseId int       `json:"knowledge_base_id" gorm:"uniqueIndex:uk_knowledge_document_creator;not null"`
+	DocumentId      string    `json:"document_id" gorm:"uniqueIndex:uk_knowledge_document_creator;type:varchar(64);not null"`
+	UserId          int       `json:"user_id" gorm:"index;not null"`
+	UpdatedAt       time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
 // KnowledgeConversation stores the isolated RAGFlow assistant and session for one user conversation.
 type KnowledgeConversation struct {
 	Id              int       `json:"id" gorm:"primaryKey"`
@@ -579,6 +590,59 @@ func DeleteKnowledgeDocumentPath(baseId int, documentId string) error {
 		Delete(&KnowledgeDocumentPath{}).Error
 }
 
+// SaveKnowledgeDocumentCreator inserts or replaces the uploader of one document.
+// A non-positive user id or an empty document id is ignored.
+func SaveKnowledgeDocumentCreator(baseId int, documentId string, userId int) error {
+	if baseId <= 0 || documentId == "" || userId <= 0 {
+		return nil
+	}
+	var row KnowledgeDocumentCreator
+	err := DB.Where("knowledge_base_id = ? AND document_id = ?", baseId, documentId).First(&row).Error
+	if err == gorm.ErrRecordNotFound {
+		return DB.Create(&KnowledgeDocumentCreator{
+			KnowledgeBaseId: baseId,
+			DocumentId:      documentId,
+			UserId:          userId,
+		}).Error
+	}
+	if err != nil {
+		return err
+	}
+	return DB.Model(&row).Update("user_id", userId).Error
+}
+
+// ListKnowledgeDocumentCreators returns uploader user ids keyed by RAGFlow document id.
+func ListKnowledgeDocumentCreators(baseId int) (map[string]int, error) {
+	var rows []KnowledgeDocumentCreator
+	if err := DB.Where("knowledge_base_id = ?", baseId).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	creators := make(map[string]int, len(rows))
+	for _, row := range rows {
+		creators[row.DocumentId] = row.UserId
+	}
+	return creators, nil
+}
+
+// DeleteKnowledgeDocumentCreators removes the uploader rows for the given documents.
+func DeleteKnowledgeDocumentCreators(baseId int, documentIds []string) error {
+	if len(documentIds) == 0 {
+		return nil
+	}
+	return DB.Where("knowledge_base_id = ? AND document_id IN ?", baseId, documentIds).
+		Delete(&KnowledgeDocumentCreator{}).Error
+}
+
+// KnowledgeUserDisplayNames returns display names (falling back to usernames) keyed by user id.
+func KnowledgeUserDisplayNames(userIds []int) (map[int]string, error) {
+	return userDisplayNames(userIds)
+}
+
+// KnowledgeSubscriberCounts returns user-grant totals keyed by knowledge base id.
+func KnowledgeSubscriberCounts(baseIds []int) (map[int]int, error) {
+	return knowledgeUserSubscriberCounts(baseIds)
+}
+
 // DeleteKnowledgeBaseRecords removes the local library and its grants, conversations, and summaries.
 func DeleteKnowledgeBaseRecords(id int) error {
 	return DB.Transaction(func(tx *gorm.DB) error {
@@ -595,6 +659,9 @@ func DeleteKnowledgeBaseRecords(id int) error {
 			return err
 		}
 		if err := tx.Where("knowledge_base_id = ?", id).Delete(&KnowledgeDocumentPath{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("knowledge_base_id = ?", id).Delete(&KnowledgeDocumentCreator{}).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&KnowledgeBase{}, id).Error

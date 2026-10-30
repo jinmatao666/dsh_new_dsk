@@ -86,6 +86,11 @@ function api(): KnowledgeApi {
   }
 }
 
+/** Q&A starts closed; open it from the selected library's sidebar card. */
+async function openChat(name = '我的资料') {
+  fireEvent.click(await screen.findByRole('button', { name: `打开问答：${name}` }))
+}
+
 it('loads authorized knowledge bases and creates a personal library', async () => {
   const service = api()
   render(<KnowledgePage api={service} />)
@@ -105,8 +110,8 @@ it('loads authorized knowledge bases and creates a personal library', async () =
   expect(service.create).toHaveBeenCalledWith({ name: '协作资料', description: '', kind: 'personal' })
   fireEvent.click(screen.getByRole('button', { name: '上传文档' }))
   expect(screen.getByRole('menuitem', { name: '本地文件' })).toBeTruthy()
-  expect(screen.getByRole('menuitem', { name: '本地文件夹' })).toBeTruthy()
-  expect(screen.getByRole('menuitem', { name: '新建文件夹' })).toBeTruthy()
+  expect(screen.queryByRole('menuitem', { name: '本地文件夹' })).toBeNull()
+  expect(screen.queryByRole('menuitem', { name: '新建文件夹' })).toBeNull()
   expect(screen.getByText('PDF')).toBeTruthy()
 })
 
@@ -165,7 +170,7 @@ it('selects the first library of the first sidebar group on open', async () => {
   render(<KnowledgePage api={service} />)
   expect(await screen.findByText('库1.pdf')).toBeTruthy()
   const personal = screen.getByText('个人知识库').closest('.dsh-knowledge-group') as HTMLElement
-  expect(within(personal).getByText('我的资料').closest('button')?.className).toContain('active')
+  expect(within(personal).getByText('我的资料').closest('.dsh-knowledge-lib-card')?.className).toContain('active')
   expect(service.documents).toHaveBeenCalledWith(1)
 })
 
@@ -542,7 +547,7 @@ it('shows uploaded folder paths as expandable folders with nested files', async 
     { id: 'doc-3', name: '根目录.txt', size: 32, run: 'DONE', progress: 1 },
   ])
   render(<KnowledgePage api={service} />)
-  expect(await screen.findByRole('button', { name: /资料/ })).toBeTruthy()
+  expect(await screen.findByRole('button', { name: /^资料/ })).toBeTruthy()
   expect(screen.getByText('说明.pdf')).toBeTruthy()
   expect(screen.getByText('根目录.txt')).toBeTruthy()
   expect(screen.queryByText('笔记.md')).toBeNull()
@@ -551,10 +556,14 @@ it('shows uploaded folder paths as expandable folders with nested files', async 
   expect(screen.getAllByText('文件夹').length).toBeGreaterThan(0)
 })
 
-it('shows sidebar counts and renders content as cards', async () => {
+it('shows plaza-style stats on sidebar cards and renders content as cards', async () => {
   const service = api()
   service.list = vi.fn(async () => [
-    { id: 1, name: '我的资料', description: '个人', kind: 'personal' as const, owner_user_id: 7, document_count: 9 },
+    {
+      id: 1, name: '我的资料', description: '个人笔记', kind: 'personal' as const, owner_user_id: 7,
+      owner_username: '小王', document_count: 9, document_bytes: 2_516_582, subscriber_count: 3,
+      updated_at: '2026-10-12T08:00:00Z',
+    },
     { id: 2, name: '第二个库', description: '个人', kind: 'personal' as const, owner_user_id: 7, document_count: 4 },
   ])
   service.documents = vi.fn(async () => [
@@ -565,11 +574,21 @@ it('shows sidebar counts and renders content as cards', async () => {
   expect(await screen.findByText('根目录.txt')).toBeTruthy()
   const personal = screen.getByText('个人知识库').closest('.dsh-knowledge-group') as HTMLElement
   expect(personal.querySelector('.dsh-knowledge-group-count')?.textContent).toBe('2')
-  const counts = [...personal.querySelectorAll('.dsh-knowledge-nav-count')].map(node => node.textContent)
-  expect(counts).toEqual(['2 个文件', '4 个文件'])
-  const card = within(personal).getByText('我的资料').closest('button') as HTMLElement
-  expect(card.className).toContain('dsh-knowledge-lib-card')
-  expect(within(card).getByText('个人')).toBeTruthy()
+  const card = within(personal).getByText('我的资料').closest('.dsh-knowledge-lib-card') as HTMLElement
+  expect(within(card).queryByText('个人')).toBeNull()
+  for (const label of ['维护者', '更新时间', '文件数量', '文件大小']) {
+    expect(within(card).getByText(label)).toBeTruthy()
+  }
+  expect(within(card).queryByText('已订阅')).toBeNull()
+  expect(card.textContent).toContain('小王')
+  expect(card.textContent).toContain('2026-10-12')
+  // The loaded document list replaces the list's file count and size for the selected library.
+  expect(card.textContent).toContain('2个')
+  expect(card.textContent).not.toContain('3人')
+  expect(card.querySelector('img')).toBeNull()
+  const second = within(personal).getByText('第二个库').closest('.dsh-knowledge-lib-card') as HTMLElement
+  expect(second.textContent).toContain('4个')
+  expect(second.textContent).toContain('未知作者')
   const file = screen.getByText('根目录.txt').closest('button') as HTMLElement
   expect(file.className).toContain('dsh-knowledge-card')
   expect(within(file).getByText('32B')).toBeTruthy()
@@ -581,19 +600,126 @@ it('shows sidebar counts and renders content as cards', async () => {
   expect(screen.queryByText('说明.pdf')).toBeNull()
 })
 
-it('drags the divider to change the content width', async () => {
+it('keeps Q&A closed by default and toggles it from the library card without a resize divider', async () => {
   const { container } = render(<KnowledgePage api={api()} />)
-  const section = container.querySelector('.dsh-knowledge') as HTMLElement
-  section.getBoundingClientRect = () => ({
-    x: 0, y: 0, left: 0, top: 0, right: 1200, bottom: 700, width: 1200, height: 700, toJSON() { return {} },
-  })
-  const split = await screen.findByRole('separator', { name: '调整内容宽度' })
-  fireEvent.pointerDown(split, { button: 0, clientX: 490 })
-  fireEvent.pointerMove(window, { clientX: 640 })
-  expect(split.getAttribute('aria-valuenow')).toBe('416')
-  fireEvent.pointerUp(window)
-  fireEvent.keyDown(split, { key: 'ArrowLeft' })
-  expect(split.getAttribute('aria-valuenow')).toBe('400')
+  await screen.findByText('说明.pdf')
+  expect(container.querySelector('.dsh-knowledge-chat')).toBeNull()
+  expect(container.querySelector('.dsh-knowledge')?.className).not.toContain('chat-open')
+  expect(screen.queryByRole('separator')).toBeNull()
+  const toggle = screen.getByRole('button', { name: '打开问答：我的资料' })
+  expect(toggle.getAttribute('aria-pressed')).toBe('false')
+  fireEvent.click(toggle)
+  expect(container.querySelector('.dsh-knowledge-chat')).toBeTruthy()
+  expect(container.querySelector('.dsh-knowledge')?.className).toContain('chat-open')
+  const close = screen.getByRole('button', { name: '关闭问答：我的资料' })
+  expect(close.getAttribute('aria-pressed')).toBe('true')
+  fireEvent.click(close)
+  expect(container.querySelector('.dsh-knowledge-chat')).toBeNull()
+})
+
+it('opens Q&A for another library when its card toggle is pressed', async () => {
+  const service = api()
+  service.list = vi.fn(async () => [
+    { id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7 },
+    { id: 2, name: '第二个库', description: '个人', kind: 'personal' as const, owner_user_id: 7 },
+  ])
+  const { container } = render(<KnowledgePage api={service} />)
+  await screen.findByText('说明.pdf')
+  fireEvent.click(screen.getByRole('button', { name: '打开问答：第二个库' }))
+  await waitFor(() => expect(service.documents).toHaveBeenCalledWith(2))
+  expect(container.querySelector('.dsh-knowledge-chat')).toBeTruthy()
+  expect(screen.getByRole('button', { name: '关闭问答：第二个库' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: '打开问答：我的资料' })).toBeTruthy()
+})
+
+it('filters the sidebar by library name and expands matching groups', async () => {
+  const service = api()
+  service.categories = vi.fn(async () => [
+    { id: 4, name: '法律', type: 'shared' as const, require_auth: true },
+  ])
+  service.list = vi.fn(async () => [
+    { id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7 },
+    { id: 2, name: '工作笔记', description: '个人', kind: 'personal' as const, owner_user_id: 7 },
+    {
+      id: 8, name: '已订法规', description: '已通过', kind: 'shared' as const,
+      owner_user_id: 2, category_id: 4, owned_by_viewer: false, subscribed_by_viewer: true,
+    },
+  ])
+  render(<KnowledgePage api={service} />)
+  await screen.findByText('说明.pdf')
+  expect(screen.queryByText('已订法规')).toBeNull()
+  const search = screen.getByRole('searchbox', { name: '搜索知识库名称' })
+  fireEvent.change(search, { target: { value: '法规' } })
+  expect(screen.getByText('已订法规')).toBeTruthy()
+  expect(screen.queryByText('工作笔记')).toBeNull()
+  expect(screen.queryByText('个人知识库')).toBeNull()
+  fireEvent.change(search, { target: { value: '不存在的库' } })
+  expect(screen.getByText('没有匹配的知识库')).toBeTruthy()
+  fireEvent.change(search, { target: { value: '' } })
+  expect(screen.getByText('工作笔记')).toBeTruthy()
+  expect(screen.queryByText('已订法规')).toBeNull()
+})
+
+it('searches files by name, sorts by upload time, and shows upload time and creator', async () => {
+  const service = api()
+  const day = (value: string) => new Date(value).getTime()
+  service.documents = vi.fn(async () => [
+    { id: 'doc-old', name: '旧规范.pdf', size: 100, run: 'DONE', progress: 1, create_time: day('2026-10-01T08:30:00') },
+    {
+      id: 'doc-new', name: '新规范.pdf', size: 100, run: 'DONE', progress: 1,
+      create_time: day('2026-10-20T09:05:00'), creator_name: '小李',
+    },
+    { id: 'doc-memo', name: '备忘.txt', size: 100, run: 'DONE', progress: 1, create_time: day('2026-10-10T10:00:00') },
+  ])
+  const { container } = render(<KnowledgePage api={service} />)
+  await screen.findByText('新规范.pdf')
+  const order = () => [...container.querySelectorAll('.dsh-knowledge-card > strong')].map(node => node.textContent)
+  expect(order()).toEqual(['新规范.pdf', '备忘.txt', '旧规范.pdf'])
+  const fresh = screen.getByText('新规范.pdf').closest('button') as HTMLElement
+  expect(fresh.textContent).toContain('上传时间')
+  expect(fresh.textContent).toContain('2026-10-20 09:05')
+  expect(fresh.textContent).toContain('创建人')
+  expect(fresh.textContent).toContain('小李')
+  // The viewer's own files arrive without a creator name and show no creator row.
+  const own = screen.getByText('旧规范.pdf').closest('button') as HTMLElement
+  expect(own.textContent).toContain('2026-10-01 08:30')
+  expect(own.textContent).not.toContain('创建人')
+  fireEvent.click(screen.getByRole('button', { name: '按上传时间排序' }))
+  expect(order()).toEqual(['旧规范.pdf', '备忘.txt', '新规范.pdf'])
+  expect(screen.getByText('最早上传')).toBeTruthy()
+  fireEvent.change(screen.getByRole('searchbox', { name: '搜索文件名称' }), { target: { value: '规范' } })
+  expect(order()).toEqual(['旧规范.pdf', '新规范.pdf'])
+  fireEvent.change(screen.getByRole('searchbox', { name: '搜索文件名称' }), { target: { value: '没有这个文件' } })
+  expect(screen.getByText('未找到匹配的文件')).toBeTruthy()
+})
+
+it('paginates content and resets to the first page when the search changes', async () => {
+  const service = api()
+  service.documents = vi.fn(async () => Array.from({ length: 30 }, (_, index) => ({
+    id: `doc-${index}`, name: `文件${String(index).padStart(2, '0')}.txt`, size: 10, run: 'DONE', progress: 1,
+    create_time: 1_760_000_000_000 + index * 1000,
+  })))
+  const { container } = render(<KnowledgePage api={service} />)
+  await screen.findByText('文件29.txt')
+  expect(container.querySelectorAll('.dsh-knowledge-card')).toHaveLength(12)
+  expect(screen.queryByText('文件00.txt')).toBeNull()
+  expect(screen.getByText('共 30 项')).toBeTruthy()
+  expect(screen.getByText('第1 页 / 3')).toBeTruthy()
+  expect(screen.getByRole('button', { name: '第1 页' }).getAttribute('aria-current')).toBe('page')
+  expect((screen.getByRole('button', { name: '上一页' }) as HTMLButtonElement).disabled).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+  expect(container.querySelectorAll('.dsh-knowledge-card')).toHaveLength(12)
+  expect(screen.getByText('文件17.txt')).toBeTruthy()
+  expect(screen.getByText('第2 页 / 3')).toBeTruthy()
+  fireEvent.change(screen.getByRole('textbox', { name: '跳转页码' }), { target: { value: '3' } })
+  fireEvent.submit(screen.getByRole('textbox', { name: '跳转页码' }).closest('form')!)
+  expect(container.querySelectorAll('.dsh-knowledge-card')).toHaveLength(6)
+  expect(screen.getByText('文件00.txt')).toBeTruthy()
+  expect(screen.getByText('第3 页 / 3')).toBeTruthy()
+  expect((screen.getByRole('button', { name: '下一页' }) as HTMLButtonElement).disabled).toBe(true)
+  fireEvent.change(screen.getByRole('searchbox', { name: '搜索文件名称' }), { target: { value: '文件0' } })
+  expect(screen.queryByRole('navigation', { name: '文件分页' })).toBeNull()
+  expect(container.querySelectorAll('.dsh-knowledge-card')).toHaveLength(10)
 })
 
 it('restores saved Q&A turns when opening a knowledge base', async () => {
@@ -603,9 +729,10 @@ it('restores saved Q&A turns when opening a knowledge base', async () => {
     { role: 'assistant' as const, content: '上次的回答' },
   ])
   const { container } = render(<KnowledgePage api={service} />)
+  await waitFor(() => expect(service.messages).toHaveBeenCalledWith(1))
+  await openChat()
   const pane = container.querySelector('.dsh-knowledge-messages') as HTMLDivElement
   Object.defineProperty(pane, 'scrollHeight', { configurable: true, get: () => 960 })
-  await waitFor(() => expect(service.messages).toHaveBeenCalledWith(1))
   expect(await screen.findByText('上次的问题')).toBeTruthy()
   expect(screen.getByText('上次的回答')).toBeTruthy()
   expect(screen.getByText('万维Buddy')).toBeTruthy()
@@ -619,6 +746,7 @@ it('clears saved Q&A turns and leaves the empty knowledge chat', async () => {
     { role: 'assistant' as const, content: '上次的回答' },
   ])
   render(<KnowledgePage api={service} />)
+  await openChat()
   expect(await screen.findByText('上次的问题')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: '清空会话' }))
   await waitFor(() => expect(service.clearMessages).toHaveBeenCalledWith(1))
@@ -636,6 +764,7 @@ it('restores Q&A turns when clearing the session fails', async () => {
   ])
   service.clearMessages = vi.fn(async () => { throw new Error('网络中断') })
   render(<KnowledgePage api={service} />)
+  await openChat()
   expect(await screen.findByText('上次的问题')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: '清空会话' }))
   expect((await screen.findByRole('alert')).textContent ?? '').toContain('清空失败')
@@ -666,6 +795,7 @@ it('asks the selected knowledge base through chat completions and renders recomm
     }
   })
   const { container } = render(<KnowledgePage api={service} />)
+  await openChat()
   const pane = container.querySelector('.dsh-knowledge-messages') as HTMLDivElement
   Object.defineProperty(pane, 'scrollHeight', { configurable: true, get: () => 960 })
   const input = await screen.findByPlaceholderText('基于知识库提问')
@@ -700,6 +830,7 @@ it('shows typing dots and a stop control while waiting for the first answer chun
       onProgress?.({ answer: '', done: false })
     }))
   render(<KnowledgePage api={service} />)
+  await openChat()
   const input = await screen.findByPlaceholderText('基于知识库提问')
   fireEvent.change(input, { target: { value: '请概括文档' } })
   fireEvent.click(screen.getByRole('button', { name: '发送' }))
@@ -817,6 +948,7 @@ it('opens a cited PDF when a blue answer citation number is clicked', async () =
     return answer
   })
   render(<KnowledgePage api={service} />)
+  await openChat()
   const input = await screen.findByPlaceholderText('基于知识库提问')
   fireEvent.change(input, { target: { value: '制度要求是什么' } })
   fireEvent.click(screen.getByRole('button', { name: '发送' }))
@@ -848,6 +980,7 @@ it('turns answer [ID:i] markers into inline locate controls without trailing sou
     return answer
   })
   render(<KnowledgePage api={service} />)
+  await openChat()
   const input = await screen.findByPlaceholderText('基于知识库提问')
   fireEvent.change(input, { target: { value: '准备工作是什么' } })
   fireEvent.click(screen.getByRole('button', { name: '发送' }))

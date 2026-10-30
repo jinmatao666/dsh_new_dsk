@@ -107,6 +107,28 @@ class Store:
             return db.execute("UPDATE tasks SET state='cancelled' WHERE user_id=? AND id=? AND state IN ('queued','running')",
                               (user, task_id)).rowcount == 1
 
+    def delete(self, user, task_id):
+        """Remove a terminal task record and its on-disk directory for the owning user."""
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT state FROM tasks WHERE id=? AND user_id=?", (task_id, user)).fetchone()
+            if not row:
+                return False
+            if row["state"] in ("queued", "running"):
+                raise ValueError("任务正在运行，请先取消再删除")
+            if not re.fullmatch(r"[a-f0-9]{32}", task_id):
+                raise ValueError("任务目录无效")
+            directory = self.root / task_id
+            is_junction = getattr(directory, "is_junction", lambda: False)()
+            if directory.is_symlink() or is_junction:
+                raise ValueError("任务目录无效")
+            if directory.exists():
+                if directory.resolve().parent != self.root:
+                    raise ValueError("任务目录不在数据目录中")
+                shutil.rmtree(directory)
+            db.execute("DELETE FROM tasks WHERE id=? AND user_id=?", (task_id, user))
+            return True
+
     def cleanup(self, retention_days=30):
         """Remove expired terminal task directories only; never follow links."""
         if not 1 <= retention_days <= 365:

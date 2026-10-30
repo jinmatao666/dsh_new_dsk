@@ -43,3 +43,11 @@ test('solo home uses full-width feature panel', () => {
   assert.match(app, /\.gdb/)
   assert.doesNotMatch(app, /conversion-tools/)
 })
+
+test('history can delete terminal tasks', () => {
+  assert.match(app, /data-delete/)
+  assert.match(app, /\/api\/tasks\/\$\{node\.dataset\.delete\}\/delete/)
+  assert.match(app, /删除此任务记录及其文件/)
+  assert.match(css, /\.history-open\{/)
+  assert.match(css, /\.history-row \.delete-task\{/)
+})

@@ -53,6 +53,21 @@ class StoreTests(unittest.TestCase):
         self.assertFalse((Path(self.temp.name) / old).exists())
         self.assertEqual(self.store.task("a", active)["state"], "queued")
 
+    def test_delete_removes_terminal_task_and_files(self):
+        task_id = "e" * 32
+        path = Path(self.temp.name) / task_id
+        path.mkdir()
+        (path / "marker.txt").write_text("x", encoding="utf-8")
+        self.store.create("a", "redline-extract", {}, ["a.dxf"], task_id)
+        with self.assertRaisesRegex(ValueError, "取消"):
+            self.store.delete("a", task_id)
+        self.store.claim(task_id)
+        self.store.finish(task_id, error="failed")
+        self.assertFalse(self.store.delete("b", task_id))
+        self.assertTrue(self.store.delete("a", task_id))
+        self.assertIsNone(self.store.task("a", task_id))
+        self.assertFalse(path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

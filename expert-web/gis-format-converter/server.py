@@ -235,7 +235,7 @@ def create_server(root, address=("127.0.0.1", 3308), redeem_ticket=redeem, publi
                     worker.submit(user, task_id)
                     threading.Thread(target=report_usage, args=(user, task_id), daemon=True).start()
                     return self.reply(201, {"id": task_id})
-                match = re.fullmatch(r"/api/tasks/([a-f0-9]{32})/(cancel|files/([0-9]+))", path)
+                match = re.fullmatch(r"/api/tasks/([a-f0-9]{32})/(cancel|delete|files/([0-9]+))", path)
                 if match:
                     task = store.task(user, match[1])
                     if not task:
@@ -246,6 +246,13 @@ def create_server(root, address=("127.0.0.1", 3308), redeem_ticket=redeem, publi
                         if cancelled:
                             worker.cancel(match[1])
                         return self.reply(200, {"cancelled": cancelled})
+                    if method == "POST" and match[2] == "delete":
+                        self.body()
+                        with worker._lock:
+                            if match[1] in worker._active:
+                                return self.reply(409, {"error": "任务仍在停止，请稍后删除"})
+                            deleted = store.delete(user, match[1])
+                        return self.reply(200, {"deleted": deleted})
                     if method == "GET" and match[3] is not None and task["state"] == "succeeded":
                         index = int(match[3])
                         if index >= len(task["outputs"]):
@@ -259,8 +266,9 @@ def create_server(root, address=("127.0.0.1", 3308), redeem_ticket=redeem, publi
                                 self.wfile.write(chunk)
                         return
                 self.reply(404, {"error": "接口不存在"})
-            except (ValueError, binascii.Error):
-                self.reply(400, {"error": "请求无效，请检查文件格式、参数和上传大小"})
+            except (ValueError, binascii.Error) as error:
+                message = str(error) if isinstance(error, ValueError) and not isinstance(error, binascii.Error) else "请求无效，请检查文件格式、参数和上传大小"
+                self.reply(400, {"error": message})
             except (BrokenPipeError, ConnectionResetError):
                 pass  # Client disconnected; never retry response writes.
             except OSError as error:

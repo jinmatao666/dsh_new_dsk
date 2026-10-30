@@ -362,6 +362,26 @@ func TestCreateKnowledgeCategoryRejectsInvalidInput(t *testing.T) {
 	}
 }
 
+func TestApplyKnowledgeDocumentCreatorsHidesViewerAndUnknownUploaders(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:knowledge-document-creators?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previous := model.DB
+	model.DB = db
+	t.Cleanup(func() { model.DB = previous })
+	require.NoError(t, db.AutoMigrate(&model.KnowledgeDocumentCreator{}, &model.User{}))
+	require.NoError(t, db.Create(&model.User{Id: 1, Username: "alice", AccessToken: "tok-a", AffCode: "aff-a", Role: model.RoleCommonUser, Status: model.UserStatusEnabled}).Error)
+	require.NoError(t, db.Create(&model.User{Id: 2, Username: "bob", DisplayName: "小李", AccessToken: "tok-b", AffCode: "aff-b", Role: model.RoleCommonUser, Status: model.UserStatusEnabled}).Error)
+	require.NoError(t, model.SaveKnowledgeDocumentCreator(5, "doc-own", 1))
+	require.NoError(t, model.SaveKnowledgeDocumentCreator(5, "doc-other", 2))
+
+	documents := []ragflow.Document{{Id: "doc-own"}, {Id: "doc-other"}, {Id: "doc-legacy"}}
+	applyKnowledgeDocumentCreators(context.Background(), 5, 1, documents)
+
+	require.Equal(t, "", documents[0].CreatorName)
+	require.Equal(t, "小李", documents[1].CreatorName)
+	require.Equal(t, "", documents[2].CreatorName)
+}
+
 func TestUpdateAndDeleteKnowledgeCategory(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:knowledge-category-admin?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
@@ -420,6 +440,7 @@ func TestUpdateAndDeleteKnowledgeCategory(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(
 		&model.KnowledgeBaseGrant{}, &model.KnowledgeSubscriptionApplication{},
 		&model.KnowledgeConversation{}, &model.KnowledgeDocumentNote{}, &model.KnowledgeDocumentPath{},
+		&model.KnowledgeDocumentCreator{},
 	))
 
 	deleted := httptest.NewRecorder()
