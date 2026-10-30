@@ -15,7 +15,7 @@ it('opens authorization from the main action and shows the QR only during author
   render(<FeishuPanel api={{ call }} onStatus={vi.fn()} onTry={vi.fn()} />)
   const connect = await screen.findByRole('button', { name: '连接' })
   expect(screen.queryByAltText('飞书授权二维码')).toBeNull()
-  expect(within(screen.getByRole('region', { name: '试试这样用' })).getAllByRole('button')).toHaveLength(4)
+  expect(within(screen.getByRole('region', { name: '试试这样用' })).getAllByRole('button')).toHaveLength(3)
   fireEvent.click(connect)
   expect(await screen.findByAltText('飞书授权二维码')).toBeTruthy()
   expect(call).toHaveBeenCalledWith('login')
@@ -23,7 +23,7 @@ it('opens authorization from the main action and shows the QR only during author
 })
 
 it('stages a connected example and keeps unbind as a secondary action', async () => {
-  const onTry = vi.fn()
+  const onTry = vi.fn<(prompt: string) => void>()
   const call = vi.fn(async () => ({ ...base, authed: true, bridge: { enabled: true, state: 'ready' as const, error: null } }))
   render(<FeishuPanel api={{ call }} onStatus={vi.fn()} onTry={onTry} />)
   fireEvent.click(await screen.findByRole('button', { name: '去试试' }))
@@ -33,7 +33,7 @@ it('stages a connected example and keeps unbind as a secondary action', async ()
 })
 
 it('shows targeted authorization instead of try actions when business permissions are missing', async () => {
-  const onTry = vi.fn()
+  const onTry = vi.fn<(prompt: string) => void>()
   const call = vi.fn(async () => ({ ...base, authed: true, missingScopes: ['im:message.send_as_user'] }))
   render(<FeishuPanel api={{ call }} onStatus={vi.fn()} onTry={onTry} />)
   const authorize = await screen.findByRole('button', { name: '补充授权' })
@@ -59,4 +59,16 @@ it('keeps successful connection actions simple and exposes recovery only on chan
   for (const name of ['授权发送消息', '开启双向任务', '关闭双向任务']) expect(screen.queryByRole('button', { name })).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '解绑' }))
   expect(call).toHaveBeenCalledWith('disconnect')
+})
+
+it('all three examples stage text even when the optional phone channel is offline', async () => {
+  const onTry = vi.fn<(prompt: string) => void>()
+  render(<FeishuPanel api={{ call: async () => ({ ...base, authed: true, bridge: { enabled: false, state: 'error', error: '离线' } }) }}
+    onStatus={vi.fn()} onTry={onTry} />)
+  const region = await screen.findByRole('region', { name: '试试这样用' })
+  await screen.findByRole('button', { name: '去试试' })
+  const buttons = within(region).getAllByRole('button')
+  expect(buttons).toHaveLength(3)
+  for (const button of buttons) fireEvent.click(button)
+  expect(onTry.mock.calls.map(call => call[0])).toEqual([...FEISHU_EXAMPLE_PROMPTS])
 })

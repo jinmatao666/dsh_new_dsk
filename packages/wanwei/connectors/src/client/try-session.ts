@@ -1,3 +1,4 @@
+import type { IConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { IWorkspaces, WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -68,4 +69,24 @@ export async function createAutomaticWorkspace(): Promise<string> {
   const path = await desktopInvoke('create_automatic_workspace', { name: automaticWorkspaceName() })
   if (typeof path !== 'string' || !path.trim()) throw new Error('无法创建默认工作区，请稍后重试。')
   return path
+}
+
+/** Open a new composer with a draft, without attaching an existing Session.
+ * @param prompt - Selected example text.
+ * @param input - Normal conversation draft owner.
+ * @param workspaces - Workspace creation API.
+ * @param sessions - Session creation and selection API.
+ * @param allocate - Desktop workspace allocator, deferred until sending.
+ * @param selected - Optional workspace for connectors that explicitly reuse one.
+ */
+export function stageConnectorExample(
+  prompt: string,
+  input: Pick<IConversation['input'], 'setStagedDraft'>,
+  workspaces: Pick<IWorkspaces, 'create'>,
+  sessions: Pick<ISessions, 'create' | 'clear'>,
+  allocate: (name: string) => Promise<string>,
+  selected?: WorkspaceId,
+): void {
+  input.setStagedDraft(prompt, connectorSessionPreparation(workspaces, sessions, allocate, selected))
+  sessions.clear()
 }

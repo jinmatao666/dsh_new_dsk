@@ -9,7 +9,7 @@ import type { IConversation } from '@deepseek-ai/dsh-client-ui-conversation/clie
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { useEffect, useState } from 'react'
-import { connectorSessionPreparation, desktopInvoke } from './try-session.ts'
+import { stageConnectorExample, desktopInvoke } from './try-session.ts'
 import { removeActiveConnectorId, setActiveConnectorId } from './active-connector.ts'
 import { ComposerConnectorChip } from './ComposerConnectorChip.tsx'
 import { createDingTalkApi } from './dingtalk-api.ts'
@@ -136,12 +136,11 @@ export function apply(ctx: Context): void {
     const current = sessions.list.getSnapshot().current
     const selected = current === undefined ? undefined
       : workspaces.list.getSnapshot().items.find(item => item.sessionIds.includes(current))?.workspaceId
-    conversation.input.setStagedDraft(prompt, connectorSessionPreparation(workspaces, sessions, async (name) => {
+    stageConnectorExample(prompt, conversation.input, workspaces, sessions, async (name) => {
       const path = await desktopInvoke('create_automatic_workspace', { name })
       if (typeof path !== 'string') throw new Error(text('无法创建默认工作区，请稍后重试。'))
       return path
-    }, selected))
-    sessions.clear()
+    }, id === 'feishu' ? undefined : selected)
   }
   registerFeaturePanel(ctx, 'skill-connectors', 20, { controller, title: text('连接器'),
     subtitle: text('管理已授权的政务协同与数据服务连接'), requiresDirectInternet: true,

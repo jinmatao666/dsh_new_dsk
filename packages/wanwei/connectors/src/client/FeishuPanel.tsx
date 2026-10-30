@@ -22,8 +22,7 @@ export interface FeishuApi { call(operation: 'status' | 'configure' | 'login' | 
 /** Business examples share the existing connector card presentation. */
 export const FEISHU_EXAMPLE_PROMPTS = [
   '查看我今天的飞书日程，按时间列出会议和待办',
-  '给飞书联系人张三发一条消息：明天下午 3 点开项目评审会，请提前准备材料',
-  '在飞书云文档中查找【项目周报】，总结本周进展、风险和待办事项',
+  '查找我最近的飞书文档，列出标题和链接',
   '在飞书中创建一项待办：周五下午 5 点前整理项目评审材料',
 ] as const
 
@@ -109,7 +108,7 @@ export function FeishuPanel({ api, onStatus, onTry }: {
         : status?.authed ? <>
           {needsAuthorization
             ? <button type="button" disabled={busy} onClick={() => { void operate('login') }}>{text('补充授权')}</button>
-            : <button type="button" disabled={busy || status.bridge.state !== 'ready'} onClick={() => { onTry(text(FEISHU_EXAMPLE_PROMPTS[0])) }}>{text('去试试')}</button>}
+            : <button type="button" disabled={busy} onClick={() => { onTry(text(FEISHU_EXAMPLE_PROMPTS[0])) }}>{text('去试试')}</button>}
           <button type="button" className="secondary" disabled={busy} onClick={() => { void operate('disconnect') }}>{text('解绑')}</button>
         </> : <button type="button" disabled={busy || !status?.installed}
           onClick={() => { void operate('login') }}>{text('连接')}</button>}
@@ -137,7 +136,7 @@ export function FeishuPanel({ api, onStatus, onTry }: {
     <section className="dsh-connector-dingtalk-examples" aria-label={text('试试这样用')}>
       <h3>{text('试试这样用')}</h3>
       <ul>{FEISHU_EXAMPLE_PROMPTS.map(prompt => <li key={prompt}>
-        <button type="button" className="dsh-connector-dingtalk-example" disabled={!status?.authed || busy || status.authorizing || needsAuthorization || status.bridge.state !== 'ready'}
+        <button type="button" className="dsh-connector-dingtalk-example" disabled={!status?.authed || busy || status.authorizing || needsAuthorization}
           onClick={() => { onTry(text(prompt)) }}><span>{text('“')}{text(prompt)}{text('”')}</span></button>
       </li>)}</ul>
     </section>

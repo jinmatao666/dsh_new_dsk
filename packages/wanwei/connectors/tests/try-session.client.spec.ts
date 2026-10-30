@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
-import { connectorSessionPreparation, createAutomaticWorkspace, automaticWorkspaceName } from '../src/client/try-session.ts'
+import { connectorSessionPreparation, createAutomaticWorkspace, automaticWorkspaceName, stageConnectorExample } from '../src/client/try-session.ts'
 
 describe('connectorSessionPreparation', () => {
   it('allocates a workspace only on first send', async () => {
@@ -48,4 +48,22 @@ it('uses the native allocator timestamp contract and reuses its collision handli
     expect(invoke.mock.calls[0]?.[0]).toBe('create_automatic_workspace')
     expect(invoke.mock.calls[0]?.[1].name).toMatch(/^\d{14}$/)
   } finally { Reflect.deleteProperty(window, '__TAURI_INTERNALS__') }
+})
+
+it('stages a fresh conversation and defers workspace and Session creation until send', async () => {
+  const staged = vi.fn<(text: string, prepare?: () => Promise<SessionId>) => void>()
+  const createWorkspace = vi.fn(async () => ({ workspaceId: 'fresh-workspace' as WorkspaceId } as WorkspaceView))
+  const createSession = vi.fn(async () => 'fresh-session' as SessionId)
+  const clear = vi.fn()
+  const allocate = vi.fn(async () => 'new-workspace')
+  stageConnectorExample('查看我的飞书日程', { setStagedDraft: staged }, { create: createWorkspace }, { create: createSession, clear }, allocate)
+  expect(clear).toHaveBeenCalledOnce()
+  expect(staged.mock.calls[0]?.[0]).toBe('查看我的飞书日程')
+  expect(createSession).not.toHaveBeenCalled()
+  expect(createWorkspace).not.toHaveBeenCalled()
+  expect(allocate).not.toHaveBeenCalled()
+  const prepare = staged.mock.calls[0]?.[1]
+  if (!prepare) throw new Error('missing deferred Session preparation')
+  await expect(prepare()).resolves.toBe('fresh-session')
+  expect(createSession).toHaveBeenCalledWith({ workspaceId: 'fresh-workspace' })
 })

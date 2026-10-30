@@ -172,9 +172,12 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       if (channels.length) {
         const record = (await store.read()).runs.find(item => item.id === run.id)
         if (record) {
-          const message = agent?.session.events.findLast(event => event.type === 'assistant/message')
-          const answer = message?.type === 'assistant/message'
-            ? message.data.message.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n').trim() : ''
+          // Each run owns a fresh Session. Include text emitted alongside tool calls;
+          // a final acknowledgement alone may omit the actual deliverable.
+          const answers = agent?.session.events.flatMap(event => event.type === 'assistant/message'
+            ? event.data.message.content.flatMap(block => block.type === 'text' && block.text.trim() ? [block.text.trim()] : [])
+            : []) ?? []
+          const answer = [...new Set(answers)].join('\n\n')
           const status = { running: '执行中', success: '已完成', failed: '执行失败', interrupted: '已中断', waiting: '等待确认', incomplete: '未完成' }[record.status]
           const body = [`定时任务：${task.name}`, `状态：${status}`, record.error, answer || record.checkpoint?.summary,
             record.checkpoint?.files.length ? `产物（保存在电脑）：\n${record.checkpoint.files.join('\n')}` : ''].filter(Boolean).join('\n\n')

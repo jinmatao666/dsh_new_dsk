@@ -37,7 +37,7 @@ it.each(['internet', 'intranet'])('loads the plugin, persists and executes real 
     await writeFile(join(dir, 'final.txt'), 'actual delivered result')
     const report = (label: string) => [
       toolCallResponse(`${label}-preflight`, 'automation_checkpoint', { stage: 'preflight', summary: '检查完成，本任务仅需文字回答', nextSteps: ['回答'], files: [], producesFiles: false }),
-      toolCallResponse(`${label}-completed`, 'automation_checkpoint', { stage: 'completed', summary: label, nextSteps: [], files: [], producesFiles: false }),
+      toolCallResponse(`${label}-completed`, 'automation_checkpoint', { stage: 'completed', summary: label, nextSteps: [], files: [], producesFiles: false }, `${label}正文：1.《百年孤独》及推荐理由；10.《思考，快与慢》及推荐理由。`),
       textResponse(label),
     ]
     const adapter = new MockAdapter([
@@ -115,12 +115,16 @@ it.each(['internet', 'intranet'])('loads the plugin, persists and executes real 
     expect(archiveSession).not.toHaveBeenCalled()
     expect(adapter.requests).toHaveLength(3)
     await expect.poll(async () => (await call('list', {})).runs[0]?.deliveries?.map(row => row.status)).toEqual(['sent', 'failed', 'sent'])
-    expect(notify.mock.calls[0]?.[1]).toContain('真实执行链路结果')
+    expect(notify.mock.calls[0]?.[1]).toContain('真实执行链路结果正文：1.《百年孤独》')
+    expect(notify.mock.calls[0]?.[1]).toContain('10.《思考，快与慢》及推荐理由')
+    expect(notify.mock.calls[0]?.[1]).not.toContain('定时执行结果')
+    expect(notify.mock.calls[0]?.[1]).not.toContain('automation_checkpoint')
     expect(prepare.mock.calls[0]?.[0]).toEqual([])
     await call('retry-delivery', { id: run.id })
     expect((await call('list', {})).runs[0]?.deliveries?.map(row => row.status)).toEqual(['sent', 'sent', 'sent'])
     expect(notify.mock.calls.filter(row => row[0] === 'feishu')).toHaveLength(1)
     expect(adapter.requests).toHaveLength(3)
+    expect(notify.mock.calls.filter(row => row[0] === 'dingtalk').at(-1)?.[1]).toBe(notify.mock.calls[0]?.[1])
 
     expect(adapter.requests[0]).toMatchObject({ model: 'task-model' })
     expect(saveDefault).not.toHaveBeenCalled()

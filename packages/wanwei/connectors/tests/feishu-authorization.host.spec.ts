@@ -105,7 +105,7 @@ it('treats exit 3 with a completed identity as partial authorization and repairs
     await vi.waitFor(() => expect(children).toHaveLength(1))
     children[0]!.stdout.emit('data', Buffer.from('{"event":"device_authorization","verification_uri_complete":"https://accounts.feishu.cn/verify?code=first"}\n'))
     children[0]!.stderr.emit('data', Buffer.from('Waiting for authorization\n'))
-    children[0]!.stdout.emit('data', Buffer.from('{"event":"authorization_complete","user_open_id":"PRIVATE","missing":["im:message.send_as_user"]}\n'))
+    children[0]!.stdout.emit('data', Buffer.from('{"event":"authorization_complete","user_open_id":"PRIVATE","missing":["im:message.send_as_user","vc:meeting.realtime:read"]}\n'))
     children[0]!.emit('close', 3)
     await vi.waitFor(async () => expect((await rpc('status')).value).toMatchObject({ authed: true, authorizing: false, error: null, missingScopes: ['im:message.send_as_user'] }))
     await rpc('login')
@@ -127,6 +127,15 @@ it('treats exit 3 with a completed identity as partial authorization and repairs
     granted = true
     children[2]!.emit('close', 0)
     await vi.waitFor(async () => expect((await rpc('status')).value.missingScopes).toEqual([]))
+    businessFailure = false
+    await rpc('disconnect')
+    await rpc('login')
+    await vi.waitFor(() => expect(children).toHaveLength(4))
+    expect(native.spawn.mock.calls[3]![1]).toEqual(['auth', 'login', '--recommend', '--json'])
+    children[3]!.stdout.emit('data', Buffer.from('{"event":"authorization_complete","missing":["vc:meeting.realtime:read"]}\n'))
+    children[3]!.emit('close', 3)
+    await vi.waitFor(async () => expect((await rpc('status')).value).toMatchObject({ authed: true, authorizing: false, missingScopes: [], error: null }))
+    await expect(tool.execute({ args: ['calendar', '+agenda', '--as', 'user'] }, { signal: new AbortController().signal })).resolves.toContain('ok')
   } finally {
     children.forEach(child => child.emit('close', 0))
     await ctx.fiber.dispose()

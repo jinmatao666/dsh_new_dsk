@@ -257,12 +257,20 @@ export function registerFeishu(ctx: Context): void {
       child.once('close', (code) => {
         clearTimeout(timer)
         const result = parseFeishuAuthorizationResult(stdout)
-        const scopes = [...new Set([...result.missingScopes, ...parseFeishuAuthorizationResult(stderr).missingScopes])]
-        if (scopes.length > 0) missingScopes = scopes
+        const stderrResult = parseFeishuAuthorizationResult(stderr)
+        const scopes = [...new Set([...result.missingScopes, ...stderrResult.missingScopes])]
+        if (args[0] === 'auth') {
+          const scopeIndex = args.indexOf('--scope')
+          // Recommended scopes include optional business domains. Only explicit
+          // requests and the connector's message capability gate readiness.
+          const requested = new Set(scopeIndex < 0 ? ['im:message.send_as_user']
+            : (args[scopeIndex + 1] ?? '').split(/\s+/u))
+          if (args.includes('--recommend') || scopes.length > 0) missingScopes = scopes.filter(scope => requested.has(scope))
+        }
         // Official CLI saves a valid identity, emits authorization_complete, then
         // exits 3 when only some requested scopes were granted. Probe the identity
         // through status() and expose missing permissions separately from failure.
-        if (code === 3 && result.completed) { resolve(); return }
+        if (code === 3 && (result.completed || stderrResult.completed)) { resolve(); return }
         if (code !== 0) {
           const error = parseFeishuError(stderr) ?? parseFeishuError(stdout)
           const message = error?.subtype === 'not_configured' ? '飞书应用尚未配置，请先完成应用配置'
