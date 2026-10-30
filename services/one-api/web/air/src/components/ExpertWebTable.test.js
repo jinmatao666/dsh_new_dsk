@@ -1,6 +1,6 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import ExpertWebTable from './ExpertWebTable';
+import ExpertWebTable, { validateExpertDraft } from './ExpertWebTable';
 import { API, showError } from '../helpers';
 
 jest.mock('../helpers', () => ({ API: { get: jest.fn(), put: jest.fn(), post: jest.fn(), delete: jest.fn() }, showError: jest.fn(), showSuccess: jest.fn() }));
@@ -100,4 +100,16 @@ test('filters experts by name, description and provider and restores the list on
     expect(container.querySelectorAll('.expert-web-list article')).toHaveLength(count);
   }
   await act(async () => { root.unmount(); });
+});
+
+test.each([
+  ['provider', '', '请填写提供方'],
+  ['key', 'Bad_Key', '专家编号须为3至80位'],
+  ['summary', '字'.repeat(501), '专家简介不能超过500字'],
+  ['footer_note', '字'.repeat(501), '弹窗底部说明不能超过500字'],
+  ['tags', Array(13).fill('标签').join('\n'), '标签不能超过12个'],
+  ['workbench_url', 'file:///test', '工作台必须使用有效'],
+])('validates %s before submitting', (field, value, expected) => {
+  const draft = { key: 'test-expert', name: '测试专家', provider: 'wanwei', workbench_url: 'https://example.com/', tags: '', [field]: value };
+  expect(validateExpertDraft(draft)).toContain(expected);
 });

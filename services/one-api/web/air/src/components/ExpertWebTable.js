@@ -4,6 +4,23 @@ import { API, showError, showSuccess } from '../helpers';
 import './ExpertWebTable.css';
 import CustomSelect from './CustomSelect';
 
+export function validateExpertDraft(draft) {
+  if (!/^[a-z][a-z0-9-]{2,79}$/.test(draft.key.trim())) return '专家编号须为3至80位，以小写字母开头，只能包含小写字母、数字和短横线（-）';
+  if (!draft.name.trim()) return '请填写专家名称';
+  if (Array.from(draft.name.trim()).length > 100) return '专家名称不能超过100字';
+  if (!draft.provider.trim()) return '请填写提供方，例如 wanwei';
+  if (Array.from(draft.provider.trim()).length > 100) return '提供方不能超过100字';
+  if (Array.from(draft.summary || '').length > 500) return '专家简介不能超过500字';
+  if (Array.from(draft.footer_note || '').length > 500) return '弹窗底部说明不能超过500字';
+  if ((draft.icon || '').length > 60 * 1024) return '专家图标编码后超过60 KB，请压缩或更换较小的图片';
+  if ((draft.tags || '').split(/\r?\n/).filter(value => value.trim()).length > 12) return '标签不能超过12个，请删除多余标签';
+  try {
+    const url = new URL(draft.workbench_url.trim());
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) throw new Error();
+  } catch { return '工作台必须使用有效的 HTTP 或 HTTPS 地址'; }
+  return '';
+}
+
 const blank = { key: '', name: '', subtitle: '', category: '', summary: '', icon: '', tags: '', scenario: '', materials: '', detail_sections: '[]', footer_note: '', provider: '', workbench_url: '', sort_order: null, requires_internet: true };
 const lines = text => JSON.stringify(text.split('\n').map(item => item.trim()).filter(Boolean));
 const asLines = value => { try { return JSON.parse(value || '[]').join('\n'); } catch { return ''; } };
@@ -80,7 +97,9 @@ export default function ExpertWebTable({ keyword = '' }) {
   useEffect(() => { void load(); }, []);
 
   const save = async () => {
-    if (!editing) return;
+    if (!editing || saving) return;
+    const validationError = validateExpertDraft(editing);
+    if (validationError) { showError(validationError); return; }
     setSaving(true);
     try {
       const sections = detailSections(editing);

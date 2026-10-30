@@ -76,23 +76,50 @@ func validExpertWebIcon(icon string) bool {
 }
 
 func validateExpertWebInput(input expertWebInput) error {
-	if !expertKeyPattern.MatchString(input.Key) || strings.TrimSpace(input.Name) == "" || len([]rune(input.Name)) > 100 || len([]rune(input.Summary)) > 500 || len([]rune(input.FooterNote)) > 500 || strings.TrimSpace(input.Provider) == "" || len([]rune(input.Provider)) > 100 {
-		return errors.New("专家编号、名称、提供方或简介无效")
+	if !expertKeyPattern.MatchString(input.Key) {
+		return errors.New("专家编号须为3至80位，以小写字母开头，只能包含小写字母、数字和短横线（-）")
+	}
+	if strings.TrimSpace(input.Name) == "" {
+		return errors.New("请填写专家名称")
+	}
+	if len([]rune(input.Name)) > 100 {
+		return errors.New("专家名称不能超过100字")
+	}
+	if strings.TrimSpace(input.Provider) == "" {
+		return errors.New("请填写提供方，例如 wanwei")
+	}
+	if len([]rune(input.Provider)) > 100 {
+		return errors.New("提供方不能超过100字")
+	}
+	if len([]rune(input.Summary)) > 500 {
+		return errors.New("专家简介不能超过500字")
+	}
+	if len([]rune(input.FooterNote)) > 500 {
+		return errors.New("弹窗底部说明不能超过500字")
+	}
+	if len(input.Icon) > 60*1024 {
+		return errors.New("专家图标编码后超过60 KB，请压缩或更换较小的图片")
 	}
 	if !validExpertWebIcon(input.Icon) {
-		return errors.New("专家图标格式无效或超过 60 KB")
+		return errors.New("专家图标格式无效，请使用PNG、JPEG、WebP或GIF图片")
 	}
 	address, err := url.Parse(input.WorkbenchURL)
 	if err != nil || (address.Scheme != "http" && address.Scheme != "https") || address.Hostname() == "" || address.User != nil || address.Opaque != "" {
 		return errors.New("工作台必须使用有效的 HTTP 或 HTTPS 地址")
 	}
 	var tags []string
-	if err := json.Unmarshal([]byte(input.Tags), &tags); err != nil || len(tags) > 12 {
-		return errors.New("标签格式无效")
+	if err := json.Unmarshal([]byte(input.Tags), &tags); err != nil {
+		return errors.New("标签格式无效，应为文字标签数组")
+	}
+	if len(tags) > 12 {
+		return errors.New("标签不能超过12个，请删除多余标签")
 	}
 	var sections []expertSection
-	if input.DetailSections != "" && (json.Unmarshal([]byte(input.DetailSections), &sections) != nil || len(sections) > 8) {
-		return errors.New("介绍区块格式无效")
+	if input.DetailSections != "" && json.Unmarshal([]byte(input.DetailSections), &sections) != nil {
+		return errors.New("介绍弹窗区块格式无效，请刷新页面后重新填写")
+	}
+	if len(sections) > 8 {
+		return errors.New("介绍弹窗区块不能超过8个")
 	}
 	return nil
 }
@@ -144,12 +171,25 @@ func AdminListExpertWebsites(c *gin.Context) {
 // AdminCreateExpertWebsite registers a draft and returns its provider secret once.
 func AdminCreateExpertWebsite(c *gin.Context) {
 	var input expertWebInput
-	if c.ShouldBindJSON(&input) != nil || validateExpertWebInput(input) != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "专家资料无效，请检查编号、HTTP/HTTPS 地址和展示资料"})
+	if c.ShouldBindJSON(&input) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "提交的数据格式错误，请刷新页面后重新填写专家资料"})
+		return
+	}
+	if err := validateExpertWebInput(input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 	if err := model.ValidateExpertCategory(input.Category); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	var existing int64
+	if err := model.DB.Model(&model.ExpertWebProfile{}).Where(clause.Eq{Column: "key", Value: input.Key}).Count(&existing).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "无法检查专家编号，请检查数据库服务后重试"})
+		return
+	}
+	if existing > 0 {
+		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "专家编号已存在，请更换编号"})
 		return
 	}
 	secret, err := expertWebRandom()
@@ -160,7 +200,7 @@ func AdminCreateExpertWebsite(c *gin.Context) {
 	profile := expertWebFromInput(input)
 	profile.ProviderSecretHash = expertWebDigest(secret)
 	if err := model.DB.Create(&profile).Error; err != nil {
-		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "专家编号已存在或无法保存"})
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存专家资料失败，请稍后重试或检查数据库服务"})
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"success": true, "data": profile, "provider_credential": secret})
@@ -174,8 +214,8 @@ func AdminUpdateExpertWebsite(c *gin.Context) {
 		return
 	}
 	input.Key = c.Param("key")
-	if validateExpertWebInput(input) != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "专家资料无效，请检查 HTTP/HTTPS 地址和展示资料"})
+	if err := validateExpertWebInput(input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 	if err := model.ValidateExpertCategory(input.Category); err != nil {

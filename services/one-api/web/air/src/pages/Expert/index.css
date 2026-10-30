@@ -19,6 +19,40 @@
 .expert-category-row{grid-template-columns:180px minmax(240px,1fr) 90px 90px 130px}
 @media(max-width:1050px){.expert-category-row{min-width:820px}}
 
-.expert-page-header{position:relative;padding-right:300px}
+.expert-page-header{position:relative;padding-right:370px}
 .expert-page-search{position:absolute;right:0;bottom:14px;width:280px;border-radius:10px}
 @media(max-width:760px){.expert-page-header{padding-right:0}.expert-page-search{position:static;margin-top:16px;width:100%}}
+
+/* Match the skill-management search field. */
+.expert-page-search {
+  width: min(350px, 32vw) !important;
+}
+
+.expert-page-search.semi-input-wrapper,
+.expert-page-search .semi-input-wrapper {
+  min-height: 44px;
+  padding-inline: 13px;
+  border: 1px solid #d9e4f2;
+  border-radius: 12px !important;
+  background: #fff;
+  box-shadow: 0 8px 22px rgb(43 82 134 / 6%);
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.expert-page-search.semi-input-wrapper-focus,
+.expert-page-search .semi-input-wrapper-focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 12%), 0 8px 22px rgb(43 82 134 / 7%);
+}
+
+.expert-page-search .semi-input {
+  color: #243a5d;
+  font-size: 14px;
+}
+
+.expert-page-search .semi-input::placeholder {
+  color: #93a4bb;
+}
+
+
+@media(max-width:760px){.expert-page-search{width:100%!important}}
