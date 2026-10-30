@@ -23,7 +23,7 @@ const detailSections = expert => {
   return sectionDefaults.map((section, index) => ({ ...section, content: index === 0 ? expert.scenario || '' : index === 1 ? expert.materials || '' : index === 2 ? expert.summary || '' : '' }));
 };
 
-export default function ExpertWebTable() {
+export default function ExpertWebTable({ keyword = '' }) {
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [editing, setEditing] = useState(null);
@@ -127,9 +127,12 @@ export default function ExpertWebTable() {
     finally { setDeletingKey(null); }
   };
 
+  const query = keyword.trim().toLocaleLowerCase();
+  const filteredItems = query ? items.filter(item => [item.name, item.key, item.subtitle, item.summary, item.provider, item.category, asLines(item.tags)].some(value => String(value || '').toLocaleLowerCase().includes(query))) : items;
+
   return <section className='expert-web-admin'>
     <header><div><h2>专家</h2><p>配置卡片、介绍和网站地址。上架后桌面端自动显示；网页功能在各自独立网站中维护。</p></div><button type='button' className='primary' onClick={() => setEditing({ ...blank })}>新增专家</button></header>
-    <div className='expert-web-list'>{items.length === 0 && <p className='empty'>还没有专家。先登记网站及提供方，再上架。</p>}{items.map(item => <article key={item.key} {...catalogDragProps('experts', item, load)}>
+    <div className='expert-web-list'>{items.length === 0 && <p className='empty'>还没有专家。先登记网站及提供方，再上架。</p>}{filteredItems.length === 0 && items.length > 0 && <p className='empty'>没有匹配的专家，请调整搜索关键词。</p>}{filteredItems.map(item => <article key={item.key} {...catalogDragProps('experts', item, load)}>
       <div className='expert-web-icon'>{item.icon?.startsWith('data:image/') ? <img src={item.icon} alt='' /> : '✦'}</div>
       <div className='expert-web-info'><strong>{item.name}</strong><small>{item.key} · {item.provider}</small><p>{item.workbench_url}</p></div>
       <span className={item.published ? 'live' : 'draft'}>{item.published ? '已上架' : '未上架'}</span>

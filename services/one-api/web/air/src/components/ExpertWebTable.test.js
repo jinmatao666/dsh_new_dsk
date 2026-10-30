@@ -87,3 +87,17 @@ test('failed deletion reports the server error and keeps the expert', async () =
   expect(remove.disabled).toBe(false);
   await act(async () => { root.unmount(); });
 });
+
+test('filters experts by name, description and provider and restores the list on clear', async () => {
+  API.get.mockImplementation(url => Promise.resolve({ data: { success: true, data: url.includes('categories') ? [] : [
+    { key: 'first-expert', name: '空间审查', summary: '规划合规', provider: 'Wanwei' },
+    { key: 'second-expert', name: '文档审查', summary: '文件处理', provider: 'Other' },
+  ] } }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  for (const [keyword, count] of [['空间', 1], ['规划合规', 1], ['wanwei', 1], ['不存在', 0], ['', 2]]) {
+    await act(async () => { root.render(<ExpertWebTable keyword={keyword} />); });
+    expect(container.querySelectorAll('.expert-web-list article')).toHaveLength(count);
+  }
+  await act(async () => { root.unmount(); });
+});

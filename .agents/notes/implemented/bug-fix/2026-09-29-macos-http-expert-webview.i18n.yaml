@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-29-macos-http-expert-webview.md
-2026-09-29-macos-http-expert-webview.md: a9963ac9e49caaa7d5f6b53697d0a3d454d98baa
-2026-09-29-macos-http-expert-webview.zh.md: 504f0e8e8cb489828c0d692167a0f0bff4efd34e
+2026-09-29-macos-http-expert-webview.md: 3c468d41cf02a4210e80141edd20a4527113dd1c
+2026-09-29-macos-http-expert-webview.zh.md: 75d2221ed438079951ed4d7d3cdf0f80bab71f55

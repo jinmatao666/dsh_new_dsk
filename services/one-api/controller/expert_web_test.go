@@ -47,11 +47,15 @@ func TestExpertWebInputRequiresPortableKeyAndWebURL(t *testing.T) {
 	if err := validateExpertWebInput(valid); err != nil {
 		t.Fatalf("HTTP deployment rejected: %v", err)
 	}
+	valid.WorkbenchURL = "http://ac.zjugis.com:8088/#/ai"
+	if err := validateExpertWebInput(valid); err != nil {
+		t.Fatal(err)
+	}
 	invalid := []expertWebInput{
 		{Key: "a", Name: valid.Name, Provider: valid.Provider, WorkbenchURL: valid.WorkbenchURL, Tags: valid.Tags},
 		{Key: valid.Key, Name: valid.Name, Provider: valid.Provider, WorkbenchURL: "file:///geology.html", Tags: valid.Tags},
 		{Key: valid.Key, Name: valid.Name, Provider: valid.Provider, WorkbenchURL: "https://user:pass@geology.example.com", Tags: valid.Tags},
-		{Key: valid.Key, Name: valid.Name, Provider: valid.Provider, WorkbenchURL: "https://geology.example.com/#other", Tags: valid.Tags},
+
 		{Key: valid.Key, Name: valid.Name, Provider: valid.Provider, WorkbenchURL: valid.WorkbenchURL, Tags: `{"not":"array"}`},
 	}
 	for _, input := range invalid {

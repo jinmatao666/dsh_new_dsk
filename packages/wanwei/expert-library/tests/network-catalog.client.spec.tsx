@@ -44,6 +44,8 @@ it('shows the expert illustration when an intranet hides every published expert'
   ]} network={{ subscribe: () => () => {}, catalogAccess: internetCatalogAccess, getSnapshot: () => state }} />)
   expect(await screen.findByRole('heading', { name: '当前没有可用的专家' })).toBeTruthy()
   expect(screen.queryByRole('button', { name: '联网专家' })).toBeNull()
+  expect(screen.getByText('当前网络暂时无法访问在线专家，请稍后重试。')).toBeTruthy()
+  expect(screen.queryByText(/内网设置|隐藏了|已灰化/)).toBeNull()
 })
 
 it('refreshes administrator card and category ordering without restarting the library', async () => {
@@ -58,7 +60,7 @@ it('refreshes administrator card and category ordering without restarting the li
   expect(cards()).toEqual(['首位专家', '次位专家'])
   expect(categories()).toEqual(['全部', '空间分析', '办公工具'])
   entries = [{ ...second, category_order: 1 }, { ...first, category_order: 0 }]
-  fireEvent.click(screen.getByRole('button', { name: '刷新目录' }))
+  fireEvent.click(screen.getByRole('button', { name: '刷新' }))
   await waitFor(() => { expect(cards()).toEqual(['次位专家', '首位专家']) })
   expect(categories()).toEqual(['全部', '办公工具', '空间分析'])
   expect(loadExperts).toHaveBeenCalledTimes(2)

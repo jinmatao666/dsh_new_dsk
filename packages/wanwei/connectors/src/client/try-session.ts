@@ -22,9 +22,7 @@ export function connectorSessionPreparation(
   return () => {
     prepared ??= (async () => {
       if (selected !== undefined) return sessions.create({ workspaceId: selected })
-      const now = new Date()
-      const name = [now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes()]
-        .map((value, index) => String(value).padStart(index === 0 ? 4 : 2, '0')).join('')
+      const name = automaticWorkspaceName()
       automaticPath ??= await allocate(name)
       const workspace = await workspaces.create({ path: automaticPath })
       return sessions.create({ workspaceId: workspace.workspaceId })
@@ -52,4 +50,22 @@ export function desktopInvoke(command: string, argumentsValue: unknown): Promise
     return Promise.reject(new Error('未连接到桌面端原生服务。请重新打开万维Buddy 后重试。'))
   }
   return invoke(command, argumentsValue)
+}
+
+/** Use the existing connector workspace naming convention, in local time.
+ * @param now - Local creation time.
+ * @returns Year, month, day, hour and minute and second without separators.
+ */
+export function automaticWorkspaceName(now: Date = new Date()): string {
+  return [now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds()]
+    .map((value, index) => String(value).padStart(index === 0 ? 4 : 2, '0')).join('')
+}
+
+/** Allocate a directory through the desktop's existing automatic workspace allocator.
+ * @returns Absolute workspace path; the native allocator handles name collisions.
+ */
+export async function createAutomaticWorkspace(): Promise<string> {
+  const path = await desktopInvoke('create_automatic_workspace', { name: automaticWorkspaceName() })
+  if (typeof path !== 'string' || !path.trim()) throw new Error('无法创建默认工作区，请稍后重试。')
+  return path
 }

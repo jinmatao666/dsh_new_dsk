@@ -51,6 +51,9 @@
 .automation-dropdown { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 130px; padding: 5px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 9px; background: var(--dsw-alias-bg-base); box-shadow: 0 6px 22px rgb(15 23 42 / 12%); }
 .automation-dropdown button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; background: none; border: 0; padding: 8px 12px; text-align: left; color: inherit; font: inherit; font-size: 13px; line-height: 20px; white-space: nowrap; cursor: pointer; border-radius: 6px; }
 .automation-dropdown button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.automation-task-more > .automation-dropdown { box-sizing: border-box; width: 120px; min-width: 0; padding: 4px; top: calc(100% + 4px); }
+.automation-task-more > .automation-dropdown > button { box-sizing: border-box; min-height: 32px; padding: 6px 10px; line-height: 20px; }
+
 .automation-new-group .automation-dropdown { top: calc(100% + 2px); width: 100%; min-width: 0; box-sizing: border-box; padding: 3px; }
 .automation-new-group .automation-dropdown button { box-sizing: border-box; min-height: 34px; padding: 6px 5px; gap: 5px; }
 .automation-new-group .automation-dropdown .automation-creation-icon { width: 16px; height: 16px; }

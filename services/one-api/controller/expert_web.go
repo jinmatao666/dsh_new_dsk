@@ -83,7 +83,7 @@ func validateExpertWebInput(input expertWebInput) error {
 		return errors.New("专家图标格式无效或超过 60 KB")
 	}
 	address, err := url.Parse(input.WorkbenchURL)
-	if err != nil || (address.Scheme != "http" && address.Scheme != "https") || address.Hostname() == "" || address.User != nil || address.Fragment != "" || address.Opaque != "" {
+	if err != nil || (address.Scheme != "http" && address.Scheme != "https") || address.Hostname() == "" || address.User != nil || address.Opaque != "" {
 		return errors.New("工作台必须使用有效的 HTTP 或 HTTPS 地址")
 	}
 	var tags []string

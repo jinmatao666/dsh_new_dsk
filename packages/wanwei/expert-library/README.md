@@ -9,9 +9,9 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Refresh catalog reloads published cards and category positions without restarting the desktop or closing running workbenches. Card order and category-navigation order remain independent administrator settings.
+The Refresh button sits beside the category filters and reloads published cards and category positions without restarting the desktop or closing running workbenches. Card order and category-navigation order remain independent administrator settings.
 
-Card order follows the backend catalog; category navigation independently follows administrator-defined category positions. Published metadata retains each expert’s internet requirement flag. In intranet mode without confirmed connectivity, marked cards follow the administrator’s hide/disable choice. Offline-capable experts remain usable and precede disabled cards, preserving backend order within each group. Disabled cards show the network-unreachable tooltip and cannot open details or start a new workbench. When all experts are hidden, the expert placeholder explains the intranet policy. Connectivity refresh restores them. Already running workbenches remain open.
+Card order follows the backend catalog; category navigation independently follows administrator-defined category positions. Published metadata retains each expert’s internet requirement flag. In intranet mode without confirmed connectivity, marked cards follow the administrator’s hide/disable choice. Offline-capable experts remain usable and precede disabled cards, preserving backend order within each group. Disabled cards show the network-unreachable tooltip and cannot open details or start a new workbench. When all experts are hidden, the expert placeholder explains current network availability. Connectivity refresh restores them. Already running workbenches remain open.
 
 Users can inspect administrator-authored expert descriptions and open several workbenches in one tab row. Reopening an expert focuses its existing tab without obtaining another ticket. This page requires OneAPI and the desktop native bridge. Both deployment modes attempt the configured service; a failed catalog request shows an expert-card placeholder instead of disabled navigation or an empty catalog. Reopening the page loads the catalog again.
 

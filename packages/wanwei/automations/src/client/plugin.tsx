@@ -1,4 +1,4 @@
-import { NotificationConnectionDialog } from '@deepseek-ai/dsh-wanwei-connectors/client'
+import { NotificationConnectionDialog, createAutomaticWorkspace } from '@deepseek-ai/dsh-wanwei-connectors/client'
 import { createPanelController, registerFeaturePanel, Toast, type WanweiNotice } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 import type { Context } from '@deepseek-ai/cordis'
 import { useState } from 'react'
@@ -48,6 +48,11 @@ export function apply(ctx: Context): void {
     },
     listWorkspaces() {
       return Promise.resolve(ctx.workspaces.list.getSnapshot().items.map(item => ({ title: item.title, path: item.path })))
+    },
+    async createAutomaticWorkspace() {
+      const path = await createAutomaticWorkspace()
+      await ctx.workspaces.create({ path })
+      return path
     },
     async chooseDirectory() {
       const result = await ctx.remote.directoryPicker.pick()

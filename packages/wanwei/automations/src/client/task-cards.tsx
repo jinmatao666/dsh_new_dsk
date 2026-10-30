@@ -16,6 +16,7 @@ export interface AutomationApi {
   openSession(id: string): void
   fromTask(): void
   listWorkspaces(): Promise<{ title: string; path: string }[]>
+  createAutomaticWorkspace?(): Promise<string>
   chooseDirectory(): Promise<string | null>
   listModels(): Promise<ModelCatalog>
   connectionDialog?(channel: string, complete: (connected: boolean) => void): ReactNode
@@ -30,6 +31,7 @@ export function AutomationCards({ notify, api }: { notify: (message: string) => 
   const prefix = useId()
   const revision = useRef(0)
   const pending = useRef(false)
+  const saving = useRef(false)
   const lifetime = useRef<AbortController | null>(null)
   const [snapshot, setSnapshot] = useState<AutomationSnapshot>({ tasks: [], runs: [] })
   const [loaded, setLoaded] = useState(false)
@@ -94,12 +96,24 @@ export function AutomationCards({ notify, api }: { notify: (message: string) => 
     void mutate('enable', { ids, enabled }, text('任务状态已保存')).then((ok) => { if (ok) setSelection([]) })
   }
   const save = async () => {
-    if (draft === null) return
-    const { id, nextRunAt: _next, ...task } = draft
-    if (await mutate('save', { ...(id ? { id } : {}), task }, text('任务已保存'))) {
-      setDraft(null); setTab('tasks'); setFilter('all'); setQuery('')
-    }
+    if (draft === null || saving.current) return
+    saving.current = true; setBusy(true); setError('')
+    try {
+      let prepared = draft
+      if (!prepared.cwd.trim()) {
+        if (!api.createAutomaticWorkspace) throw new Error(text('无法创建默认工作区，请稍后重试。'))
+        const cwd = await api.createAutomaticWorkspace()
+        prepared = { ...prepared, cwd }
+        setDraft(prepared)
+      }
+      const { id, nextRunAt: _next, ...task } = prepared
+      if (await mutate('save', { ...(id ? { id } : {}), task }, text('任务已保存'))) {
+        setDraft(null); setTab('tasks'); setFilter('all'); setQuery('')
+      }
+    } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)) }
+    finally { saving.current = false; setBusy(false) }
   }
+
   if (creation) return <CreationPicker onBack={() => { setCreation(false) }} onSelect={(value) => {
     setCreation(false)
     setDraft({ id: '', nextRunAt: 0, cwd: '', enabled: true, ...value })
@@ -135,7 +149,7 @@ export function AutomationCards({ notify, api }: { notify: (message: string) => 
         </div>
       </div>
     </header>}
-    {error && <p role="alert" className="automation-error">{error}</p>}
+    {error && draft === null && <p role="alert" className="automation-error">{error}</p>}
     {!loaded && !error && <p>{text('正在加载任务')}</p>}
     <fieldset disabled={busy} className="automation-content">
       {tab === 'tasks' && <>
@@ -170,7 +184,7 @@ export function AutomationCards({ notify, api }: { notify: (message: string) => 
           <button type="button" disabled={!selection.length} onClick={() => { setDeleteIds(selection) }}>{text('删除')}</button>
         </div>
       </footer>}
-      {draft !== null && <TaskEditor draft={draft} change={setDraft} api={api} error={error} titleId={`${prefix}-title`} close={() => { setDraft(null) }} save={() => { void save() }} />}
+      {draft !== null && <TaskEditor saving={busy} draft={draft} change={setDraft} api={api} error={error} titleId={`${prefix}-title`} close={() => { setDraft(null) }} save={() => { void save() }} />}
       {deleteRunId !== null && <div className="dsh-automation-modal-backdrop"><section className="dsh-automation-modal" role="dialog" aria-modal="true" aria-label={text('删除运行记录')}>
         <header><span>{text('删除运行记录')}</span></header><p>{text('仅删除这条运行记录，不会删除任务、会话或产物。')}</p>
         <footer><button type="button" onClick={() => { setDeleteRunId(null) }}>{text('取消')}</button><button type="button" onClick={() => {

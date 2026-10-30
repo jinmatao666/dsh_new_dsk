@@ -50,7 +50,8 @@
 
 .dsh-expert-tabs button:not(.active):hover::after { transform: scaleX(1); }
 
-.dsh-expert-category-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 17px; }
+.dsh-expert-catalog-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 17px; }
+.dsh-expert-category-row { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 
 .dsh-expert-category-row button { border: 1px solid transparent; border-radius: 999px; background: var(--dsw-alias-bg-elevated); color: var(--dsw-alias-label-secondary); cursor: pointer; font: inherit; font-size: 12px; padding: 6px 11px; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease; }
 
@@ -137,7 +138,6 @@
 .dsh-expert-card:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.65)}
 .dsh-expert-card:disabled:hover{transform:none;box-shadow:none}
 
-.dsh-expert-catalog-actions { display: flex; justify-content: flex-end; margin-bottom: 12px; }
-.dsh-expert-catalog-actions button { padding: 8px 14px; border: 1px solid #dbe4f0; border-radius: 8px; background: #fff; color: #334e6c; cursor: pointer; font: inherit; }
-.dsh-expert-catalog-actions button:hover { background: #f1f6ff; border-color: #a8c5ef; }
-.dsh-expert-catalog-actions button:disabled { opacity: .5; cursor: default; }
+.dsh-expert-refresh { display: inline-flex; flex: none; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid #dbe4f0; border-radius: 8px; background: #fff; color: #334e6c; cursor: pointer; font: inherit; font-size: 12px; }
+.dsh-expert-refresh:hover { background: #f1f6ff; border-color: #a8c5ef; }
+.dsh-expert-refresh:disabled { opacity: .5; cursor: default; }

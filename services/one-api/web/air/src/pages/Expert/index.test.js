@@ -2,6 +2,8 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import Expert from './index';
 
+jest.mock('@douyinfe/semi-ui', () => ({ Input: ({ onChange, showClear, prefix, ...props }) => <input {...props} onChange={event => onChange(event.target.value)} /> }));
+jest.mock('@douyinfe/semi-icons', () => ({ IconSearch: () => null }));
 jest.mock('../../components/ExpertWebTable', () => () => <div>专家网站配置</div>);
 jest.mock('../../components/ExpertCategory', () => () => <div>专家分类配置</div>);
 

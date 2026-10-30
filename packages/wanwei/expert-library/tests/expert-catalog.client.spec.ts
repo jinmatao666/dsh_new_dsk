@@ -61,3 +61,8 @@ describe('Wanwei published expert projection', () => {
     expect(parseExpertDetailSections('[{"title":"缺字段"}]')).toBeUndefined()
   })
 })
+
+it('preserves a hash-routed workbench in the published catalog', () => {
+  expect(projectPublishedExperts([{ key: 'hash-expert', name: 'Hash expert', workbench_url: 'http://ac.zjugis.com:8088/#/ai' }], []))
+    .toEqual([expect.objectContaining({ workbenchUrl: 'http://ac.zjugis.com:8088/#/ai' })])
+})

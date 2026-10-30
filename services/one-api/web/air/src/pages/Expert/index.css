@@ -18,3 +18,7 @@
 .expert-page .expert-page-surface{margin-top:14px!important;border-radius:14px!important}
 .expert-category-row{grid-template-columns:180px minmax(240px,1fr) 90px 90px 130px}
 @media(max-width:1050px){.expert-category-row{min-width:820px}}
+
+.expert-page-header{position:relative;padding-right:300px}
+.expert-page-search{position:absolute;right:0;bottom:14px;width:280px;border-radius:10px}
+@media(max-width:760px){.expert-page-header{padding-right:0}.expert-page-search{position:static;margin-top:16px;width:100%}}

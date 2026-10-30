@@ -10,6 +10,8 @@ Status: implemented
 
 ## Decision
 
+专家启动先原生加载不含片段和新签发票据的地址，再在匹配的顶层文档中、网站启动前注入启动地址。已有 hash 路由完整保留，票据通过独立查询参数传递；无片段登记仍沿用片段票据协议。使用 hash 路由的网站从 location.search 读取票据，并在兑换后清理。这样保留路由归属，也避免 macOS 将片段编码进 HTTP 请求路径。
+
 桌面端的 macOS `Info.plist` 仅为 `ac.zjugis.com` 域名添加 `NSExceptionAllowsInsecureHTTPLoads`。Tauri 将该文件合并进应用安装包。应用仍按所选专家的准确来源授权子 WebView，并使用一次性身份票据。
 
 ## Alternatives considered

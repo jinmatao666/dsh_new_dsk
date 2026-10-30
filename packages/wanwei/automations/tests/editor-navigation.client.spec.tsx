@@ -33,6 +33,7 @@ it('keeps the real feature panel and draft open across body-portal selections, b
     const call = vi.fn().mockResolvedValue({ tasks: [], runs: [] })
     const api: AutomationApi = {
       call, openSession: vi.fn(), fromTask: vi.fn(), chooseDirectory: async () => null,
+      listConnectors: async () => [{ id: 'feishu', name: '飞书', icon: '', connected: true }],
       listWorkspaces: async () => [{ title: '资料目录', path: 'C:\\project' }],
       listModels: async () => ({ default: { provider: 'mock', model: 'a' }, routableProviders: ['mock'], failures: [],
         groups: [{ id: 'mock', name: '测试', models: [{ id: 'a', name: '模型 A' }] }] }),
@@ -62,6 +63,11 @@ it('keeps the real feature panel and draft open across body-portal selections, b
     expect(owned.isOpen()).toBe(true)
     fireEvent.keyDown(screen.getByRole('dialog', { name: '执行权限' }), { key: 'Escape' })
     expect(screen.getByRole('button', { name: '工作区写入' })).toBeTruthy()
+    click(screen.getByRole('button', { name: '消息推送' }))
+    click(await screen.findByRole('switch', { name: '消息推送到飞书' }))
+    expect(owned.isOpen()).toBe(true)
+    expect(screen.getByRole('switch', { name: '消息推送到飞书' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.keyDown(screen.getByRole('dialog', { name: '消息推送' }), { key: 'Escape' })
     click(screen.getByRole('button', { name: '触发频率' }))
     click(within(screen.getByRole('dialog', { name: '重复' })).getByRole('button', { name: '每天' }))
     expect(owned.isOpen()).toBe(true)

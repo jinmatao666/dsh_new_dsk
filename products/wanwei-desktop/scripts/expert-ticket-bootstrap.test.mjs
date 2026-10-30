@@ -8,7 +8,7 @@ const template = readFileSync(new URL('../src-tauri/src/expert_ticket_bootstrap.
 function mount({ href = 'http://expert.test/experts/meeting-minutes/', child = false, storage = new Map(), marker = 'launch-1' } = {}) {
   const location = new URL(href)
   const launch = {
-    origin: 'http://expert.test', path: '/experts/meeting-minutes/', search: '',
+    origin: 'http://expert.test', path: '/experts/meeting-minutes/', search: '', targetSearch: '',
     fragment: `#ticket=${'a'.repeat(64)}`, marker,
   }
   const replacements = []
@@ -71,4 +71,14 @@ test('does not inject ticket into an iframe', () => {
   page.run()
   assert.equal(page.replacements.length, 0)
   assert.equal(page.storage.size, 0)
+})
+
+test('hash router preserves its route and receives a query ticket', () => {
+  const page = mount()
+  page.launch.fragment = '#/ai?mode=review'
+  page.launch.targetSearch = '?ticket=' + 'a'.repeat(64)
+  page.run()
+  assert.equal(page.location.hash, '#/ai?mode=review')
+  assert.equal(page.location.searchParams.get('ticket'), 'a'.repeat(64))
+  assert.equal(page.replacements.length, 1)
 })

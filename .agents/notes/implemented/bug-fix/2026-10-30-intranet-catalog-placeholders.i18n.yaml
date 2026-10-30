@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-30-intranet-catalog-placeholders.md
+2026-10-30-intranet-catalog-placeholders.md: 9102b4760c585c8669b89b79b29d62fbdd0b4282
+2026-10-30-intranet-catalog-placeholders.zh.md: 293466d023e9551b9dd6b8e8233b5ca5fa40877c

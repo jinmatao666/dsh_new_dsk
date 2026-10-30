@@ -80,7 +80,8 @@ it('selects an existing workspace or local folder without saving a task', async 
   fireEvent.click(screen.getByText('打开本地文件夹'))
   await waitFor(() => { expect(screen.getByRole('button', { name: '选择工作空间' }).title).toBe('C:\\local-output') })
   expect(call.mock.calls.every(args => args[0] === 'list')).toBe(true)
-  expect(screen.queryByText(/消息推送/)).toBeNull()
+  expect(screen.getByRole('button', { name: '消息推送' })).toBeTruthy()
+  expect(screen.queryByRole('switch', { name: '消息推送到飞书' })).toBeNull()
 })
 
 it('preserves the draft after directory cancellation or failure', async () => {
@@ -184,7 +185,7 @@ it('saves the real task through RPC and does not publish a failed write', async 
   fireEvent.click(screen.getByText('打开本地文件夹'))
   await waitFor(() => { expect(screen.getByRole('button', { name: '选择工作空间' }).title).toBe('C:\\work') })
   fireEvent.click(screen.getByRole('button', { name: '确定' }))
-  await waitFor(() => { expect(screen.getAllByText('磁盘写入失败')).toHaveLength(2) })
+  await waitFor(() => { expect(screen.getAllByText('磁盘写入失败')).toHaveLength(1) })
   expect(call.mock.calls[1]?.[0]).toBe('save')
   expect(call.mock.calls[1]?.[1]).toMatchObject({ task: { name: '真实任务', cwd: 'C:\\work', prompt: '汇总文件' } })
   expect(screen.getByRole('dialog')).toBeTruthy()
@@ -204,7 +205,7 @@ it('selects and saves a concrete initial model instead of a default-model placeh
   fireEvent.keyDown(screen.getByRole('textbox', { name: '搜索模型' }), { key: 'Escape' })
   fireEvent.change(screen.getByLabelText('任务名称'), { target: { value: '检查' } })
   fireEvent.change(screen.getByLabelText('任务说明'), { target: { value: '检查资料' } })
-  expect(screen.getByRole('button', { name: '确定' }).hasAttribute('disabled')).toBe(true)
+  expect(screen.getByRole('button', { name: '确定' }).hasAttribute('disabled')).toBe(false)
   fireEvent.click(screen.getByRole('button', { name: '选择工作空间' }))
   fireEvent.click(await screen.findByRole('button', { name: '资料' }))
   expect(screen.getByRole('button', { name: '确定' }).hasAttribute('disabled')).toBe(false)
@@ -354,4 +355,45 @@ it('confirms record-only deletion through RPC without opening or deleting its Se
   await screen.findByText('暂无真实运行记录')
   expect(call).toHaveBeenCalledWith('delete-run', { id: 'run' }, expect.any(AbortSignal))
   expect(openSession).not.toHaveBeenCalled()
+})
+
+it('allocates only on confirmation without a chosen workspace and reuses it after a save failure', async () => {
+  const allocate = vi.fn(async () => 'C:\\workspaces\\20261030080405')
+  let attempts = 0
+  const call = vi.fn(async (operation: string, _payload: unknown): Promise<AutomationSnapshot> => {
+    if (operation === 'save' && ++attempts === 1) throw new Error('保存失败，请重试')
+    return empty
+  })
+  render(<AutomationCards api={{ ...directories, call, openSession: vi.fn(), fromTask: vi.fn(),
+    createAutomaticWorkspace: allocate }} notify={vi.fn()} />)
+  await screen.findByText('尚未配置自动化')
+  fireEvent.click(screen.getByRole('button', { name: '新建' }))
+  fireEvent.change(screen.getByRole('textbox', { name: '任务名称' }), { target: { value: '自动工作区任务' } })
+  fireEvent.change(screen.getByRole('textbox', { name: '任务说明' }), { target: { value: '推荐十本书' } })
+  await waitFor(() => { expect(screen.getByRole('button', { name: '确定' }).hasAttribute('disabled')).toBe(false) })
+  expect(allocate).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '确定' }))
+  await screen.findByText('保存失败，请重试')
+  expect(allocate).toHaveBeenCalledOnce()
+  expect(screen.getByRole('button', { name: '选择工作空间' }).title).toBe('C:\\workspaces\\20261030080405')
+  fireEvent.click(screen.getByRole('button', { name: '确定' }))
+  await waitFor(() => { expect(screen.queryByRole('dialog', { name: '新建定时任务' })).toBeNull() })
+  expect(allocate).toHaveBeenCalledOnce()
+  expect(call.mock.calls.find(args => args[0] === 'save')?.[1]).toMatchObject({ task: { cwd: 'C:\\workspaces\\20261030080405' } })
+})
+
+it('preserves the draft when automatic workspace creation fails and allows retry', async () => {
+  const allocate = vi.fn<() => Promise<string>>().mockRejectedValueOnce(new Error('磁盘不可写')).mockResolvedValueOnce('C:\\automatic')
+  const call = vi.fn(async (): Promise<AutomationSnapshot> => empty)
+  render(<AutomationCards api={{ ...directories, call, openSession: vi.fn(), fromTask: vi.fn(),
+    createAutomaticWorkspace: allocate }} notify={vi.fn()} />)
+  await screen.findByText('尚未配置自动化')
+  fireEvent.click(screen.getByRole('button', { name: '新建' }))
+  fireEvent.change(screen.getByRole('textbox', { name: '任务名称' }), { target: { value: '保留草稿' } })
+  fireEvent.change(screen.getByRole('textbox', { name: '任务说明' }), { target: { value: '汇总资料' } })
+  fireEvent.click(await screen.findByRole('button', { name: '确定' }))
+  await screen.findByText('磁盘不可写')
+  expect(screen.getByDisplayValue('保留草稿')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '确定' }))
+  await waitFor(() => { expect(allocate).toHaveBeenCalledTimes(2) })
 })

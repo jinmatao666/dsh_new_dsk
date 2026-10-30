@@ -46,6 +46,7 @@ export function NotificationConnectionDialog({ connection, channel, complete }: 
   return createPortal(<div className="dsh-connector-modal-backdrop" data-dsh-select-owner="automation-authorization-owner" style={{ zIndex: 2000 }}>
     <section className="dsh-connector-detail" role="dialog" aria-modal="true" aria-label={name}>
       <header><h2>{name}</h2><button type="button" aria-label="关闭连接页面" onClick={() =>{  complete(false) }}>×</button></header>
+      <p role="status">{name}尚未连接，请先完成连接，成功后将自动开启消息推送。</p>
       {notice && <p role="status">{notice}</p>}
       {channel === 'feishu' ? <FeishuPanel api={feishu} onStatus={() => {}} onTry={() => {}} /> : channel === 'dingtalk'
         ? <DingTalkPanel api={dingTalk} onNotice={(value) =>{  setNotice(value.text) }} onTry={() => {}} />

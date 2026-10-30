@@ -17,12 +17,14 @@ const record = { ...skill, source: 'skillhub', localSlug: 'pdf-helper', sha256: 
 const page = { items: [skill], total: 13, pageSize: 12 }
 
 describe('SkillHub marketplace workflow', () => {
-  it('hides SkillHub on an intranet while keeping installed platform skills visible', async () => {
+  it('preserves the SkillHub placeholder on an intranet while keeping installed platform skills visible', async () => {
     const request = vi.fn()
     const invoke = vi.fn(async () => [record])
     const props = { active: true, access: 'hide' as const, request, invoke, onUse: vi.fn(), onCount: vi.fn() }
     const view = render(<SkillHubSection {...props} installedOnly={false} />)
-    expect(screen.queryByLabelText('SkillHub 技能')).toBeNull()
+    expect(screen.getByLabelText('SkillHub 技能')).toBeTruthy()
+    expect(screen.getByText('SkillHub 需要互联网连接，当前网络暂时无法访问。')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /PDF 助手/ })).toBeNull()
     view.rerender(<SkillHubSection {...props} installedOnly installedPlatforms={[
       { id: 'local', slug: 'local', name: '本地技能', summary: '可离线使用', searchText: '本地技能', card: <div key="local">本地技能卡片</div> },
     ]} />)
@@ -37,10 +39,41 @@ describe('SkillHub marketplace workflow', () => {
     const view = render(<SkillHubSection {...props} installedOnly={false} />)
     expect(screen.getByRole('heading', { name: 'SkillHub 技能暂不可用' })).toBeTruthy()
     expect(request).not.toHaveBeenCalled()
+    const catalogCard = await screen.findByRole('button', { name: /PDF 助手/ }) as HTMLButtonElement
+    expect(catalogCard.disabled).toBe(true)
+    fireEvent.click(catalogCard)
+    expect(screen.queryByRole('region', { name: skill.name })).toBeNull()
+    expect(props.onUse).not.toHaveBeenCalled()
     view.rerender(<SkillHubSection {...props} installedOnly installedPlatforms={[]} />)
     const card = await screen.findByRole('button', { name: /PDF 助手/ }) as HTMLButtonElement
     expect(card.disabled).toBe(true)
     expect(request).not.toHaveBeenCalled()
+  })
+  it('uses a placeholder when no SkillHub cards are available and never exposes policy wording', async () => {
+    const request = vi.fn()
+    const view = render(<SkillHubSection active access="disable" installedOnly={false}
+      request={request} invoke={async () => []} onUse={vi.fn()} onCount={vi.fn()} />)
+    expect(await screen.findByRole('heading', { name: 'SkillHub 技能暂不可用' })).toBeTruthy()
+    expect(view.container.textContent).not.toMatch(/灰化|隐藏|内网设置/)
+    expect(request).not.toHaveBeenCalled()
+  })
+  it('retains loaded cards as disabled and restores them after network access returns', async () => {
+    const request = vi.fn(async (operation: string) => operation === 'categories' ? { items: [] } : page)
+    const props = { active: true, installedOnly: false, request, invoke: vi.fn(async () => []), onUse: vi.fn(), onCount: vi.fn() }
+    const view = render(<SkillHubSection {...props} />)
+    const card = await screen.findByRole('button', { name: /PDF 助手/ })
+    const count = request.mock.calls.length
+    view.rerender(<SkillHubSection {...props} access="disable" />)
+    expect(screen.getByRole('button', { name: /PDF 助手/ })).toHaveProperty('disabled', true)
+    expect(screen.queryByRole('heading', { name: 'SkillHub 技能暂不可用' })).toBeNull()
+    fireEvent.click(card)
+    expect(request).toHaveBeenCalledTimes(count)
+    view.rerender(<SkillHubSection {...props} access="hide" />)
+    expect(screen.getByRole('heading', { name: 'SkillHub 技能暂不可用' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /PDF 助手/ })).toBeNull()
+    expect(request).toHaveBeenCalledTimes(count)
+    view.rerender(<SkillHubSection {...props} access="available" />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /PDF 助手/ })).toHaveProperty('disabled', false))
   })
   it('shows a SkillHub illustration only after request failure and reloads on reopening', async () => {
     let offline = true

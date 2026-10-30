@@ -13,7 +13,8 @@ import { productText as text } from './locales/product.ts'
  * @param props - Draft, Host selectors and explicit commit callbacks.
  * @returns Task dialog; changes are draft-only until confirmation.
  */
-export function TaskEditor({ draft, change, api, error, titleId, close, save }: {
+export function TaskEditor({ draft, change, api, error, titleId, close, save, saving = false }: {
+  saving?: boolean
   draft: AutomationTask
   change: (draft: AutomationTask) => void
   api: AutomationApi
@@ -32,7 +33,7 @@ export function TaskEditor({ draft, change, api, error, titleId, close, save }: 
   const [connectors, setConnectors] = useState<Awaited<ReturnType<NonNullable<AutomationApi['listConnectors']>>>>([])
   const [connecting, setConnecting] = useState<string | null>(null)
   const [connectorError, setConnectorError] = useState('')
-  const [panel, setPanel] = useState<'workspace' | 'permission' | 'model' | 'cadence' | 'time' | 'validity' | null>(null)
+  const [panel, setPanel] = useState<'workspace' | 'permission' | 'model' | 'cadence' | 'time' | 'validity' | 'push' | null>(null)
   const active = useRef(true)
   const current = useRef(draft)
   current.current = draft
@@ -86,10 +87,10 @@ export function TaskEditor({ draft, change, api, error, titleId, close, save }: 
   const invalidRange = draft.endDate !== undefined && draft.endDate < (draft.startDate ?? today)
   const validity = draft.cadence === 'once' ? draft.startDate ?? today : draft.endDate ? text('至 {0}', [draft.endDate]) : text('长期有效')
   return <div className="dsh-automation-modal-backdrop"><form className="dsh-automation-modal automation-card-dialog automation-task-editor"
-    role="dialog" aria-modal="true" aria-labelledby={titleId} onSubmit={(event) => { event.preventDefault(); collapse(); save() }}
-    onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); if (panel) collapse(); else if (connecting) setConnecting(null); else close() } }}>
+    role="dialog" aria-modal="true" aria-labelledby={titleId} onSubmit={(event) => { event.preventDefault(); collapse(); if (!saving) save() }}
+    onKeyDown={(event) => { if (event.key === 'Escape' && !saving) { event.stopPropagation(); if (panel) collapse(); else if (connecting) setConnecting(null); else close() } }}>
     <header><span id={titleId}>{draft.id ? text('编辑任务') : text('新建定时任务')}</span>
-      <button type="button" aria-label={text('关闭')} onClick={close}><IconCloseOutline16 size={20} /></button></header>
+      <button type="button" aria-label={text('关闭')} disabled={saving} onClick={close}><IconCloseOutline16 size={20} /></button></header>
     <input autoFocus aria-label={text('任务名称')} required maxLength={80} value={draft.name}
       onChange={(event) => { change({ ...draft, name: event.target.value }) }} placeholder={text('输入任务名称')} />
     <div className="automation-prompt-shell">
@@ -122,6 +123,25 @@ export function TaskEditor({ draft, change, api, error, titleId, close, save }: 
           <div className="automation-permission-toggle"><span>{text('允许完全访问')}</span><button type="button" role="switch" aria-label={text('允许完全访问')} aria-checked={fullAccess} className={`automation-task-switch${fullAccess ? ' on' : ''}`} onClick={() => { change({ ...draft, fullAccess: !fullAccess }) }} /></div>
         </TaskPopover>
 
+        <TaskPopover open={panel === 'push'} close={collapse} label={text('消息推送')} className="automation-push-menu"
+          trigger={<button id="automation-authorization-owner" type="button" className="automation-editor-trigger"
+            aria-label={text('消息推送')} aria-expanded={panel === 'push'} onClick={() => { toggle('push') }}>
+            <span>{text('消息推送')}{draft.pushChannels?.length ? ` (${draft.pushChannels.length})` : ''}</span>
+            <IconChevronDownOutline14 /></button>}>
+          {connectors.map((item) => {
+            const checked = draft.pushChannels?.includes(item.id) === true
+            return <label key={item.id} className="automation-push-option"><span>{text('消息推送到{0}', [item.name])}</span>
+              <button type="button" role="switch" aria-label={text('消息推送到{0}', [item.name])} aria-checked={checked}
+                className={`automation-task-switch${checked ? ' on' : ''}`} onClick={() => {
+                  if (!checked && !item.connected) { collapse(); setConnecting(item.id); return }
+                  change({ ...draft, pushChannels: checked
+                    ? draft.pushChannels?.filter(id => id !== item.id) : [...draft.pushChannels ?? [], item.id] })
+                }} />
+            </label>
+          })}
+          {connectorError && <p role="alert">{connectorError}</p>}
+          {!connectors.length && !connectorError && <p role="status">{text('正在加载连接器')}</p>}
+        </TaskPopover>
       </div>
     </div>
     <div className="automation-editor-schedule">
@@ -138,23 +158,6 @@ export function TaskEditor({ draft, change, api, error, titleId, close, save }: 
         <TaskCalendar draft={draft} change={change} close={collapse} />
       </TaskPopover>
     </div>
-    <div id="automation-authorization-owner" className="automation-push-options">
-      {connectors.map((item) => {
-        const checked = draft.pushChannels?.includes(item.id) === true
-        return <label key={item.id} className="automation-push-option"><span>{text('消息推送到{0}', [item.name])}</span>
-          <button type="button" role="switch" aria-label={text('消息推送到{0}', [item.name])} aria-checked={checked}
-            className={`automation-task-switch${checked ? ' on' : ''}`} onClick={() => {
-              if (!checked && !item.connected) { setConnecting(item.id); return }
-              change({ ...draft, pushChannels: checked
-                ? draft.pushChannels?.filter(id => id !== item.id) : [...draft.pushChannels ?? [], item.id] })
-            }} />
-          {!item.connected && <small>{text('未连接')}</small>}
-        </label>
-      })}
-      {connectorError && <p role="alert">{connectorError}</p>}
-      {!connectors.length && !connectorError && <p role="status">{text('正在加载连接器')}</p>}
-      <p>{text('任务结束后，将结果推送到你绑定的账号。')}</p>
-    </div>
     {connecting && api.connectionDialog?.(connecting, (connected) => {
       if (connected) {
         const id = connecting as 'feishu' | 'dingtalk' | 'wechat'
@@ -166,6 +169,6 @@ export function TaskEditor({ draft, change, api, error, titleId, close, save }: 
     {draft.cadence === 'interval' && <label className="automation-interval-field">{text('间隔分钟')}<input type="number" min={1} max={525600} required value={draft.intervalMinutes ?? 60} onChange={(event) => { change({ ...draft, intervalMinutes: event.target.valueAsNumber }) }} /></label>}
     {invalidRange && <p role="alert" className="automation-error">{text('结束日期不能早于开始日期')}</p>}
     {(selectorError || error) && <p role="alert" className="automation-error">{selectorError || error}</p>}
-    <footer><button type="button" onClick={close}>{text('取消')}</button><button type="submit" disabled={picking || invalidRange || !draft.name.trim() || !draft.prompt.trim() || !draft.cwd.trim() || !draft.model}>{text('确定')}</button></footer>
+    <footer><button type="button" disabled={saving} onClick={close}>{text('取消')}</button><button type="submit" disabled={saving || picking || invalidRange || !draft.name.trim() || !draft.prompt.trim() || !draft.model}>{text('确定')}</button></footer>
   </form></div>
 }

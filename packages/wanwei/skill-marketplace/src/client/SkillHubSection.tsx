@@ -273,12 +273,17 @@ export function SkillHubSection({
   </button>
 
   if (!active) return null
-  if (!installedOnly && access === 'hide') return null
-  if (!installedOnly && access === 'disable') return (
+  const unavailableCards = data.items.length > 0 ? data.items.slice(0, 12) : installed.map(item => ({
+    ...item, author: '', category: '', paid: false, requiresApiKey: false,
+  })).slice(0, 12)
+  if (!installedOnly && access !== 'available') return (
     <section className="wanwei-skillhub" aria-label={productText('SkillHub 技能')} aria-disabled="true">
       <div className="dsh-skill-section-header"><h2>{productText('SkillHub 技能')}</h2></div>
-      <ServiceUnavailable variant="skillhub" title={productText('SkillHub 技能暂不可用')}
-        description={productText('当前内网设置已灰化需要互联网的技能。')} />
+      {access === 'disable' && unavailableCards.length > 0
+        ? <div className="dsh-skill-grid">{unavailableCards.map(skill => renderHubCard(skill, skill.slug))}</div>
+        : <ServiceUnavailable variant="skillhub" title={productText('SkillHub 技能暂不可用')}
+          description={productText('SkillHub 需要互联网连接，当前网络暂时无法访问。')}
+          hint={productText('您仍可使用平台技能和本地技能')} />}
     </section>
   )
   if (error && !loading && !installedOnly) return (

@@ -1063,23 +1063,29 @@ fn expert_webview_url(raw: &str, ticket: &str) -> Result<(Url, Url), String> {
         || url.host_str().is_none()
         || !url.username().is_empty()
         || url.password().is_some()
-        || url.fragment().is_some()
         || ticket.len() != 64
         || !ticket.bytes().all(|byte| byte.is_ascii_hexdigit())
     {
         return Err("专家网页地址或票据无效".to_string());
     }
-    let allowed = url.clone();
-    url.set_fragment(Some(&format!("ticket={ticket}")));
+    let mut allowed = url.clone();
+    allowed.set_fragment(None);
+    if url.fragment().is_some() {
+        let pairs: Vec<(String, String)> = url.query_pairs().filter(|(key, _)| key != "ticket").map(|(key, value)| (key.into_owned(), value.into_owned())).collect();
+        url.query_pairs_mut().clear().extend_pairs(pairs).append_pair("ticket", ticket);
+    } else {
+        url.set_fragment(Some(&format!("ticket={ticket}")));
+    }
     Ok((url, allowed))
 }
 
-fn expert_ticket_bootstrap(url: &Url) -> String {
+fn expert_ticket_bootstrap(url: &Url, native: &Url) -> String {
     let marker = format!("wanwei-expert-launch:{:x}", Sha256::digest(url.as_str().as_bytes()));
     let payload = serde_json::json!({
         "origin": url.origin().ascii_serialization(),
         "path": url.path(),
-        "search": url.query().filter(|query| !query.is_empty()).map(|query| format!("?{query}")).unwrap_or_default(),
+        "targetSearch": url.query().filter(|query| !query.is_empty()).map(|query| format!("?{query}")).unwrap_or_default(),
+        "search": native.query().filter(|query| !query.is_empty()).map(|query| format!("?{query}")).unwrap_or_default(),
         "fragment": url.fragment().map(|fragment| format!("#{fragment}")).unwrap_or_default(),
         "marker": marker,
     });
@@ -1179,7 +1185,7 @@ async fn open_expert_webview(
     let title_app = window.app_handle().clone();
     let title_label = label.clone();
     // 原生加载不携带 fragment，避免部分 Mac 将 #ticket 编成请求路径 %23ticket。
-    let ticket_bootstrap = expert_ticket_bootstrap(&launch_url);
+    let ticket_bootstrap = expert_ticket_bootstrap(&launch_url, &allowed_url);
     let builder = webview_environment::expert_builder(&label, allowed_url.clone())
         .initialization_script(NATIVE_BRIDGE_INITIALIZATION_SCRIPT)
         .initialization_script(&ticket_bootstrap)
@@ -2825,7 +2831,7 @@ mod expert_web_tests {
         ).unwrap();
         assert_eq!(native.fragment(), None);
         assert!(!native.as_str().contains(&ticket));
-        let script = expert_ticket_bootstrap(&launch);
+        let script = expert_ticket_bootstrap(&launch, &native);
         assert!(!script.contains("__WANWEI_EXPERT_LAUNCH__"));
         let json = script.split("const launch = ").nth(1).unwrap().split(';').next().unwrap();
         let payload: serde_json::Value = serde_json::from_str(json).unwrap();
@@ -2853,12 +2859,24 @@ mod expert_web_tests {
     }
 
     #[test]
+    fn hash_routes_keep_the_route_and_use_a_separate_ticket_query() {
+        let ticket = "b".repeat(64);
+        let (launch, native) = expert_webview_url("http://ac.zjugis.com:8088/?mode=test#/ai", &ticket).unwrap();
+        assert_eq!(launch.fragment(), Some("/ai"));
+        assert_eq!(native.fragment(), None);
+        assert_eq!(native.query(), Some("mode=test"));
+        assert!(!native.as_str().contains(&ticket));
+        assert!(launch.query_pairs().any(|(key, value)| key == "ticket" && value == ticket));
+        let script = expert_ticket_bootstrap(&launch, &native);
+        assert!(script.contains("targetSearch"));
+    }
+
+    #[test]
     fn rejects_untrusted_launch_inputs() {
         let ticket = "a".repeat(64);
         for address in [
             "file:///expert.html",
             "https://user:pass@expert.example.com",
-            "https://expert.example.com/#old",
         ] {
             assert!(expert_webview_url(address, &ticket).is_err());
         }
