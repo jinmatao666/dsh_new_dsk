@@ -12,6 +12,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/songquanpeng/one-api/common/deployment"
 )
 
 type skillTestCall struct {
@@ -189,7 +191,7 @@ func skillTestCompletion(ctx context.Context, modelName, key string, messages []
 		if port == "" {
 			port = "3000"
 		}
-		endpoint = "http://127.0.0.1:" + port + "/v1/chat/completions"
+		endpoint = "http://127.0.0.1:" + port + deployment.Current.APIPrefix + "/v1/chat/completions"
 	}
 	var response struct {
 		Choices []struct {

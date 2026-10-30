@@ -1,3 +1,4 @@
+import { resourceURL } from '../deployment';
 import { API } from '../helpers';
 
 const encoder = new TextEncoder();
@@ -334,7 +335,7 @@ export async function fetchOfficialSkillFiles(skill) {
     const path = safePackagePath(declaredPath);
     if (!path) throw new Error(`技能文件路径无效：${String(declaredPath)}`);
     const url = `${base}/${path.split('/').map(encodeURIComponent).join('/')}`;
-    const response = await fetch(url);
+    const response = await fetch(resourceURL(url));
     if (!response.ok) throw new Error(`加载技能文件失败：${path}（${response.status}）`);
     return { path, data: new Uint8Array(await response.arrayBuffer()) };
   }));

@@ -1,0 +1,34 @@
+# Replace example hosts, upstream addresses, prefixes and TLS settings locally.
+# All proxies preserve the complete external path. proxy_pass has NO trailing /.
+# For root deployment use location / to the same backend; remove the admin/api blocks.
+# When changing prefixes, change this template AND .env, then recreate the container.
+map $http_upgrade $connection_upgrade { default upgrade; "" close; }
+upstream dsh_backend { server 127.0.0.1:3000; }
+upstream dsh_org { server 127.0.0.1:3001; }
+server {
+    listen 80;
+    server_name backend.example;
+    client_max_body_size 2g;
+    # Apply these to every location, including any outer reverse proxies.
+    # At a TLS-terminating outer gateway set proto=https; inner gateways must preserve
+    # that TRUSTED value rather than overwrite it with their internal HTTP scheme.
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Host $http_host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_buffering off;
+    proxy_request_buffering off;
+    proxy_cache off;
+    location = /dsh-admin { return 307 /dsh-admin/$is_args$args; }
+    location /dsh-admin/ { proxy_pass http://dsh_backend; }
+    location = /dsh-api { return 307 /dsh-api/$is_args$args; }
+    location /dsh-api/ { proxy_pass http://dsh_backend; }
+    location = /business { return 307 /business/$is_args$args; }
+    location /business/ { proxy_pass http://dsh_org; }
+    location / { return 404; }
+}

@@ -1,3 +1,4 @@
+import { adminPrefix, resourceURL } from '../deployment';
 import { Toast } from '@douyinfe/semi-ui';
 import { toastConstants } from '../constants';
 import React from 'react';
@@ -38,8 +39,8 @@ export function getSystemName() {
 
 export function getLogo() {
   let logo = localStorage.getItem('logo');
-  if (!logo) return '/brand-mark.svg';
-  return logo
+  if (!logo) return resourceURL('/brand-mark.svg');
+  return resourceURL(logo)
 }
 
 export function getFooterHTML() {
@@ -113,7 +114,7 @@ export function showError(error) {
       switch (status) {
         case 401:
           // toast.error('错误：未登录或登录已过期，请重新登录！', showErrorOptions);
-          window.location.href = `${process.env.PUBLIC_URL || ''}/login?expired=true`;
+          window.location.href = `${adminPrefix}/login?expired=true`;
           break;
         case 429:
           Toast.error('错误：请求次数过多，请稍后再试！');

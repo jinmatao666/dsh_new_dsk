@@ -164,7 +164,7 @@ export default function ExpertWebTable({ keyword = '' }) {
         <label>专家名称<input value={editing.name} onChange={event => setEditing({ ...editing, name: event.target.value })} /></label>
         <label>提供方<input value={editing.provider} onChange={event => setEditing({ ...editing, provider: event.target.value })} /></label>
         <label>分类<CustomSelect aria-label='分类' value={editing.category} onChange={event => setEditing({ ...editing, category: event.target.value })}><option value=''>请选择分类</option>{categories.map(category => <option key={category.id} value={category.name}>{category.name}</option>)}</CustomSelect></label>
-        <label className='wide'>HTTP/HTTPS 工作台地址<input type='url' value={editing.workbench_url} placeholder='http://ac.zjugis.com:3301/' onChange={event => setEditing({ ...editing, workbench_url: event.target.value })} /></label>
+        <label className='wide'>HTTP/HTTPS 工作台地址<input type='url' value={editing.workbench_url} placeholder='https://expert.example/' onChange={event => setEditing({ ...editing, workbench_url: event.target.value })} /></label>
         <label>顺序（数字越大越靠前）<input type='number' step='1' value={editing.sort_order ?? ''} placeholder='留空按创建时间倒序' onChange={event => setEditing({ ...editing, sort_order: event.target.value === '' ? null : Number(event.target.value) })} /></label>
         <label><span>需要访问互联网</span><input type='checkbox' checked={editing.requires_internet !== false} onChange={event => setEditing({ ...editing, requires_internet: event.target.checked })} /></label>
         <label>副标题<input value={editing.subtitle} onChange={event => setEditing({ ...editing, subtitle: event.target.value })} /></label>

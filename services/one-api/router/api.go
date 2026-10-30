@@ -10,6 +10,11 @@ import (
 )
 
 func SetApiRouter(router *gin.Engine) {
+	// The separately deployed website reads this public catalog without credentials.
+	// Keep it outside the authenticated API's deployment-specific CORS policy.
+	router.GET("/api/website-installers", middleware.GlobalAPIRateLimit(), controller.PublicWebsiteInstallers)
+	router.GET("/downloads/installers/:id", controller.DownloadWebsiteInstaller)
+	router.HEAD("/downloads/installers/:id", controller.DownloadWebsiteInstaller)
 	// Upgrade requests must bypass API gzip; authentication still applies.
 	router.GET("/api/desktop-resources/tunnel", middleware.UserAuth(), controller.DesktopResourceTunnel)
 	// Public binary downloads bypass API gzip and authentication; only published artifacts are exposed.
@@ -20,6 +25,11 @@ func SetApiRouter(router *gin.Engine) {
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
 	apiRouter.Use(middleware.GlobalAPIRateLimit())
 	apiRouter.Use(middleware.AdminOperationLog()) // 后台操作审计记录
+	installers := apiRouter.Group("/admin/website-installers", middleware.RootAuth())
+	installers.GET("", controller.AdminListWebsiteInstallers)
+	installers.POST("", controller.AdminUploadWebsiteInstaller)
+	installers.POST("/:id/:action", controller.AdminChangeWebsiteInstaller)
+	installers.DELETE("/:id", controller.AdminChangeWebsiteInstaller)
 	desktopUpdates := apiRouter.Group("/desktop-updates", middleware.UserAuth())
 	desktopUpdates.GET("", controller.AdminListDesktopUpdates)
 	desktopUpdates.POST("", controller.AdminUploadDesktopUpdate)

@@ -29,6 +29,11 @@ export default function systemSettingsMock() {
         response.setHeader('X-Preview-Data', 'mock');
         let payload = { success: true, data: [], totalItems: 0 };
         if (pathname === '/api/user/self') payload.data = user;
+        if (pathname === '/api/desktop-updates') payload.data = { items: [], channels: [], signing_configured: true };
+        if (pathname === '/api/admin/website-installers') {
+          if (request.method !== 'GET') { response.statusCode = 409; payload = { success: false, message: '本地样式预览不保存文件，请连接实际后台测试上传与发布。' }; }
+          else payload.data = { items: [], channels: [], max_bytes: 2147483648 };
+        }
         if (pathname === '/api/user/') { payload.data = [colleague, user]; payload.total = 2; }
         if (pathname === '/api/user/7') payload.data = colleague;
         if (pathname === '/api/user/1') payload.data = user;

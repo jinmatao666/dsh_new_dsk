@@ -8,6 +8,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/deployment"
 	"github.com/songquanpeng/one-api/common/i18n"
 	"github.com/songquanpeng/one-api/common/message"
 	"github.com/songquanpeng/one-api/model"
@@ -42,7 +43,8 @@ func GetStatus(c *gin.Context) {
 			"footer_html":                 config.Footer,
 			"wechat_qrcode":               config.WeChatAccountQRCodeImageURL,
 			"wechat_login":                config.WeChatAuthEnabled,
-			"server_address":              config.ServerAddress,
+			"server_address":              deployment.Current.AdminBase(config.ServerAddress),
+			"api_public_url":              deployment.Current.APIBase(config.ServerAddress),
 			"default_model":               defaultModel,
 			"vision_model":                visionModel,
 			"search_model":                searchModel,
@@ -175,7 +177,7 @@ func SendPasswordResetEmail(c *gin.Context) {
 	}
 	code := common.GenerateVerificationCode(0)
 	common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
-	link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", config.ServerAddress, email, code)
+	link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", deployment.Current.AdminBase(config.ServerAddress), email, code)
 	subject := fmt.Sprintf("%s 密码重置", config.SystemName)
 	content := message.EmailTemplate(
 		subject,

@@ -9,9 +9,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/songquanpeng/one-api/common/deployment"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -499,13 +499,8 @@ func CheckDesktopUpdate(c *gin.Context) {
 	}
 	// Tauri requires an absolute URL. Native clients use download_path with their
 	// configured backend instead, so proxy headers cannot choose the download host.
-	scheme := "http"
-	if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
 	downloadPath := "desktop-updates/files/" + record.ID
-	downloadURL := url.URL{Scheme: scheme, Host: c.Request.Host, Path: "/" + downloadPath}
-	c.JSON(200, gin.H{"version": record.Version, "notes": record.Notes, "release_id": record.ID, "pub_date": channel.UpdatedAt.UTC().Format(time.RFC3339), "url": downloadURL.String(), "download_path": downloadPath, "signature": manifest.Signature, "manifest": record.Manifest, "manifest_signature": record.ManifestSignature})
+	c.JSON(200, gin.H{"version": record.Version, "notes": record.Notes, "release_id": record.ID, "pub_date": channel.UpdatedAt.UTC().Format(time.RFC3339), "url": deployment.Current.External(c.Request, downloadPath), "download_path": downloadPath, "signature": manifest.Signature, "manifest": record.Manifest, "manifest_signature": record.ManifestSignature})
 }
 
 // DownloadDesktopUpdate exposes only the active published artifact, never an arbitrary storage path.

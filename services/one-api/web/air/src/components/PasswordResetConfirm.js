@@ -1,3 +1,4 @@
+import { resourceURL } from '../deployment';
 import React, { useEffect, useState } from 'react';
 import { Button, Form, Grid, Header, Image, Segment } from 'semantic-ui-react';
 import { API, copy, showError, showNotice } from '../helpers';
@@ -64,7 +65,7 @@ const PasswordResetConfirm = () => {
     <Grid textAlign="center" style={{ marginTop: '48px' }}>
       <Grid.Column style={{ maxWidth: 450 }}>
         <Header as="h2" color="" textAlign="center">
-          <Image src="/brand-mark.svg" /> 密码重置确认
+          <Image src={resourceURL('/brand-mark.svg')} /> 密码重置确认
         </Header>
         <Form size="large">
           <Segment>

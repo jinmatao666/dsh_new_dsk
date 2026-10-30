@@ -1,0 +1,18 @@
+name: ${COMPOSE_PROJECT_NAME:-dsh-backend}
+services:
+  backend:
+    image: ${DSH_IMAGE:?Set DSH_IMAGE to a versioned image or digest}
+    platform: ${DSH_PLATFORM:-linux/amd64}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "3000"
+      ORG_PORTAL_PORT: "3001"
+      SQLITE_PATH: /data/one-api.db
+      DESKTOP_UPDATE_DIR: /data/wanwei/desktop-updates
+    ports:
+      - "${DSH_BIND_ADDRESS:-127.0.0.1}:${DSH_HTTP_PORT:-3000}:3000"
+      - "${DSH_BIND_ADDRESS:-127.0.0.1}:${DSH_ORG_PORT:-3001}:3001"
+    volumes:
+      - ${DSH_DATA_DIR:-./data}:/data
+    stop_grace_period: 60s

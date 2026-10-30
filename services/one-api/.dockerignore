@@ -6,6 +6,9 @@
 Dockerfile
 docker-compose.yml
 data/
+deploy/data/
+deploy/.env*
+!deploy/.env.example
 logs/
 *.log
 *.db

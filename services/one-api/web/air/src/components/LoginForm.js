@@ -1,3 +1,4 @@
+import { resourceURL } from '../deployment';
 import React, { useContext, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { UserContext } from '../context/User';
@@ -128,7 +129,7 @@ const LoginForm = () => {
       <section className="wanwei-auth-visual">
         <div className="wanwei-auth-visual-glow" />
         <div className="wanwei-auth-brand-lockup">
-          <img className="zjugis-auth-brand-logo" src="/brand-wordmark.svg" alt="万维 Buddy" />
+          <img className="zjugis-auth-brand-logo" src={resourceURL('/brand-wordmark.svg')} alt="万维 Buddy" />
         </div>
         <p>面向模型服务与智能工作流的统一管理平台</p>
         <span>SECURE MODEL OPERATIONS</span>
@@ -137,7 +138,7 @@ const LoginForm = () => {
         <div className="wanwei-auth-card-wrap">
           <Card className="wanwei-auth-card">
             <div className="wanwei-auth-card-brand">
-              <img src="/brand-wordmark.svg" alt="万维 Buddy" />
+              <img src={resourceURL('/brand-wordmark.svg')} alt="万维 Buddy" />
             </div>
             <Title heading={2} style={{ textAlign: 'left', marginBottom: 6 }}>
               登录

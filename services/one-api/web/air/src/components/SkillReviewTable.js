@@ -1,3 +1,4 @@
+import { adminURL } from '../deployment';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
 import { Modal, Table, Tag, TextArea } from '@douyinfe/semi-ui';
 import SkillBrowseDrawer from './SkillBrowseDrawer';
@@ -30,7 +31,7 @@ const SkillReviewTable = forwardRef(({ keyword: keywordProp = '', onCountsChange
   const [browse, setBrowse] = useState({ visible: false, skill: null });
   const [rejecting, setRejecting] = useState(null);
   const [reason, setReason] = useState('');
-  const openTest = skill => window.open(`/skill/reviews/${skill.id}/test`, '_blank', 'noopener');
+  const openTest = skill => window.open(adminURL(`/skill/reviews/${skill.id}/test`), '_blank', 'noopener');
 
   const refreshCounts = useCallback(async () => {
     const next = await fetchReviewCounts();

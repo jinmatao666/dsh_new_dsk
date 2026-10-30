@@ -1,3 +1,4 @@
+import { adminURL } from './deployment';
 import { createBrowserHistory } from 'history';
 
 // 全局共享的 history 实例。
@@ -7,4 +8,8 @@ import { createBrowserHistory } from 'history';
 // 站内 <Link> 跳转，实现"未保存提示"。
 const history = createBrowserHistory();
 
+for (const method of ['push', 'replace']) {
+  const original = history[method].bind(history);
+  history[method] = (to, state) => original(typeof to === 'string' ? adminURL(to) : { ...to, pathname: adminURL(to.pathname) }, state);
+}
 export default history;

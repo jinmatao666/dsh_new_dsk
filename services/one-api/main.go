@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-contrib/sessions"
@@ -18,6 +17,7 @@ import (
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/client"
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/deployment"
 	"github.com/songquanpeng/one-api/common/i18n"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/common/snowflake"
@@ -37,7 +37,22 @@ var buildFS embed.FS
 var orgBuildFS embed.FS
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--check-deployment" {
+		if _, err := deployment.Parse(os.Getenv); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		if err := model.ValidateChannelKeyEncryptionConfig(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		fmt.Println("Public deployment configuration is valid")
+		return
+	}
 	common.Init()
+	if err := deployment.Configure(); err != nil {
+		panic("deployment configuration: " + err.Error())
+	}
 	logger.SetupLogger()
 	logger.SysLogf("One API %s started", common.Version)
 	if err := model.ValidateChannelKeyEncryptionConfig(); err != nil {
@@ -216,6 +231,9 @@ func main() {
 
 	// Initialize HTTP server
 	server := gin.New()
+	if err := server.SetTrustedProxies(deployment.TrustedProxies()); err != nil {
+		logger.FatalLog(err.Error())
+	}
 	server.Use(gin.Recovery())
 	// This will cause SSE not to work!!!
 	//server.Use(gzip.Gzip(gzip.DefaultCompression))
@@ -239,37 +257,23 @@ func main() {
 	}
 	go func() {
 		orgServer := gin.New()
+		if err := orgServer.SetTrustedProxies(deployment.TrustedProxies()); err != nil {
+			logger.FatalLog(err.Error())
+		}
 		orgServer.Use(gin.Recovery())
 		orgServer.Use(middleware.RequestId())
 		router.SetOrgRouter(orgServer, orgBuildFS)
 		logger.SysLogf("org-admin portal started on http://localhost:%s", orgPort)
-		logger.SysLogf("Click on http://localhost:8080/business/")
-
-		// 前端以 homepage="/business" 构建，资源/接口路径均带 /business 前缀。
-		// 生产环境由 ALB 剥掉该前缀后转发；本地直连 localhost:3001 不经过 ALB，
-		// 这里在进入 Gin 路由匹配之前剥掉前缀，模拟 ALB，使两种情况下接口与静态资源都正常。
-		stripBusiness := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if p := r.URL.Path; p == "/business" || strings.HasPrefix(p, "/business/") {
-				trimmed := strings.TrimPrefix(p, "/business")
-				if trimmed == "" {
-					trimmed = "/"
-				}
-				r.URL.Path = trimmed
-				r.RequestURI = trimmed
-				if r.URL.RawPath != "" {
-					r.URL.RawPath = ""
-				}
-			}
-			orgServer.ServeHTTP(w, r)
-		})
+		// The portal supports preserved prefixes and existing prefix-stripping gateways.
+		stripBusiness := deployment.Current.OrgHandler(orgServer)
 		if err := http.ListenAndServe(":"+orgPort, stripBusiness); err != nil {
 			logger.SysError("failed to start org-admin portal: " + err.Error())
 		}
 	}()
 
 	logger.SysLogf("server started on http://localhost:%s", port)
-	logger.SysLogf("Click on http://localhost:8080/one-api/")
-	err = server.Run(":" + port)
+	logger.SysLogf("admin path: %s/; API path: %s/", deployment.Current.AdminPrefix, deployment.Current.APIPrefix)
+	err = http.ListenAndServe(":"+port, deployment.Current.Handler(server))
 	if err != nil {
 		logger.FatalLog("failed to start HTTP server: " + err.Error())
 	}

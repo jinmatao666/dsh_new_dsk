@@ -1,3 +1,4 @@
+import { resourceURL } from '../deployment';
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { BarChart3, ClipboardList, Cpu, Home, Library, Package, PanelLeftClose, PanelLeftOpen, Settings, Sparkles, Users, UsersRound } from 'lucide-react';
@@ -31,7 +32,7 @@ export default function SiderBar({ isCollapsed, onCollapseChange }) {
     return () => window.removeEventListener('personal-skill-review-counts', updateCount);
   }, [location.pathname]);
   return <div className="zjugis-sidebar-inner">
-    <div className="zjugis-sidebar-brand">{isCollapsed ? <img src="/brand-mark.svg" alt="万维 Buddy" /> : <img src="/brand-wordmark.svg" alt="万维 Buddy" />}</div>
+    <div className="zjugis-sidebar-brand">{isCollapsed ? <img src={resourceURL('/brand-mark.svg')} alt="万维 Buddy" /> : <img src={resourceURL('/brand-wordmark.svg')} alt="万维 Buddy" />}</div>
     {!isCollapsed && <div className="zjugis-sidebar-caption">管理工作台</div>}
     <nav className="zjugis-sidebar-nav" aria-label="主导航">
       {items.filter(item => !item.permission || hasPermission(item.permission)).map(({ label, path, Icon }) => <Link key={path} to={path} className={`zjugis-sidebar-item${selected?.path === path ? ' active' : ''}`} title={isCollapsed ? label : undefined}>

@@ -5,8 +5,6 @@ ARG DOCKER_MIRROR=docker.m.daocloud.io
 FROM --platform=$BUILDPLATFORM ${DOCKER_MIRROR}/library/node:20 AS web-builder
 ARG PARVIS_VERSION
 ARG NPM_REGISTRY=https://registry.npmmirror.com
-ARG DSH_ADMIN_PUBLIC_URL=
-ARG DSH_API_PUBLIC_URL=
 
 ENV NPM_CONFIG_REGISTRY=$NPM_REGISTRY \
     NPM_CONFIG_REPLACE_REGISTRY_HOST=always
@@ -28,14 +26,16 @@ COPY web/air ./air
 COPY web/org-admin ./org-admin
 RUN mkdir -p /web/build
 RUN cd /web/air && npx --no-install eslint src/components/ExpertWebTable.js src/pages/Expert/index.js
-RUN cd /web/air && npx --no-install eslint src/components/SkillsTable.js src/components/skillFolderImport.js src/pages/Zjugis/ResourceSettings.js src/pages/VersionRelease/DesktopUpdates.js && \
+RUN cd /web/air && npx --no-install eslint src/components/SkillsTable.js src/components/skillFolderImport.js src/pages/Zjugis/ResourceSettings.js src/pages/VersionRelease/DesktopUpdates.js src/pages/VersionRelease/WebsiteInstallers.js && \
     CI=true npm test -- --watchAll=false --runInBand --runTestsByPath \
+    src/deployment.test.js \
     src/components/SkillsTable.import.test.js \
     src/components/SkillsTable.pagination.test.js \
     src/components/skillFolderImport.test.js \
     src/pages/Zjugis/SystemSettings.test.js \
     src/pages/Zjugis/ResourceSettings.test.js \
-    src/pages/VersionRelease/DesktopUpdates.test.js
+    src/pages/VersionRelease/DesktopUpdates.test.js \
+    src/pages/VersionRelease/WebsiteInstallers.test.js
 
 # Runtime skills are database releases. Checked-in GIS packages remain source
 # migration samples and are deliberately excluded from the shipped web assets.
@@ -43,13 +43,13 @@ RUN rm -rf /web/air/public/skills
 
 RUN DISABLE_ESLINT_PLUGIN=true \
     REACT_APP_VERSION="$PARVIS_VERSION" \
-    PUBLIC_URL="$DSH_ADMIN_PUBLIC_URL" \
-    REACT_APP_SERVER="$DSH_API_PUBLIC_URL" \
+    PUBLIC_URL="." \
+    REACT_APP_SERVER="" \
     npm run build --prefix /web/air
 
 RUN DISABLE_ESLINT_PLUGIN=true \
     REACT_APP_VERSION="$PARVIS_VERSION" \
-    npm run build:unix --prefix /web/org-admin
+    PUBLIC_URL="." npm run build:unix --prefix /web/org-admin
 
 FROM ${DOCKER_MIRROR}/library/golang:alpine AS go-builder
 ARG PARVIS_VERSION
@@ -81,7 +81,8 @@ COPY --from=web-builder /web/build ./web/build
 # Historical full-suite failures are listed in the release check report, not suppressed.
 RUN go test ./... -run '^$' && \
     go test ./common/resourcerelay -count=1 && \
-    go test ./controller -run '^Test(Expert|Usage|SkillDownload|SkillImport|ApplyPublished|AdminUserAffiliation|UserIdentityUpdate|Desktop)' -count=1 && \
+    go test ./common/deployment . -run '^TestRuntimeDeployment' -count=1 && \
+    go test ./controller -run '^Test(Expert|Usage|SkillDownload|SkillImport|ApplyPublished|AdminUserAffiliation|UserIdentityUpdate|Desktop|WebsiteInstaller)' -count=1 && \
     go test ./middleware -count=1 && \
     go test ./model -run '^Test(SkillDownloadCounts|SkillUserStats|SkillTestSession|UserAffiliation|UpdateUserDisplayName|UserIdentityUpdate)' -count=1
 
@@ -91,6 +92,9 @@ RUN go build -trimpath \
 
 FROM ${DOCKER_MIRROR}/library/alpine:latest
 ARG ALPINE_MIRROR
+ARG PARVIS_VERSION
+
+LABEL org.opencontainers.image.version=$PARVIS_VERSION
 
 ENV TIKTOKEN_CACHE_DIR=/opt/tiktoken-cache
 

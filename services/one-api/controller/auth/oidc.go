@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/deployment"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/controller"
 	"github.com/songquanpeng/one-api/model"
@@ -44,7 +44,7 @@ func getOidcUserInfoByCode(code string) (*OidcUser, error) {
 		"client_secret": config.OidcClientSecret,
 		"code":          code,
 		"grant_type":    "authorization_code",
-		"redirect_uri":  fmt.Sprintf("%s/oauth/oidc", config.ServerAddress),
+		"redirect_uri":  deployment.Current.AdminBase(config.ServerAddress) + "/oauth/oidc",
 	}
 	jsonData, err := json.Marshal(values)
 	if err != nil {

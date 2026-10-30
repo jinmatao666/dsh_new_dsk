@@ -1,9 +1,11 @@
+import { adminPrefix } from '../../deployment';
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { Button, Table, Tag, Modal, Input, Space, Typography, TextArea } from '@douyinfe/semi-ui';
 import { Pencil, Trash2, Plus } from 'lucide-react';
 import { API, showError, showSuccess } from '../../helpers';
 import { ConfigPageTabPane, ConfigPageTabs } from '../../components/ConfigPageLayout';
 import DesktopUpdates from './DesktopUpdates';
+import WebsiteInstallers from './WebsiteInstallers';
 import AdminPageFrame from '../../components/AdminPageFrame';
 import './index.css';
 import '../Zjugis/SystemSettings.css';
@@ -342,7 +344,7 @@ const PlatformPanel = ({ platform }) => {
 };
 
 export const LegacyVersionRelease = () => (
-  <AdminPageFrame title="旧系统发布记录" description="保留原移动应用、网站版本与服务重启记录，不用于桌面端自动更新。" actions={<a href={`${process.env.PUBLIC_URL || ''}/operation/version-release`}>返回桌面端更新</a>} className="release-page">
+  <AdminPageFrame title="旧系统发布记录" description="保留原移动应用、网站版本与服务重启记录，不用于桌面端自动更新。" actions={<a href={`${adminPrefix}/operation/version-release`}>返回桌面端更新</a>} className="release-page">
   <ConfigPageTabs defaultActiveKey="app" sticky={false}>
     {PLATFORMS.map((p) => (
       <ConfigPageTabPane tab={p.label} itemKey={p.key} key={p.key}>
@@ -354,10 +356,20 @@ export const LegacyVersionRelease = () => (
 );
 
 const VersionRelease = () => {
+  const [packageTab, setPackageTab] = useState('client');
+  const tabs = [{ key: 'client', label: '客户端更新包' }, { key: 'website', label: '官网安装包' }];
   return <div className="zjugis-new-page system-settings-page release-page">
     <div className="preview-page-head"><div><h1>版本发布</h1><p>管理万维 Buddy 桌面端安装包与更新发布。</p></div></div>
     <section className="preview-surface system-settings-surface">
-      <DesktopUpdates />
+      <div className="release-package-tabs" role="tablist" aria-label="发布类型">
+        {tabs.map((tab, index) => <button key={tab.key} type="button" role="tab" id={`release-tab-${tab.key}`} aria-controls={`release-panel-${tab.key}`} aria-selected={packageTab === tab.key} tabIndex={packageTab === tab.key ? 0 : -1} onClick={() => setPackageTab(tab.key)} onKeyDown={event => {
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : null;
+          if (next === null) return;
+          event.preventDefault(); setPackageTab(tabs[next].key); document.getElementById(`release-tab-${tabs[next].key}`).focus();
+        }}>{tab.label}</button>)}
+      </div>
+      <div role="tabpanel" id="release-panel-client" aria-labelledby="release-tab-client" hidden={packageTab !== 'client'}><DesktopUpdates /></div>
+      <div role="tabpanel" id="release-panel-website" aria-labelledby="release-tab-website" hidden={packageTab !== 'website'}><WebsiteInstallers /></div>
     </section>
   </div>;
 };

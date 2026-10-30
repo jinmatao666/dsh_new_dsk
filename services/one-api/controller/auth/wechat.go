@@ -20,6 +20,7 @@ import (
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/common/deployment"
 	"github.com/songquanpeng/one-api/model"
 )
 
@@ -137,7 +138,7 @@ func WeChatQRGenerate(c *gin.Context) {
 		Status:    "pending",
 	})
 
-	redirectURI := config.ServerAddress + "/api/oauth/wechat"
+	redirectURI := deployment.Current.APIBase(config.ServerAddress) + "/api/oauth/wechat"
 	qrconnectURL := fmt.Sprintf(
 		"https://open.weixin.qq.com/connect/qrconnect?appid=%s&redirect_uri=%s&response_type=code&scope=snsapi_login&state=%s",
 		config.WeChatAppID,
@@ -155,7 +156,7 @@ func WeChatQRGenerate(c *gin.Context) {
 			"state":         state,
 			"appid":         config.WeChatAppID,
 			"redirect_uri":  redirectURI,
-			"poll_url":      config.ServerAddress + "/api/oauth/wechat/poll",
+			"poll_url":      deployment.Current.APIBase(config.ServerAddress) + "/api/oauth/wechat/poll",
 			"qr_url":        qrURL,
 			"qrconnect_url": qrconnectURL,
 		},

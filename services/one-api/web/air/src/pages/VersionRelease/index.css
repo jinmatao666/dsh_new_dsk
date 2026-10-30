@@ -1,4 +1,30 @@
 .release-page .preview-page-head { align-items: center; }
+.release-package-tabs { display: flex; gap: 32px; margin: -4px 0 28px; border-bottom: 1px solid #dfe8f5; }
+.release-package-tabs [role=tab] { position: relative; padding: 14px 2px 16px; border: 0; background: transparent; color: #7589a7; font: inherit; font-size: 15px; cursor: pointer; }
+.release-package-tabs [aria-selected=true] { color: #3478ef; font-weight: 600; }
+.release-package-tabs [aria-selected=true]::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 3px; border-radius: 3px 3px 0 0; background: #3478ef; }
+.release-page [role=tabpanel][hidden] { display: none; }
+.installer-preview-note { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 16px; margin-bottom: 24px; border: 1px solid #e0eafa; border-radius: 8px; background: #f5f9ff; color: #6d84a4; font-size: 13px; line-height: 1.7; }
+.installer-preview-note > span { color: #3478ef; font-weight: 600; }
+.installer-list-hint { display: inline-flex; align-items: center; gap: 7px; color: #7589a7; font-size: 13px; }
+.installer-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 10px 0; }
+.installer-empty > svg { color: #a2b8d7; }
+.installer-empty > strong { font-weight: 500; color: #526b8c; }
+.installer-empty > span { font-size: 13px; }
+.installer-form-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.installer-records { min-width: 1000px; }
+.installer-records th:nth-child(5) { width: 24%; }
+.installer-records th:last-child { width: 20%; }
+.installer-download { display: inline-flex; align-items: center; gap: 4px; margin-left: 12px; }
+.installer-detail p { margin-top: 16px; }
+.installer-targets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 26px; }
+.installer-targets > button { display: flex; align-items: center; gap: 12px; padding: 16px; text-align: left; border: 1px solid #dfe8f5; border-radius: 10px; background: #fff; color: #7589a7; cursor: pointer; }
+.installer-targets > button[aria-pressed=true] { border-color: #7aa9fa; background: #f4f8ff; color: #3478ef; }
+.installer-targets strong { display: block; font-size: 14px; color: #385375; font-weight: 600; }
+.installer-targets small { display: block; margin-top: 5px; font-size: 12px; color: #7589a7; }
+.installer-target-dot { margin-left: auto; width: 14px; height: 14px; border: 1px solid #c9d8ed; border-radius: 50%; flex-shrink: 0; }
+.installer-targets [aria-pressed=true] .installer-target-dot { border: 4px solid #3478ef; }
+@media(max-width:800px) { .installer-targets { grid-template-columns: 1fr; gap: 10px; } }
 .release-page .preview-page-head h1 { font-size: 38px; font-weight: 700; letter-spacing: normal; }
 .release-section-heading, .release-list-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .release-page h2 { margin: 0 0 10px; color: #203a5e; font-size: 20px; font-weight: 600; }

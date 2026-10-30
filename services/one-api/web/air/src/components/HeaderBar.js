@@ -1,3 +1,4 @@
+import { resourceURL } from '../deployment';
 import React, { useContext, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { UserContext } from '../context/User';
@@ -55,7 +56,7 @@ const ProductSwitcher = () => {
             aria-label={p.label}
           >
             {p.key === 'parvis' ? (
-              <img className="product-switcher-wordmark" src="/brand-wordmark.svg" alt="万维 Buddy" />
+              <img className="product-switcher-wordmark" src={resourceURL('/brand-wordmark.svg')} alt="万维 Buddy" />
             ) : (
               <><Icon size={16} strokeWidth={1.75} /><span className="product-switcher-label">{p.label}</span></>
             )}

@@ -1,3 +1,4 @@
+import { adminURL } from '../../deployment';
 import React, { useEffect, useState } from 'react';
 import { API, showSuccess } from '../../helpers';
 import './SystemSettings.css';
@@ -129,7 +130,7 @@ export default function SystemSettings() {
     finally { setSaving(false); }
   };
   const logout = async () => {
-    try { await API.get('/api/user/logout'); localStorage.removeItem('user'); window.location.href = '/login'; }
+    try { await API.get('/api/user/logout'); localStorage.removeItem('user'); window.location.href = adminURL('/login'); }
     catch { setFeedback('退出失败，请重试'); }
   };
   const dirty = JSON.stringify(settings) !== JSON.stringify(saved);

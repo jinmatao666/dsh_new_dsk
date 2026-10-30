@@ -63,9 +63,9 @@ const previewChannelModels = [
 const previewChannels = [
   {
     id: 'preview-4090',
-    name: 'ZJUGIS4090',
+    name: '本地模型服务',
     type: 50,
-    base_url: 'http://ac.zjugis.com:20330/v1',
+    base_url: 'http://localhost:8000/v1',
     models: previewChannelModels.slice(0, 3).join(','),
     group: 'default',
     priority: 10,

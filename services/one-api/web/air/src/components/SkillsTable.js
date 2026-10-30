@@ -1,3 +1,4 @@
+import { resourceURL } from '../deployment';
 import CatalogOrderActions, { catalogDragProps } from './CatalogOrderActions';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Modal, Table, Tag, Tooltip } from '@douyinfe/semi-ui';
@@ -57,7 +58,7 @@ const SkillIcon = ({ icon, small = false }) => {
   const legacy = LEGACY_SKILL_ICONS.find(item => item.value === icon) || LEGACY_SKILL_ICONS[4];
   const Icon = legacy.Icon;
   return <span className={`skill-identity-icon${small ? ' small' : ''}`} title={preset?.label || legacy.label}>
-    {String(icon || '').startsWith('data:image/') ? <img src={icon} alt='' /> : preset ? <img src={preset.src} alt='' /> : <Icon aria-hidden size={small ? 16 : 24} strokeWidth={1.8} />}
+    {String(icon || '').startsWith('data:image/') ? <img src={icon} alt='' /> : preset ? <img src={resourceURL(preset.src)} alt='' /> : <Icon aria-hidden size={small ? 16 : 24} strokeWidth={1.8} />}
   </span>;
 };
 const previewableFile = path => /\.(?:md|txt|json|ya?ml|toml|js|jsx|ts|tsx|py|go|rs|sh|ps1|bat|cmd|css|html?|xml|sql|csv|tsv)$/i.test(path || '');
@@ -646,7 +647,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
                 <div className='skill-icon-options'>
                   <span className='skill-icon-picker-label'>选择通用图标</span>
                   <div className='skill-icon-presets'>
-                    {DEFAULT_SKILL_ICONS.map(item => <button key={item.value} type='button' className={form.icon === item.value ? 'active' : ''} onClick={() => setForm(prev => ({ ...prev, icon: item.value }))} title={item.label} aria-label={item.label}><img src={item.src} alt='' /></button>)}
+                    {DEFAULT_SKILL_ICONS.map(item => <button key={item.value} type='button' className={form.icon === item.value ? 'active' : ''} onClick={() => setForm(prev => ({ ...prev, icon: item.value }))} title={item.label} aria-label={item.label}><img src={resourceURL(item.src)} alt='' /></button>)}
                   </div>
                   <div className='form-inline-actions'>
                     <button type='button' className='preview-button' onClick={() => iconInputRef.current?.click()}>上传自定义图标</button>

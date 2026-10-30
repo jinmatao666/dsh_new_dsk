@@ -1,7 +1,8 @@
+import { apiPrefix } from '../deployment';
 import axios from 'axios';
 
 export const API = axios.create({
-  baseURL: process.env.REACT_APP_SERVER ? process.env.REACT_APP_SERVER : '',
+  baseURL: apiPrefix,
 });
 
 API.interceptors.response.use(

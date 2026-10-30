@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/deployment"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/controller"
 	"github.com/songquanpeng/one-api/model"
@@ -36,7 +37,7 @@ func getLarkUserInfoByCode(code string) (*LarkUser, error) {
 		"client_secret": config.LarkClientSecret,
 		"code":          code,
 		"grant_type":    "authorization_code",
-		"redirect_uri":  fmt.Sprintf("%s/oauth/lark", config.ServerAddress),
+		"redirect_uri":  deployment.Current.AdminBase(config.ServerAddress) + "/oauth/lark",
 	}
 	jsonData, err := json.Marshal(values)
 	if err != nil {

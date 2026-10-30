@@ -140,13 +140,24 @@ test('older publication prompts for confirmation without an error toast and send
   expect(showSuccess).toHaveBeenCalled();
 });
 
-test('release page has one upload area and no platform tabs or legacy entry', async () => {
+test('release page separates signed client updates from website installer management', async () => {
   await act(async () => root.render(<VersionRelease />));
-  expect(container.querySelector('[role="tablist"]')).toBeNull();
+  expect(container.querySelectorAll('[role="tab"]')).toHaveLength(2);
   expect(container.querySelector('a[href*="/legacy"]')).toBeNull();
-  expect(container.querySelectorAll('input[type="file"]')).toHaveLength(1);
+  expect(container.querySelector('#release-panel-client').hidden).toBe(false);
+  expect(container.querySelector('#release-panel-website').hidden).toBe(true);
   expect(container.textContent).toContain('不要上传 wanwei-buddy 普通安装包');
   expect(container.textContent).toContain('解压外层 ZIP');
+  act(() => container.querySelector('#release-tab-website').click());
+  expect(container.querySelector('#release-panel-client').hidden).toBe(true);
+  expect(container.querySelector('#release-panel-website').hidden).toBe(false);
+  expect(container.querySelector('#release-panel-website input[type="file"]').accept).toBe('.exe');
+  expect(container.querySelector('#release-panel-website .settings-primary').disabled).toBe(true);
+  expect(container.querySelector('#release-panel-website').textContent).toContain('独立发布');
+  expect(API.post).not.toHaveBeenCalled();
+  expect(API.get.mock.calls.filter(([path]) => path === '/api/desktop-updates')).toHaveLength(1);
+  act(() => container.querySelector('#release-tab-client').click());
+  expect(container.querySelector('#release-panel-client').hidden).toBe(false);
 });
 
 test('system and architecture filters combine and return pagination to the first page', async () => {

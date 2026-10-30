@@ -209,6 +209,9 @@ func InitDB() {
 
 func migrateDB() error {
 	var err error
+	if err = DB.AutoMigrate(&WebsiteInstaller{}, &WebsiteInstallerChannel{}); err != nil {
+		return err
+	}
 	if err = migrateDesktopUpdates(DB); err != nil {
 		return err
 	}

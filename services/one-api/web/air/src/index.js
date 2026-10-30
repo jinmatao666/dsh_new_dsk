@@ -1,3 +1,5 @@
+import './public-path';
+import { adminPrefix } from './deployment';
 import { initVChartSemiTheme } from '@visactor/vchart-semi-theme';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -52,7 +54,7 @@ root.render(
     <StatusProvider>
       <UserProvider>
         <ProductProvider>
-          <HistoryRouter history={history} basename={process.env.PUBLIC_URL}>
+          <HistoryRouter history={history} basename={adminPrefix}>
             <AdminShell />
             <>
               <ToastContainer />
