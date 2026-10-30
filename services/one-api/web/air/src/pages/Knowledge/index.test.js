@@ -14,7 +14,7 @@ const categories = [
   { id: 1, name: '测绘规范', type: 'common', require_auth: false },
 ];
 const libraries = [
-  { id: 1, name: '测绘标准规范合集', description: '关于测绘标准规范合集的详细知识资源集合', kind: 'common', category_id: 1, shelf: 'published', tags: '政策法规,林草资源', owner_username: 'Root User', visit_count: 12, daily_usage: 3, updated_at: '2025-08-10T15:52:00+08:00', created_at: '2025-08-10T15:52:00+08:00' },
+  { id: 1, name: '测绘标准规范合集', description: '关于测绘标准规范合集的详细知识资源集合', kind: 'common', category_id: 1, shelf: 'published', tags: '政策法规,林草资源', owner_user_id: 1, owner_username: 'root', visit_count: 12, daily_usage: 3, updated_at: '2025-08-10T15:52:00+08:00', created_at: '2025-08-10T15:52:00+08:00' },
   { id: 2, name: '个人笔记', description: '个人资料', kind: 'personal', shelf: 'published', tags: '', owner_username: 'alice', owner_user_id: 2, visit_count: 0, daily_usage: 0, updated_at: '2024-01-02T00:00:00Z', created_at: '2024-01-02T00:00:00Z' }
 ];
 const documents = [
@@ -22,6 +22,7 @@ const documents = [
 ];
 const documentPage = { items: documents, total: 1, page: 1, page_size: 20 };
 const users = [
+  { id: 1, username: 'root', display_name: '管理员', department_name: '', created_at: '2024-01-01T00:00:00Z', status: 1 },
   { id: 2, username: 'alice', display_name: '爱丽丝', department_name: '', created_at: '2024-01-02T00:00:00Z', status: 1 },
   { id: 8, username: 'chen', display_name: '陈静', department_name: '办公室', created_at: '2019-05-20T00:00:00Z', status: 1 },
 ];
@@ -149,7 +150,9 @@ test('knowledge catalog filters scopes and opens the file list', async () => {
   expect(container.textContent).toContain('测绘标准规范合集');
   expect(container.textContent).not.toContain('个人笔记');
   expect(container.textContent).toContain('创建人');
-  expect(container.textContent).toContain('Root User');
+  expect(container.textContent).toContain('管理员');
+  expect(container.querySelector('.knowledge-meta')?.textContent).not.toContain('#1');
+  expect(container.querySelector('.knowledge-meta')?.textContent).not.toMatch(/\broot\b/);
   expect(container.textContent).toContain('文件量');
   expect(container.textContent).toContain('1个');
   expect(container.textContent).toContain('大小');
@@ -160,7 +163,7 @@ test('knowledge catalog filters scopes and opens the file list', async () => {
   expect(container.textContent).toContain('3');
   const meta = container.querySelector('.knowledge-meta');
   expect(meta.querySelector('.knowledge-meta-label').textContent).toBe('创建人');
-  expect(meta.querySelector('.knowledge-meta-value').textContent).toBe('Root User');
+  expect(meta.querySelector('.knowledge-meta-value').textContent).toBe('管理员');
   expect(meta.textContent).not.toContain('…');
   expect(button('编辑')).toBeUndefined();
   expect(button('删除')).toBeUndefined();
@@ -346,12 +349,12 @@ test('reviews a pending subscription application from the workbench audit list',
             items: [{
               id: 11,
               knowledge_base_id: 9,
-              applicant_user_id: 3,
+              applicant_user_id: 2,
               status: 'pending',
               knowledge_base_name: '地方法规知识库',
               category_name: '法律',
               applicant_username: 'alice',
-              owner_username: 'bob',
+              owner_username: '鲍勃',
               created_at: '2026-10-23T08:00:00Z',
             }],
             total: 1,
@@ -370,7 +373,9 @@ test('reviews a pending subscription application from the workbench audit list',
   await act(async () => { button('订阅审核').click(); });
   for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
   expect(container.textContent).toContain('订阅审核');
-  expect(container.textContent).toContain('alice');
+  expect(container.textContent).toContain('爱丽丝');
+  expect(container.textContent).not.toContain('#2');
+  expect(container.querySelector('.knowledge-table-wrap')?.textContent).not.toMatch(/\balice\b/);
   expect(container.textContent).toContain('地方法规知识库');
   expect(API.get).toHaveBeenCalledWith(expect.stringContaining('/api/knowledge-admin/subscription-applications?page=1&page_size=1&status=pending'));
   expect(API.get).toHaveBeenCalledWith(expect.stringContaining('/api/knowledge-admin/subscription-applications?page=1&page_size=20&status=pending'));
@@ -763,6 +768,7 @@ test('ordinary user personal tab uses scoped organization directory like root', 
   expect(container.textContent).not.toContain('个人笔记');
   await act(async () => { button('办公室').click(); });
   expect(container.textContent).toContain('陈静');
+  expect(container.querySelector('.knowledge-people-grid')?.textContent).not.toContain('chen');
   expect(container.querySelector('.knowledge-people-grid')?.textContent).not.toContain('jmt');
   expect(container.querySelector('.knowledge-people-grid')?.textContent).not.toContain('爱丽丝');
   expect(container.querySelector('.knowledge-people-head h2').textContent).toContain('1人');

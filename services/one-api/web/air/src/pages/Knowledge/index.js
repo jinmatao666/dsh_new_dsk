@@ -603,6 +603,30 @@ const KnowledgeLibrary = () => {
   const activeScope = tabs.some(tab => tab.key === scope) ? scope : 'personal';
   const activeCategory = categories.find(category => `c:${category.id}` === activeScope);
 
+  // Prefer account display_name over login username / raw id for every creator label on this page.
+  const userDisplayById = useMemo(() => {
+    const map = new Map();
+    for (const user of users) {
+      const id = Number(user.id);
+      if (!Number.isFinite(id) || id <= 0) continue;
+      const label = String(user.display_name || user.username || '').trim();
+      if (label) map.set(id, label);
+    }
+    return map;
+  }, [users]);
+
+  const resolveUserLabel = (userId, fallback = '') => {
+    const id = Number(userId);
+    if (Number.isFinite(id) && id > 0) {
+      const known = userDisplayById.get(id);
+      if (known) return known;
+    }
+    const text = String(fallback || '').trim();
+    if (text) return text;
+    if (Number.isFinite(id) && id > 0) return `用户 ${id}`;
+    return '—';
+  };
+
   const visible = useMemo(() => {
     const text = keyword.trim().toLowerCase();
     const categoryId = activeScope.startsWith('c:') ? Number(activeScope.slice(2)) : 0;
@@ -612,13 +636,14 @@ const KnowledgeLibrary = () => {
         : item.kind === activeScope && !Number(item.category_id || 0)))
       .filter(item => {
         if (!text) return true;
-        return [item.name, item.description, item.tags, item.owner_username].some(value => String(value || '').toLowerCase().includes(text));
+        const creator = resolveUserLabel(item.owner_user_id, item.owner_username);
+        return [item.name, item.description, item.tags, creator].some(value => String(value || '').toLowerCase().includes(text));
       })
       .sort((left, right) => {
         const delta = new Date(left.updated_at || left.created_at).getTime() - new Date(right.updated_at || right.created_at).getTime();
         return order === 'asc' ? delta : -delta;
       });
-  }, [libraries, activeScope, keyword, order]);
+  }, [libraries, activeScope, keyword, order, userDisplayById]);
 
   const orgById = useMemo(() => new Map(orgNodes.map(node => [Number(node.id), node])), [orgNodes]);
   const orgChildren = useMemo(() => orgChildrenByParent(orgNodes), [orgNodes]);
@@ -1258,7 +1283,7 @@ const KnowledgeLibrary = () => {
     return sizes[id] == null ? '—' : formatSizeLabel(sizes[id]);
   };
 
-  const libraryCreator = library => library.owner_username || (library.owner_user_id ? `#${library.owner_user_id}` : '—');
+  const libraryCreator = library => resolveUserLabel(library.owner_user_id, library.owner_username);
 
   const visitCount = library => {
     const value = library.visit_count ?? library.user_visit_count;
@@ -1514,16 +1539,20 @@ const KnowledgeLibrary = () => {
           <tbody>
             {reviewLoading ? <tr><td colSpan={6}>正在加载审核列表</td></tr>
               : reviewItems.length === 0 ? <tr><td colSpan={6}>暂无待审核申请</td></tr>
-                : reviewItems.map(item => <tr key={item.id}>
-                  <td>{item.applicant_username || ('#' + item.applicant_user_id)}</td>
+                : reviewItems.map(item => {
+                  const ownerId = item.owner_user_id
+                    || libraries.find(library => Number(library.id) === Number(item.knowledge_base_id))?.owner_user_id;
+                  return <tr key={item.id}>
+                  <td>{resolveUserLabel(item.applicant_user_id, item.applicant_username)}</td>
                   <td>{item.knowledge_base_name || ('#' + item.knowledge_base_id)}</td>
                   <td>{item.category_name || '—'}</td>
-                  <td>{item.owner_username || '—'}</td>
+                  <td>{resolveUserLabel(ownerId, item.owner_username)}</td>
                   <td>{formatDate(item.created_at)}</td>
                   <td className='knowledge-ops'>
                     <button type='button' onClick={() => setReviewing(item)}>审核</button>
                   </td>
-                </tr>)}
+                </tr>;
+                })}
           </tbody>
         </table>
       </div>
@@ -1779,7 +1808,6 @@ const KnowledgeLibrary = () => {
                           <i className='knowledge-avatar' style={{ color, background: `${color}18` }}>{personInitial(item.name)}</i>
                           <span>
                             <strong>{item.name}</strong>
-                            <em>{item.username || '—'}</em>
                           </span>
                         </span>
                         <span className='knowledge-person-meta'>
@@ -1991,7 +2019,7 @@ const KnowledgeLibrary = () => {
     </section></div>}
     {reviewing && <div className='knowledge-modal-backdrop'><section className='knowledge-modal' role='dialog' aria-label='订阅审核'>
       <header><h2>订阅审核</h2><button type='button' onClick={() => setReviewing(null)}>×</button></header>
-      <p>申请人 <strong>{reviewing.applicant_username || ('#' + reviewing.applicant_user_id)}</strong> 申请订阅「{reviewing.knowledge_base_name || ('#' + reviewing.knowledge_base_id)}」。</p>
+      <p>申请人 <strong>{resolveUserLabel(reviewing.applicant_user_id, reviewing.applicant_username)}</strong> 申请订阅「{reviewing.knowledge_base_name || ('#' + reviewing.knowledge_base_id)}」。</p>
       <footer>
         <button type='button' disabled={saving} onClick={() => setReviewing(null)}>取消</button>
         <button type='button' className='remove' disabled={saving} onClick={() => void submitReview('reject')}>不同意</button>
