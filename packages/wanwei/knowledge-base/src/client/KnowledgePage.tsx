@@ -1417,7 +1417,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
             onOpenMenu: openDocumentMenu,
           })}</div>}
       </div>
-      {!loading && contentTree.length > DOCUMENT_PAGE_SIZE &&
+      {!loading && contentTree.length > 0 &&
         <nav className="dsh-knowledge-pager" aria-label={productText('文件分页')}>
           <span className="dsh-knowledge-pager-total">
             {productText('共 {count} 项').replace('{count}', String(contentTree.length))}

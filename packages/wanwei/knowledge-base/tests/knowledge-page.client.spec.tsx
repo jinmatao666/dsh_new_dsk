@@ -718,7 +718,8 @@ it('paginates content and resets to the first page when the search changes', asy
   expect(screen.getByText('第3 页 / 3')).toBeTruthy()
   expect((screen.getByRole('button', { name: '下一页' }) as HTMLButtonElement).disabled).toBe(true)
   fireEvent.change(screen.getByRole('searchbox', { name: '搜索文件名称' }), { target: { value: '文件0' } })
-  expect(screen.queryByRole('navigation', { name: '文件分页' })).toBeNull()
+  expect(screen.getByText('第1 页 / 1')).toBeTruthy()
+  expect((screen.getByRole('button', { name: '下一页' }) as HTMLButtonElement).disabled).toBe(true)
   expect(container.querySelectorAll('.dsh-knowledge-card')).toHaveLength(10)
 })
 

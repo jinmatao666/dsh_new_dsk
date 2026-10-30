@@ -16,7 +16,7 @@ Status: implemented
 
 RAGFlow 不返回上传人，因此 OneAPI 在 `uploadKnowledgeDocument` 或把文件复制、移动到知识库时，把上传人记入 `knowledge_document_creators`（`knowledge_base_id`、`document_id`、`user_id`）。转存的副本保留源文件的上传人，源文件没有记录时记为调用者。删除、移出、替换和删除知识库都会清除对应行。`applyKnowledgeDocumentCreators` 为文档列表加上 `creator_name`，上传人是调用者或未知时省略。因此桌面只对他人的文件显示创建人。
 
-侧栏搜索框跨分组按名称过滤知识库，展开有命中的分组，无命中时显示「没有匹配的知识库」。内容工具栏有始终可见的文件名称搜索，以及在「最新上传」和「最早上传」之间切换的按钮。分页按顶层文件夹和文件切片（每页 12 项，`DOCUMENT_PAGE_SIZE`）；文件夹的子项留在它所在的页。分页条对齐技能市场目录样式：上一页/下一页、「第 N 页 / 总页数」、带省略号的页码按钮和跳转输入。内容列用纵向 flex：列表 `flex: 1 1 0%` 单独滚动，分页条 `flex: none` 钉在底部。FeaturePanel 通过 `bodyClassName: dsh-knowledge-host` 把外层 body 收成满高 flex（不依赖 `:has`），避免桌面 WebView 高度链断裂把分页裁掉。搜索、排序或知识库变化后回到第 1 页。文件卡片显示上传时间（`YYYY-MM-DD HH:mm`）和创建人。
+侧栏搜索框跨分组按名称过滤知识库，展开有命中的分组，无命中时显示「没有匹配的知识库」。内容工具栏有始终可见的文件名称搜索，以及在「最新上传」和「最早上传」之间切换的按钮。分页按顶层文件夹和文件切片（每页 12 项，`DOCUMENT_PAGE_SIZE`）；文件夹的子项留在它所在的页。分页条对齐技能市场目录样式：上一页/下一页、「第 N 页 / 总页数」、带省略号的页码按钮和跳转输入；列表非空时即显示，只有一页也显示。内容列用纵向 flex：列表 `flex: 1 1 0%` 单独滚动，分页条 `flex: none` 钉在底部。FeaturePanel 通过 `bodyClassName: dsh-knowledge-host` 把外层 body 收成满高 flex（不依赖 `:has`），避免桌面 WebView 高度链断裂把分页裁掉。搜索、排序或知识库变化后回到第 1 页。文件卡片显示上传时间（`YYYY-MM-DD HH:mm`）和创建人。
 
 ## Alternatives considered
 
