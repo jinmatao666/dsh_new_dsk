@@ -141,9 +141,17 @@ func TestKnowledgeSubscriptionApplicationApprovalGrantsAccess(t *testing.T) {
 	require.Equal(t, "地方法规", plaza[0].Name)
 	require.Equal(t, "鲍勃", plaza[0].OwnerUsername)
 	require.Equal(t, KnowledgeSubscriptionStatusNone, plaza[0].SubscriptionStatus)
+	require.NoError(t, db.Create(&KnowledgeBase{
+		Name: "平台汇编", RagflowDatasetId: "ds-platform", OwnerUserId: 1,
+		Kind: KnowledgeBaseShared, Shelf: KnowledgeShelfPublished, CategoryId: category.Id,
+	}).Error)
 	ownerPlaza, err := ListKnowledgePlaza(2, 0, "")
 	require.NoError(t, err)
-	require.Empty(t, ownerPlaza)
+	require.Len(t, ownerPlaza, 2)
+	require.Equal(t, "平台汇编", ownerPlaza[0].Name)
+	require.Equal(t, KnowledgeSubscriptionStatusNone, ownerPlaza[0].SubscriptionStatus)
+	require.Equal(t, "地方法规", ownerPlaza[1].Name)
+	require.Equal(t, KnowledgeSubscriptionStatusOwned, ownerPlaza[1].SubscriptionStatus)
 
 	app, err := ApplyKnowledgeSubscription(1, base.Id)
 	require.NoError(t, err)
@@ -162,7 +170,7 @@ func TestKnowledgeSubscriptionApplicationApprovalGrantsAccess(t *testing.T) {
 	require.Equal(t, KnowledgeSubscriptionApproved, reviewed.Status)
 	visible, err := ListAuthorizedKnowledgeBases(1)
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"地方法规"}, namesOf(visible))
+	require.ElementsMatch(t, []string{"地方法规", "平台汇编"}, namesOf(visible))
 	plazaAfter, err := ListKnowledgePlaza(1, category.Id, "地方")
 	require.NoError(t, err)
 	require.Len(t, plazaAfter, 1)
@@ -172,7 +180,7 @@ func TestKnowledgeSubscriptionApplicationApprovalGrantsAccess(t *testing.T) {
 	require.NoError(t, CancelKnowledgeSubscription(1, base.Id))
 	visibleAfterCancel, err := ListAuthorizedKnowledgeBases(1)
 	require.NoError(t, err)
-	require.Empty(t, visibleAfterCancel)
+	require.ElementsMatch(t, []string{"平台汇编"}, namesOf(visibleAfterCancel))
 	plazaRestored, err := ListKnowledgePlaza(1, category.Id, "地方")
 	require.NoError(t, err)
 	require.Len(t, plazaRestored, 1)

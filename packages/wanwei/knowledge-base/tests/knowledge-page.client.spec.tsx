@@ -227,16 +227,21 @@ it('hides auth category names from the sidebar and discovers them only in the pl
   expect(card.textContent).toContain('2.4MB')
   expect(card.textContent).toContain('已订阅')
   expect(card.textContent).toContain('8人')
-  expect(screen.getByText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库仍可在广场查看与问答。自建库不出现在广场。')).toBeTruthy()
+  expect(screen.getByText('订阅后需管理员审核，通过后会出现在左侧订阅知识库。自建库在广场标「我的」（排在后面），可问答；已订阅库仍可在广场查看与问答。')).toBeTruthy()
   expect(screen.queryByRole('tab')).toBeNull()
   expect(service.plaza).toHaveBeenCalledWith({})
   fireEvent.click(screen.getByRole('button', { name: /地方法规知识库/ }))
   expect(await screen.findByRole('button', { name: '订阅' })).toBeTruthy()
+  const detailRoot = document.querySelector('.dsh-knowledge-plaza-detail.with-files') as HTMLElement
+  expect(detailRoot).toBeTruthy()
   const detail = screen.getByRole('button', { name: '订阅' }).closest('.dsh-knowledge-plaza-detail-main') as HTMLElement
   expect(detail.textContent).toContain('维护者')
+  expect(detail.textContent).toContain('法务平台')
   expect(detail.textContent).toContain('12个')
   expect(detail.textContent).toContain('2.4MB')
   expect(detail.textContent).toContain('8人')
+  expect(detailRoot.querySelector('.dsh-knowledge-plaza-detail-left .dsh-knowledge-plaza-content')).toBeNull()
+  expect(detailRoot.querySelector(':scope > .dsh-knowledge-plaza-content')).toBeTruthy()
   expect(await screen.findByText('浙江省')).toBeTruthy()
   expect(screen.getByText('安徽省')).toBeTruthy()
   expect(document.querySelector('.dsh-knowledge-plaza-detail-chat')).toBeNull()
@@ -357,8 +362,38 @@ it('keeps admin-created auth libraries out of 订阅知识库 until a grant exis
   expect(within(plaza).getByRole('button', { name: /平台法规/ })).toBeTruthy()
 })
 
-it('places owned auth-category libraries under 订阅知识库 above grants without 取消订阅', async () => {
+it('keeps owned auth libraries on the plaza as 我的 after grants, not under 订阅知识库', async () => {
   const service = api()
+  const ownedPlaza = {
+    id: 8,
+    name: '我建的法规',
+    description: '自建',
+    kind: 'shared' as const,
+    owner_user_id: 7,
+    category_id: 4,
+    category_name: '法律',
+    owner_username: '我',
+    subscription_status: 'owned' as const,
+    updated_at: '2026-10-12T08:00:00Z',
+    document_count: 1,
+    document_bytes: 1024,
+    subscriber_count: 0,
+  }
+  const grantedPlaza = {
+    id: 9,
+    name: '已订法规',
+    description: '已通过',
+    kind: 'shared' as const,
+    owner_user_id: 2,
+    category_id: 4,
+    category_name: '法律',
+    owner_username: '法务',
+    subscription_status: 'approved' as const,
+    updated_at: '2026-10-12T09:00:00Z',
+    document_count: 2,
+    document_bytes: 2048,
+    subscriber_count: 3,
+  }
   service.categories = vi.fn(async () => [
     { id: 4, name: '法律', type: 'shared' as const, require_auth: true },
   ])
@@ -373,21 +408,29 @@ it('places owned auth-category libraries under 订阅知识库 above grants with
       owner_user_id: 7, category_id: 4, owned_by_viewer: true, subscribed_by_viewer: false,
     },
   ])
-  service.plaza = vi.fn(async () => [])
+  service.plaza = vi.fn(async () => [grantedPlaza, ownedPlaza])
+  service.plazaItem = vi.fn(async () => ownedPlaza)
+  service.plazaDocuments = vi.fn(async () => [
+    { id: 'doc-1', name: '说明.pdf', location: '说明.pdf', size: 1024, run: 'DONE', progress: 1, update_time: 1_729_036_800 },
+  ])
   render(<KnowledgePage api={service} />)
   expect(await screen.findByText('订阅知识库')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: '展开订阅知识库' }))
   const subscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
-  const labels = within(subscription).getAllByRole('button')
-    .map(button => button.textContent || '')
-    .filter(text => text.includes('法规'))
-  expect(labels[0]).toContain('我建的法规')
-  expect(labels[1]).toContain('已订法规')
-  fireEvent.click(within(subscription).getByText('我建的法规'))
-  expect(screen.queryByRole('button', { name: '取消订阅' })).toBeNull()
+  expect(within(subscription).getByText('已订法规')).toBeTruthy()
+  expect(within(subscription).queryByText('我建的法规')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: /知识库广场/ }))
   const plaza = await screen.findByRole('region', { name: '知识库广场' })
-  expect(within(plaza).queryByRole('button', { name: /我建的法规/ })).toBeNull()
+  const cards = within(plaza).getAllByRole('button').filter(button =>
+    (button.textContent || '').includes('法规'))
+  expect(cards[0].textContent).toContain('已订法规')
+  expect(cards[0].textContent).toContain('已订阅')
+  expect(cards[1].textContent).toContain('我建的法规')
+  expect(cards[1].textContent).toContain('我的')
+  fireEvent.click(cards[1])
+  expect(await within(plaza).findByRole('button', { name: '我的' })).toBeTruthy()
+  expect(plaza.querySelector('.dsh-knowledge-plaza-detail-chat')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: '取消订阅' })).toBeNull()
 })
 
 it('collapses and expands each sidebar knowledge group', async () => {
@@ -505,6 +548,36 @@ it('shows uploaded folder paths as expandable folders with nested files', async 
   fireEvent.click(screen.getByRole('button', { name: /子目录/ }))
   expect(await screen.findByText('笔记.md')).toBeTruthy()
   expect(screen.getAllByText('文件夹').length).toBeGreaterThan(0)
+})
+
+it('shows sidebar counts and renders content as cards', async () => {
+  const service = api()
+  service.list = vi.fn(async () => [
+    { id: 1, name: '我的资料', description: '个人', kind: 'personal' as const, owner_user_id: 7, document_count: 9 },
+    { id: 2, name: '第二个库', description: '个人', kind: 'personal' as const, owner_user_id: 7, document_count: 4 },
+  ])
+  service.documents = vi.fn(async () => [
+    { id: 'doc-1', name: '资料/说明.pdf', location: '资料/说明.pdf', size: 2048, run: 'DONE', progress: 1 },
+    { id: 'doc-2', name: '根目录.txt', size: 32, run: 'DONE', progress: 1 },
+  ])
+  const { container } = render(<KnowledgePage api={service} />)
+  expect(await screen.findByText('根目录.txt')).toBeTruthy()
+  const personal = screen.getByText('个人知识库').closest('.dsh-knowledge-group') as HTMLElement
+  expect(personal.querySelector('.dsh-knowledge-group-count')?.textContent).toBe('2')
+  const counts = [...personal.querySelectorAll('.dsh-knowledge-nav-count')].map(node => node.textContent)
+  expect(counts).toEqual(['2 个文件', '4 个文件'])
+  const card = within(personal).getByText('我的资料').closest('button') as HTMLElement
+  expect(card.className).toContain('dsh-knowledge-lib-card')
+  expect(within(card).getByText('个人')).toBeTruthy()
+  const file = screen.getByText('根目录.txt').closest('button') as HTMLElement
+  expect(file.className).toContain('dsh-knowledge-card')
+  expect(within(file).getByText('32B')).toBeTruthy()
+  const folder = container.querySelector('.dsh-knowledge-folder-section') as HTMLElement
+  expect(within(folder).getByText('1 项')).toBeTruthy()
+  fireEvent.click(within(folder).getByRole('button', { expanded: true }))
+  const collapsed = screen.getByRole('button', { expanded: false, name: /资料文件夹/ })
+  expect(collapsed.className).toContain('dsh-knowledge-card')
+  expect(screen.queryByText('说明.pdf')).toBeNull()
 })
 
 it('drags the divider to change the content width', async () => {

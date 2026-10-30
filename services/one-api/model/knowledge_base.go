@@ -20,8 +20,8 @@ const (
 	KnowledgeSubscriptionPending      = "pending"
 	KnowledgeSubscriptionApproved     = "approved"
 	KnowledgeSubscriptionRejected     = "rejected"
-	KnowledgeSubscriptionStatusNone   = "none"
-	// KnowledgeSubscriptionStatusOwned is retained for older clients; plaza no longer returns owned rows.
+	KnowledgeSubscriptionStatusNone = "none"
+	// KnowledgeSubscriptionStatusOwned marks the caller's own auth-category library on the plaza.
 	KnowledgeSubscriptionStatusOwned = "owned"
 )
 
@@ -476,19 +476,9 @@ func ListManagedKnowledgeBases() ([]KnowledgeBaseListItem, error) {
 		seen[base.OwnerUserId] = struct{}{}
 		ownerIds = append(ownerIds, base.OwnerUserId)
 	}
-	names := make(map[int]string, len(ownerIds))
-	if len(ownerIds) != 0 {
-		var users []User
-		if err := DB.Select("id", "username", "display_name").Where("id IN ?", ownerIds).Find(&users).Error; err != nil {
-			return nil, err
-		}
-		for _, user := range users {
-			name := user.DisplayName
-			if name == "" {
-				name = user.Username
-			}
-			names[user.Id] = name
-		}
+	names, err := userDisplayNames(ownerIds)
+	if err != nil {
+		return nil, err
 	}
 	rows := make([]KnowledgeBaseListItem, len(bases))
 	for i, base := range bases {
@@ -620,6 +610,12 @@ func userDisplayNames(userIds []int) (map[int]string, error) {
 	if err := DB.Select("id", "username", "display_name").Where("id IN ?", userIds).Find(&users).Error; err != nil {
 		return nil, err
 	}
+	// Prefer account-center display_name when the identity overlay is enabled.
+	ptrs := make([]*User, len(users))
+	for i := range users {
+		ptrs[i] = &users[i]
+	}
+	OverlayUsersIdentity(ptrs)
 	for _, user := range users {
 		name := user.DisplayName
 		if name == "" {
@@ -631,9 +627,9 @@ func userDisplayNames(userIds []int) (map[int]string, error) {
 }
 
 // ListKnowledgePlaza returns published libraries in categories that require authorization.
-// The caller's own libraries omit their cards — those live under 订阅知识库.
-// Other callers see every published auth library, including ones they already hold a grant for
-// (subscription_status approved); applicants without a grant see none or pending.
+// Callers see every published auth library: their own cards use subscription_status owned and
+// sort after every other card; grant holders see approved; applicants without a grant see none
+// or pending. Sidebar 订阅知识库 lists only grant-backed rows, not owned cards.
 func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]KnowledgePlazaItem, error) {
 	// Personal categories are owner-only and never listed for subscription.
 	query := DB.Model(&KnowledgeBase{}).
@@ -708,25 +704,29 @@ func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]Knowledge
 	if err != nil {
 		return nil, err
 	}
-	items := make([]KnowledgePlazaItem, 0, len(bases))
+	others := make([]KnowledgePlazaItem, 0, len(bases))
+	owned := make([]KnowledgePlazaItem, 0)
 	for _, base := range bases {
 		status := statusByBase[base.Id]
 		if base.OwnerUserId == userId {
-			// Owners open self-built auth libraries from 订阅知识库, not the plaza.
-			continue
-		}
-		if status == "" {
+			status = KnowledgeSubscriptionStatusOwned
+		} else if status == "" {
 			status = KnowledgeSubscriptionStatusNone
 		}
-		items = append(items, KnowledgePlazaItem{
+		item := KnowledgePlazaItem{
 			KnowledgeBase:      base,
 			CategoryName:       categories[base.CategoryId],
 			OwnerUsername:      owners[base.OwnerUserId],
 			SubscriptionStatus: status,
 			SubscriberCount:    subscribers[base.Id],
-		})
+		}
+		if status == KnowledgeSubscriptionStatusOwned {
+			owned = append(owned, item)
+			continue
+		}
+		others = append(others, item)
 	}
-	return items, nil
+	return append(others, owned...), nil
 }
 
 // knowledgeUserSubscriberCounts returns user-grant totals keyed by knowledge base id.

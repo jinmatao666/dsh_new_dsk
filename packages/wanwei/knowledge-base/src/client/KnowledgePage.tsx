@@ -25,9 +25,14 @@ export interface KnowledgeBaseItem {
   subscribed_by_viewer?: boolean
   /** Compact JPEG data URL for the plaza, when the library has a cover. */
   cover?: string
+  /** RAGFlow file total from the desktop list; absent from servers that do not report it. */
+  document_count?: number
 }
 
-/** Administrator-defined category. Open categories may appear after Personal; auth-required ones feed the plaza and 订阅知识库. */
+/**
+ * Administrator-defined category. Open categories may appear after Personal;
+ * auth-required ones feed the plaza (grant-backed rows also under 订阅知识库).
+ */
 export interface KnowledgeCategory {
   id: number
   name: string
@@ -299,6 +304,8 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const [categories, setCategories] = useState<KnowledgeCategory[]>([])
   const [selectedId, setSelectedId] = useState<number>()
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([])
+  /** File totals observed from this session's document loads; they override the list's `document_count`. */
+  const [documentCounts, setDocumentCounts] = useState<ReadonlyMap<number, number>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [plazaOpen, setPlazaOpen] = useState(false)
@@ -413,6 +420,10 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       .finally(() => { if (!disposed) setLoading(false) })
     return () => { disposed = true }
   }, [api])
+  const showDocuments = (libraryId: number, value: KnowledgeDocument[]) => {
+    setDocuments(value)
+    setDocumentCounts(current => new Map(current).set(libraryId, value.length))
+  }
   const refreshPlaza = async (keyword?: string) => {
     setPlazaLoading(true)
     setError('')
@@ -445,7 +456,9 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       ])
       setPlazaDetail(detail)
       setPlazaDocuments(documents)
-      if (detail.subscription_status === 'approved') setSelectedId(detail.id)
+      if (detail.subscription_status === 'approved' || detail.subscription_status === 'owned') {
+        setSelectedId(detail.id)
+      }
     } catch (cause) {
       setError(`${productText('加载失败')}：${String(cause)}`)
     } finally {
@@ -506,7 +519,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     setDocumentMenu(undefined)
     api.documents(selectedId).then((value) => {
       if (disposed) return
-      setDocuments(value)
+      showDocuments(selectedId, value)
       setExpandedFolders(topLevelFolderPaths(value))
     })
       .catch((cause) => { if (!disposed) setError(`${productText('加载失败')}：${String(cause)}`) })
@@ -559,7 +572,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   }
   const refreshDocuments = async () => {
     if (selectedId === undefined) return
-    setDocuments(await api.documents(selectedId))
+    showDocuments(selectedId, await api.documents(selectedId))
   }
   const startTransfer = (mode: TransferMode) => {
     const documentIds = selectedDocumentIds.length > 0
@@ -836,7 +849,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     try {
       for (const file of candidates) await api.upload(selectedId, file)
       const next = await api.documents(selectedId)
-      setDocuments(next)
+      showDocuments(selectedId, next)
       setExpandedFolders((current) => {
         const merged = new Set(current)
         for (const path of topLevelFolderPaths(next)) merged.add(path)
@@ -1062,7 +1075,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       <div className="dsh-knowledge-nav-groups">
         {navGroups.map((group) => {
           const expanded = !collapsedNavGroups.has(group.key)
-          return <div key={group.key} className="dsh-knowledge-group">
+          return <div key={group.key} className={`dsh-knowledge-group ${group.key}`}>
             <div className="dsh-knowledge-group-head">
               <button type="button" className="dsh-knowledge-group-toggle"
                 aria-expanded={expanded}
@@ -1076,6 +1089,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                 <span className={expanded ? 'dsh-knowledge-group-chevron open' : 'dsh-knowledge-group-chevron'}
                   aria-hidden="true"><ChevronIcon /></span>
                 <strong>{group.label}</strong>
+                <span className="dsh-knowledge-group-count">{group.rows.length}</span>
               </button>
               {group.createLabel !== undefined && group.create === 'personal' &&
                 <button type="button" aria-label={group.createLabel}
@@ -1085,11 +1099,24 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
             </div>
             {expanded && (group.rows.length === 0
               ? <p className="dsh-knowledge-nav-empty">{productText('暂无知识库')}</p>
-              : group.rows.map(item =>
-                <button type="button" className={item.id === selectedId ? 'active' : ''} key={item.id}
+              : group.rows.map((item) => {
+                const count = documentCounts.get(item.id) ?? item.document_count
+                return <button type="button"
+                  className={item.id === selectedId ? 'dsh-knowledge-lib-card active' : 'dsh-knowledge-lib-card'} key={item.id}
+                  title={item.description ? `${item.name}\n${item.description}` : item.name} aria-label={item.name}
                   onClick={() => { setPlazaOpen(false); choose(item.id) }}>
-                  <span className="dsh-knowledge-nav-icon" aria-hidden="true"><LibraryFolderIcon /></span>{item.name}
-                </button>))}
+                  <span className="dsh-knowledge-nav-icon" aria-hidden="true"><LibraryFolderIcon /></span>
+                  <span className="dsh-knowledge-lib-card-body">
+                    <span className="dsh-knowledge-lib-card-head">
+                      <span className="dsh-knowledge-nav-name">{item.name}</span>
+                      {count !== undefined && <span className="dsh-knowledge-nav-count">
+                        {productText('{count} 个文件').replace('{count}', String(count))}
+                      </span>}
+                    </span>
+                    <span className="dsh-knowledge-lib-card-desc">{item.description || productText('暂无描述')}</span>
+                  </span>
+                </button>
+              }))}
           </div>
         })}
       </div>
@@ -1154,6 +1181,8 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                     <span className="dsh-knowledge-plaza-cover" aria-hidden="true">
                       <PlazaCover cover={item.cover} />
                       <span className="dsh-knowledge-plaza-category">{item.category_name}</span>
+                      {item.subscription_status === 'owned' &&
+                        <em className="dsh-knowledge-plaza-status">{productText('我的')}</em>}
                       {item.subscription_status === 'approved' &&
                         <em className="dsh-knowledge-plaza-status">{productText('已订阅')}</em>}
                       {item.subscription_status === 'pending' &&
@@ -1171,7 +1200,33 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         <p className="dsh-knowledge-hint">{productText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库仍可在广场查看与问答。')}</p>
       </> : (() => {
         const plazaCanUse = plazaDetail.subscription_status === 'approved'
-        return <div className={plazaCanUse ? 'dsh-knowledge-plaza-detail with-chat' : 'dsh-knowledge-plaza-detail'}>
+          || plazaDetail.subscription_status === 'owned'
+        const plazaFiles = <div className="dsh-knowledge-plaza-content">
+          <div className="dsh-knowledge-plaza-content-tabs">
+            <strong>{productText('内容')}{plazaDocuments.length > 0 ? ` ${plazaDocuments.length}` : ''}</strong>
+          </div>
+          {plazaDocuments.length === 0
+            ? <p className="dsh-knowledge-empty">{productText('暂无内容')}</p>
+            : <div className="dsh-knowledge-plaza-files" role="list">
+              {renderPlazaContentTree(buildContentTree(plazaDocuments, true), {
+                depth: 0,
+                expandedFolders: plazaFolders,
+                onToggleFolder: path => setPlazaFolders((current) => {
+                  const next = new Set(current)
+                  if (next.has(path)) next.delete(path)
+                  else next.add(path)
+                  return next
+                }),
+                ...(plazaCanUse ? {
+                  onOpenDocument: document => openDocument(document, undefined, false, plazaDetail.id),
+                  onPrefetchDocument: document => prefetchDocument(document, plazaDetail.id),
+                } : {}),
+              })}
+            </div>}
+        </div>
+        return <div className={plazaCanUse
+          ? 'dsh-knowledge-plaza-detail with-chat'
+          : 'dsh-knowledge-plaza-detail with-files'}>
           <div className="dsh-knowledge-plaza-detail-left">
             <div className="dsh-knowledge-plaza-detail-main">
               <span className="dsh-knowledge-plaza-cover large" aria-hidden="true">
@@ -1183,7 +1238,8 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                     <span className="dsh-knowledge-plaza-detail-category">{plazaDetail.category_name}</span>}
                   <h3>{plazaDetail.name}</h3>
                   <p className="dsh-knowledge-plaza-owner">
-                    @{plazaDetail.owner_username || productText('未知作者')}
+                    <em>{productText('维护者')}</em>
+                    {plazaDetail.owner_username || productText('未知作者')}
                   </p>
                   <p>{plazaDetail.description || productText('暂无描述')}</p>
                   {renderPlazaMeta(plazaDetail, {
@@ -1193,6 +1249,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                     documentBytes: (plazaDetail.document_bytes ?? 0) > 0
                       ? plazaDetail.document_bytes
                       : plazaDocuments.reduce((sum, document) => sum + document.size, 0),
+                    hideMaintainer: true,
                   })}
                 </div>
                 <button type="button"
@@ -1206,31 +1263,10 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                 </button>
               </div>
             </div>
-            <div className="dsh-knowledge-plaza-content">
-              <div className="dsh-knowledge-plaza-content-tabs">
-                <strong>{productText('内容')}{plazaDocuments.length > 0 ? ` ${plazaDocuments.length}` : ''}</strong>
-              </div>
-              {plazaDocuments.length === 0
-                ? <p className="dsh-knowledge-empty">{productText('暂无内容')}</p>
-                : <div className="dsh-knowledge-plaza-files" role="list">
-                  {renderPlazaContentTree(buildContentTree(plazaDocuments, true), {
-                    depth: 0,
-                    expandedFolders: plazaFolders,
-                    onToggleFolder: path => setPlazaFolders((current) => {
-                      const next = new Set(current)
-                      if (next.has(path)) next.delete(path)
-                      else next.add(path)
-                      return next
-                    }),
-                    ...(plazaCanUse ? {
-                      onOpenDocument: document => openDocument(document, undefined, false, plazaDetail.id),
-                      onPrefetchDocument: document => prefetchDocument(document, plazaDetail.id),
-                    } : {}),
-                  })}
-                </div>}
-            </div>
+            {plazaCanUse && plazaFiles}
             <p className="dsh-knowledge-hint">{productText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库仍可在广场查看与问答。')}</p>
           </div>
+          {!plazaCanUse && plazaFiles}
           {plazaCanUse && <section className="dsh-knowledge-plaza-detail-chat" aria-label={productText('基于知识库问答')}>
             {messages.length > 0 && <div className="dsh-knowledge-chat-head">
               <button type="button" className="dsh-knowledge-clear" disabled={answering || clearing}
@@ -1314,7 +1350,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
           </button>}
       </header>
       <div className="dsh-knowledge-toolbar">
-        <strong>{productText('内容')}({documents.length})</strong>
+        <strong>{productText('内容')}<span className="dsh-knowledge-toolbar-count">{documents.length}</span></strong>
         <div className="dsh-knowledge-toolbar-actions">
           <button type="button" aria-label={productText('搜索内容')} aria-pressed={searchOpen} onClick={() => setSearchOpen(value => !value)}><SearchIcon /></button>
           <button type="button" aria-label={productText('排序')} aria-pressed={newestFirst} onClick={() => setNewestFirst(value => !value)}><SortIcon /></button>
@@ -1912,16 +1948,23 @@ function formatPlazaMegabytes(bytes: number | undefined): string {
  */
 function renderPlazaMeta(
   item: KnowledgePlazaItem,
-  overrides?: { documentCount?: number | undefined; documentBytes?: number | undefined },
+  overrides?: {
+    documentCount?: number | undefined
+    documentBytes?: number | undefined
+    /** Detail already shows the maintainer above the description. */
+    hideMaintainer?: boolean | undefined
+  },
 ): ReactNode {
   const documentCount = overrides?.documentCount ?? item.document_count ?? 0
   const documentBytes = overrides?.documentBytes ?? item.document_bytes ?? 0
-  return <span className="dsh-knowledge-plaza-meta">
-    <span><em>{productText('维护者')}</em>{item.owner_username || productText('未知作者')}</span>
-    <span><em>{productText('更新时间')}</em>{formatPlazaUpdated(item.updated_at)}</span>
-    <span><em>{productText('文件数量')}</em>{documentCount}{productText('个')}</span>
-    <span><em>{productText('文件大小')}</em>{formatPlazaMegabytes(documentBytes)}</span>
-    <span><em>{productText('已订阅')}</em>{item.subscriber_count ?? 0}{productText('人')}</span>
+  const detailStats = overrides?.hideMaintainer === true
+  return <span className={detailStats ? 'dsh-knowledge-plaza-meta detail-stats' : 'dsh-knowledge-plaza-meta'}>
+    {overrides?.hideMaintainer !== true &&
+      <span><em>{productText('维护者')}</em><strong>{item.owner_username || productText('未知作者')}</strong></span>}
+    <span><em>{productText('更新时间')}</em><strong>{formatPlazaUpdated(item.updated_at)}</strong></span>
+    <span><em>{productText('文件数量')}</em><strong>{documentCount}{productText('个')}</strong></span>
+    <span><em>{productText('文件大小')}</em><strong>{formatPlazaMegabytes(documentBytes)}</strong></span>
+    <span><em>{productText('已订阅')}</em><strong>{item.subscriber_count ?? 0}{productText('人')}</strong></span>
   </span>
 }
 
@@ -2050,44 +2093,62 @@ type ContentTreeHandlers = {
   onOpenMenu: (documentId: string, x: number, y: number) => void
 }
 
-/** Render nested folder and file rows for the content pane.
+/** Render folders and files as content-pane cards. A collapsed folder is one grid card; an
+ * expanded folder spans the grid row as a section whose children form a nested card grid.
  * @param nodes - Tree nodes at the current depth.
  * @param handlers - Expansion and document interaction handlers.
- * @returns Flattened row elements.
+ * @returns Card and folder-section elements for one grid level.
  */
 function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers): ReactNode[] {
-  const rows: ReactNode[] = []
+  const cards: ReactNode[] = []
   for (const node of nodes) {
     if (node.type === 'folder') {
       const expanded = handlers.searching || handlers.expandedFolders.has(node.path)
-      rows.push(
-        <button type="button" key={`folder:${node.path}`} className="folder"
-          style={{ paddingLeft: `${4 + handlers.depth * 14}px` }}
-          aria-expanded={expanded}
-          onClick={() => handlers.onToggleFolder(node.path)}>
-          <span className="dsh-knowledge-file-icon folder" aria-hidden="true"><FolderIcon /></span>
-          <div>
+      const meta = <small>
+        <span>{productText('文件夹')}</span>
+        <span>{productText('{count} 项').replace('{count}', String(node.children.length))}</span>
+      </small>
+      const chevron = <span className={expanded ? 'dsh-knowledge-folder-chevron open' : 'dsh-knowledge-folder-chevron'} aria-hidden="true">
+        <ChevronIcon />
+      </span>
+      if (!expanded) {
+        cards.push(
+          <button type="button" key={`folder:${node.path}`} className="dsh-knowledge-card folder"
+            aria-expanded={false} title={node.name}
+            onClick={() => { handlers.onToggleFolder(node.path) }}>
+            <span className="dsh-knowledge-file-icon folder" aria-hidden="true"><FolderIcon /></span>
             <strong>{node.name}</strong>
-            <small>{productText('文件夹')}</small>
-          </div>
-          <span className={expanded ? 'dsh-knowledge-folder-chevron open' : 'dsh-knowledge-folder-chevron'} aria-hidden="true">
-            <ChevronIcon />
-          </span>
-        </button>,
-      )
-      if (expanded) {
-        rows.push(...renderContentTree(node.children, { ...handlers, depth: handlers.depth + 1 }))
+            {meta}
+            <span className="dsh-knowledge-card-corner">{chevron}</span>
+          </button>,
+        )
+        continue
       }
+      cards.push(
+        <section key={`folder:${node.path}`} className="dsh-knowledge-folder-section">
+          <button type="button" className="dsh-knowledge-folder-bar" aria-expanded={true} title={node.name}
+            onClick={() => { handlers.onToggleFolder(node.path) }}>
+            <span className="dsh-knowledge-file-icon folder" aria-hidden="true"><FolderIcon /></span>
+            <strong>{node.name}</strong>
+            {meta}
+            {chevron}
+          </button>
+          {node.children.length > 0 && <div className="dsh-knowledge-documents">
+            {renderContentTree(node.children, { ...handlers, depth: handlers.depth + 1 })}
+          </div>}
+        </section>,
+      )
       continue
     }
     const document = node.document
-    const kind = fileKind(documentDisplayName(document))
+    const name = documentDisplayName(document)
+    const kind = fileKind(name)
     const clock = formatClock(documentTime(document))
     const selectedDoc = handlers.selectedDocumentIds.includes(document.id)
-    rows.push(
+    cards.push(
       <button type="button" key={document.id}
-        className={selectedDoc ? 'selected' : ''}
-        style={{ paddingLeft: `${4 + handlers.depth * 14}px` }}
+        className={selectedDoc ? `dsh-knowledge-card ${kind} selected` : `dsh-knowledge-card ${kind}`}
+        title={clock === '' ? name : `${name}\n${clock}`}
         aria-pressed={selectedDoc}
         onMouseEnter={() => handlers.onPrefetchDocument(document)}
         onClick={(event) => {
@@ -2102,15 +2163,30 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
           handlers.onOpenMenu(document.id, event.clientX, event.clientY)
         }}>
         <span className={`dsh-knowledge-file-icon ${kind}`} aria-hidden="true"><TypeIcon kind={kind} /></span>
-        <div>
-          <strong>{documentDisplayName(document)}</strong>
-          <small>{clock === '' ? productText(kindLabel(kind)) : `${productText(kindLabel(kind))} | ${clock}`}</small>
-        </div>
-        {selectedDoc && <span className="dsh-knowledge-check" aria-hidden="true"><CheckIcon /></span>}
+        <strong>{name}</strong>
+        <small>
+          <span>{productText(kindLabel(kind))}</span>
+          <span>{formatDocumentSize(document.size)}</span>
+        </small>
+        {selectedDoc && <span className="dsh-knowledge-card-corner">
+          <span className="dsh-knowledge-check" aria-hidden="true"><CheckIcon /></span>
+        </span>}
       </button>,
     )
   }
-  return rows
+  return cards
+}
+
+/** File size label for a content card.
+ * @param bytes - Document size from RAGFlow.
+ * @returns Text such as `512B`, `2.0KB`, or `14MB`.
+ */
+function formatDocumentSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 1024) return `${Math.max(0, Math.round(bytes) || 0)}${productText('B')}`
+  const kilobytes = bytes / 1024
+  if (kilobytes < 1024) return `${kilobytes >= 10 ? kilobytes.toFixed(0) : kilobytes.toFixed(1)}${productText('KB')}`
+  const megabytes = kilobytes / 1024
+  return `${megabytes >= 10 ? megabytes.toFixed(0) : megabytes.toFixed(1)}${productText('MB')}`
 }
 
 /** Skip OS junk that directory picks often include.

@@ -60,11 +60,13 @@ func knowledgeAdmin(c *gin.Context) bool {
 
 // knowledgeBaseDesktopItem is one authorized library with ownership and grant flags.
 // Desktop sidebar uses SubscribedByViewer for 订阅知识库; owned auth libraries stay off the
-// sidebar and appear only on 知识库广场.
+// sidebar and appear only on 知识库广场. DocumentCount is the RAGFlow dataset total, or 0 when
+// RAGFlow is unconfigured or the count request fails.
 type knowledgeBaseDesktopItem struct {
 	model.KnowledgeBase
 	OwnedByViewer      bool `json:"owned_by_viewer"`
 	SubscribedByViewer bool `json:"subscribed_by_viewer"`
+	DocumentCount      int  `json:"document_count"`
 }
 
 // ListKnowledgeBases returns desktop sidebar libraries: grant-scoped for everyone.
@@ -103,7 +105,39 @@ func ListKnowledgeBases(c *gin.Context) {
 			SubscribedByViewer: !owned && hasGrant,
 		}
 	}
+	fillDesktopDocumentCounts(c.Request.Context(), items)
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
+}
+
+// fillDesktopDocumentCounts sets each sidebar library's file total from one RAGFlow page request.
+// A missing RAGFlow client or a failed request leaves that count at zero so the sidebar still lists.
+func fillDesktopDocumentCounts(ctx context.Context, items []knowledgeBaseDesktopItem) {
+	if len(items) == 0 {
+		return
+	}
+	client, err := ragflow.NewFromEnvironment()
+	if err != nil {
+		return
+	}
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 4)
+	for i := range items {
+		datasetId := items[i].RagflowDatasetId
+		if datasetId == "" {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(index int, datasetId string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			_, count, err := client.ListDocumentsPage(ctx, datasetId, 1, 1, "")
+			if err == nil {
+				items[index].DocumentCount = count
+			}
+		}(i, datasetId)
+	}
+	wg.Wait()
 }
 
 // ListKnowledgeOrganizationDirectory returns the caller's membership org tree and same-node peers

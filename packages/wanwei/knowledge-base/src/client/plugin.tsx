@@ -130,12 +130,17 @@ function knowledgeItem(raw: unknown): KnowledgeBaseItem {
     throw new Error('知识库响应字段无效')
   }
   const cover = optionalCover(item.cover, '知识库响应字段无效')
+  const documentCount = item.document_count
+  if (documentCount !== undefined && (!Number.isInteger(documentCount) || (documentCount as number) < 0)) {
+    throw new Error('知识库响应字段无效')
+  }
   return {
     ...(item as unknown as KnowledgeBaseItem),
     category_id: categoryId,
     ...(typeof owned === 'boolean' ? { owned_by_viewer: owned } : {}),
     ...(typeof subscribed === 'boolean' ? { subscribed_by_viewer: subscribed } : {}),
     ...(cover !== undefined ? { cover } : {}),
+    ...(documentCount !== undefined ? { document_count: documentCount as number } : {}),
   }
 }
 
