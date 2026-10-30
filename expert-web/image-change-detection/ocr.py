@@ -393,7 +393,8 @@ def extract(paths, destination, options):
     for obj in objects:
         x0, y0, x1, y1 = obj['box']
         box = (x0 * image.width, y0 * image.height, min(image.width - 1, x1 * image.width), min(image.height - 1, y1 * image.height))
-        if not options['precise'] or obj.get('segmentation_status') == 'unavailable':
+        # 变化发现的标注图始终保留红框；精准模式在框内叠加真实掩膜与轮廓。
+        if MODE == 'change' or not options['precise'] or obj.get('segmentation_status') == 'unavailable':
             draw.rectangle(box, outline='#ed5a37', width=3)
         draw.text((box[0] + 3, box[1] + 3), str(obj['id']), fill=palette[(obj['id']-1) % len(palette)])
     meta['count'] = len(objects)

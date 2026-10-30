@@ -149,6 +149,9 @@ class Integration(unittest.TestCase):
         status, raw = self.request(f'/api/tasks/{task_id}/files/1')
         self.assertEqual(status, 200)
         self.assertEqual(Image.open(io.BytesIO(raw)).format, 'PNG')
+        if MODE == 'change':
+            marked = Image.open(io.BytesIO(raw)).convert('RGB')
+            self.assertTrue(np.any(np.all(np.asarray(marked) == (237, 90, 55), axis=2)))
         other = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
         self.request('/api/session', {'ticket': 'b' * 64}, other)
         self.assertEqual(self.request(f'/api/tasks/{task_id}/files/1', client=other)[0], 404)
