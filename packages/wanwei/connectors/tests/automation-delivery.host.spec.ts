@@ -20,7 +20,10 @@ it('sends every part as the Feishu bot to the authenticated owner with stable ke
   const sends = mocks.lark.mock.calls.slice(1)
   expect(sends.length).toBeGreaterThan(1)
   expect(sends.every(([args]) => args.includes('ou_owner') && args.includes('bot'))).toBe(true)
-  const reconstructed = sends.map(([args]) => (JSON.parse(args[args.indexOf('--content') + 1] ?? '{}') as { text: string }).text.replace(/^.*\n/, '')).join('')
+  expect(sends.every(([args]) => args[args.indexOf('--msg-type') + 1] === 'post')).toBe(true)
+  const reconstructed = sends.map(([args]) => (JSON.parse(args[args.indexOf('--content') + 1] ?? '{}') as {
+    zh_cn: { content: { text: string }[][] }
+  }).zh_cn.content.flat().map(block => block.text).join('')).join('')
   expect(reconstructed).toBe(text)
   const key = sends[0]?.[0]
   await deliverAutomationNotification('feishu', text, 'run-1', new AbortController().signal)

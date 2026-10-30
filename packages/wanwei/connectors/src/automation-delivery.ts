@@ -1,3 +1,4 @@
+import { feishuParts, feishuPost } from './feishu-message.ts'
 /** Deterministic delivery of automation results, independent of model tools. */
 import { createHash } from 'node:crypto'
 import { runLark } from './feishu-cli.ts'
@@ -58,13 +59,16 @@ export async function deliverAutomationNotification(channel: string, text: strin
   } else if (channel !== 'wechat') throw new Error('不支持的推送渠道')
   // Bound every complete message, preserving all content across ordered parts.
   const points = Array.from(text)
-  for (let offset = 0; offset < points.length; offset += 2500) {
+  const parts = channel === 'feishu' ? feishuParts(text)
+    : Array.from({ length: Math.ceil(points.length / 2500) }, (_, index) =>
+      `[自动化结果 ${index + 1}/${Math.ceil(points.length / 2500)}]\n` + points.slice(index * 2500, (index + 1) * 2500).join(''))
+  for (const [index, part] of parts.entries()) {
     timeout.throwIfAborted()
-    const part = `[自动化结果 ${Math.floor(offset / 2500) + 1}/${Math.ceil(points.length / 2500)}]\n` + points.slice(offset, offset + 2500).join('')
+    const offset = channel === 'feishu' ? index : index * 2500
     const token = createHash('sha256').update(`${key}:${offset}`).digest('hex').slice(0, 48)
     if (channel === 'feishu') {
       const result = notificationResult(await runLark(['im', '+messages-send', '--as', 'bot', '--user-id', recipient,
-        '--msg-type', 'text', '--content', JSON.stringify({ text: part }), '--idempotency-key', token, '--json'], timeout))
+        '--msg-type', 'post', '--content', feishuPost(part), '--idempotency-key', token, '--json'], timeout))
       if (result.ok !== true) throw new Error('飞书未确认发送成功')
     } else if (channel === 'dingtalk' && dws) {
       const response = notificationResult(await runDwsTool(dws, ['chat', '+messages-send', '--as', 'user', '--user', recipient,

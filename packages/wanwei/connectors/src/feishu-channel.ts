@@ -1,3 +1,4 @@
+import { feishuParts, feishuPost } from './feishu-message.ts'
 /** Owner-only Feishu robot DM channel; credentials remain in the official CLI. */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
@@ -160,18 +161,16 @@ export function createFeishuChannel(ctx: Context, home: () => string, cli: Cli) 
   const send = async (messageId: string, text: string, key: string, signal: AbortSignal) => {
     signal.throwIfAborted()
     await verifyOwner(signal)
-    // JSON --content prevents model output beginning with @ or - from becoming
-    // an instruction to the CLI to read a local file or stdin.
-    let replyText = text.slice(0, 6000)
-    while (Buffer.byteLength(JSON.stringify({ text: replyText })) > 20000) {
-      replyText = replyText.slice(0, Math.floor(replyText.length * .75))
+    const parts = feishuParts(text)
+    for (const [index, part] of parts.entries()) {
+      signal.throwIfAborted()
+      await verifyOwner(signal)
+      const result = await cli.run(['im', '+messages-reply', '--message-id', messageId, '--msg-type', 'post',
+        '--content', feishuPost(part), '--as', 'bot', '--idempotency-key', digest(`${key}:${index}`).slice(0, 48), '--json'], signal)
+      if (result.exitCode !== 0) throw new Error('任务已执行，但飞书回传失败。请检查机器人的发送消息权限，并在桌面查看结果。')
+      const body = JSON.parse(result.stdout) as { ok?: boolean }
+      if (body.ok !== true) throw new Error('飞书未确认接收任务结果，请在桌面查看结果。')
     }
-    const content = JSON.stringify({ text: replyText })
-    const result = await cli.run(['im', '+messages-reply', '--message-id', messageId, '--msg-type', 'text',
-      '--content', content, '--as', 'bot', '--idempotency-key', digest(key).slice(0, 48), '--json'], signal)
-    if (result.exitCode !== 0) throw new Error('任务已执行，但飞书回传失败。请检查机器人的发送消息权限，并在桌面查看结果。')
-    const body = JSON.parse(result.stdout) as { ok?: boolean }
-    if (body.ok !== true) throw new Error('飞书未确认接收任务结果，请在桌面查看结果。')
     if (state === 'ready') error = null
   }
   const unsubscribe = ctx.on('session/event', (session, event) => {

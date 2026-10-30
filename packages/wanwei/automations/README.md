@@ -9,6 +9,8 @@ English | [中文](README.zh.md)
 
 ## Summary
 
+Scheduled delivery uses the task name as a heading and a Wanwei Buddy timestamp footer. Successful runs omit status labels; exceptional runs include the reason, and results awaiting completion confirmation say so without asserting success. Feishu renders the body as native rich text. Desktop execution states and delivery retry remain unchanged.
+
 Confirming a task without a workspace uses the desktop automatic workspace allocator with a local YYYYMMDDHHmmss name and collision handling, registers it, then saves the task. Canceling creates no directory; retrying a failed save reuses the allocated workspace. The delivery dropdown shows channel switches only; enabling an unconnected channel opens its existing authorization dialog with connection guidance and enables delivery after success.
 
 The automation editor offers separate Feishu, DingTalk and WeChat delivery switches in a dropdown beside the access control, all off by default. Authorization reuses connector panels without losing the draft. The Host sends all user-visible assistant text from the run’s fresh Session, including deliverables emitted before a completion tool call, or failure/waiting status independently of model tools; run records retain delivery status and allow delivery-only retry. Feishu sends as the bot to its authenticated owner, DingTalk sends as the signed-in user to their own account, and WeChat uses the latest bound-owner inbound conversation. WeChat requires an initial inbound message; expired reply contexts fail delivery. Files are listed by desktop path; attachments are not uploaded. Legacy connector tool selections do not enable delivery.

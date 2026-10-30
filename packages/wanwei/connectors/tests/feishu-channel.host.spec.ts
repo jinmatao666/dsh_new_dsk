@@ -94,7 +94,7 @@ it('waits for ready, executes one desktop task, replies to the original message 
     const reply = f.run.mock.calls.find(([args]) => args[1] === '+messages-reply')![0]
     expect(reply).toContain('om_first')
     expect(reply[reply.indexOf('--as') + 1]).toBe('bot')
-    expect(JSON.parse(reply[reply.indexOf('--content') + 1]!)).toEqual({ text: '@literal-result.txt\n整理完成' })
+    expect(JSON.parse(reply[reply.indexOf('--content') + 1]!)).toEqual({ zh_cn: { title: '', content: [[{ tag: 'md', text: '@literal-result.txt\n整理完成' }]] } })
     f.children[0]!.stdout.emit('data', line)
     f.children[0]!.stdout.emit('data', Buffer.from(JSON.stringify(event({ message_id: 'om_second' })) + '\n'))
     await vi.waitFor(() => { expect(f.prompt).toHaveBeenCalledTimes(2) })

@@ -178,9 +178,13 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
             ? event.data.message.content.flatMap(block => block.type === 'text' && block.text.trim() ? [block.text.trim()] : [])
             : []) ?? []
           const answer = [...new Set(answers)].join('\n\n')
-          const status = { running: '执行中', success: '已完成', failed: '执行失败', interrupted: '已中断', waiting: '等待确认', incomplete: '未完成' }[record.status]
-          const body = [`定时任务：${task.name}`, `状态：${status}`, record.error, answer || record.checkpoint?.summary,
-            record.checkpoint?.files.length ? `产物（保存在电脑）：\n${record.checkpoint.files.join('\n')}` : ''].filter(Boolean).join('\n\n')
+          const issue = record.status === 'success' ? '' : record.status === 'incomplete' && answer
+            ? '已生成以下内容，任务完成状态尚未确认。'
+            : record.error || '任务未能完成，请在桌面端查看执行记录。'
+          const deliveredAt = new Date(record.endedAt ?? Date.now()).toLocaleString('zh-CN')
+          const body = [`## ${task.name}`, issue, answer || record.checkpoint?.summary,
+            record.checkpoint?.files.length ? `成果文件（保存在电脑）：\n${record.checkpoint.files.join('\n')}` : '',
+            `万维 Buddy · 定时任务 · ${deliveredAt}`].filter(Boolean).join('\n\n')
           await store.update((state) => {
             const saved = state.runs.find(item => item.id === run.id)
             if (saved) { saved.deliveryText = body; saved.deliveries = channels.map(channel => ({ channel, status: 'pending' as const })) }

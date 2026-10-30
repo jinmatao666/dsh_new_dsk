@@ -1,3 +1,4 @@
+import { formatFeishuArgs } from './feishu-message.ts'
 /** Official native lark-cli execution and connector-owned authorization. */
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -61,7 +62,7 @@ export function runLark(args: readonly string[], signal: AbortSignal, cwd?: stri
   const command = resolveLarkCommand()
   if (!command) return Promise.reject(new Error('未找到随包飞书 CLI，请使用完整安装包'))
   return new Promise((resolve, reject) => {
-    execFile(command, [...args], { windowsHide: true, env: cliEnvironment(), signal,
+    execFile(command, [...formatFeishuArgs(args)], { windowsHide: true, env: cliEnvironment(), signal,
       timeout: 60000, maxBuffer: 2 * 1024 * 1024, ...(cwd ? { cwd } : {}) }, (error, stdout, stderr) => {
       if (error && (typeof error.code !== 'number' || error.killed)) reject(error instanceof Error ? error : new Error(JSON.stringify(error)))
       else resolve({ stdout, stderr, exitCode: typeof error?.code === 'number' ? error.code : 0 })

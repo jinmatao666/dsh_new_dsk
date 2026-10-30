@@ -10,6 +10,7 @@
     "src/automation-bridge.ts",
     "src/feishu-cli.ts",
     "src/feishu-channel.ts",
+    "src/feishu-message.ts",
     "src/feishu-questions.ts",
     "src/feishu-skills.ts",
     "src/invariant.ts",

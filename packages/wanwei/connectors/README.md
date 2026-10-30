@@ -9,6 +9,8 @@ English | [中文](README.zh.md)
 
 ## Summary
 
+Feishu bot replies, session synchronization and scheduled results use native post Markdown rather than raw text. Ordinary messages gain no generated title, status or footer. Inline text sent through the Feishu CLI send/reply shortcuts is converted while explicit rich messages and file/stdin references remain unchanged. Long bot replies and scheduled results are split on paragraph/line boundaries where possible without truncating Unicode or fenced code. Actual client rendering still needs a Feishu-client check.
+
 The Feishu panel offers three clickable examples. Clicking stages an editable draft in a new conversation; it does not bind or open a phone-channel Session, create a workspace, or execute the request. The first explicit send allocates a separate workspace and Session. Desktop example entry does not require the optional inbound phone bridge to be ready; actual business requests still check authorization.
 
 Recommended login permissions include optional business capabilities. Missing recommended permissions do not block the connector or unrelated examples. Readiness checks require message sending; an explicitly requested business permission is checked when that operation fails and is repaired through supplementary authorization. Opening permissions in the application console does not itself grant those scopes to a saved user token.
