@@ -45,20 +45,20 @@ test.each([null, 'true', 1])('rejects an explicitly invalid knowledge flag %p', 
   expect(API.put).not.toHaveBeenCalled();
 });
 
-test('seven tabs preserve profile and security, and load deployment contacts', async () => {
+test('eight tabs preserve profile and security, and load deployment contacts', async () => {
   await act(async () => root.render(<SystemSettings />));
   const tabs = [...container.querySelectorAll('[role="tab"]')];
-  expect(tabs.map(button => button.textContent)).toEqual(['账户设置', '安全设置', '网络设置', '版本类型', '功能设置', '运维设置', '插件设置']);
+  expect(tabs.map(button => button.textContent)).toEqual(['账户设置', '安全设置', '网络设置', '版本类型', '功能设置', '知识库设置', '运维设置', '插件设置']);
   expect(container.textContent).toContain('root');
   act(() => tabs[1].click()); expect(container.textContent).toContain('会话有效期');
-  act(() => tabs[5].click());
+  act(() => tabs[6].click());
   expect(container.querySelector('input').value).toBe('张运维');
   expect(container.querySelector('input[type="tel"]').value).toBe('0571-12345678');
 });
 
 test('plugin administrator switch saves independently and cancellation restores its saved value', async () => {
   await act(async () => root.render(<SystemSettings />));
-  act(() => container.querySelectorAll('[role="tab"]')[6].click());
+  act(() => container.querySelectorAll('[role="tab"]')[7].click());
   const toggle = container.querySelector('[aria-label="统一启用浏览器助手"]');
   expect(toggle.checked).toBe(true);
   act(() => toggle.click());
@@ -74,13 +74,18 @@ test('plugin administrator switch saves independently and cancellation restores 
   expect(value.features.internet.knowledgeBases).toBe(true);
 });
 
-test('non-root administrator cannot modify plugin settings', async () => {
-  API.get.mockResolvedValue({ data: { success: true, data: { username: 'admin', role: 10 } } });
+test('ordinary user can load and modify plugin settings', async () => {
+  API.get.mockImplementation(path => Promise.resolve({ data: { success: true, data: path === '/api/user/self'
+    ? { username: 'member', role: 1 }
+    : [{ key: 'SystemDeploymentSettings', value: JSON.stringify({ network: 'internet', operator: '张运维', phone: '0571-12345678' }) }] } }));
   await act(async () => root.render(<SystemSettings />));
-  act(() => container.querySelectorAll('[role="tab"]')[6].click());
-  expect(container.textContent).toContain('仅超级管理员');
-  expect(container.querySelector('[role="switch"]')).toBeNull();
-  expect(API.put).not.toHaveBeenCalled();
+  act(() => container.querySelectorAll('[role="tab"]')[7].click());
+  expect(container.textContent).not.toContain('仅超级管理员');
+  const toggle = container.querySelector('[aria-label="统一启用浏览器助手"]');
+  expect(toggle).not.toBeNull();
+  act(() => toggle.click());
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(JSON.parse(API.put.mock.calls[0][1].value).plugins).toEqual({ browserAssistant: false });
 });
 test('network selection saves one deployment option without changing account data', async () => {
   await act(async () => root.render(<SystemSettings />));
@@ -218,3 +223,94 @@ test('legacy shared hide policy initializes both independent choices', async () 
   act(() => [...container.querySelectorAll('button')].find(button => button.textContent === '取消修改').click());
   expect(container.querySelector('[name="internetExpertPolicy"][value="hide"]').checked).toBe(true);
 });
+
+function fillInput(element, value) {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  setter.call(element, value);
+  element.dispatchEvent(new Event('input', { bubbles: true }));
+  element.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+test('knowledge quota tab defaults off and saves total with person allocations', async () => {
+  API.get.mockImplementation(path => {
+    if (path === '/api/user/self') return Promise.resolve({ data: { success: true, data: { username: 'root', role: 100 } } });
+    if (path === '/api/option/') {
+      return Promise.resolve({ data: { success: true, data: [{ key: 'SystemDeploymentSettings', value: JSON.stringify({
+        network: 'internet', operator: '张运维', phone: '0571-12345678',
+        knowledgeQuota: { enabled: false, totalBytes: 0, allocations: [] },
+      }) }] } });
+    }
+    if (path === '/api/government-organization/') {
+      return Promise.resolve({ data: { success: true, data: [{ id: 1, parent_id: 0, name: '总部', sort_order: 0 }] } });
+    }
+    if (path === '/api/government-organization/memberships') {
+      return Promise.resolve({ data: { success: true, data: {
+        users: [{ id: 8, username: 'alice', display_name: '爱丽丝' }],
+        memberships: [{ user_id: 8, node_id: 1 }],
+      } } });
+    }
+    return Promise.resolve({ data: { success: true, data: [] } });
+  });
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[5].click());
+  const toggle = container.querySelector('[aria-label="文件大小限制"]');
+  expect(toggle.checked).toBe(false);
+  expect(container.textContent).toContain('已关闭');
+  await act(async () => toggle.click());
+  expect(await waitForDialog()).not.toBeNull();
+  await act(async () => fillInput(container.querySelector('[aria-label="个人知识库总量（MB）"]'), '100'));
+  const personQuota = await waitForPersonQuota();
+  await act(async () => fillInput(personQuota, '20'));
+  await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '确定').click());
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(container.textContent).toContain('总量 100MB');
+  expect(container.textContent).toContain('已分配 1 人');
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  const saved = JSON.parse(API.put.mock.calls[0][1].value);
+  expect(saved.knowledgeQuota).toEqual({
+    enabled: true,
+    totalBytes: 100 * 1024 * 1024,
+    allocations: [{ userId: 8, quotaBytes: 20 * 1024 * 1024 }],
+  });
+});
+
+test('knowledge quota requires total before save when enabled', async () => {
+  API.get.mockImplementation(path => {
+    if (path === '/api/user/self') return Promise.resolve({ data: { success: true, data: { username: 'root', role: 100 } } });
+    if (path === '/api/option/') {
+      return Promise.resolve({ data: { success: true, data: [{ key: 'SystemDeploymentSettings', value: JSON.stringify({
+        network: 'internet', operator: '张运维', phone: '0571-12345678',
+      }) }] } });
+    }
+    if (path === '/api/government-organization/' || path === '/api/government-organization/memberships') {
+      return Promise.resolve({ data: { success: true, data: path.endsWith('memberships') ? { users: [], memberships: [] } : [] } });
+    }
+    return Promise.resolve({ data: { success: true, data: [] } });
+  });
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[5].click());
+  await act(async () => container.querySelector('[aria-label="文件大小限制"]').click());
+  expect(await waitForDialog()).not.toBeNull();
+  await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '关闭').click());
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(API.put).not.toHaveBeenCalled();
+  expect(container.textContent).toContain('请先点击设置，填写个人知识库总量后再保存');
+});
+
+async function waitForDialog() {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const dialog = container.querySelector('[role="dialog"]');
+    if (dialog) return dialog;
+    await act(async () => { await Promise.resolve(); });
+  }
+  return container.querySelector('[role="dialog"]');
+}
+
+async function waitForPersonQuota() {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const input = container.querySelector('[aria-label="爱丽丝 容量（MB）"]');
+    if (input) return input;
+    await act(async () => { await Promise.resolve(); });
+  }
+  return container.querySelector('[aria-label="爱丽丝 容量（MB）"]');
+}

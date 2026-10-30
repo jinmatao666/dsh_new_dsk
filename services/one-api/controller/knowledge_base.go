@@ -51,8 +51,11 @@ func knowledgeClient(c *gin.Context) (*ragflow.Client, bool) {
 	return client, true
 }
 
+// knowledgeAdmin is true for the root catalog operator (or an explicit workbench create flag).
+// Ordinary administrators (role 10) are not knowledge catalog admins: they only see self and
+// same-organization personal libraries, plus categories they own or may open.
 func knowledgeAdmin(c *gin.Context) bool {
-	return c.GetBool("knowledge_admin") || c.GetInt("role") >= model.RoleAdminUser
+	return c.GetBool("knowledge_admin") || c.GetInt("role") >= model.RoleRootUser
 }
 
 // knowledgeBaseDesktopItem is one authorized library with ownership and grant flags.
@@ -64,10 +67,10 @@ type knowledgeBaseDesktopItem struct {
 	SubscribedByViewer bool `json:"subscribed_by_viewer"`
 }
 
-// ListKnowledgeBases returns desktop sidebar libraries: grant-scoped for everyone, with
-// administrators also receiving every uncategorized personal library. Auth-category libraries
-// still require ownership or a grant so they do not fill 订阅知识库 without approval.
-// Full workbench catalog stays on /api/knowledge-admin/bases.
+// ListKnowledgeBases returns desktop sidebar libraries: grant-scoped for everyone.
+// Root also receives every uncategorized personal library. Category libraries still require
+// ownership or a grant (or a public common category) so they do not appear without approval.
+// Full workbench catalog stays on /api/knowledge-admin/bases (root only).
 func ListKnowledgeBases(c *gin.Context) {
 	userId := c.GetInt("id")
 	rows, err := model.ListAuthorizedKnowledgeBases(userId)
@@ -103,9 +106,25 @@ func ListKnowledgeBases(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
 }
 
-// ListKnowledgeCategories returns workbench categories for the desktop and admin tabs.
+// ListKnowledgeOrganizationDirectory returns the caller's membership org tree and same-node peers
+// for the workbench personal knowledge directory (not the full administrator roster).
+func ListKnowledgeOrganizationDirectory(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	directory, err := model.ListKnowledgeOrganizationDirectory(c.GetInt("id"))
+	if err != nil {
+		logger.Errorf(c.Request.Context(), "list knowledge organization directory: %s", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取组织架构失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": directory})
+}
+
+// ListKnowledgeCategories returns workbench category tabs the caller may see.
+// Visibility is by category type and ownership (or an accessible library inside), never by tab name.
 func ListKnowledgeCategories(c *gin.Context) {
-	rows, err := model.ListKnowledgeCategories()
+	userId := c.GetInt("id")
+	root := c.GetInt("role") >= model.RoleRootUser
+	rows, err := model.ListKnowledgeCategoriesForUser(userId, root)
 	if err != nil {
 		logger.Errorf(c.Request.Context(), "list knowledge categories: %s", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库分类失败"})
@@ -589,6 +608,9 @@ func transferKnowledgeDocument(c *gin.Context, removeSource bool) {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "源文件不存在"})
 		return
 	}
+	if !enforcePersonalKnowledgeQuota(c, target, sourceDocument.Size) {
+		return
+	}
 	filename := path.Base(strings.TrimSpace(sourceDocument.Name))
 	if filename == "" || filename == "." || filename == ".." {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "源文件名称无效"})
@@ -753,6 +775,9 @@ func uploadKnowledgeDocument(c *gin.Context, row *model.KnowledgeBase) {
 	header, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请选择不超过 20MB 的文件"})
+		return
+	}
+	if !enforcePersonalKnowledgeQuota(c, row, header.Size) {
 		return
 	}
 	source, err := header.Open()

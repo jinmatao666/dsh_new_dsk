@@ -87,10 +87,6 @@ const LoginForm = () => {
       });
       const { success, message, data } = res.data;
       if (success) {
-        if (data.role < 10) {
-          showError('仅管理员可登录此系统');
-          return;
-        }
         userDispatch({ type: 'login', payload: data });
         localStorage.setItem('user', JSON.stringify(data));
         showSuccess('登录成功！');
@@ -144,10 +140,10 @@ const LoginForm = () => {
               <img src="/brand-wordmark.svg" alt="万维 Buddy" />
             </div>
             <Title heading={2} style={{ textAlign: 'left', marginBottom: 6 }}>
-              登录管理后台
+              登录
             </Title>
             <Text type="tertiary" className="wanwei-auth-subtitle">
-              使用管理员账号继续
+              使用账号密码继续
             </Text>
                 <Form>
                   <Form.Input

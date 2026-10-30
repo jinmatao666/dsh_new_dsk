@@ -93,6 +93,8 @@ it('loads authorized knowledge bases and creates a personal library', async () =
   expect(screen.queryByRole('button', { name: '新建订阅知识库' })).toBeNull()
   expect(screen.queryByRole('button', { name: '新建共享知识库' })).toBeNull()
   expect(screen.queryByText('共享知识库')).toBeNull()
+  expect(screen.getByRole('button', { name: '展开订阅知识库' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '展开订阅知识库' }))
   const subscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
   expect(within(subscription).getByText('暂无知识库')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: '新建个人知识库' }))
@@ -203,10 +205,15 @@ it('hides auth category names from the sidebar and discovers them only in the pl
   expect(await screen.findByText('公共知识库')).toBeTruthy()
   expect(screen.queryByText('公开规范')).toBeNull()
   expect(screen.queryByText('法律')).toBeNull()
-  const emptySubscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
-  expect(within(emptySubscription).getByText('暂无知识库')).toBeTruthy()
+  expect(screen.getByRole('button', { name: '展开订阅知识库' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: '展开公共知识库' })).toBeTruthy()
+  expect(screen.queryByText('公开汇编')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '展开公共知识库' }))
   const open = screen.getByText('公共知识库').closest('.dsh-knowledge-group')
   expect(within(open as HTMLElement).getByText('公开汇编')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '展开订阅知识库' }))
+  const emptySubscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
+  expect(within(emptySubscription).getByText('暂无知识库')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: /知识库广场/ }))
   const card = await screen.findByRole('button', { name: /地方法规知识库/ })
   expect(card.querySelector('img')?.getAttribute('src')).toBe('/knowledge-covers/plaza-natural-resources.jpg')
@@ -314,6 +321,8 @@ it('places approved auth-category libraries under 订阅知识库 instead of the
   render(<KnowledgePage api={service} />)
   expect(await screen.findByText('订阅知识库')).toBeTruthy()
   expect(screen.queryByText('法律')).toBeNull()
+  expect(screen.queryByText('已订法规')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '展开订阅知识库' }))
   const subscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group')
   expect(within(subscription as HTMLElement).getByText('已订法规')).toBeTruthy()
 })
@@ -338,6 +347,8 @@ it('keeps admin-created auth libraries out of 订阅知识库 until a grant exis
   }])
   render(<KnowledgePage api={service} />)
   expect(await screen.findByRole('button', { name: '我的资料' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: '展开订阅知识库' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '展开订阅知识库' }))
   const subscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
   expect(within(subscription).getByText('暂无知识库')).toBeTruthy()
   expect(within(subscription).queryByText('平台法规')).toBeNull()
@@ -365,6 +376,7 @@ it('places owned auth-category libraries under 订阅知识库 above grants with
   service.plaza = vi.fn(async () => [])
   render(<KnowledgePage api={service} />)
   expect(await screen.findByText('订阅知识库')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '展开订阅知识库' }))
   const subscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
   const labels = within(subscription).getAllByRole('button')
     .map(button => button.textContent || '')
@@ -391,12 +403,13 @@ it('collapses and expands each sidebar knowledge group', async () => {
     },
   ])
   render(<KnowledgePage api={service} />)
-  expect(await screen.findByText('已订法规')).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: '收起订阅知识库' }))
-  expect(screen.queryByText('已订法规')).toBeNull()
+  expect(await screen.findByRole('button', { name: '收起个人知识库' })).toBeTruthy()
   expect(screen.getByRole('button', { name: '展开订阅知识库' })).toBeTruthy()
+  expect(screen.queryByText('已订法规')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '展开订阅知识库' }))
   expect(screen.getByText('已订法规')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '收起订阅知识库' }))
+  expect(screen.queryByText('已订法规')).toBeNull()
   const personal = screen.getByText('个人知识库').closest('.dsh-knowledge-group') as HTMLElement
   expect(within(personal).getByText('我的资料')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: '收起个人知识库' }))
@@ -421,6 +434,7 @@ it('unsubscribes a subscribed library so it leaves 订阅知识库', async () =>
     ])
   })
   render(<KnowledgePage api={service} />)
+  fireEvent.click(await screen.findByRole('button', { name: '展开订阅知识库' }))
   fireEvent.click(await screen.findByText('已订法规'))
   expect(await screen.findByRole('button', { name: '取消订阅' })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: '取消订阅' }))
@@ -447,6 +461,8 @@ it('keeps 个人知识库 and 订阅知识库 visible when empty and hides empty
   expect(screen.queryByText('公开规范')).toBeNull()
   const personal = screen.getByText('个人知识库').closest('.dsh-knowledge-group') as HTMLElement
   expect(within(personal).getByText('我的资料')).toBeTruthy()
+  expect(screen.getByRole('button', { name: '展开订阅知识库' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '展开订阅知识库' }))
   const subscription = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
   expect(within(subscription).getByText('暂无知识库')).toBeTruthy()
 })
@@ -500,10 +516,10 @@ it('drags the divider to change the content width', async () => {
   const split = await screen.findByRole('separator', { name: '调整内容宽度' })
   fireEvent.pointerDown(split, { button: 0, clientX: 490 })
   fireEvent.pointerMove(window, { clientX: 640 })
-  expect(split.getAttribute('aria-valuenow')).toBe('430')
+  expect(split.getAttribute('aria-valuenow')).toBe('416')
   fireEvent.pointerUp(window)
   fireEvent.keyDown(split, { key: 'ArrowLeft' })
-  expect(split.getAttribute('aria-valuenow')).toBe('414')
+  expect(split.getAttribute('aria-valuenow')).toBe('400')
 })
 
 it('restores saved Q&A turns when opening a knowledge base', async () => {

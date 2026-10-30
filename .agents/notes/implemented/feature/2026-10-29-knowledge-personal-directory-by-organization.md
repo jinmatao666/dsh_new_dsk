@@ -10,7 +10,7 @@ Administrators already maintain a hierarchical government organization tree and 
 
 ## Decision
 
-On the administrator Personal tab, the left directory loads `/api/government-organization/` and `/api/government-organization/memberships`. It renders the same adjacency tree as the organization editor (nodes only — no member leaves in the nav). Selecting a node lists people who have a direct membership on that node or any descendant; the page does not show an 全部人员 entry and does not render the people grid until a node is selected. Accounts with no membership appear under 未分配组织 when that set is non-empty. Ordinary users keep the self-only personal card list and never load the organization APIs. Category tabs and personal file drill-down are unchanged; this only replaces the Personal directory source of truth for who appears where. See also [knowledge categories](2026-10-23-knowledge-library-categories.md) and [government organization tree](2026-10-24-government-organization-tree.md).
+On the administrator Personal tab, the left directory loads `/api/government-organization/` and `/api/government-organization/memberships`. It renders the same adjacency tree as the organization editor (nodes only — no member leaves in the nav). Selecting a node lists people who have a direct membership on that node or any descendant; the page does not show an 全部人员 entry and does not render the people grid until a node is selected. Accounts with no membership appear under 未分配组织 when that set is non-empty. Ordinary users use the same left-tree / right-people layout via a scoped directory API; see [org-peer personal directory](2026-10-30-knowledge-personal-directory-org-peers.md). Category tabs and personal file drill-down are unchanged; this only replaces the Personal directory source of truth for who appears where. See also [knowledge categories](2026-10-23-knowledge-library-categories.md) and [government organization tree](2026-10-24-government-organization-tree.md).
 
 ## Alternatives considered
 
@@ -26,4 +26,4 @@ Personal browsing depends on organization nodes and memberships being maintained
 
 ## Testing
 
-Workbench React tests mock the government organization and memberships APIs, assert no 全部人员 roster on load, filter by node and 未分配组织, and keep the person file-list / preview path. Ordinary-user tests assert the organization endpoints are not called.
+Workbench React tests mock the government organization and memberships APIs, assert no 全部人员 roster on load, filter by node and 未分配组织, and keep the person file-list / preview path. Ordinary-user coverage for the scoped peer directory lives with [org-peer personal directory](2026-10-30-knowledge-personal-directory-org-peers.md).

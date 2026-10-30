@@ -32,12 +32,12 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); container.remove(); jest.clearAllMocks(); delete global.IS_REACT_ACT_ENVIRONMENT; });
 
-test('ordinary users never load the upload or publication interface', async () => {
+test('ordinary users can load the upload or publication interface', async () => {
   isRoot.mockReturnValue(false);
   await act(async () => root.render(<DesktopUpdates />));
-  expect(container.textContent).toContain('仅系统超级管理员');
-  expect(API.get).not.toHaveBeenCalled();
-  expect(container.querySelector('input[type="file"]')).toBeNull();
+  expect(container.textContent).not.toContain('仅系统超级管理员');
+  expect(API.get).toHaveBeenCalledWith('/api/desktop-updates', expect.any(Object));
+  expect(container.querySelector('input[type="file"]')).not.toBeNull();
 });
 
 test('styled dropdown supports keyboard navigation, closes on Escape and respects disabled architecture', async () => {

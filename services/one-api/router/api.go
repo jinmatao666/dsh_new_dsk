@@ -20,7 +20,7 @@ func SetApiRouter(router *gin.Engine) {
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
 	apiRouter.Use(middleware.GlobalAPIRateLimit())
 	apiRouter.Use(middleware.AdminOperationLog()) // 后台操作审计记录
-	desktopUpdates := apiRouter.Group("/desktop-updates", middleware.RootAuth())
+	desktopUpdates := apiRouter.Group("/desktop-updates", middleware.UserAuth())
 	desktopUpdates.GET("", controller.AdminListDesktopUpdates)
 	desktopUpdates.POST("", controller.AdminUploadDesktopUpdate)
 	desktopUpdates.POST("/:id/publish", controller.AdminPublishDesktopUpdate)
@@ -52,7 +52,8 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/oauth/wechat/bind", middleware.CriticalRateLimit(), middleware.UserAuth(), auth.WeChatBind)
 		apiRouter.GET("/oauth/wechat/quick-bind", middleware.CriticalRateLimit(), middleware.UserAuth(), auth.WeChatQuickBind)
 		apiRouter.GET("/oauth/email/bind", middleware.CriticalRateLimit(), middleware.UserAuth(), controller.EmailBind)
-		apiRouter.POST("/topup", middleware.AdminAuth(), controller.AdminTopUp)
+		// Workbench 用户权限 treats ordinary users like administrators; AdminTopUp is used from that page.
+		apiRouter.POST("/topup", middleware.UserAuth(), controller.AdminTopUp)
 		apiRouter.GET("/province-sso/launch", middleware.CriticalRateLimit(), controller.ProvinceSSOLaunch)
 		// AI Search 的所有请求来自同一后端 IP，不能使用每 20 分钟仅 20 次的
 		// CriticalRateLimit，否则多个正常用户会共用并快速耗尽限额。
@@ -100,8 +101,9 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/self/phone/reset-password", controller.ResetPasswordByPhone)
 			}
 
+			// Workbench 用户权限: ordinary users share administrator capabilities (unified permission redesign deferred).
 			adminRoute := userRoute.Group("/")
-			adminRoute.Use(middleware.AdminAuth())
+			adminRoute.Use(middleware.UserAuth())
 			{
 				adminRoute.GET("/", controller.GetAllUsers)
 				adminRoute.GET("/search", controller.SearchUsers)
@@ -120,34 +122,31 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.POST("/:id/transfer-to-personal", controller.TransferUserToPersonal)
 			}
 		}
-		// 平台管理员杂项接口,独立分组避免与 /user/:id 通配冲突
+		// Workbench modules (except 知识库) share administrator access with ordinary users until unified permissions land.
 		adminMiscRoute := apiRouter.Group("/admin")
-		adminMiscRoute.Use(middleware.AdminAuth())
+		adminMiscRoute.Use(middleware.UserAuth())
 		{
 			adminMiscRoute.GET("/account-type-changes", controller.ListAccountTypeChanges)
 			adminMiscRoute.GET("/user-prompts", controller.GetUserPromptAudits)
 		}
-		// 充值套餐管理(平台管理员)
 		rechargePackageRoute := apiRouter.Group("/recharge-package")
-		rechargePackageRoute.Use(middleware.AdminAuth())
+		rechargePackageRoute.Use(middleware.UserAuth())
 		{
 			rechargePackageRoute.GET("/", controller.AdminListRechargePackages)
 			rechargePackageRoute.POST("/", controller.AdminCreateRechargePackage)
 			rechargePackageRoute.PUT("/", controller.AdminUpdateRechargePackage)
 			rechargePackageRoute.DELETE("/:id", controller.AdminDeleteRechargePackage)
 		}
-		// 版本更新说明管理(平台管理员)
 		versionNoteRoute := apiRouter.Group("/version-note")
-		versionNoteRoute.Use(middleware.AdminAuth())
+		versionNoteRoute.Use(middleware.UserAuth())
 		{
 			versionNoteRoute.GET("/", controller.AdminListVersionNotes)
 			versionNoteRoute.POST("/", controller.AdminCreateVersionNote)
 			versionNoteRoute.PUT("/", controller.AdminUpdateVersionNote)
 			versionNoteRoute.DELETE("/:id", controller.AdminDeleteVersionNote)
 		}
-		// 发布记录(平台管理员,路线B定时探测)
 		versionReleaseRoute := apiRouter.Group("/version-release")
-		versionReleaseRoute.Use(middleware.AdminAuth())
+		versionReleaseRoute.Use(middleware.UserAuth())
 		{
 			versionReleaseRoute.GET("/", controller.AdminListVersionReleases)
 		}
@@ -170,8 +169,9 @@ func SetApiRouter(router *gin.Engine) {
 			memberIdentityRoute.PUT("/", controller.AdminUpdateMemberIdentity)
 			memberIdentityRoute.DELETE("/:id", controller.AdminDeleteMemberIdentity)
 		}
+		// Workbench 系统设置 deployment tabs: any signed-in user (same interim open gate as other non-knowledge modules).
 		optionRoute := apiRouter.Group("/option")
-		optionRoute.Use(middleware.RootAuth())
+		optionRoute.Use(middleware.UserAuth())
 		{
 			optionRoute.GET("/", controller.GetOptions)
 			optionRoute.PUT("/", controller.UpdateOption)
@@ -180,6 +180,7 @@ func SetApiRouter(router *gin.Engine) {
 		knowledgeRoute.Use(middleware.UserAuth())
 		{
 			knowledgeRoute.GET("", controller.ListKnowledgeBases)
+			knowledgeRoute.GET("/organization-directory", controller.ListKnowledgeOrganizationDirectory)
 			knowledgeRoute.GET("/categories", controller.ListKnowledgeCategories)
 			knowledgeRoute.GET("/ragflow-datasets", controller.ListManagedRagflowDatasets)
 			knowledgeRoute.GET("/plaza", controller.ListKnowledgePlaza)
@@ -248,7 +249,7 @@ func SetApiRouter(router *gin.Engine) {
 			adminPermReadRoute.PUT("/:id/role", controller.UpdateAdminRole)
 		}
 		roleRoute := apiRouter.Group("/role")
-		roleRoute.Use(middleware.AdminAuth())
+		roleRoute.Use(middleware.UserAuth())
 		{
 			roleRoute.GET("/", controller.ListRoles)
 			roleRoute.POST("/", controller.CreateRole)
@@ -256,7 +257,7 @@ func SetApiRouter(router *gin.Engine) {
 			roleRoute.DELETE("/:role", controller.DeleteRole)
 		}
 		governmentOrganizationRoute := apiRouter.Group("/government-organization")
-		governmentOrganizationRoute.Use(middleware.AdminAuth())
+		governmentOrganizationRoute.Use(middleware.UserAuth())
 		{
 			governmentOrganizationRoute.GET("/", controller.ListGovernmentOrganizationNodes)
 			governmentOrganizationRoute.GET("/memberships", controller.ListGovernmentMembers)
@@ -266,7 +267,7 @@ func SetApiRouter(router *gin.Engine) {
 			governmentOrganizationRoute.DELETE("/:id", controller.DeleteGovernmentOrganizationNode)
 		}
 		channelRoute := apiRouter.Group("/channel")
-		channelRoute.Use(middleware.AdminAuth())
+		channelRoute.Use(middleware.UserAuth())
 		{
 			channelRoute.GET("/", controller.GetAllChannels)
 			channelRoute.GET("/search", controller.SearchChannels)
@@ -285,12 +286,13 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.DELETE("/disabled", controller.DeleteDisabledChannel)
 			channelRoute.DELETE("/:id", controller.DeleteChannel)
 		}
+		// Role-permission model picker (用户权限) needs the aggregated catalog; writes stay admin-only.
+		apiRouter.GET("/model_definition/aggregated", middleware.UserAuth(), controller.ListAggregatedModels)
 		// 模型主表 CRUD(T1.2)+ 模型↔渠道关系(T1.3)
 		modelDefRoute := apiRouter.Group("/model_definition")
-		modelDefRoute.Use(middleware.AdminAuth())
+		modelDefRoute.Use(middleware.UserAuth())
 		{
 			modelDefRoute.GET("/", controller.GetAllModelDefinitions)
-			modelDefRoute.GET("/aggregated", controller.ListAggregatedModels)
 			modelDefRoute.GET("/channels", controller.GetConfiguredModelChannels)
 			modelDefRoute.GET("/candidate_channels", controller.GetCandidateChannels)
 			modelDefRoute.GET("/channel_model_names", controller.GetChannelModelNames)
@@ -320,7 +322,7 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.DELETE("/:id", controller.DeleteToken)
 		}
 		adminTokenRoute := apiRouter.Group("/admin/token")
-		adminTokenRoute.Use(middleware.AdminAuth())
+		adminTokenRoute.Use(middleware.UserAuth())
 		{
 			adminTokenRoute.GET("/user/:user_id", controller.GetUserTokens)
 			adminTokenRoute.GET("/user/:user_id/:id", controller.AdminGetUserToken)
@@ -339,15 +341,15 @@ func SetApiRouter(router *gin.Engine) {
 			redemptionRoute.DELETE("/:id", controller.DeleteRedemption)
 		}
 		logRoute := apiRouter.Group("/log")
-		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)
-		logRoute.GET("/options", middleware.AdminAuth(), controller.GetLogFilterOptions)
-		logRoute.DELETE("/", middleware.AdminAuth(), controller.DeleteHistoryLogs)
-		logRoute.GET("/stat", middleware.AdminAuth(), controller.GetLogsStat)
-		logRoute.GET("/cleanup/stat", middleware.AdminAuth(), controller.GetLogCleanupStat)
+		logRoute.GET("/", middleware.UserAuth(), controller.GetAllLogs)
+		logRoute.GET("/options", middleware.UserAuth(), controller.GetLogFilterOptions)
+		logRoute.DELETE("/", middleware.UserAuth(), controller.DeleteHistoryLogs)
+		logRoute.GET("/stat", middleware.UserAuth(), controller.GetLogsStat)
+		logRoute.GET("/cleanup/stat", middleware.UserAuth(), controller.GetLogCleanupStat)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
 		logRoute.GET("/self/trend", middleware.UserAuth(), controller.GetLogsSelfTrend)
-		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
-		logRoute.GET("/ranking", middleware.AdminAuth(), controller.GetUserUsageRanking)
+		logRoute.GET("/search", middleware.UserAuth(), controller.SearchAllLogs)
+		logRoute.GET("/ranking", middleware.UserAuth(), controller.GetUserUsageRanking)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/options", middleware.UserAuth(), controller.GetUserLogFilterOptions)
 		logRoute.GET("/self/search", middleware.UserAuth(), controller.SearchUserLogs)
@@ -360,7 +362,7 @@ func SetApiRouter(router *gin.Engine) {
 			customDashboardRoute.DELETE("/:id", controller.DeleteCustomDashboard)
 		}
 		groupRoute := apiRouter.Group("/group")
-		groupRoute.Use(middleware.AdminAuth())
+		groupRoute.Use(middleware.UserAuth())
 		{
 			groupRoute.GET("/", controller.GetGroups)
 		}
@@ -468,7 +470,7 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			usageRoute.POST("/skill", middleware.UserAuth(), controller.RecordSkillUsage)
 			usageAdmin := usageRoute.Group("/admin")
-			usageAdmin.Use(middleware.AdminAuth())
+			usageAdmin.Use(middleware.UserAuth())
 			usageAdmin.GET("/stats", controller.GetUsageStats)
 			usageAdmin.GET("/details", controller.GetUsageDetails)
 		}
@@ -480,7 +482,7 @@ func SetApiRouter(router *gin.Engine) {
 			expertWebRoute.POST("/usage", controller.RecordExpertUsage)
 			expertWebRoute.POST("/:key/launch", middleware.UserAuth(), controller.LaunchExpertWebsite)
 			expertWebAdminRoute := expertWebRoute.Group("/admin")
-			expertWebAdminRoute.Use(middleware.AdminAuth())
+			expertWebAdminRoute.Use(middleware.UserAuth())
 			{
 				expertWebAdminRoute.GET("/list", controller.AdminListExpertWebsites)
 				expertWebAdminRoute.POST("/reorder", controller.ReorderCatalog("experts"))
@@ -495,7 +497,7 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			expertRoute.GET("/", controller.ListPublishedExperts)
 			expertAdminRoute := expertRoute.Group("/admin")
-			expertAdminRoute.Use(middleware.AdminAuth())
+			expertAdminRoute.Use(middleware.UserAuth())
 			{
 				expertAdminRoute.GET("/list", controller.AdminListExperts)
 				expertAdminRoute.PUT("/:key/publish", controller.SetExpertPublished)
@@ -521,7 +523,7 @@ func SetApiRouter(router *gin.Engine) {
 			skillRoute.POST("/:id/installation", middleware.UserAuth(), controller.RecordSkillInstallation)
 
 			skillAdminRoute := skillRoute.Group("/admin")
-			skillAdminRoute.Use(middleware.AdminAuth())
+			skillAdminRoute.Use(middleware.UserAuth())
 			{
 				skillAdminRoute.GET("/list", controller.AdminListSkills)
 				skillAdminRoute.POST("/reorder", controller.ReorderCatalog("skills"))
@@ -533,7 +535,7 @@ func SetApiRouter(router *gin.Engine) {
 			}
 
 			skillWriteRoute := skillRoute.Group("/")
-			skillWriteRoute.Use(middleware.AdminAuth())
+			skillWriteRoute.Use(middleware.UserAuth())
 			{
 				skillWriteRoute.POST("/", controller.CreateSkill)
 				skillWriteRoute.PUT("/:id", controller.UpdateSkill)
@@ -552,7 +554,7 @@ func SetApiRouter(router *gin.Engine) {
 		}
 		skillCategoryRoute := apiRouter.Group("/skill-category")
 		skillCategoryRoute.Use(middleware.RequireRemoteSkills())
-		skillCategoryRoute.Use(middleware.AdminAuth())
+		skillCategoryRoute.Use(middleware.UserAuth())
 		{
 			skillCategoryRoute.GET("/types", controller.ListSkillCategoryTypes)
 			skillCategoryRoute.POST("/reorder", controller.ReorderCatalog("skill-categories"))
@@ -585,10 +587,10 @@ func SetApiRouter(router *gin.Engine) {
 			personalSkillRoute.PUT("/:id", controller.UpdatePersonalSkill)
 			personalSkillRoute.DELETE("/:id", controller.DeletePersonalSkill)
 		}
-		// Admin-only personal skill routes (cross-owner)
+		// Personal-skill admin list (reviews stay RootAuth). Opened like other non-knowledge workbench APIs.
 		personalSkillAdminRoute := apiRouter.Group("/personal-skill/admin")
 		personalSkillAdminRoute.Use(middleware.RequireRemoteSkills())
-		personalSkillAdminRoute.Use(middleware.AdminAuth())
+		personalSkillAdminRoute.Use(middleware.UserAuth())
 		{
 			personalSkillAdminRoute.GET("/", controller.AdminListPersonalSkills)
 			personalSkillAdminRoute.GET("/reviews", middleware.RootAuth(), controller.AdminListPersonalSkillReviews)

@@ -21,18 +21,13 @@ export function isRoot() {
   return user.role >= 100;
 }
 
-// 超管拥有全部权限；管理员需检查 admin_permissions 字段
+// Interim: any signed-in workbench user may open non-knowledge modules.
+// Fine-grained admin_permissions and AdminAuth remain only for 知识库 until a unified redesign.
 export function hasPermission(key) {
   let user = localStorage.getItem('user');
   if (!user) return false;
   user = JSON.parse(user);
-  if (user.role >= 100) return true;
-  try {
-    const perms = JSON.parse(user.admin_permissions || '[]');
-    return perms.includes(key);
-  } catch {
-    return false;
-  }
+  return user.role >= 1;
 }
 
 export function getSystemName() {

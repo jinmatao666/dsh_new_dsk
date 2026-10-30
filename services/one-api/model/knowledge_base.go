@@ -54,14 +54,16 @@ var ErrKnowledgeCategoryDuplicate = errors.New("知识库分类名称已存在")
 // ErrKnowledgeCategoryInvalid is returned when the name or type cannot be stored.
 var ErrKnowledgeCategoryInvalid = errors.New("知识库分类无效")
 
-// KnowledgeCategory is an administrator-defined tab beside Personal on the workbench and desktop.
+// KnowledgeCategory is a user-defined workbench tab beside Personal (any display name).
 // Type is the library kind created inside the tab. Only common categories with RequireAuth false
 // are open to every signed-in user; personal and shared categories always use owner-or-grant.
+// OwnerUserId is the creator; root may manage every tab, others manage only their own.
 type KnowledgeCategory struct {
 	Id          int       `json:"id" gorm:"primaryKey"`
 	Name        string    `json:"name" gorm:"type:varchar(64);uniqueIndex;not null"`
 	Type        string    `json:"type" gorm:"type:varchar(16);not null"`
 	RequireAuth bool      `json:"require_auth" gorm:"not null;default:false"`
+	OwnerUserId int       `json:"owner_user_id" gorm:"index;not null;default:0"`
 	CreatedAt   time.Time `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt   time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
@@ -202,23 +204,28 @@ func ListUncategorizedPersonalKnowledgeBases() ([]KnowledgeBase, error) {
 }
 
 // MergeAdminPersonalKnowledgeBases appends every uncategorized personal library missing
-// from an authorized desktop list so administrators can open other users' personal libraries.
+// from an authorized desktop list so root can open other users' personal libraries.
 func MergeAdminPersonalKnowledgeBases(rows []KnowledgeBase) ([]KnowledgeBase, error) {
 	personal, err := ListUncategorizedPersonalKnowledgeBases()
 	if err != nil {
 		return nil, err
 	}
-	seen := make(map[int]struct{}, len(rows))
+	return mergeKnowledgeBasesByID(rows, personal), nil
+}
+
+func mergeKnowledgeBasesByID(rows, extra []KnowledgeBase) []KnowledgeBase {
+	seen := make(map[int]struct{}, len(rows)+len(extra))
 	for _, row := range rows {
 		seen[row.Id] = struct{}{}
 	}
-	for _, row := range personal {
+	for _, row := range extra {
 		if _, ok := seen[row.Id]; ok {
 			continue
 		}
 		rows = append(rows, row)
+		seen[row.Id] = struct{}{}
 	}
-	return rows, nil
+	return rows
 }
 
 // ListAuthorizedKnowledgeBases returns published libraries the user may open.
@@ -271,6 +278,50 @@ func ListKnowledgeCategories() ([]KnowledgeCategory, error) {
 	var rows []KnowledgeCategory
 	err := DB.Order("id ASC").Find(&rows).Error
 	return rows, err
+}
+
+// ListKnowledgeCategoriesForUser returns tabs the caller may see on the workbench.
+// Root receives every category. Others receive public (common) categories, categories they
+// created, and any other category that already contains a library they may open — never by
+// a hard-coded tab name such as 授权知识库.
+func ListKnowledgeCategoriesForUser(userId int, root bool) ([]KnowledgeCategory, error) {
+	all, err := ListKnowledgeCategories()
+	if err != nil || root {
+		return all, err
+	}
+	accessible, err := ListAuthorizedKnowledgeBases(userId)
+	if err != nil {
+		return nil, err
+	}
+	openCategory := make(map[int]struct{})
+	for _, row := range accessible {
+		if row.CategoryId > 0 {
+			openCategory[row.CategoryId] = struct{}{}
+		}
+	}
+	out := make([]KnowledgeCategory, 0, len(all))
+	for _, category := range all {
+		if category.Type == KnowledgeBaseCommon || category.OwnerUserId == userId {
+			out = append(out, category)
+			continue
+		}
+		if _, ok := openCategory[category.Id]; ok {
+			out = append(out, category)
+		}
+	}
+	return out, nil
+}
+
+// CanManageKnowledgeCategory is true when root, or when the caller created the category.
+// Legacy rows with OwnerUserId 0 are root-only to manage.
+func CanManageKnowledgeCategory(category *KnowledgeCategory, userId int, root bool) bool {
+	if category == nil {
+		return false
+	}
+	if root {
+		return true
+	}
+	return category.OwnerUserId > 0 && category.OwnerUserId == userId
 }
 
 // GetKnowledgeCategory reads one category by its local id.
@@ -343,6 +394,24 @@ func ListKnowledgeBasesByCategory(categoryId int) ([]KnowledgeBase, error) {
 	}
 	var rows []KnowledgeBase
 	err := DB.Where("category_id = ?", categoryId).Order("id ASC").Find(&rows).Error
+	return rows, err
+}
+
+// ListPersonalKnowledgeBases returns every personal library, including offline shelf rows.
+func ListPersonalKnowledgeBases() ([]KnowledgeBase, error) {
+	var rows []KnowledgeBase
+	err := DB.Where("kind = ?", KnowledgeBasePersonal).Order("id ASC").Find(&rows).Error
+	return rows, err
+}
+
+// ListPersonalKnowledgeBasesByOwner returns every personal library owned by one user.
+func ListPersonalKnowledgeBasesByOwner(ownerUserId int) ([]KnowledgeBase, error) {
+	if ownerUserId <= 0 {
+		return nil, nil
+	}
+	var rows []KnowledgeBase
+	err := DB.Where("kind = ? AND owner_user_id = ?", KnowledgeBasePersonal, ownerUserId).
+		Order("id ASC").Find(&rows).Error
 	return rows, err
 }
 

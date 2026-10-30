@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-29-knowledge-personal-directory-by-organization.md
-2026-10-29-knowledge-personal-directory-by-organization.md: 9f2d16cf9bf9550851fab153f3ea6ff705aade34
-2026-10-29-knowledge-personal-directory-by-organization.zh.md: a0800d96414f31e9c071b862bb4ae53303c1957e
+2026-10-29-knowledge-personal-directory-by-organization.md: 3b15abeb7a9e42097a881c6ee0b86cc32e0fe593
+2026-10-29-knowledge-personal-directory-by-organization.zh.md: 6b0e1404227e5e120b25efea5fc11d1f93b2bad6
