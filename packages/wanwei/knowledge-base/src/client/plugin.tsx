@@ -486,6 +486,7 @@ export function apply(ctx: Context): void {
     visibility: ctx.wanweiNetwork.visibility('knowledgeBases'),
     Icon: KnowledgeIcon,
     hooks: { network: ctx.wanweiNetwork },
+    bodyClassName: 'dsh-knowledge-host',
     renderContent: () => <KnowledgePage api={api} />,
   })
   installComposerToggle(ctx, call, api, () => { controller.open() })

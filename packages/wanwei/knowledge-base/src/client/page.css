@@ -1,8 +1,11 @@
+/* Explicit host class from FeaturePanel bodyClassName; :has kept as a fallback for older mounts. */
+.dsh-skill-market-body.dsh-knowledge-host,
 .dsh-skill-market-body:has(.dsh-knowledge) {
-  display: flex; flex-direction: column; overflow: hidden; padding: 0;
+  display: flex; flex-direction: column; overflow: hidden; padding: 0; min-height: 0;
 }
+.dsh-skill-market-body.dsh-knowledge-host > .dsh-knowledge,
 .dsh-skill-market-body:has(.dsh-knowledge) > .dsh-knowledge {
-  flex: 1 1 auto; align-self: stretch; width: 100%; min-height: 0; height: auto;
+  flex: 1 1 auto; align-self: stretch; width: 100%; min-height: 0; height: auto; max-height: 100%;
 }
 .dsh-knowledge {
   position: relative; display: grid; grid-template-columns: 296px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
@@ -486,13 +489,12 @@ button.dsh-knowledge-plaza-file { cursor: pointer; }
   font-size: 12px; line-height: 18px;
 }
 .dsh-knowledge-content {
-  position: relative; z-index: 3; display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
-  align-content: stretch; box-sizing: border-box; min-width: 0; min-height: 0; height: 100%;
+  position: relative; z-index: 3; display: flex; flex-direction: column;
+  box-sizing: border-box; min-width: 0; min-height: 0; height: 100%; max-height: 100%;
   padding: 18px 16px; overflow: hidden;
 }
 .dsh-knowledge-content > header {
-  grid-row: 1; display: flex; flex: none; gap: 12px; align-items: center; min-height: 44px; padding-bottom: 15px;
+  display: flex; flex: none; gap: 12px; align-items: center; min-height: 44px; padding-bottom: 15px;
 }
 .dsh-knowledge-header-copy { flex: 1; min-width: 0; }
 .dsh-knowledge-cover {
@@ -510,7 +512,7 @@ button.dsh-knowledge-plaza-file { cursor: pointer; }
 .dsh-knowledge-content h2 { margin: 0; color: #1d3557; font-size: 16px; font-weight: 700; }
 .dsh-knowledge-content header p { margin: 4px 0 0; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .dsh-knowledge-toolbar {
-  grid-row: 2; display: flex; flex: none; justify-content: space-between; align-items: center;
+  display: flex; flex: none; justify-content: space-between; align-items: center;
   min-height: 39px; padding: 8px 0; border-top: 1px solid var(--dsw-alias-border-l1);
 }
 .dsh-knowledge-toolbar > strong { display: inline-flex; align-items: center; gap: 6px; color: #435976; font-size: 13px; font-weight: 650; }
@@ -550,7 +552,7 @@ button.dsh-knowledge-plaza-file { cursor: pointer; }
 .dsh-knowledge-upload-menu button.submenu span { display: inline-flex; align-items: center; gap: 6px; }
 .dsh-knowledge-upload-menu hr { margin: 3px 5px; border: 0; border-top: 1px solid #eef0f3; }
 .dsh-knowledge-list-pane {
-  grid-row: 3; display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  display: flex; flex: 1 1 0%; flex-direction: column; min-width: 0; min-height: 0;
   overflow: auto; overscroll-behavior: contain;
 }
 .dsh-knowledge-documents { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 12px; align-content: start; }
@@ -558,7 +560,7 @@ button.dsh-knowledge-plaza-file { cursor: pointer; }
 .dsh-knowledge:not(.chat-open) .dsh-knowledge-documents { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 .dsh-knowledge.chat-open .dsh-knowledge-documents { grid-template-columns: minmax(0, 1fr); }
 .dsh-knowledge-pager {
-  grid-row: 4; display: flex; flex-wrap: nowrap; gap: 12px; align-items: center; justify-content: space-between;
+  display: flex; flex: none; flex-wrap: nowrap; gap: 12px; align-items: center; justify-content: space-between;
   box-sizing: border-box; min-height: 48px; padding: 10px 2px 4px; overflow-x: auto;
   border-top: 1px solid #e5e6eb; background: #fff; color: #64748b; font-size: 12px;
 }

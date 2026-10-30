@@ -67,6 +67,21 @@ describe('independent feature navigation', () => {
       expect(screen.queryByRole('dialog')).toBeNull()
     } finally { await feature.dispose() }
   })
+  it('applies an optional body class for features that fill the panel height', async () => {
+    const ctx = new Context()
+    const feature = await mount(ctx, 'body-class')
+    const props = {
+      wide: true, title: 'fixture', subtitle: '', Icon: () => null, controller: feature.controller,
+      requiresDirectInternet: false, useNetwork: () => false, bodyClassName: 'dsh-knowledge-host',
+      renderContent: () => <p>content</p>,
+    } as unknown as PanelActionProps & PanelProps
+    try {
+      render(<FeaturePanel {...props} />)
+      act(() => { feature.controller.open() })
+      expect(document.querySelector('.dsh-skill-market-body.dsh-knowledge-host')).toBeTruthy()
+    } finally { await feature.dispose() }
+  })
+
   it('switches between independent instances and leaves siblings usable after disposal', async () => {
     const ctx = new Context()
     const features = await Promise.all(['skills', 'experts', 'connectors', 'automations'].map(id => mount(ctx, id)))
