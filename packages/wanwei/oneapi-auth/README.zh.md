@@ -115,7 +115,7 @@ kind: "package-reference"
 
 #### What the model sees
 
-`dsh-server` 提供方仅提供已登录 OneAPI 账户获准的模型。登录状态和生成令牌不会加入模型提示词。
+`dsh-server` 提供方仅提供已登录 OneAPI 账户获准的模型。登录状态和生成令牌不会加入模型提示词。认证刷新只更新 `dsh-server` 配置，保留用户创建的模型服务。登录时保留已选择的自定义默认模型；首次使用的 DeepSeek 默认项和已选的后台模型会切换到当前可用的后台默认模型。退出登录只移除后台路由。
 
 #### Token effect
 

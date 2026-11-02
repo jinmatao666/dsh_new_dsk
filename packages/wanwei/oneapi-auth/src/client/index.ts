@@ -5,14 +5,15 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import { AccountSection, type AccountInjected } from './AccountSection.tsx'
-import { ManagedModelsSection } from './ManagedModelsSection.tsx'
 import { DesktopUpdateSection, DesktopUpdateOverlay } from './DesktopUpdateSection.tsx'
 import { DesktopUpdateController } from './desktop-update-controller.ts'
 import { AuthGate, type AuthInjected } from './AuthGate.tsx'
 import { AuthController } from './controller.ts'
 import { NetworkController } from './network-controller.ts'
 import { NetworkGuard } from './NetworkGuard.tsx'
+import { ManagedProviderCatalog } from './ManagedProviderCatalog.tsx'
 export type { NetworkController } from './network-controller.ts'
 export type { NetworkState, NetworkEnvironment } from '../network-contract.ts'
 declare module '@deepseek-ai/cordis' {
@@ -63,14 +64,14 @@ export function apply(ctx: Context): void {
     name: 'shell.overlay', id: 'wanwei-auth', order: -1000, locale: NS, inject: authInject,
   }, AuthGate))
   ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section', id: 'wanwei-managed-models', order: 10, label: () => t('modelsNav'), locale: NS,
-    inject: accountInject,
-  }, ManagedModelsSection))
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'wanwei-account', order: 40, label: () => t('accountNav'), locale: NS, inject: accountInject,
   }, AccountSection))
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'wanwei-version', order: 35, label: () => t('updatesNav'), locale: NS,
     inject: () => ({ updates }),
   }, DesktopUpdateSection))
+  ctx.slots.inject('settings.models.provider-card', () => ctx.slots.register({
+    name: 'settings.models.provider-card', key: 'llm-pi-ai',
+    locale: NS, inject: () => ({ hooks: { auth: controller } }),
+  }, ManagedProviderCatalog))
 }

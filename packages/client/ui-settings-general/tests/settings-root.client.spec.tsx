@@ -85,6 +85,13 @@ function openPanel() {
 }
 
 describe('SettingsRoot trigger', () => {
+  it('opens the models section when requested by the composer', () => {
+    mount()
+    act(() => { window.dispatchEvent(new Event('dsh:open-model-settings')) })
+    expect(screen.getByTestId('section-models')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Models' }).getAttribute('aria-current')).toBe('true')
+  })
+
   it('renders the trigger seat content as the accessible name (no aria-label of its own)', () => {
     const { renderSlot } = mount()
     const trigger = screen.getByRole('button', { name: 'Settings' })

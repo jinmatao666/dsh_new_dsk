@@ -140,6 +140,7 @@ interface ManagedProvider {
   }
 }
 interface DefaultModelService {
+  currentSelection(): { provider: string; model: string }
   saveSelection(next: { provider: string; model: string }): Promise<void>
 }
 interface QuestionReport {
@@ -380,12 +381,10 @@ export function apply(ctx: Context, config: Config): void {
         chatTemplateKwargs: { enable_thinking: false },
       },
     }
-    // The desktop distribution is intentionally server-managed: models come
-    // exclusively from OneAPI rather than from any legacy local/provider
-    // configuration that may have been left by an older installation.
-    await ctx.settings.replace(LLM_SETTINGS, {
-      providers: { [config.provider]: managed },
-    })
+    // Refresh only the managed route so desktop-owned providers survive login.
+    await ctx.settings.mutate(LLM_SETTINGS, [
+      { op: 'set', path: ['providers', config.provider], value: managed },
+    ])
     const firstModel = models[0]?.id
     if (firstModel === undefined) throw new Error('服务器没有返回可用模型')
     const configuredDefault = serverDefaultModel ?? config.defaultModel
@@ -394,12 +393,17 @@ export function apply(ctx: Context, config: Config): void {
       : firstModel
     const defaultModel = ctx.get('agentDefaultModel') as DefaultModelService | undefined
     if (defaultModel === undefined) throw new Error('默认模型服务不可用')
-    await defaultModel.saveSelection({ provider: config.provider, model })
+    // Keep a selected local route; replace only the base or managed default.
+    if ([config.provider, 'deepseek-official'].includes(defaultModel.currentSelection().provider)) {
+      await defaultModel.saveSelection({ provider: config.provider, model })
+    }
   }
 
   const clearLocalAuth = async (): Promise<void> => {
     await ctx.credentials.unset(ref)
-    await ctx.settings.replace(LLM_SETTINGS, { providers: {} })
+    await ctx.settings.mutate(LLM_SETTINGS, [
+      { op: 'unset', path: ['providers', config.provider] },
+    ])
   }
 
   const reportQuestion = async (payload: unknown): Promise<{ ok: true; value: unknown } | { ok: false; error: { code: 'internal'; message: string; details: Record<string, never> } }> => {

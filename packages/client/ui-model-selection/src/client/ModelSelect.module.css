@@ -259,3 +259,5 @@
   flex: 0 0 auto;
   color: var(--dsw-alias-label-tertiary);
 }
+.configure { width: 100%; padding: 11px 16px; border: 0; border-top: 1px solid var(--dsw-alias-line-light); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); text-align: left; cursor: pointer; }
+.configure:hover, .configure:focus-visible { background: var(--dsw-alias-bg-layer-2); }

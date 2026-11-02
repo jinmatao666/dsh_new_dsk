@@ -117,7 +117,7 @@ The Host also reports skill references resolved by the official injector and eac
 
 #### What the model sees
 
-The `dsh-server` provider offers only models returned for the signed-in OneAPI account. Login state and the generated token are not added to the model prompt.
+The `dsh-server` provider offers only models returned for the signed-in OneAPI account. Login state and the generated token are not added to the model prompt. Authentication refreshes only the `dsh-server` provider profile and leaves user-created provider routes intact. It keeps a selected custom default model on login; the first-run DeepSeek default and a selected managed route resolve to the server's available default. Logout removes only the managed route.
 
 #### Token effect
 

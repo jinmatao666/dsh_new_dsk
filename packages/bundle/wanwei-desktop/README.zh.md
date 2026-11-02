@@ -46,7 +46,7 @@ pnpm dsh --profile wanwei-desktop
 
 产品启用[跨步骤失败纠错](../../guard/repeat-tool-reminder/README.zh.md)，允许三次参数错误尝试并记录最多 128 个失败调用身份。它引导模型纠错，仅限制已确认无效的相同参数，不结束整个任务，也不阻止临时网络故障重试。
 
-此层禁用 `llm-deepseek` 和 `ui-settings-models`，选择万维 `oneapi-bailian` 联网搜索 Provider，再挂载万维自有插件。OneAPI 认证插件提供唯一受管模型 Provider、只读的“模型”设置页和服务端管理的联网搜索；官方 base 与 Web bundle 不承载这些私有配置。
+此层禁用 `llm-deepseek`，启用不带通用首次引导的“模型”设置页，选择万维 `oneapi-bailian` 联网搜索 Provider，再挂载万维自有插件。OneAPI 仅管理只读的 `dsh-server` 模型路由；桌面端用户可以另外配置 OpenAI 兼容服务及本地凭据。对话框按提供方分组展示模型，并可从模型菜单打开设置页。
 
 连接器页的钉钉走本机 `dws` 个人授权与 `dws-cli` 技能（`products/wanwei-desktop` 随包 `dingtalk-workspace-cli`，并仅把 `@dingtalk-real-ai/dsh-dingtalk` 留作技能资源）。万维 `cordis.patch.yml` 与产品 profile 不挂载 Stream IM，也不收集机器人 Client ID / Secret。
 

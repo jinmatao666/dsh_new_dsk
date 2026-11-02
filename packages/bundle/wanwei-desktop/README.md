@@ -46,7 +46,7 @@ The desktop product mounts the enabled browser-assistant plugin with `headless: 
 
 The product enables [cross-step failure recovery](../../guard/repeat-tool-reminder/README.md) with three invalid-input attempts and memory for 128 failed call identities. It coaches correction and suppresses only unchanged inputs already confirmed invalid; it does not terminate tasks or block transient network retries.
 
-The layer disables `llm-deepseek` and `ui-settings-models`, selects the Wanwei `oneapi-bailian` web-search provider, then mounts the Wanwei-owned plugins. The OneAPI authentication plugin supplies the sole managed model provider, a read-only Models settings section, and server-governed search; it does not change the official base or Web bundles.
+The layer disables `llm-deepseek`, enables the Models settings editor without generic onboarding, selects the Wanwei `oneapi-bailian` web-search provider, then mounts the Wanwei-owned plugins. OneAPI owns only the read-only `dsh-server` model route; desktop users can add separate OpenAI-compatible provider routes with local credentials. The model picker groups routes by provider and opens the Models settings page from its configuration action.
 
 Connectors-page DingTalk uses personal `dws` auth and the `dws-cli` skill (`products/wanwei-desktop` ships `dingtalk-workspace-cli` and keeps `@dingtalk-real-ai/dsh-dingtalk` only for skill assets). The Wanwei `cordis.patch.yml` and product profile do not mount Stream IM or collect robot Client ID / Secret.
 

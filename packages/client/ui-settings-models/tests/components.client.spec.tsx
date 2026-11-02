@@ -212,7 +212,7 @@ function cardSeatCalls(
     ])
 }
 
-async function mountFace(scripted: ReturnType<typeof scriptedFace>) {
+async function mountFace(scripted: ReturnType<typeof scriptedFace>, managedProvider?: string) {
   const { face, update, mutate, set, unset } = scripted
   const mirror = new SettingsDescribeMirror(face as never)
   const controller = new ModelsSettingsStore(face as unknown as WireFace, settingsSchema, mirror)
@@ -224,6 +224,7 @@ async function mountFace(scripted: ReturnType<typeof scriptedFace>) {
     api: face as never,
     schema: settingsSchema,
     t,
+    ...managedProvider === undefined ? {} : { managedProvider },
     renderSlot: renderSlot as unknown as ModelsSectionProps['renderSlot'],
   }
   const view = render(<ModelsSection {...injected} />)
@@ -274,6 +275,15 @@ describe('ModelsSection', () => {
     expect(renderSlot.mock.calls.filter(call => call[0] === 'settings.models.footer')).toEqual([
       ['settings.models.footer', {}],
     ])
+  })
+
+  it('keeps the product-managed provider visible without local edit or removal controls', async () => {
+    const { renderSlot } = await mountFace(scriptedFace(), 'openai')
+    expect(screen.getByText('openai')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: openaiCopy(en.editProvider) })).toBeNull()
+    expect(screen.queryByRole('button', { name: openaiCopy(en.removeProvider) })).toBeNull()
+    expect(cardSeatCalls(renderSlot)).toContainEqual(['openai', true, true, 'llm-pi-ai'])
+    expect(screen.getByRole('button', { name: deepSeekCopy(en.editProvider) })).toBeTruthy()
   })
 
   it('dispatches the provider-card seat inside the first-run setup card', async () => {

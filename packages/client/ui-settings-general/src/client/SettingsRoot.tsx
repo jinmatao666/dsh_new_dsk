@@ -115,6 +115,12 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
     setOpen(true)
   }, [])
 
+  useEffect(() => {
+    const openModels = () => { openSection('models') }
+    window.addEventListener('dsh:open-model-settings', openModels)
+    return () => { window.removeEventListener('dsh:open-model-settings', openModels) }
+  }, [openSection])
+
   // The ledger tick keeps the nav rows fresh: registrants re-register with
   // freshly localized text on locale change, and the trigger/header/close
   // seats re-render through their own outlets' subscriptions.

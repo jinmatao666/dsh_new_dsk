@@ -31,9 +31,11 @@ describe('OneAPI login flow', () => {
     { baseURL: config.baseURL, environment: 'https://ignored.example.test', expected: 'https://oneapi.example.test/dsh-api' },
     { baseURL: undefined, environment: 'https://launch.example.test/api-root', expected: 'https://launch.example.test/api-root' },
     { baseURL: undefined, environment: undefined, expected: 'http://127.0.0.1:3000' },
-  ])('resolves $expected and preserves the login/token/model protocol', async ({ baseURL, environment, expected }) => {
+    { baseURL: config.baseURL, environment: undefined, expected: 'https://oneapi.example.test/dsh-api', currentProvider: 'my-local-model' },
+  ])('resolves $expected and preserves the login/token/model protocol', async ({ baseURL, environment, expected, currentProvider }) => {
     const credentials = new Map<string, string>()
     const replace = vi.fn(() => Promise.resolve())
+    const mutate = vi.fn(() => Promise.resolve())
     const saveSelection = vi.fn(() => Promise.resolve())
     let handler: Handler | undefined
     const ctx = new Context()
@@ -63,12 +65,12 @@ describe('OneAPI login flow', () => {
     } as never)
     let networkMode = 'internet'
     const networkListeners = new Set<() => void>()
-    ctx.provide('settings', { replace, register: () => ({
+    ctx.provide('settings', { replace, mutate, register: () => ({
       get: () => ({ mode: networkMode }),
       watch: (listener: () => void) => { networkListeners.add(listener); return () => networkListeners.delete(listener) },
       update: async ({ mode }: { mode: string }) => { networkMode = mode; for (const listener of networkListeners) listener() },
     }) } as never)
-    ctx.provide('agentDefaultModel', { saveSelection } as never)
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: currentProvider ?? 'dsh-server', model: 'old' }), saveSelection } as never)
 
     const requests: string[] = []
     let failDownloadReport = false
@@ -157,23 +159,26 @@ describe('OneAPI login flow', () => {
     ])
     expect(credentials.get('DSH_ONEAPI_TOKEN')).toBe('oneapi-token')
     expect(credentials.get('DSH_LOGIN_USERNAME')).toBe('tester')
-    expect(replace).toHaveBeenCalledWith(expect.anything(), {
-      providers: {
-        'dsh-server': expect.objectContaining({
-          apiKeyEnv: 'DSH_ONEAPI_TOKEN',
-          baseURL: `${expected}/v1`,
-          models: [
-            { id: 'model-text', name: '文本模型', input: ['text'] },
-            { id: 'model-vision', name: '视觉模型', input: ['text', 'image'] },
-          ],
-        }) as unknown,
-      },
-    })
-    expect(saveSelection).toHaveBeenCalledWith({ provider: 'dsh-server', model: 'model-vision' })
+    expect(mutate).toHaveBeenCalledWith(expect.anything(), [
+      { op: 'set', path: ['providers', 'dsh-server'], value: expect.objectContaining({
+        apiKeyEnv: 'DSH_ONEAPI_TOKEN',
+        baseURL: `${expected}/v1`,
+        models: [
+          { id: 'model-text', name: '文本模型', input: ['text'] },
+          { id: 'model-vision', name: '视觉模型', input: ['text', 'image'] },
+        ],
+      }) as unknown },
+    ])
+    if (currentProvider === undefined) {
+      expect(saveSelection).toHaveBeenCalledWith({ provider: 'dsh-server', model: 'model-vision' })
+    } else {
+      expect(saveSelection).not.toHaveBeenCalled()
+    }
     requests.length = 0
     expect(await handler?.('network-get', {}, new AbortController().signal)).toEqual({
       ok: true, value: {
         mode: 'intranet', internalOrigins: [new URL(expected).origin], directInternet: false,
+        internetCatalogPolicy: 'disable', internetExpertPolicy: 'disable', internetSkillPolicy: 'disable',
         plugins: { browserAssistant: true },
         features: {
           internet: { automations: true, connectors: true, knowledgeBases: true },
@@ -184,6 +189,7 @@ describe('OneAPI login flow', () => {
     expect(await handler?.('deployment-get', {}, new AbortController().signal)).toEqual({
       ok: true, value: {
         network: 'intranet', operator: '张运维', phone: '0571-12345678',
+        internetCatalogPolicy: 'disable', internetExpertPolicy: 'disable', internetSkillPolicy: 'disable',
         plugins: { browserAssistant: true },
         features: {
           internet: { automations: true, connectors: true, knowledgeBases: true },

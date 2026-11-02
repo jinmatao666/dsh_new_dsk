@@ -16,7 +16,7 @@
     "src/client/AccountSection.tsx",
     "src/client/DesktopUpdateSection.tsx",
     "src/client/desktop-update-controller.ts",
-    "src/client/ManagedModelsSection.tsx",
+    "src/client/ManagedProviderCatalog.tsx",
     "src/client/controller.ts",
     "src/client/locales.ts",
     "src/css-modules.d.ts",
@@ -29,6 +29,7 @@
     { "path": "../../client/ui-layout" },
     { "path": "../../client/ui-renderer" },
     { "path": "../../client/ui-settings" },
+    { "path": "../../client/ui-settings-models" },
     { "path": "../../client/ui-slots" }
   ]
 }

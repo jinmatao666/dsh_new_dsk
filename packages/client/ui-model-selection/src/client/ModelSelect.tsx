@@ -316,6 +316,10 @@ export function ModelSelect(
               {state.status === 'ready' && choices.length === 0 && (
                 <div className={css.empty}>{t('empty.models')}</div>
               )}
+              <button ref={itemRef()} type="button" role="menuitem" className={css.configure} onClick={() => {
+                setOpen(false)
+                window.dispatchEvent(new Event('dsh:open-model-settings'))
+              }}>{t('configure.models')}</button>
             </>
           )}
 

@@ -60,6 +60,18 @@ function declare(slots: SlotRegistry): () => void {
 }
 
 describe('ui-settings-models apply', () => {
+  it('keeps the managed provider read-only and skips generic onboarding in the desktop product', async () => {
+    const b = await bench()
+    declare(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }, {
+      managedProvider: 'dsh-server', skipOnboarding: true,
+    }).await()
+    const entry = b.slots.entries('settings.section')[0]!
+    const injected = (entry.inject as unknown as () => import('../src/client/ModelsSection.tsx').ModelsSectionInjected)()
+    expect(injected.managedProvider).toBe('dsh-server')
+    expect(b.slots.entries('settings.onboarding')).toHaveLength(0)
+  })
+
   it('declares the services it uses', () => {
     expect(inject).toEqual([
       'slots', 'locale', 'remote', 'remote.credentials', 'remote.llm', 'remote.settings',

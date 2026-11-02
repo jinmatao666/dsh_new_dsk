@@ -4,7 +4,10 @@
   disabled: true
 
 - id: ui-settings-models
-  disabled: true
+  disabled: false
+  config:
+    managedProvider: dsh-server
+    skipOnboarding: true
 
 - id: repeat-tool-reminder
   config:
