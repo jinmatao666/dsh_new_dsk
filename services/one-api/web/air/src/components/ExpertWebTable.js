@@ -1,5 +1,5 @@
 import CatalogOrderActions, { catalogDragProps } from './CatalogOrderActions';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { API, showError, showSuccess } from '../helpers';
 import './ExpertWebTable.css';
 import CustomSelect from './CustomSelect';
@@ -47,6 +47,15 @@ export default function ExpertWebTable({ keyword = '' }) {
   const [saving, setSaving] = useState(false);
   const [deletingKey, setDeletingKey] = useState(null);
   const [credential, setCredential] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [managing, setManaging] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState([]);
+  const [batchAction, setBatchAction] = useState(null);
+  const [batchProgress, setBatchProgress] = useState(null);
+  const [batchFailures, setBatchFailures] = useState([]);
+  const batchLock = useRef(false);
+  const selectAllRef = useRef(null);
   const updateSection = (index, field, value) => setEditing(current => {
     if (!current) return current;
     const sections = detailSections(current).map((section, position) => position === index ? { ...section, [field]: value } : section);
@@ -90,11 +99,15 @@ export default function ExpertWebTable({ keyword = '' }) {
     try {
       const [experts, categoryResult] = await Promise.all([API.get('/api/expert-web/admin/list'), API.get('/api/expert/admin/categories')]);
       if (!experts.data?.success) throw new Error(experts.data?.message || '无法读取专家');
-      setItems(experts.data.data || []);
+      const nextItems = experts.data.data || [];
+      setItems(nextItems);
+      setSelectedKeys(current => current.filter(key => nextItems.some(item => item.key === key)));
       setCategories(categoryResult.data?.data || []);
     } catch (error) { showError(error.response?.data?.message || error.message || '读取失败'); }
   };
   useEffect(() => { void load(); }, []);
+  // A changed filter starts a new selection, so hidden rows cannot be changed accidentally.
+  useEffect(() => { setSelectedKeys([]); setBatchFailures([]); }, [keyword, categoryFilter, statusFilter]);
 
   const save = async () => {
     if (!editing || saving) return;
@@ -147,16 +160,84 @@ export default function ExpertWebTable({ keyword = '' }) {
   };
 
   const query = keyword.trim().toLocaleLowerCase();
-  const filteredItems = query ? items.filter(item => [item.name, item.key, item.subtitle, item.summary, item.provider, item.category, asLines(item.tags)].some(value => String(value || '').toLocaleLowerCase().includes(query))) : items;
+  const categoryNames = [...new Set([...categories.map(category => category.name), ...items.map(item => item.category)].filter(Boolean))];
+  const filteredItems = items.filter(item =>
+    (categoryFilter === 'all' || (categoryFilter === 'uncategorized' ? !item.category : item.category === categoryFilter.slice(9))) &&
+    (statusFilter === 'all' || Boolean(item.published) === (statusFilter === 'published')) &&
+    (!query || [item.name, item.key, item.subtitle, item.summary, item.provider, item.category, asLines(item.tags)].some(value => String(value || '').toLocaleLowerCase().includes(query))));
+  const selectedItems = filteredItems.filter(item => selectedKeys.includes(item.key));
+  const allSelected = filteredItems.length > 0 && selectedItems.length === filteredItems.length;
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = selectedItems.length > 0 && !allSelected;
+  }, [selectedItems.length, allSelected]);
+  const busy = Boolean(batchProgress) || deletingKey !== null;
+  const batchTargets = selectedItems.filter(item => batchAction === 'delete' || Boolean(item.published) !== (batchAction === 'publish'));
+  const batchLabel = batchAction === 'delete' ? '删除' : batchAction === 'publish' ? '上架' : '下架';
+  const toggleSelected = key => setSelectedKeys(current => current.includes(key) ? current.filter(value => value !== key) : [...current, key]);
+  const runBatch = async () => {
+    if (batchLock.current || !batchAction || batchTargets.length === 0) return;
+    batchLock.current = true;
+    const action = batchAction;
+    const targets = [...batchTargets];
+    const failures = [];
+    const succeeded = [];
+    setBatchFailures([]);
+    setBatchProgress({ done: 0, total: targets.length });
+    try {
+      // Existing admin endpoints retain their authorization and deletion semantics.
+      for (const [index, item] of targets.entries()) {
+        try {
+          const url = `/api/expert-web/admin/${encodeURIComponent(item.key)}`;
+          const response = action === 'delete' ? await API.delete(url) : await API.put(`${url}/publish`, { published: action === 'publish' });
+          if (!response.data?.success) throw new Error(response.data?.message || '操作未成功');
+          succeeded.push(item.key);
+        } catch (error) {
+          failures.push({ key: item.key, name: item.name, message: error.response?.data?.message || error.message || '请求失败' });
+        }
+        setBatchProgress({ done: index + 1, total: targets.length });
+      }
+      setItems(current => action === 'delete' ? current.filter(item => !succeeded.includes(item.key)) : current.map(item => succeeded.includes(item.key) ? { ...item, published: action === 'publish' } : item));
+      setSelectedKeys(failures.map(item => item.key));
+      setBatchFailures(failures);
+      setBatchAction(null);
+      if (succeeded.length) showSuccess(`已${batchLabel} ${succeeded.length} 位专家`);
+      if (failures.length) showError(`${failures.length} 位专家操作失败，请查看列表并重试`);
+      await load();
+    } finally {
+      setBatchProgress(null);
+      batchLock.current = false;
+    }
+  };
 
   return <section className='expert-web-admin'>
-    <header><div><h2>专家</h2><p>配置卡片、介绍和网站地址。上架后桌面端自动显示；网页功能在各自独立网站中维护。</p></div><button type='button' className='primary' onClick={() => setEditing({ ...blank })}>新增专家</button></header>
-    <div className='expert-web-list'>{items.length === 0 && <p className='empty'>还没有专家。先登记网站及提供方，再上架。</p>}{filteredItems.length === 0 && items.length > 0 && <p className='empty'>没有匹配的专家，请调整搜索关键词。</p>}{filteredItems.map(item => <article key={item.key} {...catalogDragProps('experts', item, load)}>
+    <header><div><h2>专家</h2><p>配置卡片、介绍和网站地址。上架后桌面端自动显示；网页功能在各自独立网站中维护。</p></div><div className='expert-header-actions'><button type='button' className='expert-secondary' disabled={busy} onClick={() => { setManaging(value => !value); setSelectedKeys([]); setBatchFailures([]); }}>{managing ? '退出批量管理' : '批量管理'}</button><button type='button' className='primary' disabled={busy} onClick={() => setEditing({ ...blank })}>新增专家</button></div></header>
+    <div className='expert-filters'>
+      <label><span>分类</span><CustomSelect aria-label='筛选专家分类' disabled={busy} value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}><option value='all'>全部分类</option>{categoryNames.map(name => <option key={name} value={`category:${name}`}>{name}</option>)}<option value='uncategorized'>未分类</option></CustomSelect></label>
+      <label><span>状态</span><CustomSelect aria-label='筛选上架状态' disabled={busy} value={statusFilter} onChange={event => setStatusFilter(event.target.value)}><option value='all'>全部状态</option><option value='published'>已上架</option><option value='draft'>未上架</option></CustomSelect></label>
+      <span className='expert-result-count' role='status'>共 {items.length} 位专家，当前显示 {filteredItems.length} 位</span>
+      {(categoryFilter !== 'all' || statusFilter !== 'all') && <button className='expert-filter-reset' type='button' disabled={busy} onClick={() => { setCategoryFilter('all'); setStatusFilter('all'); }}>重置筛选</button>}
+    </div>
+    {managing && <div className='expert-batch-toolbar'>
+      <label className='expert-select-all'><input ref={selectAllRef} type='checkbox' aria-label='全选当前结果' checked={allSelected} disabled={busy || !filteredItems.length} onChange={() => setSelectedKeys(allSelected ? [] : filteredItems.map(item => item.key))} />全选当前结果</label>
+      <button type='button' className='expert-filter-reset' disabled={busy || !filteredItems.length} onClick={() => setSelectedKeys(current => filteredItems.filter(item => !current.includes(item.key)).map(item => item.key))}>反选</button>
+      <span>已选 <strong>{selectedItems.length}</strong> 位</span>
+      <div className='expert-batch-actions'><button type='button' disabled={busy || !selectedItems.some(item => !item.published)} onClick={() => setBatchAction('publish')}>批量上架</button><button type='button' disabled={busy || !selectedItems.some(item => item.published)} onClick={() => setBatchAction('unpublish')}>批量下架</button><button type='button' className='danger' disabled={busy || !selectedItems.length} onClick={() => setBatchAction('delete')}>批量删除</button></div>
+      {batchProgress && <span role='status'>处理中 {batchProgress.done}/{batchProgress.total}</span>}
+    </div>}
+    {batchFailures.length > 0 && <div className='expert-batch-errors' role='alert'><strong>以下专家未处理成功，可重新勾选重试</strong><ul>{batchFailures.map(item => <li key={item.key}>{item.name}：{item.message}</li>)}</ul></div>}
+    <div className='expert-web-list' aria-busy={Boolean(batchProgress)}>{items.length === 0 && <p className='empty'>还没有专家。先登记网站及提供方，再上架。</p>}{filteredItems.length === 0 && items.length > 0 && <p className='empty'>没有匹配的专家，请调整分类、状态或搜索关键词。</p>}{filteredItems.map(item => <article key={item.key} className={selectedKeys.includes(item.key) ? 'expert-row-selected' : ''} {...(!managing && !busy ? catalogDragProps('experts', item, load) : {})}>
+      {managing && <input className='expert-row-check' type='checkbox' aria-label={`选择${item.name}`} checked={selectedKeys.includes(item.key)} disabled={busy} onChange={() => toggleSelected(item.key)} />}
       <div className='expert-web-icon'>{item.icon?.startsWith('data:image/') ? <img src={item.icon} alt='' /> : '✦'}</div>
-      <div className='expert-web-info'><strong>{item.name}</strong><small>{item.key} · {item.provider}</small><p>{item.workbench_url}</p></div>
+      <div className='expert-web-info'><strong>{item.name}<span className='expert-category-badge'>{item.category || '未分类'}</span></strong><small>{item.key} · {item.provider}</small><p>{item.workbench_url}</p></div>
       <span className={item.published ? 'live' : 'draft'}>{item.published ? '已上架' : '未上架'}</span>
-      <div className='actions'><button type='button' disabled={deletingKey === item.key} onClick={() => setEditing({ ...item, tags: asLines(item.tags) })}>编辑</button><button type='button' disabled={deletingKey === item.key} onClick={() => void rotate(item)}>重置凭据</button><button type='button' disabled={deletingKey === item.key} onClick={() => void publish(item)}>{item.published ? '下架' : '上架'}</button><button type='button' className='danger' disabled={deletingKey !== null} onClick={() => void remove(item)}>{deletingKey === item.key ? '删除中…' : '删除'}</button><CatalogOrderActions kind='experts' item={item} items={items} reload={load} /></div>
+      <div className='actions'><button type='button' disabled={busy} onClick={() => setEditing({ ...item, tags: asLines(item.tags) })}>编辑</button><button type='button' disabled={busy} onClick={() => void rotate(item)}>重置凭据</button><button type='button' disabled={busy} onClick={() => void publish(item)}>{item.published ? '下架' : '上架'}</button><button type='button' className='danger' disabled={busy} onClick={() => void remove(item)}>{deletingKey === item.key ? '删除中…' : '删除'}</button>{!managing && <CatalogOrderActions kind='experts' item={item} items={items} reload={load} disabled={busy} />}</div>
     </article>)}</div>
+    {batchAction && <div className='expert-web-backdrop'><section className='expert-batch-dialog' role='dialog' aria-modal='true' aria-label={`确认批量${batchLabel}`}>
+      <h2>批量{batchLabel}专家</h2><p>将{batchLabel}当前选中的 <strong>{batchTargets.length}</strong> 位专家。{batchTargets.length !== selectedItems.length && '已处于目标状态的专家会自动跳过。'}</p>
+      {batchAction === 'delete' && <p className='expert-delete-warning'>删除后无法恢复，接入凭据及未使用的启动票据失效。历史统计和服务器上的专家文件保留。</p>}
+      <ul>{batchTargets.map(item => <li key={item.key}>{item.name}</li>)}</ul>
+      <footer><button type='button' disabled={Boolean(batchProgress)} onClick={() => setBatchAction(null)}>取消</button><button type='button' className={batchAction === 'delete' ? 'danger' : 'primary'} disabled={Boolean(batchProgress) || !batchTargets.length} onClick={() => void runBatch()}>{batchProgress ? `处理中 ${batchProgress.done}/${batchProgress.total}` : `确认${batchLabel}`}</button></footer>
+    </section></div>}
     {editing && <div className='expert-web-backdrop'><section className='expert-web-dialog' role='dialog' aria-modal='true' aria-label='专家资料'>
       <header><h2>{items.some(item => item.key === editing.key) ? '编辑专家' : '新增专家'}</h2><button type='button' aria-label='关闭' onClick={() => setEditing(null)}>×</button></header>
       <div className='fields'>

@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import systemSettingsMock from './scripts/system-settings-mock.mjs';
+import expertManagementMock from './scripts/expert-management-mock.mjs';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -14,7 +15,7 @@ export default defineConfig(({ mode }) => {
   processEnvDefines['process.env.NODE_ENV'] = JSON.stringify(mode);
 
   return {
-    plugins: [react(), ...(mode === 'development' && process.env.DSH_ADMIN_MOCK === '1' ? [systemSettingsMock()] : [])],
+    plugins: [react(), ...(mode === 'development' && process.env.DSH_EXPERT_MOCK === '1' ? [expertManagementMock(), systemSettingsMock()] : mode === 'development' && process.env.DSH_ADMIN_MOCK === '1' ? [systemSettingsMock()] : [])],
     esbuild: {
       loader: 'jsx',
       include: /src\/.*\.js$/,
