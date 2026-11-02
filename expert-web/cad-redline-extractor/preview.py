@@ -24,14 +24,16 @@ def main():
         shutil.rmtree(DATA_ROOT, ignore_errors=True)
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
     ticket = secrets.token_hex(32)
-    # Local fixture only: allow the same ticket to be redeemed again after refresh.
+    # Local fixture only: any well-formed ticket maps to the fixture user so old
+    # hash links and bare http://127.0.0.1:3309/ (injected ticket) both work.
     def identity(value):
-        if value != ticket:
+        if not isinstance(value, str) or len(value) != 64:
             raise ValueError("Invalid local fixture ticket")
         return {"user_id": "local-visual-fixture"}
     app = create_server(DATA_ROOT, ("127.0.0.1", 3309), redeem_ticket=identity,
-                        public_url="http://127.0.0.1:3309")
-    print(f"LOCAL FIXTURE ONLY: http://127.0.0.1:3309/#ticket={ticket}", flush=True)
+                        public_url="http://127.0.0.1:3309", local_fixture_ticket=ticket)
+    print(f"LOCAL FIXTURE ONLY: http://127.0.0.1:3309/", flush=True)
+    print(f"ticket URL: http://127.0.0.1:3309/#ticket={ticket}", flush=True)
     print(f"data: {DATA_ROOT}", flush=True)
     print(f"ogr2ogr: {gdal or 'NOT FOUND'}", flush=True)
     print(f"dwg2dxf: {dwg or 'NOT FOUND'}", flush=True)

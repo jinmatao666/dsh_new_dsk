@@ -18,8 +18,18 @@ from urllib.parse import urlsplit, quote
 from store import Store
 from worker import Worker
 from deployment import ready
+from overlay import OverlayError, parse_overlay_files
+from online_service import OnlineServiceError, describe_mapserver, fetch_overlay_image, generate_arcgis_token
 
 PROJECT = Path(__file__).resolve().parent
+
+
+class ExclusiveThreadingHTTPServer(ThreadingHTTPServer):
+    # On Windows SO_REUSEADDR lets a second process bind the same port, so a stale
+    # server keeps answering; fail at startup instead.
+    allow_reuse_address = os.name != "nt"
+
+
 MAX_BODY = 80 * 1024 * 1024
 MAX_FILES = 64 * 1024 * 1024
 TOOLS = {
@@ -27,6 +37,22 @@ TOOLS = {
 }
 
 SESSION_COOKIE = "expert_cad_redline_extractor_session"
+
+
+def content_security_policy():
+    return (
+        "default-src 'self'; script-src 'self'; style-src 'self'; "
+        "img-src 'self' data: blob:; connect-src 'self'; "
+        "frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+    )
+
+
+def map_config_payload():
+    return {
+        "onlineEnabled": True,
+        "proxy": True,
+        "defaultCrs": "EPSG:4326",
+    }
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -66,11 +92,14 @@ def redeem(ticket):
         return json.loads(response.read(65536))
 
 
-def create_server(root, address=("127.0.0.1", 3309), redeem_ticket=redeem, public_url=""):
+def create_server(root, address=("127.0.0.1", 3309), redeem_ticket=redeem, public_url="",
+                  local_fixture_ticket=""):
     store = Store(root)
     retention = int(os.environ.get("EXPERT_RETENTION_DAYS", "30"))
     store.cleanup(retention)
     worker = Worker(store)
+    # Local preview only: when set, index auto-loads this ticket so refresh works without the hash.
+    fixture_ticket = local_fixture_ticket if isinstance(local_fixture_ticket, str) and re.fullmatch(r"[a-f0-9]{64}", local_fixture_ticket) else ""
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -83,7 +112,7 @@ def create_server(root, address=("127.0.0.1", 3309), redeem_ticket=redeem, publi
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
-            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+            self.send_header("Content-Security-Policy", content_security_policy())
             for key, value in extra.items():
                 self.send_header(key.replace("_", "-"), value)
             self.end_headers()
@@ -156,10 +185,30 @@ def create_server(root, address=("127.0.0.1", 3309), redeem_ticket=redeem, publi
                         Content_Disposition=f"attachment; filename*=UTF-8''{quote(asset.name)}")
                     self.wfile.write(data)
                     return
+                if method == "GET" and path == "/local-fixture.js" and fixture_ticket:
+                    data = f'window.__LOCAL_FIXTURE_TICKET__="{fixture_ticket}";\n'.encode()
+                    self.response_headers(200, "text/javascript; charset=utf-8", Content_Length=str(len(data)))
+                    self.wfile.write(data)
+                    return
+                if method == "GET" and re.fullmatch(r"/vendor/ol/(ol\.js|ol\.css)", path):
+                    asset = PROJECT / "web" / "vendor" / "ol" / path.rsplit("/", 1)[1]
+                    if not asset.is_file():
+                        return self.reply(404, {"error": "资源不存在"})
+                    mime = "text/javascript" if asset.suffix == ".js" else "text/css"
+                    data = asset.read_bytes()
+                    self.response_headers(200, mime + "; charset=utf-8", Content_Length=str(len(data)))
+                    self.wfile.write(data)
+                    return
                 if method == "GET" and path in ("/", "/app.js", "/style.css"):
                     name = "index.html" if path == "/" else path[1:]
                     mime = {"index.html": "text/html", "app.js": "text/javascript", "style.css": "text/css"}[name]
                     data = (PROJECT / "web" / name).read_bytes()
+                    if name == "index.html" and fixture_ticket:
+                        data = data.replace(
+                            b'<script src="./app.js" defer></script>',
+                            b'<script src="./local-fixture.js" defer></script><script src="./app.js" defer></script>',
+                            1,
+                        )
                     self.response_headers(200, mime + "; charset=utf-8", Content_Length=str(len(data)))
                     self.wfile.write(data)
                     return
@@ -193,6 +242,66 @@ def create_server(root, address=("127.0.0.1", 3309), redeem_ticket=redeem, publi
                     for item in items:
                         item.pop("user_id")
                     return self.reply(200, {"items": items})
+                if method == "GET" and path == "/api/map-config":
+                    return self.reply(200, map_config_payload())
+                if method == "POST" and path == "/api/overlay/parse":
+                    body = self.body()
+                    try:
+                        collection = parse_overlay_files(body.get("files"))
+                    except OverlayError as error:
+                        return self.reply(400, {"error": str(error)})
+                    return self.reply(200, collection)
+                if method == "POST" and path == "/api/overlay/arcgis-token":
+                    body = self.body()
+                    try:
+                        issued = generate_arcgis_token(
+                            body.get("serviceUrl", ""),
+                            body.get("username", ""),
+                            body.get("password", ""),
+                        )
+                    except (OnlineServiceError, TypeError, ValueError) as error:
+                        message = str(error) if isinstance(error, OnlineServiceError) else "Token 参数无效"
+                        return self.reply(400, {"error": message})
+                    return self.reply(200, issued)
+                if method == "POST" and path == "/api/overlay/arcgis-info":
+                    body = self.body()
+                    try:
+                        info = describe_mapserver(
+                            body.get("serviceUrl", ""),
+                            token=str(body.get("token") or ""),
+                            referer=str(body.get("referer") or ""),
+                        )
+                    except (OnlineServiceError, TypeError, ValueError) as error:
+                        message = str(error) if isinstance(error, OnlineServiceError) else "服务信息参数无效"
+                        return self.reply(400, {"error": message})
+                    return self.reply(200, info)
+                if method == "POST" and path == "/api/overlay/online-map":
+                    body = self.body()
+                    try:
+                        image = fetch_overlay_image(
+                            body.get("serviceUrl", ""),
+                            body.get("layerName", ""),
+                            body.get("bbox"),
+                            int(body.get("width", 0)),
+                            int(body.get("height", 0)),
+                            str(body.get("crs") or "EPSG:4326"),
+                            token=str(body.get("token") or ""),
+                            username=str(body.get("username") or ""),
+                            password=str(body.get("password") or ""),
+                            referer=str(body.get("referer") or ""),
+                        )
+                    except OnlineServiceError as error:
+                        payload = {"error": str(error)}
+                        extent = getattr(error, "extent", None)
+                        if extent:
+                            payload["extent"] = extent
+                        service_crs = getattr(error, "service_crs", None)
+                        if service_crs:
+                            payload["serviceCrs"] = service_crs
+                        return self.reply(400, payload)
+                    except (TypeError, ValueError):
+                        return self.reply(400, {"error": "在线服务参数无效"})
+                    return self.reply(200, image)
                 if method == "POST" and path == "/api/tasks":
                     store.cleanup(retention)
                     body = self.body()
@@ -280,7 +389,7 @@ def create_server(root, address=("127.0.0.1", 3309), redeem_ticket=redeem, publi
             except Exception:
                 self.reply(500, {"error": "服务异常，请稍后重试"})
 
-    server = ThreadingHTTPServer(address, Handler)
+    server = ExclusiveThreadingHTTPServer(address, Handler)
     server.daemon_threads = False
     server.store = store
     server.worker = worker

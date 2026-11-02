@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write expert-web/cad-redline-extractor/README.md
-README.md: 482c5d4139ba4650d18abc38b6fedd54685c8daf
-README.zh.md: bec746b952b765c871f780d17d4751b5c6dec0f9
+README.md: 2f1b4102ddc3de8538f8a6e3fce2144edc43936d
+README.zh.md: 68db208d0c34d7c822a3abd49192dc2e20083b6d

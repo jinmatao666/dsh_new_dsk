@@ -123,6 +123,57 @@ it('hides cover upload on the desktop create dialog', async () => {
   expect(screen.queryByText('封面')).toBeNull()
 })
 
+it('paginates the plaza homepage and keeps the pager under the card list', async () => {
+  const service = api()
+  service.plaza = vi.fn(async () => Array.from({ length: 30 }, (_, index) => ({
+    id: index + 1,
+    name: `广场库${String(index).padStart(2, '0')}`,
+    description: '描述',
+    kind: 'common' as const,
+    owner_user_id: 2,
+    category_id: 4,
+    category_name: '授权',
+    owner_username: '维护者',
+    subscription_status: 'none' as const,
+  })))
+  const { container } = render(<KnowledgePage api={service} />)
+  fireEvent.click(await screen.findByRole('button', { name: /知识库广场/ }))
+  await screen.findByText('广场库00')
+  expect(container.querySelectorAll('.dsh-knowledge-plaza-card')).toHaveLength(12)
+  expect(screen.queryByText('广场库12')).toBeNull()
+  const plazaPager = screen.getByRole('navigation', { name: '知识库分页' })
+  expect(plazaPager.textContent).toContain('第1 页 / 3')
+  fireEvent.click(within(plazaPager).getByRole('button', { name: '下一页' }))
+  expect(screen.getByText('广场库12')).toBeTruthy()
+  expect(plazaPager.textContent).toContain('第2 页 / 3')
+  const plaza = container.querySelector('.dsh-knowledge-plaza')
+  expect(plaza?.contains(container.querySelector('.dsh-knowledge-plaza-pager')!)).toBe(true)
+  expect(container.querySelector('.dsh-knowledge-plaza-catalog')?.contains(
+    container.querySelector('.dsh-knowledge-plaza-pager')!,
+  )).toBe(false)
+})
+
+it('keeps the plaza pager visible when the catalog fits on one page', async () => {
+  const service = api()
+  service.plaza = vi.fn(async () => Array.from({ length: 6 }, (_, index) => ({
+    id: index + 1,
+    name: `短目录${index}`,
+    description: '描述',
+    kind: 'common' as const,
+    owner_user_id: 2,
+    category_id: 4,
+    category_name: '授权',
+    owner_username: '维护者',
+    subscription_status: 'none' as const,
+  })))
+  render(<KnowledgePage api={service} />)
+  fireEvent.click(await screen.findByRole('button', { name: /知识库广场/ }))
+  await screen.findByText('短目录0')
+  const plazaPager = screen.getByRole('navigation', { name: '知识库分页' })
+  expect(plazaPager.textContent).toContain('第1 页 / 1')
+  expect(plazaPager.textContent).toContain('共 6 个')
+})
+
 it('shows an uploaded cover on the plaza card and detail', async () => {
   const service = api()
   const cover = 'data:image/jpeg;base64,aaaa'

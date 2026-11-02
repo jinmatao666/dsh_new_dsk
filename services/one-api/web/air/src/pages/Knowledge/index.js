@@ -81,6 +81,8 @@ function categoryFormFromRow(category) {
 
 const FILE_PAGE_SIZE = 20;
 const REVIEW_PAGE_SIZE = 20;
+/** Card grid page size for authorized/public category tabs (personal uses the directory UI). */
+const LIBRARY_PAGE_SIZE = 12;
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const MAX_COVER_BYTES = 8 * 1024 * 1024;
 const PARSE_POLL_MS = 2500;
@@ -349,6 +351,7 @@ const KnowledgeLibrary = () => {
   const [scope, setScope] = useState('personal');
   const [keyword, setKeyword] = useState('');
   const [order, setOrder] = useState('desc');
+  const [libraryPage, setLibraryPage] = useState(1);
   const [counts, setCounts] = useState({});
   const [sizes, setSizes] = useState({});
   const [editing, setEditing] = useState(null);
@@ -644,6 +647,17 @@ const KnowledgeLibrary = () => {
         return order === 'asc' ? delta : -delta;
       });
   }, [libraries, activeScope, keyword, order, userDisplayById]);
+
+  useEffect(() => {
+    setLibraryPage(1);
+  }, [activeScope, keyword, order]);
+
+  const libraryPageCount = Math.max(1, Math.ceil(visible.length / LIBRARY_PAGE_SIZE) || 1);
+  const currentLibraryPage = Math.min(libraryPage, libraryPageCount);
+  const pagedLibraries = visible.slice(
+    (currentLibraryPage - 1) * LIBRARY_PAGE_SIZE,
+    currentLibraryPage * LIBRARY_PAGE_SIZE,
+  );
 
   const orgById = useMemo(() => new Map(orgNodes.map(node => [Number(node.id), node])), [orgNodes]);
   const orgChildren = useMemo(() => orgChildrenByParent(orgNodes), [orgNodes]);
@@ -1498,6 +1512,14 @@ const KnowledgeLibrary = () => {
           </button>
         </div>
       </div>}
+      {showChrome && activeScope !== 'personal' && <div className='knowledge-toolbar'>
+        <label className='knowledge-search'><Search size={16} /><input value={keyword} onChange={event => setKeyword(event.target.value)} placeholder='搜索知识库...' /></label>
+        <CustomSelect aria-label='排序' value={order} onChange={event => setOrder(event.target.value)}>
+          <option value='desc'>按时间降序</option>
+          <option value='asc'>按时间升序</option>
+        </CustomSelect>
+        <button type='button' className='knowledge-primary' onClick={() => { setCategoryOpen(false); setEditing(null); setForm({ ...EMPTY_LIBRARY_FORM, kind: activeCategory?.type || 'personal', category_id: activeCategory?.id || 0 }); setCreating(true); }}><Plus size={16} />新建知识库</button>
+      </div>}
     </div>
     {tabMenu?.category && createPortal(
       <>
@@ -1825,66 +1847,68 @@ const KnowledgeLibrary = () => {
           </>}
         </div>
       </div> : <>
-      <div className='knowledge-toolbar'>
-        <label className='knowledge-search'><Search size={16} /><input value={keyword} onChange={event => setKeyword(event.target.value)} placeholder='搜索知识库...' /></label>
-        <CustomSelect aria-label='排序' value={order} onChange={event => setOrder(event.target.value)}>
-          <option value='desc'>按时间降序</option>
-          <option value='asc'>按时间升序</option>
-        </CustomSelect>
-        <button type='button' className='knowledge-primary' onClick={() => { setCategoryOpen(false); setEditing(null); setForm({ ...EMPTY_LIBRARY_FORM, kind: activeCategory?.type || 'personal', category_id: activeCategory?.id || 0 }); setCreating(true); }}><Plus size={16} />新建知识库</button>
-      </div>
       {loading ? <p className='knowledge-empty' role='status'>正在加载知识库</p> : visible.length === 0 ? <p className='knowledge-empty'>
         {libraries.length > 0 ? '当前分类暂无知识库。' : '暂无知识库'}
-      </p> : <div className='knowledge-grid'>
-        {visible.map(library => {
-          const menuOpen = cardMenuId === library.id;
-          return <article key={library.id} className={menuOpen ? 'knowledge-card is-menu-open' : 'knowledge-card'}>
-            <header>
-              <span className={typeof library.cover === 'string' && library.cover.startsWith('data:image/') ? 'knowledge-card-mark has-cover' : 'knowledge-card-mark'} aria-hidden='true'>
-                {typeof library.cover === 'string' && library.cover.startsWith('data:image/')
-                  ? <img src={library.cover} alt='' />
-                  : <Folder size={18} />}
-              </span>
-              <h2 title={library.name}>{library.name}</h2>
-              {isAdmin() && <div className='knowledge-card-menu'>
-                <button
-                  type='button'
-                  className='knowledge-card-more'
-                  aria-label='更多操作'
-                  aria-haspopup='menu'
-                  aria-expanded={menuOpen}
-                  onClick={() => setCardMenuId(menuOpen ? null : library.id)}
-                >
-                  <MoreHorizontal size={16} />
-                </button>
-                {menuOpen && <>
-                  <button type='button' className='knowledge-card-menu-dismiss' aria-label='关闭菜单' onClick={() => setCardMenuId(null)} />
-                  <div className='knowledge-card-menu-panel' role='menu'>
-                    <button type='button' role='menuitem' onClick={() => { setCardMenuId(null); openEdit(library); }}>
-                      <Pencil size={14} />编辑
-                    </button>
-                    <button type='button' role='menuitem' className='danger' onClick={() => { setCardMenuId(null); setConfirming({ type: 'library', library }); }}>
-                      <Trash2 size={14} />删除
-                    </button>
-                  </div>
-                </>}
-              </div>}
-            </header>
-            <p className={`knowledge-card-desc${library.description ? '' : ' is-empty'}`}>{library.description || '暂无描述'}</p>
-            <div className='knowledge-tags'>{splitTags(library.tags).map(tag => <span key={tag}><Tag size={12} />{tag}</span>)}</div>
-            <div className='knowledge-meta'>
-              {metaRow('创建人', libraryCreator(library))}
-              {metaRow('文件量', fileCount(library.id))}
-              {metaRow('大小', librarySize(library.id))}
-              {metaRow('用户访问量', visitCount(library))}
-              {metaRow('每天使用量', dailyUsage(library))}
-            </div>
-            <div className='knowledge-card-actions'>
-              <button type='button' onClick={() => openFiles(library)}><FileText size={14} />文件清单</button>
-            </div>
-          </article>;
-        })}
-      </div>}
+      </p> : <section className='knowledge-library-catalog'>
+        <div className='knowledge-grid'>
+          {pagedLibraries.map(library => {
+            const menuOpen = cardMenuId === library.id;
+            return <article key={library.id} className={menuOpen ? 'knowledge-card is-menu-open' : 'knowledge-card'}>
+              <header>
+                <span className={typeof library.cover === 'string' && library.cover.startsWith('data:image/') ? 'knowledge-card-mark has-cover' : 'knowledge-card-mark'} aria-hidden='true'>
+                  {typeof library.cover === 'string' && library.cover.startsWith('data:image/')
+                    ? <img src={library.cover} alt='' />
+                    : <Folder size={18} />}
+                </span>
+                <h2 title={library.name}>{library.name}</h2>
+                {isAdmin() && <div className='knowledge-card-menu'>
+                  <button
+                    type='button'
+                    className='knowledge-card-more'
+                    aria-label='更多操作'
+                    aria-haspopup='menu'
+                    aria-expanded={menuOpen}
+                    onClick={() => setCardMenuId(menuOpen ? null : library.id)}
+                  >
+                    <MoreHorizontal size={16} />
+                  </button>
+                  {menuOpen && <>
+                    <button type='button' className='knowledge-card-menu-dismiss' aria-label='关闭菜单' onClick={() => setCardMenuId(null)} />
+                    <div className='knowledge-card-menu-panel' role='menu'>
+                      <button type='button' role='menuitem' onClick={() => { setCardMenuId(null); openEdit(library); }}>
+                        <Pencil size={14} />编辑
+                      </button>
+                      <button type='button' role='menuitem' className='danger' onClick={() => { setCardMenuId(null); setConfirming({ type: 'library', library }); }}>
+                        <Trash2 size={14} />删除
+                      </button>
+                    </div>
+                  </>}
+                </div>}
+              </header>
+              <p className={`knowledge-card-desc${library.description ? '' : ' is-empty'}`}>{library.description || '暂无描述'}</p>
+              <div className='knowledge-tags'>{splitTags(library.tags).map(tag => <span key={tag}><Tag size={12} />{tag}</span>)}</div>
+              <div className='knowledge-meta'>
+                {metaRow('创建人', libraryCreator(library))}
+                {metaRow('文件量', fileCount(library.id))}
+                {metaRow('大小', librarySize(library.id))}
+                {metaRow('用户访问量', visitCount(library))}
+                {metaRow('每天使用量', dailyUsage(library))}
+              </div>
+              <div className='knowledge-card-actions'>
+                <button type='button' onClick={() => openFiles(library)}><FileText size={14} />文件清单</button>
+              </div>
+            </article>;
+          })}
+        </div>
+        <div className='zjugis-table-pagination knowledge-library-pagination' aria-label='知识库分页'>
+          <span>共 {visible.length} 个，每页 {LIBRARY_PAGE_SIZE} 个</span>
+          <div>
+            <button type='button' aria-label='上一页' disabled={currentLibraryPage <= 1} onClick={() => setLibraryPage(page => page - 1)}>上一页</button>
+            <span>{currentLibraryPage} / {libraryPageCount}</span>
+            <button type='button' aria-label='下一页' disabled={currentLibraryPage >= libraryPageCount} onClick={() => setLibraryPage(page => page + 1)}>下一页</button>
+          </div>
+        </div>
+      </section>}
       </>}
     </>}
     {categoryOpen && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' onSubmit={saveCategory}>

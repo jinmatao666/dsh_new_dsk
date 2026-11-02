@@ -9,6 +9,29 @@ const tools = [
 const main = document.querySelector('#main')
 let currentPage = 'home', selectedTool, selectedFiles = [], options = {}, tasks = [], timer, toastTimer, busy = false
 const escape = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]))
+const overlayState = {
+  taskId: undefined,
+  result: null,
+  localLayers: [],
+  onlineLayers: [],
+  layerVisibility: {},
+  mapConfig: null,
+  serviceModalOpen: false,
+  serviceModalEditId: null,
+  geometryModal: null,
+  view: { zoom: 1, offsetX: 0, offsetY: 0 },
+  pan: null,
+  rasterCache: null,
+  drawToken: 0,
+  map: null,
+  onlineNote: '',
+  autoFittedOnline: {},
+  layerPanelOpen: false,
+}
+const MAP_ZOOM_MIN = 0.2
+const MAP_ZOOM_MAX = 28
+const ONLINE_LAYERS_KEY = 'cad-redline-online-layers'
+let previewGeometryCollections = []
 function parameterText(tool, key, values, raw) {
   if (raw === undefined || raw === null || raw === '') return '未填写'
   const entry = values?.find(value => String(Array.isArray(value) ? value[0] : value) === String(raw))
@@ -35,17 +58,28 @@ function expireSession() {
 async function authenticatedFetch(path, options) {
   if (sessionExpired) throw new Error('登录已失效，请重新打开工作台')
   const response = await fetch(path.startsWith('/api/') ? path.slice(1) : path, options)
-  if (response.status === 401) expireSession()
-  if (sessionExpired) throw new Error('登录已失效，请重新打开工作台')
+  if (response.status === 401 && path !== '/api/session') {
+    expireSession()
+    throw new Error('登录已失效，请重新打开工作台')
+  }
   return response
 }
 async function api(path, body) {
   if (sessionExpired) throw new Error('登录已失效，请重新打开工作台')
   const response = await authenticatedFetch(path, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
-  if (response.status === 401) expireSession()
-  const data = await response.json()
+  const data = await response.json().catch(() => ({}))
+  if (response.status === 401) {
+    // Boot ticket redeem should not lock the whole page into expireSession UI.
+    if (path === '/api/session') throw new Error(data.error || '登录票据已失效，请重新打开工作台')
+    expireSession()
+    throw new Error('登录已失效，请重新打开工作台')
+  }
   if (sessionExpired) throw new Error('登录已失效，请重新打开工作台')
-  if (!response.ok) throw new Error(data.error || '请求失败')
+  if (!response.ok) {
+    const error = new Error(data.error || '请求失败')
+    error.payload = data
+    throw error
+  }
   return data
 }
 function toast(message) {
@@ -145,7 +179,7 @@ function taskMarkup() {
   const outputFiles = `<h3>真实成果文件</h3><div class="conversion-result-files">${success && task.outputs.length ? task.outputs.map((name, index) => {
     const previewable = /\.(csv|txt|tsv|geojson|json|dxf)$/i.test(name)
     return `<div><span>${escape(name)}${previewable ? '<small class="muted">支持页内预览</small>' : '<small class="muted">压缩包/二进制请下载后查看</small>'}</span><span class="result-file-actions"><a class="primary" href="api/tasks/${escape(task.id)}/files/${index}" download>下载文件</a></span></div>`
-  }).join('') : '<p class="muted">尚未找到符合本任务要求的成果文件。</p>'}</div>${success && task.outputs.length ? '<div id="result-preview" class="result-preview"><p class="muted">正在加载可预览成果…</p></div>' : ''}`
+  }).join('') : '<p class="muted">尚未找到符合本任务要求的成果文件。</p>'}</div>${success && task.outputs.length ? '<div id="result-preview" class="result-preview"><p class="muted">正在加载可预览成果…</p></div><div id="result-overlay" class="result-overlay"><p class="muted">正在准备成果套合…</p></div>' : ''}`
   const details = `<dl class="conversion-details"><dt>任务名称</dt><dd>${escape(task.options.taskName || task.options.title || tool?.name || task.tool)}</dd><dt>所选工具</dt><dd>${escape(tool?.name || task.tool)}</dd><dt>创建时间</dt><dd>${escape(new Date(task.created * 1000).toLocaleString())}</dd><dt>输入文件</dt><dd>${(task.input_names?.length ? task.input_names : task.inputs).map(name => escape(name)).join('<br>')}</dd>${(tool?.params || []).map(([key, label, values]) => `<dt>${escape(label)}</dt><dd>${escape(parameterText(tool, key, values, task.options[key]))}</dd>`).join('')}</dl>`
   return `<div class="conversion-flow"><button class="text-action" data-page="history">← 返回处理记录</button>${taskHeader}<section class="conversion-result ${escape(task.state)}"><header class="conversion-result-head"><div><small>真实任务状态</small><h3>${escape(stateLabels[task.state] || task.state)}</h3></div></header>${active ? progressMarkup(task) : ''}${task.error ? `<p class="error conversion-result-error">${escape(task.error)}</p>` : ''}${outputFiles}</section><details class="conversion-task-details"><summary>任务详情</summary>${details}</details><div class="actions">${active ? `<button class="secondary" data-cancel="${escape(task.id)}">取消任务</button>` : `${!success && tool ? `<button class="primary" data-tool="${escape(tool.id)}">重新创建处理</button>` : ''}<button class="secondary delete-task" data-delete="${escape(task.id)}">删除记录</button>`}<button class="secondary" data-page="history">查看处理记录</button></div></div>`
 }
@@ -213,6 +247,8 @@ function geojsonPreviewMarkup(name, text) {
   let data
   try { data = JSON.parse(text) } catch { return `<section class="preview-card"><h4>${escape(name)}</h4><p class="error">GeoJSON 解析失败</p></section>` }
   const features = Array.isArray(data.features) ? data.features : (data.type === 'Feature' ? [data] : [])
+  const previewId = previewGeometryCollections.length
+  previewGeometryCollections.push({ name, features })
   const sample = features.slice(0, 20).map((feature, index) => {
     const layer = feature.properties?.layer ?? feature.properties?.NAME ?? ''
     const geometry = feature.geometry?.type || '未知'
@@ -222,15 +258,1189 @@ function geojsonPreviewMarkup(name, text) {
     else if (geometry === 'Point' && Array.isArray(coords)) point = `${coords[0]}, ${coords[1]}`
     return `<tr><td>${index + 1}</td><td>${escape(geometry)}</td><td>${escape(layer)}</td><td>${escape(point)}</td></tr>`
   }).join('')
-  return `<section class="preview-card"><h4>${escape(name)}</h4><p class="muted">共 ${features.length} 个要素，预览前 ${Math.min(features.length, 20)} 个</p><div class="preview-table-wrap"><table class="preview-table"><thead><tr><th>#</th><th>几何</th><th>图层/名称</th><th>首点坐标</th></tr></thead><tbody>${sample || '<tr><td colspan="4">无要素</td></tr>'}</tbody></table></div></section>`
+  return `<section class="preview-card"><div class="preview-card-head"><div><h4>${escape(name)}</h4><p class="muted">共 ${features.length} 个要素，预览前 ${Math.min(features.length, 20)} 个</p></div><button type="button" class="secondary" data-preview-geometry="${previewId}">查看</button></div><div class="preview-table-wrap"><table class="preview-table"><thead><tr><th>#</th><th>几何</th><th>图层/名称</th><th>首点坐标</th></tr></thead><tbody>${sample || '<tr><td colspan="4">无要素</td></tr>'}</tbody></table></div></section>`
 }
 function textPreviewMarkup(name, text) {
   const clipped = text.length > 20000 ? `${text.slice(0, 20000)}\n…（已截断）` : text
   return `<section class="preview-card"><h4>${escape(name)}</h4><pre class="preview-code">${escape(clipped)}</pre></section>`
 }
+function parseFeatureCollection(text) {
+  const data = JSON.parse(text)
+  if (data?.type === 'FeatureCollection' && Array.isArray(data.features)) return { type: 'FeatureCollection', features: data.features }
+  if (data?.type === 'Feature') return { type: 'FeatureCollection', features: [data] }
+  throw new Error('GeoJSON 结构无效')
+}
+function featureLabel(feature, index) {
+  const props = feature?.properties || {}
+  return props.layer || props.NAME || props.name || props.id || `要素 ${index + 1}`
+}
+function walkCoordinates(node, visit) {
+  if (!Array.isArray(node)) return
+  if (node.length >= 2 && typeof node[0] === 'number' && typeof node[1] === 'number') {
+    visit(node[0], node[1])
+    return
+  }
+  node.forEach(child => walkCoordinates(child, visit))
+}
+function collectionBounds(collections) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, count = 0
+  for (const collection of collections) {
+    for (const feature of collection?.features || []) {
+      walkCoordinates(feature.geometry?.coordinates, (x, y) => {
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return
+        minX = Math.min(minX, x); minY = Math.min(minY, y)
+        maxX = Math.max(maxX, x); maxY = Math.max(maxY, y)
+        count += 1
+      })
+    }
+  }
+  if (!count) return null
+  if (minX === maxX) { minX -= 1; maxX += 1 }
+  if (minY === maxY) { minY -= 1; maxY += 1 }
+  return { minX, minY, maxX, maxY }
+}
+function looksGeographic(bounds) {
+  if (!bounds) return false
+  return bounds.minX >= -180 && bounds.maxX <= 180 && bounds.minY >= -90 && bounds.maxY <= 90
+}
+function normalizeCrsInput(value) {
+  const raw = String(value || '').trim() || 'EPSG:4326'
+  if (/^\d+$/.test(raw)) return `EPSG:${raw}`
+  const match = raw.match(/^EPSG\s*:\s*(\d+)$/i)
+  return match ? `EPSG:${match[1]}` : raw
+}
+function suggestedOverlayCrs(bounds) {
+  if (!bounds) return overlayState.mapConfig?.defaultCrs || 'EPSG:4326'
+  if (looksGeographic(bounds)) return 'EPSG:4490'
+  // CGCS2000 / 3-degree Gauss-Kruger: easting prefix is the zone (EPSG:4528 = zone 40).
+  const midX = (bounds.minX + bounds.maxX) / 2
+  if (midX > 3e6 && midX < 6e7) {
+    const zone = Math.floor(midX / 1e6)
+    if (zone >= 25 && zone <= 45) return `EPSG:${4488 + zone}`
+  }
+  return 'EPSG:4528'
+}
+function crsMatchesBounds(crs, bounds) {
+  if (!bounds || !crs) return true
+  const code = normalizeCrsInput(crs).replace(/^EPSG:/i, '')
+  const geographicCodes = new Set(['4326', '4490', '4214', '4610'])
+  const isGeoCrs = geographicCodes.has(code)
+  const isGeoData = looksGeographic(bounds)
+  return isGeoCrs === isGeoData
+}
+function lonLatToWorld(lon, lat) {
+  const x = (lon + 180) / 360
+  const sin = Math.sin(lat * Math.PI / 180)
+  const y = 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)
+  return { x, y }
+}
+function projectPoint(x, y, bounds, width, height, padding, geographic) {
+  if (geographic) {
+    const topLeft = lonLatToWorld(bounds.minX, bounds.maxY)
+    const bottomRight = lonLatToWorld(bounds.maxX, bounds.minY)
+    const world = lonLatToWorld(x, y)
+    const spanX = Math.max(bottomRight.x - topLeft.x, 1e-12)
+    const spanY = Math.max(bottomRight.y - topLeft.y, 1e-12)
+    const scale = Math.min((width - padding * 2) / spanX, (height - padding * 2) / spanY)
+    return {
+      x: padding + (world.x - topLeft.x) * scale + ((width - padding * 2) - spanX * scale) / 2,
+      y: padding + (world.y - topLeft.y) * scale + ((height - padding * 2) - spanY * scale) / 2,
+      scale,
+      originX: topLeft.x,
+      originY: topLeft.y,
+    }
+  }
+  const spanX = bounds.maxX - bounds.minX
+  const spanY = bounds.maxY - bounds.minY
+  const scale = Math.min((width - padding * 2) / spanX, (height - padding * 2) / spanY)
+  return {
+    x: padding + (x - bounds.minX) * scale + ((width - padding * 2) - spanX * scale) / 2,
+    y: height - (padding + (y - bounds.minY) * scale + ((height - padding * 2) - spanY * scale) / 2),
+    scale,
+    originX: bounds.minX,
+    originY: bounds.minY,
+  }
+}
+function ringToPath(ctx, ring, bounds, width, height, padding, geographic) {
+  if (!Array.isArray(ring) || ring.length < 2) return
+  ring.forEach((point, index) => {
+    const projected = projectPoint(point[0], point[1], bounds, width, height, padding, geographic)
+    if (index === 0) ctx.moveTo(projected.x, projected.y)
+    else ctx.lineTo(projected.x, projected.y)
+  })
+}
+function drawGeometry(ctx, geometry, bounds, width, height, padding, geographic, style) {
+  if (!geometry) return
+  const kind = geometry.type
+  const coordinates = geometry.coordinates
+  ctx.beginPath()
+  if (kind === 'Point') {
+    const point = projectPoint(coordinates[0], coordinates[1], bounds, width, height, padding, geographic)
+    ctx.arc(point.x, point.y, style.pointRadius || 4, 0, Math.PI * 2)
+  } else if (kind === 'MultiPoint') {
+    coordinates.forEach(pair => {
+      const point = projectPoint(pair[0], pair[1], bounds, width, height, padding, geographic)
+      ctx.moveTo(point.x + (style.pointRadius || 4), point.y)
+      ctx.arc(point.x, point.y, style.pointRadius || 4, 0, Math.PI * 2)
+    })
+  } else if (kind === 'LineString') {
+    ringToPath(ctx, coordinates, bounds, width, height, padding, geographic)
+  } else if (kind === 'MultiLineString') {
+    coordinates.forEach(line => ringToPath(ctx, line, bounds, width, height, padding, geographic))
+  } else if (kind === 'Polygon') {
+    coordinates.forEach(ring => ringToPath(ctx, ring, bounds, width, height, padding, geographic))
+  } else if (kind === 'MultiPolygon') {
+    coordinates.forEach(polygon => polygon.forEach(ring => ringToPath(ctx, ring, bounds, width, height, padding, geographic)))
+  }
+  const fillable = kind === 'Polygon' || kind === 'MultiPolygon' || kind === 'Point' || kind === 'MultiPoint'
+  if (style.fill && fillable) {
+    ctx.fillStyle = style.fill
+    ctx.fill(style.fillRule || 'evenodd')
+  }
+  ctx.strokeStyle = style.stroke
+  ctx.lineWidth = style.lineWidth || 2
+  ctx.stroke()
+}
+function mapContentRect(bounds, width, height, padding, geographic) {
+  const corners = [
+    projectPoint(bounds.minX, bounds.minY, bounds, width, height, padding, geographic),
+    projectPoint(bounds.minX, bounds.maxY, bounds, width, height, padding, geographic),
+    projectPoint(bounds.maxX, bounds.minY, bounds, width, height, padding, geographic),
+    projectPoint(bounds.maxX, bounds.maxY, bounds, width, height, padding, geographic),
+  ]
+  const left = Math.min(...corners.map(point => point.x))
+  const right = Math.max(...corners.map(point => point.x))
+  const top = Math.min(...corners.map(point => point.y))
+  const bottom = Math.max(...corners.map(point => point.y))
+  return { left, top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) }
+}
+function loadImageFromBase64(contentType, imageBase64) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('在线服务图像无法显示'))
+    image.src = `data:${contentType};base64,${imageBase64}`
+  })
+}
+function boundsFromExtent(extent) {
+  if (!Array.isArray(extent) || extent.length !== 4) return null
+  const values = extent.map(Number)
+  if (values.some(value => !Number.isFinite(value))) return null
+  if (!(values[0] < values[2] && values[1] < values[3])) return null
+  return { minX: values[0], minY: values[1], maxX: values[2], maxY: values[3] }
+}
+function unionBoundsList(parts) {
+  const valid = parts.filter(Boolean)
+  if (!valid.length) return null
+  return {
+    minX: Math.min(...valid.map(item => item.minX)),
+    minY: Math.min(...valid.map(item => item.minY)),
+    maxX: Math.max(...valid.map(item => item.maxX)),
+    maxY: Math.max(...valid.map(item => item.maxY)),
+  }
+}
+function boundsIntersect(a, b) {
+  if (!a || !b) return false
+  return !(a.maxX < b.minX || a.minX > b.maxX || a.maxY < b.minY || a.minY > b.maxY)
+}
+function intersectBounds(a, b) {
+  if (!a || !b || !boundsIntersect(a, b)) return null
+  return {
+    minX: Math.max(a.minX, b.minX),
+    minY: Math.max(a.minY, b.minY),
+    maxX: Math.min(a.maxX, b.maxX),
+    maxY: Math.min(a.maxY, b.maxY),
+  }
+}
+function expandBounds(bounds, ratio = 0.05) {
+  if (!bounds) return null
+  const padX = Math.max((bounds.maxX - bounds.minX) * ratio, 1e-6)
+  const padY = Math.max((bounds.maxY - bounds.minY) * ratio, 1e-6)
+  return {
+    minX: bounds.minX - padX,
+    minY: bounds.minY - padY,
+    maxX: bounds.maxX + padX,
+    maxY: bounds.maxY + padY,
+  }
+}
+function canvasToContentPoint(screenX, screenY, width, height) {
+  const view = overlayState.view
+  const cx = width / 2
+  const cy = height / 2
+  return {
+    x: cx + (screenX - cx - view.offsetX) / view.zoom,
+    y: cy + (screenY - cy - view.offsetY) / view.zoom,
+  }
+}
+function contentToMapPoint(contentX, contentY, bounds, width, height, padding, geographic) {
+  if (geographic) {
+    const topLeft = lonLatToWorld(bounds.minX, bounds.maxY)
+    const bottomRight = lonLatToWorld(bounds.maxX, bounds.minY)
+    const spanX = Math.max(bottomRight.x - topLeft.x, 1e-12)
+    const spanY = Math.max(bottomRight.y - topLeft.y, 1e-12)
+    const scale = Math.min((width - padding * 2) / spanX, (height - padding * 2) / spanY)
+    const offsetX = padding + ((width - padding * 2) - spanX * scale) / 2
+    const offsetY = padding + ((height - padding * 2) - spanY * scale) / 2
+    const worldX = topLeft.x + (contentX - offsetX) / scale
+    const worldY = topLeft.y + (contentY - offsetY) / scale
+    const lon = worldX * 360 - 180
+    const n = Math.PI - 2 * Math.PI * worldY
+    const lat = 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)))
+    return { x: lon, y: lat }
+  }
+  const spanX = bounds.maxX - bounds.minX
+  const spanY = bounds.maxY - bounds.minY
+  const scale = Math.min((width - padding * 2) / spanX, (height - padding * 2) / spanY)
+  const offsetX = padding + ((width - padding * 2) - spanX * scale) / 2
+  const offsetY = padding + ((height - padding * 2) - spanY * scale) / 2
+  return {
+    x: bounds.minX + (contentX - offsetX) / scale,
+    y: bounds.minY + (height - contentY - offsetY) / scale,
+  }
+}
+function visibleMapBounds(worldBounds, width, height, padding, geographic) {
+  if (!worldBounds) return null
+  const corners = [
+    [0, 0],
+    [width, 0],
+    [0, height],
+    [width, height],
+  ].map(([sx, sy]) => {
+    const content = canvasToContentPoint(sx, sy, width, height)
+    return contentToMapPoint(content.x, content.y, worldBounds, width, height, padding, geographic)
+  })
+  return {
+    minX: Math.min(...corners.map(point => point.x)),
+    minY: Math.min(...corners.map(point => point.y)),
+    maxX: Math.max(...corners.map(point => point.x)),
+    maxY: Math.max(...corners.map(point => point.y)),
+  }
+}
+function onlineLayerBounds(layer) {
+  return boundsFromExtent(layer?.extent)
+}
+function worldMapBounds() {
+  const featureBounds = collectionBounds([{ features: allMapFeatures() }])
+  const online = overlayState.onlineLayers
+    .filter(layer => layerVisible(`online:${layer.id}`))
+    .map(onlineLayerBounds)
+  return unionBoundsList([featureBounds, ...online])
+}
+function applyOnlineServiceMeta(service, payload) {
+  if (!service || !payload) return false
+  let changed = false
+  if (payload.crs && payload.crs !== service.crs) {
+    service.crs = payload.crs
+    changed = true
+  }
+  if (payload.serviceCrs && !service.crs) {
+    service.crs = payload.serviceCrs
+    changed = true
+  }
+  if (payload.token && payload.token !== service.token) {
+    service.token = payload.token
+    changed = true
+  }
+  if (payload.referer && payload.referer !== service.referer) {
+    service.referer = payload.referer
+    changed = true
+  }
+  if (payload.expires != null && payload.expires !== service.expires) {
+    service.expires = payload.expires
+    changed = true
+  }
+  if (Array.isArray(payload.extent) && payload.extent.length === 4) {
+    const next = payload.extent.map(Number)
+    const prev = Array.isArray(service.extent) ? service.extent : null
+    if (!prev || next.some((value, index) => value !== Number(prev[index]))) {
+      service.extent = next
+      changed = true
+    }
+  }
+  return changed
+}
+async function ensureOnlineLayerExtent(service) {
+  if (!service?.serviceUrl) return null
+  if (onlineLayerBounds(service)) return onlineLayerBounds(service)
+  try {
+    const info = await api('/api/overlay/arcgis-info', {
+      serviceUrl: service.serviceUrl,
+      token: service.token || '',
+      referer: service.referer || '',
+    })
+    if (applyOnlineServiceMeta(service, info)) writeSavedOnlineLayers()
+    if (onlineLayerBounds(service)) return onlineLayerBounds(service)
+  } catch (error) {
+    // Older preview builds may lack /api/overlay/arcgis-info; fall through to export.
+    if (!/接口不存在/.test(error.message || '')) throw error
+  }
+  const seed = collectionBounds([{ features: allMapFeatures() }]) || {
+    minX: 0, minY: 0, maxX: 1, maxY: 1,
+  }
+  await fetchOnlineOverlayImage(service, seed, 64, 64)
+  return onlineLayerBounds(service)
+}
+async function fetchOnlineOverlayImage(service, bounds, width, height) {
+  if (!service?.serviceUrl || !service?.layerName || !bounds) return null
+  const crs = normalizeCrsInput(service.crs || suggestedOverlayCrs(bounds))
+  const featureBounds = collectionBounds([{ features: allMapFeatures() }])
+  if (featureBounds && !crsMatchesBounds(crs, featureBounds)) {
+    throw new Error(
+      looksGeographic(featureBounds)
+        ? `当前成果是经纬度，请将坐标参考改为 EPSG:4490 或 EPSG:4326（现在是 ${crs}）`
+        : `当前成果像是投影坐标（米），请用 EPSG:4528 等投影坐标系，不要用 ${crs}`
+    )
+  }
+  let payload
+  try {
+    payload = await api('/api/overlay/online-map', {
+      serviceUrl: service.serviceUrl,
+      layerName: service.layerName,
+      crs,
+      token: service.token || '',
+      referer: service.referer || '',
+      username: service.username || '',
+      bbox: [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY],
+      width: Math.round(width),
+      height: Math.round(height),
+    })
+  } catch (error) {
+    if (error?.payload && applyOnlineServiceMeta(service, error.payload)) writeSavedOnlineLayers()
+    throw error
+  }
+  if (crs !== service.crs) {
+    service.crs = crs
+    applyOnlineServiceMeta(service, payload)
+    writeSavedOnlineLayers()
+  } else if (applyOnlineServiceMeta(service, payload)) {
+    writeSavedOnlineLayers()
+  }
+  return payload
+}
+function layerVisible(key) {
+  return overlayState.layerVisibility[key] !== false
+}
+function setLayerVisible(key, visible) {
+  overlayState.layerVisibility[key] = !!visible
+}
+async function boundsForLayerKey(key) {
+  if (!key) return null
+  if (key.startsWith('result:')) {
+    const index = Number(key.slice('result:'.length))
+    const feature = overlayState.result?.features?.[index]
+    return feature ? collectionBounds([{ features: [feature] }]) : null
+  }
+  if (key.startsWith('local:')) {
+    const id = key.slice('local:'.length)
+    const layer = overlayState.localLayers.find(item => item.id === id)
+    return layer ? collectionBounds([{ features: layer.features || [] }]) : null
+  }
+  if (key.startsWith('online:')) {
+    const id = key.slice('online:'.length)
+    const layer = overlayState.onlineLayers.find(item => item.id === id)
+    if (!layer) return null
+    try {
+      return await ensureOnlineLayerExtent(layer) || onlineLayerBounds(layer)
+    } catch {
+      return onlineLayerBounds(layer)
+    }
+  }
+  return null
+}
+async function locateLayerByKey(key) {
+  const bounds = await boundsForLayerKey(key)
+  if (!bounds) return false
+  fitMapToDataBounds(bounds)
+  return true
+}
+function revealResultLayers() {
+  ;(overlayState.result?.features || []).forEach((_, index) => {
+    overlayState.layerVisibility[`result:${index}`] = true
+  })
+}
+function setAllOverlayLayers(visible) {
+  ;(overlayState.result?.features || []).forEach((_, index) => setLayerVisible(`result:${index}`, visible))
+  overlayState.localLayers.forEach(layer => setLayerVisible(`local:${layer.id}`, visible))
+  overlayState.onlineLayers.forEach(layer => setLayerVisible(`online:${layer.id}`, visible))
+}
+function layerControlSelectionState() {
+  const items = layerControlItems()
+  if (!items.length) return { checked: false, indeterminate: false }
+  const visibleCount = items.filter(item => layerVisible(item.key)).length
+  return {
+    checked: visibleCount === items.length,
+    indeterminate: visibleCount > 0 && visibleCount < items.length,
+  }
+}
+function syncLayerControlCheckboxes() {
+  document.querySelectorAll('[data-layer-key]').forEach(node => {
+    const key = node.getAttribute('data-layer-key')
+    if (!key) return
+    node.checked = layerVisible(key)
+  })
+  const master = document.querySelector('#overlay-layers-select-all')
+  if (!master) return
+  const state = layerControlSelectionState()
+  master.checked = state.checked
+  master.indeterminate = state.indeterminate
+}
+function allMapFeatures() {
+  return [
+    ...(overlayState.result?.features || []),
+    ...overlayState.localLayers.flatMap(layer => layer.features || []),
+  ]
+}
+function layerControlItems() {
+  const items = []
+  ;(overlayState.result?.features || []).forEach((feature, index) => {
+    items.push({ key: `result:${index}`, label: `成果 · ${featureLabel(feature, index)}`, tone: 'result' })
+  })
+  overlayState.localLayers.forEach(layer => {
+    items.push({ key: `local:${layer.id}`, label: `本地 · ${layer.name}`, tone: 'reference' })
+  })
+  overlayState.onlineLayers.forEach(layer => {
+    items.push({ key: `online:${layer.id}`, label: `在线 · ${layer.name}`, tone: 'online' })
+  })
+  return items
+}
+function layerControlMarkup() {
+  const items = layerControlItems()
+  const open = !!overlayState.layerPanelOpen
+  const icon = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 3.2 3 8l9 4.8L21 8l-9-4.8Zm0 7.1L4.2 6.4 12 2.3l7.8 4.1L12 10.3Zm0 2.1 9-4.8v2.4L12 17.1 3 10v-2.4l9 4.8Zm0 4.3 9-4.8v2.4L12 21.4 3 14.3v-2.4l9 4.8Z"/></svg>'
+  const toggle = `<button type="button" id="overlay-layers-toggle" class="overlay-layer-toggle${open ? ' is-active' : ''}" title="图层" aria-label="图层" aria-expanded="${open ? 'true' : 'false'}" aria-controls="overlay-layer-panel">${icon}</button>`
+  if (!items.length) {
+    return `<div id="overlay-layer-panel" class="overlay-layer-panel" ${open ? '' : 'hidden'}><p class="muted overlay-layer-empty">暂无图层</p></div>${toggle}`
+  }
+  const selection = layerControlSelectionState()
+  const master = `<label class="overlay-layer-select-all"><input type="checkbox" id="overlay-layers-select-all" ${selection.checked ? 'checked' : ''}>全选</label>`
+  const list = master + items.map(item => `<label class="legend-${item.tone}"><input type="checkbox" data-layer-key="${escape(item.key)}" ${layerVisible(item.key) ? 'checked' : ''}>${escape(item.label)}</label>`).join('')
+  return `<div id="overlay-layer-panel" class="overlay-layer-panel" ${open ? '' : 'hidden'}>${list}</div>${toggle}`
+}
+function localLayerListMarkup() {
+  if (!overlayState.localLayers.length) return '<p class="muted">尚未添加本地套合数据</p>'
+  return `<ul class="overlay-source-list">${overlayState.localLayers.map(layer => `<li><button type="button" class="overlay-source-locate" data-locate-local="${escape(layer.id)}" title="定位到该图层"><strong>${escape(layer.name)}</strong><small>${(layer.features || []).length} 个要素 · 点击定位</small></button><button type="button" class="text-action" data-remove-local="${escape(layer.id)}">删除</button></li>`).join('')}</ul>`
+}
+function onlineLayerListMarkup() {
+  if (!overlayState.onlineLayers.length) return '<p class="muted">尚未添加在线服务</p>'
+  return `<ul class="overlay-source-list">${overlayState.onlineLayers.map(layer => `<li><button type="button" class="overlay-source-locate" data-locate-online="${escape(layer.id)}" title="定位到该图层"><strong>${escape(layer.name || layer.layerName)}</strong><small title="${escape(layer.serviceUrl)}">序号 ${escape(layer.layerName)} · ${escape(layer.crs || 'EPSG:4326')}${layer.token ? ' · 已鉴权' : ''} · 点击定位</small></button><span class="overlay-source-actions"><button type="button" class="text-action" data-edit-online="${escape(layer.id)}">编辑</button><button type="button" class="text-action" data-remove-online="${escape(layer.id)}">删除</button></span></li>`).join('')}</ul>`
+}
+function openServiceModal(editId = null) {
+  overlayState.serviceModalEditId = editId
+  overlayState.serviceModalOpen = true
+  refreshOverlayPanel()
+}
+function serviceModalDraft() {
+  const editing = overlayState.onlineLayers.find(item => item.id === overlayState.serviceModalEditId)
+  const bounds = collectionBounds([{ features: allMapFeatures() }])
+  return {
+    editing,
+    serviceUrl: editing?.serviceUrl || '',
+    name: editing?.name || '',
+    layerName: editing?.layerName || '',
+    crs: editing?.crs || suggestedOverlayCrs(bounds),
+    username: editing?.username || '',
+    token: editing?.token || '',
+  }
+}
+function boundsToExtent(bounds) {
+  if (!bounds) return null
+  return [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY]
+}
+function ensureOverlayProjection(crs, sampleBounds) {
+  const code = normalizeCrsInput(crs || 'EPSG:4326')
+  if (typeof ol === 'undefined') return code
+  if (ol.proj.get(code)) return code
+  const geographic = sampleBounds ? looksGeographic(sampleBounds) : /^(EPSG:)?(4326|4490|4214|4610)$/i.test(code)
+  ol.proj.addProjection(new ol.proj.Projection({
+    code,
+    units: geographic ? 'degrees' : 'm',
+    extent: geographic ? [-180, -90, 180, 90] : [0, 0, 60000000, 10000000],
+  }))
+  return code
+}
+function overlayMapProjectionCode() {
+  const bounds = worldMapBounds()
+  const online = overlayState.onlineLayers.find(layer => layerVisible(`online:${layer.id}`))
+  return ensureOverlayProjection(online?.crs || suggestedOverlayCrs(bounds), bounds)
+}
+function vectorStyle(tone) {
+  if (tone === 'result') {
+    return new ol.style.Style({
+      stroke: new ol.style.Stroke({ color: '#d92d20', width: 2.5 }),
+      fill: new ol.style.Fill({ color: 'rgba(217,45,32,0.16)' }),
+      image: new ol.style.Circle({
+        radius: 4,
+        fill: new ol.style.Fill({ color: '#d92d20' }),
+        stroke: new ol.style.Stroke({ color: '#fff', width: 1 }),
+      }),
+    })
+  }
+  return new ol.style.Style({
+    stroke: new ol.style.Stroke({ color: '#2f6fed', width: 2 }),
+    fill: new ol.style.Fill({ color: 'rgba(47,111,237,0.14)' }),
+    image: new ol.style.Circle({
+      radius: 4,
+      fill: new ol.style.Fill({ color: '#2f6fed' }),
+      stroke: new ol.style.Stroke({ color: '#fff', width: 1 }),
+    }),
+  })
+}
+function featuresToVectorSource(features, projectionCode) {
+  const source = new ol.source.Vector()
+  if (!features?.length) return source
+  const format = new ol.format.GeoJSON()
+  source.addFeatures(format.readFeatures({
+    type: 'FeatureCollection',
+    features: features.map((feature, index) => ({
+      type: 'Feature',
+      id: feature.id || index,
+      properties: feature.properties || {},
+      geometry: feature.geometry,
+    })),
+  }, {
+    dataProjection: projectionCode,
+    featureProjection: projectionCode,
+  }))
+  return source
+}
+async function loadOnlineImageViaProxy(service, image, src) {
+  const parsed = new URL(src, window.location.origin)
+  const bboxParam = parsed.searchParams.get('BBOX') || parsed.searchParams.get('bbox')
+  const sizeParam = parsed.searchParams.get('SIZE') || parsed.searchParams.get('size')
+  if (!bboxParam || !sizeParam) throw new Error('在线服务请求参数无效')
+  const bbox = bboxParam.split(',').map(Number)
+  const size = sizeParam.split(',').map(Number)
+  if (bbox.some(value => !Number.isFinite(value)) || size.some(value => !Number.isFinite(value))) {
+    throw new Error('在线服务请求参数无效')
+  }
+  const crs = normalizeCrsInput(service.crs || suggestedOverlayCrs(boundsFromExtent(bbox)))
+  const payload = await api('/api/overlay/online-map', {
+    serviceUrl: service.serviceUrl,
+    layerName: service.layerName,
+    crs,
+    token: service.token || '',
+    referer: service.referer || '',
+    username: service.username || '',
+    bbox,
+    width: Math.max(64, Math.min(2048, Math.round(size[0]))),
+    height: Math.max(64, Math.min(2048, Math.round(size[1]))),
+  })
+  if (applyOnlineServiceMeta(service, payload)) writeSavedOnlineLayers()
+  if (payload.warning) overlayState.onlineNote = payload.warning
+  else overlayState.onlineNote = ''
+  updateOverlayMapNote()
+  const node = image.getImage()
+  await new Promise((resolve, reject) => {
+    node.onload = () => resolve()
+    node.onerror = () => reject(new Error('在线服务图像无法显示'))
+    node.src = `data:${payload.contentType || 'image/png'};base64,${payload.imageBase64}`
+  })
+}
+function createOnlineOlLayer(service, projectionCode) {
+  const isArcGis = /\/MapServer\b/i.test(service.serviceUrl || '')
+  const imageLoadFunction = (image, src) => {
+    loadOnlineImageViaProxy(service, image, src).catch(error => {
+      overlayState.onlineNote = error.message || '在线服务套合失败'
+      updateOverlayMapNote()
+      try {
+        image.setState(ol.ImageState?.ERROR ?? 3)
+      } catch { /* ignore */ }
+    })
+  }
+  const source = isArcGis
+    ? new ol.source.ImageArcGISRest({
+      url: String(service.serviceUrl || '').replace(/\/+$/, ''),
+      params: {
+        LAYERS: `show:${service.layerName}`,
+        FORMAT: 'PNG32',
+        TRANSPARENT: true,
+      },
+      ratio: 1.2,
+      projection: projectionCode,
+      imageLoadFunction,
+    })
+    : new ol.source.ImageWMS({
+      url: String(service.serviceUrl || ''),
+      params: {
+        LAYERS: service.layerName,
+        FORMAT: 'image/png',
+        TRANSPARENT: true,
+      },
+      ratio: 1.2,
+      projection: projectionCode,
+      imageLoadFunction,
+    })
+  return new ol.layer.Image({
+    source,
+    opacity: 0.88,
+    visible: layerVisible(`online:${service.id}`),
+    properties: { overlayKey: `online:${service.id}`, serviceId: service.id },
+  })
+}
+function disposeOverlayMap() {
+  if (overlayState.map) {
+    overlayState.map.setTarget(null)
+    overlayState.map.dispose?.()
+    overlayState.map = null
+  }
+}
+function updateOverlayMapNote() {
+  const note = document.querySelector('#overlay-map-note')
+  if (!note) return
+  const resultCount = (overlayState.result?.features || []).filter((_, index) => layerVisible(`result:${index}`)).length
+  const localCount = overlayState.localLayers
+    .filter(layer => layerVisible(`local:${layer.id}`))
+    .reduce((sum, layer) => sum + (layer.features || []).length, 0)
+  const visibleOnline = overlayState.onlineLayers.filter(layer => layerVisible(`online:${layer.id}`)).length
+  const bounds = worldMapBounds()
+  const plane = bounds && looksGeographic(bounds) ? '经纬度范围' : '本地平面坐标'
+  const zoom = overlayState.map?.getView()?.getZoom()
+  const zoomText = Number.isFinite(zoom) ? `缩放 ${zoom.toFixed(2)}×` : ''
+  const onlineNote = overlayState.onlineNote
+    || (visibleOnline ? `在线 ${visibleOnline} 层` : (overlayState.onlineLayers.length ? '在线图层已隐藏' : '未添加在线服务'))
+  note.textContent = `成果 ${resultCount} · 本地 ${localCount} · ${onlineNote} · ${plane}${zoomText ? ` · ${zoomText}` : ''}`
+}
+function syncOverlayMapLayerVisibility() {
+  const map = overlayState.map
+  if (!map) return
+  map.getLayers().forEach(layer => {
+    const key = layer.get('overlayKey')
+    if (!key) return
+    layer.setVisible(layerVisible(key))
+  })
+  updateOverlayMapNote()
+}
+async function syncOverlayMap(options = {}) {
+  const target = document.querySelector('#overlay-map')
+  const note = document.querySelector('#overlay-map-note')
+  if (!target) return
+  if (typeof ol === 'undefined') {
+    if (note) note.textContent = '地图组件未加载，请刷新页面'
+    return
+  }
+  const visibleOnline = overlayState.onlineLayers.filter(layer => layerVisible(`online:${layer.id}`))
+  for (const service of visibleOnline) {
+    if (onlineLayerBounds(service)) continue
+    try {
+      await ensureOnlineLayerExtent(service)
+    } catch { /* optional */ }
+  }
+  if (!overlayState.autoFittedOnline) overlayState.autoFittedOnline = {}
+  const featureBounds = collectionBounds([{ features: allMapFeatures() }])
+  for (const service of visibleOnline) {
+    const layerBounds = onlineLayerBounds(service)
+    if (!layerBounds || overlayState.autoFittedOnline[service.id]) continue
+    if (featureBounds && boundsIntersect(featureBounds, layerBounds)) continue
+    overlayState.autoFittedOnline[service.id] = true
+    await ensureOverlayMapBuilt()
+    fitMapToDataBounds(layerBounds)
+    return
+  }
+  await ensureOverlayMapBuilt(options)
+  updateOverlayMapNote()
+}
+async function ensureOverlayMapBuilt(options = {}) {
+  const target = document.querySelector('#overlay-map')
+  if (!target || typeof ol === 'undefined') return null
+  const bounds = worldMapBounds()
+  if (!bounds) {
+    disposeOverlayMap()
+    const note = document.querySelector('#overlay-map-note')
+    if (note) note.textContent = '没有可绘制的几何。请确认成果含 GeoJSON，上传套合 SHP，或添加在线服务。'
+    return null
+  }
+  const buildToken = ++overlayState.drawToken
+  const projectionCode = overlayMapProjectionCode()
+  const previousExtent = options.keepView && overlayState.map
+    ? overlayState.map.getView().calculateExtent()
+    : null
+  disposeOverlayMap()
+  const layers = []
+  for (const service of overlayState.onlineLayers) {
+    try {
+      layers.push(createOnlineOlLayer(service, projectionCode))
+    } catch (error) {
+      overlayState.onlineNote = error.message || '在线服务图层创建失败'
+    }
+  }
+  overlayState.localLayers.forEach(layer => {
+    layers.push(new ol.layer.Vector({
+      source: featuresToVectorSource(layer.features || [], projectionCode),
+      style: vectorStyle('local'),
+      properties: { overlayKey: `local:${layer.id}` },
+      visible: layerVisible(`local:${layer.id}`),
+    }))
+  })
+  ;(overlayState.result?.features || []).forEach((feature, index) => {
+    layers.push(new ol.layer.Vector({
+      source: featuresToVectorSource([feature], projectionCode),
+      style: vectorStyle('result'),
+      properties: { overlayKey: `result:${index}` },
+      visible: layerVisible(`result:${index}`),
+    }))
+  })
+  const view = new ol.View({
+    projection: projectionCode,
+    maxZoom: MAP_ZOOM_MAX,
+    minZoom: 0,
+  })
+  if (buildToken !== overlayState.drawToken) return null
+  const map = new ol.Map({
+    target,
+    layers,
+    view,
+    controls: [],
+  })
+  if (buildToken !== overlayState.drawToken) {
+    map.setTarget(null)
+    return null
+  }
+  overlayState.map = map
+  const fitExtent = previousExtent && previousExtent.every(Number.isFinite)
+    ? previousExtent
+    : boundsToExtent(bounds)
+  view.fit(fitExtent, { padding: [40, 40, 40, 40], duration: 0, maxZoom: MAP_ZOOM_MAX })
+  map.on('moveend', () => updateOverlayMapNote())
+  syncOverlayMapLayerVisibility()
+  return map
+}
+function fitMapToDataBounds(targetBounds) {
+  if (!targetBounds) return false
+  const extent = boundsToExtent(targetBounds)
+  if (!extent) return false
+  const run = map => {
+    map.getView().fit(extent, { padding: [48, 48, 48, 48], duration: 250, maxZoom: MAP_ZOOM_MAX })
+    updateOverlayMapNote()
+  }
+  if (overlayState.map) {
+    run(overlayState.map)
+    return true
+  }
+  ensureOverlayMapBuilt().then(map => { if (map) run(map) })
+  return true
+}
+function locateLocalLayer(id) {
+  const layer = overlayState.localLayers.find(item => item.id === id)
+  if (!layer) return
+  setLayerVisible(`local:${id}`, true)
+  syncLayerControlCheckboxes()
+  syncOverlayMapLayerVisibility()
+  const bounds = collectionBounds([{ features: layer.features || [] }])
+  if (!bounds) return toast('该本地图层没有可定位的几何')
+  fitMapToDataBounds(bounds)
+  toast(`已定位到本地图层四至：${layer.name}`)
+}
+async function locateOnlineLayer(id) {
+  const layer = overlayState.onlineLayers.find(item => item.id === id)
+  if (!layer) return
+  setLayerVisible(`online:${id}`, true)
+  syncLayerControlCheckboxes()
+  syncOverlayMapLayerVisibility()
+  try {
+    const bounds = await ensureOnlineLayerExtent(layer) || onlineLayerBounds(layer)
+    if (!bounds) return toast('无法读取该在线图层四至，请确认 Token 后重试')
+    await syncOverlayMap({ keepView: true })
+    fitMapToDataBounds(bounds)
+    toast(`已定位到在线图层四至：${layer.name || layer.layerName}`)
+  } catch (error) {
+    toast(error.message || '定位在线图层失败')
+  }
+}
+function serviceModalMarkup() {
+  if (!overlayState.serviceModalOpen) return ''
+  const draft = serviceModalDraft()
+  const editing = !!draft.editing
+  return `<div class="overlay-modal-backdrop" id="overlay-service-modal" role="dialog" aria-modal="true" aria-labelledby="overlay-service-title"><div class="overlay-modal"><header><h3 id="overlay-service-title">${editing ? '编辑在线服务' : '添加在线服务'}</h3></header><label>服务地址<input id="overlay-service-url" value="${escape(draft.serviceUrl)}" placeholder="http://host/arcgis/rest/services/.../MapServer"></label><label>显示名称<input id="overlay-service-name" value="${escape(draft.name)}" placeholder="如：高标准农田"></label><label>图层序号<input id="overlay-service-layer" value="${escape(draft.layerName)}" placeholder="MapServer 填 0 或 0,1；WMS 可填服务图层名"></label><label>坐标参考<input id="overlay-service-crs" value="${escape(draft.crs)}" placeholder="EPSG:4528"></label><label>Token<input id="overlay-service-token" value="${escape(draft.token)}" placeholder="粘贴服务 Token"></label><p id="overlay-service-error" class="error" hidden></p><div class="overlay-modal-actions"><button type="button" class="secondary" id="overlay-service-cancel">取消</button><button type="button" class="primary" id="overlay-service-save">${editing ? '保存修改' : '保存并套合'}</button></div></div></div>`
+}
+function geometryModalMarkup() {
+  const modal = overlayState.geometryModal
+  if (!modal) return ''
+  return `<div class="overlay-modal-backdrop" id="geometry-view-modal" role="dialog" aria-modal="true" aria-labelledby="geometry-view-title"><div class="overlay-modal overlay-modal-wide"><header class="geometry-view-head"><div><h3 id="geometry-view-title">${escape(modal.title || '几何图形')}</h3><p class="muted">共 ${(modal.features || []).length} 个要素</p></div><button type="button" class="geometry-view-close" id="geometry-view-close" aria-label="关闭">×</button></header><canvas id="geometry-view-canvas" width="860" height="480" aria-label="几何图形预览"></canvas></div></div>`
+}
+function overlayPanelMarkup() {
+  return `<section class="overlay-panel"><header class="overlay-panel-head"><div><h3>成果套合可视化</h3><p class="muted">本地与在线图层可同时套合（坐标系一致即可，范围不重合也能显示）。列表点击可定位到该图层四至；右上角图层按钮开关图层面板，可用 +/- 或滚轮缩放。</p></div></header><div class="overlay-layout"><div class="overlay-map-pane"><div class="overlay-map-frame"><div id="overlay-map" role="img" aria-label="红线成果套合图"></div><div class="overlay-zoom-control" role="group" aria-label="地图缩放"><button type="button" id="overlay-zoom-in" title="放大" aria-label="放大">+</button><button type="button" id="overlay-zoom-out" title="缩小" aria-label="缩小">−</button><button type="button" id="overlay-zoom-reset" title="复位" aria-label="复位">↺</button></div><div class="overlay-layer-control" role="group" aria-label="图层显示控制">${layerControlMarkup()}</div></div><p id="overlay-map-note" class="muted overlay-map-note"></p></div><aside class="overlay-side"><section class="overlay-card"><h4>本地套合数据</h4><p class="muted">上传 Shape ZIP，或同名 .shp/.shx/.dbf（可附 .prj）。也可上传 GeoJSON。</p><input id="overlay-upload" type="file" hidden accept=".zip,.shp,.shx,.dbf,.prj,.cpg,.geojson,.json" multiple><button type="button" class="secondary" id="overlay-pick">上传本地图层</button>${localLayerListMarkup()}</section><section class="overlay-card"><h4>在线服务配置</h4><p class="muted">显示名称用于图例；图层序号用于拉图。列表可编辑。</p><div class="overlay-card-actions"><button type="button" class="secondary" id="overlay-service-open">添加在线服务</button></div>${onlineLayerListMarkup()}</section></aside></div>${serviceModalMarkup()}${geometryModalMarkup()}</section>`
+}
+function resetMapView() {
+  const bounds = worldMapBounds()
+  if (bounds) fitMapToDataBounds(bounds)
+  else if (overlayState.map) {
+    overlayState.map.getView().setZoom(1)
+    updateOverlayMapNote()
+  }
+}
+function applyMapZoom(delta) {
+  const map = overlayState.map
+  if (!map) return
+  const view = map.getView()
+  const zoom = view.getZoom()
+  if (!Number.isFinite(zoom)) return
+  view.animate({ zoom: Math.min(MAP_ZOOM_MAX, Math.max(0, zoom + delta)), duration: 160 })
+}
+function readSavedOnlineLayers() {
+  try {
+    const raw = localStorage.getItem(ONLINE_LAYERS_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(item => item && typeof item.serviceUrl === 'string' && typeof item.layerName === 'string').map((item, index) => ({
+      id: typeof item.id === 'string' ? item.id : `online-${index}`,
+      name: item.name || item.layerName,
+      serviceUrl: item.serviceUrl,
+      layerName: item.layerName,
+      crs: typeof item.crs === 'string' && item.crs ? item.crs : 'EPSG:4326',
+      username: typeof item.username === 'string' ? item.username : '',
+      token: typeof item.token === 'string' ? item.token : '',
+      referer: typeof item.referer === 'string' ? item.referer : '',
+      expires: typeof item.expires === 'number' ? item.expires : null,
+      extent: Array.isArray(item.extent) && item.extent.length === 4 ? item.extent.map(Number) : null,
+    }))
+  } catch {
+    return []
+  }
+}
+function writeSavedOnlineLayers() {
+  try {
+    localStorage.setItem(ONLINE_LAYERS_KEY, JSON.stringify(overlayState.onlineLayers.map(layer => ({
+      id: layer.id,
+      name: layer.name,
+      serviceUrl: layer.serviceUrl,
+      layerName: layer.layerName,
+      crs: layer.crs || 'EPSG:4326',
+      username: layer.username || '',
+      token: layer.token || '',
+      referer: layer.referer || '',
+      expires: layer.expires ?? null,
+      extent: Array.isArray(layer.extent) && layer.extent.length === 4 ? layer.extent : null,
+    }))))
+  } catch { /* private mode */ }
+}
+async function ensureMapConfig() {
+  if (!overlayState.mapConfig) {
+    try {
+      overlayState.mapConfig = await api('/api/map-config')
+    } catch {
+      overlayState.mapConfig = { onlineEnabled: true, proxy: true, defaultCrs: 'EPSG:4326' }
+    }
+  }
+  if (!overlayState.onlineLayers.length) {
+    const saved = readSavedOnlineLayers()
+    if (saved.length) overlayState.onlineLayers = saved
+  }
+  return overlayState.mapConfig
+}
+function paintFeaturesOnCanvas(canvas, features, noteNode) {
+  const ctx = canvas.getContext('2d')
+  const width = canvas.width
+  const height = canvas.height
+  ctx.clearRect(0, 0, width, height)
+  ctx.fillStyle = '#f4f7fc'
+  ctx.fillRect(0, 0, width, height)
+  const bounds = collectionBounds([{ features }])
+  if (!bounds) {
+    if (noteNode) noteNode.textContent = '没有可绘制的几何'
+    return
+  }
+  const geographic = looksGeographic(bounds)
+  const padding = 28
+  features.forEach(feature => {
+    drawGeometry(ctx, feature.geometry, bounds, width, height, padding, geographic, {
+      stroke: '#d92d20',
+      fill: 'rgba(217,45,32,0.16)',
+      lineWidth: 2.5,
+      pointRadius: 4,
+    })
+  })
+  if (noteNode) noteNode.textContent = `${features.length} 个要素 · ${geographic ? '经纬度范围' : '本地平面坐标'}`
+}
+function openGeometryModal(title, features) {
+  overlayState.geometryModal = { title, features: features || [] }
+  refreshOverlayPanel()
+  requestAnimationFrame(() => {
+    const canvas = document.querySelector('#geometry-view-canvas')
+    if (canvas) paintFeaturesOnCanvas(canvas, overlayState.geometryModal.features)
+  })
+}
+function refreshOverlayPanel() {
+  const host = document.querySelector('#result-overlay')
+  if (!host) return
+  disposeOverlayMap()
+  host.innerHTML = overlayPanelMarkup()
+  bindOverlayPanel()
+  syncLayerControlCheckboxes()
+  syncOverlayMap()
+  if (overlayState.geometryModal) {
+    requestAnimationFrame(() => {
+      const canvas = document.querySelector('#geometry-view-canvas')
+      if (canvas) paintFeaturesOnCanvas(canvas, overlayState.geometryModal.features)
+    })
+  }
+}
+function bindOverlayPanel() {
+  const pick = document.querySelector('#overlay-pick')
+  const upload = document.querySelector('#overlay-upload')
+  if (pick && upload) {
+    pick.onclick = () => upload.click()
+    upload.onchange = async event => {
+      const files = Array.from(event.target.files || [])
+      upload.value = ''
+      if (!files.length) return
+      try {
+        const encoded = await Promise.all(files.map(file => new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve({ name: file.name, content: String(reader.result).split(',')[1] })
+          reader.onerror = () => reject(new Error('套合文件读取失败'))
+          reader.readAsDataURL(file)
+        })))
+        const collection = await api('/api/overlay/parse', { files: encoded })
+        const id = `local-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+        const name = files.length === 1 ? files[0].name : `${files[0].name} 等 ${files.length} 个文件`
+        overlayState.localLayers.push({ id, name, features: collection.features || [] })
+        setLayerVisible(`local:${id}`, true)
+        refreshOverlayPanel()
+        toast(`已添加本地图层，共 ${(collection.features || []).length} 个要素`)
+      } catch (error) {
+        toast(error.message || '套合数据加载失败')
+      }
+    }
+  }
+  document.querySelectorAll('[data-locate-local]').forEach(node => {
+    node.onclick = () => locateLocalLayer(node.dataset.locateLocal)
+  })
+  document.querySelectorAll('[data-locate-online]').forEach(node => {
+    node.onclick = () => locateOnlineLayer(node.dataset.locateOnline)
+  })
+  document.querySelectorAll('[data-remove-local]').forEach(node => {
+    node.onclick = event => {
+      event.stopPropagation()
+      const id = node.dataset.removeLocal
+      overlayState.localLayers = overlayState.localLayers.filter(layer => layer.id !== id)
+      delete overlayState.layerVisibility[`local:${id}`]
+      refreshOverlayPanel()
+      toast('已删除本地图层')
+    }
+  })
+  document.querySelectorAll('[data-edit-online]').forEach(node => {
+    node.onclick = event => {
+      event.stopPropagation()
+      openServiceModal(node.dataset.editOnline)
+    }
+  })
+  document.querySelectorAll('[data-remove-online]').forEach(node => {
+    node.onclick = event => {
+      event.stopPropagation()
+      const id = node.dataset.removeOnline
+      overlayState.onlineLayers = overlayState.onlineLayers.filter(layer => layer.id !== id)
+      delete overlayState.layerVisibility[`online:${id}`]
+      writeSavedOnlineLayers()
+      refreshOverlayPanel()
+      toast('已删除在线服务')
+    }
+  })
+  document.querySelectorAll('[data-layer-key]').forEach(node => {
+    node.addEventListener('change', async () => {
+      const key = node.getAttribute('data-layer-key')
+      if (!key) return
+      setLayerVisible(key, node.checked)
+      syncLayerControlCheckboxes()
+      syncOverlayMapLayerVisibility()
+      if (node.checked) await locateLayerByKey(key)
+    })
+  })
+  document.querySelector('#overlay-layers-select-all')?.addEventListener('change', event => {
+    const master = event.currentTarget
+    setAllOverlayLayers(!!master.checked)
+    syncLayerControlCheckboxes()
+    syncOverlayMapLayerVisibility()
+    toast(master.checked ? '已全选图层' : '已取消全选')
+  })
+  document.querySelector('#overlay-layers-toggle')?.addEventListener('click', () => {
+    overlayState.layerPanelOpen = !overlayState.layerPanelOpen
+    const panel = document.querySelector('#overlay-layer-panel')
+    const toggle = document.querySelector('#overlay-layers-toggle')
+    if (panel) panel.hidden = !overlayState.layerPanelOpen
+    if (toggle) {
+      toggle.classList.toggle('is-active', overlayState.layerPanelOpen)
+      toggle.setAttribute('aria-expanded', overlayState.layerPanelOpen ? 'true' : 'false')
+    }
+  })
+  document.querySelector('#overlay-zoom-in')?.addEventListener('click', () => applyMapZoom(1))
+  document.querySelector('#overlay-zoom-out')?.addEventListener('click', () => applyMapZoom(-1))
+  document.querySelector('#overlay-zoom-reset')?.addEventListener('click', () => resetMapView())
+  document.querySelector('#overlay-service-open')?.addEventListener('click', () => openServiceModal(null))
+  const closeServiceModal = () => {
+    overlayState.serviceModalOpen = false
+    overlayState.serviceModalEditId = null
+    refreshOverlayPanel()
+  }
+  document.querySelector('#overlay-service-cancel')?.addEventListener('click', closeServiceModal)
+  document.querySelector('#overlay-service-modal')?.addEventListener('click', event => {
+    if (event.target?.id === 'overlay-service-modal') closeServiceModal()
+  })
+  document.querySelector('#overlay-service-save')?.addEventListener('click', async () => {
+    const serviceUrl = document.querySelector('#overlay-service-url')?.value.trim() || ''
+    const displayName = document.querySelector('#overlay-service-name')?.value.trim() || ''
+    const layerName = document.querySelector('#overlay-service-layer')?.value.trim() || ''
+    const crs = normalizeCrsInput(document.querySelector('#overlay-service-crs')?.value || 'EPSG:4326')
+    let token = document.querySelector('#overlay-service-token')?.value.trim() || ''
+    let expires = null
+    const editId = overlayState.serviceModalEditId
+    const existing = overlayState.onlineLayers.find(item => item.id === editId)
+    const showModalError = message => {
+      const node = document.querySelector('#overlay-service-error')
+      if (node) {
+        node.hidden = false
+        node.textContent = message
+      }
+      toast(message)
+    }
+    const errorNode = document.querySelector('#overlay-service-error')
+    if (errorNode) {
+      errorNode.hidden = true
+      errorNode.textContent = ''
+    }
+    if (!/^https?:\/\//i.test(serviceUrl)) return showModalError('请填写有效的服务地址（http/https）')
+    if (!layerName) return showModalError('请填写图层序号')
+    if (/\/MapServer\b/i.test(serviceUrl)) {
+      const ids = layerName.replace(/^show:/i, '').split(',').map(part => part.trim()).filter(Boolean)
+      if (!ids.length || ids.some(part => !/^\d+$/.test(part))) {
+        return showModalError('ArcGIS MapServer 请填写图层序号，例如 0 或 0,1')
+      }
+    }
+    if (/\/MapServer\b/i.test(serviceUrl) && !token && !(existing?.token)) {
+      return showModalError('该 ArcGIS 服务需要鉴权：请粘贴 Token')
+    }
+    const bounds = collectionBounds([{ features: allMapFeatures() }])
+    if (bounds && !crsMatchesBounds(crs, bounds)) {
+      return showModalError(
+        looksGeographic(bounds)
+          ? `当前成果是经纬度，请改用 EPSG:4490 / 4326（现在是 ${crs}）`
+          : `当前成果像投影坐标，请改用 ${suggestedOverlayCrs(bounds)} 等，不要用 ${crs}`
+      )
+    }
+    const saveButton = document.querySelector('#overlay-service-save')
+    if (saveButton) saveButton.disabled = true
+    try {
+      const referer = existing?.referer || ''
+      if (existing && !token) token = existing.token || ''
+      if (existing && existing.expires != null) expires = existing.expires
+      const record = {
+        id: existing?.id || `online-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        name: displayName || layerName,
+        serviceUrl,
+        layerName,
+        crs,
+        username: '',
+        token,
+        referer,
+        expires,
+      }
+      if (existing) {
+        Object.assign(existing, record)
+      } else {
+        overlayState.onlineLayers.push(record)
+      }
+      setLayerVisible(`online:${record.id}`, true)
+      revealResultLayers()
+      overlayState.serviceModalOpen = false
+      overlayState.serviceModalEditId = null
+      overlayState.rasterCache = null
+      writeSavedOnlineLayers()
+      try {
+        await ensureOnlineLayerExtent(record)
+      } catch {
+        /* locate can fetch later */
+      }
+      refreshOverlayPanel()
+      const focus = collectionBounds([{ features: allMapFeatures() }]) || onlineLayerBounds(record)
+      if (focus) fitMapToDataBounds(focus)
+      toast(existing
+        ? (token ? '在线服务已更新（已带鉴权）；点列表「定位」可跳到该服务四至' : '在线服务已更新；点列表「定位」可跳到该服务四至')
+        : (token ? '在线服务已添加（已带鉴权）；点列表「定位」可跳到该服务四至' : '在线服务已添加；点列表「定位」可跳到该服务四至'))
+    } catch (error) {
+      showModalError(error.message || '在线服务保存失败')
+      if (saveButton) saveButton.disabled = false
+    }
+  })
+  document.querySelector('#geometry-view-close')?.addEventListener('click', () => {
+    overlayState.geometryModal = null
+    refreshOverlayPanel()
+  })
+  document.querySelector('#geometry-view-modal')?.addEventListener('click', event => {
+    if (event.target?.id === 'geometry-view-modal') {
+      overlayState.geometryModal = null
+      refreshOverlayPanel()
+    }
+  })
+}
+async function loadResultGeojson(task) {
+  for (let index = 0; index < task.outputs.length; index++) {
+    const name = task.outputs[index]
+    if (!/\.(geojson|json)$/i.test(name)) continue
+    const response = await authenticatedFetch(`api/tasks/${task.id}/files/${index}`)
+    if (!response.ok) throw new Error('读取成果失败')
+    const length = Number(response.headers.get('content-length') || 0)
+    if (length > 8 * 1024 * 1024) throw new Error('成果 GeoJSON 过大，请下载后在 GIS 中查看')
+    return parseFeatureCollection(await response.text())
+  }
+  for (let index = 0; index < task.outputs.length; index++) {
+    const name = task.outputs[index]
+    if (!/\.zip$/i.test(name)) continue
+    const response = await authenticatedFetch(`api/tasks/${task.id}/files/${index}`)
+    if (!response.ok) throw new Error('读取成果失败')
+    const length = Number(response.headers.get('content-length') || 0)
+    if (length > 32 * 1024 * 1024) throw new Error('成果 ZIP 过大，无法页内套合')
+    const buffer = await response.arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+    let binary = ''
+    const chunk = 0x8000
+    for (let offset = 0; offset < bytes.length; offset += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk))
+    }
+    const collection = await api('/api/overlay/parse', { files: [{ name, content: btoa(binary) }] })
+    return { type: 'FeatureCollection', features: collection.features || [] }
+  }
+  return null
+}
+async function loadResultOverlay(task) {
+  const host = document.querySelector('#result-overlay')
+  if (!host || task?.state !== 'succeeded') return
+  if (overlayState.taskId !== task.id) {
+    overlayState.taskId = task.id
+    overlayState.result = null
+    overlayState.localLayers = []
+    overlayState.layerVisibility = {}
+    overlayState.serviceModalOpen = false
+    overlayState.serviceModalEditId = null
+    overlayState.geometryModal = null
+    overlayState.rasterCache = null
+    resetMapView()
+  }
+  await ensureMapConfig()
+  try {
+    overlayState.result = await loadResultGeojson(task) || { type: 'FeatureCollection', features: [] }
+    revealResultLayers()
+    ;(overlayState.result.features || []).forEach((_, index) => setLayerVisible(`result:${index}`, true))
+    refreshOverlayPanel()
+    const focus = collectionBounds([{ features: overlayState.result.features || [] }])
+    if (focus) requestAnimationFrame(() => fitMapToDataBounds(focus))
+  } catch (error) {
+    host.innerHTML = `<section class="overlay-panel"><h3>成果套合可视化</h3><p class="error">${escape(error.message || '套合准备失败')}</p></section>`
+  }
+}
+function bindPreviewGeometryButtons() {
+  document.querySelectorAll('[data-preview-geometry]').forEach(node => {
+    node.onclick = () => {
+      const entry = previewGeometryCollections[Number(node.dataset.previewGeometry)]
+      if (!entry) return toast('没有可查看的几何')
+      openGeometryModal(entry.name, entry.features)
+    }
+  })
+}
 async function loadResultPreviews(task) {
   const host = document.querySelector('#result-preview')
   if (!host || task?.state !== 'succeeded') return
+  previewGeometryCollections = []
+  await loadResultOverlay(task)
   const parts = []
   for (let index = 0; index < task.outputs.length; index++) {
     const name = task.outputs[index]
@@ -252,7 +1462,13 @@ async function loadResultPreviews(task) {
       parts.push(`<section class="preview-card"><h4>${escape(name)}</h4><p class="error">${escape(error.message || '预览失败')}</p></section>`)
     }
   }
+  if (!parts.length && overlayState.result?.features?.length) {
+    const previewId = previewGeometryCollections.length
+    previewGeometryCollections.push({ name: '提取成果几何', features: overlayState.result.features })
+    parts.push(`<section class="preview-card"><div class="preview-card-head"><div><h4>提取成果几何</h4><p class="muted">共 ${overlayState.result.features.length} 个要素（来自成果包解析）</p></div><button type="button" class="secondary" data-preview-geometry="${previewId}">查看</button></div></section>`)
+  }
   host.innerHTML = parts.length ? `<h3>成果预览</h3>${parts.join('')}` : '<p class="muted">当前成果为压缩包或二进制，请下载后用 GIS 软件打开。</p>'
+  bindPreviewGeometryButtons()
 }
 function formatChipMarkup(chips, output) {
   return `<div class="conversion-format-chips"><small>支持格式</small>${chips.map(chip => `<b>${escape(chip)}</b>`).join('')}${output ? `<em>→</em><b>${escape(output)}</b>` : ''}</div>`
@@ -275,7 +1491,8 @@ function homeMarkup() {
 function guideMarkup() {
   const sections = [
     ['01 / 红线提取', '红线提取', '从 DWG/DXF 提取闭合多段线。可指定图层；留空则匹配名称含“红线”等关键字的图层。成果可导出 GeoJSON 或 Shapefile。图纸若无坐标系元数据，请在下游自行定义参考系。', 'redline-extract'],
-    ['02 / 任务与成果', '任务与成果', '关闭网页后任务仍由专家服务处理。桌面端下载走原生另存为。取消会终止处理进程且不发布成果。', null],
+    ['02 / 成果套合', '成果套合可视化', '成果预览可点「查看」弹框看几何。其下方为套合地图：可多次上传本地图层、弹框添加在线服务，列表可删除；地图右上角按已有图层开关显示隐藏。', null],
+    ['03 / 任务与成果', '任务与成果', '关闭网页后任务仍由专家服务处理。桌面端下载走原生另存为。取消会终止处理进程且不发布成果。', null],
   ]
   return `<div class="guide-page"><button class="text-action" data-page="home">← 返回首页</button><section class="guide-hero"><span class="eyebrow">使用指南</span><h1>红线提取</h1><p>从 DWG/DXF 提取闭合多段线，导出 GeoJSON 和/或 Shapefile ZIP。可指定图层，或自动匹配含“红线/REDLINE”等关键字的图层。</p><button class="primary" data-page="home">＋ 新建任务</button></section><div class="guide-grid">${sections.map(([badge, title, body, toolId]) => `<section class="panel"><span>${escape(badge)}</span><h2>${escape(title)}</h2><p>${escape(body)}</p>${toolId ? `<button class="text-action" data-tool="${escape(toolId)}">开始${escape(title)} →</button>` : '<button class="text-action" data-page="home">去工作台选工具 →</button>'}</section>`).join('')}</div></div>`
 }
@@ -526,7 +1743,9 @@ async function refresh() {
 document.querySelectorAll('[data-page]').forEach(node => node.onclick = () => { currentPage = node.dataset.page; render() })
 async function boot() {
   try {
+    sessionExpired = false
     const ticket = new URLSearchParams(location.hash.slice(1)).get('ticket')
+      || (typeof window.__LOCAL_FIXTURE_TICKET__ === 'string' ? window.__LOCAL_FIXTURE_TICKET__ : null)
     history.replaceState(null, '', location.pathname)
     if (ticket) await api('/api/session', { ticket })
     currentPage = 'home'

@@ -72,6 +72,52 @@ class ServerTests(unittest.TestCase):
         cookie = self.login("a")
         self.assertTrue(cookie.startswith("expert_cad_redline_extractor_session="))
 
+    def test_map_config_and_overlay_parse(self):
+        cookie = self.login("a")
+        status, data, _ = self.request("/api/map-config", cookie=cookie)
+        self.assertEqual(status, 200)
+        payload = json.loads(data)
+        self.assertTrue(payload["onlineEnabled"])
+        self.assertTrue(payload["proxy"])
+        geojson = {
+            "type": "FeatureCollection",
+            "features": [{
+                "type": "Feature",
+                "properties": {"id": 1},
+                "geometry": {"type": "Point", "coordinates": [120.1, 30.2]},
+            }],
+        }
+        status, data, _ = self.request("/api/overlay/parse", {
+            "files": [{"name": "point.geojson", "content": base64.b64encode(json.dumps(geojson).encode()).decode()}],
+        }, cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(data)["count"], 1)
+        self.assertEqual(self.request("/api/overlay/parse", {"files": []}, cookie)[0], 400)
+        status, data, _ = self.request("/api/overlay/online-map", {
+            "serviceUrl": "http://127.0.0.1/wms",
+            "layerName": "demo",
+            "bbox": [1, 2, 3, 4],
+            "width": 256,
+            "height": 256,
+            "crs": "EPSG:4326",
+        }, cookie)
+        self.assertEqual(status, 400)
+        self.assertIn("内网", json.loads(data)["error"])
+        status, data, _ = self.request("/api/overlay/arcgis-token", {
+            "serviceUrl": "http://127.0.0.1/arcgis/rest/services/x/MapServer",
+            "username": "u",
+            "password": "p",
+        }, cookie)
+        self.assertEqual(status, 400)
+        self.assertIn("内网", json.loads(data)["error"])
+        status, data, _ = self.request("/api/overlay/arcgis-info", {
+            "serviceUrl": "http://127.0.0.1/arcgis/rest/services/x/MapServer",
+            "token": "t",
+        }, cookie)
+        self.assertEqual(status, 400)
+        self.assertIn("内网", json.loads(data)["error"])
+        self.assertNotEqual(json.loads(data).get("error"), "接口不存在")
+
 
     def test_path_traversal_upload_rejected(self):
         cookie = self.login("a")

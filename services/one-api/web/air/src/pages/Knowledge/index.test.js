@@ -806,3 +806,62 @@ test('ordinary user personal tab uses scoped organization directory like root', 
     ragflow_dataset_id: 'ds-remote-1',
   }));
 });
+
+test('paginates category libraries and keeps the toolbar inside the sticky chrome', async () => {
+  const many = Array.from({ length: 30 }, (_, index) => ({
+    id: index + 10,
+    name: `授权库${String(index).padStart(2, '0')}`,
+    description: '授权资料',
+    kind: 'shared',
+    category_id: 1,
+    shelf: 'published',
+    tags: '',
+    owner_user_id: 1,
+    owner_username: 'root',
+    visit_count: 0,
+    daily_usage: 0,
+    updated_at: `2025-08-${String((index % 28) + 1).padStart(2, '0')}T12:00:00+08:00`,
+    created_at: `2025-08-${String((index % 28) + 1).padStart(2, '0')}T12:00:00+08:00`,
+  }));
+  API.get.mockImplementation(url => {
+    const path = String(url);
+    if (path === '/api/knowledge-admin/bases' || path === '/api/knowledge-bases') {
+      return Promise.resolve({ data: { success: true, data: [...libraries, ...many] } });
+    }
+    return Promise.resolve(documentsResponse(url));
+  });
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  await act(async () => { button('测绘规范').click(); });
+  for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+  const sticky = container.querySelector('.knowledge-sticky');
+  expect(sticky.querySelector('.knowledge-toolbar')).toBeTruthy();
+  expect(sticky.querySelector('.knowledge-toolbar .knowledge-search')).toBeTruthy();
+  expect(sticky.textContent).toContain('新建知识库');
+  expect(container.querySelectorAll('.knowledge-card')).toHaveLength(12);
+  expect(container.textContent).toContain('授权库27');
+  expect(container.textContent).not.toContain('授权库00');
+  const catalog = container.querySelector('.knowledge-library-catalog');
+  const pager = container.querySelector('[aria-label="知识库分页"]');
+  expect(catalog).toBeTruthy();
+  expect(pager).toBeTruthy();
+  expect(catalog.contains(container.querySelector('.knowledge-grid'))).toBe(true);
+  expect(catalog.contains(pager)).toBe(true);
+  expect(pager.textContent).toContain('共 31 个，每页 12 个');
+  expect(pager.textContent).toContain('1 / 3');
+  await act(async () => { button('下一页').click(); });
+  expect(pager.textContent).toContain('2 / 3');
+  expect(container.querySelectorAll('.knowledge-card').length).toBe(12);
+});
+
+test('keeps the category library pager when the filtered list fits on one page', async () => {
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  await act(async () => { button('测绘规范').click(); });
+  for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+  const pager = container.querySelector('[aria-label="知识库分页"]');
+  expect(pager).toBeTruthy();
+  expect(pager.textContent).toContain('共 1 个，每页 12 个');
+  expect(pager.textContent).toContain('1 / 1');
+  expect(container.querySelectorAll('.knowledge-card').length).toBe(1);
+});

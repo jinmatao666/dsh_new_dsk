@@ -292,13 +292,15 @@ type DocumentViewer = {
 
 /** Top-level folders and files shown per content page; nested folder children expand inside their page. */
 const DOCUMENT_PAGE_SIZE = 12
+/** Plaza homepage cards per page (four-column grid). */
+const PLAZA_PAGE_SIZE = 12
 
 /** Compact page-number strip matching the skill-market catalog pager.
  * @param page - Current 1-based page.
  * @param pages - Total page count.
  * @returns Page numbers and `gap` markers for ellipsis.
  */
-function visibleDocumentPages(page: number, pages: number): (number | 'gap')[] {
+function visiblePageNumbers(page: number, pages: number): (number | 'gap')[] {
   if (pages <= 7) return Array.from({ length: pages }, (_, index) => index + 1)
   const nearby = new Set([1, pages, page - 1, page, page + 1])
   const numbers = [...nearby].filter(value => value >= 1 && value <= pages).sort((a, b) => a - b)
@@ -331,6 +333,8 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const [plazaDetail, setPlazaDetail] = useState<KnowledgePlazaItem>()
   const [plazaQuery, setPlazaQuery] = useState('')
   const [plazaLoading, setPlazaLoading] = useState(false)
+  const [plazaPage, setPlazaPage] = useState(1)
+  const [plazaJump, setPlazaJump] = useState('')
   const [plazaDocuments, setPlazaDocuments] = useState<KnowledgeDocument[]>([])
   const [plazaFolders, setPlazaFolders] = useState<Set<string>>(new Set())
   const [subscribing, setSubscribing] = useState(false)
@@ -451,6 +455,8 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         ...(keyword !== undefined && keyword.trim() !== '' ? { keyword: keyword.trim() } : {}),
       })
       setPlazaItems(rows)
+      setPlazaPage(1)
+      setPlazaJump('')
     } catch (cause) {
       setError(`${productText('加载失败')}：${String(cause)}`)
     } finally {
@@ -461,6 +467,8 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     setPlazaOpen(true)
     setPlazaDetail(undefined)
     setPlazaQuery('')
+    setPlazaPage(1)
+    setPlazaJump('')
     void refreshPlaza()
   }
   const openPlazaItem = async (id: number) => {
@@ -907,6 +915,12 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const pageCount = Math.max(1, Math.ceil(contentTree.length / DOCUMENT_PAGE_SIZE))
   const currentPage = Math.min(documentPage, pageCount)
   const pagedTree = contentTree.slice((currentPage - 1) * DOCUMENT_PAGE_SIZE, currentPage * DOCUMENT_PAGE_SIZE)
+  const plazaPageCount = Math.max(1, Math.ceil(plazaItems.length / PLAZA_PAGE_SIZE))
+  const currentPlazaPage = Math.min(plazaPage, plazaPageCount)
+  const pagedPlazaItems = plazaItems.slice(
+    (currentPlazaPage - 1) * PLAZA_PAGE_SIZE,
+    currentPlazaPage * PLAZA_PAGE_SIZE,
+  )
   useEffect(() => {
     setDocumentPage(1)
     setPageJump('')
@@ -1189,36 +1203,76 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       {plazaDetail === undefined ? <>
         {plazaLoading ? <p role="status">{productText('正在加载…')}</p>
           : plazaItems.length === 0 ? <p className="dsh-knowledge-empty">{productText('暂无可订阅知识库')}</p>
-            : <section className="dsh-knowledge-plaza-catalog">
-              <header className="dsh-knowledge-plaza-catalog-head">
-                <div>
-                  <strong>{productText('精选知识库')}</strong>
-                  <span>{productText('共 {count} 个').replace('{count}', String(plazaItems.length))}</span>
+            : <>
+              <section className="dsh-knowledge-plaza-catalog">
+                <header className="dsh-knowledge-plaza-catalog-head">
+                  <div>
+                    <strong>{productText('精选知识库')}</strong>
+                    <span>{productText('共 {count} 个').replace('{count}', String(plazaItems.length))}</span>
+                  </div>
+                </header>
+                <div className="dsh-knowledge-plaza-list">
+                  <div className="dsh-knowledge-plaza-grid">
+                    {pagedPlazaItems.map(item =>
+                      <button type="button" key={item.id} className="dsh-knowledge-plaza-card"
+                        onClick={() => void openPlazaItem(item.id)}>
+                        <span className="dsh-knowledge-plaza-cover" aria-hidden="true">
+                          <PlazaCover cover={item.cover} />
+                          <span className="dsh-knowledge-plaza-category">{item.category_name}</span>
+                          {item.subscription_status === 'owned' &&
+                            <em className="dsh-knowledge-plaza-status">{productText('我的')}</em>}
+                          {item.subscription_status === 'approved' &&
+                            <em className="dsh-knowledge-plaza-status">{productText('已订阅')}</em>}
+                          {item.subscription_status === 'pending' &&
+                            <em className="dsh-knowledge-plaza-status pending">{productText('审核中')}</em>}
+                        </span>
+                        <span className="dsh-knowledge-plaza-card-body">
+                          <strong>{item.name}</strong>
+                          <p>{item.description || productText('暂无描述')}</p>
+                          {renderPlazaMeta(item)}
+                        </span>
+                        <span className="dsh-knowledge-plaza-card-arrow" aria-hidden="true"><ChevronIcon /></span>
+                      </button>)}
+                  </div>
                 </div>
-              </header>
-              <div className="dsh-knowledge-plaza-grid">
-                {plazaItems.map(item =>
-                  <button type="button" key={item.id} className="dsh-knowledge-plaza-card"
-                    onClick={() => void openPlazaItem(item.id)}>
-                    <span className="dsh-knowledge-plaza-cover" aria-hidden="true">
-                      <PlazaCover cover={item.cover} />
-                      <span className="dsh-knowledge-plaza-category">{item.category_name}</span>
-                      {item.subscription_status === 'owned' &&
-                        <em className="dsh-knowledge-plaza-status">{productText('我的')}</em>}
-                      {item.subscription_status === 'approved' &&
-                        <em className="dsh-knowledge-plaza-status">{productText('已订阅')}</em>}
-                      {item.subscription_status === 'pending' &&
-                        <em className="dsh-knowledge-plaza-status pending">{productText('审核中')}</em>}
-                    </span>
-                    <span className="dsh-knowledge-plaza-card-body">
-                      <strong>{item.name}</strong>
-                      <p>{item.description || productText('暂无描述')}</p>
-                      {renderPlazaMeta(item)}
-                    </span>
-                    <span className="dsh-knowledge-plaza-card-arrow" aria-hidden="true"><ChevronIcon /></span>
-                  </button>)}
-              </div>
-            </section>}
+              </section>
+              <nav className="dsh-knowledge-pager dsh-knowledge-plaza-pager" aria-label={productText('知识库分页')}>
+                <span className="dsh-knowledge-pager-total">
+                  {productText('共 {count} 个').replace('{count}', String(plazaItems.length))}
+                </span>
+                <div className="dsh-knowledge-pager-controls">
+                  <button type="button" disabled={currentPlazaPage <= 1}
+                    onClick={() => setPlazaPage(currentPlazaPage - 1)}>{productText('上一页')}</button>
+                  <span className="dsh-knowledge-page-count" aria-live="polite">
+                    {productText('第')}{currentPlazaPage}{productText(' 页')} / {plazaPageCount}
+                  </span>
+                  <span className="dsh-knowledge-page-choices" aria-label={productText('选择页码')}>
+                    {visiblePageNumbers(currentPlazaPage, plazaPageCount).map((value, index) => value === 'gap'
+                      ? <span className="dsh-knowledge-page-gap" key={`plaza-gap-${index}`} aria-hidden="true">…</span>
+                      : <button className="dsh-knowledge-page-number" type="button" key={value}
+                        aria-label={`${productText('第')}${value}${productText(' 页')}`}
+                        aria-current={value === currentPlazaPage ? 'page' : undefined}
+                        disabled={value === currentPlazaPage}
+                        onClick={() => setPlazaPage(value)}>{value}</button>)}
+                  </span>
+                  <button type="button" disabled={currentPlazaPage >= plazaPageCount}
+                    onClick={() => setPlazaPage(currentPlazaPage + 1)}>{productText('下一页')}</button>
+                  <form className="dsh-knowledge-page-jump" onSubmit={(event) => {
+                    event.preventDefault()
+                    const target = Number(plazaJump)
+                    if (/^[1-9]\d*$/.test(plazaJump) && Number.isSafeInteger(target) && target <= plazaPageCount) {
+                      setPlazaPage(target)
+                      setPlazaJump('')
+                    }
+                  }}>
+                    <input type="text" inputMode="numeric" aria-label={productText('跳转页码')}
+                      placeholder={productText('页码')} value={plazaJump}
+                      onChange={event => setPlazaJump(event.target.value)} />
+                    <button type="submit" disabled={plazaJump === ''}>{productText('跳转')}</button>
+                  </form>
+                </div>
+              </nav>
+            </>}
         <p className="dsh-knowledge-hint">{productText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库仍可在广场查看与问答。')}</p>
       </> : (() => {
         const plazaCanUse = plazaDetail.subscription_status === 'approved'
@@ -1429,7 +1483,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
               {productText('第')}{currentPage}{productText(' 页')} / {pageCount}
             </span>
             <span className="dsh-knowledge-page-choices" aria-label={productText('选择页码')}>
-              {visibleDocumentPages(currentPage, pageCount).map((value, index) => value === 'gap'
+              {visiblePageNumbers(currentPage, pageCount).map((value, index) => value === 'gap'
                 ? <span className="dsh-knowledge-page-gap" key={`gap-${index}`} aria-hidden="true">…</span>
                 : <button className="dsh-knowledge-page-number" type="button" key={value}
                   aria-label={`${productText('第')}${value}${productText(' 页')}`}

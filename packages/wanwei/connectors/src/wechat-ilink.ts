@@ -11,12 +11,13 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
-import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-permission-presets'
-import { SessionId, type SessionId as WeChatSessionId } from '@deepseek-ai/dsh-session'
+import {
+  SessionId, type Session, type SessionEvent, type SessionId as WeChatSessionId,
+} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { resolveProductDshHome } from './dingtalk-dws.ts'
 
@@ -47,6 +48,9 @@ const TYPING_STATUS_TYPING = 1
 const TYPING_STATUS_CANCEL = 2
 /** WeChat clears 「对方正在输入…」 shortly after the last typing signal; resend at OpenClaw's cadence. */
 const TYPING_KEEPALIVE_MS = 5_000
+/** `sendmessage` attempts per reply; retries reuse one `client_id`. */
+const REPLY_SEND_ATTEMPTS = 3
+const REPLY_RETRY_DELAY_MS = 500
 
 /** Non-secret WeChat Assistant status for the connectors page. */
 export type WeChatStatus = {
@@ -760,22 +764,35 @@ async function sendTextReply(
   text: string,
   contextToken: string | undefined,
 ): Promise<void> {
-  await httpPost(
-    `${ensureTrailingSlash(credentials.baseUrl)}ilink/bot/sendmessage`,
-    {
-      base_info: baseInfo(),
-      msg: {
-        from_user_id: '',
-        to_user_id: toUserId,
-        client_id: `wanwei-wechat-${randomUUID()}`,
-        message_type: 2,
-        message_state: 2,
-        item_list: text === '' ? undefined : [{ type: MESSAGE_ITEM_TEXT, text_item: { text } }],
-        context_token: contextToken,
-      },
+  const body = {
+    base_info: baseInfo(),
+    msg: {
+      from_user_id: '',
+      to_user_id: toUserId,
+      client_id: `wanwei-wechat-${randomUUID()}`,
+      message_type: 2,
+      message_state: 2,
+      item_list: text === '' ? undefined : [{ type: MESSAGE_ITEM_TEXT, text_item: { text } }],
+      context_token: contextToken,
     },
-    { token: credentials.botToken, timeoutMs: 15_000 },
-  )
+  }
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      const raw = await httpPost(
+        `${ensureTrailingSlash(credentials.baseUrl)}ilink/bot/sendmessage`,
+        body,
+        { token: credentials.botToken, timeoutMs: 15_000 },
+      )
+      const parsed = (raw.trim() === '' ? {} : JSON.parse(raw)) as { ret?: number; errmsg?: string }
+      if (parsed.ret !== undefined && parsed.ret !== 0) {
+        throw new Error(`sendmessage ret=${parsed.ret} ${parsed.errmsg ?? ''}`)
+      }
+      return
+    } catch (error) {
+      if (attempt >= REPLY_SEND_ATTEMPTS) throw error
+      await new Promise(resolve => setTimeout(resolve, REPLY_RETRY_DELAY_MS))
+    }
+  }
 }
 
 async function fetchTypingTicket(
@@ -812,53 +829,78 @@ async function sendTyping(
   }
 }
 
+/** Per-bridge typing state shared by every inbound message. */
+type TypingChannel = {
+  /** Typing tickets keyed by user id; failed tickets are evicted. */
+  tickets: Map<string, string>
+  /** Tail of the `sendtyping` requests, which run one at a time in enqueue order. */
+  queue: Promise<void>
+}
+
 /**
- * Show 「对方正在输入…」 in the user's WeChat chat until the returned stop resolves.
- * Typing is best-effort: ticket or send failures are logged and never delay the task.
+ * Show 「对方正在输入…」 in the user's WeChat chat until the returned stop is called.
+ * Typing is best-effort: ticket or send failures are logged and never delay the task
+ * or the reply. Requests share the bridge queue, so the cancel status for one
+ * message is never overtaken by an earlier keepalive or by the next message's typing.
  * @param ctx - Host context for warnings.
  * @param credentials - bridge credentials.
  * @param userId - bound WeChat user receiving the indicator.
  * @param contextToken - inbound message context token for `getconfig`.
- * @param tickets - per-bridge typing ticket cache keyed by user id; failed tickets are evicted.
- * @returns stop function that ends keepalive and sends the cancel status in the background.
+ * @param channel - per-bridge ticket cache and request queue.
+ * @returns stop function that ends keepalive at once and enqueues the cancel status
+ *   once `after` settles; `after` must not reject.
  */
 function startTypingIndicator(
   ctx: Context,
   credentials: StoredCredentials,
   userId: string,
   contextToken: string | undefined,
-  tickets: Map<string, string>,
-): () => void {
+  channel: TypingChannel,
+): (after: Promise<void>) => void {
   let stopped = false
   let keepalive: ReturnType<typeof setInterval> | undefined
+  let typingQueued = false
   const send = (ticket: string, status: typeof TYPING_STATUS_TYPING | typeof TYPING_STATUS_CANCEL) =>
     sendTyping(credentials, userId, ticket, status).catch((error: unknown) => {
       clearInterval(keepalive)
       // A late failure from an earlier message must not evict a newer ticket.
-      if (tickets.get(userId) === ticket) tickets.delete(userId)
+      if (channel.tickets.get(userId) === ticket) channel.tickets.delete(userId)
       ctx.logger.warn(`微信输入状态发送失败：${error instanceof Error ? error.message : String(error)}`)
     })
-  const cached = tickets.get(userId)
+  const enqueue = (request: () => Promise<void>): Promise<void> => {
+    const next = channel.queue.then(request)
+    channel.queue = next
+    return next
+  }
+  const typing = (ticket: string) => {
+    // A slow request must not pile keepalives up behind it.
+    if (typingQueued) return
+    typingQueued = true
+    void enqueue(() => (stopped ? Promise.resolve() : send(ticket, TYPING_STATUS_TYPING)))
+      .finally(() => { typingQueued = false })
+  }
+  const cached = channel.tickets.get(userId)
   const ready: Promise<string | null> = (cached === undefined
     ? fetchTypingTicket(credentials, userId, contextToken).then((ticket) => {
-      tickets.set(userId, ticket)
+      channel.tickets.set(userId, ticket)
       return ticket
     })
     : Promise.resolve(cached)
   ).then((ticket) => {
     if (stopped) return ticket
-    void send(ticket, TYPING_STATUS_TYPING)
-    keepalive = setInterval(() => { void send(ticket, TYPING_STATUS_TYPING) }, TYPING_KEEPALIVE_MS)
+    typing(ticket)
+    keepalive = setInterval(() => { typing(ticket) }, TYPING_KEEPALIVE_MS)
     return ticket
   }, (error: unknown) => {
     ctx.logger.warn(`微信输入状态不可用：${error instanceof Error ? error.message : String(error)}`)
     return null
   })
-  return () => {
+  return (after) => {
     stopped = true
     clearInterval(keepalive)
-    void ready.then((ticket) => {
-      if (ticket !== null) void send(ticket, TYPING_STATUS_CANCEL)
+    void enqueue(async () => {
+      const [ticket] = await Promise.all([ready, after])
+      if (ticket !== null) await send(ticket, TYPING_STATUS_CANCEL)
     })
   }
 }
@@ -874,20 +916,46 @@ function extractUserText(message: {
   return parts.join('\n').trim()
 }
 
-function extractAssistantText(agent: Agent): string {
-  const events = agent.session.events
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index]
-    if (event === undefined || event.type !== 'assistant/message') continue
-    const blocks = event.data.message.content
-    const text = blocks
-      .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
-      .map(block => block.text)
-      .join('\n')
-      .trim()
-    if (text !== '') return text
-  }
-  return '任务已完成（无文本回复）。'
+function assistantText(event: SessionEvent<'assistant/message'>): string {
+  return event.data.message.content
+    .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
+    .map(block => block.text)
+    .join('\n')
+    .trim()
+}
+
+/** The turn that consumed one prompt: its `turn/end` and last non-empty assistant text. */
+type PromptTurn = { end: SessionEvent<'turn/end'>; reply: string | null }
+
+/**
+ * Follow one prompt from the user message carrying `requestId` to the `turn/end`
+ * that closes its turn. Later turns (desktop follow-ups, background wake-ups)
+ * do not delay the result.
+ * @param ctx - Host context whose `session/event` stream is observed.
+ * @param session - the WeChat Assistant Session.
+ * @param requestId - id passed to `sessionController.prompt`.
+ * @returns `turn` settling with that turn, or `null` once read as unrun; `dispose` stops observing.
+ */
+function watchPromptTurn(
+  ctx: Context,
+  session: Session,
+  requestId: SessionRequestId,
+): { turn: Promise<PromptTurn | null>; dispose: () => void } {
+  const settled = Promise.withResolvers<PromptTurn | null>()
+  let claimed = false
+  let reply: string | null = null
+  const dispose = ctx.on('session/event', (source, event) => {
+    if (source !== session) return
+    if (event.type === 'user/message') {
+      const origin = event.data.source
+      if (origin.kind === 'user' && 'rpcId' in origin && origin.rpcId === requestId) claimed = true
+    } else if (claimed && event.type === 'assistant/message') {
+      reply = assistantText(event) || reply
+    } else if (claimed && event.type === 'turn/end') {
+      settled.resolve({ end: event, reply })
+    }
+  })
+  return { turn: settled.promise, dispose }
 }
 
 /**
@@ -938,7 +1006,7 @@ async function runBridgeLoop(ctx: Context, dshHome: string, signal: AbortSignal)
   let credentials = loadWeChatCredentials(dshHome)
   if (credentials === null) return
   let active: StoredCredentials = credentials
-  const typingTickets = new Map<string, string>()
+  const typing: TypingChannel = { tickets: new Map(), queue: Promise.resolve() }
   await notifyLifecycle(credentials, 'start', signal)
   try {
     while (!signal.aborted) {
@@ -1006,18 +1074,19 @@ async function runBridgeLoop(ctx: Context, dshHome: string, signal: AbortSignal)
             })
           continue
         }
-        const stopTyping = startTypingIndicator(ctx, credentials, from, message.context_token, typingTickets)
+        const stopTyping = startTypingIndicator(ctx, credentials, from, message.context_token, typing)
         let reply: string
         try {
           reply = await runDesktopTask(ctx, dshHome, text, signal)
         } catch (error) {
           reply = `执行失败：${error instanceof Error ? error.message : String(error)}`
-        } finally {
-          stopTyping()
         }
-        await sendTextReply(credentials, from, reply, message.context_token).catch((error: unknown) => {
+        // Cancel typing only after the reply lands, matching the iLink reference client.
+        const delivered = sendTextReply(credentials, from, reply, message.context_token).catch((error: unknown) => {
           ctx.logger.warn(`微信回复失败：${error instanceof Error ? error.message : String(error)}`)
         })
+        stopTyping(delivered)
+        await delivered
       }
     }
   } finally {
@@ -1040,24 +1109,40 @@ async function runDesktopTask(
   const agent = resolved.agent
   ctx.permissionPresets.set(agent.session, 'workspace-write')
   signal.throwIfAborted()
-  await ctx.sessionController.prompt({
-    sessionId,
-    requestId: randomUUID() as SessionRequestId,
-    mode: 'queue',
-    content: [{ type: 'text', text: prompt }],
-    clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-  }, signal)
-  await agent.whenIdle()
+  const requestId = randomUUID() as SessionRequestId
+  const watch = watchPromptTurn(ctx, agent.session, requestId)
+  const stopped = Promise.withResolvers<never>()
+  // An abort during `prompt` rejects before the race below subscribes.
+  stopped.promise.catch(() => {})
+  const onAbort = () => { stopped.reject(signal.reason) }
+  signal.addEventListener('abort', onAbort, { once: true })
+  let result: PromptTurn | null
+  try {
+    await ctx.sessionController.prompt({
+      sessionId,
+      requestId,
+      mode: 'queue',
+      content: [{ type: 'text', text: prompt }],
+      clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }, signal)
+    // The agent reaching idle without closing this prompt's turn means the
+    // prompt was cancelled out of the inbox before any turn claimed it.
+    result = await Promise.race([
+      watch.turn,
+      agent.whenIdle().then(() => null),
+      stopped.promise,
+    ])
+  } finally {
+    signal.removeEventListener('abort', onAbort)
+    watch.dispose()
+  }
+  if (result === null) throw new Error('任务未执行：消息在开始前已被取消')
   await ctx.sessions.flush(agent.session)
-  const end = agent.session.events.findLast(event => event.type === 'turn/end')
-  if (end?.type === 'turn/end' && end.data.reason.kind === 'error') {
-    throw new Error(end.data.reason.error.message)
-  }
-  if (end?.type === 'turn/end' && end.data.reason.kind !== 'completed') {
-    throw new Error(`任务未完成：${end.data.reason.kind}`)
-  }
+  const reason = result.end.data.reason
+  if (reason.kind === 'error') throw new Error(reason.error.message)
+  if (reason.kind !== 'completed') throw new Error(`任务未完成：${reason.kind}`)
   // Keep the fixed 微信助理 Session alive so the desktop transcript stays open.
-  return extractAssistantText(agent)
+  return result.reply ?? '任务已完成（无文本回复）。'
 }
 
 /**

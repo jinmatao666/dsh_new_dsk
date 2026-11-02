@@ -45,7 +45,7 @@ describe('WeChat Assistant Host helpers', () => {
     const home = mkdtempSync(join(tmpdir(), 'wanwei-wechat-ensure-'))
     let creates = 0
     let releaseCreate!: () => void
-    const createHold = new Promise<void>(resolve => { releaseCreate = resolve })
+    const createHold = new Promise<void>((resolve) => { releaseCreate = resolve })
     const ctx = {
       workspaceRegistry: {
         create: async () => ({ id: 'ws-wechat', sessionIds: [] as string[] }),
@@ -281,6 +281,8 @@ function bridgeHarness(options: {
   ilink: (endpoint: string, body: Record<string, unknown>) => Promise<unknown>
   whenIdle?: () => Promise<void>
   prompt?: () => Promise<void>
+  /** Settles when the prompted turn ends; `'dropped'` removes the prompt unrun. */
+  turn?: () => Promise<'ran' | 'dropped'>
 }) {
   const home = mkdtempSync(join(tmpdir(), 'wanwei-wechat-typing-'))
   mkdirSync(dirname(wechatCredentialPath(home)), { recursive: true })
@@ -314,35 +316,50 @@ function bridgeHarness(options: {
     }
     return new Response(JSON.stringify(await options.ilink(endpoint, body)), { status: 200 })
   }) as unknown as typeof fetch)
-  const events: unknown[] = []
+  const listeners = new Set<(session: unknown, event: unknown) => void>()
+  const session = { events: [] as unknown[] }
+  const emit = (event: unknown) => {
+    session.events.push(event)
+    for (const listener of listeners) listener(session, event)
+  }
+  let idle = Promise.resolve()
   const agent = {
-    session: { events },
-    whenIdle: options.whenIdle ?? (async () => {}),
+    session,
+    whenIdle: () => options.whenIdle?.() ?? idle,
   }
   const ctx = {
     logger: { warn: (message: string) => { warnings.push(message) } },
+    on: (_name: string, listener: (session: unknown, event: unknown) => void) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
     workspaceRegistry: { create: async () => ({ id: 'ws', sessionIds: ['wechat-s'] }) },
     sessionController: {
       resolveAgent: async () => ({ agent }),
       create: async () => ({ sessionId: 'wechat-s' }),
       rename: async () => {},
-      prompt: async () => {
+      prompt: async (request: { requestId: string }) => {
         await options.prompt?.()
-        events.push(
-          { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '已完成' }] } } },
-          { type: 'turn/end', data: { reason: { kind: 'completed' } } },
-        )
+        idle = (async () => {
+          if (await options.turn?.() === 'dropped') return
+          emit({ type: 'user/message', data: { source: { kind: 'user', rpcId: request.requestId } } })
+          emit({ type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '已完成' }] } } })
+          emit({ type: 'turn/end', data: { reason: { kind: 'completed' } } })
+        })()
       },
     },
     sessions: { flush: async () => {} },
     permissionPresets: { set: () => {} },
   }
   startWeChatBridge(ctx as never, home)
-  return { calls, warnings }
+  return { calls, warnings, emit }
 }
 
-async function waitFor(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 200 && !predicate(); attempt += 1) {
+const replyTexts = (calls: IlinkCall[]) => calls.filter(call => call.endpoint === 'sendmessage')
+  .map(call => (call.body.msg as { item_list: Array<{ text_item: { text: string } }> }).item_list[0]!.text_item.text)
+
+async function waitFor(predicate: () => boolean, timeoutMs = 1_000): Promise<void> {
+  for (let attempt = 0; attempt < timeoutMs / 5 && !predicate(); attempt += 1) {
     await new Promise(resolve => setTimeout(resolve, 5))
   }
   expect(predicate()).toBe(true)
@@ -352,18 +369,19 @@ const typingStatuses = (calls: IlinkCall[]) =>
   calls.filter(call => call.endpoint === 'sendtyping').map(call => call.body.status)
 
 describe('WeChat Assistant typing indicator', () => {
-  it('shows typing with keepalive while the task runs and cancels before the reply', async () => {
+  it('shows typing with keepalive while the task runs and cancels after the reply', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     try {
       let releaseTask!: () => void
       const taskHold = new Promise<void>((resolve) => { releaseTask = resolve })
-      let idleCalls = 0
+      let turns = 0
       const { calls } = bridgeHarness({
         inbound: ['打开百度地图', '再查一下天气'],
         ilink: async endpoint => endpoint === 'getconfig' ? { ret: 0, typing_ticket: 'ticket-1' } : { ret: 0 },
-        whenIdle: async () => {
-          idleCalls += 1
-          if (idleCalls === 1) await taskHold
+        turn: async () => {
+          turns += 1
+          if (turns === 1) await taskHold
+          return 'ran'
         },
       })
       await waitFor(() => typingStatuses(calls).length === 1)
@@ -375,15 +393,18 @@ describe('WeChat Assistant typing indicator', () => {
       await waitFor(() => typingStatuses(calls).length === 2)
       releaseTask()
       await waitFor(() => calls.filter(call => call.endpoint === 'sendmessage').length === 2)
-      await waitFor(() => typingStatuses(calls).length === 5)
+      await waitFor(() => typingStatuses(calls).length === 4)
 
-      expect(typingStatuses(calls)).toEqual([1, 1, 2, 1, 2])
+      // The second task ends before its queued typing request runs, so only its cancel is sent.
+      const outbound = calls.filter(call => call.endpoint === 'sendtyping' || call.endpoint === 'sendmessage')
+        .map(call => call.endpoint === 'sendmessage' ? 'reply' : call.body.status)
+      expect(outbound).toEqual([1, 1, 'reply', 2, 'reply', 2])
       const typing = calls.filter(call => call.endpoint === 'sendtyping')
       expect(typing.every(call => call.body.typing_ticket === 'ticket-1' && call.body.ilink_user_id === 'user-1')).toBe(true)
       expect(calls.filter(call => call.endpoint === 'getconfig')).toHaveLength(1)
       vi.advanceTimersByTime(20_000)
       await new Promise(resolve => setTimeout(resolve, 20))
-      expect(typingStatuses(calls)).toHaveLength(5)
+      expect(typingStatuses(calls)).toHaveLength(4)
     } finally {
       vi.useRealTimers()
     }
@@ -411,17 +432,19 @@ describe('WeChat Assistant typing indicator', () => {
       },
     })
     const { calls, warnings } = harness
-    await waitFor(() => calls.filter(call => call.endpoint === 'sendmessage').length === 3)
-    await waitFor(() => warnings.length === 4)
+    await waitFor(() => calls.filter(call => call.endpoint === 'sendmessage').length === 4)
+    await waitFor(() => warnings.length === 3)
     expect(typingStatuses(calls)).toEqual([])
     expect([...warnings].sort()).toEqual([
       '微信输入状态不可用：getconfig ret=-1 denied',
       '微信输入状态不可用：getconfig ret=0 ',
       '微信输入状态不可用：offline',
-      '微信回复失败：send down',
     ].sort())
-    const lastReply = calls.filter(call => call.endpoint === 'sendmessage').at(-1)!.body.msg as { item_list: Array<{ text_item: { text: string } }> }
-    expect(lastReply.item_list[0]!.text_item.text).toBe('执行失败：disk full')
+    const clientIds = calls.filter(call => call.endpoint === 'sendmessage')
+      .map(call => (call.body.msg as { client_id: string }).client_id)
+    expect(clientIds[1]).toBe(clientIds[0])
+    expect(new Set(clientIds).size).toBe(3)
+    expect(replyTexts(calls)).toEqual(['已完成', '已完成', '已完成', '执行失败：disk full'])
   })
 
   it('evicts a rejected ticket and keeps replying when typing or reply sends fail', async () => {
@@ -434,8 +457,8 @@ describe('WeChat Assistant typing indicator', () => {
           if (body.status === 2) throw 'socket closed'
           return {}
         }
-        if (endpoint === 'sendmessage' && harness.calls.filter(call => call.endpoint === 'sendmessage').length === 2) {
-          throw 'send down'
+        if (endpoint === 'sendmessage' && harness.calls.filter(call => call.endpoint === 'sendmessage').length >= 2) {
+          return { ret: -2, errmsg: 'busy' }
         }
         return { ret: 0 }
       },
@@ -447,8 +470,8 @@ describe('WeChat Assistant typing indicator', () => {
       },
     })
     const { calls, warnings } = harness
-    await waitFor(() => calls.filter(call => call.endpoint === 'sendmessage').length === 2)
-    await waitFor(() => warnings.some(message => message.startsWith('微信回复失败')))
+    await waitFor(() => warnings.includes('微信回复失败：sendmessage ret=-2 busy'), 2_000)
+    expect(calls.filter(call => call.endpoint === 'sendmessage')).toHaveLength(4)
     await waitFor(() => warnings.includes('微信输入状态发送失败：socket closed'))
     expect(calls.filter(call => call.endpoint === 'getconfig')).toHaveLength(2)
     expect(warnings).toContain('微信输入状态发送失败：sendtyping ret=-14 expired')
@@ -456,6 +479,26 @@ describe('WeChat Assistant typing indicator', () => {
     const replies = calls.filter(call => call.endpoint === 'sendmessage')
       .map(call => ((call.body.msg as { item_list: Array<{ text_item: { text: string } }> }).item_list[0]!.text_item.text))
     expect(replies[0]).toBe('执行失败：model busy')
+  })
+
+  it('replies when its own turn ends while later work keeps the agent busy', async () => {
+    const { calls } = bridgeHarness({
+      inbound: ['打开百度'],
+      ilink: async () => ({ ret: 0 }),
+      whenIdle: () => new Promise<void>(() => {}),
+    })
+    await waitFor(() => calls.some(call => call.endpoint === 'sendmessage'))
+    expect(replyTexts(calls)).toEqual(['已完成'])
+  })
+
+  it('reports a prompt the agent dropped before any turn ran it', async () => {
+    const { calls } = bridgeHarness({
+      inbound: ['打开百度'],
+      ilink: async () => ({ ret: 0 }),
+      turn: async () => 'dropped',
+    })
+    await waitFor(() => calls.some(call => call.endpoint === 'sendmessage'))
+    expect(replyTexts(calls)).toEqual(['执行失败：任务未执行：消息在开始前已被取消'])
   })
 
   it('replies without waiting on a hung typing ticket and cancels once it arrives', async () => {
@@ -491,7 +534,7 @@ describe('WeChat Assistant typing indicator', () => {
         ilink: async endpoint => endpoint === 'getconfig'
           ? { ret: 0, typing_ticket: 'stale' }
           : endpoint === 'sendtyping' ? { ret: -14, errmsg: 'expired' } : { ret: 0 },
-        whenIdle: () => taskHold,
+        turn: () => taskHold.then(() => 'ran' as const),
       })
       await waitFor(() => warnings.length === 1)
       vi.advanceTimersByTime(15_000)

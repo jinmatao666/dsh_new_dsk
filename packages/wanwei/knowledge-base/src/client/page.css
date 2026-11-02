@@ -60,7 +60,9 @@
   overflow: hidden;
 }
 .dsh-knowledge-plaza:has(.dsh-knowledge-plaza-detail) { gap: 14px; padding-bottom: 18px; }
-.dsh-knowledge-plaza:not(:has(.dsh-knowledge-plaza-detail)) { overflow: auto; }
+.dsh-knowledge-plaza:not(:has(.dsh-knowledge-plaza-detail)) {
+  display: flex; flex-direction: column; overflow: hidden;
+}
 .dsh-knowledge-plaza-head { display: flex; flex: none; align-items: center; gap: 14px; min-height: 72px; }
 .dsh-knowledge-plaza-heading { display: flex; flex: 1; gap: 13px; align-items: center; min-width: 0; }
 .dsh-knowledge-plaza-heading-icon {
@@ -76,11 +78,19 @@
   text-overflow: ellipsis; white-space: nowrap;
 }
 .dsh-knowledge-plaza-heading p { margin: 3px 0 0; color: #71829b; font-size: 12px; line-height: 18px; }
-.dsh-knowledge-plaza-catalog { display: grid; gap: 14px; }
-.dsh-knowledge-plaza-catalog-head { display: flex; align-items: center; justify-content: space-between; }
+.dsh-knowledge-plaza-catalog {
+  display: flex; flex: 1 1 auto; flex-direction: column; gap: 14px; min-height: 0;
+}
+.dsh-knowledge-plaza-catalog-head { display: flex; flex: none; align-items: center; justify-content: space-between; }
 .dsh-knowledge-plaza-catalog-head > div { display: flex; gap: 9px; align-items: baseline; }
 .dsh-knowledge-plaza-catalog-head strong { color: #253858; font-size: 15px; font-weight: 700; }
 .dsh-knowledge-plaza-catalog-head span { color: #8291a8; font-size: 12px; }
+.dsh-knowledge-plaza-list {
+  display: flex; flex: 1 1 0%; flex-direction: column; min-height: 0; overflow: auto; overscroll-behavior: contain;
+}
+/* Pager is a plaza flex sibling (not inside the shrinking catalog) so short hosts keep it visible. */
+.dsh-knowledge-plaza-pager { flex: none; margin-top: 0; }
+.dsh-knowledge-plaza > .dsh-knowledge-hint { flex: none; }
 .dsh-knowledge-plaza-search {
   display: flex; flex: 0 1 310px; align-items: center; gap: 8px; width: min(310px, 100%); height: 40px; padding: 0 14px;
   border: 1px solid #dbe4f0; border-radius: 11px; background: rgb(255 255 255 / 88%); color: #8696ad;
