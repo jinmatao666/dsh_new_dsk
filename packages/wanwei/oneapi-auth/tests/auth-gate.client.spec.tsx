@@ -6,7 +6,7 @@ import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts
 import type { AuthView } from '../src/client/controller.ts'
 import { AuthGate, type AuthGateProps } from '../src/client/AuthGate.tsx'
 import { zh } from '../src/client/locales.ts'
-import { resolveDeploymentFeatures } from '../src/deployment.ts'
+import { resolveDeploymentFeaturePages, resolveDeploymentFeatures } from '../src/deployment.ts'
 
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
@@ -27,7 +27,9 @@ const noAttention: AttentionSnapshot = new Map()
 const useSessionPendingInteraction: AuthGateProps['useSessionPendingInteraction'] = selector => selector(noAttention)
 const kit = {
   getSupportContact: vi.fn(async () => ({ network: 'internet' as const, operator: '张运维', phone: '0571-12345678',
-    features: resolveDeploymentFeatures(undefined), plugins: { browserAssistant: true } })),
+    features: resolveDeploymentFeatures(undefined),
+    featurePages: resolveDeploymentFeaturePages(undefined),
+    plugins: { browserAssistant: true } })),
   useSessions: unusedHook,
   useSessionPendingInteraction,
   useWorkspaces: unusedHook,
