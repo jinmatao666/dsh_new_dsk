@@ -210,6 +210,8 @@ export interface ResolvedPiAiProviderProfile
    * own, so a catalog capability must not appear here.
    */
   configuredMaxTokens: ReadonlyMap<string, number>
+  /** Presentation-only multipliers, independent of provider token prices. */
+  displayMultipliers: ReadonlyMap<string, number>
 }
 
 /** Plugin configuration: the provider routes this instance owns. */
@@ -289,6 +291,7 @@ const reasoningEfforts = z.dict(
 
 /** The fields a `models` entry and a `modelOverrides` value share; only the id's home differs. */
 const modelFields = {
+  displayMultiplier: z.number().min(0).max(1000000),
   name: z.string(),
   contextWindow: z.number().step(1).min(1),
   maxTokens: z.number().step(1).min(1),
@@ -445,6 +448,17 @@ export function resolveProfiles(
       defaultMaxTokens: source.defaultMaxTokens ?? DEFAULT_MAX_TOKENS,
     })
     const { apiKeyEnv, retryPolicy, models: _models, displayName: _displayName, ...rest } = source
+    const displayMultipliers = new Map<string, number>()
+    const displayEntries = source.models?.length ? source.models
+      : Object.entries(source.modelOverrides ?? {}).map(([id, value]) => ({ id, ...value }))
+    for (const entry of displayEntries) {
+      const value = entry.displayMultiplier
+      if (value === undefined) continue
+      if (!Number.isFinite(value) || value < 0 || value > 1000000) {
+        throw new Error(`llm-pi-ai: model "${entry.id}" displayMultiplier must be between 0 and 1000000`)
+      }
+      displayMultipliers.set(entry.id, value)
+    }
     resolved.set(provider, {
       ...rest,
       provider,
@@ -458,6 +472,7 @@ export function resolveProfiles(
       ...rest.headers === undefined ? {} : { headers: { ...rest.headers } },
       ...rest.thinkingBudgets === undefined ? {} : { thinkingBudgets: { ...rest.thinkingBudgets } },
       configuredMaxTokens: catalog.configuredMaxTokens,
+      displayMultipliers,
       piProvider: buildProvider({
         provider,
         displayName,

@@ -38,6 +38,7 @@ export async function buildModelCatalog(
         return {
           id: model.id,
           name: model.name,
+          ...(model.displayMultiplier === undefined ? {} : { displayMultiplier: model.displayMultiplier }),
           ...(model.description === undefined ? {} : { description: model.description }),
           ...(reasoning === undefined ? {} : { reasoning }),
         }

@@ -27,6 +27,8 @@ export const zh = {
   'warning.groupLoad': '{name} 加载失败：{message}',
   'empty.models': '没有可用的模型。',
   'configure.models': '配置自定义模型',
+  'cost.reference': '参考倍率 {value} 倍',
+  'cost.referenceHint': '参考倍率；实际按输入、输出和缓存用量分别计费。',
   'blocked.composer': '当前模型不可用，请先选择模型',
   'empty.efforts': '当前模型未提供推理等级。',
 } satisfies Record<string, string>
@@ -53,6 +55,8 @@ export const en = {
   'warning.groupLoad': '{name} failed to load: {message}',
   'empty.models': 'No models available.',
   'configure.models': 'Configure custom models',
+  'cost.reference': 'Reference multiplier {value}x',
+  'cost.referenceHint': 'Reference multiplier; actual billing uses input, output, and cache usage separately.',
   'blocked.composer': 'This model is unavailable — select one to continue',
   'empty.efforts': 'This model provides no reasoning effort levels.',
 } satisfies Record<ModelKey, string>

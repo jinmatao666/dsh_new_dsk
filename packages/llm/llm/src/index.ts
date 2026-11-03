@@ -683,6 +683,7 @@ export class LlmRuntime extends TypertRemoteService {
         || typeof model.name !== 'string'
         || model.name.length === 0
         || (model.description !== undefined && typeof model.description !== 'string')
+        || (model.displayMultiplier !== undefined && (!Number.isFinite(model.displayMultiplier) || model.displayMultiplier < 0))
         || seen.has(model.id)
       ) {
         throw new LlmError(`adapter returned invalid or duplicate model metadata for provider "${provider}"`, 'INVALID_CATALOG')
@@ -693,6 +694,7 @@ export class LlmRuntime extends TypertRemoteService {
         provider: model.provider,
         id: model.id,
         name: model.name,
+        ...model.displayMultiplier === undefined ? {} : { displayMultiplier: model.displayMultiplier },
         ...model.description === undefined ? {} : { description: model.description },
         ...inputModalities === undefined ? {} : { inputModalities },
       }

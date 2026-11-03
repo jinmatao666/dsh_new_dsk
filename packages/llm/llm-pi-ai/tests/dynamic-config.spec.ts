@@ -75,6 +75,21 @@ describe('login flows in a real composition', () => {
 })
 
 describe('request-level dynamic profiles', () => {
+  it('preserves reference multipliers through model discovery and updates', async () => {
+    const ctx = await boot(await home(), { providers: { 'managed-models': {
+      api: 'openai-completions', baseURL: 'https://example.test/v1',
+      models: [{ id: 'managed', displayMultiplier: 0.375 }, { id: 'custom' }],
+    } } })
+    expect(await ctx.llm.listModels('managed-models')).toEqual([
+      expect.objectContaining({ id: 'managed', displayMultiplier: 0.375 }),
+      expect.not.objectContaining({ displayMultiplier: expect.anything() }),
+    ])
+    await ctx.settings.update(NS, { providers: { 'managed-models': {
+      api: 'openai-completions', baseURL: 'https://example.test/v1',
+      models: [{ id: 'managed', displayMultiplier: 0 }],
+    } } })
+    expect(await ctx.llm.listModels('managed-models')).toEqual([expect.objectContaining({ id: 'managed', displayMultiplier: 0 })])
+  })
   it('mounts bare and dormant, then registers routes the moment settings supply providers', async () => {
     vi.stubEnv('PI_DYNAMIC_KEY', '')
     const dir = await home()

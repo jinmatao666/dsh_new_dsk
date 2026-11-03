@@ -53,6 +53,19 @@ function state(overrides: Partial<ModelDirectoryState> = {}): ModelDirectoryStat
 afterEach(cleanup)
 
 describe('ModelSelect reasoning effort', () => {
+  it('shows the supplied reference multiplier, including zero, without inventing one for custom models', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({ groups: [{ id: 'server', name: 'Model Server', models: [
+      { id: 'a', name: 'Model A', displayMultiplier: 0.375 },
+      { id: 'b', name: 'Model B', displayMultiplier: 0 },
+      { id: 'custom', name: 'Custom model' },
+    ] }] }))
+    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={vi.fn()} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    expect(screen.getByLabelText('参考倍率 0.375 倍').textContent).toBe('0.375×')
+    expect(screen.getByLabelText('参考倍率 0 倍').textContent).toBe('0×')
+    expect(screen.getByRole('menuitemradio', { name: 'Custom model' }).textContent).toBe('Custom model')
+  })
   it('opens model settings from the custom-model entry in the picker', () => {
     const openSettings = vi.fn()
     window.addEventListener('dsh:open-model-settings', openSettings, { once: true })

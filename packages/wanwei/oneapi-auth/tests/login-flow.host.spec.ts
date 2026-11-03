@@ -113,7 +113,7 @@ describe('OneAPI login flow', () => {
         return Promise.resolve(Response.json({
           success: true,
           data: [
-            { id: 'model-text', name: '文本模型', modalities: { input: ['text'] } },
+            { id: 'model-text', name: '文本模型', display_multiplier: 0.375, modalities: { input: ['text'] } },
             { id: 'model-vision', name: '视觉模型', modalities: { input: ['text', 'image'] } },
           ],
         }))
@@ -164,7 +164,7 @@ describe('OneAPI login flow', () => {
         apiKeyEnv: 'DSH_ONEAPI_TOKEN',
         baseURL: `${expected}/v1`,
         models: [
-          { id: 'model-text', name: '文本模型', input: ['text'] },
+          { id: 'model-text', name: '文本模型', displayMultiplier: 0.375, input: ['text'] },
           { id: 'model-vision', name: '视觉模型', input: ['text', 'image'] },
         ],
       }) as unknown },

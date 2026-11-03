@@ -115,6 +115,8 @@ export interface ModelReasoning {
 
 /** One model displayed inside its provider group. */
 export interface ModelCatalogModel {
+  /** Presentation-only reference multiplier supplied by the model provider. */
+  readonly displayMultiplier?: number
   readonly id: string
   readonly name: string
   readonly description?: string

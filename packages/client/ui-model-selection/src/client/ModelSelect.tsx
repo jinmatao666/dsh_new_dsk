@@ -303,6 +303,10 @@ export function ModelSelect(
                             <span className={css.optionCopy}>
                               <span className={css.modelName}>{model.name}</span>
                             </span>
+                            {model.displayMultiplier !== undefined && <span className={css.multiplier}
+                              title={t('cost.referenceHint')} aria-label={t('cost.reference', { value: model.displayMultiplier })}>
+                              {model.displayMultiplier.toLocaleString(undefined, { maximumFractionDigits: 12 })}×
+                            </span>}
                             <span className={css.check}>
                               {selected ? <IconCheckOutline16 /> : null}
                             </span>

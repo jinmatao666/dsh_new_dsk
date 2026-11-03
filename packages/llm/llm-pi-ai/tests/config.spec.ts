@@ -19,6 +19,11 @@ const configWith = (model: Record<string, unknown>): (() => unknown) =>
   routeWith({ models: [{ id: 'm', ...model }] })
 
 describe('reasoning schema boundary', () => {
+  it('accepts zero reference multiplier and rejects invalid presentation metadata', () => {
+    expect(configWith({ displayMultiplier: 0 })).not.toThrow()
+    expect(configWith({ displayMultiplier: -1 })).toThrow()
+    expect(configWith({ displayMultiplier: Infinity })).toThrow()
+  })
   it('rejects a level pi-ai does not know at the write that produced it', () => {
     expect(configWith({ reasoningEfforts: { ultra: 'x' } })).toThrow(/"off"/)
     expect(configWith({ reasoningEfforts: { high: 42 } })).toThrow()

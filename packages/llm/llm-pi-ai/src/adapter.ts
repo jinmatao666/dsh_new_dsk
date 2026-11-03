@@ -276,13 +276,17 @@ export class PiAiAdapter extends LlmAdapter {
   override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     return Promise.resolve().then(() => {
       const snapshot = this.current()
-      this.profileOf(snapshot, provider)
-      return snapshot.models.getModels(provider).map(model => ({
-        provider,
-        id: model.id,
-        name: model.name,
-        inputModalities: [...model.input],
-      }))
+      const profile = this.profileOf(snapshot, provider)
+      return snapshot.models.getModels(provider).map((model) => {
+        const displayMultiplier = profile.displayMultipliers.get(model.id)
+        return {
+          provider,
+          id: model.id,
+          name: model.name,
+          ...(displayMultiplier === undefined ? {} : { displayMultiplier }),
+          inputModalities: [...model.input],
+        }
+      })
     })
   }
 

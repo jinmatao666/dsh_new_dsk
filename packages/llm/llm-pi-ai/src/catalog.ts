@@ -547,6 +547,8 @@ function assertOfferedCompatFields(
 
 /** One configured model entry: an id plus the catalog fields it overrides. */
 export interface PiAiModelProfile {
+  /** Optional reference multiplier for selectors; never a token price. */
+  displayMultiplier?: number
   /** Model id sent to the provider and accepted by {@link GenerateOptions.model}. */
   id: string
   /** Display name for selectors; defaults to the catalog name, then the id. */

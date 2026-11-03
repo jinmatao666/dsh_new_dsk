@@ -162,6 +162,17 @@ function currentSelection(ctx: Context, sessionId: SessionId) {
 }
 
 describe('Web session model selection', () => {
+  it('forwards the reference multiplier without changing model identity', async () => {
+    const { ctx } = await harness()
+    ctx.llm.registerAdapter(['priced'], new CatalogAdapter('Priced models', [
+      { provider: 'priced', id: 'm', name: 'Model M', displayMultiplier: 0.375 },
+    ]))
+    const catalog = await buildModelCatalog(ctx, { provider: 'priced', model: 'm' })
+    expect(catalog.groups.find(group => group.id === 'priced')?.models).toEqual([
+      { id: 'm', name: 'Model M', displayMultiplier: 0.375 },
+    ])
+    await ctx.fiber.dispose()
+  })
   it('supports a Session-local model choice without saving a new user default', async () => {
     const { ctx, sessionId } = await harness()
     const saveDefaultModelSelection = vi.fn()

@@ -111,11 +111,13 @@ interface ModelEntry { id?: string }
 interface ModelsBody { data?: ModelEntry[] }
 interface StatusBody { data?: { default_model?: unknown } }
 interface ClientModelDetail {
+  display_multiplier?: unknown
   id?: unknown
   name?: unknown
   modalities?: { input?: unknown }
 }
 interface ManagedModel {
+  displayMultiplier?: number
   id: string
   name?: string
   input?: Array<'text' | 'image'>
@@ -286,6 +288,8 @@ async function fetchManagedModels(baseURL: string, token: string, fallbackInput:
         : []
       return [{
         id,
+        ...(typeof entry.display_multiplier === 'number' && Number.isFinite(entry.display_multiplier) && entry.display_multiplier >= 0
+          ? { displayMultiplier: entry.display_multiplier } : {}),
         ...(typeof entry.name === 'string' && entry.name.trim() !== '' ? { name: entry.name.trim() } : {}),
         // A registered server model should always declare text.  Keep the
         // build fallback only for an old/malformed server response.
