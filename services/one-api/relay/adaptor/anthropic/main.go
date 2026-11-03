@@ -265,6 +265,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	common.SetEventStreamHeaders(c)
 
 	var usage model.Usage
+	var ordinaryInputTokens int
 	var modelName string
 	var id string
 	var lastToolCallChoice openai.ChatCompletionsStreamResponseChoice
@@ -286,13 +287,23 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 		response, meta := StreamResponseClaude2OpenAI(&claudeResponse)
 		if meta != nil {
-			usage.PromptTokens += meta.Usage.InputTokens
-			usage.CompletionTokens += meta.Usage.OutputTokens
+			// message_delta usage is cumulative, not an increment:
+			// https://platform.claude.com/docs/en/build-with-claude/streaming
+			ordinaryInputTokens = max(ordinaryInputTokens, meta.Usage.InputTokens)
+			if usage.PromptTokensDetails == nil {
+				usage.PromptTokensDetails = &model.PromptTokensDetails{}
+			}
+			usage.PromptTokensDetails.CachedTokens = max(usage.PromptTokensDetails.CachedTokens, meta.Usage.CacheReadInputTokens)
+			usage.PromptTokensDetails.CacheCreationInputTokens = max(usage.PromptTokensDetails.CacheCreationInputTokens, meta.Usage.CacheCreationInputTokens)
+			usage.PromptTokens = ordinaryInputTokens + usage.PromptTokensDetails.CachedTokens + usage.PromptTokensDetails.CacheCreationInputTokens
+			usage.CompletionTokens = max(usage.CompletionTokens, meta.Usage.OutputTokens)
+			usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 			if len(meta.Id) > 0 { // only message_start has an id, otherwise it's a finish_reason event.
 				modelName = meta.Model
 				id = fmt.Sprintf("chatcmpl-%s", meta.Id)
 				continue
 			} else { // finish_reason case
+				response.Usage = &usage
 				if len(lastToolCallChoice.Delta.ToolCalls) > 0 {
 					lastArgs := &lastToolCallChoice.Delta.ToolCalls[len(lastToolCallChoice.Delta.ToolCalls)-1].Function
 					if len(lastArgs.Arguments.(string)) == 0 { // compatible with OpenAI sending an empty object `{}` when no arguments.
@@ -363,10 +374,12 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	fullTextResponse := ResponseClaude2OpenAI(&claudeResponse)
 	fullTextResponse.Model = modelName
 	usage := model.Usage{
-		PromptTokens:     claudeResponse.Usage.InputTokens,
-		CompletionTokens: claudeResponse.Usage.OutputTokens,
-		TotalTokens:      claudeResponse.Usage.InputTokens + claudeResponse.Usage.OutputTokens,
+		PromptTokens:        claudeResponse.Usage.InputTokens + claudeResponse.Usage.CacheReadInputTokens + claudeResponse.Usage.CacheCreationInputTokens,
+		CompletionTokens:    claudeResponse.Usage.OutputTokens,
+		TotalTokens:         claudeResponse.Usage.InputTokens + claudeResponse.Usage.OutputTokens,
+		PromptTokensDetails: &model.PromptTokensDetails{CachedTokens: claudeResponse.Usage.CacheReadInputTokens, CacheCreationInputTokens: claudeResponse.Usage.CacheCreationInputTokens},
 	}
+	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	fullTextResponse.Usage = usage
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {

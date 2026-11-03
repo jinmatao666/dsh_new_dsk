@@ -6,6 +6,8 @@ import RolePermissions from '../../components/RolePermissions';
 import GovernmentOrganization from '../../components/GovernmentOrganization';
 import UserOrganizationAssignments from '../../components/UserOrganizationAssignments';
 import SystemSettings from './SystemSettings';
+import CreditLogs from './CreditLogs';
+import { CREDIT_PRICING_OPTION, readCreditPricing, validCreditNumber, creditPrice, formatCreditPrice, formatModelCreditRatios, averageCreditRatio } from './creditPricing';
 import UserProfile from './UserProfile';
 import { ChannelModelBatch, ChannelModelPicker, channelModelNames, filterChannelModels, filterModelSources } from './ChannelModelTools';
 
@@ -261,6 +263,12 @@ export function ModelConfigPage() {
   const [fetchedModels, setFetchedModels] = useState([]);
   const [definitions, setDefinitions] = useState([]);
   const [modelEdit, setModelEdit] = useState(null);
+  const [modelCreditPreviews, setModelCreditPreviews] = useState({});
+  const modelCacheAllowed = (ids) => ids?.length > 0 && ids.every(id => modelChannelList.rows.some(channel => Number(channel.id) === Number(id) && channel.explicit_cache_allowed === true));
+  const changeModelSource = (value) => {
+    const ids = value ? [Number(value)] : [];
+    setModelEdit(current => ({ ...current, sourceChannelIds: ids, support_explicit_cache: modelCacheAllowed(ids) }));
+  };
   const [modelChannelFilter, setModelChannelFilter] = useState('all');
   const [batchModelsOpen, setBatchModelsOpen] = useState(false);
   const [options, setOptions] = useState({
@@ -472,6 +480,7 @@ export function ModelConfigPage() {
             next[x.key] = x.value;
         });
         setOptions(next);
+        setModelCreditPreviews(readCreditPricing(Object.fromEntries((res.data.data || []).map(item => [item.key, item.value]))).models);
       }
     } catch {}
   };
@@ -483,7 +492,14 @@ export function ModelConfigPage() {
     if (tab === 'basic' || tab === 'models') loadOptions();
     if (tab === 'models') modelChannelList.refresh();
   }, [tab]);
-  const openModel = (row) =>
+  const openModel = async (row) => {
+    let pricing;
+    try {
+      const response = await API.get('/api/option/');
+      if (!response.data?.success) throw new Error(response.data?.message || '读取积分配置失败');
+      pricing = readCreditPricing(Object.fromEntries(response.data.data.map(item => [item.key, item.value])));
+    } catch (error) { dialog.notice(error.message || '读取积分配置失败，请重试'); return; }
+    const credit = pricing.models[row?.name];
     setModelEdit(
       row
         ? {
@@ -491,6 +507,14 @@ export function ModelConfigPage() {
             sourceChannelIds: (row.sources || []).map((x) => x.channel_id),
             model_ratio: row.model_ratio ?? 0,
             completion_ratio: row.completion_ratio ?? 0,
+            credit_base: pricing.base,
+            display_credit_ratio: credit?.display ?? null,
+            // 旧补全倍率是相对输入的倍数；独立输出倍率以乘积呈现。
+            input_credit_ratio: credit?.input ?? row.model_ratio ?? 0,
+            output_credit_ratio: credit?.output ?? (row.model_ratio ?? 0) * (row.completion_ratio ?? 0),
+            cache_read_credit_ratio: credit?.cache_read ?? credit?.input ?? row.model_ratio ?? 0,
+            cache_write_credit_ratio: credit?.cache_write ?? credit?.input ?? row.model_ratio ?? 0,
+            support_explicit_cache: modelCacheAllowed((row.sources || []).map(source => source.channel_id)) && !!row.support_explicit_cache,
           }
         : {
             name: '',
@@ -505,11 +529,24 @@ export function ModelConfigPage() {
             sourceChannelIds: [],
             model_ratio: 0,
             completion_ratio: 0,
+            credit_base: pricing.base,
+            display_credit_ratio: null,
+            input_credit_ratio: 0,
+            output_credit_ratio: 0,
+            cache_read_credit_ratio: 0,
+            cache_write_credit_ratio: 0,
           }
     );
+  };
   const saveModel = async (e) => {
     e.preventDefault();
     const m = { ...modelEdit, name: String(modelEdit.name || '').trim() };
+    if (m.display_credit_ratio !== null && !validCreditNumber(m.display_credit_ratio, true)) {
+      return dialog.notice('桌面端显示倍率必须为 0 至 1,000,000 之间的数值');
+    }
+    if (![m.input_credit_ratio,m.output_credit_ratio,m.cache_read_credit_ratio,m.cache_write_credit_ratio].every(value => validCreditNumber(value,true))) {
+      return dialog.notice('输入、输出倍率必须为 0 至 1,000,000 之间的数值');
+    }
     if (!m.id && !selectedModelChannel) {
       return dialog.notice('请先选择来源渠道');
     }
@@ -521,7 +558,7 @@ export function ModelConfigPage() {
       enabled: !!m.enabled,
       model_type: m.model_type || 'chat',
       context_limit: Number(m.context_limit) || 0,
-      support_explicit_cache: !!m.support_explicit_cache,
+      support_explicit_cache: modelCacheAllowed(m.sourceChannelIds) && !!m.support_explicit_cache,
       // These values are server-owned and are updated only by visual probing.
       modalities: m.modalities || '',
       attachment: !!m.attachment,
@@ -557,25 +594,21 @@ export function ModelConfigPage() {
       }
     }
     const optRes = await API.get('/api/option/');
-    if (optRes.data?.success) {
+    if (!optRes.data?.success) return dialog.notice('模型已保存，积分预览配置读取失败，请重新保存');
+    {
       const map = {};
       optRes.data.data.forEach((x) => {
         map[x.key] = x.value;
       });
-      for (const [key, value] of [
-        ['ModelRatio', m.model_ratio],
-        ['CompletionRatio', m.completion_ratio],
-      ]) {
-        let valueMap = {};
-        try {
-          valueMap = map[key] ? JSON.parse(map[key]) : {};
-        } catch {}
-        valueMap[m.name] = Number(value) || 0;
-        await API.put('/api/option/', { key, value: JSON.stringify(valueMap) });
-      }
+      const preview = readCreditPricing(map);
+      preview.models[m.name] = { input: Number(m.input_credit_ratio), output: Number(m.output_credit_ratio), cache_read: Number(m.cache_read_credit_ratio), cache_write: Number(m.cache_write_credit_ratio) };
+      if (m.display_credit_ratio !== null) preview.models[m.name].display = Number(m.display_credit_ratio);
+      const pricingSave = await API.put('/api/option/', { key: CREDIT_PRICING_OPTION, value: JSON.stringify(preview.models) });
+      if (!pricingSave.data?.success) return dialog.notice(pricingSave.data?.message || '积分预览配置保存失败，请重试');
     }
     setModelEdit(null);
     loadDefinitions();
+    loadOptions();
     if (visionDetectionError) dialog.notice(visionDetectionError);
   };
   const removeModel = async (m) => {
@@ -938,7 +971,7 @@ export function ModelConfigPage() {
               </div>
             </div>
             <div className='form-inline-actions'>
-              <button className='preview-button' onClick={loadDefinitions}>
+              <button className='preview-button' onClick={() => { loadDefinitions(); loadOptions(); }}>
                 ↻ 刷新
               </button>
               <button
@@ -971,11 +1004,13 @@ export function ModelConfigPage() {
           </div>
           {modelChannelList.error && <div className='channel-model-filter-error' role='alert'>渠道清单读取失败 <button className='link-button' onClick={modelChannelList.refresh}>重试</button></div>}
           <div className='preview-table-wrap'>
-            <table className='preview-table'>
+            <table className='preview-table model-definition-table'>
+              <colgroup>{[14, 15, 11, 8, 9, 8, 6, 9, 20].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}</colgroup>
               <thead>
                 <tr>
                   <th>模型</th>
                   <th>显示名称</th>
+                  <th>输入 / 输出倍率</th>
                   <th>模型类型</th>
                   <th>来源渠道</th>
                   <th>上下文</th>
@@ -987,11 +1022,12 @@ export function ModelConfigPage() {
               <tbody>
                 {visibleDefinitions.map((m) => (
                   <tr key={m.name}>
-                    <td>
-                      <strong>{m.name}</strong>
-                      {m.remark ? <small>{m.remark}</small> : null}
+                    <td className='model-definition-name'>
+                      <strong title={m.name}>{m.name}</strong>
+                      {m.remark ? <small title={m.remark}>{m.remark}</small> : null}
                     </td>
-                    <td>{m.display_name || m.name || ''}</td>
+                    <td className='model-definition-name'><span title={m.display_name || m.name || ''}>{m.display_name || m.name || ''}</span></td>
+                    <td className='model-definition-ratios' title='输入倍率 / 独立输出倍率'>{formatModelCreditRatios(m, modelCreditPreviews)}</td>
                     <td>{modelCapabilityLabel(m)}</td>
                     <td>
                       {filterModelSources(m, modelChannelFilter)
@@ -1539,7 +1575,10 @@ export function ModelConfigPage() {
         >
           <form className='zjugis-form' onSubmit={saveModel}>
             {!modelEdit.id && <div className='zjugis-field full'><span>来源渠道</span>
-              <CustomSelect value={String(modelEdit.sourceChannelIds?.[0] || '')} onChange={e => setModelEdit(current => ({ ...current, sourceChannelIds: e.target.value ? [Number(e.target.value)] : [], name: '', display_name: '' }))}>
+              <CustomSelect value={String(modelEdit.sourceChannelIds?.[0] || '')} onChange={e => {
+                const ids = e.target.value ? [Number(e.target.value)] : [];
+                setModelEdit(current => ({ ...current, sourceChannelIds: ids, name: '', display_name: '', support_explicit_cache: modelCacheAllowed(ids) }));
+              }}>
                 <option value=''>请选择来源渠道</option>{modelChannels.map(row => <option key={row.id} value={row.id}>{row.name}（{row.id}）</option>)}
               </CustomSelect><small className='preview-muted'>先选择渠道，再选择已有模型或手动填写模型 ID；无需先获取模型列表。</small>
             </div>}
@@ -1588,29 +1627,34 @@ export function ModelConfigPage() {
                   })
                 }
               />
-              <Field
-                label='输入倍率'
-                type='number'
-                value={modelEdit.model_ratio || 0}
-                onChange={(e) =>
-                  setModelEdit({
-                    ...modelEdit,
-                    model_ratio: Number(e.target.value),
-                  })
-                }
-              />
-              <Field
-                label='补全倍率'
-                type='number'
-                value={modelEdit.completion_ratio || 0}
-                onChange={(e) =>
-                  setModelEdit({
-                    ...modelEdit,
-                    completion_ratio: Number(e.target.value),
-                  })
-                }
-              />
             </div>
+            <section className='model-credit-pricing' aria-label='模型积分价格'>
+              <div className='credit-pricing-heading'><h3>积分计费</h3><span className='credit-preview-tag'>按实际用量结算</span></div>
+              <p className='credit-pricing-note'>统一基准：1× = {formatCreditPrice(modelEdit.credit_base)} 积分／千 Token。输入、输出倍率独立计算。</p>
+              <div className='form-grid'>
+                <Field label='输入倍率' type='number' min='0' max='1000000' step='any' required value={modelEdit.input_credit_ratio}
+                  onChange={event => setModelEdit({ ...modelEdit, input_credit_ratio: event.target.value })} />
+                <Field label='输入积分价格（积分／千 Token）' readOnly value={formatCreditPrice(creditPrice(modelEdit.credit_base, modelEdit.input_credit_ratio))} />
+                <Field label='输出倍率' type='number' min='0' max='1000000' step='any' required value={modelEdit.output_credit_ratio}
+                  onChange={event => setModelEdit({ ...modelEdit, output_credit_ratio: event.target.value })} />
+                <Field label='输出积分价格（积分／千 Token）' readOnly value={formatCreditPrice(creditPrice(modelEdit.credit_base, modelEdit.output_credit_ratio))} />
+                <Field label='缓存命中倍率' type='number' min='0' max='1000000' step='any' required value={modelEdit.cache_read_credit_ratio}
+                  onChange={event => setModelEdit({ ...modelEdit, cache_read_credit_ratio: event.target.value })} />
+                <Field label='缓存命中价格（积分／千 Token）' readOnly value={formatCreditPrice(creditPrice(modelEdit.credit_base, modelEdit.cache_read_credit_ratio))} />
+                <Field label='缓存创建倍率' type='number' min='0' max='1000000' step='any' required value={modelEdit.cache_write_credit_ratio}
+                  onChange={event => setModelEdit({ ...modelEdit, cache_write_credit_ratio: event.target.value })} />
+                <Field label='缓存创建价格（积分／千 Token）' readOnly value={formatCreditPrice(creditPrice(modelEdit.credit_base, modelEdit.cache_write_credit_ratio))} />
+              </div>
+              <div className='model-display-multiplier'>
+                <Field label='桌面端显示倍率' type='number' min='0' max='1000000' step='any' required
+                  value={modelEdit.display_credit_ratio ?? averageCreditRatio(modelEdit.input_credit_ratio, modelEdit.output_credit_ratio)}
+                  onChange={event => setModelEdit({ ...modelEdit, display_credit_ratio: event.target.value })} />
+                <button type='button' className='link-button' disabled={modelEdit.display_credit_ratio === null}
+                  onClick={() => setModelEdit({ ...modelEdit, display_credit_ratio: null })}>恢复默认</button>
+              </div>
+              <p className='credit-pricing-note'>默认取（输入倍率 + 输出倍率）÷ 2，可自行修改。仅用于桌面端模型列表展示，实际按各项用量计费。</p>
+              <p className='credit-pricing-note'>保存后用于运营版后续调用。缓存按服务实际返回用量计算；未命中、命中和创建分别计价，不重复扣分。分组倍率另行作用于总费用。</p>
+            </section>
             <label className='zjugis-field full'>
               <span>备注</span>
               <textarea
@@ -1625,14 +1669,7 @@ export function ModelConfigPage() {
               <span>来源渠道</span>
               <CustomSelect
                 value={String((modelEdit.sourceChannelIds || [])[0] || '')}
-                onChange={(e) =>
-                  setModelEdit({
-                    ...modelEdit,
-                    sourceChannelIds: e.target.value
-                      ? [Number(e.target.value)]
-                      : [],
-                  })
-                }
+                onChange={e => changeModelSource(e.target.value)}
               >
                 <option value=''>暂不绑定渠道</option>
                 {rows.map((r) => (
@@ -1645,30 +1682,17 @@ export function ModelConfigPage() {
                 选择该模型实际调用的来源渠道；需要备用渠道时可在后续编辑中调整。
               </small>
             </div>}
-            <div className='form-inline-actions'>
-              <label className='zjugis-check'>
-                <input
-                  type='checkbox'
-                  checked={!!modelEdit.enabled}
-                  onChange={(e) =>
-                    setModelEdit({ ...modelEdit, enabled: e.target.checked })
-                  }
-                />
-                启用模型
-              </label>
-              <label className='zjugis-check'>
-                <input
-                  type='checkbox'
-                  checked={!!modelEdit.support_explicit_cache}
-                  onChange={(e) =>
-                    setModelEdit({
-                      ...modelEdit,
-                      support_explicit_cache: e.target.checked,
-                    })
-                  }
-                />
-                支持显式缓存
-              </label>
+            <div className='form-grid'>
+              <div className='zjugis-field'>
+                <span id='explicit-cache-label'>显式缓存</span>
+                <CustomSelect aria-labelledby='explicit-cache-label' aria-label='显式缓存'
+                  value={modelCacheAllowed(modelEdit.sourceChannelIds) && modelEdit.support_explicit_cache ? 'on' : 'off'}
+                  disabled={!modelCacheAllowed(modelEdit.sourceChannelIds)}
+                  onChange={event => setModelEdit({ ...modelEdit, support_explicit_cache: event.target.value === 'on' })}>
+                  <option value='off'>关闭</option><option value='on'>开启</option>
+                </CustomSelect>
+                {!modelCacheAllowed(modelEdit.sourceChannelIds) && <small className='preview-muted'>自建或尚未适配的渠道不开放显式缓存。</small>}
+              </div>
             </div>
             <div className='zjugis-modal-actions'>
               <button
@@ -2485,6 +2509,7 @@ export function LogsPage() {
   const [detail, setDetail] = useState(null);
   const [promptDetail, setPromptDetail] = useState(null);
   const [logTab, setLogTab] = useState('prompts');
+  const [creditRefresh, setCreditRefresh] = useState(0);
   const rows = list.rows.filter(
     (r) =>
       !keyword ||
@@ -2513,6 +2538,7 @@ export function LogsPage() {
             onClick={() => {
               list.refresh();
               prompts.refresh();
+              setCreditRefresh(value => value + 1);
             }}
           >
             ↻ 刷新
@@ -2538,7 +2564,9 @@ export function LogsPage() {
         >
           调用记录
         </button>
+        <button type='button' role='tab' aria-selected={logTab === 'credits'} className={logTab === 'credits' ? 'active' : ''} onClick={() => setLogTab('credits')}>积分明细</button>
       </div>
+      {logTab === 'credits' && <CreditLogs refreshKey={creditRefresh} />}
       {logTab === 'prompts' && (
         <section className='preview-surface'>
           <div className='preview-section-head'>

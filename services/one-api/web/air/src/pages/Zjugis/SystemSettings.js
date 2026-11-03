@@ -4,11 +4,13 @@ import { API, showSuccess } from '../../helpers';
 import './SystemSettings.css';
 import ResourceSettings, { defaultResources, normalizeResources } from './ResourceSettings';
 import KnowledgeQuotaSettings, { defaultKnowledgeQuota, normalizeKnowledgeQuota } from './KnowledgeQuotaSettings';
+import { DEFAULT_CREDIT_BASE, validCreditNumber, formatCreditPrice } from './creditPricing';
+import CreditRewardSettings, { normalizeCreditRewards } from './CreditRewardSettings';
 
 const defaults = { network: 'internet', internetCatalogPolicy: 'disable', internetSkillPolicy: 'disable', internetExpertPolicy: 'disable', edition: 'operations', operator: '', phone: '', features: {
   internet: { automations: true, connectors: true, knowledgeBases: true },
   intranet: { automations: true, connectors: false, knowledgeBases: true },
-}, plugins: { browserAssistant: true }, knowledgeQuota: defaultKnowledgeQuota };
+}, plugins: { browserAssistant: true }, knowledgeQuota: defaultKnowledgeQuota, creditPricingBase: DEFAULT_CREDIT_BASE };
 const tabs = [['account', '账户设置'], ['security', '安全设置'], ['network', '网络设置'], ['edition', '版本类型'], ['features', '功能设置'], ['knowledge', '知识库设置'], ['operations', '运维设置'], ['plugins', '插件设置']];
 const descriptions = {
   network: '设置桌面端使用的部署网络环境。',
@@ -72,6 +74,8 @@ export default function SystemSettings() {
       const raw = options.find(item => item.key === 'SystemDeploymentSettings')?.value;
       const stored = raw ? JSON.parse(raw) : {};
       const value = { ...defaults, ...stored };
+        value.creditRewards = normalizeCreditRewards(stored.creditRewards);
+      if (!validCreditNumber(value.creditPricingBase)) throw new Error('积分计费基准无效，请联系管理员检查配置');
       for (const key of ['internetSkillPolicy', 'internetExpertPolicy']) {
         value[key] = stored[key] === undefined ? value.internetCatalogPolicy : stored[key];
         if (!['hide', 'disable'].includes(value[key])) throw new Error('技能专家联网处理设置无效');
@@ -110,9 +114,15 @@ export default function SystemSettings() {
   const save = async event => {
     event.preventDefault();
     if (loading || loadError || saving || !user) return;
+    let creditRewards;
+    try { creditRewards = normalizeCreditRewards(settings.creditRewards); }
+    catch (error) { setFeedback(error.message); return; }
+    if (!validCreditNumber(settings.creditPricingBase)) {
+      setFeedback('计费基准必须大于 0，且不能超过 1,000,000 积分／千 Token'); return;
+    }
     setSaving(true); setFeedback('');
-    const value = { ...settings, operator: settings.operator.trim(), phone: settings.phone.trim(),
-      knowledgeQuota: normalizeKnowledgeQuota(settings.knowledgeQuota) };
+    const value = { ...settings, creditRewards, operator: settings.operator.trim(), phone: settings.phone.trim(),
+      knowledgeQuota: normalizeKnowledgeQuota(settings.knowledgeQuota), creditPricingBase: Number(settings.creditPricingBase) };
     if (value.knowledgeQuota.enabled && value.knowledgeQuota.totalBytes <= 0) {
       setSaving(false); setFeedback('请先点击设置，填写个人知识库总量后再保存'); return;
     }
@@ -176,6 +186,19 @@ export default function SystemSettings() {
               <label>运维人员<input value={settings.operator} maxLength={80} placeholder='请输入运维人员姓名' disabled={saving} onChange={event => change('operator', event.target.value)} /></label>
               <label>联系电话<input type='tel' value={settings.phone} maxLength={40} placeholder='请输入手机号或固定电话' disabled={saving} onChange={event => change('phone', event.target.value)} /></label>
             </div>}
+            {active === 'edition' && settings.edition === 'operations' && <section className='settings-credit-pricing' aria-label='积分计费基准'>
+              <div className='credit-pricing-heading'><h3>积分计费基准</h3><span className='credit-preview-tag'>运营版计费</span></div>
+              <p className='settings-description'>统一定义 1× 对应的积分价格，各模型的输入、输出倍率分别在模型配置中设置。</p>
+              <div className='credit-base-equation'><strong>1× =</strong><label htmlFor='credit-pricing-base' className='credit-base-label'>积分基准</label>
+                <input id='credit-pricing-base' type='number' min='0.000001' max='1000000' step='any' required
+                  value={settings.creditPricingBase} disabled={saving} onChange={event => change('creditPricingBase', event.target.value)} />
+                <span>积分／千 Token</span></div>
+              <div className='credit-base-examples'><span>输入倍率 0.15× → <strong>{formatCreditPrice(validCreditNumber(settings.creditPricingBase) ? Number(settings.creditPricingBase) * 0.15 : '—')}</strong> 积分／千 Token</span>
+                <span>输出倍率 0.6× → <strong>{formatCreditPrice(validCreditNumber(settings.creditPricingBase) ? Number(settings.creditPricingBase) * 0.6 : '—')}</strong> 积分／千 Token</span></div>
+              <p className='credit-pricing-note'>以上倍率为换算示例。修改基准将影响已配置积分价格的模型后续调用，历史消费保留当时价格。尚未配置的模型沿用原有计费规则。</p>
+            </section>}
+            {active === 'edition' && settings.edition === 'operations' && <CreditRewardSettings
+              value={settings.creditRewards} disabled={saving} onChange={value => change('creditRewards', value)} />}
             {active === 'network' && settings.network === 'intranet' && <section className='settings-catalog-policies' aria-label='互联网内容处理'>
               <h3>互联网内容处理</h3>
               <p>终端无法访问外部资源时，分别控制需要联网的技能和专家如何展示。</p>

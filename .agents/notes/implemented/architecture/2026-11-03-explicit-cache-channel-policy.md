@@ -1,0 +1,23 @@
+# Agent Note: Explicit cache channel policy
+
+Status: implemented
+
+English | [中文](2026-11-03-explicit-cache-channel-policy.zh.md)
+
+## Problem
+
+The model editor allows cache markers on self-hosted endpoints whose cache protocol is unknown. Its enable-model checkbox duplicates the model list action.
+
+## Decision
+
+The editor exposes an explicit-cache dropdown and preserves model enabled state. Channel metadata supplies eligibility without credentials. The current policy permits the implemented Bailian protocol on official endpoints; generic compatible, self-hosted, and unadapted endpoints remain closed. Source changes close ineligible selections and default eligible selections to on. Reopening preserves an eligible model's saved off state.
+
+Relay checks the actual channel before injecting cache markers, including for historical model records with caching enabled. This policy is an adapter restriction, not a live capability probe, and does not control implicit cache accounting.
+
+## Alternatives considered
+
+**Disable only the UI.** Rejected because historical settings could still inject unsupported cache markers on self-hosted channels.
+
+## Consequences
+
+Administrators control the supported dropdown while list actions own model enablement. Unknown endpoints cannot opt in until their protocol is adapted. Live model-specific detection remains a separate capability.

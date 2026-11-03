@@ -57,19 +57,21 @@ func clampQuotaNonNegative(quota int64) int64 {
 //   - deducted:    预扣时账本扣减明细(rowId->amount),用于实际<预扣时按原路精确退款;无预扣传 nil
 //
 // 注意:本函数不负责写消费日志——三条路径日志字段不同,由各自调用方记录。
-func postConsumeOrgLedger(ctx context.Context, orgId, userId, orgDeptId int, actualQuota, preConsumed int64, deducted map[int64]int64) {
+func postConsumeOrgLedger(ctx context.Context, orgId, userId, orgDeptId int, actualQuota, preConsumed int64, deducted map[int64]int64) error {
 	actualQuota = clampQuotaNonNegative(actualQuota)
 	quotaDelta := actualQuota - preConsumed
 	if quotaDelta > 0 {
 		// 实际 > 预扣:补扣差额。账本不足时仅记日志(差额由日志体现),不阻断已完成的请求。
 		if _, err := model.DecreaseOrgQuotaByLedger(orgId, quotaDelta); err != nil {
 			logger.Error(ctx, "post_consume decrease_org_quota_failed: "+err.Error())
+			return err
 		}
 	} else if quotaDelta < 0 {
 		// 实际 < 预扣:按预扣 deducted 明细原路退还多扣部分。
 		// scaleDeductedRefund 退款额受 deducted 各行上限约束,不会退超过实际扣减,账本不会转正溢出。
 		if err := model.RefundOrgQuotaByLedger(orgId, scaleDeductedRefund(deducted, -quotaDelta)); err != nil {
 			logger.Error(ctx, "post_consume refund_org_quota_failed: "+err.Error())
+			return err
 		}
 	}
 	if actualQuota > 0 {
@@ -81,4 +83,5 @@ func postConsumeOrgLedger(ctx context.Context, orgId, userId, orgDeptId int, act
 			logger.Error(ctx, "post_consume incr_member_period_used_failed: "+err.Error())
 		}
 	}
+	return nil
 }

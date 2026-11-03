@@ -93,11 +93,14 @@ func AddModelDefinition(c *gin.Context) {
 			respondError(c, "请先选择来源渠道")
 			return
 		}
-		_, err := model.GetChannelById(*req.SourceChannelID, false)
+		channel, err := model.GetChannelById(*req.SourceChannelID, false)
 		if err != nil {
 			respondError(c, "所选来源渠道不存在或读取失败")
 			return
 		}
+		def.SupportExplicitCache = def.SupportExplicitCache && model.ChannelAllowsExplicitCache(channel.Type, channel.GetBaseURL())
+	} else {
+		def.SupportExplicitCache = false
 	}
 	if err := def.Insert(); err != nil {
 		respondError(c, err.Error())

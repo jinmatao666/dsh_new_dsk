@@ -9,6 +9,8 @@ import (
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/model"
+	"github.com/songquanpeng/one-api/relay/billing/price"
+	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
 )
 
 // 客户端模型同步(T5.1)
@@ -28,14 +30,15 @@ type clientModelModalities struct {
 
 // clientModelDetail 对齐 opencode ModelsDev.Model 的关键字段(packages/opencode/src/provider/models.ts)
 type clientModelDetail struct {
-	Id          string                `json:"id"`   // 真实模型名(渠道可识别)
-	Name        string                `json:"name"` // 展示名
-	Reasoning   bool                  `json:"reasoning"`
-	Attachment  bool                  `json:"attachment"`
-	ToolCall    bool                  `json:"tool_call"`
-	Temperature bool                  `json:"temperature"`
-	Modalities  clientModelModalities `json:"modalities"`
-	Limit       clientModelLimit      `json:"limit"`
+	DisplayMultiplier *float64              `json:"display_multiplier,omitempty"`
+	Id                string                `json:"id"`   // 真实模型名(渠道可识别)
+	Name              string                `json:"name"` // 展示名
+	Reasoning         bool                  `json:"reasoning"`
+	Attachment        bool                  `json:"attachment"`
+	ToolCall          bool                  `json:"tool_call"`
+	Temperature       bool                  `json:"temperature"`
+	Modalities        clientModelModalities `json:"modalities"`
+	Limit             clientModelLimit      `json:"limit"`
 }
 
 func clientModelInputs(def *model.ModelDefinition) []string {
@@ -146,6 +149,7 @@ func sortModelNames(names []string, defs map[string]*model.ModelDefinition) {
 // 有但未登记的模型一律不下发——否则会绕过停用/类型过滤直接冒到客户端。抽成纯函数以便单测。
 func buildClientModelDetails(names []string, defs map[string]*model.ModelDefinition) []clientModelDetail {
 	result := make([]clientModelDetail, 0, len(names))
+	inputs, completions := billingratio.GetAllModelRatios(), billingratio.GetAllCompletionRatios()
 	for _, name := range names {
 		def, ok := defs[name]
 		if !ok {
@@ -169,6 +173,11 @@ func buildClientModelDetails(names []string, defs map[string]*model.ModelDefinit
 		if def.DisplayName != "" {
 			d.Name = def.DisplayName
 		}
+		rateName := name
+		if def.RedirectTo != "" {
+			rateName = def.RedirectTo
+		}
+		d.DisplayMultiplier, _ = price.DisplayMultiplier(name, inputs[rateName], inputs[rateName]*completions[rateName])
 		d.Reasoning = def.Reasoning
 		d.ToolCall = def.ToolCall
 		if def.ContextLimit > 0 {

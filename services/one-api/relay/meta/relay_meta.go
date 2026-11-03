@@ -8,19 +8,23 @@ import (
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/model"
+	"github.com/songquanpeng/one-api/relay/billing/price"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/songquanpeng/one-api/relay/relaymode"
 )
 
 type Meta struct {
-	Mode         int
-	ChannelType  int
-	ChannelId    int
-	TokenId      int
-	TokenName    string
-	UserId       int
-	Group        string
-	ModelMapping map[string]string
+	CreditPrice     *price.Snapshot
+	CreditReserved  map[int64]int64
+	CreditSessionID string
+	Mode            int
+	ChannelType     int
+	ChannelId       int
+	TokenId         int
+	TokenName       string
+	UserId          int
+	Group           string
+	ModelMapping    map[string]string
 	// BaseURL is the proxy url set in the channel config
 	BaseURL  string
 	APIKey   string

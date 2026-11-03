@@ -6,6 +6,22 @@ import { API, showSuccess } from '../../helpers';
 
 jest.mock('../../helpers', () => ({ API: { get: jest.fn(), put: jest.fn() }, showSuccess: jest.fn() }));
 let container, root;
+test('operations credit base updates both examples and persists; government hides it', async () => {
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[3].click());
+  const input = container.querySelector('#credit-pricing-base');
+  expect(input.value).toBe('1');
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '2');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(container.querySelector('.credit-base-examples').textContent).toContain('0.3');
+  expect(container.querySelector('.credit-base-examples').textContent).toContain('1.2');
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(JSON.parse(API.put.mock.calls[0][1].value).creditPricingBase).toBe(2);
+  act(() => container.querySelector('input[value="government"]').click());
+  expect(container.querySelector('#credit-pricing-base')).toBeNull();
+});
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
@@ -230,6 +246,47 @@ function fillInput(element, value) {
   element.dispatchEvent(new Event('input', { bubbles: true }));
   element.dispatchEvent(new Event('change', { bubbles: true }));
 }
+
+test('reward rules support independent toggles, cycles, cancel and persisted reload', async () => {
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[3].click());
+  const find = label => container.querySelector(`[aria-label="${label}"]`);
+  expect(find('注册赠送积分').value).toBe('2000');
+  expect(find('登录赠送积分').value).toBe('100');
+  expect(find('登录发放周期').value).toBe('1');
+  expect(find('登录发放周期').disabled).toBe(true);
+  act(() => find('启用登录赠送').click());
+  act(() => fillInput(find('登录发放周期'), '7'));
+  act(() => fillInput(find('登录赠送积分'), '150'));
+  act(() => [...container.querySelectorAll('button')].find(button => button.textContent === '取消修改').click());
+  expect(find('启用登录赠送').checked).toBe(false);
+  expect(find('登录发放周期').value).toBe('1');
+  act(() => find('启用登录赠送').click());
+  act(() => fillInput(find('登录发放周期'), '7'));
+  act(() => fillInput(find('登录赠送积分'), '150'));
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  const saved = JSON.parse(API.put.mock.calls[0][1].value);
+  expect(saved.creditRewards).toEqual({ registration: { enabled: false, amount: 2000 }, login: { enabled: true, amount: 150, intervalDays: 7 } });
+  API.get.mockImplementation(path => Promise.resolve({ data: { success: true, data: path === '/api/user/self'
+    ? { username: 'root', role: 100 } : [{ key: 'SystemDeploymentSettings', value: JSON.stringify(saved) }] } }));
+  act(() => root.unmount()); root = createRoot(container);
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[3].click());
+  expect(find('登录发放周期').value).toBe('7');
+  expect(find('登录赠送积分').value).toBe('150');
+  act(() => container.querySelector('input[value="government"]').click());
+  expect(find('积分赠送规则')).toBeNull();
+});
+
+test('invalid gift cycles are blocked before an API save', async () => {
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[3].click());
+  act(() => container.querySelector('[aria-label="启用登录赠送"]').click());
+  act(() => fillInput(container.querySelector('[aria-label="登录发放周期"]'), '0'));
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(API.put).not.toHaveBeenCalled();
+  expect(container.textContent).toContain('登录发放周期必须');
+});
 
 test('knowledge quota tab defaults off and saves total with person allocations', async () => {
   API.get.mockImplementation(path => {

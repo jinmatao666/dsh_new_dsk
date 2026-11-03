@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -62,6 +63,8 @@ func getPromptTokens(textRequest *relaymodel.GeneralOpenAIRequest, relayMode int
 		return openai.CountTokenInput(textRequest.Prompt, textRequest.Model)
 	case relaymode.Moderations:
 		return openai.CountTokenInput(textRequest.Input, textRequest.Model)
+	case relaymode.Embeddings:
+		return openai.CountTokenInput(textRequest.Input, textRequest.Model)
 	}
 	return 0
 }
@@ -80,6 +83,27 @@ func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTok
 
 func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64, meta *meta.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
 	preConsumedQuota := getPreConsumedQuota(textRequest, promptTokens, ratio)
+	if meta.CreditPrice != nil && meta.CreditPrice.Source == "configured" {
+		output := int(config.PreConsumedQuota)
+		if textRequest.MaxTokens > 0 {
+			output = int(textRequest.MaxTokens)
+		}
+		if int64(output) > config.PreConsumedMaxTokensCap {
+			output = int(config.PreConsumedMaxTokensCap)
+		}
+		var err error
+		preConsumedQuota, err = meta.CreditPrice.Reserve(promptTokens, output)
+		if err != nil {
+			return 0, openai.ErrorWrapper(err, "invalid_credit_reservation", http.StatusBadRequest)
+		}
+		if !meta.UseOrgQuota {
+			meta.CreditReserved, err = model.ChangeTokenCreditQuota(meta.UserId, meta.TokenId, preConsumedQuota, nil)
+			if err != nil {
+				return 0, openai.ErrorWrapper(err, "insufficient_user_quota", http.StatusForbidden)
+			}
+			return preConsumedQuota, nil
+		}
+	}
 
 	if meta.UseOrgQuota {
 		// 企业模式：四道闸门(总账本/成员累计上限/日月限额/部门预算)统一走公共校验
@@ -136,6 +160,7 @@ func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIR
 func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.Meta, textRequest *relaymodel.GeneralOpenAIRequest, ratio float64, preConsumedQuota int64, modelRatio float64, groupRatio float64, systemPromptReset bool) {
 	if usage == nil {
 		logger.Error(ctx, "usage is nil, which is unexpected")
+		returnPreConsumedQuota(ctx, preConsumedQuota, meta)
 		return
 	}
 	var quota int64
@@ -150,6 +175,29 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 	if totalTokens == 0 || completionTokens == 0 {
 		quota = 0
 	}
+	cacheReadTokens, cacheWriteTokens := 0, 0
+	if usage.PromptTokensDetails == nil && usage.PromptCacheHitTokens != nil {
+		cacheReadTokens = *usage.PromptCacheHitTokens
+	}
+	if usage.PromptTokensDetails != nil {
+		cacheReadTokens, cacheWriteTokens = usage.PromptTokensDetails.CachedTokens, usage.PromptTokensDetails.CacheCreationInputTokens
+	}
+	var creditBilling string
+	var receiptQuota int64
+	if meta.CreditPrice != nil && meta.CreditPrice.Source == "configured" {
+		receipt, err := meta.CreditPrice.Calculate(promptTokens, completionTokens, cacheReadTokens, cacheWriteTokens)
+		receipt.SessionID = meta.CreditSessionID
+		if err != nil {
+			returnPreConsumedQuota(ctx, preConsumedQuota, meta)
+			logger.Error(ctx, "缓存用量无效，已请求退回本次预扣："+err.Error())
+			model.RecordErrorLog(ctx, &model.Log{UserId: meta.UserId, ChannelId: meta.ChannelId, ModelName: textRequest.Model, Content: err.Error()})
+			return
+		}
+		quota = receipt.Quota
+		receiptQuota = receipt.Quota
+		encoded, _ := json.Marshal(receipt)
+		creditBilling = string(encoded)
+	}
 	quota = clampQuotaNonNegative(quota)
 	quotaDelta := quota - preConsumedQuota
 	if meta.UseOrgQuota {
@@ -157,6 +205,24 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 		err := model.PostConsumeTokenQuotaOnly(meta.TokenId, quotaDelta)
 		if err != nil {
 			logger.Error(ctx, "error consuming token remain quota: "+err.Error())
+			if creditBilling != "" {
+				var receipt map[string]interface{}
+				_ = json.Unmarshal([]byte(creditBilling), &receipt)
+				receipt["status"], receipt["error"], receipt["expected_quota"], receipt["quota"] = "settlement_failed", err.Error(), receiptQuota, preConsumedQuota
+				encoded, _ := json.Marshal(receipt)
+				creditBilling = string(encoded)
+				quota, quotaDelta = preConsumedQuota, 0
+			}
+		}
+	} else if meta.CreditPrice != nil && meta.CreditPrice.Source == "configured" {
+		if _, err := model.ChangeTokenCreditQuota(meta.UserId, meta.TokenId, quotaDelta, meta.CreditReserved); err != nil {
+			logger.Error(ctx, "积分结算失败："+err.Error())
+			var receipt map[string]interface{}
+			_ = json.Unmarshal([]byte(creditBilling), &receipt)
+			receipt["status"], receipt["error"], receipt["expected_quota"], receipt["quota"] = "settlement_failed", err.Error(), receiptQuota, preConsumedQuota
+			encoded, _ := json.Marshal(receipt)
+			creditBilling = string(encoded)
+			quota = preConsumedQuota
 		}
 	} else {
 		err := model.PostConsumeTokenQuota(meta.TokenId, quotaDelta)
@@ -175,17 +241,23 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 	if meta.UseOrgQuota {
 		orgId = meta.OrgId
 		// 账本差额 + 成员已用 + 部门用量 + 成员周期计数,统一走公共结算(含 0 下限钳制)
-		postConsumeOrgLedger(ctx, meta.OrgId, meta.UserId, meta.OrgDeptId, quota, preConsumedQuota, meta.OrgPreConsumedDeducted)
+		if err := postConsumeOrgLedger(ctx, meta.OrgId, meta.UserId, meta.OrgDeptId, quota, preConsumedQuota, meta.OrgPreConsumedDeducted); err != nil && creditBilling != "" {
+			if tokenErr := model.PostConsumeTokenQuotaOnly(meta.TokenId, -quotaDelta); tokenErr != nil {
+				logger.Error(ctx, "回退企业令牌结算失败："+tokenErr.Error())
+			}
+			var receipt map[string]interface{}
+			_ = json.Unmarshal([]byte(creditBilling), &receipt)
+			receipt["status"], receipt["error"], receipt["expected_quota"], receipt["quota"] = "settlement_failed", err.Error(), receiptQuota, preConsumedQuota
+			encoded, _ := json.Marshal(receipt)
+			creditBilling = string(encoded)
+			quota = preConsumedQuota
+		}
 	}
 
 	logContent := fmt.Sprintf("倍率：%.2f × %.2f × %.2f", modelRatio, groupRatio, completionRatio)
-	// 缓存 token（prompt cache）：从上游 usage 的 prompt_tokens_details 提取，仅用于观测缓存命中率，不参与计费。
-	// cached_tokens=命中读取（cache_read）；cache_creation_input_tokens=创建写入（cache_write，显式缓存返回）。
-	cacheReadTokens := 0
-	cacheWriteTokens := 0
-	if usage.PromptTokensDetails != nil {
-		cacheReadTokens = usage.PromptTokensDetails.CachedTokens
-		cacheWriteTokens = usage.PromptTokensDetails.CacheCreationInputTokens
+	if meta.CreditPrice != nil && meta.CreditPrice.Source == "configured" {
+		p := meta.CreditPrice
+		logContent = fmt.Sprintf("积分计费 | 基准：%g | 输入：%g× | 输出：%g× | 缓存命中：%g× | 缓存创建：%g× | 分组：%g×", p.Base, p.Input, p.Output, p.CacheRead, p.CacheWrite, p.Group)
 	}
 	log := &model.Log{
 		UserId:            meta.UserId,
@@ -202,6 +274,7 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 		OrgId:             orgId,
 		CacheReadTokens:   cacheReadTokens,
 		CacheWriteTokens:  cacheWriteTokens,
+		CreditBilling:     creditBilling,
 	}
 	billing.FillLogTimingFromContext(ctx, log)
 	model.RecordConsumeLog(ctx, log)

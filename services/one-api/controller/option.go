@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/i18n"
 	"github.com/songquanpeng/one-api/model"
@@ -45,7 +46,20 @@ func UpdateOption(c *gin.Context) {
 		return
 	}
 	switch option.Key {
+	case "ModelCreditPricing":
+		if err := validateModelCreditPricing(option.Value); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
 	case "SystemDeploymentSettings":
+		if err := validateCreditRewards(option.Value); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		if err := validateCreditPricingBase(option.Value); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
 		settings, parseErr := parseDesktopDeploymentSettings(option.Value)
 		if option.Value == "" || parseErr != nil ||
 			len([]rune(settings.Operator)) > 80 || len([]rune(settings.Phone)) > 40 {
@@ -100,13 +114,20 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 	}
+	var auditDetail []byte
+	if option.Key == "SystemDeploymentSettings" {
+		auditDetail = creditRewardAuditDetail(option.Value)
+	}
 	err = model.UpdateOption(option.Key, option.Value)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
+		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"message": err.Error(),
 		})
 		return
+	}
+	if len(auditDetail) > 0 {
+		c.Set(ctxkey.AdminAuditDetail, auditDetail)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

@@ -1,13 +1,14 @@
 package model
 
 type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens         int  `json:"prompt_tokens"`
+	CompletionTokens     int  `json:"completion_tokens"`
+	TotalTokens          int  `json:"total_tokens"`
+	PromptCacheHitTokens *int `json:"prompt_cache_hit_tokens,omitempty"`
 
 	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"`
 	// PromptTokensDetails 承接上游返回的输入 token 细分，其中 cached_tokens 为 prompt cache 命中数。
-	// 仅用于观测缓存命中率，不参与计费。
+	// 缓存输入属于 PromptTokens 的子集，结算时从普通输入中扣除。
 	PromptTokensDetails *PromptTokensDetails `json:"prompt_tokens_details,omitempty"`
 }
 

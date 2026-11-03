@@ -28,4 +28,5 @@ const (
 	OrgDeptId           = "org_dept_id"
 	UseOrgQuota         = "use_org_quota"
 	OrgMemberQuotaLimit = "org_member_quota_limit"
+	AdminAuditDetail    = "admin_audit_detail"
 )

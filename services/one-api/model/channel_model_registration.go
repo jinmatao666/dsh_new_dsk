@@ -17,15 +17,21 @@ var channelModelRegistrationMu sync.Mutex
 
 // ConfiguredModelChannel 不包含密钥，供模型页全量选择渠道，不受渠道列表分页影响。
 type ConfiguredModelChannel struct {
-	Id     int    `json:"id"`
-	Name   string `json:"name"`
-	Models string `json:"models"`
-	Status int    `json:"status"`
+	Id                   int    `json:"id"`
+	Name                 string `json:"name"`
+	Models               string `json:"models"`
+	Status               int    `json:"status"`
+	Type                 int    `json:"type"`
+	BaseURL              string `json:"-"`
+	ExplicitCacheAllowed bool   `json:"explicit_cache_allowed" gorm:"-"`
 }
 
 func GetConfiguredModelChannels() ([]ConfiguredModelChannel, error) {
 	var channels []ConfiguredModelChannel
-	err := DB.Model(&Channel{}).Select("id, name, models, status").Order("id asc").Scan(&channels).Error
+	err := DB.Model(&Channel{}).Select("id, name, models, status, type, base_url").Order("id asc").Scan(&channels).Error
+	for i := range channels {
+		channels[i].ExplicitCacheAllowed = ChannelAllowsExplicitCache(channels[i].Type, channels[i].BaseURL)
+	}
 	return channels, err
 }
 

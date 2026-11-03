@@ -351,6 +351,7 @@ func SetApiRouter(router *gin.Engine) {
 			redemptionRoute.DELETE("/:id", controller.DeleteRedemption)
 		}
 		logRoute := apiRouter.Group("/log")
+		logRoute.GET("/credits", middleware.AdminAuth(), controller.GetCreditLogs)
 		logRoute.GET("/", middleware.UserAuth(), controller.GetAllLogs)
 		logRoute.GET("/options", middleware.UserAuth(), controller.GetLogFilterOptions)
 		logRoute.DELETE("/", middleware.UserAuth(), controller.DeleteHistoryLogs)

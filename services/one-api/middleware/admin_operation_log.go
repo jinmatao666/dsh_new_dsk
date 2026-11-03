@@ -160,6 +160,11 @@ func AdminOperationLog() gin.HandlerFunc {
 			meta = auditAction{Action: method + " " + fullPath, Module: "其他"}
 		}
 
+		if detail, exists := c.Get(ctxkey.AdminAuditDetail); exists {
+			if prepared, ok := detail.([]byte); ok {
+				bodyBytes = prepared
+			}
+		}
 		entry := &model.AdminOperationLog{
 			AdminId:       c.GetInt(ctxkey.Id),
 			AdminUsername: c.GetString(ctxkey.Username),

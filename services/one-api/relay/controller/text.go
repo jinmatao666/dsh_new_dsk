@@ -20,6 +20,7 @@ import (
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/apitype"
 	"github.com/songquanpeng/one-api/relay/billing"
+	"github.com/songquanpeng/one-api/relay/billing/price"
 	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/songquanpeng/one-api/relay/meta"
@@ -71,6 +72,11 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	modelRatio := billingratio.GetModelRatio(textRequest.Model, meta.ChannelType)
 	groupRatio := billingratio.GetGroupRatio(meta.Group)
 	ratio := modelRatio * groupRatio
+	meta.CreditPrice, err = price.Resolve(meta.OriginModelName, modelRatio, billingratio.GetCompletionRatio(textRequest.Model, meta.ChannelType), groupRatio)
+	if err != nil {
+		return openai.ErrorWrapper(err, "invalid_credit_pricing", http.StatusServiceUnavailable)
+	}
+	meta.CreditSessionID = auditSessionID(c)
 	// pre-consume quota
 	promptTokens := getPromptTokens(textRequest, meta.Mode)
 
@@ -159,13 +165,19 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 		return respErr
 	}
 	// post-consume quota
-	go postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, modelRatio, groupRatio, systemPromptReset)
+	postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, modelRatio, groupRatio, systemPromptReset)
 	timing.Finish(c, "ok")
 	return nil
 }
 
 // returnPreConsumedQuota 归还预扣额度（个人或企业账本），用于上游/本地报错的退款路径。
 func returnPreConsumedQuota(ctx context.Context, preConsumedQuota int64, meta *meta.Meta) {
+	if meta.CreditPrice != nil && meta.CreditPrice.Source == "configured" && !meta.UseOrgQuota {
+		if _, err := dbmodel.ChangeTokenCreditQuota(meta.UserId, meta.TokenId, -preConsumedQuota, meta.CreditReserved); err != nil {
+			logger.Error(ctx, "积分退款失败："+err.Error())
+		}
+		return
+	}
 	if meta.UseOrgQuota {
 		billing.ReturnPreConsumedOrgQuota(ctx, preConsumedQuota, meta.TokenId, meta.OrgId, meta.OrgPreConsumedDeducted)
 	} else {
@@ -191,7 +203,8 @@ func getRequestBody(c *gin.Context, meta *meta.Meta, textRequest *model.GeneralO
 	// 显式缓存注入：模型在后台勾选了"显式缓存"且走 OpenAI 兼容上游时，需解析 body 注入
 	// content 块级 cache_control 锚点（阿里云百炼等只认此格式）。注入需解析 body，
 	// 故不能走下方 openai 直通分支。仅限 apitype.OpenAI，避免误伤 Ali 原生/Anthropic 格式。
-	needCacheInject := meta.APIType == apitype.OpenAI && dbmodel.ModelSupportsExplicitCache(meta.OriginModelName)
+	needCacheInject := meta.APIType == apitype.OpenAI && dbmodel.ModelSupportsExplicitCache(meta.OriginModelName) &&
+		dbmodel.ChannelAllowsExplicitCache(meta.ChannelType, meta.BaseURL)
 
 	if !c.GetBool(ctxkey.WebSearch) && !needCacheInject &&
 		!needsPrivateModelDefaults &&

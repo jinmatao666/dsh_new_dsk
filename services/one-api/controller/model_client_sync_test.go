@@ -3,8 +3,21 @@ package controller
 import (
 	"testing"
 
+	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/model"
 )
+
+func TestClientModelDisplayMultiplier(t *testing.T) {
+	config.OptionMapRWMutex.Lock()
+	old := config.OptionMap
+	config.OptionMap = map[string]string{"ModelCreditPricing": `{"test":{"input":0.15,"output":0.6,"display":0.8}}`}
+	config.OptionMapRWMutex.Unlock()
+	defer func() { config.OptionMapRWMutex.Lock(); config.OptionMap = old; config.OptionMapRWMutex.Unlock() }()
+	rows := buildClientModelDetails([]string{"test"}, map[string]*model.ModelDefinition{"test": {Name: "test", Enabled: true, ModelType: "chat"}})
+	if len(rows) != 1 || rows[0].DisplayMultiplier == nil || *rows[0].DisplayMultiplier != 0.8 {
+		t.Fatalf("missing reference multiplier %+v", rows)
+	}
+}
 
 // 验证客户端模型下发契约:仅下发在 model_definitions 登记、启用、且为 chat 类型的模型;
 // 渠道(ability)里有但未登记的模型一律不下发(回归保护:历史上未登记模型会绕过过滤冒出来)。

@@ -27,6 +27,74 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); container.remove(); delete global.IS_REACT_ACT_ENVIRONMENT; });
 
+test('explicit cache uses a dropdown, disables own channels and preserves model enabled state', async () => {
+  const oldGet = API.get.getMockImplementation();
+  API.get.mockImplementation(async path => path === '/api/model_definition/channels'
+    ? { data: { success: true, data: [{ ...channels[0], explicit_cache_allowed: false }, { ...channels[1], explicit_cache_allowed: true }] } }
+    : path === '/api/model_definition/aggregated'
+      ? { data: { success: true, data: [{ ...definitions[0], support_explicit_cache: true, sources: [definitions[0].sources[0]] }] } }
+      : oldGet(path));
+  API.put.mockResolvedValue({ data: { success: true } });
+  API.post.mockResolvedValue({ data: { success: true } });
+  await act(async () => root.render(<ModelConfigPage />));
+  await click('模型配置');
+  await click('编辑');
+  const dialog = container.querySelector('.zjugis-modal');
+  expect(dialog.textContent).not.toContain('启用模型');
+  const cache = dialog.querySelector('select[aria-label="显式缓存"]');
+  expect(cache.disabled).toBe(true);
+  expect(cache.value).toBe('off');
+  const source = [...dialog.querySelectorAll('.zjugis-field')].find(field => field.textContent.startsWith('来源渠道')).querySelector('select');
+  await changeSelect(source, '2');
+  expect(cache.disabled).toBe(false);
+  expect(cache.value).toBe('on');
+  await changeSelect(cache, 'off');
+  expect(cache.value).toBe('off');
+  await changeSelect(source, '1');
+  expect(cache.disabled).toBe(true);
+  expect(cache.value).toBe('off');
+  await act(async () => dialog.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  const saved = API.put.mock.calls.find(([path]) => path === '/api/model_definition/')[1];
+  expect(saved.enabled).toBe(true);
+  expect(saved.support_explicit_cache).toBe(false);
+});
+
+test('model credit preview converts legacy output, updates prices, and saves separately', async () => {
+  const previousGet = API.get.getMockImplementation();
+  API.get.mockImplementation(async path => path === '/api/option/'
+    ? { data: { success: true, data: [{ key: 'SystemDeploymentSettings', value: '{"creditPricingBase":2}' }] } }
+    : path === '/api/model_definition/aggregated'
+      ? { data: { success: true, data: [{ ...definitions[0], model_ratio: 0.15, completion_ratio: 4 }] } }
+      : previousGet(path));
+  API.put.mockResolvedValue({ data: { success: true } });
+  API.post.mockResolvedValue({ data: { success: true } });
+  await act(async () => root.render(<ModelConfigPage />));
+  await click('模型配置');
+  expect(container.querySelector('.model-definition-ratios').textContent).toBe('0.15× / 0.6×');
+  expect(container.querySelector('.model-definition-name strong').title).toBe('shared');
+  await click('编辑');
+  const fields = [...container.querySelectorAll('.model-credit-pricing input')];
+  expect(fields[0].value).toBe('0.15');
+  expect(fields[1].readOnly).toBe(true);
+  expect(fields[1].value).toBe('0.3');
+  expect(fields[2].value).toBe('0.6');
+  expect(fields[3].value).toBe('1.2');
+  expect(fields[8].value).toBe('0.375');
+  await changeInput(fields[2], '0.8');
+  expect(fields[3].value).toBe('1.6');
+  expect(fields[8].value).toBe('0.475');
+  await changeInput(fields[8], '0.7');
+  await changeInput(fields[2], '1');
+  expect(fields[8].value).toBe('0.7');
+  await click('恢复默认');
+  expect(Number(fields[8].value)).toBe(0.575);
+  await changeInput(fields[2], '0.8');
+  await changeInput(fields[8], '0.7');
+  await act(async () => container.querySelector('.model-credit-pricing').closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  const options = API.put.mock.calls.filter(([path]) => path === '/api/option/').map(([, body]) => body);
+  expect(options).toEqual([{ key: 'ModelCreditPricing', value: '{"shared":{"input":0.15,"output":0.8,"cache_read":0.15,"cache_write":0.15,"display":0.7}}' }]);
+});
+
 test('channel filters include multi-source models and distinguish unbound definitions', () => {
   expect(filterChannelModels(definitions, '1').map(item => item.name)).toEqual(['shared']);
   expect(filterChannelModels(definitions, '2').map(item => item.name)).toEqual(['shared']);
