@@ -250,15 +250,15 @@ function geojsonPreviewMarkup(name, text) {
   const previewId = previewGeometryCollections.length
   previewGeometryCollections.push({ name, features })
   const sample = features.slice(0, 20).map((feature, index) => {
-    const layer = feature.properties?.layer ?? feature.properties?.NAME ?? ''
+    const layer = feature.properties?.layer ?? feature.properties?.NAME ?? feature.properties?.name ?? ''
     const geometry = feature.geometry?.type || '未知'
     const coords = feature.geometry?.coordinates
     let point = ''
     if (geometry === 'Polygon' && Array.isArray(coords?.[0]?.[0])) point = `${coords[0][0][0]}, ${coords[0][0][1]}`
     else if (geometry === 'Point' && Array.isArray(coords)) point = `${coords[0]}, ${coords[1]}`
-    return `<tr><td>${index + 1}</td><td>${escape(geometry)}</td><td>${escape(layer)}</td><td>${escape(point)}</td></tr>`
+    return `<tr><td>${index + 1}</td><td>${escape(geometry)}</td><td>${escape(layer)}</td><td>${escape(point)}</td><td><button type="button" class="text-action" data-preview-geometry="${previewId}" data-preview-feature="${index}">查看</button></td></tr>`
   }).join('')
-  return `<section class="preview-card"><div class="preview-card-head"><div><h4>${escape(name)}</h4><p class="muted">共 ${features.length} 个要素，预览前 ${Math.min(features.length, 20)} 个</p></div><button type="button" class="secondary" data-preview-geometry="${previewId}">查看</button></div><div class="preview-table-wrap"><table class="preview-table"><thead><tr><th>#</th><th>几何</th><th>图层/名称</th><th>首点坐标</th></tr></thead><tbody>${sample || '<tr><td colspan="4">无要素</td></tr>'}</tbody></table></div></section>`
+  return `<section class="preview-card"><div class="preview-card-head"><div><h4>${escape(name)}</h4><p class="muted">共 ${features.length} 个要素，预览前 ${Math.min(features.length, 20)} 个</p></div><button type="button" class="secondary" data-preview-geometry="${previewId}">查看</button></div><div class="preview-table-wrap"><table class="preview-table"><thead><tr><th>#</th><th>几何</th><th>图层/名称</th><th>首点坐标</th><th></th></tr></thead><tbody>${sample || '<tr><td colspan="5">无要素</td></tr>'}</tbody></table></div></section>`
 }
 function textPreviewMarkup(name, text) {
   const clipped = text.length > 20000 ? `${text.slice(0, 20000)}\n…（已截断）` : text
@@ -717,11 +717,11 @@ function layerControlMarkup() {
   return `<div id="overlay-layer-panel" class="overlay-layer-panel" ${open ? '' : 'hidden'}>${list}</div>${toggle}`
 }
 function localLayerListMarkup() {
-  if (!overlayState.localLayers.length) return '<p class="muted">尚未添加本地套合数据</p>'
+  if (!overlayState.localLayers.length) return ''
   return `<ul class="overlay-source-list">${overlayState.localLayers.map(layer => `<li><button type="button" class="overlay-source-locate" data-locate-local="${escape(layer.id)}" title="定位到该图层"><strong>${escape(layer.name)}</strong><small>${(layer.features || []).length} 个要素 · 点击定位</small></button><button type="button" class="text-action" data-remove-local="${escape(layer.id)}">删除</button></li>`).join('')}</ul>`
 }
 function onlineLayerListMarkup() {
-  if (!overlayState.onlineLayers.length) return '<p class="muted">尚未添加在线服务</p>'
+  if (!overlayState.onlineLayers.length) return ''
   return `<ul class="overlay-source-list">${overlayState.onlineLayers.map(layer => `<li><button type="button" class="overlay-source-locate" data-locate-online="${escape(layer.id)}" title="定位到该图层"><strong>${escape(layer.name || layer.layerName)}</strong><small title="${escape(layer.serviceUrl)}">序号 ${escape(layer.layerName)} · ${escape(layer.crs || 'EPSG:4326')}${layer.token ? ' · 已鉴权' : ''} · 点击定位</small></button><span class="overlay-source-actions"><button type="button" class="text-action" data-edit-online="${escape(layer.id)}">编辑</button><button type="button" class="text-action" data-remove-online="${escape(layer.id)}">删除</button></span></li>`).join('')}</ul>`
 }
 function openServiceModal(editId = null) {
@@ -1050,7 +1050,7 @@ function serviceModalMarkup() {
   if (!overlayState.serviceModalOpen) return ''
   const draft = serviceModalDraft()
   const editing = !!draft.editing
-  return `<div class="overlay-modal-backdrop" id="overlay-service-modal" role="dialog" aria-modal="true" aria-labelledby="overlay-service-title"><div class="overlay-modal"><header><h3 id="overlay-service-title">${editing ? '编辑在线服务' : '添加在线服务'}</h3></header><label>服务地址<input id="overlay-service-url" value="${escape(draft.serviceUrl)}" placeholder="http://host/arcgis/rest/services/.../MapServer"></label><label>显示名称<input id="overlay-service-name" value="${escape(draft.name)}" placeholder="如：高标准农田"></label><label>图层序号<input id="overlay-service-layer" value="${escape(draft.layerName)}" placeholder="MapServer 填 0 或 0,1；WMS 可填服务图层名"></label><label>坐标参考<input id="overlay-service-crs" value="${escape(draft.crs)}" placeholder="EPSG:4528"></label><label>Token<input id="overlay-service-token" value="${escape(draft.token)}" placeholder="粘贴服务 Token"></label><p id="overlay-service-error" class="error" hidden></p><div class="overlay-modal-actions"><button type="button" class="secondary" id="overlay-service-cancel">取消</button><button type="button" class="primary" id="overlay-service-save">${editing ? '保存修改' : '保存并套合'}</button></div></div></div>`
+  return `<div class="overlay-modal-backdrop" id="overlay-service-modal" role="dialog" aria-modal="true" aria-labelledby="overlay-service-title"><div class="overlay-modal"><header><h3 id="overlay-service-title">${editing ? '编辑在线服务' : '添加在线服务'}</h3></header><label>服务地址<input id="overlay-service-url" value="${escape(draft.serviceUrl)}" placeholder="http://host/arcgis/rest/services/.../MapServer"></label><label>显示名称<input id="overlay-service-name" value="${escape(draft.name)}" placeholder="如：高标准农田"></label><label>图层序号<input id="overlay-service-layer" value="${escape(draft.layerName)}" placeholder="MapServer 填 0 或 0,1；WMS 可填服务图层名"></label><label>坐标参考<input id="overlay-service-crs" value="${escape(draft.crs)}" placeholder="EPSG:4528"></label><label>Token（可选）<input id="overlay-service-token" value="${escape(draft.token)}" placeholder="粘贴服务 Token"></label><p id="overlay-service-error" class="error" hidden></p><div class="overlay-modal-actions"><button type="button" class="secondary" id="overlay-service-cancel">取消</button><button type="button" class="primary" id="overlay-service-save">${editing ? '保存修改' : '保存并套合'}</button></div></div></div>`
 }
 function geometryModalMarkup() {
   const modal = overlayState.geometryModal
@@ -1058,7 +1058,13 @@ function geometryModalMarkup() {
   return `<div class="overlay-modal-backdrop" id="geometry-view-modal" role="dialog" aria-modal="true" aria-labelledby="geometry-view-title"><div class="overlay-modal overlay-modal-wide"><header class="geometry-view-head"><div><h3 id="geometry-view-title">${escape(modal.title || '几何图形')}</h3><p class="muted">共 ${(modal.features || []).length} 个要素</p></div><button type="button" class="geometry-view-close" id="geometry-view-close" aria-label="关闭">×</button></header><canvas id="geometry-view-canvas" width="860" height="480" aria-label="几何图形预览"></canvas></div></div>`
 }
 function overlayPanelMarkup() {
-  return `<section class="overlay-panel"><header class="overlay-panel-head"><div><h3>成果套合可视化</h3><p class="muted">本地与在线图层可同时套合（坐标系一致即可，范围不重合也能显示）。列表点击可定位到该图层四至；右上角图层按钮开关图层面板，可用 +/- 或滚轮缩放。</p></div></header><div class="overlay-layout"><div class="overlay-map-pane"><div class="overlay-map-frame"><div id="overlay-map" role="img" aria-label="红线成果套合图"></div><div class="overlay-zoom-control" role="group" aria-label="地图缩放"><button type="button" id="overlay-zoom-in" title="放大" aria-label="放大">+</button><button type="button" id="overlay-zoom-out" title="缩小" aria-label="缩小">−</button><button type="button" id="overlay-zoom-reset" title="复位" aria-label="复位">↺</button></div><div class="overlay-layer-control" role="group" aria-label="图层显示控制">${layerControlMarkup()}</div></div><p id="overlay-map-note" class="muted overlay-map-note"></p></div><aside class="overlay-side"><section class="overlay-card"><h4>本地套合数据</h4><p class="muted">上传 Shape ZIP，或同名 .shp/.shx/.dbf（可附 .prj）。也可上传 GeoJSON。</p><input id="overlay-upload" type="file" hidden accept=".zip,.shp,.shx,.dbf,.prj,.cpg,.geojson,.json" multiple><button type="button" class="secondary" id="overlay-pick">上传本地图层</button>${localLayerListMarkup()}</section><section class="overlay-card"><h4>在线服务配置</h4><p class="muted">显示名称用于图例；图层序号用于拉图。列表可编辑。</p><div class="overlay-card-actions"><button type="button" class="secondary" id="overlay-service-open">添加在线服务</button></div>${onlineLayerListMarkup()}</section></aside></div>${serviceModalMarkup()}${geometryModalMarkup()}</section>`
+  const localPick = overlayState.localLayers.length
+    ? '<button type="button" class="overlay-add-btn overlay-add-btn-compact" id="overlay-pick"><span class="overlay-add-title">＋ 继续上传</span></button>'
+    : '<button type="button" class="overlay-add-btn" id="overlay-pick"><span class="overlay-add-title">上传本地图层</span><small>Shape ZIP · .shp/.shx/.dbf · GeoJSON</small></button>'
+  const onlinePick = overlayState.onlineLayers.length
+    ? '<button type="button" class="overlay-add-btn overlay-add-btn-compact" id="overlay-service-open"><span class="overlay-add-title">＋ 继续添加</span></button>'
+    : '<button type="button" class="overlay-add-btn" id="overlay-service-open"><span class="overlay-add-title">添加在线服务</span><small>显示名称用于图例；图层序号用于拉图</small></button>'
+  return `<section class="overlay-panel"><header class="overlay-panel-head"><div><h3>成果展示</h3></div></header><div class="overlay-layout"><div class="overlay-map-pane"><div class="overlay-map-frame"><div id="overlay-map" role="img" aria-label="红线成果套合图"></div><div class="overlay-zoom-control" role="group" aria-label="地图缩放"><button type="button" id="overlay-zoom-in" title="放大" aria-label="放大">+</button><button type="button" id="overlay-zoom-out" title="缩小" aria-label="缩小">−</button><button type="button" id="overlay-zoom-reset" title="复位" aria-label="复位">↺</button></div><div class="overlay-layer-control" role="group" aria-label="图层显示控制">${layerControlMarkup()}</div></div><p id="overlay-map-note" class="muted overlay-map-note"></p></div><aside class="overlay-side"><section class="overlay-card"><header class="overlay-card-head"><h4>本地数据上传</h4><span class="overlay-card-tag">SHP / GeoJSON</span></header><input id="overlay-upload" type="file" hidden accept=".zip,.shp,.shx,.dbf,.prj,.cpg,.geojson,.json" multiple>${localPick}${localLayerListMarkup()}</section><section class="overlay-card"><header class="overlay-card-head"><h4>在线服务配置</h4><span class="overlay-card-tag">WMS / ArcGIS</span></header>${onlinePick}${onlineLayerListMarkup()}</section></aside></div>${serviceModalMarkup()}${geometryModalMarkup()}</section>`
 }
 function resetMapView() {
   const bounds = worldMapBounds()
@@ -1306,9 +1312,6 @@ function bindOverlayPanel() {
         return showModalError('ArcGIS MapServer 请填写图层序号，例如 0 或 0,1')
       }
     }
-    if (/\/MapServer\b/i.test(serviceUrl) && !token && !(existing?.token)) {
-      return showModalError('该 ArcGIS 服务需要鉴权：请粘贴 Token')
-    }
     const bounds = collectionBounds([{ features: allMapFeatures() }])
     if (bounds && !crsMatchesBounds(crs, bounds)) {
       return showModalError(
@@ -1321,8 +1324,8 @@ function bindOverlayPanel() {
     if (saveButton) saveButton.disabled = true
     try {
       const referer = existing?.referer || ''
-      if (existing && !token) token = existing.token || ''
-      if (existing && existing.expires != null) expires = existing.expires
+      // Empty token field means clear auth; do not keep the previous token.
+      if (token && existing && existing.expires != null) expires = existing.expires
       const record = {
         id: existing?.id || `online-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
         name: displayName || layerName,
@@ -1424,7 +1427,7 @@ async function loadResultOverlay(task) {
     const focus = collectionBounds([{ features: overlayState.result.features || [] }])
     if (focus) requestAnimationFrame(() => fitMapToDataBounds(focus))
   } catch (error) {
-    host.innerHTML = `<section class="overlay-panel"><h3>成果套合可视化</h3><p class="error">${escape(error.message || '套合准备失败')}</p></section>`
+    host.innerHTML = `<section class="overlay-panel"><h3>成果展示</h3><p class="error">${escape(error.message || '套合准备失败')}</p></section>`
   }
 }
 function bindPreviewGeometryButtons() {
@@ -1432,6 +1435,13 @@ function bindPreviewGeometryButtons() {
     node.onclick = () => {
       const entry = previewGeometryCollections[Number(node.dataset.previewGeometry)]
       if (!entry) return toast('没有可查看的几何')
+      const featureIndex = node.dataset.previewFeature
+      if (featureIndex != null && featureIndex !== '') {
+        const feature = entry.features?.[Number(featureIndex)]
+        if (!feature) return toast('没有可查看的几何')
+        openGeometryModal(`${entry.name} · ${featureLabel(feature, Number(featureIndex))}`, [feature])
+        return
+      }
       openGeometryModal(entry.name, entry.features)
     }
   })
@@ -1463,9 +1473,10 @@ async function loadResultPreviews(task) {
     }
   }
   if (!parts.length && overlayState.result?.features?.length) {
-    const previewId = previewGeometryCollections.length
-    previewGeometryCollections.push({ name: '提取成果几何', features: overlayState.result.features })
-    parts.push(`<section class="preview-card"><div class="preview-card-head"><div><h4>提取成果几何</h4><p class="muted">共 ${overlayState.result.features.length} 个要素（来自成果包解析）</p></div><button type="button" class="secondary" data-preview-geometry="${previewId}">查看</button></div></section>`)
+    parts.push(geojsonPreviewMarkup('提取成果几何', JSON.stringify({
+      type: 'FeatureCollection',
+      features: overlayState.result.features,
+    })))
   }
   host.innerHTML = parts.length ? `<h3>成果预览</h3>${parts.join('')}` : '<p class="muted">当前成果为压缩包或二进制，请下载后用 GIS 软件打开。</p>'
   bindPreviewGeometryButtons()
@@ -1491,7 +1502,7 @@ function homeMarkup() {
 function guideMarkup() {
   const sections = [
     ['01 / 红线提取', '红线提取', '从 DWG/DXF 提取闭合多段线。可指定图层；留空则匹配名称含“红线”等关键字的图层。成果可导出 GeoJSON 或 Shapefile。图纸若无坐标系元数据，请在下游自行定义参考系。', 'redline-extract'],
-    ['02 / 成果套合', '成果套合可视化', '成果预览可点「查看」弹框看几何。其下方为套合地图：可多次上传本地图层、弹框添加在线服务，列表可删除；地图右上角按已有图层开关显示隐藏。', null],
+    ['02 / 成果套合', '成果展示', '成果预览可点「查看」弹框看几何。其下方为套合地图：可多次上传本地图层、弹框添加在线服务，列表可删除；地图右上角按已有图层开关显示隐藏。', null],
     ['03 / 任务与成果', '任务与成果', '关闭网页后任务仍由专家服务处理。桌面端下载走原生另存为。取消会终止处理进程且不发布成果。', null],
   ]
   return `<div class="guide-page"><button class="text-action" data-page="home">← 返回首页</button><section class="guide-hero"><span class="eyebrow">使用指南</span><h1>红线提取</h1><p>从 DWG/DXF 提取闭合多段线，导出 GeoJSON 和/或 Shapefile ZIP。可指定图层，或自动匹配含“红线/REDLINE”等关键字的图层。</p><button class="primary" data-page="home">＋ 新建任务</button></section><div class="guide-grid">${sections.map(([badge, title, body, toolId]) => `<section class="panel"><span>${escape(badge)}</span><h2>${escape(title)}</h2><p>${escape(body)}</p>${toolId ? `<button class="text-action" data-tool="${escape(toolId)}">开始${escape(title)} →</button>` : '<button class="text-action" data-page="home">去工作台选工具 →</button>'}</section>`).join('')}</div></div>`

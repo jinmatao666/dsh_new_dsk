@@ -25,7 +25,7 @@ ENV ODA_FILE_CONVERTER=/usr/local/bin/ODAFileConverter
 COPY requirements.txt ./
 ARG PIP_INDEX_URL=https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
 RUN python -m pip install --no-cache-dir --disable-pip-version-check --index-url "${PIP_INDEX_URL}" --timeout 60 --retries 3 --prefer-binary -r requirements.txt
-COPY processors.py store.py worker.py server.py deployment.py ./
+COPY processors.py store.py worker.py server.py deployment.py overlay.py online_service.py ./
 COPY web ./web
 RUN mkdir -p /data && chown expert:expert /data
 USER expert

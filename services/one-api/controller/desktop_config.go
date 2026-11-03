@@ -4,15 +4,24 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common/config"
 )
 
 type desktopFeatureFlags struct {
-	Automations    bool `json:"automations"`
-	Connectors     bool `json:"connectors"`
-	KnowledgeBases bool `json:"knowledgeBases"`
+	Automations          bool `json:"automations"`
+	Connectors           bool `json:"connectors"`
+	KnowledgeBases       bool `json:"knowledgeBases"`
+	LandMarket           bool `json:"landMarket"`
+	PolicyEncyclopedia   bool `json:"policyEncyclopedia"`
+}
+
+type desktopFeaturePage struct {
+	URL string `json:"url"`
 }
 
 type desktopDeploymentSettings struct {
@@ -24,6 +33,7 @@ type desktopDeploymentSettings struct {
 	Operator              string                         `json:"operator"`
 	Phone                 string                         `json:"phone"`
 	Features              map[string]desktopFeatureFlags `json:"features"`
+	FeaturePages          map[string]desktopFeaturePage  `json:"featurePages"`
 	Plugins               desktopPluginSettings          `json:"plugins"`
 	Resources             *desktopResourceSettings       `json:"resources,omitempty"`
 	// KnowledgeQuota is workbench-only personal storage policy; desktop clients ignore it.
@@ -34,12 +44,34 @@ type desktopPluginSettings struct {
 	BrowserAssistant bool `json:"browserAssistant"`
 }
 
+func defaultDesktopFeaturePages() map[string]desktopFeaturePage {
+	return map[string]desktopFeaturePage{
+		"landMarket":         {URL: ""},
+		"policyEncyclopedia": {URL: ""},
+	}
+}
+
+func validateDesktopFeaturePageURL(raw string) error {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+	if utf8.RuneCountInString(trimmed) > 2048 {
+		return fmt.Errorf("invalid feature page url length")
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return fmt.Errorf("invalid feature page url")
+	}
+	return nil
+}
+
 // Existing deployment records without feature settings retain their current behavior.
 func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, error) {
 	settings := desktopDeploymentSettings{InternetCatalogPolicy: "disable", InternetSkillPolicy: "disable", InternetExpertPolicy: "disable", Network: "internet", Edition: "operations", Plugins: desktopPluginSettings{BrowserAssistant: true}, Features: map[string]desktopFeatureFlags{
 		"internet": {Automations: true, Connectors: true, KnowledgeBases: true},
 		"intranet": {Automations: true, Connectors: false, KnowledgeBases: true},
-	}}
+	}, FeaturePages: defaultDesktopFeaturePages()}
 	if raw == "" {
 		return settings, nil
 	}
@@ -89,14 +121,40 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 			return settings, err
 		}
 		for _, mode := range []string{"internet", "intranet"} {
-			for _, feature := range []string{"automations", "connectors", "knowledgeBases"} {
-				if _, present := environments[mode][feature]; feature == "knowledgeBases" && !present {
-					legacyKnowledge[mode] = true
-					continue
-				}
-				if _, ok := environments[mode][feature].(bool); !ok {
+			for _, feature := range []string{"automations", "connectors", "knowledgeBases", "landMarket", "policyEncyclopedia"} {
+				value, present := environments[mode][feature]
+				if !present {
+					if feature == "knowledgeBases" {
+						legacyKnowledge[mode] = true
+						continue
+					}
+					if feature == "landMarket" || feature == "policyEncyclopedia" {
+						continue
+					}
 					return settings, fmt.Errorf("invalid feature setting: %s.%s", mode, feature)
 				}
+				if _, ok := value.(bool); !ok {
+					return settings, fmt.Errorf("invalid feature setting: %s.%s", mode, feature)
+				}
+			}
+		}
+	}
+	if pages, present := fields["featurePages"]; present {
+		var entries map[string]map[string]interface{}
+		if err := json.Unmarshal(pages, &entries); err != nil {
+			return settings, err
+		}
+		for _, key := range []string{"landMarket", "policyEncyclopedia"} {
+			entry, ok := entries[key]
+			if !ok {
+				continue
+			}
+			rawURL, ok := entry["url"].(string)
+			if !ok {
+				return settings, fmt.Errorf("invalid feature page url: %s", key)
+			}
+			if err := validateDesktopFeaturePageURL(rawURL); err != nil {
+				return settings, err
 			}
 		}
 	}
@@ -156,6 +214,15 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 		}
 	}
 	settings.Features = map[string]desktopFeatureFlags{"internet": settings.Features["internet"], "intranet": settings.Features["intranet"]}
+	normalizedPages := defaultDesktopFeaturePages()
+	for key := range normalizedPages {
+		if settings.FeaturePages != nil {
+			if page, ok := settings.FeaturePages[key]; ok {
+				normalizedPages[key] = desktopFeaturePage{URL: strings.TrimSpace(page.URL)}
+			}
+		}
+	}
+	settings.FeaturePages = normalizedPages
 	if settings.Network != "internet" && settings.Network != "intranet" {
 		return settings, fmt.Errorf("invalid network")
 	}

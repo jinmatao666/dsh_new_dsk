@@ -1,0 +1,40 @@
+.dsh-skill-market-body.dsh-portal-host {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  padding: 0;
+}
+
+.dsh-skill-market-body.dsh-portal-host > .dsh-portal-frame,
+.dsh-skill-market-body.dsh-portal-host > .dsh-portal-empty {
+  flex: 1 1 auto;
+  align-self: stretch;
+  width: 100%;
+  min-height: 0;
+}
+
+.dsh-portal-frame {
+  border: 0;
+  background: #fff;
+}
+
+.dsh-portal-empty {
+  display: grid;
+  place-content: center;
+  text-align: center;
+  color: #526b8c;
+  padding: 24px;
+}
+
+.dsh-portal-empty h2 {
+  margin: 0 0 10px;
+  font-size: 18px;
+  color: #203a5e;
+}
+
+.dsh-portal-empty p {
+  margin: 0;
+  max-width: 420px;
+  line-height: 1.7;
+}

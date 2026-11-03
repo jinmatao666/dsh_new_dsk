@@ -38,11 +38,12 @@ test('result page can preview outputs', () => {
 
 test('result page supports overlay visualization', () => {
   assert.match(app, /loadResultOverlay/)
-  assert.match(app, /成果套合可视化/)
+  assert.match(app, /成果展示/)
   assert.match(app, /\/api\/overlay\/parse/)
   assert.match(app, /\/api\/overlay\/online-map/)
   assert.match(app, /\/api\/map-config/)
   assert.match(app, /data-preview-geometry/)
+  assert.match(app, /data-preview-feature/)
   assert.match(app, /openGeometryModal/)
   assert.match(app, /添加在线服务/)
   assert.match(app, /overlay-service-token/)

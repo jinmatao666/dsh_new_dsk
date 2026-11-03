@@ -157,17 +157,64 @@ class OnlineServiceTests(unittest.TestCase):
                         "EPSG:4326",
                     )
 
-    def test_fetch_mapserver_requires_token(self):
-        with mock.patch("online_service._hostname_allowed", return_value=True):
-            with self.assertRaisesRegex(OnlineServiceError, "Token"):
-                fetch_overlay_image(
-                    "http://60.191.110.206:36080/arcgis/rest/services/SL/SL_XZQ/MapServer",
-                    "0",
-                    [40525700.0, 3494900.0, 40526400.0, 3495120.0],
-                    256,
-                    256,
-                    "EPSG:4528",
-                )
+    def test_fetch_mapserver_public_without_token(self):
+        """Public MapServers may omit Token; only server auth failures should block."""
+        png = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+            b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00"
+            b"\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+
+        class FakeResponse:
+            headers = {"Content-Type": "image/png"}
+
+            def read(self, _size):
+                return png
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        with mock.patch("online_service.urllib.request.urlopen", return_value=FakeResponse()):
+            with mock.patch("online_service._hostname_allowed", return_value=True):
+                with mock.patch("online_service.fetch_mapserver_metadata", return_value={}):
+                    payload = fetch_overlay_image(
+                        "http://60.191.110.206:36080/arcgis/rest/services/SL/SL_XZQ/MapServer",
+                        "0",
+                        [40525700.0, 3494900.0, 40526400.0, 3495120.0],
+                        256,
+                        256,
+                        "EPSG:4528",
+                    )
+        self.assertTrue(payload["imageBase64"])
+
+    def test_fetch_mapserver_missing_token_surfaces_auth_error(self):
+        class FakeResponse:
+            headers = {"Content-Type": "text/plain;charset=utf-8"}
+
+            def read(self, _size):
+                return b'{"error":{"code":499,"message":"Token Required","details":[]}}'
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        with mock.patch("online_service.urllib.request.urlopen", return_value=FakeResponse()):
+            with mock.patch("online_service._hostname_allowed", return_value=True):
+                with mock.patch("online_service.fetch_mapserver_metadata", return_value={}):
+                    with self.assertRaisesRegex(OnlineServiceError, "Token"):
+                        fetch_overlay_image(
+                            "http://60.191.110.206:36080/arcgis/rest/services/SL/SL_XZQ/MapServer",
+                            "0",
+                            [40525700.0, 3494900.0, 40526400.0, 3495120.0],
+                            256,
+                            256,
+                            "EPSG:4528",
+                        )
 
     def test_fetch_rejects_token_required_text_plain(self):
         class FakeResponse:

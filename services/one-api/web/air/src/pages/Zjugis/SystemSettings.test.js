@@ -39,11 +39,15 @@ test('legacy feature switches load and save with knowledge defaults without rese
   act(() => container.querySelectorAll('[role="tab"]')[4].click());
   expect(container.querySelector('[role="alert"]')).toBeNull();
   const switches = [...container.querySelectorAll('[role="switch"]')];
-  expect(switches.map(toggle => toggle.checked)).toEqual([false, true, true, false, true, true]);
+  expect(switches.map(toggle => toggle.checked)).toEqual([false, true, true, false, true, true, false, false, false, false]);
   act(() => switches[4].click());
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   const saved = JSON.parse(API.put.mock.calls[0][1].value);
-  expect(saved.features).toEqual({ internet: { ...legacy.features.internet, knowledgeBases: false }, intranet: { ...legacy.features.intranet, knowledgeBases: true } });
+  expect(saved.features).toEqual({
+    internet: { ...legacy.features.internet, knowledgeBases: false, landMarket: false, policyEncyclopedia: false },
+    intranet: { ...legacy.features.intranet, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+  });
+  expect(saved.featurePages).toEqual({ landMarket: { url: '' }, policyEncyclopedia: { url: '' } });
   expect(saved.network).toBe(legacy.network);
   expect(saved.resources).toEqual(legacy.resources);
 });
@@ -61,20 +65,20 @@ test.each([null, 'true', 1])('rejects an explicitly invalid knowledge flag %p', 
   expect(API.put).not.toHaveBeenCalled();
 });
 
-test('eight tabs preserve profile and security, and load deployment contacts', async () => {
+test('nine tabs preserve profile and security, and load deployment contacts', async () => {
   await act(async () => root.render(<SystemSettings />));
   const tabs = [...container.querySelectorAll('[role="tab"]')];
-  expect(tabs.map(button => button.textContent)).toEqual(['账户设置', '安全设置', '网络设置', '版本类型', '功能设置', '知识库设置', '运维设置', '插件设置']);
+  expect(tabs.map(button => button.textContent)).toEqual(['账户设置', '安全设置', '网络设置', '版本类型', '功能设置', '功能配置', '知识库设置', '运维设置', '插件设置']);
   expect(container.textContent).toContain('root');
   act(() => tabs[1].click()); expect(container.textContent).toContain('会话有效期');
-  act(() => tabs[6].click());
+  act(() => tabs[7].click());
   expect(container.querySelector('input').value).toBe('张运维');
   expect(container.querySelector('input[type="tel"]').value).toBe('0571-12345678');
 });
 
 test('plugin administrator switch saves independently and cancellation restores its saved value', async () => {
   await act(async () => root.render(<SystemSettings />));
-  act(() => container.querySelectorAll('[role="tab"]')[7].click());
+  act(() => container.querySelectorAll('[role="tab"]')[8].click());
   const toggle = container.querySelector('[aria-label="统一启用浏览器助手"]');
   expect(toggle.checked).toBe(true);
   act(() => toggle.click());
@@ -88,6 +92,8 @@ test('plugin administrator switch saves independently and cancellation restores 
   expect(value.operator).toBe('张运维');
   expect(value.features.internet.connectors).toBe(true);
   expect(value.features.internet.knowledgeBases).toBe(true);
+  expect(value.features.internet.landMarket).toBe(false);
+  expect(value.features.internet.policyEncyclopedia).toBe(false);
 });
 
 test('ordinary user can load and modify plugin settings', async () => {
@@ -95,7 +101,7 @@ test('ordinary user can load and modify plugin settings', async () => {
     ? { username: 'member', role: 1 }
     : [{ key: 'SystemDeploymentSettings', value: JSON.stringify({ network: 'internet', operator: '张运维', phone: '0571-12345678' }) }] } }));
   await act(async () => root.render(<SystemSettings />));
-  act(() => container.querySelectorAll('[role="tab"]')[7].click());
+  act(() => container.querySelectorAll('[role="tab"]')[8].click());
   expect(container.textContent).not.toContain('仅超级管理员');
   const toggle = container.querySelector('[aria-label="统一启用浏览器助手"]');
   expect(toggle).not.toBeNull();
@@ -111,7 +117,10 @@ test('network selection saves one deployment option without changing account dat
   const saved = JSON.parse(API.put.mock.calls[0][1].value);
   expect(saved.network).toBe('intranet');
   expect(saved.operator).toBe('张运维');
-  expect(saved.features).toEqual({ internet: { automations: true, connectors: true, knowledgeBases: true }, intranet: { automations: true, connectors: false, knowledgeBases: true } });
+  expect(saved.features).toEqual({
+    internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+    intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+  });
   expect(showSuccess).toHaveBeenCalledWith('设置已保存');
   expect(container.textContent).not.toContain('设置已保存');
   expect(container.textContent).not.toContain('所有修改已保存');
@@ -139,9 +148,33 @@ test('feature switches save independently for internet and intranet', async () =
   act(() => toggle('互联网自动化').click());
   act(() => toggle('纯内网连接器').click());
   act(() => toggle('互联网知识库').click());
+  act(() => toggle('互联网土地市场').click());
+  act(() => toggle('纯内网政策宝典').click());
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-  expect(JSON.parse(API.put.mock.calls[0][1].value).features).toEqual({ internet: { automations: false, connectors: true, knowledgeBases: false }, intranet: { automations: true, connectors: true, knowledgeBases: true } });
+  expect(JSON.parse(API.put.mock.calls[0][1].value).features).toEqual({
+    internet: { automations: false, connectors: true, knowledgeBases: false, landMarket: true, policyEncyclopedia: false },
+    intranet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: true },
+  });
   expect(toggle('纯内网自动化').checked).toBe(true);
+});
+
+test('feature configuration tab saves portal page URLs', async () => {
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[5].click());
+  expect(container.textContent).toContain('土地市场');
+  expect(container.textContent).toContain('政策宝典');
+  expect(container.textContent).toContain('未配置');
+  await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '配置').click());
+  expect(await waitForDialog()).not.toBeNull();
+  await act(async () => fillInput(container.querySelector('[aria-label="土地市场页面地址"]'), 'https://land.example/#/home'));
+  await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '确定').click());
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(container.textContent).toContain('https://land.example/#/home');
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(JSON.parse(API.put.mock.calls[0][1].value).featurePages).toEqual({
+    landMarket: { url: 'https://land.example/#/home' },
+    policyEncyclopedia: { url: '' },
+  });
 });
 
 test('edition selection saves independently and can be cancelled', async () => {
@@ -309,7 +342,7 @@ test('knowledge quota tab defaults off and saves total with person allocations',
     return Promise.resolve({ data: { success: true, data: [] } });
   });
   await act(async () => root.render(<SystemSettings />));
-  act(() => container.querySelectorAll('[role="tab"]')[5].click());
+  act(() => container.querySelectorAll('[role="tab"]')[6].click());
   const toggle = container.querySelector('[aria-label="文件大小限制"]');
   expect(toggle.checked).toBe(false);
   expect(container.textContent).toContain('已关闭');
@@ -345,7 +378,7 @@ test('knowledge quota requires total before save when enabled', async () => {
     return Promise.resolve({ data: { success: true, data: [] } });
   });
   await act(async () => root.render(<SystemSettings />));
-  act(() => container.querySelectorAll('[role="tab"]')[5].click());
+  act(() => container.querySelectorAll('[role="tab"]')[6].click());
   await act(async () => container.querySelector('[aria-label="文件大小限制"]').click());
   expect(await waitForDialog()).not.toBeNull();
   await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '关闭').click());

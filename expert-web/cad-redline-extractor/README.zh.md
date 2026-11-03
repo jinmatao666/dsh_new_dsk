@@ -34,7 +34,7 @@ docker compose -p wanwei-cad-redline-extractor up -d
 
 Nginx 已按编号转发时无需改网关；参考 `nginx.location.conf.example`。更新时保留 `.env` 与数据卷，不要 `down -v`。
 
-## 成果套合可视化
+## 成果展示
 
 结果页可上传本地 Shape ZIP（或同名 `.shp/.shx/.dbf`）/ GeoJSON 与提取成果套合；几何列表支持选中后单独展示。在线服务通过弹框填写 **服务地址** 与 **图层名称**（可选坐标参考，默认 `EPSG:4326`）后保存；服务端代理拉取 WMS GetMap 或 ArcGIS MapServer/export 图像，再套合到当前图范围。地图右上角可开关「提取成果 / 套合参考 / 在线服务」图层。内网与回环地址不可作为在线服务目标。
 

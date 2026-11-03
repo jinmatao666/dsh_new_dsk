@@ -66,6 +66,8 @@
       name: '@deepseek-ai/dsh-wanwei-knowledge-base'
     - id: wanwei-automations
       name: '@deepseek-ai/dsh-wanwei-automations'
+    - id: wanwei-portals
+      name: '@deepseek-ai/dsh-wanwei-portals'
     - id: wanwei-skill-marketplace
       name: '@deepseek-ai/dsh-wanwei-skill-marketplace'
     - id: wanwei-product-ui

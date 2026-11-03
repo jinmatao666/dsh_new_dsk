@@ -72,7 +72,16 @@
 .overlay-layer-empty{margin:0;font-size:12px}
 .overlay-map-note{margin:8px 0 0;font-size:12px}
 .overlay-card-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0}
-.overlay-source-list{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:8px}
+.overlay-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.overlay-card-head h4{margin:0;font-size:14px;line-height:1.3}
+.overlay-card-tag{flex:0 0 auto;padding:3px 8px;border:1px solid #d9e7ff;border-radius:999px;background:#eef4ff;color:#315c9a;font-size:11px;font-weight:700;letter-spacing:.02em}
+.overlay-add-btn{display:grid;justify-items:center;gap:4px;width:100%;margin:0;padding:18px 14px;border:1px dashed #8eafea;border-radius:10px;background:#f7faff;color:#17335b;cursor:pointer}
+.overlay-add-btn:hover{border-color:#3476eb;background:#e7efff}
+.overlay-add-btn .overlay-add-title{font-size:13px;font-weight:700;color:#1760ee}
+.overlay-add-btn small{color:#687c9c;font-size:11px;line-height:1.5;text-align:center}
+.overlay-add-btn-compact{padding:10px 12px;gap:0}
+.overlay-add-btn-compact .overlay-add-title{font-size:12px}
+.overlay-source-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .overlay-source-list li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #e2e8f2;border-radius:10px;background:#fff}
 .overlay-source-locate{min-width:0;flex:1;display:grid;gap:2px;padding:4px 6px;border:0;border-radius:8px;background:transparent;text-align:left;cursor:pointer}
 .overlay-source-locate:hover{background:#f3f7ff}
@@ -92,9 +101,9 @@
 .overlay-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}
 #geometry-view-canvas{display:block;width:100%;height:auto;border:1px solid #d9e4f4;border-radius:12px;background:#f4f7fc}
 .overlay-side{display:grid;gap:12px;align-content:start}
-.overlay-card{padding:14px;border:1px solid #e2e8f2;border-radius:12px;background:#fbfcff}
-.overlay-card h4{margin:0 0 8px;font-size:14px}
-.overlay-card .muted{margin:0 0 10px;font-size:12px;line-height:1.6}
+.overlay-card{display:grid;gap:10px;padding:14px;border:1px solid #e2e8f2;border-radius:12px;background:#fff;box-shadow:0 1px 0 rgba(16,38,75,.03)}
+.overlay-card h4{margin:0;font-size:14px}
+.overlay-card .muted{margin:0;font-size:12px;line-height:1.6}
 .overlay-card label{display:grid;gap:6px;margin:10px 0;font-size:13px;color:#40506a}
 .overlay-card input[type=text],.overlay-card input:not([type]),.overlay-card input[type=url]{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #d5deed;border-radius:8px}
 .overlay-toggle{display:flex!important;align-items:center;gap:8px;grid-template-columns:none}

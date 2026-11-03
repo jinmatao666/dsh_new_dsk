@@ -6,21 +6,24 @@ import ResourceSettings, { defaultResources, normalizeResources } from './Resour
 import KnowledgeQuotaSettings, { defaultKnowledgeQuota, normalizeKnowledgeQuota } from './KnowledgeQuotaSettings';
 import { DEFAULT_CREDIT_BASE, validCreditNumber, formatCreditPrice } from './creditPricing';
 import CreditRewardSettings, { normalizeCreditRewards } from './CreditRewardSettings';
+import FeaturePagesSettings, { defaultFeaturePages, normalizeFeaturePages, validateFeaturePageUrl, FEATURE_PAGE_ENTRIES } from './FeaturePagesSettings';
 
+const featureKeys = ['automations', 'connectors', 'knowledgeBases', 'landMarket', 'policyEncyclopedia'];
 const defaults = { network: 'internet', internetCatalogPolicy: 'disable', internetSkillPolicy: 'disable', internetExpertPolicy: 'disable', edition: 'operations', operator: '', phone: '', features: {
-  internet: { automations: true, connectors: true, knowledgeBases: true },
-  intranet: { automations: true, connectors: false, knowledgeBases: true },
-}, plugins: { browserAssistant: true }, knowledgeQuota: defaultKnowledgeQuota, creditPricingBase: DEFAULT_CREDIT_BASE };
-const tabs = [['account', '账户设置'], ['security', '安全设置'], ['network', '网络设置'], ['edition', '版本类型'], ['features', '功能设置'], ['knowledge', '知识库设置'], ['operations', '运维设置'], ['plugins', '插件设置']];
+  internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+  intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+}, featurePages: defaultFeaturePages, plugins: { browserAssistant: true }, knowledgeQuota: defaultKnowledgeQuota, creditPricingBase: DEFAULT_CREDIT_BASE };
+const tabs = [['account', '账户设置'], ['security', '安全设置'], ['network', '网络设置'], ['edition', '版本类型'], ['features', '功能设置'], ['featureConfig', '功能配置'], ['knowledge', '知识库设置'], ['operations', '运维设置'], ['plugins', '插件设置']];
 const descriptions = {
   network: '设置桌面端使用的部署网络环境。',
   edition: '选择本系统的版本类型，网络环境与功能开关保持独立。',
   features: '内网与互联网独立配置。关闭后隐藏桌面端入口，桌面端启动、登录或切回窗口刷新后生效；开启不代表外部服务在内网可访问。',
+  featureConfig: '为土地市场和政策宝典配置桌面端展示的页面地址。入口显示隐藏仍由功能设置控制；桌面端启动、登录或切回窗口刷新后生效。',
   knowledge: '限制个人知识库存储总量，并可按组织架构为具体人员分配额度。关闭后不限制个人知识库总容量。',
   operations: '填写负责本系统日常维护的人员及联系电话。',
   plugins: '统一控制桌面端插件。关闭后用户无法开启；开启后用户可自行启停。桌面端启动、登录或切回窗口刷新后生效，不强制中断已开始的操作。原有网络限制仍然有效。',
 };
-const deploymentTabs = ['network', 'edition', 'features', 'knowledge', 'operations', 'plugins'];
+const deploymentTabs = ['network', 'edition', 'features', 'featureConfig', 'knowledge', 'operations', 'plugins'];
 
 async function loadSettingsResponse(path, signal) {
   for (let attempt = 0; ; attempt++) {
@@ -80,12 +83,16 @@ export default function SystemSettings() {
         value[key] = stored[key] === undefined ? value.internetCatalogPolicy : stored[key];
         if (!['hide', 'disable'].includes(value[key])) throw new Error('技能专家联网处理设置无效');
       }
-      // 仅兼容旧记录缺少的知识库开关，错误值和缺失的原有字段仍交给校验拒绝。
+      // 仅兼容旧记录缺少的知识库与门户开关，错误值和缺失的原有字段仍交给校验拒绝。
       if (value.features && typeof value.features === 'object') {
         for (const mode of ['internet', 'intranet']) {
           const flags = value.features[mode];
-          if (flags && typeof flags === 'object' && !Object.prototype.hasOwnProperty.call(flags, 'knowledgeBases')) {
-            value.features = { ...value.features, [mode]: { ...flags, knowledgeBases: true } };
+          if (flags && typeof flags === 'object') {
+            const next = { ...flags };
+            if (!Object.prototype.hasOwnProperty.call(flags, 'knowledgeBases')) next.knowledgeBases = true;
+            if (!Object.prototype.hasOwnProperty.call(flags, 'landMarket')) next.landMarket = false;
+            if (!Object.prototype.hasOwnProperty.call(flags, 'policyEncyclopedia')) next.policyEncyclopedia = false;
+            value.features = { ...value.features, [mode]: next };
           }
         }
       }
@@ -93,9 +100,14 @@ export default function SystemSettings() {
       if (!['hide', 'disable'].includes(value.internetCatalogPolicy)) throw new Error('技能专家联网处理设置无效');
       if (!['government', 'operations'].includes(value.edition)) throw new Error('版本类型无效，请联系管理员检查配置');
       for (const mode of ['internet', 'intranet']) {
-        for (const feature of ['automations', 'connectors', 'knowledgeBases']) {
+        for (const feature of featureKeys) {
           if (typeof value.features?.[mode]?.[feature] !== 'boolean') throw new Error('功能设置无效，请联系管理员检查配置');
         }
+      }
+      value.featurePages = normalizeFeaturePages(value.featurePages);
+      for (const [key] of FEATURE_PAGE_ENTRIES) {
+        const message = validateFeaturePageUrl(value.featurePages[key].url);
+        if (message) throw new Error(`功能配置无效：${message}`);
       }
       value.knowledgeQuota = normalizeKnowledgeQuota(value.knowledgeQuota);
       if (value.knowledgeQuota.enabled && value.knowledgeQuota.totalBytes <= 0) {
@@ -122,7 +134,12 @@ export default function SystemSettings() {
     }
     setSaving(true); setFeedback('');
     const value = { ...settings, creditRewards, operator: settings.operator.trim(), phone: settings.phone.trim(),
+      featurePages: normalizeFeaturePages(settings.featurePages),
       knowledgeQuota: normalizeKnowledgeQuota(settings.knowledgeQuota), creditPricingBase: Number(settings.creditPricingBase) };
+    for (const [key, label] of FEATURE_PAGE_ENTRIES) {
+      const message = validateFeaturePageUrl(value.featurePages[key].url);
+      if (message) { setSaving(false); setFeedback(`${label}${message}`); return; }
+    }
     if (value.knowledgeQuota.enabled && value.knowledgeQuota.totalBytes <= 0) {
       setSaving(false); setFeedback('请先点击设置，填写个人知识库总量后再保存'); return;
     }
@@ -162,10 +179,12 @@ export default function SystemSettings() {
             <div className='account-row'><span>登录保护</span><strong className='green'>已启用</strong></div>
           </div><button type='button' className='settings-secondary settings-logout' onClick={logout}>退出登录</button></>}
           {deploymentTabs.includes(active) && <form onSubmit={save}>
-            <h2>{active === 'network' ? '网络环境' : active === 'edition' ? '版本类型' : active === 'features' ? '功能入口' : active === 'knowledge' ? '知识库设置' : active === 'plugins' ? '插件控制' : '运维联系信息'}</h2>
+            <h2>{active === 'network' ? '网络环境' : active === 'edition' ? '版本类型' : active === 'features' ? '功能入口' : active === 'featureConfig' ? '功能配置' : active === 'knowledge' ? '知识库设置' : active === 'plugins' ? '插件控制' : '运维联系信息'}</h2>
             <p className='settings-description'>{descriptions[active]}</p>
             {active === 'knowledge' ? <KnowledgeQuotaSettings value={settings.knowledgeQuota || defaultKnowledgeQuota} disabled={saving}
               saving={saving} onChange={value => change('knowledgeQuota', normalizeKnowledgeQuota(value))} />
+              : active === 'featureConfig' ? <FeaturePagesSettings value={settings.featurePages || defaultFeaturePages} disabled={saving}
+                onChange={value => change('featurePages', normalizeFeaturePages(value))} />
               : active === 'plugins' ? <>
               <table className='settings-features'><thead><tr><th scope='col'>插件</th><th scope='col'>统一开关</th></tr></thead><tbody><tr><th scope='row'>浏览器助手</th><td><label>
                 <input type='checkbox' role='switch' aria-label='统一启用浏览器助手' checked={settings.plugins.browserAssistant} disabled={saving} onChange={event => change('plugins', { ...settings.plugins, browserAssistant: event.target.checked })} />
@@ -175,7 +194,7 @@ export default function SystemSettings() {
                 <input type='radio' name='edition' value={key} checked={settings.edition === key} onChange={() => change('edition', key)} disabled={saving} /><span><strong>{label}</strong><small>{hint}</small></span>
               </label>)}
             </fieldset> : active === 'features' ? <table className='settings-features'><thead><tr><th scope='col'>功能</th><th scope='col'>互联网环境</th><th scope='col'>纯内网环境</th></tr></thead><tbody>
-              {[['automations', '自动化'], ['connectors', '连接器'], ['knowledgeBases', '知识库']].map(([feature, label]) => <tr key={feature}><th scope='row'>{label}</th>
+              {[['automations', '自动化'], ['connectors', '连接器'], ['knowledgeBases', '知识库'], ['landMarket', '土地市场'], ['policyEncyclopedia', '政策宝典']].map(([feature, label]) => <tr key={feature}><th scope='row'>{label}</th>
                 {['internet', 'intranet'].map(mode => <td key={mode}><label><input type='checkbox' role='switch' aria-label={`${mode === 'internet' ? '互联网' : '纯内网'}${label}`} checked={settings.features[mode][feature]} disabled={saving} onChange={event => change('features', { ...settings.features, [mode]: { ...settings.features[mode], [feature]: event.target.checked } })} /><span>{settings.features[mode][feature] ? '开启' : '关闭'}</span></label></td>)}
               </tr>)}
             </tbody></table> : active === 'network' ? <fieldset className='settings-network'><legend>网络类型</legend>
