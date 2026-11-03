@@ -13,11 +13,11 @@ import (
 )
 
 type desktopFeatureFlags struct {
-	Automations          bool `json:"automations"`
-	Connectors           bool `json:"connectors"`
-	KnowledgeBases       bool `json:"knowledgeBases"`
-	LandMarket           bool `json:"landMarket"`
-	PolicyEncyclopedia   bool `json:"policyEncyclopedia"`
+	Automations        bool `json:"automations"`
+	Connectors         bool `json:"connectors"`
+	KnowledgeBases     bool `json:"knowledgeBases"`
+	LandMarket         bool `json:"landMarket"`
+	PolicyEncyclopedia bool `json:"policyEncyclopedia"`
 }
 
 type desktopFeaturePage struct {
@@ -143,6 +143,9 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 		var entries map[string]map[string]interface{}
 		if err := json.Unmarshal(pages, &entries); err != nil {
 			return settings, err
+		}
+		if entries == nil {
+			return settings, fmt.Errorf("invalid featurePages")
 		}
 		for _, key := range []string{"landMarket", "policyEncyclopedia"} {
 			entry, ok := entries[key]

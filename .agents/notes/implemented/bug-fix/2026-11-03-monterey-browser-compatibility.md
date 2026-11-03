@@ -14,6 +14,8 @@ The Wanwei product build transforms the shell's JS/CSS and fetched plugin JS/CSS
 
 An empty root gets a reload prompt after an early loading error or thirty seconds. Error messages and token-bearing URLs are not rendered. Existing rendered content is retained.
 
+The pnpm build policy explicitly denies the funding-banner-only `core-js` install script. The package ships its polyfills ready for bundling, so installation succeeds under strict dependency build checks without interactive approval or running that script.
+
 ## Alternatives considered
 
 **Require an upgraded browser.** The desktop uses the operating system WebView, independently of installed Chrome. The product build therefore supplies compatible syntax and missing standard APIs while leaving shared Node artifacts intact.

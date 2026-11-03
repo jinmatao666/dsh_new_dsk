@@ -51,6 +51,8 @@ packageExtensions:
 # default and only allow scripts we need. esbuild (native binary) and lefthook
 # (git hooks) genuinely need theirs.
 allowBuilds:
+  # core-js ships ready-to-use polyfills; its postinstall only prints a funding banner.
+  core-js: false
   esbuild: true
   lefthook: true
   # Cross-platform boundary for the persistent PTY backend, including ConPTY on Windows.

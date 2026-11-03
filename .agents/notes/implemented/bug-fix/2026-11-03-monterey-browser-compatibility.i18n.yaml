@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-11-03-monterey-browser-compatibility.md
-2026-11-03-monterey-browser-compatibility.md: 08dfb51e445afdefa4db1790f7afbb431f755755
-2026-11-03-monterey-browser-compatibility.zh.md: 184a7b17c1e26de0db720a8f4bb27a538e19fce7
+2026-11-03-monterey-browser-compatibility.md: 844a1ce2be1749e0a8fafc04c5fe00b8b98de07d
+2026-11-03-monterey-browser-compatibility.zh.md: e9ff1e61a45ff178b56a767c737e07ba79f98b19
