@@ -36,7 +36,7 @@
 
 在 `services/one-api` 运行 `go test ./controller ./router -run '^Test(WebsiteInstaller|DesktopUpdate)' -count=1`。在 `services/one-api/web/air` 设置 `CI=true` 后运行 `npm test -- --watchAll=false --runInBand --runTestsByPath src/pages/VersionRelease/WebsiteInstallers.test.js src/pages/VersionRelease/DesktopUpdates.test.js`。测试覆盖发布、撤下、替换、删除、下载、鉴权、无效上传、文件完整性和管理页面交互，不会安装实际安装包或部署官网。
 
-服务端检查可执行文件格式及 Windows x64 信息，或 DMG 尾部标记，再计算 SHA-256；发布时重新核对文件哈希。这些检查不认证应用版本、DMG 架构、系统签名或安装成功。可信管理员必须对照构建产物核实。进程突然终止可能遗留暂存或无引用目录，只能在停止上传期间检查清理。
+服务端接受 AMD64 可执行文件，以及具有有效附加数据头和合理归档长度的 x86 NSIS 引导程序，或检查 DMG 尾部标记，再计算 SHA-256。x86 NSIS 引导程序可以安装 x64 应用，不能用外层 EXE 的机器类型判断内部应用架构。发布时重新核对文件哈希。这些检查不认证应用版本、NSIS 内部应用或 DMG 架构、系统签名或安装成功。可信管理员必须对照构建产物核实。进程突然终止可能遗留暂存或无引用目录，只能在停止上传期间检查清理。
 
 ## 开发备注
 

@@ -60,6 +60,59 @@ func installerPE() []byte {
 	binary.LittleEndian.PutUint16(data[86:], 2)
 	return data
 }
+
+func installerNSIS() []byte {
+	data := append(installerPE(), make([]byte, 288)...)
+	binary.LittleEndian.PutUint16(data[68:], 0x14c)
+	binary.LittleEndian.PutUint16(data[70:], 1)
+	copy(data[88:], ".text")
+	binary.LittleEndian.PutUint32(data[104:], 256)
+	binary.LittleEndian.PutUint32(data[108:], 256)
+	copy(data[516:], []byte{0xef, 0xbe, 0xad, 0xde, 'N', 'u', 'l', 'l', 's', 'o', 'f', 't', 'I', 'n', 's', 't'})
+	binary.LittleEndian.PutUint32(data[532:], 16)
+	binary.LittleEndian.PutUint32(data[536:], 32)
+	return data
+}
+
+func TestWebsiteInstallerNSISBootstrapper(t *testing.T) {
+	r, _ := installerRouter(t)
+	data := installerNSIS()
+	id := uploadedID(t, installerUpload(t, r, "root", "1.0.2", "windows-x64", "app_x64-setup.exe", data))
+	require.Equal(t, 200, updateRequest(r, "POST", "/api/admin/website-installers/"+id+"/publish", nil, "", "root").Code)
+	w := updateRequest(r, "GET", "/downloads/installers/"+id, nil, "", "")
+	require.Equal(t, 200, w.Code)
+	require.Equal(t, data, w.Body.Bytes())
+	for _, kind := range []string{"truncated", "signature", "length", "dll", "arm"} {
+		bad := installerNSIS()
+		switch kind {
+		case "truncated":
+			bad = bad[:530]
+		case "signature":
+			bad[520] = 0
+		case "length":
+			binary.LittleEndian.PutUint32(bad[536:], 0xffffffff)
+		case "dll":
+			binary.LittleEndian.PutUint16(bad[86:], 0x2002)
+		case "arm":
+			binary.LittleEndian.PutUint16(bad[68:], 0xaa64)
+		}
+		require.Equal(t, 400, installerUpload(t, r, "root", "1.0.2", "windows-x64", "bad.exe", bad).Code, kind)
+	}
+}
+
+func TestWebsiteInstallerRealNSIS(t *testing.T) {
+	path := os.Getenv("DSH_TEST_WEBSITE_INSTALLER")
+	if path == "" {
+		t.Skip("Set DSH_TEST_WEBSITE_INSTALLER to a real x64 NSIS setup executable")
+	}
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	r, root := installerRouter(t)
+	id := uploadedID(t, installerUpload(t, r, "root", "1.0.2", "windows-x64", filepath.Base(path), data))
+	stored, err := os.ReadFile(filepath.Join(root, "website-installers", id, "installer"))
+	require.NoError(t, err)
+	require.Equal(t, sha256.Sum256(data), sha256.Sum256(stored))
+}
 func installerDMG() []byte { data := make([]byte, 1024); copy(data[512:], "koly"); return data }
 func installerUpload(t *testing.T, r *gin.Engine, role, version, platform, name string, data []byte) *httptest.ResponseRecorder {
 	t.Helper()

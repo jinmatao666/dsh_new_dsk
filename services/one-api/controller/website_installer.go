@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"debug/pe"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -39,6 +41,41 @@ func websiteInstallerExtension(platform string) string {
 	}
 }
 
+// NSIS uses an x86 bootstrapper even for x64 application payloads. Validate its
+// overlay header, not the bootstrapper architecture; payload architecture is an
+// administrator-supplied release attribute, as with DMG packages.
+func isWebsiteNSISInstaller(path string, binaryFile *pe.File) bool {
+	var overlay int64
+	for _, section := range binaryFile.Sections {
+		end := int64(section.Offset) + int64(section.Size)
+		if end > overlay {
+			overlay = end
+		}
+	}
+	if overlay == 0 || overlay%512 != 0 {
+		return false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || overlay > info.Size()-28 {
+		return false
+	}
+	var header [28]byte
+	if _, err := file.ReadAt(header[:], overlay); err != nil {
+		return false
+	}
+	if !bytes.Equal(header[4:20], []byte{0xef, 0xbe, 0xad, 0xde, 'N', 'u', 'l', 'l', 's', 'o', 'f', 't', 'I', 'n', 's', 't'}) {
+		return false
+	}
+	headerSize := binary.LittleEndian.Uint32(header[20:24])
+	archiveSize := int64(binary.LittleEndian.Uint32(header[24:28]))
+	return headerSize > 0 && archiveSize > 28 && archiveSize <= info.Size()-overlay
+}
+
 // DMG architecture and product version remain administrator-supplied build metadata.
 func validateWebsiteInstallerFile(path, platform string) error {
 	if platform == "windows-x64" {
@@ -47,8 +84,11 @@ func validateWebsiteInstallerFile(path, platform string) error {
 			return errors.New("请上传有效的 Windows EXE 安装程序，不要上传 ZIP")
 		}
 		defer binary.Close()
-		if binary.Machine != pe.IMAGE_FILE_MACHINE_AMD64 || binary.Characteristics&pe.IMAGE_FILE_EXECUTABLE_IMAGE == 0 || binary.Characteristics&pe.IMAGE_FILE_DLL != 0 {
+		if binary.Characteristics&pe.IMAGE_FILE_EXECUTABLE_IMAGE == 0 || binary.Characteristics&pe.IMAGE_FILE_DLL != 0 {
 			return errors.New("仅支持 Windows x64 EXE 安装程序")
+		}
+		if binary.Machine != pe.IMAGE_FILE_MACHINE_AMD64 && !(binary.Machine == pe.IMAGE_FILE_MACHINE_I386 && isWebsiteNSISInstaller(path, binary)) {
+			return errors.New("请上传 Windows x64 EXE 安装包，支持 NSIS 安装程序；不支持普通 x86 或 ARM 程序")
 		}
 		return nil
 	}

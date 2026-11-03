@@ -24,6 +24,8 @@ Files share the updater's persistent parent directory under a dedicated `website
 
 ## Consequences
 
+Windows validation accepts an x86 NSIS bootstrapper only when the PE overlay has the NSIS first-header signature and an archive length within the file. The x64 NSIS setup artifact uses an x86 bootstrapper, so requiring an AMD64 outer EXE rejects the project's own installer. Accepting every x86 EXE would also accept ordinary x86 programs; the NSIS check retains that distinction. Payload architecture remains administrator-supplied metadata rather than a certification by the upload API.
+
 The backend supplies a stable catalog and verifies stored file hashes on publication. Administrators remain responsible for product version, DMG architecture, operating-system signing, and real installation checks. The separate website still needs to consume the catalog. Both database and storage require backup. See the [operational reference](../../../../services/one-api/docs/website-installers.md).
 
 ## Testing
