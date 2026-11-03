@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "check:browser": "node --test scripts/browser-compatibility.test.mjs",
     "check:identity": "node scripts/verify-identity.mjs",
     "check:installer-data": "node --test scripts/verify-installer-data.test.mjs && node scripts/verify-installer-data.mjs",
     "check:boundaries": "node scripts/verify-boundaries.mjs",
     "check:sidecar": "node scripts/verify-sidecar.mjs",
-    "check:runtime": "node --test scripts/expert-ticket-bootstrap.test.mjs && node scripts/verify-document-runtime.mjs && node scripts/verify-sidecar.mjs --staged",
+    "check:runtime": "node --test scripts/browser-compatibility.test.mjs scripts/expert-ticket-bootstrap.test.mjs && node scripts/verify-document-runtime.mjs && node scripts/verify-sidecar.mjs --staged",
     "check:rust": "cargo check --manifest-path src-tauri/Cargo.toml",
     "check:expert-window": "node scripts/verify-expert-window.mjs",
     "check:runner": "node scripts/require-github-runner.mjs",
@@ -32,6 +33,8 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.8.4"
+    "@tauri-apps/cli": "^2.8.4",
+    "core-js": "3.41.0",
+    "esbuild": "0.25.12"
   }
 }

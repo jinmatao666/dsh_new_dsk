@@ -6,6 +6,8 @@
 
 ## 当前边界
 
+产品构建将浏览器 JavaScript 和 CSS（包括动态获取的 `lib/client.js` 插件）转换为 Safari 15.6 目标，兼容 Monterey WebView。阻塞式启动脚本在壳和插件之前加载 `core-js/stable`，补齐缺失的标准 API，不修改官方源码或 Node 产物。页面仍为空白时，启动错误或三十秒超时会显示重新加载提示。运行 `node --test products/wanwei-desktop/scripts/browser-compatibility.test.mjs` 验证缺失 API 和失败提示。仍需安装包在 macOS 12.6.6 上验收；这些检查不能复现该系统的 WebKit。
+
 主窗口先创建空白 WebView，在后台线程清理本地回环地址上遗留的 `dsh-auth-*` 认证 Cookie，再访问本次 Sidecar 输出的带令牌地址。Sidecar 每次可能选择不同端口，而 Cookie 按主机发送；清理可避免长期累积导致 HTTP 431。清理只针对本产品认证 Cookie，不删除工作区数据。
 
 专家视图原生导航时不携带登录片段。文档启动脚本仅在与登记来源、路径和查询参数一致的顶层文档中，在网站脚本读取前恢复一次性票据。每次启动独立的 sessionStorage 标记防止刷新后重放。票据不加入 HTTP 路径或查询参数。此方式绕过已观测到的 Mac `%23ticket=` 请求路径，不改变服务端认证；异常 Mac 仍需安装包实机验收。

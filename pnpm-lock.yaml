@@ -9796,15 +9796,15 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
+      '@deepseek-ai/dsh-user-questions':
+        specifier: workspace:^
+        version: link:../../interaction/user-questions
       '@deepseek-ai/dsh-wanwei-feature-panels':
         specifier: workspace:^
         version: link:../feature-panels
       '@deepseek-ai/dsh-wanwei-oneapi-auth':
         specifier: workspace:^
         version: link:../oneapi-auth
-      '@deepseek-ai/dsh-user-questions':
-        specifier: workspace:^
-        version: link:../../interaction/user-questions
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:^
         version: link:../../workspace/workspace
@@ -10680,6 +10680,12 @@ importers:
       '@tauri-apps/cli':
         specifier: ^2.8.4
         version: 2.11.4
+      core-js:
+        specifier: 3.41.0
+        version: 3.41.0
+      esbuild:
+        specifier: 0.25.12
+        version: 0.25.12
 
   products/wanwei-desktop/runtime-closure:
     dependencies:
@@ -14642,6 +14648,9 @@ packages:
   copy-anything@4.0.5:
     resolution: {integrity: sha512-7Vv6asjS4gMOuILabD3l739tsaxFQmC+a7pLZm02zyvs8p977bL3zEgq3yDk5rn9B0PbYgIv++jmHcuUab4RhA==}
     engines: {node: '>=18'}
+
+  core-js@3.41.0:
+    resolution: {integrity: sha512-SJ4/EHwS36QMJd6h/Rg+GyR4A5xE0FSI3eZ+iBVpfqf1x0eTSg1smWLHrA+2jQThZSh97fmSgFSU8B61nxosxA==}
 
   core-util-is@1.0.3:
     resolution: {integrity: sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==}
@@ -20509,6 +20518,8 @@ snapshots:
   copy-anything@4.0.5:
     dependencies:
       is-what: 5.5.0
+
+  core-js@3.41.0: {}
 
   core-util-is@1.0.3: {}
 

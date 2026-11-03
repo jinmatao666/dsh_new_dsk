@@ -2,6 +2,7 @@ import { copyFileSync, cpSync, existsSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import process from 'node:process'
+import { prepareBrowserCompatibility } from './browser-compatibility.mjs'
 
 const productRoot = resolve(import.meta.dirname, '..')
 const repositoryRoot = resolve(productRoot, '..', '..')
@@ -27,6 +28,7 @@ try {
     shell: process.platform === 'win32',
   })
   if (result.status !== 0) throw new Error(`DSH build failed with exit code ${String(result.status)}`)
+  await prepareBrowserCompatibility(repositoryRoot)
 } finally {
   for (const target of targets) rmSync(target, { recursive: true, force: true })
 }
