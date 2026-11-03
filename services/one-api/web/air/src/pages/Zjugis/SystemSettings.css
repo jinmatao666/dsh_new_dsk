@@ -78,6 +78,10 @@
 .knowledge-quota-summary { margin: 14px 0 0; color: #365d8c; font-size: 13px; }
 .knowledge-quota-summary.is-error { color: #c44949; }
 .knowledge-quota-dialog footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #dfe8f5; }
+.feature-page-url { display: inline-block; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #385375; }
+.feature-page-dialog { max-width: 640px; }
+.feature-page-url-field { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; color: #385375; font-weight: 600; }
+.feature-page-url-field input { width: 100%; box-sizing: border-box; padding: 12px 14px; border: 1px solid #d6e3f4; border-radius: 8px; font: inherit; font-weight: 400; color: #253d60; }
 @media (max-width: 800px) {
   .knowledge-quota-org-layout { grid-template-columns: 1fr; }
   .knowledge-quota-people li { grid-template-columns: 1fr; }

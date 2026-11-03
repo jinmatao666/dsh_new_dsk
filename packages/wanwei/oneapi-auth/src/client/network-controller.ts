@@ -1,7 +1,12 @@
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import { internetCatalogAccess, type NetworkState } from '../network-contract.ts'
-import { resolveDeploymentFeatures, resolveDeploymentPlugins, resolveInternetCatalogPolicy } from '../deployment.ts'
-import type { DeploymentFeatures } from '../deployment.ts'
+import {
+  resolveDeploymentFeaturePages,
+  resolveDeploymentFeatures,
+  resolveDeploymentPlugins,
+  resolveInternetCatalogPolicy,
+} from '../deployment.ts'
+import type { DeploymentFeaturePageId, DeploymentFeaturePages, DeploymentFeatures } from '../deployment.ts'
 import type { DeploymentPlugins } from '../deployment.ts'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 
@@ -19,6 +24,7 @@ export class NetworkController {
   private readonly listeners = new Set<() => void>()
   private tail: Promise<unknown> = Promise.resolve()
   private features: DeploymentFeatures = resolveDeploymentFeatures(undefined)
+  private featurePages: DeploymentFeaturePages = resolveDeploymentFeaturePages(undefined)
   private plugins: DeploymentPlugins = { browserAssistant: false }
   /** Observe an administrator permission after deployment synchronization.
    * @param plugin - Product plugin identifier.
@@ -31,8 +37,15 @@ export class NetworkController {
    * @param feature - Entry owned by the consuming plugin.
    * @returns Boolean observable sharing the committed deployment refresh.
    */
-  visibility(feature: 'automations' | 'connectors' | 'knowledgeBases'): HostObservable<boolean> {
+  visibility(feature: keyof DeploymentFeatures['internet']): HostObservable<boolean> {
     return { getSnapshot: () => this.features[this.snapshot.mode][feature], subscribe: this.subscribe }
+  }
+  /** Observe the configured portal page URL for one feature entry.
+   * @param page - Portal owned by the consuming plugin.
+   * @returns String observable sharing the committed deployment refresh.
+   */
+  featurePageUrl(page: DeploymentFeaturePageId): HostObservable<string> {
+    return { getSnapshot: () => this.featurePages[page].url, subscribe: this.subscribe }
   }
   constructor(private readonly connection: ConnectionHandle) {}
   /** Read the last synchronized Host state.
@@ -47,13 +60,19 @@ export class NetworkController {
     this.listeners.add(listener)
     return () => { this.listeners.delete(listener) }
   }
-  private async synchronize(value: NetworkState, features: DeploymentFeatures, plugins: DeploymentPlugins): Promise<void> {
+  private async synchronize(
+    value: NetworkState,
+    features: DeploymentFeatures,
+    featurePages: DeploymentFeaturePages,
+    plugins: DeploymentPlugins,
+  ): Promise<void> {
     const native = (window as unknown as {
       __ZJUGIS_NATIVE_INVOKE__?: (command: string, args: unknown) => Promise<unknown>
     }).__ZJUGIS_NATIVE_INVOKE__
     if (native) await native('set_network_environment', { mode: value.mode, internalOrigins: value.internalOrigins })
     this.snapshot = value
     this.features = features
+    this.featurePages = featurePages
     this.plugins = plugins
     for (const listener of this.listeners) {
       try { listener() }
@@ -69,6 +88,7 @@ export class NetworkController {
         internalOrigins: readonly string[]
         directInternet?: unknown
         features?: unknown
+        featurePages?: unknown
         plugins?: unknown
         internetCatalogPolicy?: unknown
         internetSkillPolicy?: unknown
@@ -77,6 +97,7 @@ export class NetworkController {
       if (value.mode !== 'internet' && value.mode !== 'intranet') throw new Error('网络环境状态无效')
       if (value.directInternet !== undefined && typeof value.directInternet !== 'boolean') throw new Error('网络检测状态无效')
       const features = resolveDeploymentFeatures(value.features)
+      const featurePages = resolveDeploymentFeaturePages(value.featurePages)
       const plugins = resolveDeploymentPlugins(value.plugins)
       await this.synchronize({ mode: value.mode, internalOrigins: value.internalOrigins,
         internetCatalogPolicy: resolveInternetCatalogPolicy(value.internetCatalogPolicy),
@@ -84,7 +105,8 @@ export class NetworkController {
           value.internetSkillPolicy === undefined ? value.internetCatalogPolicy : value.internetSkillPolicy),
         internetExpertPolicy: resolveInternetCatalogPolicy(
           value.internetExpertPolicy === undefined ? value.internetCatalogPolicy : value.internetExpertPolicy),
-        ...(value.directInternet === undefined ? {} : { directInternet: value.directInternet }) }, features, plugins)
+        ...(value.directInternet === undefined ? {} : { directInternet: value.directInternet }) },
+      features, featurePages, plugins)
       return this.snapshot
     }
     const promise = this.tail.then(run)

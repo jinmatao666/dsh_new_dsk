@@ -84,8 +84,8 @@ it('refreshes server-owned mode, synchronizes native policy and retains the last
 
 it('publishes independent visibility flags only after a successful deployment refresh', async () => {
   const features = {
-    internet: { automations: false, connectors: false, knowledgeBases: true },
-    intranet: { automations: true, connectors: true, knowledgeBases: false },
+    internet: { automations: false, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+    intranet: { automations: true, connectors: true, knowledgeBases: false, landMarket: false, policyEncyclopedia: false },
   }
   let mode = 'internet'
   const call = vi.fn(async () => ({ ok: true, value: { mode, internalOrigins: [], features } }))
@@ -105,6 +105,27 @@ it('publishes independent visibility flags only after a successful deployment re
   call.mockRejectedValueOnce(new Error('offline'))
   await expect(controller.refresh()).rejects.toThrow('offline')
   expect(connectors.getSnapshot()).toBe(true)
+})
+
+it('updates featurePageUrl after refresh when featurePages is in the RPC payload', async () => {
+  let featurePages = {
+    landMarket: { url: '' },
+    policyEncyclopedia: { url: '' },
+  }
+  const call = vi.fn(async () => ({ ok: true, value: { mode: 'internet', internalOrigins: [], featurePages } }))
+  const controller = new NetworkController({ rpc: { call } } as unknown as ConnectionHandle)
+  const landMarket = controller.featurePageUrl('landMarket')
+  const policyEncyclopedia = controller.featurePageUrl('policyEncyclopedia')
+  await controller.refresh()
+  expect(landMarket.getSnapshot()).toBe('')
+  expect(policyEncyclopedia.getSnapshot()).toBe('')
+  featurePages = {
+    landMarket: { url: 'https://land.example/' },
+    policyEncyclopedia: { url: 'https://policy.example/docs' },
+  }
+  await controller.refresh()
+  expect(landMarket.getSnapshot()).toBe('https://land.example/')
+  expect(policyEncyclopedia.getSnapshot()).toBe('https://policy.example/docs')
 })
 
 it('publishes independent catalog policies and rejects malformed refreshes without changing state', async () => {

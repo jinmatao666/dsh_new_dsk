@@ -46,8 +46,12 @@ func TestDesktopConfigPublicFields(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if !body.Success || len(body.Data) != 9 || body.Data["internetCatalogPolicy"] != "disable" || body.Data["edition"] != "operations" || body.Data["network"] != "intranet" || body.Data["operator"] != "张运维" || body.Data["phone"] != "0571-12345678" {
+	if !body.Success || len(body.Data) != 10 || body.Data["internetCatalogPolicy"] != "disable" || body.Data["edition"] != "operations" || body.Data["network"] != "intranet" || body.Data["operator"] != "张运维" || body.Data["phone"] != "0571-12345678" {
 		t.Fatalf("unexpected public data: %+v", body)
+	}
+	featurePages, ok := body.Data["featurePages"].(map[string]interface{})
+	if !ok || featurePages["landMarket"] == nil || featurePages["policyEncyclopedia"] == nil {
+		t.Fatalf("missing featurePages: %+v", body.Data["featurePages"])
 	}
 	config.OptionMapRWMutex.Lock()
 	config.OptionMap["SystemDeploymentSettings"] = `{"network":"unknown"}`
@@ -79,7 +83,9 @@ func TestDesktopPluginSettings(t *testing.T) {
 
 func TestDesktopFeatureSettings(t *testing.T) {
 	legacyFlags, err := parseDesktopDeploymentSettings(`{"network":"intranet","features":{"internet":{"automations":false,"connectors":true},"intranet":{"automations":true,"connectors":false}}}`)
-	if err != nil || legacyFlags.Features["internet"].Automations || legacyFlags.Features["intranet"].Connectors || !legacyFlags.Features["internet"].KnowledgeBases || !legacyFlags.Features["intranet"].KnowledgeBases {
+	if err != nil || legacyFlags.Features["internet"].Automations || legacyFlags.Features["intranet"].Connectors || !legacyFlags.Features["internet"].KnowledgeBases || !legacyFlags.Features["intranet"].KnowledgeBases ||
+		legacyFlags.Features["internet"].LandMarket || legacyFlags.Features["intranet"].LandMarket ||
+		legacyFlags.Features["internet"].PolicyEncyclopedia || legacyFlags.Features["intranet"].PolicyEncyclopedia {
 		t.Fatalf("legacy feature settings: %+v %v", legacyFlags, err)
 	}
 	for _, invalid := range []string{`null`, `"true"`, `1`} {
@@ -92,12 +98,31 @@ func TestDesktopFeatureSettings(t *testing.T) {
 		t.Fatalf("settings: %+v %v", settings, err)
 	}
 	legacy, err := parseDesktopDeploymentSettings(`{"network":"intranet"}`)
-	if err != nil || !legacy.Features["internet"].Connectors || legacy.Features["intranet"].Connectors || !legacy.Features["intranet"].Automations || !legacy.Features["intranet"].KnowledgeBases {
+	if err != nil || !legacy.Features["internet"].Connectors || legacy.Features["intranet"].Connectors || !legacy.Features["intranet"].Automations || !legacy.Features["intranet"].KnowledgeBases ||
+		legacy.Features["internet"].LandMarket || legacy.Features["intranet"].LandMarket ||
+		legacy.Features["internet"].PolicyEncyclopedia || legacy.Features["intranet"].PolicyEncyclopedia {
 		t.Fatalf("defaults: %+v %v", legacy, err)
 	}
 	for _, raw := range []string{`null`, `{}`, `{"network":null}`, `{"network":"internet","operator":null}`, `{"network":"internet","features":null}`, `{"network":"internet","features":{}}`, `{"network":"internet","features":{"internet":{"automations":"false","connectors":true,"knowledgeBases":true}}}`} {
 		if _, err := parseDesktopDeploymentSettings(raw); err == nil {
 			t.Fatalf("accepted %s", raw)
+		}
+	}
+}
+
+func TestDesktopFeaturePages(t *testing.T) {
+	settings, err := parseDesktopDeploymentSettings(`{"network":"internet","featurePages":{"landMarket":{"url":" https://land.example/ "},"policyEncyclopedia":{"url":"https://policy.example/docs"}}}`)
+	if err != nil || settings.FeaturePages["landMarket"].URL != "https://land.example/" || settings.FeaturePages["policyEncyclopedia"].URL != "https://policy.example/docs" {
+		t.Fatalf("feature pages: %+v %v", settings.FeaturePages, err)
+	}
+	for _, raw := range []string{
+		`{"network":"internet","featurePages":null}`,
+		`{"network":"internet","featurePages":{"landMarket":{"url":"ftp://bad"}}}`,
+		`{"network":"internet","featurePages":{"policyEncyclopedia":{"url":true}}}`,
+		`{"network":"internet","featurePages":{"landMarket":{"url":"not-a-url"}}}`,
+	} {
+		if _, err := parseDesktopDeploymentSettings(raw); err == nil {
+			t.Fatalf("accepted invalid featurePages: %s", raw)
 		}
 	}
 }

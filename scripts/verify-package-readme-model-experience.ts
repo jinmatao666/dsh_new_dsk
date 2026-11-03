@@ -47,6 +47,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/wanwei/connectors': { kind: 'none', reason: 'Client presentation registers no model context; downstream execution remains provider-owned.' },
   'packages/wanwei/automations': { kind: 'indirect', reason: 'Local scheduling delegates task prompts and model requests to the ordinary Session Controller and Agent.' },
   'packages/wanwei/feature-panels': { kind: 'none', reason: 'Client presentation registers no model context; downstream execution remains provider-owned.' },
+  'packages/wanwei/portals': { kind: 'none', reason: 'Client presentation registers no model context; portal pages are administrator-configured URLs.' },
   'packages/attachment/attachment': { kind: 'indirect', reason: 'The storage seam delegates model request rendering to provider adapters.' },
   'packages/attachment/attachment-local': { kind: 'indirect', reason: 'The local backend delegates model request rendering to provider adapters.' },
   'packages/shell/shell': { kind: 'indirect', reason: 'The service interface delegates all model rendering to dsh-tool-bash.' },

@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { fetchDeploymentSettings, resolveDeploymentFeatures, resolveDeploymentPlugins } from '../src/deployment.ts'
+import { fetchDeploymentSettings, resolveDeploymentFeaturePages, resolveDeploymentFeatures, resolveDeploymentPlugins } from '../src/deployment.ts'
 
 afterEach(() => vi.unstubAllGlobals())
 it.each(['internet', 'intranet'])('reads %s mode and the public maintenance contact from the configured backend', async (network) => {
@@ -8,7 +8,9 @@ it.each(['internet', 'intranet'])('reads %s mode and the public maintenance cont
   vi.stubGlobal('fetch', fetcher)
   expect(await fetchDeploymentSettings('https://oneapi.example.test')).toEqual({ ...data,
     internetCatalogPolicy: 'disable', internetSkillPolicy: 'disable', internetExpertPolicy: 'disable',
-    features: resolveDeploymentFeatures(undefined), plugins: { browserAssistant: true } })
+    features: resolveDeploymentFeatures(undefined),
+    featurePages: resolveDeploymentFeaturePages(undefined),
+    plugins: { browserAssistant: true } })
   expect(fetcher.mock.calls[0]).toEqual(['https://oneapi.example.test/api/desktop-config', { signal: null, cache: 'no-store', redirect: 'error' }])
 })
 
@@ -22,25 +24,41 @@ it('accepts explicit administrator denial, allowlists public plugins and rejects
 
 it('keeps the two environments independent and rejects incomplete or non-boolean flags', () => {
   const features = {
-    internet: { automations: false, connectors: false, knowledgeBases: true },
-    intranet: { automations: true, connectors: true, knowledgeBases: false },
+    internet: { automations: false, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+    intranet: { automations: true, connectors: true, knowledgeBases: false, landMarket: false, policyEncyclopedia: false },
   }
   expect(resolveDeploymentFeatures(features)).toEqual(features)
   for (const value of [null, {}, { ...features, intranet: null },
-    { ...features, internet: { automations: 'false', connectors: true, knowledgeBases: true } }]) {
+    { ...features, internet: { automations: 'false', connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false } }]) {
     expect(() => resolveDeploymentFeatures(value)).toThrow('后台功能设置无效')
   }
 })
 it('defaults only the missing knowledge switch in legacy per-environment settings', () => {
   const legacy = { internet: { automations: false, connectors: true }, intranet: { automations: true, connectors: false } }
   expect(resolveDeploymentFeatures(legacy)).toEqual({
-    internet: { ...legacy.internet, knowledgeBases: true }, intranet: { ...legacy.intranet, knowledgeBases: true },
+    internet: { ...legacy.internet, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+    intranet: { ...legacy.intranet, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
   })
   for (const knowledgeBases of [null, 'true', 1]) {
     expect(() => resolveDeploymentFeatures({ ...legacy, internet: { ...legacy.internet, knowledgeBases } })).toThrow('后台功能设置无效')
   }
   const denied = resolveDeploymentFeatures({ ...legacy, internet: { ...legacy.internet, knowledgeBases: false } })
   expect(denied.internet.knowledgeBases).toBe(false)
+})
+
+it('defaults portal page addresses and rejects invalid URLs', () => {
+  expect(resolveDeploymentFeaturePages(undefined)).toEqual({
+    landMarket: { url: '' }, policyEncyclopedia: { url: '' },
+  })
+  expect(resolveDeploymentFeaturePages({
+    landMarket: { url: ' https://land.example/page ' },
+    policyEncyclopedia: { url: 'https://policy.example/' },
+  })).toEqual({
+    landMarket: { url: 'https://land.example/page' }, policyEncyclopedia: { url: 'https://policy.example/' },
+  })
+  for (const value of [null, { landMarket: null }, { landMarket: { url: 'ftp://bad' } }, { policyEncyclopedia: { url: true } }]) {
+    expect(() => resolveDeploymentFeaturePages(value)).toThrow('后台功能页面')
+  }
 })
 
 it('rejects unavailable or invalid configuration without assuming internet mode', async () => {

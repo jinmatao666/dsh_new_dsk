@@ -181,9 +181,10 @@ describe('OneAPI login flow', () => {
         internetCatalogPolicy: 'disable', internetExpertPolicy: 'disable', internetSkillPolicy: 'disable',
         plugins: { browserAssistant: true },
         features: {
-          internet: { automations: true, connectors: true, knowledgeBases: true },
-          intranet: { automations: true, connectors: false, knowledgeBases: true },
+          internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+          intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
         },
+        featurePages: { landMarket: { url: '' }, policyEncyclopedia: { url: '' } },
       },
     })
     expect(await handler?.('deployment-get', {}, new AbortController().signal)).toEqual({
@@ -192,9 +193,10 @@ describe('OneAPI login flow', () => {
         internetCatalogPolicy: 'disable', internetExpertPolicy: 'disable', internetSkillPolicy: 'disable',
         plugins: { browserAssistant: true },
         features: {
-          internet: { automations: true, connectors: true, knowledgeBases: true },
-          intranet: { automations: true, connectors: false, knowledgeBases: true },
+          internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+          intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
         },
+        featurePages: { landMarket: { url: '' }, policyEncyclopedia: { url: '' } },
       },
     })
     expect(requests).toEqual([`${expected}/api/desktop-config`, `${expected}/api/desktop-config`])

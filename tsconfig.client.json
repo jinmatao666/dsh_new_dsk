@@ -110,6 +110,7 @@
     { "path": "./packages/wanwei/knowledge-base" },
     { "path": "./packages/wanwei/connectors/tsconfig.client.json" },
     { "path": "./packages/wanwei/automations/tsconfig.client.json" },
+    { "path": "./packages/wanwei/portals" },
     { "path": "./packages/wanwei/skill-marketplace" },
     { "path": "./packages/wanwei/product-ui" },
     { "path": "./packages/wanwei/chinese/tsconfig.client.json" },

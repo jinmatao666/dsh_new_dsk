@@ -34,7 +34,7 @@ docker compose -p wanwei-cad-redline-extractor up -d
 
 When Nginx already routes by expert id, leave the gateway unchanged; see `nginx.location.conf.example`. Keep `.env` and data volumes on updates; do not run `down -v`.
 
-## Result overlay visualization
+## Result display
 
 On the result page you can upload a local Shape ZIP (or matching `.shp/.shx/.dbf`) / GeoJSON to overlay against the extraction result; the feature list supports selecting one geometry for solo display. Online services are configured in a dialog with **service URL** and **layer name** (optional CRS, default `EPSG:4326`). The server proxies a WMS GetMap or ArcGIS MapServer/export image and overlays it on the current map extent. The map’s top-right layer control toggles result / reference / online layers. Loopback and private network targets are rejected.
 

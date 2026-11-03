@@ -645,7 +645,8 @@ export function apply(ctx: Context, config: Config): void {
           await network.setDeployment(settings)
         }
         return { ok: true as const, value: endpoint === 'network-get'
-          ? { ...network.getSnapshot(), features: settings.features, plugins: settings.plugins } : settings }
+          ? { ...network.getSnapshot(), features: settings.features, featurePages: settings.featurePages, plugins: settings.plugins }
+          : settings }
       }
       catch (error) { return internal(error instanceof Error ? error.message : String(error)) }
     }

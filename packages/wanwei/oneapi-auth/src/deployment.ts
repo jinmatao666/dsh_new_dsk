@@ -10,6 +10,7 @@ export interface DeploymentSettings {
   operator: string
   phone: string
   features: DeploymentFeatures
+  featurePages: DeploymentFeaturePages
   plugins: DeploymentPlugins
   resources?: ResourceSettings
 }
@@ -43,7 +44,15 @@ export type DeploymentFeatures = Record<NetworkEnvironment, {
   automations: boolean
   connectors: boolean
   knowledgeBases: boolean
+  landMarket: boolean
+  policyEncyclopedia: boolean
 }>
+
+/** Administrator-configured portal page addresses shown by desktop feature entries. */
+export type DeploymentFeaturePageId = 'landMarket' | 'policyEncyclopedia'
+export type DeploymentFeaturePages = Record<DeploymentFeaturePageId, { url: string }>
+
+const FEATURE_PAGE_IDS = ['landMarket', 'policyEncyclopedia'] as const
 
 /** Resolve omitted legacy settings and validate explicitly configured flags.
  * @param value - Public API feature settings.
@@ -51,22 +60,64 @@ export type DeploymentFeatures = Record<NetworkEnvironment, {
  */
 export function resolveDeploymentFeatures(value: unknown): DeploymentFeatures {
   if (value === undefined) return {
-    internet: { automations: true, connectors: true, knowledgeBases: true },
-    intranet: { automations: true, connectors: false, knowledgeBases: true },
+    internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+    intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
   }
   if (typeof value !== 'object' || value === null) throw new Error('后台功能设置无效')
   const result = {} as DeploymentFeatures
   for (const mode of ['internet', 'intranet'] as const) {
     const flags: unknown = (value as Record<string, unknown>)[mode]
     if (typeof flags !== 'object' || flags === null) throw new Error('后台功能设置无效')
-    const { automations, connectors } = flags as Record<string, unknown>
-    // 旧后台尚未提供知识库开关；显式 null 或错误类型仍必须拒绝。
-    const knowledgeBases = Object.hasOwn(flags, 'knowledgeBases')
-      ? (flags as Record<string, unknown>).knowledgeBases : true
-    if (typeof automations !== 'boolean' || typeof connectors !== 'boolean' || typeof knowledgeBases !== 'boolean') {
+    const record = flags as Record<string, unknown>
+    const { automations, connectors } = record
+    // 旧后台尚未提供知识库或门户开关；显式 null 或错误类型仍必须拒绝。
+    const knowledgeBases = Object.hasOwn(record, 'knowledgeBases') ? record.knowledgeBases : true
+    const landMarket = Object.hasOwn(record, 'landMarket') ? record.landMarket : false
+    const policyEncyclopedia = Object.hasOwn(record, 'policyEncyclopedia') ? record.policyEncyclopedia : false
+    if (typeof automations !== 'boolean' || typeof connectors !== 'boolean'
+      || typeof knowledgeBases !== 'boolean' || typeof landMarket !== 'boolean'
+      || typeof policyEncyclopedia !== 'boolean') {
       throw new Error('后台功能设置无效')
     }
-    result[mode] = { automations, connectors, knowledgeBases }
+    result[mode] = { automations, connectors, knowledgeBases, landMarket, policyEncyclopedia }
+  }
+  return result
+}
+
+/** Validate one portal page URL from the public deployment response.
+ * @param value - Candidate URL string.
+ * @returns Trimmed URL, empty when unset.
+ */
+function resolveFeaturePageUrl(value: unknown): string {
+  if (value === undefined) return ''
+  if (typeof value !== 'string') throw new Error('后台功能页面地址无效')
+  const url = value.trim()
+  if (url === '') return ''
+  if (url.length > 2048) throw new Error('后台功能页面地址无效')
+  let parsed: URL
+  try { parsed = new URL(url) }
+  catch { throw new Error('后台功能页面地址无效') }
+  if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.host) {
+    throw new Error('后台功能页面地址无效')
+  }
+  return url
+}
+
+/** Resolve omitted portal pages and validate configured addresses.
+ * @param value - Public API feature page settings.
+ * @returns Allowlisted page addresses for both portals.
+ */
+export function resolveDeploymentFeaturePages(value: unknown): DeploymentFeaturePages {
+  if (value === undefined) {
+    return { landMarket: { url: '' }, policyEncyclopedia: { url: '' } }
+  }
+  if (typeof value !== 'object' || value === null) throw new Error('后台功能页面配置无效')
+  const result = { landMarket: { url: '' }, policyEncyclopedia: { url: '' } } as DeploymentFeaturePages
+  for (const id of FEATURE_PAGE_IDS) {
+    const entry = (value as Record<string, unknown>)[id]
+    if (entry === undefined) continue
+    if (typeof entry !== 'object' || entry === null) throw new Error('后台功能页面配置无效')
+    result[id] = { url: resolveFeaturePageUrl((entry as Record<string, unknown>).url) }
   }
   return result
 }
@@ -97,5 +148,7 @@ export async function fetchDeploymentSettings(baseURL: string, signal?: AbortSig
     internetExpertPolicy: resolveInternetCatalogPolicy(
       data.internetExpertPolicy === undefined ? data.internetCatalogPolicy : data.internetExpertPolicy),
     ...(resources === undefined ? {} : { resources }),
-    features: resolveDeploymentFeatures(data.features), plugins: resolveDeploymentPlugins(data.plugins) }
+    features: resolveDeploymentFeatures(data.features),
+    featurePages: resolveDeploymentFeaturePages(data.featurePages),
+    plugins: resolveDeploymentPlugins(data.plugins) }
 }

@@ -530,7 +530,7 @@ def _raise_if_arcgis_error_payload(data: bytes) -> None:
     message = error.get("message")
     code = error.get("code")
     if code in {498, 499, 401, 403} or (isinstance(message, str) and "token" in message.lower()):
-        raise OnlineServiceError("该 MapServer 需要有效 Token：请编辑在线服务，填写用户名密码重新换取，或粘贴未过期 Token")
+        raise OnlineServiceError("该服务需要有效 Token（未填写或已过期）：请编辑在线服务并粘贴未过期 Token 后再套合")
     raise OnlineServiceError(str(message) if message else "在线服务返回错误，请核对地址、图层名与鉴权信息")
 
 
@@ -542,7 +542,7 @@ def _read_overlay_response(request_url: str, headers: dict) -> tuple[str, bytes]
             data = response.read(MAX_IMAGE_BYTES + 1)
     except HTTPError as error:
         if error.code in {401, 403, 498, 499}:
-            raise OnlineServiceError("在线服务鉴权失败，请检查 Token 或用户名密码") from error
+            raise OnlineServiceError("在线服务鉴权失败：Token 未填写或已过期，请编辑在线服务后重试") from error
         raw = error.read(65536) if hasattr(error, "read") else b""
         if raw:
             try:
@@ -565,7 +565,7 @@ def _read_overlay_response(request_url: str, headers: dict) -> tuple[str, bytes]
         if not data.startswith(b"\x89PNG") and data[:3] != b"GIF" and data[:2] != b"\xff\xd8":
             preview = data[:200].decode("utf-8", errors="replace").lower()
             if "token" in preview:
-                raise OnlineServiceError("该 MapServer 需要有效 Token：请编辑在线服务，填写用户名密码重新换取，或粘贴未过期 Token")
+                raise OnlineServiceError("该服务需要有效 Token（未填写或已过期）：请编辑在线服务并粘贴未过期 Token 后再套合")
             raise OnlineServiceError("在线服务未返回图像，请核对地址、图层序号与鉴权信息")
     if not content_type.startswith("image/") and not data.startswith(b"\x89PNG") and data[:3] != b"GIF" and data[:2] != b"\xff\xd8":
         preview = data[:200].decode("utf-8", errors="replace").lower()
@@ -611,8 +611,8 @@ def fetch_overlay_image(
         issued = generate_arcgis_token(service_url, username, password)
         token = issued["token"]
         referer = issued.get("referer") or referer
-    if _is_arcgis_mapserver(service_url) and not token:
-        raise OnlineServiceError("该 MapServer 需要 Token：请在在线服务中填写用户名密码换取，或粘贴 Token 后再套合")
+    # Token is optional: public MapServers load without it; secured ones fail later
+    # with a Token / auth message when the service rejects the request.
     if not referer and token and _is_arcgis_mapserver(service_url):
         parsed = urlsplit(service_url)
         referer = f"{parsed.scheme}://{parsed.netloc}"
