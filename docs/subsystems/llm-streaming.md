@@ -487,6 +487,8 @@ interface LlmConfigurableProvider {
 ```ts type-equiv
 /** One adapter-discovered model; catalog membership is advisory, not request validation. */
 interface LlmModelInfo {
+  /** Optional reference multiplier for selectors; independent of actual billing. */
+  displayMultiplier?: number
   /** Provider route that owns this model entry. */
   provider: string
   /** Model id passed to {@link GenerateOptions.model}. */

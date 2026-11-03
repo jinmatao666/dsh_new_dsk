@@ -19,7 +19,7 @@ export class NetworkController {
    * @param kind - Skill or expert catalog to evaluate.
    * @returns Available, hidden, or disabled presentation.
    */
-  catalogAccess = (state: NetworkState, requiresInternet: boolean, kind: 'skill' | 'expert'): 'available' | 'hide' | 'disable' =>
+  catalogAccess: (state: NetworkState, requiresInternet: boolean, kind: 'skill' | 'expert') => 'available' | 'hide' | 'disable' = (state, requiresInternet, kind) =>
     internetCatalogAccess(state, requiresInternet, kind)
   private readonly listeners = new Set<() => void>()
   private tail: Promise<unknown> = Promise.resolve()

@@ -1151,6 +1151,8 @@ export interface PiAiProviderProfile {
 
 /** One configured model entry: an id plus the catalog fields it overrides. */
 export interface PiAiModelProfile {
+  /** Optional reference multiplier for selectors; never a token price. */
+  displayMultiplier?: number
   /** Model id sent to the provider and accepted by {@link GenerateOptions.model}. */
   id: string
   /** Display name for selectors; defaults to the catalog name, then the id. */
@@ -1302,7 +1304,7 @@ export type PiAiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFo
 
 Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
 
-Source: [`packages/llm/llm-pi-ai/src/config.ts:216`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-pi-ai/src/config.ts:218`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="deepseek-aidsh-llm-replay"></a>
 
@@ -3213,7 +3215,7 @@ Source: [`packages/interaction/user-approval/src/index.ts:142`](../packages/inte
 
 ## `@deepseek-ai/dsh-wanwei-automations`
 
-Requires: `connection` · `credentials` · `sessionController` · `sessions` · `agents` · `permissionPresets` · `tools` · `workspaceRegistry`
+Requires: `connection` · `credentials` · `sessionController` · `sessions` · `agents` · `permissionPresets` · `tools` · `workspaceRegistry` · `wanweiConnectors`
 
 ```ts config-catalog
 /** Deployment limits and local storage location. */
@@ -3348,7 +3350,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/wanwei/oneapi-auth/src/index.ts:37`](../packages/wanwei/oneapi-auth/src/index.ts)
+Source: [`packages/wanwei/oneapi-auth/src/index.ts:38`](../packages/wanwei/oneapi-auth/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-skillhub"></a>
 
@@ -3676,6 +3678,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-wanwei-expert-library` ([`packages/wanwei/expert-library/src/index.ts`](../packages/wanwei/expert-library/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-feature-panels` ([`packages/wanwei/feature-panels/src/index.ts`](../packages/wanwei/feature-panels/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-knowledge-base` ([`packages/wanwei/knowledge-base/src/index.ts`](../packages/wanwei/knowledge-base/src/index.ts))
+- `@deepseek-ai/dsh-wanwei-portals` ([`packages/wanwei/portals/src/index.ts`](../packages/wanwei/portals/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-product-ui` ([`packages/wanwei/product-ui/src/index.ts`](../packages/wanwei/product-ui/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-skill-marketplace` ([`packages/wanwei/skill-marketplace/src/index.ts`](../packages/wanwei/skill-marketplace/src/index.ts))
 - `@deepseek-ai/dsh-webhook` — requires `agents` · `agentDefaultModel` · `agentPresets` · `permissionPresets` · `sessionTitle` · `workspaceRegistry` ([`packages/webhook/webhook/src/index.ts`](../packages/webhook/webhook/src/index.ts))

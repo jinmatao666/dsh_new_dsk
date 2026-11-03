@@ -146,6 +146,7 @@ export const SERVICE_PAGE: Record<string, string> = {
  * to a model as `cordis_runtime_inspect what:"client"`).
  */
 export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
+  wanweiConnectors: 'private product automation delivery interface — packages/wanwei/connectors/README.md owns the API',
   wanweiNetwork: 'client-face deployment policy mirror — packages/wanwei/oneapi-auth/README.md owns the API',
   platformActions: 'client-face optional shell operations — packages/client/platform-actions/README.md owns the API',
   deliverableExtensions: 'client-face artifact parser and presenter registry — packages/client/ui-deliverables/README.md owns the API',
