@@ -45,6 +45,7 @@ function failureMessage(
   code: unknown,
   t: ChatViewSlotProps['t'],
 ): string {
+  if (code === 'QUOTA') return t('message.failure.quota')
   return code === 'AUTH' ? t('message.failure.auth') : message
 }
 
@@ -124,7 +125,7 @@ function TurnErrorItem({ node, t }: {
       <StateDot state="error" className={css.turnErrorDot} />
       <div className={css.turnErrorCopy}>
         <span className={css.turnErrorTitle}>{t('message.turnError')}</span>
-        <span className={css.turnErrorMessage}>{failureMessage(node.message, node.code, t)}</span>
+        <span className={node.code === 'QUOTA' ? css.turnErrorTitle : css.turnErrorMessage}>{failureMessage(node.message, node.code, t)}</span>
       </div>
       {node.code !== undefined && <code className={css.turnErrorCode}>{node.code}</code>}
     </div>

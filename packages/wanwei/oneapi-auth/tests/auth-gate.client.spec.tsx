@@ -26,6 +26,7 @@ type AttentionSnapshot = Parameters<Parameters<AuthGateProps['useSessionPendingI
 const noAttention: AttentionSnapshot = new Map()
 const useSessionPendingInteraction: AuthGateProps['useSessionPendingInteraction'] = selector => selector(noAttention)
 const kit = {
+  publicAuth: vi.fn(async () => ({ success: true, data: { sms: true, reset: true, register: true, wechat: false, captcha: false, agreement: '用户协议正文', privacy: '隐私政策正文' } })),
   getSupportContact: vi.fn(async () => ({ network: 'internet' as const, operator: '张运维', phone: '0571-12345678',
     features: resolveDeploymentFeatures(undefined),
     featurePages: resolveDeploymentFeaturePages(undefined),
@@ -56,47 +57,44 @@ describe('Wanwei authentication gate', () => {
     await waitFor(() => { expect(subject.refresh).toHaveBeenCalledOnce() })
   })
 
-  it('keeps account inputs mounted and shows unavailable notices for SMS and QR', async () => {
+  it('keeps SMS available while QR only shows the unavailable notice', async () => {
     renderGate()
     fireEvent.click(screen.getByRole('tab', { name: zh.smsLogin }))
-    expect(screen.getByRole('status').textContent).toBe(zh.smsUnavailableTitle)
-    expect(screen.getByRole('status').querySelector('[aria-hidden="true"] svg')).not.toBeNull()
-    expect(screen.queryByPlaceholderText(zh.phonePlaceholder)).toBeNull()
-    const account = screen.getByLabelText(zh.username)
+    await screen.findByLabelText(zh.securityPhone)
+    expect(screen.getByRole('tab', { name: zh.smsLogin }).getAttribute('aria-selected')).toBe('true')
+    const calls = kit.publicAuth.mock.calls.length
     fireEvent.click(screen.getByRole('tab', { name: zh.qrLogin }))
     expect(screen.getByRole('status').textContent).toBe(zh.qrUnavailableTitle)
-    expect(screen.queryByLabelText(zh.qrCodeLabel)).toBeNull()
-    expect(screen.getByLabelText(zh.username)).toBe(account)
-    expect(screen.getByRole('tab', { name: zh.accountLogin }).getAttribute('aria-selected')).toBe('true')
-    expect(screen.queryByRole('radiogroup')).toBeNull()
-    expect(screen.queryByText(zh.requestAccess)).toBeNull()
+    expect(kit.publicAuth.mock.calls.length).toBe(calls)
+    expect(screen.getByRole('tab', { name: zh.smsLogin }).getAttribute('aria-selected')).toBe('true')
+    fireEvent.click(screen.getByRole('tab', { name: zh.accountLogin }))
+    expect(screen.getByLabelText(zh.username)).toBeTruthy()
   })
 
-  it('dismisses the floating notice after three seconds and restarts its timer on repeated clicks', () => {
+  it('preserves account credentials and dismisses the restored QR notice', () => {
     vi.useFakeTimers()
     renderGate()
-    const sms = screen.getByRole('tab', { name: zh.smsLogin })
-    fireEvent.click(sms)
-    act(() => { vi.advanceTimersByTime(2000) })
-    fireEvent.click(sms)
-    act(() => { vi.advanceTimersByTime(2000) })
-    expect(screen.getByRole('status').textContent).toBe(zh.smsUnavailableTitle)
-    act(() => { vi.advanceTimersByTime(1000) })
-    expect(screen.getByRole('status').getAttribute('data-exiting')).toBe('true')
-    fireEvent.click(sms)
-    expect(screen.getByRole('status').getAttribute('data-exiting')).toBeNull()
-    act(() => { vi.advanceTimersByTime(3000) })
-    expect(screen.getByRole('status').getAttribute('data-exiting')).toBe('true')
-    act(() => { vi.advanceTimersByTime(240) })
-    expect(screen.queryByRole('status')).toBeNull()
+    const username = screen.getByLabelText(zh.username)
+    fireEvent.change(username, { target: { value: 'existing-account' } })
+    fireEvent.change(screen.getByLabelText(zh.password), { target: { value: 'secret' } })
     fireEvent.click(screen.getByRole('tab', { name: zh.qrLogin }))
-    fireEvent.click(screen.getByRole('tab', { name: zh.accountLogin }))
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByLabelText(zh.username)).toBe(username)
+    expect(screen.getByLabelText(zh.password)).toHaveProperty('value', 'secret')
+    expect(screen.getByRole('tab', { name: zh.accountLogin }).getAttribute('aria-selected')).toBe('true')
+    act(() => { vi.advanceTimersByTime(3240) })
+    expect(screen.queryByText(zh.qrUnavailableTitle)).toBeNull()
+  })
+
+  it('opens phone password recovery inside the login card', async () => {
+    renderGate()
+    fireEvent.click(screen.getByRole('button', { name: zh.forgotPassword }))
+    await screen.findByLabelText(zh.securityNewPassword)
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('reads the configured operator and contact number in a separate password-help dialog', async () => {
     renderGate()
-    fireEvent.click(screen.getByRole('button', { name: zh.forgotPassword }))
+    fireEvent.click(screen.getByRole('button', { name: zh.administrator }))
     await waitFor(() => { expect(screen.getByText('张运维')).toBeTruthy() })
     expect(screen.getByText('0571-12345678')).toBeTruthy()
     expect(screen.getByRole('dialog')).toBeTruthy()

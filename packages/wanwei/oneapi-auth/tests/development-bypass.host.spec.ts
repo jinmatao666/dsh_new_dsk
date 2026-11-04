@@ -33,10 +33,10 @@ describe('desktop development authentication', () => {
     type Handler = (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>
     let handler: Handler | undefined
     ctx.provide('connection', {
+      fetch: { register: () => () => {} },
       rpc: {
         handle(path: string, next: Handler) {
-          expect(path).toBe('/desktop-auth')
-          handler = next
+          if (path === '/desktop-auth') handler = next
           return async () => {}
         },
       },

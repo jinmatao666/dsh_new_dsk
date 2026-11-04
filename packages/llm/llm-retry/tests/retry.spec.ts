@@ -1036,3 +1036,13 @@ describe('provider-routed retry policy', () => {
     }).toThrow(/unknown key "retryPolciy"/)
   })
 })
+
+it('terminates quota exhaustion even when the provider requests unlimited retries', async () => {
+  const adapter = new ScriptedAdapter([new LlmError('insufficient_user_quota', 'QUOTA'), textResponse('must not run')])
+  ;({ ctx: context } = await harness(adapter, { mock: alwaysConfig() }))
+  const agent = context.agentLoop.create(SessionId('credit-exhausted'), { provider: 'mock', model: 'mock' })
+  agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+  await agent.whenIdle()
+  expect(adapter.requests).toHaveLength(1)
+  expect(agent.session.events.filter(event => event.type === 'llm/retry')).toHaveLength(0)
+})

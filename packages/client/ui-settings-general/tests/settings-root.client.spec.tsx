@@ -279,3 +279,9 @@ describe('SettingsPanel navigation', () => {
     expect(listeners.size).toBe(0)
   })
 })
+
+it('opens the requested settings section from a product shortcut event', () => {
+  mount({ rows: [{ id: 'wanwei-credits', order: 38, label: 'Credits' }], steps: [] })
+  act(() => { window.dispatchEvent(new CustomEvent('dsh:open-settings-section', { detail: 'wanwei-credits' })) })
+  expect(screen.getByTestId('section-wanwei-credits')).toBeTruthy()
+})

@@ -10,6 +10,7 @@ import type { Context, Events } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent, RequestErrorAction } from '@deepseek-ai/dsh-agent'
 import type { LlmFailure, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
+import { QUOTA_EXCEEDED_CODE, isQuotaExceededError } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { RetryId } from './brand.ts'
 import type { LlmRetryEventData } from './types.ts'
@@ -157,6 +158,7 @@ export function apply(ctx: Context, config: Config = {}, internals: RetryInterna
     { agent, turn, step, provider, failure, retryPolicy: policy, signal }: Parameters<Events['agent/request-error']>[0],
     next: () => Promise<RequestErrorAction>,
   ): Promise<RequestErrorAction> {
+    if (failure.code === QUOTA_EXCEEDED_CODE || isQuotaExceededError(failure.message)) return
     if (policy === undefined) return next()
     if (policy.mode === 'always') {
       if (signal.aborted || lifetime.signal.aborted) return

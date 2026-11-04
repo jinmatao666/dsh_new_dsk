@@ -68,6 +68,24 @@ export class AuthController {
     }
   }
 
+  /** Execute a public authentication flow and publish only a completed login.
+   * @param operation - Allowlisted login operation.
+   * @param input - Login form values.
+   * @param signal - Cancel when the login form is left.
+   * @returns Sanitized flow state.
+   */
+  async publicAuth(operation: string, input: Record<string, string>, signal?: AbortSignal): Promise<unknown> {
+    const revision = ++this.authRevision
+    this.mutations++
+    try {
+      const result = await this.connection.rpc.call('/desktop-auth', 'public-auth', { operation, input }, signal)
+      if (!result.ok) throw new Error(result.error.message)
+      const value = result.value as { state?: string }
+      if (!signal?.aborted && value.state === 'authenticated' && revision === this.authRevision) this.publish(value as AuthState)
+      return value
+    } finally { this.mutations-- }
+  }
+
   /** End the Host session; only the newest mutation updates the view.
  * @returns Host authentication result.
  */

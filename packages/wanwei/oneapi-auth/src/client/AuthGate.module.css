@@ -170,3 +170,7 @@
   .formSide { flex-basis: 430px; }
   .card { padding: 30px 34px 26px; }
 }
+
+.card[data-public-login=true] .methodNotice { display: none; }
+.card[data-public-login=true] .loginMode { margin-bottom: 12px; }
+.card[data-public-login=true] .loginContent { flex-basis: 390px; height: 390px; }

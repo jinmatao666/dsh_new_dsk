@@ -13,7 +13,9 @@
     "src/network-contract.ts",
     "src/client/index.ts",
     "src/client/AuthGate.tsx",
+    "src/client/PublicLogin.tsx",
     "src/client/AccountSection.tsx",
+    "src/client/CreditsSection.tsx",
     "src/client/DesktopUpdateSection.tsx",
     "src/client/desktop-update-controller.ts",
     "src/client/ManagedProviderCatalog.tsx",
@@ -23,13 +25,32 @@
     "src/contract.ts"
   ],
   "references": [
-    { "path": "../../../vendor/cordis" },
-    { "path": "../../client/connection/tsconfig.client.json" },
-    { "path": "../../client/locale" },
-    { "path": "../../client/ui-layout" },
-    { "path": "../../client/ui-renderer" },
-    { "path": "../../client/ui-settings" },
-    { "path": "../../client/ui-settings-models" },
-    { "path": "../../client/ui-slots" }
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../client/connection/tsconfig.client.json"
+    },
+    {
+      "path": "../../client/locale"
+    },
+    {
+      "path": "../../client/ui-layout"
+    },
+    {
+      "path": "../../client/ui-renderer"
+    },
+    {
+      "path": "../../client/ui-settings"
+    },
+    {
+      "path": "../../client/ui-settings-models"
+    },
+    {
+      "path": "../../client/ui-slots"
+    },
+    {
+      "path": "../../client/ui-primitives"
+    }
   ]
 }

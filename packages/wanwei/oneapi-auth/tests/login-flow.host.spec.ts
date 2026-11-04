@@ -26,13 +26,22 @@ afterEach(async () => {
   vi.unstubAllGlobals()
 })
 
+const loginCases: Array<{
+  baseURL: string | undefined
+  environment: string | undefined
+  expected: string
+  currentProvider?: string
+  loginMethod?: 'sms' | 'register' | 'wechat-phone'
+}> = [
+  { baseURL: config.baseURL, environment: 'https://ignored.example.test', expected: 'https://oneapi.example.test/dsh-api' },
+  ...(['sms', 'register', 'wechat-phone'] as const).map(loginMethod => ({ baseURL: config.baseURL, environment: undefined, expected: config.baseURL!, loginMethod })),
+  { baseURL: undefined, environment: 'https://launch.example.test/api-root', expected: 'https://launch.example.test/api-root' },
+  { baseURL: undefined, environment: undefined, expected: 'http://127.0.0.1:3000' },
+  { baseURL: config.baseURL, environment: undefined, expected: 'https://oneapi.example.test/dsh-api', currentProvider: 'my-local-model' },
+]
+
 describe('OneAPI login flow', () => {
-  it.each([
-    { baseURL: config.baseURL, environment: 'https://ignored.example.test', expected: 'https://oneapi.example.test/dsh-api' },
-    { baseURL: undefined, environment: 'https://launch.example.test/api-root', expected: 'https://launch.example.test/api-root' },
-    { baseURL: undefined, environment: undefined, expected: 'http://127.0.0.1:3000' },
-    { baseURL: config.baseURL, environment: undefined, expected: 'https://oneapi.example.test/dsh-api', currentProvider: 'my-local-model' },
-  ])('resolves $expected and preserves the login/token/model protocol', async ({ baseURL, environment, expected, currentProvider }) => {
+  it.each(loginCases)('resolves $expected and preserves the login/token/model protocol', async ({ baseURL, environment, expected, currentProvider, loginMethod }) => {
     const credentials = new Map<string, string>()
     const replace = vi.fn(() => Promise.resolve())
     const mutate = vi.fn(() => Promise.resolve())
@@ -100,7 +109,19 @@ describe('OneAPI login flow', () => {
       if (url.endsWith('/api/expert-web/test-expert/launch')) {
         return Promise.resolve(Response.json({ success: true, url: 'http://expert.lan/', ticket: 'ticket' }))
       }
-      if (url.endsWith('/api/user/login')) {
+      if (url.endsWith('/api/oauth/wechat/qr')) {
+        return Promise.resolve(Response.json({ success: true, data: { state: 'owned-state', qr_url: 'https://open.weixin.qq.com/connect/qrcode/mock' } }))
+      }
+      if (url === 'https://open.weixin.qq.com/connect/qrcode/mock') {
+        return Promise.resolve(new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/png' } }))
+      }
+      if (url.endsWith('/api/oauth/wechat/poll?state=owned-state')) {
+        return Promise.resolve(Response.json({ status: 'need_bind_phone', data: { username: 'tester' } }, {
+          headers: { 'set-cookie': 'session=wanwei-session; Path=/; HttpOnly' },
+        }))
+      }
+      if (url.endsWith('/api/user/self/phone/bind')) return Promise.resolve(Response.json({ success: true }))
+      if (url.endsWith('/api/user/login') || url.endsWith('/api/user/phone/login') || url.endsWith('/api/user/phone/register')) {
         return Promise.resolve(new Response(JSON.stringify({ success: true, data: { username: 'tester' } }), {
           status: 200,
           headers: { 'content-type': 'application/json', 'set-cookie': 'session=wanwei-session; Path=/; HttpOnly' },
@@ -145,14 +166,24 @@ describe('OneAPI login flow', () => {
     } } as unknown as NonNullable<typeof ctx.loader.internal>
     await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
     await ctx.loader.await()
-    const result = await handler?.('login', { username: ' tester ', password: 'secret' }, new AbortController().signal)
+    if (loginMethod === 'wechat-phone') {
+      await handler?.('public-auth', { operation: 'qr', input: {} }, new AbortController().signal)
+      const pending = await handler?.('public-auth', { operation: 'poll', input: { state: 'owned-state' } }, new AbortController().signal)
+      expect(JSON.stringify(pending)).not.toContain('wanwei-session')
+    }
+    const result = loginMethod
+      ? await handler?.('public-auth', { operation: loginMethod === 'wechat-phone' ? 'wechat-phone-bind' : loginMethod, input: { phone: '13800138000', code: '123456', agreed: 'true', state: 'owned-state' } }, new AbortController().signal)
+      : await handler?.('login', { username: ' tester ', password: 'secret' }, new AbortController().signal)
 
     expect(result).toEqual({
       ok: true,
       value: { state: 'authenticated', models: ['model-text', 'model-vision'], username: 'tester' },
     })
     expect(requests).toEqual([
-      `${expected}/api/user/login`,
+      ...(loginMethod === 'wechat-phone' ? [
+        `${expected}/api/oauth/wechat/qr`, 'https://open.weixin.qq.com/connect/qrcode/mock',
+        `${expected}/api/oauth/wechat/poll?state=owned-state`, `${expected}/api/user/self/phone/bind`,
+      ] : [loginMethod ? `${expected}/api/user/phone/${loginMethod === 'sms' ? 'login' : 'register'}` : `${expected}/api/user/login`]),
       `${expected}/api/token/`,
       `${expected}/api/user/available_models/detail`,
       `${expected}/api/status`,

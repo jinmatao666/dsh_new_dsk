@@ -1,3 +1,4 @@
+import { PublicLogin } from './PublicLogin.tsx'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -11,6 +12,7 @@ export interface AuthInjected {
   getSupportContact: () => Promise<DeploymentSettings>
   refresh: (signal?: AbortSignal) => Promise<AuthState>
   login: (username: string, password: string, signal?: AbortSignal) => Promise<AuthState>
+  publicAuth?: (operation: string, input: Record<string, string>, signal?: AbortSignal) => Promise<unknown>
   fail: (error: unknown) => void
 }
 
@@ -29,12 +31,13 @@ function readRememberedAccount(): string {
 type LoginMode = 'account' | 'sms' | 'qr'
 
 /** Blocking login surface; desktop viewports scale one centered 1120×720 layout, and credentials go only to the local Host. */
-export function AuthGate({ useAuth, getSupportContact, refresh, login, fail, t }: AuthGateProps) {
+export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAuth, fail, t }: AuthGateProps) {
   const auth = useAuth(view => view)
   const authenticated = auth.state === 'authenticated'
   const checking = auth.state === 'checking'
   const [username, setUsername] = useState(readRememberedAccount)
   const [rememberMe, setRememberMe] = useState(() => readRememberedAccount() !== '')
+  const [loginMode, setLoginMode] = useState<LoginMode | 'reset'>('account')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
@@ -64,6 +67,7 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, fail, t }
     if (!authenticated) return
     setPassword('')
     setError(undefined)
+    setLoginMode('account')
     setNotice(undefined)
     setSupportOpen(false)
   }, [authenticated])
@@ -155,7 +159,8 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, fail, t }
   const retry = (): void => { setError(undefined); void refresh().catch(fail) }
   const serviceError = error ?? (auth.state === 'offline' ? auth.message || t('offline') : undefined)
   const changeMode = (mode: LoginMode): void => {
-    setNotice(mode === 'account' ? undefined : { text: t(mode === 'sms' ? 'smsUnavailableTitle' : 'qrUnavailableTitle') })
+    if (mode === 'qr') { setNotice({ text: t('qrUnavailableTitle') }); return }
+    setNotice(undefined); setLoginMode(mode); setError(undefined)
   }
   const openSupport = async (trigger: HTMLButtonElement): Promise<void> => {
     supportTrigger.current = trigger
@@ -201,41 +206,45 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, fail, t }
         </section>
 
         <section className={css.formSide} aria-label={t('loginTitle')}>
-          <div className={css.card}>
+          <div className={css.card} data-public-login={loginMode !== 'account' ? 'true' : undefined}>
             <div className={css.cardHeader}><h2>{t('loginTitle')}</h2><p>{t('loginIntro')}</p></div>
             <div className={css.loginMode} role="tablist" aria-label={t('loginMethods')}>
               {(['account', 'sms', 'qr'] as const).map(mode => (
-                <button key={mode} type="button" className={mode === 'account' ? css.loginModeActive : undefined} role="tab" aria-selected={mode === 'account'} onClick={() => { changeMode(mode) }}>
+                <button key={mode} type="button" className={mode === loginMode ? css.loginModeActive : undefined} role="tab" aria-selected={mode === loginMode} onClick={() => { changeMode(mode) }}>
                   {t(mode === 'account' ? 'accountLogin' : mode === 'sms' ? 'smsLogin' : 'qrLogin')}
                 </button>
               ))}
             </div>
             <div className={css.methodNotice} aria-hidden='true' />
             <div className={css.loginContent}>
-              <form className={serviceError === undefined ? undefined : css.accountFormError}
-                onSubmit={(event) => { void submit(event) }}>
-                <label>{t('username')}<input autoFocus autoComplete="username" disabled={busy} value={username} onChange={(event) => { setUsername(event.target.value) }} placeholder={t('usernamePlaceholder')} required /></label>
-                <label>{t('password')}<input type="password" autoComplete="current-password" disabled={busy} value={password} onChange={(event) => { setPassword(event.target.value) }} placeholder={t('passwordPlaceholder')} required /></label>
-                <div className={css.formOptions}>
-                  <label className={css.remember}><input type="checkbox" checked={rememberMe} disabled={busy} onChange={(event) => {
-                    setRememberMe(event.target.checked)
-                    if (!event.target.checked) {
-                      try { window.localStorage.removeItem(REMEMBERED_ACCOUNT_KEY) } catch { /* Storage may be unavailable. */ }
-                    }
-                  }} />{t('rememberMe')}</label>
-                  <button className={css.textAction} type="button" onClick={(event) => { void openSupport(event.currentTarget) }}>{t('forgotPassword')}</button>
-                </div>
-                {serviceError !== undefined ? (
-                  <div className={css.accountFeedback}>
-                    <p className={css.error} role="alert" title={serviceError}>{serviceError}</p>
-                    {auth.state === 'offline'
-                      ? <button className={css.textAction} type="button" onClick={retry}>{t('retry')}</button> : null}
+              {loginMode === 'account' ? <>
+                <form className={serviceError === undefined ? undefined : css.accountFormError}
+                  onSubmit={(event) => { void submit(event) }}>
+                  <label>{t('username')}<input autoFocus autoComplete="username" disabled={busy} value={username} onChange={(event) => { setUsername(event.target.value) }} placeholder={t('usernamePlaceholder')} required /></label>
+                  <label>{t('password')}<input type="password" autoComplete="current-password" disabled={busy} value={password} onChange={(event) => { setPassword(event.target.value) }} placeholder={t('passwordPlaceholder')} required /></label>
+                  <div className={css.formOptions}>
+                    <label className={css.remember}><input type="checkbox" checked={rememberMe} disabled={busy} onChange={(event) => {
+                      setRememberMe(event.target.checked)
+                      if (!event.target.checked) {
+                        try { window.localStorage.removeItem(REMEMBERED_ACCOUNT_KEY) } catch { /* Storage may be unavailable. */ }
+                      }
+                    }} />{t('rememberMe')}</label>
+                    <button className={css.textAction} type="button" onClick={() => setLoginMode('reset')}>{t('forgotPassword')}</button>
                   </div>
-                ) : null}
-                <button className={css.primaryButton} type="submit" disabled={checking || busy || username.trim() === '' || password === ''}>{checking ? t('checking') : busy ? t('signingIn') : t('signIn')}</button>
-              </form>
+                  {serviceError !== undefined ? (
+                    <div className={css.accountFeedback}>
+                      <p className={css.error} role="alert" title={serviceError}>{serviceError}</p>
+                      {auth.state === 'offline'
+                        ? <button className={css.textAction} type="button" onClick={retry}>{t('retry')}</button> : null}
+                    </div>
+                  ) : null}
+                  <button className={css.primaryButton} type="submit" disabled={checking || busy || username.trim() === '' || password === ''}>{checking ? t('checking') : busy ? t('signingIn') : t('signIn')}</button>
+                </form>
+                <button type="button" className={css.textAction} onClick={() => setLoginMode('sms')}>{t('loginRegisterLink')}</button></>
+                : publicAuth ? <PublicLogin key={loginMode} mode={loginMode} request={publicAuth} onBack={() => setLoginMode('account')} t={key => t(key as import('./locales.ts').WanweiAuthKey)} /> : <p>{t('loginServiceMissing')}</p>}
+
             </div>
-            <p className={css.legalNotice}>{t('legalPrefix')}{t('userAgreement')}{t('legalJoin')}{t('privacyPolicy')}</p>
+            {loginMode === 'account' && <p className={css.legalNotice}>{t('legalPrefix')}{t('userAgreement')}{t('legalJoin')}{t('privacyPolicy')}</p>}
             <p className={css.footerSpace}>{t('accountHelpPrefix')}<button className={css.textAction} type="button" onClick={(event) => { void openSupport(event.currentTarget) }}>{t('administrator')}</button>{t('accountHelpSuffix')}</p>
           </div>
         </section>

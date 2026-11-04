@@ -117,8 +117,10 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
 
   useEffect(() => {
     const openModels = () => { openSection('models') }
+    const openRequested = (event: Event) => { const id = (event as CustomEvent<string>).detail; if (typeof id === 'string') openSection(id) }
+    window.addEventListener('dsh:open-settings-section', openRequested)
     window.addEventListener('dsh:open-model-settings', openModels)
-    return () => { window.removeEventListener('dsh:open-model-settings', openModels) }
+    return () => { window.removeEventListener('dsh:open-model-settings', openModels); window.removeEventListener('dsh:open-settings-section', openRequested) }
   }, [openSection])
 
   // The ledger tick keeps the nav rows fresh: registrants re-register with
@@ -147,15 +149,18 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
 
   return (
     <>
-      <button
-        type="button"
-        className={clsx(css.trigger, !wide && css.rail)}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => { setOpen(true) }}
-      >
-        {renderSlot('settings.trigger', { wide })}
-      </button>
+      <div className={css.triggerRow}>
+        <button
+          type="button"
+          className={clsx(css.trigger, !wide && css.rail)}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={() => { setOpen(true) }}
+        >
+          {renderSlot('settings.trigger', { wide })}
+        </button>
+        {renderSlot('settings.shortcut', { wide })}
+      </div>
       {open && (
         <SettingsPanel
           rows={rows}

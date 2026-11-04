@@ -164,7 +164,8 @@ it('activates only for intranet relay mode and restores the original Python sear
   cleanups.push(() => route.dispose())
   route.configure('intranet', { source: 'proxy', proxyUrl: 'http://relay.lan:3128', autoDetect: false, probeUrls: [] })
   await route.prepare()
-  const overlay = process.env.PYTHONPATH!.split(delimiter)[0]!
+  const overlay = process.env.PYTHONPATH!.split(delimiter).find(path => existsSync(join(path, 'pip', '__main__.py')))!
+  expect(overlay).toBeDefined()
   expect(existsSync(join(overlay, 'pip', '__main__.py'))).toBe(true)
   expect(process.env.PIP_INDEX_URL).toBe(indexes[0])
   expect(process.env.PIP_EXTRA_INDEX_URL).toBeUndefined()

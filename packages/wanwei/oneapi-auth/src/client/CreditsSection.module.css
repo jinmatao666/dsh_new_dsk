@@ -1,0 +1,25 @@
+.section { display: grid; gap: 24px; padding: 8px 0 24px; color: var(--dsw-alias-label-primary); }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.section h1 { margin: 0 0 8px; font-size: 26px; font-weight: 600; }
+.section h2 { margin: 0; font-size: 16px; }
+.section p { margin: 8px 0 0; color: var(--dsw-alias-label-secondary); font-size: 13px; line-height: 1.6; }
+.balance { display: grid; gap: 12px; padding: 24px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 14px; background: var(--dsw-alias-bg-layer-1); }
+.balance strong { font-size: 36px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.balance span { color: var(--dsw-alias-label-secondary); font-size: 13px; }
+.checkin { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 12px; }
+.primary, .secondary, .shortcut { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 8px 14px; background: transparent; color: inherit; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.primary { background: #2563eb; color: white; border-color: #2563eb; }
+.section button:disabled { opacity: .45; cursor: default; }
+.shortcut { margin-left: auto; padding: 4px 8px; color: #2563eb; border: none; flex: none; font-size: 12px; }
+.filters { display: flex; gap: 4px; }
+.filters button { padding: 5px 10px; border: 0; border-radius: 6px; color: var(--dsw-alias-label-secondary); background: transparent; cursor: pointer; }
+.filters button[aria-pressed="true"] { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.tableWrap { overflow-x: auto; }
+.section table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+.section th { color: var(--dsw-alias-label-secondary); font-weight: 500; }
+.section td, .section th { padding: 12px 8px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.section td:first-child { white-space: nowrap; }
+.earned { color: #168264; }
+.muted { text-align: center; }
+.pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; }
+.pagination > span:first-child { flex: 1; color: var(--dsw-alias-label-secondary); }

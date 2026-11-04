@@ -21,6 +21,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * icon-only button without an accessible name (broken-composition state;
      * the shipped composition always registers the seat).
      */
+    /** Optional product shortcuts beside the settings button. */
+    'settings.shortcut': { kind: 'list'; scope: 'root'; owner: SettingsTriggerOwnerProps }
     'settings.trigger': { kind: 'single'; scope: 'root'; owner: SettingsTriggerOwnerProps }
     /**
      * The panel title text seat. Content renders inside the nav heading row;

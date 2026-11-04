@@ -1,3 +1,4 @@
+import { CreditsSection, CheckinShortcut, type CreditsInjected } from './CreditsSection.tsx'
 /** Browser half of Wanwei desktop authentication. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
@@ -29,6 +30,7 @@ export const inject = ['slots', 'connection', 'locale']
 
 /** Install the login gate and account settings entry over one shared controller. */
 export function apply(ctx: Context): void {
+  ctx.provide('modelSettingsPolicy', { managedProvider: 'dsh-server', customOnly: true })
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'wanwei-auth: dictionaries')
   const connection = ctx.get('connection') as ConnectionHandle
   const controller = new AuthController(connection)
@@ -43,12 +45,26 @@ export function apply(ctx: Context): void {
     },
     refresh: async (signal) => { await network.refresh(signal); return controller.refresh(signal) },
     login: async (username, password, signal) => { await network.refresh(signal); return controller.login(username, password, signal) },
+    publicAuth: (operation, input, signal) => controller.publicAuth(operation, input, signal),
     fail: (error) => { controller.fail(error) },
   })
   const accountInject = (): AccountInjected => ({
     hooks: { auth: controller },
     logout: () => controller.logout(),
+    requestAccount: async (operation, input = {}) => {
+      const result = await connection.rpc.call('/desktop-auth', 'account-security', { operation, input })
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
   })
+  const requestCredits: CreditsInjected['requestCredits'] = async (operation, page = 0, filter = 'all') => {
+    const result = await connection.rpc.call('/desktop-auth', 'credits', { operation, page, filter })
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value
+  }
+  const creditsInject = (): CreditsInjected => ({ hooks: { auth: controller }, requestCredits })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({ name: 'settings.section', id: 'wanwei-credits', order: 38, label: () => '积分与用量', inject: creditsInject }, CreditsSection))
+  ctx.slots.inject('settings.shortcut', () => ctx.slots.register({ name: 'settings.shortcut', id: 'wanwei-checkin', inject: creditsInject }, CheckinShortcut))
   const t = ctx.locale.bind(NS)
   const updates = new DesktopUpdateController((window as Window & {
     __ZJUGIS_NATIVE_INVOKE__?: (command: string, args: unknown) => Promise<unknown>

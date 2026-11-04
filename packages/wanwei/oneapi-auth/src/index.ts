@@ -1,3 +1,7 @@
+import { installCreditGuard } from './credit-guard.ts'
+import { publicAuthRequest } from './public-auth.ts'
+import { creditsRequest } from './credits.ts'
+import { accountSecurityRequest } from './account-security.ts'
 /**
  * Host half of the desktop OneAPI authentication plugin.
  *
@@ -347,6 +351,7 @@ export function apply(ctx: Context, config: Config): void {
     config.pipMirrorUrls === undefined ? undefined : {
       indexes: config.pipMirrorUrls, attemptSeconds: config.pipMirrorAttemptSeconds ?? 30,
     })
+  if (!config.developmentBypass) installCreditGuard(ctx, baseURL, config.provider, async () => (await ctx.credentials.resolve(ref))?.value)
   installFinalDeliverables(ctx)
   installScriptWorkspaceGuidance(ctx)
   installSearchCitationPolicy(ctx)
@@ -573,6 +578,35 @@ export function apply(ctx: Context, config: Config): void {
     }
   }
 
+  const establishSession = async (cookie: string, username: string, signal: AbortSignal) => {
+    const tokenResponse = await fetch(`${baseURL}/api/token/`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ name: config.tokenName, remain_quota: 10_000_000_000, unlimited_quota: false }),
+      signal,
+    })
+    const tokenResult = await jsonBody<OneApiEnvelope<TokenData>>(tokenResponse)
+    const token = tokenResult.data?.key
+    if (!tokenResponse.ok || !tokenResult.success || token === undefined || token === '') {
+      return internal(tokenResult.message ?? '无法创建模型访问令牌')
+    }
+    const [models, serverDefaultModel] = await Promise.all([
+      fetchManagedModels(baseURL, token, config.defaultInput ?? ['text'], signal),
+      fetchServerDefaultModel(baseURL, signal),
+    ])
+    signal.throwIfAborted()
+    await ctx.credentials.set(ref, token)
+    await ctx.credentials.set(usernameRef, username)
+    try {
+      await syncProvider(models, serverDefaultModel)
+    } catch (error) {
+      await ctx.credentials.unset(ref)
+      throw error
+    }
+    return { ok: true as const, value: { state: 'authenticated' as const, models: models.map(model => model.id), username: username } }
+  }
+  const pendingWechat = new Set<string>()
+  const pendingPhoneBinding = new Map<string, { cookie: string; username: string; expires: number }>()
   const login = async (payload: unknown, signal: AbortSignal) => {
     try {
       const input = loginPayload(payload)
@@ -587,30 +621,7 @@ export function apply(ctx: Context, config: Config): void {
       const cookie = sessionCookie(response.headers)
       if (cookie === undefined) return internal('登录成功，但服务器没有返回会话 Cookie')
 
-      const tokenResponse = await fetch(`${baseURL}/api/token/`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', cookie },
-        body: JSON.stringify({ name: config.tokenName, remain_quota: 10_000_000_000, unlimited_quota: false }),
-        signal,
-      })
-      const tokenResult = await jsonBody<OneApiEnvelope<TokenData>>(tokenResponse)
-      const token = tokenResult.data?.key
-      if (!tokenResponse.ok || !tokenResult.success || token === undefined || token === '') {
-        return internal(tokenResult.message ?? '无法创建模型访问令牌')
-      }
-      const [models, serverDefaultModel] = await Promise.all([
-        fetchManagedModels(baseURL, token, config.defaultInput ?? ['text'], signal),
-        fetchServerDefaultModel(baseURL, signal),
-      ])
-      await ctx.credentials.set(ref, token)
-      await ctx.credentials.set(usernameRef, input.username)
-      try {
-        await syncProvider(models, serverDefaultModel)
-      } catch (error) {
-        await ctx.credentials.unset(ref)
-        throw error
-      }
-      return { ok: true as const, value: { state: 'authenticated' as const, models: models.map(model => model.id), username: input.username } }
+      return await establishSession(cookie, input.username, signal)
     } catch (error) {
       return internal(error instanceof Error ? error.message : String(error))
     }
@@ -642,6 +653,91 @@ export function apply(ctx: Context, config: Config): void {
   })
   const remove = connection.rpc.handle('/desktop-auth', async (endpoint, payload, signal) => {
     const serviceSignal = () => AbortSignal.any([signal, AbortSignal.timeout(config.serviceTimeoutMs ?? 15000)])
+    if (endpoint === 'credits') {
+      try {
+        await installReady
+        const token = (await ctx.credentials.resolve(ref))?.value
+        if (!token) throw new Error('请先登录')
+        const args = payload as { operation?: unknown; page?: unknown; filter?: unknown }
+        if (typeof args.operation !== 'string' || !Number.isInteger(args.page) || Number(args.page) < 0 || Number(args.page) > 1000 || !['all', 'earned', 'spent'].includes(String(args.filter))) throw new Error('积分参数无效')
+        const value = await creditsRequest(baseURL, token, args.operation, Number(args.page), String(args.filter), serviceSignal())
+        if ((await ctx.credentials.resolve(ref))?.value !== token) throw new Error('登录账号已变化，请重新打开积分页面')
+        return { ok: true as const, value }
+      } catch (error) { return internal(error instanceof Error ? error.message : String(error)) }
+    }
+    if (endpoint === 'public-auth') {
+      try {
+        await installReady
+        const args = payload as { operation?: unknown; input?: unknown }
+        if (typeof args.operation !== 'string' || !args.input || typeof args.input !== 'object' || Array.isArray(args.input)
+          || JSON.stringify(args.input).length > 8192 || Object.values(args.input).some(value => typeof value !== 'string')) throw new Error('登录参数无效')
+        const input = args.input as Record<string, string>
+        if (args.operation === 'wechat-phone-send' || args.operation === 'wechat-phone-bind') {
+          const provisional = pendingPhoneBinding.get(input.state ?? '')
+          if (!provisional || provisional.expires < Date.now()) throw new Error('微信验证已过期，请重新扫码')
+          if (!/^1[3-9]\d{9}$/.test(input.phone ?? '')) throw new Error('请输入有效手机号')
+          const sending = args.operation === 'wechat-phone-send'
+          const response = await fetch(baseURL + (sending ? '/api/user/self/phone/send-bind-code' : '/api/user/self/phone/bind'), {
+            method: 'POST', headers: { cookie: provisional.cookie, 'content-type': 'application/json' },
+            body: JSON.stringify({ phone: input.phone, code: input.code, purpose: 'phone_bind' }),
+            signal: serviceSignal(), redirect: 'error',
+          })
+          const result = await jsonBody<OneApiEnvelope<unknown>>(response)
+          if (!response.ok || !result.success) throw new Error(result.message || '手机号绑定失败')
+          if (sending) return { ok: true as const, value: { success: true } }
+          signal.throwIfAborted()
+          pendingPhoneBinding.delete(input.state ?? '')
+          return await establishSession(provisional.cookie, provisional.username, serviceSignal())
+        }
+        if (args.operation === 'poll' && !pendingWechat.has(input.state ?? '')) throw new Error('微信二维码已失效，请刷新')
+        const result = await publicAuthRequest(baseURL, args.operation, input, serviceSignal())
+        signal.throwIfAborted()
+        const value = result.value
+        if (args.operation === 'poll' && !pendingWechat.has(input.state ?? '')) throw new Error('微信二维码已更新，请重新扫码')
+        if (args.operation === 'qr' && typeof value.data?.state === 'string') {
+          pendingWechat.clear()
+          pendingPhoneBinding.clear()
+          pendingWechat.add(value.data.state)
+        }
+        if (args.operation === 'poll' && value.status === 'need_bind_phone') {
+          const cookie = sessionCookie(result.headers)
+          if (!cookie) throw new Error('微信验证成功但未返回会话，请重新扫码')
+          pendingPhoneBinding.set(input.state ?? '', {
+            cookie, username: String(value.data?.username || ''), expires: Date.now() + 5 * 60 * 1000,
+          })
+          pendingWechat.delete(input.state ?? '')
+        }
+        if ((args.operation === 'sms' || args.operation === 'register') && value.success === true || args.operation === 'poll' && value.status === 'success') {
+          if (args.operation === 'poll') pendingWechat.delete(input.state ?? '')
+          const cookie = sessionCookie(result.headers)
+          if (!cookie) throw new Error('认证成功但没有返回登录会话，请重试')
+          if (input.wechat_state) {
+            if (!pendingWechat.has(input.wechat_state)) throw new Error('微信二维码已失效，请重新扫码')
+            const bound = await fetch(baseURL + '/api/oauth/wechat/quick-bind?state=' + encodeURIComponent(input.wechat_state), {
+              headers: { cookie }, signal: serviceSignal(), redirect: 'error',
+            })
+            const binding = await jsonBody<OneApiEnvelope<unknown>>(bound)
+            if (!bound.ok || !binding.success) throw new Error(binding.message || '微信绑定失败，请重新登录后在账户设置中绑定')
+            pendingWechat.delete(input.wechat_state)
+          }
+          return await establishSession(cookie, String(value.data?.username || input.phone || ''), serviceSignal())
+        }
+        return { ok: true as const, value }
+      } catch (error) { return internal(error instanceof Error ? error.message : String(error)) }
+    }
+    if (endpoint === 'account-security') {
+      try {
+        await installReady
+        const token = (await ctx.credentials.resolve(ref))?.value
+        if (!token) throw new Error('请先登录')
+        const args = payload as { operation?: unknown; input?: unknown }
+        if (typeof args.operation !== 'string' || !args.input || typeof args.input !== 'object' || Array.isArray(args.input)
+          || JSON.stringify(args.input).length > 8192 || Object.values(args.input).some(value => typeof value !== 'string')) throw new Error('账号参数无效')
+        const value = await accountSecurityRequest(baseURL, token, args.operation, args.input as Record<string, string>, serviceSignal())
+        if ((await ctx.credentials.resolve(ref))?.value !== token) throw new Error('登录账号已变化，请重新打开账户设置')
+        return { ok: true as const, value }
+      } catch (error) { return internal(error instanceof Error ? error.message : String(error)) }
+    }
     if (endpoint === 'network-get' || endpoint === 'deployment-get') {
       try {
         const settings = await fetchDeploymentSettings(baseURL, serviceSignal())
@@ -730,6 +826,7 @@ export function apply(ctx: Context, config: Config): void {
     }
     if (endpoint === 'login') return login(payload, signal)
     if (endpoint === 'logout') {
+      pendingWechat.clear(); pendingPhoneBinding.clear()
       try {
         await clearLocalAuth()
         const username = (await ctx.credentials.resolve(usernameRef))?.value
