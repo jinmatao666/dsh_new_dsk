@@ -61,7 +61,7 @@
 .loginMode button::after { display: none; }
 .loginMode button:hover { color: var(--accent); }
 .loginModeActive { color: var(--accent) !important; font-weight: 700; background: rgb(255 255 255 / 95%); box-shadow: 0 4px 12px rgb(15 23 42 / 7%); }
-.loginContent { flex: 0 0 322px; height: 322px; overflow: auto; }
+.loginContent { flex: 0 0 322px; height: 322px; overflow: visible; }
 .card form { display: grid; min-height: 322px; gap: 27px; }
 .card form.accountFormError { gap: 8px; }
 .accountFeedback { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -174,3 +174,40 @@
 .card[data-public-login=true] .methodNotice { display: none; }
 .card[data-public-login=true] .loginMode { margin-bottom: 12px; }
 .card[data-public-login=true] .loginContent { flex-basis: 390px; height: 390px; }
+
+.registrationFooter { margin: 16px 0 0; color: var(--muted); font-size: 12px; line-height: 20px; text-align: center; }
+.card .registrationFooter button { position: static; margin: 0 0 0 4px; padding: 0; border: 0; color: var(--accent); font: inherit; font-weight: 400; background: transparent; box-shadow: none; }
+.card .registrationFooter button::after { display: none; }
+.card .legalNotice { padding-top: 10px; }
+
+/* One shared rhythm for registration, policy and support copy. */
+.card .registrationFooter, .card .legalNotice, .card .footerSpace { flex: 0 0 auto; height: auto; margin: 10px 0 0; padding: 0; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 20px; text-align: center; }
+.card .registrationFooter { margin-top: 16px; }
+.card .registrationFooter button, .card .footerSpace button.textAction { font-size: 12px; font-weight: 400; line-height: 20px; }
+
+.card[data-public-login=true] .loginMode { margin-bottom: 28px; }
+.card[data-public-login=true] .methodNotice { display: flex; }
+.card[data-public-login=true] .loginContent { flex-basis: 322px; height: 322px; }
+.card[data-public-login=true] .footerSpace { margin-top: auto; padding-top: 16px; }
+
+.card:has([data-register=true]) .loginContent { flex-basis: 390px; height: 390px; }
+.card:has([data-register=true]) .methodNotice { display: none; }
+.card:has([data-register=true]) .loginMode { margin-bottom: 12px; }
+
+.card[data-public-login=true]:has(.registrationFooter) .footerSpace { margin-top: 10px; padding-top: 0; }
+
+.card:not([data-public-login=true]) .loginContent > form:not(.accountFormError) { grid-template-rows: 75px 75px 26px 54px; align-content: start; gap: 27px; }
+.card:not([data-public-login=true]) .loginContent > form:not(.accountFormError) input:not([type=checkbox]) { height: 50px; }
+
+.initialPassword { width: 420px; max-width: calc(100vw - 40px); padding: 24px; border: 1px solid #dce5f3; border-radius: 18px; color: #202632; background: white; }
+.initialPassword::backdrop { background: #172e5044; }
+.initialPassword h2 { margin: 0 0 10px; font-size: 20px; }
+.initialPassword p { font-size: 13px; line-height: 1.6; }
+.initialPassword form, .initialPassword label { display: grid; gap: 10px; }
+.initialPassword label { font-size: 13px; }
+.initialPassword label div, .initialPassword footer { display: flex; gap: 8px; }
+.initialPassword input { min-width: 0; width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #dce5f3; border-radius: 8px; }
+.initialPassword button { padding: 9px 12px; border: 1px solid #dce5f3; border-radius: 8px; color: #2563eb; background: white; white-space: nowrap; cursor: pointer; }
+.initialPassword footer { justify-content: flex-end; margin-top: 12px; }
+.initialPassword footer button:last-child { color: white; background: #2563eb; }
+.initialPassword [role=alert] { color: #c53b42; }

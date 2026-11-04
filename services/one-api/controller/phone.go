@@ -472,6 +472,9 @@ func PhoneRegister(c *gin.Context) {
 
 	common.DeletePhoneVerificationCode(req.Phone, codePurpose)
 	model.RecordLog(ctx, user.Id, model.LogTypeBehavior, "通过手机号注册")
+	if req.Password == "" {
+		grantInitialPassword(user.Id)
+	}
 	SetupLogin(user, c)
 }
 

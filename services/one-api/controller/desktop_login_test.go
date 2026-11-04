@@ -105,6 +105,26 @@ func TestDesktopPhoneRegistrationAndExistingAccount(t *testing.T) {
 	require.Equal(t, 1, successes, "duplicate submissions must create only one account")
 	db.Model(&model.User{}).Count(&count)
 	require.Equal(t, int64(2), count)
+	var second model.User
+	require.NoError(t, second.FillUserByPhone("13900139000"))
+	setup := func(userID int) map[string]interface{} {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set(ctxkey.Id, userID)
+		c.Request = httptest.NewRequest("POST", "/", strings.NewReader(`{"new_password":"FirstPass123"}`))
+		c.Request.Header.Set("Content-Type", "application/json")
+		SetInitialDesktopPassword(c)
+		var value map[string]interface{}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &value))
+		return value
+	}
+	require.Equal(t, true, setup(second.Id)["success"])
+	require.Equal(t, false, setup(second.Id)["success"], "grant must be consumed")
+	require.Equal(t, false, setup(int(id.(float64)))["success"], "old accounts must not bypass SMS")
+	matched, err = model.ValidateAccountPasswordByLocalUserID(second.Id, "FirstPass123")
+	require.NoError(t, err)
+	require.True(t, matched)
+
 }
 
 func TestDesktopLoginOptionsRequireRoot(t *testing.T) {

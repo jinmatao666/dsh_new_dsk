@@ -7,6 +7,8 @@ kind: "package-reference"
 
 English | [中文](README.zh.md)
 
+New phone registrations now enter the workspace immediately after consent and SMS verification, then offer an optional password modal. A server-owned ten-minute, single-use grant allows first password setup without another SMS; existing passwords cannot be overwritten through this route. Later changes retain phone verification. Registration administration uses On/Off dropdowns and omits fixed SMS parameters and deferred WeChat configuration.
+
 ## Summary
 
 Account settings show the current identity and phone, password and WeChat management instead of a model inventory. Each action opens a centered modal instead of expanding the page. Cancellation clears the draft and restores focus; errors stay inside the modal, and active submissions prevent dismissal. Fixed Host operations reuse OneAPI phone verification, password reset and WeChat QR/quick-bind endpoints. Phone replacement verifies both numbers; WeChat binding and unbinding require the bound phone code. Password setup and modification share a verified flow because legacy generated passwords do not establish whether the user chose a password. Status exposes masked phone and binding flags only. Account dialogs omit graphical captchas and use authenticated, rate-limited SMS routes, including `/api/user/self/phone/send-bind-code`. Public login/registration captcha policy stays unchanged. Deploy the updated backend together with the desktop. SMS and WeChat services must be configured on the server.

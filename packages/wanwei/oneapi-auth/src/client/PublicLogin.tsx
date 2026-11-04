@@ -110,15 +110,17 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
       if ((mode === 'reset' || password) && (password.length < 8 || password.length > 20 || password !== confirm)) throw new Error(t('securityPasswordInvalid'))
     }
     if (register && (!agreed || !cap?.agreement || !cap.privacy)) throw new Error(t('loginConsentRequired'))
+    if (mode === 'sms' && cap?.register && !agreed) throw new Error(t('loginConsentRequired'))
     const input = { phone, code, password, new_password: password, agreed: String(agreed), wechat_state: unbound, state: wechatPhone }
     const result = await request(wechatPhone ? 'wechat-phone-bind' : mode === 'reset' ? 'reset' : register ? 'register' : 'sms', input) as Result
     if (result.code === 'phone_not_registered') {
       if (!result.register_enabled) throw new Error(result.message || t('loginRegistrationClosed'))
-      setRegister(true); setNotice(''); return
+      if (!agreed || !cap?.agreement || !cap.privacy) throw new Error(t('loginConsentRequired'))
+      await request('register', { ...input, password: '', agreed: 'true' }); return
     }
     if (mode === 'reset') { setPassword(''); setConfirm(''); setCode(''); setNotice(t('loginPasswordSaved')) }
   }) }
-  return <div className={styles.body}>
+  return <div className={styles.body} data-login-mode={mode} data-register={register ? 'true' : undefined}>
     {!cap && !error && <p role="status">{t('securityLoading')}</p>}
     {cap && !smsEnabled && smsForm && <p role="status">{t('loginSmsDisabled')}</p>}
     {cap && mode === 'qr' && !cap.wechat && <p role="status">{t('loginWechatDisabled')}</p>}
@@ -129,18 +131,19 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
     {wechatPhone && <p>{t('loginBindPhoneAfterScan')}</p>}
     {unbound && <p>{t('loginBindExisting')}</p>}
     {cap && smsEnabled && smsForm && <form className={styles.form} data-register={register ? 'true' : undefined} onSubmit={submit}>
-      {register ? <><h3>{t('loginCreateAccount')}</h3><p>{t('loginAccountPhone')} {phone}</p></> : <label>{t('securityPhone')}<input type="tel" autoComplete="tel" maxLength={11} required value={phone} disabled={busy} onChange={(e) => { setPhone(e.target.value); setCode('') }} /></label>}
-      {!register && <div className={styles.code}><label>{t('loginSmsCode')}<input inputMode="numeric" autoComplete="one-time-code" maxLength={6} required value={code} disabled={busy} onChange={e => setCode(e.target.value)} /></label><button type="button" disabled={busy || countdown > 0} onClick={send}>{countdown ? `${countdown}s` : t('securitySendCode')}</button></div>}
+      {register ? <><h3>{t('loginCreateAccount')}</h3><p>{t('loginAccountPhone')} {phone}</p></> : <label>{t('securityPhone')}<input type="tel" placeholder={t('loginPhonePlaceholder')} autoComplete="tel" maxLength={11} required value={phone} disabled={busy} onChange={(e) => { setPhone(e.target.value); setCode('') }} /></label>}
+      {!register && <div className={styles.code}><label>{t('loginSmsCode')}<input inputMode="numeric" placeholder={t('loginCodePlaceholder')} autoComplete="one-time-code" maxLength={6} required value={code} disabled={busy} onChange={e => setCode(e.target.value)} /></label><button type="button" disabled={busy || countdown > 0} onClick={send}>{countdown ? `${countdown}s` : t('securitySendCode')}</button></div>}
       {captcha && <div className={styles.code}><label>{t('securityCaptcha')}<input value={imageCode} onChange={e => setImageCode(e.target.value)} /></label><img src={captcha.captcha_image} alt={t('securityCaptcha')} /></div>}
       {(register || mode === 'reset') && <><p className={styles.hint}>{t(register ? 'loginPasswordOptional' : 'securityPasswordHint')}</p><label>{t('securityNewPassword')}<input type="password" autoComplete="new-password" maxLength={20} required={mode === 'reset'} value={password} onChange={e => setPassword(e.target.value)} /></label><label>{t('securityConfirmPassword')}<input type="password" autoComplete="new-password" maxLength={20} required={mode === 'reset'} value={confirm} onChange={e => setConfirm(e.target.value)} /></label></>}
-      {register && <><label className={styles.consent}><input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} />{t('loginAgree')}<button type="button" onClick={() => setLegal('agreement')}>{t('userAgreement')}</button><button type="button" onClick={() => setLegal('privacy')}>{t('privacyPolicy')}</button></label>
+      {(register || mode === 'sms' && cap?.register) && <><label className={styles.consent}><input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} />{t('loginAgree')}<button type="button" onClick={() => setLegal('agreement')}>{t('userAgreement')}</button><button type="button" onClick={() => setLegal('privacy')}>{t('privacyPolicy')}</button></label>
         {(!cap.agreement || !cap.privacy) && <p>{t('loginLegalMissing')}</p>}</>}
       {register && <button className={styles.inline} type="button" disabled={busy} onClick={() => { setRegister(false); setCode(''); setPassword(''); setConfirm(''); setAgreed(false); setNotice('') }}>{t('loginChangePhone')}</button>}
+      {mode === 'sms' && !register && !cap?.register && <p className={styles.smsHint}>{t('loginCodePrivacyHint')}</p>}
       <button className={css.primaryButton} disabled={busy || register && (!agreed || !cap.agreement || !cap.privacy)}>{busy ? t('securitySaving') : t(wechatPhone ? 'loginBindPhoneEnter' : mode === 'reset' ? 'securityPasswordAction' : register ? password ? 'loginRegisterEnter' : 'loginSkipPassword' : cap.register ? 'loginOrRegister' : 'signIn')}</button>
     </form>}
     {notice && <p role="status" className={styles.hint}>{notice}</p>}
     {error && <p role="alert" className={styles.error}>{error}</p>}
     {legal && <div className={styles.legal} role="region" aria-label={t(legal === 'agreement' ? 'userAgreement' : 'privacyPolicy')}><strong>{t(legal === 'agreement' ? 'userAgreement' : 'privacyPolicy')}</strong><pre>{cap?.[legal] || t('loginLegalMissing')}</pre><button type="button" onClick={() => setLegal(undefined)}>{t('securityCancel')}</button></div>}
-    {!register && <button type="button" className={styles.back} onClick={onBack}>{t('loginBackAccount')}</button>}
+    {!register && mode === 'reset' && <button type="button" className={styles.back} onClick={onBack}>{t('loginBackAccount')}</button>}
   </div>
 }

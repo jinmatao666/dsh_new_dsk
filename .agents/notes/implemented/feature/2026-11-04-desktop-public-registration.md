@@ -16,6 +16,8 @@ Resolve new public-registration roles on the server, defaulting to the existing 
 
 The desktop QR tab is temporarily held at its original unavailable toast pending the chosen WeChat integration route. It preserves the active form and does not invoke public QR operations. Password and SMS entry points remain enabled.
 
+Verified new phone users now enter the workspace directly after consent. A native dialog offers optional password setup. A ten-minute, single-use server grant permits this first setup without another SMS and rejects accounts that already have a password; later changes use the existing verified flow. The grant is process-local, so restart or routing to another replica requires the ordinary account-settings flow. The admin page groups registration, SMS and policies in one form, uses On/Off dropdowns, and hides fixed technical parameters and deferred WeChat settings. Login forms share field/button positions and three footer lines without inner scrolling.
+
 ## Alternatives considered
 
 Automatic creation on unknown login omits consent. Creating a new user for an existing WeChat account splits identity. Guessing a role by number risks wrong permissions. UI-only configuration restrictions do not protect direct API calls.

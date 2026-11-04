@@ -45,6 +45,11 @@ export function apply(ctx: Context): void {
     },
     refresh: async (signal) => { await network.refresh(signal); return controller.refresh(signal) },
     login: async (username, password, signal) => { await network.refresh(signal); return controller.login(username, password, signal) },
+    requestAccount: async (operation, input = {}) => {
+      const result = await connection.rpc.call('/desktop-auth', 'account-security', { operation, input })
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
     publicAuth: (operation, input, signal) => controller.publicAuth(operation, input, signal),
     fail: (error) => { controller.fail(error) },
   })

@@ -81,7 +81,7 @@ export class AuthController {
       const result = await this.connection.rpc.call('/desktop-auth', 'public-auth', { operation, input }, signal)
       if (!result.ok) throw new Error(result.error.message)
       const value = result.value as { state?: string }
-      if (!signal?.aborted && value.state === 'authenticated' && revision === this.authRevision) this.publish(value as AuthState)
+      if (!signal?.aborted && value.state === 'authenticated' && revision === this.authRevision) this.publish({ ...value, ...(operation === 'register' && !input.password ? { passwordSetup: true } : {}) } as AuthState)
       return value
     } finally { this.mutations-- }
   }

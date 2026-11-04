@@ -159,3 +159,5 @@
 }
 
 .registration-settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 28px;max-width:960px}.registration-settings-grid label{display:grid;gap:8px;color:#172e50;font-size:14px}.registration-settings-grid input:not([type=checkbox]),.registration-settings-grid select,.registration-settings-grid textarea{width:100%;box-sizing:border-box;border:1px solid #d6e3f7;border-radius:9px;padding:10px 12px;background:#fff;color:#172e50;font:inherit}.registration-settings-grid input[type=checkbox]{width:18px;height:18px;accent-color:#3079f0}.registration-settings-wide{grid-column:1/-1}@media(max-width:760px){.registration-settings-grid{grid-template-columns:1fr}}
+
+.registration-settings-section{padding:24px 0 28px;border-top:1px solid #e0e8f4}.registration-settings-section h3{margin:0 0 8px;color:#172e50;font-size:17px;font-weight:600}.registration-settings-section .settings-description{margin-bottom:20px}.registration-settings-section:last-of-type{padding-bottom:0}

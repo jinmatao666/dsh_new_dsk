@@ -63,7 +63,7 @@ var SMSRegion = "cn-hangzhou"
 var PhoneLoginEnabled = true    // 默认开启手机号登录
 var PhoneRegisterEnabled = true // 默认开启手机号注册
 var PhoneVerificationCodeLength = 6
-var PhoneVerificationValidMinutes = 10
+var PhoneVerificationValidMinutes = 5
 var PhoneMaxSendPerHour = 5
 
 // Captcha Configuration（图形验证码：发送短信验证码前的人机验证）

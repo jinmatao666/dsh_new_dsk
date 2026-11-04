@@ -222,3 +222,15 @@ describe('Wanwei authentication gate', () => {
     }
   })
 })
+
+it('opens password setup after a new registration and allows continuing without setting it', async () => {
+  const view = { state: 'authenticated' as const, username: 'new-user', models: [], passwordSetup: true }
+  const requestAccount = vi.fn(async () => ({ success: true }))
+  render(<AuthGate {...kit} useAuth={selector => selector(view)} requestAccount={requestAccount}
+    login={vi.fn()} refresh={vi.fn(async () => view)} fail={vi.fn()} t={t} />)
+  await screen.findByRole('dialog')
+  expect(screen.queryByRole('main')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '稍后设置' }))
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(requestAccount).not.toHaveBeenCalled()
+})

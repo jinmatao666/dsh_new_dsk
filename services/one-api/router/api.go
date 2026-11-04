@@ -104,6 +104,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/available_models", controller.GetUserAvailableModels)
 				selfRoute.GET("/available_models/detail", controller.GetUserAvailableModelsDetail)
 				// Phone management routes
+				selfRoute.POST("/self/password/initial", middleware.CriticalRateLimit(), controller.SetInitialDesktopPassword)
 				selfRoute.POST("/self/phone/send-bind-code", middleware.CriticalRateLimit(), controller.SendAccountPhoneBindCode)
 				selfRoute.POST("/self/phone/bind", controller.BindPhone)
 				selfRoute.POST("/self/phone/quick-bind", controller.QuickBindPhone)

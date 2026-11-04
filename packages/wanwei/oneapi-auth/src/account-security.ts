@@ -42,6 +42,7 @@ export async function accountSecurityRequest(
     return request('/api/oauth/wechat/quick-bind?state=' + encodeURIComponent(input.state ?? '') + '&phone_code=' + encodeURIComponent(input.phone_code))
   }
   const routes: Record<string, string> = {
+    'initial-password': '/api/user/self/password/initial',
     'send-new': '/api/user/self/phone/send-bind-code', 'send-current': '/api/user/self/phone/send-change-code',
     'send-password': '/api/user/self/phone/send-reset-code', 'phone-bind': '/api/user/self/phone/bind',
     'phone-replace': '/api/user/self/phone/replace', 'password': '/api/user/self/phone/reset-password', 'wechat-unbind': '/api/user/self/wechat/unbind',

@@ -25,3 +25,18 @@
 .body button.inline { padding: 2px 0; border: 0; text-align: left; background: transparent; }
 
 .body .consent input[type=checkbox] { appearance: auto; flex: 0 0 16px; width: 16px; height: 16px; margin: 0 3px 0 0; accent-color: #2563eb; }
+
+.body[data-login-mode=sms]:not([data-register=true]) { margin-top: 0; }
+.body[data-login-mode=sms]:not([data-register=true]) form.form { min-height: 322px; gap: 27px; align-content: start; }
+.body[data-login-mode=sms]:not([data-register=true]) .form label { gap: 8px; color: #656b80; font-size: 13px; font-weight: 600; line-height: 17px; }
+.body[data-login-mode=sms]:not([data-register=true]) form.form label input { padding: 14px 16px; border-radius: 12px; font-size: 15px; line-height: 20px; }
+.body[data-login-mode=sms]:not([data-register=true]) .code button { min-height: 50px; padding: 12px; border-radius: 12px; font-size: 13px; }
+
+/* Match the account form's two field rows, options row and submit row. */
+.body[data-login-mode=sms]:not([data-register=true]) form.form { grid-template-rows: auto auto 26px 54px; gap: 27px; }
+.body[data-login-mode=sms]:not([data-register=true]) form.form > button:last-child { grid-row: 4; }
+
+.body[data-login-mode=sms]:not([data-register=true]) form.form { grid-template-rows: 75px 75px 26px 54px; }
+.body[data-login-mode=sms]:not([data-register=true]) form.form label input { height: 50px; }
+
+.body .form .smsHint { grid-row: 3; align-self: center; margin: 0; color: #6b7085; font-size: 12px; font-weight: 400; line-height: 20px; }

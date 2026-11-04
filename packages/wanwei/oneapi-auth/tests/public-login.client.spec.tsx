@@ -10,23 +10,23 @@ function inputs() {
   fireEvent.change(screen.getByLabelText(zh.securityPhone), { target: { value: '13800138000' } })
   fireEvent.change(screen.getByLabelText(zh.loginSmsCode), { target: { value: '123456' } })
 }
-it('registers only after unknown-phone confirmation and consent, and allows skipping a password', async () => {
+it('requires consent then registers an unknown phone directly without replacing the login form', async () => {
   const request = vi.fn(async (op: string) => op === 'capabilities' ? { success: true, data: cap }
     : op === 'sms' ? { success: false, code: 'phone_not_registered', register_enabled: true } : { state: 'authenticated' })
   render(<PublicLogin mode='sms' request={request} onBack={() => {}} t={t} />)
   await screen.findByLabelText(zh.securityPhone); inputs()
   fireEvent.click(screen.getByRole('button', { name: zh.loginOrRegister }))
-  await screen.findByText(zh.loginCreateAccount)
-  expect(request.mock.calls.some(([op]) => op === 'register')).toBe(false)
-  expect(screen.getByRole('button', { name: zh.loginSkipPassword })).toHaveProperty('disabled', true)
+  await screen.findByRole('alert')
+  expect(request.mock.calls.some(([op]) => op === 'sms' || op === 'register')).toBe(false)
   fireEvent.click(screen.getByRole('checkbox'))
-  fireEvent.click(screen.getByRole('button', { name: zh.loginSkipPassword }))
+  fireEvent.click(screen.getByRole('button', { name: zh.loginOrRegister }))
   await waitFor(() => expect(request).toHaveBeenCalledWith('register', expect.objectContaining({ phone: '13800138000', password: '', agreed: 'true' }), expect.anything()))
+  expect(screen.queryByText(zh.loginCreateAccount)).toBeNull()
 })
 it('preserves existing accounts and surfaces rejected verification without entering registration', async () => {
   const request = vi.fn(async (op: string) => { if (op === 'capabilities') return { data: cap }; throw new Error('验证码已过期') })
   render(<PublicLogin mode='sms' request={request} onBack={() => {}} t={t} />)
-  await screen.findByLabelText(zh.securityPhone); inputs()
+  await screen.findByLabelText(zh.securityPhone); inputs(); fireEvent.click(screen.getByRole('checkbox'))
   fireEvent.click(screen.getByRole('button', { name: zh.loginOrRegister }))
   expect((await screen.findByRole('alert')).textContent).toBe('验证码已过期')
   expect(screen.queryByText(zh.loginCreateAccount)).toBeNull()

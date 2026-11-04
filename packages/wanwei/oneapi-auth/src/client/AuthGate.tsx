@@ -12,6 +12,7 @@ export interface AuthInjected {
   getSupportContact: () => Promise<DeploymentSettings>
   refresh: (signal?: AbortSignal) => Promise<AuthState>
   login: (username: string, password: string, signal?: AbortSignal) => Promise<AuthState>
+  requestAccount?: (operation: string, input?: Record<string, string>) => Promise<unknown>
   publicAuth?: (operation: string, input: Record<string, string>, signal?: AbortSignal) => Promise<unknown>
   fail: (error: unknown) => void
 }
@@ -31,7 +32,7 @@ function readRememberedAccount(): string {
 type LoginMode = 'account' | 'sms' | 'qr'
 
 /** Blocking login surface; desktop viewports scale one centered 1120×720 layout, and credentials go only to the local Host. */
-export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAuth, fail, t }: AuthGateProps) {
+export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAuth, requestAccount, fail, t }: AuthGateProps) {
   const auth = useAuth(view => view)
   const authenticated = auth.state === 'authenticated'
   const checking = auth.state === 'checking'
@@ -136,7 +137,8 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAut
     return () => { window.removeEventListener('resize', update) }
   }, [authenticated])
 
-  if (auth.state === 'authenticated') return null
+  if (auth.state === 'authenticated') return auth.passwordSetup && requestAccount
+    ? <InitialPassword key={auth.username} request={requestAccount} /> : null
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
@@ -240,11 +242,13 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAut
                   ) : null}
                   <button className={css.primaryButton} type="submit" disabled={checking || busy || username.trim() === '' || password === ''}>{checking ? t('checking') : busy ? t('signingIn') : t('signIn')}</button>
                 </form>
-                <button type="button" className={css.textAction} onClick={() => setLoginMode('sms')}>{t('loginRegisterLink')}</button></>
+              </>
                 : publicAuth ? <PublicLogin key={loginMode} mode={loginMode} request={publicAuth} onBack={() => setLoginMode('account')} t={key => t(key as import('./locales.ts').WanweiAuthKey)} /> : <p>{t('loginServiceMissing')}</p>}
 
             </div>
-            {loginMode === 'account' && <p className={css.legalNotice}>{t('legalPrefix')}{t('userAgreement')}{t('legalJoin')}{t('privacyPolicy')}</p>}
+            {loginMode === 'account' && <p className={css.registrationFooter}><span>{t('loginNoAccount')}</span><button type="button" onClick={() => setLoginMode('sms')}>{t('loginPhoneRegister')}</button></p>}
+            {loginMode === 'sms' && <p className={css.registrationFooter}>{t('loginUnregisteredHint')}</p>}
+            {(loginMode === 'account' || loginMode === 'sms') && <p className={css.legalNotice}>{t('legalPrefix')}{t('userAgreement')}{t('legalJoin')}{t('privacyPolicy')}</p>}
             <p className={css.footerSpace}>{t('accountHelpPrefix')}<button className={css.textAction} type="button" onClick={(event) => { void openSupport(event.currentTarget) }}>{t('administrator')}</button>{t('accountHelpSuffix')}</p>
           </div>
         </section>
@@ -285,3 +289,30 @@ function FileIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d
 function SearchIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg> }
 function FlowIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M8.5 6H13a5 5 0 0 1 5 5v4.5M15.5 18H11a5 5 0 0 1-5-5V8.5" /></svg> }
 function ServerIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1.5" /><rect x="4" y="14" width="16" height="6" rx="1.5" /><path d="M8 7h.01M8 17h.01" /></svg> }
+
+function InitialPassword({ request }: { request: NonNullable<AuthInjected['requestAccount']> }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const [closed, setClosed] = useState(false)
+  const [password, setPassword] = useState(''), [confirm, setConfirm] = useState('')
+  const [busy, setBusy] = useState(false), [error, setError] = useState('')
+  useEffect(() => { if (!closed) dialog.current?.showModal() }, [closed])
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true); setError('')
+    try { await action() }
+    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { setBusy(false) }
+  }
+  if (closed) return null
+  return <dialog ref={dialog} className={css.initialPassword}
+    onCancel={(event) => { if (busy) event.preventDefault(); else setClosed(true) }}>
+    <h2>设置登录密码</h2><p>账号已创建并登录。可设置密码，也可稍后在“设置 → 账户”中设置。</p>
+    <form onSubmit={(event) => { event.preventDefault(); void run(async () => {
+      if (password.length < 8 || password.length > 20 || password !== confirm) throw new Error('请输入8–20位密码，并确保两次输入一致')
+      await request('initial-password', { new_password: password }); setClosed(true)
+    }) }}>
+      <label>新密码<input type="password" placeholder="请输入8–20位密码" maxLength={20} required autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} disabled={busy} /></label>
+      <label>确认密码<input type="password" placeholder="请再次输入密码" maxLength={20} required autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} disabled={busy} /></label>
+      {error && <p role="alert">{error}</p>}<footer><button type="button" disabled={busy} onClick={() => setClosed(true)}>稍后设置</button><button disabled={busy}>保存密码</button></footer>
+    </form>
+  </dialog>
+}
