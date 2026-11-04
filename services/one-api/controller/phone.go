@@ -3,7 +3,9 @@ package controller
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"gorm.io/gorm"
 	"net/http"
 	"regexp"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/i18n"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/common/sms"
@@ -22,6 +25,7 @@ import (
 // Phone rate limiting
 var phoneRateLimitMap = make(map[string][]time.Time)
 var phoneRateLimitMutex sync.Mutex
+var phoneRegistrationMutex sync.Mutex
 
 type SendPhoneCodeRequest struct {
 	Phone       string `json:"phone" binding:"required"`
@@ -42,6 +46,7 @@ type PhoneRegisterRequest struct {
 	Username string `json:"username"` // 可选；为空时默认使用规范化后的手机号作为登录用户名
 	// UseLoginSMS 为 true 时，允许使用「登录」用途短信验证码完成注册（须号码未注册；用于登录页引导弹窗，避免二次发短信）
 	UseLoginSMS bool `json:"use_login_sms"`
+	Agreed      bool `json:"agreed"`
 }
 
 // validateE164Phone validates Chinese mainland mobile number (11 digits)
@@ -98,6 +103,10 @@ func checkPhoneRateLimit(phone string) bool {
 		}
 		phoneRateLimitMap[phone] = validTimes
 
+		// Enforce the same one-minute interval as the client countdown.
+		if len(validTimes) > 0 && now.Sub(validTimes[len(validTimes)-1]) < time.Minute {
+			return false
+		}
 		// Check if exceeds limit
 		if len(validTimes) >= config.PhoneMaxSendPerHour {
 			return false
@@ -128,6 +137,19 @@ func verifyCaptcha(captchaId string, captchaCode string) (bool, string) {
 
 // SendPhoneVerificationCode sends SMS verification code
 func SendPhoneVerificationCode(c *gin.Context) {
+	sendPhoneVerificationCode(c, false)
+}
+
+// SendAccountPhoneBindCode sends binding SMS for an authenticated account without a graphical challenge.
+func SendAccountPhoneBindCode(c *gin.Context) {
+	if c.GetInt(ctxkey.Id) <= 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": "请先登录"})
+		return
+	}
+	sendPhoneVerificationCode(c, true)
+}
+
+func sendPhoneVerificationCode(c *gin.Context, accountBinding bool) {
 	if !config.SMSEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -158,12 +180,18 @@ func SendPhoneVerificationCode(c *gin.Context) {
 	}
 
 	// Verify graphical captcha (human verification) before sending SMS
-	if ok, msg := verifyCaptcha(req.CaptchaId, req.CaptchaCode); !ok {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": msg,
-		})
-		return
+	if !accountBinding {
+		if ok, msg := verifyCaptcha(req.CaptchaId, req.CaptchaCode); !ok {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": msg,
+			})
+			return
+		}
+
+	}
+	if accountBinding {
+		req.Purpose = common.PhoneBindPurpose
 	}
 
 	// Validate purpose
@@ -187,7 +215,7 @@ func SendPhoneVerificationCode(c *gin.Context) {
 	if !checkPhoneRateLimit(req.Phone) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": fmt.Sprintf("发送过于频繁，每小时最多发送 %d 次", config.PhoneMaxSendPerHour),
+			"message": fmt.Sprintf("发送过于频繁，请间隔60秒重试；每小时最多发送 %d 次", config.PhoneMaxSendPerHour),
 		})
 		return
 	}
@@ -285,6 +313,10 @@ func PhoneLogin(c *gin.Context) {
 	// 仅允许已绑定该手机号的用户登录；新用户请走 /api/user/phone/register 并单独获取「注册」验证码
 	user := &model.User{}
 	err := user.FillUserByPhone(req.Phone)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "账号查询失败，请稍后重试"})
+		return
+	}
 	if err != nil {
 		msg := "该手机号尚未注册。请切换到「短信注册」并获取注册验证码以创建账号；若已有账号请用密码或微信登录，并在个人中心绑定手机号。"
 		if !config.RegisterEnabled || !config.PhoneRegisterEnabled {
@@ -366,6 +398,17 @@ func PhoneRegister(c *gin.Context) {
 		return
 	}
 
+	{
+		config.OptionMapRWMutex.RLock()
+		legalReady := strings.TrimSpace(config.OptionMap["RegistrationAgreementText"]) != "" && strings.TrimSpace(config.OptionMap["RegistrationPrivacyText"]) != ""
+		config.OptionMapRWMutex.RUnlock()
+		if !req.Agreed || !legalReady {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "请先阅读并同意用户协议和隐私政策；未配置时请联系管理员"})
+			return
+		}
+	}
+	phoneRegistrationMutex.Lock()
+	defer phoneRegistrationMutex.Unlock()
 	verifyRegister := common.VerifyPhoneCode(req.Phone, req.Code, common.PhoneRegisterPurpose)
 	verifyLogin := false
 	if req.UseLoginSMS {
@@ -415,6 +458,10 @@ func PhoneRegister(c *gin.Context) {
 		PhoneVerified: true,
 	}
 
+	if roleErr := model.AssignRegistrationRole(user); roleErr != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": roleErr.Error()})
+		return
+	}
 	if err := user.Insert(ctx, 0); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

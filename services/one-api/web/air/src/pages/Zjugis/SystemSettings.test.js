@@ -68,7 +68,7 @@ test.each([null, 'true', 1])('rejects an explicitly invalid knowledge flag %p', 
 test('nine tabs preserve profile and security, and load deployment contacts', async () => {
   await act(async () => root.render(<SystemSettings />));
   const tabs = [...container.querySelectorAll('[role="tab"]')];
-  expect(tabs.map(button => button.textContent)).toEqual(['账户设置', '安全设置', '网络设置', '版本类型', '功能设置', '功能配置', '知识库设置', '运维设置', '插件设置']);
+  expect(tabs.map(button => button.textContent)).toEqual(['账户设置', '安全设置', '网络设置', '版本类型', '功能设置', '功能配置', '知识库设置', '运维设置', '插件设置', '登录与注册']);
   expect(container.textContent).toContain('root');
   act(() => tabs[1].click()); expect(container.textContent).toContain('会话有效期');
   act(() => tabs[7].click());
@@ -285,18 +285,18 @@ test('reward rules support independent toggles, cycles, cancel and persisted rel
   act(() => container.querySelectorAll('[role="tab"]')[3].click());
   const find = label => container.querySelector(`[aria-label="${label}"]`);
   expect(find('注册赠送积分').value).toBe('2000');
-  expect(find('登录赠送积分').value).toBe('100');
-  expect(find('登录发放周期').value).toBe('1');
-  expect(find('登录发放周期').disabled).toBe(true);
-  act(() => find('启用登录赠送').click());
-  act(() => fillInput(find('登录发放周期'), '7'));
-  act(() => fillInput(find('登录赠送积分'), '150'));
+  expect(find('签到赠送积分').value).toBe('100');
+  expect(find('签到发放周期').value).toBe('1');
+  expect(find('签到发放周期').disabled).toBe(true);
+  act(() => find('启用签到赠送').click());
+  act(() => fillInput(find('签到发放周期'), '7'));
+  act(() => fillInput(find('签到赠送积分'), '150'));
   act(() => [...container.querySelectorAll('button')].find(button => button.textContent === '取消修改').click());
-  expect(find('启用登录赠送').checked).toBe(false);
-  expect(find('登录发放周期').value).toBe('1');
-  act(() => find('启用登录赠送').click());
-  act(() => fillInput(find('登录发放周期'), '7'));
-  act(() => fillInput(find('登录赠送积分'), '150'));
+  expect(find('启用签到赠送').checked).toBe(false);
+  expect(find('签到发放周期').value).toBe('1');
+  act(() => find('启用签到赠送').click());
+  act(() => fillInput(find('签到发放周期'), '7'));
+  act(() => fillInput(find('签到赠送积分'), '150'));
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   const saved = JSON.parse(API.put.mock.calls[0][1].value);
   expect(saved.creditRewards).toEqual({ registration: { enabled: false, amount: 2000 }, login: { enabled: true, amount: 150, intervalDays: 7 } });
@@ -305,8 +305,8 @@ test('reward rules support independent toggles, cycles, cancel and persisted rel
   act(() => root.unmount()); root = createRoot(container);
   await act(async () => root.render(<SystemSettings />));
   act(() => container.querySelectorAll('[role="tab"]')[3].click());
-  expect(find('登录发放周期').value).toBe('7');
-  expect(find('登录赠送积分').value).toBe('150');
+  expect(find('签到发放周期').value).toBe('7');
+  expect(find('签到赠送积分').value).toBe('150');
   act(() => container.querySelector('input[value="government"]').click());
   expect(find('积分赠送规则')).toBeNull();
 });
@@ -314,11 +314,11 @@ test('reward rules support independent toggles, cycles, cancel and persisted rel
 test('invalid gift cycles are blocked before an API save', async () => {
   await act(async () => root.render(<SystemSettings />));
   act(() => container.querySelectorAll('[role="tab"]')[3].click());
-  act(() => container.querySelector('[aria-label="启用登录赠送"]').click());
-  act(() => fillInput(container.querySelector('[aria-label="登录发放周期"]'), '0'));
+  act(() => container.querySelector('[aria-label="启用签到赠送"]').click());
+  act(() => fillInput(container.querySelector('[aria-label="签到发放周期"]'), '0'));
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   expect(API.put).not.toHaveBeenCalled();
-  expect(container.textContent).toContain('登录发放周期必须');
+  expect(container.textContent).toContain('签到发放周期必须');
 });
 
 test('knowledge quota tab defaults off and saves total with person allocations', async () => {

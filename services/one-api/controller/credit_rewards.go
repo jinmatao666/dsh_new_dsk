@@ -35,7 +35,7 @@ func validateCreditRewards(raw string) error {
 		return fmt.Errorf("积分赠送配置无效：需要独立开关，赠送积分须为 1 至 1,000,000 的整数")
 	}
 	if rules.Login.IntervalDays == nil || *rules.Login.IntervalDays < 1 || *rules.Login.IntervalDays > 3650 {
-		return fmt.Errorf("登录发放周期必须为 1 至 3,650 天的整数")
+		return fmt.Errorf("签到发放周期必须为 1 至 3,650 天的整数")
 	}
 	return nil
 }

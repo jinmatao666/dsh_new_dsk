@@ -132,7 +132,7 @@ test('submits edited name with confirmation password and keeps failed edits avai
   expect(container.textContent).not.toContain('确认保存用户');
 });
 
-test('opens an observed-data profile from the user row without changing token actions', async () => {
+test('opens an observed-data profile from the user row without exposing token actions', async () => {
   API.get.mockImplementation(async (path) => ({
     data: { success: true, data: path === '/api/user/2/profile' ? {
       from: '2026-09-25', to: '2026-10-24',
@@ -150,7 +150,27 @@ test('opens an observed-data profile from the user row without changing token ac
   expect(container.textContent).not.toContain('令牌列表');
   await act(async () => container.querySelector('.user-profile-modal .zjugis-modal-head button').click());
   expect(container.querySelector('.user-profile-modal')).toBeNull();
-  await click('详情 / 令牌');
+  await click('用户详情');
   expect(container.querySelector('.user-profile-modal')).toBeNull();
-  expect(API.get).toHaveBeenCalledWith('/api/admin/token/user/2');
+  expect(API.get).not.toHaveBeenCalledWith('/api/admin/token/user/2');
+  expect(container.querySelector('.token-panel')).toBeNull();
+  expect(container.textContent).not.toContain('添加令牌');
+});
+
+test('opens credit grants in a separate modal without submitting user edits', async () => {
+  await click('编辑');
+  expect(container.querySelector('.topup-form')).toBeNull();
+  const editModal = Array.from(container.querySelectorAll('.zjugis-modal')).find(node => node.textContent.includes('编辑用户'));
+  expect(editModal.textContent).not.toContain('取消');
+  await click('发放积分');
+  expect(container.querySelector('.topup-form')).not.toBeNull();
+  expect(container.textContent).toContain('发放积分 · xu001');
+  expect(API.put).not.toHaveBeenCalled();
+});
+
+test('hides user grouping while preserving the saved group on edits', async () => {
+  expect(container.textContent).not.toContain('分组');
+  await click('编辑');
+  expect(container.textContent).not.toContain('分组');
+  expect(container.querySelector('input[value="default"]')).toBeNull();
 });

@@ -3,6 +3,7 @@ package model
 // ExpertWebProfile is a published, independently deployed expert website.
 // It does not affect the legacy shipped-workbench roster.
 type ExpertWebProfile struct {
+	TaskCredits        int64  `json:"task_credits" gorm:"not null;default:0"`
 	CategoryOrder      int    `json:"category_order" gorm:"-"`
 	Key                string `json:"key" gorm:"primaryKey;size:80"`
 	Name               string `json:"name" gorm:"size:100;not null"`

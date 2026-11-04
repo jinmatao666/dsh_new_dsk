@@ -122,8 +122,10 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	}
 	adaptor.Init(meta)
 
-	// 不传 max_tokens 给上游，避免 thinking tokens 占用 content 预算
-	textRequest.MaxTokens = 0
+	// Paid calls retain the upstream output limit covered by their reservation.
+	if meta.CreditPrice == nil || meta.CreditPrice.Source != "configured" {
+		textRequest.MaxTokens = 0
+	}
 
 	// get request body
 	requestBody, err := getRequestBody(c, meta, textRequest, adaptor)
@@ -159,7 +161,11 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	usage, respErr := adaptor.DoResponse(c, resp, meta)
 	if respErr != nil {
 		logger.Errorf(ctx, "respErr is not nil: %+v", respErr)
-		returnPreConsumedQuota(ctx, preConsumedQuota, meta)
+		if usage != nil && (usage.PromptTokens > 0 || usage.CompletionTokens > 0) {
+			postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, modelRatio, groupRatio, systemPromptReset)
+		} else {
+			returnPreConsumedQuota(ctx, preConsumedQuota, meta)
+		}
 		timing.Finish(c, "error", timing.F("err", respErr.Error.Message))
 		recordRelayErrorLog(c, meta, textRequest, respErr.Error.Message)
 		return respErr
@@ -173,8 +179,17 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 // returnPreConsumedQuota 归还预扣额度（个人或企业账本），用于上游/本地报错的退款路径。
 func returnPreConsumedQuota(ctx context.Context, preConsumedQuota int64, meta *meta.Meta) {
 	if meta.CreditPrice != nil && meta.CreditPrice.Source == "configured" && !meta.UseOrgQuota {
+		if preConsumedQuota > 0 && len(meta.CreditReserved) == 0 {
+			return
+		}
 		if _, err := dbmodel.ChangeTokenCreditQuota(meta.UserId, meta.TokenId, -preConsumedQuota, meta.CreditReserved); err != nil {
 			logger.Error(ctx, "积分退款失败："+err.Error())
+		} else {
+			meta.CreditReserved = nil
+			if preConsumedQuota > 0 {
+				receipt, _ := json.Marshal(map[string]interface{}{"status": "refunded", "reserved_quota": preConsumedQuota, "charged_quota": 0, "refunded_quota": preConsumedQuota})
+				dbmodel.RecordConsumeLog(ctx, &dbmodel.Log{UserId: meta.UserId, ModelName: meta.CreditPrice.Model, TokenName: meta.TokenName, CreditBilling: string(receipt), Content: "请求未结算，预扣积分已退回"})
+			}
 		}
 		return
 	}

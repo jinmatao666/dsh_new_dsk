@@ -1,3 +1,4 @@
+import RegistrationSettings from './RegistrationSettings';
 import { adminURL } from '../../deployment';
 import React, { useEffect, useState } from 'react';
 import { API, showSuccess } from '../../helpers';
@@ -13,7 +14,7 @@ const defaults = { network: 'internet', internetCatalogPolicy: 'disable', intern
   internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
   intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
 }, featurePages: defaultFeaturePages, plugins: { browserAssistant: true }, knowledgeQuota: defaultKnowledgeQuota, creditPricingBase: DEFAULT_CREDIT_BASE };
-const tabs = [['account', '账户设置'], ['security', '安全设置'], ['network', '网络设置'], ['edition', '版本类型'], ['features', '功能设置'], ['featureConfig', '功能配置'], ['knowledge', '知识库设置'], ['operations', '运维设置'], ['plugins', '插件设置']];
+const tabs = [['account', '账户设置'], ['security', '安全设置'], ['network', '网络设置'], ['edition', '版本类型'], ['features', '功能设置'], ['featureConfig', '功能配置'], ['knowledge', '知识库设置'], ['operations', '运维设置'], ['plugins', '插件设置'], ['registration', '登录与注册']];
 const descriptions = {
   network: '设置桌面端使用的部署网络环境。',
   edition: '选择本系统的版本类型，网络环境与功能开关保持独立。',
@@ -169,6 +170,7 @@ export default function SystemSettings() {
       </div>
       {loading ? <p role='status'>正在加载设置，网络异常时会自动重试…</p> : loadError && (!user || deploymentTabs.includes(active)) ? <div><p role='alert'>{loadError}</p><button type='button' className='settings-secondary' onClick={() => setReload(value => value + 1)}>重新加载</button></div> :
         <div role='tabpanel' id={`settings-panel-${active}`} aria-labelledby={`settings-tab-${active}`} className='system-settings-panel'>
+          {active === 'registration' && (user?.role >= 100 ? <RegistrationSettings /> : <p>仅超级管理员可配置登录与注册。</p>)}
           {active === 'account' && <><h2>账户信息</h2><p className='settings-description'>当前登录的后台管理账户。</p><div className='settings-account-details'>
             <div className='account-row'><span>登录账号</span><strong>{user?.username || '—'}</strong></div>
             <div className='account-row'><span>账户角色</span><strong className='green'>{user?.role === 100 ? '超级管理员' : user?.role >= 10 ? '管理员' : '普通用户'}</strong></div>
@@ -178,7 +180,7 @@ export default function SystemSettings() {
             <div className='account-row'><span>会话有效期</span><strong>默认</strong></div>
             <div className='account-row'><span>登录保护</span><strong className='green'>已启用</strong></div>
           </div><button type='button' className='settings-secondary settings-logout' onClick={logout}>退出登录</button></>}
-          {deploymentTabs.includes(active) && <form onSubmit={save}>
+          {deploymentTabs.includes(active) && <form className={active === 'edition' ? 'settings-edition-form' : undefined} onSubmit={save}>
             <h2>{active === 'network' ? '网络环境' : active === 'edition' ? '版本类型' : active === 'features' ? '功能入口' : active === 'featureConfig' ? '功能配置' : active === 'knowledge' ? '知识库设置' : active === 'plugins' ? '插件控制' : '运维联系信息'}</h2>
             <p className='settings-description'>{descriptions[active]}</p>
             {active === 'knowledge' ? <KnowledgeQuotaSettings value={settings.knowledgeQuota || defaultKnowledgeQuota} disabled={saving}
@@ -189,11 +191,13 @@ export default function SystemSettings() {
               <table className='settings-features'><thead><tr><th scope='col'>插件</th><th scope='col'>统一开关</th></tr></thead><tbody><tr><th scope='row'>浏览器助手</th><td><label>
                 <input type='checkbox' role='switch' aria-label='统一启用浏览器助手' checked={settings.plugins.browserAssistant} disabled={saving} onChange={event => change('plugins', { ...settings.plugins, browserAssistant: event.target.checked })} />
                 <span>{settings.plugins.browserAssistant ? '开启' : '关闭'}</span>
-              </label></td></tr></tbody></table></> : active === 'edition' ? <fieldset className='settings-network'><legend>版本类型</legend>
+              </label></td></tr></tbody></table></> : active === 'edition' ? <section className='edition-settings-row edition-version-row'>
+              <div className='edition-section-heading'><h3>使用版本</h3><p>按使用场景选择版本</p></div>
+              <fieldset className='settings-network'><legend className='credit-base-label'>版本类型</legend>
               {[['government', '政务版', '适用于政务场景'], ['operations', '运营版', '适用于运营场景']].map(([key, label, hint]) => <label key={key} className={`settings-network-option${settings.edition === key ? ' selected' : ''}`}>
                 <input type='radio' name='edition' value={key} checked={settings.edition === key} onChange={() => change('edition', key)} disabled={saving} /><span><strong>{label}</strong><small>{hint}</small></span>
               </label>)}
-            </fieldset> : active === 'features' ? <table className='settings-features'><thead><tr><th scope='col'>功能</th><th scope='col'>互联网环境</th><th scope='col'>纯内网环境</th></tr></thead><tbody>
+            </fieldset></section> : active === 'features' ? <table className='settings-features'><thead><tr><th scope='col'>功能</th><th scope='col'>互联网环境</th><th scope='col'>纯内网环境</th></tr></thead><tbody>
               {[['automations', '自动化'], ['connectors', '连接器'], ['knowledgeBases', '知识库'], ['landMarket', '土地市场'], ['policyEncyclopedia', '政策宝典']].map(([feature, label]) => <tr key={feature}><th scope='row'>{label}</th>
                 {['internet', 'intranet'].map(mode => <td key={mode}><label><input type='checkbox' role='switch' aria-label={`${mode === 'internet' ? '互联网' : '纯内网'}${label}`} checked={settings.features[mode][feature]} disabled={saving} onChange={event => change('features', { ...settings.features, [mode]: { ...settings.features[mode], [feature]: event.target.checked } })} /><span>{settings.features[mode][feature] ? '开启' : '关闭'}</span></label></td>)}
               </tr>)}
@@ -205,16 +209,17 @@ export default function SystemSettings() {
               <label>运维人员<input value={settings.operator} maxLength={80} placeholder='请输入运维人员姓名' disabled={saving} onChange={event => change('operator', event.target.value)} /></label>
               <label>联系电话<input type='tel' value={settings.phone} maxLength={40} placeholder='请输入手机号或固定电话' disabled={saving} onChange={event => change('phone', event.target.value)} /></label>
             </div>}
-            {active === 'edition' && settings.edition === 'operations' && <section className='settings-credit-pricing' aria-label='积分计费基准'>
-              <div className='credit-pricing-heading'><h3>积分计费基准</h3><span className='credit-preview-tag'>运营版计费</span></div>
-              <p className='settings-description'>统一定义 1× 对应的积分价格，各模型的输入、输出倍率分别在模型配置中设置。</p>
+            {active === 'edition' && settings.edition === 'operations' && <section className='settings-credit-pricing edition-settings-row' aria-label='积分计费基准'>
+              <div className='edition-section-heading'><h3>积分计费基准</h3><p>统一设置 1× 的积分单价</p></div>
+              <div className='edition-section-content'>
               <div className='credit-base-equation'><strong>1× =</strong><label htmlFor='credit-pricing-base' className='credit-base-label'>积分基准</label>
                 <input id='credit-pricing-base' type='number' min='0.000001' max='1000000' step='any' required
                   value={settings.creditPricingBase} disabled={saving} onChange={event => change('creditPricingBase', event.target.value)} />
                 <span>积分／千 Token</span></div>
-              <div className='credit-base-examples'><span>输入倍率 0.15× → <strong>{formatCreditPrice(validCreditNumber(settings.creditPricingBase) ? Number(settings.creditPricingBase) * 0.15 : '—')}</strong> 积分／千 Token</span>
+              <div className='credit-base-examples'><span>示例：输入 0.15× → <strong>{formatCreditPrice(validCreditNumber(settings.creditPricingBase) ? Number(settings.creditPricingBase) * 0.15 : '—')}</strong> 积分／千 Token</span>
                 <span>输出倍率 0.6× → <strong>{formatCreditPrice(validCreditNumber(settings.creditPricingBase) ? Number(settings.creditPricingBase) * 0.6 : '—')}</strong> 积分／千 Token</span></div>
               <p className='credit-pricing-note'>以上倍率为换算示例。修改基准将影响已配置积分价格的模型后续调用，历史消费保留当时价格。尚未配置的模型沿用原有计费规则。</p>
+              </div>
             </section>}
             {active === 'edition' && settings.edition === 'operations' && <CreditRewardSettings
               value={settings.creditRewards} disabled={saving} onChange={value => change('creditRewards', value)} />}

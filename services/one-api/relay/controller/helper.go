@@ -88,8 +88,16 @@ func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIR
 		if textRequest.MaxTokens > 0 {
 			output = int(textRequest.MaxTokens)
 		}
-		if int64(output) > config.PreConsumedMaxTokensCap {
-			output = int(config.PreConsumedMaxTokensCap)
+		// Reserve the complete permitted output, not a capped fraction of it.
+		// A request without an explicit limit receives a bounded upstream limit too.
+		if textRequest.MaxTokens == 0 && meta.Mode == relaymode.ChatCompletions {
+			if output <= 0 {
+				output = int(config.PreConsumedMaxTokensCap)
+			}
+			if output <= 0 {
+				output = 4096
+			}
+			textRequest.MaxTokens = output
 		}
 		var err error
 		preConsumedQuota, err = meta.CreditPrice.Reserve(promptTokens, output)
@@ -277,6 +285,21 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 		CreditBilling:     creditBilling,
 	}
 	billing.FillLogTimingFromContext(ctx, log)
+	if log.CreditBilling != "" {
+		var receipt map[string]interface{}
+		if json.Unmarshal([]byte(log.CreditBilling), &receipt) == nil {
+			receipt["reserved_quota"] = preConsumedQuota
+			receipt["charged_quota"] = quota
+			refund := preConsumedQuota - quota
+			if refund < 0 {
+				refund = 0
+			}
+			receipt["refunded_quota"] = refund
+			if encoded, err := json.Marshal(receipt); err == nil {
+				log.CreditBilling = string(encoded)
+			}
+		}
+	}
 	model.RecordConsumeLog(ctx, log)
 	model.FinishUserPromptAudit(ctx, "success", "", int(quota), promptTokens, completionTokens, log.ElapsedTime)
 	model.UpdateUserUsedQuotaAndRequestCount(meta.UserId, quota)

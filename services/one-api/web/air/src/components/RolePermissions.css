@@ -34,3 +34,5 @@
   .zjugis-role-permissions .zjugis-role-row-info { min-width: 60%; }
   .role-management-dialog { max-width: calc(100vw - 32px); }
 }
+
+.registration-default-role{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:18px 20px;margin-bottom:18px;border:1px solid #dce6f5;border-radius:12px;background:#fff;color:#172b4d}.registration-default-role>div{flex:1;min-width:240px}.registration-default-role p{margin:6px 0 0;font-size:12px;color:#64748b}.registration-default-role select{padding:9px 12px;border:1px solid #dce6f5;border-radius:8px;background:#fff;color:#172b4d}.registration-default-role>p[role=alert]{width:100%;color:#c53b42}

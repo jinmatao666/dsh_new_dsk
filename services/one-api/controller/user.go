@@ -176,6 +176,10 @@ func Register(c *gin.Context) {
 	if config.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
 	}
+	if roleErr := model.AssignRegistrationRole(&cleanUser); roleErr != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": roleErr.Error()})
+		return
+	}
 	if err := cleanUser.Insert(ctx, 0); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -1416,7 +1420,7 @@ func AdminTopUp(c *gin.Context) {
 		ttl = &d
 	}
 	// 管理员充值落到永久定时积分账本(source=admin),备注作为 source_ref
-	err = model.AddUserTimedQuota(req.UserId, int64(req.Quota), model.TimedQuotaSourceAdmin, remark, ttl)
+	err = model.GrantAdminCredits(req.UserId, c.GetInt("id"), int64(req.Quota), remark, ttl)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -1571,17 +1575,8 @@ func SendResetPasswordCode(c *gin.Context) {
 		return
 	}
 
-	// Optional captcha body（图形验证码，CaptchaEnabled 开启时必填）
-	var capReq struct {
-		CaptchaId   string `json:"captcha_id"`
-		CaptchaCode string `json:"captcha_code"`
-	}
-	_ = c.ShouldBindJSON(&capReq)
-	if ok, msg := verifyCaptcha(capReq.CaptchaId, capReq.CaptchaCode); !ok {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": msg,
-		})
+	if c.GetInt(ctxkey.Id) <= 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": "请先登录"})
 		return
 	}
 
@@ -2065,17 +2060,8 @@ func SendPhoneChangeCode(c *gin.Context) {
 		return
 	}
 
-	// Optional captcha body（图形验证码，CaptchaEnabled 开启时必填）
-	var capReq struct {
-		CaptchaId   string `json:"captcha_id"`
-		CaptchaCode string `json:"captcha_code"`
-	}
-	_ = c.ShouldBindJSON(&capReq)
-	if ok, msg := verifyCaptcha(capReq.CaptchaId, capReq.CaptchaCode); !ok {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": msg,
-		})
+	if c.GetInt(ctxkey.Id) <= 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": "请先登录"})
 		return
 	}
 

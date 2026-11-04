@@ -41,6 +41,7 @@ type expertWebInput struct {
 	FooterNote       string `json:"footer_note"`
 	Provider         string `json:"provider"`
 	WorkbenchURL     string `json:"workbench_url"`
+	TaskCredits      int64  `json:"task_credits"`
 	SortOrder        *int   `json:"sort_order"`
 	RequiresInternet *bool  `json:"requires_internet"`
 }
@@ -76,6 +77,9 @@ func validExpertWebIcon(icon string) bool {
 }
 
 func validateExpertWebInput(input expertWebInput) error {
+	if input.TaskCredits < 0 || input.TaskCredits > 1000000 {
+		return errors.New("任务积分须为 0 至 1,000,000 的整数")
+	}
 	if !expertKeyPattern.MatchString(input.Key) {
 		return errors.New("专家编号须为3至80位，以小写字母开头，只能包含小写字母、数字和短横线（-）")
 	}
@@ -126,7 +130,7 @@ func validateExpertWebInput(input expertWebInput) error {
 
 func expertWebFromInput(input expertWebInput) model.ExpertWebProfile {
 	profile := model.ExpertWebProfile{
-		Key: input.Key, Name: strings.TrimSpace(input.Name), Subtitle: strings.TrimSpace(input.Subtitle), Category: strings.TrimSpace(input.Category), Summary: strings.TrimSpace(input.Summary), Icon: input.Icon, Tags: input.Tags, Scenario: input.Scenario, Materials: input.Materials, DetailSections: input.DetailSections, FooterNote: strings.TrimSpace(input.FooterNote), Provider: strings.TrimSpace(input.Provider), WorkbenchURL: input.WorkbenchURL, SortOrder: input.SortOrder,
+		TaskCredits: input.TaskCredits, Key: input.Key, Name: strings.TrimSpace(input.Name), Subtitle: strings.TrimSpace(input.Subtitle), Category: strings.TrimSpace(input.Category), Summary: strings.TrimSpace(input.Summary), Icon: input.Icon, Tags: input.Tags, Scenario: input.Scenario, Materials: input.Materials, DetailSections: input.DetailSections, FooterNote: strings.TrimSpace(input.FooterNote), Provider: strings.TrimSpace(input.Provider), WorkbenchURL: input.WorkbenchURL, SortOrder: input.SortOrder,
 	}
 	profile.RequiresInternet = input.RequiresInternet
 	return profile
@@ -231,7 +235,7 @@ func AdminUpdateExpertWebsite(c *gin.Context) {
 	if input.RequiresInternet == nil {
 		updated.RequiresInternet = profile.RequiresInternet
 	}
-	if err := model.DB.Model(&profile).Updates(map[string]interface{}{"name": updated.Name, "subtitle": updated.Subtitle, "category": updated.Category, "summary": updated.Summary, "icon": updated.Icon, "tags": updated.Tags, "scenario": updated.Scenario, "materials": updated.Materials, "detail_sections": updated.DetailSections, "footer_note": updated.FooterNote, "provider": updated.Provider, "workbench_url": updated.WorkbenchURL, "sort_order": updated.SortOrder, "requires_internet": updated.RequiresInternet}).Error; err != nil {
+	if err := model.DB.Model(&profile).Updates(map[string]interface{}{"task_credits": updated.TaskCredits, "name": updated.Name, "subtitle": updated.Subtitle, "category": updated.Category, "summary": updated.Summary, "icon": updated.Icon, "tags": updated.Tags, "scenario": updated.Scenario, "materials": updated.Materials, "detail_sections": updated.DetailSections, "footer_note": updated.FooterNote, "provider": updated.Provider, "workbench_url": updated.WorkbenchURL, "sort_order": updated.SortOrder, "requires_internet": updated.RequiresInternet}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存专家失败"})
 		return
 	}

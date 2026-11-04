@@ -145,6 +145,10 @@ func OidcAuth(c *gin.Context) {
 			} else {
 				user.DisplayName = "OIDC User"
 			}
+			if roleErr := model.AssignRegistrationRole(&user); roleErr != nil {
+				c.JSON(http.StatusOK, gin.H{"success": false, "message": roleErr.Error()})
+				return
+			}
 			err := user.Insert(ctx, 0)
 			if err != nil {
 				c.JSON(http.StatusOK, gin.H{

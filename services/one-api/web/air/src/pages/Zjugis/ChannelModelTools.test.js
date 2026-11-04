@@ -41,12 +41,14 @@ test('explicit cache uses a dropdown, disables own channels and preserves model 
   await click('编辑');
   const dialog = container.querySelector('.zjugis-modal');
   expect(dialog.textContent).not.toContain('启用模型');
-  const cache = dialog.querySelector('select[aria-label="显式缓存"]');
+  const cache = dialog.querySelector('select[aria-label="启用显式缓存"]');
   expect(cache.disabled).toBe(true);
   expect(cache.value).toBe('off');
   const source = [...dialog.querySelectorAll('.zjugis-field')].find(field => field.textContent.startsWith('来源渠道')).querySelector('select');
   await changeSelect(source, '2');
   expect(cache.disabled).toBe(false);
+  expect(cache.value).toBe('off');
+  await changeSelect(cache, 'on');
   expect(cache.value).toBe('on');
   await changeSelect(cache, 'off');
   expect(cache.value).toBe('off');

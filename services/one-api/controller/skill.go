@@ -363,6 +363,12 @@ func CreateSkill(c *gin.Context) {
 	if v, ok := payload["name"]; ok {
 		_ = json.Unmarshal(v, &skill.Name)
 	}
+	if v, ok := payload["task_credits"]; ok {
+		if err := json.Unmarshal(v, &skill.TaskCredits); err != nil || string(v) == "null" || skill.TaskCredits < 0 || skill.TaskCredits > 1000000 {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "任务积分须为 0 至 1,000,000 的整数"})
+			return
+		}
+	}
 	if v, ok := payload["sort_order"]; ok {
 		if err := json.Unmarshal(v, &skill.SortOrder); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "排序必须是整数或空值"})
@@ -534,6 +540,12 @@ func UpdateSkill(c *gin.Context) {
 
 	if v, ok := payload["name"]; ok {
 		_ = json.Unmarshal(v, &existing.Name)
+	}
+	if v, ok := payload["task_credits"]; ok {
+		if err := json.Unmarshal(v, &existing.TaskCredits); err != nil || string(v) == "null" || existing.TaskCredits < 0 || existing.TaskCredits > 1000000 {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "任务积分须为 0 至 1,000,000 的整数"})
+			return
+		}
 	}
 	if v, ok := payload["sort_order"]; ok {
 		if err := json.Unmarshal(v, &existing.SortOrder); err != nil {

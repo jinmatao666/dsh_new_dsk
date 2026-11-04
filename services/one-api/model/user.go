@@ -315,19 +315,28 @@ func (user *User) Insert(ctx context.Context, inviterId int) error {
 			"email", "phone", "phone_verified",
 			"wechat_id", "github_id", "lark_id", "oidc_id")
 	}
-	result := DB.Omit(omitColumns...).Create(user)
-	if result.Error != nil {
+	rewardOwned, registrationAmount, ruleErr := RegistrationCreditRule()
+	if ruleErr != nil {
+		return ruleErr
+	}
+	createErr := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Omit(omitColumns...).Create(user).Error; err != nil {
+			return err
+		}
+		return grantRegistrationCreditTx(tx, user, registrationAmount)
+	})
+	if createErr != nil {
 		// 落库失败要把内存还原,不污染调用方
 		user.Username, user.Email, user.Phone, user.PhoneVerified = pendingUsername, pendingEmail, pendingPhone, pendingPhoneVerified
 		user.WeChatId, user.GitHubId, user.LarkId, user.OidcId = pendingWeChat, pendingGitHub, pendingLark, pendingOidc
-		return result.Error
+		return createErr
 	}
 	// 还原内存身份字段,EnsureAccountForUser / SetupLogin 都需要这些值。
 	if ACCOUNT_DB != nil {
 		user.Username, user.Email, user.Phone, user.PhoneVerified = pendingUsername, pendingEmail, pendingPhone, pendingPhoneVerified
 		user.WeChatId, user.GitHubId, user.LarkId, user.OidcId = pendingWeChat, pendingGitHub, pendingLark, pendingOidc
 	}
-	if freeQuota := GetTrialFreeQuota(); freeQuota > 0 {
+	if freeQuota := GetTrialFreeQuota(); !rewardOwned && freeQuota > 0 {
 		// 首月免费额度走 monthly_free 账本笔(带 30 天过期),与每月免费 cron 完全一致:
 		// 既插入 user_timed_quota 行(供扣费/过期/对账),又同步累加 subscription_quota。
 		// 额度取自「试用包」(个人套餐中 price=0 且启用的套餐),见 GetTrialFreeQuota。
@@ -362,10 +371,10 @@ func (user *User) Insert(ctx context.Context, inviterId int) error {
 		RemainQuota:    -1,
 		UnlimitedQuota: true,
 	}
-	result.Error = cleanToken.Insert()
-	if result.Error != nil {
+	tokenErr := cleanToken.Insert()
+	if tokenErr != nil {
 		// do not block
-		logger.SysError(fmt.Sprintf("create default token for user %d failed: %s", user.Id, result.Error.Error()))
+		logger.SysError(fmt.Sprintf("create default token for user %d failed: %s", user.Id, tokenErr.Error()))
 	}
 	// 阶段 A 双写：注册成功后把用户投影到账号中心（失败不阻断）。
 	// 临时把 hash 后的密码放回 user.Password，让 EnsureAccountForUser 写入

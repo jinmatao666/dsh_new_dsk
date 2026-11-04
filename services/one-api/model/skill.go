@@ -54,6 +54,7 @@ func SkillPackageSHA256(assets string) (string, error) {
 }
 
 type Skill struct {
+	TaskCredits      int64  `json:"task_credits" gorm:"not null;default:0"`
 	SortOrder        *int   `json:"sort_order"`
 	RequiresInternet *bool  `json:"requires_internet" gorm:"not null;default:true"`
 	Id               int    `json:"id" gorm:"primaryKey;autoIncrement"`

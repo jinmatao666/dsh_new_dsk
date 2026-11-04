@@ -21,7 +21,7 @@ export function validateExpertDraft(draft) {
   return '';
 }
 
-const blank = { key: '', name: '', subtitle: '', category: '', summary: '', icon: '', tags: '', scenario: '', materials: '', detail_sections: '[]', footer_note: '', provider: '', workbench_url: '', sort_order: null, requires_internet: true };
+const blank = { task_credits: 0, key: '', name: '', subtitle: '', category: '', summary: '', icon: '', tags: '', scenario: '', materials: '', detail_sections: '[]', footer_note: '', provider: '', workbench_url: '', sort_order: null, requires_internet: true };
 const lines = text => JSON.stringify(text.split('\n').map(item => item.trim()).filter(Boolean));
 const asLines = value => { try { return JSON.parse(value || '[]').join('\n'); } catch { return ''; } };
 const sectionDefaults = [
@@ -247,6 +247,7 @@ export default function ExpertWebTable({ keyword = '' }) {
         <label>分类<CustomSelect aria-label='分类' value={editing.category} onChange={event => setEditing({ ...editing, category: event.target.value })}><option value=''>请选择分类</option>{categories.map(category => <option key={category.id} value={category.name}>{category.name}</option>)}</CustomSelect></label>
         <label className='wide'>HTTP/HTTPS 工作台地址<input type='url' value={editing.workbench_url} placeholder='https://expert.example/' onChange={event => setEditing({ ...editing, workbench_url: event.target.value })} /></label>
         <label>顺序（数字越大越靠前）<input type='number' step='1' value={editing.sort_order ?? ''} placeholder='留空按创建时间倒序' onChange={event => setEditing({ ...editing, sort_order: event.target.value === '' ? null : Number(event.target.value) })} /></label>
+        <label><span>任务积分（积分／次）</span><input type='number' min='0' max='1000000' step='1' required value={editing.task_credits ?? 0} onChange={event => setEditing({ ...editing, task_credits: event.target.value === '' ? '' : Number(event.target.value) })} /></label>
         <label><span>需要访问互联网</span><input type='checkbox' checked={editing.requires_internet !== false} onChange={event => setEditing({ ...editing, requires_internet: event.target.checked })} /></label>
         <label>副标题<input value={editing.subtitle} onChange={event => setEditing({ ...editing, subtitle: event.target.value })} /></label>
         <label className='wide'>专家主图标（卡片和介绍弹窗共用）<span className='expert-web-icon-editor'><input type='file' accept='image/png,image/jpeg,image/webp,image/gif' onChange={uploadIcon} />{editing.icon?.startsWith('data:image/') && <img className='expert-web-icon-preview' src={editing.icon} alt='专家图标预览' />}</span><small>上传 PNG、JPEG、WebP 或 GIF；保存后桌面端自动同步。</small></label>

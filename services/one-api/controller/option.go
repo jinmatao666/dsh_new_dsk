@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/songquanpeng/one-api/common/config"
@@ -18,6 +19,9 @@ func GetOptions(c *gin.Context) {
 	var options []*model.Option
 	config.OptionMapRWMutex.Lock()
 	for k, v := range config.OptionMap {
+		if c.GetInt(ctxkey.Role) < model.RoleRootUser && isLoginOption(k) {
+			continue
+		}
 		if strings.HasSuffix(k, "Token") || strings.HasSuffix(k, "Secret") {
 			continue
 		}
@@ -45,7 +49,35 @@ func UpdateOption(c *gin.Context) {
 		})
 		return
 	}
+	if isLoginOption(option.Key) && c.GetInt(ctxkey.Role) < model.RoleRootUser {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "仅超级管理员可修改登录与注册配置"})
+		return
+	}
 	switch option.Key {
+	case "RegistrationAgreementText", "RegistrationPrivacyText":
+		if len([]rune(option.Value)) > 30000 {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "协议正文最多30000字"})
+			return
+		}
+	case "PhoneVerificationCodeLength", "PhoneVerificationValidMinutes", "PhoneMaxSendPerHour":
+		value, err := strconv.Atoi(option.Value)
+		min, max := 1, 30
+		if option.Key == "PhoneVerificationCodeLength" {
+			min, max = 4, 6
+		}
+		if option.Key == "PhoneMaxSendPerHour" {
+			max = 100
+		}
+		if err != nil || value < min || value > max {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "验证码参数超出允许范围"})
+			return
+		}
+	case "RegistrationDefaultRole":
+		if _, err := model.ResolveRegistrationRole(option.Value); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+
 	case "ModelCreditPricing":
 		if err := validateModelCreditPricing(option.Value); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
@@ -134,4 +166,9 @@ func UpdateOption(c *gin.Context) {
 		"message": "",
 	})
 	return
+}
+
+// Login configuration changes are privileged even while deployment options retain their existing access policy.
+func isLoginOption(key string) bool {
+	return strings.HasPrefix(key, "SMS") || strings.HasPrefix(key, "Phone") || strings.HasPrefix(key, "WeChat") || strings.HasPrefix(key, "Registration") || key == "RegisterEnabled" || key == "PasswordRegisterEnabled" || key == "ServerAddress" || key == "CaptchaEnabled"
 }

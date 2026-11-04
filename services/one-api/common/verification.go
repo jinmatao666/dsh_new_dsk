@@ -2,23 +2,25 @@ package common
 
 import (
 	"github.com/google/uuid"
+	"github.com/songquanpeng/one-api/common/config"
 	"strings"
 	"sync"
 	"time"
 )
 
 type verificationValue struct {
-	code string
-	time time.Time
+	code     string
+	time     time.Time
+	lifetime time.Duration
 }
 
 const (
-	EmailVerificationPurpose = "v"
-	PasswordResetPurpose     = "r"
-	PhoneLoginPurpose        = "phone_login"
-	PhoneRegisterPurpose     = "phone_register"
-	PhoneBindPurpose         = "phone_bind"
-	PhoneChangePurpose       = "phone_change"
+	EmailVerificationPurpose  = "v"
+	PasswordResetPurpose      = "r"
+	PhoneLoginPurpose         = "phone_login"
+	PhoneRegisterPurpose      = "phone_register"
+	PhoneBindPurpose          = "phone_bind"
+	PhoneChangePurpose        = "phone_change"
 	PhoneResetPasswordPurpose = "phone_reset_password"
 	CaptchaPurpose            = "captcha"
 )
@@ -40,9 +42,14 @@ func GenerateVerificationCode(length int) string {
 func RegisterVerificationCodeWithKey(key string, code string, purpose string) {
 	verificationMutex.Lock()
 	defer verificationMutex.Unlock()
+	minutes := VerificationValidMinutes
+	if strings.HasPrefix(purpose, "phone_") && config.PhoneVerificationValidMinutes > 0 {
+		minutes = config.PhoneVerificationValidMinutes
+	}
 	verificationMap[purpose+key] = verificationValue{
-		code: code,
-		time: time.Now(),
+		code:     code,
+		time:     time.Now(),
+		lifetime: time.Duration(minutes) * time.Minute,
 	}
 	if len(verificationMap) > verificationMapMaxSize {
 		removeExpiredPairs()
@@ -70,7 +77,12 @@ func DeleteKey(key string, purpose string) {
 func removeExpiredPairs() {
 	now := time.Now()
 	for key := range verificationMap {
-		if int(now.Sub(verificationMap[key].time).Seconds()) >= VerificationValidMinutes*60 {
+		value := verificationMap[key]
+		lifetime := value.lifetime
+		if lifetime <= 0 {
+			lifetime = time.Duration(VerificationValidMinutes) * time.Minute
+		}
+		if now.Sub(value.time) >= lifetime {
 			delete(verificationMap, key)
 		}
 	}
@@ -101,7 +113,18 @@ func RegisterPhoneVerificationCode(phone string, purpose string, code string) {
 
 // VerifyPhoneCode verifies a phone verification code
 func VerifyPhoneCode(phone string, code string, purpose string) bool {
-	return VerifyCodeWithKey(phone, code, purpose)
+	verificationMutex.Lock()
+	defer verificationMutex.Unlock()
+	value, okay := verificationMap[purpose+phone]
+	lifetime := value.lifetime
+	if lifetime <= 0 {
+		minutes := config.PhoneVerificationValidMinutes
+		if minutes <= 0 {
+			minutes = 5
+		}
+		lifetime = time.Duration(minutes) * time.Minute
+	}
+	return okay && time.Since(value.time) < lifetime && code == value.code
 }
 
 // DeletePhoneVerificationCode deletes a phone verification code

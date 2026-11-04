@@ -62,6 +62,13 @@ func TestCreditBillingActualBalanceReceiptAndFailureRefund(t *testing.T) {
 	if err = json.Unmarshal([]byte(log.CreditBilling), &receipt); err != nil {
 		t.Fatal(err)
 	}
+	var ledgerReceipt map[string]interface{}
+	if err = json.Unmarshal([]byte(log.CreditBilling), &ledgerReceipt); err != nil {
+		t.Fatal(err)
+	}
+	if ledgerReceipt["reserved_quota"] != float64(450) || ledgerReceipt["charged_quota"] != float64(354) || ledgerReceipt["refunded_quota"] != float64(96) {
+		t.Fatalf("reservation receipt: %s", log.CreditBilling)
+	}
 	if receipt.CacheReadTokens != 800 || receipt.InputTokens != 200 || receipt.SessionID != "session-credit-test" || receipt.Status != "settled" {
 		t.Fatalf("incorrect receipt %+v", receipt)
 	}
@@ -70,6 +77,7 @@ func TestCreditBillingActualBalanceReceiptAndFailureRefund(t *testing.T) {
 		t.Fatal(bizErr)
 	}
 	returnPreConsumedQuota(context.Background(), reserved, meta)
+	returnPreConsumedQuota(context.Background(), reserved, meta) // duplicate cleanup must not refund twice
 	db.First(&user, 1)
 	db.First(&token, 1)
 	if user.Quota != 1146 || token.RemainQuota != 1146 {

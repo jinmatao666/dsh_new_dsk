@@ -29,19 +29,51 @@
 .credit-pricing-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .credit-pricing-heading h3 { margin: 0; color: #203a5e; font-size: 17px; }
 .credit-preview-tag { padding: 3px 8px; border-radius: 5px; color: #58718f; background: #edf2f8; font-size: 12px; }
-.settings-credit-rewards { max-width: 820px; margin-top: 28px; padding-top: 24px; border-top: 1px solid #dfe8f5; }
-.credit-reward-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.credit-reward-card { padding: 20px; border: 1px solid #dfe8f5; border-radius: 12px; background: #fff; }
-.credit-reward-heading { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.settings-edition-form { max-width: 1320px; }
+.edition-settings-row { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 32px; margin: 0; padding: 26px 0; border-top: 1px solid #e3eaf4; max-width: none; }
+.edition-version-row { border-top: 0; padding-top: 12px; }
+.edition-section-heading h3 { margin: 3px 0 8px; color: #203a5e; font-size: 15px; font-weight: 600; }
+.edition-section-heading p { margin: 0; color: #8191a8; font-size: 12px; line-height: 1.7; }
+.edition-section-content { min-width: 0; }
+.edition-version-row .settings-network { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; max-width: none; margin: 0; padding: 0; border: 0; }
+.edition-version-row .settings-network-option { min-width: 0; gap: 12px; padding: 16px 20px; border-radius: 9px; }
+.edition-version-row .settings-network-option small { margin-top: 5px; }
+.settings-edition-form .credit-base-equation { gap: 12px; font-size: 14px; }
+.settings-edition-form .credit-base-equation strong { font-size: 18px; }
+.settings-edition-form .credit-base-equation input { box-sizing: border-box; width: 136px; height: 40px; padding: 8px 12px; }
+.settings-edition-form .credit-base-examples { display: flex; flex-wrap: wrap; gap: 10px 36px; margin-top: 14px; padding: 12px 16px; background: #f0f5fc; font-size: 12px; }
+.settings-edition-form .credit-pricing-note { margin-top: 12px; color: #8191a8; font-size: 12px; }
+.settings-edition-form .settings-footer { margin-top: 6px; padding-top: 20px; }
+.credit-reward-grid { border: 1px solid #e0e8f3; border-radius: 10px; background: #fff; }
+.credit-reward-card { display: grid; grid-template-columns: minmax(180px, 1fr) 160px 204px 76px; gap: 20px; align-items: center; padding: 20px; }
+.credit-reward-card + .credit-reward-card { border-top: 1px solid #e8edf5; }
 .credit-reward-heading h4 { margin: 0; font-size: 15px; color: #203a5e; }
-.credit-reward-toggle { display: inline-flex; align-items: center; gap: 6px; color: #58718f; font-size: 13px; }
-.credit-reward-toggle input { accent-color: #3478ef; }
-.credit-reward-card p, .credit-reward-card small { color: #7589a7; font-size: 12px; line-height: 1.8; }
-.credit-reward-field { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; color: #385375; font-size: 13px; }
-.credit-reward-field > div { display: flex; align-items: center; gap: 10px; }
-.credit-reward-field input { width: 130px; min-width: 0; padding: 10px 12px; border: 1px solid #d6e3f4; border-radius: 8px; font: inherit; color: #253d60; }
+.credit-reward-toggle { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; color: #58718f; font-size: 12px; cursor: pointer; }
+.credit-reward-toggle input { appearance: none; flex: none; position: relative; width: 32px; height: 18px; margin: 0; border-radius: 12px; background: #bac7d8; cursor: pointer; }
+.credit-reward-toggle input::after { content: ''; position: absolute; width: 12px; height: 12px; top: 3px; left: 3px; border-radius: 50%; background: #fff; }
+.credit-reward-toggle input:checked { background: #3478ef; }
+.credit-reward-toggle input:checked::after { left: 17px; }
+.credit-reward-toggle input:disabled { cursor: not-allowed; opacity: .5; }
+.credit-reward-card p { margin: 6px 0 0; color: #8191a8; font-size: 12px; line-height: 1.7; }
+.credit-reward-field { display: flex; flex-direction: column; gap: 8px; margin: 0; color: #7589a7; font-size: 12px; }
+.credit-reward-field > div { display: flex; align-items: center; gap: 8px; min-height: 38px; color: #385375; white-space: nowrap; }
+.credit-reward-field input { box-sizing: border-box; width: 100px; min-width: 0; height: 38px; padding: 8px 10px; border: 1px solid #d6e3f4; border-radius: 7px; font: inherit; font-size: 14px; color: #253d60; }
+.credit-reward-period input { width: 66px; }
 .credit-reward-field input:disabled { background: #f4f7fb; color: #7589a7; }
-@media (max-width: 650px) { .credit-reward-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1280px) {
+  .edition-settings-row { grid-template-columns: 150px minmax(0, 1fr); gap: 24px; }
+  .credit-reward-card { grid-template-columns: minmax(140px, 1fr) 130px 176px 66px; gap: 12px; padding: 16px; }
+}
+@media (max-width: 1150px) {
+  .edition-settings-row { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+}
+@media (max-width: 900px) {
+  .edition-version-row .settings-network { grid-template-columns: minmax(0, 1fr); }
+  .credit-reward-card { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  .credit-reward-heading { grid-column: 1; grid-row: 1; }
+  .credit-reward-toggle { grid-column: 2; grid-row: 1; }
+  .credit-reward-period > div { white-space: normal; flex-wrap: wrap; }
+}
 .credit-base-equation { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; color: #385375; }
 .credit-base-equation strong { font-size: 22px; color: #203a5e; }
 .credit-base-equation input { width: 150px; padding: 11px 14px; border: 1px solid #d6e3f4; border-radius: 8px; font: inherit; color: #253d60; background: #fff; }
@@ -125,3 +157,5 @@
   .knowledge-quota-org-layout { grid-template-columns: 1fr; }
   .knowledge-quota-people li { grid-template-columns: 1fr; }
 }
+
+.registration-settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 28px;max-width:960px}.registration-settings-grid label{display:grid;gap:8px;color:#172e50;font-size:14px}.registration-settings-grid input:not([type=checkbox]),.registration-settings-grid select,.registration-settings-grid textarea{width:100%;box-sizing:border-box;border:1px solid #d6e3f7;border-radius:9px;padding:10px 12px;background:#fff;color:#172e50;font:inherit}.registration-settings-grid input[type=checkbox]{width:18px;height:18px;accent-color:#3079f0}.registration-settings-wide{grid-column:1/-1}@media(max-width:760px){.registration-settings-grid{grid-template-columns:1fr}}

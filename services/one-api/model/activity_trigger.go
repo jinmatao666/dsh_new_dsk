@@ -22,6 +22,11 @@ func TriggerActivities(ctx context.Context, triggerType string, userId int) erro
 
 	// 2. 遍历每个活动
 	for _, activity := range activities {
+		// Recurring login/first-request gifts are now claimed explicitly through desktop check-in.
+		if (triggerType == "login" || triggerType == "first_request") && activity.GrantLimit == "daily" {
+			continue
+		}
+
 		// 检查用户是否匹配
 		match, err := activity.MatchUser(userId)
 		if err != nil {

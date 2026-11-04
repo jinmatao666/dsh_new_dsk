@@ -15,7 +15,7 @@ export function normalizeCreditRewards(value) {
     }
   }
   if (!Number.isInteger(value.login.intervalDays) || value.login.intervalDays < 1 || value.login.intervalDays > 3650) {
-    throw new Error('登录发放周期必须为 1 至 3,650 天的整数');
+    throw new Error('签到发放周期必须为 1 至 3,650 天的整数');
   }
   return {
     registration: { enabled: value.registration.enabled, amount: value.registration.amount },
@@ -25,31 +25,33 @@ export function normalizeCreditRewards(value) {
 
 export default function CreditRewardSettings({ value, onChange, disabled }) {
   const change = (key, field, next) => onChange({ ...value, [key]: { ...value[key], [field]: next } });
-  return <section className='settings-credit-rewards' aria-label='积分赠送规则'>
-    <div className='credit-pricing-heading'><h3>积分赠送规则</h3><span className='credit-preview-tag'>运营版</span></div>
-    <p className='settings-description'>统一配置注册与登录赠送，金额单位为积分。</p>
+  return <section className='settings-credit-rewards edition-settings-row' aria-label='积分赠送规则'>
+    <div className='edition-section-heading'><h3>积分赠送规则</h3><p>分别管理注册与签到赠送</p></div>
+    <div className='edition-section-content'>
     <div className='credit-reward-grid'>
       {['registration', 'login'].map(key => {
-        const title = key === 'registration' ? '注册赠送' : '登录赠送';
+        const title = key === 'registration' ? '注册赠送' : '签到赠送';
         const rule = value[key];
         return <div className='credit-reward-card' key={key}>
-          <div className='credit-reward-heading'><h4>{title}</h4><label className='credit-reward-toggle'>
-            <input type='checkbox' role='switch' aria-label={`启用${title}`} checked={rule.enabled} disabled={disabled}
-              onChange={event => change(key, 'enabled', event.target.checked)} />{rule.enabled ? '开启' : '关闭'}
-          </label></div>
-          <p>{key === 'registration' ? '新用户注册成功后赠送，每人仅一次。' : '达到发放周期后，在首次登录时赠送。'}</p>
+          <div className='credit-reward-heading'><h4>{title}</h4>
+            <p>{key === 'registration' ? '仅赠送新用户，不向老用户补发。' : '用户主动签到领取，未签到不补发。'}</p>
+          </div>
           <label className='credit-reward-field'>每次赠送积分
             <div><input aria-label={`${title}积分`} type='number' min='1' max='1000000' step='1' required disabled={disabled || !rule.enabled}
               value={rule.amount} onChange={event => change(key, 'amount', event.target.value === '' ? '' : Number(event.target.value))} /><span>积分</span></div>
           </label>
-          {key === 'login' && <label className='credit-reward-field'>发放周期
-            <div><span>每</span><input aria-label='登录发放周期' type='number' min='1' max='3650' step='1' required disabled={disabled || !rule.enabled}
+          {key === 'login' ? <label className='credit-reward-field credit-reward-period'>发放周期
+            <div><span>每</span><input aria-label='签到发放周期' type='number' min='1' max='3650' step='1' required disabled={disabled || !rule.enabled}
               value={rule.intervalDays} onChange={event => change(key, 'intervalDays', event.target.value === '' ? '' : Number(event.target.value))} /><span>天赠送一次</span></div>
-          </label>}
-          <small>{key === 'registration' ? '不向已注册用户补发。' : '首次登录可领取；后续按上次发放日起算，未登录不补发。'}</small>
+          </label> : <div className='credit-reward-field credit-reward-period'><span>发放周期</span><div>注册成功，仅一次</div></div>}
+          <label className='credit-reward-toggle'>
+            <input type='checkbox' role='switch' aria-label={`启用${title}`} checked={rule.enabled} disabled={disabled}
+              onChange={event => change(key, 'enabled', event.target.checked)} /><span>{rule.enabled ? '开启' : '关闭'}</span>
+          </label>
         </div>;
       })}
     </div>
-    <p className='credit-pricing-note'>当前保存赠送规则，自动发放链路接入后生效。规则修改记录在后台操作日志中。</p>
+    <p className='credit-pricing-note'>签到周期从上次签到日期起算，按北京时间计算，未签到不补发。注册赠送仅面向新注册用户。</p>
+    </div>
   </section>;
 }

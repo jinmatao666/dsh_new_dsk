@@ -267,7 +267,7 @@ export function ModelConfigPage() {
   const modelCacheAllowed = (ids) => ids?.length > 0 && ids.every(id => modelChannelList.rows.some(channel => Number(channel.id) === Number(id) && channel.explicit_cache_allowed === true));
   const changeModelSource = (value) => {
     const ids = value ? [Number(value)] : [];
-    setModelEdit(current => ({ ...current, sourceChannelIds: ids, support_explicit_cache: modelCacheAllowed(ids) }));
+    setModelEdit(current => ({ ...current, sourceChannelIds: ids, support_explicit_cache: false }));
   };
   const [modelChannelFilter, setModelChannelFilter] = useState('all');
   const [batchModelsOpen, setBatchModelsOpen] = useState(false);
@@ -1577,7 +1577,7 @@ export function ModelConfigPage() {
             {!modelEdit.id && <div className='zjugis-field full'><span>来源渠道</span>
               <CustomSelect value={String(modelEdit.sourceChannelIds?.[0] || '')} onChange={e => {
                 const ids = e.target.value ? [Number(e.target.value)] : [];
-                setModelEdit(current => ({ ...current, sourceChannelIds: ids, name: '', display_name: '', support_explicit_cache: modelCacheAllowed(ids) }));
+                setModelEdit(current => ({ ...current, sourceChannelIds: ids, name: '', display_name: '', support_explicit_cache: false }));
               }}>
                 <option value=''>请选择来源渠道</option>{modelChannels.map(row => <option key={row.id} value={row.id}>{row.name}（{row.id}）</option>)}
               </CustomSelect><small className='preview-muted'>先选择渠道，再选择已有模型或手动填写模型 ID；无需先获取模型列表。</small>
@@ -1684,14 +1684,15 @@ export function ModelConfigPage() {
             </div>}
             <div className='form-grid'>
               <div className='zjugis-field'>
-                <span id='explicit-cache-label'>显式缓存</span>
-                <CustomSelect aria-labelledby='explicit-cache-label' aria-label='显式缓存'
+                <span id='explicit-cache-label'>启用显式缓存</span>
+                <CustomSelect aria-labelledby='explicit-cache-label' aria-label='启用显式缓存'
                   value={modelCacheAllowed(modelEdit.sourceChannelIds) && modelEdit.support_explicit_cache ? 'on' : 'off'}
                   disabled={!modelCacheAllowed(modelEdit.sourceChannelIds)}
                   onChange={event => setModelEdit({ ...modelEdit, support_explicit_cache: event.target.value === 'on' })}>
                   <option value='off'>关闭</option><option value='on'>开启</option>
                 </CustomSelect>
                 {!modelCacheAllowed(modelEdit.sourceChannelIds) && <small className='preview-muted'>自建或尚未适配的渠道不开放显式缓存。</small>}
+                {modelCacheAllowed(modelEdit.sourceChannelIds) && <small className='preview-muted'>默认关闭，请确认当前模型及地域支持后手动开启。不影响模型自身的隐式缓存。</small>}
               </div>
             </div>
             <div className='zjugis-modal-actions'>
@@ -1732,18 +1733,12 @@ export function UsersPage() {
   const [roles, setRoles] = useState([]);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [roleLoadError, setRoleLoadError] = useState('');
-  const [tokens, setTokens] = useState([]);
+  const [grantOpen, setGrantOpen] = useState(false);
   const [topup, setTopup] = useState({
     quota: '',
     remark: '',
     expires_in_days: 0,
     admin_password: '',
-  });
-  const [tokenForm, setTokenForm] = useState({
-    name: '',
-    remain_quota: 500000,
-    unlimited_quota: false,
-    expired_time: -1,
   });
   const [form, setForm] = useState({
     username: '',
@@ -1832,6 +1827,8 @@ export function UsersPage() {
     }
   };
   const openEdit = async (u) => {
+    setGrantOpen(false);
+    setTopup({ quota: '', remark: '', expires_in_days: 0, admin_password: '' });
     try {
       setDepartmentsReady(false);
       setDepartmentIds([]);
@@ -1885,50 +1882,8 @@ export function UsersPage() {
       setEditSaving(false);
     }
   };
-  const openDetail = async (u) => {
+  const openDetail = (u) => {
     setDetail(u);
-    setTokens([]);
-    try {
-      const res = await API.get(`/api/admin/token/user/${u.id}`);
-      if (res.data?.success) setTokens(res.data.data || []);
-    } catch {}
-  };
-  const manageToken = async (token, action) => {
-    const res =
-      action === 'delete'
-        ? await API.delete(`/api/admin/token/user/${detail.id}/${token.id}`)
-        : await API.put(`/api/admin/token/user/${detail.id}?status_only=true`, {
-            id: token.id,
-            status: action === 'enable' ? 1 : 2,
-          });
-    if (res.data?.success) openDetail(detail);
-    else dialog.notice(res.data?.message || '令牌操作失败');
-  };
-  const createToken = async (e) => {
-    e.preventDefault();
-    const res = await API.post(`/api/admin/token/user/${detail.id}`, {
-      ...tokenForm,
-      remain_quota: Number(tokenForm.remain_quota),
-      expired_time:
-        tokenForm.expired_time === '' ? -1 : Number(tokenForm.expired_time),
-    });
-    if (res.data?.success) {
-      setTokenForm({
-        name: '',
-        remain_quota: 500000,
-        unlimited_quota: false,
-        expired_time: -1,
-      });
-      openDetail(detail);
-    } else dialog.notice(res.data?.message || '创建令牌失败');
-  };
-  const copyToken = async (token) => {
-    const value = `sk-${token.key}`;
-    if (await copy(value)) {
-      dialog.notice('令牌已复制');
-    } else {
-      dialog.notice(`无法自动复制，请手动复制：${value}`);
-    }
   };
   const grant = async (e) => {
     e.preventDefault();
@@ -1947,7 +1902,7 @@ export function UsersPage() {
         expires_in_days: 0,
         admin_password: '',
       });
-      openEdit(edit);
+      setGrantOpen(false);
       list.refresh();
     } else dialog.notice(res.data?.message || '积分发放失败');
   };
@@ -2035,7 +1990,6 @@ export function UsersPage() {
             <thead>
               <tr>
                 <th>ID / 用户</th>
-                <th>分组</th>
                 <th>账户类型</th>
                 <th>角色</th>
                 <th>剩余额度</th>
@@ -2063,7 +2017,6 @@ export function UsersPage() {
                       {u.email ? ` · ${u.email}` : ''}
                     </small>
                   </td>
-                  <td>{u.group || 'default'}</td>
                   <td>{u.account_type === 2 ? '企业' : '个体'}</td>
                   <td>
                     {u.role === 100
@@ -2094,7 +2047,7 @@ export function UsersPage() {
                       className='link-button'
                       onClick={() => openDetail(u)}
                     >
-                      详情 / 令牌
+                      用户详情
                     </button>
                     <button className='link-button' onClick={() => openEdit(u)}>
                       编辑
@@ -2252,11 +2205,6 @@ export function UsersPage() {
                 value={edit.phone || ''}
                 onChange={(e) => setEdit({ ...edit, phone: e.target.value })}
               />
-              <Field
-                label='分组'
-                value={edit.group || 'default'}
-                onChange={(e) => setEdit({ ...edit, group: e.target.value })}
-              />
               <SelectField
                 label='角色权限'
                 value={edit.role || ''}
@@ -2284,15 +2232,25 @@ export function UsersPage() {
               <button
                 type='button'
                 className='preview-button'
-                onClick={() => setEdit(null)}
+                onClick={() => {
+                  setTopup({ quota: '', remark: '', expires_in_days: 0, admin_password: '' });
+                  setGrantOpen(true);
+                }}
               >
-                取消
+                发放积分
               </button>
               <button className='preview-button primary' disabled={!departmentsReady}>保存用户</button>
             </div>
           </form>
+
+        </Modal>
+      )}
+      {edit && grantOpen && (
+        <Modal title={`发放积分 · ${edit.username}`} onClose={() => {
+          setGrantOpen(false);
+          setTopup({ quota: '', remark: '', expires_in_days: 0, admin_password: '' });
+        }}>
           <form className='zjugis-form topup-form' onSubmit={grant}>
-            <h3>积分操作</h3>
             <div className='form-grid'>
               <Field
                 label='发放积分'
@@ -2338,12 +2296,12 @@ export function UsersPage() {
       {detail && (
         <Modal
           wide
-          title={`用户详情与令牌 · ${detail.username}`}
+          title={`用户详情 · ${detail.username}`}
           onClose={() => setDetail(null)}
         >
           <div className='detail-grid'>
             {Object.entries(detail)
-              .filter(([k]) => !['password', 'key'].includes(k))
+              .filter(([k]) => !['password', 'key', 'group'].includes(k))
               .map(([k, v]) => (
                 <div key={k}>
                   <span>{k}</span>
@@ -2354,97 +2312,6 @@ export function UsersPage() {
                   </strong>
                 </div>
               ))}
-          </div>
-          <div className='token-panel'>
-            <div className='preview-section-head'>
-              <h3>令牌（{tokens.length}）</h3>
-            </div>
-            {tokens.map((t) => (
-              <div className='token-row' key={t.id}>
-                <div>
-                  <strong>{t.name}</strong>
-                  <small>
-                    剩余额度：{t.unlimited_quota ? '无限制' : t.remain_quota} ·{' '}
-                    {t.status === 1 ? '已启用' : '已禁用'}
-                  </small>
-                </div>
-                <div>
-                  <button
-                    type='button'
-                    className='link-button'
-                    onClick={() => {
-                      void copyToken(t);
-                    }}
-                  >
-                    复制
-                  </button>
-                  <button
-                    className='link-button'
-                    onClick={() =>
-                      manageToken(t, t.status === 1 ? 'disable' : 'enable')
-                    }
-                  >
-                    {t.status === 1 ? '禁用' : '启用'}
-                  </button>
-                  <button
-                    className='link-button danger'
-                    onClick={() => manageToken(t, 'delete')}
-                  >
-                    删除
-                  </button>
-                </div>
-              </div>
-            ))}
-            <form className='zjugis-form token-form' onSubmit={createToken}>
-              <h3>添加令牌</h3>
-              <div className='form-grid'>
-                <Field
-                  label='令牌名称'
-                  value={tokenForm.name}
-                  onChange={(e) =>
-                    setTokenForm({ ...tokenForm, name: e.target.value })
-                  }
-                  required
-                />
-                <Field
-                  label='令牌额度'
-                  type='number'
-                  value={tokenForm.remain_quota}
-                  disabled={tokenForm.unlimited_quota}
-                  onChange={(e) =>
-                    setTokenForm({ ...tokenForm, remain_quota: e.target.value })
-                  }
-                />
-                <SelectField
-                  label='有效期'
-                  value={tokenForm.expired_time}
-                  onChange={(e) =>
-                    setTokenForm({
-                      ...tokenForm,
-                      expired_time: Number(e.target.value),
-                    })
-                  }
-                >
-                  <option value='-1'>永不过期</option>
-                </SelectField>
-                <label className='zjugis-check'>
-                  <input
-                    type='checkbox'
-                    checked={tokenForm.unlimited_quota}
-                    onChange={(e) =>
-                      setTokenForm({
-                        ...tokenForm,
-                        unlimited_quota: e.target.checked,
-                      })
-                    }
-                  />
-                  无限额度
-                </label>
-              </div>
-              <div className='zjugis-modal-actions'>
-                <button className='preview-button'>添加令牌</button>
-              </div>
-            </form>
           </div>
         </Modal>
       )}

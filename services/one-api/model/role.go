@@ -101,6 +101,9 @@ func CreateRole(role *Role, roleType string) error {
 
 // DeleteRole 保护内置角色及仍被账号引用的角色，不修改账号权限。
 func DeleteRole(code int) error {
+	if current, _ := registrationRoleSelection(); current == code {
+		return fmt.Errorf("该角色用于新用户注册，请先更换默认注册角色")
+	}
 	if code <= RoleCommonUser || code >= RoleRootUser {
 		return fmt.Errorf("内置角色不能删除")
 	}
@@ -117,6 +120,9 @@ func DeleteRole(code int) error {
 
 // UpdateRole updates mutable role metadata and permissions without changing its code.
 func UpdateRole(role *Role) error {
+	if current, value := registrationRoleSelection(); current == role.Role && (role.Status != 1 || strings.TrimSpace(value) == "" && role.Name != "注册用户") {
+		return fmt.Errorf("该角色用于新用户注册，请先更换默认注册角色后再停用或改名")
+	}
 	if role.Role <= RoleGuestUser {
 		return fmt.Errorf("角色编号必须大于 0")
 	}

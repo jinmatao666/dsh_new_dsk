@@ -24,6 +24,9 @@ func AllOption() ([]*Option, error) {
 func InitOptionMap() {
 	config.OptionMapRWMutex.Lock()
 	config.OptionMap = make(map[string]string)
+	config.OptionMap["RegistrationDefaultRole"] = ""
+	config.OptionMap["RegistrationAgreementText"] = ""
+	config.OptionMap["RegistrationPrivacyText"] = ""
 	config.OptionMap["SystemDeploymentSettings"] = `{"network":"internet","operator":"","phone":""}`
 	config.OptionMap["PasswordLoginEnabled"] = strconv.FormatBool(config.PasswordLoginEnabled)
 	config.OptionMap["PasswordRegisterEnabled"] = strconv.FormatBool(config.PasswordRegisterEnabled)

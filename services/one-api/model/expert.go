@@ -10,6 +10,7 @@ import (
 // ExpertProfile stores administrator-controlled presentation for a workbench
 // that is shipped by the desktop application. It never defines execution.
 type ExpertProfile struct {
+	TaskCredits    int64  `json:"task_credits" gorm:"not null;default:0"`
 	Key            string `json:"key" gorm:"primaryKey;size:80"`
 	Name           string `json:"name" gorm:"size:100;not null"`
 	Subtitle       string `json:"subtitle" gorm:"size:160"`

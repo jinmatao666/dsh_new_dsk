@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-03-explicit-cache-channel-policy.md
-2026-11-03-explicit-cache-channel-policy.md: b4598574acae96232f12ed66a93337982f2ca7a2
-2026-11-03-explicit-cache-channel-policy.zh.md: a6892c1fd3593104cb7942369b8c73372f370eb7
+2026-11-03-explicit-cache-channel-policy.md: bdcc85bc44602c75b19f24f50a50fa990d535b07
+2026-11-03-explicit-cache-channel-policy.zh.md: ad4c97d06ef849e86827c97e919b6577a684ab95
