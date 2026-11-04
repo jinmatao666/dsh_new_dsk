@@ -281,7 +281,7 @@ describe('SettingsPanel navigation', () => {
 })
 
 it('opens the requested settings section from a product shortcut event', () => {
-  mount({ rows: [{ id: 'wanwei-credits', order: 38, label: 'Credits' }], steps: [] })
-  act(() => { window.dispatchEvent(new CustomEvent('dsh:open-settings-section', { detail: 'wanwei-credits' })) })
-  expect(screen.getByTestId('section-wanwei-credits')).toBeTruthy()
+  mount({ rows: [{ id: 'example-section', order: 38, label: 'Credits' }], steps: [] })
+  act(() => { window.dispatchEvent(new CustomEvent('dsh:open-settings-section', { detail: 'example-section' })) })
+  expect(screen.getByTestId('section-example-section')).toBeTruthy()
 })
