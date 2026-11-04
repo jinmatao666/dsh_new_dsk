@@ -44,3 +44,23 @@ describe('desktop credit entry and check-in', () => {
     expect(screen.getByText('连接失败')).toBeTruthy()
   })
 })
+
+it('provides first/last/jump navigation and removes historical balance fields', async () => {
+  const request = vi.fn(async (op: string, page = 0) => op === 'history'
+    ? { balance: 1000, total: 126, items: [{ id: String(page), time: 1793754026, name: '调用记录', credits: -1, balance: null }] }
+    : { enabled: false })
+  render(<CreditsSection {...kit} close={vi.fn()} requestCredits={request} />)
+  await screen.findByText('调用记录')
+  expect(screen.getByText('变动后余额')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '末页' }))
+  await waitFor(() => expect(request).toHaveBeenCalledWith('history', 6, 'all'))
+  await screen.findByText('调用记录')
+  expect(screen.getByRole('button', { name: '下一页' })).toHaveProperty('disabled', true)
+  fireEvent.change(screen.getByRole('spinbutton', { name: '跳转页码' }), { target: { value: '3' } })
+  fireEvent.click(screen.getByRole('button', { name: '跳转' }))
+  await waitFor(() => expect(request).toHaveBeenCalledWith('history', 2, 'all'))
+  await screen.findByText('调用记录')
+  fireEvent.click(screen.getByRole('button', { name: '首页' }))
+  await screen.findByText('调用记录')
+  expect(screen.getByRole('button', { name: '上一页' })).toHaveProperty('disabled', true)
+})

@@ -108,3 +108,12 @@ it('opens a modal, preserves the overview, and clears the password draft on canc
   await screen.findByRole('dialog')
   expect(screen.getByLabelText<HTMLInputElement>(zh.securityNewPassword).value).toBe('')
 })
+
+it('explains the phone requirement on the password action without enabling it', async () => {
+  render(<AccountSection {...kit} useAuth={useAuth} logout={vi.fn()} close={vi.fn()} t={t}
+    requestAccount={async () => ({ phoneBound: false, phone: '', wechatBound: false })} />)
+  const action = await screen.findByLabelText(zh.securityPasswordBindFirst)
+  expect(action.getAttribute('tabindex')).toBe('0')
+  expect(action.getAttribute('data-tooltip')).toBe(zh.securityPasswordBindFirst)
+  expect(screen.getByRole('button', { name: zh.securityPasswordAction })).toHaveProperty('disabled', true)
+})

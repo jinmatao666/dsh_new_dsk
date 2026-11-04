@@ -61,3 +61,5 @@ The organization tree and role organization picker use the same array response; 
 ## Runtime deployment
 
 Production builds are relocatable. Public paths, API prefixes, canonical URLs and proxy trust are container runtime configuration; see [generic backend delivery](../../deploy/README.md).
+
+The login and registration page uses one SMS login switch; saving it synchronizes the SMS service and phone login options. The SMS signature stays server-configured and is hidden from this form.

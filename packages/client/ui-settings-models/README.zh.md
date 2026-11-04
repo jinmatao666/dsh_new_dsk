@@ -119,3 +119,5 @@ kind: "package-reference"
 无。
 
 </details>
+
+删除确认展示模型名称，不展示内部路由 ID；操作按钮使用简短文案并保持单行。

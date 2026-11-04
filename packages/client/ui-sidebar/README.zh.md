@@ -99,3 +99,5 @@ kind: "package-reference"
 无。
 
 </details>
+
+展开／收起按钮通过 `data-dsh-sidebar-toggle` 标记，让功能面板区分布局调整与页面导航。

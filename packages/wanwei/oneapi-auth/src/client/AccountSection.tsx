@@ -1,3 +1,4 @@
+import { accountIcons } from './account-icons.ts'
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -104,9 +105,9 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
   }
   const blocked = busy || !data || auth.state !== 'authenticated'
   const rows = [
-    { key: 'phone' as const, title: t('securityPhone'), detail: data ? data.phoneBound ? data.phone : t('securityPhoneHint') : t('securityLoading'), action: data?.phoneBound ? t('securityReplacePhone') : t('securityBindPhone'), path: 'M8 2h8v20H8z M11 18h2' },
-    { key: 'password' as const, title: t('securityPassword'), detail: t('securityPasswordHint'), action: t('securityPasswordAction'), path: 'M7 10V7a5 5 0 0110 0v3 M5 10h14v12H5z M12 14v4' },
-    { key: 'wechat' as const, title: t('securityWechat'), detail: data ? data.wechatBound ? t('securityWechatBound') : t('securityWechatHint') : t('securityLoading'), action: data?.wechatBound ? t('securityUnbindWechat') : t('securityBindWechat'), path: 'M21 11a8 8 0 01-8 8H7l-4 3v-6a8 8 0 118-13 M8 10h.1 M15 10h.1' },
+    { key: 'phone' as const, title: t('securityPhone'), detail: data ? data.phoneBound ? data.phone : t('securityPhoneHint') : t('securityLoading'), action: data?.phoneBound ? t('securityReplacePhone') : t('securityBindPhone') },
+    { key: 'password' as const, title: t('securityPassword'), detail: t('securityPasswordHint'), action: t('securityPasswordAction') },
+    { key: 'wechat' as const, title: t('securityWechat'), detail: data ? data.wechatBound ? t('securityWechatBound') : t('securityWechatHint') : t('securityLoading'), action: data?.wechatBound ? t('securityUnbindWechat') : t('securityBindWechat') },
   ]
   return <section className={css.section}>
     <h1>{t('accountTitle')}</h1><p className={css.hint}>{t('securityIntro')}</p>
@@ -114,7 +115,7 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
       {auth.state === 'authenticated' && <button type="button" className={css.logout} disabled={busy} onClick={() => { void execute(async () => { setSigningOut(true); try { await logout(); close() } finally { setSigningOut(false) } }) }}>{signingOut ? t('signingOut') : t('signOut')}</button>}
     </div>
     <h2 className={css.subheading}>{t('securityTitle')}</h2>
-    <div className={css.security}>{rows.map(row => <div key={row.key} className={css.row}><span className={css.icon} aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d={row.path} /></svg></span><div className={css.description}><h3>{row.title}</h3><p>{row.detail}</p></div><button className={css.secondary} disabled={blocked || row.key !== 'phone' && !data?.phoneBound} type="button" onClick={() => { edit(row.key) }}>{row.action}</button></div>)}</div>
+    <div className={css.security}>{rows.map(row => <div key={row.key} className={css.row}><span className={css.icon} aria-hidden="true"><img src={accountIcons[row.key === 'phone' ? 'smartphone' : row.key === 'password' ? 'key-round' : 'wechat']} alt="" /></span><div className={css.description}><h3>{row.title}</h3><p>{row.detail}</p></div><span className={css.action} tabIndex={row.key === 'password' && !data?.phoneBound ? 0 : undefined} data-tooltip={row.key === 'password' && !data?.phoneBound ? t('securityPasswordBindFirst') : undefined} aria-label={row.key === 'password' && !data?.phoneBound ? t('securityPasswordBindFirst') : undefined}><button className={css.secondary} disabled={blocked || row.key !== 'phone' && !data?.phoneBound} type="button" onClick={() => { edit(row.key) }}>{row.action}</button></span></div>)}</div>
     {data && !data.phoneBound && <p className={css.hint}>{t('securityBindFirst')}</p>}
     {!mode && error && <div role="alert" className={css.error}>{error}<button type="button" className={css.secondary} disabled={busy} onClick={() => { setRevision(value => value + 1) }}>{t('securityRetry')}</button></div>}
     {!mode && notice && <p role="status" className={css.success}>{notice}</p>}

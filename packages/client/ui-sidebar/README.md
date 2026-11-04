@@ -99,3 +99,5 @@ These limits define what the shell owns versus what its occupants own; they are 
 None.
 
 </details>
+
+The expand/collapse button exposes `data-dsh-sidebar-toggle` so feature panels can distinguish layout changes from navigation.

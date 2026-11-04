@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { Context } from '@deepseek-ai/cordis'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPanelController, PanelAction, FeaturePanel } from '../src/client/panels.tsx'
 import type { PanelActionProps, PanelController, PanelProps } from '../src/client/panels.tsx'
@@ -15,6 +15,32 @@ async function mount(ctx: Context, id: string) {
 }
 
 describe('independent feature navigation', () => {
+  it('preserves mounted content across sidebar toggles but closes on navigation', async () => {
+    const ctx = new Context()
+    const feature = await mount(ctx, 'experts')
+    const props = { title: 'experts', subtitle: '', Icon: () => null,
+      controller: feature.controller, useNetwork: () => false,
+      renderContent: () => <input aria-label="analysis draft" defaultValue="" />,
+    } as unknown as PanelProps
+    try {
+      render(<><button data-dsh-sidebar-toggle><span>toggle sidebar</span></button>
+        <button>new session</button><FeaturePanel {...props} /></>)
+      act(() => { feature.controller.open() })
+      const draft = screen.getByRole<HTMLInputElement>('textbox', { name: 'analysis draft' })
+      fireEvent.change(draft, { target: { value: 'unsaved analysis' } })
+      for (let index = 0; index < 2; index++) {
+        fireEvent.pointerDown(screen.getByText('toggle sidebar'))
+        fireEvent.click(screen.getByText('toggle sidebar'))
+        expect(feature.controller.isOpen()).toBe(true)
+        expect(screen.getByRole('textbox')).toBe(draft)
+        expect(draft.value).toBe('unsaved analysis')
+      }
+      fireEvent.pointerDown(screen.getByText('new session'))
+      expect(feature.controller.isOpen()).toBe(false)
+      expect(screen.queryByRole('dialog')).toBeNull()
+    } finally { await feature.dispose() }
+  })
+
   it('closes an unavailable page even when opened outside the disabled sidebar action and restores the entry after recovery', async () => {
     const ctx = new Context()
     const feature = await mount(ctx, 'connectivity')

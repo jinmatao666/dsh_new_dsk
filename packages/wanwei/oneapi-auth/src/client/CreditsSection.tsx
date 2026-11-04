@@ -1,3 +1,4 @@
+import { accountIcons } from './account-icons.ts'
 import { useEffect, useState } from 'react'
 import { Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -38,7 +39,7 @@ export function CheckinShortcut({ useAuth, requestCredits, wide }: PropsRuntime<
   }, [auth, requestCredits])
   if (!wide || !status?.enabled || !status.can_claim) return null
   return <button className={css.shortcut} type="button"
-    onClick={() => { window.dispatchEvent(new CustomEvent('dsh:open-settings-section', { detail: 'wanwei-credits' })) }}>签到领积分</button>
+    onClick={() => { window.dispatchEvent(new CustomEvent('dsh:open-settings-section', { detail: 'wanwei-credits' })) }}><img src={accountIcons.gift} alt="" /><span>签到领积分</span></button>
 }
 
 /** Balance, explicit check-in and paginated personal credit history. */
@@ -47,6 +48,7 @@ export function CreditsSection({ useAuth, requestCredits }: PropsRuntime<'settin
   const [status, setStatus] = useState<Checkin>()
   const [history, setHistory] = useState<History>()
   const [page, setPage] = useState(0)
+  const [jump, setJump] = useState('')
   const [filter, setFilter] = useState('all')
   const [revision, setRevision] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -122,13 +124,18 @@ export function CreditsSection({ useAuth, requestCredits }: PropsRuntime<'settin
     </div>
     {loading ? <p className={css.muted}>正在加载…</p> : history?.items.length === 0 ? <p className={css.muted}>暂无积分记录</p> : null}
     <footer className={css.pagination}>
-      <span>时间按北京时间显示；历史记录未保存的余额显示为“—”。</span>
-      <button className={css.secondary} disabled={loading || busy || page === 0}
-        onClick={() => { setPage(value => value - 1) }}>上一页</button>
-      <span>{page + 1}</span>
-      <button className={css.secondary}
-        disabled={loading || busy || !history || (page + 1) * 20 >= history.total}
-        onClick={() => { setPage(value => value + 1) }}>下一页</button>
+      <span>共 {history?.total ?? 0} 条 · 第 {page + 1} / {Math.max(1, Math.ceil((history?.total ?? 0) / 20))} 页</span>
+      <button className={css.secondary} disabled={loading || busy || page === 0} onClick={() => { setPage(0) }}>首页</button>
+      <button className={css.secondary} disabled={loading || busy || page === 0} onClick={() => { setPage(page - 1) }}>上一页</button>
+      <button className={css.secondary} disabled={loading || busy || !history || (page + 1) * 20 >= history.total}
+        onClick={() => { setPage(page + 1) }}>下一页</button>
+      <button className={css.secondary} disabled={loading || busy || !history || (page + 1) * 20 >= history.total}
+        onClick={() => { setPage(Math.max(0, Math.ceil((history?.total ?? 0) / 20) - 1)) }}>末页</button>
+      <form onSubmit={(event) => { event.preventDefault(); const target = Number(jump)
+        if (Number.isInteger(target) && target >= 1 && target <= Math.max(1, Math.ceil((history?.total ?? 0) / 20))) { setPage(target - 1); setJump('') }
+      }}><label>跳至 <input type="number" aria-label="跳转页码" min={1} max={Math.max(1, Math.ceil((history?.total ?? 0) / 20))}
+          required value={jump} disabled={loading || busy} onChange={(event) => { setJump(event.target.value) }} /> 页</label>
+        <button className={css.secondary} disabled={loading || busy}>跳转</button></form>
     </footer>
     {notice && <Toast text={notice} onDone={() => { setNotice('') }} />}
     <Modal open={!!error} title="积分服务提示" closeLabel="关闭" onClose={() => { setError('') }}>

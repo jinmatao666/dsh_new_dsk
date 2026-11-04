@@ -48,7 +48,8 @@
     "lib/index.js",
     "lib/invariant.js",
     "lib/client.js",
-    "lib/types/**/*.d.ts"
+    "lib/types/**/*.d.ts",
+    "icon-licenses.txt"
   ],
   "license": "MIT",
   "dependencies": {

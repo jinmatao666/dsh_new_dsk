@@ -593,7 +593,8 @@ button.selectInput {
 }
 
 .deleteDialog {
-  width: min(480px, 100%);
+  width: min(440px, calc(100vw - 32px));
+  overflow-wrap: anywhere;
 }
 
 .customDialog {
@@ -673,4 +674,18 @@ button.selectInput {
   font-family: var(--ds-font-family-code);
   font-size: 13px;
   overflow-wrap: anywhere;
+}
+
+.deleteDialog .deleteCancel,
+.deleteDialog .deleteConfirm {
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-width: 76px;
+  height: 36px;
+  border: 1px solid var(--dsw-alias-border-l1, #e1e5eb);
+  border-radius: 8px;
+}
+
+.deleteDialog .deleteConfirm {
+  border-color: var(--dsw-alias-state-error-primary, #dc3535);
 }

@@ -573,7 +573,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
       <Modal
         open={deleteTarget !== undefined}
         onClose={closeDelete}
-        title={deleteTarget === undefined ? '' : providerCopy(t('deleteTitle'), deleteTarget)}
+        title={deleteTarget === undefined ? '' : t('deleteTitle').replace('{provider}', () => deleteTarget.displayName)}
         closeLabel={t('close')}
         description={deleteTarget === undefined
           ? ''
@@ -581,12 +581,12 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
             deleteTarget.credentialRef === undefined
               ? t('deleteDescription')
               : t('deleteDescriptionWithCredential'),
-            deleteTarget,
+            { ...deleteTarget, provider: deleteTarget.displayName },
           )}
         className={styles['deleteDialog'] as string}
         footer={(
           <>
-            <Button variant="outline" autoFocus disabled={deleting} onClick={closeDelete}>
+            <Button variant="outline" className={styles['deleteCancel']} autoFocus disabled={deleting} onClick={closeDelete}>
               {t('cancel')}
             </Button>
             <Button
@@ -597,7 +597,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
             >
               {deleteTarget === undefined
                 ? ''
-                : providerCopy(deleting ? t('deleting') : t('deleteConfirm'), deleteTarget)}
+                : t(deleting ? 'deleting' : 'deleteConfirm')}
             </Button>
           </>
         )}

@@ -12,15 +12,15 @@ afterEach(() => { act(()=>root.unmount());container.remove();jest.clearAllMocks(
 test('leaves credentials blank and saves only changed options', async () => {
  await act(async()=>root.render(<RegistrationSettings/>));
  const secret=container.querySelector('input[type=password]');expect(secret.value).toBe('');
- const input=container.querySelector('[aria-label="启用短信服务"]');act(()=>input.click());act(()=>document.querySelector('[role=option][value="true"]').click());
+ const input=container.querySelector('[aria-label="允许短信登录"]');act(()=>input.click());act(()=>document.querySelector('[role=option][value="true"]').click());
  API.put.mockResolvedValue({data:{success:true}});
  await act(async()=>container.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
- expect(API.put.mock.calls).toEqual([['/api/option/',{key:'SMSEnabled',value:'true'}]]);
+ expect(API.put.mock.calls).toEqual([['/api/option/',{key:'SMSEnabled',value:'true'}],['/api/option/',{key:'PhoneLoginEnabled',value:'true'}]]);
  expect(container.textContent).toContain('登录与注册设置已保存');
  expect(container.textContent).not.toContain('never-show-this');
 });
 test('shows business errors and keeps unsaved changes for retry', async () => {
- await act(async()=>root.render(<RegistrationSettings/>));act(()=>container.querySelector('[aria-label="启用短信服务"]').click());act(()=>document.querySelector('[role=option][value="true"]').click());
+ await act(async()=>root.render(<RegistrationSettings/>));act(()=>container.querySelector('[aria-label="允许短信登录"]').click());act(()=>document.querySelector('[role=option][value="true"]').click());
  API.put.mockResolvedValue({data:{success:false,message:'短信参数未配置'}});
  await act(async()=>container.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  expect(container.textContent).toContain('短信参数未配置');expect(container.querySelector('button[type=submit]').disabled).toBe(false);
@@ -42,6 +42,16 @@ test('configures the default registration role in the unified registration form'
 
 test('hides fixed SMS technical parameters and deferred WeChat configuration', async () => {
  await act(async()=>root.render(<RegistrationSettings/>));
- for(const label of ['短信提供商','阿里云地域','验证码位数（4–6）','验证码有效期（分钟）','启用微信扫码登录']) expect(container.textContent).not.toContain(label);
+ for(const label of ['启用短信服务','短信签名','短信提供商','阿里云地域','验证码位数（4–6）','验证码有效期（分钟）','启用微信扫码登录']) expect(container.textContent).not.toContain(label);
  expect(container.textContent).toContain('验证码默认6位、5分钟有效');
+});
+
+test('disabling SMS login also disables the SMS service without changing the signature', async () => {
+ API.get.mockResolvedValue({data:{success:true,data:[{key:'SMSEnabled',value:'true'},{key:'PhoneLoginEnabled',value:'true'},{key:'SMSSignName',value:'existing signature'}]}});
+ await act(async()=>root.render(<RegistrationSettings/>));
+ act(()=>container.querySelector('[aria-label="允许短信登录"]').click());
+ act(()=>document.querySelector('[role=option][value="false"]').click());
+ API.put.mockResolvedValue({data:{success:true}});
+ await act(async()=>container.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ expect(API.put.mock.calls).toEqual([['/api/option/',{key:'SMSEnabled',value:'false'}],['/api/option/',{key:'PhoneLoginEnabled',value:'false'}]]);
 });

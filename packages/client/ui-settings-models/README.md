@@ -119,3 +119,5 @@ These limits define the editor's field coverage and the page's reach; they are c
 None.
 
 </details>
+
+Delete confirmation shows the display name without internal route IDs and uses a short, non-wrapping action label.

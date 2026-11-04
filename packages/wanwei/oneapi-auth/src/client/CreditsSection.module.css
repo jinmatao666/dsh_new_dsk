@@ -23,3 +23,13 @@
 .muted { text-align: center; }
 .pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; }
 .pagination > span:first-child { flex: 1; color: var(--dsw-alias-label-secondary); }
+
+.shortcut { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid #d9e7ff; border-radius: 9px; background: linear-gradient(120deg,#f0f6ff,#eef3ff); font-weight: 500; transition: background .15s,box-shadow .15s; }
+.shortcut img { width: 16px; height: 16px; }
+.shortcut:hover { background: #e5efff; box-shadow: 0 2px 7px #2563eb16; }
+.shortcut:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+.pagination { gap: 6px; }
+.pagination > span:first-child { flex: none; margin: 0 4px 0 0; }
+.pagination .secondary { padding: 6px 9px; font-size: 12px; }
+.pagination form { display: inline-flex; align-items: center; gap: 6px; margin-left: 4px; }
+.pagination input { width: 48px; padding: 6px; border: 1px solid #dce5f3; border-radius: 6px; color: inherit; background: transparent; font: inherit; }

@@ -15,7 +15,7 @@ const fields = [
 
 const sections = [
   { id: 'registration', title: '注册设置', hint: '设置新用户注册方式与默认角色，已有账号的角色不受影响。', keys: ['RegisterEnabled', 'PhoneRegisterEnabled', 'RegistrationDefaultRole'] },
-  { id: 'sms', title: '短信登录', hint: '配置阿里云短信服务。密钥留空保留原值；验证码默认6位、5分钟有效，发送间隔60秒。', keys: ['SMSEnabled', 'PhoneLoginEnabled', 'SMSAccessKeyId', 'SMSAccessKeySecret', 'SMSSignName', 'SMSTemplateCode'] },
+  { id: 'sms', title: '短信登录', hint: '配置阿里云短信服务。密钥留空保留原值；验证码默认6位、5分钟有效，发送间隔60秒。', keys: ['PhoneLoginEnabled', 'SMSAccessKeyId', 'SMSAccessKeySecret', 'SMSTemplateCode'] },
   { id: 'policies', title: '协议与隐私', hint: '供用户注册时阅读和确认。', keys: ['RegistrationAgreementText', 'RegistrationPrivacyText'] },
 ];
 
@@ -30,7 +30,7 @@ export default function RegistrationSettings() {
       if (active) setRoles(roleList.filter(role => role.role >= 1 && role.role < 10 && role.status === 1));
       if (!data.success) throw new Error(data.message || '加载失败');
       const next = Object.fromEntries(fields.map(([key,,type]) => [key, type === 'password' ? '' : String(data.data.find(item => item.key === key)?.value || '')]));
-      if (active) { setValues(next); setSaved(next); setFeedback(''); }
+      if (active) { setValues({ ...next, SMSEnabled: next.PhoneLoginEnabled === 'true' ? 'true' : 'false' }); setSaved(next); setFeedback(''); }
     }).catch(error => { if (active) setFeedback(error.response?.data?.message || error.message); });
     return () => { active = false; };
   }, [reload]);
@@ -58,7 +58,7 @@ export default function RegistrationSettings() {
     {!values ? <><p role='status'>{feedback || '正在加载…'}</p><button type='button' className='settings-secondary' onClick={() => setReload(value => value + 1)}>重新加载</button></> : <>
       {sections.map(section => <section key={section.id} className='registration-settings-section' aria-labelledby={`registration-${section.id}`}><h3 id={`registration-${section.id}`}>{section.title}</h3><p className='settings-description'>{section.hint}</p>
       <div className='registration-settings-grid'>{section.keys.map(key => fields.find(field => field[0] === key)).map(([key,label,type]) => <label key={key} className={type === 'textarea' ? 'registration-settings-wide' : ''}><span>{label}</span>
-        {type === 'switch' ? <CustomSelect aria-label={label} value={values[key] === 'true' ? 'true' : 'false'} disabled={busy} onChange={event => setValues({ ...values, [key]: event.target.value })}><option value='false'>关闭</option><option value='true'>开启</option></CustomSelect>
+        {type === 'switch' ? <CustomSelect aria-label={label} value={values[key] === 'true' ? 'true' : 'false'} disabled={busy} onChange={event => setValues({ ...values, [key]: event.target.value, ...(key === 'PhoneLoginEnabled' ? { SMSEnabled: event.target.value } : {}) })}><option value='false'>关闭</option><option value='true'>开启</option></CustomSelect>
           : type === 'textarea' ? <textarea rows={5} maxLength={30000} value={values[key]} disabled={busy} onChange={event => setValues({ ...values, [key]: event.target.value })} />
           : type === 'role' ? <CustomSelect aria-label={label} value={values[key]} disabled={busy} onChange={event => setValues({ ...values, [key]: event.target.value })}><option value=''>注册用户（默认）</option>{roles.map(role => <option key={role.role} value={String(role.role)}>{role.name}</option>)}</CustomSelect>
           : type === 'provider' ? <CustomSelect aria-label={label} value={values[key] || 'aliyun'} disabled={busy} onChange={event => setValues({ ...values, [key]: event.target.value })}><option value='aliyun'>阿里云短信</option></CustomSelect>

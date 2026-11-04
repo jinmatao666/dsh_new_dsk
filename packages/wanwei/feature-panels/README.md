@@ -84,3 +84,5 @@ No direct changes to model context or cache reuse.
 None.
 
 </details>
+
+Sidebar expand/collapse is a layout-only gesture: it keeps the active feature and its mounted content intact. Normal navigation still closes the feature.

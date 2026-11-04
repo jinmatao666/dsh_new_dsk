@@ -43,5 +43,23 @@
 .dialogHeader p { margin: 8px 0 0; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.7; }
 .closeButton { display: grid; place-items: center; flex: none; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 6px; color: var(--dsw-alias-label-secondary); background: transparent; cursor: pointer; }
 .closeButton:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-interactive-bg-hover, #eff6ff); }
-.formActions { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--dsw-alias-line-light, #e4e9f0); }
+.formActions { margin-top: 20px; padding: 0; border: 0; }
 @media(max-width:560px) { .dialog .form { padding: 20px; } }
+
+.icon img { width: 24px; height: 24px; }
+.row { padding: 22px 20px; gap: 16px; }
+.icon { width: 44px; height: 44px; border-radius: 12px; background: #eff5ff; }
+.action { flex: none; }
+.action button { min-width: 112px; border-color: #dce5f3; color: #2563eb; background: #f8faff; }
+.action:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; border-radius: 8px; }
+
+.action[data-tooltip] { position: relative; cursor: not-allowed; }
+.action[data-tooltip]::after { position: absolute; z-index: 2; right: 0; bottom: calc(100% + 8px); width: 230px; padding: 9px 11px; border-radius: 8px; color: #fff; background: #26354a; box-shadow: 0 4px 16px #15243b20; font-size: 12px; font-weight: 400; line-height: 1.6; content: attr(data-tooltip); opacity: 0; visibility: hidden; pointer-events: none; }
+.action[data-tooltip]:hover::after, .action[data-tooltip]:focus-visible::after { opacity: 1; visibility: visible; }
+
+.dialog .field { gap: 7px; margin-bottom: 16px; }
+.dialog .field input { height: 40px; padding: 10px 12px; border-radius: 9px; }
+.dialog .field input:focus-visible { outline: 0; border-color: #6092ef; box-shadow: 0 0 0 2px #2563eb14; }
+.dialog .codeRow { gap: 10px; }
+.dialog .codeRow > button { height: 40px; margin-bottom: 16px; }
+.dialog .formActions button { min-width: 76px; height: 38px; }

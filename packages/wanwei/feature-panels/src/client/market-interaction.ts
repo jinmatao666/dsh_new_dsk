@@ -6,7 +6,7 @@ import { isNoticeTarget } from './Toast.tsx'
  */
 export function isMarketInteraction(target: Element): boolean {
   // AppFrame's column handles change geometry, not the selected feature or session.
-  if (target.closest('[data-side="sidebar"], [data-side="details"]') !== null) return true
+  if (target.closest('[data-side="sidebar"], [data-side="details"], [data-dsh-sidebar-toggle]') !== null) return true
   // Knowledge-base preview, action menu, and transfer dialogs portal above the overlay.
   if (target.closest([
     '.dsh-knowledge-viewer',
