@@ -596,6 +596,11 @@ button.selectInput {
   width: min(480px, 100%);
 }
 
+.customDialog {
+  max-height: calc(100vh - 48px);
+  overflow-y: auto; width: min(680px, calc(100vw - 40px)); }
+.customDialog .editor { padding: 0; background: transparent; }
+
 .deleteConfirm:not(:disabled) {
   border-color: var(--dsw-alias-state-error-primary);
   color: var(--dsw-alias-state-error-primary);

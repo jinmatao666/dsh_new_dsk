@@ -77,7 +77,7 @@
   width: max-content;
   min-width: min(240px, calc(100vw - 32px));
   max-width: min(420px, calc(100vw - 32px));
-  max-height: min(360px, calc(100vh - 96px));
+  max-height: min(320px, calc(100vh - 96px));
   overflow: hidden;
   padding: 4px;
   /* Surface tokens match the Menu primitive card (ui-primitives
@@ -136,9 +136,18 @@
 }
 
 .groups {
+  flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
 }
+
+.groups::-webkit-scrollbar { display: none; }
+.scrollViewport { display: flex; position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.scrollThumb { position: absolute; right: 1px; width: 4px; border-radius: 4px; background: var(--dsh-scrollbar-thumb); cursor: grab; touch-action: none; }
+.scrollThumb:hover { background: var(--dsh-scrollbar-thumb-hover); }
 
 .group + .group {
   margin-top: 4px;
@@ -161,8 +170,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  width: auto;
-  min-width: 100%;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 38px;
   padding: 6px 8px;
   border: none;

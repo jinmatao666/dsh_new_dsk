@@ -53,6 +53,21 @@ function state(overrides: Partial<ModelDirectoryState> = {}): ModelDirectoryStat
 afterEach(cleanup)
 
 describe('ModelSelect reasoning effort', () => {
+  it('combines local providers under custom models while keeping their route identities', () => {
+    const select = vi.fn(async () => true)
+    const directory = createSnapshotStore<ModelDirectoryState>(state({ groups: [
+      { id: 'server', name: 'Model Server', models: [{ id: 'main', name: 'Server model' }] },
+      { id: 'local-a', name: 'Arbitrary provider A', models: [{ id: 'same', name: 'Local A' }] },
+      { id: 'local-b', name: 'Arbitrary provider B', models: [{ id: 'same', name: 'Local B' }] },
+    ] }))
+    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} t={t} managedProvider="server" />)
+    fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    expect(screen.getByRole('group', { name: '自定义模型' })).toBeTruthy()
+    expect(screen.queryByText('Arbitrary provider A')).toBeNull()
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Local B' }))
+    expect(select).toHaveBeenCalledWith({ provider: 'local-b', model: 'same' })
+  })
   it('shows the supplied reference multiplier, including zero, without inventing one for custom models', () => {
     const directory = createSnapshotStore<ModelDirectoryState>(state({ groups: [{ id: 'server', name: 'Model Server', models: [
       { id: 'a', name: 'Model A', displayMultiplier: 0.375 },

@@ -1,3 +1,4 @@
+import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
 /**
  * The card that declares a provider pi-ai does not ship — an OpenAI-compatible
  * gateway, a self-hosted server, or a provider newer than the installed
@@ -50,6 +51,8 @@ const ROUTE_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
 
 /** Props of {@link CustomProviderCard}. */
 export interface CustomProviderCardProps {
+  /** Generate a stable internal route and omit provider identity fields from the form. */
+  automaticRoute?: boolean
   /** Route ids already declared, so the card refuses to shadow one. */
   taken: readonly string[]
   /** Wire protocols the adapter can serve, in the order it reports them. */
@@ -79,8 +82,8 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   const { taken, protocols, api, t } = props
   // The write is checked against the revision on which this draft was opened.
   const [openedAt] = useState(() => props.revision)
-  const [route, setRoute] = useState('')
-  const [displayName, setDisplayName] = useState('')
+  const [route, setRoute] = useState(() => props.automaticRoute ? `custom-${randomUUID()}` : '')
+  const [displayName, setDisplayName] = useState(() => props.automaticRoute ? t('customGroup') : '')
   const [baseURL, setBaseURL] = useState('')
   const [protocol, setProtocol] = useState(protocols[0] ?? '')
   const [keyDraft, setKeyDraft] = useState('')
@@ -190,10 +193,10 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
 
   return (
     <div className={styles['editor']}>
-      <div className={styles['editorHeader']}>
+      {!props.automaticRoute && <div className={styles['editorHeader']}>
         <span className={styles['editorTitle']}>{t('customTitle')}</span>
-      </div>
-      <div className={styles['field']}>
+      </div>}
+      {!props.automaticRoute && <><div className={styles['field']}>
         <span className={styles['fieldLabel']}>{t('customRoute')}</span>
         <input
           className={styles['input']}
@@ -222,7 +225,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
           onChange={(event) => { setDisplayName(event.target.value) }}
         />
       </div>
-      <div className={styles['field']}>
+      </>}<div className={styles['field']}>
         <span className={styles['fieldLabel']}>{t('baseUrl')}</span>
         <input
           className={styles['input']}

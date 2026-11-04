@@ -25,6 +25,7 @@ import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelDirectoryState } from './directory.ts'
 import { ModelDirectoryResolver } from './service.ts'
 import type { ModelSelectInjected } from './slots.ts'
+import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import { ModelSelect } from './ModelSelect.tsx'
 import { en, zh, type ModelKey } from './locales.ts'
 
@@ -164,8 +165,10 @@ export function apply(ctx: ClientContext): void {
       inject: (sessionId): ModelSelectInjected => {
         const directory = sessionId === undefined ? models.draft : models.directoryFor(sessionId)
         const available = sessionId === undefined || sessions.subagentAddress(sessionId) === undefined
+        const policy = scope.get('modelSettingsPolicy')
         return {
           available,
+          ...(policy === undefined ? {} : { managedProvider: policy.managedProvider }),
           directory: directory.store,
           load: () => {
             if (available) directory.load().catch(() => { /* surfaced on the store */ })

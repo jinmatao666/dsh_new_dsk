@@ -60,6 +60,16 @@ function declare(slots: SlotRegistry): () => void {
 }
 
 describe('ui-settings-models apply', () => {
+  it('reads a product policy supplied after generic client registration', async () => {
+    const b = await bench()
+    declare(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    b.ctx.provide('modelSettingsPolicy', { managedProvider: 'server-route', customOnly: true })
+    const entry = b.slots.entries('settings.section')[0]!
+    const injected = (entry.inject as unknown as () => import('../src/client/ModelsSection.tsx').ModelsSectionInjected)()
+    expect(injected.managedProvider).toBe('server-route')
+    expect(injected.customOnly).toBe(true)
+  })
   it('keeps the managed provider read-only and skips generic onboarding in the desktop product', async () => {
     const b = await bench()
     declare(b.slots)

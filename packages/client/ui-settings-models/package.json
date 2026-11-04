@@ -71,5 +71,8 @@
     "lib/invariant.js",
     "lib/client.js",
     "lib/types/**/*.d.ts"
-  ]
+  ],
+  "dependencies": {
+    "@deepseek-ai/dsh-util-crypto": "workspace:^"
+  }
 }

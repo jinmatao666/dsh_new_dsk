@@ -40,6 +40,7 @@ function capacityInputs(label: string): HTMLInputElement[] {
 
 const PiAiConfig = Schema.object({
   providers: Schema.dict(Schema.object({
+    api: Schema.union(['openai-completions', 'anthropic-messages']),
     apiKeyEnv: Schema.string().role('credential-ref'),
     baseURL: Schema.string(),
     reasoning: Schema.union(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']),
@@ -212,7 +213,7 @@ function cardSeatCalls(
     ])
 }
 
-async function mountFace(scripted: ReturnType<typeof scriptedFace>, managedProvider?: string) {
+async function mountFace(scripted: ReturnType<typeof scriptedFace>, managedProvider?: string, customOnly = false) {
   const { face, update, mutate, set, unset } = scripted
   const mirror = new SettingsDescribeMirror(face as never)
   const controller = new ModelsSettingsStore(face as unknown as WireFace, settingsSchema, mirror)
@@ -225,6 +226,7 @@ async function mountFace(scripted: ReturnType<typeof scriptedFace>, managedProvi
     schema: settingsSchema,
     t,
     ...managedProvider === undefined ? {} : { managedProvider },
+    customOnly,
     renderSlot: renderSlot as unknown as ModelsSectionProps['renderSlot'],
   }
   const view = render(<ModelsSection {...injected} />)
@@ -260,6 +262,16 @@ async function mountDeepSeekCard(overrides: Parameters<typeof scriptedFace>[0] =
 }
 
 describe('ModelsSection', () => {
+  it('offers only a modal for local custom models in product mode', async () => {
+    await mountFace(scriptedFace(), 'openai', true)
+    expect(screen.queryByRole('button', { name: en.add })).toBeNull()
+    expect(screen.queryByRole('button', { name: openaiCopy(en.editProvider) })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en.customAddModel }))
+    const dialog = screen.getByRole('dialog', { name: en.customGroup })
+    expect(within(dialog).queryByLabelText(en.customRoute)).toBeNull()
+    expect(within(dialog).getByLabelText(en.baseUrl)).toBeTruthy()
+    expect(within(dialog).getByLabelText(en.keyInput)).toBeTruthy()
+  })
   it('renders nothing before the slot injects its dependencies', () => {
     const uninjected = {} as ModelsSectionProps
     render(<ModelsSection {...uninjected} />)
@@ -282,6 +294,8 @@ describe('ModelsSection', () => {
     expect(screen.getByText('openai')).toBeTruthy()
     expect(screen.queryByRole('button', { name: openaiCopy(en.editProvider) })).toBeNull()
     expect(screen.queryByRole('button', { name: openaiCopy(en.removeProvider) })).toBeNull()
+    expect(cardSeatCalls(renderSlot)).not.toContainEqual(['openai', true, true, 'llm-pi-ai'])
+    fireEvent.click(screen.getByRole('button', { name: en.managedExpand }))
     expect(cardSeatCalls(renderSlot)).toContainEqual(['openai', true, true, 'llm-pi-ai'])
     expect(screen.getByRole('button', { name: deepSeekCopy(en.editProvider) })).toBeTruthy()
   })

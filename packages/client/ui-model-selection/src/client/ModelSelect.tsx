@@ -43,7 +43,7 @@ interface EffortChoice {
  * @returns the trigger and, while open, the two-level menu.
  */
 export function ModelSelect(
-  { locked, available, directory, load, select, t }:
+  { locked, available, directory, load, select, t, managedProvider }:
   ModelSelectInjected & { locked: boolean } & PropsLocale<'model'>,
 ) {
   const state = useSyncExternalStore(
@@ -62,6 +62,17 @@ export function ModelSelect(
   const rootRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const groupsRef = useRef<HTMLDivElement | null>(null)
+  const dragRef = useRef<{ y: number; top: number } | null>(null)
+  const [scrollThumb, setScrollThumb] = useState({ visible: false, top: 0, height: 40 })
+  const measureScroll = (): void => {
+    const element = groupsRef.current
+    if (element === null) return
+    const height = Math.min(40, element.clientHeight)
+    const maximum = element.scrollHeight - element.clientHeight
+    setScrollThumb({ visible: maximum > 1, height, top: maximum <= 0 ? 0
+      : element.scrollTop / maximum * (element.clientHeight - height) })
+  }
   const id = useId()
 
   const choices = useMemo(() => state.groups.flatMap(group =>
@@ -100,6 +111,14 @@ export function ModelSelect(
       })),
     ]
   const busy = state.status === 'selecting'
+  const menuGroups = managedProvider === undefined
+    ? state.groups.map(group => ({ id: group.id, name: group.name, entries: group.models.map(model => ({ provider: group.id, model })) }))
+    : [
+      ...state.groups.filter(group => group.id === managedProvider)
+        .map(group => ({ id: group.id, name: group.name, entries: group.models.map(model => ({ provider: group.id, model })) })),
+      { id: 'custom-models', name: t('group.custom'), entries: state.groups.filter(group => group.id !== managedProvider)
+        .flatMap(group => group.models.map(model => ({ provider: group.id, model }))) },
+    ].filter(group => group.entries.length > 0)
 
   const reload = (): void => {
     lastActionRef.current = 'load'
@@ -114,6 +133,15 @@ export function ModelSelect(
     document.addEventListener('mousedown', closeOutside)
     return () => { document.removeEventListener('mousedown', closeOutside) }
   }, [open])
+
+  useEffect(() => {
+    if (!open || pane !== 'model' || groupsRef.current === null) return
+    measureScroll()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measureScroll)
+    observer.observe(groupsRef.current)
+    return () => { observer.disconnect() }
+  }, [open, pane, state.groups])
 
   if (!available) return null
 
@@ -280,42 +308,60 @@ export function ModelSelect(
                   <button type="button" className={css.retry} onClick={reload}>{t('retry')}</button>
                 </div>
               ))}
-              <div className={clsx(css.groups, 'scrollable')}>
-                {state.groups.map((group) => {
-                  const headingId = `${id}-${group.id}`
-                  return (
-                    <section role="group" aria-labelledby={headingId} className={css.group} key={group.id}>
-                      <div className={css.groupTitle} id={headingId}>{group.name}</div>
-                      {group.models.map((model) => {
-                        const selected = state.current?.provider === group.id && state.current.model === model.id
-                        return (
-                          <button
-                            ref={itemRef()}
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={selected}
-                            className={clsx(css.option, selected && css.selected)}
-                            key={model.id}
-                            title={model.name}
-                            disabled={busy}
-                            onClick={() => { choose({ provider: group.id, model: model.id }) }}
-                          >
-                            <span className={css.optionCopy}>
-                              <span className={css.modelName}>{model.name}</span>
-                            </span>
-                            {model.displayMultiplier !== undefined && <span className={css.multiplier}
-                              title={t('cost.referenceHint')} aria-label={t('cost.reference', { value: model.displayMultiplier })}>
-                              {model.displayMultiplier.toLocaleString(undefined, { maximumFractionDigits: 12 })}×
-                            </span>}
-                            <span className={css.check}>
-                              {selected ? <IconCheckOutline16 /> : null}
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </section>
-                  )
-                })}
+              <div className={css.scrollViewport}>
+                <div className={css.groups} ref={groupsRef} onScroll={measureScroll}>
+                  {menuGroups.map((group) => {
+                    const headingId = `${id}-${group.id}`
+                    return (
+                      <section role="group" aria-labelledby={headingId} className={css.group} key={group.id}>
+                        <div className={css.groupTitle} id={headingId}>{group.name}</div>
+                        {group.entries.map(({ provider, model }) => {
+                          const selected = state.current?.provider === provider && state.current.model === model.id
+                          return (
+                            <button
+                              ref={itemRef()}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={selected}
+                              className={clsx(css.option, selected && css.selected)}
+                              key={`${provider}/${model.id}`}
+                              title={model.name}
+                              disabled={busy}
+                              onClick={() => { choose({ provider, model: model.id }) }}
+                            >
+                              <span className={css.optionCopy}>
+                                <span className={css.modelName}>{model.name}</span>
+                              </span>
+                              {model.displayMultiplier !== undefined && <span className={css.multiplier}
+                                title={t('cost.referenceHint')} aria-label={t('cost.reference', { value: model.displayMultiplier })}>
+                                {model.displayMultiplier.toLocaleString(undefined, { maximumFractionDigits: 12 })}×
+                              </span>}
+                              <span className={css.check}>
+                                {selected ? <IconCheckOutline16 /> : null}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </section>
+                    )
+                  })}
+                </div>
+                {scrollThumb.visible && <div className={css.scrollThumb} aria-hidden="true"
+                  style={{ top: scrollThumb.top, height: scrollThumb.height }}
+                  onPointerDown={(event) => {
+                    event.preventDefault()
+                    event.currentTarget.setPointerCapture(event.pointerId)
+                    dragRef.current = { y: event.clientY, top: groupsRef.current?.scrollTop ?? 0 }
+                  }}
+                  onPointerMove={(event) => {
+                    const element = groupsRef.current
+                    const drag = dragRef.current
+                    if (element === null || drag === null) return
+                    const track = element.clientHeight - scrollThumb.height
+                    if (track > 0) element.scrollTop = drag.top + (event.clientY - drag.y)
+                    * (element.scrollHeight - element.clientHeight) / track
+                  }}
+                  onPointerUp={() => { dragRef.current = null }} onPointerCancel={() => { dragRef.current = null }} />}
               </div>
               {state.status === 'ready' && choices.length === 0 && (
                 <div className={css.empty}>{t('empty.models')}</div>

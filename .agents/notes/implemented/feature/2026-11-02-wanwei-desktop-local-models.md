@@ -23,3 +23,7 @@ Authentication mutates only `providers.dsh-server`. Login preserves a selected l
 ## Consequences
 
 Users still need a Wanwei account to enter the desktop app. Their local model API keys are stored through the existing desktop credential service. A managed model chosen before login may move to the server default when the authorized catalog refreshes; a local provider selection remains selected.
+
+## Desktop presentation update
+
+The product installs a browser presentation policy for its managed route. Model Server is read-only and collapsed by default. Users add local models in a modal with generated internal route identifiers. The composer groups all local endpoints under Custom models while retaining each endpoint for selection. Horizontal overflow is suppressed and the draggable vertical thumb is capped at 40 pixels.

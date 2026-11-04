@@ -28,6 +28,8 @@ import styles from './ModelsSection.module.css'
 
 /** Injected dependencies of {@link ModelsSection} (slot `inject`). */
 export interface ModelsSectionInjected {
+  /** Product mode offers only locally configured custom endpoints. */
+  customOnly?: boolean
   /** Optional route managed by the product server rather than this editor. */
   managedProvider?: string
   /** The page store (loaded on mount, refreshed on pushed invalidations). */
@@ -207,11 +209,13 @@ export function ModelsSection(props: ModelsSectionProps): ReactNode {
   ) return null
   return <Loaded injected={{ controller, useSnapshot, api, schema, t,
     ...props.managedProvider === undefined ? {} : { managedProvider: props.managedProvider },
+    ...props.customOnly === undefined ? {} : { customOnly: props.customOnly },
   }} renderSlot={renderSlot} />
 }
 
 function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderSlot: ModelsRenderSlot }): ReactNode {
-  const { controller, api, schema, t, managedProvider } = injected
+  const { controller, api, schema, t, managedProvider, customOnly = false } = injected
+  const [managedExpanded, setManagedExpanded] = useState(false)
   const state = injected.useSnapshot(snapshot => snapshot)
   const [editing, setEditing] = useState<EditorTarget | undefined>(undefined)
   const [adding, setAdding] = useState(false)
@@ -394,6 +398,10 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                       : null}
                 </span>
                 <span className={styles['rowActions']}>
+                  {row.entry.provider === managedProvider && <button type="button" className={styles['secondaryButton']}
+                    aria-expanded={managedExpanded} onClick={() => { setManagedExpanded(value => !value) }}>
+                    {t(managedExpanded ? 'managedCollapse' : 'managedExpand')}
+                  </button>}
                   {row.entry.provider !== managedProvider && <>
                     <button
                       type="button"
@@ -431,12 +439,12 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                   </>}
                 </span>
               </div>
-              {renderSlot(
+              {(row.entry.provider !== managedProvider || managedExpanded) && renderSlot(
                 'settings.models.provider-card',
                 { provider: row.entry, configured: row.configured, keyConfigured: keyConfiguredOf(row) },
                 { entryKey: row.entry.settingsNs },
               )}
-              {open
+              {open && !customOnly
                 ? renderProviderEditor({
                   target,
                   namespace,
@@ -447,6 +455,11 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                   onClose: (changed) => { closeEditor(changed, target) },
                 })
                 : null}
+              {open && customOnly && <Modal open onClose={() => { setEditing(undefined) }} title={target.displayName}
+                closeLabel={t('close')} className={styles['customDialog'] as string}>
+                {renderProviderEditor({ target, namespace, schema, api, t, readOnly: !state.writable,
+                  onClose: (changed) => { closeEditor(changed, target) } })}
+              </Modal>}
             </li>
           )
         })}
@@ -492,7 +505,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                 )}
             </div>
           )
-          : declaring
+          : declaring && !customOnly
             ? (
               <div className={styles['addCard']}>
                 <CustomProviderCard
@@ -516,7 +529,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
               // and equal-width so they read as siblings and line up with the
               // rows above, rather than two pills of different lengths.
               <div className={styles['addActions']}>
-                <button
+                {!customOnly && <button
                   type="button"
                   className={styles['addButton']}
                   disabled={addable.length === 0 || !state.writable}
@@ -532,7 +545,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                 >
                   <IconPlusOutline16 size={14} />
                   {t('add')}
-                </button>
+                </button>}
                 <button
                   type="button"
                   className={styles['addButton']}
@@ -545,11 +558,17 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                   }}
                 >
                   <IconPlusOutline16 size={14} />
-                  {t('customAdd')}
+                  {t(customOnly ? 'customAddModel' : 'customAdd')}
                 </button>
               </div>
             )}
       </div>
+      {customOnly && <Modal open={declaring} onClose={() => { setDeclaring(false) }} title={t('customGroup')}
+        closeLabel={t('close')} className={styles['customDialog'] as string}>
+        <CustomProviderCard automaticRoute taken={state.rows.map(row => row.entry.provider)} protocols={protocols}
+          revision={state.namespaces.get('llm-pi-ai')?.revision ?? 0} api={api} t={t} readOnly={!state.writable}
+          onClose={(changed) => { setDeclaring(false); if (changed) void controller.load() }} />
+      </Modal>}
       {renderSlot('settings.models.footer', {})}
       <Modal
         open={deleteTarget !== undefined}

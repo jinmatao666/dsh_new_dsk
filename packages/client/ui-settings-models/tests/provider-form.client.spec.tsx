@@ -689,6 +689,20 @@ describe('provider rows', () => {
 })
 
 describe('hand-declared providers', () => {
+  it('generates a private route while presenting only the custom model form', async () => {
+    const { mutate, onClose } = mountCard({ automaticRoute: true })
+    expect(screen.queryByLabelText(en.customRoute)).toBeNull()
+    expect(screen.queryByLabelText(en.customDisplayName)).toBeNull()
+    fireEvent.change(screen.getByLabelText(en.baseUrl), { target: { value: 'https://gateway.example/v1' } })
+    fireEvent.click(screen.getByRole('button', { name: en.addModel }))
+    fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'local-model' } })
+    fireEvent.click(screen.getByText(en.create))
+    await waitFor(() => { expect(onClose).toHaveBeenCalledWith(true) })
+    const saved = firstMutate(mutate)
+    expect(saved.ns).toBe('llm-pi-ai')
+    expect(saved.ops[0]).toMatchObject({ op: 'set', path: ['providers', expect.stringMatching(/^custom-[a-z0-9-]+$/)],
+      value: { displayName: en.customGroup, models: [{ id: 'local-model' }] } })
+  })
   function mountCard(
     overrides: Partial<Parameters<typeof CustomProviderCard>[0]> = {},
     wire: Parameters<typeof scriptedFace>[0] = {},

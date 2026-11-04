@@ -16,6 +16,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // (settings/credentials invalidations ride the allowlist) into this program.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { ModelsSection } from './ModelsSection.tsx'
+import type {} from './presentation-policy.ts'
+export type { ModelSettingsPolicy } from './presentation-policy.ts'
 import type { ModelsSectionInjected } from './ModelsSection.tsx'
 import { DeepSeekOnboardingDialog } from './DeepSeekOnboardingDialog.tsx'
 import type { DeepSeekOnboardingInjected } from './DeepSeekOnboardingDialog.tsx'
@@ -85,14 +87,19 @@ export function apply(ctx: ClientContext, config: { managedProvider?: string; sk
   // Registration-time text (the nav label thunk) and the inject faces share
   // one bound translate; copy freshness rides the locale revision.
   const t = ctx.locale.bind(NS) as ModelsSectionInjected['t']
-  const injected = (): ModelsSectionInjected => ({
-    ...config.managedProvider === undefined ? {} : { managedProvider: config.managedProvider },
-    controller,
-    hooks: { snapshot: controller.store },
-    api: wire,
-    schema,
-    t,
-  })
+  const injected = (): ModelsSectionInjected => {
+    const policy = ctx.get('modelSettingsPolicy')
+    const managedProvider = policy?.managedProvider ?? config.managedProvider
+    return {
+      ...managedProvider === undefined ? {} : { managedProvider },
+      customOnly: policy?.customOnly ?? false,
+      controller,
+      hooks: { snapshot: controller.store },
+      api: wire,
+      schema,
+      t,
+    }
+  }
   const deepSeekOnboardingInjected = (): DeepSeekOnboardingInjected => ({
     controller,
     hooks: { models: controller.store },
