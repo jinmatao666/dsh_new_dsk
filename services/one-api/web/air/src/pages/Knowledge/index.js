@@ -11,7 +11,7 @@ const LIBRARY_CARD_BANNER_BLUE = '/knowledge-icons/card-banner.png';
 const LIBRARY_CARD_BANNER_CREAM = '/knowledge-icons/card-banner-cream.png';
 const LIBRARY_CARD_BANNER_MINT = '/knowledge-icons/card-banner-mint.png';
 const LIBRARY_CARD_BANNER_PINK = '/knowledge-icons/card-banner-pink.png';
-/** Fixed default mark for unmatched names / no cover: white book + bookmark on blue squircle. */
+/** Fixed default mark for unmatched names: white book + bookmark on blue squircle. */
 const LIBRARY_CARD_DEFAULT_ICON = '/knowledge-icons/icon-library-default.png';
 /** File-list CTA glyph on category cards. */
 const LIBRARY_CARD_FILE_LIST_ICON = '/knowledge-icons/icon-file-list.png';
@@ -306,16 +306,12 @@ function libraryCardTheme(library) {
   return LIBRARY_CARD_NAME_THEMES.find(theme => name.includes(theme.keyword)) ?? LIBRARY_CARD_DEFAULT_THEME;
 }
 
-/** Design-keyword mark when the name matches; else cover data URL; else penultimate mark.
- * @param {{ name?: unknown, cover?: unknown }} library
+/** Design-keyword mark when the name matches; else the blue-book default (covers stay edit-only).
+ * @param {{ name?: unknown }} library
  * @returns {string}
  */
 function libraryCardIconSrc(library) {
-  const name = String(library?.name || '');
-  const matched = LIBRARY_CARD_NAME_THEMES.find(theme => name.includes(theme.keyword));
-  if (matched) return resourceURL(matched.icon);
-  const cover = typeof library?.cover === 'string' ? library.cover : '';
-  return cover.startsWith('data:image/') ? cover : resourceURL(LIBRARY_CARD_DEFAULT_ICON);
+  return resourceURL(libraryCardTheme(library).icon);
 }
 
 /** Hue-matched banner plate for the resolved card theme.
@@ -2077,14 +2073,13 @@ const KnowledgeLibrary = () => {
           {pagedLibraries.map(library => {
             const menuOpen = cardMenuId === library.id;
             const iconSrc = libraryCardIconSrc(library);
-            const usingCover = iconSrc.startsWith('data:image/');
             const subtitle = libraryCardSubtitle(library);
             return <article key={library.id} className={menuOpen ? 'knowledge-card is-menu-open' : 'knowledge-card'}>
               <div className='knowledge-card-banner' aria-hidden='true'>
                 <img src={libraryCardBannerSrc(library)} alt='' draggable={false} />
               </div>
               <header>
-                <span className={usingCover ? 'knowledge-card-mark has-cover' : 'knowledge-card-mark'} aria-hidden='true'>
+                <span className='knowledge-card-mark' aria-hidden='true'>
                   <img src={iconSrc} alt='' draggable={false} />
                 </span>
                 <div className='knowledge-card-titles'>
@@ -2093,30 +2088,30 @@ const KnowledgeLibrary = () => {
                     {subtitle === '' ? '暂无描述' : subtitle}
                   </p>
                 </div>
+                {isAdmin() && <div className='knowledge-card-menu'>
+                  <button
+                    type='button'
+                    className='knowledge-card-more'
+                    aria-label='更多操作'
+                    aria-haspopup='menu'
+                    aria-expanded={menuOpen}
+                    onClick={() => setCardMenuId(menuOpen ? null : library.id)}
+                  >
+                    <img className='knowledge-card-more-art' src={resourceURL(LIBRARY_CARD_MORE_ICON)} alt='' draggable={false} aria-hidden='true' />
+                  </button>
+                  {menuOpen && <>
+                    <button type='button' className='knowledge-card-menu-dismiss' aria-label='关闭菜单' onClick={() => setCardMenuId(null)} />
+                    <div className='knowledge-card-menu-panel' role='menu'>
+                      <button type='button' role='menuitem' onClick={() => { setCardMenuId(null); openEdit(library); }}>
+                        <Pencil size={14} />编辑
+                      </button>
+                      <button type='button' role='menuitem' className='danger' onClick={() => { setCardMenuId(null); setConfirming({ type: 'library', library }); }}>
+                        <Trash2 size={14} />删除
+                      </button>
+                    </div>
+                  </>}
+                </div>}
               </header>
-              {isAdmin() && <div className='knowledge-card-menu'>
-                <button
-                  type='button'
-                  className='knowledge-card-more'
-                  aria-label='更多操作'
-                  aria-haspopup='menu'
-                  aria-expanded={menuOpen}
-                  onClick={() => setCardMenuId(menuOpen ? null : library.id)}
-                >
-                  <img className='knowledge-card-more-art' src={resourceURL(LIBRARY_CARD_MORE_ICON)} alt='' draggable={false} aria-hidden='true' />
-                </button>
-                {menuOpen && <>
-                  <button type='button' className='knowledge-card-menu-dismiss' aria-label='关闭菜单' onClick={() => setCardMenuId(null)} />
-                  <div className='knowledge-card-menu-panel' role='menu'>
-                    <button type='button' role='menuitem' onClick={() => { setCardMenuId(null); openEdit(library); }}>
-                      <Pencil size={14} />编辑
-                    </button>
-                    <button type='button' role='menuitem' className='danger' onClick={() => { setCardMenuId(null); setConfirming({ type: 'library', library }); }}>
-                      <Trash2 size={14} />删除
-                    </button>
-                  </div>
-                </>}
-              </div>}
               <div className='knowledge-meta'>
                 {metaRow('创建人', libraryCreator(library))}
                 {metaRow('文件量', fileCount(library.id))}
