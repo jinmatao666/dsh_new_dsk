@@ -29,7 +29,7 @@ The desktop login layout uses Windows-reference column sizing and explicit text 
 
 Client authentication ignores obsolete status replies and refreshes overlapping a login or logout. Cancelled refreshes do not publish offline state. This orders Client state updates; it does not cancel authentication work already accepted by the Host.
 
-Users sign in to the configured OneAPI service and use the models permitted for their account. The desktop reads a server-managed model catalog rather than exposing local provider editing. The Host also requests published expert entries and one-use website tickets while keeping the OneAPI token outside the Client.
+Users sign in to the configured OneAPI service even when their permitted model catalog is empty. The desktop skips model onboarding and allows local provider configuration in Settings. Synchronization updates only the managed provider, preserves local selections, and chooses no default from an empty catalog; sending still requires an available model. The Host also requests published expert entries and one-use website tickets while keeping the OneAPI token outside the Client.
 
 ## Table of Contents
 
@@ -193,7 +193,7 @@ Platform skill downloads and installation confirmations use separate authenticat
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- Model discovery, managed search and the expert catalog require a reachable OneAPI service. The desktop has no local provider-editing fallback.
+- Model discovery, managed search and the expert catalog require a reachable OneAPI service. An empty model catalog permits login; request failures and invalid credentials retain their existing error handling.
 - Citation guidance does not mechanically prove that a claim matches a page or that the conversation model follows it. Inaccessible or unsupported sources must be reported as unverified; no live-news truthfulness guarantee is provided by URL parsing alone.
 - Resource routing covers pip wheels and proxy-aware child clients, not browser traffic, native PowerShell downloads or Node fetch. It is not a network sandbox. Proxy credentials, source archives, OS packages and offline npm packages are not supplied. Internal OneAPI traffic bypasses the shell proxy. Public search and link restrictions remain independent.
 - Search sources require the updated OneAPI relay and a channel exposing Bailian's native generation endpoint, not only its compatible chat endpoint. Model compliance with citation instructions still needs live acceptance; links alone do not establish factual accuracy.

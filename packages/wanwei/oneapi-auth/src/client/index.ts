@@ -30,7 +30,7 @@ export const inject = ['slots', 'connection', 'locale']
 
 /** Install the login gate and account settings entry over one shared controller. */
 export function apply(ctx: Context): void {
-  ctx.provide('modelSettingsPolicy', { managedProvider: 'dsh-server', customOnly: true })
+  ctx.provide('modelSettingsPolicy', { managedProvider: 'dsh-server', customOnly: true, skipOnboarding: true })
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'wanwei-auth: dictionaries')
   const connection = ctx.get('connection') as ConnectionHandle
   const controller = new AuthController(connection)

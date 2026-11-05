@@ -55,6 +55,7 @@ function mount(
   version?: string,
   mutateImpl: () => Promise<unknown> = () =>
     Promise.resolve(remoteAnswer(welcomeView({ [WELCOME_NOTICE_ACK_FIELD]: WELCOME_NOTICE_VERSION }, 1))),
+  skip = false,
 ) {
   const appRoot = document.createElement('div')
   appRoot.id = 'root'
@@ -90,6 +91,7 @@ function mount(
     useSessionPendingInteraction,
     useWorkspaces: unusedHook,
     controller,
+    shouldSkip: () => skip,
     useWelcome: bindSnapshotSelector(controller.store),
     t: key => zh[key],
   }
@@ -97,6 +99,12 @@ function mount(
 }
 
 describe('WelcomeNotice', () => {
+  it('completes without displaying or acknowledging a notice suppressed by product policy', () => {
+    const h = mount(undefined, undefined, true)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(h.complete).toHaveBeenCalledTimes(1)
+    expect(h.mutate).not.toHaveBeenCalled()
+  })
   it('uses the exact owner copy in both GUI locales', () => {
     expect(WELCOME_NOTICE_COPY.en).toEqual({
       title: 'Internal Testing Notice',

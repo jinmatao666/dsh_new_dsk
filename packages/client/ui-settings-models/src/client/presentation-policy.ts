@@ -6,6 +6,8 @@ export interface ModelSettingsPolicy {
   readonly managedProvider: string
   /** Restrict local additions to custom endpoints with generated route identifiers. */
   readonly customOnly: boolean
+  /** Suppress the upstream welcome notice for products with their own onboarding. */
+  readonly skipOnboarding?: boolean
 }
 
 declare module '@deepseek-ai/cordis' {

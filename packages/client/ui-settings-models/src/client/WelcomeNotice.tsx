@@ -18,6 +18,8 @@ export interface WelcomeNoticeInjected {
   }
   /** Welcome acknowledgement controller. */
   controller: WelcomeNoticeStore
+  /** Read the product policy at render time, including late product registration. */
+  shouldSkip?: () => boolean
   /** Onboarding copy. */
   t: (key: keyof typeof en) => string
 }
@@ -34,6 +36,7 @@ export type WelcomeNoticeProps =
 export function WelcomeNotice(props: WelcomeNoticeProps): ReactNode {
   const { complete, controller, useWelcome, t } = props
   const state = useWelcome(snapshot => snapshot)
+  const skipped = props.shouldSkip?.() === true
   const finished = useRef(false)
   const finish = useCallback((): void => {
     if (finished.current) return
@@ -46,10 +49,10 @@ export function WelcomeNotice(props: WelcomeNoticeProps): ReactNode {
   }, [controller, state.status])
 
   useEffect(() => {
-    if (state.acknowledged) finish()
-  }, [finish, state.acknowledged])
+    if (skipped || state.acknowledged) finish()
+  }, [finish, skipped, state.acknowledged])
 
-  if (state.status === 'idle' || state.status === 'loading' || state.acknowledged) return null
+  if (skipped || state.status === 'idle' || state.status === 'loading' || state.acknowledged) return null
 
   const acknowledge = async (): Promise<void> => {
     if (await controller.acknowledge()) finish()

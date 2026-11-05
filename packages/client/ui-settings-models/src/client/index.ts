@@ -115,6 +115,7 @@ export function apply(ctx: ClientContext, config: { managedProvider?: string; sk
   }))
   const welcomeInjected = (): WelcomeNoticeInjected => ({
     controller: welcomeController,
+    shouldSkip: () => ctx.get('modelSettingsPolicy')?.skipOnboarding === true,
     hooks: { welcome: welcomeController.store },
     t,
   })

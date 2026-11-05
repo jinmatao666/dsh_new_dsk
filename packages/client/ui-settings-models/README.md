@@ -122,6 +122,8 @@ None.
 
 Delete confirmation shows the display name without internal route IDs and uses a short, non-wrapping action label.
 
+The optional modelSettingsPolicy.skipOnboarding product policy suppresses the welcome notice at render time, including when the product policy is installed after generic settings registration. The suppressed step completes without displaying upstream copy or writing a welcome acknowledgement. The Buddy product supplies this policy in addition to its bundle-level skipOnboarding setting.
+
 Custom-model creation opens with model name (the request ID), optional alias, endpoint and API key. Protocol selection stays in Advanced settings and defaults to OpenAI completions. Test model sends the unsaved values to the Host for one short request without saving the profile or credential. The test result clears after edits.
 
 Saving a custom model requires a successful test of the current draft, including credential retries. Changing model, alias, endpoint, protocol or credential invalidates that success.

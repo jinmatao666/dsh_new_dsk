@@ -85,6 +85,7 @@ describe('OneAPI login flow', () => {
     let failDownloadReport = false
     const deployment: { browserAssistant?: boolean } = {}
     let failDeployment = false
+    let modelCatalog: 'available' | 'empty' | 'legacy-empty' | 'unauthorized' = 'available'
     vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       requests.push(url)
@@ -131,6 +132,9 @@ describe('OneAPI login flow', () => {
         return Promise.resolve(Response.json({ success: true, data: { key: 'oneapi-token' } }))
       }
       if (url.endsWith('/api/user/available_models/detail')) {
+        if (modelCatalog === 'unauthorized') return Promise.resolve(new Response('', { status: 401 }))
+        if (modelCatalog === 'legacy-empty') return Promise.resolve(new Response('', { status: 404 }))
+        if (modelCatalog === 'empty') return Promise.resolve(Response.json({ success: true, data: [] }))
         return Promise.resolve(Response.json({
           success: true,
           data: [
@@ -139,6 +143,7 @@ describe('OneAPI login flow', () => {
           ],
         }))
       }
+      if (url.endsWith('/v1/models')) return Promise.resolve(Response.json({ data: [] }))
       if (url.endsWith('/api/status')) {
         return Promise.resolve(Response.json({ data: { default_model: 'model-vision' } }))
       }
@@ -205,6 +210,27 @@ describe('OneAPI login flow', () => {
     } else {
       expect(saveSelection).not.toHaveBeenCalled()
     }
+    requests.length = 0
+    for (const catalog of ['empty', 'legacy-empty'] as const) {
+      modelCatalog = catalog
+      saveSelection.mockClear()
+      expect(await handler?.('login', { username: 'tester', password: 'secret' }, new AbortController().signal)).toEqual({
+        ok: true, value: { state: 'authenticated', models: [], username: 'tester' },
+      })
+      expect(await handler?.('status', {}, new AbortController().signal)).toEqual({
+        ok: true, value: { state: 'authenticated', models: [], username: 'tester' },
+      })
+      expect(credentials.get('DSH_ONEAPI_TOKEN')).toBe('oneapi-token')
+      expect(saveSelection).not.toHaveBeenCalled()
+      expect(mutate).toHaveBeenLastCalledWith(expect.anything(), [
+        { op: 'set', path: ['providers', 'dsh-server'], value: expect.objectContaining({ models: [] }) as unknown },
+      ])
+    }
+    modelCatalog = 'unauthorized'
+    expect(await handler?.('status', {}, new AbortController().signal)).toMatchObject({ ok: true, value: { state: 'logged-out' } })
+    expect(credentials.has('DSH_ONEAPI_TOKEN')).toBe(false)
+    modelCatalog = 'available'
+    await handler?.('login', { username: 'tester', password: 'secret' }, new AbortController().signal)
     requests.length = 0
     expect(await handler?.('network-get', {}, new AbortController().signal)).toEqual({
       ok: true, value: {

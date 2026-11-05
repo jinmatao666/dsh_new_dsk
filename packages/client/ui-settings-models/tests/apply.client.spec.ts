@@ -64,7 +64,10 @@ describe('ui-settings-models apply', () => {
     const b = await bench()
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
-    b.ctx.provide('modelSettingsPolicy', { managedProvider: 'server-route', customOnly: true })
+    b.ctx.provide('modelSettingsPolicy', { managedProvider: 'server-route', customOnly: true, skipOnboarding: true })
+    const welcome = b.slots.entries('settings.onboarding').find(entry => entry.options.id === 'welcome-notice')!
+    const welcomeProps = (welcome.inject as unknown as () => import('../src/client/WelcomeNotice.tsx').WelcomeNoticeInjected)()
+    expect(welcomeProps.shouldSkip?.()).toBe(true)
     const entry = b.slots.entries('settings.section')[0]!
     const injected = (entry.inject as unknown as () => import('../src/client/ModelsSection.tsx').ModelsSectionInjected)()
     expect(injected.managedProvider).toBe('server-route')

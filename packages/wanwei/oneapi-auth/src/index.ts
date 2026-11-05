@@ -265,7 +265,6 @@ async function fetchModels(baseURL: string, token: string, signal?: AbortSignal)
   const body = await jsonBody<ModelsBody>(response)
   const models = [...new Set((body.data ?? []).flatMap(entry =>
     typeof entry.id === 'string' && entry.id.trim() !== '' ? [entry.id] : []))]
-  if (models.length === 0) throw new Error('服务器没有返回可用模型')
   return models
 }
 
@@ -301,7 +300,6 @@ async function fetchManagedModels(baseURL: string, token: string, fallbackInput:
       }]
     })
     const unique = [...new Map(models.map(model => [model.id, model])).values()]
-    if (unique.length === 0) throw new Error('服务器没有返回可用模型')
     return unique
   } catch (error) {
     if ((error as { authInvalid?: unknown }).authInvalid === true) throw error
@@ -395,7 +393,8 @@ export function apply(ctx: Context, config: Config): void {
       { op: 'set', path: ['providers', config.provider], value: managed },
     ])
     const firstModel = models[0]?.id
-    if (firstModel === undefined) throw new Error('服务器没有返回可用模型')
+    // 空目录不影响账户认证；保留本地模型选择，由发送入口检查模型可用性。
+    if (firstModel === undefined) return
     const configuredDefault = serverDefaultModel ?? config.defaultModel
     const model = configuredDefault !== undefined && models.some(entry => entry.id === configuredDefault)
       ? configuredDefault
