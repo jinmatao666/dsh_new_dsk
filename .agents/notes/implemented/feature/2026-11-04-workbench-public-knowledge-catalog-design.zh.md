@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-在不改分类接口、页签归属（个人 + 各已创建分类）与可见性规则的前提下，把分类标签目录对齐 js.design 公开知识库画板。在 `services/one-api/web/air/public/knowledge-icons/` 暂存 `page-header-art.png`，作为页标题右侧装饰图。分类工具条改为透明的搜索 / 排序 / 新建一行。分类卡片的标与色系匹配头图按库名解析，见[管理工作台授权知识库卡片名称主题](2026-11-04-workbench-authorized-knowledge-card-themes.zh.md)；保留首标签副标题，管理员「更多」菜单固定在头图右上。个人目录顶栏与组织 → 人员浏览仍见[管理工作台个人知识库目录视觉对齐](2026-11-04-workbench-personal-knowledge-directory-design.zh.md)。
+在不改分类接口、页签归属（个人 + 各已创建分类）与可见性规则的前提下，把分类标签目录对齐 js.design 公开知识库画板。在 `services/one-api/web/air/public/knowledge-icons/` 暂存 `page-header-art.png`，作为页标题右侧装饰图。分类工具条改为透明的搜索 / 排序 / 新建一行。分类卡片的标与色系匹配头图按库名解析，见[管理工作台授权知识库卡片名称主题](2026-11-04-workbench-authorized-knowledge-card-themes.zh.md)；保留首标签副标题；管理员「更多」菜单钉在 93px 头图板 `top: 30px; right: 20px`，图标与标题在同一叠层内垂直居中。个人目录顶栏与组织 → 人员浏览仍见[管理工作台个人知识库目录视觉对齐](2026-11-04-workbench-personal-knowledge-directory-design.zh.md)。
 
 ## Alternatives considered
 

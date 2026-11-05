@@ -112,6 +112,11 @@ test('category cards pair design-name marks with hue-matched banner plates', asy
     { id: 12, name: '土地征收指引', description: '', kind: 'shared', category_id: 1, shelf: 'published', tags: '专题', owner_user_id: 1, owner_username: 'root', visit_count: 0, daily_usage: 0, updated_at: '2025-08-10T15:52:00+08:00', created_at: '2025-08-10T15:52:00+08:00' },
     { id: 13, name: '耕地保护手册', description: '', kind: 'shared', category_id: 1, shelf: 'published', tags: '专题', owner_user_id: 1, owner_username: 'root', visit_count: 0, daily_usage: 0, updated_at: '2025-08-10T15:52:00+08:00', created_at: '2025-08-10T15:52:00+08:00' },
     { id: 14, name: '闲置土地台账', description: '', kind: 'shared', category_id: 1, shelf: 'published', tags: '专题', owner_user_id: 1, owner_username: 'root', visit_count: 0, daily_usage: 0, updated_at: '2025-08-10T15:52:00+08:00', created_at: '2025-08-10T15:52:00+08:00' },
+    {
+      id: 15, name: '生态修复', description: '', kind: 'shared', category_id: 1, shelf: 'published', tags: '专题',
+      cover: 'data:image/png;base64,aaaa', owner_user_id: 1, owner_username: 'root',
+      visit_count: 0, daily_usage: 0, updated_at: '2025-08-10T15:52:00+08:00', created_at: '2025-08-10T15:52:00+08:00',
+    },
   ];
   API.get.mockImplementation(url => {
     const path = String(url);
@@ -124,7 +129,7 @@ test('category cards pair design-name marks with hue-matched banner plates', asy
   for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
   await act(async () => { button('测绘规范').click(); });
   const cards = [...container.querySelectorAll('.knowledge-card')];
-  expect(cards).toHaveLength(4);
+  expect(cards).toHaveLength(5);
   const byName = name => cards.find(card => card.querySelector('h2')?.textContent === name);
   expect(byName('占卜平衡专题').querySelector('.knowledge-card-mark img')?.getAttribute('src')).toContain('icon-theme-grid.png');
   expect(byName('占卜平衡专题').querySelector('.knowledge-card-banner img')?.getAttribute('src')).toContain('card-banner-mint.png');
@@ -134,6 +139,10 @@ test('category cards pair design-name marks with hue-matched banner plates', asy
   expect(byName('耕地保护手册').querySelector('.knowledge-card-banner img')?.getAttribute('src')).toContain('card-banner.png');
   expect(byName('闲置土地台账').querySelector('.knowledge-card-mark img')?.getAttribute('src')).toContain('icon-theme-clock.png');
   expect(byName('闲置土地台账').querySelector('.knowledge-card-banner img')?.getAttribute('src')).toContain('card-banner.png');
+  // Unmatched names keep the blue-book default even when a cover is stored.
+  expect(byName('生态修复').querySelector('.knowledge-card-mark img')?.getAttribute('src')).toContain('icon-library-default.png');
+  expect(byName('生态修复').querySelector('.knowledge-card-mark.has-cover')).toBeNull();
+  expect(byName('生态修复').querySelector('header .knowledge-card-menu')).toBeTruthy();
 });
 
 test('sort listbox preserves the selected value and creates a personal library', async () => {

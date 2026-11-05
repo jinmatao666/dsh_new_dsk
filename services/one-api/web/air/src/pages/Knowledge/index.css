@@ -232,33 +232,44 @@
 .knowledge-card.is-menu-open { border-color: #c9dbf6; box-shadow: 0 10px 22px rgba(16, 106, 243, .14); }
 @media (prefers-reduced-motion: reduce) { .knowledge-card, .knowledge-card:hover { transition: none; transform: none; } }
 .knowledge-card-banner {
-  position: relative; flex: none; height: 92px; overflow: hidden;
+  position: relative; flex: none; height: 93px; overflow: hidden;
   border-radius: 15px 15px 0 0; background: linear-gradient(135deg, #e8f3ff 0%, #f5f9ff 55%, #eef6ff 100%);
   pointer-events: none;
 }
 .knowledge-card-banner img {
-  display: block; width: 100%; height: 100%; object-fit: cover; object-position: center top; opacity: .95;
+  display: block; width: 100%; height: 100%; object-fit: cover; object-position: right center; opacity: 1;
 }
 .knowledge-card header, .knowledge-files header, .knowledge-modal header, .knowledge-modal footer { display: flex; align-items: center; gap: 8px; }
+/* Overlay the 93px banner plate; mark + title/description stay vertically centered. Same CSS for local and packaged admin. */
 .knowledge-card header {
-  position: relative; z-index: 1; justify-content: flex-start; align-items: flex-start;
-  gap: 12px; margin: -48px 18px 0; padding: 0;
+  position: absolute; top: 0; left: 0; right: 0; z-index: 1;
+  box-sizing: border-box; height: 93px; margin: 0; padding: 0 48px 0 20px;
+  justify-content: flex-start; align-items: center; gap: 12px;
+  pointer-events: none;
 }
+.knowledge-card header > * { pointer-events: auto; }
 .knowledge-card-mark {
   display: grid; place-items: center; flex: none; width: 40px; height: 40px; overflow: hidden;
   border-radius: 12px; background: transparent;
-  box-shadow: 0 4px 12px rgba(47, 84, 130, .12);
+  box-shadow: 0 4px 12px rgba(16, 106, 243, .18);
 }
 .knowledge-card-mark img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .knowledge-card-mark.has-cover { background: #e8eef8; }
-.knowledge-card-titles { display: grid; gap: 2px; min-width: 0; flex: 1; padding-top: 2px; }
+.knowledge-card-titles {
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  min-width: 0; flex: 1;
+}
 .knowledge-card h2, .knowledge-files h2, .knowledge-modal h2 { margin: 0; overflow: hidden; color: #222; font-size: 15px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .knowledge-card h2 { min-width: 0; font-size: 16px; font-weight: 700; letter-spacing: -.01em; line-height: 22px; }
 .knowledge-card-titles p {
   margin: 0; overflow: hidden; color: #707c8d; font-size: 12px; line-height: 16px;
   text-overflow: ellipsis; white-space: nowrap;
 }
-.knowledge-card-menu { position: relative; flex: none; margin-left: auto; margin-top: -4px; }
+.knowledge-card-titles p.is-empty { color: #a0aab8; }
+/* More menu pinned on the banner plate (js.design); 30px from the top edge. */
+.knowledge-card .knowledge-card-menu {
+  position: absolute; top: 30px; right: 20px; z-index: 2; margin: 0; align-self: auto;
+}
 .knowledge-card-more {
   display: inline-grid; place-items: center; width: 20px; height: 12px; padding: 0;
   border: 0; border-radius: 0; background: transparent; overflow: visible;
