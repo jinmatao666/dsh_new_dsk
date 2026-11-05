@@ -31,6 +31,7 @@ import type { LlmCallConfig, LlmCallConfigAdapterDefaults } from './call-config.
 import { HarnessError, INVALID_CREDENTIAL_CODE } from './error.ts'
 import { normalizeLlmFailure } from './adapter-failure.ts'
 import { normalizeApiKey } from './api-key.ts'
+import { testDraftModel } from './test-draft-model.ts'
 import { contentHasImage, projectImagesForTextModel } from './content.ts'
 
 export * from './attribution.ts'
@@ -607,6 +608,28 @@ export class LlmRuntime extends TypertRemoteService {
       })
     }
     return models
+  }
+
+  /**
+   * Test an unsaved endpoint with one short, non-streaming model request.
+   * The supplied key is used once and is never persisted or returned.
+   * @param baseURL - HTTP(S) API base URL, including any deployment prefix.
+   * @param api - OpenAI completions/responses or Anthropic messages protocol.
+   * @param model - exact request model name.
+   * @param apiKey - optional one-shot credential.
+   * @param signal - cancellation supplied by the Remote carrier.
+   * @returns resolves when a valid model response is received.
+   */
+  @Remote('testModel')
+  async remoteTestModel(
+    baseURL: string, api: string, model: string, apiKey: string, signal: AbortSignal,
+  ): Promise<void> {
+    try {
+      await testDraftModel(baseURL, api, model, apiKey, signal)
+    } catch (error: unknown) {
+      throw new TypertRemoteFailure({ code: 'model-test-failed',
+        message: error instanceof Error ? error.message : String(error), details: {} })
+    }
   }
 
   /**

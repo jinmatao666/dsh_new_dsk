@@ -62,6 +62,8 @@ export interface ProbeTarget {
 
 /** Props of {@link ModelListEditor}. */
 export interface ModelListEditorProps {
+  /** Show the initial model fields directly in the custom-provider form. */
+  primaryFields?: boolean
   /** The rows as currently drafted. */
   models: readonly ModelDraft[]
   /** Whether the user layer currently owns the whole array; absent on a create. */
@@ -303,8 +305,8 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   // draft with neither has nothing to ask about.
   const askable = probe.provider !== undefined || (probe.baseURL !== undefined && probe.baseURL.length > 0)
   return (
-    <section className={styles['modelCatalog']} aria-label={t('models')}>
-      <div className={styles['modelListHead']}>
+    <section className={props.primaryFields ? styles['primaryModelCatalog'] : styles['modelCatalog']} aria-label={t('models')}>
+      {!props.primaryFields && <div className={styles['modelListHead']}>
         <div className={styles['modelCatalogHeading']}>
           <span className={styles['modelCatalogTitle']}>{t('models')}</span>
           {props.overridden === undefined
@@ -338,11 +340,12 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
         >
           {busy ? t('fetching') : t('fetchModels')}
         </button>
-      </div>
+      </div>}
       {models.length === 0 ? <p className={styles['modelEmpty']}>{t('modelsEmpty')}</p> : null}
       {models.map((model, index) => (
-        <div key={index} className={styles['modelEntry']}>
-          <div className={styles['modelRow']}>
+        <div key={index} className={props.primaryFields ? styles['primaryModelEntry'] : styles['modelEntry']}>
+          <div className={props.primaryFields ? styles['field'] : styles['modelRow']}>
+            {props.primaryFields && <span className={styles['fieldLabel']}>{t('modelId')}</span>}
             <input
               className={styles['input']}
               type="text"
@@ -352,6 +355,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
               disabled={disabled}
               onChange={(event) => { patch(index, { id: event.target.value }) }}
             />
+            {props.primaryFields && <span className={styles['fieldLabel']}>{t('modelName')}</span>}
             <input
               className={styles['input']}
               type="text"
@@ -361,7 +365,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
               disabled={disabled}
               onChange={(event) => { patch(index, { name: event.target.value === '' ? undefined : event.target.value }) }}
             />
-            <button
+            {!props.primaryFields && <button
               type="button"
               className={styles['iconButton']}
               aria-label={`${t('modelAdvanced')} ${index + 1}`}
@@ -370,8 +374,8 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
               onClick={() => { toggleExpanded(index) }}
             >
               <IconChevron open={expanded.has(index)} />
-            </button>
-            <button
+            </button>}
+            {!props.primaryFields && <button
               type="button"
               className={`${styles['iconButton']} ${styles['iconButtonDanger']}`}
               aria-label={`${t('removeModel')} ${index + 1}`}
@@ -395,7 +399,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
               }}
             >
               <IconTrash />
-            </button>
+            </button>}
           </div>
           {expanded.has(index)
             ? (
@@ -431,14 +435,14 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
             : null}
         </div>
       ))}
-      <button
+      {!props.primaryFields && <button
         type="button"
         className={styles['addModelButton']}
         disabled={disabled}
         onClick={() => { onChange([...models, { id: '' }]) }}
       >
         {t('addModel')}
-      </button>
+      </button>}
       {failure !== undefined ? <p className={styles['error']}>{failure}</p> : null}
       <Modal
         open={candidates !== undefined}

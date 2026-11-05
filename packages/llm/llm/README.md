@@ -166,3 +166,5 @@ This Dev Note is non-authoritative working context: open questions and undecided
 - The `llm/adapters-updated` event is payload-free by design; consumers re-read the registries instead of receiving the new topology in the event.
 
 </details>
+
+The testModel Remote sends a one-shot draft request for OpenAI completions/responses or Anthropic messages. It preserves API path prefixes, refuses redirects, cancels after 30 seconds, and neither persists credentials nor echoes response error bodies.

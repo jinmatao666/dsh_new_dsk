@@ -121,3 +121,9 @@ None.
 </details>
 
 Delete confirmation shows the display name without internal route IDs and uses a short, non-wrapping action label.
+
+Custom-model creation opens with model name (the request ID), optional alias, endpoint and API key. Protocol selection stays in Advanced settings and defaults to OpenAI completions. Test model sends the unsaved values to the Host for one short request without saving the profile or credential. The test result clears after edits.
+
+Saving a custom model requires a successful test of the current draft, including credential retries. Changing model, alias, endpoint, protocol or credential invalidates that success.
+
+Testing opens a result dialog with indeterminate progress while waiting, and a completed or failed state afterward. Saving stays locked until the request succeeds.

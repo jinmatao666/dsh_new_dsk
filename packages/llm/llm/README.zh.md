@@ -166,3 +166,5 @@ for await (const chunk of ctx.llm.stream({
 - `llm/adapters-updated` 事件按设计不携带载荷；消费方重新读取注册表，而不是在事件中接收新拓扑。
 
 </details>
+
+testModel远程方法支持OpenAI completions/responses和Anthropic messages草稿测试，保留接口路径前缀，拒绝重定向，30秒后取消；不保存密钥，也不回显服务端错误响应正文。

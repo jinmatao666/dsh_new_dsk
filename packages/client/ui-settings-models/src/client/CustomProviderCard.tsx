@@ -22,10 +22,10 @@ import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
  * levels instead.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { JsonValue } from '@deepseek-ai/dsh-api-remotes/client'
-import { Select } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Modal, Select } from '@deepseek-ai/dsh-client-ui-primitives'
 import { apiKeyFailure } from './apiKey.ts'
 import { EditorFooter } from './EditorFooter.tsx'
 import { validateDeepSeekModels } from './DeepSeekModelsEditor.tsx'
@@ -85,9 +85,13 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   const [route, setRoute] = useState(() => props.automaticRoute ? `custom-${randomUUID()}` : '')
   const [displayName, setDisplayName] = useState(() => props.automaticRoute ? t('customGroup') : '')
   const [baseURL, setBaseURL] = useState('')
-  const [protocol, setProtocol] = useState(protocols[0] ?? '')
+  const [protocol, setProtocol] = useState(protocols.includes('openai-completions') ? 'openai-completions' : protocols[0] ?? '')
   const [keyDraft, setKeyDraft] = useState('')
-  const [models, setModels] = useState<readonly ModelDraft[]>([])
+  const [models, setModels] = useState<readonly ModelDraft[]>(props.automaticRoute ? [{ id: '' }] : [])
+  const [testing, setTesting] = useState(false)
+  const [testDialogOpen, setTestDialogOpen] = useState(false)
+  const [testedDraft, setTestedDraft] = useState<string | undefined>()
+  const [testResult, setTestResult] = useState<string | undefined>()
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
   /**
@@ -96,9 +100,21 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
    * the credential alone.
    */
   const [committed, setCommitted] = useState(false)
-  const disabled = props.readOnly || busy
+  const disabled = props.readOnly || busy || testing
   /** Everything but the key stops being editable once the provider exists. */
   const profileDisabled = disabled || committed
+
+  useEffect(() => {
+    if (!testDialogOpen) return
+    const onEscape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      if (!testing) setTestDialogOpen(false)
+    }
+    window.addEventListener('keydown', onEscape, true)
+    return () => { window.removeEventListener('keydown', onEscape, true) }
+  }, [testDialogOpen, testing])
 
   const routeInvalid = route.length > 0 && !ROUTE_PATTERN.test(route)
   const routeTaken = taken.includes(route)
@@ -114,6 +130,9 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   const ready = route.length > 0 && !routeInvalid && !routeTaken
     && baseURL.length > 0 && models.length > 0 && modelFailure === undefined
     && keyFailure === undefined
+  const draftSignature = JSON.stringify([baseURL, protocol, models, keyValue])
+  const testPassed = testedDraft === draftSignature
+  const canSave = testPassed
   // The one blocked gate worth a line under the form. A satisfied card says
   // nothing at all rather than printing an empty paragraph.
   const hint = failure !== undefined || ready
@@ -145,8 +164,8 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
         // chain, ADC) instead of resolving a reference nothing ever sets.
         ...storesKey ? { apiKeyEnv: keyRef } : {},
         api: protocol,
-        baseURL,
-        models: models.map(model => ({ ...model })),
+        baseURL: baseURL.trim(),
+        models: models.map(model => ({ ...model, id: String(model.id).trim() })),
       }
       // `taken` is a snapshot too, so the id check alone cannot see a route
       // declared after this card opened; the revision makes that race a
@@ -173,6 +192,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   }
 
   const create = async (): Promise<void> => {
+    if (!ready || !canSave || testing) return
     setBusy(true)
     setFailure(undefined)
     try {
@@ -191,109 +211,164 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
     }
   }
 
+  const testModel = async (): Promise<void> => {
+    setTestDialogOpen(true)
+    setTesting(true)
+    setTestedDraft(undefined)
+    setTestResult(undefined)
+    try {
+      for (const model of models) {
+        const result = await api.llm.testModel(baseURL.trim(), protocol, String(model.id ?? '').trim(), keyValue)
+        if (!result.ok) { setTestResult(result.error.message); return }
+      }
+      setTestedDraft(draftSignature)
+      setTestResult(t('modelTestSucceeded'))
+    } catch (error) {
+      setTestResult(messageOf(error))
+    } finally {
+      setTesting(false)
+    }
+  }
+
   return (
-    <div className={styles['editor']}>
-      {!props.automaticRoute && <div className={styles['editorHeader']}>
-        <span className={styles['editorTitle']}>{t('customTitle')}</span>
-      </div>}
-      {!props.automaticRoute && <><div className={styles['field']}>
-        <span className={styles['fieldLabel']}>{t('customRoute')}</span>
-        <input
-          className={styles['input']}
-          type="text"
-          value={route}
-          placeholder="acme-gateway"
-          aria-label={t('customRoute')}
+    <>
+      <div className={props.automaticRoute ? styles['customModelEditor'] : styles['editor']}>
+        <ModelListEditor
+          models={models}
+          primaryFields={props.automaticRoute === true}
+          onChange={(next) => { setModels(next); setTestResult(undefined); setTestDialogOpen(false) }}
+          probe={{
+            settingsNs: NS,
+            baseURL,
+            api: protocol,
+            ...keyValue.length === 0 ? {} : { apiKey: keyValue },
+          }}
+          probeBlocked={keyFailure === 'keyBlank' ? 'keyBlankNew' : keyFailure}
+          api={api}
+          t={t}
           disabled={profileDisabled}
-          onChange={(event) => { setRoute(event.target.value) }}
         />
-      </div>
-      {/* A rejected id reads as a fault, not as guidance — the same split the
+        {!props.automaticRoute && <div className={styles['editorHeader']}>
+          <span className={styles['editorTitle']}>{t('customTitle')}</span>
+        </div>}
+        {!props.automaticRoute && <><div className={styles['field']}>
+          <span className={styles['fieldLabel']}>{t('customRoute')}</span>
+          <input
+            className={styles['input']}
+            type="text"
+            value={route}
+            placeholder="acme-gateway"
+            aria-label={t('customRoute')}
+            disabled={profileDisabled}
+            onChange={(event) => { setRoute(event.target.value) }}
+          />
+        </div>
+        {/* A rejected id reads as a fault, not as guidance — the same split the
           key field below already makes between its failure and its hint. */}
-      {routeInvalid || routeTaken
-        ? <p className={styles['error']}>{t(routeInvalid ? 'customRouteInvalid' : 'customRouteTaken')}</p>
-        : <p className={styles['advancedHint']}>{t('customRouteHint')}</p>}
-      <div className={styles['field']}>
-        <span className={styles['fieldLabel']}>{t('customDisplayName')}</span>
-        <input
-          className={styles['input']}
-          type="text"
-          value={displayName}
-          placeholder={route.length === 0 ? t('customDisplayName') : route}
-          aria-label={t('customDisplayName')}
-          disabled={profileDisabled}
-          onChange={(event) => { setDisplayName(event.target.value) }}
-        />
-      </div>
-      </>}<div className={styles['field']}>
-        <span className={styles['fieldLabel']}>{t('baseUrl')}</span>
-        <input
-          className={styles['input']}
-          type="text"
-          value={baseURL}
-          placeholder={t('customBaseUrlPlaceholder')}
-          aria-label={t('baseUrl')}
-          disabled={profileDisabled}
-          onChange={(event) => { setBaseURL(event.target.value) }}
-        />
-      </div>
-      <div className={styles['field']}>
-        <span className={styles['fieldLabel']}>{t('customApi')}</span>
-        <Select
-          className={styles['selectInput']}
-          value={protocol}
-          label={t('customApi')}
-          disabled={profileDisabled}
-          onChange={setProtocol}
-          options={protocols.map(choice => ({ value: choice, label: choice }))}
-        />
-      </div>
-      <div className={styles['field']}>
-        <span className={styles['fieldLabel']}>{t('keyInput')}</span>
-        <input
-          className={styles['input']}
-          type="password"
-          autoComplete="off"
-          value={keyDraft}
-          placeholder={t('keyPlaceholder')}
-          aria-label={t('keyInput')}
-          disabled={disabled}
-          onChange={(event) => { setKeyDraft(event.target.value) }}
-        />
-        {/* A create card has no stored key to keep, so the blank case says
+        {routeInvalid || routeTaken
+          ? <p className={styles['error']}>{t(routeInvalid ? 'customRouteInvalid' : 'customRouteTaken')}</p>
+          : <p className={styles['advancedHint']}>{t('customRouteHint')}</p>}
+        <div className={styles['field']}>
+          <span className={styles['fieldLabel']}>{t('customDisplayName')}</span>
+          <input
+            className={styles['input']}
+            type="text"
+            value={displayName}
+            placeholder={route.length === 0 ? t('customDisplayName') : route}
+            aria-label={t('customDisplayName')}
+            disabled={profileDisabled}
+            onChange={(event) => { setDisplayName(event.target.value) }}
+          />
+        </div>
+        </>}<div className={styles['field']}>
+          <span className={styles['fieldLabel']}>{t('baseUrl')}</span>
+          <input
+            className={styles['input']}
+            type="text"
+            value={baseURL}
+            placeholder={t('customBaseUrlPlaceholder')}
+            aria-label={t('baseUrl')}
+            disabled={profileDisabled}
+            onChange={(event) => { setBaseURL(event.target.value); setTestResult(undefined); setTestDialogOpen(false) }}
+          />
+        </div>
+        <div className={styles['field']}>
+          <span className={styles['fieldLabel']}>{t('keyInput')}</span>
+          <input
+            className={styles['input']}
+            type="password"
+            autoComplete="off"
+            value={keyDraft}
+            placeholder={t('keyPlaceholder')}
+            aria-label={t('keyInput')}
+            disabled={disabled}
+            onChange={(event) => { setKeyDraft(event.target.value); setTestResult(undefined); setTestDialogOpen(false) }}
+          />
+          {/* A create card has no stored key to keep, so the blank case says
             what a blank field means here instead: this route may authenticate
             through the provider's own ambient discovery or OAuth. */}
-        {keyFailure === undefined
-          ? null
-          : <p className={styles['error']}>{t(keyFailure === 'keyBlank' ? 'keyBlankNew' : keyFailure)}</p>}
-      </div>
-      <ModelListEditor
-        models={models}
-        onChange={setModels}
-        probe={{
-          settingsNs: NS,
-          baseURL,
-          api: protocol,
-          ...keyValue.length === 0 ? {} : { apiKey: keyValue },
-        }}
-        probeBlocked={keyFailure === 'keyBlank' ? 'keyBlankNew' : keyFailure}
-        api={api}
-        t={t}
-        disabled={profileDisabled}
-      />
-      {failure !== undefined ? <p className={styles['error']}>{failure}</p> : null}
-      {/* Only the gates with something to say render; the route-id gate has its
+          {keyFailure === undefined
+            ? null
+            : <p className={styles['error']}>{t(keyFailure === 'keyBlank' ? 'keyBlankNew' : keyFailure)}</p>}
+        </div>
+        <details className={styles['protocolSettings']}>
+          <summary className={styles['protocolSummary']}><span>{t('advancedSettings')}</span><span className={styles['protocolCurrent']}>{protocol === 'openai-completions' ? t('openaiCompatible') : protocol}</span></summary>
+          <div className={styles['protocolBody']}>
+            <div className={styles['field']}>
+              <span className={styles['fieldLabel']}>{t('customApi')}</span>
+              <Select
+                className={styles['selectInput']}
+                value={protocol}
+                label={t('customApi')}
+                disabled={profileDisabled}
+                onChange={(next) => { setProtocol(next); setTestResult(undefined); setTestDialogOpen(false) }}
+                options={protocols.map(choice => ({ value: choice, label: choice === 'openai-completions' ? t('openaiCompatible') : choice }))}
+              />
+            </div>
+          </div>
+        </details>
+        <div className={styles['testPanel']}>
+          <div className={styles['testPanelHeading']}><span>{t('connectionCheck')}</span><span className={styles['testRequirement']}>{t('testBeforeSave')}</span></div>
+          <button type="button" className={styles['testModelButton']} disabled={disabled || !ready}
+            onClick={() => { void testModel() }}>
+            {testing ? t('testingModel') : t('testModel')}
+          </button>
+
+        </div>
+        {failure !== undefined ? <p className={styles['error']}>{failure}</p> : null}
+        {/* Only the gates with something to say render; the route-id gate has its
           own field-level hint, so its blocked state would print an empty line. */}
-      {hint === undefined ? null : <p className={styles['advancedHint']}>{hint}</p>}
-      <EditorFooter
-        t={t}
-        busy={busy}
-        submitDisabled={disabled || !ready}
-        submitLabelKey="create"
-        submitBusyLabelKey="creating"
-        onCancel={() => { props.onClose(committed) }}
-        onSubmit={() => { void create() }}
-      />
-    </div>
+        {hint === undefined ? null : <p className={styles['advancedHint']}>{hint}</p>}
+        <EditorFooter
+          t={t}
+          busy={busy}
+          submitDisabled={disabled || !ready || !canSave}
+          submitLabelKey={props.automaticRoute ? 'apply' : 'create'}
+          submitBusyLabelKey={props.automaticRoute ? 'applying' : 'creating'}
+          onCancel={() => { props.onClose(committed) }}
+          onSubmit={() => { void create() }}
+        />
+      </div>
+      <Modal open={testDialogOpen} title={t('connectionCheck')} closeLabel={t('close')}
+        onClose={() => { if (!testing) setTestDialogOpen(false) }}
+        className={styles['modelTestDialog'] as string}>
+        <div className={styles['modelTestContent']} onKeyDownCapture={(event) => {
+          if (event.key === 'Escape') { event.stopPropagation(); if (!testing) setTestDialogOpen(false) }
+        }}>
+          <p className={styles['testModelName']}>{String(models[0]?.name || models[0]?.id || '')}</p>
+          <div role="progressbar" aria-label={t('connectionCheck')} aria-valuemin={0} aria-valuemax={100}
+            {...testing ? {} : { 'aria-valuenow': testPassed ? 100 : 0 }}
+            aria-valuetext={testing ? t('testConnecting') : testResult}
+            className={styles['modelTestProgress']}>
+            <span className={testing ? styles['testProgressLoading'] : testPassed ? styles['testProgressDone'] : styles['testProgressFailed']} />
+          </div>
+          <p role="status" className={testResult !== undefined && !testPassed ? styles['testFailure'] : styles['testDialogStatus']}>
+            {testing ? t('testConnecting') : testResult}
+          </p>
+          <button type="button" className={styles['primaryButton']} disabled={testing}
+            onClick={() => { setTestDialogOpen(false) }}>{t('testDone')}</button>
+        </div>
+      </Modal>
+    </>
   )
 }

@@ -92,3 +92,5 @@ These limits define the current model surface. They are current package constrai
 None.
 
 </details>
+
+The composer opens the model list on the first click. Reasoning effort is available inside the list; Escape returns from effort to models, then closes the menu.

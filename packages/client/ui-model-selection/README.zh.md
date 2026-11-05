@@ -92,3 +92,5 @@ kind: "package-reference"
 无。
 
 </details>
+
+输入框中的模型按钮单击即展开模型列表；推理等级从列表内进入，Escape先从推理等级返回模型列表，再关闭菜单。

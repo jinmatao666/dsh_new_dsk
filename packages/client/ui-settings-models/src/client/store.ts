@@ -27,7 +27,7 @@ export type ModelsCredentials = Pick<ClientRemote['credentials'], 'describe' | '
 /** LLM Remote methods used by the Models page. */
 export type ModelsLlm = Pick<
   ClientRemote['llm'],
-  'discoverModels' | 'listConfigurableProviders' | 'listProviders'
+  'discoverModels' | 'listConfigurableProviders' | 'listProviders' | 'testModel'
 >
 
 /** One provider row after joining the configurable directory with live routes. */

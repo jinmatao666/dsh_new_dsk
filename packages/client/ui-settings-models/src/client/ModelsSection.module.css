@@ -682,17 +682,62 @@ button.selectInput {
   white-space: nowrap;
   min-width: 76px;
   height: 36px;
-  border: 1px solid var(--dsw-alias-border-l1, #e1e5eb);
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
 }
 
 .deleteDialog .deleteConfirm {
-  border-color: var(--dsw-alias-state-error-primary, #dc3535);
+  border-color: var(--dsw-alias-state-error-primary);
 }
 
-.customGroup { margin-top: 12px; padding: 0 14px 14px; border: 1px solid var(--dsw-alias-border-l1, #e1e5eb); border-radius: 14px; }
+.customGroup { margin-top: 12px; padding: 0 14px 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 14px; }
 .customGroup > summary { padding: 16px 0; cursor: pointer; font-size: 14px; font-weight: 600; }
-.customGroup .rowCard { background: var(--dsw-alias-bg-layer-1, #fff); }
+.customGroup .rowCard { background: var(--dsw-alias-bg-module-platform); }
 .customGroup .addBlock { margin-top: 12px; }
 
 .deleteDialog h2 { font-weight: 600; }
+
+.primaryModelCatalog { display: flex; flex-direction: column; gap: 14px; }
+.primaryModelEntry { display: flex; flex-direction: column; }
+
+/* The custom model form uses one field stack, with the protocol isolated below. */
+.customModelEditor { display: flex; flex-direction: column; gap: 20px; padding: 0; }
+.customModelEditor .fieldLabel { font-size: 13px; line-height: 20px; color: var(--dsw-alias-label-primary); }
+.customModelEditor .input { min-height: 42px; border-radius: 10px; }
+.customModelEditor .primaryModelEntry .field { gap: 8px; }
+.customModelEditor .primaryModelEntry .field > input:first-of-type { margin-bottom: 12px; }
+.protocolSettings { border-top: 1px solid var(--dsw-alias-border-l2); }
+.protocolSummary { display: flex; align-items: center; gap: 10px; padding: 16px 0 0; cursor: pointer; list-style: none; font-size: 13px; color: var(--dsw-alias-label-primary); }
+.protocolSummary::-webkit-details-marker { display: none; }
+.protocolSummary::before { content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s; }
+.protocolSettings[open] .protocolSummary::before { transform: rotate(45deg); }
+.protocolCurrent { margin-left: auto; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.protocolBody { margin-top: 14px; padding: 16px; background: var(--dsw-alias-bg-module-platform); border-radius: 10px; }
+.protocolBody .selectInput { width: 100%; max-width: 100%; justify-content: space-between; min-height: 40px; }
+.testPanel { display: flex; flex-direction: column; gap: 10px; }
+.testPanelHeading { display: flex; justify-content: space-between; gap: 12px; align-items: center; font-size: 13px; color: var(--dsw-alias-label-primary); }
+.testRequirement { font-size: 12px; color: var(--dsw-alias-label-tertiary); }
+.testModelButton { display: flex; justify-content: center; align-items: center; min-height: 40px; border-radius: 10px; padding: 0 16px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-specific-menu); color: var(--dsw-alias-label-primary); cursor: pointer; font: inherit; font-size: 13px; }
+.testModelButton:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.testModelButton:disabled { opacity: .45; cursor: default; }
+.testSuccess,.testFailure { margin: 0; font-size: 12px; line-height: 20px; overflow-wrap: anywhere; }
+.testSuccess { color: var(--dsw-alias-label-primary); }
+.testFailure { color: var(--dsw-alias-state-error-primary); }
+.customModelEditor .editorActions { padding-top: 16px; border-top: 1px solid var(--dsw-alias-border-l2); }
+.customModelEditor .editorActions button { min-width: 80px; border-radius: 10px; height: 40px; }
+@media (prefers-reduced-motion: reduce) { .protocolSummary::before { transition: none; } }
+
+.testModelButton { background: var(--dsw-alias-button-primary-fill); border-color: transparent; color: var(--dsw-alias-label-primary-foreground); font-weight: 500; }
+.testModelButton:hover:not(:disabled) { background: var(--dsw-alias-button-primary-hover); }
+.modelTestDialog { width: min(420px, calc(100vw - 40px)); }
+.modelTestContent { display: flex; flex-direction: column; gap: 18px; }
+.testModelName { margin: 0; font-size: 14px; font-weight: 500; color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
+.modelTestProgress { height: 7px; border-radius: 8px; background: var(--dsw-alias-bg-module-platform); overflow: hidden; }
+.modelTestProgress > span { display: block; height: 100%; border-radius: inherit; }
+.testProgressLoading { width: 35%; background: var(--dsw-alias-button-primary-fill); animation: model-test-progress 1.3s ease-in-out infinite; }
+.testProgressDone { width: 100%; background: var(--dsw-alias-button-primary-fill); }
+.testProgressFailed { width: 100%; background: var(--dsw-alias-state-error-primary); }
+.testDialogStatus { margin: 0; font-size: 13px; line-height: 22px; color: var(--dsw-alias-label-secondary); }
+.modelTestContent > button { align-self: flex-end; min-width: 76px; border-radius: 10px; }
+@keyframes model-test-progress { from { transform: translateX(-100%); } to { transform: translateX(390%); } }
+@media (prefers-reduced-motion: reduce) { .testProgressLoading { animation: none; width: 60%; } }
