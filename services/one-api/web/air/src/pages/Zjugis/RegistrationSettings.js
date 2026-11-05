@@ -10,13 +10,12 @@ const fields = [
   ['SMSAccessKeyId', '阿里云 AccessKey ID', 'text'],
   ['SMSAccessKeySecret', '阿里云 AccessKey Secret', 'password'], ['SMSSignName', '短信签名', 'text'],
   ['SMSTemplateCode', '验证码模板 CODE', 'text'],
-  ['RegistrationAgreementText', '用户协议正文', 'textarea'], ['RegistrationPrivacyText', '隐私政策正文', 'textarea'],
 ];
 
 const sections = [
   { id: 'registration', title: '注册设置', hint: '设置新用户注册方式与默认角色，已有账号的角色不受影响。', keys: ['RegisterEnabled', 'PhoneRegisterEnabled', 'RegistrationDefaultRole'] },
   { id: 'sms', title: '短信登录', hint: '配置阿里云短信服务。密钥留空保留原值；验证码默认6位、5分钟有效，发送间隔60秒。', keys: ['PhoneLoginEnabled', 'SMSAccessKeyId', 'SMSAccessKeySecret', 'SMSTemplateCode'] },
-  { id: 'policies', title: '协议与隐私', hint: '供用户注册时阅读和确认。', keys: ['RegistrationAgreementText', 'RegistrationPrivacyText'] },
+  { id: 'policies', title: '协议与隐私', hint: '用户协议与隐私政策已内置于桌面客户端，随版本发布，无需在后台填写正文。', keys: [] },
 ];
 
 /** Separate server-owned authentication options; no credentials enter desktop configuration. */

@@ -1,3 +1,5 @@
+import { LegalDocument } from './LegalDocument.tsx'
+import type { LegalKind } from './legal-documents.ts'
 import { LoginDialog } from './LoginDialog.tsx'
 import { PublicLogin } from './PublicLogin.tsx'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -44,14 +46,8 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAut
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const [notice, setNotice] = useState<{ text: string }>()
-  const [legal, setLegal] = useState<{ kind: 'agreement' | 'privacy'; text: string }>()
-  const openLegal = async (kind: 'agreement' | 'privacy') => {
-    setLegal({ kind, text: t('securityLoading') })
-    try {
-      const result = await publicAuth?.('capabilities', {}) as { data?: { agreement?: string; privacy?: string } } | undefined
-      setLegal(current => current?.kind === kind ? { kind, text: result?.data?.[kind] || t('loginLegalMissing') } : current)
-    } catch { setLegal(current => current?.kind === kind ? { kind, text: t('loginLegalMissing') } : current) }
-  }
+  const [legal, setLegal] = useState<LegalKind>()
+  const openLegal = (kind: LegalKind) => { setLegal(kind) }
   const [supportOpen, setSupportOpen] = useState(false)
   const [support, setSupport] = useState<DeploymentSettings>()
   const [supportError, setSupportError] = useState<string>()
@@ -244,7 +240,7 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAut
             </div>
             {loginMode === 'account' && <p className={css.registrationFooter}><span>{t('loginNoAccount')}</span><button type="button" onClick={() =>{  setLoginMode('sms') }}>{t('loginPhoneRegister')}</button></p>}
             {loginMode === 'sms' && <p className={css.registrationFooter}>{t('loginUnregisteredHint')}</p>}
-            {(loginMode === 'account' || loginMode === 'sms') && <p className={css.legalNotice}>{t('legalPrefix')}<button type="button" onClick={() => { void openLegal('agreement') }}>{t('userAgreement')}</button>{t('legalJoin')}<button type="button" onClick={() => { void openLegal('privacy') }}>{t('privacyPolicy')}</button></p>}
+            {(loginMode === 'account' || loginMode === 'sms') && <p className={css.legalNotice}>{t('legalPrefix')}<button type="button" onClick={() => {  openLegal('agreement') }}>{t('userAgreement')}</button>{t('legalJoin')}<button type="button" onClick={() => {  openLegal('privacy') }}>{t('privacyPolicy')}</button></p>}
             <p className={css.footerSpace}>{t('accountHelpPrefix')}<button className={css.textAction} type="button" onClick={(event) => { void openSupport(event.currentTarget) }}>{t('administrator')}</button>{t('accountHelpSuffix')}</p>
           </div>
         </section>
@@ -254,9 +250,9 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAut
         <p className={serviceError !== undefined ? css.error : undefined} role={serviceError !== undefined ? 'alert' : 'status'}>{serviceError ?? notice?.text}</p>
         {serviceError !== undefined && auth.state === 'offline' && <button className={css.textAction} type="button" onClick={retry}>{t('retry')}</button>}
       </LoginDialog>
-      <LoginDialog open={legal !== undefined} title={t(legal?.kind === 'privacy' ? 'privacyPolicy' : 'userAgreement')}
+      <LoginDialog open={legal !== undefined} title={t(legal === 'privacy' ? 'privacyPolicy' : 'userAgreement')}
         closeLabel={t('supportClose')} onClose={() => { setLegal(undefined) }}>
-        <div className={css.legalContent}>{legal?.text}</div>
+        {legal && <LegalDocument kind={legal} />}
       </LoginDialog>
       {supportOpen && <dialog ref={dialogRef} className={css.supportDialog} aria-labelledby='wanwei-support-title' onCancel={() => { setSupportOpen(false); supportTrigger.current?.focus() }} onClose={() => { setSupportOpen(false); supportTrigger.current?.focus() }}>
         <h2 id='wanwei-support-title'>{t('supportTitle')}</h2>

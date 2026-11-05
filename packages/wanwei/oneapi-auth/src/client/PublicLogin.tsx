@@ -114,12 +114,10 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
     if (register || mode === 'reset') {
       if ((mode === 'reset' || password) && (password.length < 8 || password.length > 20 || password !== confirm)) throw new Error(t('securityPasswordInvalid'))
     }
-    if (register && (!cap?.agreement || !cap.privacy)) throw new Error(t('loginConsentRequired'))
     const input = { phone, code, password, new_password: password, agreed: 'true', wechat_state: unbound, state: wechatPhone }
     const result = await request(wechatPhone ? 'wechat-phone-bind' : mode === 'reset' ? 'reset' : register ? 'register' : 'sms', input) as Result
     if (result.code === 'phone_not_registered') {
       if (!result.register_enabled) throw new Error(result.message || t('loginRegistrationClosed'))
-      if (!cap?.agreement || !cap.privacy) throw new Error(t('loginConsentRequired'))
       await request('register', { ...input, password: '', agreed: 'true' }); return
     }
     if (mode === 'reset') { setPassword(''); setConfirm(''); setCode(''); setNotice(t('loginPasswordSaved')) }
@@ -139,7 +137,7 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
       {(register || mode === 'reset') && <><p className={styles.hint}>{t(register ? 'loginPasswordOptional' : 'securityPasswordHint')}</p><label>{t('securityNewPassword')}<input type="password" autoComplete="new-password" maxLength={20} required={mode === 'reset'} value={password} onChange={(e) =>{  setPassword(e.target.value) }} /></label><label>{t('securityConfirmPassword')}<input type="password" autoComplete="new-password" maxLength={20} required={mode === 'reset'} value={confirm} onChange={(e) =>{  setConfirm(e.target.value) }} /></label></>}
       {register && <button className={styles.inline} type="button" disabled={busy} onClick={() => { setRegister(false); setCode(''); setPassword(''); setConfirm(''); setNotice('') }}>{t('loginChangePhone')}</button>}
       {mode === 'sms' && !register && <p className={styles.smsHint} role={notice ? 'status' : undefined}>{notice || t('loginCodePrivacyHint')}</p>}
-      <button className={css.primaryButton} disabled={busy || register && (!cap.agreement || !cap.privacy)}>{busy ? t('securitySaving') : t(wechatPhone ? 'loginBindPhoneEnter' : mode === 'reset' ? 'securityPasswordAction' : register ? password ? 'loginRegisterEnter' : 'loginSkipPassword' : cap.register ? 'loginOrRegister' : 'signIn')}</button>
+      <button className={css.primaryButton} disabled={busy}>{busy ? t('securitySaving') : t(wechatPhone ? 'loginBindPhoneEnter' : mode === 'reset' ? 'securityPasswordAction' : register ? password ? 'loginRegisterEnter' : 'loginSkipPassword' : cap.register ? 'loginOrRegister' : 'signIn')}</button>
     </form>}
     {notice && mode !== 'sms' && <p role="status" className={styles.hint}>{notice}</p>}
     <LoginDialog compact open={!!error} title={t(mode === 'reset' ? 'forgotPassword' : mode === 'qr' ? 'qrLogin' : 'smsLogin')} closeLabel={t('supportClose')} onClose={() => { setError('') }}>

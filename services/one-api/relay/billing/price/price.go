@@ -83,7 +83,7 @@ func Resolve(model string, legacyInput, legacyCompletion, group float64) (*Snaps
 	if unit <= 0 || math.IsInf(unit, 0) || math.IsNaN(unit) || !valid(group) || !valid(legacyInput) || !valid(legacyInput*legacyCompletion) {
 		return nil, errors.New("积分换算或分组倍率无效")
 	}
-	s := &Snapshot{Version: 1, Source: "legacy", Model: model, Base: 1000 / unit,
+	s := &Snapshot{Version: 2, Source: "legacy", Model: model, Base: 1000 / unit,
 		Input: legacyInput, Output: legacyInput * legacyCompletion, CacheRead: legacyInput,
 		CacheWrite: legacyInput, Group: group, QuotaPerUnit: unit}
 	var settings struct {
@@ -111,12 +111,6 @@ func Resolve(model string, legacyInput, legacyCompletion, group float64) (*Snaps
 		s.Base = *settings.Base
 	}
 	s.Input, s.Output, s.CacheRead, s.CacheWrite = rates.Input, rates.Output, rates.Input, rates.Input
-	if rates.CacheRead != nil {
-		s.CacheRead = *rates.CacheRead
-	}
-	if rates.CacheWrite != nil {
-		s.CacheWrite = *rates.CacheWrite
-	}
 	if s.Base <= 0 || !valid(s.Base) || !valid(s.Input) || !valid(s.Output) || !valid(s.CacheRead) || !valid(s.CacheWrite) {
 		return nil, errors.New("模型积分价格无效")
 	}
@@ -130,6 +124,10 @@ func rat(v float64) *big.Rat {
 }
 
 func (s *Snapshot) Calculate(prompt, output, read, write int) (Receipt, error) {
+	if s.Version >= 2 {
+		read, write = 0, 0
+	}
+
 	r := Receipt{Snapshot: *s, OutputTokens: output, CacheReadTokens: read, CacheWriteTokens: write, Status: "settled"}
 	if prompt < 0 || output < 0 || read < 0 || write < 0 || read > prompt || write > prompt-read {
 		return r, errors.New("模型缓存用量超出输入用量")
@@ -158,7 +156,9 @@ func (s *Snapshot) Calculate(prompt, output, read, write int) (Receipt, error) {
 // 预扣按输入各类价格最大值计算，不在用量未知时假定缓存折扣。
 func (s *Snapshot) Reserve(prompt, output int) (int64, error) {
 	copy := *s
-	copy.Input = math.Max(s.Input, math.Max(s.CacheRead, s.CacheWrite))
+	if s.Version < 2 {
+		copy.Input = math.Max(s.Input, math.Max(s.CacheRead, s.CacheWrite))
+	}
 	r, err := copy.Calculate(prompt, output, 0, 0)
 	return r.Quota, err
 }

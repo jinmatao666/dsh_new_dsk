@@ -117,3 +117,14 @@ it('explains the phone requirement on the password action without enabling it', 
   expect(action.getAttribute('data-tooltip')).toBe(zh.securityPasswordBindFirst)
   expect(screen.getByRole('button', { name: zh.securityPasswordAction })).toHaveProperty('disabled', true)
 })
+
+it('keeps the deferred WeChat action disabled without requesting a QR code', async () => {
+  const request = vi.fn(async () => ({ phoneBound: true, phone: '138****0000', wechatBound: false }))
+  render(<AccountSection {...kit} useAuth={useAuth} logout={vi.fn()} requestAccount={request} close={vi.fn()} t={t} />)
+  await screen.findByText('138****0000')
+  const button = screen.getByRole<HTMLButtonElement>('button', { name: zh.securityComingSoon })
+  expect(button.disabled).toBe(true)
+  fireEvent.click(button)
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(request.mock.calls).toHaveLength(1)
+})

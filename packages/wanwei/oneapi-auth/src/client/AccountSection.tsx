@@ -98,7 +98,7 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
         : data.wechatBound ? { code: values.code || '' } : { state: qr?.state || '', phone_code: values.code || '' }
     await requestAccount(operation, input); setMode(undefined); setValues({}); setQr(undefined); setNotice(t('securitySaved')); setRevision(value => value + 1)
   }) }
-  const field = (key: string, label: string, type = 'text') => <label className={css.field}>{label}<input required type={type} value={values[key] || ''} autoComplete={type === 'password' ? 'new-password' : 'off'} maxLength={key === 'phone' ? 11 : type === 'password' ? 20 : 12} onChange={(event) => { setValues(old => ({ ...old, [key]: event.target.value })) }} /></label>
+  const field = (key: string, label: string, type = 'text') => <label className={css.field}>{label}<input required type={type} placeholder={t(key === 'phone' ? 'phonePlaceholder' : type === 'password' ? 'passwordPlaceholder' : 'codePlaceholder')} value={values[key] || ''} autoComplete={type === 'password' ? 'new-password' : 'off'} maxLength={key === 'phone' ? 11 : type === 'password' ? 20 : 12} onChange={(event) => { setValues(old => ({ ...old, [key]: event.target.value })) }} /></label>
   const codeButton = (target: 'new' | 'current') => {
     const key = target === 'new' ? 'send-new' : mode === 'password' ? 'send-password' : 'send-current'
     return <button type="button" className={css.secondary} disabled={busy || !!cooldown[key]} onClick={() => { sendCode(target) }}>{cooldown[key] ? `${cooldown[key]}s` : t('securitySendCode')}</button>
@@ -107,7 +107,7 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
   const rows = [
     { key: 'phone' as const, title: t('securityPhone'), detail: data ? data.phoneBound ? data.phone : t('securityPhoneHint') : t('securityLoading'), action: data?.phoneBound ? t('securityReplacePhone') : t('securityBindPhone') },
     { key: 'password' as const, title: t('securityPassword'), detail: t('securityPasswordHint'), action: t('securityPasswordAction') },
-    { key: 'wechat' as const, title: t('securityWechat'), detail: data ? data.wechatBound ? t('securityWechatBound') : t('securityWechatHint') : t('securityLoading'), action: data?.wechatBound ? t('securityUnbindWechat') : t('securityBindWechat') },
+    { key: 'wechat' as const, title: t('securityWechat'), detail: t('securityWechatComingHint'), action: t('securityComingSoon') },
   ]
   return <section className={css.section}>
     <h1>{t('accountTitle')}</h1><p className={css.hint}>{t('securityIntro')}</p>
@@ -115,7 +115,7 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
       {auth.state === 'authenticated' && <button type="button" className={css.logout} disabled={busy} onClick={() => { void execute(async () => { setSigningOut(true); try { await logout(); close() } finally { setSigningOut(false) } }) }}>{signingOut ? t('signingOut') : t('signOut')}</button>}
     </div>
     <h2 className={css.subheading}>{t('securityTitle')}</h2>
-    <div className={css.security}>{rows.map(row => <div key={row.key} className={css.row}><span className={css.icon} aria-hidden="true"><img src={accountIcons[row.key === 'phone' ? 'smartphone' : row.key === 'password' ? 'key-round' : 'wechat']} alt="" /></span><div className={css.description}><h3>{row.title}</h3><p>{row.detail}</p></div><span className={css.action} tabIndex={row.key === 'password' && !data?.phoneBound ? 0 : undefined} data-tooltip={row.key === 'password' && !data?.phoneBound ? t('securityPasswordBindFirst') : undefined} aria-label={row.key === 'password' && !data?.phoneBound ? t('securityPasswordBindFirst') : undefined}><button className={css.secondary} disabled={blocked || row.key !== 'phone' && !data?.phoneBound} type="button" onClick={() => { edit(row.key) }}>{row.action}</button></span></div>)}</div>
+    <div className={css.security}>{rows.map(row => <div key={row.key} className={css.row}><span className={css.icon} aria-hidden="true"><img src={accountIcons[row.key === 'phone' ? 'smartphone' : row.key === 'password' ? 'key-round' : 'wechat']} alt="" /></span><div className={css.description}><h3>{row.title}</h3><p>{row.detail}</p></div><span className={css.action} tabIndex={row.key === 'password' && !data?.phoneBound ? 0 : undefined} data-tooltip={row.key === 'password' && !data?.phoneBound ? t('securityPasswordBindFirst') : undefined} aria-label={row.key === 'password' && !data?.phoneBound ? t('securityPasswordBindFirst') : undefined}><button className={css.secondary} disabled={blocked || row.key === 'wechat' || row.key !== 'phone' && !data?.phoneBound} type="button" onClick={() => { edit(row.key) }}>{row.action}</button></span></div>)}</div>
     {data && !data.phoneBound && <p className={css.hint}>{t('securityBindFirst')}</p>}
     {!mode && error && <div role="alert" className={css.error}>{error}<button type="button" className={css.secondary} disabled={busy} onClick={() => { setRevision(value => value + 1) }}>{t('securityRetry')}</button></div>}
     {!mode && notice && <p role="status" className={css.success}>{notice}</p>}

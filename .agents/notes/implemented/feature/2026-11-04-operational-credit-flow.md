@@ -25,3 +25,7 @@ Estimating charge from stream character counts was rejected because provider tok
 ## Consequences
 
 Backend and desktop must be updated together. Token-level cancellation against unreported usage is not promised: the financial boundary is full reservation plus an enforced output budget, followed by authoritative settlement. Account switches, unavailable billing services and exhausted balances prevent new tool side effects. Production service compatibility and real-account acceptance follow local checks.
+
+## Input and output pricing
+
+New price snapshots use version 2: all prompt tokens use the input rate and completion tokens use the output rate. Cache metadata cannot discount, increase or invalidate the bill. Model editing exposes no cache rates or explicit-cache switch, and the managed model catalog disables explicit cache hints. Version 1 historical receipts retain their original itemization.

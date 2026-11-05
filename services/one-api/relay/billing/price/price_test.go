@@ -19,30 +19,30 @@ func TestCreditPricesAndSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Quota != 354 || r.InputTokens != 200 {
+	if r.Quota != 450 || r.InputTokens != 1000 {
 		t.Fatalf("unexpected receipt %+v", r)
 	}
-	if _, err = s.Calculate(1000, 500, 900, 200); err == nil {
-		t.Fatal("accepted overlapping cache usage")
+	if _, err = s.Calculate(1000, 500, 900, 200); err != nil {
+		t.Fatal("cache metadata must not affect two-part billing")
 	}
 	r, err = s.Calculate(1000, 0, 0, 1000)
-	if err != nil || r.Quota != 200 {
+	if err != nil || r.Quota != 150 {
 		t.Fatalf("input-only cache creation %+v %v", r, err)
 	}
 	q, err := s.Reserve(1000, 500)
-	if err != nil || q != 500 {
+	if err != nil || q != 450 {
 		t.Fatalf("reservation %d %v", q, err)
 	}
 	config.OptionMapRWMutex.Lock()
 	config.OptionMap["SystemDeploymentSettings"] = `{"creditPricingBase":2}`
 	config.OptionMapRWMutex.Unlock()
 	r, _ = s.Calculate(1000, 500, 800, 0)
-	if r.Quota != 354 {
+	if r.Quota != 450 {
 		t.Fatal("in-flight price changed")
 	}
 	next, _ := Resolve("test", 2, 4, 1)
 	r, _ = next.Calculate(1000, 500, 800, 0)
-	if r.Quota != 708 {
+	if r.Quota != 900 {
 		t.Fatal("new request missed new base")
 	}
 	legacy, _ := Resolve("other", 0.15, 4, 1)
@@ -70,5 +70,25 @@ func TestCreditDecimalRounding(t *testing.T) {
 	r, err := s.Calculate(1000, 500, 800, 0)
 	if err != nil || r.Quota != 0 {
 		t.Fatal("free model charged")
+	}
+}
+
+func TestZeroInputOutputIgnoresOldCacheRates(t *testing.T) {
+	config.OptionMapRWMutex.Lock()
+	old := config.OptionMap
+	config.OptionMap = map[string]string{OptionKey: `{"free":{"input":0,"output":0,"cache_read":100,"cache_write":100}}`, "SystemDeploymentSettings": `{"edition":"operations","creditPricingBase":1}`}
+	config.OptionMapRWMutex.Unlock()
+	defer func() { config.OptionMapRWMutex.Lock(); config.OptionMap = old; config.OptionMapRWMutex.Unlock() }()
+	snapshot, err := Resolve("free", 1, 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reserved, err := snapshot.Reserve(188000, 65536)
+	if err != nil || reserved != 0 {
+		t.Fatalf("free model reserved %d: %v", reserved, err)
+	}
+	receipt, err := snapshot.Calculate(188000, 654, 150000, 1000)
+	if err != nil || receipt.Quota != 0 {
+		t.Fatalf("free model charged: %+v %v", receipt, err)
 	}
 }

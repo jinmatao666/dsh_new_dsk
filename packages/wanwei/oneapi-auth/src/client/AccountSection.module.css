@@ -63,3 +63,19 @@
 .dialog .codeRow { gap: 10px; }
 .dialog .codeRow > button { height: 40px; margin-bottom: 16px; }
 .dialog .formActions button { min-width: 76px; height: 38px; }
+
+/* Explicit dialog fields survive themes that do not define legacy line tokens. */
+.dialog { width: min(440px, calc(100vw - 32px)); border-color: var(--dsw-alias-border-l2, #e1e6ef); border-radius: 18px; color: var(--dsw-alias-label-primary, #202632); background: var(--dsw-alias-bg-layer-2, #fff); }
+.dialog .form { padding: 24px; }
+.dialogHeader { margin-bottom: 22px; align-items: center; }
+.dialogHeader h2 { font-size: 18px; line-height: 26px; }
+.dialogHeader p { margin-top: 6px; color: var(--dsw-alias-label-secondary, #758094); }
+.dialog .field { gap: 8px; margin-bottom: 18px; color: var(--dsw-alias-label-primary, #303b50); line-height: 20px; }
+.dialog .field input { height: 44px; padding: 10px 12px; border: 1px solid var(--dsw-alias-border-l2, #dce3ee); background: var(--dsw-alias-bg-layer-1, #fff); color: var(--dsw-alias-label-primary, #202632); font-size: 14px; }
+.dialog .field input::placeholder { color: var(--dsw-alias-label-tertiary, #a0a8b7); font-size: 13px; }
+.dialog .codeRow { gap: 10px; }
+.dialog .codeRow > button { height: 44px; margin-bottom: 18px; padding: 0 14px; border: 1px solid #dce5f3; border-radius: 9px; color: #2563eb; background: #f8faff; }
+.dialog .formActions { margin-top: 6px; gap: 10px; }
+.dialog .formActions button { height: 40px; min-width: 80px; }
+.dialog .formActions .secondary { border-color: var(--dsw-alias-border-l2, #dce3ee); color: var(--dsw-alias-label-primary, #303b50); background: var(--dsw-alias-bg-layer-1, #fff); }
+.dialog .closeButton { color: var(--dsw-alias-label-secondary, #758094); }

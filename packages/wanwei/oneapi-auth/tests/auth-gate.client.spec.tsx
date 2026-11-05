@@ -46,13 +46,13 @@ function renderGate(view: AuthView = { state: 'logged-out' }) {
 }
 
 describe('Wanwei authentication gate', () => {
-  it('opens configured agreements from the login footer', async () => {
+  it('opens bundled legal documents without requesting backend copy', async () => {
     renderGate()
     fireEvent.click(screen.getByRole('button', { name: zh.userAgreement }))
-    expect(await screen.findByText('用户协议正文')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: '万维Buddy用户协议' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: zh.supportClose }))
     fireEvent.click(screen.getByRole('button', { name: zh.privacyPolicy }))
-    expect(await screen.findByText('隐私政策正文')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: '万维Buddy隐私政策' })).toBeTruthy()
   })
 
   it('shows account failures in a dismissible dialog without clearing credentials', async () => {
