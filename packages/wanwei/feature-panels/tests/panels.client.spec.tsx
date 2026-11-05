@@ -108,6 +108,24 @@ describe('independent feature navigation', () => {
     } finally { await feature.dispose() }
   })
 
+  it('renders optional header art behind the heading', async () => {
+    const ctx = new Context()
+    const feature = await mount(ctx, 'header-art')
+    const props = {
+      wide: true, title: 'fixture', subtitle: 'copy', Icon: () => null, controller: feature.controller,
+      requiresDirectInternet: false, useNetwork: () => false,
+      headerArt: '/knowledge-covers/hero-banner.png',
+      renderContent: () => <p>content</p>,
+    } as unknown as PanelActionProps & PanelProps
+    try {
+      render(<FeaturePanel {...props} />)
+      act(() => { feature.controller.open() })
+      expect(document.querySelector('.dsh-skill-market-header.has-art')).toBeTruthy()
+      expect(document.querySelector('.dsh-skill-market-header-art')?.getAttribute('src'))
+        .toBe('/knowledge-covers/hero-banner.png')
+    } finally { await feature.dispose() }
+  })
+
   it('switches between independent instances and leaves siblings usable after disposal', async () => {
     const ctx = new Context()
     const features = await Promise.all(['skills', 'experts', 'connectors', 'automations'].map(id => mount(ctx, id)))

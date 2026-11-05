@@ -106,6 +106,36 @@ function button(text) {
     || items.find(item => item.textContent.includes(text));
 }
 
+test('category cards pair design-name marks with hue-matched banner plates', async () => {
+  const themed = [
+    { id: 11, name: '占卜平衡专题', description: '', kind: 'shared', category_id: 1, shelf: 'published', tags: '专题', owner_user_id: 1, owner_username: 'root', visit_count: 0, daily_usage: 0, updated_at: '2025-08-10T15:52:00+08:00', created_at: '2025-08-10T15:52:00+08:00' },
+    { id: 12, name: '土地征收指引', description: '', kind: 'shared', category_id: 1, shelf: 'published', tags: '专题', owner_user_id: 1, owner_username: 'root', visit_count: 0, daily_usage: 0, updated_at: '2025-08-10T15:52:00+08:00', created_at: '2025-08-10T15:52:00+08:00' },
+    { id: 13, name: '耕地保护手册', description: '', kind: 'shared', category_id: 1, shelf: 'published', tags: '专题', owner_user_id: 1, owner_username: 'root', visit_count: 0, daily_usage: 0, updated_at: '2025-08-10T15:52:00+08:00', created_at: '2025-08-10T15:52:00+08:00' },
+    { id: 14, name: '闲置土地台账', description: '', kind: 'shared', category_id: 1, shelf: 'published', tags: '专题', owner_user_id: 1, owner_username: 'root', visit_count: 0, daily_usage: 0, updated_at: '2025-08-10T15:52:00+08:00', created_at: '2025-08-10T15:52:00+08:00' },
+  ];
+  API.get.mockImplementation(url => {
+    const path = String(url);
+    if (path === '/api/knowledge-admin/bases' || path === '/api/knowledge-bases') {
+      return Promise.resolve({ data: { success: true, data: themed } });
+    }
+    return Promise.resolve(documentsResponse(url));
+  });
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
+  await act(async () => { button('测绘规范').click(); });
+  const cards = [...container.querySelectorAll('.knowledge-card')];
+  expect(cards).toHaveLength(4);
+  const byName = name => cards.find(card => card.querySelector('h2')?.textContent === name);
+  expect(byName('占卜平衡专题').querySelector('.knowledge-card-mark img')?.getAttribute('src')).toContain('icon-theme-grid.png');
+  expect(byName('占卜平衡专题').querySelector('.knowledge-card-banner img')?.getAttribute('src')).toContain('card-banner-mint.png');
+  expect(byName('土地征收指引').querySelector('.knowledge-card-mark img')?.getAttribute('src')).toContain('icon-theme-zheng.png');
+  expect(byName('土地征收指引').querySelector('.knowledge-card-banner img')?.getAttribute('src')).toContain('card-banner-pink.png');
+  expect(byName('耕地保护手册').querySelector('.knowledge-card-mark img')?.getAttribute('src')).toContain('icon-theme-seedling.png');
+  expect(byName('耕地保护手册').querySelector('.knowledge-card-banner img')?.getAttribute('src')).toContain('card-banner.png');
+  expect(byName('闲置土地台账').querySelector('.knowledge-card-mark img')?.getAttribute('src')).toContain('icon-theme-clock.png');
+  expect(byName('闲置土地台账').querySelector('.knowledge-card-banner img')?.getAttribute('src')).toContain('card-banner.png');
+});
+
 test('sort listbox preserves the selected value and creates a personal library', async () => {
   await act(async () => { root.render(<KnowledgeLibrary />); });
   for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
@@ -146,6 +176,13 @@ test('knowledge catalog filters scopes and opens the file list', async () => {
   expect(button('测绘规范').textContent).toContain('1');
   expect(button('共性知识库')).toBeUndefined();
   expect(button('共享知识库')).toBeUndefined();
+  expect(container.querySelector('.knowledge-page-header-art')?.getAttribute('src')).toContain('page-header-art.png');
+  const hero = container.querySelector('.knowledge-hero');
+  expect(hero).toBeTruthy();
+  expect(hero.contains(container.querySelector('.knowledge-page-header-art'))).toBe(true);
+  expect(hero.contains(container.querySelector('.knowledge-chrome'))).toBe(true);
+  expect(hero.contains(button('订阅审核'))).toBe(true);
+  expect(hero.contains(button('新建知识库分类'))).toBe(true);
   await act(async () => { button('测绘规范').click(); });
   expect(container.textContent).toContain('测绘标准规范合集');
   expect(container.textContent).not.toContain('个人笔记');
@@ -161,6 +198,14 @@ test('knowledge catalog filters scopes and opens the file list', async () => {
   expect(container.textContent).toContain('12');
   expect(container.textContent).toContain('每天使用量');
   expect(container.textContent).toContain('3');
+  const card = container.querySelector('.knowledge-card');
+  expect(card.querySelector('.knowledge-card-banner img')?.getAttribute('src')).toContain('card-banner.png');
+  expect(card.querySelector('.knowledge-card-mark img')?.getAttribute('src')).toContain('icon-library-default.png');
+  expect(card.querySelector('.knowledge-card-more-art')?.getAttribute('src')).toContain('icon-card-more.png');
+  expect(card.querySelector('.knowledge-card-titles p')?.textContent).toBe('关于测绘标准规范合集的详细知识资源集…');
+  expect(card.querySelector('.knowledge-card-file-list-art')?.getAttribute('src')).toContain('icon-file-list.png');
+  expect(container.querySelector('.knowledge-toolbar')).toBeTruthy();
+  expect(container.querySelector('.knowledge-page-header-art')?.getAttribute('src')).toContain('page-header-art.png');
   const meta = container.querySelector('.knowledge-meta');
   expect(meta.querySelector('.knowledge-meta-label').textContent).toBe('创建人');
   expect(meta.querySelector('.knowledge-meta-value').textContent).toBe('管理员');
@@ -192,11 +237,20 @@ test('knowledge catalog filters scopes and opens the file list', async () => {
   }));
   await act(async () => { button('文件清单').click(); });
   await act(async () => { await Promise.resolve(); });
-  expect(container.textContent).toContain('测绘标准规范合集 - 文件清单');
+  expect(container.textContent).toContain('测绘标准规范合集-文件清单');
   expect(container.textContent).toContain('测绘标准规范合集_文件1.pdf');
   expect(container.textContent).toContain('7');
   expect(container.textContent).toContain('这是测绘标准规范合集文件1的文档摘要');
-  expect(container.textContent).toContain('共 1 条，每页 20 条');
+  expect(container.textContent).toContain('共 1 条，每页20条');
+  expect(container.textContent).toContain('第 1 页 / 1');
+  expect(container.textContent).toContain('跳至');
+  expect(button('浏览')?.querySelector('img')?.getAttribute('src')).toContain('icon-file-browse.png');
+  expect(button('下载')?.querySelector('img')?.getAttribute('src')).toContain('icon-file-download.png');
+  expect(button('切片')?.querySelector('img')?.getAttribute('src')).toContain('icon-file-chunks.png');
+  expect(button('摘要')?.querySelector('img')?.getAttribute('src')).toContain('icon-file-summary.png');
+  expect(button('删除')?.querySelector('img')?.getAttribute('src')).toContain('icon-file-delete.png');
+  expect([...container.querySelectorAll('button')].find(item => item.textContent.includes('上传文件'))
+    ?.querySelector('img')?.getAttribute('src')).toContain('icon-file-upload.png');
   expect(API.get).toHaveBeenCalledWith(expect.stringContaining('/api/knowledge-admin/bases/1/documents?page=1&page_size=20'));
   const pdfBlob = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
   const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null);
@@ -332,7 +386,7 @@ test('uploads one file, shows parse progress, and opens the new library', async 
     });
     await act(async () => { container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
     for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
-    expect(container.textContent).toContain('协作资料 - 文件清单');
+    expect(container.textContent).toContain('协作资料-文件清单');
   } finally {
     interval.mockRestore();
     clear.mockRestore();
@@ -531,6 +585,12 @@ test('personal knowledge browses by organization tree without listing all people
   expect(container.textContent).not.toContain('全部人员');
   expect(container.textContent).toContain('陈静');
   expect(container.querySelector('.knowledge-people-grid')?.textContent).not.toContain('爱丽丝');
+  // Personal-tab chrome uses staged js.design cutouts (transparent PNG).
+  expect(button('订阅审核')?.querySelector('img')?.getAttribute('src')).toContain('icon-subscription-review.png');
+  expect(button('个人知识库')?.querySelector('.knowledge-tab-icon')).toBeNull();
+  expect(container.querySelector('.knowledge-org-node-icon')?.getAttribute('src')).toContain('icon-org-node.png');
+  expect(button('新建知识库分类')?.querySelector('img')?.getAttribute('src')).toContain('icon-new-category.png');
+  expect(button('新建知识库')?.querySelector('img')?.getAttribute('src')).toContain('icon-new-library.png');
   const office = [...container.querySelectorAll('.knowledge-org-label')].find(item => item.textContent.includes('办公室'));
   await act(async () => { office.click(); });
   expect(container.querySelector('.knowledge-people-head h2').textContent).toContain('办公室');
@@ -538,6 +598,17 @@ test('personal knowledge browses by organization tree without listing all people
   expect(container.querySelector('.knowledge-person-files')).toBeNull();
   expect(container.textContent).toContain('陈静');
   expect(container.querySelector('.knowledge-people-grid')?.textContent).not.toContain('爱丽丝');
+  // Person card: solid avatar, stacked 组织/注册 labels, stats with count above label.
+  const chen = [...container.querySelectorAll('.knowledge-person')].find(item => item.textContent.includes('陈静'));
+  expect(chen).toBeTruthy();
+  expect(chen.querySelector('.knowledge-avatar')?.textContent).toBe('陈');
+  expect(chen.querySelector('.knowledge-avatar')?.getAttribute('style')).toMatch(/background:\s*rgb|#/);
+  expect(chen.querySelector('.knowledge-person-meta-label')?.textContent).toBe('组织');
+  expect(chen.querySelector('.knowledge-person-org')?.textContent).toContain('浙江万维空间信息技术有限公司');
+  expect(chen.querySelector('.knowledge-person-org')?.textContent).toContain('/办公室');
+  expect(chen.querySelector('.knowledge-person-registered')?.textContent).toBe('2019-05-20');
+  expect(chen.querySelector('.knowledge-person-stats')?.textContent).toMatch(/0\s*知识库/);
+  expect(chen.querySelector('.knowledge-person-stats')?.textContent).toMatch(/0B\s*总大小/);
   await act(async () => { button('未分配组织').click(); });
   expect(container.querySelector('.knowledge-people-head h2').textContent).toContain('未分配组织');
   expect(container.textContent).toContain('爱丽丝');

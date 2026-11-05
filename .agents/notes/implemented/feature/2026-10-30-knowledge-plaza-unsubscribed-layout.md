@@ -10,7 +10,7 @@ Unsubscribed plaza detail stacked cover, meta, and the file catalog in one narro
 
 ## Decision
 
-Pending or none plaza detail uses class `with-files`: left column is the cover hero, title, maintainer display name, description, stats, and subscribe control; right column is the read-only content tree. Approved and owned detail keeps `with-chat` (files under the left hero, Q&A on the right) per [plaza subscribed Q&A](2026-10-29-knowledge-plaza-subscribed-qa.md). `userDisplayNames` overlays account-center identity before preferring `display_name` over `username` for `owner_username` on plaza and managed list rows.
+Pending or none plaza detail uses class `with-files`: left column is the horizontal cover hero (授权知识库 tag, title, card-layout stats, 订阅 / 审核中), right column is the read-only content tree. Approved and owned detail keeps `with-chat` (files under the left hero, Q&A on the right) per [plaza subscribed Q&A](2026-10-29-knowledge-plaza-subscribed-qa.md); hero chrome follows [plaza detail design](2026-11-04-knowledge-plaza-detail-design.md). `userDisplayNames` overlays account-center identity before preferring `display_name` over `username` for `owner_username` on plaza and managed list rows.
 
 ## Alternatives considered
 
@@ -18,7 +18,7 @@ Keep a single-column unsubscribed detail — rejected; the empty right side next
 
 ## Consequences
 
-Desktop Client CSS and plaza detail markup must ship with the OneAPI overlay change. Card meta still shows 维护者; detail shows it once above the description.
+Desktop Client CSS and plaza detail markup must ship with the OneAPI overlay change. Card and detail meta both show 维护者 in the shared `cardLayout` rows.
 
 ## Required verification
 

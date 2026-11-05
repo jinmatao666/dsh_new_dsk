@@ -312,6 +312,15 @@ function visiblePageNumbers(page: number, pages: number): (number | 'gap')[] {
   return result
 }
 
+/** Total label with the count painted in the design accent blue.
+ * @param key - Locale template containing `{count}`.
+ * @param count - Item count.
+ */
+function pagerTotal(key: '共 {count} 项' | '共 {count} 个', count: number): ReactNode {
+  const [before = '', after = ''] = productText(key).split('{count}')
+  return <>{before}<em className="dsh-knowledge-pager-count">{count}</em>{after}</>
+}
+
 /** File count and byte total observed from this session's document loads for one library. */
 type LibraryDocumentStats = { count: number; bytes: number }
 
@@ -1115,8 +1124,12 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                 })}>
                 <span className={expanded ? 'dsh-knowledge-group-chevron open' : 'dsh-knowledge-group-chevron'}
                   aria-hidden="true"><ChevronIcon /></span>
+                <span className="dsh-knowledge-group-icon" aria-hidden="true">{groupIcon(group.key)}</span>
                 <strong>{group.label}</strong>
-                <span className="dsh-knowledge-group-count">{group.rows.length}</span>
+                <span className="dsh-knowledge-group-count">
+                  <img src={ICON_GROUP_COUNT_BG} alt="" draggable={false} aria-hidden="true" />
+                  <span>{group.rows.length}</span>
+                </span>
               </button>
               {group.createLabel !== undefined && group.create === 'personal' &&
                 <button type="button" aria-label={group.createLabel}
@@ -1131,23 +1144,26 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                 const chatShown = active && chatOpen
                 const stats = documentStats.get(item.id)
                 const chatLabel = chatShown ? productText('关闭问答') : productText('打开问答')
+                const description = item.description.trim()
                 return <div key={item.id} className={active ? 'dsh-knowledge-lib-card active' : 'dsh-knowledge-lib-card'}>
                   <button type="button" className="dsh-knowledge-lib-chat" aria-pressed={chatShown}
                     aria-label={`${chatLabel}：${item.name}`} title={chatLabel}
                     onClick={() => { setPlazaOpen(false); toggleChat(item.id) }}>
-                    <ChatIcon />
+                    <LibChatIcon />
                   </button>
                   <button type="button" className="dsh-knowledge-lib-card-main"
-                    title={item.description ? `${item.name}\n${item.description}` : item.name} aria-label={item.name}
+                    title={description !== '' ? `${item.name}\n${description}` : item.name} aria-label={item.name}
                     aria-current={active ? 'true' : undefined}
                     onClick={() => { setPlazaOpen(false); choose(item.id) }}>
                     <span className="dsh-knowledge-lib-card-body">
                       <strong className="dsh-knowledge-nav-name">{item.name}</strong>
-                      <span className="dsh-knowledge-lib-card-desc">{item.description || productText('暂无描述')}</span>
+                      {description !== '' &&
+                        <span className="dsh-knowledge-lib-card-desc">{description}</span>}
                       {renderPlazaMeta(libraryMetaItem(item), {
                         documentCount: stats?.count,
                         documentBytes: stats?.bytes,
                         hideSubscribers: true,
+                        cardLayout: true,
                       })}
                     </span>
                   </button>
@@ -1156,13 +1172,15 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
           </div>
         })}
       </div>
-      <button type="button" className="dsh-knowledge-plaza-launch" onClick={() => openPlaza()}>
-        <span className="dsh-knowledge-plaza-launch-icon" aria-hidden="true"><PlazaIcon /></span>
+      <button type="button" className="dsh-knowledge-plaza-launch" onClick={() => openPlaza()}
+        aria-label={`${productText('知识库广场')}：${productText('发现优质行业知识')}`}>
+        <img className="dsh-knowledge-plaza-launch-bg" src={PLAZA_ENTRY_ART} alt="" draggable={false} aria-hidden="true" />
         <span className="dsh-knowledge-plaza-launch-copy">
           <strong>{productText('知识库广场')}</strong>
           <small>{productText('发现优质行业知识')}</small>
         </span>
-        <span className="dsh-knowledge-plaza-launch-arrow" aria-hidden="true"><ChevronIcon /></span>
+        <img className="dsh-knowledge-plaza-launch-arrow" src={ICON_PLAZA_LAUNCH_ARROW} alt=""
+          draggable={false} aria-hidden="true" />
       </button>
     </aside>
     {plazaOpen && <div className="dsh-knowledge-plaza" role="region" aria-label={productText('知识库广场')}>
@@ -1178,15 +1196,23 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
             setPlazaOpen(false)
             void reloadLibraries().catch(cause => setError(`${productText('加载失败')}：${String(cause)}`))
           }}>
-          <BackIcon />
+          {plazaDetail === undefined
+            ? <img className="dsh-knowledge-plaza-back-art" src={ICON_PLAZA_BACK} alt="" draggable={false} />
+            : <BackIcon />}
         </button>
         <div className="dsh-knowledge-plaza-heading">
-          <span className="dsh-knowledge-plaza-heading-icon" aria-hidden="true"><PlazaIcon /></span>
+          <span className={plazaDetail === undefined
+            ? 'dsh-knowledge-plaza-heading-icon'
+            : 'dsh-knowledge-plaza-heading-icon detail-cover'} aria-hidden="true">
+            {plazaDetail === undefined
+              ? <img className="dsh-knowledge-plaza-book-art" src={ICON_PLAZA_BOOK} alt="" draggable={false} />
+              : <PlazaCover cover={plazaDetail.cover} />}
+          </span>
           <div>
-            <small>{plazaDetail === undefined ? productText('知识资源中心') : productText('知识库详情')}</small>
             <h2>{plazaDetail === undefined ? productText('知识库广场') : plazaDetail.name}</h2>
-            {plazaDetail === undefined &&
-              <p>{productText('发现并订阅专业知识库，让可靠资料随时参与工作')}</p>}
+            {plazaDetail === undefined
+              ? <p>{productText('知识资源中心，发现并订阅专业知识库，让可靠资料随时参与工作')}</p>
+              : <p>{productText('知识库详情')}</p>}
           </div>
         </div>
         {plazaDetail === undefined &&
@@ -1208,7 +1234,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                 <header className="dsh-knowledge-plaza-catalog-head">
                   <div>
                     <strong>{productText('精选知识库')}</strong>
-                    <span>{productText('共 {count} 个').replace('{count}', String(plazaItems.length))}</span>
+                    <span>{productText('共')} <em>{plazaItems.length}</em> {productText('个')}</span>
                   </div>
                 </header>
                 <div className="dsh-knowledge-plaza-list">
@@ -1218,39 +1244,45 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                         onClick={() => void openPlazaItem(item.id)}>
                         <span className="dsh-knowledge-plaza-cover" aria-hidden="true">
                           <PlazaCover cover={item.cover} />
-                          <span className="dsh-knowledge-plaza-category">{item.category_name}</span>
                           {item.subscription_status === 'owned' &&
-                            <em className="dsh-knowledge-plaza-status">{productText('我的')}</em>}
+                            <em className="dsh-knowledge-plaza-status owned">{productText('我的')}</em>}
                           {item.subscription_status === 'approved' &&
-                            <em className="dsh-knowledge-plaza-status">{productText('已订阅')}</em>}
+                            <em className="dsh-knowledge-plaza-status subscribed">{productText('已订阅')}</em>}
                           {item.subscription_status === 'pending' &&
                             <em className="dsh-knowledge-plaza-status pending">{productText('审核中')}</em>}
                         </span>
                         <span className="dsh-knowledge-plaza-card-body">
-                          <strong>{item.name}</strong>
-                          <p>{item.description || productText('暂无描述')}</p>
-                          {renderPlazaMeta(item)}
+                          <span className="dsh-knowledge-plaza-card-title">
+                            <strong>{item.name}</strong>
+                            <span className="dsh-knowledge-plaza-card-subs">
+                              <img className="dsh-knowledge-plaza-subs-art" src={ICON_PLAZA_SUBSCRIBERS}
+                                alt="" draggable={false} aria-hidden="true" />
+                              <span>{productText('已订阅')}<em>{item.subscriber_count ?? 0}</em>{productText('人')}</span>
+                            </span>
+                          </span>
+                          <span className="dsh-knowledge-plaza-card-tags">
+                            <span className="dsh-knowledge-plaza-category">{productText('授权知识库')}</span>
+                            {renderPlazaCategoryName(item.category_name)}
+                          </span>
+                          {renderPlazaMeta(item, { hideSubscribers: true, cardLayout: true })}
                         </span>
-                        <span className="dsh-knowledge-plaza-card-arrow" aria-hidden="true"><ChevronIcon /></span>
                       </button>)}
                   </div>
                 </div>
               </section>
               <nav className="dsh-knowledge-pager dsh-knowledge-plaza-pager" aria-label={productText('知识库分页')}>
-                <span className="dsh-knowledge-pager-total">
-                  {productText('共 {count} 个').replace('{count}', String(plazaItems.length))}
-                </span>
+                <span className="dsh-knowledge-pager-total">{pagerTotal('共 {count} 个', plazaItems.length)}</span>
                 <div className="dsh-knowledge-pager-controls">
+                  <span className="dsh-knowledge-page-count" aria-live="polite">
+                    {productText('第')} {currentPlazaPage}{productText(' 页')} / {plazaPageCount}
+                  </span>
                   <button type="button" disabled={currentPlazaPage <= 1}
                     onClick={() => setPlazaPage(currentPlazaPage - 1)}>{productText('上一页')}</button>
-                  <span className="dsh-knowledge-page-count" aria-live="polite">
-                    {productText('第')}{currentPlazaPage}{productText(' 页')} / {plazaPageCount}
-                  </span>
                   <span className="dsh-knowledge-page-choices" aria-label={productText('选择页码')}>
                     {visiblePageNumbers(currentPlazaPage, plazaPageCount).map((value, index) => value === 'gap'
                       ? <span className="dsh-knowledge-page-gap" key={`plaza-gap-${index}`} aria-hidden="true">…</span>
                       : <button className="dsh-knowledge-page-number" type="button" key={value}
-                        aria-label={`${productText('第')}${value}${productText(' 页')}`}
+                        aria-label={`${productText('第')} ${value}${productText(' 页')}`}
                         aria-current={value === currentPlazaPage ? 'page' : undefined}
                         disabled={value === currentPlazaPage}
                         onClick={() => setPlazaPage(value)}>{value}</button>)}
@@ -1265,21 +1297,31 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                       setPlazaJump('')
                     }
                   }}>
+                    <span>{productText('跳至')}</span>
                     <input type="text" inputMode="numeric" aria-label={productText('跳转页码')}
-                      placeholder={productText('页码')} value={plazaJump}
-                      onChange={event => setPlazaJump(event.target.value)} />
-                    <button type="submit" disabled={plazaJump === ''}>{productText('跳转')}</button>
+                      value={plazaJump} onChange={event => setPlazaJump(event.target.value)} />
+                    <span>{productText('页')}</span>
                   </form>
                 </div>
               </nav>
             </>}
-        <p className="dsh-knowledge-hint">{productText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库仍可在广场查看与问答。')}</p>
       </> : (() => {
-        const plazaCanUse = plazaDetail.subscription_status === 'approved'
-          || plazaDetail.subscription_status === 'owned'
+        const plazaStatus = plazaDetail.subscription_status
+        const plazaCanUse = plazaStatus === 'approved' || plazaStatus === 'owned'
+        const showSubscribe = plazaStatus === 'none' || plazaStatus === 'pending'
+        const plazaDocumentCount = plazaDocuments.length > 0
+          ? Math.max(plazaDetail.document_count ?? 0, plazaDocuments.length)
+          : plazaDetail.document_count
+        const plazaDocumentBytes = (plazaDetail.document_bytes ?? 0) > 0
+          ? plazaDetail.document_bytes
+          : plazaDocuments.reduce((sum, document) => sum + document.size, 0)
+        const plazaContentCount = plazaDocuments.length > 0
+          ? plazaDocuments.length
+          : plazaDetail.document_count ?? 0
         const plazaFiles = <div className="dsh-knowledge-plaza-content">
-          <div className="dsh-knowledge-plaza-content-tabs">
-            <strong>{productText('内容')}{plazaDocuments.length > 0 ? ` ${plazaDocuments.length}` : ''}</strong>
+          <div className="dsh-knowledge-plaza-content-head">
+            <strong>{productText('内容')}</strong>
+            <span className="dsh-knowledge-plaza-content-count">{plazaContentCount}</span>
           </div>
           {plazaDocuments.length === 0
             ? <p className="dsh-knowledge-empty">{productText('暂无内容')}</p>
@@ -1307,40 +1349,43 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
             <div className="dsh-knowledge-plaza-detail-main">
               <span className="dsh-knowledge-plaza-cover large" aria-hidden="true">
                 <PlazaCover cover={plazaDetail.cover} />
+                {plazaStatus === 'owned' &&
+                  <em className="dsh-knowledge-plaza-status owned">{productText('我的')}</em>}
+                {plazaStatus === 'approved' &&
+                  <em className="dsh-knowledge-plaza-status subscribed">{productText('已订阅')}</em>}
               </span>
               <div className="dsh-knowledge-plaza-detail-row">
                 <div className="dsh-knowledge-plaza-detail-copy">
-                  {plazaDetail.category_name !== '' &&
-                    <span className="dsh-knowledge-plaza-detail-category">{plazaDetail.category_name}</span>}
                   <h3>{plazaDetail.name}</h3>
-                  <p className="dsh-knowledge-plaza-owner">
-                    <em>{productText('维护者')}</em>
-                    {plazaDetail.owner_username || productText('未知作者')}
-                  </p>
-                  <p>{plazaDetail.description || productText('暂无描述')}</p>
+                  <span className="dsh-knowledge-plaza-detail-tags">
+                    <span className="dsh-knowledge-plaza-category">{productText('授权知识库')}</span>
+                    {renderPlazaCategoryName(plazaDetail.category_name)}
+                  </span>
                   {renderPlazaMeta(plazaDetail, {
-                    documentCount: plazaDocuments.length > 0
-                      ? Math.max(plazaDetail.document_count ?? 0, plazaDocuments.length)
-                      : plazaDetail.document_count,
-                    documentBytes: (plazaDetail.document_bytes ?? 0) > 0
-                      ? plazaDetail.document_bytes
-                      : plazaDocuments.reduce((sum, document) => sum + document.size, 0),
-                    hideMaintainer: true,
+                    documentCount: plazaDocumentCount,
+                    documentBytes: plazaDocumentBytes,
+                    hideSubscribers: true,
+                    cardLayout: true,
                   })}
                 </div>
-                <button type="button"
-                  className={`dsh-knowledge-plaza-subscribe ${plazaDetail.subscription_status}`}
-                  disabled={subscribing || plazaDetail.subscription_status !== 'none'}
-                  onClick={() => void submitSubscribe()}>
-                  {plazaDetail.subscription_status === 'owned' ? productText('我的')
-                    : plazaDetail.subscription_status === 'approved' ? productText('已订阅')
-                      : plazaDetail.subscription_status === 'pending' ? productText('审核中')
-                        : productText('订阅')}
-                </button>
+                <div className="dsh-knowledge-plaza-detail-actions">
+                  {showSubscribe
+                    ? <button type="button"
+                      className={`dsh-knowledge-plaza-subscribe ${plazaStatus}`}
+                      disabled={subscribing || plazaStatus !== 'none'}
+                      onClick={() => void submitSubscribe()}>
+                      {plazaStatus === 'pending' ? productText('审核中') : productText('订阅')}
+                    </button>
+                    : <span className="dsh-knowledge-plaza-subscribe-slot" aria-hidden="true" />}
+                  <span className="dsh-knowledge-plaza-card-subs">
+                    {plazaCanUse && <img className="dsh-knowledge-plaza-subs-art" src={ICON_PLAZA_SUBSCRIBERS}
+                      alt="" draggable={false} aria-hidden="true" />}
+                    <span>{productText('已订阅')}<em>{plazaDetail.subscriber_count ?? 0}</em>{productText('人')}</span>
+                  </span>
+                </div>
               </div>
             </div>
             {plazaCanUse && plazaFiles}
-            <p className="dsh-knowledge-hint">{productText('订阅后需管理员审核，通过后会出现在左侧订阅知识库；已订阅的知识库仍可在广场查看与问答。')}</p>
           </div>
           {!plazaCanUse && plazaFiles}
           {plazaCanUse && <section className="dsh-knowledge-plaza-detail-chat" aria-label={productText('基于知识库问答')}>
@@ -1399,7 +1444,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                     : <button type="submit" className={question.trim() === '' ? 'dsh-knowledge-send idle' : 'dsh-knowledge-send ready'}
                       aria-label={productText('发送')}
                       disabled={question.trim() === '' || clearing}>
-                      <SendIcon />
+                      <SendIcon ready={question.trim() !== ''} />
                     </button>}
                 </div>
               </div>
@@ -1409,15 +1454,13 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       })()}
     </div>}
     <main className={uploadOpen ? 'dsh-knowledge-content upload-open' : 'dsh-knowledge-content'}>
-      <header>
+      <header className="dsh-knowledge-lib-header">
         <div className="dsh-knowledge-cover" aria-hidden="true">
-          {selected?.cover?.startsWith('data:image/') ? <img src={selected.cover} alt="" />
-            : selected === undefined ? <BookIcon />
-              : <LibraryFolderIcon />}
+          {selected === undefined ? <BookIcon /> : <LibraryHeaderIcon />}
         </div>
         <div className="dsh-knowledge-header-copy">
           <h2>{selected?.name ?? productText('暂无知识库')}</h2>
-          <p>{selected?.description ?? ''}</p>
+          {selected?.description?.trim() ? <p>{selected.description.trim()}</p> : null}
         </div>
         {selectedIsSubscribed &&
           <button type="button" className="dsh-knowledge-unsubscribe" disabled={unsubscribing}
@@ -1471,22 +1514,20 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
             onOpenMenu: openDocumentMenu,
           })}</div>}
       </div>
-      {!loading && contentTree.length > 0 &&
+      {!chatOpen && !loading && contentTree.length > 0 &&
         <nav className="dsh-knowledge-pager" aria-label={productText('文件分页')}>
-          <span className="dsh-knowledge-pager-total">
-            {productText('共 {count} 项').replace('{count}', String(contentTree.length))}
-          </span>
+          <span className="dsh-knowledge-pager-total">{pagerTotal('共 {count} 项', contentTree.length)}</span>
           <div className="dsh-knowledge-pager-controls">
+            <span className="dsh-knowledge-page-count" aria-live="polite">
+              {productText('第')} {currentPage}{productText(' 页')} / {pageCount}
+            </span>
             <button type="button" disabled={currentPage <= 1}
               onClick={() => setDocumentPage(currentPage - 1)}>{productText('上一页')}</button>
-            <span className="dsh-knowledge-page-count" aria-live="polite">
-              {productText('第')}{currentPage}{productText(' 页')} / {pageCount}
-            </span>
             <span className="dsh-knowledge-page-choices" aria-label={productText('选择页码')}>
               {visiblePageNumbers(currentPage, pageCount).map((value, index) => value === 'gap'
                 ? <span className="dsh-knowledge-page-gap" key={`gap-${index}`} aria-hidden="true">…</span>
                 : <button className="dsh-knowledge-page-number" type="button" key={value}
-                  aria-label={`${productText('第')}${value}${productText(' 页')}`}
+                  aria-label={`${productText('第')} ${value}${productText(' 页')}`}
                   aria-current={value === currentPage ? 'page' : undefined}
                   disabled={value === currentPage}
                   onClick={() => setDocumentPage(value)}>{value}</button>)}
@@ -1501,10 +1542,10 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                 setPageJump('')
               }
             }}>
+              <span>{productText('跳至')}</span>
               <input type="text" inputMode="numeric" aria-label={productText('跳转页码')}
-                placeholder={productText('页码')} value={pageJump}
-                onChange={event => setPageJump(event.target.value)} />
-              <button type="submit" disabled={pageJump === ''}>{productText('跳转')}</button>
+                value={pageJump} onChange={event => setPageJump(event.target.value)} />
+              <span>{productText('页')}</span>
             </form>
           </div>
         </nav>}
@@ -1565,7 +1606,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
               : <button type="submit" className={question.trim() === '' ? 'dsh-knowledge-send idle' : 'dsh-knowledge-send ready'}
                 aria-label={productText('发送')}
                 disabled={question.trim() === '' || selectedId === undefined || clearing}>
-                <SendIcon />
+                <SendIcon ready={question.trim() !== ''} />
               </button>}
           </div>
         </div>
@@ -1838,7 +1879,9 @@ function PreviewAskPane({
       {answering
         ? <button type="button" className="dsh-knowledge-send stop" aria-label={productText('停止')} onClick={onStop}><StopIcon /></button>
         : <button type="submit" className={question.trim() === '' ? 'dsh-knowledge-send idle' : 'dsh-knowledge-send ready'}
-          aria-label={productText('发送')} disabled={question.trim() === '' || disabled}><SendIcon /></button>}
+          aria-label={productText('发送')} disabled={question.trim() === '' || disabled}>
+          <SendIcon ready={question.trim() !== ''} />
+        </button>}
     </form>
   </aside>
 }
@@ -1927,25 +1970,45 @@ function BookIcon() {
   </svg>
 }
 
-function PlazaIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M4 10.5 12 4l8 6.5" />
-    <path d="M6.5 9.5V20h11V9.5M9.5 20v-5h5v5" />
-    <path d="M3 20h18" />
-  </svg>
-}
+/** Design plaza entry art (book + blue plate; copy is overlaid in the page). */
+const PLAZA_ENTRY_ART = '/knowledge-covers/plaza-entry.png'
+/** Plaza launch — circular chevron cutout from the design. */
+const ICON_PLAZA_LAUNCH_ARROW = '/knowledge-covers/icon-plaza-launch-arrow.png'
+/** Sidebar group tally — glowing disc cutout behind the count. */
+const ICON_GROUP_COUNT_BG = '/knowledge-covers/icon-group-count-bg.png'
 
-/**
- * Theme-blue filled folder for sidebar rows and the content header — matches the
- * product folder mark (tab + horizontal slot).
+/** js.design cutouts staged under `knowledge-covers/` (served ~3× for retina). */
+const ICON_GROUP_PERSONAL = '/knowledge-covers/icon-group-personal.png'
+const ICON_GROUP_PUBLIC = '/knowledge-covers/icon-group-public.png'
+const ICON_GROUP_SUBSCRIPTION = '/knowledge-covers/icon-group-subscription.png'
+/** Sidebar Q&A toggle — ~48px PNG for 12 CSS px. */
+const ICON_LIB_CHAT = '/knowledge-covers/icon-lib-chat.png'
+/** Composer send (ready): design blue circle + white paper plane. */
+const ICON_SEND_READY = '/knowledge-covers/icon-send-ready.png'
+/** Composer send (idle): white paper-plane glyph on the gray button. */
+const ICON_SEND_PLANE = '/knowledge-covers/icon-send-plane.png'
+const ICON_CLOCK = '/knowledge-covers/icon-clock.png'
+const ICON_LIBRARY_HEADER = '/knowledge-covers/icon-library-header.png'
+/** Content-card PDF mark — yellow/orange book on dark tile. */
+const ICON_FILE_PDF = '/knowledge-covers/icon-file-pdf.png'
+/** Content-card Word mark — blue book on dark tile. */
+const ICON_FILE_WORD = '/knowledge-covers/icon-file-word.png'
+const ICON_UPLOAD = '/knowledge-covers/icon-upload.png'
+/** Plaza list header — open-book mark from js.design. */
+const ICON_PLAZA_BOOK = '/knowledge-covers/icon-plaza-book.png'
+/** Plaza list header — back chevron from js.design. */
+const ICON_PLAZA_BACK = '/knowledge-covers/icon-plaza-back.png'
+/** Plaza card — person glyph next to subscriber count. */
+const ICON_PLAZA_SUBSCRIBERS = '/knowledge-covers/icon-plaza-subscribers.png'
+/** Plaza detail content tab — open-book mark. */
+
+/** Sidebar group mark for a nav key — design PNG cutouts.
+ * @param key - `personal` / `public` / `subscription`, or a future group id.
  */
-function LibraryFolderIcon() {
-  return <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-    <path fill="currentColor"
-      d="M4 7.2C4 6 5 5 6.2 5h3.2l1.4 1.4H17.8C19 6.4 20 7.4 20 8.6v9.2c0 1.2-1 2.2-2.2 2.2H6.2C5 20 4 19 4 17.8V7.2Z" />
-    <rect x="7.2" y="9.6" width="9.6" height="1.8" rx="0.9" fill="#fff" />
-  </svg>
+function groupIcon(key: string): ReactNode {
+  if (key === 'personal') return <img src={ICON_GROUP_PERSONAL} alt="" draggable={false} />
+  if (key === 'subscription') return <img src={ICON_GROUP_SUBSCRIPTION} alt="" draggable={false} />
+  return <img src={ICON_GROUP_PUBLIC} alt="" draggable={false} />
 }
 
 /** Product-staged natural-resources cover for plaza cards and detail. */
@@ -1995,15 +2058,19 @@ function renderPlazaContentTree(nodes: ContentNode[], handlers: PlazaTreeHandler
     }
     const document = node.document
     const stamp = documentTime(document)
+    const uploadedAt = formatUploadTime(stamp)
     const openable = handlers.onOpenDocument !== undefined
+    const sizeLabel = formatDocumentSize(document.size).replace(/(B|KB|MB)$/u, ' $1')
+    const kind = fileKind(documentDisplayName(document))
     const fileBody = <>
-      <span className={`dsh-knowledge-plaza-file-icon ${fileKind(documentDisplayName(document))}`} aria-hidden="true">
-        <TypeIcon kind={fileKind(documentDisplayName(document))} />
+      <span className={`dsh-knowledge-plaza-file-icon ${kind}`} aria-hidden="true">
+        <TypeIcon kind={kind} />
       </span>
       <strong>{documentDisplayName(document)}</strong>
-      <span className="dsh-knowledge-plaza-file-type">{productText(kindLabel(fileKind(documentDisplayName(document))))}</span>
+      <span className="dsh-knowledge-plaza-file-type">{sizeLabel}</span>
       <span className="dsh-knowledge-plaza-file-date">
-        {stamp > 0 ? productText('{date}更新').replace('{date}', formatPlazaDate(stamp)) : '-'}
+        <ClockIcon />
+        {uploadedAt !== '' ? uploadedAt : '-'}
       </span>
     </>
     rows.push(openable
@@ -2021,17 +2088,6 @@ function renderPlazaContentTree(nodes: ContentNode[], handlers: PlazaTreeHandler
   return rows
 }
 
-/** Compact month/day label for plaza catalog rows.
- * @param stamp - Unix seconds or milliseconds.
- * @returns Local `M/D` text.
- */
-function formatPlazaDate(stamp: number): string {
-  const ms = stamp > 1e12 ? stamp : stamp * 1000
-  const date = new Date(ms)
-  if (Number.isNaN(date.getTime())) return ''
-  return `${date.getMonth() + 1}/${date.getDate()}`
-}
-
 /** Calendar day for a plaza card's updated_at.
  * @param value - RFC3339 timestamp from OneAPI.
  * @returns `YYYY-MM-DD`, or an em dash when missing.
@@ -2044,13 +2100,17 @@ function formatPlazaUpdated(value: string | undefined): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
-/** File size label in megabytes for a plaza card.
+/** File size label for plaza / sidebar library cards (KB under 1MB, else MB).
  * @param bytes - Summed document size.
- * @returns Text such as `2.4MB`.
+ * @returns Text such as `14KB` or `21MB`.
  */
 function formatPlazaMegabytes(bytes: number | undefined): string {
   const number = Number(bytes)
   if (!Number.isFinite(number) || number <= 0) return '0MB'
+  if (number < 1024 * 1024) {
+    const kilobytes = number / 1024
+    return `${kilobytes >= 10 ? kilobytes.toFixed(0) : kilobytes.toFixed(1)}KB`
+  }
   const megabytes = number / (1024 * 1024)
   return `${megabytes >= 10 ? megabytes.toFixed(0) : megabytes.toFixed(1)}MB`
 }
@@ -2073,6 +2133,15 @@ function libraryMetaItem(item: KnowledgeBaseItem): PlazaMetaSource {
   }
 }
 
+/** Plain category label beside the blue 授权知识库 chip; omit when it would duplicate that chip.
+ * @param categoryName - Marketplace `category_name`, or empty when unset.
+ */
+function renderPlazaCategoryName(categoryName: string): ReactNode {
+  const label = categoryName.trim()
+  if (label === '' || label === productText('授权知识库')) return null
+  return <span className="dsh-knowledge-plaza-card-category">{label}</span>
+}
+
 /** Shared plaza card / detail stats rows.
  * @param item - Marketplace library, or a sidebar library projected by `libraryMetaItem`.
  * @param overrides - Optional document totals when the detail catalog already loaded.
@@ -2086,14 +2155,29 @@ function renderPlazaMeta(
     hideMaintainer?: boolean | undefined
     /** Sidebar cards omit the subscriber count. */
     hideSubscribers?: boolean | undefined
+    /** Plaza grid cards: 2×2 label：value (维护者/文件数量 | 更新时间/文件大小). */
+    cardLayout?: boolean | undefined
   },
 ): ReactNode {
   const documentCount = overrides?.documentCount ?? item.document_count ?? 0
   const documentBytes = overrides?.documentBytes ?? item.document_bytes ?? 0
+  const maintainer = item.owner_username || productText('未知作者')
+  if (overrides?.cardLayout === true) {
+    return <span className="dsh-knowledge-plaza-meta card-layout">
+      <span className="dsh-knowledge-plaza-meta-col">
+        <span><em>{productText('维护者')}</em><strong>{maintainer}</strong></span>
+        <span><em>{productText('文件数量')}</em><strong>{documentCount}{productText('个')}</strong></span>
+      </span>
+      <span className="dsh-knowledge-plaza-meta-col">
+        <span><em>{productText('更新时间')}</em><strong>{formatPlazaUpdated(item.updated_at)}</strong></span>
+        <span><em>{productText('文件大小')}</em><strong>{formatPlazaMegabytes(documentBytes)}</strong></span>
+      </span>
+    </span>
+  }
   const detailStats = overrides?.hideMaintainer === true
   return <span className={detailStats ? 'dsh-knowledge-plaza-meta detail-stats' : 'dsh-knowledge-plaza-meta'}>
     {overrides?.hideMaintainer !== true &&
-      <span><em>{productText('维护者')}</em><strong>{item.owner_username || productText('未知作者')}</strong></span>}
+      <span><em>{productText('维护者')}</em><strong>{maintainer}</strong></span>}
     <span><em>{productText('更新时间')}</em><strong>{formatPlazaUpdated(item.updated_at)}</strong></span>
     <span><em>{productText('文件数量')}</em><strong>{documentCount}{productText('个')}</strong></span>
     <span><em>{productText('文件大小')}</em><strong>{formatPlazaMegabytes(documentBytes)}</strong></span>
@@ -2117,10 +2201,13 @@ function ChatIcon() {
   </svg>
 }
 
-function SendIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-    <path fill="currentColor" d="M4.2 11.1 18.6 4.4c.7-.3 1.4.4 1.1 1.1L13 20.8c-.3.7-1.3.6-1.5-.1l-1.7-5.4a1 1 0 0 1 .5-1.2l5-2.4-6.7-.4a1 1 0 0 1-.8-.6L4.2 11.1Z" />
-  </svg>
+/** Composer send mark — ready uses the full blue disk; idle is the white plane only.
+ * @param props.ready - True when the field has text and the button is active.
+ */
+function SendIcon({ ready = false }: { ready?: boolean }) {
+  return ready
+    ? <img className="dsh-knowledge-send-art" src={ICON_SEND_READY} alt="" draggable={false} />
+    : <img className="dsh-knowledge-send-plane" src={ICON_SEND_PLANE} alt="" draggable={false} />
 }
 
 function StopIcon() {
@@ -2296,15 +2383,19 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
           event.preventDefault()
           handlers.onOpenMenu(document.id, event.clientX, event.clientY)
         }}>
-        <span className={`dsh-knowledge-file-icon ${kind}`} aria-hidden="true"><TypeIcon kind={kind} /></span>
+        <span className={`dsh-knowledge-file-icon ${kind}`} aria-hidden="true">
+          <TypeIcon kind={kind} />
+        </span>
         <strong>{name}</strong>
         <small>
-          <span>{productText(kindLabel(kind))}</span>
+          <span className="dsh-knowledge-card-time">
+            <ClockIcon />
+            {uploadedAt !== '' ? uploadedAt : productText(kindLabel(kind))}
+          </span>
           <span>{formatDocumentSize(document.size)}</span>
         </small>
-        {(uploadedAt !== '' || document.creator_name !== undefined) && <span className="dsh-knowledge-card-meta">
-          {uploadedAt !== '' && <span><em>{productText('上传时间')}</em>{uploadedAt}</span>}
-          {document.creator_name !== undefined && <span><em>{productText('创建人')}</em>{document.creator_name}</span>}
+        {document.creator_name !== undefined && <span className="dsh-knowledge-card-meta">
+          <span><em>{productText('创建人')}</em>{document.creator_name}</span>
         </span>}
         {selectedDoc && <span className="dsh-knowledge-card-corner">
           <span className="dsh-knowledge-check" aria-hidden="true"><CheckIcon /></span>
@@ -2405,8 +2496,24 @@ function formatUploadTime(value: number): string {
 
 function TypeIcon({ kind }: { kind: FileKind }) {
   if (kind === 'image') return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" /><circle cx="9" cy="10" r="1.4" fill="currentColor" /><path d="m7 16 3.2-3.2a1 1 0 0 1 1.4 0L16 17" /></svg>
-  if (kind === 'pdf') return <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 3.5h7l5 5V20a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 20V5A1.5 1.5 0 0 1 7 3.5Z" /><path fill="#fff" d="M8 14.2h1.2c.8 0 1.3-.4 1.3-1.1S10 12 9.2 12H8v2.2Zm.7-1.7h.4c.3 0 .5.1.5.4s-.2.4-.5.4H8.7v-.8Zm2.2 1.7h1.2c1 0 1.6-.5 1.6-1.3s-.6-1.3-1.6-1.3h-1.2v2.6Zm.7-.5v-1.6h.4c.5 0 .8.2.8.8s-.3.8-.8.8h-.4Zm2.5.5h.7V12h-.7v2.2Z" /></svg>
+  if (kind === 'pdf') return <img src={ICON_FILE_PDF} alt="" draggable={false} />
+  if (kind === 'word') return <img src={ICON_FILE_WORD} alt="" draggable={false} />
   return <FileIcon />
+}
+
+/** Library-card Q&A toggle — design PNG cutout. */
+function LibChatIcon() {
+  return <img src={ICON_LIB_CHAT} alt="" draggable={false} />
+}
+
+/** Selected-library header mark — design dark tile + blue book. */
+function LibraryHeaderIcon() {
+  return <img src={ICON_LIBRARY_HEADER} alt="" draggable={false} />
+}
+
+/** Content-card timestamp clock — design cutout. */
+function ClockIcon() {
+  return <img className="dsh-knowledge-card-clock" src={ICON_CLOCK} alt="" draggable={false} />
 }
 
 function SearchIcon() {
@@ -2418,7 +2525,7 @@ function SortIcon() {
 }
 
 function UploadIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M12 16V6M12 6l-3.5 3.5M12 6l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" /><path d="M5 18.5h14" strokeLinecap="round" /></svg>
+  return <img className="dsh-knowledge-upload-art" src={ICON_UPLOAD} alt="" draggable={false} />
 }
 
 function FileMenuIcon() {

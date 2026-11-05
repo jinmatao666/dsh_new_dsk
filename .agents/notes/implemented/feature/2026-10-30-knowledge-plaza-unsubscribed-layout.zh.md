@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-审核中或未订阅详情使用 `with-files`：左栏为封面、标题、维护者显示名、描述、统计与订阅按钮；右栏为只读内容树。已订阅与「我的」仍用 `with-chat`（文件在左栏封面下、问答在右），见 [广场已订阅分栏问答](2026-10-29-knowledge-plaza-subscribed-qa.zh.md)。`userDisplayNames` 先叠加账号中心身份，再优先用 `display_name`，否则回退 `username`，写入广场与管理列表的 `owner_username`。
+审核中或未订阅详情使用 `with-files`：左栏为横向封面主视觉（授权知识库标签、标题、卡片式统计、订阅 / 审核中），右栏为只读内容树。已订阅与「我的」仍用 `with-chat`（文件在左栏封面下、问答在右），见 [广场已订阅分栏问答](2026-10-29-knowledge-plaza-subscribed-qa.zh.md)；主视觉细节见 [广场详情设计](2026-11-04-knowledge-plaza-detail-design.zh.md)。`userDisplayNames` 先叠加账号中心身份，再优先用 `display_name`，否则回退 `username`，写入广场与管理列表的 `owner_username`。
 
 ## Alternatives considered
 
@@ -18,7 +18,7 @@ Status: implemented
 
 ## Consequences
 
-桌面 Client 样式与广场详情结构需与 OneAPI 显示名叠加同发。卡片元信息仍展示维护者；详情在描述上方只展示一次。
+桌面 Client 样式与广场详情结构需与 OneAPI 显示名叠加同发。卡片与详情元信息均在共用的 `cardLayout` 行中展示维护者。
 
 ## Required verification
 

@@ -86,6 +86,11 @@ export interface PanelInjected {
    * (for example knowledge-base pagination). Prefer an explicit class over CSS `:has()`.
    */
   bodyClassName?: string
+  /**
+   * Absolute URL of a wide header illustration (empty left, art on the right).
+   * Rendered behind the heading copy; omit for panels without product art.
+   */
+  headerArt?: string
   hooks: { network: HostObservable<NetworkState> }
 }
 export type PanelProps = PropsRuntime<'shell.overlay'> & InjectFace<PanelInjected>
@@ -132,7 +137,7 @@ export function usePanelNavigation(controller: PanelController, open: boolean): 
  */
 export function FeaturePanel({
   title, subtitle, controller, requiresDirectInternet, useNetwork, renderContent, renderHeaderActions, visibility,
-  bodyClassName,
+  bodyClassName, headerArt,
 }: PanelProps) {
   const visible = useSyncExternalStore(
     listener => visibility ? visibility.subscribe(listener) : () => {}, () => visibility ? visibility.getSnapshot() : true,
@@ -144,9 +149,14 @@ export function FeaturePanel({
   useEffect(() => { if (unavailable || !visible) controller.close() }, [controller, unavailable, visible, open])
   if (!open || unavailable || !visible) return null
   const bodyClass = ['dsh-skill-market-body', bodyClassName].filter(Boolean).join(' ')
+  const headerClass = headerArt !== undefined && headerArt !== ''
+    ? 'dsh-skill-market-header has-art'
+    : 'dsh-skill-market-header'
   return <div className="dsh-skill-market-overlay" role="dialog" aria-modal="true" aria-label={title}>
     <div className="dsh-skill-market-panel">
-      <header className="dsh-skill-market-header">
+      <header className={headerClass}>
+        {headerArt !== undefined && headerArt !== '' &&
+          <img className="dsh-skill-market-header-art" src={headerArt} alt="" draggable={false} aria-hidden="true" />}
         <div className="dsh-skill-market-heading"><span className="dsh-skill-kicker">{productText('WANWEI Buddy')}</span>
           <h1>{title}</h1><p>{subtitle}</p></div>
         <div className="dsh-skill-market-header-end">

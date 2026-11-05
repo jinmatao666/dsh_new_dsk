@@ -79,15 +79,45 @@
 }
 
 .dsh-skill-market-header {
+  position: relative;
   display: grid;
   flex: 0 0 auto;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: flex-start;
   gap: 12px 20px;
   padding-bottom: 16px;
+  overflow: hidden;
+}
+
+.dsh-skill-market-header.has-art {
+  /* Design frame: hero art displays at 185px tall, right-aligned. */
+  box-sizing: border-box;
+  height: 185px;
+  min-height: 185px;
+  align-items: center;
+  padding: 0 0 12px;
+}
+
+.dsh-skill-market-header-art {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 0;
+  /* Native design height 185px; asset ships @2x so DPR≥1 stays sharp. */
+  height: 185px;
+  width: auto;
+  max-width: none;
+  object-fit: contain;
+  object-position: right center;
+  image-rendering: auto;
+  -ms-interpolation-mode: bicubic;
+  pointer-events: none;
+  user-select: none;
 }
 
 .dsh-skill-market-header-end {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -127,6 +157,8 @@
 }
 
 .dsh-skill-market-heading {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-width: 0;
 }
@@ -147,7 +179,11 @@
   margin: 4px 0 0;
   color: var(--dsw-alias-label-secondary);
   line-height: 1.6;
-  max-width: 720px;
+  max-width: min(520px, 62%);
+}
+
+.dsh-skill-market-header.has-art p {
+  max-width: min(420px, 48%);
 }
 
 .dsh-skill-market-actions {

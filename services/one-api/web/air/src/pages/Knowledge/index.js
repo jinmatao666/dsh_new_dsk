@@ -1,9 +1,87 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ChevronDown, ChevronRight, ClipboardList, Download, Eye, FileText, Folder, FolderPlus, FolderTree, Layers, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Tag, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Download, Folder, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { API, isAdmin, isRoot } from '../../helpers';
+import { resourceURL } from '../../deployment';
 import CustomSelect from '../../components/CustomSelect';
 import './index.css';
+
+/** Hue-matched category-card header plates (js.design). Blue family uses the fixed isometric-folder plate. */
+const LIBRARY_CARD_BANNER_BLUE = '/knowledge-icons/card-banner.png';
+const LIBRARY_CARD_BANNER_CREAM = '/knowledge-icons/card-banner-cream.png';
+const LIBRARY_CARD_BANNER_MINT = '/knowledge-icons/card-banner-mint.png';
+const LIBRARY_CARD_BANNER_PINK = '/knowledge-icons/card-banner-pink.png';
+/** Fixed default mark for unmatched names / no cover: white book + bookmark on blue squircle. */
+const LIBRARY_CARD_DEFAULT_ICON = '/knowledge-icons/icon-library-default.png';
+/** File-list CTA glyph on category cards. */
+const LIBRARY_CARD_FILE_LIST_ICON = '/knowledge-icons/icon-file-list.png';
+/** Horizontal three-dot more-menu glyph on category / person library cards. */
+const LIBRARY_CARD_MORE_ICON = '/knowledge-icons/icon-card-more.png';
+/**
+ * Design-name mark themes for category cards.
+ * Green (占补/占卜/占比平衡) → mint 图4; yellow/coral (土地征收, 地灾防治) → pink 图3;
+ * blue-family marks → blue. Unmatched names keep the default mark on the blue plate.
+ */
+const LIBRARY_CARD_NAME_THEMES = [
+  { keyword: '占补平衡', icon: '/knowledge-icons/icon-theme-grid.png', banner: LIBRARY_CARD_BANNER_MINT },
+  { keyword: '占卜平衡', icon: '/knowledge-icons/icon-theme-grid.png', banner: LIBRARY_CARD_BANNER_MINT },
+  { keyword: '占比平衡', icon: '/knowledge-icons/icon-theme-grid.png', banner: LIBRARY_CARD_BANNER_MINT },
+  { keyword: '闲置土地', icon: '/knowledge-icons/icon-theme-clock.png', banner: LIBRARY_CARD_BANNER_BLUE },
+  { keyword: '土地征收', icon: '/knowledge-icons/icon-theme-zheng.png', banner: LIBRARY_CARD_BANNER_PINK },
+  { keyword: '土地市场', icon: '/knowledge-icons/icon-theme-layout.png', banner: LIBRARY_CARD_BANNER_BLUE },
+  { keyword: '地灾防治', icon: '/knowledge-icons/icon-theme-landslide.png', banner: LIBRARY_CARD_BANNER_PINK },
+  { keyword: '耕地保护', icon: '/knowledge-icons/icon-theme-seedling.png', banner: LIBRARY_CARD_BANNER_BLUE },
+  { keyword: '规划实施', icon: '/knowledge-icons/icon-theme-draft.png', banner: LIBRARY_CARD_BANNER_BLUE },
+  { keyword: '规划评估', icon: '/knowledge-icons/icon-theme-edit.png', banner: LIBRARY_CARD_BANNER_BLUE },
+  { keyword: '临时用地', icon: '/knowledge-icons/icon-theme-schedule.png', banner: LIBRARY_CARD_BANNER_BLUE },
+  { keyword: '低效用地', icon: '/knowledge-icons/icon-theme-gear.png', banner: LIBRARY_CARD_BANNER_BLUE },
+];
+/** Public/default category cards: isometric folder plate + white book mark. */
+const LIBRARY_CARD_DEFAULT_THEME = {
+  icon: LIBRARY_CARD_DEFAULT_ICON,
+  banner: LIBRARY_CARD_BANNER_BLUE,
+};
+/** Page-head decorative strip (folders / documents, js.design public-tab art). */
+const PAGE_HEADER_ART = '/knowledge-icons/page-header-art.png';
+/** Organization-tree node mark (js.design blue list glyph). */
+const ICON_ORG_NODE = '/knowledge-icons/icon-org-node.png';
+/** Personal-directory chrome: subscription review (js.design cutout). */
+const ICON_SUBSCRIPTION_REVIEW = '/knowledge-icons/icon-subscription-review.png';
+/** Personal-directory chrome: new category (folder + plus). */
+const ICON_NEW_CATEGORY = '/knowledge-icons/icon-new-category.png';
+/** Personal-directory primary CTA: new library (document + person). */
+const ICON_NEW_LIBRARY = '/knowledge-icons/icon-new-library.png';
+/** File-list row / upload glyphs (js.design cutouts). */
+const ICON_FILE_UPLOAD = '/knowledge-icons/icon-file-upload.png';
+const ICON_FILE_BROWSE = '/knowledge-icons/icon-file-browse.png';
+const ICON_FILE_DOWNLOAD = '/knowledge-icons/icon-file-download.png';
+const ICON_FILE_CHUNKS = '/knowledge-icons/icon-file-chunks.png';
+const ICON_FILE_SUMMARY = '/knowledge-icons/icon-file-summary.png';
+const ICON_FILE_DELETE = '/knowledge-icons/icon-file-delete.png';
+
+/** Compact page-number strip for the design file-list pager.
+ * @param {number} page
+ * @param {number} pages
+ * @returns {(number|'gap')[]}
+ */
+function visiblePageNumbers(page, pages) {
+  if (pages <= 7) return Array.from({ length: pages }, (_, index) => index + 1);
+  const nearby = new Set([1, pages, page - 1, page, page + 1]);
+  const numbers = [...nearby].filter(value => value >= 1 && value <= pages).sort((a, b) => a - b);
+  const result = [];
+  numbers.forEach((value, index) => {
+    if (index > 0 && value - (numbers[index - 1] ?? value) > 1) result.push('gap');
+    result.push(value);
+  });
+  return result;
+}
+
+/** File-list action or upload glyph from staged knowledge-icons cutouts.
+ * @param {{ src: string, className?: string }} props
+ */
+function FileOpIcon({ src, className = '' }) {
+  return <img className={`knowledge-file-op-icon${className ? ` ${className}` : ''}`} src={resourceURL(src)} alt='' draggable={false} aria-hidden='true' />;
+}
 
 /** @param {Array<{ id: number, parent_id?: number, sort_order?: number }>} nodes */
 function orgChildrenByParent(nodes) {
@@ -219,6 +297,48 @@ function splitTags(value) {
   return String(value || '').split(/[,，、]/).map(item => item.trim()).filter(Boolean);
 }
 
+/** Name-matched design theme, else the blue-plate default (penultimate mark).
+ * @param {{ name?: unknown }} library
+ * @returns {{ keyword?: string, icon: string, banner: string }}
+ */
+function libraryCardTheme(library) {
+  const name = String(library?.name || '');
+  return LIBRARY_CARD_NAME_THEMES.find(theme => name.includes(theme.keyword)) ?? LIBRARY_CARD_DEFAULT_THEME;
+}
+
+/** Design-keyword mark when the name matches; else cover data URL; else penultimate mark.
+ * @param {{ name?: unknown, cover?: unknown }} library
+ * @returns {string}
+ */
+function libraryCardIconSrc(library) {
+  const name = String(library?.name || '');
+  const matched = LIBRARY_CARD_NAME_THEMES.find(theme => name.includes(theme.keyword));
+  if (matched) return resourceURL(matched.icon);
+  const cover = typeof library?.cover === 'string' ? library.cover : '';
+  return cover.startsWith('data:image/') ? cover : resourceURL(LIBRARY_CARD_DEFAULT_ICON);
+}
+
+/** Hue-matched banner plate for the resolved card theme.
+ * @param {{ name?: unknown }} library
+ * @returns {string}
+ */
+function libraryCardBannerSrc(library) {
+  return resourceURL(libraryCardTheme(library).banner);
+}
+
+/** Secondary line under the card title: description, else first tag (empty when neither).
+ * @param {{ tags?: unknown, description?: unknown, name?: unknown }} library
+ * @returns {string}
+ */
+function libraryCardSubtitle(library) {
+  const description = String(library?.description || '').trim();
+  if (description !== '' && description !== String(library?.name || '').trim()) {
+    return description.length > 18 ? `${description.slice(0, 18)}…` : description;
+  }
+  const tags = splitTags(library?.tags);
+  return tags[0] || '';
+}
+
 function formatDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
@@ -260,6 +380,19 @@ function avatarColor(name) {
 function personInitial(name) {
   const text = String(name || '').trim();
   return text ? text.slice(0, 1) : '人';
+}
+
+/** Split an org path into company line + "/dept/…" so person cards match the design.
+ * Multiple memberships (joined with "；") keep the first path only for the card body.
+ * @param {string} path
+ * @returns {{ root: string, rest: string }}
+ */
+function splitOrgPath(path) {
+  const text = String(path || '').trim().split('；')[0] || '';
+  if (!text) return { root: '', rest: '' };
+  const parts = text.split(/\s*\/\s*/).filter(Boolean);
+  if (parts.length <= 1) return { root: parts[0] || text, rest: '' };
+  return { root: parts[0], rest: `/${parts.slice(1).join('/')}` };
 }
 
 function isPersonalLibrary(library) {
@@ -360,9 +493,11 @@ const KnowledgeLibrary = () => {
   const [documents, setDocuments] = useState([]);
   const [documentTotal, setDocumentTotal] = useState(0);
   const [filePage, setFilePage] = useState(1);
+  const [fileJump, setFileJump] = useState('');
   const [fileKeyword, setFileKeyword] = useState('');
   const [fileSearch, setFileSearch] = useState('');
   const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [personFileJump, setPersonFileJump] = useState('');
   const [creating, setCreating] = useState(false);
   const [coverReading, setCoverReading] = useState(false);
   const [form, setForm] = useState(EMPTY_LIBRARY_FORM);
@@ -925,6 +1060,7 @@ const KnowledgeLibrary = () => {
     setFileKeyword('');
     setFileSearch('');
     setFilePage(1);
+    setFileJump('');
     await loadDocuments(library, { page: 1, keywords: '' });
   };
 
@@ -1277,7 +1413,7 @@ const KnowledgeLibrary = () => {
             if (hasChildren && orgExpanded[nodeId] === false) toggleOrgExpanded(nodeId);
           }}
         >
-          <FolderTree size={15} />
+          <img className='knowledge-org-node-icon' src={resourceURL(ICON_ORG_NODE)} alt='' draggable={false} aria-hidden='true' />
           <span>{node.name}</span>
           {node.kind ? <small>{node.kind}</small> : null}
           <i>{count}</i>
@@ -1437,82 +1573,97 @@ const KnowledgeLibrary = () => {
 
   const reviewPageCount = Math.max(1, Math.ceil(reviewTotal / REVIEW_PAGE_SIZE) || 1);
 
-  const showChrome = !reviewOpen && !opened;
+  /* Design hero plate keeps tabs/actions on the banner even while a file list is open. */
+  const showHeroChrome = !reviewOpen;
+  const showCatalogToolbar = showHeroChrome && !opened && activeScope !== 'personal';
 
   return <div className='knowledge-admin'>
     <div className='knowledge-sticky'>
-      <header className='knowledge-page-head'>
-        <div className='knowledge-page-title'>
-          <h1>知识库</h1>
-          {!reviewOpen && <p>{manageAllPersonal
-            ? '按分类管理知识库与人员目录中的文件'
-            : '管理本组织与自己的个人知识库，以及自己创建或已获授权的分类知识库'}</p>}
-        </div>
-      </header>
-      {showChrome && <div className='knowledge-chrome'>
-        <div
-          className='knowledge-tabs'
-          role='tablist'
-          aria-label='知识库分类'
-          onScroll={() => { if (tabMenu) setTabMenu(null); }}
-        >
-          {tabs.map(tab => {
-            const menuOpen = tabMenu?.key === tab.key;
-            const classes = [
-              'knowledge-tab',
-              activeScope === tab.key ? 'active' : '',
-              menuOpen ? 'is-menu-open' : '',
-            ].filter(Boolean).join(' ');
-            return <div key={tab.key} className={classes}>
-              <button
-                type='button'
-                role='tab'
-                aria-selected={activeScope === tab.key}
-                onClick={() => { setPerson(null); setSelectedOrgId(null); setTabMenu(null); setScope(tab.key); }}
-              >
-                {tab.label}<span>{countsByScope[tab.key] || 0}</span>
-              </button>
-              {tab.category && canManageCategory(tab.category) && <div className='knowledge-tab-menu'>
+      <div className='knowledge-hero'>
+        {!reviewOpen && <img
+          className='knowledge-page-header-art'
+          src={resourceURL(PAGE_HEADER_ART)}
+          alt=''
+          draggable={false}
+          aria-hidden='true'
+        />}
+        <header className='knowledge-page-head'>
+          <div className='knowledge-page-title'>
+            <h1>知识库</h1>
+            {!reviewOpen && <p>{manageAllPersonal
+              ? '按分类管理知识库与人员目录中的文件'
+              : '管理本组织与自己的个人知识库，以及自己创建或已获授权的分类知识库'}</p>}
+          </div>
+        </header>
+        {showHeroChrome && <div className='knowledge-chrome'>
+          <div
+            className='knowledge-tabs'
+            role='tablist'
+            aria-label='知识库分类'
+            onScroll={() => { if (tabMenu) setTabMenu(null); }}
+          >
+            {tabs.map(tab => {
+              const menuOpen = tabMenu?.key === tab.key;
+              const classes = [
+                'knowledge-tab',
+                activeScope === tab.key ? 'active' : '',
+                menuOpen ? 'is-menu-open' : '',
+              ].filter(Boolean).join(' ');
+              return <div key={tab.key} className={classes}>
                 <button
                   type='button'
-                  className='knowledge-tab-more'
-                  aria-label={`更多操作 ${tab.label}`}
-                  aria-haspopup='menu'
-                  aria-expanded={menuOpen}
-                  tabIndex={-1}
-                  onClick={event => {
-                    event.stopPropagation();
-                    setCardMenuId(null);
-                    if (menuOpen) {
-                      setTabMenu(null);
-                      return;
-                    }
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    setTabMenu({
-                      key: tab.key,
-                      category: tab.category,
-                      top: Math.round(rect.bottom + 4),
-                      left: Math.round(Math.min(rect.left, window.innerWidth - 130)),
-                    });
-                  }}
+                  role='tab'
+                  aria-selected={activeScope === tab.key}
+                  onClick={() => { setPerson(null); setSelectedOrgId(null); setTabMenu(null); setScope(tab.key); }}
                 >
-                  <MoreHorizontal size={14} />
+                  {tab.label}<span>{countsByScope[tab.key] || 0}</span>
                 </button>
-              </div>}
-            </div>;
-          })}
-        </div>
-        <div className='knowledge-chrome-actions'>
-          <button type='button' className='knowledge-ghost' onClick={openReviews}>
-            <ClipboardList size={15} />订阅审核
-            {reviewTotal > 0 && <i className='knowledge-review-count' aria-label={`待审核 ${reviewTotal} 条`}>{reviewTotal > 99 ? '99+' : reviewTotal}</i>}
-          </button>
-          <button type='button' className='knowledge-secondary' onClick={openCreateCategory}>
-            <FolderPlus size={15} />新建知识库分类
-          </button>
-        </div>
-      </div>}
-      {showChrome && activeScope !== 'personal' && <div className='knowledge-toolbar'>
+                {tab.category && canManageCategory(tab.category) && <div className='knowledge-tab-menu'>
+                  <button
+                    type='button'
+                    className='knowledge-tab-more'
+                    aria-label={`更多操作 ${tab.label}`}
+                    aria-haspopup='menu'
+                    aria-expanded={menuOpen}
+                    tabIndex={-1}
+                    onClick={event => {
+                      event.stopPropagation();
+                      setCardMenuId(null);
+                      if (menuOpen) {
+                        setTabMenu(null);
+                        return;
+                      }
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const panelWidth = 130;
+                      setTabMenu({
+                        key: tab.key,
+                        category: tab.category,
+                        top: Math.round(rect.bottom + 4),
+                        // Prefer right-align under the more button so the panel clears the search row.
+                        left: Math.round(Math.max(8, Math.min(rect.right - panelWidth, window.innerWidth - panelWidth - 8))),
+                      });
+                    }}
+                  >
+                    <MoreHorizontal size={14} />
+                  </button>
+                </div>}
+              </div>;
+            })}
+          </div>
+          <div className='knowledge-chrome-actions'>
+            <button type='button' className='knowledge-ghost' onClick={openReviews}>
+              <img className='knowledge-chrome-icon' src={resourceURL(ICON_SUBSCRIPTION_REVIEW)} alt='' draggable={false} aria-hidden='true' />
+              订阅审核
+              {reviewTotal > 0 && <i className='knowledge-review-count' aria-label={`待审核 ${reviewTotal} 条`}>{reviewTotal > 99 ? '99+' : reviewTotal}</i>}
+            </button>
+            <button type='button' className='knowledge-secondary' onClick={openCreateCategory}>
+              <img className='knowledge-chrome-icon knowledge-chrome-icon-category' src={resourceURL(ICON_NEW_CATEGORY)} alt='' draggable={false} aria-hidden='true' />
+              新建知识库分类
+            </button>
+          </div>
+        </div>}
+      </div>
+      {showCatalogToolbar && <div className='knowledge-toolbar'>
         <label className='knowledge-search'><Search size={16} /><input value={keyword} onChange={event => setKeyword(event.target.value)} placeholder='搜索知识库...' /></label>
         <CustomSelect aria-label='排序' value={order} onChange={event => setOrder(event.target.value)}>
           <option value='desc'>按时间降序</option>
@@ -1586,18 +1737,21 @@ const KnowledgeLibrary = () => {
           <button type='button' aria-label='下一页' disabled={reviewLoading || reviewPage >= reviewPageCount} onClick={() => void loadReviews(reviewPage + 1)}>下一页</button>
         </div>
       </div>
-    </section> : opened ? <section className='knowledge-files'>
-      <header>
-        <button type='button' className='knowledge-back' onClick={() => { closeViewer(); setOpened(null); }}><ArrowLeft size={16} />返回</button>
-        <h2>{opened.name} - 文件清单</h2>
-        <button type='button' className='knowledge-primary' disabled={busy === 'upload'} onClick={() => fileInput.current?.click()}>
-          <Upload size={15} />{busy === 'upload' ? '正在上传' : '上传文件'}
-        </button>
-        <input ref={fileInput} className='knowledge-file-input' type='file' multiple aria-label='上传文件' tabIndex={-1} disabled={busy === 'upload'} onChange={uploadFile} />
+    </section> : opened ? <section className='knowledge-files knowledge-file-list' aria-label='文件清单'>
+      <header className='knowledge-file-list-head'>
+        <div className='knowledge-file-list-title-row'>
+          <button type='button' className='knowledge-back' onClick={() => { closeViewer(); setOpened(null); setFileJump(''); }}>返回</button>
+          <h2>{opened.name}-文件清单</h2>
+          <button type='button' className='knowledge-primary knowledge-upload-btn' disabled={busy === 'upload'} onClick={() => fileInput.current?.click()}>
+            <FileOpIcon src={ICON_FILE_UPLOAD} className='knowledge-file-op-icon-upload' />
+            {busy === 'upload' ? '正在上传' : '上传文件'}
+          </button>
+          <input ref={fileInput} className='knowledge-file-input' type='file' multiple aria-label='上传文件' tabIndex={-1} disabled={busy === 'upload'} onChange={uploadFile} />
+        </div>
+        <p className='knowledge-hint knowledge-upload-hint'>可一次选择多个文件，每个不超过 20MB。上传后在后台解析，列表会显示解析进度。</p>
       </header>
-      <p className='knowledge-hint knowledge-upload-hint'>可一次选择多个文件，每个不超过 20MB。上传后在后台解析，列表会显示解析进度。</p>
-      <div className='knowledge-files-toolbar'>
-        <label className='knowledge-search'>
+      <div className='knowledge-files-toolbar knowledge-file-search-row'>
+        <label className='knowledge-search knowledge-file-search'>
           <Search size={16} />
           <input
             value={fileKeyword}
@@ -1607,6 +1761,7 @@ const KnowledgeLibrary = () => {
               const next = fileKeyword.trim();
               setFileSearch(next);
               setFilePage(1);
+              setFileJump('');
               void loadDocuments(opened, { page: 1, keywords: next });
             }}
             placeholder='搜索文件名称...'
@@ -1614,57 +1769,91 @@ const KnowledgeLibrary = () => {
         </label>
         <button
           type='button'
-          className='knowledge-back'
+          className='knowledge-file-search-btn'
           disabled={documentsLoading}
           onClick={() => {
             const next = fileKeyword.trim();
             setFileSearch(next);
             setFilePage(1);
+            setFileJump('');
             void loadDocuments(opened, { page: 1, keywords: next });
           }}
         >搜索</button>
       </div>
-      <div className='knowledge-table-wrap'>
-        <table>
-          <thead><tr><th>文件名称</th><th>大小</th><th>上传时间</th><th>解析状态</th><th>切片数量</th><th>摘要</th><th>操作</th></tr></thead>
-          <tbody>
-            {documentsLoading ? <tr><td colSpan={7}>正在加载文件</td></tr> : documents.length === 0 ? <tr><td colSpan={7}>{fileSearch ? '没有匹配的文件' : '暂无文件'}</td></tr> : documents.map(file => {
-              const state = parseState(file);
-              return <tr key={file.id}>
-              <td>{file.name}</td>
-              <td>{formatSize(file.size)}</td>
-              <td>{formatUnix(file.create_time || file.update_time)}</td>
-              <td className={`knowledge-parse ${state.key}`}>{state.label}</td>
-              <td>{Number.isFinite(Number(file.chunk_count)) ? file.chunk_count : '—'}</td>
-              <td className='knowledge-summary' title={file.summary || ''}>{file.summary || '—'}</td>
-              <td className='knowledge-ops'>
-                <button type='button' disabled={busy === `${file.id}:browse`} onClick={() => runFileAction(file, 'browse')}><Eye size={14} />浏览</button>
-                <button type='button' disabled={busy === `${file.id}:download`} onClick={() => runFileAction(file, 'download')}><Download size={14} />下载</button>
-                <button type='button' disabled={busy === `${file.id}:chunks`} onClick={() => runFileAction(file, 'chunks')}><Layers size={14} />切片</button>
-                {isAdmin() && state.retry && <button type='button' disabled={busy === `${file.id}:parse`} onClick={() => runFileAction(file, 'parse')}><RefreshCw size={14} />重新解析</button>}
-                {isAdmin() && <button type='button' onClick={() => { setSummaryFile(file); setSummaryText(file.summary || ''); }}><FileText size={14} />摘要</button>}
-                <button type='button' className='danger' onClick={() => setConfirming({ type: 'file', file })}><Trash2 size={14} />删除</button>
-              </td>
-            </tr>;
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div className='zjugis-table-pagination knowledge-files-pagination'>
-        <span>共 {documentTotal} 条，每页 {FILE_PAGE_SIZE} 条</span>
-        <div>
-          <button type='button' aria-label='上一页' disabled={documentsLoading || filePage <= 1} onClick={() => {
-            const next = filePage - 1;
-            setFilePage(next);
-            void loadDocuments(opened, { page: next, keywords: fileSearch });
-          }}>上一页</button>
-          <span>{filePage} / {filePageCount}</span>
-          <button type='button' aria-label='下一页' disabled={documentsLoading || filePage >= filePageCount} onClick={() => {
-            const next = filePage + 1;
-            setFilePage(next);
-            void loadDocuments(opened, { page: next, keywords: fileSearch });
-          }}>下一页</button>
+      <div className='knowledge-table-card'>
+        <div className='knowledge-table-wrap'>
+          <table>
+            <thead><tr><th>文件名称</th><th>大小</th><th>上传时间</th><th>解析状态</th><th>切片数量</th><th>摘要</th><th>操作</th></tr></thead>
+            <tbody>
+              {documentsLoading ? <tr><td colSpan={7}>正在加载文件</td></tr> : documents.length === 0 ? <tr><td colSpan={7}>{fileSearch ? '没有匹配的文件' : '暂无文件'}</td></tr> : documents.map(file => {
+                const state = parseState(file);
+                return <tr key={file.id}>
+                <td>{file.name}</td>
+                <td>{formatSize(file.size)}</td>
+                <td>{formatUnix(file.create_time || file.update_time)}</td>
+                <td className={`knowledge-parse ${state.key}`}>{state.label}</td>
+                <td>{Number.isFinite(Number(file.chunk_count)) ? file.chunk_count : '—'}</td>
+                <td className='knowledge-summary' title={file.summary || ''}>{file.summary || '—'}</td>
+                <td className='knowledge-ops'>
+                  <button type='button' disabled={busy === `${file.id}:browse`} onClick={() => runFileAction(file, 'browse')}><FileOpIcon src={ICON_FILE_BROWSE} />浏览</button>
+                  <button type='button' disabled={busy === `${file.id}:download`} onClick={() => runFileAction(file, 'download')}><FileOpIcon src={ICON_FILE_DOWNLOAD} />下载</button>
+                  <button type='button' disabled={busy === `${file.id}:chunks`} onClick={() => runFileAction(file, 'chunks')}><FileOpIcon src={ICON_FILE_CHUNKS} />切片</button>
+                  {isAdmin() && state.retry && <button type='button' disabled={busy === `${file.id}:parse`} onClick={() => runFileAction(file, 'parse')}><RefreshCw size={14} />重新解析</button>}
+                  {isAdmin() && <button type='button' onClick={() => { setSummaryFile(file); setSummaryText(file.summary || ''); }}><FileOpIcon src={ICON_FILE_SUMMARY} />摘要</button>}
+                  <button type='button' className='danger' onClick={() => setConfirming({ type: 'file', file })}><FileOpIcon src={ICON_FILE_DELETE} />删除</button>
+                </td>
+              </tr>;
+              })}
+            </tbody>
+          </table>
         </div>
+        <nav className='knowledge-files-pagination' aria-label='文件分页'>
+          <span className='knowledge-pager-total'>共 <em>{documentTotal}</em> 条，每页{FILE_PAGE_SIZE}条</span>
+          <div className='knowledge-pager-controls'>
+            <span className='knowledge-page-count' aria-live='polite'>第 {filePage} 页 / {filePageCount}</span>
+            <button type='button' aria-label='上一页' disabled={documentsLoading || filePage <= 1} onClick={() => {
+              const next = filePage - 1;
+              setFilePage(next);
+              setFileJump('');
+              void loadDocuments(opened, { page: next, keywords: fileSearch });
+            }}>上一页</button>
+            <span className='knowledge-page-choices' aria-label='选择页码'>
+              {visiblePageNumbers(filePage, filePageCount).map((value, index) => value === 'gap'
+                ? <span className='knowledge-page-gap' key={`gap-${index}`} aria-hidden='true'>…</span>
+                : <button
+                  type='button'
+                  key={value}
+                  className={value === filePage ? 'knowledge-page-number active' : 'knowledge-page-number'}
+                  aria-label={`第 ${value} 页`}
+                  aria-current={value === filePage ? 'page' : undefined}
+                  disabled={documentsLoading || value === filePage}
+                  onClick={() => {
+                    setFilePage(value);
+                    setFileJump('');
+                    void loadDocuments(opened, { page: value, keywords: fileSearch });
+                  }}
+                >{value}</button>)}
+            </span>
+            <button type='button' aria-label='下一页' disabled={documentsLoading || filePage >= filePageCount} onClick={() => {
+              const next = filePage + 1;
+              setFilePage(next);
+              setFileJump('');
+              void loadDocuments(opened, { page: next, keywords: fileSearch });
+            }}>下一页</button>
+            <form className='knowledge-page-jump' onSubmit={event => {
+              event.preventDefault();
+              const target = Number(fileJump);
+              if (!/^[1-9]\d*$/.test(fileJump) || !Number.isSafeInteger(target) || target > filePageCount) return;
+              setFilePage(target);
+              setFileJump('');
+              void loadDocuments(opened, { page: target, keywords: fileSearch });
+            }}>
+              <span>跳至</span>
+              <input type='text' inputMode='numeric' aria-label='跳转页码' value={fileJump} onChange={event => setFileJump(event.target.value)} />
+              <span>页</span>
+            </form>
+          </div>
+        </nav>
       </div>
     </section> : <>
       {activeScope === 'personal' ? <div className='knowledge-directory'>
@@ -1691,9 +1880,9 @@ const KnowledgeLibrary = () => {
           </button>}
         </aside>
         <div className='knowledge-directory-main'>
-          {person ? <section className='knowledge-files knowledge-person-files' aria-label='个人文件清单'>
+          {person ? <section className='knowledge-files knowledge-person-files knowledge-file-list' aria-label='个人文件清单'>
             <header className='knowledge-person-file-head'>
-              <button type='button' className='knowledge-back' onClick={() => { closeViewer(); setPerson(null); setPersonLibrariesOpen(false); setCardMenuId(null); }}><ArrowLeft size={16} />返回</button>
+              <button type='button' className='knowledge-back' onClick={() => { closeViewer(); setPerson(null); setPersonLibrariesOpen(false); setCardMenuId(null); setPersonFileJump(''); }}>返回</button>
               <button
                 type='button'
                 className={personLibrariesOpen ? 'knowledge-person-file-title open' : 'knowledge-person-file-title'}
@@ -1734,7 +1923,7 @@ const KnowledgeLibrary = () => {
                           aria-expanded={menuOpen}
                           onClick={() => setCardMenuId(menuOpen ? null : library.id)}
                         >
-                          <MoreHorizontal size={16} />
+                          <img className='knowledge-card-more-art' src={resourceURL(LIBRARY_CARD_MORE_ICON)} alt='' draggable={false} aria-hidden='true' />
                         </button>
                         {menuOpen && <>
                           <button type='button' className='knowledge-card-menu-dismiss' aria-label='关闭菜单' onClick={() => setCardMenuId(null)} />
@@ -1752,45 +1941,71 @@ const KnowledgeLibrary = () => {
                   })}
                 </div>}
             </section>}
-            <div className='knowledge-files-toolbar'>
-              <label className='knowledge-search'>
+            <div className='knowledge-files-toolbar knowledge-file-search-row'>
+              <label className='knowledge-search knowledge-file-search'>
                 <Search size={16} />
-                <input value={personFileQuery} onChange={event => { setPersonFileQuery(event.target.value); setPersonFilePage(1); }} placeholder='搜索文件名称...' />
+                <input value={personFileQuery} onChange={event => { setPersonFileQuery(event.target.value); setPersonFilePage(1); setPersonFileJump(''); }} placeholder='搜索文件名称...' />
               </label>
             </div>
-            <div className='knowledge-table-wrap'>
-              <table>
-                <thead><tr><th>文件名称</th><th>所属知识库</th><th>大小</th><th>上传时间</th><th>摘要</th><th>操作</th></tr></thead>
-                <tbody>
-                  {personFilesLoading ? <tr><td colSpan={6}>正在加载文件</td></tr>
-                    : personFileRows.length === 0 ? <tr><td colSpan={6}>{personFileQuery.trim() ? '没有匹配的文件' : '暂无文件'}</td></tr>
-                      : personFileRows.map(file => {
-                        const ownedLibrary = personLibraries.find(library => Number(library.id) === Number(file.library_id));
-                        const canDeleteFile = canManagePersonalLibrary(ownedLibrary || { owner_user_id: person?.id });
-                        return <tr key={`${file.library_id}:${file.id}`}>
-                        <td className='knowledge-file-name'><FileText size={15} />{file.name}</td>
-                        <td>{file.library_name || '—'}</td>
-                        <td>{formatSizeLabel(file.size)}</td>
-                        <td>{formatUnix(file.create_time || file.update_time)}</td>
-                        <td className='knowledge-summary' title={file.summary || ''}>{file.summary || '—'}</td>
-                        <td className='knowledge-ops'>
-                          <button type='button' disabled={busy === `${file.id}:browse`} onClick={() => runFileAction(file, 'browse')}><Eye size={14} />预览</button>
-                          <button type='button' disabled={busy === `${file.id}:download`} onClick={() => runFileAction(file, 'download')}><Download size={14} />下载</button>
-                          <button type='button' disabled={busy === `${file.id}:chunks`} onClick={() => runFileAction(file, 'chunks')}><Layers size={14} />切片</button>
-                          {canDeleteFile && <button type='button' className='danger' onClick={() => setConfirming({ type: 'file', file })}><Trash2 size={14} />删除</button>}
-                        </td>
-                      </tr>;
-                      })}
-                </tbody>
-              </table>
-            </div>
-            <div className='zjugis-table-pagination knowledge-files-pagination'>
-              <span>共 {shownPersonFiles.length} 条，每页 {FILE_PAGE_SIZE} 条</span>
-              <div>
-                <button type='button' aria-label='上一页' disabled={personFilesLoading || personFilePage <= 1} onClick={() => setPersonFilePage(page => page - 1)}>上一页</button>
-                <span>{Math.min(personFilePage, personFilePageCount)} / {personFilePageCount}</span>
-                <button type='button' aria-label='下一页' disabled={personFilesLoading || personFilePage >= personFilePageCount} onClick={() => setPersonFilePage(page => page + 1)}>下一页</button>
+            <div className='knowledge-table-card'>
+              <div className='knowledge-table-wrap'>
+                <table>
+                  <thead><tr><th>文件名称</th><th>所属知识库</th><th>大小</th><th>上传时间</th><th>摘要</th><th>操作</th></tr></thead>
+                  <tbody>
+                    {personFilesLoading ? <tr><td colSpan={6}>正在加载文件</td></tr>
+                      : personFileRows.length === 0 ? <tr><td colSpan={6}>{personFileQuery.trim() ? '没有匹配的文件' : '暂无文件'}</td></tr>
+                        : personFileRows.map(file => {
+                          const ownedLibrary = personLibraries.find(library => Number(library.id) === Number(file.library_id));
+                          const canDeleteFile = canManagePersonalLibrary(ownedLibrary || { owner_user_id: person?.id });
+                          return <tr key={`${file.library_id}:${file.id}`}>
+                          <td className='knowledge-file-name'><FileOpIcon src={ICON_FILE_SUMMARY} />{file.name}</td>
+                          <td>{file.library_name || '—'}</td>
+                          <td>{formatSizeLabel(file.size)}</td>
+                          <td>{formatUnix(file.create_time || file.update_time)}</td>
+                          <td className='knowledge-summary' title={file.summary || ''}>{file.summary || '—'}</td>
+                          <td className='knowledge-ops'>
+                            <button type='button' disabled={busy === `${file.id}:browse`} onClick={() => runFileAction(file, 'browse')}><FileOpIcon src={ICON_FILE_BROWSE} />预览</button>
+                            <button type='button' disabled={busy === `${file.id}:download`} onClick={() => runFileAction(file, 'download')}><FileOpIcon src={ICON_FILE_DOWNLOAD} />下载</button>
+                            <button type='button' disabled={busy === `${file.id}:chunks`} onClick={() => runFileAction(file, 'chunks')}><FileOpIcon src={ICON_FILE_CHUNKS} />切片</button>
+                            {canDeleteFile && <button type='button' className='danger' onClick={() => setConfirming({ type: 'file', file })}><FileOpIcon src={ICON_FILE_DELETE} />删除</button>}
+                          </td>
+                        </tr>;
+                        })}
+                  </tbody>
+                </table>
               </div>
+              <nav className='knowledge-files-pagination' aria-label='个人文件分页'>
+                <span className='knowledge-pager-total'>共 <em>{shownPersonFiles.length}</em> 条，每页{FILE_PAGE_SIZE}条</span>
+                <div className='knowledge-pager-controls'>
+                  <span className='knowledge-page-count' aria-live='polite'>第 {Math.min(personFilePage, personFilePageCount)} 页 / {personFilePageCount}</span>
+                  <button type='button' aria-label='上一页' disabled={personFilesLoading || personFilePage <= 1} onClick={() => { setPersonFilePage(page => page - 1); setPersonFileJump(''); }}>上一页</button>
+                  <span className='knowledge-page-choices' aria-label='选择页码'>
+                    {visiblePageNumbers(Math.min(personFilePage, personFilePageCount), personFilePageCount).map((value, index) => value === 'gap'
+                      ? <span className='knowledge-page-gap' key={`gap-${index}`} aria-hidden='true'>…</span>
+                      : <button
+                        type='button'
+                        key={value}
+                        className={value === Math.min(personFilePage, personFilePageCount) ? 'knowledge-page-number active' : 'knowledge-page-number'}
+                        aria-label={`第 ${value} 页`}
+                        aria-current={value === Math.min(personFilePage, personFilePageCount) ? 'page' : undefined}
+                        disabled={personFilesLoading || value === Math.min(personFilePage, personFilePageCount)}
+                        onClick={() => { setPersonFilePage(value); setPersonFileJump(''); }}
+                      >{value}</button>)}
+                  </span>
+                  <button type='button' aria-label='下一页' disabled={personFilesLoading || personFilePage >= personFilePageCount} onClick={() => { setPersonFilePage(page => page + 1); setPersonFileJump(''); }}>下一页</button>
+                  <form className='knowledge-page-jump' onSubmit={event => {
+                    event.preventDefault();
+                    const target = Number(personFileJump);
+                    if (!/^[1-9]\d*$/.test(personFileJump) || !Number.isSafeInteger(target) || target > personFilePageCount) return;
+                    setPersonFilePage(target);
+                    setPersonFileJump('');
+                  }}>
+                    <span>跳至</span>
+                    <input type='text' inputMode='numeric' aria-label='跳转页码' value={personFileJump} onChange={event => setPersonFileJump(event.target.value)} />
+                    <span>页</span>
+                  </form>
+                </div>
+              </nav>
             </div>
           </section> : <>
             <header className='knowledge-people-head'>
@@ -1814,7 +2029,10 @@ const KnowledgeLibrary = () => {
                   <Search size={16} />
                   <input value={peopleQuery} onChange={event => setPeopleQuery(event.target.value)} placeholder='搜索姓名、用户名或组织' disabled={selectedOrgId == null} />
                 </label>
-                <button type='button' className='knowledge-primary' onClick={() => { setCategoryOpen(false); setEditing(null); setForm(EMPTY_LIBRARY_FORM); setCreating(true); }}><Plus size={16} />新建知识库</button>
+                <button type='button' className='knowledge-primary' onClick={() => { setCategoryOpen(false); setEditing(null); setForm(EMPTY_LIBRARY_FORM); setCreating(true); }}>
+                  <img className='knowledge-chrome-icon knowledge-chrome-icon-on-primary' src={resourceURL(ICON_NEW_LIBRARY)} alt='' draggable={false} aria-hidden='true' />
+                  新建知识库
+                </button>
               </div>
             </header>
             {selectedOrgId == null
@@ -1825,21 +2043,26 @@ const KnowledgeLibrary = () => {
                     {visiblePeople.map(item => {
                       const usage = personUsage(item.id);
                       const color = avatarColor(item.name);
+                      const org = splitOrgPath(item.department);
+                      const registered = item.createdAt ? formatDate(item.createdAt).slice(0, 10) : '—';
                       return <button key={item.id} type='button' className='knowledge-person' onClick={() => void openPerson(item)}>
                         <span className='knowledge-person-top'>
-                          <i className='knowledge-avatar' style={{ color, background: `${color}18` }}>{personInitial(item.name)}</i>
-                          <span>
-                            <strong>{item.name}</strong>
-                          </span>
+                          <i className='knowledge-avatar' style={{ background: color }}>{personInitial(item.name)}</i>
+                          <strong>{item.name}</strong>
                         </span>
                         <span className='knowledge-person-meta'>
-                          <span>组织 {item.department || '未分配组织'}</span>
-                          <span>注册 {formatDate(item.createdAt).slice(0, 10)}</span>
+                          <span className='knowledge-person-meta-label'>组织</span>
+                          <span className='knowledge-person-org' title={item.department || '未分配组织'}>
+                            {org.root || '未分配组织'}
+                            {org.rest ? <><br />{org.rest}</> : null}
+                          </span>
+                          <span className='knowledge-person-meta-label'>注册</span>
+                          <span className='knowledge-person-registered'>{registered}</span>
                           {item.status === 2 && <span className='muted'>账号已禁用</span>}
                         </span>
                         <span className='knowledge-person-stats'>
-                          <span><b>{usage.libraries}</b>知识库</span>
-                          <span><b>{usage.size}</b>总大小</span>
+                          <span><b>{usage.libraries}</b><em>知识库</em></span>
+                          <span><b>{usage.size}</b><em>总大小</em></span>
                         </span>
                       </button>;
                     })}
@@ -1853,40 +2076,47 @@ const KnowledgeLibrary = () => {
         <div className='knowledge-grid'>
           {pagedLibraries.map(library => {
             const menuOpen = cardMenuId === library.id;
+            const iconSrc = libraryCardIconSrc(library);
+            const usingCover = iconSrc.startsWith('data:image/');
+            const subtitle = libraryCardSubtitle(library);
             return <article key={library.id} className={menuOpen ? 'knowledge-card is-menu-open' : 'knowledge-card'}>
+              <div className='knowledge-card-banner' aria-hidden='true'>
+                <img src={libraryCardBannerSrc(library)} alt='' draggable={false} />
+              </div>
               <header>
-                <span className={typeof library.cover === 'string' && library.cover.startsWith('data:image/') ? 'knowledge-card-mark has-cover' : 'knowledge-card-mark'} aria-hidden='true'>
-                  {typeof library.cover === 'string' && library.cover.startsWith('data:image/')
-                    ? <img src={library.cover} alt='' />
-                    : <Folder size={18} />}
+                <span className={usingCover ? 'knowledge-card-mark has-cover' : 'knowledge-card-mark'} aria-hidden='true'>
+                  <img src={iconSrc} alt='' draggable={false} />
                 </span>
-                <h2 title={library.name}>{library.name}</h2>
-                {isAdmin() && <div className='knowledge-card-menu'>
-                  <button
-                    type='button'
-                    className='knowledge-card-more'
-                    aria-label='更多操作'
-                    aria-haspopup='menu'
-                    aria-expanded={menuOpen}
-                    onClick={() => setCardMenuId(menuOpen ? null : library.id)}
-                  >
-                    <MoreHorizontal size={16} />
-                  </button>
-                  {menuOpen && <>
-                    <button type='button' className='knowledge-card-menu-dismiss' aria-label='关闭菜单' onClick={() => setCardMenuId(null)} />
-                    <div className='knowledge-card-menu-panel' role='menu'>
-                      <button type='button' role='menuitem' onClick={() => { setCardMenuId(null); openEdit(library); }}>
-                        <Pencil size={14} />编辑
-                      </button>
-                      <button type='button' role='menuitem' className='danger' onClick={() => { setCardMenuId(null); setConfirming({ type: 'library', library }); }}>
-                        <Trash2 size={14} />删除
-                      </button>
-                    </div>
-                  </>}
-                </div>}
+                <div className='knowledge-card-titles'>
+                  <h2 title={library.name}>{library.name}</h2>
+                  <p className={subtitle === '' ? 'is-empty' : undefined} title={subtitle || undefined}>
+                    {subtitle === '' ? '暂无描述' : subtitle}
+                  </p>
+                </div>
               </header>
-              <p className={`knowledge-card-desc${library.description ? '' : ' is-empty'}`}>{library.description || '暂无描述'}</p>
-              <div className='knowledge-tags'>{splitTags(library.tags).map(tag => <span key={tag}><Tag size={12} />{tag}</span>)}</div>
+              {isAdmin() && <div className='knowledge-card-menu'>
+                <button
+                  type='button'
+                  className='knowledge-card-more'
+                  aria-label='更多操作'
+                  aria-haspopup='menu'
+                  aria-expanded={menuOpen}
+                  onClick={() => setCardMenuId(menuOpen ? null : library.id)}
+                >
+                  <img className='knowledge-card-more-art' src={resourceURL(LIBRARY_CARD_MORE_ICON)} alt='' draggable={false} aria-hidden='true' />
+                </button>
+                {menuOpen && <>
+                  <button type='button' className='knowledge-card-menu-dismiss' aria-label='关闭菜单' onClick={() => setCardMenuId(null)} />
+                  <div className='knowledge-card-menu-panel' role='menu'>
+                    <button type='button' role='menuitem' onClick={() => { setCardMenuId(null); openEdit(library); }}>
+                      <Pencil size={14} />编辑
+                    </button>
+                    <button type='button' role='menuitem' className='danger' onClick={() => { setCardMenuId(null); setConfirming({ type: 'library', library }); }}>
+                      <Trash2 size={14} />删除
+                    </button>
+                  </div>
+                </>}
+              </div>}
               <div className='knowledge-meta'>
                 {metaRow('创建人', libraryCreator(library))}
                 {metaRow('文件量', fileCount(library.id))}
@@ -1895,7 +2125,10 @@ const KnowledgeLibrary = () => {
                 {metaRow('每天使用量', dailyUsage(library))}
               </div>
               <div className='knowledge-card-actions'>
-                <button type='button' onClick={() => openFiles(library)}><FileText size={14} />文件清单</button>
+                <button type='button' onClick={() => openFiles(library)}>
+                  <img className='knowledge-card-file-list-art' src={resourceURL(LIBRARY_CARD_FILE_LIST_ICON)} alt='' draggable={false} aria-hidden='true' />
+                  文件清单
+                </button>
               </div>
             </article>;
           })}
