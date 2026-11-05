@@ -46,7 +46,7 @@ function failureMessage(
   t: ChatViewSlotProps['t'],
 ): string {
   if (code === 'QUOTA') return t('message.failure.quota')
-  return code === 'AUTH' ? t('message.failure.auth') : message
+  return code === 'AUTH' ? `${t('message.failure.auth')}：${message}` : message
 }
 
 function ModelRetryItem({ node, active, t }: {
@@ -124,10 +124,10 @@ function TurnErrorItem({ node, t }: {
     <div className={css.turnErrorRow} role="status">
       <StateDot state="error" className={css.turnErrorDot} />
       <div className={css.turnErrorCopy}>
-        <span className={css.turnErrorTitle}>{t('message.turnError')}</span>
+        {node.code !== 'QUOTA' && <span className={css.turnErrorTitle}>{t('message.turnError')}</span>}
         <span className={node.code === 'QUOTA' ? css.turnErrorTitle : css.turnErrorMessage}>{failureMessage(node.message, node.code, t)}</span>
       </div>
-      {node.code !== undefined && <code className={css.turnErrorCode}>{node.code}</code>}
+      {node.code !== undefined && node.code !== 'QUOTA' && <code className={css.turnErrorCode}>{node.code}</code>}
     </div>
   )
 }

@@ -919,3 +919,10 @@ describe('toStreamChunks defensive branches', () => {
     expect(chunks[0]).toEqual({ type: 'tool-call-delta', index: 0, id: '', argumentsDelta: '{}' })
   })
 })
+
+it('classifies 403 credit exhaustion before authentication and preserves permission errors', () => {
+  expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'HTTP 403: insufficient_user_quota 用户积分不足' })))
+    .toMatchObject({ kind: 'error', failure: { code: 'QUOTA' } })
+  expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'HTTP 403: 当前角色无权使用模型' })))
+    .toMatchObject({ kind: 'error', failure: { code: 'PERMISSION' } })
+})

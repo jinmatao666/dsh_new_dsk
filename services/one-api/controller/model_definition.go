@@ -98,7 +98,7 @@ func AddModelDefinition(c *gin.Context) {
 			respondError(c, "所选来源渠道不存在或读取失败")
 			return
 		}
-		def.SupportExplicitCache = def.SupportExplicitCache && model.ChannelAllowsExplicitCache(channel.Type, channel.GetBaseURL())
+		def.SupportExplicitCache = false
 	} else {
 		def.SupportExplicitCache = false
 	}
@@ -253,7 +253,7 @@ func ListAggregatedModels(c *gin.Context) {
 			ContextLimit:         d.ContextLimit,
 			Modalities:           d.Modalities,
 			Attachment:           d.Attachment,
-			SupportExplicitCache: d.SupportExplicitCache,
+			SupportExplicitCache: false,
 		}
 		byName[d.Name] = m
 		order = append(order, d.Name)

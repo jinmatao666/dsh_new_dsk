@@ -12,7 +12,7 @@ function inputs() {
   fireEvent.change(screen.getByLabelText(zh.loginSmsCode), { target: { value: '123456' } })
 }
 it('registers an unknown phone on login submission without a separate consent checkbox', async () => {
-  const request = vi.fn(async (op: string) => op === 'capabilities' ? { success: true, data: cap }
+  const request = vi.fn(async (op: string) => op === 'capabilities' ? { success: true, data: { ...cap, agreement: '', privacy: '' } }
     : op === 'sms' ? { success: false, code: 'phone_not_registered', register_enabled: true } : { state: 'authenticated' })
   render(<PublicLogin mode='sms' request={request} onBack={() => {}} t={t} />)
   await screen.findByLabelText(zh.securityPhone); inputs()

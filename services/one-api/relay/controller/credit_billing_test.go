@@ -132,7 +132,7 @@ func TestCreditBillingActualBalanceReceiptAndFailureRefund(t *testing.T) {
 	for _, scenario := range []struct {
 		fail, stream bool
 		balance      int64
-	}{{false, false, 792}, {false, true, 438}, {true, false, 438}} {
+	}{{false, false, 696}, {false, true, 246}, {true, false, 246}} {
 		upstreamFailed, upstreamStream = scenario.fail, scenario.stream
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		body := `{"model":"test","max_tokens":500,"messages":[{"role":"user","content":"hello"}]}`

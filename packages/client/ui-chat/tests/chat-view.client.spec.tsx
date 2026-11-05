@@ -993,7 +993,7 @@ describe('ChatView', () => {
     const view = render(<h.ChatView {...h.props} />)
     const statuses = view.getAllByRole('status')
     expect(statuses.map(status => status.textContent)).toEqual([
-      '本轮运行失败API 密钥无效AUTH',
+      '本轮运行失败身份验证失败：API key is invalidAUTH',
       '本轮运行失败plugin exploded',
     ])
   })
@@ -2323,4 +2323,13 @@ describe('ChatView', () => {
     expect(failedView.getByText('Compaction cancelled.')).toBeTruthy()
     expect(failedView.container.querySelector('[data-state="error"]')).not.toBeNull()
   })
+})
+
+it('shows a clear credit interruption inline without authentication wording or internal error code', () => {
+  const h = makeHarness({ nodes: [user(1, 'try'), turnError(2, 'QUOTA')] })
+  const view = render(<h.ChatView {...h.props} />)
+  const notice = view.getByRole('status')
+  expect(notice.textContent).toBe('积分不足，任务已中断。请补充积分后重试。')
+  expect(notice.querySelector('code')).toBeNull()
+  expect(view.queryByRole('dialog')).toBeNull()
 })

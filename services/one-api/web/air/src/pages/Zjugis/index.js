@@ -544,7 +544,7 @@ export function ModelConfigPage() {
     if (m.display_credit_ratio !== null && !validCreditNumber(m.display_credit_ratio, true)) {
       return dialog.notice('桌面端显示倍率必须为 0 至 1,000,000 之间的数值');
     }
-    if (![m.input_credit_ratio,m.output_credit_ratio,m.cache_read_credit_ratio,m.cache_write_credit_ratio].every(value => validCreditNumber(value,true))) {
+    if (![m.input_credit_ratio,m.output_credit_ratio].every(value => validCreditNumber(value,true))) {
       return dialog.notice('输入、输出倍率必须为 0 至 1,000,000 之间的数值');
     }
     if (!m.id && !selectedModelChannel) {
@@ -558,7 +558,7 @@ export function ModelConfigPage() {
       enabled: !!m.enabled,
       model_type: m.model_type || 'chat',
       context_limit: Number(m.context_limit) || 0,
-      support_explicit_cache: modelCacheAllowed(m.sourceChannelIds) && !!m.support_explicit_cache,
+      support_explicit_cache: false,
       // These values are server-owned and are updated only by visual probing.
       modalities: m.modalities || '',
       attachment: !!m.attachment,
@@ -601,7 +601,7 @@ export function ModelConfigPage() {
         map[x.key] = x.value;
       });
       const preview = readCreditPricing(map);
-      preview.models[m.name] = { input: Number(m.input_credit_ratio), output: Number(m.output_credit_ratio), cache_read: Number(m.cache_read_credit_ratio), cache_write: Number(m.cache_write_credit_ratio) };
+      preview.models[m.name] = { input: Number(m.input_credit_ratio), output: Number(m.output_credit_ratio) };
       if (m.display_credit_ratio !== null) preview.models[m.name].display = Number(m.display_credit_ratio);
       const pricingSave = await API.put('/api/option/', { key: CREDIT_PRICING_OPTION, value: JSON.stringify(preview.models) });
       if (!pricingSave.data?.success) return dialog.notice(pricingSave.data?.message || '积分预览配置保存失败，请重试');
@@ -1638,14 +1638,6 @@ export function ModelConfigPage() {
                 <Field label='输出倍率' type='number' min='0' max='1000000' step='any' required value={modelEdit.output_credit_ratio}
                   onChange={event => setModelEdit({ ...modelEdit, output_credit_ratio: event.target.value })} />
                 <Field label='输出积分价格（积分／千 Token）' readOnly value={formatCreditPrice(creditPrice(modelEdit.credit_base, modelEdit.output_credit_ratio))} />
-                <Field label='缓存命中倍率' type='number' min='0' max='1000000' step='any' required value={modelEdit.cache_read_credit_ratio}
-                  onChange={event => setModelEdit({ ...modelEdit, cache_read_credit_ratio: event.target.value })} />
-                <Field label='缓存命中价格（积分／千 Token）' readOnly value={formatCreditPrice(creditPrice(modelEdit.credit_base, modelEdit.cache_read_credit_ratio))} />
-                <Field label='缓存创建倍率' type='number' min='0' max='1000000' step='any' required value={modelEdit.cache_write_credit_ratio}
-                  onChange={event => setModelEdit({ ...modelEdit, cache_write_credit_ratio: event.target.value })} />
-                <Field label='缓存创建价格（积分／千 Token）' readOnly value={formatCreditPrice(creditPrice(modelEdit.credit_base, modelEdit.cache_write_credit_ratio))} />
-              </div>
-              <div className='model-display-multiplier'>
                 <Field label='桌面端显示倍率' type='number' min='0' max='1000000' step='any' required
                   value={modelEdit.display_credit_ratio ?? averageCreditRatio(modelEdit.input_credit_ratio, modelEdit.output_credit_ratio)}
                   onChange={event => setModelEdit({ ...modelEdit, display_credit_ratio: event.target.value })} />
@@ -1653,7 +1645,7 @@ export function ModelConfigPage() {
                   onClick={() => setModelEdit({ ...modelEdit, display_credit_ratio: null })}>恢复默认</button>
               </div>
               <p className='credit-pricing-note'>默认取（输入倍率 + 输出倍率）÷ 2，可自行修改。仅用于桌面端模型列表展示，实际按各项用量计费。</p>
-              <p className='credit-pricing-note'>保存后用于运营版后续调用。缓存按服务实际返回用量计算；未命中、命中和创建分别计价，不重复扣分。分组倍率另行作用于总费用。</p>
+              <p className='credit-pricing-note'>保存后用于运营版后续调用。全部输入 Token 按输入倍率计价，输出 Token 按输出倍率计价。分组倍率另行作用于总费用。</p>
             </section>
             <label className='zjugis-field full'>
               <span>备注</span>
@@ -1682,19 +1674,6 @@ export function ModelConfigPage() {
                 选择该模型实际调用的来源渠道；需要备用渠道时可在后续编辑中调整。
               </small>
             </div>}
-            <div className='form-grid'>
-              <div className='zjugis-field'>
-                <span id='explicit-cache-label'>启用显式缓存</span>
-                <CustomSelect aria-labelledby='explicit-cache-label' aria-label='启用显式缓存'
-                  value={modelCacheAllowed(modelEdit.sourceChannelIds) && modelEdit.support_explicit_cache ? 'on' : 'off'}
-                  disabled={!modelCacheAllowed(modelEdit.sourceChannelIds)}
-                  onChange={event => setModelEdit({ ...modelEdit, support_explicit_cache: event.target.value === 'on' })}>
-                  <option value='off'>关闭</option><option value='on'>开启</option>
-                </CustomSelect>
-                {!modelCacheAllowed(modelEdit.sourceChannelIds) && <small className='preview-muted'>自建或尚未适配的渠道不开放显式缓存。</small>}
-                {modelCacheAllowed(modelEdit.sourceChannelIds) && <small className='preview-muted'>默认关闭，请确认当前模型及地域支持后手动开启。不影响模型自身的隐式缓存。</small>}
-              </div>
-            </div>
             <div className='zjugis-modal-actions'>
               <button
                 type='button'

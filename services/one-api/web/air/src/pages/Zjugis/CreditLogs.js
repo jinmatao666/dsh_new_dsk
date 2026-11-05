@@ -61,7 +61,7 @@ export default function CreditLogs({ refreshKey }) {
       {detailReceipt ? <>
         <p className='credit-pricing-note'>调用时基准：1× = {formatCreditPrice(detailReceipt.base)} 积分／千 Token；分组倍率：{detailReceipt.group}×。</p>
         <table className='preview-table credit-log-breakdown'><thead><tr><th>计费项</th><th>Token 用量</th><th>当时倍率</th><th>单价（积分／千 Token）</th><th>消耗积分（取整前）</th></tr></thead><tbody>
-          {[['普通输入','input'],['输出','output'],['缓存命中','cache_read'],['缓存创建','cache_write']].map(([label,key]) => <tr key={key}>
+          {(detailReceipt.version >= 2 ? [['输入','input'],['输出','output']] : [['普通输入','input'],['输出','output'],['缓存命中','cache_read'],['缓存创建','cache_write']]).map(([label,key]) => <tr key={key}>
             <td>{label}</td><td>{detailReceipt[`${key}_tokens`]}</td><td>{detailReceipt[key]}×</td>
             <td>{formatCreditPrice(detailReceipt.base * detailReceipt[key])}</td>
             <td>{formatCreditPrice(detailReceipt[`${key}_tokens`] / 1000 * detailReceipt.base * detailReceipt[key] * detailReceipt.group)}</td>

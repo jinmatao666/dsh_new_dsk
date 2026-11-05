@@ -398,14 +398,10 @@ func PhoneRegister(c *gin.Context) {
 		return
 	}
 
-	{
-		config.OptionMapRWMutex.RLock()
-		legalReady := strings.TrimSpace(config.OptionMap["RegistrationAgreementText"]) != "" && strings.TrimSpace(config.OptionMap["RegistrationPrivacyText"]) != ""
-		config.OptionMapRWMutex.RUnlock()
-		if !req.Agreed || !legalReady {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "请先阅读并同意用户协议和隐私政策；未配置时请联系管理员"})
-			return
-		}
+	// Published desktop builds bundle their versioned legal documents.
+	if !req.Agreed {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "请先阅读并同意用户协议和隐私政策"})
+		return
 	}
 	phoneRegistrationMutex.Lock()
 	defer phoneRegistrationMutex.Unlock()

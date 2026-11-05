@@ -33,7 +33,7 @@ func TestDesktopPhoneRegistrationAndExistingAccount(t *testing.T) {
 	})
 	model.DB, model.ACCOUNT_DB, model.LOG_DB = db, db, db
 	config.RegisterEnabled, config.PhoneRegisterEnabled, config.PhoneLoginEnabled = true, true, true
-	config.OptionMap = map[string]string{"RegistrationDefaultRole": "", "RegistrationAgreementText": "协议正文", "RegistrationPrivacyText": "隐私正文"}
+	config.OptionMap = map[string]string{"RegistrationDefaultRole": ""}
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Role{}, &model.Token{}, &model.Log{}, &model.RechargePackage{}, &model.Account{}, &model.AccountProduct{}, &model.AccountProfile{}, &model.AccountIdentifier{}, &model.AccountCredential{}))
 	require.NoError(t, db.Create(&model.Role{Role: 3, Name: "注册用户", Status: 1, Permissions: json.RawMessage(`{}`)}).Error)
 	router := gin.New()
