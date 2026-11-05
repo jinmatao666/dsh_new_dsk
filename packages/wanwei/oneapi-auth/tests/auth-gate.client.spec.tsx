@@ -48,10 +48,10 @@ function renderGate(view: AuthView = { state: 'logged-out' }) {
 describe('Wanwei authentication gate', () => {
   it('opens configured agreements from the login footer', async () => {
     renderGate()
-    fireEvent.click(screen.getByRole('button', { name: zh.userAgreement, exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: zh.userAgreement }))
     expect(await screen.findByText('用户协议正文')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: zh.supportClose }))
-    fireEvent.click(screen.getByRole('button', { name: zh.privacyPolicy, exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: zh.privacyPolicy }))
     expect(await screen.findByText('隐私政策正文')).toBeTruthy()
   })
 
@@ -61,7 +61,7 @@ describe('Wanwei authentication gate', () => {
       login={login} refresh={async () => ({ state: 'logged-out' })} fail={() => {}} t={t} />)
     fireEvent.change(screen.getByLabelText(zh.username), { target: { value: 'existing-account' } })
     fireEvent.change(screen.getByLabelText(zh.password), { target: { value: 'secret' } })
-    fireEvent.click(screen.getByRole('button', { name: zh.signIn, exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: zh.signIn }))
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', '账号或密码不正确')
     expect(screen.getByRole('dialog')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: zh.supportClose }))
