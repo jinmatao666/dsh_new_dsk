@@ -1,3 +1,4 @@
+import { LoginDialog } from './LoginDialog.tsx'
 import { PublicLogin } from './PublicLogin.tsx'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
@@ -43,7 +44,14 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAut
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const [notice, setNotice] = useState<{ text: string }>()
-  const [noticeExiting, setNoticeExiting] = useState(false)
+  const [legal, setLegal] = useState<{ kind: 'agreement' | 'privacy'; text: string }>()
+  const openLegal = async (kind: 'agreement' | 'privacy') => {
+    setLegal({ kind, text: t('securityLoading') })
+    try {
+      const result = await publicAuth?.('capabilities', {}) as { data?: { agreement?: string; privacy?: string } } | undefined
+      setLegal(current => current?.kind === kind ? { kind, text: result?.data?.[kind] || t('loginLegalMissing') } : current)
+    } catch { setLegal(current => current?.kind === kind ? { kind, text: t('loginLegalMissing') } : current) }
+  }
   const [supportOpen, setSupportOpen] = useState(false)
   const [support, setSupport] = useState<DeploymentSettings>()
   const [supportError, setSupportError] = useState<string>()
@@ -53,12 +61,8 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAut
   const pageRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
-    setNoticeExiting(false)
-    if (notice === undefined) return
-    const fadeTimer = window.setTimeout(() => { setNoticeExiting(true) }, 3000)
-    const removeTimer = window.setTimeout(() => { setNotice(undefined) }, 3240)
-    return () => { window.clearTimeout(fadeTimer); window.clearTimeout(removeTimer) }
-  }, [notice])
+    if (auth.state === 'offline') setError(auth.message || t('offline'))
+  }, [auth, t])
 
   useEffect(() => {
     if ('username' in auth) setUsername(auth.username)
@@ -159,7 +163,7 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAut
   }
 
   const retry = (): void => { setError(undefined); void refresh().catch(fail) }
-  const serviceError = error ?? (auth.state === 'offline' ? auth.message || t('offline') : undefined)
+  const serviceError = error
   const changeMode = (mode: LoginMode): void => {
     if (mode === 'qr') { setNotice({ text: t('qrUnavailableTitle') }); return }
     setNotice(undefined); setLoginMode(mode); setError(undefined)
@@ -220,8 +224,7 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAut
             <div className={css.methodNotice} aria-hidden='true' />
             <div className={css.loginContent}>
               {loginMode === 'account' ? <>
-                <form className={serviceError === undefined ? undefined : css.accountFormError}
-                  onSubmit={(event) => { void submit(event) }}>
+                <form onSubmit={(event) => { void submit(event) }}>
                   <label>{t('username')}<input autoFocus autoComplete="username" disabled={busy} value={username} onChange={(event) => { setUsername(event.target.value) }} placeholder={t('usernamePlaceholder')} required /></label>
                   <label>{t('password')}<input type="password" autoComplete="current-password" disabled={busy} value={password} onChange={(event) => { setPassword(event.target.value) }} placeholder={t('passwordPlaceholder')} required /></label>
                   <div className={css.formOptions}>
@@ -231,34 +234,30 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAut
                         try { window.localStorage.removeItem(REMEMBERED_ACCOUNT_KEY) } catch { /* Storage may be unavailable. */ }
                       }
                     }} />{t('rememberMe')}</label>
-                    <button className={css.textAction} type="button" onClick={() => setLoginMode('reset')}>{t('forgotPassword')}</button>
+                    <button className={css.textAction} type="button" onClick={() =>{  setLoginMode('reset') }}>{t('forgotPassword')}</button>
                   </div>
-                  {serviceError !== undefined ? (
-                    <div className={css.accountFeedback}>
-                      <p className={css.error} role="alert" title={serviceError}>{serviceError}</p>
-                      {auth.state === 'offline'
-                        ? <button className={css.textAction} type="button" onClick={retry}>{t('retry')}</button> : null}
-                    </div>
-                  ) : null}
                   <button className={css.primaryButton} type="submit" disabled={checking || busy || username.trim() === '' || password === ''}>{checking ? t('checking') : busy ? t('signingIn') : t('signIn')}</button>
                 </form>
               </>
-                : publicAuth ? <PublicLogin key={loginMode} mode={loginMode} request={publicAuth} onBack={() => setLoginMode('account')} t={key => t(key as import('./locales.ts').WanweiAuthKey)} /> : <p>{t('loginServiceMissing')}</p>}
+                : publicAuth ? <PublicLogin key={loginMode} mode={loginMode} request={publicAuth} onBack={() =>{  setLoginMode('account') }} t={key => t(key as import('./locales.ts').WanweiAuthKey)} /> : <p>{t('loginServiceMissing')}</p>}
 
             </div>
-            {loginMode === 'account' && <p className={css.registrationFooter}><span>{t('loginNoAccount')}</span><button type="button" onClick={() => setLoginMode('sms')}>{t('loginPhoneRegister')}</button></p>}
+            {loginMode === 'account' && <p className={css.registrationFooter}><span>{t('loginNoAccount')}</span><button type="button" onClick={() =>{  setLoginMode('sms') }}>{t('loginPhoneRegister')}</button></p>}
             {loginMode === 'sms' && <p className={css.registrationFooter}>{t('loginUnregisteredHint')}</p>}
-            {(loginMode === 'account' || loginMode === 'sms') && <p className={css.legalNotice}>{t('legalPrefix')}{t('userAgreement')}{t('legalJoin')}{t('privacyPolicy')}</p>}
+            {(loginMode === 'account' || loginMode === 'sms') && <p className={css.legalNotice}>{t('legalPrefix')}<button type="button" onClick={() => { void openLegal('agreement') }}>{t('userAgreement')}</button>{t('legalJoin')}<button type="button" onClick={() => { void openLegal('privacy') }}>{t('privacyPolicy')}</button></p>}
             <p className={css.footerSpace}>{t('accountHelpPrefix')}<button className={css.textAction} type="button" onClick={(event) => { void openSupport(event.currentTarget) }}>{t('administrator')}</button>{t('accountHelpSuffix')}</p>
           </div>
         </section>
       </main>
-      {notice !== undefined && <div className={css.methodToast} data-exiting={noticeExiting ? 'true' : undefined} role='status' aria-live='polite'>
-        <span className={css.methodToastIcon} aria-hidden='true'>
-          <svg viewBox='0 0 24 24' focusable='false'><circle cx='12' cy='12' r='9' fill='currentColor' /><path d='M12 11v6' stroke='#fff' strokeWidth='2' strokeLinecap='round' /><circle cx='12' cy='7.5' r='1.2' fill='#fff' /></svg>
-        </span>
-        <span>{notice.text}</span>
-      </div>}
+      <LoginDialog compact open={serviceError !== undefined || notice !== undefined} title={t('productName')}
+        closeLabel={t('supportClose')} onClose={() => { setError(undefined); setNotice(undefined) }}>
+        <p className={serviceError !== undefined ? css.error : undefined} role={serviceError !== undefined ? 'alert' : 'status'}>{serviceError ?? notice?.text}</p>
+        {serviceError !== undefined && auth.state === 'offline' && <button className={css.textAction} type="button" onClick={retry}>{t('retry')}</button>}
+      </LoginDialog>
+      <LoginDialog open={legal !== undefined} title={t(legal?.kind === 'privacy' ? 'privacyPolicy' : 'userAgreement')}
+        closeLabel={t('supportClose')} onClose={() => { setLegal(undefined) }}>
+        <div className={css.legalContent}>{legal?.text}</div>
+      </LoginDialog>
       {supportOpen && <dialog ref={dialogRef} className={css.supportDialog} aria-labelledby='wanwei-support-title' onCancel={() => { setSupportOpen(false); supportTrigger.current?.focus() }} onClose={() => { setSupportOpen(false); supportTrigger.current?.focus() }}>
         <h2 id='wanwei-support-title'>{t('supportTitle')}</h2>
         <p>{t('supportHint')}</p>
@@ -310,9 +309,9 @@ function InitialPassword({ request }: { request: NonNullable<AuthInjected['reque
       if (password.length < 8 || password.length > 20 || password !== confirm) throw new Error('请输入8–20位密码，并确保两次输入一致')
       await request('initial-password', { new_password: password }); setClosed(true)
     }) }}>
-      <label>新密码<input type="password" placeholder="请输入8–20位密码" maxLength={20} required autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} disabled={busy} /></label>
-      <label>确认密码<input type="password" placeholder="请再次输入密码" maxLength={20} required autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} disabled={busy} /></label>
-      {error && <p role="alert">{error}</p>}<footer><button type="button" disabled={busy} onClick={() => setClosed(true)}>稍后设置</button><button disabled={busy}>保存密码</button></footer>
+      <label>新密码<input type="password" placeholder="请输入8–20位密码" maxLength={20} required autoComplete="new-password" value={password} onChange={(e) =>{  setPassword(e.target.value) }} disabled={busy} /></label>
+      <label>确认密码<input type="password" placeholder="请再次输入密码" maxLength={20} required autoComplete="new-password" value={confirm} onChange={(e) =>{  setConfirm(e.target.value) }} disabled={busy} /></label>
+      <LoginDialog compact open={!!error} title="设置登录密码" closeLabel="关闭" onClose={() => { setError('') }}><p role="alert" className={css.error}>{error}</p></LoginDialog><footer><button type="button" disabled={busy} onClick={() =>{  setClosed(true) }}>稍后设置</button><button disabled={busy}>保存密码</button></footer>
     </form>
   </dialog>
 }

@@ -14,6 +14,7 @@
     "src/client/index.ts",
     "src/client/AuthGate.tsx",
     "src/client/PublicLogin.tsx",
+    "src/client/LoginDialog.tsx",
     "src/client/AccountSection.tsx",
     "src/client/account-icons.ts",
     "src/client/CreditsSection.tsx",

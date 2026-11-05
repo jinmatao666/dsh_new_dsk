@@ -20,6 +20,8 @@ Verified new phone users now enter the workspace directly after consent. A nativ
 
 The admin SMS login dropdown synchronizes PhoneLoginEnabled and SMSEnabled on save; the signature is hidden and preserved. Account security actions use bundled licensed icons and a keyboard-accessible phone-binding hint. Credit history retains post-change balances and adds first/last navigation with bounded page jumps.
 
+SMS submission is the acceptance action described by the visible login notice; no separate checkbox is required. Footer links open server-configured agreement/privacy text in a native top-layer dialog. Registration still requires both texts, while existing-account SMS login remains available. The options row shows the five-minute code lifetime; account, connectivity, SMS, recovery and unavailable-QR errors use the same dismissible native dialog to avoid overlapping the footer. Closing it preserves form input.
+
 ## Alternatives considered
 
 Automatic creation on unknown login omits consent. Creating a new user for an existing WeChat account splits identity. Guessing a role by number risks wrong permissions. UI-only configuration restrictions do not protect direct API calls.

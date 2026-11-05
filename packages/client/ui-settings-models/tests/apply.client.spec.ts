@@ -103,7 +103,7 @@ describe('ui-settings-models apply', () => {
     expect(resolveSlotLabel(entry.options.label)).toBe('模型')
     const injected = (entry.inject as unknown as () => import('../src/client/ModelsSection.tsx').ModelsSectionInjected)()
     expect(injected.t('nav')).toBe('模型')
-    expect(injected.t('deleteTitle')).toBe('删除「{provider}」？')
+    expect(injected.t('deleteTitle')).toBe('删除{provider}？')
     expect(typeof injected.controller.load).toBe('function')
     expect(injected.hooks.snapshot).toBe(injected.controller.store)
     expect(injected.api).toBeDefined()
@@ -144,7 +144,7 @@ describe('ui-settings-models apply', () => {
     expect(injected().t('deleteTitle')).toBe('Delete {provider}?')
     b.locale.setLocale('zh')
     expect(resolveSlotLabel(b.slots.entries('settings.section')[0]!.options.label)).toBe('模型')
-    expect(injected().t('deleteTitle')).toBe('删除「{provider}」？')
+    expect(injected().t('deleteTitle')).toBe('删除{provider}？')
   })
 
   it('locale change while the slot is undeclared stays a no-op', async () => {

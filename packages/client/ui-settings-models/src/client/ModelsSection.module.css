@@ -689,3 +689,10 @@ button.selectInput {
 .deleteDialog .deleteConfirm {
   border-color: var(--dsw-alias-state-error-primary, #dc3535);
 }
+
+.customGroup { margin-top: 12px; padding: 0 14px 14px; border: 1px solid var(--dsw-alias-border-l1, #e1e5eb); border-radius: 14px; }
+.customGroup > summary { padding: 16px 0; cursor: pointer; font-size: 14px; font-weight: 600; }
+.customGroup .rowCard { background: var(--dsw-alias-bg-layer-1, #fff); }
+.customGroup .addBlock { margin-top: 12px; }
+
+.deleteDialog h2 { font-weight: 600; }

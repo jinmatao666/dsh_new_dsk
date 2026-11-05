@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { AuthView } from '../src/client/controller.ts'
@@ -46,6 +46,29 @@ function renderGate(view: AuthView = { state: 'logged-out' }) {
 }
 
 describe('Wanwei authentication gate', () => {
+  it('opens configured agreements from the login footer', async () => {
+    renderGate()
+    fireEvent.click(screen.getByRole('button', { name: zh.userAgreement, exact: true }))
+    expect(await screen.findByText('用户协议正文')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: zh.supportClose }))
+    fireEvent.click(screen.getByRole('button', { name: zh.privacyPolicy, exact: true }))
+    expect(await screen.findByText('隐私政策正文')).toBeTruthy()
+  })
+
+  it('shows account failures in a dismissible dialog without clearing credentials', async () => {
+    const login = vi.fn(async () => { throw new Error('账号或密码不正确') })
+    render(<AuthGate {...kit} useAuth={selector => selector({ state: 'logged-out' })}
+      login={login} refresh={async () => ({ state: 'logged-out' })} fail={() => {}} t={t} />)
+    fireEvent.change(screen.getByLabelText(zh.username), { target: { value: 'existing-account' } })
+    fireEvent.change(screen.getByLabelText(zh.password), { target: { value: 'secret' } })
+    fireEvent.click(screen.getByRole('button', { name: zh.signIn, exact: true }))
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', '账号或密码不正确')
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: zh.supportClose }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByLabelText(zh.password)).toHaveProperty('value', 'secret')
+  })
+
   it('renders the production product lockup with the purple account-login surface', async () => {
     const subject = renderGate()
     expect(screen.getByAltText(zh.productName)).toBeTruthy()
@@ -67,6 +90,7 @@ describe('Wanwei authentication gate', () => {
     expect(screen.getByRole('status').textContent).toBe(zh.qrUnavailableTitle)
     expect(kit.publicAuth.mock.calls.length).toBe(calls)
     expect(screen.getByRole('tab', { name: zh.smsLogin }).getAttribute('aria-selected')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: zh.supportClose }))
     fireEvent.click(screen.getByRole('tab', { name: zh.accountLogin }))
     expect(screen.getByLabelText(zh.username)).toBeTruthy()
   })
@@ -81,7 +105,7 @@ describe('Wanwei authentication gate', () => {
     expect(screen.getByLabelText(zh.username)).toBe(username)
     expect(screen.getByLabelText(zh.password)).toHaveProperty('value', 'secret')
     expect(screen.getByRole('tab', { name: zh.accountLogin }).getAttribute('aria-selected')).toBe('true')
-    act(() => { vi.advanceTimersByTime(3240) })
+    fireEvent.click(screen.getByRole('button', { name: zh.supportClose }))
     expect(screen.queryByText(zh.qrUnavailableTitle)).toBeNull()
   })
 

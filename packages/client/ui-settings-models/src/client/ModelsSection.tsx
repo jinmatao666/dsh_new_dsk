@@ -191,6 +191,22 @@ export function providerTargetLabel(target: ProviderIdentity): string {
     : `${target.displayName} (${target.provider})`
 }
 
+/** Human-readable endpoint identity without exposing generated route IDs. */
+function localLabel(row: ProviderRow, value: unknown): string {
+  let profile = value
+  for (const key of row.entry.settingsPath) {
+    if (typeof profile !== 'object' || profile === null) return row.entry.displayName
+    profile = (profile as Record<string, unknown>)[key]
+  }
+  if (typeof profile !== 'object' || profile === null) return row.entry.displayName
+  const config = profile as { baseURL?: string; models?: { name?: string; id?: string }[] }
+  const first = config.models?.[0]
+  const name = first?.name || first?.id
+  if (name) return config.models && config.models.length > 1 ? `${name} +${config.models.length - 1}` : name
+  if (config.baseURL) { try { return new URL(config.baseURL).host } catch { /* Preserve the provider label for invalid endpoints. */ } }
+  return row.entry.displayName
+}
+
 /** Replace the one provider placeholder in localized destructive-action copy. */
 export function providerCopy(template: string, target: ProviderIdentity): string {
   return template.replace('{provider}', () => providerTargetLabel(target))
@@ -318,251 +334,255 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
   // there is nothing to declare and the entry point stays disabled.
   const protocols = protocolChoices(state.namespaces.get('llm-pi-ai'), schema)
 
+  const CustomGroup = customOnly ? 'details' : 'div'
+  const renderConfigured = (row: ProviderRow) => {
+    const target = targetOf(row)
+    const namespace = state.namespaces.get(target.settingsNs)
+    /* v8 ignore next -- the join marks a row configured only when its namespace resolved */
+    if (namespace === undefined) return null
+    if (row.entry.provider !== managedProvider && needsSetup(row, anyUsable) && !dismissedSetup.has(row.entry.provider)) {
+      // First-run posture: the provider exists but has no key — the
+      // setup card IS its presence on the page, until the user closes it.
+      return (
+        <li key={row.entry.provider} className={styles['setupCard']}>
+          {renderProviderEditor({
+            target,
+            namespace,
+            schema,
+            api,
+            t,
+            readOnly: !state.writable,
+            onClose: (changed) => { closeSetup(changed, target) },
+          })}
+          {renderSlot(
+            'settings.models.provider-card',
+            { provider: row.entry, configured: row.configured, keyConfigured: keyConfiguredOf(row) },
+            { entryKey: row.entry.settingsNs },
+          )}
+        </li>
+      )
+    }
+    const open = !adding && editing?.provider === row.entry.provider
+    const credentialConfigured = row.credential?.configured === true
+    const credentialMissing = !credentialConfigured
+            && row.apiKeyEnv !== undefined
+            && row.credential?.configured === false
+    return (
+      <li key={row.entry.provider} className={styles['rowCard']}>
+        <div className={styles['rowHead']}>
+          <span className={styles['rowIdentity']}>
+            <span className={styles['rowName']}>{customOnly && row.entry.provider !== managedProvider ? localLabel(row, namespace.value) : row.entry.displayName}</span>
+            {/* Only the adapter can tell a hand-declared route from a
+                      shipped one it also has a stored profile for, so the tag
+                      follows its answer and stays off when it gives none. */}
+            {row.entry.declared === true && row.entry.provider !== managedProvider
+              ? <span className={styles['rowTag']}>{t('customTag')}</span>
+              : null}
+            {row.entry.provider === managedProvider
+              ? <span className={styles['rowTag']}>{t('managedTag')}</span>
+              : null}
+            {credentialConfigured
+              ? (
+                <span
+                  className={`${styles['credentialDot']} ${styles['credentialDotConfigured']}`}
+                  role="img"
+                  aria-label={t('credentialConfigured')}
+                  title={t('credentialConfigured')}
+                />
+              )
+              : credentialMissing
+                ? (
+                  <span
+                    className={`${styles['credentialDot']} ${styles['credentialDotMissing']}`}
+                    role="img"
+                    aria-label={t('credentialMissing')}
+                    title={t('credentialMissing')}
+                  />
+                )
+                : null}
+          </span>
+          <span className={styles['rowActions']}>
+            {row.entry.provider === managedProvider && <button type="button" className={styles['secondaryButton']}
+              aria-expanded={managedExpanded} onClick={() => { setManagedExpanded(value => !value) }}>
+              {t(managedExpanded ? 'managedCollapse' : 'managedExpand')}
+            </button>}
+            {row.entry.provider !== managedProvider && <>
+              <button
+                type="button"
+                className={styles['secondaryButton']}
+                aria-label={providerCopy(t('editProvider'), target)}
+                onClick={() => {
+                  setSavedTarget(undefined)
+                  // One card at a time: leaving `declaring` set would show
+                  // the create card beside this editor, and closing either
+                  // one discards the other's draft.
+                  setDeclaring(false)
+                  setAdding(false)
+                  setEditing(open ? undefined : target)
+                }}
+              >
+                {t('edit')}
+              </button>
+              {row.removable
+                ? (
+                  <button
+                    type="button"
+                    className={styles['dangerButton']}
+                    aria-label={providerCopy(t('removeProvider'), target)}
+                    disabled={!state.writable}
+                    onClick={() => {
+                      setSavedTarget(undefined)
+                      setDeleteFailure(undefined)
+                      setDeleteTarget(target)
+                    }}
+                  >
+                    {t('remove')}
+                  </button>
+                )
+                : null}
+            </>}
+          </span>
+        </div>
+        {(row.entry.provider !== managedProvider || managedExpanded) && renderSlot(
+          'settings.models.provider-card',
+          { provider: row.entry, configured: row.configured, keyConfigured: keyConfiguredOf(row) },
+          { entryKey: row.entry.settingsNs },
+        )}
+        {open && !customOnly
+          ? renderProviderEditor({
+            target,
+            namespace,
+            schema,
+            api,
+            t,
+            readOnly: !state.writable,
+            onClose: (changed) => { closeEditor(changed, target) },
+          })
+          : null}
+        {open && customOnly && <Modal open onClose={() => { setEditing(undefined) }} title={target.displayName}
+          closeLabel={t('close')} className={styles['customDialog'] as string}>
+          {renderProviderEditor({ target, namespace, schema, api, t, readOnly: !state.writable,
+            onClose: (changed) => { closeEditor(changed, target) } })}
+        </Modal>}
+      </li>
+    )
+  }
+
   return (
     <div className={styles['section']}>
       <h2 className={styles['title']}>{t('title')}</h2>
       <p className={styles['intro']}>{t(managedProvider === undefined ? 'intro' : 'introManaged')}</p>
       {!state.writable && state.status === 'ready' ? <p className={styles['notice']}>{t('readOnly')}</p> : null}
-      {savedIdentity === undefined
-        ? null
-        : (
-          <p className={styles['savedNotice']} role="status" aria-live="polite">
-            {providerCopy(t('savedProvider'), savedIdentity)}
-          </p>
-        )}
+      <Modal open={savedIdentity !== undefined} onClose={() => { setSavedTarget(undefined) }}
+        title={t('saveSuccessTitle')} closeLabel={t('close')} className={styles['deleteDialog'] as string}>
+        <p className={styles['savedNotice']} role="status">{t('savedProvider')}</p>
+      </Modal>
       <ul className={styles['rows']}>
-        {configured.map((row) => {
-          const target = targetOf(row)
-          const namespace = state.namespaces.get(target.settingsNs)
-          /* v8 ignore next -- the join marks a row configured only when its namespace resolved */
-          if (namespace === undefined) return null
-          if (row.entry.provider !== managedProvider && needsSetup(row, anyUsable) && !dismissedSetup.has(row.entry.provider)) {
-            // First-run posture: the provider exists but has no key — the
-            // setup card IS its presence on the page, until the user closes it.
-            return (
-              <li key={row.entry.provider} className={styles['setupCard']}>
-                {renderProviderEditor({
-                  target,
-                  namespace,
-                  schema,
-                  api,
-                  t,
-                  readOnly: !state.writable,
-                  onClose: (changed) => { closeSetup(changed, target) },
-                })}
-                {renderSlot(
-                  'settings.models.provider-card',
-                  { provider: row.entry, configured: row.configured, keyConfigured: keyConfiguredOf(row) },
-                  { entryKey: row.entry.settingsNs },
-                )}
-              </li>
-            )
-          }
-          const open = !adding && editing?.provider === row.entry.provider
-          const credentialConfigured = row.credential?.configured === true
-          const credentialMissing = !credentialConfigured
-            && row.apiKeyEnv !== undefined
-            && row.credential?.configured === false
-          return (
-            <li key={row.entry.provider} className={styles['rowCard']}>
-              <div className={styles['rowHead']}>
-                <span className={styles['rowIdentity']}>
-                  <span className={styles['rowName']}>{row.entry.displayName}</span>
-                  {/* Only the adapter can tell a hand-declared route from a
-                      shipped one it also has a stored profile for, so the tag
-                      follows its answer and stays off when it gives none. */}
-                  {row.entry.declared === true && row.entry.provider !== managedProvider
-                    ? <span className={styles['rowTag']}>{t('customTag')}</span>
-                    : null}
-                  {row.entry.provider === managedProvider
-                    ? <span className={styles['rowTag']}>{t('managedTag')}</span>
-                    : null}
-                  {credentialConfigured
-                    ? (
-                      <span
-                        className={`${styles['credentialDot']} ${styles['credentialDotConfigured']}`}
-                        role="img"
-                        aria-label={t('credentialConfigured')}
-                        title={t('credentialConfigured')}
-                      />
-                    )
-                    : credentialMissing
-                      ? (
-                        <span
-                          className={`${styles['credentialDot']} ${styles['credentialDotMissing']}`}
-                          role="img"
-                          aria-label={t('credentialMissing')}
-                          title={t('credentialMissing')}
-                        />
-                      )
-                      : null}
-                </span>
-                <span className={styles['rowActions']}>
-                  {row.entry.provider === managedProvider && <button type="button" className={styles['secondaryButton']}
-                    aria-expanded={managedExpanded} onClick={() => { setManagedExpanded(value => !value) }}>
-                    {t(managedExpanded ? 'managedCollapse' : 'managedExpand')}
-                  </button>}
-                  {row.entry.provider !== managedProvider && <>
-                    <button
-                      type="button"
-                      className={styles['secondaryButton']}
-                      aria-label={providerCopy(t('editProvider'), target)}
-                      onClick={() => {
-                        setSavedTarget(undefined)
-                        // One card at a time: leaving `declaring` set would show
-                        // the create card beside this editor, and closing either
-                        // one discards the other's draft.
-                        setDeclaring(false)
-                        setAdding(false)
-                        setEditing(open ? undefined : target)
-                      }}
-                    >
-                      {t('edit')}
-                    </button>
-                    {row.removable
-                      ? (
-                        <button
-                          type="button"
-                          className={styles['dangerButton']}
-                          aria-label={providerCopy(t('removeProvider'), target)}
-                          disabled={!state.writable}
-                          onClick={() => {
-                            setSavedTarget(undefined)
-                            setDeleteFailure(undefined)
-                            setDeleteTarget(target)
-                          }}
-                        >
-                          {t('remove')}
-                        </button>
-                      )
-                      : null}
-                  </>}
-                </span>
-              </div>
-              {(row.entry.provider !== managedProvider || managedExpanded) && renderSlot(
-                'settings.models.provider-card',
-                { provider: row.entry, configured: row.configured, keyConfigured: keyConfiguredOf(row) },
-                { entryKey: row.entry.settingsNs },
-              )}
-              {open && !customOnly
-                ? renderProviderEditor({
-                  target,
-                  namespace,
-                  schema,
-                  api,
-                  t,
-                  readOnly: !state.writable,
-                  onClose: (changed) => { closeEditor(changed, target) },
-                })
-                : null}
-              {open && customOnly && <Modal open onClose={() => { setEditing(undefined) }} title={target.displayName}
-                closeLabel={t('close')} className={styles['customDialog'] as string}>
-                {renderProviderEditor({ target, namespace, schema, api, t, readOnly: !state.writable,
-                  onClose: (changed) => { closeEditor(changed, target) } })}
-              </Modal>}
-            </li>
-          )
-        })}
+        {(customOnly ? configured.filter(row => row.entry.provider === managedProvider) : configured).map(renderConfigured)}
       </ul>
-      <div className={styles['addBlock']}>
-        {addTarget !== undefined && addNamespace !== undefined
-          ? (
-            <div className={styles['addCard']}>
-              <div className={styles['field']}>
-                <span className={styles['fieldLabel']}>{t('provider')}</span>
-                <Select
-                  className={styles['selectInput']}
-                  value={addTarget.provider}
-                  label={t('provider')}
-                  onChange={(value) => {
-                    const row = addable.find(candidate => candidate.entry.provider === value)
-                    /* v8 ignore next -- the select only lists addable rows */
-                    if (row === undefined) return
-                    setEditing(targetOf(row))
-                  }}
-                  options={addable.map(row => ({ value: row.entry.provider, label: row.entry.displayName }))}
-                />
-              </div>
-              <ProviderEditor
-                key={addTarget.provider}
-                provider={addTarget.provider}
-                displayName={addTarget.displayName}
-                hideTitle
-                namespace={addNamespace}
-                schema={schema}
-                settingsPath={addTarget.settingsPath}
-                api={api}
-                t={t}
-                readOnly={!state.writable}
-                onClose={(changed) => { closeEditor(changed, addTarget) }}
-              />
-              {addRow === undefined
-                ? null
-                : renderSlot(
-                  'settings.models.provider-card',
-                  { provider: addRow.entry, configured: addRow.configured, keyConfigured: keyConfiguredOf(addRow) },
-                  { entryKey: addRow.entry.settingsNs },
-                )}
-            </div>
-          )
-          : declaring && !customOnly
+      <CustomGroup className={customOnly ? styles['customGroup'] : undefined} open>
+        {customOnly && <summary>{t('customGroup')}</summary>}
+        {customOnly && <ul className={styles['rows']}>{configured.filter(row => row.entry.provider !== managedProvider).map(renderConfigured)}</ul>}
+        <div className={styles['addBlock']}>
+          {addTarget !== undefined && addNamespace !== undefined
             ? (
               <div className={styles['addCard']}>
-                <CustomProviderCard
-                  taken={state.rows.map(row => row.entry.provider)}
-                  protocols={protocols}
-                  /* v8 ignore next -- the card only opens from a button disabled without this namespace */
-                  revision={state.namespaces.get('llm-pi-ai')?.revision ?? 0}
+                <div className={styles['field']}>
+                  <span className={styles['fieldLabel']}>{t('provider')}</span>
+                  <Select
+                    className={styles['selectInput']}
+                    value={addTarget.provider}
+                    label={t('provider')}
+                    onChange={(value) => {
+                      const row = addable.find(candidate => candidate.entry.provider === value)
+                      /* v8 ignore next -- the select only lists addable rows */
+                      if (row === undefined) return
+                      setEditing(targetOf(row))
+                    }}
+                    options={addable.map(row => ({ value: row.entry.provider, label: row.entry.displayName }))}
+                  />
+                </div>
+                <ProviderEditor
+                  key={addTarget.provider}
+                  provider={addTarget.provider}
+                  displayName={addTarget.displayName}
+                  hideTitle
+                  namespace={addNamespace}
+                  schema={schema}
+                  settingsPath={addTarget.settingsPath}
                   api={api}
                   t={t}
                   readOnly={!state.writable}
-                  onClose={(changed) => {
-                    setDeclaring(false)
-                    if (changed) void controller.load()
-                  }}
+                  onClose={(changed) => { closeEditor(changed, addTarget) }}
                 />
+                {addRow === undefined
+                  ? null
+                  : renderSlot(
+                    'settings.models.provider-card',
+                    { provider: addRow.entry, configured: addRow.configured, keyConfigured: keyConfiguredOf(addRow) },
+                    { entryKey: addRow.entry.settingsNs },
+                  )}
               </div>
             )
-            : (
+            : declaring && !customOnly
+              ? (
+                <div className={styles['addCard']}>
+                  <CustomProviderCard
+                    taken={state.rows.map(row => row.entry.provider)}
+                    protocols={protocols}
+                    /* v8 ignore next -- the card only opens from a button disabled without this namespace */
+                    revision={state.namespaces.get('llm-pi-ai')?.revision ?? 0}
+                    api={api}
+                    t={t}
+                    readOnly={!state.writable}
+                    onClose={(changed) => {
+                      setDeclaring(false)
+                      if (changed) void controller.load()
+                    }}
+                  />
+                </div>
+              )
+              : (
               // One row for the two ways to gain a provider: adopt one the
               // adapter already knows, or declare one it does not. Side by side
               // and equal-width so they read as siblings and line up with the
               // rows above, rather than two pills of different lengths.
-              <div className={styles['addActions']}>
-                {!customOnly && <button
-                  type="button"
-                  className={styles['addButton']}
-                  disabled={addable.length === 0 || !state.writable}
-                  onClick={() => {
-                    const first = addable[0]
-                    /* v8 ignore next -- the button is disabled while nothing is addable */
-                    if (first === undefined) return
-                    setSavedTarget(undefined)
-                    setDeclaring(false)
-                    setAdding(true)
-                    setEditing(targetOf(first))
-                  }}
-                >
-                  <IconPlusOutline16 size={14} />
-                  {t('add')}
-                </button>}
-                <button
-                  type="button"
-                  className={styles['addButton']}
-                  disabled={protocols.length === 0 || !state.writable}
-                  onClick={() => {
-                    setSavedTarget(undefined)
-                    setAdding(false)
-                    setEditing(undefined)
-                    setDeclaring(true)
-                  }}
-                >
-                  <IconPlusOutline16 size={14} />
-                  {t(customOnly ? 'customAddModel' : 'customAdd')}
-                </button>
-              </div>
-            )}
-      </div>
+                <div className={styles['addActions']}>
+                  {!customOnly && <button
+                    type="button"
+                    className={styles['addButton']}
+                    disabled={addable.length === 0 || !state.writable}
+                    onClick={() => {
+                      const first = addable[0]
+                      /* v8 ignore next -- the button is disabled while nothing is addable */
+                      if (first === undefined) return
+                      setSavedTarget(undefined)
+                      setDeclaring(false)
+                      setAdding(true)
+                      setEditing(targetOf(first))
+                    }}
+                  >
+                    <IconPlusOutline16 size={14} />
+                    {t('add')}
+                  </button>}
+                  <button
+                    type="button"
+                    className={styles['addButton']}
+                    disabled={protocols.length === 0 || !state.writable}
+                    onClick={() => {
+                      setSavedTarget(undefined)
+                      setAdding(false)
+                      setEditing(undefined)
+                      setDeclaring(true)
+                    }}
+                  >
+                    <IconPlusOutline16 size={14} />
+                    {t(customOnly ? 'customAddModel' : 'customAdd')}
+                  </button>
+                </div>
+              )}
+        </div>
+      </CustomGroup>
       {customOnly && <Modal open={declaring} onClose={() => { setDeclaring(false) }} title={t('customGroup')}
         closeLabel={t('close')} className={styles['customDialog'] as string}>
         <CustomProviderCard automaticRoute taken={state.rows.map(row => row.entry.provider)} protocols={protocols}

@@ -1,3 +1,4 @@
+import { LoginDialog } from './LoginDialog.tsx'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import css from './AuthGate.module.css'
@@ -37,14 +38,13 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
   const [cap, setCap] = useState<Capabilities>()
   const [phone, setPhone] = useState(''), [code, setCode] = useState('')
   const [password, setPassword] = useState(''), [confirm, setConfirm] = useState('')
-  const [register, setRegister] = useState(false), [agreed, setAgreed] = useState(false)
+  const [register, setRegister] = useState(false)
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('')
   const [countdown, setCountdown] = useState(0)
   const [captcha, setCaptcha] = useState<{ captcha_id: string; captcha_image: string }>()
   const [imageCode, setImageCode] = useState('')
   const [qr, setQr] = useState<{ state: string; image: string }>(), [unbound, setUnbound] = useState('')
   const [wechatPhone, setWechatPhone] = useState('')
-  const [legal, setLegal] = useState<'agreement' | 'privacy'>()
   const live = useRef(true), polling = useRef(false)
   useEffect(() => {
     live.current = true
@@ -94,6 +94,11 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
   }, [qr, unbound, request, t])
   const smsEnabled = mode === 'reset' || wechatPhone ? cap?.reset : cap?.sms
   const smsForm = mode !== 'qr' || !!unbound || !!wechatPhone
+  useEffect(() => {
+    if (cap && (!smsEnabled && smsForm || mode === 'qr' && !cap.wechat)) {
+      setError(t(mode === 'qr' ? 'loginWechatDisabled' : 'loginSmsDisabled'))
+    }
+  }, [cap, smsEnabled, smsForm, mode, t])
   const send = () => { void run(async () => {
     if (!/^1[3-9]\d{9}$/.test(phone)) throw new Error(t('securityInvalidPhone'))
     if (cap?.captcha && !wechatPhone && !captcha) {
@@ -109,21 +114,18 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
     if (register || mode === 'reset') {
       if ((mode === 'reset' || password) && (password.length < 8 || password.length > 20 || password !== confirm)) throw new Error(t('securityPasswordInvalid'))
     }
-    if (register && (!agreed || !cap?.agreement || !cap.privacy)) throw new Error(t('loginConsentRequired'))
-    if (mode === 'sms' && cap?.register && !agreed) throw new Error(t('loginConsentRequired'))
-    const input = { phone, code, password, new_password: password, agreed: String(agreed), wechat_state: unbound, state: wechatPhone }
+    if (register && (!cap?.agreement || !cap.privacy)) throw new Error(t('loginConsentRequired'))
+    const input = { phone, code, password, new_password: password, agreed: 'true', wechat_state: unbound, state: wechatPhone }
     const result = await request(wechatPhone ? 'wechat-phone-bind' : mode === 'reset' ? 'reset' : register ? 'register' : 'sms', input) as Result
     if (result.code === 'phone_not_registered') {
       if (!result.register_enabled) throw new Error(result.message || t('loginRegistrationClosed'))
-      if (!agreed || !cap?.agreement || !cap.privacy) throw new Error(t('loginConsentRequired'))
+      if (!cap?.agreement || !cap.privacy) throw new Error(t('loginConsentRequired'))
       await request('register', { ...input, password: '', agreed: 'true' }); return
     }
     if (mode === 'reset') { setPassword(''); setConfirm(''); setCode(''); setNotice(t('loginPasswordSaved')) }
   }) }
   return <div className={styles.body} data-login-mode={mode} data-register={register ? 'true' : undefined}>
     {!cap && !error && <p role="status">{t('securityLoading')}</p>}
-    {cap && !smsEnabled && smsForm && <p role="status">{t('loginSmsDisabled')}</p>}
-    {cap && mode === 'qr' && !cap.wechat && <p role="status">{t('loginWechatDisabled')}</p>}
     {mode === 'qr' && cap?.wechat && !unbound && !wechatPhone && <div className={styles.qr}>
       {qr ? <><img src={qr.image} alt={t('loginQrAlt')} /><p>{t('securityScanHint')}</p></> : <p>{t(busy ? 'securityLoading' : 'loginQrExpired')}</p>}
       <button type="button" disabled={busy} onClick={loadQr}>{t('loginRefreshQr')}</button>
@@ -132,18 +134,17 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
     {unbound && <p>{t('loginBindExisting')}</p>}
     {cap && smsEnabled && smsForm && <form className={styles.form} data-register={register ? 'true' : undefined} onSubmit={submit}>
       {register ? <><h3>{t('loginCreateAccount')}</h3><p>{t('loginAccountPhone')} {phone}</p></> : <label>{t('securityPhone')}<input type="tel" placeholder={t('loginPhonePlaceholder')} autoComplete="tel" maxLength={11} required value={phone} disabled={busy} onChange={(e) => { setPhone(e.target.value); setCode('') }} /></label>}
-      {!register && <div className={styles.code}><label>{t('loginSmsCode')}<input inputMode="numeric" placeholder={t('loginCodePlaceholder')} autoComplete="one-time-code" maxLength={6} required value={code} disabled={busy} onChange={e => setCode(e.target.value)} /></label><button type="button" disabled={busy || countdown > 0} onClick={send}>{countdown ? `${countdown}s` : t('securitySendCode')}</button></div>}
-      {captcha && <div className={styles.code}><label>{t('securityCaptcha')}<input value={imageCode} onChange={e => setImageCode(e.target.value)} /></label><img src={captcha.captcha_image} alt={t('securityCaptcha')} /></div>}
-      {(register || mode === 'reset') && <><p className={styles.hint}>{t(register ? 'loginPasswordOptional' : 'securityPasswordHint')}</p><label>{t('securityNewPassword')}<input type="password" autoComplete="new-password" maxLength={20} required={mode === 'reset'} value={password} onChange={e => setPassword(e.target.value)} /></label><label>{t('securityConfirmPassword')}<input type="password" autoComplete="new-password" maxLength={20} required={mode === 'reset'} value={confirm} onChange={e => setConfirm(e.target.value)} /></label></>}
-      {(register || mode === 'sms' && cap?.register) && <><label className={styles.consent}><input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} />{t('loginAgree')}<button type="button" onClick={() => setLegal('agreement')}>{t('userAgreement')}</button><button type="button" onClick={() => setLegal('privacy')}>{t('privacyPolicy')}</button></label>
-        {(!cap.agreement || !cap.privacy) && <p>{t('loginLegalMissing')}</p>}</>}
-      {register && <button className={styles.inline} type="button" disabled={busy} onClick={() => { setRegister(false); setCode(''); setPassword(''); setConfirm(''); setAgreed(false); setNotice('') }}>{t('loginChangePhone')}</button>}
-      {mode === 'sms' && !register && !cap?.register && <p className={styles.smsHint}>{t('loginCodePrivacyHint')}</p>}
-      <button className={css.primaryButton} disabled={busy || register && (!agreed || !cap.agreement || !cap.privacy)}>{busy ? t('securitySaving') : t(wechatPhone ? 'loginBindPhoneEnter' : mode === 'reset' ? 'securityPasswordAction' : register ? password ? 'loginRegisterEnter' : 'loginSkipPassword' : cap.register ? 'loginOrRegister' : 'signIn')}</button>
+      {!register && <div className={styles.code}><label>{t('loginSmsCode')}<input inputMode="numeric" placeholder={t('loginCodePlaceholder')} autoComplete="one-time-code" maxLength={6} required value={code} disabled={busy} onChange={(e) =>{  setCode(e.target.value) }} /></label><button type="button" disabled={busy || countdown > 0} onClick={send}>{countdown ? `${countdown}s` : t('securitySendCode')}</button></div>}
+      {captcha && <div className={styles.code}><label>{t('securityCaptcha')}<input value={imageCode} onChange={(e) =>{  setImageCode(e.target.value) }} /></label><img src={captcha.captcha_image} alt={t('securityCaptcha')} /></div>}
+      {(register || mode === 'reset') && <><p className={styles.hint}>{t(register ? 'loginPasswordOptional' : 'securityPasswordHint')}</p><label>{t('securityNewPassword')}<input type="password" autoComplete="new-password" maxLength={20} required={mode === 'reset'} value={password} onChange={(e) =>{  setPassword(e.target.value) }} /></label><label>{t('securityConfirmPassword')}<input type="password" autoComplete="new-password" maxLength={20} required={mode === 'reset'} value={confirm} onChange={(e) =>{  setConfirm(e.target.value) }} /></label></>}
+      {register && <button className={styles.inline} type="button" disabled={busy} onClick={() => { setRegister(false); setCode(''); setPassword(''); setConfirm(''); setNotice('') }}>{t('loginChangePhone')}</button>}
+      {mode === 'sms' && !register && <p className={styles.smsHint} role={notice ? 'status' : undefined}>{notice || t('loginCodePrivacyHint')}</p>}
+      <button className={css.primaryButton} disabled={busy || register && (!cap.agreement || !cap.privacy)}>{busy ? t('securitySaving') : t(wechatPhone ? 'loginBindPhoneEnter' : mode === 'reset' ? 'securityPasswordAction' : register ? password ? 'loginRegisterEnter' : 'loginSkipPassword' : cap.register ? 'loginOrRegister' : 'signIn')}</button>
     </form>}
-    {notice && <p role="status" className={styles.hint}>{notice}</p>}
-    {error && <p role="alert" className={styles.error}>{error}</p>}
-    {legal && <div className={styles.legal} role="region" aria-label={t(legal === 'agreement' ? 'userAgreement' : 'privacyPolicy')}><strong>{t(legal === 'agreement' ? 'userAgreement' : 'privacyPolicy')}</strong><pre>{cap?.[legal] || t('loginLegalMissing')}</pre><button type="button" onClick={() => setLegal(undefined)}>{t('securityCancel')}</button></div>}
+    {notice && mode !== 'sms' && <p role="status" className={styles.hint}>{notice}</p>}
+    <LoginDialog compact open={!!error} title={t(mode === 'reset' ? 'forgotPassword' : mode === 'qr' ? 'qrLogin' : 'smsLogin')} closeLabel={t('supportClose')} onClose={() => { setError('') }}>
+      <p role="alert" className={styles.error}>{error}</p>
+    </LoginDialog>
     {!register && mode === 'reset' && <button type="button" className={styles.back} onClick={onBack}>{t('loginBackAccount')}</button>}
   </div>
 }
