@@ -10,7 +10,7 @@ import type { ModelsSectionInjected, ModelsSectionProps } from '../src/client/Mo
 import { CustomProviderCard } from '../src/client/CustomProviderCard.tsx'
 import { formatCapacity, parseCapacity } from '../src/client/DeepSeekModelsEditor.tsx'
 import { SettingsDescribeMirror } from '@deepseek-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
-import { ModelsSettingsStore, deriveKeyRef, protocolChoices } from '../src/client/store.ts'
+import { ModelsSettingsStore, deriveKeyRef, protocolChoices, type ModelsWire } from '../src/client/store.ts'
 import { en } from '../src/client/locales.ts'
 import { settingsSchema } from './settings-schema.client.ts'
 
@@ -92,7 +92,7 @@ function scriptedFace(options: {
   const set = options.set ?? vi.fn(() => Promise.resolve(remoteOk(undefined)))
   const face = {
     llm: {
-      testModel: vi.fn(() => Promise.resolve(ok(undefined))),
+      testModel: vi.fn<ModelsWire['llm']['testModel']>(() => Promise.resolve(ok(undefined))),
       listProviders: vi.fn(() => Promise.resolve(ok(
         Object.keys(providers).map(provider => ({ id: provider, name: provider })),
       ))),
