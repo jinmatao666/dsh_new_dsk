@@ -364,6 +364,14 @@ export function apply(ctx: Context, config: Config): void {
   }))
 
   const syncProvider = async (models: ManagedModel[], serverDefaultModel?: string): Promise<void> => {
+    const firstModel = models[0]?.id
+    if (firstModel === undefined) {
+      // Remove only the managed route; an empty catalog is not a valid provider.
+      await ctx.settings.mutate(LLM_SETTINGS, [
+        { op: 'unset', path: ['providers', config.provider] },
+      ])
+      return
+    }
     const managed: ManagedProvider = {
       displayName: 'Model Server',
       apiKeyEnv: config.credentialRef,
@@ -392,9 +400,6 @@ export function apply(ctx: Context, config: Config): void {
     await ctx.settings.mutate(LLM_SETTINGS, [
       { op: 'set', path: ['providers', config.provider], value: managed },
     ])
-    const firstModel = models[0]?.id
-    // 空目录不影响账户认证；保留本地模型选择，由发送入口检查模型可用性。
-    if (firstModel === undefined) return
     const configuredDefault = serverDefaultModel ?? config.defaultModel
     const model = configuredDefault !== undefined && models.some(entry => entry.id === configuredDefault)
       ? configuredDefault

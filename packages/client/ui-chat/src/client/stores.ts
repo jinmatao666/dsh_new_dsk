@@ -4,6 +4,7 @@ import type { TurnProcessGeneration } from './contract/turn-process.ts'
 import type { ChatStoreState, SelectionTarget, TurnProcessViewEntry } from './contract/store.ts'
 
 type ChatActions = {
+  resetTurnProcesses: (draft: ChatStoreState) => void
   select: (draft: ChatStoreState, target: SelectionTarget | null) => void
   setTurnProcessOpen: (
     draft: ChatStoreState,
@@ -34,6 +35,7 @@ export function createChatStore(): EngineStoreHandle<ChatStoreState, ChatActions
   return defineStore({
     init: (): ChatStoreState => ({ selection: null, turnProcesses: [] }),
     actions: {
+      resetTurnProcesses: (draft) => { draft.turnProcesses = [] },
       select: (draft, target: SelectionTarget | null) => { draft.selection = target },
       setTurnProcessOpen: (draft, turn, generation, open) => {
         const index = draft.turnProcesses.findIndex(entry => entry.turn === turn)

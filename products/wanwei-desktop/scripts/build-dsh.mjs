@@ -23,7 +23,13 @@ try {
   }
   const result = spawnSync('pnpm', ['--dir', repositoryRoot, 'run', 'build'], {
     cwd: repositoryRoot,
-    env: process.env,
+    env: {
+      ...process.env,
+      DSH_CLIENT_TITLE: '万维Buddy',
+      DSH_BOOT_WORDMARK: '万维Buddy',
+      DSH_BOOT_LOADING: '正在启动，请稍候…',
+      DSH_BOOT_FAILED: '启动未完成，请重试或联系管理员',
+    },
     stdio: 'inherit',
     shell: process.platform === 'win32',
   })

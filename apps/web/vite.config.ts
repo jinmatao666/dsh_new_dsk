@@ -22,7 +22,13 @@ function clientDocumentTitle(): Plugin {
   return {
     name: 'dsh-client-document-title',
     transformIndexHtml(html) {
-      return html.replace('<title>DSH Local Build</title>', `<title>${title}</title>`)
+      const tags = [
+        ['dsh-boot-wordmark', process.env.DSH_BOOT_WORDMARK],
+        ['dsh-boot-loading', process.env.DSH_BOOT_LOADING],
+        ['dsh-boot-failed', process.env.DSH_BOOT_FAILED],
+      ].flatMap(([name, content]) => name !== undefined && content !== undefined
+        ? [{ tag: 'meta', attrs: { name, content }, injectTo: 'head' as const }] : [])
+      return { html: html.replace('<title>DSH Local Build</title>', `<title>${title}</title>`), tags }
     },
   }
 }

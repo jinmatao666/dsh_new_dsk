@@ -221,6 +221,10 @@ export function ChatView({
   const hasMore = useSession(s => s.hasMore)
   const loadingOlder = useSession(s => s.loadingOlder)
   const selectedCallId = useStore(s => s.selection?.callId)
+  useLayoutEffect(() => {
+    actions.resetTurnProcesses()
+  }, [actions, sessionId])
+
   const compactTranscript = useTranscriptView(mode => mode === 'compact')
   const inspectCall = useCallback((callId: string) => {
     openView('trajectory', callId)
@@ -594,7 +598,7 @@ export function ChatView({
           )}
           {order.map(nodeKey => (
             <ChatNodeSeat
-              key={nodeKey}
+              key={`${sessionId}:${nodeKey}`}
               nodeKey={nodeKey}
               historyIncomplete={hasMore}
               compactTranscript={compactTranscript}

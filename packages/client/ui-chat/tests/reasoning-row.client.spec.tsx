@@ -49,6 +49,8 @@ describe('ReasoningRow', () => {
         renderMessageImages={renderMessageImages}
       />,
     )
+    expect(view.getByRole('button').getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(view.getByText('思考'))
     expect(view.getByText('运行中')).toBeTruthy()
     const summary = view.getByText('Newest reasoning tokens')
     Object.defineProperties(summary, {
@@ -84,6 +86,44 @@ describe('ReasoningRow', () => {
     expect(view.queryByText('运行中')).toBeNull()
     expect(summary.scrollLeft).toBe(0)
     expect(summary.hasAttribute('data-follow-end')).toBe(false)
+  })
+
+  it('collapses only reasoning when body starts and never hides streaming body text', () => {
+    const view = render(<AssistantMarkdown t={t} blocks={[{ kind: 'reasoning', text: 'analysis only' }]}
+      streaming renderMessageImages={renderMessageImages} />)
+    expect(view.getByRole('button').getAttribute('aria-expanded')).toBe('true')
+    view.rerender(<AssistantMarkdown t={t} blocks={[
+      { kind: 'reasoning', text: 'analysis only' }, { kind: 'text', text: 'Visible answer' },
+    ]} streaming renderMessageImages={renderMessageImages} />)
+    expect(view.getByRole('button').getAttribute('aria-expanded')).toBe('false')
+    expect(view.getByText('Visible answer').closest('[hidden]')).toBeNull()
+    expect(view.container.querySelector('[class*="thinkBody"]')).toBeNull()
+    fireEvent.click(view.getByText('思考'))
+    view.rerender(<AssistantMarkdown t={t} blocks={[
+      { kind: 'reasoning', text: 'analysis only' }, { kind: 'text', text: 'Visible answer continues' },
+    ]} streaming renderMessageImages={renderMessageImages} />)
+    expect(view.getByRole('button').getAttribute('aria-expanded')).toBe('true')
+    expect(view.getByText('Visible answer continues').closest('[hidden]')).toBeNull()
+  })
+
+  it('keeps earlier body prose visible even when reasoning follows it', () => {
+    const view = render(<AssistantMarkdown t={t} blocks={[
+      { kind: 'text', text: 'Answer before reasoning' }, { kind: 'reasoning', text: 'analysis' },
+    ]} streaming renderMessageImages={renderMessageImages} />)
+    expect(view.getByRole('button').getAttribute('aria-expanded')).toBe('false')
+    expect(view.getByText('Answer before reasoning').closest('[hidden]')).toBeNull()
+  })
+
+  it('restores a completed answer with reasoning collapsed after remount', () => {
+    const props: AssistantMarkdownProps = { t, blocks: [
+      { kind: 'reasoning', text: 'analysis' }, { kind: 'text', text: 'Saved answer' },
+    ], streaming: false, renderMessageImages }
+    const first = render(<AssistantMarkdown {...props} />)
+    fireEvent.click(first.getByText('思考'))
+    first.unmount()
+    const restored = render(<AssistantMarkdown {...props} />)
+    expect(restored.getByRole('button').getAttribute('aria-expanded')).toBe('false')
+    expect(restored.getByText('Saved answer').closest('[hidden]')).toBeNull()
   })
 
   it('expands from either Think or the reasoning summary', () => {

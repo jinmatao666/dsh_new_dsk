@@ -214,6 +214,7 @@ describe('OneAPI login flow', () => {
     for (const catalog of ['empty', 'legacy-empty'] as const) {
       modelCatalog = catalog
       saveSelection.mockClear()
+      mutate.mockClear()
       expect(await handler?.('login', { username: 'tester', password: 'secret' }, new AbortController().signal)).toEqual({
         ok: true, value: { state: 'authenticated', models: [], username: 'tester' },
       })
@@ -222,8 +223,12 @@ describe('OneAPI login flow', () => {
       })
       expect(credentials.get('DSH_ONEAPI_TOKEN')).toBe('oneapi-token')
       expect(saveSelection).not.toHaveBeenCalled()
+      expect(mutate).toHaveBeenCalledTimes(2)
+      expect(mutate).toHaveBeenNthCalledWith(1, expect.anything(), [
+        { op: 'unset', path: ['providers', 'dsh-server'] },
+      ])
       expect(mutate).toHaveBeenLastCalledWith(expect.anything(), [
-        { op: 'set', path: ['providers', 'dsh-server'], value: expect.objectContaining({ models: [] }) as unknown },
+        { op: 'unset', path: ['providers', 'dsh-server'] },
       ])
     }
     modelCatalog = 'unauthorized'

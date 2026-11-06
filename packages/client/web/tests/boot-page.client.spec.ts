@@ -2,7 +2,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { BootPage } from '../src/boot-page.ts'
 
-afterEach(() => { document.body.innerHTML = '' })
+afterEach(() => {
+  document.body.innerHTML = ''
+  document.head.querySelectorAll('meta[name^="dsh-boot-"]').forEach((el) => { el.remove() })
+})
 
 function mount() {
   const el = document.createElement('div')
@@ -11,6 +14,21 @@ function mount() {
 }
 
 describe('BootPage', () => {
+  it('uses initial-document product copy before plugins load and when boot fails', () => {
+    for (const [name, content] of [['wordmark', '示例助手'], ['loading', '正在启动，请稍候…'], ['failed', '启动未完成']]) {
+      const meta = document.createElement('meta')
+      meta.name = `dsh-boot-${name}`
+      meta.content = content ?? ''
+      document.head.append(meta)
+    }
+    const { el, page } = mount()
+    expect(el.textContent).toContain('示例助手')
+    expect(el.textContent).toContain('正在启动，请稍候…')
+    expect(el.textContent).not.toContain('HARNESS')
+    page.fail('diagnostic')
+    expect(el.textContent).toContain('启动未完成')
+    expect(el.textContent).toContain('diagnostic')
+  })
   it('draws the loading skeleton before any plugin state arrives', () => {
     const { el } = mount()
     expect(el.firstElementChild?.getAttribute('data-dsh-boot')).toBe('')

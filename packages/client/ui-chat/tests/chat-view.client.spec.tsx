@@ -1335,6 +1335,37 @@ describe('ChatView', () => {
     expect(view.getByLabelText('回到底部')).toBeTruthy()
   })
 
+  it('keeps streaming body visible while reasoning collapses before the Turn closes', () => {
+    const h = makeHarness({ nodes: [user(1, 'question')], running: true,
+      partial: { turn: 1, step: 1, blocks: [{ kind: 'reasoning', text: 'private analysis' }] } })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.getByRole('button', { name: '思考' }).getAttribute('aria-expanded')).toBe('true')
+    act(() => { h.setChat({ partial: { turn: 1, step: 1, blocks: [
+      { kind: 'reasoning', text: 'private analysis' }, { kind: 'text', text: 'Real streaming answer' },
+    ] } }) })
+    expect(view.getByRole('button', { name: /思考/ }).getAttribute('aria-expanded')).toBe('false')
+    expect(view.getByText('Real streaming answer').closest('[hidden]')).toBeNull()
+    act(() => { h.set({ nodes: [user(1, 'question'), {
+      ...assistant(2, 'Real final answer'), blocks: [
+        { kind: 'reasoning', text: 'private analysis' }, { kind: 'text', text: 'Real final answer' },
+      ],
+    }], partial: null, running: false, turnEnds: new Map([[1, 3]]) }) })
+    expect(view.getByText('Real final answer').closest('[hidden]')).toBeNull()
+    expect(turnProcessControl(view.container)?.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('resets process expansion on a session change without hiding the answer', () => {
+    const h = makeHarness({ nodes: [user(1, 'question'), reasoningAssistant(2, 'private', 1, 1),
+      assistant(3, 'Current answer', 1, 2)], turnEnds: new Map([[1, 4]]) })
+    const view = render(<h.ChatView {...h.props} />)
+    fireEvent.click(turnProcessControl(view.container)!)
+    expect(turnProcessControl(view.container)?.getAttribute('aria-expanded')).toBe('true')
+    view.rerender(<h.ChatView {...h.props} sessionId={'other' as SessionId} />)
+    view.rerender(<h.ChatView {...h.props} />)
+    expect(turnProcessControl(view.container)?.getAttribute('aria-expanded')).toBe('false')
+    expect(view.getByText('Current answer').closest('[hidden]')).toBeNull()
+  })
+
   it('keeps a focused process row visible when a live Turn completes', () => {
     const h = makeHarness({
       nodes: [user(1, 'question'), context(2, 'runtime policy', 1)],
@@ -1470,7 +1501,7 @@ describe('ChatView', () => {
     expect(turnProcessControl(view.container)?.getAttribute('aria-expanded')).toBe('false')
   })
 
-  it('keeps a manual expansion when the reader returns from another view', () => {
+  it('collapses a manual expansion when the reader returns from another view', () => {
     const host = document.createElement('div')
     host.setAttribute('data-conversation-scroll', '')
     Object.defineProperty(host, 'scrollHeight', { value: 2_000, writable: true, configurable: true })
@@ -1489,7 +1520,8 @@ describe('ChatView', () => {
 
       view.rerender(<div />)
       view.rerender(<h.ChatView {...h.props} />)
-      expect(turnProcessControl(view.container)?.getAttribute('aria-expanded')).toBe('true')
+      expect(turnProcessControl(view.container)?.getAttribute('aria-expanded')).toBe('false')
+      expect(view.getByText('new answer').closest('[hidden]')).toBeNull()
     } finally {
       host.remove()
     }

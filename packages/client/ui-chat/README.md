@@ -67,3 +67,5 @@ None; Chat presentation does not assemble or mutate provider requests.
 None.
 
 </details>
+
+Reasoning expands while streaming without reply content and collapses when the first nonempty reply block appears. This only controls reasoning blocks; streaming and completed body content remains independently rendered. Manual expansion after that transition survives further body tokens. Returning to Chat or switching sessions resets process expansion, so restored answers show their body with reasoning collapsed.

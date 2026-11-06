@@ -36,6 +36,15 @@ describe('createChatStore', () => {
     expect(store.store.getSnapshot().turnProcesses).toEqual([])
   })
 
+  it('resets process expansion without clearing the selected tool', () => {
+    const store = createChatStore().create()
+    store.actions.select({ turnSeq: 1, callId: 'c1' })
+    store.actions.setTurnProcessOpen(2, '2|3', true)
+    store.actions.resetTurnProcesses()
+    expect(store.store.getSnapshot().turnProcesses).toEqual([])
+    expect(store.store.getSnapshot().selection?.callId).toBe('c1')
+  })
+
   it('closes only the requested Turn-process entry', () => {
     const store = createChatStore().create()
     store.actions.setTurnProcessOpen(2, '2|3', true)

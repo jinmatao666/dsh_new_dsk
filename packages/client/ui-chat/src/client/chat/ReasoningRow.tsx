@@ -20,12 +20,15 @@ function latestLine(text: string): string {
 /**
  * Render one assistant reasoning block as the Think disclosure row.
  * @param props.text - complete or streaming reasoning text.
- * @param props.running - whether this block is the streaming tail.
+ * @param props.running - whether reasoning is streaming before any reply content appears.
  * @param props.t - conversation locale seat for the running status.
  * @returns the reasoning disclosure.
  */
 export function ReasoningRow({ text, running, t }: { text: string; running: boolean; t: ChatViewSlotProps['t'] }) {
-  const [expanded, setExpanded] = useState(false)
+  const [choice, setChoice] = useState<{ running: boolean; expanded: boolean } | undefined>()
+  // An explicit choice lasts for this phase only. The first body token ends
+  // running reasoning and collapses it before the body is painted.
+  const expanded = choice?.running === running ? choice.expanded : running
   const summaryRef = useRef<HTMLSpanElement>(null)
   const summary = running ? latestLine(text) : firstLine(text)
   const scheduleSummaryScroll = useThrottledVisualUpdate(() => {
@@ -50,7 +53,7 @@ export function ReasoningRow({ text, running, t }: { text: string; running: bool
         open={expanded}
         expandable
         expandOnRowClick
-        onToggle={() => { setExpanded(value => !value) }}
+        onToggle={() => { setChoice({ running, expanded: !expanded }) }}
         collapsedContent={(
           <>
             <span className={css.separator} aria-hidden />
