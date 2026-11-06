@@ -74,11 +74,12 @@ export function libraryAllowsDesktopFileDelete(item: KnowledgeBaseItem | undefin
 }
 
 /**
- * Nav: 个人知识库 and 订阅知识库 are always present (empty groups stay visible). 公共知识库
- * merges every open category plus uncategorized common libraries and appears only when
- * non-empty. 订阅知识库 holds only grant-backed subscriptions (not self-built auth libraries).
- * Auth category names never appear as sidebar groups; self-built and discoverable auth
- * libraries appear in 知识库广场 (owned cards sort last with status 我的).
+ * Nav: 个人知识库 and 订阅知识库 are always present (empty groups stay visible). 个人知识库
+ * lists only libraries the caller owns. 公共知识库 merges every open category plus
+ * uncategorized common libraries and appears only when non-empty. 订阅知识库 holds only
+ * grant-backed subscriptions (not self-built auth libraries). Auth category names never
+ * appear as sidebar groups; self-built and discoverable auth libraries appear in 知识库广场
+ * (owned cards sort last with status 我的).
  * @param items - Libraries the caller may open.
  * @param categories - Administrator-defined categories.
  * @param selfUserId - Optional fallback owner id when ownership annotation is absent.
@@ -90,7 +91,9 @@ export function libraryNavGroups(
   selfUserId?: number,
 ): LibraryGroup[] {
   const categoryById = new Map(categories.map(category => [category.id, category]))
-  const personal = items.filter(item => item.kind === 'personal' && categoryIdOf(item) === 0)
+  // Owner-only even if a stale API still returns another user's uncategorized personal row.
+  const personal = items.filter(item =>
+    item.kind === 'personal' && categoryIdOf(item) === 0 && libraryOwnedByViewer(item, selfUserId))
   const publicRows = items.filter((item) => {
     const categoryId = categoryIdOf(item)
     if (categoryId === 0) return item.kind === 'common'

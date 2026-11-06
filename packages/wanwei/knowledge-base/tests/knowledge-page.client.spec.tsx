@@ -387,6 +387,25 @@ it('selects the first library of the first sidebar group on open', async () => {
   expect(service.documents).toHaveBeenCalledWith(1)
 })
 
+it('keeps 个人知识库 to libraries the caller owns even when the list includes another owner', async () => {
+  const service = api()
+  service.list = vi.fn(async () => [
+    {
+      id: 1, name: '我的资料', description: '个人', kind: 'personal' as const,
+      owner_user_id: 7, owned_by_viewer: true,
+    },
+    {
+      id: 99, name: '他人笔记', description: '不应出现', kind: 'personal' as const,
+      owner_user_id: 2, owned_by_viewer: false,
+    },
+  ])
+  render(<KnowledgePage api={service} />)
+  const personal = (await screen.findByText('个人知识库')).closest('.dsh-knowledge-group') as HTMLElement
+  expect(within(personal).getByRole('button', { name: '我的资料' })).toBeTruthy()
+  expect(within(personal).queryByRole('button', { name: '他人笔记' })).toBeNull()
+  expect(screen.queryByRole('button', { name: '他人笔记' })).toBeNull()
+})
+
 it('hides auth category names from the sidebar and discovers them only in the plaza', async () => {
   const service = api()
   const plazaItem = {

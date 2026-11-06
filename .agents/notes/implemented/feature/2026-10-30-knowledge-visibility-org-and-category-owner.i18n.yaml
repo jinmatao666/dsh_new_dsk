@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-30-knowledge-visibility-org-and-category-owner.md
-2026-10-30-knowledge-visibility-org-and-category-owner.md: c1dfd24918a7110e9ab296369cb7f61c99534e14
-2026-10-30-knowledge-visibility-org-and-category-owner.zh.md: 0f5eee21e4ed10d097e434fb7cc40da602761cc9
+2026-10-30-knowledge-visibility-org-and-category-owner.md: c8dc07655cbc473700e7e01c2906275531d01c6a
+2026-10-30-knowledge-visibility-org-and-category-owner.zh.md: bef6da364570df69ae20f86f64268ae3b8ecfe8d

@@ -204,41 +204,6 @@ func KnowledgeBaseGrantIDs(userId int) (map[int]struct{}, error) {
 	return out, nil
 }
 
-// ListUncategorizedPersonalKnowledgeBases returns every published personal library
-// that is not filed under a workbench category (desktop 个人知识库 for administrators).
-func ListUncategorizedPersonalKnowledgeBases() ([]KnowledgeBase, error) {
-	var rows []KnowledgeBase
-	err := DB.Where("kind = ? AND COALESCE(category_id, 0) = 0 AND COALESCE(shelf, '') <> ?",
-		KnowledgeBasePersonal, KnowledgeShelfOffline).
-		Order("updated_at DESC").Find(&rows).Error
-	return rows, err
-}
-
-// MergeAdminPersonalKnowledgeBases appends every uncategorized personal library missing
-// from an authorized desktop list so root can open other users' personal libraries.
-func MergeAdminPersonalKnowledgeBases(rows []KnowledgeBase) ([]KnowledgeBase, error) {
-	personal, err := ListUncategorizedPersonalKnowledgeBases()
-	if err != nil {
-		return nil, err
-	}
-	return mergeKnowledgeBasesByID(rows, personal), nil
-}
-
-func mergeKnowledgeBasesByID(rows, extra []KnowledgeBase) []KnowledgeBase {
-	seen := make(map[int]struct{}, len(rows)+len(extra))
-	for _, row := range rows {
-		seen[row.Id] = struct{}{}
-	}
-	for _, row := range extra {
-		if _, ok := seen[row.Id]; ok {
-			continue
-		}
-		rows = append(rows, row)
-		seen[row.Id] = struct{}{}
-	}
-	return rows
-}
-
 // ListAuthorizedKnowledgeBases returns published libraries the user may open.
 // Uncategorized personal libraries stay with their owner, uncategorized shared libraries
 // require ownership or a grant, and every uncategorized common library is included.

@@ -75,9 +75,10 @@ type knowledgeBaseDesktopItem struct {
 }
 
 // ListKnowledgeBases returns desktop sidebar libraries: grant-scoped for everyone.
-// Root also receives every uncategorized personal library. Category libraries still require
-// ownership or a grant (or a public common category) so they do not appear without approval.
-// Full workbench catalog stays on /api/knowledge-admin/bases (root only).
+// Uncategorized personal libraries are owner-only for every role, including root;
+// administrators browse other users' personal libraries only on the workbench catalog
+// (/api/knowledge-admin/bases). Category libraries still require ownership or a grant
+// (or a public common category) so they do not appear without approval.
 func ListKnowledgeBases(c *gin.Context) {
 	userId := c.GetInt("id")
 	rows, err := model.ListAuthorizedKnowledgeBases(userId)
@@ -85,14 +86,6 @@ func ListKnowledgeBases(c *gin.Context) {
 		logger.Errorf(c.Request.Context(), "list authorized knowledge bases: %s", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
 		return
-	}
-	if knowledgeAdmin(c) {
-		rows, err = model.MergeAdminPersonalKnowledgeBases(rows)
-		if err != nil {
-			logger.Errorf(c.Request.Context(), "list admin personal knowledge bases: %s", err.Error())
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
-			return
-		}
 	}
 	granted, err := model.KnowledgeBaseGrantIDs(userId)
 	if err != nil {

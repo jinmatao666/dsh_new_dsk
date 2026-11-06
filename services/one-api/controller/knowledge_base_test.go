@@ -403,6 +403,58 @@ func TestApplyKnowledgeDocumentCreatorsHidesViewerAndUnknownUploaders(t *testing
 	require.Equal(t, "", documents[2].CreatorName)
 }
 
+func TestListKnowledgeBasesRootSeesOnlyOwnPersonal(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:knowledge-desktop-personal-own?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previous := model.DB
+	model.DB = db
+	t.Cleanup(func() { model.DB = previous })
+	require.NoError(t, db.AutoMigrate(
+		&model.KnowledgeBase{}, &model.KnowledgeBaseGrant{}, &model.KnowledgeCategory{},
+		&model.GovernmentOrganizationMember{}, &model.OrgMember{}, &model.User{},
+	))
+	require.NoError(t, db.Create(&model.User{
+		Id: 1, Username: "root", AccessToken: "t1", AffCode: "a1",
+		Role: model.RoleRootUser, Status: model.UserStatusEnabled,
+	}).Error)
+	require.NoError(t, db.Create(&model.User{
+		Id: 2, Username: "alice", AccessToken: "t2", AffCode: "a2",
+		Role: model.RoleCommonUser, Status: model.UserStatusEnabled,
+	}).Error)
+	require.NoError(t, db.Create(&model.KnowledgeBase{
+		Name: "root-notes", RagflowDatasetId: "ds-root", OwnerUserId: 1,
+		Kind: model.KnowledgeBasePersonal, Shelf: model.KnowledgeShelfPublished,
+	}).Error)
+	require.NoError(t, db.Create(&model.KnowledgeBase{
+		Name: "alice-notes", RagflowDatasetId: "ds-alice", OwnerUserId: 2,
+		Kind: model.KnowledgeBasePersonal, Shelf: model.KnowledgeShelfPublished,
+	}).Error)
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Set("id", 1)
+	c.Set("role", model.RoleRootUser)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/knowledge-bases", nil)
+	ListKnowledgeBases(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var body struct {
+		Success bool `json:"success"`
+		Data    []struct {
+			Name        string `json:"name"`
+			OwnerUserId int    `json:"owner_user_id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	require.True(t, body.Success)
+	names := make([]string, 0, len(body.Data))
+	for _, row := range body.Data {
+		names = append(names, row.Name)
+		require.Equal(t, 1, row.OwnerUserId)
+	}
+	require.ElementsMatch(t, []string{"root-notes"}, names)
+}
+
 func TestUpdateAndDeleteKnowledgeCategory(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:knowledge-category-admin?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
