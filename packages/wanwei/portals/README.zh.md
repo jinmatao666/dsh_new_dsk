@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本插件挂载两个独立功能入口：土地市场与政策宝典。各入口可见性跟随 OneAPI 当前部署环境开关。打开后嵌入管理员配置的页面地址，并最大化桌面窗口。未配置地址时显示配置占位，不显示空白框架。
+本插件挂载两个独立功能入口：土地市场与政策宝典。各入口可见性跟随 OneAPI 当前部署环境开关。打开后全屏嵌入管理员配置的页面地址（不显示功能面板标题区，仅保留右上角返回），并最大化桌面窗口。iframe 加载期间显示与知识库文档预览相同的居中加载指示。未配置地址时显示配置占位，不显示空白框架。
 
 ## 目录
 
@@ -27,7 +27,7 @@ kind: "package-reference"
 
 万维桌面产品通过[组合补丁](../../bundle/wanwei-desktop/cordis.patch.yml)挂载本插件。它没有单独的插件配置字段。
 
-管理员在管理工作台「系统设置 → 功能设置」控制入口显示，在「系统设置 → 功能配置」填写页面地址。停用本插件的配置项会移除这两个入口。
+管理员在管理工作台「系统设置 → 功能设置」控制入口显示，并通过土地市场、政策宝典旁的「地址配置」填写页面地址。停用本插件的配置项会移除这两个入口。
 
 -----
 
@@ -37,7 +37,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节 — 点击展开</summary>
 
-可见性与地址通过 `wanweiNetwork` 读取 `/api/desktop-config`。打开面板时关闭侧栏，并调用已有的 `maximize_expert_window` 原生命令。内容使用 iframe，以便展示管理员配置的任意 http(s) 地址，无需专家票据。
+可见性与地址通过 `wanweiNetwork` 读取 `/api/desktop-config`。打开面板时关闭侧栏，并调用已有的 `maximize_expert_window` 原生命令。注册时使用 `headerChrome: 'back-only'`，去掉 WANWEI Buddy / 标题 / 副标题，仅浮层返回按钮。内容使用 iframe，以便展示管理员配置的任意 http(s) 地址，无需专家票据。`PortalPage` 在 iframe 的 `load` 事件触发前用全屏加载层盖住页面；配置地址变更时重新显示加载层。
 
 </details>
 

@@ -133,6 +133,7 @@
 .knowledge-quota-dialog header h3 { margin: 0; color: #203a5e; font-size: 18px; }
 .knowledge-quota-total { display: flex; flex-direction: column; gap: 10px; max-width: 280px; margin-bottom: 12px; color: #385375; font-weight: 600; }
 .knowledge-quota-total input, .knowledge-quota-people input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #d6e3f4; border-radius: 8px; font: inherit; font-weight: 400; color: #253d60; }
+.knowledge-quota-saved-hint { margin: -4px 0 12px; color: #8191a8; font-size: 12px; line-height: 1.6; }
 .knowledge-quota-org-layout { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.2fr); gap: 18px; margin-top: 8px; min-height: 280px; }
 .knowledge-quota-org-layout > aside, .knowledge-quota-org-layout > section { border: 1px solid #dce6f4; border-radius: 12px; padding: 14px; background: #f8fbff; }
 .knowledge-quota-org-layout > aside > p, .knowledge-quota-org-layout > section > p { margin: 0 0 12px; color: #385375; font-weight: 600; }
@@ -149,7 +150,10 @@
 .knowledge-quota-summary { margin: 14px 0 0; color: #365d8c; font-size: 13px; }
 .knowledge-quota-summary.is-error { color: #c44949; }
 .knowledge-quota-dialog footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #dfe8f5; }
-.feature-page-url { display: inline-block; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #385375; }
+.feature-name-with-address { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.feature-address-link { margin: 0; padding: 0; border: 0; background: transparent; color: #3478ef; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.feature-address-link:hover:not(:disabled) { text-decoration: underline; }
+.feature-address-link:disabled { opacity: .5; cursor: not-allowed; }
 .feature-page-dialog { max-width: 640px; }
 .feature-page-url-field { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; color: #385375; font-weight: 600; }
 .feature-page-url-field input { width: 100%; box-sizing: border-box; padding: 12px 14px; border: 1px solid #d6e3f4; border-radius: 8px; font: inherit; font-weight: 400; color: #253d60; }

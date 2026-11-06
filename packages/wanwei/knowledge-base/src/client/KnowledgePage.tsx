@@ -7,9 +7,21 @@ import { MarkdownView } from './MarkdownView.tsx'
 import { PdfLocateViewer, type PdfLocateRequest } from './PdfLocateViewer.tsx'
 import { ViewerLoading } from './ViewerLoading.tsx'
 import {
-  defaultCollapsedNavGroups, firstNavLibraryId, libraryIsGrantedSubscription, libraryNavGroups,
+  defaultCollapsedNavGroups, firstNavLibraryId, libraryAllowsDesktopFileDelete,
+  libraryAllowsDesktopUpload, libraryIsGrantedSubscription, libraryNavGroups,
 } from './library-groups.ts'
+import {
+  documentIsParsing, documentParseFailed, documentParsePercent, documentParseReady,
+} from './document-status.ts'
 import { productText } from './locales/product.ts'
+import { MinutesViewer } from './MinutesViewer.tsx'
+import { RecordingPanel, type RecordingMinutesCapture } from './RecordingPanel.tsx'
+import {
+  isRecordingMinutesAudioName, isRecordingMinutesName, parseRecordingMinutesMarkdown,
+  recordingMinutesBaseStem,
+} from './recording-minutes.ts'
+import { extractWebSourceUrl, prepareEmbeddedWebPreview } from './web-preview.ts'
+import { parseWebLinkInput } from './web-links.ts'
 
 export interface KnowledgeBaseItem {
   id: number
@@ -230,6 +242,16 @@ export interface KnowledgeApi {
   /** Download the original file bytes for the desktop viewer. */
   download(knowledgeBaseId: number, documentId: string): Promise<KnowledgeFileBytes>
   upload(id: number, file: File): Promise<void>
+  /** Crawl public http(s) pages into an uncategorized personal library (max 10). */
+  importWebLinks(id: number, urls: string[]): Promise<void>
+  /** Host ASR + 速览/纪要 draft, then upload markdown and WAV into the library. */
+  importRecordingMinutes(input: {
+    id: number
+    audio: File
+    stem: string
+    durationMs: number
+    liveTranscript: string
+  }): Promise<void>
   /** Remove one document from the authorized library through RAGFlow. */
   delete(knowledgeBaseId: number, documentId: string): Promise<void>
   /** Copy one document into another personal or shared library. */
@@ -265,35 +287,33 @@ export interface KnowledgeApi {
 }
 
 type DocumentMenu = { documentId: string; x: number; y: number }
-type TransferMode = 'copy' | 'move'
-type TransferState = {
-  mode: TransferMode
-  documentIds: string[]
-  targetId?: number | undefined
-  remaining: number
-  busy: boolean
-}
-type ConflictState = {
-  names: string[]
-  resolve: (policy: KnowledgeConflictPolicy | 'cancel') => void
-}
 
 type DocumentViewer = {
   document: KnowledgeDocument
   loading: boolean
-  mode: 'image' | 'pdf' | 'text'
+  mode: 'image' | 'pdf' | 'text' | 'html' | 'minutes'
   objectUrl?: string
   pdfBytes?: Uint8Array
   content?: string
   /** Render downloaded text as Markdown when the file is .md. */
   markdown?: boolean
   locate?: PdfLocateRequest
+  transcript?: string
+  overview?: string
+  minutes?: string
+  audioUrl?: string
+  durationMs?: number
+  recordedAtLabel?: string
+  /** Document id used for preview 问问万维 retrieval (companion markdown when present). */
+  askDocumentId?: string
+  /** Live source URL when the viewer is a web-link shell (body opens externally). */
+  sourceUrl?: string
 }
 
 /** Top-level folders and files shown per content page; nested folder children expand inside their page. */
 const DOCUMENT_PAGE_SIZE = 12
-/** Plaza homepage cards per page (four-column grid). */
-const PLAZA_PAGE_SIZE = 12
+/** Plaza homepage cards per page. */
+const PLAZA_PAGE_SIZE = 10
 
 /** Compact page-number strip matching the skill-market catalog pager.
  * @param page - Current 1-based page.
@@ -358,6 +378,11 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const [answering, setAnswering] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [webLinkOpen, setWebLinkOpen] = useState(false)
+  const [webLinkDraft, setWebLinkDraft] = useState('')
+  const [webLinkError, setWebLinkError] = useState('')
+  const [webLinkImporting, setWebLinkImporting] = useState(false)
+  const [recordingOpen, setRecordingOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [libraryQuery, setLibraryQuery] = useState('')
   const [newestFirst, setNewestFirst] = useState(true)
@@ -373,8 +398,6 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const [downloading, setDownloading] = useState(false)
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([])
   const [documentMenu, setDocumentMenu] = useState<DocumentMenu>()
-  const [transfer, setTransfer] = useState<TransferState>()
-  const [conflict, setConflict] = useState<ConflictState>()
   const [deleteIds, setDeleteIds] = useState<string[]>()
   const [mutating, setMutating] = useState(false)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set())
@@ -402,6 +425,8 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     && libraryIsGrantedSubscription(selected, selfUserId)
     && categories.some(category =>
       category.require_auth && category.id === (selected.category_id ?? 0))
+  const canUpload = libraryAllowsDesktopUpload(selected)
+  const canDeleteFile = libraryAllowsDesktopFileDelete(selected)
   // Stick to the latest turn only while an answer is streaming; history opens at the top.
   useEffect(() => {
     if (!answering) return
@@ -568,9 +593,37 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     })
     return () => { disposed = true }
   }, [api, selectedId])
+  const needsParsePoll = documents.some(documentIsParsing)
+  useEffect(() => {
+    if (selectedId === undefined || !needsParsePoll) return
+    let disposed = false
+    const tick = () => {
+      void api.documents(selectedId).then((value) => {
+        if (disposed) return
+        showDocuments(selectedId, value)
+        setViewer((current) => {
+          if (current === undefined) return current
+          const next = value.find(item => item.id === current.document.id)
+          return next === undefined ? current : { ...current, document: next }
+        })
+      }).catch(() => {
+        // Named: parse polling is best-effort and must not replace an existing page error.
+      })
+    }
+    const timer = window.setInterval(tick, 2000)
+    return () => {
+      disposed = true
+      window.clearInterval(timer)
+    }
+  }, [api, selectedId, needsParsePoll])
+  /** Hide the file context menu and drop the highlight that right-click applied. */
+  const dismissDocumentMenu = () => {
+    setDocumentMenu(undefined)
+    setSelectedDocumentIds([])
+  }
   useEffect(() => {
     if (documentMenu === undefined) return
-    const close = () => setDocumentMenu(undefined)
+    const close = () => dismissDocumentMenu()
     window.addEventListener('mousedown', close)
     window.addEventListener('scroll', close, true)
     window.addEventListener('resize', close)
@@ -580,8 +633,6 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       window.removeEventListener('resize', close)
     }
   }, [documentMenu])
-  const transferTargets = items.filter(item =>
-    (item.kind === 'personal' || item.kind === 'shared') && item.id !== selectedId)
   const navGroups = libraryNavGroups(items, categories, selfUserId)
   /** Toggle multi-select without opening preview or the action panel. */
   const toggleDocumentSelection = (documentId: string) => {
@@ -592,72 +643,15 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         : [...current, documentId]
     })
   }
-  /** Select the document (keeping multi-select if already included) and show the action panel. */
+  /** Select the document and show delete when the open library is personal. */
   const openDocumentMenu = (documentId: string, x: number, y: number) => {
+    if (!canDeleteFile) return
     setSelectedDocumentIds(current => current.includes(documentId) ? current : [documentId])
     setDocumentMenu({ documentId, x, y })
-  }
-  const askConflict = (names: string[]) => new Promise<KnowledgeConflictPolicy | 'cancel'>((resolve) => {
-    setConflict({ names, resolve })
-  })
-  const closeConflict = (policy: KnowledgeConflictPolicy | 'cancel') => {
-    setConflict((current) => {
-      current?.resolve(policy)
-      return undefined
-    })
   }
   const refreshDocuments = async () => {
     if (selectedId === undefined) return
     showDocuments(selectedId, await api.documents(selectedId))
-  }
-  const startTransfer = (mode: TransferMode) => {
-    const documentIds = selectedDocumentIds.length > 0
-      ? selectedDocumentIds
-      : documentMenu === undefined ? [] : [documentMenu.documentId]
-    setDocumentMenu(undefined)
-    if (documentIds.length === 0) return
-    setTransfer({
-      mode, documentIds, remaining: documentIds.length, busy: false,
-      targetId: transferTargets[0]?.id,
-    })
-  }
-  const runTransfer = async (conflictPolicy?: KnowledgeConflictPolicy) => {
-    if (selectedId === undefined || transfer === undefined || transfer.targetId === undefined || transfer.busy) return
-    const targetId = transfer.targetId
-    const mode = transfer.mode
-    const documentIds = [...transfer.documentIds]
-    setTransfer(current => current === undefined ? current : { ...current, busy: true, remaining: documentIds.length })
-    setError('')
-    try {
-      const targetDocuments = await api.documents(targetId)
-      const names = new Set(targetDocuments.map(document => document.name))
-      const conflicts = documentIds
-        .map(id => documents.find(document => document.id === id)?.name)
-        .filter((name): name is string => typeof name === 'string' && names.has(name))
-      let policy = conflictPolicy
-      if (conflicts.length > 0 && policy === undefined) {
-        setTransfer(current => current === undefined ? current : { ...current, busy: false })
-        const choice = await askConflict([...new Set(conflicts)])
-        if (choice === 'cancel') return
-        policy = choice
-        setTransfer(current => current === undefined ? current : { ...current, busy: true })
-      }
-      for (let index = 0; index < documentIds.length; index += 1) {
-        const documentId = documentIds[index]
-        if (documentId === undefined) continue
-        setTransfer(current => current === undefined ? current : {
-          ...current, remaining: documentIds.length - index,
-        })
-        if (mode === 'copy') await api.copy(selectedId, documentId, targetId, policy)
-        else await api.move(selectedId, documentId, targetId, policy)
-      }
-      setTransfer(undefined)
-      setSelectedDocumentIds([])
-      await refreshDocuments()
-    } catch (cause) {
-      setError(`${productText(mode === 'copy' ? '复制失败' : '移动失败')}：${String(cause)}`)
-      setTransfer(current => current === undefined ? current : { ...current, busy: false })
-    }
   }
   const confirmDelete = async () => {
     if (selectedId === undefined || deleteIds === undefined || deleteIds.length === 0 || mutating) return
@@ -691,6 +685,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     resetPreviewAsk()
     setViewer((current) => {
       if (current?.objectUrl !== undefined) URL.revokeObjectURL(current.objectUrl)
+      if (current?.audioUrl !== undefined) URL.revokeObjectURL(current.audioUrl)
       return undefined
     })
   }
@@ -719,9 +714,15 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     if (libraryId === undefined) return
     if (!keepAsk) resetPreviewAsk()
     const kind = fileKind(document.name)
-    const loadingMode: DocumentViewer['mode'] = kind === 'pdf' ? 'pdf' : kind === 'image' ? 'image' : 'text'
+    const minutesDoc = isRecordingMinutesName(documentBaseName(document)) || kind === 'audio'
+    const loadingMode: DocumentViewer['mode'] = kind === 'pdf' ? 'pdf'
+      : kind === 'image' ? 'image'
+        : minutesDoc ? 'minutes'
+          : kind === 'web' ? 'html'
+            : 'text'
     setViewer((current) => {
       if (current?.objectUrl !== undefined) URL.revokeObjectURL(current.objectUrl)
+      if (current?.audioUrl !== undefined) URL.revokeObjectURL(current.audioUrl)
       return {
         document, loading: true, mode: loadingMode, content: '',
         ...(locate === undefined ? {} : { locate }),
@@ -729,16 +730,41 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     })
     setError('')
     void (async () => {
-      const apply = (next: DocumentViewer, orphanUrl?: string) => {
+      const apply = (next: DocumentViewer, orphanUrls: string[] = []) => {
         setViewer((current) => {
           if (current === undefined || current.document.id !== document.id) {
-            if (orphanUrl !== undefined) URL.revokeObjectURL(orphanUrl)
+            for (const orphanUrl of orphanUrls) URL.revokeObjectURL(orphanUrl)
             return current
           }
           return next
         })
       }
       try {
+        if (minutesDoc) {
+          const minutesView = await loadMinutesViewer(api, libraryId, document, documents)
+          apply(minutesView, [minutesView.audioUrl, minutesView.objectUrl].filter((url): url is string => url !== undefined))
+          return
+        }
+        if (kind === 'web') {
+          const cached = readDownloadCache(libraryId, document.id)
+          const file = cached ?? await api.download(libraryId, document.id)
+          if (cached === undefined) writeDownloadCache(libraryId, document.id, file)
+          const rawHtml = new TextDecoder('utf-8').decode(file.bytes)
+          const sourceUrl = extractWebSourceUrl(rawHtml)
+          if (sourceUrl === undefined) {
+            apply({ document, loading: false, mode: 'html', content: '' })
+            setError(productText('无法打开源地址'))
+            return
+          }
+          // Same-origin blob iframe: sites with X-Frame-Options cannot be framed
+          // directly, so the stored page is shown in-pane with <base> → source.
+          const objectUrl = URL.createObjectURL(new Blob(
+            [prepareEmbeddedWebPreview(rawHtml, sourceUrl)],
+            { type: 'text/html; charset=utf-8' },
+          ))
+          apply({ document, loading: false, mode: 'html', sourceUrl, objectUrl }, [objectUrl])
+          return
+        }
         if (kind === 'image' || kind === 'pdf' || isPlainTextName(document.name)) {
           const cached = readDownloadCache(libraryId, document.id)
           const file = cached ?? await api.download(libraryId, document.id)
@@ -747,7 +773,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
           const contentType = mimeFor(document.name, file.contentType)
           if (kind === 'image' || contentType.startsWith('image/')) {
             const objectUrl = URL.createObjectURL(new Blob([bytes.slice()], { type: contentType }))
-            apply({ document, loading: false, mode: 'image', objectUrl }, objectUrl)
+            apply({ document, loading: false, mode: 'image', objectUrl }, [objectUrl])
             return
           }
           if (kind === 'pdf' || contentType.includes('pdf')) {
@@ -774,6 +800,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         setViewer((current) => {
           if (current === undefined || current.document.id !== document.id) return current
           if (current.objectUrl !== undefined) URL.revokeObjectURL(current.objectUrl)
+          if (current.audioUrl !== undefined) URL.revokeObjectURL(current.audioUrl)
           return undefined
         })
         setError(`${productText('打开失败')}：${String(cause)}`)
@@ -863,6 +890,72 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     }
   }
   useEffect(() => {
+    if (!canUpload) {
+      setUploadOpen(false)
+      setWebLinkOpen(false)
+      setRecordingOpen(false)
+    }
+  }, [canUpload])
+  useEffect(() => {
+    if (!canDeleteFile) dismissDocumentMenu()
+  }, [canDeleteFile])
+  const openWebLinkDialog = () => {
+    setUploadOpen(false)
+    setWebLinkDraft('')
+    setWebLinkError('')
+    setWebLinkOpen(true)
+  }
+  const openRecordingPanel = () => {
+    setUploadOpen(false)
+    setError('')
+    setRecordingOpen(true)
+  }
+  const submitRecordingMinutes = async (capture: RecordingMinutesCapture) => {
+    if (selectedId === undefined) return
+    setRecordingOpen(false)
+    setUploading(true)
+    setError('')
+    try {
+      await api.importRecordingMinutes({
+        id: selectedId,
+        audio: capture.audio,
+        stem: capture.stem,
+        durationMs: capture.durationMs,
+        liveTranscript: capture.liveTranscript,
+      })
+      const next = await api.documents(selectedId)
+      showDocuments(selectedId, next)
+    } catch (cause) {
+      setError(`${productText('上传失败')}：${String(cause)}`)
+    } finally {
+      setUploading(false)
+    }
+  }
+  const submitWebLinks = async (event: FormEvent) => {
+    event.preventDefault()
+    if (selectedId === undefined || webLinkImporting) return
+    const parsed = parseWebLinkInput(webLinkDraft)
+    if (!parsed.ok) {
+      setWebLinkError(parsed.messageKey === '链接格式无效' && parsed.invalidLine !== undefined
+        ? `${productText('链接格式无效')}：${parsed.invalidLine}`
+        : productText(parsed.messageKey))
+      return
+    }
+    setWebLinkImporting(true)
+    setWebLinkError('')
+    setError('')
+    try {
+      await api.importWebLinks(selectedId, parsed.urls)
+      setWebLinkOpen(false)
+      setWebLinkDraft('')
+      await refreshDocuments()
+    } catch (cause) {
+      setWebLinkError(`${productText('导入失败')}：${String(cause)}`)
+    } finally {
+      setWebLinkImporting(false)
+    }
+  }
+  useEffect(() => {
     if (!uploadOpen) return
     const close = (event: MouseEvent) => {
       if (!uploadRoot.current?.contains(event.target as Node)) setUploadOpen(false)
@@ -914,6 +1007,8 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     void uploadFiles(files)
   }
   const shownDocuments = documents.filter((document) => {
+    // Keep only the WAV card for 录音纪要; companion markdown stays for preview/ask.
+    if (isRecordingMinutesCompanionName(documentBaseName(document))) return false
     if (query.trim() === '') return true
     const needle = query.trim().toLowerCase()
     return documentDisplayName(document).toLowerCase().includes(needle)
@@ -1076,12 +1171,12 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     void submitKnowledgeQuestion(
       `${typed}\n请依据该文档完整作答，相关分项或编号列表须全部列出（文件：${fileName}）。`,
       'preview',
-      viewer.document.id,
+      viewer.askDocumentId ?? viewer.document.id,
     )
   }
   const askPreviewPrompt = (prompt: string) => {
     if (viewer === undefined) return
-    void submitKnowledgeQuestion(prompt, 'preview', viewer.document.id)
+    void submitKnowledgeQuestion(prompt, 'preview', viewer.askDocumentId ?? viewer.document.id)
   }
   /** Open the Q&A pane for a library, or close it when that library's pane is already open. */
   const toggleChat = (id: number) => {
@@ -1480,23 +1575,20 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
             onClick={() => setNewestFirst(value => !value)}>
             <SortIcon /><span>{newestFirst ? productText('最新上传') : productText('最早上传')}</span>
           </button>
-          <div className="dsh-knowledge-upload" ref={uploadRoot}>
+          {canUpload && <div className="dsh-knowledge-upload" ref={uploadRoot}>
             <button type="button" aria-label={uploading ? productText('正在加载…') : productText('上传文档')}
               aria-expanded={uploadOpen} aria-haspopup="menu" aria-busy={uploading}
-              disabled={selectedId === undefined || uploading} onClick={() => setUploadOpen(value => !value)}>
+              disabled={uploading} onClick={() => setUploadOpen(value => !value)}>
               {uploading ? <span className="dsh-knowledge-upload-busy" aria-hidden="true" /> : <UploadIcon />}
             </button>
             <input ref={fileInput} type="file" hidden multiple onChange={event => takeFiles(event.currentTarget)} />
             <input ref={folderInput} type="file" hidden multiple onChange={event => takeFiles(event.currentTarget)} />
             {uploadOpen && <div className="dsh-knowledge-upload-menu" role="menu">
               <button type="button" role="menuitem" onClick={() => { fileInput.current?.click(); setUploadOpen(false) }}><FileMenuIcon />{productText('本地文件')}</button>
-              <button type="button" role="menuitem" onClick={() => { setUploadOpen(false); setError(productText('暂不支持该来源')) }}><BookIcon />{productText('个人知识库')}</button>
-              <button type="button" role="menuitem" onClick={() => { setUploadOpen(false); setError(productText('暂不支持该来源')) }}><LinkIcon />{productText('网页链接')}</button>
-              <button type="button" role="menuitem" className="submenu" onClick={() => { setUploadOpen(false); setError(productText('暂不支持该来源')) }}><span><NoteIcon />{productText('笔记')}</span><ChevronIcon /></button>
-              <button type="button" role="menuitem" onClick={() => { setUploadOpen(false); setError(productText('暂不支持该来源')) }}><DocIcon />{productText('腾讯文档')}</button>
-              <button type="button" role="menuitem" onClick={() => { setUploadOpen(false); setError(productText('暂不支持该来源')) }}><MicIcon />{productText('录音纪要')}</button>
+              <button type="button" role="menuitem" onClick={openWebLinkDialog}><LinkIcon />{productText('网页链接')}</button>
+              <button type="button" role="menuitem" onClick={openRecordingPanel}><MicIcon />{productText('录音纪要')}</button>
             </div>}
-          </div>
+          </div>}
         </div>
       </div>
       <div className="dsh-knowledge-list-pane">
@@ -1613,20 +1705,10 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       </form>
     </section>}
     {error !== '' && <div role="alert" className="dsh-knowledge-error">{error}<button type="button" aria-label={productText('关闭')} onClick={() => setError('')}>×</button></div>}
-    {documentMenu !== undefined && <div className="dsh-knowledge-context-menu" role="menu"
+    {documentMenu !== undefined && canDeleteFile && <div className="dsh-knowledge-context-menu" role="menu"
       style={{ left: documentMenu.x, top: documentMenu.y }}
       onPointerDown={event => event.stopPropagation()}
       onMouseDown={event => event.stopPropagation()}>
-      <button type="button" role="menuitem" onClick={(event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        startTransfer('move')
-      }}><MoveIcon />{productText('移动到')}</button>
-      <button type="button" role="menuitem" onClick={(event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        startTransfer('copy')
-      }}><CopyIcon />{productText('复制到')}</button>
       <button type="button" role="menuitem" className="danger" onClick={(event) => {
         event.preventDefault()
         event.stopPropagation()
@@ -1635,84 +1717,13 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         setDeleteIds(ids)
       }}><TrashIcon />{productText('删除')}</button>
     </div>}
-    {transfer !== undefined && <div className="dsh-knowledge-modal-backdrop"
-      onPointerDown={event => event.stopPropagation()}>
-      <section className="dsh-knowledge-transfer" role="dialog"
-        aria-modal="true" aria-labelledby="dsh-knowledge-transfer-title">
-        <header>
-          <h2 id="dsh-knowledge-transfer-title">
-            {transfer.mode === 'copy' ? productText('复制') : productText('移动')}
-            {transfer.documentIds.length === 1
-              ? `: ${documents.find(item => item.id === transfer.documentIds[0])?.name ?? ''}`
-              : ` (${transfer.documentIds.length})`}
-          </h2>
-          <button type="button" aria-label={productText('关闭')} disabled={transfer.busy}
-            onClick={() => setTransfer(undefined)}>×</button>
-        </header>
-        {transfer.busy
-          ? <div className="dsh-knowledge-transfer-progress" role="status">
-            <span className="dsh-knowledge-upload-busy" aria-hidden="true" />
-            <p>{productText('剩余 {count} 个内容').replace('{count}', String(transfer.remaining))}</p>
-          </div>
-          : <div className="dsh-knowledge-transfer-body">
-            <aside>
-              {([
-                { kind: 'personal' as const, label: productText('个人知识库') },
-                { kind: 'shared' as const, label: productText('共享知识库') },
-              ]).map((group) => {
-                const rows = transferTargets.filter(item => item.kind === group.kind)
-                if (rows.length === 0) return null
-                return <div key={group.kind}>
-                  <strong>{group.label}</strong>
-                  {rows.map(item =>
-                    <button type="button" key={item.id} className={item.id === transfer.targetId ? 'active' : ''}
-                      onClick={() => setTransfer(current => current === undefined ? current : { ...current, targetId: item.id })}>
-                      <BookIcon />{item.name}
-                    </button>)}
-                </div>
-              })}
-              {transferTargets.length === 0 && <p className="dsh-knowledge-empty">{productText('暂无可用知识库')}</p>}
-            </aside>
-            <div className="dsh-knowledge-transfer-preview">
-              {transfer.documentIds.map((id) => {
-                const document = documents.find(item => item.id === id)
-                if (document === undefined) return null
-                const kind = fileKind(document.name)
-                return <div key={id}>
-                  <span className={`dsh-knowledge-file-icon ${kind}`} aria-hidden="true"><TypeIcon kind={kind} /></span>
-                  <strong>{document.name}</strong>
-                </div>
-              })}
-            </div>
-          </div>}
-        <footer>
-          <button type="button" disabled={transfer.busy} onClick={() => setTransfer(undefined)}>{productText('取消')}</button>
-          <button type="button" disabled={transfer.busy || transfer.targetId === undefined}
-            onClick={() => void runTransfer()}>
-            {transfer.mode === 'copy' ? productText('复制至此') : productText('移动至此')}
-          </button>
-        </footer>
-      </section></div>}
-    {conflict !== undefined && <div className="dsh-knowledge-modal-backdrop"
-      onPointerDown={event => event.stopPropagation()}>
-      <section className="dsh-knowledge-modal" role="dialog"
-        aria-modal="true" aria-labelledby="dsh-knowledge-conflict-title">
-        <header><h2 id="dsh-knowledge-conflict-title">{productText('同名项目')}</h2>
-          <button type="button" aria-label={productText('关闭')} onClick={() => closeConflict('cancel')}>×</button></header>
-        <p>{productText('此处存在以下同名项目，请选择操作')}</p>
-        <ul className="dsh-knowledge-conflict-list">{conflict.names.map(name => <li key={name}>{name}</li>)}</ul>
-        <footer>
-          <button type="button" onClick={() => closeConflict('keep')}>{productText('保留全部')}</button>
-          <button type="button" onClick={() => closeConflict('replace')}>{productText('替换')}</button>
-          <button type="button" onClick={() => closeConflict('cancel')}>{productText('取消')}</button>
-        </footer>
-      </section></div>}
     {deleteIds !== undefined && <div className="dsh-knowledge-modal-backdrop"
       onPointerDown={event => event.stopPropagation()}>
       <section className="dsh-knowledge-modal" role="dialog"
         aria-modal="true" aria-labelledby="dsh-knowledge-delete-title">
         <header><h2 id="dsh-knowledge-delete-title">{productText('确认删除')}</h2>
-          <button type="button" aria-label={productText('关闭')} disabled={mutating} onClick={() => setDeleteIds(undefined)}>×</button></header>
+          <button type="button" aria-label={productText('关闭')} disabled={mutating}
+            onClick={() => { setDeleteIds(undefined); setSelectedDocumentIds([]) }}>×</button></header>
         <p>{productText('确认删除所选内容？删除后将从知识库同步移除。')}</p>
         <ul className="dsh-knowledge-conflict-list">
           {deleteIds.map((id) => {
@@ -1721,7 +1732,8 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
           })}
         </ul>
         <footer>
-          <button type="button" disabled={mutating} onClick={() => setDeleteIds(undefined)}>{productText('取消')}</button>
+          <button type="button" disabled={mutating}
+            onClick={() => { setDeleteIds(undefined); setSelectedDocumentIds([]) }}>{productText('取消')}</button>
           <button type="button" className="danger" disabled={mutating} onClick={() => void confirmDelete()}>{productText('确认删除')}</button>
         </footer>
       </section></div>}
@@ -1736,6 +1748,31 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       <footer><button type="button" onClick={() => setCreateKind(undefined)}>{productText('取消')}</button>
         <button type="submit" disabled={name.trim() === '' || saving}>{productText('确定')}</button></footer>
     </form></div>}
+    {webLinkOpen && <div className="dsh-knowledge-modal-backdrop"><form className="dsh-knowledge-modal dsh-knowledge-web-link-modal"
+      role="dialog" aria-modal="true" aria-labelledby="dsh-knowledge-web-link-title" onSubmit={event => void submitWebLinks(event)}>
+      <header>
+        <div className="dsh-knowledge-web-link-title">
+          <span className="dsh-knowledge-web-link-mark" aria-hidden="true"><LinkIcon /></span>
+          <h2 id="dsh-knowledge-web-link-title">{productText('导入网页链接')}</h2>
+        </div>
+        <button type="button" aria-label={productText('关闭')} onClick={() => setWebLinkOpen(false)}>×</button>
+      </header>
+      <textarea autoFocus rows={6} value={webLinkDraft}
+        aria-label={productText('网页链接输入')}
+        placeholder={productText('粘贴或输入链接，多条链接间需换行，一次可输入10条')}
+        onChange={(event) => { setWebLinkDraft(event.target.value); setWebLinkError('') }} />
+      {webLinkError !== '' && <p className="dsh-knowledge-web-link-error" role="alert">{webLinkError}</p>}
+      <footer className="dsh-knowledge-web-link-footer">
+        <p>{productText('支持公众号、新闻文章等公开网页链接')}</p>
+        <button type="submit" disabled={webLinkImporting || webLinkDraft.trim() === ''}>
+          {webLinkImporting ? productText('正在导入…') : productText('导入')}
+        </button>
+      </footer>
+    </form></div>}
+    {recordingOpen && <RecordingPanel
+      onCancel={() => setRecordingOpen(false)}
+      onComplete={(capture) => { void submitRecordingMinutes(capture) }}
+    />}
     {viewer !== undefined && createPortal(<div className="dsh-knowledge-viewer-shell"
       onPointerDown={(event) => { event.stopPropagation() }}>
       <section className={previewAskOpen ? 'dsh-knowledge-viewer asking' : 'dsh-knowledge-viewer'} role="dialog" aria-modal="true" aria-labelledby="dsh-knowledge-viewer-title">
@@ -1748,9 +1785,21 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
             </button>
           </div>
           <div className="dsh-knowledge-viewer-actions">
-            {!previewAskOpen && <button type="button" className="dsh-knowledge-ask-launch" onClick={() => setPreviewAskOpen(true)}>
-              <AskWanweiIcon />{productText('问问万维')}
-            </button>}
+            {!previewAskOpen && (() => {
+              const askTarget = viewer.askDocumentId !== undefined
+                ? documents.find(item => item.id === viewer.askDocumentId) ?? viewer.document
+                : viewer.document
+              const askReady = viewer.mode === 'minutes' || documentParseReady(askTarget)
+              return <button type="button" className="dsh-knowledge-ask-launch"
+                disabled={!askReady}
+                title={askReady ? undefined
+                  : documentIsParsing(askTarget) ? productText('解析完成后可问答')
+                    : documentParseFailed(askTarget) ? productText('解析失败')
+                      : productText('解析完成后可问答')}
+                onClick={() => setPreviewAskOpen(true)}>
+                <AskWanweiIcon />{productText('问问万维')}
+              </button>
+            })()}
             {!previewAskOpen && <button type="button" className="icon-only close" aria-label={productText('关闭')}
               onClick={(event) => { event.stopPropagation(); closeViewer() }}>
               <CloseIcon />
@@ -1759,15 +1808,31 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         </header>
         <div className={`dsh-knowledge-viewer-body ${viewer.mode}`} ref={previewBodyRef}>
           {viewer.loading ? <ViewerLoading label={productText('正在加载…')} />
-            : viewer.mode === 'image' && viewer.objectUrl !== undefined
-              ? <img src={viewer.objectUrl} alt={documentDisplayName(viewer.document)} />
-              : viewer.mode === 'pdf' && viewer.pdfBytes !== undefined
-                ? <PdfLocateViewer bytes={viewer.pdfBytes} locate={viewer.locate} />
-                : (viewer.content ?? '') === ''
-                  ? <p className="dsh-knowledge-empty">{productText('暂无解析内容')}</p>
-                  : viewer.markdown === true
-                    ? <MarkdownView source={viewer.content ?? ''} />
-                    : <article><pre>{viewer.content}</pre></article>}
+            : viewer.mode === 'minutes'
+              ? <MinutesViewer
+                title={documentDisplayName(viewer.document)}
+                recordedAtLabel={viewer.recordedAtLabel ?? ''}
+                transcript={viewer.transcript ?? ''}
+                overview={viewer.overview ?? ''}
+                minutes={viewer.minutes ?? ''}
+                {...(viewer.audioUrl === undefined ? {} : { audioUrl: viewer.audioUrl })}
+                {...(viewer.durationMs === undefined ? {} : { durationMs: viewer.durationMs })}
+              />
+              : viewer.mode === 'html'
+                ? <WebSourcePane
+                  title={documentDisplayName(viewer.document)}
+                  sourceUrl={viewer.sourceUrl}
+                  objectUrl={viewer.objectUrl}
+                />
+                : viewer.mode === 'image' && viewer.objectUrl !== undefined
+                  ? <img src={viewer.objectUrl} alt={documentDisplayName(viewer.document)} />
+                  : viewer.mode === 'pdf' && viewer.pdfBytes !== undefined
+                    ? <PdfLocateViewer bytes={viewer.pdfBytes} locate={viewer.locate} />
+                    : (viewer.content ?? '') === ''
+                      ? <p className="dsh-knowledge-empty">{productText('暂无解析内容')}</p>
+                      : viewer.markdown === true
+                        ? <MarkdownView source={viewer.content ?? ''} />
+                        : <article><pre>{viewer.content}</pre></article>}
         </div>
         {previewAskOpen && <PreviewAskPane
           fileName={documentDisplayName(viewer.document)}
@@ -1853,8 +1918,8 @@ function PreviewAskPane({
     </div>
     {showHints && mode !== 'image' && <div className="dsh-knowledge-preview-ask-file">
       <div>
-        <span className={`dsh-knowledge-file-icon ${mode === 'pdf' ? 'pdf' : 'file'}`} aria-hidden="true">
-          <TypeIcon kind={mode === 'pdf' ? 'pdf' : 'file'} />
+        <span className={`dsh-knowledge-file-icon ${askFileKind(mode)}`} aria-hidden="true">
+          <TypeIcon kind={askFileKind(mode)} />
         </span>
         <strong>{fileName}</strong>
         <button type="button" aria-label={productText('移除当前文件')} onClick={onDismissHints}>×</button>
@@ -1886,9 +1951,60 @@ function PreviewAskPane({
   </aside>
 }
 
+/** File-chip kind for the preview ask prompt strip.
+ * @param mode - Open viewer mode.
+ */
+function askFileKind(mode: DocumentViewer['mode']): FileKind {
+  if (mode === 'pdf') return 'pdf'
+  if (mode === 'html') return 'web'
+  if (mode === 'image') return 'image'
+  if (mode === 'minutes') return 'audio'
+  return 'file'
+}
+
+/** Live source page embedded in the document preview pane.
+ * @param props.title - Accessible iframe title.
+ * @param props.sourceUrl - Absolute http(s) page URL when recoverable.
+ * @param props.objectUrl - Same-origin blob URL of the prepared page HTML.
+ */
+function WebSourcePane({
+  title, sourceUrl, objectUrl,
+}: {
+  title: string
+  sourceUrl?: string | undefined
+  objectUrl?: string | undefined
+}) {
+  if (objectUrl !== undefined && objectUrl !== '') {
+    return <iframe
+      className="dsh-knowledge-web-preview"
+      title={title}
+      src={objectUrl}
+    />
+  }
+  if (sourceUrl !== undefined && sourceUrl !== '') {
+    return <iframe
+      className="dsh-knowledge-web-preview"
+      title={title}
+      src={sourceUrl}
+      referrerPolicy="no-referrer"
+    />
+  }
+  return <div className="dsh-knowledge-web-source">
+    <span className="dsh-knowledge-file-icon web" aria-hidden="true"><TypeIcon kind="web" /></span>
+    <strong>{title}</strong>
+    <p>{productText('无法打开源地址')}</p>
+  </div>
+}
+
 function previewQuickPrompts(fileName: string, mode: DocumentViewer['mode']): { label: '解读图片' | '总结' | '生成脑图' | '生成测验' | '生成播客'; prompt: string }[] {
   if (mode === 'image') {
     return [{ label: '解读图片', prompt: `请解读图片「${fileName}」的内容。` }]
+  }
+  if (mode === 'minutes') {
+    return [
+      { label: '总结', prompt: `请根据录音纪要「${fileName}」整理要点、结论与待办。` },
+      { label: '生成脑图', prompt: `请根据录音纪要「${fileName}」生成思维导图大纲。` },
+    ]
   }
   return [
     { label: '总结', prompt: `请总结文档的主要内容、关键步骤与要点（文件：${fileName}）。` },
@@ -1915,22 +2031,6 @@ function CheckIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="m5 12 5 5L19 7" />
-  </svg>
-}
-
-function MoveIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
-    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M12 3v12M8.5 11.5 12 15l3.5-3.5" />
-    <path d="M5 18.5h14" />
-  </svg>
-}
-
-function CopyIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
-    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <rect x="9" y="9" width="11" height="11" rx="2" />
-    <path d="M5 15V5a2 2 0 0 1 2-2h10" />
   </svg>
 }
 
@@ -1993,14 +2093,17 @@ const ICON_LIBRARY_HEADER = '/knowledge-covers/icon-library-header.png'
 const ICON_FILE_PDF = '/knowledge-covers/icon-file-pdf.png'
 /** Content-card Word mark — blue book on dark tile. */
 const ICON_FILE_WORD = '/knowledge-covers/icon-file-word.png'
+/** Content-card web-link mark — blue book on dark tile. */
+const ICON_FILE_WEB = '/knowledge-covers/icon-file-web.png'
 const ICON_UPLOAD = '/knowledge-covers/icon-upload.png'
+/** Content toolbar — upload-time sort (down / up arrows). */
+const ICON_SORT = '/knowledge-covers/icon-sort.png'
 /** Plaza list header — open-book mark from js.design. */
 const ICON_PLAZA_BOOK = '/knowledge-covers/icon-plaza-book.png'
 /** Plaza list header — back chevron from js.design. */
 const ICON_PLAZA_BACK = '/knowledge-covers/icon-plaza-back.png'
 /** Plaza card — person glyph next to subscriber count. */
 const ICON_PLAZA_SUBSCRIBERS = '/knowledge-covers/icon-plaza-subscribers.png'
-/** Plaza detail content tab — open-book mark. */
 
 /** Sidebar group mark for a nav key — design PNG cutouts.
  * @param key - `personal` / `public` / `subscription`, or a future group id.
@@ -2061,7 +2164,7 @@ function renderPlazaContentTree(nodes: ContentNode[], handlers: PlazaTreeHandler
     const uploadedAt = formatUploadTime(stamp)
     const openable = handlers.onOpenDocument !== undefined
     const sizeLabel = formatDocumentSize(document.size).replace(/(B|KB|MB)$/u, ' $1')
-    const kind = fileKind(documentDisplayName(document))
+    const kind = documentFileKind(document)
     const fileBody = <>
       <span className={`dsh-knowledge-plaza-file-icon ${kind}`} aria-hidden="true">
         <TypeIcon kind={kind} />
@@ -2225,14 +2328,44 @@ function documentStoragePath(document: KnowledgeDocument): string {
   return raw.replace(/\\/g, '/').replace(/^\/+/u, '')
 }
 
-/** Visible file name without parent folders.
+/** Basename from the stored path (keeps the extension).
  * @param document - Listed knowledge document.
- * @returns Base file name.
  */
-function documentDisplayName(document: KnowledgeDocument): string {
+function documentBaseName(document: KnowledgeDocument): string {
   const path = documentStoragePath(document)
   const index = path.lastIndexOf('/')
   return index >= 0 ? path.slice(index + 1) : path
+}
+
+/** Visible file name without parent folders.
+ * @param document - Listed knowledge document.
+ * @returns Base file name; HTML and 录音纪要 titles omit the extension.
+ */
+function documentDisplayName(document: KnowledgeDocument): string {
+  const base = documentBaseName(document)
+  if (documentFileKind(document) === 'web' || isRecordingMinutesName(base)) return trimFileExtension(base)
+  return base
+}
+
+/** Companion markdown/text for a 录音纪要 pair (hidden from the content grid).
+ * @param name - Stored base file name.
+ */
+function isRecordingMinutesCompanionName(name: string): boolean {
+  return isRecordingMinutesName(name) && !isRecordingMinutesAudioName(name)
+}
+
+/** File kind from the stored name/path, never from the display title.
+ * Display names strip `.html`, so kind must be resolved before that.
+ * @param document - Listed knowledge document.
+ */
+function documentFileKind(document: KnowledgeDocument): FileKind {
+  return fileKind(documentBaseName(document))
+}
+
+function trimFileExtension(name: string): string {
+  const index = name.lastIndexOf('.')
+  if (index <= 0) return name
+  return name.slice(0, index)
 }
 
 /** Top-level folder paths present in the document list.
@@ -2363,9 +2496,20 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
     }
     const document = node.document
     const name = documentDisplayName(document)
-    const kind = fileKind(name)
+    const kind = documentFileKind(document)
     const uploadedAt = formatUploadTime(documentTime(document))
+    const clock = formatCardClock(documentTime(document))
+    // Audio is playback-only (RAGFlow chunking skipped) and must not surface as 解析失败.
+    const skipParseAlarm = kind === 'audio' || isRecordingMinutesName(documentBaseName(document))
+    const parsing = !skipParseAlarm && documentIsParsing(document)
+    const failed = !skipParseAlarm && documentParseFailed(document)
     const selectedDoc = handlers.selectedDocumentIds.includes(document.id)
+    const statusLabel = parsing
+      ? `${productText('解析中…')}${documentParsePercent(document)}%`
+      : failed
+        ? productText('解析失败')
+        : productText(kindLabel(kind))
+    const statusLine = clock === '' ? statusLabel : `${statusLabel} | ${clock}`
     cards.push(
       <button type="button" key={document.id}
         className={selectedDoc ? `dsh-knowledge-card ${kind} selected` : `dsh-knowledge-card ${kind}`}
@@ -2387,12 +2531,11 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
           <TypeIcon kind={kind} />
         </span>
         <strong>{name}</strong>
-        <small>
-          <span className="dsh-knowledge-card-time">
-            <ClockIcon />
-            {uploadedAt !== '' ? uploadedAt : productText(kindLabel(kind))}
+        <small className={parsing ? 'dsh-knowledge-card-status parsing' : failed ? 'dsh-knowledge-card-status failed' : 'dsh-knowledge-card-status'}>
+          <span className="dsh-knowledge-card-status-mark" aria-hidden="true">
+            {parsing ? <ParseStatusIcon /> : kind === 'audio' ? <AudioStatusIcon /> : kind === 'web' ? <WebStatusIcon /> : <ClockIcon />}
           </span>
-          <span>{formatDocumentSize(document.size)}</span>
+          <span>{statusLine}</span>
         </small>
         {document.creator_name !== undefined && <span className="dsh-knowledge-card-meta">
           <span><em>{productText('创建人')}</em>{document.creator_name}</span>
@@ -2429,7 +2572,7 @@ function isSkippedUploadName(name: string): boolean {
   return lower === '.ds_store' || lower === 'thumbs.db' || lower === 'desktop.ini' || lower.startsWith('._')
 }
 
-type FileKind = 'image' | 'pdf' | 'word' | 'sheet' | 'database' | 'file'
+type FileKind = 'image' | 'pdf' | 'word' | 'sheet' | 'database' | 'audio' | 'web' | 'file'
 
 function fileExtension(name: string): string {
   return name.split('.').pop()?.toLowerCase() ?? ''
@@ -2442,6 +2585,8 @@ function fileKind(name: string): FileKind {
   if (['doc', 'docx'].includes(extension)) return 'word'
   if (['xls', 'xlsx', 'csv'].includes(extension)) return 'sheet'
   if (['mdb', 'accdb'].includes(extension)) return 'database'
+  if (['webm', 'ogg', 'm4a', 'mp3', 'wav', 'mp4', 'aac', 'flac'].includes(extension)) return 'audio'
+  if (['html', 'htm', 'xhtml'].includes(extension)) return 'web'
   return 'file'
 }
 
@@ -2462,18 +2607,25 @@ function mimeFor(name: string, contentType: string): string {
   if (extension === 'gif') return 'image/gif'
   if (extension === 'webp') return 'image/webp'
   if (extension === 'bmp') return 'image/bmp'
+  if (extension === 'webm') return 'audio/webm'
+  if (extension === 'ogg') return 'audio/ogg'
+  if (extension === 'm4a' || extension === 'mp4') return 'audio/mp4'
+  if (extension === 'mp3') return 'audio/mpeg'
+  if (extension === 'wav') return 'audio/wav'
   if (extension === 'md' || extension === 'txt' || extension === 'log') return 'text/plain; charset=utf-8'
   if (extension === 'json') return 'application/json'
   if (extension === 'html' || extension === 'htm') return 'text/html; charset=utf-8'
   return contentType || 'application/octet-stream'
 }
 
-function kindLabel(kind: FileKind): '图片' | 'PDF' | 'Word' | '表格' | '数据库' | '文件' {
+function kindLabel(kind: FileKind): '图片' | 'PDF' | 'Word' | '表格' | '数据库' | '音频' | '网址' | '文件' {
   if (kind === 'image') return '图片'
   if (kind === 'pdf') return 'PDF'
   if (kind === 'word') return 'Word'
   if (kind === 'sheet') return '表格'
   if (kind === 'database') return '数据库'
+  if (kind === 'audio') return '音频'
+  if (kind === 'web') return '网址'
   return '文件'
 }
 
@@ -2494,11 +2646,132 @@ function formatUploadTime(value: number): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+/** Compact `HH:mm` clock for the card status line.
+ * @param value - Epoch milliseconds from `documentTime`.
+ */
+function formatCardClock(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 function TypeIcon({ kind }: { kind: FileKind }) {
   if (kind === 'image') return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" /><circle cx="9" cy="10" r="1.4" fill="currentColor" /><path d="m7 16 3.2-3.2a1 1 0 0 1 1.4 0L16 17" /></svg>
-  if (kind === 'pdf') return <img src={ICON_FILE_PDF} alt="" draggable={false} />
-  if (kind === 'word') return <img src={ICON_FILE_WORD} alt="" draggable={false} />
+  if (kind === 'pdf') return <img src={ICON_FILE_PDF} alt="" draggable={false} onError={swapBrokenFileIcon} />
+  if (kind === 'word') return <img src={ICON_FILE_WORD} alt="" draggable={false} onError={swapBrokenFileIcon} />
+  if (kind === 'audio') {
+    return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+      <rect x="4" y="5" width="16" height="14" rx="2" />
+      <path d="M8 14V10m4 6V8m4 4v-2" strokeLinecap="round" />
+    </svg>
+  }
+  if (kind === 'web') return <img src={`${ICON_FILE_WEB}?v=web-book`} alt="" draggable={false} onError={swapBrokenFileIcon} />
   return <FileIcon />
+}
+
+/** Hide a staged cutout that failed to load so the card does not show a broken-image glyph. */
+function swapBrokenFileIcon(event: { currentTarget: HTMLImageElement }): void {
+  event.currentTarget.style.display = 'none'
+}
+
+function ParseStatusIcon() {
+  return <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="8" cy="8" r="7" fill="#2f6fe0" />
+    <path d="M6.2 5.2 11 8l-4.8 2.8V5.2Z" fill="#fff" />
+  </svg>
+}
+
+function AudioStatusIcon() {
+  return <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M3 10V6m3.3 6V4m3.4 8V6m3.3 4V7" stroke="#0f9aa8" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+}
+
+function WebStatusIcon() {
+  return <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="5.5" stroke="#2f6fe0" strokeWidth="1.4" />
+    <path d="M2.8 8h10.4M8 2.8a9 9 0 0 1 0 10.4M8 2.8a9 9 0 0 0 0 10.4" stroke="#2f6fe0" strokeWidth="1.2" />
+  </svg>
+}
+
+/** Assemble the dual-pane recording-minutes viewer from audio and optional companion markdown.
+ * @param api - Knowledge API used to download bytes and chunks.
+ * @param libraryId - Open library id.
+ * @param document - Document the user opened.
+ * @param listed - Current library document list for sibling lookup.
+ */
+async function loadMinutesViewer(
+  api: KnowledgeApi,
+  libraryId: number,
+  document: KnowledgeDocument,
+  listed: KnowledgeDocument[],
+): Promise<DocumentViewer> {
+  const storageName = documentBaseName(document)
+  const stem = recordingMinutesBaseStem(storageName)
+  const siblings = listed.filter(item => recordingMinutesBaseStem(documentBaseName(item)) === stem)
+  const audioDoc = isRecordingMinutesAudioName(storageName) || fileKind(storageName) === 'audio'
+    ? document
+    : siblings.find(item => fileKind(documentBaseName(item)) === 'audio')
+  const textDoc = isMarkdownName(storageName) || fileExtension(storageName) === 'txt'
+    ? document
+    : siblings.find(item => isMarkdownName(documentBaseName(item)) || fileExtension(documentBaseName(item)) === 'txt')
+
+  let transcript = ''
+  let overview = ''
+  let minutes = ''
+  if (textDoc !== undefined) {
+    try {
+      const cached = readDownloadCache(libraryId, textDoc.id)
+      const file = cached ?? await api.download(libraryId, textDoc.id)
+      if (cached === undefined) writeDownloadCache(libraryId, textDoc.id, file)
+      const source = new TextDecoder('utf-8').decode(file.bytes)
+      const sections = parseRecordingMinutesMarkdown(source)
+      transcript = sections.transcript
+      overview = sections.overview
+      minutes = sections.minutes
+      if (transcript === '' && overview === '' && minutes === '') {
+        transcript = source.trim()
+      }
+    } catch {
+      // Named: companion markdown may be missing while audio still opens.
+    }
+  }
+  if (transcript === '') {
+    try {
+      const chunks = await api.chunks(libraryId, document.id)
+      transcript = chunks.map(chunk => chunk.content.trim()).filter(Boolean).join('\n\n')
+    } catch {
+      // Named: unparsed audio has no chunks yet.
+    }
+  }
+  if (overview === '' && transcript !== '') {
+    overview = transcript.length > 180 ? `${transcript.slice(0, 180)}…` : transcript
+  }
+  if (minutes === '' && transcript !== '') minutes = transcript
+
+  let audioUrl: string | undefined
+  if (audioDoc !== undefined) {
+    const cached = readDownloadCache(libraryId, audioDoc.id)
+    const file = cached ?? await api.download(libraryId, audioDoc.id)
+    if (cached === undefined) writeDownloadCache(libraryId, audioDoc.id, file)
+    const contentType = mimeFor(documentBaseName(audioDoc), file.contentType)
+    audioUrl = URL.createObjectURL(new Blob([file.bytes.slice()], { type: contentType }))
+  }
+
+  const stamp = documentTime(document)
+  return {
+    document: audioDoc ?? document,
+    loading: false,
+    mode: 'minutes',
+    transcript,
+    overview,
+    minutes,
+    recordedAtLabel: formatUploadTime(stamp),
+    ...(textDoc !== undefined ? { askDocumentId: textDoc.id } : {}),
+    ...(audioUrl === undefined ? {} : { audioUrl }),
+  }
 }
 
 /** Library-card Q&A toggle — design PNG cutout. */
@@ -2521,7 +2794,7 @@ function SearchIcon() {
 }
 
 function SortIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M8 6v12M8 6 5 9M8 6l3 3M16 18V6M16 18l-3-3M16 18l3-3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+  return <img className="dsh-knowledge-sort-art" src={ICON_SORT} alt="" draggable={false} />
 }
 
 function UploadIcon() {
@@ -2538,14 +2811,6 @@ function FolderIcon() {
 
 function LinkIcon() {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" strokeLinecap="round" /><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1" strokeLinecap="round" /></svg>
-}
-
-function NoteIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M7 4.5h8l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-10.5A1.5 1.5 0 0 1 5.5 19V6A1.5 1.5 0 0 1 7 4.5Z" /><path d="M15 4.5V9h4.5M8.5 13h7M8.5 16.5h5" /></svg>
-}
-
-function DocIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2" /><path d="M8.5 8h7M8.5 12h7M8.5 16h4" /></svg>
 }
 
 function MicIcon() {

@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-广场主页客户端按每页 12 张（`PLAZA_PAGE_SIZE`）分页，分页条对齐技能市场（上一页/下一页、「第 N 页 / 总页数」、页码、跳转）。目录有条目时即显示分页条（与文件列表一致，单页也显示）。卡片在 `.dsh-knowledge-plaza-list` 内滚动；分页条是广场壳的 `flex: none` 子项（不放进可被压成 0 高的 catalog），主页广场壳 `overflow: hidden`。搜索与重新打开回到第 1 页。
+广场主页客户端按每页 10 张（`PLAZA_PAGE_SIZE`）分页，分页条对齐技能市场（上一页/下一页、「第 N 页 / 总页数」、页码、跳转）。目录有条目时即显示分页条（与文件列表一致，单页也显示）。卡片在 `.dsh-knowledge-plaza-list` 内滚动；分页条是广场壳的 `flex: none` 子项（不放进可被压成 0 高的 catalog），主页广场壳 `overflow: hidden`。搜索与重新打开回到第 1 页。
 
 管理工作台除「个人知识库」外的分类页，对筛选后的卡片列表按每页 12 个（`LIBRARY_PAGE_SIZE`）分页，使用现有 `zjugis-table-pagination`；分类有卡片时即显示分页条（单页也显示）。目录壳 `.knowledge-library-catalog` 为纵向 flex：卡片网格单独滚动，分页条 `flex: none` 钉底；知识库页占满内容区高度，避免分页随整页一起滚走。搜索、排序、新建知识库工具栏在 `.knowledge-sticky` 置顶。个人范围仍用目录界面，不显示该工具栏与卡片分页。分类、关键词、排序变化回到第 1 页。
 

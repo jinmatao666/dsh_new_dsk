@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-29-knowledge-personal-storage-quota.md
-2026-10-29-knowledge-personal-storage-quota.md: 5aec9262a77a848c60862293735b6d9178e81db1
-2026-10-29-knowledge-personal-storage-quota.zh.md: 44e1a1b98c58228f069beb10aacc92766f825d98
+2026-10-29-knowledge-personal-storage-quota.md: d735886221f35e36bda839711b04cee0a3290c91
+2026-10-29-knowledge-personal-storage-quota.zh.md: 7883f08a079e058b22e46218ffde81ebb96e35b7

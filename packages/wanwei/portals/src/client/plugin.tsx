@@ -1,6 +1,6 @@
 import { createPanelController, registerFeaturePanel } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 import type { Context } from '@deepseek-ai/cordis'
-import { useSyncExternalStore, type ComponentType } from 'react'
+import { useEffect, useState, useSyncExternalStore, type ComponentType } from 'react'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
@@ -33,15 +33,42 @@ function PolicyEncyclopediaIcon({ size = 18 }: { size?: number }) {
   </svg>
 }
 
-function PortalPage({ url }: { url: HostObservable<string> }) {
+/** Centered loading mark matching knowledge-base ViewerLoading visuals.
+ * @param props - Accessible status label.
+ */
+function PortalLoading({ label }: { label: string }) {
+  return <div className="dsh-portal-loading" role="status" aria-label={label}>
+    <span className="dsh-portal-loading-mark" aria-hidden="true">
+      <span className="dsh-portal-loading-core" />
+    </span>
+  </div>
+}
+
+/** Embed the administrator-configured page URL, or show the empty-config placeholder.
+ * @param props - Live feature-page URL observable from wanweiNetwork.
+ */
+export function PortalPage({ url }: { url: HostObservable<string> }) {
   const href = useSyncExternalStore(url.subscribe, url.getSnapshot)
+  const [loading, setLoading] = useState(Boolean(href))
+  useEffect(() => {
+    setLoading(Boolean(href))
+  }, [href])
   if (!href) {
     return <div className="dsh-portal-empty" role="status">
       <h2>{productText('请先在管理工作台配置页面地址')}</h2>
       <p>{productText('管理员尚未配置此功能的页面地址，配置后即可在此查看。')}</p>
     </div>
   }
-  return <iframe className="dsh-portal-frame" title={href} src={href} referrerPolicy="no-referrer" />
+  return <div className="dsh-portal-frame-host">
+    {loading ? <PortalLoading label={productText('正在加载…')} /> : null}
+    <iframe
+      className="dsh-portal-frame"
+      title={href}
+      src={href}
+      referrerPolicy="no-referrer"
+      onLoad={() => setLoading(false)}
+    />
+  </div>
 }
 
 function registerPortal(
@@ -72,6 +99,7 @@ function registerPortal(
     Icon: options.Icon,
     hooks: { network: ctx.wanweiNetwork },
     bodyClassName: 'dsh-portal-host',
+    headerChrome: 'back-only',
     renderContent: () => <PortalPage url={ctx.wanweiNetwork.featurePageUrl(options.feature)} />,
   })
 }

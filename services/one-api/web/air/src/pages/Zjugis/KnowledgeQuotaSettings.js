@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { API } from '../../helpers';
 
-export const defaultKnowledgeQuota = { enabled: false, totalBytes: 0, allocations: [] };
+export const defaultKnowledgeQuota = { enabled: false, totalBytes: 0, batchInitBytes: 0, allocations: [] };
 
 const MEGABYTE = 1024 * 1024;
 
@@ -26,6 +26,7 @@ export function normalizeKnowledgeQuota(value) {
   return {
     enabled: source.enabled === true,
     totalBytes: Math.max(0, Math.floor(Number(source.totalBytes) || 0)),
+    batchInitBytes: Math.max(0, Math.floor(Number(source.batchInitBytes) || 0)),
     allocations: unique,
   };
 }
@@ -65,10 +66,12 @@ function personLabel(user) {
 
 /** Dialog that edits total personal storage and per-person allocations against the org tree. */
 function KnowledgeQuotaDialog({ value, onClose, onConfirm, disabled }) {
-  const [totalInput, setTotalInput] = useState(bytesToMegabytesInput(value.totalBytes));
+  const [totalInput, setTotalInput] = useState('');
+  const [batchInitInput, setBatchInitInput] = useState(bytesToMegabytesInput(value.batchInitBytes));
   const [draftAllocations, setDraftAllocations] = useState(() => new Map(
     (value.allocations || []).map(item => [item.userId, bytesToMegabytesInput(item.quotaBytes)]),
   ));
+  const savedTotalLabel = value.totalBytes > 0 ? bytesToMegabytesInput(value.totalBytes) : '';
   const [nodes, setNodes] = useState([]);
   const [users, setUsers] = useState([]);
   const [memberships, setMemberships] = useState([]);
@@ -133,10 +136,35 @@ function KnowledgeQuotaDialog({ value, onClose, onConfirm, disabled }) {
   };
 
   const confirm = () => {
-    const totalBytes = megabytesInputToBytes(totalInput);
-    if (!Number.isFinite(totalBytes) || totalBytes <= 0) {
-      setLocalError('请设置大于 0 的个人知识库总量（单位 MB）');
-      return;
+    const totalTrimmed = String(totalInput || '').trim();
+    let totalBytes;
+    if (!totalTrimmed) {
+      if (value.totalBytes > 0) totalBytes = value.totalBytes;
+      else {
+        setLocalError('请设置大于 0 的个人知识库总量（单位 MB）');
+        return;
+      }
+    } else {
+      totalBytes = megabytesInputToBytes(totalTrimmed);
+      if (!Number.isFinite(totalBytes) || totalBytes <= 0) {
+        setLocalError('请设置大于 0 的个人知识库总量（单位 MB）');
+        return;
+      }
+    }
+    const batchInitTrimmed = String(batchInitInput || '').trim();
+    let batchInitBytes = 0;
+    if (batchInitTrimmed) {
+      batchInitBytes = megabytesInputToBytes(batchInitTrimmed);
+      if (!Number.isFinite(batchInitBytes) || batchInitBytes <= 0) {
+        setLocalError('请设置大于 0 的个人批量初始化额度（单位 MB），或留空');
+        return;
+      }
+      if (batchInitBytes > totalBytes) {
+        setLocalError('个人批量初始化额度不能超过个人知识库总量');
+        return;
+      }
+    } else if (!totalTrimmed && value.batchInitBytes > 0) {
+      batchInitBytes = value.batchInitBytes;
     }
     const allocations = [];
     let allocated = 0;
@@ -153,7 +181,7 @@ function KnowledgeQuotaDialog({ value, onClose, onConfirm, disabled }) {
         return;
       }
     }
-    onConfirm(normalizeKnowledgeQuota({ enabled: true, totalBytes, allocations }));
+    onConfirm(normalizeKnowledgeQuota({ enabled: true, totalBytes, batchInitBytes, allocations }));
   };
 
   const renderBranch = (parentId = 0, depth = 0) => (children.get(parentId) || []).map(node => {
@@ -186,11 +214,17 @@ function KnowledgeQuotaDialog({ value, onClose, onConfirm, disabled }) {
         <button type='button' className='settings-secondary' disabled={disabled} onClick={onClose}>关闭</button>
       </header>
       <label className='knowledge-quota-total'>个人知识库总量（MB）
-        <input inputMode='decimal' value={totalInput} disabled={disabled}
+        <input inputMode='decimal' value={totalInput} disabled={disabled} autoComplete='off'
           placeholder='例如 100' aria-label='个人知识库总量（MB）'
           onChange={event => { setTotalInput(event.target.value); setLocalError(''); }} />
       </label>
-      <p className='settings-description'>开启限制后，所有个人知识库已用容量之和不能超过总量。可为具体人员单独分配上限；有分配的人不能超过本人额度，且全体合计仍不能超过总量。</p>
+      {savedTotalLabel ? <p className='knowledge-quota-saved-hint'>已保存 {savedTotalLabel}MB；留空确定将保留原值，填写新数字则覆盖。</p> : null}
+      <label className='knowledge-quota-total'>个人批量初始化额度（MB）
+        <input inputMode='decimal' value={batchInitInput} disabled={disabled} autoComplete='off'
+          placeholder='例如 20' aria-label='个人批量初始化额度（MB）'
+          onChange={event => { setBatchInitInput(event.target.value); setLocalError(''); }} />
+      </label>
+      <p className='settings-description'>开启限制后，所有个人知识库已用容量之和不能超过总量。个人批量初始化额度为批量初始化时每人默认分配的容量上限，不能超过总量。可为具体人员单独分配上限；有分配的人不能超过本人额度，且全体合计仍不能超过总量。</p>
       <div className='knowledge-quota-org-layout'>
         <aside aria-label='组织架构'>
           <p>组织架构</p>
@@ -236,6 +270,7 @@ export default function KnowledgeQuotaSettings({ value = defaultKnowledgeQuota, 
   const summary = !quota.enabled ? '已关闭'
     : quota.totalBytes <= 0 ? '已开启，尚未设置总量'
       : `总量 ${bytesToMegabytesInput(quota.totalBytes)}MB` +
+        (quota.batchInitBytes > 0 ? `，批量初始化 ${bytesToMegabytesInput(quota.batchInitBytes)}MB` : '') +
         (quota.allocations.length ? `，已分配 ${quota.allocations.length} 人` : '，未单独分配人员');
 
   return <div className='knowledge-quota-settings'>

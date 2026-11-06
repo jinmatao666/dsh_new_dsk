@@ -98,7 +98,7 @@ describe('KnowledgeBaseApi retrieval', () => {
       success: true, data: { chunks: [{ content: '正文', document_name: 'a.pdf', knowledge_base_name: '库', similarity: 0.4 }] },
     }))
     vi.stubGlobal('fetch', fetch)
-    const api = new KnowledgeBaseApi('http://oneapi', async () => 'token', 1000)
+    const api = new KnowledgeBaseApi('http://oneapi', async () => 'token', 1000, { transcriptionModel: 'asr', chatModel: 'chat' })
     const signal = new AbortController().signal
     await api.call('retrieval-scope', { sessionId: 's1', ids: [3, 3, 7] }, signal)
     expect(api.scopeOf('s1')).toEqual([3, 7])

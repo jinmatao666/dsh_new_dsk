@@ -16,7 +16,7 @@ describe('KnowledgeBaseApi.streamFile', () => {
       })
     })
     vi.stubGlobal('fetch', fetchMock)
-    const api = new KnowledgeBaseApi('https://one.example', async () => 'token', 60_000)
+    const api = new KnowledgeBaseApi('https://one.example', async () => 'token', 60_000, { transcriptionModel: 'asr', chatModel: 'chat' })
     const response = await api.streamFile(new Request(
       'https://desktop.local/api/desktop-knowledge-file?id=9&documentId=doc-1',
     ))
@@ -33,14 +33,14 @@ describe('KnowledgeBaseApi.streamFile', () => {
   it('rejects missing auth and invalid document ids before contacting OneAPI', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
-    const unauthenticated = new KnowledgeBaseApi('https://one.example', async () => undefined, 60_000)
+    const unauthenticated = new KnowledgeBaseApi('https://one.example', async () => undefined, 60_000, { transcriptionModel: 'asr', chatModel: 'chat' })
     const denied = await unauthenticated.streamFile(new Request(
       'https://desktop.local/api/desktop-knowledge-file?id=9&documentId=doc-1',
     ))
     expect(denied.status).toBe(401)
     expect(fetchMock).not.toHaveBeenCalled()
 
-    const api = new KnowledgeBaseApi('https://one.example', async () => 'token', 60_000)
+    const api = new KnowledgeBaseApi('https://one.example', async () => 'token', 60_000, { transcriptionModel: 'asr', chatModel: 'chat' })
     const invalid = await api.streamFile(new Request(
       'https://desktop.local/api/desktop-knowledge-file?id=9&documentId=../x',
     ))

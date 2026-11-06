@@ -77,6 +77,8 @@ function api(): KnowledgeApi {
     chunks: vi.fn(async () => [{ id: 'chunk-1', content: '文档正文内容' }]),
     download: vi.fn(async () => ({ contentType: 'application/pdf', bytes: new Uint8Array([37, 80, 68, 70]) })),
     upload: vi.fn(async () => {}),
+    importWebLinks: vi.fn(async () => {}),
+    importRecordingMinutes: vi.fn(async () => {}),
     delete: vi.fn(async () => {}),
     copy: vi.fn(async () => {}),
     move: vi.fn(async () => {}),
@@ -110,9 +112,169 @@ it('loads authorized knowledge bases and creates a personal library', async () =
   expect(service.create).toHaveBeenCalledWith({ name: '协作资料', description: '', kind: 'personal' })
   fireEvent.click(screen.getByRole('button', { name: '上传文档' }))
   expect(screen.getByRole('menuitem', { name: '本地文件' })).toBeTruthy()
+  expect(screen.getByRole('menuitem', { name: '网页链接' })).toBeTruthy()
+  expect(screen.getByRole('menuitem', { name: '录音纪要' })).toBeTruthy()
   expect(screen.queryByRole('menuitem', { name: '本地文件夹' })).toBeNull()
   expect(screen.queryByRole('menuitem', { name: '新建文件夹' })).toBeNull()
+  expect(screen.queryByRole('menuitem', { name: '个人知识库' })).toBeNull()
+  expect(screen.queryByRole('menuitem', { name: '笔记' })).toBeNull()
+  expect(screen.queryByRole('menuitem', { name: '腾讯文档' })).toBeNull()
   expect(screen.getByText('PDF')).toBeTruthy()
+})
+
+it('shows parse progress on documents that are still chunking', async () => {
+  const service = api()
+  service.documents = vi.fn(async () => [
+    {
+      id: 'doc-web',
+      name: 'MySQL修改connect_timeout (连接超时) 全局变量 - 我找的就是你 - 博客园.html',
+      size: 4096,
+      run: 'RUNNING',
+      progress: 0.03,
+      create_time: Date.parse('2026-11-06T09:15:00'),
+    },
+    {
+      id: 'doc-audio',
+      name: '录音纪要_261106091257.webm',
+      size: 2048,
+      run: 'DONE',
+      progress: 1,
+      create_time: Date.parse('2026-11-06T09:13:00'),
+    },
+  ])
+  render(<KnowledgePage api={service} />)
+  expect(await screen.findByText('MySQL修改connect_timeout (连接超时) 全局变量 - 我找的就是你 - 博客园')).toBeTruthy()
+  expect(screen.getByText(/解析中…3%/)).toBeTruthy()
+  expect(screen.getByText(/音频 \| 09:13/)).toBeTruthy()
+})
+
+it('keeps 网址 kind after stripping the .html display suffix', async () => {
+  const service = api()
+  service.documents = vi.fn(async () => [
+    {
+      id: 'doc-web',
+      name: 'MySQL修改connect_timeout (连接超时) 全局变量 - 我找的就是你 - 博客园.html',
+      size: 4096,
+      run: 'DONE',
+      progress: 1,
+      create_time: Date.parse('2026-11-06T10:38:00'),
+    },
+  ])
+  render(<KnowledgePage api={service} />)
+  expect(await screen.findByText('MySQL修改connect_timeout (连接超时) 全局变量 - 我找的就是你 - 博客园')).toBeTruthy()
+  expect(screen.getByText(/网址 \| 10:38/)).toBeTruthy()
+  expect(screen.queryByText(/文件 \|/)).toBeNull()
+  const card = screen.getByText('MySQL修改connect_timeout (连接超时) 全局变量 - 我找的就是你 - 博客园')
+    .closest('.dsh-knowledge-card') as HTMLElement
+  expect(card.className).toContain('web')
+  expect(card.querySelector('img')?.getAttribute('src')).toBe('/knowledge-covers/icon-file-web.png?v=web-book')
+})
+
+it('imports validated web links into the selected personal library', async () => {
+  const service = api()
+  render(<KnowledgePage api={service} />)
+  await screen.findByText('说明.pdf')
+  fireEvent.click(screen.getByRole('button', { name: '上传文档' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: '网页链接' }))
+  const dialog = screen.getByRole('dialog', { name: '导入网页链接' })
+  const input = within(dialog).getByLabelText('网页链接输入')
+  fireEvent.change(input, { target: { value: 'not-a-url' } })
+  fireEvent.click(within(dialog).getByRole('button', { name: '导入' }))
+  expect(within(dialog).getByRole('alert').textContent).toContain('链接格式无效')
+  expect(service.importWebLinks).not.toHaveBeenCalled()
+  fireEvent.change(input, {
+    target: { value: 'https://www.cnblogs.com/wangboyu/p/14463680.html' },
+  })
+  fireEvent.click(within(dialog).getByRole('button', { name: '导入' }))
+  await waitFor(() => expect(service.importWebLinks).toHaveBeenCalledWith(
+    1, ['https://www.cnblogs.com/wangboyu/p/14463680.html'],
+  ))
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: '导入网页链接' })).toBeNull())
+})
+
+it('opens the recording panel from the personal upload menu', async () => {
+  const service = api()
+  render(<KnowledgePage api={service} />)
+  await screen.findByText('说明.pdf')
+  fireEvent.click(screen.getByRole('button', { name: '上传文档' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: '录音纪要' }))
+  expect(screen.getByRole('dialog', { name: '录音纪要' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: '开始录音' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '取消录音' }))
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: '录音纪要' })).toBeNull())
+})
+
+it('opens a recording-minutes document in the dual-pane minutes viewer', async () => {
+  const service = api()
+  const markdown = [
+    '# 录音纪要_261106091257',
+    '',
+    '## 逐字稿',
+    '',
+    '你好，你好，你好',
+    '',
+    '## 速览',
+    '',
+    '00:00 连续问候开场',
+    '',
+    '## 纪要',
+    '',
+    '以问候开场，无实质议题。',
+    '',
+  ].join('\n')
+  service.documents = vi.fn(async () => [
+    { id: 'audio-1', name: '录音纪要_261106091257.webm', size: 2048, run: 'DONE', progress: 1 },
+    { id: 'md-1', name: '录音纪要_261106091257.md', size: markdown.length, run: 'DONE', progress: 1 },
+  ])
+  service.download = vi.fn(async (_libraryId, documentId) => {
+    if (documentId === 'md-1') {
+      return {
+        contentType: 'text/markdown',
+        bytes: new TextEncoder().encode(markdown),
+      }
+    }
+    return {
+      contentType: 'audio/webm',
+      bytes: new Uint8Array([1, 2, 3, 4]),
+    }
+  })
+  render(<KnowledgePage api={service} />)
+  await screen.findByText('录音纪要_261106091257')
+  expect(screen.queryByText('录音纪要_261106091257.md')).toBeNull()
+  expect(screen.queryByText('录音纪要_261106091257.webm')).toBeNull()
+  expect(screen.getByText('音频')).toBeTruthy()
+  fireEvent.click(screen.getByText('录音纪要_261106091257'))
+  await waitFor(() => expect(screen.getByRole('tab', { name: '速览' })).toBeTruthy())
+  expect(screen.getByText('你好，你好，你好')).toBeTruthy()
+  expect(screen.getByText('00:00 连续问候开场')).toBeTruthy()
+  fireEvent.click(screen.getByRole('tab', { name: '纪要' }))
+  expect(screen.getByText('以问候开场，无实质议题。')).toBeTruthy()
+  expect(screen.getByRole('button', { name: '播放' })).toBeTruthy()
+  expect((screen.getByRole('button', { name: '问问万维' }) as HTMLButtonElement).disabled).toBe(false)
+})
+
+it('hides the upload control for public and subscribed libraries', async () => {
+  const service = api()
+  service.list = vi.fn(async () => [
+    { id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7 },
+    { id: 8, name: '公开法规', description: '公共', kind: 'common' as const, owner_user_id: 1 },
+    {
+      id: 9, name: '已订法规', description: '订阅', kind: 'common' as const, owner_user_id: 1,
+      category_id: 4, subscribed_by_viewer: true,
+    },
+  ])
+  service.categories = vi.fn(async () => [
+    { id: 4, name: '授权', type: 'common' as const, require_auth: true },
+  ])
+  render(<KnowledgePage api={service} />)
+  await screen.findByText('说明.pdf')
+  expect(screen.getByRole('button', { name: '上传文档' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '展开公共知识库' }))
+  fireEvent.click(screen.getByRole('button', { name: '公开法规' }))
+  expect(screen.queryByRole('button', { name: '上传文档' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '展开订阅知识库' }))
+  fireEvent.click(screen.getByRole('button', { name: '已订法规' }))
+  expect(screen.queryByRole('button', { name: '上传文档' })).toBeNull()
 })
 
 it('hides cover upload on the desktop create dialog', async () => {
@@ -139,12 +301,12 @@ it('paginates the plaza homepage and keeps the pager under the card list', async
   const { container } = render(<KnowledgePage api={service} />)
   fireEvent.click(await screen.findByRole('button', { name: /知识库广场/ }))
   await screen.findByText('广场库00')
-  expect(container.querySelectorAll('.dsh-knowledge-plaza-card')).toHaveLength(12)
-  expect(screen.queryByText('广场库12')).toBeNull()
+  expect(container.querySelectorAll('.dsh-knowledge-plaza-card')).toHaveLength(10)
+  expect(screen.queryByText('广场库10')).toBeNull()
   const plazaPager = screen.getByRole('navigation', { name: '知识库分页' })
   expect(plazaPager.textContent).toContain('第 1 页 / 3')
   fireEvent.click(within(plazaPager).getByRole('button', { name: '下一页' }))
-  expect(screen.getByText('广场库12')).toBeTruthy()
+  expect(screen.getByText('广场库10')).toBeTruthy()
   expect(plazaPager.textContent).toContain('第 2 页 / 3')
   const plaza = container.querySelector('.dsh-knowledge-plaza')
   expect(plaza?.contains(container.querySelector('.dsh-knowledge-plaza-pager')!)).toBe(true)
@@ -592,29 +754,6 @@ it('keeps 个人知识库 and 订阅知识库 visible when empty and hides empty
   expect(within(subscription).getByText('暂无知识库')).toBeTruthy()
 })
 
-it('uploads every file from a local folder into the selected knowledge base', async () => {
-  const service = api()
-  const { container } = render(<KnowledgePage api={service} />)
-  await screen.findByText('说明.pdf')
-  const folderInput = container.querySelector('input[webkitdirectory]') as HTMLInputElement
-  expect(folderInput).toBeTruthy()
-  expect(folderInput.getAttribute('webkitdirectory')).toBe('')
-  const nested = new File(['body'], 'nested.md', { type: 'text/markdown' })
-  Object.defineProperty(nested, 'webkitRelativePath', { value: '资料/nested.md' })
-  const junk = new File([''], '.DS_Store', { type: 'text/plain' })
-  Object.defineProperty(junk, 'webkitRelativePath', { value: '资料/.DS_Store' })
-  const top = new File(['guide'], '指南.txt', { type: 'text/plain' })
-  Object.defineProperty(top, 'webkitRelativePath', { value: '资料/指南.txt' })
-  fireEvent.change(folderInput, { target: { files: [nested, junk, top] } })
-  await waitFor(() => expect(service.upload).toHaveBeenCalledTimes(2))
-  const uploaded = vi.mocked(service.upload).mock.calls.map((call: [number, File]) => ({
-    id: call[0],
-    name: call[1].name,
-  }))
-  expect(uploaded).toEqual([{ id: 1, name: 'nested.md' }, { id: 1, name: '指南.txt' }])
-  expect(service.documents).toHaveBeenCalled()
-})
-
 it('shows uploaded folder paths as expandable folders with nested files', async () => {
   const service = api()
   service.documents = vi.fn(async () => [
@@ -971,6 +1110,7 @@ it('opens 问问万维 beside a preview and asks the current knowledge base abou
   const ask = within(dialog).getByRole('complementary', { name: '问问万维' })
   expect(within(ask).getByText('你好，我是你的智能助手万维，能帮你速读文章、答疑解惑，快向我提问吧！')).toBeTruthy()
   expect(within(ask).queryByText('DS 快速')).toBeNull()
+  expect(ask.querySelector('.dsh-knowledge-preview-ask-file .dsh-knowledge-file-icon.pdf img')).toBeTruthy()
   fireEvent.click(within(ask).getByRole('button', { name: '总结' }))
   await waitFor(() => expect(service.complete).toHaveBeenCalledWith(
     1, '请总结文档的主要内容、关键步骤与要点（文件：说明.pdf）。',
@@ -1086,31 +1226,56 @@ it('previews images through the original file blob', async () => {
   expect(screen.getByRole('img', { name: '截图.png' })).toBeTruthy()
 })
 
-it('selects a document on right-click and shows move, copy, and delete actions', async () => {
+it('selects a personal-library document on right-click and shows delete only', async () => {
   const service = api()
   render(<KnowledgePage api={service} />)
   const row = await screen.findByRole('button', { name: /说明\.pdf/ })
   fireEvent.contextMenu(row)
   expect(row.className).toContain('selected')
-  expect(screen.getByRole('menuitem', { name: '移动到' })).toBeTruthy()
-  expect(screen.getByRole('menuitem', { name: '复制到' })).toBeTruthy()
   expect(screen.getByRole('menuitem', { name: '删除' })).toBeTruthy()
+  expect(screen.queryByRole('menuitem', { name: '移动到' })).toBeNull()
+  expect(screen.queryByRole('menuitem', { name: '复制到' })).toBeNull()
   expect(screen.queryByRole('menuitem', { name: '重命名' })).toBeNull()
   expect(screen.queryByRole('menuitem', { name: '编辑标签' })).toBeNull()
 })
 
-it('moves a selected document into another personal or shared library', async () => {
+it('clears the right-click selection when the delete menu is dismissed', async () => {
   const service = api()
-  service.documents = vi.fn(async (id: number) => id === 1
-    ? [{ id: 'doc-1', name: '说明.pdf', size: 2048, run: 'DONE', progress: 1 }]
-    : [])
   render(<KnowledgePage api={service} />)
+  const row = await screen.findByRole('button', { name: /说明\.pdf/ })
+  fireEvent.contextMenu(row)
+  expect(row.className).toContain('selected')
+  expect(screen.getByRole('menuitem', { name: '删除' })).toBeTruthy()
+  fireEvent.mouseDown(document.body)
+  expect(screen.queryByRole('menuitem', { name: '删除' })).toBeNull()
+  expect(row.className).not.toContain('selected')
+})
+
+it('hides file context actions for public and subscribed libraries', async () => {
+  const service = api()
+  service.list = vi.fn(async () => [
+    { id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7 },
+    { id: 8, name: '公开法规', description: '公共', kind: 'common' as const, owner_user_id: 1 },
+    {
+      id: 9, name: '已订法规', description: '订阅', kind: 'common' as const, owner_user_id: 1,
+      category_id: 4, subscribed_by_viewer: true,
+    },
+  ])
+  service.categories = vi.fn(async () => [
+    { id: 4, name: '授权', type: 'common' as const, require_auth: true },
+  ])
+  render(<KnowledgePage api={service} />)
+  await screen.findByText('说明.pdf')
+  fireEvent.click(screen.getByRole('button', { name: '展开公共知识库' }))
+  fireEvent.click(screen.getByRole('button', { name: '公开法规' }))
   fireEvent.contextMenu(await screen.findByRole('button', { name: /说明\.pdf/ }))
-  fireEvent.click(screen.getByRole('menuitem', { name: '移动到' }))
-  const dialog = await screen.findByRole('dialog', { name: /移动/ })
-  fireEvent.click(dialog.querySelector('aside button') as HTMLButtonElement)
-  fireEvent.click(screen.getByRole('button', { name: '移动至此' }))
-  await waitFor(() => expect(service.move).toHaveBeenCalledWith(1, 'doc-1', 3, undefined))
+  expect(screen.queryByRole('menu')).toBeNull()
+  expect(screen.queryByRole('menuitem', { name: '删除' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '展开订阅知识库' }))
+  fireEvent.click(screen.getByRole('button', { name: '已订法规' }))
+  fireEvent.contextMenu(await screen.findByRole('button', { name: /说明\.pdf/ }))
+  expect(screen.queryByRole('menu')).toBeNull()
+  expect(screen.queryByRole('menuitem', { name: '删除' })).toBeNull()
 })
 
 it('asks for confirmation before deleting a selected document', async () => {

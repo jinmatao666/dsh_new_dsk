@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-06-desktop-knowledge-file-context-delete-only.md
+2026-11-06-desktop-knowledge-file-context-delete-only.md: 560237910ab63ef671c0f4e79f09a3c6c8049c0c
+2026-11-06-desktop-knowledge-file-context-delete-only.zh.md: 2b7afbb7ec9ef9e2711818f595a7d21c81dab4d3

@@ -46,6 +46,34 @@ export function libraryIsGrantedSubscription(item: KnowledgeBaseItem, selfUserId
 }
 
 /**
+ * Whether the selected library is an uncategorized personal row under 个人知识库.
+ * Desktop write actions (upload, file delete) are scoped to this group only;
+ * 公共知识库 and 订阅知识库 stay read-only.
+ * @param item - Currently selected library, if any.
+ */
+export function libraryIsDesktopPersonal(item: KnowledgeBaseItem | undefined): boolean {
+  if (item === undefined) return false
+  return item.kind === 'personal' && (item.category_id ?? 0) === 0
+}
+
+/**
+ * Whether the desktop content toolbar may show upload for this library.
+ * @param item - Currently selected library, if any.
+ */
+export function libraryAllowsDesktopUpload(item: KnowledgeBaseItem | undefined): boolean {
+  return libraryIsDesktopPersonal(item)
+}
+
+/**
+ * Whether the desktop file context menu may offer delete for this library.
+ * Personal keeps delete only; public and subscription offer no file actions.
+ * @param item - Currently selected library, if any.
+ */
+export function libraryAllowsDesktopFileDelete(item: KnowledgeBaseItem | undefined): boolean {
+  return libraryIsDesktopPersonal(item)
+}
+
+/**
  * Nav: 个人知识库 and 订阅知识库 are always present (empty groups stay visible). 公共知识库
  * merges every open category plus uncategorized common libraries and appears only when
  * non-empty. 订阅知识库 holds only grant-backed subscriptions (not self-built auth libraries).

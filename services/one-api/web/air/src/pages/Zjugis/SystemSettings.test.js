@@ -68,17 +68,17 @@ test.each([null, 'true', 1])('rejects an explicitly invalid knowledge flag %p', 
 test('nine tabs preserve profile and security, and load deployment contacts', async () => {
   await act(async () => root.render(<SystemSettings />));
   const tabs = [...container.querySelectorAll('[role="tab"]')];
-  expect(tabs.map(button => button.textContent)).toEqual(['账户设置', '安全设置', '网络设置', '版本类型', '功能设置', '功能配置', '知识库设置', '运维设置', '插件设置', '登录与注册']);
+  expect(tabs.map(button => button.textContent)).toEqual(['账户设置', '安全设置', '网络设置', '版本类型', '功能设置', '知识库设置', '运维设置', '插件设置', '登录与注册']);
   expect(container.textContent).toContain('root');
   act(() => tabs[1].click()); expect(container.textContent).toContain('会话有效期');
-  act(() => tabs[7].click());
+  act(() => tabs[6].click());
   expect(container.querySelector('input').value).toBe('张运维');
   expect(container.querySelector('input[type="tel"]').value).toBe('0571-12345678');
 });
 
 test('plugin administrator switch saves independently and cancellation restores its saved value', async () => {
   await act(async () => root.render(<SystemSettings />));
-  act(() => container.querySelectorAll('[role="tab"]')[8].click());
+  act(() => container.querySelectorAll('[role="tab"]')[7].click());
   const toggle = container.querySelector('[aria-label="统一启用浏览器助手"]');
   expect(toggle.checked).toBe(true);
   act(() => toggle.click());
@@ -101,7 +101,7 @@ test('ordinary user can load and modify plugin settings', async () => {
     ? { username: 'member', role: 1 }
     : [{ key: 'SystemDeploymentSettings', value: JSON.stringify({ network: 'internet', operator: '张运维', phone: '0571-12345678' }) }] } }));
   await act(async () => root.render(<SystemSettings />));
-  act(() => container.querySelectorAll('[role="tab"]')[8].click());
+  act(() => container.querySelectorAll('[role="tab"]')[7].click());
   expect(container.textContent).not.toContain('仅超级管理员');
   const toggle = container.querySelector('[aria-label="统一启用浏览器助手"]');
   expect(toggle).not.toBeNull();
@@ -158,18 +158,16 @@ test('feature switches save independently for internet and intranet', async () =
   expect(toggle('纯内网自动化').checked).toBe(true);
 });
 
-test('feature configuration tab saves portal page URLs', async () => {
+test('feature settings address links open portal page dialogs and save URLs', async () => {
   await act(async () => root.render(<SystemSettings />));
-  act(() => container.querySelectorAll('[role="tab"]')[5].click());
-  expect(container.textContent).toContain('土地市场');
-  expect(container.textContent).toContain('政策宝典');
-  expect(container.textContent).toContain('未配置');
-  await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '配置').click());
+  act(() => container.querySelectorAll('[role="tab"]')[4].click());
+  expect(container.querySelector('[aria-label="土地市场地址配置"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="政策宝典地址配置"]')).not.toBeNull();
+  await act(async () => container.querySelector('[aria-label="土地市场地址配置"]').click());
   expect(await waitForDialog()).not.toBeNull();
   await act(async () => fillInput(container.querySelector('[aria-label="土地市场页面地址"]'), 'https://land.example/#/home'));
   await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '确定').click());
   expect(container.querySelector('[role="dialog"]')).toBeNull();
-  expect(container.textContent).toContain('https://land.example/#/home');
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   expect(JSON.parse(API.put.mock.calls[0][1].value).featurePages).toEqual({
     landMarket: { url: 'https://land.example/#/home' },
@@ -342,24 +340,27 @@ test('knowledge quota tab defaults off and saves total with person allocations',
     return Promise.resolve({ data: { success: true, data: [] } });
   });
   await act(async () => root.render(<SystemSettings />));
-  act(() => container.querySelectorAll('[role="tab"]')[6].click());
+  act(() => container.querySelectorAll('[role="tab"]')[5].click());
   const toggle = container.querySelector('[aria-label="文件大小限制"]');
   expect(toggle.checked).toBe(false);
   expect(container.textContent).toContain('已关闭');
   await act(async () => toggle.click());
   expect(await waitForDialog()).not.toBeNull();
   await act(async () => fillInput(container.querySelector('[aria-label="个人知识库总量（MB）"]'), '100'));
+  await act(async () => fillInput(container.querySelector('[aria-label="个人批量初始化额度（MB）"]'), '20'));
   const personQuota = await waitForPersonQuota();
   await act(async () => fillInput(personQuota, '20'));
   await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '确定').click());
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   expect(container.textContent).toContain('总量 100MB');
+  expect(container.textContent).toContain('批量初始化 20MB');
   expect(container.textContent).toContain('已分配 1 人');
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   const saved = JSON.parse(API.put.mock.calls[0][1].value);
   expect(saved.knowledgeQuota).toEqual({
     enabled: true,
     totalBytes: 100 * 1024 * 1024,
+    batchInitBytes: 20 * 1024 * 1024,
     allocations: [{ userId: 8, quotaBytes: 20 * 1024 * 1024 }],
   });
 });
@@ -378,7 +379,7 @@ test('knowledge quota requires total before save when enabled', async () => {
     return Promise.resolve({ data: { success: true, data: [] } });
   });
   await act(async () => root.render(<SystemSettings />));
-  act(() => container.querySelectorAll('[role="tab"]')[6].click());
+  act(() => container.querySelectorAll('[role="tab"]')[5].click());
   await act(async () => container.querySelector('[aria-label="文件大小限制"]').click());
   expect(await waitForDialog()).not.toBeNull();
   await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '关闭').click());

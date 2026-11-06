@@ -159,6 +159,27 @@ func TestStartKnowledgeDocumentParseNoopsWithoutIds(t *testing.T) {
 	startKnowledgeDocumentParse(nil, "", []string{"doc-1"})
 }
 
+func TestApplyKnowledgeAudioPlaybackStatusMarksAudioDone(t *testing.T) {
+	documents := []ragflow.Document{
+		{Id: "wav", Name: "录音纪要_261106113022.wav", Run: "FAIL", Progress: 0},
+		{Id: "md", Name: "录音纪要_261106113022.md", Run: "FAIL", Progress: 0},
+		{Id: "nested", Name: "clip.wav", Location: "资料/clip.wav", Run: "UNSTART", Progress: 0},
+	}
+	applyKnowledgeAudioPlaybackStatus(documents)
+	if documents[0].Run != "DONE" || documents[0].Progress != 1 {
+		t.Fatalf("wav status: %#v", documents[0])
+	}
+	if documents[1].Run != "FAIL" || documents[1].Progress != 0 {
+		t.Fatalf("markdown must keep RAGFlow status: %#v", documents[1])
+	}
+	if documents[2].Run != "DONE" || documents[2].Progress != 1 {
+		t.Fatalf("nested wav status: %#v", documents[2])
+	}
+	if !isKnowledgeAudioFilename("a.WAV") || isKnowledgeAudioFilename("a.md") {
+		t.Fatalf("audio filename helper mismatch")
+	}
+}
+
 func TestLimitKnowledgeRecommendationsKeepsThreeUnique(t *testing.T) {
 	got := limitKnowledgeRecommendations([]string{"甲", "", "乙", "甲", "丙", "丁"})
 	if len(got) != 3 || got[0] != "甲？" || got[1] != "乙？" || got[2] != "丙？" {

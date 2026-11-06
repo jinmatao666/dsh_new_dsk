@@ -22,13 +22,16 @@ func TestParseKnowledgePersonalQuotaDefaultsAndEnabled(t *testing.T) {
 	require.Equal(t, int64(0), got.TotalBytes)
 	require.Empty(t, got.Allocations)
 
-	got, err = parseKnowledgePersonalQuota(json.RawMessage(`{"enabled":true,"totalBytes":104857600,"allocations":[{"userId":8,"quotaBytes":10485760}]}`))
+	got, err = parseKnowledgePersonalQuota(json.RawMessage(`{"enabled":true,"totalBytes":104857600,"batchInitBytes":20971520,"allocations":[{"userId":8,"quotaBytes":10485760}]}`))
 	require.NoError(t, err)
 	require.True(t, got.Enabled)
 	require.Equal(t, int64(104857600), got.TotalBytes)
+	require.Equal(t, int64(20971520), got.BatchInitBytes)
 	require.Equal(t, []knowledgePersonalQuotaAllocation{{UserId: 8, QuotaBytes: 10485760}}, got.Allocations)
 
 	_, err = parseKnowledgePersonalQuota(json.RawMessage(`{"enabled":true,"totalBytes":0}`))
+	require.Error(t, err)
+	_, err = parseKnowledgePersonalQuota(json.RawMessage(`{"enabled":true,"totalBytes":100,"batchInitBytes":120}`))
 	require.Error(t, err)
 	_, err = parseKnowledgePersonalQuota(json.RawMessage(`{"enabled":true,"totalBytes":100,"allocations":[{"userId":1,"quotaBytes":80},{"userId":2,"quotaBytes":30}]}`))
 	require.Error(t, err)

@@ -393,6 +393,33 @@ export function apply(ctx: Context): void {
     async upload(id, file) {
       await uploadKnowledgeFile(call, id, file)
     },
+    async importWebLinks(id, urls) {
+      await call('import-web-links', { id, urls })
+    },
+    async importRecordingMinutes(input) {
+      const form = new FormData()
+      form.set('id', String(input.id))
+      form.set('file', input.audio, input.audio.name)
+      form.set('stem', input.stem)
+      form.set('durationMs', String(input.durationMs))
+      form.set('liveTranscript', input.liveTranscript)
+      const response = await fetch('/api/desktop-knowledge-recording-minutes', {
+        method: 'POST',
+        body: form,
+      })
+      let message = '录音纪要生成失败'
+      try {
+        const body: unknown = await response.json()
+        if (typeof body === 'object' && body !== null) {
+          const envelope = body as { success?: unknown; message?: unknown }
+          if (response.ok && envelope.success === true) return
+          if (typeof envelope.message === 'string' && envelope.message !== '') message = envelope.message
+        }
+      } catch {
+        // Named: Host may return empty or non-JSON error bodies.
+      }
+      throw new Error(message)
+    },
     async delete(knowledgeBaseId, documentId) {
       await call('delete', { id: knowledgeBaseId, documentId })
     },

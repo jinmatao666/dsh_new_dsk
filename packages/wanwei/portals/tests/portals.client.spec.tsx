@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { Context } from '@deepseek-ai/cordis'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPanelController, FeaturePanel, PanelAction } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 import type { PanelActionProps, PanelController, PanelProps } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
-import { useSyncExternalStore } from 'react'
+import { PortalPage } from '../src/client/plugin.tsx'
 import { productText } from '../src/client/locales/product.ts'
 
 afterEach(() => {
@@ -27,17 +27,6 @@ function observable<T>(value: T): HostObservable<T> & { set(next: T): void } {
       for (const listener of listeners) listener()
     },
   }
-}
-
-function PortalPage({ url }: { url: HostObservable<string> }) {
-  const href = useSyncExternalStore(url.subscribe, url.getSnapshot)
-  if (!href) {
-    return <div role="status">
-      <h2>{productText('请先在管理工作台配置页面地址')}</h2>
-      <p>{productText('管理员尚未配置此功能的页面地址，配置后即可在此查看。')}</p>
-    </div>
-  }
-  return <iframe title={href} src={href} />
 }
 
 async function mount(ctx: Context, id: string) {
@@ -63,6 +52,7 @@ describe('portal feature panels', () => {
       requiresDirectInternet: false,
       useNetwork: () => false,
       bodyClassName: 'dsh-portal-host',
+      headerChrome: 'back-only',
       renderContent: () => <PortalPage url={url} />,
     } as unknown as PanelActionProps & PanelProps
     try {
@@ -72,14 +62,31 @@ describe('portal feature panels', () => {
       view.rerender(<><PanelAction {...props} /><FeaturePanel {...props} /></>)
       expect(screen.getByRole('button', { name: productText('土地市场') })).toBeTruthy()
       act(() => { feature.controller.open() })
+      expect(document.querySelector('.dsh-skill-market-heading')).toBeNull()
+      expect(screen.getByRole('button', { name: '返回' })).toBeTruthy()
       expect(screen.getByRole('status').textContent).toContain('请先在管理工作台配置页面地址')
       act(() => { url.set('https://land.example/#/home') })
       view.rerender(<><PanelAction {...props} /><FeaturePanel {...props} /></>)
       expect(screen.getByTitle('https://land.example/#/home')).toBeTruthy()
       expect((screen.getByTitle('https://land.example/#/home') as HTMLIFrameElement).src)
         .toBe('https://land.example/#/home')
+      expect(screen.getByRole('status', { name: productText('正在加载…') })).toBeTruthy()
+      act(() => { fireEvent.load(screen.getByTitle('https://land.example/#/home')) })
+      expect(screen.queryByRole('status', { name: productText('正在加载…') })).toBeNull()
     } finally {
       await feature.dispose()
     }
+  })
+
+  it('shows the loading mark again when the configured URL changes', () => {
+    const url = observable('https://land.example/a')
+    const view = render(<PortalPage url={url} />)
+    expect(screen.getByRole('status', { name: productText('正在加载…') })).toBeTruthy()
+    act(() => { fireEvent.load(screen.getByTitle('https://land.example/a')) })
+    expect(screen.queryByRole('status', { name: productText('正在加载…') })).toBeNull()
+    act(() => { url.set('https://land.example/b') })
+    view.rerender(<PortalPage url={url} />)
+    expect(screen.getByRole('status', { name: productText('正在加载…') })).toBeTruthy()
+    expect(screen.getByTitle('https://land.example/b')).toBeTruthy()
   })
 })

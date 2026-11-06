@@ -7,24 +7,24 @@ import ResourceSettings, { defaultResources, normalizeResources } from './Resour
 import KnowledgeQuotaSettings, { defaultKnowledgeQuota, normalizeKnowledgeQuota } from './KnowledgeQuotaSettings';
 import { DEFAULT_CREDIT_BASE, validCreditNumber, formatCreditPrice } from './creditPricing';
 import CreditRewardSettings, { normalizeCreditRewards } from './CreditRewardSettings';
-import FeaturePagesSettings, { defaultFeaturePages, normalizeFeaturePages, validateFeaturePageUrl, FEATURE_PAGE_ENTRIES } from './FeaturePagesSettings';
+import FeaturePageAddressDialog, { defaultFeaturePages, normalizeFeaturePages, validateFeaturePageUrl, FEATURE_PAGE_ENTRIES } from './FeaturePagesSettings';
 
 const featureKeys = ['automations', 'connectors', 'knowledgeBases', 'landMarket', 'policyEncyclopedia'];
+const featureAddressKeys = new Set(['landMarket', 'policyEncyclopedia']);
 const defaults = { network: 'internet', internetCatalogPolicy: 'disable', internetSkillPolicy: 'disable', internetExpertPolicy: 'disable', edition: 'operations', operator: '', phone: '', features: {
   internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
   intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
 }, featurePages: defaultFeaturePages, plugins: { browserAssistant: true }, knowledgeQuota: defaultKnowledgeQuota, creditPricingBase: DEFAULT_CREDIT_BASE };
-const tabs = [['account', '账户设置'], ['security', '安全设置'], ['network', '网络设置'], ['edition', '版本类型'], ['features', '功能设置'], ['featureConfig', '功能配置'], ['knowledge', '知识库设置'], ['operations', '运维设置'], ['plugins', '插件设置'], ['registration', '登录与注册']];
+const tabs = [['account', '账户设置'], ['security', '安全设置'], ['network', '网络设置'], ['edition', '版本类型'], ['features', '功能设置'], ['knowledge', '知识库设置'], ['operations', '运维设置'], ['plugins', '插件设置'], ['registration', '登录与注册']];
 const descriptions = {
   network: '设置桌面端使用的部署网络环境。',
   edition: '选择本系统的版本类型，网络环境与功能开关保持独立。',
-  features: '内网与互联网独立配置。关闭后隐藏桌面端入口，桌面端启动、登录或切回窗口刷新后生效；开启不代表外部服务在内网可访问。',
-  featureConfig: '为土地市场和政策宝典配置桌面端展示的页面地址。入口显示隐藏仍由功能设置控制；桌面端启动、登录或切回窗口刷新后生效。',
+  features: '内网与互联网独立配置。关闭后隐藏桌面端入口，桌面端启动、登录或切回窗口刷新后生效；开启不代表外部服务在内网可访问。土地市场与政策宝典可在此配置页面地址。',
   knowledge: '限制个人知识库存储总量，并可按组织架构为具体人员分配额度。关闭后不限制个人知识库总容量。',
   operations: '填写负责本系统日常维护的人员及联系电话。',
   plugins: '统一控制桌面端插件。关闭后用户无法开启；开启后用户可自行启停。桌面端启动、登录或切回窗口刷新后生效，不强制中断已开始的操作。原有网络限制仍然有效。',
 };
-const deploymentTabs = ['network', 'edition', 'features', 'featureConfig', 'knowledge', 'operations', 'plugins'];
+const deploymentTabs = ['network', 'edition', 'features', 'knowledge', 'operations', 'plugins'];
 
 async function loadSettingsResponse(path, signal) {
   for (let attempt = 0; ; attempt++) {
@@ -65,6 +65,7 @@ export default function SystemSettings() {
   const [feedback, setFeedback] = useState('');
   const [loadError, setLoadError] = useState('');
   const [reload, setReload] = useState(0);
+  const [addressFeature, setAddressFeature] = useState(null);
   useEffect(() => {
     let disposed = false;
     const controller = new AbortController();
@@ -166,7 +167,7 @@ export default function SystemSettings() {
     <div className='preview-page-head'><div><h1>系统设置</h1><p>管理账户、安全、部署网络环境、功能入口与运维联系信息。</p></div></div>
     <section className='preview-surface system-settings-surface'>
       <div className='preview-tabs' role='tablist' aria-label='系统设置'>
-        {tabs.map(([key, label]) => <button type='button' role='tab' id={`settings-tab-${key}`} aria-controls={`settings-panel-${key}`} aria-selected={active === key} key={key} className={active === key ? 'active' : ''} onClick={() => { setActive(key); setFeedback(''); }}>{label}</button>)}
+        {tabs.map(([key, label]) => <button type='button' role='tab' id={`settings-tab-${key}`} aria-controls={`settings-panel-${key}`} aria-selected={active === key} key={key} className={active === key ? 'active' : ''} onClick={() => { setActive(key); setFeedback(''); setAddressFeature(null); }}>{label}</button>)}
       </div>
       {loading ? <p role='status'>正在加载设置，网络异常时会自动重试…</p> : loadError && (!user || deploymentTabs.includes(active)) ? <div><p role='alert'>{loadError}</p><button type='button' className='settings-secondary' onClick={() => setReload(value => value + 1)}>重新加载</button></div> :
         <div role='tabpanel' id={`settings-panel-${active}`} aria-labelledby={`settings-tab-${active}`} className='system-settings-panel'>
@@ -181,12 +182,10 @@ export default function SystemSettings() {
             <div className='account-row'><span>登录保护</span><strong className='green'>已启用</strong></div>
           </div><button type='button' className='settings-secondary settings-logout' onClick={logout}>退出登录</button></>}
           {deploymentTabs.includes(active) && <form className={active === 'edition' ? 'settings-edition-form' : undefined} onSubmit={save}>
-            <h2>{active === 'network' ? '网络环境' : active === 'edition' ? '版本类型' : active === 'features' ? '功能入口' : active === 'featureConfig' ? '功能配置' : active === 'knowledge' ? '知识库设置' : active === 'plugins' ? '插件控制' : '运维联系信息'}</h2>
+            <h2>{active === 'network' ? '网络环境' : active === 'edition' ? '版本类型' : active === 'features' ? '功能入口' : active === 'knowledge' ? '知识库设置' : active === 'plugins' ? '插件控制' : '运维联系信息'}</h2>
             <p className='settings-description'>{descriptions[active]}</p>
             {active === 'knowledge' ? <KnowledgeQuotaSettings value={settings.knowledgeQuota || defaultKnowledgeQuota} disabled={saving}
               saving={saving} onChange={value => change('knowledgeQuota', normalizeKnowledgeQuota(value))} />
-              : active === 'featureConfig' ? <FeaturePagesSettings value={settings.featurePages || defaultFeaturePages} disabled={saving}
-                onChange={value => change('featurePages', normalizeFeaturePages(value))} />
               : active === 'plugins' ? <>
               <table className='settings-features'><thead><tr><th scope='col'>插件</th><th scope='col'>统一开关</th></tr></thead><tbody><tr><th scope='row'>浏览器助手</th><td><label>
                 <input type='checkbox' role='switch' aria-label='统一启用浏览器助手' checked={settings.plugins.browserAssistant} disabled={saving} onChange={event => change('plugins', { ...settings.plugins, browserAssistant: event.target.checked })} />
@@ -197,11 +196,19 @@ export default function SystemSettings() {
               {[['government', '政务版', '适用于政务场景'], ['operations', '运营版', '适用于运营场景']].map(([key, label, hint]) => <label key={key} className={`settings-network-option${settings.edition === key ? ' selected' : ''}`}>
                 <input type='radio' name='edition' value={key} checked={settings.edition === key} onChange={() => change('edition', key)} disabled={saving} /><span><strong>{label}</strong><small>{hint}</small></span>
               </label>)}
-            </fieldset></section> : active === 'features' ? <table className='settings-features'><thead><tr><th scope='col'>功能</th><th scope='col'>互联网环境</th><th scope='col'>纯内网环境</th></tr></thead><tbody>
-              {[['automations', '自动化'], ['connectors', '连接器'], ['knowledgeBases', '知识库'], ['landMarket', '土地市场'], ['policyEncyclopedia', '政策宝典']].map(([feature, label]) => <tr key={feature}><th scope='row'>{label}</th>
+            </fieldset></section> : active === 'features' ? <><table className='settings-features'><thead><tr><th scope='col'>功能</th><th scope='col'>互联网环境</th><th scope='col'>纯内网环境</th></tr></thead><tbody>
+              {[['automations', '自动化'], ['connectors', '连接器'], ['knowledgeBases', '知识库'], ['landMarket', '土地市场'], ['policyEncyclopedia', '政策宝典']].map(([feature, label]) => <tr key={feature}>
+                <th scope='row'>{featureAddressKeys.has(feature)
+                  ? <span className='feature-name-with-address'>{label}<button type='button' className='feature-address-link' disabled={saving}
+                    aria-label={`${label}地址配置`} onClick={() => setAddressFeature(feature)}>地址配置</button></span>
+                  : label}</th>
                 {['internet', 'intranet'].map(mode => <td key={mode}><label><input type='checkbox' role='switch' aria-label={`${mode === 'internet' ? '互联网' : '纯内网'}${label}`} checked={settings.features[mode][feature]} disabled={saving} onChange={event => change('features', { ...settings.features, [mode]: { ...settings.features[mode], [feature]: event.target.checked } })} /><span>{settings.features[mode][feature] ? '开启' : '关闭'}</span></label></td>)}
               </tr>)}
-            </tbody></table> : active === 'network' ? <fieldset className='settings-network'><legend>网络类型</legend>
+            </tbody></table>
+            {addressFeature && <FeaturePageAddressDialog featureKey={addressFeature} value={settings.featurePages || defaultFeaturePages}
+              disabled={saving} onClose={() => setAddressFeature(null)}
+              onChange={value => change('featurePages', normalizeFeaturePages(value))} />}
+            </> : active === 'network' ? <fieldset className='settings-network'><legend>网络类型</legend>
               {[['internet', '外网（互联网）', '部署于可访问互联网的网络环境'], ['intranet', '内网', '部署于单位内部网络环境']].map(([key, label, hint]) => <label key={key} className={`settings-network-option${settings.network === key ? ' selected' : ''}`}>
                 <input type='radio' name='network' value={key} checked={settings.network === key} onChange={() => change('network', key)} disabled={saving} /><span><strong>{label}</strong><small>{hint}</small></span>
               </label>)}

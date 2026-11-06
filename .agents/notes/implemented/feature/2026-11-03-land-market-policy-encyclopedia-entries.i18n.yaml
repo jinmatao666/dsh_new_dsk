@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-03-land-market-policy-encyclopedia-entries.md
-2026-11-03-land-market-policy-encyclopedia-entries.md: 7020c9890bb071b5f47aa4c4a509ff0852962fa4
-2026-11-03-land-market-policy-encyclopedia-entries.zh.md: d64cf190a1226b384bd481df41ddb96d5d2176c6
+2026-11-03-land-market-policy-encyclopedia-entries.md: 88c23a2910dec19e0214bedc2438e3e9d5be678c
+2026-11-03-land-market-policy-encyclopedia-entries.zh.md: 3dad2b548ed5547dda03f6dca73448e8293ed5db

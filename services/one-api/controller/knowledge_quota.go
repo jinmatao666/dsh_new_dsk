@@ -16,9 +16,10 @@ import (
 
 // knowledgePersonalQuotaSettings limits total and per-user personal knowledge storage.
 type knowledgePersonalQuotaSettings struct {
-	Enabled     bool                                `json:"enabled"`
-	TotalBytes  int64                               `json:"totalBytes"`
-	Allocations []knowledgePersonalQuotaAllocation  `json:"allocations"`
+	Enabled        bool                               `json:"enabled"`
+	TotalBytes     int64                              `json:"totalBytes"`
+	BatchInitBytes int64                              `json:"batchInitBytes"`
+	Allocations    []knowledgePersonalQuotaAllocation `json:"allocations"`
 }
 
 type knowledgePersonalQuotaAllocation struct {
@@ -27,11 +28,12 @@ type knowledgePersonalQuotaAllocation struct {
 }
 
 func defaultKnowledgePersonalQuota() knowledgePersonalQuotaSettings {
-	return knowledgePersonalQuotaSettings{Enabled: false, TotalBytes: 0, Allocations: []knowledgePersonalQuotaAllocation{}}
+	return knowledgePersonalQuotaSettings{Enabled: false, TotalBytes: 0, BatchInitBytes: 0, Allocations: []knowledgePersonalQuotaAllocation{}}
 }
 
 // parseKnowledgePersonalQuota validates optional knowledgeQuota in deployment settings.
 // Missing or null values keep the default (switch off). Enabled configs require a positive total.
+// BatchInitBytes is the default per-person quota for batch personal-library initialization; 0 means unset.
 func parseKnowledgePersonalQuota(raw json.RawMessage) (knowledgePersonalQuotaSettings, error) {
 	settings := defaultKnowledgePersonalQuota()
 	if len(raw) == 0 || string(raw) == "null" {
@@ -42,6 +44,9 @@ func parseKnowledgePersonalQuota(raw json.RawMessage) (knowledgePersonalQuotaSet
 	}
 	if settings.Allocations == nil {
 		settings.Allocations = []knowledgePersonalQuotaAllocation{}
+	}
+	if settings.BatchInitBytes < 0 {
+		return settings, fmt.Errorf("invalid knowledgeQuota.batchInitBytes")
 	}
 	if !settings.Enabled {
 		if settings.TotalBytes < 0 {
@@ -61,6 +66,9 @@ func parseKnowledgePersonalQuota(raw json.RawMessage) (knowledgePersonalQuotaSet
 	}
 	if settings.TotalBytes <= 0 {
 		return settings, fmt.Errorf("knowledgeQuota.totalBytes required when enabled")
+	}
+	if settings.BatchInitBytes > settings.TotalBytes {
+		return settings, fmt.Errorf("knowledgeQuota.batchInitBytes exceeds total")
 	}
 	var allocated int64
 	seen := make(map[int]struct{}, len(settings.Allocations))
