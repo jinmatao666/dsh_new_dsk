@@ -60,12 +60,14 @@ export class ModelDirectoryResolver extends Service {
       scope.effect(() => scope.conversation.input.registerStagedSessionTransfer(async (sessionId) => {
         const selection = this.draft.pendingDraftSelection
         if (selection === null) return
-        const result = await ctx.remote.session.selectModel({ sessionId, ...selection })
+        const result = await ctx.remote.session.selectModel({ sessionId, ...selection, saveAsDefault: false })
         if (!result.ok) throw new Error(result.error.message)
+        this.draft.clearDraftSelection(selection)
       }), 'model draft selection transfer')
     })
     void this.catalog.load().catch(() => { /* selectors expose the shared error */ })
     ctx.on('connection/reset', () => {
+      this.draft.clearDraftSelection()
       this.catalog.resetGeneration()
       for (const directory of this.live.directories.values()) directory.resetConnected()
     })

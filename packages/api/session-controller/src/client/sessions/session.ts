@@ -233,6 +233,7 @@ export class Session implements SessionFace {
           mode,
           content,
           clientTimeZone,
+          rememberModel: true,
         }, signal))
       } else if (this.address.mode === 'one-shot') {
         result = {

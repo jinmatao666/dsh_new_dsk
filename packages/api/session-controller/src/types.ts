@@ -321,6 +321,8 @@ export interface SessionForkValue {
 
 /** Session prompt request. */
 export interface SessionPromptRequest {
+  /** Remember the model for future conversations after an interactive prompt is accepted. */
+  readonly rememberModel?: boolean
   /** Client-minted identity persisted on the exact accepted user message. */
   readonly requestId: SessionRequestId
   readonly sessionId: SessionId

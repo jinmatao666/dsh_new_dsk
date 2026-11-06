@@ -769,6 +769,13 @@ interface PreparedLlmCall {
  */
 declare abstract class LlmAdapter {
   /**
+   * Resolve a saved credential for a draft test, only for its configured endpoint.
+   * @param _provider - registered provider route.
+   * @param _baseURL - proposed endpoint to verify against the saved profile.
+   * @returns the credential to use on the host.
+   */
+  async draftTestCredential(_provider: string, _baseURL: string): Promise<string>;
+  /**
    * Describe one provider route owned by this adapter.
    * @param provider - a route passed to `registerAdapter()` for this instance.
    * @returns detached display metadata whose id must equal `provider`.

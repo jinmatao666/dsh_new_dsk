@@ -73,6 +73,15 @@ beforeEach(() => {
 })
 
 describe('PiAiAdapter provider routing', () => {
+  it('reuses a saved draft-test credential only at the configured endpoint', async () => {
+    const adapter = adapterOf({
+      openai: { apiKeyEnv: 'PI_TEST_KEY', baseURL: 'https://example.test/project/v1' },
+    })
+    await expect(adapter.draftTestCredential('openai', 'https://example.test/project/v1')).resolves.toBe('test-key')
+    await expect(adapter.draftTestCredential('openai', 'https://example.test/other/v1')).rejects.toThrow('different endpoint')
+    await expect(adapter.draftTestCredential('openai', 'https://other.test/project/v1')).rejects.toThrow('different endpoint')
+  })
+
   it('resolves a catalog model dynamically and uses a private endpoint', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = await harness(server.url)

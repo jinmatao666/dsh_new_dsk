@@ -45,7 +45,12 @@ describe('OneAPI login flow', () => {
     const credentials = new Map<string, string>()
     const replace = vi.fn(() => Promise.resolve())
     const mutate = vi.fn(() => Promise.resolve())
-    const saveSelection = vi.fn(() => Promise.resolve())
+    let currentSelection = { provider: currentProvider ?? 'dsh-server', model: 'old' }
+    const saveSelection = vi.fn((next: typeof currentSelection) => {
+      currentSelection = next
+      return Promise.resolve()
+    })
+    let loginUsername = 'tester'
     let handler: Handler | undefined
     const ctx = new Context()
     ctx.provide('launchEnvironment', createLaunchEnvironmentSnapshot([{
@@ -79,7 +84,7 @@ describe('OneAPI login flow', () => {
       watch: (listener: () => void) => { networkListeners.add(listener); return () => networkListeners.delete(listener) },
       update: async ({ mode }: { mode: string }) => { networkMode = mode; for (const listener of networkListeners) listener() },
     }) } as never)
-    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: currentProvider ?? 'dsh-server', model: 'old' }), saveSelection } as never)
+    ctx.provide('agentDefaultModel', { currentSelection: () => currentSelection, saveSelection } as never)
 
     const requests: string[] = []
     let failDownloadReport = false
@@ -123,7 +128,7 @@ describe('OneAPI login flow', () => {
       }
       if (url.endsWith('/api/user/self/phone/bind')) return Promise.resolve(Response.json({ success: true }))
       if (url.endsWith('/api/user/login') || url.endsWith('/api/user/phone/login') || url.endsWith('/api/user/phone/register')) {
-        return Promise.resolve(new Response(JSON.stringify({ success: true, data: { username: 'tester' } }), {
+        return Promise.resolve(new Response(JSON.stringify({ success: true, data: { username: loginUsername } }), {
           status: 200,
           headers: { 'content-type': 'application/json', 'set-cookie': 'session=wanwei-session; Path=/; HttpOnly' },
         }))
@@ -209,6 +214,30 @@ describe('OneAPI login flow', () => {
       expect(saveSelection).toHaveBeenCalledWith({ provider: 'dsh-server', model: 'model-vision' })
     } else {
       expect(saveSelection).not.toHaveBeenCalled()
+    }
+    if (currentProvider === undefined && loginMethod === undefined) {
+      const signal = new AbortController().signal
+      const used = { provider: 'dsh-server', model: 'model-text' }
+      currentSelection = used
+      await handler?.('status', {}, signal)
+      expect(currentSelection).toEqual(used)
+      await handler?.('logout', {}, signal)
+      loginUsername = 'another-user'
+      await handler?.('login', { username: loginUsername, password: 'secret' }, signal)
+      expect(currentSelection).toEqual({ provider: 'dsh-server', model: 'model-vision' })
+      const local = { provider: 'custom-local', model: 'local-model' }
+      currentSelection = local
+      await handler?.('logout', {}, signal)
+      loginUsername = 'tester'
+      await handler?.('login', { username: loginUsername, password: 'secret' }, signal)
+      expect(currentSelection).toEqual(used)
+      await handler?.('logout', {}, signal)
+      loginUsername = 'another-user'
+      await handler?.('login', { username: loginUsername, password: 'secret' }, signal)
+      expect(currentSelection).toEqual(local)
+      await handler?.('logout', {}, signal)
+      loginUsername = 'tester'
+      await handler?.('login', { username: loginUsername, password: 'secret' }, signal)
     }
     requests.length = 0
     for (const catalog of ['empty', 'legacy-empty'] as const) {

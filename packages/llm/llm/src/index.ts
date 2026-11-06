@@ -193,6 +193,16 @@ export interface PreparedAdapterCall {
  */
 export abstract class LlmAdapter {
   /**
+   * Resolve a saved credential for a draft test, only for its configured endpoint.
+   * @param _provider - registered provider route.
+   * @param _baseURL - proposed endpoint to verify against the saved profile.
+   * @returns the credential to use on the host.
+   */
+  async draftTestCredential(_provider: string, _baseURL: string): Promise<string> {
+    throw new Error('This provider does not support testing with a saved API key.')
+  }
+
+  /**
    * Describe one provider route owned by this adapter.
    * @param provider - a route passed to `registerAdapter()` for this instance.
    * @returns detached display metadata whose id must equal `provider`.
@@ -616,16 +626,18 @@ export class LlmRuntime extends TypertRemoteService {
    * @param baseURL - HTTP(S) API base URL, including any deployment prefix.
    * @param api - OpenAI completions/responses or Anthropic messages protocol.
    * @param model - exact request model name.
-   * @param apiKey - optional one-shot credential.
+   * @param apiKey - one-shot credential or a provider whose saved endpoint and credential are reused.
    * @param signal - cancellation supplied by the Remote carrier.
    * @returns resolves when a valid model response is received.
    */
   @Remote('testModel')
   async remoteTestModel(
-    baseURL: string, api: string, model: string, apiKey: string, signal: AbortSignal,
+    baseURL: string, api: string, model: string, apiKey: string | { provider: string }, signal: AbortSignal,
   ): Promise<void> {
     try {
-      await testDraftModel(baseURL, api, model, apiKey, signal)
+      const key = typeof apiKey === 'string' ? apiKey
+        : await this.registration(apiKey.provider).adapter.draftTestCredential(apiKey.provider, baseURL)
+      await testDraftModel(baseURL, api, model, key, signal)
     } catch (error: unknown) {
       throw new TypertRemoteFailure({ code: 'model-test-failed',
         message: error instanceof Error ? error.message : String(error), details: {} })

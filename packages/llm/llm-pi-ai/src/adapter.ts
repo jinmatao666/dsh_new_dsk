@@ -262,6 +262,16 @@ export class PiAiAdapter extends LlmAdapter {
     return resolved
   }
 
+  override async draftTestCredential(provider: string, baseURL: string): Promise<string> {
+    const profile = this.profileOf(this.current(), provider)
+    if (profile.baseURL?.trim() !== baseURL.trim()) {
+      throw new Error('Enter an API key to test a different endpoint.')
+    }
+    const key = await this.config.resolveApiKey(provider, profile)
+    if (key === undefined) throw new Error('This model has no saved API key.')
+    return key
+  }
+
   override providerInfo(provider: string): LlmProviderInfo {
     // The configured name, not the route key: `displayName` exists so a
     // deployment can label a route, and a label only the configuration surface

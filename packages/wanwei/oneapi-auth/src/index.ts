@@ -12,7 +12,7 @@ import { accountSecurityRequest } from './account-security.ts'
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import z from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
@@ -145,9 +145,11 @@ interface ManagedProvider {
     chatTemplateKwargs: { enable_thinking: boolean }
   }
 }
+interface DesktopModelSelection { provider: string; model: string; reasoningEffort?: string }
+
 interface DefaultModelService {
-  currentSelection(): { provider: string; model: string }
-  saveSelection(next: { provider: string; model: string }): Promise<void>
+  currentSelection(): DesktopModelSelection
+  saveSelection(next: DesktopModelSelection): Promise<void>
 }
 interface QuestionReport {
   question?: unknown
@@ -355,6 +357,10 @@ export function apply(ctx: Context, config: Config): void {
   installSearchCitationPolicy(ctx)
   installDesktopLifecycle(ctx)
   const usernameRef = credentialRef('DSH_LOGIN_USERNAME')
+  // The active preference already lives in settings. Park it when another account takes ownership.
+  const modelOwnerRef = credentialRef('DSH_DESKTOP_MODEL_OWNER')
+  const modelPreferenceRef = (owner: string) => credentialRef(`DSH_DESKTOP_MODEL_${owner.toUpperCase()}`)
+  let modelSync = Promise.resolve()
   const installMarkerRef = credentialRef('DSH_DESKTOP_INSTALL_MARKER')
   registerSkillUsage(ctx, baseURL, async () => (await ctx.credentials.resolve(ref))?.value)
   ctx.web.registerSearchProvider(new OneApiSearchProvider({
@@ -363,7 +369,7 @@ export function apply(ctx: Context, config: Config): void {
     resolveToken: async () => (await ctx.credentials.resolve(ref))?.value,
   }))
 
-  const syncProvider = async (models: ManagedModel[], serverDefaultModel?: string): Promise<void> => {
+  const syncProvider = async (models: ManagedModel[]): Promise<void> => {
     const firstModel = models[0]?.id
     if (firstModel === undefined) {
       // Remove only the managed route; an empty catalog is not a valid provider.
@@ -400,16 +406,61 @@ export function apply(ctx: Context, config: Config): void {
     await ctx.settings.mutate(LLM_SETTINGS, [
       { op: 'set', path: ['providers', config.provider], value: managed },
     ])
-    const configuredDefault = serverDefaultModel ?? config.defaultModel
-    const model = configuredDefault !== undefined && models.some(entry => entry.id === configuredDefault)
-      ? configuredDefault
-      : firstModel
-    const defaultModel = ctx.get('agentDefaultModel') as DefaultModelService | undefined
-    if (defaultModel === undefined) throw new Error('默认模型服务不可用')
-    // Keep a selected local route; replace only the base or managed default.
-    if ([config.provider, 'deepseek-official'].includes(defaultModel.currentSelection().provider)) {
-      await defaultModel.saveSelection({ provider: config.provider, model })
-    }
+  }
+
+  const syncAccountModels = (
+    models: ManagedModel[], serverDefaultModel: string | undefined, username: string | undefined,
+  ): Promise<void> => {
+    const next = modelSync.then(async () => {
+      await syncProvider(models)
+      const defaults = ctx.get('agentDefaultModel') as DefaultModelService | undefined
+      if (defaults === undefined) throw new Error('默认模型服务不可用')
+      const current = defaults.currentSelection()
+      const owner = username === undefined ? undefined
+        : createHash('sha256').update(JSON.stringify([baseURL, username])).digest('hex')
+      const previous = owner === undefined ? undefined : (await ctx.credentials.resolve(modelOwnerRef))?.value
+      const switched = previous !== undefined && previous !== owner
+      let preferred: DesktopModelSelection | undefined = current
+      if (switched && owner !== undefined) {
+        if (/^[a-f0-9]{64}$/.test(previous)) {
+          await ctx.credentials.set(modelPreferenceRef(previous), JSON.stringify(current))
+        }
+        preferred = undefined
+        const stored = await ctx.credentials.resolve(modelPreferenceRef(owner))
+        if (stored !== undefined) {
+          try {
+            const value = JSON.parse(stored.value) as Partial<DesktopModelSelection> | null
+            if (value !== null && typeof value.provider === 'string' && typeof value.model === 'string') {
+              preferred = { provider: value.provider, model: value.model,
+                ...typeof value.reasoningEffort === 'string' ? { reasoningEffort: value.reasoningEffort } : {} }
+            }
+          } catch { /* An invalid saved preference falls back to the current catalog. */ }
+        }
+      }
+
+      let available = false
+      if (preferred !== undefined) {
+        if (preferred.provider === config.provider) {
+          available = models.some(model => model.id === preferred?.model)
+        } else if (preferred.provider !== 'deepseek-official') {
+          const llm = ctx.get('llm')
+          available = llm === undefined || await llm.resolveModelInfo(preferred.provider, preferred.model)
+            .then(() => true, () => false)
+        }
+      }
+      const configuredDefault = serverDefaultModel ?? config.defaultModel
+      const fallback = models.find(entry => entry.id === configuredDefault)?.id ?? models[0]?.id
+      const selected = available ? preferred
+        : fallback !== undefined ? { provider: config.provider, model: fallback }
+          : switched ? { provider: config.provider, model: config.defaultModel ?? 'unconfigured' } : undefined
+      if (selected !== undefined && (selected.provider !== current.provider
+        || selected.model !== current.model || selected.reasoningEffort !== current.reasoningEffort)) {
+        await defaults.saveSelection(selected)
+      }
+      if (owner !== undefined && owner !== previous) await ctx.credentials.set(modelOwnerRef, owner)
+    })
+    modelSync = next.catch(() => {})
+    return next
   }
 
   const clearLocalAuth = async (): Promise<void> => {
@@ -570,7 +621,7 @@ export function apply(ctx: Context, config: Config): void {
         fetchManagedModels(baseURL, resolved.value, config.defaultInput ?? ['text'], signal),
         fetchServerDefaultModel(baseURL, signal),
       ])
-      await syncProvider(models, serverDefaultModel)
+      await syncAccountModels(models, serverDefaultModel, username)
       const ids = models.map(model => model.id)
       return username === undefined ? { state: 'authenticated', models: ids } : { state: 'authenticated', models: ids, username }
     } catch (error) {
@@ -602,7 +653,7 @@ export function apply(ctx: Context, config: Config): void {
     await ctx.credentials.set(ref, token)
     await ctx.credentials.set(usernameRef, username)
     try {
-      await syncProvider(models, serverDefaultModel)
+      await syncAccountModels(models, serverDefaultModel, username)
     } catch (error) {
       await ctx.credentials.unset(ref)
       throw error
@@ -625,7 +676,7 @@ export function apply(ctx: Context, config: Config): void {
       const cookie = sessionCookie(response.headers)
       if (cookie === undefined) return internal('登录成功，但服务器没有返回会话 Cookie')
 
-      return await establishSession(cookie, input.username, signal)
+      return await establishSession(cookie, loginResult.data?.username || input.username, signal)
     } catch (error) {
       return internal(error instanceof Error ? error.message : String(error))
     }

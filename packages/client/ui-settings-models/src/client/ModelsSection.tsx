@@ -340,7 +340,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
     const namespace = state.namespaces.get(target.settingsNs)
     /* v8 ignore next -- the join marks a row configured only when its namespace resolved */
     if (namespace === undefined) return null
-    if (row.entry.provider !== managedProvider && needsSetup(row, anyUsable) && !dismissedSetup.has(row.entry.provider)) {
+    if (!customOnly && row.entry.provider !== managedProvider && needsSetup(row, anyUsable) && !dismissedSetup.has(row.entry.provider)) {
       // First-run posture: the provider exists but has no key — the
       // setup card IS its presence on the page, until the user closes it.
       return (
@@ -362,6 +362,10 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
         </li>
       )
     }
+    const profile = schema.getPath(namespace.value, target.settingsPath)
+    const customProfile = target.settingsNs === 'llm-pi-ai'
+      && typeof profile === 'object' && profile !== null && !Array.isArray(profile)
+      ? profile as Record<string, unknown> : undefined
     const open = !adding && editing?.provider === row.entry.provider
     const credentialConfigured = row.credential?.configured === true
     const credentialMissing = !credentialConfigured
@@ -459,10 +463,18 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
             onClose: (changed) => { closeEditor(changed, target) },
           })
           : null}
-        {open && customOnly && <Modal open onClose={() => { setEditing(undefined) }} title={target.displayName}
+        {open && customOnly && <Modal open onClose={() => { setEditing(undefined) }} title={customProfile === undefined ? target.displayName : t('customEditModel')}
           closeLabel={t('close')} className={styles['customDialog'] as string}>
-          {renderProviderEditor({ target, namespace, schema, api, t, readOnly: !state.writable,
-            onClose: (changed) => { closeEditor(changed, target) } })}
+          {customProfile === undefined
+            ? renderProviderEditor({ target, namespace, schema, api, t, readOnly: !state.writable,
+              onClose: (changed) => { closeEditor(changed, target) } })
+            : <CustomProviderCard key={target.provider} automaticRoute taken={[]} protocols={protocols}
+              existing={{
+                route: target.provider, profile: customProfile,
+                keyConfigured: row.apiKeyEnv !== undefined && row.credential?.configured === true,
+              }}
+              revision={namespace.revision} api={api} t={t} readOnly={!state.writable}
+              onClose={(changed) => { closeEditor(changed, target) }} />}
         </Modal>}
       </li>
     )

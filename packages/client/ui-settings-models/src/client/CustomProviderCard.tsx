@@ -28,7 +28,7 @@ import type { JsonValue } from '@deepseek-ai/dsh-api-remotes/client'
 import { Modal, Select } from '@deepseek-ai/dsh-client-ui-primitives'
 import { apiKeyFailure } from './apiKey.ts'
 import { EditorFooter } from './EditorFooter.tsx'
-import { validateDeepSeekModels } from './DeepSeekModelsEditor.tsx'
+import { modelDrafts, validateDeepSeekModels } from './DeepSeekModelsEditor.tsx'
 import { ModelListEditor } from './ModelListEditor.tsx'
 import type { ModelDraft } from './ModelListEditor.tsx'
 import { deriveKeyRef, messageOf } from './store.ts'
@@ -53,6 +53,8 @@ const ROUTE_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
 export interface CustomProviderCardProps {
   /** Generate a stable internal route and omit provider identity fields from the form. */
   automaticRoute?: boolean
+  /** Saved profile and route when editing. Secrets never enter this snapshot. */
+  existing?: { route: string; profile: Record<string, unknown>; keyConfigured: boolean }
   /** Route ids already declared, so the card refuses to shadow one. */
   taken: readonly string[]
   /** Wire protocols the adapter can serve, in the order it reports them. */
@@ -79,15 +81,21 @@ export interface CustomProviderCardProps {
  * @returns the creation card.
  */
 export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
-  const { taken, protocols, api, t } = props
+  const { taken, protocols, api, t, existing } = props
+  const savedURL = typeof existing?.profile.baseURL === 'string' ? existing.profile.baseURL : ''
+  const savedRef = typeof existing?.profile.apiKeyEnv === 'string' ? existing.profile.apiKeyEnv : undefined
   // The write is checked against the revision on which this draft was opened.
   const [openedAt] = useState(() => props.revision)
-  const [route, setRoute] = useState(() => props.automaticRoute ? `custom-${randomUUID()}` : '')
+  const [route, setRoute] = useState(() => existing?.route ?? (props.automaticRoute ? `custom-${randomUUID()}` : ''))
   const [displayName, setDisplayName] = useState(() => props.automaticRoute ? t('customGroup') : '')
-  const [baseURL, setBaseURL] = useState('')
-  const [protocol, setProtocol] = useState(protocols.includes('openai-completions') ? 'openai-completions' : protocols[0] ?? '')
+  const [baseURL, setBaseURL] = useState(savedURL)
+  const [protocol, setProtocol] = useState(() => typeof existing?.profile.api === 'string' ? existing.profile.api :
+    protocols.includes('openai-completions') ? 'openai-completions' : protocols[0] ?? '')
+  const [replacementRef] = useState(() => existing === undefined ? undefined : deriveKeyRef(`${existing.route}-${randomUUID()}`))
   const [keyDraft, setKeyDraft] = useState('')
-  const [models, setModels] = useState<readonly ModelDraft[]>(props.automaticRoute ? [{ id: '' }] : [])
+  const [models, setModels] = useState<readonly ModelDraft[]>(() => existing === undefined
+    ? props.automaticRoute ? [{ id: '' }] : []
+    : modelDrafts(existing.profile.models))
   const [testing, setTesting] = useState(false)
   const [testDialogOpen, setTestDialogOpen] = useState(false)
   const [testedDraft, setTestedDraft] = useState<string | undefined>()
@@ -117,7 +125,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   }, [testDialogOpen, testing])
 
   const routeInvalid = route.length > 0 && !ROUTE_PATTERN.test(route)
-  const routeTaken = taken.includes(route)
+  const routeTaken = existing === undefined && taken.includes(route)
   // Rows are checked by the same per-row validator the editor cards use, so a
   // bad row is named by its position here too. Capacities have route-level
   // fallbacks; what a route cannot default is at least one model.
@@ -127,7 +135,8 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   // string, which the create path reads as "no key supplied" — a route may
   // legitimately authenticate through the provider's own ambient discovery.
   const keyValue = keyDraft.trim()
-  const ready = route.length > 0 && !routeInvalid && !routeTaken
+  const needsNewKey = existing?.keyConfigured === true && baseURL.trim() !== savedURL.trim() && keyValue === ''
+  const ready = !needsNewKey && route.length > 0 && !routeInvalid && !routeTaken
     && baseURL.length > 0 && models.length > 0 && modelFailure === undefined
     && keyFailure === undefined
   const draftSignature = JSON.stringify([baseURL, protocol, models, keyValue])
@@ -135,7 +144,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   const canSave = testPassed
   // The one blocked gate worth a line under the form. A satisfied card says
   // nothing at all rather than printing an empty paragraph.
-  const hint = failure !== undefined || ready
+  const hint = failure !== undefined || ready || needsNewKey
     // The key field prints its own failure directly beneath itself, so a card
     // blocked only by the key stays silent here rather than answering with the
     // next unmet gate — which is satisfied, and reads as a second, false fault.
@@ -153,11 +162,19 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
 
   /** Perform the create, returning a failure message or undefined. */
   const createOnce = async (): Promise<string | undefined> => {
-    const keyRef = deriveKeyRef(route)
+    const newEndpoint = existing !== undefined && baseURL.trim() !== savedURL.trim()
+    const keyRef = (newEndpoint ? replacementRef : savedRef) ?? deriveKeyRef(route)
     const storesKey = keyValue.length > 0
+    // Stage a fresh credential before publishing a different endpoint. A
+    // failed write must never leave the old credential attached to that URL.
+    if (newEndpoint && storesKey) {
+      const stored = await api.credentials.set(keyRef, keyValue)
+      if (!stored.ok) return stored.error.message
+    }
     if (!committed) {
       const profile = {
-        ...displayName.length === 0 ? {} : { displayName },
+        ...existing?.profile,
+        ...existing !== undefined || displayName.length === 0 ? {} : { displayName },
         // The profile names the conventional reference only when this card is
         // about to store a key, matching the editor: a route declared with the
         // key left blank keeps its provider-native auth path (a credential
@@ -175,14 +192,17 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
         [{ op: 'set', path: ['providers', route], value: profile as JsonValue }],
         openedAt,
       )
-      if (!response.ok) return response.error.message
+      if (!response.ok) {
+        if (newEndpoint && storesKey) await api.credentials.unset(keyRef)
+        return response.error.message
+      }
       // The provider now exists. A retry after the key write below fails must
       // not re-run this mutate: the revision it holds is the one this write
       // just superseded, so the Host would answer `settings-conflict` and the
       // key could never be stored from this card at all.
       setCommitted(true)
     }
-    if (storesKey) {
+    if (storesKey && !newEndpoint) {
       const stored = await api.credentials.set(keyRef, keyValue)
       // The profile landed; saying the key did not is the only honest report,
       // and the retry above now goes straight back to this write.
@@ -218,7 +238,8 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
     setTestResult(undefined)
     try {
       for (const model of models) {
-        const result = await api.llm.testModel(baseURL.trim(), protocol, String(model.id ?? '').trim(), keyValue)
+        const result = await api.llm.testModel(baseURL.trim(), protocol, String(model.id ?? '').trim(),
+          keyValue === '' && existing?.keyConfigured === true ? { provider: existing.route } : keyValue)
         if (!result.ok) { setTestResult(result.error.message); return }
       }
       setTestedDraft(draftSignature)
@@ -299,7 +320,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
             type="password"
             autoComplete="off"
             value={keyDraft}
-            placeholder={t('keyPlaceholder')}
+            placeholder={t(existing?.keyConfigured === true && !needsNewKey ? 'keyStored' : 'keyPlaceholder')}
             aria-label={t('keyInput')}
             disabled={disabled}
             onChange={(event) => { setKeyDraft(event.target.value); setTestResult(undefined); setTestDialogOpen(false) }}
@@ -307,6 +328,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
           {/* A create card has no stored key to keep, so the blank case says
             what a blank field means here instead: this route may authenticate
             through the provider's own ambient discovery or OAuth. */}
+          {needsNewKey && <p className={styles['advancedHint']}>{t('newEndpointKey')}</p>}
           {keyFailure === undefined
             ? null
             : <p className={styles['error']}>{t(keyFailure === 'keyBlank' ? 'keyBlankNew' : keyFailure)}</p>}

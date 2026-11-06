@@ -309,6 +309,7 @@ export class SessionCommandController {
     }
     const hasImage = request.content.some(part => part.type === 'image')
     const admit = async (): Promise<SessionPromptValue> => {
+      let used = selection
       try {
         if (hasImage) {
           const current = this.agents.selectionFor(agent).current
@@ -323,6 +324,7 @@ export class SessionCommandController {
         }
         const content = await durablePromptContent(this.ctx, request.content)
         const message: UserMessage = createUserMessage({ content, source })
+        used = this.agents.selectionFor(agent).current
         if (request.mode === 'steer') agent.steer(message)
         else agent.followup(message)
       } catch (error) {
@@ -331,6 +333,18 @@ export class SessionCommandController {
           reject('attachment-error', error.message, { reason: error.code })
         }
         reject('agent-busy', 'prompt rejected', { reason: String(error) })
+      }
+      if (request.rememberModel === true) {
+        const defaults = this.ctx.agentDefaultModel
+        const current = defaults.currentSelection()
+        if (current.provider !== used.provider || current.model !== used.model
+          || current.reasoningEffort !== used.reasoningEffort) {
+          try {
+            await defaults.saveSelection(used)
+          } catch (error) {
+            this.ctx.logger.warn(`session-controller: accepted prompt but could not remember its model: ${String(error)}`)
+          }
+        }
       }
       return { accepted: true }
     }

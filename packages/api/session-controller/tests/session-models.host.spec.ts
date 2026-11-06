@@ -188,6 +188,31 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
+  it('remembers the model of an accepted interactive prompt, not a background or rejected prompt', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    const followup = vi.fn()
+    Object.assign(agent, { followup })
+    const saveDefaultModelSelection = vi.fn()
+    const remote = createSessionTestRemote(ctx, {
+      cwd: '/tmp', defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      saveDefaultModelSelection,
+    })
+    expectValue(await remote.selectModel({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-reasoner', saveAsDefault: false,
+    }))
+    const prompt = { sessionId, mode: 'queue' as const, content: [{ type: 'text' as const, text: 'hello' }] }
+    expectValue(await remote.prompt(promptRequest(prompt)))
+    expect(saveDefaultModelSelection).not.toHaveBeenCalled()
+    followup.mockImplementationOnce(() => { throw new Error('busy') })
+    expect(await remote.prompt(promptRequest({ ...prompt, rememberModel: true }))).toMatchObject({ ok: false })
+    expect(saveDefaultModelSelection).not.toHaveBeenCalled()
+    expectValue(await remote.prompt(promptRequest({ ...prompt, rememberModel: true })))
+    expect(saveDefaultModelSelection).toHaveBeenCalledWith({
+      provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'high',
+    })
+    await ctx.fiber.dispose()
+  })
+
   it('validates an ordered image batch before persisting any member', async () => {
     const { ctx, agent, sessionId } = await harness()
     const validateImage = vi.fn((_input: { data: Uint8Array }) => Promise.resolve())

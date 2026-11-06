@@ -729,6 +729,33 @@ describe('hand-declared providers', () => {
     expect(screen.queryByRole('status')).toBeNull()
     expect(buttonNamed(en.apply).disabled).toBe(true)
   })
+  it('prefills an existing model and requires a new test before writing to the same route', async () => {
+    const { face, mutate, set, onClose } = mountCard({
+      automaticRoute: true,
+      existing: { route: 'custom-saved', keyConfigured: true, profile: {
+        baseURL: 'https://gateway.example/v1', api: 'openai-completions',
+        apiKeyEnv: 'CUSTOM_SAVED_API_KEY', models: [{ id: 'old-model', contextWindow: 65536 }],
+      } },
+    })
+    expect(screen.getByLabelText(`${en.modelId} 1`)).toHaveProperty('value', 'old-model')
+    expect(screen.getByLabelText(en.keyInput)).toHaveProperty('value', '')
+    expect(buttonNamed(en.apply).disabled).toBe(true)
+    await testCurrentDraft()
+    fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'new-model' } })
+    expect(buttonNamed(en.apply).disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText(en.baseUrl), { target: { value: 'https://other.example/v1' } })
+    expect(buttonNamed(en.testModel).disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText(en.baseUrl), { target: { value: 'https://gateway.example/v1' } })
+    await testCurrentDraft()
+    expect(face.llm.testModel).toHaveBeenLastCalledWith('https://gateway.example/v1', 'openai-completions',
+      'new-model', { provider: 'custom-saved' })
+    fireEvent.click(screen.getByText(en.apply))
+    await waitFor(() => { expect(onClose).toHaveBeenCalledWith(true) })
+    expect(set).not.toHaveBeenCalled()
+    expect(firstMutate(mutate).ops[0]).toMatchObject({ path: ['providers', 'custom-saved'], value: {
+      apiKeyEnv: 'CUSTOM_SAVED_API_KEY', models: [{ id: 'new-model', contextWindow: 65536 }],
+    } })
+  })
   it('keeps saving disabled after a rejected test', async () => {
     const { face, mutate } = mountCard({ automaticRoute: true })
     face.llm.testModel.mockResolvedValueOnce(remoteFail('HTTP 401'))

@@ -100,6 +100,7 @@ export class ModelDirectory {
       sessionId: this.sessionId,
       provider: selection.provider,
       model: selection.model,
+      saveAsDefault: false,
       ...selection.reasoningEffort === undefined
         ? {}
         : { reasoningEffort: selection.reasoningEffort },
@@ -113,6 +114,16 @@ export class ModelDirectory {
       throw new Error(`session.selectModel failed: ${result.error.code}: ${result.error.message}`)
     }
     this.store.update((s) => { s.status = 'ready'; s.error = null })
+    this.syncInputs()
+  }
+
+  /**
+   * Clear the staged model after it transfers to a Session or the connection resets.
+   * @param expected - staged object captured before transfer; preserve a newer pick.
+   */
+  clearDraftSelection(expected: ModelSelection | null = this.pendingDraftSelection): void {
+    if (this.pendingDraftSelection !== expected) return
+    this.pendingDraftSelection = null
     this.syncInputs()
   }
 
