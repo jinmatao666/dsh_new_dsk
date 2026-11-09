@@ -10,7 +10,7 @@ afterEach(async () => {
 })
 
 function api() {
-  const service = new KnowledgeBaseApi('http://backend.test', async () => 'private-token', 60000)
+  const service = new KnowledgeBaseApi('http://backend.test', async () => 'private-token', 60000, { transcriptionModel: 'asr', chatModel: 'chat' })
   active.push(service)
   return service
 }
@@ -67,13 +67,13 @@ it('rejects out-of-order chunks and can begin a new upload after abort or forwar
 })
 
 it('does not reserve temporary storage for an unauthenticated caller', async () => {
-  const service = new KnowledgeBaseApi('http://backend.test', async () => undefined, 60000)
+  const service = new KnowledgeBaseApi('http://backend.test', async () => undefined, 60000, { transcriptionModel: 'asr', chatModel: 'chat' })
   active.push(service)
   await expect(service.call('upload-begin', { id: 1, name: 'a.mdb', size: 1 }, new AbortController().signal)).rejects.toThrow('登录')
 })
 
 it('expires an idle upload without disabling subsequent uploads', async () => {
-  const service = new KnowledgeBaseApi('http://backend.test', async () => 'token', 10)
+  const service = new KnowledgeBaseApi('http://backend.test', async () => 'token', 10, { transcriptionModel: 'asr', chatModel: 'chat' })
   active.push(service)
   const call = (operation: string, payload: unknown) => service.call(operation, payload, new AbortController().signal)
   const started = await call('upload-begin', { id: 1, name: 'a.mdb', size: 1 })

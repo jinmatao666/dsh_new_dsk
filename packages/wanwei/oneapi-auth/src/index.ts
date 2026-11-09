@@ -22,6 +22,7 @@ import type {} from '@deepseek-ai/dsh-web'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type { AuthState } from './contract.ts'
 import { launchExpertWebsite, listPublishedExperts } from './expert-catalog.ts'
+import { launchLandMarket } from './portal-land-market.ts'
 import { installSearchCitationPolicy, OneApiSearchProvider } from './search-provider.ts'
 import { registerSkillUsage } from './usage.ts'
 import { installNetworkPolicy } from './network.ts'
@@ -61,6 +62,8 @@ export interface Config {
   tokenName: string
   /** Optional preferred default model id. */
   defaultModel?: string
+  /** Transcription model for desktop knowledge 录音纪要 (OneAPI `/v1/audio/transcriptions`). */
+  knowledgeTranscriptionModel?: string
   /**
    * Input modalities advertised for models returned by OneAPI.
    *
@@ -96,6 +99,7 @@ export const Config: z<Config> = z.object({
   credentialRef: z.string().default('DSH_ONEAPI_TOKEN'),
   tokenName: z.string().default('DSH Desktop Auto Token'),
   defaultModel: z.string(),
+  knowledgeTranscriptionModel: z.string().default('Qwen3-ASR-1.7B'),
   defaultInput: z.array(z.union(['text', 'image'] as const)).default(['text']),
   installId: z.string(),
   developmentBypass: z.boolean().default(false),
@@ -687,8 +691,15 @@ export function apply(ctx: Context, config: Config): void {
 
   const connection = ctx.get('connection')
   if (connection === undefined) throw new Error('桌面认证需要 Connection 服务')
-  const knowledgeBases = new KnowledgeBaseApi(baseURL, async () => (await ctx.credentials.resolve(ref))?.value,
-    config.knowledgeUploadIdleTimeoutMs ?? 900000)
+  const knowledgeBases = new KnowledgeBaseApi(
+    baseURL,
+    async () => (await ctx.credentials.resolve(ref))?.value,
+    config.knowledgeUploadIdleTimeoutMs ?? 900000,
+    {
+      transcriptionModel: config.knowledgeTranscriptionModel ?? 'Qwen3-ASR-1.7B',
+      chatModel: config.defaultModel ?? '',
+    },
+  )
   installKnowledgeRetrieval(ctx, knowledgeBases, {
     pageSize: config.knowledgeRetrievalPageSize ?? 8,
     similarityThreshold: config.knowledgeRetrievalSimilarityThreshold ?? 0.2,
@@ -708,6 +719,11 @@ export function apply(ctx: Context, config: Config): void {
     path: '/api/desktop-knowledge-file',
     methods: ['GET'],
     fetch: request => knowledgeBases.streamFile(request),
+  })
+  const removeKnowledgeRecording = connection.fetch.register({
+    path: '/api/desktop-knowledge-recording-minutes',
+    methods: ['POST'],
+    fetch: request => knowledgeBases.importRecordingMinutes(request),
   })
   const remove = connection.rpc.handle('/desktop-auth', async (endpoint, payload, signal) => {
     const serviceSignal = () => AbortSignal.any([signal, AbortSignal.timeout(config.serviceTimeoutMs ?? 15000)])
@@ -827,6 +843,15 @@ export function apply(ctx: Context, config: Config): void {
         return internal(error instanceof Error ? error.message : String(error))
       }
     }
+    if (endpoint === 'land-market-launch') {
+      try {
+        const token = (await ctx.credentials.resolve(ref))?.value
+        if (token === undefined) throw new Error('请先登录后再打开土地市场')
+        return { ok: true as const, value: await launchLandMarket(baseURL, token, serviceSignal()) }
+      } catch (error) {
+        return internal(error instanceof Error ? error.message : String(error))
+      }
+    }
     if (endpoint === 'skill-list') {
       try {
         return { ok: true as const, value: await listPublishedSkills(signal) }
@@ -899,7 +924,8 @@ export function apply(ctx: Context, config: Config): void {
   })
   ctx.effect(() => async () => {
     await Promise.all([
-      remove(), removeKnowledgeBases(), removeKnowledgeChat(), removeKnowledgeFile(), knowledgeBases.dispose(),
+      remove(), removeKnowledgeBases(), removeKnowledgeChat(), removeKnowledgeFile(),
+      removeKnowledgeRecording(), knowledgeBases.dispose(),
     ])
   }, 'ui-oneapi-auth: loopback RPC')
 }

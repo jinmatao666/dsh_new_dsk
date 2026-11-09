@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -74,9 +75,10 @@ type knowledgeBaseDesktopItem struct {
 }
 
 // ListKnowledgeBases returns desktop sidebar libraries: grant-scoped for everyone.
-// Root also receives every uncategorized personal library. Category libraries still require
-// ownership or a grant (or a public common category) so they do not appear without approval.
-// Full workbench catalog stays on /api/knowledge-admin/bases (root only).
+// Uncategorized personal libraries are owner-only for every role, including root;
+// administrators browse other users' personal libraries only on the workbench catalog
+// (/api/knowledge-admin/bases). Category libraries still require ownership or a grant
+// (or a public common category) so they do not appear without approval.
 func ListKnowledgeBases(c *gin.Context) {
 	userId := c.GetInt("id")
 	rows, err := model.ListAuthorizedKnowledgeBases(userId)
@@ -84,14 +86,6 @@ func ListKnowledgeBases(c *gin.Context) {
 		logger.Errorf(c.Request.Context(), "list authorized knowledge bases: %s", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
 		return
-	}
-	if knowledgeAdmin(c) {
-		rows, err = model.MergeAdminPersonalKnowledgeBases(rows)
-		if err != nil {
-			logger.Errorf(c.Request.Context(), "list admin personal knowledge bases: %s", err.Error())
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
-			return
-		}
 	}
 	granted, err := model.KnowledgeBaseGrantIDs(userId)
 	if err != nil {
@@ -533,6 +527,99 @@ func UploadKnowledgeDocument(c *gin.Context) {
 	uploadKnowledgeDocument(c, row)
 }
 
+type importKnowledgeWebLinksInput struct {
+	URLs []string `json:"urls"`
+}
+
+const maxKnowledgeWebLinks = 10
+
+// ImportKnowledgeWebLinks crawls up to ten public http(s) pages into an uncategorized personal library.
+func ImportKnowledgeWebLinks(c *gin.Context) {
+	row, ok := authorizedKnowledgeBase(c)
+	if !ok {
+		return
+	}
+	if row.Kind != model.KnowledgeBasePersonal || row.CategoryId != 0 {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "仅个人知识库支持导入网页链接"})
+		return
+	}
+	var input importKnowledgeWebLinksInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请求参数无效"})
+		return
+	}
+	urls, err := normalizeKnowledgeWebLinks(input.URLs)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	client, ok := knowledgeClient(c)
+	if !ok {
+		return
+	}
+	uploaded := make([]ragflow.Document, 0, len(urls))
+	for _, pageURL := range urls {
+		documents, uploadErr := client.UploadWebDocument(c.Request.Context(), row.RagflowDatasetId,
+			ragflow.WebDocumentName(pageURL), pageURL)
+		if uploadErr != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": uploadErr.Error()})
+			return
+		}
+		for index := range documents {
+			if documents[index].Id == "" {
+				continue
+			}
+			if saveErr := model.SaveKnowledgeDocumentCreator(row.Id, documents[index].Id, c.GetInt("id")); saveErr != nil {
+				logger.Errorf(c.Request.Context(), "save knowledge web document creator: %s", saveErr.Error())
+			}
+			uploaded = append(uploaded, documents[index])
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": uploaded})
+	startKnowledgeDocumentParse(client, row.RagflowDatasetId, knowledgeDocumentIDs(uploaded))
+}
+
+func normalizeKnowledgeWebLinks(raw []string) ([]string, error) {
+	if len(raw) == 0 {
+		return nil, errors.New("请输入网页链接")
+	}
+	if len(raw) > maxKnowledgeWebLinks {
+		return nil, errors.New("一次最多导入 10 条链接")
+	}
+	seen := make(map[string]struct{}, len(raw))
+	urls := make([]string, 0, len(raw))
+	for _, item := range raw {
+		normalized, err := validateKnowledgeWebLink(item)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := seen[normalized]; exists {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		urls = append(urls, normalized)
+	}
+	if len(urls) == 0 {
+		return nil, errors.New("请输入网页链接")
+	}
+	return urls, nil
+}
+
+func validateKnowledgeWebLink(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	parsed, err := url.Parse(trimmed)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+		return "", fmt.Errorf("链接格式无效：%s", strings.TrimSpace(raw))
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" || strings.HasSuffix(host, ".localhost") ||
+		strings.HasSuffix(host, ".local") {
+		return "", errors.New("不支持本机或内网链接")
+	}
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
 // ListKnowledgeDocumentChunks returns parsed text for the desktop document viewer.
 func ListKnowledgeDocumentChunks(c *gin.Context) {
 	documentId, ok := managedDocumentID(c)
@@ -826,6 +913,7 @@ func writeKnowledgeDocuments(c *gin.Context, row *model.KnowledgeBase, includeSu
 	}
 	applyKnowledgeDocumentPaths(row.Id, documents)
 	applyKnowledgeDocumentCreators(c.Request.Context(), row.Id, c.GetInt("id"), documents)
+	applyKnowledgeAudioPlaybackStatus(documents)
 	if !includeSummary {
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": documents})
 		return
@@ -937,7 +1025,36 @@ func uploadKnowledgeDocument(c *gin.Context, row *model.KnowledgeBase) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": documents})
-	startKnowledgeDocumentParse(client, row.RagflowDatasetId, knowledgeDocumentIDs(documents))
+	// Audio is kept for playback; RAGFlow chunking fails or is unsupported for these types.
+	if !isKnowledgeAudioFilename(header.Filename) {
+		startKnowledgeDocumentParse(client, row.RagflowDatasetId, knowledgeDocumentIDs(documents))
+	}
+}
+
+func isKnowledgeAudioFilename(name string) bool {
+	ext := strings.ToLower(path.Ext(name))
+	switch ext {
+	case ".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".webm", ".mp4":
+		return true
+	default:
+		return false
+	}
+}
+
+// applyKnowledgeAudioPlaybackStatus treats audio as playback-ready. RAGFlow chunking is
+// skipped on upload; list responses must not surface FAIL/UNSTART as parse failures.
+func applyKnowledgeAudioPlaybackStatus(documents []ragflow.Document) {
+	for index := range documents {
+		name := documents[index].Name
+		if documents[index].Location != "" {
+			name = documents[index].Location
+		}
+		if !isKnowledgeAudioFilename(name) {
+			continue
+		}
+		documents[index].Run = "DONE"
+		documents[index].Progress = 1
+	}
 }
 
 func knowledgeDocumentIDs(documents []ragflow.Document) []string {

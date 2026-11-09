@@ -210,6 +210,7 @@ func SetApiRouter(router *gin.Engine) {
 			knowledgeRoute.DELETE("/:id/subscribe", controller.UnsubscribeKnowledgeBase)
 			knowledgeRoute.GET("/:id/documents", controller.ListKnowledgeDocuments)
 			knowledgeRoute.POST("/:id/documents", controller.UploadKnowledgeDocument)
+			knowledgeRoute.POST("/:id/web-links", controller.ImportKnowledgeWebLinks)
 			knowledgeRoute.DELETE("/:id/documents/:documentId", controller.DeleteKnowledgeDocument)
 			knowledgeRoute.POST("/:id/documents/:documentId/copy", controller.CopyKnowledgeDocument)
 			knowledgeRoute.POST("/:id/documents/:documentId/move", controller.MoveKnowledgeDocument)
@@ -510,6 +511,17 @@ func SetApiRouter(router *gin.Engine) {
 				expertWebAdminRoute.DELETE("/:key", controller.AdminDeleteExpertWebsite)
 				expertWebAdminRoute.PUT("/:key/publish", controller.AdminPublishExpertWebsite)
 				expertWebAdminRoute.POST("/:key/credential", controller.AdminRotateExpertWebCredential)
+			}
+		}
+		portalLandMarketRoute := apiRouter.Group("/portal/land-market")
+		{
+			portalLandMarketRoute.POST("/redeem", controller.RedeemLandMarketTicket)
+			portalLandMarketRoute.POST("/launch", middleware.UserAuth(), controller.LaunchLandMarket)
+			portalLandMarketAdmin := portalLandMarketRoute.Group("/admin")
+			portalLandMarketAdmin.Use(middleware.AdminAuth())
+			{
+				portalLandMarketAdmin.GET("/credential", controller.GetLandMarketCredentialStatus)
+				portalLandMarketAdmin.POST("/credential", controller.RotateLandMarketCredential)
 			}
 		}
 		expertRoute := apiRouter.Group("/expert")

@@ -46,11 +46,40 @@ export function libraryIsGrantedSubscription(item: KnowledgeBaseItem, selfUserId
 }
 
 /**
- * Nav: 个人知识库 and 订阅知识库 are always present (empty groups stay visible). 公共知识库
- * merges every open category plus uncategorized common libraries and appears only when
- * non-empty. 订阅知识库 holds only grant-backed subscriptions (not self-built auth libraries).
- * Auth category names never appear as sidebar groups; self-built and discoverable auth
- * libraries appear in 知识库广场 (owned cards sort last with status 我的).
+ * Whether the selected library is an uncategorized personal row under 个人知识库.
+ * Desktop write actions (upload, file delete) are scoped to this group only;
+ * 公共知识库 and 订阅知识库 stay read-only.
+ * @param item - Currently selected library, if any.
+ */
+export function libraryIsDesktopPersonal(item: KnowledgeBaseItem | undefined): boolean {
+  if (item === undefined) return false
+  return item.kind === 'personal' && (item.category_id ?? 0) === 0
+}
+
+/**
+ * Whether the desktop content toolbar may show upload for this library.
+ * @param item - Currently selected library, if any.
+ */
+export function libraryAllowsDesktopUpload(item: KnowledgeBaseItem | undefined): boolean {
+  return libraryIsDesktopPersonal(item)
+}
+
+/**
+ * Whether the desktop file context menu may offer delete for this library.
+ * Personal keeps delete only; public and subscription offer no file actions.
+ * @param item - Currently selected library, if any.
+ */
+export function libraryAllowsDesktopFileDelete(item: KnowledgeBaseItem | undefined): boolean {
+  return libraryIsDesktopPersonal(item)
+}
+
+/**
+ * Nav: 个人知识库 and 订阅知识库 are always present (empty groups stay visible). 个人知识库
+ * lists only libraries the caller owns. 公共知识库 merges every open category plus
+ * uncategorized common libraries and appears only when non-empty. 订阅知识库 holds only
+ * grant-backed subscriptions (not self-built auth libraries). Auth category names never
+ * appear as sidebar groups; self-built and discoverable auth libraries appear in 知识库广场
+ * (owned cards sort last with status 我的).
  * @param items - Libraries the caller may open.
  * @param categories - Administrator-defined categories.
  * @param selfUserId - Optional fallback owner id when ownership annotation is absent.
@@ -62,7 +91,9 @@ export function libraryNavGroups(
   selfUserId?: number,
 ): LibraryGroup[] {
   const categoryById = new Map(categories.map(category => [category.id, category]))
-  const personal = items.filter(item => item.kind === 'personal' && categoryIdOf(item) === 0)
+  // Owner-only even if a stale API still returns another user's uncategorized personal row.
+  const personal = items.filter(item =>
+    item.kind === 'personal' && categoryIdOf(item) === 0 && libraryOwnedByViewer(item, selfUserId))
   const publicRows = items.filter((item) => {
     const categoryId = categoryIdOf(item)
     if (categoryId === 0) return item.kind === 'common'

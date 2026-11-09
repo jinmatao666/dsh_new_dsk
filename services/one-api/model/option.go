@@ -28,6 +28,7 @@ func InitOptionMap() {
 	config.OptionMap["RegistrationAgreementText"] = ""
 	config.OptionMap["RegistrationPrivacyText"] = ""
 	config.OptionMap["SystemDeploymentSettings"] = `{"network":"internet","operator":"","phone":""}`
+	config.OptionMap[LandMarketProviderSecretOption] = ""
 	config.OptionMap["PasswordLoginEnabled"] = strconv.FormatBool(config.PasswordLoginEnabled)
 	config.OptionMap["PasswordRegisterEnabled"] = strconv.FormatBool(config.PasswordRegisterEnabled)
 	config.OptionMap["EmailVerificationEnabled"] = strconv.FormatBool(config.EmailVerificationEnabled)

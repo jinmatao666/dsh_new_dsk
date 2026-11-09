@@ -43,7 +43,7 @@ Consumers import the helpers from `@deepseek-ai/dsh-wanwei-feature-panels/client
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The Client exports panel controllers, registration helpers, page chrome, notices and interaction classification. The caller supplies the title, icon, content and optional visibility observable. A hidden entry renders no placeholder and closes its page; the sidebar keeps Settings anchored below the remaining actions. Controller listeners belong to the caller's Context; callback failures are contained, logout closes open pages, and disposal closes the page and removes listeners. Resizing and owned dropdown interactions preserve the active page.
+The Client exports panel controllers, registration helpers, page chrome, notices and interaction classification. The caller supplies the title, icon, content and optional visibility observable; optional `headerChrome: 'back-only'` hides the title stack and keeps only the back control. A hidden entry renders no placeholder and closes its page; the sidebar keeps Settings anchored below the remaining actions. Controller listeners belong to the caller's Context; callback failures are contained, logout closes open pages, and disposal closes the page and removes listeners. Resizing and owned dropdown interactions preserve the active page.
 
 The [Client entry](src/client/index.ts) supplies the implementation. The [Host entry](src/index.ts) anchors module discovery without registering a business service.
 

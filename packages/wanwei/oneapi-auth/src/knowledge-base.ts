@@ -5,6 +5,14 @@ import {
   type KnowledgeRetrievalSource,
   type RetrievedKnowledgeChunk,
 } from './knowledge-retrieval.ts'
+import {
+  buildRecordingMinutesDocument,
+  draftRecordingMinutesLocally,
+  readRecordingMinutesForm,
+  summarizeRecordingTranscript,
+  transcribeRecordingAudio,
+  type RecordingMinutesModels,
+} from './knowledge-recording-minutes.ts'
 
 type CachedKnowledgeFile = {
   body: ArrayBuffer
@@ -24,8 +32,15 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
   private readonly fileCache = new Map<string, CachedKnowledgeFile>()
   private fileCacheBytes = 0
 
-  constructor(private readonly baseURL: string, private readonly resolveToken: () => Promise<string | undefined>,
-    uploadIdleTimeoutMs: number) {
+  constructor(
+    private readonly baseURL: string,
+    private readonly resolveToken: () => Promise<string | undefined>,
+    uploadIdleTimeoutMs: number,
+    private readonly recordingModels: RecordingMinutesModels = {
+      transcriptionModel: 'Qwen3-ASR-1.7B',
+      chatModel: '',
+    },
+  ) {
     this.uploads = new KnowledgeUpload(uploadIdleTimeoutMs)
   }
 
@@ -47,9 +62,22 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
     if (text.length > 16_777_216) throw new Error('知识库服务响应过大')
     const body: unknown = JSON.parse(text)
     if (typeof body !== 'object' || body === null) throw new Error('知识库服务响应无效')
-    const envelope = body as { success?: unknown; data?: unknown; message?: unknown }
+    const envelope = body as {
+      success?: unknown
+      data?: unknown
+      message?: unknown
+      error?: { message?: unknown } | unknown
+    }
     if (!response.ok || envelope.success !== true) {
-      throw new Error(typeof envelope.message === 'string' ? envelope.message : '知识库服务请求失败')
+      const nested = typeof envelope.error === 'object' && envelope.error !== null
+        ? (envelope.error as { message?: unknown }).message
+        : undefined
+      const message = typeof envelope.message === 'string' && envelope.message !== ''
+        ? envelope.message
+        : typeof nested === 'string' && nested !== ''
+          ? nested
+          : '知识库服务请求失败'
+      throw new Error(message)
     }
     return envelope.data
   }
@@ -115,6 +143,21 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
     if (operation === 'documents') {
       const id = integer(value.id, '知识库编号')
       return this.request(`/api/knowledge-bases/${id}/documents`, {}, signal)
+    }
+    if (operation === 'import-web-links') {
+      const id = integer(value.id, '知识库编号')
+      if (!Array.isArray(value.urls) || value.urls.length === 0 || value.urls.length > 10) {
+        throw new Error('网页链接无效')
+      }
+      const urls = value.urls.map((item) => {
+        if (typeof item !== 'string' || item.trim() === '') throw new Error('网页链接无效')
+        return item.trim()
+      })
+      return this.request(`/api/knowledge-bases/${id}/web-links`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ urls }),
+      }, signal)
     }
     if (operation === 'chunks') {
       const id = integer(value.id, '知识库编号')
@@ -285,6 +328,56 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
     }
     this.fileCache.set(key, { body, contentType, at: Date.now() })
     this.fileCacheBytes += body.byteLength
+  }
+
+  /** Transcribe a WAV, draft 速览/纪要, and upload markdown plus audio into the library.
+   * @param request - Multipart form: `id`, `file`, `stem`, `durationMs`, optional `liveTranscript`.
+   * @returns JSON `{ success: true }` or an error envelope.
+   */
+  async importRecordingMinutes(request: Request): Promise<Response> {
+    try {
+      const form = await request.formData()
+      const fields = readRecordingMinutesForm(form)
+      const token = await this.resolveToken()
+      if (token === undefined || token === '') {
+        return Response.json({ success: false, message: '请先登录后再使用知识库' }, { status: 401 })
+      }
+      let transcript = fields.liveTranscript
+      try {
+        const asr = await transcribeRecordingAudio(
+          this.baseURL, token, fields.audio, this.recordingModels.transcriptionModel, request.signal,
+        )
+        if (asr.trim() !== '') transcript = asr.trim()
+      } catch {
+        // Named: keep live captions when the transcription endpoint is unavailable.
+      }
+      const summarized = this.recordingModels.chatModel.trim() === ''
+        ? undefined
+        : await summarizeRecordingTranscript(
+          this.baseURL, token, this.recordingModels.chatModel, transcript, fields.durationMs, request.signal,
+        )
+      const drafted = summarized ?? draftRecordingMinutesLocally(transcript, fields.durationMs)
+      const markdownText = buildRecordingMinutesDocument(
+        fields.stem, transcript, drafted.overview, drafted.minutes,
+      )
+      const markdown = new File([markdownText], `${fields.stem}.md`, { type: 'text/markdown;charset=utf-8' })
+      const audio = new File([fields.audio], `${fields.stem}.wav`, { type: 'audio/wav' })
+      await this.uploadBrowserFile(fields.libraryId, markdown, request.signal)
+      await this.uploadBrowserFile(fields.libraryId, audio, request.signal)
+      return Response.json({ success: true, data: { stem: fields.stem } })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return Response.json({ success: false, message }, { status: 400 })
+    }
+  }
+
+  private async uploadBrowserFile(libraryId: number, file: File, signal: AbortSignal): Promise<void> {
+    const form = new FormData()
+    form.set('file', file, file.name)
+    await this.request(`/api/knowledge-bases/${libraryId}/documents`, {
+      method: 'POST',
+      body: form,
+    }, signal)
   }
 
   /** Proxy a streaming knowledge-base completion to the desktop Fetch route.

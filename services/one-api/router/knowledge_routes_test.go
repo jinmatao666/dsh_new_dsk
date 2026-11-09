@@ -38,6 +38,7 @@ func TestKnowledgeAdminRoutesRegister(t *testing.T) {
 		"GET /api/knowledge-bases",
 		"POST /api/knowledge-bases/retrieval",
 		"GET /api/knowledge-bases/:id/documents",
+		"POST /api/knowledge-bases/:id/web-links",
 		"DELETE /api/knowledge-bases/:id/documents/:documentId",
 		"POST /api/knowledge-bases/:id/documents/:documentId/copy",
 		"POST /api/knowledge-bases/:id/documents/:documentId/move",

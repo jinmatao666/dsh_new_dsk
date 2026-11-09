@@ -710,6 +710,40 @@ func (c *Client) UploadDocument(ctx context.Context, datasetId, filename string,
 	return documents, nil
 }
 
+// UploadWebDocument fetches one public page and uploads it as a local RAGFlow document.
+// Deployed RAGFlow builds that ignore `?type=web` (and return "No file part!") still accept the bytes.
+// @param datasetId - Target RAGFlow dataset.
+// @param name - Preferred document display name.
+// @param pageURL - Absolute http(s) URL to download.
+func (c *Client) UploadWebDocument(ctx context.Context, datasetId, name, pageURL string) ([]Document, error) {
+	body, filename, err := fetchPublicWebDocument(ctx, pageURL, name)
+	if err != nil {
+		return nil, err
+	}
+	return c.UploadDocument(ctx, datasetId, filename, bytes.NewReader(body), "")
+}
+
+// WebDocumentName builds a short RAGFlow document name from a page URL.
+func WebDocumentName(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Host == "" {
+		return "网页链接"
+	}
+	host := strings.TrimPrefix(parsed.Hostname(), "www.")
+	segment := strings.Trim(path.Base(parsed.Path), "/")
+	if segment == "" || segment == "." || segment == "/" {
+		segment = "page"
+	}
+	name := host + "_" + segment
+	replacer := strings.NewReplacer("/", "_", "\\", "_", ":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_")
+	name = replacer.Replace(name)
+	runes := []rune(name)
+	if len(runes) > 80 {
+		name = string(runes[:80])
+	}
+	return name
+}
+
 // UpdateDocument patches mutable RAGFlow document fields such as display name.
 func (c *Client) UpdateDocument(ctx context.Context, datasetId, documentId string, fields map[string]interface{}) error {
 	body, err := jsonBody(fields)

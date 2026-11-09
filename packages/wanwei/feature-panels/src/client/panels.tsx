@@ -91,6 +91,11 @@ export interface PanelInjected {
    * Rendered behind the heading copy; omit for panels without product art.
    */
   headerArt?: string
+  /**
+   * `back-only` hides the kicker/title/subtitle stack and floats only the back
+   * control so an embedded page can fill the panel edge-to-edge.
+   */
+  headerChrome?: 'default' | 'back-only'
   hooks: { network: HostObservable<NetworkState> }
 }
 export type PanelProps = PropsRuntime<'shell.overlay'> & InjectFace<PanelInjected>
@@ -137,7 +142,7 @@ export function usePanelNavigation(controller: PanelController, open: boolean): 
  */
 export function FeaturePanel({
   title, subtitle, controller, requiresDirectInternet, useNetwork, renderContent, renderHeaderActions, visibility,
-  bodyClassName, headerArt,
+  bodyClassName, headerArt, headerChrome = 'default',
 }: PanelProps) {
   const visible = useSyncExternalStore(
     listener => visibility ? visibility.subscribe(listener) : () => {}, () => visibility ? visibility.getSnapshot() : true,
@@ -148,17 +153,21 @@ export function FeaturePanel({
   usePanelNavigation(controller, open)
   useEffect(() => { if (unavailable || !visible) controller.close() }, [controller, unavailable, visible, open])
   if (!open || unavailable || !visible) return null
+  const backOnly = headerChrome === 'back-only'
   const bodyClass = ['dsh-skill-market-body', bodyClassName].filter(Boolean).join(' ')
-  const headerClass = headerArt !== undefined && headerArt !== ''
-    ? 'dsh-skill-market-header has-art'
-    : 'dsh-skill-market-header'
+  const panelClass = ['dsh-skill-market-panel', backOnly ? 'back-only-header' : ''].filter(Boolean).join(' ')
+  const headerClass = [
+    'dsh-skill-market-header',
+    !backOnly && headerArt !== undefined && headerArt !== '' ? 'has-art' : '',
+    backOnly ? 'back-only' : '',
+  ].filter(Boolean).join(' ')
   return <div className="dsh-skill-market-overlay" role="dialog" aria-modal="true" aria-label={title}>
-    <div className="dsh-skill-market-panel">
+    <div className={panelClass}>
       <header className={headerClass}>
-        {headerArt !== undefined && headerArt !== '' &&
+        {!backOnly && headerArt !== undefined && headerArt !== '' &&
           <img className="dsh-skill-market-header-art" src={headerArt} alt="" draggable={false} aria-hidden="true" />}
-        <div className="dsh-skill-market-heading"><span className="dsh-skill-kicker">{productText('WANWEI Buddy')}</span>
-          <h1>{title}</h1><p>{subtitle}</p></div>
+        {!backOnly && <div className="dsh-skill-market-heading"><span className="dsh-skill-kicker">{productText('WANWEI Buddy')}</span>
+          <h1>{title}</h1><p>{subtitle}</p></div>}
         <div className="dsh-skill-market-header-end">
           {renderHeaderActions?.()}
           <button type="button" className="dsh-skill-close" aria-label={productText('返回')} onClick={() => { controller.close() }}>

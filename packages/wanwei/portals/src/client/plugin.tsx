@@ -1,16 +1,23 @@
 import { createPanelController, registerFeaturePanel } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 import type { Context } from '@deepseek-ai/cordis'
-import { useSyncExternalStore, type ComponentType } from 'react'
+import { useEffect, useState, useSyncExternalStore, type ComponentType } from 'react'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
+import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
 import './page.css'
 import { productText } from './locales/product.ts'
+import { withPortalTicket } from './ticket.ts'
 
 type PortalFeature = 'landMarket' | 'policyEncyclopedia'
 
 type DesktopBridge = { core?: { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> } }
 type DesktopInternals = { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> }
+
+function rpcValue(result: RpcResult<unknown>): unknown {
+  if (!result.ok) throw new Error(result.error.message)
+  return result.value
+}
 
 async function maximizeDesktopWindow(): Promise<void> {
   const desktopWindow = window as Window & { __TAURI__?: DesktopBridge; __TAURI_INTERNALS__?: DesktopInternals }
@@ -33,15 +40,78 @@ function PolicyEncyclopediaIcon({ size = 18 }: { size?: number }) {
   </svg>
 }
 
-function PortalPage({ url }: { url: HostObservable<string> }) {
-  const href = useSyncExternalStore(url.subscribe, url.getSnapshot)
-  if (!href) {
+/** Centered loading mark matching knowledge-base ViewerLoading visuals.
+ * @param props - Accessible status label.
+ */
+function PortalLoading({ label }: { label: string }) {
+  return <div className="dsh-portal-loading" role="status" aria-label={label}>
+    <span className="dsh-portal-loading-mark" aria-hidden="true">
+      <span className="dsh-portal-loading-core" />
+    </span>
+  </div>
+}
+
+/** Embed the administrator-configured page URL, or show the empty-config placeholder.
+ * Land market optionally launches with a one-use desktop ticket before iframe load.
+ * @param props - Live feature-page URL observable and optional launch callback.
+ */
+export function PortalPage({
+  url,
+  launchWithTicket,
+}: {
+  url: HostObservable<string>
+  launchWithTicket?: () => Promise<{ url: string; ticket: string }>
+}) {
+  const configured = useSyncExternalStore(url.subscribe, url.getSnapshot)
+  const [href, setHref] = useState(configured)
+  const [loading, setLoading] = useState(Boolean(configured))
+
+  useEffect(() => {
+    let cancelled = false
+    if (!configured) {
+      setHref('')
+      setLoading(false)
+      return
+    }
+    if (launchWithTicket === undefined) {
+      setHref(configured)
+      setLoading(true)
+      return
+    }
+    setLoading(true)
+    setHref('')
+    void launchWithTicket().then((launch) => {
+      if (cancelled) return
+      setHref(withPortalTicket(launch.url || configured, launch.ticket))
+    }).catch((err: unknown) => {
+      if (cancelled) return
+      console.error('land-market launch ticket failed', err)
+      setHref(configured)
+    })
+    return () => { cancelled = true }
+  }, [configured, launchWithTicket])
+
+  if (!configured) {
     return <div className="dsh-portal-empty" role="status">
       <h2>{productText('请先在管理工作台配置页面地址')}</h2>
       <p>{productText('管理员尚未配置此功能的页面地址，配置后即可在此查看。')}</p>
     </div>
   }
-  return <iframe className="dsh-portal-frame" title={href} src={href} referrerPolicy="no-referrer" />
+  if (!href) {
+    return <div className="dsh-portal-frame-host">
+      <PortalLoading label={productText('正在加载…')} />
+    </div>
+  }
+  return <div className="dsh-portal-frame-host">
+    {loading ? <PortalLoading label={productText('正在加载…')} /> : null}
+    <iframe
+      className="dsh-portal-frame"
+      title={href}
+      src={href}
+      referrerPolicy="no-referrer"
+      onLoad={() => setLoading(false)}
+    />
+  </div>
 }
 
 function registerPortal(
@@ -53,6 +123,7 @@ function registerPortal(
     title: string
     subtitle: string
     Icon: ComponentType<{ size?: number }>
+    launchWithTicket?: () => Promise<{ url: string; ticket: string }>
   },
 ): void {
   const controller = createPanelController(ctx, options.id)
@@ -72,16 +143,31 @@ function registerPortal(
     Icon: options.Icon,
     hooks: { network: ctx.wanweiNetwork },
     bodyClassName: 'dsh-portal-host',
-    renderContent: () => <PortalPage url={ctx.wanweiNetwork.featurePageUrl(options.feature)} />,
+    headerChrome: 'back-only',
+    renderContent: () => <PortalPage
+      url={ctx.wanweiNetwork.featurePageUrl(options.feature)}
+      {...(options.launchWithTicket === undefined
+        ? {}
+        : { launchWithTicket: options.launchWithTicket })}
+    />,
   })
 }
 
-export const inject = ['slots', 'layout', 'wanweiNetwork']
+export const inject = ['slots', 'layout', 'wanweiNetwork', 'connection']
 
 /** Mount land-market and policy-encyclopedia portal panels.
  * @param ctx - Product Client context.
  */
 export function apply(ctx: Context): void {
+  const connection = ctx.get('connection') as unknown as ConnectionHandle
+  const launchLandMarket = async () => {
+    const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'land-market-launch', {})) as {
+      url?: unknown
+      ticket?: unknown
+    }
+    if (typeof raw.url !== 'string' || typeof raw.ticket !== 'string') throw new Error('土地市场打开信息无效')
+    return { url: raw.url, ticket: raw.ticket }
+  }
   registerPortal(ctx, {
     id: 'skill-land-market',
     order: 40,
@@ -89,6 +175,7 @@ export function apply(ctx: Context): void {
     title: productText('土地市场'),
     subtitle: productText('浏览配置的土地市场页面'),
     Icon: LandMarketIcon,
+    launchWithTicket: launchLandMarket,
   })
   registerPortal(ctx, {
     id: 'skill-policy-encyclopedia',

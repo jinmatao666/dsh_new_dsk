@@ -2,6 +2,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { isMarketInteraction } from '../src/client/market-interaction.ts'
 import { createPanelController, PanelAction, FeaturePanel } from '../src/client/panels.tsx'
 import type { PanelActionProps, PanelController, PanelProps } from '../src/client/panels.tsx'
 
@@ -15,6 +16,31 @@ async function mount(ctx: Context, id: string) {
 }
 
 describe('independent feature navigation', () => {
+  it('keeps the panel open for portaled knowledge recording controls', async () => {
+    const ctx = new Context()
+    const feature = await mount(ctx, 'knowledge')
+    const props = {
+      title: 'knowledge', subtitle: '', Icon: () => null,
+      controller: feature.controller, useNetwork: () => false,
+      renderContent: () => <p>library</p>,
+    } as unknown as PanelProps
+    try {
+      render(<>
+        <FeaturePanel {...props} />
+        <div className="dsh-knowledge-recorder">
+          <button type="button">开始录音</button>
+        </div>
+      </>)
+      act(() => { feature.controller.open() })
+      expect(screen.getByRole('dialog')).toBeTruthy()
+      const start = screen.getByRole('button', { name: '开始录音' })
+      expect(isMarketInteraction(start)).toBe(true)
+      fireEvent.pointerDown(start)
+      expect(feature.controller.isOpen()).toBe(true)
+      expect(screen.getByRole('dialog')).toBeTruthy()
+    } finally { await feature.dispose() }
+  })
+
   it('preserves mounted content across sidebar toggles but closes on navigation', async () => {
     const ctx = new Context()
     const feature = await mount(ctx, 'experts')
@@ -123,6 +149,26 @@ describe('independent feature navigation', () => {
       expect(document.querySelector('.dsh-skill-market-header.has-art')).toBeTruthy()
       expect(document.querySelector('.dsh-skill-market-header-art')?.getAttribute('src'))
         .toBe('/knowledge-covers/hero-banner.png')
+    } finally { await feature.dispose() }
+  })
+
+  it('keeps only the back control when headerChrome is back-only', async () => {
+    const ctx = new Context()
+    const feature = await mount(ctx, 'back-only')
+    const props = {
+      wide: true, title: 'fixture', subtitle: 'copy', Icon: () => null, controller: feature.controller,
+      requiresDirectInternet: false, useNetwork: () => false, headerChrome: 'back-only',
+      headerArt: '/knowledge-covers/hero-banner.png',
+      renderContent: () => <p>content</p>,
+    } as unknown as PanelActionProps & PanelProps
+    try {
+      render(<FeaturePanel {...props} />)
+      act(() => { feature.controller.open() })
+      expect(document.querySelector('.dsh-skill-market-panel.back-only-header')).toBeTruthy()
+      expect(document.querySelector('.dsh-skill-market-header.back-only')).toBeTruthy()
+      expect(document.querySelector('.dsh-skill-market-heading')).toBeNull()
+      expect(document.querySelector('.dsh-skill-market-header-art')).toBeNull()
+      expect(screen.getByRole('button', { name: '返回' })).toBeTruthy()
     } finally { await feature.dispose() }
   })
 

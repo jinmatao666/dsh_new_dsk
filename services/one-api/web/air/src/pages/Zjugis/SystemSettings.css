@@ -128,11 +128,14 @@
 .knowledge-quota-configure { margin: 0; padding: 6px 14px; line-height: 1.2; }
 .knowledge-quota-status { margin: 12px 0 0; color: #385375; font-size: 14px; }
 .knowledge-quota-dialog-backdrop { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(17, 34, 58, .42); }
+/* Portal address dialog sits above the admin shell; do not dismiss on backdrop click (IME candidate clicks hit the mask). */
+.feature-page-dialog-backdrop { z-index: 1000; }
 .knowledge-quota-dialog { width: min(920px, 100%); max-height: min(88vh, 760px); overflow: auto; padding: 22px 24px; border-radius: 14px; background: #fff; box-shadow: 0 18px 48px rgba(22, 44, 78, .22); }
 .knowledge-quota-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
 .knowledge-quota-dialog header h3 { margin: 0; color: #203a5e; font-size: 18px; }
 .knowledge-quota-total { display: flex; flex-direction: column; gap: 10px; max-width: 280px; margin-bottom: 12px; color: #385375; font-weight: 600; }
 .knowledge-quota-total input, .knowledge-quota-people input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #d6e3f4; border-radius: 8px; font: inherit; font-weight: 400; color: #253d60; }
+.knowledge-quota-saved-hint { margin: -4px 0 12px; color: #8191a8; font-size: 12px; line-height: 1.6; }
 .knowledge-quota-org-layout { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.2fr); gap: 18px; margin-top: 8px; min-height: 280px; }
 .knowledge-quota-org-layout > aside, .knowledge-quota-org-layout > section { border: 1px solid #dce6f4; border-radius: 12px; padding: 14px; background: #f8fbff; }
 .knowledge-quota-org-layout > aside > p, .knowledge-quota-org-layout > section > p { margin: 0 0 12px; color: #385375; font-weight: 600; }
@@ -149,10 +152,21 @@
 .knowledge-quota-summary { margin: 14px 0 0; color: #365d8c; font-size: 13px; }
 .knowledge-quota-summary.is-error { color: #c44949; }
 .knowledge-quota-dialog footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #dfe8f5; }
-.feature-page-url { display: inline-block; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #385375; }
+.feature-name-with-address { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.feature-address-link { margin: 0; padding: 0; border: 0; background: transparent; color: #3478ef; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.feature-address-link:hover:not(:disabled) { text-decoration: underline; }
+.feature-address-link:disabled { opacity: .5; cursor: not-allowed; }
 .feature-page-dialog { max-width: 640px; }
 .feature-page-url-field { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; color: #385375; font-weight: 600; }
 .feature-page-url-field input { width: 100%; box-sizing: border-box; padding: 12px 14px; border: 1px solid #d6e3f4; border-radius: 8px; font: inherit; font-weight: 400; color: #253d60; }
+.feature-page-credential { margin: 16px 0 8px; padding: 14px 16px; border: 1px solid #b7d0f5; border-radius: 10px; background: #f0f6ff; }
+.feature-page-credential-title { margin: 0 0 10px; color: #203a5e; font-size: 15px; font-weight: 600; }
+.feature-page-credential-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.feature-page-credential-row .settings-description { margin: 0; flex: 1; }
+.feature-page-credential-row .settings-primary { flex-shrink: 0; }
+.feature-page-credential-secret-backdrop { z-index: 50; }
+.feature-page-credential-secret { max-width: 560px; }
+.feature-page-credential-code { display: block; margin: 12px 0; padding: 12px 14px; border-radius: 8px; background: #10233f; color: #f4f8ff; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; word-break: break-all; }
 @media (max-width: 800px) {
   .knowledge-quota-org-layout { grid-template-columns: 1fr; }
   .knowledge-quota-people li { grid-template-columns: 1fr; }

@@ -6,7 +6,7 @@
   padding: 0;
 }
 
-.dsh-skill-market-body.dsh-portal-host > .dsh-portal-frame,
+.dsh-skill-market-body.dsh-portal-host > .dsh-portal-frame-host,
 .dsh-skill-market-body.dsh-portal-host > .dsh-portal-empty {
   flex: 1 1 auto;
   align-self: stretch;
@@ -14,9 +14,91 @@
   min-height: 0;
 }
 
+.dsh-portal-frame-host {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .dsh-portal-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
   border: 0;
   background: #fff;
+}
+
+.dsh-portal-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 48px 24px;
+  background: #fff;
+}
+
+.dsh-portal-loading-mark {
+  position: relative;
+  width: 56px;
+  height: 56px;
+}
+
+.dsh-portal-loading-mark::before,
+.dsh-portal-loading-mark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.dsh-portal-loading-mark::before {
+  border: 2px solid rgb(148 163 184 / 28%);
+}
+
+.dsh-portal-loading-mark::after {
+  border: 2px solid transparent;
+  border-top-color: #3b82f6;
+  border-right-color: rgb(59 130 246 / 35%);
+  animation: dsh-portal-spin .85s cubic-bezier(.45, .05, .55, .95) infinite;
+}
+
+.dsh-portal-loading-core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #3b82f6;
+  box-shadow: 0 0 0 6px rgb(59 130 246 / 12%);
+  transform: translate(-50%, -50%);
+  animation: dsh-portal-load-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes dsh-portal-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes dsh-portal-load-pulse {
+  0%, 100% {
+    opacity: .55;
+    transform: translate(-50%, -50%) scale(.92);
+    box-shadow: 0 0 0 4px rgb(59 130 246 / 10%);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 0 10px rgb(59 130 246 / 6%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsh-portal-loading-mark::after,
+  .dsh-portal-loading-core { animation: none; }
+  .dsh-portal-loading-core { opacity: .85; }
 }
 
 .dsh-portal-empty {

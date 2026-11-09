@@ -2,10 +2,11 @@ jest.mock('../../helpers', () => ({ API: { get: jest.fn(), put: jest.fn() } }));
 import { bytesToMegabytesInput, megabytesInputToBytes, normalizeKnowledgeQuota } from './KnowledgeQuotaSettings';
 
 test('normalizeKnowledgeQuota drops invalid allocations and keeps defaults', () => {
-  expect(normalizeKnowledgeQuota(undefined)).toEqual({ enabled: false, totalBytes: 0, allocations: [] });
+  expect(normalizeKnowledgeQuota(undefined)).toEqual({ enabled: false, totalBytes: 0, batchInitBytes: 0, allocations: [] });
   expect(normalizeKnowledgeQuota({
     enabled: true,
     totalBytes: 104857600,
+    batchInitBytes: 20971520,
     allocations: [
       { userId: 1, quotaBytes: 10 },
       { userId: 1, quotaBytes: 20 },
@@ -16,6 +17,7 @@ test('normalizeKnowledgeQuota drops invalid allocations and keeps defaults', () 
   })).toEqual({
     enabled: true,
     totalBytes: 104857600,
+    batchInitBytes: 20971520,
     allocations: [{ userId: 1, quotaBytes: 10 }, { userId: 3, quotaBytes: 30 }],
   });
 });
