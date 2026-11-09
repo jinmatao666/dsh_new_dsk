@@ -271,7 +271,12 @@ test('intranet skill and expert policies persist independently', async () => {
   expect(container.querySelector('[name="internetSkillPolicy"]')).toBeNull();
   act(() => container.querySelector('[name="network"][value="intranet"]').click());
   expect(container.textContent).toContain('保存后应用内网预设');
-  expect(container.querySelector('[name="internetSkillPolicy"]')).toBeNull();
+  expect(container.textContent).toContain('保存后可调整');
+  expect(container.querySelector('[aria-label="互联网内容处理"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="内网资源配置"]')).not.toBeNull();
+  expect(container.querySelector('[name="internetSkillPolicy"][value="disable"]').checked).toBe(true);
+  expect(container.querySelector('[name="internetSkillPolicy"]').closest('fieldset').disabled).toBe(true);
+  expect(container.querySelector('[aria-label="内网资源配置"] input[type="file"]').disabled).toBe(true);
   API.put.mockImplementationOnce((_path, body) => {
     const committed = JSON.parse(body.value);
     committed.features.intranet.knowledgeBases = false;
@@ -281,6 +286,8 @@ test('intranet skill and expert policies persist independently', async () => {
   const skills = [...container.querySelectorAll('[name="internetSkillPolicy"]')];
   const experts = [...container.querySelectorAll('[name="internetExpertPolicy"]')];
   expect(skills).toHaveLength(2);
+  expect(skills[0].closest('fieldset').disabled).toBe(false);
+  expect(container.querySelector('[aria-label="内网资源配置"] input[type="file"]').disabled).toBe(false);
   expect(experts).toHaveLength(2);
   expect(skills[1].checked).toBe(true);
   expect(experts[1].checked).toBe(true);

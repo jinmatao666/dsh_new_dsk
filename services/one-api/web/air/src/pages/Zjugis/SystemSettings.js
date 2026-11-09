@@ -172,6 +172,7 @@ export default function SystemSettings() {
     catch { setFeedback('退出失败，请重试'); }
   };
   const dirty = JSON.stringify(settings) !== JSON.stringify(saved);
+  const pendingIntranet = settings.network === 'intranet' && saved.network !== 'intranet';
   return <div className='zjugis-new-page system-settings-page'>
     <div className='preview-page-head'><div><h1>系统设置</h1><p>管理账户、安全、部署网络环境、功能入口与运维联系信息。</p></div></div>
     <section className='preview-surface system-settings-surface'>
@@ -247,27 +248,27 @@ export default function SystemSettings() {
             {active === 'edition' && settings.edition === 'operations' && <CreditRewardSettings
               value={settings.creditRewards} disabled={saving} onChange={value => change('creditRewards', value)} />}
             {active === 'network' && settings.network !== saved.network && <p role='status'>
-              {settings.network === 'intranet' ? '保存后应用内网预设：开启自动化，关闭连接器和可选入口，使用离线依赖包。' : '保存后恢复此前保存的互联网功能设置。'}
+              {settings.network === 'intranet' ? '保存后应用内网预设：开启自动化，关闭连接器和可选入口，使用离线依赖包。下方已展示预设内容，保存后可调整。' : '保存后恢复此前保存的互联网功能设置。'}
             </p>}
-            {active === 'network' && settings.network === 'intranet' && saved.network === 'intranet' && <section className='settings-catalog-policies' aria-label='互联网内容处理'>
+            {active === 'network' && settings.network === 'intranet' && <section className='settings-catalog-policies' aria-label='互联网内容处理'>
               <h3>互联网内容处理</h3>
               <p>终端无法访问外部资源时，分别控制需要联网的技能和专家如何展示。</p>
               {[
                 ['internetSkillPolicy', '互联网类技能处理方式', '技能'],
                 ['internetExpertPolicy', '互联网类专家处理方式', '专家'],
-              ].map(([field, title, item]) => <fieldset key={field} className='settings-network settings-catalog-policy' disabled={saving}>
+              ].map(([field, title, item]) => <fieldset key={field} className='settings-network settings-catalog-policy' disabled={saving || pendingIntranet}>
                 <legend>{title}</legend>
                 {[
                   ['hide', '隐藏', `不展示需要联网的${item}。`],
                   ['disable', '灰化', `保留${item}展示并置灰，无法点击使用。`],
-                ].map(([key, label, hint]) => <label key={key} className={`settings-network-option${settings[field] === key ? ' selected' : ''}`}>
-                  <input type='radio' name={field} value={key} checked={settings[field] === key} onChange={() => change(field, key)} />
+                ].map(([key, label, hint]) => <label key={key} className={`settings-network-option${(pendingIntranet ? 'disable' : settings[field]) === key ? ' selected' : ''}`}>
+                  <input type='radio' name={field} value={key} checked={(pendingIntranet ? 'disable' : settings[field]) === key} onChange={() => change(field, key)} />
                   <span><strong>{label}</strong><small>{hint}</small></span>
                 </label>)}
               </fieldset>)}
             </section>}
-            {active === 'network' && settings.network === 'intranet' && saved.network === 'intranet' && <ResourceSettings value={settings.resources || defaultResources}
-              disabled={saving} onChange={value => change('resources', value)} />}
+            {active === 'network' && settings.network === 'intranet' && <ResourceSettings value={pendingIntranet ? { ...defaultResources, probeUrls: [] } : settings.resources || defaultResources}
+              disabled={saving || pendingIntranet} onChange={value => change('resources', value)} />}
             {active === 'network' && settings.network === 'intranet' && saved.network === 'intranet' && !settings.resources && <button type='button'
               className='settings-secondary' disabled={saving} onClick={() => change('resources', defaultResources)}>启用此资源配置（保存后生效）</button>}
             <div className='settings-footer'><span>{dirty ? '有未保存的修改' : ''}</span><div><button type='button' className='settings-secondary' disabled={!dirty || saving} onClick={() => { setSettings(saved); setFeedback(''); }}>取消修改</button><button type='submit' className='settings-primary' disabled={!dirty || saving}>{saving ? '保存中…' : '保存设置'}</button></div></div>
