@@ -146,7 +146,9 @@ function registerPortal(
     headerChrome: 'back-only',
     renderContent: () => <PortalPage
       url={ctx.wanweiNetwork.featurePageUrl(options.feature)}
-      launchWithTicket={options.launchWithTicket}
+      {...(options.launchWithTicket === undefined
+        ? {}
+        : { launchWithTicket: options.launchWithTicket })}
     />,
   })
 }
