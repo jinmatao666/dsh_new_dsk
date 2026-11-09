@@ -25,6 +25,7 @@ type desktopFeaturePage struct {
 }
 
 type desktopDeploymentSettings struct {
+	Billing               config.CreditPolicy            `json:"billing"`
 	InternetSkillPolicy   string                         `json:"internetSkillPolicy"`
 	InternetExpertPolicy  string                         `json:"internetExpertPolicy"`
 	InternetCatalogPolicy string                         `json:"internetCatalogPolicy"`
@@ -68,7 +69,7 @@ func validateDesktopFeaturePageURL(raw string) error {
 
 // Existing deployment records without feature settings retain their current behavior.
 func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, error) {
-	settings := desktopDeploymentSettings{InternetCatalogPolicy: "disable", InternetSkillPolicy: "disable", InternetExpertPolicy: "disable", Network: "internet", Edition: "operations", Plugins: desktopPluginSettings{BrowserAssistant: true}, Features: map[string]desktopFeatureFlags{
+	settings := desktopDeploymentSettings{Billing: config.CreditPolicy{ShowCredits: true, ShowMultipliers: true, Enabled: true}, InternetCatalogPolicy: "disable", InternetSkillPolicy: "disable", InternetExpertPolicy: "disable", Network: "internet", Edition: "operations", Plugins: desktopPluginSettings{BrowserAssistant: true}, Features: map[string]desktopFeatureFlags{
 		"internet": {Automations: true, Connectors: true, KnowledgeBases: true},
 		"intranet": {Automations: true, Connectors: false, KnowledgeBases: true},
 	}, FeaturePages: defaultDesktopFeaturePages()}
@@ -226,6 +227,11 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 		}
 	}
 	settings.FeaturePages = normalizedPages
+	policy, billingErr := config.ResolveCreditPolicy(raw)
+	if billingErr != nil {
+		return settings, billingErr
+	}
+	settings.Billing = policy
 	if settings.Network != "internet" && settings.Network != "intranet" {
 		return settings, fmt.Errorf("invalid network")
 	}

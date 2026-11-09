@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { fetchDeploymentSettings, resolveDeploymentFeaturePages, resolveDeploymentFeatures, resolveDeploymentPlugins } from '../src/deployment.ts'
+import { fetchDeploymentSettings, resolveDeploymentFeaturePages, resolveDeploymentFeatures, resolveDeploymentPlugins, resolveBillingPolicy } from '../src/deployment.ts'
 
 afterEach(() => vi.unstubAllGlobals())
 it.each(['internet', 'intranet'])('reads %s mode and the public maintenance contact from the configured backend', async (network) => {
@@ -7,6 +7,7 @@ it.each(['internet', 'intranet'])('reads %s mode and the public maintenance cont
   const fetcher = vi.fn(async () => new Response(JSON.stringify({ success: true, data })))
   vi.stubGlobal('fetch', fetcher)
   expect(await fetchDeploymentSettings('https://oneapi.example.test')).toEqual({ ...data,
+    billing: { showCredits: true, showMultipliers: true, enabled: true },
     internetCatalogPolicy: 'disable', internetSkillPolicy: 'disable', internetExpertPolicy: 'disable',
     features: resolveDeploymentFeatures(undefined),
     featurePages: resolveDeploymentFeaturePages(undefined),
@@ -76,4 +77,10 @@ it('reads split catalog policies, inherits omitted legacy values, and rejects ex
   expect(await fetchDeploymentSettings('https://example.test')).toMatchObject({ internetSkillPolicy: 'hide', internetExpertPolicy: 'disable' })
   data.internetExpertPolicy = null
   await expect(fetchDeploymentSettings('https://example.test')).rejects.toThrow()
+})
+
+it('keeps billing independent of network and allows government overrides', () => {
+  expect(resolveBillingPolicy(undefined, 'government')).toEqual({ showCredits: false, showMultipliers: false, enabled: false })
+  expect(resolveBillingPolicy({ enabled: true }, 'government')).toEqual({ showCredits: false, showMultipliers: false, enabled: true })
+  expect(() => resolveBillingPolicy({ enabled: 'false' })).toThrow()
 })

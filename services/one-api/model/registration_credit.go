@@ -9,8 +9,11 @@ import (
 	"strconv"
 )
 
-// RegistrationCreditRule returns whether the operational edition explicitly owns registration rewards.
+// RegistrationCreditRule returns whether accounting permits the configured registration reward.
 func RegistrationCreditRule() (bool, int64, error) {
+	if config.CreditsDisabled() {
+		return false, 0, nil
+	}
 	config.OptionMapRWMutex.RLock()
 	raw := config.OptionMap["SystemDeploymentSettings"]
 	config.OptionMapRWMutex.RUnlock()
@@ -29,7 +32,7 @@ func RegistrationCreditRule() (bool, int64, error) {
 	if err := json.Unmarshal([]byte(raw), &s); err != nil {
 		return false, 0, err
 	}
-	if s.Edition != "operations" || s.Rewards.Registration == nil {
+	if config.CreditsDisabled() || s.Rewards.Registration == nil {
 		return false, 0, nil
 	}
 	r := s.Rewards.Registration

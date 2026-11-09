@@ -32,11 +32,13 @@ export const inject = ['slots', 'connection', 'locale']
 
 /** Install the login gate and account settings entry over one shared controller. */
 export function apply(ctx: Context): void {
-  ctx.provide('modelSettingsPolicy', { managedProvider: 'dsh-server', customOnly: true, skipOnboarding: true })
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'wanwei-auth: dictionaries')
   const connection = ctx.get('connection') as ConnectionHandle
   const controller = new AuthController(connection)
   const network = new NetworkController(connection)
+  const billing = { getSnapshot: () => network.getSnapshot().billing?.showCredits !== false, subscribe: network.subscribe }
+  ctx.provide('modelSettingsPolicy', { managedProvider: 'dsh-server', customOnly: true, skipOnboarding: true,
+    billing: { getSnapshot: () => network.getSnapshot().billing?.showMultipliers !== false, subscribe: network.subscribe } })
   ctx.provide('wanweiNetwork', network)
   ctx.effect(() => {
     const lifetime = new AbortController()
@@ -80,8 +82,24 @@ export function apply(ctx: Context): void {
     if (!result.ok) throw new Error(result.error.message)
     return result.value
   }
-  const creditsInject = (): CreditsInjected => ({ hooks: { auth: controller }, requestCredits })
-  ctx.slots.inject('settings.section', () => ctx.slots.register({ name: 'settings.section', id: 'wanwei-credits', order: 38, label: () => '积分与用量', inject: creditsInject }, CreditsSection))
+  const creditsInject = (): CreditsInjected => ({ hooks: { auth: controller }, billing,
+    accounting: { getSnapshot: () => network.getSnapshot().billing?.enabled !== false, subscribe: network.subscribe }, requestCredits })
+  ctx.slots.inject('settings.section', () => {
+    const scope = ctx
+    let dispose: (() => void) | undefined
+    let shown: boolean | undefined
+    const update = () => {
+      const next = billing.getSnapshot()
+      if (shown === next) return
+      shown = next
+      dispose?.()
+      dispose = billing.getSnapshot() ? scope.slots.register({ name: 'settings.section',
+        id: 'wanwei-credits', order: 38, label: () => '积分与用量', inject: creditsInject }, CreditsSection) : undefined
+    }
+    update()
+    const unsubscribe = network.subscribe(update)
+    return () => { unsubscribe(); dispose?.() }
+  })
   const t = ctx.locale.bind(NS)
   ctx.slots.inject('sidebar.footer', () => ctx.slots.register({
     name: 'sidebar.footer', locale: NS, inject: () => ({ ...creditsInject(), logout: () => controller.logout() }),

@@ -36,6 +36,9 @@ type DesktopCheckinStatus struct {
 var checkinLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
 
 func desktopCheckinRule() DesktopCheckinStatus {
+	if config.CreditsDisabled() {
+		return DesktopCheckinStatus{}
+	}
 	config.OptionMapRWMutex.RLock()
 	raw := config.OptionMap["SystemDeploymentSettings"]
 	config.OptionMapRWMutex.RUnlock()
@@ -53,7 +56,7 @@ func desktopCheckinRule() DesktopCheckinStatus {
 		return DesktopCheckinStatus{}
 	}
 	r := settings.CreditRewards.Login
-	valid := settings.Edition == "operations" && r.Enabled && r.Amount >= 1 && r.Amount <= 1000000 && r.IntervalDays >= 1 && r.IntervalDays <= 3650
+	valid := !config.CreditsDisabled() && r.Enabled && r.Amount >= 1 && r.Amount <= 1000000 && r.IntervalDays >= 1 && r.IntervalDays <= 3650
 	return DesktopCheckinStatus{Enabled: valid, Amount: r.Amount, IntervalDays: r.IntervalDays}
 }
 func checkinAvailability(s DesktopCheckinStatus, last string, now time.Time) DesktopCheckinStatus {

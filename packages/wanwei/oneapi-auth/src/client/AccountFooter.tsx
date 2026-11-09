@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AccountInjected } from './AccountSection.tsx'
 import { CheckinShortcut, type CreditsInjected } from './CreditsSection.tsx'
@@ -8,7 +8,9 @@ type FooterProps = PropsRuntime<'sidebar.footer'> & PropsLocale<'wanwei.auth'>
   & InjectFace<CreditsInjected & Pick<AccountInjected, 'logout'>>
 
 /** Display the account and reveal the existing sidebar controls on demand. */
-export function AccountFooter({ controls, wide, useAuth, requestCredits, logout, t }: FooterProps) {
+export function AccountFooter({ controls, wide, useAuth, requestCredits, logout, t, billing, accounting }: FooterProps) {
+  const creditsEnabled = useSyncExternalStore(billing?.subscribe ?? (() => () => {}), billing?.getSnapshot ?? (() => true))
+  const accountingEnabled = useSyncExternalStore(accounting?.subscribe ?? (() => () => {}), accounting?.getSnapshot ?? (() => true))
   const auth = useAuth(value => value)
   const username = auth.state === 'authenticated' ? auth.username?.trim() : undefined
   const label = username || t('accountNav')
@@ -30,7 +32,7 @@ export function AccountFooter({ controls, wide, useAuth, requestCredits, logout,
   }
   const [credit, setCredit] = useState<{ auth: typeof auth; value: string }>()
   useEffect(() => {
-    if (!open || auth.state !== 'authenticated') return
+    if (!creditsEnabled || !open || auth.state !== 'authenticated') return
     let live = true, revision = 0
     const refresh = () => {
       const current = ++revision
@@ -47,7 +49,7 @@ export function AccountFooter({ controls, wide, useAuth, requestCredits, logout,
     refresh()
     window.addEventListener('wanwei:credits-changed', refresh)
     return () => { live = false; window.removeEventListener('wanwei:credits-changed', refresh) }
-  }, [auth, open, requestCredits, t])
+  }, [auth, open, requestCredits, t, creditsEnabled])
   const root = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const panelId = useId()
@@ -82,10 +84,11 @@ export function AccountFooter({ controls, wide, useAuth, requestCredits, logout,
         <span className={css.avatar} aria-hidden="true"><img src="/brand-mark.svg" width={25} height={22} alt="" /></span>
         {wide && <span className={css.name}>{label}</span>}
       </button>
-      {wide && <CheckinShortcut wide={wide} useAuth={useAuth} requestCredits={requestCredits} onOpen={() => { setOpen(false) }} />}
+      {wide && creditsEnabled && accountingEnabled && <CheckinShortcut wide={wide} useAuth={useAuth}
+        requestCredits={requestCredits} onOpen={() => { setOpen(false) }} />}
     </div>
     <div id={panelId} className={css.panel} hidden={!open}>
-      {auth.state === 'authenticated' && <div className={css.credits}>
+      {creditsEnabled && auth.state === 'authenticated' && <div className={css.credits}>
         <img src="/brand-mark.svg" className={css.creditMark} width={82} height={72} alt="" />
         <span className={css.creditLabel}>{t('accountCreditsBalance')}</span>
         <strong className={css.creditValue} aria-live="polite">{credit?.auth === auth ? credit.value : '—'}</strong>

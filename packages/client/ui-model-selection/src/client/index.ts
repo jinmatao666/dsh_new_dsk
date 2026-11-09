@@ -168,7 +168,8 @@ export function apply(ctx: ClientContext): void {
         const policy = scope.get('modelSettingsPolicy')
         return {
           available,
-          ...(policy === undefined ? {} : { managedProvider: policy.managedProvider }),
+          ...(policy === undefined ? {} : { managedProvider: policy.managedProvider,
+            ...(policy.billing === undefined ? {} : { billing: policy.billing }) }),
           directory: directory.store,
           load: () => {
             if (available) directory.load().catch(() => { /* surfaced on the store */ })

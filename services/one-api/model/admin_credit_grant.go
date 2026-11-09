@@ -1,7 +1,9 @@
 package model
 
 import (
+	"errors"
 	"github.com/google/uuid"
+	"github.com/songquanpeng/one-api/common/config"
 	"gorm.io/gorm"
 	"time"
 )
@@ -19,6 +21,9 @@ type AdminCreditGrant struct {
 }
 
 func GrantAdminCredits(userId, actorId int, amount int64, remark string, ttl *time.Duration) error {
+	if config.CreditsDisabled() {
+		return errors.New("积分机制已关闭，暂停发放积分")
+	}
 	reference := uuid.NewString()
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		if err := AddUserTimedQuotaTx(tx, userId, amount, TimedQuotaSourceAdmin, reference, ttl); err != nil {

@@ -190,7 +190,9 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		quota = int64(ratio*imageCostRatio*1000) * int64(imageRequest.N)
 	}
 
-	if meta.UseOrgQuota {
+	if meta.CreditsDisabled {
+		quota = 0
+	} else if meta.UseOrgQuota {
 		// 企业账户:四道闸门(总账本/成员累计上限/日月限额/部门预算)统一走公共校验
 		if errResp := checkOrgSpendGuards(meta.OrgId, meta.UserId, meta.OrgDeptId, meta.OrgMemberQuotaLimit, quota); errResp != nil {
 			recordImageRelayErrorLog(c, meta, imageRequest.Model, errResp.Error.Message)
@@ -218,6 +220,12 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			return
 		}
 
+		if meta.CreditsDisabled {
+			model.RecordConsumeLog(ctx, &model.Log{UserId: meta.UserId, OrgId: meta.OrgId, ChannelId: meta.ChannelId,
+				ModelName: imageRequest.Model, TokenName: meta.TokenName, Content: "积分机制已关闭，不计积分"})
+			model.UpdateUserUsedQuotaAndRequestCount(meta.UserId, 0)
+			return
+		}
 		if meta.UseOrgQuota {
 			// 企业账户:扣 token 额度 + 企业账本,日志带 OrgId
 			if err := model.PostConsumeTokenQuotaOnly(meta.TokenId, quota); err != nil {

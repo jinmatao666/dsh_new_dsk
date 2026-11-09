@@ -11,6 +11,10 @@ import FeaturePageAddressDialog, { defaultFeaturePages, normalizeFeaturePages, v
 
 const featureKeys = ['automations', 'connectors', 'knowledgeBases', 'landMarket', 'policyEncyclopedia'];
 const featureAddressKeys = new Set(['landMarket', 'policyEncyclopedia']);
+const billingDefaults = edition => ({
+  showCredits: edition !== 'government', showMultipliers: edition !== 'government', enabled: edition !== 'government',
+});
+const resolveBilling = value => ({ ...billingDefaults(value.edition), ...value.billing });
 const defaults = { network: 'internet', internetCatalogPolicy: 'disable', internetSkillPolicy: 'disable', internetExpertPolicy: 'disable', edition: 'operations', operator: '', phone: '', features: {
   internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
   intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
@@ -124,7 +128,8 @@ export default function SystemSettings() {
       .finally(() => { if (!disposed) setLoading(false); });
     return () => { disposed = true; controller.abort(); };
   }, [reload]);
-  const change = (key, value) => { setSettings(previous => ({ ...previous, [key]: value })); setFeedback(''); };
+  const change = (key, value) => { setSettings(previous => ({ ...previous, [key]: value,
+    ...(key === 'edition' ? { billing: billingDefaults(value) } : {}) })); setFeedback(''); };
   const save = async event => {
     event.preventDefault();
     // Address dialog owns its draft until 确定; do not save the outer form while it is open
@@ -194,13 +199,20 @@ export default function SystemSettings() {
               <table className='settings-features'><thead><tr><th scope='col'>插件</th><th scope='col'>统一开关</th></tr></thead><tbody><tr><th scope='row'>浏览器助手</th><td><label>
                 <input type='checkbox' role='switch' aria-label='统一启用浏览器助手' checked={settings.plugins.browserAssistant} disabled={saving} onChange={event => change('plugins', { ...settings.plugins, browserAssistant: event.target.checked })} />
                 <span>{settings.plugins.browserAssistant ? '开启' : '关闭'}</span>
-              </label></td></tr></tbody></table></> : active === 'edition' ? <section className='edition-settings-row edition-version-row'>
+              </label></td></tr></tbody></table></> : active === 'edition' ? <><section className='edition-settings-row edition-version-row'>
               <div className='edition-section-heading'><h3>使用版本</h3><p>按使用场景选择版本</p></div>
               <fieldset className='settings-network'><legend className='credit-base-label'>版本类型</legend>
               {[['government', '政务版', '适用于政务场景'], ['operations', '运营版', '适用于运营场景']].map(([key, label, hint]) => <label key={key} className={`settings-network-option${settings.edition === key ? ' selected' : ''}`}>
                 <input type='radio' name='edition' value={key} checked={settings.edition === key} onChange={() => change('edition', key)} disabled={saving} /><span><strong>{label}</strong><small>{hint}</small></span>
               </label>)}
-            </fieldset></section> : active === 'features' ? <><table className='settings-features'><thead><tr><th scope='col'>功能</th><th scope='col'>互联网环境</th><th scope='col'>纯内网环境</th></tr></thead><tbody>
+            </fieldset></section><table className='settings-features'><thead><tr><th scope='col'>积分功能</th><th scope='col'>开关</th></tr></thead><tbody>
+              {[['showCredits', '显示积分相关内容'], ['showMultipliers', '显示模型倍率'], ['enabled', '启用积分机制']].map(([key, label]) =>
+                <tr key={key}><th scope='row'>{label}</th><td><label>
+                  <input type='checkbox' role='switch' aria-label={label} checked={resolveBilling(settings)[key]} disabled={saving}
+                    onChange={event => change('billing', { ...resolveBilling(settings), [key]: event.target.checked })} />
+                  <span>{resolveBilling(settings)[key] ? '开启' : '关闭'}</span>
+                </label></td></tr>)}
+            </tbody></table></> : active === 'features' ? <><table className='settings-features'><thead><tr><th scope='col'>功能</th><th scope='col'>互联网环境</th><th scope='col'>纯内网环境</th></tr></thead><tbody>
               {[['automations', '自动化'], ['connectors', '连接器'], ['knowledgeBases', '知识库'], ['landMarket', '土地市场'], ['policyEncyclopedia', '政策宝典']].map(([feature, label]) => <tr key={feature}>
                 <th scope='row'>{featureAddressKeys.has(feature)
                   ? <span className='feature-name-with-address'>{label}<button type='button' className='feature-address-link' disabled={saving}

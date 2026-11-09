@@ -2,6 +2,7 @@
 export type NetworkEnvironment = 'internet' | 'intranet'
 /** Committed network mode with deployment-owned internal origins. */
 export interface NetworkState {
+  billing?: { showCredits: boolean; showMultipliers: boolean; enabled: boolean }
   /** Presentation of internet-dependent skills and experts when connectivity is unavailable. */
   internetCatalogPolicy?: 'hide' | 'disable'
   internetSkillPolicy?: 'hide' | 'disable'

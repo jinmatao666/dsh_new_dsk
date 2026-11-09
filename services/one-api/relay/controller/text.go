@@ -72,9 +72,11 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	modelRatio := billingratio.GetModelRatio(textRequest.Model, meta.ChannelType)
 	groupRatio := billingratio.GetGroupRatio(meta.Group)
 	ratio := modelRatio * groupRatio
-	meta.CreditPrice, err = price.Resolve(meta.OriginModelName, modelRatio, billingratio.GetCompletionRatio(textRequest.Model, meta.ChannelType), groupRatio)
-	if err != nil {
-		return openai.ErrorWrapper(err, "invalid_credit_pricing", http.StatusServiceUnavailable)
+	if !meta.CreditsDisabled {
+		meta.CreditPrice, err = price.Resolve(meta.OriginModelName, modelRatio, billingratio.GetCompletionRatio(textRequest.Model, meta.ChannelType), groupRatio)
+		if err != nil {
+			return openai.ErrorWrapper(err, "invalid_credit_pricing", http.StatusServiceUnavailable)
+		}
 	}
 	meta.CreditSessionID = auditSessionID(c)
 	// pre-consume quota

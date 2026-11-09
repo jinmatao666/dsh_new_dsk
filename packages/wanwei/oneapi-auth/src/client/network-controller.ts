@@ -2,6 +2,7 @@ import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client
 import { internetCatalogAccess, type NetworkState } from '../network-contract.ts'
 import {
   resolveDeploymentFeaturePages,
+  resolveBillingPolicy,
   resolveDeploymentFeatures,
   resolveDeploymentPlugins,
   resolveInternetCatalogPolicy,
@@ -84,6 +85,7 @@ export class NetworkController {
       const result = await this.connection.rpc.call('/desktop-auth', operation, payload, signal)
       if (!result.ok) throw new Error(result.error.message)
       const value = result.value as {
+        billing?: unknown
         mode: unknown
         internalOrigins: readonly string[]
         directInternet?: unknown
@@ -99,7 +101,7 @@ export class NetworkController {
       const features = resolveDeploymentFeatures(value.features)
       const featurePages = resolveDeploymentFeaturePages(value.featurePages)
       const plugins = resolveDeploymentPlugins(value.plugins)
-      await this.synchronize({ mode: value.mode, internalOrigins: value.internalOrigins,
+      await this.synchronize({ billing: resolveBillingPolicy(value.billing), mode: value.mode, internalOrigins: value.internalOrigins,
         internetCatalogPolicy: resolveInternetCatalogPolicy(value.internetCatalogPolicy),
         internetSkillPolicy: resolveInternetCatalogPolicy(
           value.internetSkillPolicy === undefined ? value.internetCatalogPolicy : value.internetSkillPolicy),

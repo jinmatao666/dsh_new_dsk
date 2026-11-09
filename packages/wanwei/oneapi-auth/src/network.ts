@@ -57,6 +57,7 @@ declare module '@deepseek-ai/cordis' {
  */
 export function installNetworkPolicy(ctx: Context, baseURL: string,
   resolveToken?: () => Promise<string | undefined>, pipMirrors?: PipMirrorPolicy): NetworkPolicy {
+  let billing: DeploymentSettings['billing']
   let features: DeploymentSettings['features'] | undefined
   const listeners = new Set<() => void>()
   let plugins: DeploymentPlugins = { browserAssistant: false }
@@ -78,6 +79,7 @@ export function installNetworkPolicy(ctx: Context, baseURL: string,
       await policy.setMode(settings.network)
       policy.setPlugins(settings.plugins)
       features = settings.features
+      billing = settings.billing
       resources.configure(settings.network, settings.resources)
       resourceRelay = settings.resources?.source === 'proxy'
       directInternet = await resources.directAvailable()
@@ -92,7 +94,7 @@ export function installNetworkPolicy(ctx: Context, baseURL: string,
     watch: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     pluginAllowed: plugin => plugins[plugin],
     setPlugins: (value) => { plugins = value },
-    getSnapshot: () => ({ mode: scope.get().mode, internalOrigins: [new URL(baseURL).origin],
+    getSnapshot: () => ({ ...billing === undefined ? {} : { billing }, mode: scope.get().mode, internalOrigins: [new URL(baseURL).origin],
       internetCatalogPolicy, internetSkillPolicy, internetExpertPolicy,
       ...(directInternet === undefined ? {} : { directInternet }) }),
     async setMode(mode) {

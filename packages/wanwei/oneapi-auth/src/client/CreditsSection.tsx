@@ -13,6 +13,8 @@ type History = {
 }
 /** Host-backed operations shared by the credits page and sidebar shortcut. */
 export interface CreditsInjected {
+  billing?: HostObservable<boolean>
+  accounting?: HostObservable<boolean>
   hooks: { auth: HostObservable<AuthView> }
   requestCredits: (operation: string, page?: number, filter?: string) => Promise<unknown>
 }

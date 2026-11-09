@@ -82,6 +82,9 @@ func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTok
 }
 
 func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64, meta *meta.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
+	if meta.CreditsDisabled {
+		return 0, nil
+	}
 	preConsumedQuota := getPreConsumedQuota(textRequest, promptTokens, ratio)
 	if meta.CreditPrice != nil && meta.CreditPrice.Source == "configured" {
 		output := int(config.PreConsumedQuota)
@@ -173,6 +176,16 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 	}
 	var quota int64
 	completionRatio := billingratio.GetCompletionRatio(textRequest.Model, meta.ChannelType)
+	if meta.CreditsDisabled {
+		log := &model.Log{UserId: meta.UserId, OrgId: meta.OrgId, ChannelId: meta.ChannelId, ModelName: textRequest.Model,
+			TokenName: meta.TokenName, PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens,
+			IsStream: meta.IsStream, Content: "积分机制已关闭，不计积分", ElapsedTime: helper.CalcElapsedTime(meta.StartTime)}
+		billing.FillLogTimingFromContext(ctx, log)
+		model.RecordConsumeLog(ctx, log)
+		model.FinishUserPromptAudit(ctx, "success", "", 0, usage.PromptTokens, usage.CompletionTokens, log.ElapsedTime)
+		model.UpdateUserUsedQuotaAndRequestCount(meta.UserId, 0)
+		return
+	}
 	promptTokens := usage.PromptTokens
 	completionTokens := usage.CompletionTokens
 	quota = int64(math.Ceil((float64(promptTokens) + float64(completionTokens)*completionRatio) * ratio))

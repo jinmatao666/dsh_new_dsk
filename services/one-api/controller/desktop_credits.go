@@ -13,6 +13,10 @@ import (
 )
 
 func DesktopCheckin(c *gin.Context) {
+	if config.CreditsDisabled() {
+		c.JSON(200, gin.H{"success": true, "data": gin.H{"enabled": false, "can_claim": false}})
+		return
+	}
 	id := c.GetInt(ctxkey.Id)
 	if c.Request.Method == "POST" {
 		if err := model.ClaimDesktopCheckin(id); err != nil {
@@ -152,14 +156,7 @@ func GetDesktopCredits(c *gin.Context) {
 
 // DesktopCreditAvailability checks live, unexpired credits before task side effects.
 func DesktopCreditAvailability(c *gin.Context) {
-	config.OptionMapRWMutex.RLock()
-	raw := config.OptionMap["SystemDeploymentSettings"]
-	config.OptionMapRWMutex.RUnlock()
-	var settings struct {
-		Edition string `json:"edition"`
-	}
-	_ = json.Unmarshal([]byte(raw), &settings)
-	enabled := settings.Edition == "operations"
+	enabled := !config.CreditsDisabled()
 	var account model.User
 	if err := model.DB.Select("account_type").First(&account, c.GetInt(ctxkey.Id)).Error; err != nil {
 		c.JSON(401, gin.H{"success": false, "message": "用户身份无效"})

@@ -79,6 +79,18 @@ describe('ModelSelect reasoning effort', () => {
     expect(screen.getByLabelText('参考倍率 0 倍').textContent).toBe('0×')
     expect(screen.getByRole('menuitemradio', { name: 'Custom model' }).textContent).toBe('Custom model')
   })
+  it('hides multipliers without hiding selectable models when the deployment disables their display', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({ groups: [
+      { id: 'server', name: 'Model Server', models: [{ id: 'a', name: 'Model A', displayMultiplier: 0.375 }] },
+    ] }))
+    const select = vi.fn(async () => true)
+    render(<ModelSelect locked={false} available directory={directory} billing={createSnapshotStore(false)}
+      load={vi.fn()} select={select} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
+    expect(screen.queryByLabelText('参考倍率 0.375 倍')).toBeNull()
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Model A' }))
+    expect(select).toHaveBeenCalledWith({ provider: 'server', model: 'a' })
+  })
   it('opens model settings from the custom-model entry in the picker', () => {
     const openSettings = vi.fn()
     window.addEventListener('dsh:open-model-settings', openSettings, { once: true })

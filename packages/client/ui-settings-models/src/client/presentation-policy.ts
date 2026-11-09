@@ -4,6 +4,8 @@ import type {} from '@deepseek-ai/cordis'
 export interface ModelSettingsPolicy {
   /** Provider controlled by the connected server, never edited in this page. */
   readonly managedProvider: string
+  /** Observable permission for billing UI; omitted outside the product build. */
+  readonly billing?: import('@deepseek-ai/dsh-client-ui-slots').HostObservable<boolean>
   /** Restrict local additions to custom endpoints with generated route identifiers. */
   readonly customOnly: boolean
   /** Suppress the upstream welcome notice for products with their own onboarding. */

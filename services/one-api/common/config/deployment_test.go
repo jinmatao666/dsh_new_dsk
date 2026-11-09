@@ -47,3 +47,26 @@ func TestReleaseDetectionRequiresExplicitOptIn(t *testing.T) {
 	t.Setenv("PARVIS_RELEASE_DETECTION_ENABLED", "true")
 	assert.True(t, ReleaseDetectionEnabled())
 }
+
+func TestCreditPolicyDefaultsAndOverrides(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want CreditPolicy
+	}{
+		{`{}`, CreditPolicy{true, true, true}},
+		{`{"edition":"government"}`, CreditPolicy{}},
+		{`{"edition":"operations","network":"intranet"}`, CreditPolicy{true, true, true}},
+		{`{"edition":"government","billing":{"enabled":true}}`, CreditPolicy{false, false, true}},
+		{`{"edition":"operations","billing":{"showCredits":false,"showMultipliers":false,"enabled":false}}`, CreditPolicy{}},
+	} {
+		got, err := ResolveCreditPolicy(tc.raw)
+		if err != nil || got != tc.want {
+			t.Fatalf("%s: %+v %v", tc.raw, got, err)
+		}
+	}
+	for _, raw := range []string{`{"billing":null}`, `{"billing":[]}`, `{"billing":{"enabled":null}}`, `{"billing":{"enabled":"false"}}`} {
+		if _, err := ResolveCreditPolicy(raw); err == nil {
+			t.Fatalf("accepted invalid flags: %s", raw)
+		}
+	}
+}

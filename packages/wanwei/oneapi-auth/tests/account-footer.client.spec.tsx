@@ -36,3 +36,19 @@ it('shows the signed-in user and reveals controls without unmounting them', asyn
   expect(logout).toHaveBeenCalledOnce()
   await screen.findByRole('button', { name: 'Mysterious', expanded: false })
 })
+
+it('keeps the account menu while hiding credits and check-in without balance requests', () => {
+  const requestCredits = vi.fn()
+  const props = {
+    logout: vi.fn(), requestCredits, billing: { getSnapshot: () => false, subscribe: () => () => {} },
+    wide: true, controls: <button type="button">设置</button>,
+    useAuth: <T,>(select: (state: AuthView) => T) => select({ state: 'authenticated', username: 'Gov', models: [] }),
+    t: (key: keyof typeof zh) => zh[key],
+  } as Parameters<typeof AccountFooter>[0]
+  render(<AccountFooter {...props} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Gov' }))
+  expect(screen.getByRole('button', { name: '设置' })).toBeTruthy()
+  expect(screen.queryByText('签到领积分')).toBeNull()
+  expect(screen.queryByText(zh.accountCreditsBalance)).toBeNull()
+  expect(requestCredits).not.toHaveBeenCalled()
+})

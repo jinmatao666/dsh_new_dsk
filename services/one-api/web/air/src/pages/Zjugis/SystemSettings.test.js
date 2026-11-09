@@ -440,3 +440,16 @@ async function waitForPersonQuota() {
   }
   return container.querySelector('[aria-label="爱丽丝 容量（MB）"]');
 }
+
+test('government edition defaults all three billing switches off and permits independent overrides', async () => {
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[3].click());
+  act(() => container.querySelector('input[value="government"]').click());
+  const toggles = [...container.querySelectorAll('[role="switch"]')];
+  expect(toggles).toHaveLength(3);
+  expect(toggles.map(toggle => toggle.checked)).toEqual([false, false, false]);
+  act(() => toggles[1].click());
+  expect(toggles.map(toggle => toggle.checked)).toEqual([false, true, false]);
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(JSON.parse(API.put.mock.calls[0][1].value).billing).toEqual({ showCredits: false, showMultipliers: true, enabled: false });
+});

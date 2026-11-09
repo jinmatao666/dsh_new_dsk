@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/songquanpeng/one-api/common/config"
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/model"
@@ -14,6 +15,7 @@ import (
 )
 
 type Meta struct {
+	CreditsDisabled bool
 	CreditPrice     *price.Snapshot
 	CreditReserved  map[int64]int64
 	CreditSessionID string
@@ -52,6 +54,7 @@ type Meta struct {
 
 func GetByContext(c *gin.Context) *Meta {
 	meta := Meta{
+		CreditsDisabled:    config.CreditsDisabled(),
 		Mode:               relaymode.GetByPath(c.Request.URL.Path),
 		ChannelType:        c.GetInt(ctxkey.Channel),
 		ChannelId:          c.GetInt(ctxkey.ChannelId),

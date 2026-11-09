@@ -71,12 +71,12 @@ func ValidateUserToken(key string) (token *Token, err error) {
 		}
 		return nil, errors.New("令牌验证失败")
 	}
-	if token.Status == TokenStatusExhausted {
+	if token.Status == TokenStatusExhausted && !config.CreditsDisabled() {
 		return nil, fmt.Errorf("令牌 %s（#%d）额度已用尽", token.Name, token.Id)
 	} else if token.Status == TokenStatusExpired {
 		return nil, errors.New("该令牌已过期")
 	}
-	if token.Status != TokenStatusEnabled {
+	if token.Status != TokenStatusEnabled && !(config.CreditsDisabled() && token.Status == TokenStatusExhausted) {
 		return nil, errors.New("该令牌状态不可用")
 	}
 	if token.ExpiredTime != -1 && token.ExpiredTime < helper.GetTimestamp() {
@@ -89,7 +89,7 @@ func ValidateUserToken(key string) (token *Token, err error) {
 		}
 		return nil, errors.New("该令牌已过期")
 	}
-	if !token.UnlimitedQuota && token.RemainQuota <= 0 {
+	if !config.CreditsDisabled() && !token.UnlimitedQuota && token.RemainQuota <= 0 {
 		if !common.RedisEnabled {
 			// in this case, we can make sure the token is exhausted
 			token.Status = TokenStatusExhausted

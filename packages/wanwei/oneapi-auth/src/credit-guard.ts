@@ -17,6 +17,8 @@ export function installCreditGuard(ctx: Context, baseURL: string, provider: stri
     return agent.options.provider === provider
   }
   const check = async (agent: Agent, signal: AbortSignal): Promise<void> => {
+    const policy = ctx.get?.('wanweiNetworkPolicy')
+    if (policy?.getSnapshot().billing?.enabled === false) return
     if (!managed(agent)) return
     const token = await resolveToken()
     if (!token) throw new Error('登录状态已失效，请重新登录')

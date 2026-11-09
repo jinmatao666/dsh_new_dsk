@@ -40,9 +40,10 @@ interface EffortChoice {
  * @returns the trigger and, while open, the two-level menu.
  */
 export function ModelSelect(
-  { locked, available, directory, load, select, t, managedProvider }:
+  { locked, available, directory, load, select, t, managedProvider, billing }:
   ModelSelectInjected & { locked: boolean } & PropsLocale<'model'>,
 ) {
+  const showCosts = useSyncExternalStore(billing?.subscribe ?? (() => () => {}), billing?.getSnapshot ?? (() => true))
   const state = useSyncExternalStore(
     fn => directory.subscribe(fn),
     () => directory.getSnapshot(),
@@ -312,7 +313,7 @@ export function ModelSelect(
                               <span className={css.optionCopy}>
                                 <span className={css.modelName}>{model.name}</span>
                               </span>
-                              {model.displayMultiplier !== undefined && <span className={css.multiplier}
+                              {showCosts && model.displayMultiplier !== undefined && <span className={css.multiplier}
                                 title={t('cost.referenceHint')} aria-label={t('cost.reference', { value: model.displayMultiplier })}>
                                 {model.displayMultiplier.toLocaleString(undefined, { maximumFractionDigits: 12 })}×
                               </span>}

@@ -72,6 +72,9 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	default:
 		preConsumedQuota = int64(float64(config.PreConsumedQuota) * ratio)
 	}
+	if meta.CreditsDisabled {
+		preConsumedQuota, quota = 0, 0
+	}
 	userQuota, err := model.CacheGetUserQuota(ctx, userId)
 	if err != nil {
 		return openai.ErrorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
@@ -79,7 +82,9 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 
 	// 企业账户:走企业账本扣减,不动 user_quota
 	var orgDeducted map[int64]int64
-	if useOrgQuota {
+	if meta.CreditsDisabled {
+		// Requests with accounting disabled bypass both personal and organizational balances.
+	} else if useOrgQuota {
 		// 四道闸门(总账本/成员累计上限/日月限额/部门预算)统一走公共校验
 		if errResp := checkOrgSpendGuards(orgId, userId, orgDeptId, meta.OrgMemberQuotaLimit, preConsumedQuota); errResp != nil {
 			return errResp
@@ -289,6 +294,12 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	quotaDelta := quota - preConsumedQuota
 	defer func(ctx context.Context) {
 		go func() {
+			if meta.CreditsDisabled {
+				model.RecordConsumeLog(ctx, &model.Log{UserId: userId, OrgId: orgId, ChannelId: channelId,
+					ModelName: audioModel, TokenName: tokenName, Content: "积分机制已关闭，不计积分"})
+				model.UpdateUserUsedQuotaAndRequestCount(userId, 0)
+				return
+			}
 			if useOrgQuota {
 				// 企业模式:仅调整 token 额度,不动用户个人额度
 				if err := model.PostConsumeTokenQuotaOnly(tokenId, quotaDelta); err != nil {

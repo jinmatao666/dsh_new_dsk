@@ -46,7 +46,7 @@ func TestDesktopConfigPublicFields(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if !body.Success || len(body.Data) != 10 || body.Data["internetCatalogPolicy"] != "disable" || body.Data["edition"] != "operations" || body.Data["network"] != "intranet" || body.Data["operator"] != "张运维" || body.Data["phone"] != "0571-12345678" {
+	if !body.Success || len(body.Data) != 11 || body.Data["internetCatalogPolicy"] != "disable" || body.Data["edition"] != "operations" || body.Data["network"] != "intranet" || body.Data["operator"] != "张运维" || body.Data["phone"] != "0571-12345678" {
 		t.Fatalf("unexpected public data: %+v", body)
 	}
 	featurePages, ok := body.Data["featurePages"].(map[string]interface{})

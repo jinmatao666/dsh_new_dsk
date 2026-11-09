@@ -12,6 +12,8 @@ import type { ModelDirectoryState } from './directory.ts'
 export interface ModelSelectInjected {
   /** Product server route displayed separately from all local custom models. */
   managedProvider?: string
+  /** Whether the product displays cost multipliers. */
+  billing?: import('@deepseek-ai/dsh-client-ui-slots').HostObservable<boolean>
   /** Whether this session supports Agent-bound model inspection and selection. */
   available: boolean
   /** The session's shared directory store (same instance the /model popup reads). */

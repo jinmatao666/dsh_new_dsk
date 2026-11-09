@@ -3,6 +3,7 @@ import { resolveResourceSettings, type ResourceSettings } from './resource-setti
 
 /** Public deployment metadata owned by the desktop's configured OneAPI server. */
 export interface DeploymentSettings {
+  billing?: BillingPolicy
   internetCatalogPolicy?: 'hide' | 'disable'
   internetSkillPolicy?: 'hide' | 'disable'
   internetExpertPolicy?: 'hide' | 'disable'
@@ -141,7 +142,7 @@ export async function fetchDeploymentSettings(baseURL: string, signal?: AbortSig
     typeof data.operator !== 'string' || data.operator.length > 160 ||
     typeof data.phone !== 'string' || data.phone.length > 80) throw new Error('后台系统设置字段无效')
   const resources = resolveResourceSettings(data.resources)
-  return { network: data.network, operator: data.operator, phone: data.phone,
+  return { billing: resolveBillingPolicy(data.billing, data.edition), network: data.network, operator: data.operator, phone: data.phone,
     internetCatalogPolicy: resolveInternetCatalogPolicy(data.internetCatalogPolicy),
     internetSkillPolicy: resolveInternetCatalogPolicy(
       data.internetSkillPolicy === undefined ? data.internetCatalogPolicy : data.internetSkillPolicy),
@@ -151,4 +152,26 @@ export async function fetchDeploymentSettings(baseURL: string, signal?: AbortSig
     features: resolveDeploymentFeatures(data.features),
     featurePages: resolveDeploymentFeaturePages(data.featurePages),
     plugins: resolveDeploymentPlugins(data.plugins) }
+}
+
+
+/** Administrator-owned visibility and accounting switches. */
+export interface BillingPolicy { showCredits: boolean; showMultipliers: boolean; enabled: boolean }
+/** Resolve absent legacy flags from the edition and reject malformed explicit flags.
+ * @param value - Optional billing object returned by the backend.
+ * @param edition - Edition supplying defaults for absent switches.
+ * @returns Independent display and accounting permissions.
+ */
+export function resolveBillingPolicy(value: unknown, edition: unknown = 'operations'): BillingPolicy {
+  const base = edition !== 'government'
+  if (value === undefined) return { showCredits: base, showMultipliers: base, enabled: base }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('积分开关配置无效')
+  const record = value as Record<string, unknown>
+  const result = { showCredits: base, showMultipliers: base, enabled: base }
+  for (const key of ['showCredits', 'showMultipliers', 'enabled'] as const) {
+    const flag = record[key]
+    if (flag !== undefined && typeof flag !== 'boolean') throw new Error('积分开关配置无效')
+    if (typeof flag === 'boolean') result[key] = flag
+  }
+  return result
 }

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 )
@@ -75,4 +77,54 @@ func parseDeploymentCapabilities(raw string) map[string]bool {
 // contacts public release, website, and backend endpoints.
 func ReleaseDetectionEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("PARVIS_RELEASE_DETECTION_ENABLED")), "true")
+}
+
+// CreditPolicy separates visibility from accounting; absent flags follow the edition.
+type CreditPolicy struct {
+	ShowCredits     bool `json:"showCredits"`
+	ShowMultipliers bool `json:"showMultipliers"`
+	Enabled         bool `json:"enabled"`
+}
+
+func ResolveCreditPolicy(raw string) (CreditPolicy, error) {
+	var settings struct {
+		Edition string          `json:"edition"`
+		Billing json.RawMessage `json:"billing"`
+	}
+	if err := json.Unmarshal([]byte(raw), &settings); err != nil && raw != "" {
+		return CreditPolicy{}, err
+	}
+	var flags map[string]json.RawMessage
+	if settings.Billing != nil {
+		if strings.TrimSpace(string(settings.Billing)) == "null" {
+			return CreditPolicy{}, fmt.Errorf("invalid billing")
+		}
+		if err := json.Unmarshal(settings.Billing, &flags); err != nil {
+			return CreditPolicy{}, err
+		}
+	}
+	enabled := settings.Edition != "government"
+	policy := CreditPolicy{enabled, enabled, enabled}
+	for key, target := range map[string]*bool{
+		"showCredits": &policy.ShowCredits, "showMultipliers": &policy.ShowMultipliers, "enabled": &policy.Enabled,
+	} {
+		if value, ok := flags[key]; ok {
+			if string(value) == "null" {
+				return policy, fmt.Errorf("invalid billing.%s", key)
+			}
+			if err := json.Unmarshal(value, target); err != nil {
+				return policy, err
+			}
+		}
+	}
+	return policy, nil
+}
+
+// CreditsDisabled reads the edition policy without changing balances or prices.
+func CreditsDisabled() bool {
+	OptionMapRWMutex.RLock()
+	raw := OptionMap["SystemDeploymentSettings"]
+	OptionMapRWMutex.RUnlock()
+	policy, err := ResolveCreditPolicy(raw)
+	return err == nil && !policy.Enabled
 }

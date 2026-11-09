@@ -158,3 +158,52 @@ func TestCreditBillingActualBalanceReceiptAndFailureRefund(t *testing.T) {
 		}
 	}
 }
+
+func TestDisabledCreditsAllowsZeroBalanceAndKeepsLedgerUnchanged(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldDB, oldLog, oldSQLite, oldRedis, oldBatch := dbmodel.DB, dbmodel.LOG_DB, common.UsingSQLite, common.RedisEnabled, config.BatchUpdateEnabled
+	dbmodel.DB, dbmodel.LOG_DB, common.UsingSQLite, common.RedisEnabled, config.BatchUpdateEnabled = db, db, true, false, false
+	config.OptionMapRWMutex.Lock()
+	oldOptions := config.OptionMap
+	config.OptionMap = map[string]string{"SystemDeploymentSettings": `{"edition":"government"}`}
+	config.OptionMapRWMutex.Unlock()
+	defer func() {
+		dbmodel.DB, dbmodel.LOG_DB, common.UsingSQLite, common.RedisEnabled, config.BatchUpdateEnabled = oldDB, oldLog, oldSQLite, oldRedis, oldBatch
+		config.OptionMapRWMutex.Lock()
+		config.OptionMap = oldOptions
+		config.OptionMapRWMutex.Unlock()
+	}()
+	if err = db.AutoMigrate(&dbmodel.User{}, &dbmodel.UserTimedQuota{}, &dbmodel.Token{}, &dbmodel.Log{}, &dbmodel.Channel{}); err != nil {
+		t.Fatal(err)
+	}
+	db.Create(&dbmodel.User{Id: 1, Username: "zero-balance"})
+	db.Create(&dbmodel.Token{Id: 1, UserId: 1, Key: "zero-balance-token", Status: dbmodel.TokenStatusExhausted, ExpiredTime: -1})
+	if _, err = dbmodel.ValidateUserToken("zero-balance-token"); err != nil {
+		t.Fatal(err)
+	}
+	m := &meta.Meta{CreditsDisabled: config.CreditsDisabled(), UserId: 1, TokenId: 1, StartTime: time.Now()}
+	request := &model.GeneralOpenAIRequest{Model: "test", MaxTokens: 500}
+	reserved, bizErr := preConsumeQuota(context.Background(), request, 1000, 1, m)
+	if bizErr != nil || reserved != 0 {
+		t.Fatalf("zero balance blocked: %v %d", bizErr, reserved)
+	}
+	postConsumeQuota(context.Background(), &model.Usage{PromptTokens: 100, CompletionTokens: 50}, m, request, 1, 0, 1, 1, false)
+	var user dbmodel.User
+	var token dbmodel.Token
+	var record dbmodel.Log
+	db.First(&user, 1)
+	db.First(&token, 1)
+	db.First(&record)
+	if user.Quota != 0 || token.RemainQuota != 0 || record.Quota != 0 || record.PromptTokens != 100 {
+		t.Fatalf("unexpected charge: %+v %+v %+v", user, token, record)
+	}
+	config.OptionMapRWMutex.Lock()
+	config.OptionMap["SystemDeploymentSettings"] = `{"edition":"operations"}`
+	config.OptionMapRWMutex.Unlock()
+	if _, err = dbmodel.ValidateUserToken("zero-balance-token"); err == nil {
+		t.Fatal("internet accounting did not restore exhausted-token check")
+	}
+}

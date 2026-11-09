@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"github.com/songquanpeng/one-api/common/config"
 	"time"
 
 	"github.com/songquanpeng/one-api/common"
@@ -21,6 +22,9 @@ const FreeQuotaIntervalDays = 30
 //
 // 注意:本函数被每天 0 点 cron 调用,本身具幂等性,重复调用不会重复发放。
 func IssueMonthlyFreeQuotas() error {
+	if config.CreditsDisabled() {
+		return nil
+	}
 	freeQuota := GetTrialFreeQuota()
 	if freeQuota <= 0 {
 		return nil
