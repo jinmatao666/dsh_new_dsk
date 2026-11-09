@@ -79,3 +79,17 @@
 .dialog .formActions button { height: 40px; min-width: 80px; }
 .dialog .formActions .secondary { border-color: var(--dsw-alias-border-l2, #dce3ee); color: var(--dsw-alias-label-primary, #303b50); background: var(--dsw-alias-bg-layer-1, #fff); }
 .dialog .closeButton { color: var(--dsw-alias-label-secondary, #758094); }
+
+/* 账户操作并排收拢到身份卡片右侧。 */
+.card { padding: 18px 20px; gap: 16px; border: 1px solid var(--dsw-alias-border-l2, #e5e9f0); border-radius: 14px; background: var(--dsw-alias-bg-layer-1, #fafbfd); }
+.identity { min-width: 0; }
+.value { overflow-wrap: anywhere; }
+.rename { flex: none; margin-left: auto; padding: 8px 14px; border: 1px solid #dce5f3; border-radius: 8px; color: #2563eb; background: #fff; font: inherit; font-size: 13px; cursor: pointer; }
+.rename:hover:not(:disabled) { background: #f0f5ff; border-color: #b9cef5; }
+.rename:disabled { opacity: .45; cursor: not-allowed; }
+.identityActions .logout { margin: 0; padding: 9px 18px; border: 1px solid #e0e4eb; border-radius: 8px; color: #536071; background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
+.identityActions .logout:hover:not(:disabled) { color: #c53b42; border-color: #edc1c5; background: #fff7f7; }
+.rename:focus-visible, .identityActions .logout:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+
+.identityActions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
+.identityActions .rename { margin-left: 0; }

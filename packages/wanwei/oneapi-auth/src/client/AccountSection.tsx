@@ -117,9 +117,11 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
   return <section className={css.section}>
     <h1>{t('accountTitle')}</h1><p className={css.hint}>{t('securityIntro')}</p>
     <div className={css.card}><div className={css.identity}><span className={css.avatar} aria-hidden="true">{auth.state === 'authenticated' ? data?.username?.slice(0, 1).toUpperCase() || 'W' : 'W'}</span><div><div className={css.label}>{t('signedInAs')}</div><div className={css.value}>{auth.state === 'authenticated' ? data?.username || t('signedInFallback') : t('loggedOut')}</div></div></div>
-      {auth.state === 'authenticated' && <button type="button" className={css.logout} disabled={busy} onClick={() => { void execute(async () => { setSigningOut(true); try { await logout(); close() } finally { setSigningOut(false) } }) }}>{signingOut ? t('signingOut') : t('signOut')}</button>}
-      {auth.state === 'authenticated' && <button type="button" className={css.secondary} disabled={blocked || !data?.username}
-        onClick={() => { edit('username') }}>{t('securityRename')}</button>}
+      <div className={css.identityActions}>
+        {auth.state === 'authenticated' && <button type="button" className={css.logout} disabled={busy} onClick={() => { void execute(async () => { setSigningOut(true); try { await logout(); close() } finally { setSigningOut(false) } }) }}>{signingOut ? t('signingOut') : t('signOut')}</button>}
+        {auth.state === 'authenticated' && <button type="button" className={css.rename} disabled={blocked || !data?.username}
+          onClick={() => { edit('username') }}>{t('securityRename')}</button>}
+      </div>
     </div>
     <h2 className={css.subheading}>{t('securityTitle')}</h2>
     <div className={css.security}>{rows.map(row => <div key={row.key} className={css.row}><span className={css.icon} aria-hidden="true"><img src={accountIcons[row.key === 'phone' ? 'smartphone' : row.key === 'password' ? 'key-round' : 'wechat']} alt="" /></span><div className={css.description}><h3>{row.title}</h3><p>{row.detail}</p></div><span className={css.action} tabIndex={row.key === 'password' && !data?.phoneBound ? 0 : undefined} data-tooltip={row.key === 'password' && !data?.phoneBound ? t('securityPasswordBindFirst') : undefined} aria-label={row.key === 'password' && !data?.phoneBound ? t('securityPasswordBindFirst') : undefined}><button className={css.secondary} disabled={blocked || row.key === 'wechat' || row.key !== 'phone' && !data?.phoneBound} type="button" onClick={() => { edit(row.key) }}>{row.action}</button></span></div>)}</div>
