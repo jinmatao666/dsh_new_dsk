@@ -45,6 +45,7 @@ export class HttpFetchProvider implements WebFetchProvider {
   constructor(
     private readonly limits: HttpFetchLimits,
     private readonly resolveAddresses: HttpFetchResolver = publicHttpNetwork.resolve,
+    private readonly intranetPolicy?: (url: URL) => boolean | undefined,
   ) {}
 
   /** No credentials to check — an anonymous public fetcher is always usable. */
@@ -115,7 +116,9 @@ export class HttpFetchProvider implements WebFetchProvider {
 
   private async requestOnce(url: URL, signal: AbortSignal) {
     try {
-      const addresses = await this.resolveAddresses(url.hostname, signal)
+      const intranet = this.intranetPolicy?.(url)
+      if (intranet === false) throw new WebError('URL is outside the deployment intranet', 'WEB_BLOCKED_URL')
+      const addresses = await (intranet === true ? publicHttpNetwork.resolveIntranet : this.resolveAddresses)(url.hostname, signal)
       return await publicHttpNetwork.request(url, addresses, {
         'user-agent': this.limits.userAgent,
         'accept': 'text/html,application/xhtml+xml,text/*;q=0.9,application/json;q=0.8',

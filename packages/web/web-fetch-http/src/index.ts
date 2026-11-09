@@ -90,5 +90,5 @@ export function apply(ctx: Context, config: Config): void {
     maxRedirects: resolved.maxRedirects,
     userAgent: resolved.userAgent,
   }
-  ctx.web.registerFetchProvider(new HttpFetchProvider(limits))
+  ctx.web.registerFetchProvider(new HttpFetchProvider(limits, undefined, url => ctx.get('webHttpIntranetPolicy')?.(url)))
 }

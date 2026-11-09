@@ -3,6 +3,7 @@
  * Messages arrive from WeChat and drive a desktop Session; replies return to the
  * WeChat chat window.
  */
+import { connectorNetworkPolicy, connectorsAllowed } from './network.ts'
 import { randomBytes, randomUUID } from 'node:crypto'
 import {
   existsSync, mkdirSync, readFileSync, rmSync, writeFileSync,
@@ -975,6 +976,7 @@ export function stopWeChatBridge(): void {
  * @param dshHome - product DSH home.
  */
 export function startWeChatBridge(ctx: Context, dshHome: string): void {
+  if (!connectorsAllowed(ctx)) return
   const credentials = loadWeChatCredentials(dshHome)
   if (credentials === null) return
   // Login polls call this repeatedly; restarting would abort an in-flight phone task.
@@ -1091,7 +1093,7 @@ async function runBridgeLoop(ctx: Context, dshHome: string, signal: AbortSignal)
     }
   } finally {
     // A replaced bridge must not announce offline for the token its successor just started.
-    if (bridgeAbort === null) await notifyLifecycle(active, 'stop').catch(() => {})
+    if (bridgeAbort === null && connectorsAllowed(ctx)) await notifyLifecycle(active, 'stop').catch(() => {})
   }
 }
 
@@ -1165,11 +1167,13 @@ export function registerWeChatIlinkRpc(ctx: Context): () => void {
   const ensureBridge = () => {
     if (loadWeChatCredentials(dshHome()) !== null) startWeChatBridge(ctx, dshHome())
   }
-  ensureBridge()
-
   return ctx.effect(() => {
+    const reconcile = () => { if (connectorsAllowed(ctx)) ensureBridge(); else stopWeChatBridge() }
+    const unsubscribe = connectorNetworkPolicy(ctx)?.watch(reconcile)
+    reconcile()
     const disposeRpc = connection.rpc.handle('/wanwei-wechat', async (endpoint, payload) => {
       try {
+        if (!connectorsAllowed(ctx)) throw new Error('当前网络环境未开放连接器')
         const home = dshHome()
         if (endpoint === 'status') {
           // Revive a bridge whose loop exited on an unexpected error.
@@ -1214,6 +1218,7 @@ export function registerWeChatIlinkRpc(ctx: Context): () => void {
       }
     })
     return () => {
+      unsubscribe?.()
       stopWeChatBridge()
       disposeRpc()
     }

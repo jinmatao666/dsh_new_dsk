@@ -1,3 +1,4 @@
+import { trackCustomModels } from './custom-model-usage.ts'
 import { installCreditGuard } from './credit-guard.ts'
 import { publicAuthRequest } from './public-auth.ts'
 import { creditsRequest } from './credits.ts'
@@ -362,6 +363,8 @@ export function apply(ctx: Context, config: Config): void {
   const modelPreferenceRef = (owner: string) => credentialRef(`DSH_DESKTOP_MODEL_${owner.toUpperCase()}`)
   let modelSync = Promise.resolve()
   const installMarkerRef = credentialRef('DSH_DESKTOP_INSTALL_MARKER')
+  if (!config.developmentBypass) trackCustomModels(ctx, baseURL, config.provider,
+    () => ctx.settings.get(LLM_SETTINGS), async () => (await ctx.credentials.resolve(ref))?.value)
   registerSkillUsage(ctx, baseURL, async () => (await ctx.credentials.resolve(ref))?.value)
   ctx.web.registerSearchProvider(new OneApiSearchProvider({
     allowed: () => network.getSnapshot().mode === 'internet',
@@ -723,6 +726,7 @@ export function apply(ctx: Context, config: Config): void {
     if (endpoint === 'public-auth') {
       try {
         await installReady
+        if (network.getSnapshot().mode === 'intranet') return internal('此功能暂未开放')
         const args = payload as { operation?: unknown; input?: unknown }
         if (typeof args.operation !== 'string' || !args.input || typeof args.input !== 'object' || Array.isArray(args.input)
           || JSON.stringify(args.input).length > 8192 || Object.values(args.input).some(value => typeof value !== 'string')) throw new Error('登录参数无效')

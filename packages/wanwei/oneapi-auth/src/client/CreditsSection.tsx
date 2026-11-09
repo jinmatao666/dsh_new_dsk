@@ -21,7 +21,7 @@ const points = (value: number) => value.toLocaleString('zh-CN', { maximumFractio
 const changed = () => { window.dispatchEvent(new Event('wanwei:credits-changed')) }
 
 /** A shortcut appears only while the authenticated user can claim a configured reward. */
-export function CheckinShortcut({ useAuth, requestCredits, wide }: PropsRuntime<'settings.shortcut'> & InjectFace<CreditsInjected>) {
+export function CheckinShortcut({ useAuth, requestCredits, wide, onOpen }: Pick<PropsRuntime<'sidebar.footer'>, 'wide'> & InjectFace<CreditsInjected> & { onOpen?: () => void }) {
   const auth = useAuth(value => value)
   const [status, setStatus] = useState<Checkin>()
   useEffect(() => {
@@ -39,7 +39,7 @@ export function CheckinShortcut({ useAuth, requestCredits, wide }: PropsRuntime<
   }, [auth, requestCredits])
   if (!wide || !status?.enabled || !status.can_claim) return null
   return <button className={css.shortcut} type="button"
-    onClick={() => { window.dispatchEvent(new CustomEvent('dsh:open-settings-section', { detail: 'wanwei-credits' })) }}><img src={accountIcons.gift} alt="" /><span>签到领积分</span></button>
+    onClick={() => { onOpen?.(); window.dispatchEvent(new CustomEvent('dsh:open-settings-section', { detail: 'wanwei-credits' })) }}><img src={accountIcons.gift} alt="" /><span>签到领积分</span></button>
 }
 
 /** Balance, explicit check-in and paginated personal credit history. */

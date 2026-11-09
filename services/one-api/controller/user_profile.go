@@ -139,6 +139,6 @@ func GetUserProfile(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{
-		"from": from, "to": to, "models": models, "skills": skills, "experts": experts, "downloads": downloads,
+		"from": from, "to": to, "models": models, "skills": skills, "experts": experts, "downloads": downloads, "custom_models": customModelProfile(id),
 	}})
 }

@@ -145,6 +145,13 @@ export default function UserProfile({ user }) {
           <Ranking title='常用技能' items={state.data.skills.top} empty='暂无技能调用记录' />
           <Ranking title='常用专家' items={state.data.experts.top} empty='暂无专家任务记录' />
         </div>
+        {(!state.data.custom_models?.synced_at || state.data.custom_models?.models?.length > 0) && <section className='user-profile-downloads'>
+          <div className='user-profile-section-head'><h3>桌面端自定义模型</h3><span>{state.data.custom_models?.synced_at ? `最近同步：${new Date(state.data.custom_models.synced_at * 1000).toLocaleString('zh-CN')}` : '尚未同步'}</span></div>
+          {state.data.custom_models?.models?.length > 0 ? <table style={{ width: '100%' }}>
+            <thead><tr><th>模型名称</th><th>模型 ID</th><th>近 30 天调用</th><th>最近调用</th></tr></thead>
+            <tbody>{state.data.custom_models.models.map(item => <tr key={item.id}><td>{item.name || item.id}{!item.configured && '（历史）'}</td><td>{item.id}</td><td>{number(item.calls)} 次</td><td>{item.last_call ? new Date(item.last_call * 1000).toLocaleString('zh-CN') : '—'}</td></tr>)}</tbody>
+          </table> : <p className='user-profile-empty'>等待桌面端同步</p>}
+        </section>}
         <section className='user-profile-downloads'><div className='user-profile-section-head'><h3>已安装技能</h3><span>共 {number(state.data.downloads.installed_count)} 个</span></div>
           {state.data.downloads.top?.length ? <>
             <div className='user-profile-installed-grid'>

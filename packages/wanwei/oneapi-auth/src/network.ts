@@ -15,6 +15,10 @@ export interface NetworkPolicy {
    * @returns Current deployment network state.
    */
   getSnapshot(): NetworkState
+  /** Whether the last confirmed deployment allows the feature. */
+  featureAllowed(feature: keyof DeploymentSettings['features']['internet']): boolean
+  /** Observe committed policy updates. */
+  watch(listener: () => void): () => void
   /** Persist a validated environment selection.
    * @param mode - Requested internet or intranet mode, validated before persistence.
    * @returns Committed deployment network state.
@@ -47,6 +51,8 @@ declare module '@deepseek-ai/cordis' {
  */
 export function installNetworkPolicy(ctx: Context, baseURL: string,
   resolveToken?: () => Promise<string | undefined>, pipMirrors?: PipMirrorPolicy): NetworkPolicy {
+  let features: DeploymentSettings['features'] | undefined
+  const listeners = new Set<() => void>()
   let plugins: DeploymentPlugins = { browserAssistant: false }
   const resources = new ResourceRouting(baseURL, undefined, resolveToken, pipMirrors)
   ctx.effect(() => () => resources.dispose())
@@ -65,6 +71,7 @@ export function installNetworkPolicy(ctx: Context, baseURL: string,
     async setDeployment(settings) {
       await policy.setMode(settings.network)
       policy.setPlugins(settings.plugins)
+      features = settings.features
       resources.configure(settings.network, settings.resources)
       resourceRelay = settings.resources?.source === 'proxy'
       directInternet = await resources.directAvailable()
@@ -73,7 +80,10 @@ export function installNetworkPolicy(ctx: Context, baseURL: string,
       internetExpertPolicy = settings.internetExpertPolicy ?? internetCatalogPolicy
       confirmedAt = Date.now()
       refreshPrompt()
+      for (const listener of listeners) listener()
     },
+    featureAllowed: feature => features?.[scope.get().mode][feature] ?? false,
+    watch: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     pluginAllowed: plugin => plugins[plugin],
     setPlugins: (value) => { plugins = value },
     getSnapshot: () => ({ mode: scope.get().mode, internalOrigins: [new URL(baseURL).origin],
@@ -87,6 +97,9 @@ export function installNetworkPolicy(ctx: Context, baseURL: string,
     },
   }
   ctx.provide('wanweiNetworkPolicy', policy)
+  ctx.provide('webHttpIntranetPolicy', (url: URL) => scope.get().mode === 'intranet'
+    ? internalLink(url.href, policy.getSnapshot().internalOrigins)
+    : undefined)
   ctx.inject(['systemPrompt'], (pctx) => {
     const install = () => scope.get().mode === 'intranet' ? pctx.systemPrompt.section({
       name: 'wanwei:intranet-dependencies',

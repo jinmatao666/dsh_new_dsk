@@ -8,6 +8,7 @@
  * actions in `sidebar.footer.action`.
  */
 import type { PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ReactNode } from 'react'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 // Type-only: pulls ui-layout's SlotMap merge (the 'sidebar' entry) into every
 // program that sees this contract, so PropsRuntime<'sidebar'> resolves.
@@ -38,6 +39,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * 'sidebar' entry; ui-settings registers its trigger row + modal panel.
      * The sidebar passes only its column state — it holds no settings state.
      */
+    /** Optional product wrapper around the existing footer controls. */
+    'sidebar.footer': { kind: 'single'; scope: 'root'; owner: SidebarFooterOwnerProps }
     'sidebar.settings': { kind: 'single'; scope: 'root'; owner: SidebarSettingsOwnerProps }
     /**
      * Optional actions beside Settings at the sidebar foot. Declared by this
@@ -81,6 +84,14 @@ export interface SidebarSettingsOwnerProps {
   wide: boolean
 }
 
+/** Existing controls and sidebar width supplied to a footer wrapper. */
+export interface SidebarFooterOwnerProps {
+  /** Whether the sidebar is expanded. */
+  wide: boolean
+  /** The settings control, mounted by the wrapper. */
+  controls: ReactNode
+}
+
 /** Owner share of an action rendered beside Settings at the sidebar foot. */
 export interface SidebarFooterActionOwnerProps {
   /** Whether the sidebar renders wide content (false = 56px rail). */
@@ -113,6 +124,7 @@ export type SidebarRootComponentProps =
     | 'sidebar.brand.mark'
     | 'sidebar.brand.name'
     | 'sidebar.workspaces'
+    | 'sidebar.footer'
     | 'sidebar.settings'
     | 'sidebar.footer.action'
   >

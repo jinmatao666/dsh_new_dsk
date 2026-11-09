@@ -247,3 +247,58 @@ func GetDesktopConfig(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": settings})
 }
+
+// applyDesktopNetworkTransition changes only the settings owned by the network preset.
+func applyDesktopNetworkTransition(previous, next string) (string, error) {
+	before, err := parseDesktopDeploymentSettings(previous)
+	if err != nil {
+		return "", err
+	}
+	after, err := parseDesktopDeploymentSettings(next)
+	if err != nil {
+		return "", err
+	}
+	if before.Network == after.Network {
+		return next, nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(next), &fields); err != nil {
+		return "", err
+	}
+	after.Features["internet"] = before.Features["internet"]
+	if after.Network == "intranet" {
+		after.Features["intranet"] = desktopFeatureFlags{Automations: true}
+		for _, key := range []string{"internetSkillPolicy", "internetExpertPolicy", "internetCatalogPolicy"} {
+			fields[key], _ = json.Marshal("disable")
+		}
+		fields["resources"], _ = json.Marshal(desktopResourceSettings{
+			Source: "offline", Transport: "tunnel", ProbeURLs: []string{},
+		})
+	}
+	fields["features"], _ = json.Marshal(after.Features)
+	value, err := json.Marshal(fields)
+	return string(value), err
+}
+
+func currentDesktopDeploymentSettings() (desktopDeploymentSettings, error) {
+	config.OptionMapRWMutex.RLock()
+	raw := config.OptionMap["SystemDeploymentSettings"]
+	config.OptionMapRWMutex.RUnlock()
+	return parseDesktopDeploymentSettings(raw)
+}
+
+func offlineIntranet() bool {
+	settings, err := currentDesktopDeploymentSettings()
+	return err == nil && settings.Network == "intranet" &&
+		(settings.Resources == nil || settings.Resources.Source == "offline")
+}
+
+// RequirePublicDesktopLogin blocks public authentication methods in intranet mode.
+func RequirePublicDesktopLogin(c *gin.Context) {
+	settings, err := currentDesktopDeploymentSettings()
+	if err != nil || settings.Network == "intranet" {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "message": "此功能暂未开放"})
+		return
+	}
+	c.Next()
+}

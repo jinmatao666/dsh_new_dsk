@@ -245,6 +245,14 @@ test('intranet skill and expert policies persist independently', async () => {
   act(() => container.querySelectorAll('[role="tab"]')[2].click());
   expect(container.querySelector('[name="internetSkillPolicy"]')).toBeNull();
   act(() => container.querySelector('[name="network"][value="intranet"]').click());
+  expect(container.textContent).toContain('保存后应用内网预设');
+  expect(container.querySelector('[name="internetSkillPolicy"]')).toBeNull();
+  API.put.mockImplementationOnce((_path, body) => {
+    const committed = JSON.parse(body.value);
+    committed.features.intranet.knowledgeBases = false;
+    return Promise.resolve({ data: { success: true, data: committed } });
+  });
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   const skills = [...container.querySelectorAll('[name="internetSkillPolicy"]')];
   const experts = [...container.querySelectorAll('[name="internetExpertPolicy"]')];
   expect(skills).toHaveLength(2);
@@ -255,7 +263,7 @@ test('intranet skill and expert policies persist independently', async () => {
   expect(skills[0].checked).toBe(true);
   expect(experts[1].checked).toBe(true);
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-  const saved = JSON.parse(API.put.mock.calls[0][1].value);
+  const saved = JSON.parse(API.put.mock.calls[1][1].value);
   expect(saved.internetSkillPolicy).toBe('hide');
   expect(saved.internetExpertPolicy).toBe('disable');
 });

@@ -18,6 +18,7 @@
     "src/client/LegalDocument.tsx",
     "src/client/legal-documents.ts",
     "src/client/AccountSection.tsx",
+    "src/client/AccountFooter.tsx",
     "src/client/account-icons.ts",
     "src/client/CreditsSection.tsx",
     "src/client/DesktopUpdateSection.tsx",
@@ -49,6 +50,9 @@
     },
     {
       "path": "../../client/ui-settings-models"
+    },
+    {
+      "path": "../../client/ui-sidebar"
     },
     {
       "path": "../../client/ui-slots"

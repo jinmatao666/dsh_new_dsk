@@ -178,3 +178,52 @@ func TestDesktopIndependentCatalogPolicies(t *testing.T) {
 		}
 	}
 }
+
+func TestDesktopNetworkTransitionResetsOnlyIntranetPreset(t *testing.T) {
+	internet := desktopFeatureFlags{Connectors: true, KnowledgeBases: true, PolicyEncyclopedia: true}
+	initial := `{"network":"internet","features":{"internet":{"automations":false,"connectors":true,"knowledgeBases":true,"policyEncyclopedia":true},"intranet":{"automations":false,"connectors":true}}}`
+	candidate := `{"network":"intranet","creditPricingBase":45,"features":{"internet":{"automations":true,"connectors":false},"intranet":{"automations":false,"connectors":true}},"internetSkillPolicy":"hide","internetExpertPolicy":"hide"}`
+	switchMode := func(before, next string) (string, desktopDeploymentSettings) {
+		t.Helper()
+		raw, err := applyDesktopNetworkTransition(before, next)
+		if err != nil {
+			t.Fatal(err)
+		}
+		config, err := parseDesktopDeploymentSettings(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw, config
+	}
+	raw, entered := switchMode(initial, candidate)
+	if entered.Features["internet"] != internet || entered.Features["intranet"] != (desktopFeatureFlags{Automations: true}) ||
+		entered.Resources == nil || entered.Resources.Source != "offline" || entered.Resources.AutoDetect ||
+		entered.InternetSkillPolicy != "disable" || entered.InternetExpertPolicy != "disable" {
+		t.Fatalf("unexpected intranet preset: %+v", entered)
+	}
+	var unchanged map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &unchanged); err != nil || string(unchanged["creditPricingBase"]) != "45" {
+		t.Fatalf("unrelated setting changed: %s, %v", raw, err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		t.Fatal(err)
+	}
+	entered.Features["intranet"] = desktopFeatureFlags{Automations: true, KnowledgeBases: true}
+	fields["features"], _ = json.Marshal(entered.Features)
+	changed, _ := json.Marshal(fields)
+	_, live := switchMode(raw, string(changed))
+	if !live.Features["intranet"].KnowledgeBases {
+		t.Fatal("saving within intranet must allow changes")
+	}
+	fields["network"], _ = json.Marshal("internet")
+	returning, _ := json.Marshal(fields)
+	back, restored := switchMode(string(changed), string(returning))
+	if restored.Features["internet"] != internet {
+		t.Fatalf("internet options lost: %+v", restored.Features)
+	}
+	_, again := switchMode(back, string(changed))
+	if again.Features["intranet"].KnowledgeBases || !again.Features["intranet"].Automations {
+		t.Fatalf("previous intranet edits survived reentry: %+v", again.Features)
+	}
+}

@@ -153,7 +153,8 @@ export default function SystemSettings() {
     try {
       const response = await API.put('/api/option/', { key: 'SystemDeploymentSettings', value: JSON.stringify(value) });
       if (!response.data.success) throw new Error(response.data.message || '保存失败');
-      setSettings(value); setSaved(value); showSuccess('设置已保存');
+      const committed = response.data.data || value;
+      setSettings(committed); setSaved(committed); showSuccess('设置已保存');
     } catch (error) { setFeedback(error.message || '保存失败，请重试'); }
     finally { setSaving(false); }
   };
@@ -223,7 +224,10 @@ export default function SystemSettings() {
             </section>}
             {active === 'edition' && settings.edition === 'operations' && <CreditRewardSettings
               value={settings.creditRewards} disabled={saving} onChange={value => change('creditRewards', value)} />}
-            {active === 'network' && settings.network === 'intranet' && <section className='settings-catalog-policies' aria-label='互联网内容处理'>
+            {active === 'network' && settings.network !== saved.network && <p role='status'>
+              {settings.network === 'intranet' ? '保存后应用内网预设：开启自动化，关闭连接器和可选入口，使用离线依赖包。' : '保存后恢复此前保存的互联网功能设置。'}
+            </p>}
+            {active === 'network' && settings.network === 'intranet' && saved.network === 'intranet' && <section className='settings-catalog-policies' aria-label='互联网内容处理'>
               <h3>互联网内容处理</h3>
               <p>终端无法访问外部资源时，分别控制需要联网的技能和专家如何展示。</p>
               {[
@@ -240,9 +244,9 @@ export default function SystemSettings() {
                 </label>)}
               </fieldset>)}
             </section>}
-            {active === 'network' && settings.network === 'intranet' && <ResourceSettings value={settings.resources || defaultResources}
+            {active === 'network' && settings.network === 'intranet' && saved.network === 'intranet' && <ResourceSettings value={settings.resources || defaultResources}
               disabled={saving} onChange={value => change('resources', value)} />}
-            {active === 'network' && settings.network === 'intranet' && !settings.resources && <button type='button'
+            {active === 'network' && settings.network === 'intranet' && saved.network === 'intranet' && !settings.resources && <button type='button'
               className='settings-secondary' disabled={saving} onClick={() => change('resources', defaultResources)}>启用此资源配置（保存后生效）</button>}
             <div className='settings-footer'><span>{dirty ? '有未保存的修改' : ''}</span><div><button type='button' className='settings-secondary' disabled={!dirty || saving} onClick={() => { setSettings(saved); setFeedback(''); }}>取消修改</button><button type='submit' className='settings-primary' disabled={!dirty || saving}>{saving ? '保存中…' : '保存设置'}</button></div></div>
           </form>}

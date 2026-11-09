@@ -34,6 +34,13 @@ export type {
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
+    /** Undefined decision keeps public HTTP policy; true allows a private destination, false denies it. */
+    webHttpIntranetPolicy: (url: URL) => boolean | undefined
+  }
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
     web: WebRuntime
   }
 }

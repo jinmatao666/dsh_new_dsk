@@ -7,7 +7,7 @@ it('only exposes masked status and never forwards full profile credentials', asy
     : { wechat_id: 'wx_private', access_token: 'secret', email: 'private@example.com' } }))
   vi.stubGlobal('fetch', fetcher)
   const value = await accountSecurityRequest('https://server.test', 'host-token', 'status', {}, new AbortController().signal)
-  expect(value).toEqual({ phoneBound: true, phone: '138****0000', wechatBound: true })
+  expect(value).toEqual({ username: '', phoneBound: true, phone: '138****0000', wechatBound: true })
   expect(JSON.stringify(value)).not.toMatch(/secret|wx_private|private@example/)
 })
 it('rejects arbitrary destinations and preserves verification requirements', async () => {

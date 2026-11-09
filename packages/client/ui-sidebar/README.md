@@ -25,6 +25,8 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
+The optional `sidebar.footer` slot wraps the existing settings control; feature actions stay in the sidebar. The wrapper receives the current column width mode and the rendered controls, so it can present them in a disclosure without changing the session browser.
+
 The sidebar is the navigation shell: users see the brand, start new sessions, collapse the rail, and reach Settings. Feature plugins fill its seats — ui-workspace fills `sidebar.workspaces`, ui-settings registers the trigger row and settings panel at `sidebar.settings`.
 
 ### Brand and New Session

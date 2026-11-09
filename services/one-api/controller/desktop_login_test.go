@@ -83,6 +83,21 @@ func TestDesktopPhoneRegistrationAndExistingAccount(t *testing.T) {
 	matched, err = model.ValidateAccountPasswordByLocalUserID(int(id.(float64)), "Password123")
 	require.NoError(t, err)
 	require.False(t, matched)
+	router.POST("/rename", func(c *gin.Context) {
+		c.Set(ctxkey.Id, int(id.(float64)))
+		UpdateSelfUsername(c)
+	})
+	require.Equal(t, false, call("/rename", `{"username":"13800138000"}`)["success"])
+	require.Equal(t, true, call("/rename", `{"username":"buddy_123"}`)["success"])
+	profile, err := model.GetUserById(int(id.(float64)), false)
+	require.NoError(t, err)
+	require.Equal(t, "buddy_123", profile.Username)
+	for _, identifier := range []string{"buddy_123", phone} {
+		user := model.User{Username: identifier, Password: "Changed123"}
+		require.NoError(t, user.ValidateAndFill())
+		require.Equal(t, int(id.(float64)), user.Id)
+		require.Equal(t, "buddy_123", user.Username)
+	}
 	common.RegisterPhoneVerificationCode("13900139000", common.PhoneLoginPurpose, "333333")
 	outcomes := make(chan []byte, 2)
 	for i := 0; i < 2; i++ {

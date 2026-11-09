@@ -21,6 +21,11 @@ export function apply(ctx: Context, config: Config): void {
   const connection = ctx.get('connection') as HostConnectionHandle
   ctx.effect(() => connection.rpc.handle('/wanwei-skillhub', async (endpoint, payload, signal) => {
     try {
+      const policy = ctx.get('wanweiNetworkPolicy' as never) as {
+        getSnapshot(): { mode: string; directInternet?: boolean }
+      } | undefined
+      const network = policy?.getSnapshot()
+      if (network?.mode === 'intranet' && network.directInternet !== true) throw new Error('SkillHub 技能暂不可用')
       const value = endpoint === 'list' ? await api.list(payload, signal)
         : endpoint === 'categories' ? await api.categories(signal)
           : endpoint === 'detail' ? await api.detail(payload, signal)

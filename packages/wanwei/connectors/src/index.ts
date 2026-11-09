@@ -16,6 +16,7 @@ export const name = 'wanwei-connectors'
  */
 export const inject = [
   'connection',
+  'wanweiNetworkPolicy',
   'tools',
   'sessionController',
   'sessions',

@@ -22,7 +22,7 @@ export async function accountSecurityRequest(
   }
   if (operation === 'status') {
     const [phone, user] = await Promise.all([request('/api/user/self/phone/status'), request('/api/user/self')])
-    return { phoneBound: phone.has_phone === true && phone.phone_verified === true, phone: typeof phone.phone === 'string' ? phone.phone : '', wechatBound: typeof user.wechat_id === 'string' && user.wechat_id.length > 0 } satisfies AccountSecurity
+    return { username: typeof user.username === 'string' ? user.username : '', phoneBound: phone.has_phone === true && phone.phone_verified === true, phone: typeof phone.phone === 'string' ? phone.phone : '', wechatBound: typeof user.wechat_id === 'string' && user.wechat_id.length > 0 } satisfies AccountSecurity
   }
   if (operation === 'wechat-qr') {
     const data = await request('/api/oauth/wechat/qr')
@@ -42,6 +42,7 @@ export async function accountSecurityRequest(
     return request('/api/oauth/wechat/quick-bind?state=' + encodeURIComponent(input.state ?? '') + '&phone_code=' + encodeURIComponent(input.phone_code))
   }
   const routes: Record<string, string> = {
+    username: '/api/user/self/username',
     'initial-password': '/api/user/self/password/initial',
     'send-new': '/api/user/self/phone/send-bind-code', 'send-current': '/api/user/self/phone/send-change-code',
     'send-password': '/api/user/self/phone/send-reset-code', 'phone-bind': '/api/user/self/phone/bind',
@@ -49,5 +50,6 @@ export async function accountSecurityRequest(
   }
   const path = routes[operation]
   if (!path) throw new Error('未知账号操作')
+  if (operation === 'username') return request(path, { username: input.username ?? '' })
   return request(path, operation === 'send-new' ? { ...input, purpose: 'phone_bind' } : input)
 }

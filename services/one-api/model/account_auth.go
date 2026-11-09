@@ -49,6 +49,7 @@ func authByAccountCenter(loginName, password string) (*User, bool, error) {
 	candidates := []struct{ typ, val string }{
 		{IdentifierTypeUsername, loginName},
 		{IdentifierTypePhone, normalizeLoginPhone(loginName)},
+		{IdentifierTypePhone, loginName}, // Older registrations stored the national number.
 		{IdentifierTypeEmail, loginName},
 	}
 	var ident AccountIdentifier
@@ -100,6 +101,7 @@ func authByAccountCenter(loginName, password string) (*User, bool, error) {
 	if u.Status != UserStatusEnabled {
 		return nil, false, errors.New("用户名或密码错误，或用户已被封禁")
 	}
+	u.Username = ResolveUserIdentifierByLocalUser(u.Id, IdentifierTypeUsername, u.Username)
 	return &u, true, nil
 }
 

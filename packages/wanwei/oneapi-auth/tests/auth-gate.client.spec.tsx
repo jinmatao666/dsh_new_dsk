@@ -80,6 +80,24 @@ describe('Wanwei authentication gate', () => {
     await waitFor(() => { expect(subject.refresh).toHaveBeenCalledOnce() })
   })
 
+  it('keeps intranet login tabs and registration visible without calling public authentication', () => {
+    const publicAuth = vi.fn()
+    render(<AuthGate {...kit} publicAuth={publicAuth} publicLoginAvailable={() => false}
+      useAuth={selector => selector({ state: 'logged-out' })} login={vi.fn()}
+      refresh={async () => ({ state: 'logged-out' })} fail={vi.fn()} t={t} />)
+    for (const entry of [
+      screen.getByRole('tab', { name: zh.smsLogin }),
+      screen.getByRole('tab', { name: zh.qrLogin }),
+      screen.getByRole('button', { name: zh.loginPhoneRegister }),
+    ]) {
+      fireEvent.click(entry)
+      expect(screen.getByRole('status').textContent).toBe('此功能暂未开放')
+      fireEvent.click(screen.getByRole('button', { name: zh.supportClose }))
+    }
+    expect(publicAuth).not.toHaveBeenCalled()
+    expect(screen.getByRole('tab', { name: zh.accountLogin }).getAttribute('aria-selected')).toBe('true')
+  })
+
   it('keeps SMS available while QR only shows the unavailable notice', async () => {
     renderGate()
     fireEvent.click(screen.getByRole('tab', { name: zh.smsLogin }))

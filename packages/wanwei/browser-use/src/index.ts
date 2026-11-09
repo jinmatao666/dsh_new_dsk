@@ -4,11 +4,12 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import BrowserUse from '@deepseek-ai/dsh-browser-use'
-import * as OfficialProvider from '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp'
 import z from '@deepseek-ai/schemastery'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { stat } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
+import { startBrowserProxy } from './browser-proxy.ts'
+import { mountDesktopPlaywright } from './playwright.ts'
 import { FIRST_PARTY_SECTION_ORDER } from '@deepseek-ai/dsh-system-prompt'
 import { BROWSER_GUIDANCE, BROWSER_UNAVAILABLE, browserStartupFailure, resolveBrowserExecutable } from './browser-executable.ts'
 import type {} from '@deepseek-ai/dsh-wanwei-oneapi-auth'
@@ -141,7 +142,7 @@ export function browserCompatibilityContext(ctx: Context, browserAllowed: () => 
 }
 
 /**
- * Mount the pinned official provider and deny browser tools in pure intranet mode.
+ * Mount the pinned browser provider through a deployment-aware HTTP proxy.
  * @param ctx - desktop runtime services.
  * @param config - explicit launch settings.
  */
@@ -155,7 +156,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   const administratorAllows = (): boolean =>
     ctx.get('wanweiNetworkPolicy')?.pluginAllowed('browserAssistant') ?? true
-  const browserAllowed = (): boolean => administratorAllows() && preference.get().enabled && networkMode() !== 'intranet'
+  const browserAllowed = (): boolean => administratorAllows() && preference.get().enabled
   const prefix = 'mcp__playwright-mcp__'
   const executablePath = await resolveBrowserExecutable(config.executablePath)
   ctx.effect(() => ctx.systemPrompt.section({
@@ -163,14 +164,16 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     order: FIRST_PARTY_SECTION_ORDER.DELIVERABLE_FILE_REFERENCES + 120,
     text: BROWSER_GUIDANCE,
   }))
-  ctx.effect(() => ctx.tools.registerAvailability(tool =>
-    !tool.startsWith(prefix) || browserAllowed()))
+  const unrestrictedTool = (tool: string): boolean =>
+    /browser_(?:run_code|install)/.test(tool)
+  ctx.effect(() => ctx.tools.registerAvailability(tool => !tool.startsWith(prefix)
+    || (browserAllowed() && (networkMode() !== 'intranet' || !unrestrictedTool(tool)))))
   ctx.on('tools/pre-execute', async (exec, next) => {
     if (exec.name.startsWith(prefix) && !administratorAllows()) {
       return { kind: 'deny', reason: '管理员未允许使用浏览器助手，请联系管理员或刷新后台配置' }
     }
-    if (exec.name.startsWith(prefix) && networkMode() === 'intranet') {
-      return { kind: 'deny', reason: '纯内网环境暂不开放浏览器自动化' }
+    if (exec.name.startsWith(prefix) && networkMode() === 'intranet' && unrestrictedTool(exec.name)) {
+      return { kind: 'deny', reason: '内网不开放浏览器任意代码执行或组件下载' }
     }
     if (exec.name.startsWith(prefix) && !preference.get().enabled) {
       return { kind: 'deny', reason: '浏览器助手已停用，请在设置的插件配置中启用' }
@@ -192,8 +195,17 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       ...content,
     ] }
   })
-  OfficialProvider.apply(browserCompatibilityContext(ctx, browserAllowed), {
-    mode: 'launch', headless: config.headless,
-    ...executablePath === undefined ? {} : { executablePath },
+  const browserContext = browserCompatibilityContext(ctx, browserAllowed)
+  const proxy = await startBrowserProxy(url => ctx.get('webHttpIntranetPolicy')?.(url)
+    ?? (networkMode() === 'intranet' ? false : undefined))
+  ctx.effect(() => () => proxy.close())
+  ctx.inject(['wanweiNetworkPolicy'], (scope) => {
+    proxy.reset()
+    let mode = networkMode()
+    scope.effect(() => scope.wanweiNetworkPolicy.watch(() => {
+      const current = networkMode()
+      if (current !== mode) { mode = current; proxy.reset() }
+    }))
   })
+  await mountDesktopPlaywright(browserContext, proxy.address, config.headless, executablePath)
 }

@@ -1,4 +1,5 @@
 /** Task-owned connector selection; scheduler consumes the Host service, not connector UI. */
+import { connectorsAllowed } from './network.ts'
 import { deliverAutomationNotification } from './automation-delivery.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -45,6 +46,7 @@ declare module '@deepseek-ai/cordis' { interface Context { wanweiConnectors: Aut
 export function registerAutomationConnectors(ctx: Context): void {
   const service: AutomationConnectors = {
     async options(signal) {
+      if (!connectorsAllowed(ctx)) return []
       const home = resolveProductDshHome()
       return Promise.all(entries.map(async (entry) => {
         let connected = false
@@ -65,7 +67,9 @@ export function registerAutomationConnectors(ctx: Context): void {
         return { id: entry.id, name: entry.name, icon: entry.icon, connected }
       }))
     },
-    notify: (channel, text, key, signal) => deliverAutomationNotification(channel, text, key, signal),
+    notify: (channel, text, key, signal) => connectorsAllowed(ctx)
+      ? deliverAutomationNotification(channel, text, key, signal)
+      : Promise.reject(new Error('当前网络环境未开放连接器')),
     async prepare(ids, agent, signal) {
       const unknown = ids.find(id => !entries.some(entry => entry.id === id))
       if (unknown) throw new Error(`不支持的连接器：${unknown}`)
@@ -101,6 +105,7 @@ export function registerAutomationConnectors(ctx: Context): void {
     parameters: { text: { type: 'string', required: true } },
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
     async execute(args, exec) {
+      if (!connectorsAllowed(ctx)) throw new Error('当前网络环境未开放连接器')
       exec.signal.throwIfAborted()
       if (!args.text.trim() || args.text.length > 4000) throw new Error('微信通知需为 1–4000 字符')
       await sendWeChatNotification(resolveProductDshHome(), args.text)

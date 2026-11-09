@@ -1,3 +1,4 @@
+import { connectorNetworkPolicy, connectorsAllowed } from './network.ts'
 import { formatFeishuArgs } from './feishu-message.ts'
 /** Official native lark-cli execution and connector-owned authorization. */
 import { execFile, spawn } from 'node:child_process'
@@ -197,6 +198,7 @@ export function registerFeishu(ctx: Context): void {
     command: resolveLarkCommand, environment: cliEnvironment, run: runLark,
   })
   const status = async (): Promise<FeishuStatus> => {
+    if (!connectorsAllowed(ctx)) throw new Error('当前网络环境未开放连接器')
     const revision = authRevision
     const command = resolveLarkCommand()
     const authorized = !flight && !!command
@@ -310,6 +312,7 @@ export function registerFeishu(ctx: Context): void {
   }
   ctx.effect(() => ctx.connection.rpc.handle('/wanwei-feishu', async (operation) => {
     try {
+      if (!connectorsAllowed(ctx)) throw new Error('当前网络环境未开放连接器')
       if (operation === 'configure' || operation === 'login' || operation === 'authorize-messages') {
         if (!flight) { await channel.pause(); authorize(operation) }
       } else if (operation === 'bridge-enable') {
@@ -332,8 +335,19 @@ export function registerFeishu(ctx: Context): void {
       message: error instanceof Error ? error.message : String(error), details: {} } } }
   }))
   ctx.effect(() => {
-    void channel.restore().then(() => channel.enableIfUnconfigured()).catch(() => {})
-    return async () => { lifetime.abort(); await channel.dispose(); await flight }
+    let allowed: boolean | undefined
+    const reconcile = () => {
+      const next = connectorsAllowed(ctx)
+      if (allowed === next) return
+      allowed = next
+      void (next ? channel.restore().then(async () => {
+        if (connectorsAllowed(ctx)) await channel.enableIfUnconfigured()
+        if (!connectorsAllowed(ctx)) await channel.pause()
+      }) : channel.pause()).catch(() => {})
+    }
+    const unsubscribe = connectorNetworkPolicy(ctx)?.watch(reconcile)
+    reconcile()
+    return async () => { unsubscribe?.(); lifetime.abort(); await channel.dispose(); await flight }
   })
   ctx.effect(() => ctx.tools.register(defineTool({
     name: 'feishu_cli',

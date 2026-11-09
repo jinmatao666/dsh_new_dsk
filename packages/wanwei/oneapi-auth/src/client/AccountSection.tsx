@@ -24,7 +24,7 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
   const [error, setError] = useState<string>()
   const [notice, setNotice] = useState('')
   const [data, setData] = useState<AccountSecurity>()
-  const [mode, setMode] = useState<'phone' | 'password' | 'wechat'>()
+  const [mode, setMode] = useState<'phone' | 'password' | 'wechat' | 'username'>()
   const [values, setValues] = useState<Record<string, string>>({})
   const [qr, setQr] = useState<{ state: string; image: string }>()
   const [scanned, setScanned] = useState(false)
@@ -90,6 +90,11 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
   }) }
   const submit = (event: FormEvent) => { event.preventDefault(); void execute(async () => {
     if (!data || !mode) return
+    if (mode === 'username') {
+      await requestAccount('username', { username: values.username?.trim() ?? '' })
+      dismiss(); setRevision(value => value + 1); setNotice(t('securitySaved'))
+      return
+    }
     if (mode === 'password' && (values.password !== values.confirm || !values.password || values.password.length < 8 || values.password.length > 20)) throw new Error(t('securityPasswordInvalid'))
     if (mode === 'wechat' && !data.wechatBound && !scanned) throw new Error(t('securityScanFirst'))
     const operation = mode === 'phone' ? data.phoneBound ? 'phone-replace' : 'phone-bind' : mode === 'password' ? 'password' : data.wechatBound ? 'wechat-unbind' : 'wechat-bind'
@@ -111,8 +116,10 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
   ]
   return <section className={css.section}>
     <h1>{t('accountTitle')}</h1><p className={css.hint}>{t('securityIntro')}</p>
-    <div className={css.card}><div className={css.identity}><span className={css.avatar} aria-hidden="true">{auth.state === 'authenticated' ? auth.username?.slice(0, 1).toUpperCase() || 'W' : 'W'}</span><div><div className={css.label}>{t('signedInAs')}</div><div className={css.value}>{auth.state === 'authenticated' ? auth.username || t('signedInFallback') : t('loggedOut')}</div></div></div>
+    <div className={css.card}><div className={css.identity}><span className={css.avatar} aria-hidden="true">{auth.state === 'authenticated' ? data?.username?.slice(0, 1).toUpperCase() || 'W' : 'W'}</span><div><div className={css.label}>{t('signedInAs')}</div><div className={css.value}>{auth.state === 'authenticated' ? data?.username || t('signedInFallback') : t('loggedOut')}</div></div></div>
       {auth.state === 'authenticated' && <button type="button" className={css.logout} disabled={busy} onClick={() => { void execute(async () => { setSigningOut(true); try { await logout(); close() } finally { setSigningOut(false) } }) }}>{signingOut ? t('signingOut') : t('signOut')}</button>}
+      {auth.state === 'authenticated' && <button type="button" className={css.secondary} disabled={blocked || !data?.username}
+        onClick={() => { edit('username') }}>{t('securityRename')}</button>}
     </div>
     <h2 className={css.subheading}>{t('securityTitle')}</h2>
     <div className={css.security}>{rows.map(row => <div key={row.key} className={css.row}><span className={css.icon} aria-hidden="true"><img src={accountIcons[row.key === 'phone' ? 'smartphone' : row.key === 'password' ? 'key-round' : 'wechat']} alt="" /></span><div className={css.description}><h3>{row.title}</h3><p>{row.detail}</p></div><span className={css.action} tabIndex={row.key === 'password' && !data?.phoneBound ? 0 : undefined} data-tooltip={row.key === 'password' && !data?.phoneBound ? t('securityPasswordBindFirst') : undefined} aria-label={row.key === 'password' && !data?.phoneBound ? t('securityPasswordBindFirst') : undefined}><button className={css.secondary} disabled={blocked || row.key === 'wechat' || row.key !== 'phone' && !data?.phoneBound} type="button" onClick={() => { edit(row.key) }}>{row.action}</button></span></div>)}</div>
@@ -122,16 +129,22 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
     {mode && data && <dialog ref={dialogRef} className={css.dialog} aria-modal="true" aria-labelledby="account-security-title"
       onCancel={(event) => { event.preventDefault(); if (!busy) dismiss() }}>
       <form className={css.form} onSubmit={submit}>
-        <header className={css.dialogHeader}><div><h2 id="account-security-title">{rows.find(row => row.key === mode)?.action}</h2><p>{t('securityDialogHint')}</p></div>
+        <header className={css.dialogHeader}><div><h2 id="account-security-title">{mode === 'username' ? t('securityRename') : rows.find(row => row.key === mode)?.action}</h2><p>{t(mode === 'username' ? 'securityUsernameHint' : 'securityDialogHint')}</p></div>
           <button type="button" className={css.closeButton} aria-label={t('securityCancel')} disabled={busy} onClick={dismiss}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button></header>
         {error && <p role="alert" className={css.error}>{error}</p>}
         {notice && <p role="status" className={css.success}>{notice}</p>}
-        {mode === 'wechat' && data.wechatBound && <p className={css.hint}>{t('securityUnbindHint')}</p>}
-        {mode === 'wechat' && qr && <div className={css.qr}><img src={qr.image} alt={t('securityWechatQr')} /><p>{scanned ? t('securityScanned') : t('securityScanHint')}</p></div>}
-        {mode === 'phone' && field('phone', t('securityNewPhone'), 'tel')}
-        {mode === 'phone' && data.phoneBound && <div className={css.codeRow}>{field('old_code', t('securityOldCode'))}{codeButton('current')}</div>}
-        <div className={css.codeRow}>{field('code', mode === 'phone' ? t('securityNewCode') : t('securitySmsCode'))}{codeButton(mode === 'phone' ? 'new' : 'current')}</div>
-        {mode === 'password' && <>{field('password', t('securityNewPassword'), 'password')}{field('confirm', t('securityConfirmPassword'), 'password')}</>}
+        {mode === 'username' ? <label className={css.field}>{t('securityNewUsername')}
+          <input required autoComplete="off" maxLength={12} value={values.username ?? ''} onChange={(event) => {
+            setValues({ username: event.target.value })
+          }} />
+        </label> : <>
+          {mode === 'wechat' && data.wechatBound && <p className={css.hint}>{t('securityUnbindHint')}</p>}
+          {mode === 'wechat' && qr && <div className={css.qr}><img src={qr.image} alt={t('securityWechatQr')} /><p>{scanned ? t('securityScanned') : t('securityScanHint')}</p></div>}
+          {mode === 'phone' && field('phone', t('securityNewPhone'), 'tel')}
+          {mode === 'phone' && data.phoneBound && <div className={css.codeRow}>{field('old_code', t('securityOldCode'))}{codeButton('current')}</div>}
+          <div className={css.codeRow}>{field('code', mode === 'phone' ? t('securityNewCode') : t('securitySmsCode'))}{codeButton(mode === 'phone' ? 'new' : 'current')}</div>
+          {mode === 'password' && <>{field('password', t('securityNewPassword'), 'password')}{field('confirm', t('securityConfirmPassword'), 'password')}</>}
+        </>}
         <div className={css.formActions}><button type="button" className={css.secondary} disabled={busy} onClick={dismiss}>{t('securityCancel')}</button><button className={css.primary} disabled={busy || mode === 'wechat' && !data.wechatBound && !scanned}>{busy ? t('securitySaving') : t('securityConfirm')}</button></div>
       </form></dialog>}
   </section>

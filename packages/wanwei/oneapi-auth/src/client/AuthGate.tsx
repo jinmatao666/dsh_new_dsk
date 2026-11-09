@@ -12,6 +12,7 @@ import css from './AuthGate.module.css'
 
 export interface AuthInjected {
   hooks: { auth: HostObservable<AuthView> }
+  publicLoginAvailable?: () => boolean
   getSupportContact: () => Promise<DeploymentSettings>
   refresh: (signal?: AbortSignal) => Promise<AuthState>
   login: (username: string, password: string, signal?: AbortSignal) => Promise<AuthState>
@@ -35,7 +36,9 @@ function readRememberedAccount(): string {
 type LoginMode = 'account' | 'sms' | 'qr'
 
 /** Blocking login surface; desktop viewports scale one centered 1120×720 layout, and credentials go only to the local Host. */
-export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAuth, requestAccount, fail, t }: AuthGateProps) {
+export function AuthGate({
+  useAuth, getSupportContact, refresh, login, publicAuth, publicLoginAvailable, requestAccount, fail, t,
+}: AuthGateProps) {
   const auth = useAuth(view => view)
   const authenticated = auth.state === 'authenticated'
   const checking = auth.state === 'checking'
@@ -161,6 +164,9 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAut
   const retry = (): void => { setError(undefined); void refresh().catch(fail) }
   const serviceError = error
   const changeMode = (mode: LoginMode): void => {
+    if (mode !== 'account' && publicLoginAvailable?.() === false) {
+      setNotice({ text: t('intranetLoginUnavailable') }); return
+    }
     if (mode === 'qr') { setNotice({ text: t('qrUnavailableTitle') }); return }
     setNotice(undefined); setLoginMode(mode); setError(undefined)
   }
@@ -238,7 +244,7 @@ export function AuthGate({ useAuth, getSupportContact, refresh, login, publicAut
                 : publicAuth ? <PublicLogin key={loginMode} mode={loginMode} request={publicAuth} onBack={() =>{  setLoginMode('account') }} t={key => t(key as import('./locales.ts').WanweiAuthKey)} /> : <p>{t('loginServiceMissing')}</p>}
 
             </div>
-            {loginMode === 'account' && <p className={css.registrationFooter}><span>{t('loginNoAccount')}</span><button type="button" onClick={() =>{  setLoginMode('sms') }}>{t('loginPhoneRegister')}</button></p>}
+            {loginMode === 'account' && <p className={css.registrationFooter}><span>{t('loginNoAccount')}</span><button type="button" onClick={() => { changeMode('sms') }}>{t('loginPhoneRegister')}</button></p>}
             {loginMode === 'sms' && <p className={css.registrationFooter}>{t('loginUnregisteredHint')}</p>}
             {(loginMode === 'account' || loginMode === 'sms') && <p className={css.legalNotice}>{t('legalPrefix')}<button type="button" onClick={() => {  openLegal('agreement') }}>{t('userAgreement')}</button>{t('legalJoin')}<button type="button" onClick={() => {  openLegal('privacy') }}>{t('privacyPolicy')}</button></p>}
             <p className={css.footerSpace}>{t('accountHelpPrefix')}<button className={css.textAction} type="button" onClick={(event) => { void openSupport(event.currentTarget) }}>{t('administrator')}</button>{t('accountHelpSuffix')}</p>

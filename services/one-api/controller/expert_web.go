@@ -310,6 +310,10 @@ func LaunchExpertWebsite(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "专家未上架"})
 		return
 	}
+	if offlineIntranet() && (profile.RequiresInternet == nil || *profile.RequiresInternet) {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "当前网络环境不可使用需要互联网的专家"})
+		return
+	}
 	ticket, err := expertWebRandom()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "生成登录票据失败"})

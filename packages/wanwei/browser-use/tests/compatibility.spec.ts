@@ -70,22 +70,22 @@ describe('official browser lifecycle compatibility', () => {
     expect((await ctx.tools.execute(call)).isError).toBe(true)
   })
 
-  it('denies direct browser execution in pure intranet mode', async () => {
+  it('denies unrestricted browser code in intranet mode', async () => {
     await setup()
     ctx.provide('wanweiNetworkPolicy', {
       getSnapshot: () => ({ mode: 'intranet', internalOrigins: [] }),
       setMode: async () => ({ mode: 'intranet', internalOrigins: [] }),
-      pluginAllowed: () => true, setPlugins: () => {},
+      pluginAllowed: () => true, setPlugins: () => {}, featureAllowed: () => true, watch: () => () => {},
     })
     await ctx.plugin(BrowserPlugin, { enabled: true, headless: true })
     ctx.effect(() => ctx.tools.register(defineTool({
-      name: 'mcp__playwright-mcp__policy-probe', description: 'test policy', parameters: {},
+      name: 'mcp__playwright-mcp__browser_run_code_unsafe', description: 'test policy', parameters: {},
       output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
       async execute() { throw new Error('must not execute') },
     })))
     expect(ctx.tools.schemas()).toEqual([])
     const result = await ctx.tools.execute({
-      name: 'mcp__playwright-mcp__policy-probe', arguments: {},
+      name: 'mcp__playwright-mcp__browser_run_code_unsafe', arguments: {},
       callId: ToolCallId('intranet-probe'), signal: new AbortController().signal,
     })
     expect(result.isError).toBe(true)

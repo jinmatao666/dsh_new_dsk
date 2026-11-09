@@ -7,6 +7,7 @@
  * argv directly without a shell; `dws` itself can still write local files
  * that a command names (for example an export path) outside the sandbox.
  */
+import { connectorsAllowed } from './network.ts'
 import { spawn } from 'node:child_process'
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -112,6 +113,7 @@ export function registerDingTalkDwsTool(ctx: Context, resolveCommand: () => stri
       render: (_args, value) => [{ type: 'text', text: renderDwsResult(value) }],
     },
     async execute(args, exec): Promise<DwsToolResult> {
+      if (!connectorsAllowed(ctx)) throw new Error('当前网络环境未开放连接器')
       validateDwsToolArgs(args.args)
       const command = resolveCommand()
       if (command === undefined) throw new Error('未找到随包 dws。请使用完整桌面安装包。')

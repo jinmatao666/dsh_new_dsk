@@ -801,6 +801,36 @@ func UpdateUser(c *gin.Context) {
 	return
 }
 
+// UpdateSelfUsername changes only the authenticated account's login identifier.
+func UpdateSelfUsername(c *gin.Context) {
+	var req struct {
+		Username string `json:"username"`
+	}
+	if c.ShouldBindJSON(&req) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "用户名参数不正确"})
+		return
+	}
+	name := strings.TrimSpace(req.Username)
+	valid := len(name) >= 3 && len(name) <= 12 && !validateE164Phone(name)
+	for _, ch := range name {
+		valid = valid && (ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '_')
+	}
+	if !valid {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户名须为 3–12 位字母、数字或下划线，不能使用手机号"})
+		return
+	}
+	id := c.GetInt(ctxkey.Id)
+	if model.IsUsernameTakenByOther(name, id) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户名已被使用"})
+		return
+	}
+	if err := model.WriteAccountIdentifierByLocalUser(id, model.IdentifierTypeUsername, name, true, "self_username_update"); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户名保存失败，请确认用户名未被使用后重试"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
 func UpdateSelf(c *gin.Context) {
 	var user model.User
 	err := json.NewDecoder(c.Request.Body).Decode(&user)

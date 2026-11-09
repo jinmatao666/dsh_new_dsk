@@ -46,6 +46,13 @@ func ReportClientEvents(c *gin.Context) {
 
 	var events []model.ClientEvent
 	for _, item := range req.Events {
+		if item.Event == customCatalogEvent || item.Event == customCallEvent {
+			data, ok := sanitizeCustomModelEvent(item.Event, item.Data)
+			if ok {
+				events = append(events, model.ClientEvent{UserId: userId, Username: username, EventName: item.Event, EventData: data, Platform: "desktop", CreatedAt: time.Now()})
+			}
+			continue
+		}
 		dataJSON := ""
 		if item.Data != nil {
 			if b, err := json.Marshal(item.Data); err == nil {

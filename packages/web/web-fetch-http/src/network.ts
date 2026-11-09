@@ -190,9 +190,29 @@ export async function requestPinned(
   }
 }
 
+async function resolveIntranetAddresses(hostname: string, signal: AbortSignal): Promise<PublicAddress[]> {
+  const host = stripIpv6Brackets(hostname)
+  const family = isIP(host)
+  const entries = family === 0
+    ? await raceWithSignal(systemLookup(host, { all: true, order: 'verbatim' }), signal)
+    : [{ address: host, family }]
+  const addresses: PublicAddress[] = []
+  for (const entry of entries) {
+    if (entry.family !== 4 && entry.family !== 6) throw new WebError('Invalid intranet address', 'WEB_BLOCKED_URL')
+    const address = ipaddr.process(entry.address)
+    if (!['private', 'uniqueLocal', 'loopback', 'linkLocal'].includes(address.range())) {
+      throw new WebError('Intranet hostname resolves outside the local network', 'WEB_BLOCKED_URL')
+    }
+    addresses.push({ address: entry.address, family: entry.family })
+  }
+  if (addresses.length === 0) throw new WebError('No intranet addresses found', 'WEB_BLOCKED_URL')
+  return addresses
+}
+
 /** Production network operations kept as an object so provider tests can replace resolution only. */
 export const publicHttpNetwork = {
   resolve: resolvePublicAddresses,
+  resolveIntranet: resolveIntranetAddresses,
   request: requestPinned,
 }
 

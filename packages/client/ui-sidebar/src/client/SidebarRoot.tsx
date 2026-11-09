@@ -123,6 +123,10 @@ export function SidebarRoot({
 
   const buildVersion = localBuildVersion()
 
+  const footer = (
+    <div className={css.settingsArea}>{renderSlot('sidebar.settings', { wide })}</div>
+  )
+
   return (
     <div
       ref={column}
@@ -209,14 +213,9 @@ export function SidebarRoot({
         })}
       </div>
 
-      {/* Footer actions stack above Settings in both sidebar widths. */}
       <div className={css.footArea}>
-        <div className={css.footerActions}>
-          {renderSlot('sidebar.footer.action', { wide })}
-        </div>
-        <div className={css.settingsArea}>
-          {renderSlot('sidebar.settings', { wide })}
-        </div>
+        <div className={css.footerActions}>{renderSlot('sidebar.footer.action', { wide })}</div>
+        {renderSlot('sidebar.footer', { wide, controls: footer }, { fallback: footer })}
       </div>
     </div>
   )

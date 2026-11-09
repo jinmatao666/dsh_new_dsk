@@ -307,6 +307,10 @@ func GetSkillBundle(c *gin.Context) {
 		})
 		return
 	}
+	if offlineIntranet() && (skill.RequiresInternet == nil || *skill.RequiresInternet) {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "当前网络环境不可下载需要互联网的技能"})
+		return
+	}
 	if skill.PublishedReleaseId != nil {
 		release, releaseErr := model.GetSkillRelease(skill.Id, *skill.PublishedReleaseId)
 		if releaseErr != nil {

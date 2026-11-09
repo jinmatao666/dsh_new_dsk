@@ -355,6 +355,12 @@ describe('HttpFetchProvider caps', () => {
   })
 })
 
+it('uses pinned private addresses for intranet pages and refuses public destinations', async () => {
+  const provider = new HttpFetchProvider(limits, undefined, () => true)
+  expect(await provider.fetch({ url: base })).toMatchObject({ statusCode: 200 })
+  await expect(provider.fetch({ url: 'http://1.1.1.1/' })).rejects.toMatchObject({ code: 'WEB_BLOCKED_URL' })
+})
+
 describe('HttpFetchProvider redirects', () => {
   it('follows a same-origin redirect and reports the final URL', async () => {
     handler = (req, res) => {

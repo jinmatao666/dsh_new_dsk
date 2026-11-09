@@ -25,6 +25,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+可选的 `sidebar.footer` 插槽包裹现有设置入口，功能入口仍留在侧栏。它接收当前侧栏宽度模式和已渲染的入口，可将入口收进浮层，会话浏览区域保持原有布局。
+
 侧边栏是导航外壳：用户看到品牌、启动新会话、折叠轨道并到达 Settings。功能插件填充它的席位——ui-workspace 填充 `sidebar.workspaces`，ui-settings 在 `sidebar.settings` 注册触发行与设置面板。
 
 ### 品牌与 New Session

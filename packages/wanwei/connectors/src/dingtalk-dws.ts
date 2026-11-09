@@ -4,6 +4,7 @@
  * in desktop chat. The product ships `dingtalk-workspace-cli` (`dws`) in the
  * desktop runtime (WorkBuddy-style); PATH / npm -g is only a fallback.
  */
+import { connectorsAllowed } from './network.ts'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -760,6 +761,7 @@ export function registerDingTalkDwsRpc(ctx: Context): () => void {
   const dshHome = () => resolveProductDshHome()
   return ctx.effect(() => connection.rpc.handle('/wanwei-dingtalk', async (endpoint, _payload) => {
     try {
+      if (!connectorsAllowed(ctx)) throw new Error('当前网络环境未开放连接器')
       if (endpoint === 'status') {
         // Do not auto-write skills here: after「解绑」a status poll must not silently reconnect.
         return { ok: true as const, value: await buildDingTalkDwsStatus(dshHome()) }

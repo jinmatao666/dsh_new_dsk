@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { apply } from '../src/index.ts'
 
 afterEach(() => { vi.unstubAllGlobals() })
-it('requests the upstream in either deployment mode and reports actual connection failures', async () => {
+it('blocks offline intranet requests without contacting the upstream and restores internet access', async () => {
   const ctx = new Context()
   let mode: 'internet' | 'intranet' = 'intranet'
   let handler!: (operation: string, payload: unknown, signal: AbortSignal) => Promise<unknown>
@@ -12,10 +12,13 @@ it('requests the upstream in either deployment mode and reports actual connectio
   const fetcher = vi.fn(async () => Response.json({ items: [{ key: 'office', name: '办公' }] }))
   vi.stubGlobal('fetch', fetcher)
   apply(ctx, { baseURL: 'https://api.skillhub.cn', timeoutMs: 1000, maxJsonBytes: 4096, maxArchiveBytes: 4096, downloadHosts: [] })
-  expect(await handler('categories', {}, new AbortController().signal)).toEqual({ ok: true, value: { items: [{ key: 'office', name: '办公' }] } })
+  expect(await handler('categories', {}, new AbortController().signal)).toMatchObject({
+    ok: false, error: { message: 'SkillHub 技能暂不可用' },
+  })
+  expect(fetcher).not.toHaveBeenCalled()
+  mode = 'internet'
   fetcher.mockRejectedValueOnce(new TypeError('fetch failed'))
   expect(await handler('categories', {}, new AbortController().signal)).toMatchObject({ ok: false, error: { message: 'fetch failed' } })
-  mode = 'internet'
   expect(await handler('categories', {}, new AbortController().signal)).toEqual({ ok: true, value: { items: [{ key: 'office', name: '办公' }] } })
-  expect(fetcher).toHaveBeenCalledTimes(3)
+  expect(fetcher).toHaveBeenCalledTimes(2)
 })

@@ -9,7 +9,7 @@ import * as BrowserPlugin from '../src/index.ts'
 import { BROWSER_GUIDANCE, BROWSER_UNAVAILABLE, resolveBrowserExecutable } from '../src/browser-executable.ts'
 
 // Startup failures are deterministic here; the Loader test exercises the real MCP/browser.
-vi.mock('@deepseek-ai/dsh-experimental-browser-use-playwright-mcp', () => ({ apply: vi.fn() }))
+vi.mock('../src/playwright.ts', () => ({ mountDesktopPlaywright: vi.fn() }))
 vi.mock('../src/browser-executable.ts', async original => ({
   ...await original<typeof import('../src/browser-executable.ts')>(), resolveBrowserExecutable: vi.fn(),
 }))

@@ -25,14 +25,13 @@ export type BrowserCardProps = PropsRuntime<'settings.plugin.item'> & PropsLocal
  */
 export function BrowserCard(props: BrowserCardProps) {
   const snapshot = props.usePreference(value => value)
-  const intranet = props.useNetwork(value => value.mode) === 'intranet'
   const administratorAllowed = props.useAdministratorAllowed(value => value)
   const [saving, setSaving] = useState(false)
   const [failed, setFailed] = useState(false)
   const [open, setOpen] = useState(false)
   const bodyId = useId()
   const enabled = snapshot.value?.enabled === true
-  const blocked = !administratorAllowed || intranet || snapshot.status !== 'ready' || !snapshot.writable || saving
+  const blocked = !administratorAllowed || snapshot.status !== 'ready' || !snapshot.writable || saving
   const toggle = async () => {
     setSaving(true)
     setFailed(false)
@@ -40,7 +39,7 @@ export function BrowserCard(props: BrowserCardProps) {
     catch { setFailed(true) } // SettingsScope recovers the Host snapshot after a rejected write.
     finally { setSaving(false) }
   }
-  const status = !administratorAllowed ? 'administratorDisabled' : intranet ? 'intranet' : saving ? 'saving'
+  const status = !administratorAllowed ? 'administratorDisabled' : saving ? 'saving'
     : snapshot.status !== 'ready' || !snapshot.writable ? 'unavailable' : enabled ? 'enabled' : 'disabled'
   return <li className={`${css.card} ${open ? css.cardOpen : ''}`}>
     <button type="button" className={css.header} aria-expanded={open} aria-controls={open ? bodyId : undefined}
@@ -54,8 +53,8 @@ export function BrowserCard(props: BrowserCardProps) {
         <div className={css.control}>
           <span>{props.t(status)}</span>
           <button type="button" role="switch" aria-label={props.t('title')}
-            aria-checked={enabled && !intranet && administratorAllowed} disabled={blocked}
-            className={`${css.switch} ${enabled && !intranet && administratorAllowed ? css.on : ''}`}
+            aria-checked={enabled && administratorAllowed} disabled={blocked}
+            className={`${css.switch} ${enabled && administratorAllowed ? css.on : ''}`}
             onClick={() => { void toggle() }}><span className={css.thumb} /></button>
         </div>
       </div>

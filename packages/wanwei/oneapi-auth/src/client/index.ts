@@ -1,9 +1,11 @@
-import { CreditsSection, CheckinShortcut, type CreditsInjected } from './CreditsSection.tsx'
+import { CreditsSection, type CreditsInjected } from './CreditsSection.tsx'
 /** Browser half of Wanwei desktop authentication. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import { AccountFooter } from './AccountFooter.tsx'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
@@ -36,8 +38,19 @@ export function apply(ctx: Context): void {
   const controller = new AuthController(connection)
   const network = new NetworkController(connection)
   ctx.provide('wanweiNetwork', network)
+  ctx.effect(() => {
+    const lifetime = new AbortController()
+    let refreshing = false
+    const timer = window.setInterval(() => {
+      if (refreshing || controller.getSnapshot().state !== 'authenticated') return
+      refreshing = true
+      void network.refresh(lifetime.signal).catch(() => {}).finally(() => { refreshing = false })
+    }, 30_000)
+    return () => { lifetime.abort(); window.clearInterval(timer) }
+  }, 'wanwei-auth: refresh active deployment policy')
   const authInject = (): AuthInjected => ({
     hooks: { auth: controller },
+    publicLoginAvailable: () => network.getSnapshot().mode !== 'intranet',
     getSupportContact: async () => {
       const result = await connection.rpc.call('/desktop-auth', 'deployment-get', {})
       if (!result.ok) throw new Error(result.error.message)
@@ -69,8 +82,10 @@ export function apply(ctx: Context): void {
   }
   const creditsInject = (): CreditsInjected => ({ hooks: { auth: controller }, requestCredits })
   ctx.slots.inject('settings.section', () => ctx.slots.register({ name: 'settings.section', id: 'wanwei-credits', order: 38, label: () => '积分与用量', inject: creditsInject }, CreditsSection))
-  ctx.slots.inject('settings.shortcut', () => ctx.slots.register({ name: 'settings.shortcut', id: 'wanwei-checkin', inject: creditsInject }, CheckinShortcut))
   const t = ctx.locale.bind(NS)
+  ctx.slots.inject('sidebar.footer', () => ctx.slots.register({
+    name: 'sidebar.footer', locale: NS, inject: () => ({ ...creditsInject(), logout: () => controller.logout() }),
+  }, AccountFooter))
   const updates = new DesktopUpdateController((window as Window & {
     __ZJUGIS_NATIVE_INVOKE__?: (command: string, args: unknown) => Promise<unknown>
   }).__ZJUGIS_NATIVE_INVOKE__)

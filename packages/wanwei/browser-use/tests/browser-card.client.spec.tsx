@@ -32,15 +32,10 @@ it('shows the enabled switch and saves a disable choice', async () => {
   expect(screen.queryByRole('switch')).toBeNull()
   expect(face.setEnabled).toHaveBeenCalledTimes(1)
 })
-it('disables the switch in intranet mode without losing the saved preference', () => {
-  const face = props(true)
-  render(<BrowserCard {...face} />)
+it('allows the saved browser preference to be changed in intranet mode', () => {
+  render(<BrowserCard {...props(true)} />)
   fireEvent.click(screen.getByRole('button', { name: zh.expand }))
-  expect(screen.getByRole('switch').hasAttribute('disabled')).toBe(true)
-  expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('false')
-  expect(screen.getByText(zh.intranet)).toBeDefined()
-  fireEvent.click(screen.getByRole('switch'))
-  expect(face.setEnabled).not.toHaveBeenCalled()
+  expect(screen.getByRole('switch')).toHaveProperty('disabled', false)
 })
 it('reports a failed save and permits retry', async () => {
   const face = props()

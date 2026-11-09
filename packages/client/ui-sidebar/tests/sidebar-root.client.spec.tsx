@@ -45,7 +45,9 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
       renderSlot={((
         key: string,
         owner: SidebarFooterActionOwnerProps | SidebarSectionOwnerProps | SidebarSettingsOwnerProps,
+        opts?: { fallback?: React.ReactNode },
       ) => {
+        if (key === 'sidebar.footer') return opts?.fallback
         if (key === 'sidebar.brand.mark') return brandMark
         if (key === 'sidebar.brand.name') return brandName
         if (key === 'sidebar.settings') {

@@ -490,6 +490,7 @@ describe('DingTalk DWS RPC', () => {
     expect(name).toBe('wanwei-connectors')
     expect(inject).toEqual([
       'connection',
+      'wanweiNetworkPolicy',
       'tools',
       'sessionController',
       'sessions',

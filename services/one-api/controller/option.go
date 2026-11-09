@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/ctxkey"
@@ -38,6 +39,8 @@ func GetOptions(c *gin.Context) {
 	})
 	return
 }
+
+var deploymentOptionWrite sync.Mutex
 
 func UpdateOption(c *gin.Context) {
 	var option model.Option
@@ -84,6 +87,17 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 	case "SystemDeploymentSettings":
+		deploymentOptionWrite.Lock()
+		defer deploymentOptionWrite.Unlock()
+		config.OptionMapRWMutex.RLock()
+		previous := config.OptionMap[option.Key]
+		config.OptionMapRWMutex.RUnlock()
+		value, err := applyDesktopNetworkTransition(previous, option.Value)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "网络环境或功能设置无效"})
+			return
+		}
+		option.Value = value
 		if err := validateCreditRewards(option.Value); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 			return
@@ -161,11 +175,11 @@ func UpdateOption(c *gin.Context) {
 	if len(auditDetail) > 0 {
 		c.Set(ctxkey.AdminAuditDetail, auditDetail)
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-	})
-	return
+	response := gin.H{"success": true, "message": ""}
+	if option.Key == "SystemDeploymentSettings" {
+		response["data"] = json.RawMessage(option.Value)
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 // Login configuration changes are privileged even while deployment options retain their existing access policy.
