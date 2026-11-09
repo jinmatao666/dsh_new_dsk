@@ -21,6 +21,7 @@ import type {} from '@deepseek-ai/dsh-web'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type { AuthState } from './contract.ts'
 import { launchExpertWebsite, listPublishedExperts } from './expert-catalog.ts'
+import { launchLandMarket } from './portal-land-market.ts'
 import { installSearchCitationPolicy, OneApiSearchProvider } from './search-provider.ts'
 import { registerSkillUsage } from './usage.ts'
 import { installNetworkPolicy } from './network.ts'
@@ -834,6 +835,15 @@ export function apply(ctx: Context, config: Config): void {
         const token = (await ctx.credentials.resolve(ref))?.value
         if (token === undefined) throw new Error('请先登录后再打开专家工作台')
         return { ok: true as const, value: await launchExpertWebsite(baseURL, key, token, serviceSignal()) }
+      } catch (error) {
+        return internal(error instanceof Error ? error.message : String(error))
+      }
+    }
+    if (endpoint === 'land-market-launch') {
+      try {
+        const token = (await ctx.credentials.resolve(ref))?.value
+        if (token === undefined) throw new Error('请先登录后再打开土地市场')
+        return { ok: true as const, value: await launchLandMarket(baseURL, token, serviceSignal()) }
       } catch (error) {
         return internal(error instanceof Error ? error.message : String(error))
       }

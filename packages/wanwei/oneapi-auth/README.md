@@ -198,6 +198,7 @@ Platform skill downloads and installation confirmations use separate authenticat
 - Resource routing covers pip wheels and proxy-aware child clients, not browser traffic, native PowerShell downloads or Node fetch. It is not a network sandbox. Proxy credentials, source archives, OS packages and offline npm packages are not supplied. Internal OneAPI traffic bypasses the shell proxy. Public search and link restrictions remain independent.
 - Search sources require the updated OneAPI relay and a channel exposing Bailian's native generation endpoint, not only its compatible chat endpoint. Model compliance with citation instructions still needs live acceptance; links alone do not establish factual accuracy.
 - Independent expert launch requires the separate OneAPI `/api/expert-web` deployment and database tables; the ordinary login endpoint alone does not provide it.
+- Land-market desktop login requires OneAPI `/api/portal/land-market` launch/redeem plus a workbench-issued provider credential; see [portal-land-market](../../../services/one-api/docs/portal-land-market.md).
 - Website tickets and child Webview permissions still require live service and cross-platform desktop acceptance.
 - Final delivery verifies file existence, not document quality or user intent. The model must call the tool directly with the correct final list; nested dispatch does not declare the UI list. Installed-desktop and live-model acceptance remain required.
 

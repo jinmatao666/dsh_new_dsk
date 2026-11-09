@@ -196,6 +196,7 @@ Host 提供 `deliver_files`，在最终回复前声明完整的最终成果清�
 - 资源路由覆盖 pip wheel 和遵循代理环境的子进程客户端，不覆盖浏览器流量、原生 PowerShell 下载或 Node fetch；它不是网络沙箱。不提供代理凭证、源码包、系统软件包及离线 npm 包。内网 OneAPI 流量绕过 Shell 代理。公网搜索与链接限制仍独立生效。
 - 搜索来源需要更新后的 OneAPI 转发层及公开百炼原生生成端点的渠道，不能只有兼容对话端点。模型是否遵守引用指引仍需真实服务验收；有链接并不代表事实已经核实。
 - 独立专家打开需要另行部署 OneAPI `/api/expert-web` 接口和数据库表；普通登录接口不包含该能力。
+- 土地市场桌面登录需要 OneAPI `/api/portal/land-market` 的 launch/redeem 与管理工作台生成的提供方凭据；见 [portal-land-market](../../../services/one-api/docs/portal-land-market.md)。
 - 网站票据和子 Webview 权限仍需真实服务与跨平台桌面验收。
 - 最终交付校验文件存在性，不校验文档质量或用户意图。模型必须直接调用工具并提供正确的最终清单；嵌套调用不会声明 UI 清单。安装版桌面端与真实模型仍需验收。
 

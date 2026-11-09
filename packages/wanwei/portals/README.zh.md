@@ -27,7 +27,7 @@ kind: "package-reference"
 
 万维桌面产品通过[组合补丁](../../bundle/wanwei-desktop/cordis.patch.yml)挂载本插件。它没有单独的插件配置字段。
 
-管理员在管理工作台「系统设置 → 功能设置」控制入口显示，并通过土地市场、政策宝典旁的「地址配置」填写页面地址。停用本插件的配置项会移除这两个入口。
+管理员在管理工作台「系统设置 → 功能设置」控制入口显示，并通过土地市场、政策宝典旁的「地址配置」填写页面地址；土地市场还可生成桌面登录接入凭据。停用本插件的配置项会移除这两个入口。
 
 -----
 
@@ -37,7 +37,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节 — 点击展开</summary>
 
-可见性与地址通过 `wanweiNetwork` 读取 `/api/desktop-config`。打开面板时关闭侧栏，并调用已有的 `maximize_expert_window` 原生命令。注册时使用 `headerChrome: 'back-only'`，去掉 WANWEI Buddy / 标题 / 副标题，仅浮层返回按钮。内容使用 iframe，以便展示管理员配置的任意 http(s) 地址，无需专家票据。`PortalPage` 在 iframe 的 `load` 事件触发前用全屏加载层盖住页面；配置地址变更时重新显示加载层。
+可见性与地址通过 `wanweiNetwork` 读取 `/api/desktop-config`。打开面板时关闭侧栏，并调用已有的 `maximize_expert_window` 原生命令。注册时使用 `headerChrome: 'back-only'`，去掉 WANWEI Buddy / 标题 / 副标题，仅浮层返回按钮。政策宝典用 iframe 直接打开配置地址。土地市场打开前经 Host `land-market-launch` 调用 OneAPI `/api/portal/land-market/launch` 取得一次性票据，拼进 iframe 地址；失败时回退为未带票据打开。`PortalPage` 在 iframe 的 `load` 事件触发前用全屏加载层盖住页面；配置地址变更时重新显示加载层。
 
 </details>
 

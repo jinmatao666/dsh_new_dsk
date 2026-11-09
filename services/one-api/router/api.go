@@ -512,6 +512,17 @@ func SetApiRouter(router *gin.Engine) {
 				expertWebAdminRoute.POST("/:key/credential", controller.AdminRotateExpertWebCredential)
 			}
 		}
+		portalLandMarketRoute := apiRouter.Group("/portal/land-market")
+		{
+			portalLandMarketRoute.POST("/redeem", controller.RedeemLandMarketTicket)
+			portalLandMarketRoute.POST("/launch", middleware.UserAuth(), controller.LaunchLandMarket)
+			portalLandMarketAdmin := portalLandMarketRoute.Group("/admin")
+			portalLandMarketAdmin.Use(middleware.AdminAuth())
+			{
+				portalLandMarketAdmin.GET("/credential", controller.GetLandMarketCredentialStatus)
+				portalLandMarketAdmin.POST("/credential", controller.RotateLandMarketCredential)
+			}
+		}
 		expertRoute := apiRouter.Group("/expert")
 		{
 			expertRoute.GET("/", controller.ListPublishedExperts)

@@ -1,10 +1,11 @@
 /* eslint-disable testing-library/no-unnecessary-act -- ReactDOM roots, not Testing Library helpers, require explicit act. */
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Simulate } from 'react-dom/test-utils';
 import SystemSettings from './SystemSettings';
 import { API, showSuccess } from '../../helpers';
 
-jest.mock('../../helpers', () => ({ API: { get: jest.fn(), put: jest.fn() }, showSuccess: jest.fn() }));
+jest.mock('../../helpers', () => ({ API: { get: jest.fn(), put: jest.fn(), post: jest.fn() }, showSuccess: jest.fn(), showError: jest.fn() }));
 let container, root;
 test('operations credit base updates both examples and persists; government hides it', async () => {
   await act(async () => root.render(<SystemSettings />));
@@ -25,8 +26,17 @@ test('operations credit base updates both examples and persists; government hide
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
-  API.get.mockImplementation(path => Promise.resolve({ data: { success: true, data: path === '/api/user/self' ? { username: 'root', role: 100 } : [{ key: 'SystemDeploymentSettings', value: JSON.stringify({ network: 'internet', operator: '张运维', phone: '0571-12345678' }) }] } }));
+  API.get.mockImplementation(path => {
+    if (path === '/api/user/self') {
+      return Promise.resolve({ data: { success: true, data: { username: 'root', role: 100 } } });
+    }
+    if (path === '/api/portal/land-market/admin/credential') {
+      return Promise.resolve({ data: { success: true, configured: false } });
+    }
+    return Promise.resolve({ data: { success: true, data: [{ key: 'SystemDeploymentSettings', value: JSON.stringify({ network: 'internet', operator: '张运维', phone: '0571-12345678' }) }] } });
+  });
   API.put.mockResolvedValue({ data: { success: true } });
+  API.post.mockResolvedValue({ data: { success: true, provider_credential: 'a'.repeat(64) } });
 });
 afterEach(() => { act(() => root.unmount()); container.remove(); jest.clearAllMocks(); jest.useRealTimers(); delete global.IS_REACT_ACT_ENVIRONMENT; });
 test('legacy feature switches load and save with knowledge defaults without resetting other settings', async () => {
@@ -165,14 +175,31 @@ test('feature settings address links open portal page dialogs and save URLs', as
   expect(container.querySelector('[aria-label="政策宝典地址配置"]')).not.toBeNull();
   await act(async () => container.querySelector('[aria-label="土地市场地址配置"]').click());
   expect(await waitForDialog()).not.toBeNull();
-  await act(async () => fillInput(container.querySelector('[aria-label="土地市场页面地址"]'), 'https://land.example/#/home'));
-  await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '确定').click());
-  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  const urlInput = document.querySelector('[aria-label="土地市场页面地址"]');
+  await act(async () => fillInput(urlInput, 'https://land.example/#/home'));
+  // Enter confirms the dialog draft instead of submitting the outer settings form.
+  await act(async () => { Simulate.keyDown(urlInput, { key: 'Enter' }); });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(API.put).not.toHaveBeenCalled();
+  await act(async () => container.querySelector('[aria-label="土地市场地址配置"]').click());
+  expect((await waitForDialog()).querySelector('[aria-label="土地市场页面地址"]').value).toBe('https://land.example/#/home');
+  await act(async () => [...document.querySelectorAll('.feature-page-dialog button')].find(button => button.textContent === '确定').click());
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   expect(JSON.parse(API.put.mock.calls[0][1].value).featurePages).toEqual({
     landMarket: { url: 'https://land.example/#/home' },
     policyEncyclopedia: { url: '' },
   });
+});
+
+test('feature address dialog blocks outer form submit while open', async () => {
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[4].click());
+  await act(async () => container.querySelector('[aria-label="土地市场地址配置"]').click());
+  expect(await waitForDialog()).not.toBeNull();
+  await act(async () => fillInput(document.querySelector('[aria-label="土地市场页面地址"]'), 'https://land.example/#/home'));
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(API.put).not.toHaveBeenCalled();
+  expect(document.querySelector('[aria-label="土地市场页面地址"]').value).toBe('https://land.example/#/home');
 });
 
 test('edition selection saves independently and can be cancelled', async () => {
@@ -390,11 +417,11 @@ test('knowledge quota requires total before save when enabled', async () => {
 
 async function waitForDialog() {
   for (let attempt = 0; attempt < 20; attempt++) {
-    const dialog = container.querySelector('[role="dialog"]');
+    const dialog = document.querySelector('[role="dialog"]');
     if (dialog) return dialog;
     await act(async () => { await Promise.resolve(); });
   }
-  return container.querySelector('[role="dialog"]');
+  return document.querySelector('[role="dialog"]');
 }
 
 async function waitForPersonQuota() {

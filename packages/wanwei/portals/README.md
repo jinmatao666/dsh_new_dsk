@@ -27,7 +27,7 @@ This plugin mounts two independent feature entries: land market and policy encyc
 
 The Wanwei desktop product mounts this plugin through its [composition patch](../../bundle/wanwei-desktop/cordis.patch.yml). It has no per-plugin configuration fields.
 
-Administrators set entry visibility and page URLs under workbench System Settings → Feature Settings (use Address Configuration beside land market and policy encyclopedia). Disable this plugin’s row to remove both entries.
+Administrators set entry visibility and page URLs under workbench System Settings → Feature Settings (use Address Configuration beside land market and policy encyclopedia). Land market can also mint a desktop login provider credential there. Disable this plugin’s row to remove both entries.
 
 -----
 
@@ -37,7 +37,7 @@ Administrators set entry visibility and page URLs under workbench System Setting
 <details>
 <summary>Implementation details — click to expand</summary>
 
-Visibility and URLs come from `/api/desktop-config` through `wanweiNetwork`. Opening a panel closes the sidebar and invokes the existing `maximize_expert_window` native command. Registration sets `headerChrome: 'back-only'` so the shared panel omits the WANWEI Buddy / title / subtitle stack and keeps only a floating back control. Content uses an iframe so any http(s) address configured by the administrator can render without an expert ticket. `PortalPage` keeps the iframe mounted under a full-panel loading overlay until the frame’s `load` event fires, and restores the overlay when the configured URL changes.
+Visibility and URLs come from `/api/desktop-config` through `wanweiNetwork`. Opening a panel closes the sidebar and invokes the existing `maximize_expert_window` native command. Registration sets `headerChrome: 'back-only'` so the shared panel omits the WANWEI Buddy / title / subtitle stack and keeps only a floating back control. Policy encyclopedia loads the configured address in an iframe. Land market first calls Host `land-market-launch` → OneAPI `/api/portal/land-market/launch` for a one-use ticket, then embeds it in the iframe URL; launch failure falls back to the bare configured URL. `PortalPage` keeps the iframe mounted under a full-panel loading overlay until the frame’s `load` event fires, and restores the overlay when the configured URL changes.
 
 </details>
 

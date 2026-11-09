@@ -19,7 +19,7 @@ const tabs = [['account', '账户设置'], ['security', '安全设置'], ['netwo
 const descriptions = {
   network: '设置桌面端使用的部署网络环境。',
   edition: '选择本系统的版本类型，网络环境与功能开关保持独立。',
-  features: '内网与互联网独立配置。关闭后隐藏桌面端入口，桌面端启动、登录或切回窗口刷新后生效；开启不代表外部服务在内网可访问。土地市场与政策宝典可在此配置页面地址。',
+  features: '内网与互联网独立配置。关闭后隐藏桌面端入口，桌面端启动、登录或切回窗口刷新后生效；开启不代表外部服务在内网可访问。土地市场与政策宝典可在此配置页面地址；土地市场还可生成桌面登录接入凭据。',
   knowledge: '限制个人知识库存储总量，并可按组织架构为具体人员分配额度。关闭后不限制个人知识库总容量。',
   operations: '填写负责本系统日常维护的人员及联系电话。',
   plugins: '统一控制桌面端插件。关闭后用户无法开启；开启后用户可自行启停。桌面端启动、登录或切回窗口刷新后生效，不强制中断已开始的操作。原有网络限制仍然有效。',
@@ -127,6 +127,9 @@ export default function SystemSettings() {
   const change = (key, value) => { setSettings(previous => ({ ...previous, [key]: value })); setFeedback(''); };
   const save = async event => {
     event.preventDefault();
+    // Address dialog owns its draft until 确定; do not save the outer form while it is open
+    // (Enter used to submit this form and drop the unconfirmed URL).
+    if (addressFeature) return;
     if (loading || loadError || saving || !user) return;
     let creditRewards;
     try { creditRewards = normalizeCreditRewards(settings.creditRewards); }
