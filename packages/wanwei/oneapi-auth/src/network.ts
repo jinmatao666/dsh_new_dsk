@@ -15,9 +15,15 @@ export interface NetworkPolicy {
    * @returns Current deployment network state.
    */
   getSnapshot(): NetworkState
-  /** Whether the last confirmed deployment allows the feature. */
+  /** Whether the last confirmed deployment allows the feature.
+   * @param feature - feature controlled by the active deployment.
+   * @returns true if the current mode enables the feature.
+   */
   featureAllowed(feature: keyof DeploymentSettings['features']['internet']): boolean
-  /** Observe committed policy updates. */
+  /** Observe committed policy updates.
+   * @param listener - callback invoked after applying deployment settings.
+   * @returns disposer for the subscription.
+   */
   watch(listener: () => void): () => void
   /** Persist a validated environment selection.
    * @param mode - Requested internet or intranet mode, validated before persistence.
