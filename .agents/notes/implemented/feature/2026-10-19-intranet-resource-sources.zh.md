@@ -12,7 +12,7 @@ Status: implemented
 
 中转接入方式为独立正向代理，或经过已认证 OneAPI 来源的托管 WebSocket 通道。Host 的回环监听器接收普通 HTTP 和 CONNECT，Nginx 转发 WebSocket Upgrade，无需原生 CONNECT 支持。OneAPI 只解析并固定公网目标 IP 的 80/443 端口，按用户及全局限制连接数、字节数和时间，不解密目标 TLS。Host 拒绝跨来源转发凭证，切换来源时撤销中转连接，并等待监听器卸载完成。通道不增加额外加密：即使目标 TLS 内容保持加密，公网 HTTP/WS 入口仍暴露认证和连接信息。显式直连主机扩展子进程客户端的 NO_PROXY 行为。
 
-OneAPI 公开部署配置包含可选资源方式：`offline` 或 `proxy`。超级管理员上传仅含 wheel 的 ZIP，此操作独立于资源方式的保存。按内容寻址的 wheel URL 保留 SHA-256 片段，替换依赖包后仍可访问。资源制品只含依赖，不含私密文档。
+OneAPI 公开部署配置包含可选资源方式：`offline` 或 `proxy`。超级管理员上传仅含 wheel 的 ZIP，此操作独立于资源方式的保存。[追加目录索引](2026-11-09-append-offline-dependency-bundles.zh.md)合并已生效上传包，并保留按内容寻址的 wheel URL 和 SHA-256 片段。资源制品只含依赖，不含私密文档。
 
 万维 Host 在启动新的 Shell 工作前，将资源方式应用到专属 sidecar 进程环境。离线 pip 禁用索引，只使用后台 wheel 依赖库；此模式为遵循代理的公网下载配置必然失败的本机代理。中转模式清除离线 pip 变量，使用 HTTP 正向代理。两种方式均保留内网平台访问，互不兜底。
 
@@ -28,4 +28,4 @@ OneAPI 公开部署配置包含可选资源方式：`offline` 或 `proxy`。超�
 
 首版支持 Python wheel 和遵循代理的子进程下载客户端，不是防火墙：无法全面控制显式客户端覆盖、原生 PowerShell、Node fetch、浏览器流量及已有终端会话。离线 npm、源码构建、系统软件包和代理凭证不在本次实现内。管理员必须持久化资源目录、管理依赖包保留策略，并在服务器防火墙限制中转访问。
 
-专项测试覆盖公开配置校验、归档拒绝、依赖包原子替换、从后台真实安装 pip 包、Python HTTP 经过测试中转、环境恢复、检测缓存、过时检测及 Loader 组装的提示词快照。本 Windows 机器没有 Docker；Squid 实际启动和安装版桌面验收仍由发布运维按[资源指南](../../../../products/wanwei-desktop/resource-relay/README.zh.md)执行。
+专项测试覆盖公开配置校验、归档拒绝、目录索引原子发布、从后台真实安装 pip 包、Python HTTP 经过测试中转、环境恢复、检测缓存、过时检测及 Loader 组装的提示词快照。本 Windows 机器没有 Docker；Squid 实际启动和安装版桌面验收仍由发布运维按[资源指南](../../../../products/wanwei-desktop/resource-relay/README.zh.md)执行。

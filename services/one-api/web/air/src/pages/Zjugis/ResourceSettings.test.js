@@ -52,6 +52,34 @@ test('managed tunnel retains the optional address without transport or bypass co
   expect(container.textContent).toContain('直接接入暂未开放');
 });
 
+test('appended uploads display the base and supplement without replacing earlier files', async () => {
+  const base = { id: 'base', name: 'base.zip', files: [{ name: 'base.whl', size: 1024 }] };
+  const supplement = { id: 'extra', name: 'extra.zip', files: [{ name: 'extra.whl', size: 2048 }] };
+  API.post.mockResolvedValue({ data: { success: true, data: {
+    id: 'extra', files: [...base.files, ...supplement.files], bundles: [base, supplement],
+  } } });
+  await act(async () => root.render(<ResourceSettings value={defaultResources} onChange={jest.fn()} />));
+  const input = container.querySelector('input[type="file"]');
+  Object.defineProperty(input, 'files', { value: [new File(['zip'], 'extra.zip')] });
+  await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+  expect(container.textContent).toContain('2 个资源包，2 个文件');
+  const list = container.querySelector('[aria-label="已上传的离线依赖包"]');
+  expect(list.textContent).toContain('base.zip');
+  expect(list.textContent).toContain('extra.zip');
+  expect(container.querySelector('[role="status"]').textContent).toContain('原有依赖继续可用');
+});
+
+test('rejected supplements leave the displayed base bundle intact', async () => {
+  API.post.mockRejectedValue({ response: { data: { message: '依赖文件冲突，未追加资源包' } } });
+  await act(async () => root.render(<ResourceSettings value={defaultResources} onChange={jest.fn()} />));
+  const input = container.querySelector('input[type="file"]');
+  Object.defineProperty(input, 'files', { value: [new File(['zip'], 'conflict.zip')] });
+  await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+  expect(container.textContent).toContain('bundle-one');
+  expect(container.querySelector('[role="status"]').textContent).toContain('依赖文件冲突');
+  expect(input.disabled).toBe(false);
+});
+
 test('resource edits remove hidden bypass settings and select managed transport', async () => {
   const change = jest.fn();
   const value = { ...defaultResources, source: 'proxy', transport: 'forward', bypassHosts: ['internal.example'] };

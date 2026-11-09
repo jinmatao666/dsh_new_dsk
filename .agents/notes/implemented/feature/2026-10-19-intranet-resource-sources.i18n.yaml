@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-19-intranet-resource-sources.md
-2026-10-19-intranet-resource-sources.md: 6c7a88ee3773f55cabef6251276ec27df78a5b5d
-2026-10-19-intranet-resource-sources.zh.md: 54cbad261f721454ac60be0f9fb553c13374bc2b
+2026-10-19-intranet-resource-sources.md: 51fd1cc0141ef7bd95fe15117e482207617e5d86
+2026-10-19-intranet-resource-sources.zh.md: 502d8cf56981d02580c9cc70824d61fa8e0921c1

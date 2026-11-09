@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -42,12 +43,19 @@ func testWheel(t *testing.T) []byte {
 	t.Helper()
 	var body bytes.Buffer
 	writer := zip.NewWriter(&body)
-	for name, content := range map[string]string{
+	contents := map[string]string{
 		"humanize/__init__.py":            "__version__ = '4.0'\n",
 		"humanize-4.0.dist-info/METADATA": "Metadata-Version: 2.1\nName: humanize\nVersion: 4.0\n",
 		"humanize-4.0.dist-info/WHEEL":    "Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
 		"humanize-4.0.dist-info/RECORD":   "",
-	} {
+	}
+	names := make([]string, 0, len(contents))
+	for name := range contents {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		content := contents[name]
 		file, err := writer.Create(name)
 		if err != nil {
 			t.Fatal(err)

@@ -13,7 +13,7 @@ export function normalizeResources(value) {
   return normalized;
 }
 
-/** Uploading replaces the shared bundle; saving selects the resource source. */
+/** Uploading appends to the shared catalog; saving selects the resource source. */
 export default function ResourceSettings({ value = defaultResources, onChange, disabled }) {
   const [bundle, setBundle] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -38,7 +38,7 @@ export default function ResourceSettings({ value = defaultResources, onChange, d
       const form = new FormData(); form.append('file', file);
       const response = await API.post('/api/desktop-resources', form, { timeout: 300000 });
       if (!response.data.success) throw new Error(response.data.message);
-      setBundle(response.data.data); setMessage('依赖包已替换。资源方式仍以保存设置为准。');
+      setBundle(response.data.data); setMessage('依赖包已追加，原有依赖继续可用。资源方式仍以保存设置为准。');
     } catch (error) { setMessage(error.response?.data?.message || error.message || '上传失败，请重试'); }
     finally { setUploading(false); }
   };
@@ -64,9 +64,10 @@ export default function ResourceSettings({ value = defaultResources, onChange, d
         <textarea rows={3} value={value.probeUrls.join('\n')} disabled={disabled}
           onChange={event => change({ probeUrls: event.target.value.split('\n') })} /></label>}
     </div> : <div key='offline' className='settings-resource-fields'>
-      <p>Python wheel 依赖包：{bundle ? `${bundle.files.length} 个文件，包标识 ${bundle.id}` : '尚未上传'}</p>
-      <label>上传或替换依赖 ZIP<input type='file' accept='.zip' disabled={disabled || uploading} onChange={upload} /></label>
-      <p className='settings-description'>ZIP 根目录仅放 .whl，包含所需包及其间接依赖，且匹配桌面端的操作系统和 Python 版本。最大 512MB。上传后立即替换公共依赖库，不包含客户文件。</p>
+      <p>Python wheel 依赖包：{bundle ? `${bundle.bundles?.length || 1} 个资源包，${bundle.files.length} 个文件，包标识 ${bundle.id}` : '尚未上传'}</p>
+      {bundle?.bundles?.length > 0 && <ul aria-label='已上传的离线依赖包'>{bundle.bundles.map(item => <li key={item.id}>{item.name || item.id} · {item.files.length} 个文件 · {(item.files.reduce((total, file) => total + file.size, 0) / 1024 / 1024).toFixed(1)} MB</li>)}</ul>}
+      <label>追加依赖 ZIP<input type='file' accept='.zip' disabled={disabled || uploading} onChange={upload} /></label>
+      <p className='settings-description'>每次可追加一个ZIP，原有包继续生效，无需重新上传基础包。ZIP根目录仅放.whl，包含所需包及其间接依赖，并匹配桌面端的系统和Python版本。单次最大512MB。相同文件合并展示；同名但内容不同会拒绝上传，不同版本可共存。仅上传依赖，不包含客户文件。</p>
     </div>}
     {message && <p role='status'>{message}</p>}
     <p className='settings-description'>首版支持 pip 及遵循 HTTP(S)_PROXY 的命令行下载工具，不是全系统 VPN。切换后请停止旧任务，再启动新任务；已启动的进程不会被改写。</p>

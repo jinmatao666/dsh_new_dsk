@@ -16,7 +16,7 @@
 python products/wanwei-desktop/resource-relay/build-offline-python.py --output E:/code/dsh_newversion/delivery/resource-test-six-20261019.zip six==1.17.0
 ```
 
-正式使用时换一个输出文件名，并填写实际需要的包。跨平台参数为 `--platform`、`--python-version` 和 `--abi`；选择参数前先检查桌面实际使用的 Python。将 ZIP 上传到“离线依赖包”，再保存资源方式。上传会立即替换共享资源包；取消设置不会撤销上传。
+正式使用时换一个输出文件名，并填写实际需要的包。跨平台参数为 `--platform`、`--python-version` 和 `--abi`；选择参数前先检查桌面实际使用的 Python。将 ZIP 上传到“离线依赖包”，再保存资源方式。每次上传立即追加到共享依赖库；取消设置不会撤销上传。文件名及内容相同的 wheel 只展示一条下载记录；同名内容冲突会拒绝本次上传。不同版本可共存。已有生效包继续可用，无需重传基础 ZIP。持久化及验证范围见[目录决策](../../../.agents/notes/implemented/feature/2026-11-09-append-offline-dependency-bundles.zh.md)。
 
 OneAPI 将资源包存放在 `/data/desktop-resources`，或 `DESKTOP_RESOURCE_DIR`。必须持久化此目录。旧的按内容寻址资源包会保留供进行中的下载使用；运维负责磁盘容量监控和保留策略。依赖下载在服务内公开，所以只上传依赖制品，不上传客户私密文件。
 

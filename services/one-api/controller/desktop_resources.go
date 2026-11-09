@@ -73,14 +73,17 @@ func validateDesktopResources(settings desktopResourceSettings) error {
 var bypassHostName = regexp.MustCompile(`^[A-Za-z0-9.-]{1,253}$`)
 
 type offlineWheel struct {
-	Name   string `json:"name"`
-	SHA256 string `json:"sha256"`
-	Size   int64  `json:"size"`
+	Name     string `json:"name"`
+	SHA256   string `json:"sha256"`
+	Size     int64  `json:"size"`
+	BundleID string `json:"bundle_id,omitempty"`
 }
 type offlineBundle struct {
-	ID        string         `json:"id"`
-	CreatedAt int64          `json:"createdAt"`
-	Files     []offlineWheel `json:"files"`
+	ID        string          `json:"id"`
+	CreatedAt int64           `json:"createdAt"`
+	Files     []offlineWheel  `json:"files"`
+	Name      string          `json:"name,omitempty"`
+	Bundles   []offlineBundle `json:"bundles,omitempty"`
 }
 
 // This path must be persisted together with /data in production containers.
@@ -197,7 +200,7 @@ func UploadDesktopResources(c *gin.Context) {
 		c.JSON(400, gin.H{"success": false, "message": "ZIP上传失败或超过512MB"})
 		return
 	}
-	file, _, err := c.Request.FormFile("file")
+	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		c.JSON(400, gin.H{"success": false, "message": "请选择ZIP资源包"})
 		return
@@ -208,33 +211,23 @@ func UploadDesktopResources(c *gin.Context) {
 		c.JSON(400, gin.H{"success": false, "message": "无法读取资源包"})
 		return
 	}
+	offlineResourcePublishMu.Lock()
+	defer offlineResourcePublishMu.Unlock()
 	bundle, err := importOfflineBundle(file, size, desktopResourceRoot())
 	if err != nil {
 		c.JSON(400, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	// Atomic pointer replacement keeps readers on an entirely old or entirely new bundle.
-	pointer, err := os.CreateTemp(desktopResourceRoot(), ".current-")
-	if err == nil {
-		name := pointer.Name()
-		defer os.Remove(name)
-		_, err = pointer.WriteString(bundle.ID)
-		closeErr := pointer.Close()
-		if err == nil {
-			err = closeErr
-		}
-		if err == nil {
-			err = os.Rename(name, filepath.Join(desktopResourceRoot(), "current"))
-		}
-	}
+	bundle.Name = filepath.Base(header.Filename)
+	merged, err := appendOfflineBundle(bundle)
 	if err != nil {
-		c.JSON(500, gin.H{"success": false, "message": "发布资源包失败"})
+		c.JSON(400, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	c.JSON(200, gin.H{"success": true, "data": bundle})
+	c.JSON(200, gin.H{"success": true, "data": merged})
 }
 
-func currentOfflineBundle() (offlineBundle, error) {
+func legacyOfflineBundle() (offlineBundle, error) {
 	var bundle offlineBundle
 	id, err := os.ReadFile(filepath.Join(desktopResourceRoot(), "current"))
 	if err != nil || !resourceID.Match(id) {
@@ -270,7 +263,11 @@ func ListDesktopWheels(c *gin.Context) {
 	var body strings.Builder
 	body.WriteString("<!doctype html><html><body>")
 	for _, file := range bundle.Files {
-		fmt.Fprintf(&body, `<a href="files/%s/%s#sha256=%s">%s</a><br>`, bundle.ID, url.PathEscape(file.Name), file.SHA256, html.EscapeString(file.Name))
+		id := file.BundleID
+		if id == "" {
+			id = bundle.ID
+		}
+		fmt.Fprintf(&body, `<a href="files/%s/%s#sha256=%s">%s</a><br>`, id, url.PathEscape(file.Name), file.SHA256, html.EscapeString(file.Name))
 	}
 	body.WriteString("</body></html>")
 	c.String(200, body.String())

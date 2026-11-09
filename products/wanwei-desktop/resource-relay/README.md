@@ -16,7 +16,7 @@ The builder downloads binary dependencies and refuses to overwrite an existing o
 python products/wanwei-desktop/resource-relay/build-offline-python.py --output E:/code/dsh_newversion/delivery/resource-test-six-20261019.zip six==1.17.0
 ```
 
-For production, choose a new output filename and the required package list. Cross-target options are `--platform`, `--python-version` and `--abi`; inspect the actual desktop interpreter before selecting values. Upload the ZIP under Offline dependency bundle, then save the resource selection. Upload replaces the shared bundle immediately; cancelling settings does not undo the upload.
+For production, choose a new output filename and the required package list. Cross-target options are `--platform`, `--python-version` and `--abi`; inspect the actual desktop interpreter before selecting values. Upload the ZIP under Offline dependency bundle, then save the resource selection. Each upload immediately appends to the shared library; cancelling settings does not undo the upload. Identical wheel filenames and content share one download listing; conflicting content under the same filename rejects the upload. Different versions coexist. Existing published bundles remain available without re-uploading the base ZIP. See the [catalog decision](../../../.agents/notes/implemented/feature/2026-11-09-append-offline-dependency-bundles.md) for persistence and verification limits.
 
 OneAPI stores bundles under `/data/desktop-resources`, or `DESKTOP_RESOURCE_DIR`. Persist this directory. Old content-addressed bundles remain for in-flight downloads; operators own disk-capacity monitoring and retention. Downloads are public within the service, so upload dependency artifacts only, never private customer files.
 
