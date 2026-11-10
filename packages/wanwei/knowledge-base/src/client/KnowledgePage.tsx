@@ -5,6 +5,7 @@ import { type KnowledgeCitation } from './citations.ts'
 import { AnswerBody } from './AnswerBody.tsx'
 import { MarkdownView } from './MarkdownView.tsx'
 import { PdfLocateViewer, type PdfLocateRequest } from './PdfLocateViewer.tsx'
+import { DocumentListLoading, DocumentThumbnail, DocumentThumbnailPage } from './DocumentThumbnail.tsx'
 import { ViewerLoading } from './ViewerLoading.tsx'
 import {
   defaultCollapsedNavGroups, firstNavLibraryId, libraryAllowsDesktopFileDelete,
@@ -1019,6 +1020,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const pageCount = Math.max(1, Math.ceil(contentTree.length / DOCUMENT_PAGE_SIZE))
   const currentPage = Math.min(documentPage, pageCount)
   const pagedTree = contentTree.slice((currentPage - 1) * DOCUMENT_PAGE_SIZE, currentPage * DOCUMENT_PAGE_SIZE)
+  const thumbnailIds = visiblePdfIds(pagedTree, expandedFolders, searching)
   const plazaPageCount = Math.max(1, Math.ceil(plazaItems.length / PLAZA_PAGE_SIZE))
   const currentPlazaPage = Math.min(plazaPage, plazaPageCount)
   const pagedPlazaItems = plazaItems.slice(
@@ -1592,9 +1594,10 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         </div>
       </div>
       <div className="dsh-knowledge-list-pane">
-        {loading ? <p role="status">{productText('正在加载…')}</p> : shownDocuments.length === 0
+        {loading ? <DocumentListLoading /> : shownDocuments.length === 0
           ? <p className="dsh-knowledge-empty">{searching ? productText('未找到匹配的文件') : productText('暂无内容')}</p>
-          : <div className="dsh-knowledge-documents">{renderContentTree(pagedTree, {
+          : <DocumentThumbnailPage key={JSON.stringify([selectedId, currentPage, thumbnailIds])} documentIds={thumbnailIds}>
+            {renderContentTree(pagedTree, {
             depth: 0,
             expandedFolders,
             searching,
@@ -1603,8 +1606,16 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
             onToggleDocumentSelection: toggleDocumentSelection,
             onOpenDocument: openDocument,
             onPrefetchDocument: prefetchDocument,
+            loadThumbnail: async document => {
+              const libraryId = selectedId!
+              const cached = readDownloadCache(libraryId, document.id)
+              if (cached !== undefined) return cached
+              const file = await api.download(libraryId, document.id)
+              writeDownloadCache(libraryId, document.id, file)
+              return file
+            },
             onOpenMenu: openDocumentMenu,
-          })}</div>}
+          })}</DocumentThumbnailPage>}
       </div>
       {!chatOpen && !loading && contentTree.length > 0 &&
         <nav className="dsh-knowledge-pager" aria-label={productText('文件分页')}>
@@ -2443,8 +2454,21 @@ type ContentTreeHandlers = {
   onToggleFolder: (path: string) => void
   onToggleDocumentSelection: (documentId: string) => void
   onOpenDocument: (document: KnowledgeDocument) => void
+  loadThumbnail: (document: KnowledgeDocument) => Promise<KnowledgeFileBytes>
   onPrefetchDocument: (document: KnowledgeDocument) => void
   onOpenMenu: (documentId: string, x: number, y: number) => void
+}
+
+/** PDF identities mounted in the current page, including expanded folders.
+ * @param nodes - Current page's tree nodes.
+ * @param expanded - Expanded folder paths.
+ * @param searching - Whether search exposes every matching folder.
+ * @returns Document identities whose first pages must finish loading.
+ */
+function visiblePdfIds(nodes: ContentNode[], expanded: Set<string>, searching: boolean): string[] {
+  return nodes.flatMap(node => node.type === 'folder'
+    ? searching || expanded.has(node.path) ? visiblePdfIds(node.children, expanded, searching) : []
+    : documentFileKind(node.document) === 'pdf' ? [node.document.id] : [])
 }
 
 /** Render folders and files as content-pane cards. A collapsed folder is one grid card; an
@@ -2498,7 +2522,6 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
     const name = documentDisplayName(document)
     const kind = documentFileKind(document)
     const uploadedAt = formatUploadTime(documentTime(document))
-    const clock = formatCardClock(documentTime(document))
     // Audio is playback-only (RAGFlow chunking skipped) and must not surface as 解析失败.
     const skipParseAlarm = kind === 'audio' || isRecordingMinutesName(documentBaseName(document))
     const parsing = !skipParseAlarm && documentIsParsing(document)
@@ -2509,7 +2532,6 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
       : failed
         ? productText('解析失败')
         : productText(kindLabel(kind))
-    const statusLine = clock === '' ? statusLabel : `${statusLabel} | ${clock}`
     cards.push(
       <button type="button" key={document.id}
         className={selectedDoc ? `dsh-knowledge-card ${kind} selected` : `dsh-knowledge-card ${kind}`}
@@ -2527,19 +2549,20 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
           event.preventDefault()
           handlers.onOpenMenu(document.id, event.clientX, event.clientY)
         }}>
-        <span className={`dsh-knowledge-file-icon ${kind}`} aria-hidden="true">
-          <TypeIcon kind={kind} />
-        </span>
+        <DocumentThumbnail documentId={document.id} kind={kind} load={() => handlers.loadThumbnail(document)} fallback={<TypeIcon kind={kind} />} />
+        <span className="dsh-knowledge-card-details">
         <strong>{name}</strong>
         <small className={parsing ? 'dsh-knowledge-card-status parsing' : failed ? 'dsh-knowledge-card-status failed' : 'dsh-knowledge-card-status'}>
           <span className="dsh-knowledge-card-status-mark" aria-hidden="true">
             {parsing ? <ParseStatusIcon /> : kind === 'audio' ? <AudioStatusIcon /> : kind === 'web' ? <WebStatusIcon /> : <ClockIcon />}
           </span>
-          <span>{statusLine}</span>
+          <span>{statusLabel}</span>
         </small>
+        {uploadedAt !== '' && <small className="dsh-knowledge-card-upload-time">{uploadedAt}</small>}
         {document.creator_name !== undefined && <span className="dsh-knowledge-card-meta">
           <span><em>{productText('创建人')}</em>{document.creator_name}</span>
         </span>}
+        </span>
         {selectedDoc && <span className="dsh-knowledge-card-corner">
           <span className="dsh-knowledge-check" aria-hidden="true"><CheckIcon /></span>
         </span>}
@@ -2644,17 +2667,6 @@ function formatUploadTime(value: number): string {
   if (Number.isNaN(date.getTime())) return ''
   const pad = (part: number) => String(part).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-/** Compact `HH:mm` clock for the card status line.
- * @param value - Epoch milliseconds from `documentTime`.
- */
-function formatCardClock(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const pad = (part: number) => String(part).padStart(2, '0')
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 function TypeIcon({ kind }: { kind: FileKind }) {

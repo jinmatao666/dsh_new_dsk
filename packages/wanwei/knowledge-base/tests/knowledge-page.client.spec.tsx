@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import {
   clearKnowledgeDownloadCache,
   formatAnswerDurationSeconds,
@@ -17,6 +17,7 @@ vi.mock('pdfjs-dist', () => ({
     transform: (_viewport: number[], item: number[]) => item,
   },
   getDocument: () => ({
+    async destroy() {},
     promise: Promise.resolve({
       numPages: 1,
       async getPage() {
@@ -34,6 +35,8 @@ vi.mock('pdfjs-dist', () => ({
 vi.mock('pdfjs-dist/build/pdf.worker.min.mjs', () => ({
   WorkerMessageHandler: { setup() {} },
 }))
+
+beforeEach(() => { stubCanvas() })
 
 afterEach(() => {
   clearKnowledgeDownloadCache()
@@ -167,7 +170,7 @@ it('keeps 网址 kind after stripping the .html display suffix', async () => {
   const card = screen.getByText('MySQL修改connect_timeout (连接超时) 全局变量 - 我找的就是你 - 博客园')
     .closest('.dsh-knowledge-card') as HTMLElement
   expect(card.className).toContain('web')
-  expect(card.querySelector('img')?.getAttribute('src')).toBe('/knowledge-covers/icon-file-web.png?v=web-book')
+  expect(card.querySelector('.dsh-knowledge-document-cover.web')).not.toBeNull()
 })
 
 it('imports validated web links into the selected personal library', async () => {
@@ -829,7 +832,7 @@ it('shows plaza-style stats on sidebar cards and renders content as cards', asyn
   expect(second.textContent).toContain('未知作者')
   const file = screen.getByText('根目录.txt').closest('button') as HTMLElement
   expect(file.className).toContain('dsh-knowledge-card')
-  expect(within(file).getByText('32B')).toBeTruthy()
+  expect(within(file).getByText('文件')).toBeTruthy()
   const folder = container.querySelector('.dsh-knowledge-folder-section') as HTMLElement
   expect(within(folder).getByText('1 项')).toBeTruthy()
   fireEvent.click(within(folder).getByRole('button', { expanded: true }))
@@ -913,15 +916,15 @@ it('searches files by name, sorts by upload time, and shows upload time and crea
   ])
   const { container } = render(<KnowledgePage api={service} />)
   await screen.findByText('新规范.pdf')
-  const order = () => [...container.querySelectorAll('.dsh-knowledge-card > strong')].map(node => node.textContent)
+  const order = () => [...container.querySelectorAll('.dsh-knowledge-card-details > strong')].map(node => node.textContent)
   expect(order()).toEqual(['新规范.pdf', '备忘.txt', '旧规范.pdf'])
   const fresh = screen.getByText('新规范.pdf').closest('button') as HTMLElement
-  expect(fresh.textContent).toContain('2026-10-20 09:05')
+  expect(fresh.title).toContain('2026-10-20 09:05')
   expect(fresh.textContent).toContain('创建人')
   expect(fresh.textContent).toContain('小李')
   // The viewer's own files arrive without a creator name and show no creator row.
   const own = screen.getByText('旧规范.pdf').closest('button') as HTMLElement
-  expect(own.textContent).toContain('2026-10-01 08:30')
+  expect(own.title).toContain('2026-10-01 08:30')
   expect(own.textContent).not.toContain('创建人')
   fireEvent.click(screen.getByRole('button', { name: '按上传时间排序' }))
   expect(order()).toEqual(['旧规范.pdf', '备忘.txt', '新规范.pdf'])
