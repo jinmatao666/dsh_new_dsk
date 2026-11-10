@@ -148,7 +148,8 @@ it('shows parse progress on documents that are still chunking', async () => {
   render(<KnowledgePage api={service} />)
   expect(await screen.findByText('MySQL修改connect_timeout (连接超时) 全局变量 - 我找的就是你 - 博客园')).toBeTruthy()
   expect(screen.getByText(/解析中…3%/)).toBeTruthy()
-  expect(screen.getByText(/音频 \| 09:13/)).toBeTruthy()
+  expect(screen.getByText('音频', { exact: true })).toBeTruthy()
+  expect(screen.getByText('2026-11-06 09:13')).toBeTruthy()
 })
 
 it('keeps 网址 kind after stripping the .html display suffix', async () => {
@@ -165,7 +166,8 @@ it('keeps 网址 kind after stripping the .html display suffix', async () => {
   ])
   render(<KnowledgePage api={service} />)
   expect(await screen.findByText('MySQL修改connect_timeout (连接超时) 全局变量 - 我找的就是你 - 博客园')).toBeTruthy()
-  expect(screen.getByText(/网址 \| 10:38/)).toBeTruthy()
+  expect(screen.getByText('网址', { exact: true })).toBeTruthy()
+  expect(screen.getByText('2026-11-06 10:38')).toBeTruthy()
   expect(screen.queryByText(/文件 \|/)).toBeNull()
   const card = screen.getByText('MySQL修改connect_timeout (连接超时) 全局变量 - 我找的就是你 - 博客园')
     .closest('.dsh-knowledge-card') as HTMLElement
