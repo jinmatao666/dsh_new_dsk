@@ -44,6 +44,53 @@ func TestKnowledgeUploadRejectsOverOneGiBWithoutOpeningFile(t *testing.T) {
 	}
 }
 
+func TestParsePersonalKnowledgeDocumentRequiresOwnership(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:knowledge-personal-parse?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previous := model.DB
+	model.DB = db
+	t.Cleanup(func() { model.DB = previous })
+	require.NoError(t, db.AutoMigrate(
+		&model.KnowledgeBase{}, &model.KnowledgeBaseGrant{}, &model.KnowledgeCategory{}, &model.OrgMember{},
+	))
+	libraries := []model.KnowledgeBase{
+		{Name: "own", RagflowDatasetId: "ds-own", Kind: model.KnowledgeBasePersonal, OwnerUserId: 2, Shelf: model.KnowledgeShelfPublished},
+		{Name: "other", RagflowDatasetId: "ds-other", Kind: model.KnowledgeBasePersonal, OwnerUserId: 3, Shelf: model.KnowledgeShelfPublished},
+		{Name: "public", RagflowDatasetId: "ds-public", Kind: model.KnowledgeBaseCommon, OwnerUserId: 2, Shelf: model.KnowledgeShelfPublished},
+	}
+	require.NoError(t, db.Create(&libraries).Error)
+	upstreamCalls := make(chan string, 3)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		upstreamCalls <- r.Method + " " + r.URL.Path + " " + strings.TrimSpace(string(body))
+		_, _ = io.WriteString(w, `{"code":0,"data":null}`)
+	}))
+	defer upstream.Close()
+	t.Setenv("RAGFLOW_BASE_URL", upstream.URL)
+	t.Setenv("RAGFLOW_API_KEY", "test-key")
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/:id/documents/:documentId/parse", func(c *gin.Context) {
+		c.Set("id", 2)
+		c.Set("role", model.RoleCommonUser)
+		ParsePersonalKnowledgeDocument(c)
+	})
+	for i, status := range []int{http.StatusOK, http.StatusForbidden, http.StatusForbidden} {
+		recorder := httptest.NewRecorder()
+		path := fmt.Sprintf("/%d/documents/failed-file/parse", libraries[i].Id)
+		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, path, nil))
+		require.Equal(t, status, recorder.Code, recorder.Body.String())
+	}
+	require.Len(t, upstreamCalls, 1)
+	require.Equal(t, `POST /api/v1/datasets/ds-own/chunks {"document_ids":["failed-file"]}`, <-upstreamCalls)
+}
+
 func TestKnowledgeUploadAcceptsMDBAboveTwentyMiB(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/documents") {

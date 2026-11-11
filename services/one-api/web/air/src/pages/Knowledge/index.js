@@ -521,6 +521,7 @@ const KnowledgeLibrary = () => {
   const [personFilesLoading, setPersonFilesLoading] = useState(false);
   const [personFileQuery, setPersonFileQuery] = useState('');
   const [personFilePage, setPersonFilePage] = useState(1);
+  const [personUploadLibraryId, setPersonUploadLibraryId] = useState('');
   const [personLibrariesOpen, setPersonLibrariesOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(null);
@@ -540,7 +541,10 @@ const KnowledgeLibrary = () => {
   const loadDocumentsRef = useRef(null);
   const pollRef = useRef({ library: null, page: 1, keywords: '' });
   const personLoadRef = useRef(0);
+  const personRef = useRef(null);
+  const loadPersonFilesRef = useRef(null);
   viewerRef.current = viewer;
+  personRef.current = person;
 
   useEffect(() => () => { revokeViewerUrl(viewerRef.current); }, []);
 
@@ -718,6 +722,9 @@ const KnowledgeLibrary = () => {
   const viewerId = currentUserId();
   const canManagePersonalLibrary = library => (
     manageAllPersonal || (Number(library?.owner_user_id) === viewerId && isAdmin())
+  );
+  const canWritePersonalFiles = library => (
+    library && (manageAllPersonal || Number(library.owner_user_id) === viewerId)
   );
 
   const countsByScope = useMemo(() => {
@@ -929,6 +936,11 @@ const KnowledgeLibrary = () => {
   const personLibraries = person
     ? libraries.filter(library => isPersonalLibrary(library) && Number(library.owner_user_id) === person.id)
     : [];
+  const writablePersonLibraries = personLibraries.filter(canWritePersonalFiles);
+  const personUploadLibrary = writablePersonLibraries.length === 1
+    ? writablePersonLibraries[0]
+    : writablePersonLibraries.find(library => String(library.id) === personUploadLibraryId);
+  const canWriteOpened = !isPersonalLibrary(opened) || canWritePersonalFiles(opened);
 
   const shownPersonFiles = useMemo(() => {
     const text = personFileQuery.trim().toLowerCase();
@@ -1015,26 +1027,45 @@ const KnowledgeLibrary = () => {
     return rows;
   };
 
-  const loadPersonFiles = async user => {
+  const loadPersonFiles = async (user, { silent = false } = {}) => {
     const token = personLoadRef.current + 1;
     personLoadRef.current = token;
-    setPersonFilesLoading(true);
-    setError('');
+    if (!silent) {
+      setPersonFilesLoading(true);
+      setError('');
+    }
     try {
       const owned = libraries.filter(library => isPersonalLibrary(library) && Number(library.owner_user_id) === user.id);
       const groups = await Promise.all(owned.map(library => listLibraryDocuments(library)));
-      if (personLoadRef.current !== token) return;
+      if (personLoadRef.current !== token || (silent && personRef.current?.id !== user.id)) return;
       const rows = groups.flat().sort((left, right) => Number(right.create_time || right.update_time || 0) - Number(left.create_time || left.update_time || 0));
       setPersonFiles(rows);
       setPersonFilePage(current => Math.min(current, Math.max(1, Math.ceil(rows.length / FILE_PAGE_SIZE) || 1)));
     } catch (cause) {
-      if (personLoadRef.current !== token) return;
+      if (silent || personLoadRef.current !== token) return;
       setPersonFiles([]);
       setError(await errorMessage(cause));
     } finally {
       if (personLoadRef.current === token) setPersonFilesLoading(false);
     }
   };
+  loadPersonFilesRef.current = loadPersonFiles;
+
+  const personParsePending = personFiles.some(file => parseState(file).pending);
+  useEffect(() => {
+    if (!person || opened || !personParsePending || personFilesLoading || busy) return undefined;
+    let polling = false;
+    const timer = window.setInterval(async () => {
+      if (polling) return;
+      polling = true;
+      try {
+        await loadPersonFilesRef.current(person, { silent: true });
+      } finally {
+        polling = false;
+      }
+    }, PARSE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [person, opened, personParsePending, personFilesLoading, busy]);
 
   const openPerson = async user => {
     closeViewer();
@@ -1043,13 +1074,16 @@ const KnowledgeLibrary = () => {
     setPersonFiles([]);
     setPersonFileQuery('');
     setPersonFilePage(1);
+    setPersonUploadLibraryId('');
     setPersonLibrariesOpen(false);
     setCardMenuId(null);
     await loadPersonFiles(user);
   };
 
-  const openFiles = async library => {
-    setPerson(null);
+  const openFiles = async (library, { fromPerson = false } = {}) => {
+    if (!fromPerson) setPerson(null);
+    closeViewer();
+    setCardMenuId(null);
     setOpened(library);
     setDocuments([]);
     setDocumentTotal(0);
@@ -1155,10 +1189,10 @@ const KnowledgeLibrary = () => {
     }
   };
 
-  const uploadFile = async event => {
+  const uploadFile = async (event, library = opened, personToRefresh = null) => {
     const selected = [...(event.target.files || [])];
     event.target.value = '';
-    if (selected.length === 0 || !opened) return;
+    if (selected.length === 0 || !library || (isPersonalLibrary(library) && !canWritePersonalFiles(library))) return;
     const candidates = selected.filter(file => !isSkippedUploadName(file.name));
     if (candidates.length === 0) {
       setError('不支持上传该文件');
@@ -1176,15 +1210,23 @@ const KnowledgeLibrary = () => {
         try {
           const body = new FormData();
           body.append('file', file);
-          unwrap(await API.post(`${knowledgeBasesRoot()}/${opened.id}/documents`, body));
+          unwrap(await API.post(`${knowledgeBasesRoot()}/${library.id}/documents`, body));
         } catch (cause) {
           failures.push(`${file.name}：${await errorMessage(cause)}`);
         }
       }
-      setFileKeyword('');
-      setFileSearch('');
-      setFilePage(1);
-      await loadDocuments(opened, { page: 1, keywords: '' });
+      if (personToRefresh) {
+        if (personRef.current?.id !== personToRefresh.id) return;
+        setPersonFileQuery('');
+        setPersonFilePage(1);
+        setPersonFileJump('');
+        await loadPersonFiles(personToRefresh);
+      } else {
+        setFileKeyword('');
+        setFileSearch('');
+        setFilePage(1);
+        await loadDocuments(library, { page: 1, keywords: '' });
+      }
       if (failures.length > 0) {
         setError(failures.length === candidates.length
           ? failures.join('；')
@@ -1328,9 +1370,24 @@ const KnowledgeLibrary = () => {
         link.click();
         URL.revokeObjectURL(url);
       } else if (action === 'parse') {
-        if (!isAdmin()) throw new Error('无权重新解析');
-        unwrap(await API.post(`/api/knowledge-admin/bases/${libraryId}/documents/${file.id}/parse`));
-        await refreshOpened(opened);
+        if ((file.library_id && person) || isPersonalLibrary(opened)) {
+          const library = file.library_id && person
+            ? personLibraries.find(item => Number(item.id) === libraryId)
+            : opened;
+          if (!canWritePersonalFiles(library)) {
+            throw new Error('无权重新解析');
+          }
+          unwrap(await API.post(`${base}/parse`));
+          if (file.library_id && person) {
+            if (personRef.current?.id === person.id) await loadPersonFiles(person);
+          } else {
+            await refreshOpened(opened);
+          }
+        } else {
+          if (!isAdmin()) throw new Error('无权重新解析');
+          unwrap(await API.post(`/api/knowledge-admin/bases/${libraryId}/documents/${file.id}/parse`));
+          await refreshOpened(opened);
+        }
       } else if (action === 'delete') {
         unwrap(await API.delete(base));
         setConfirming(null);
@@ -1736,15 +1793,20 @@ const KnowledgeLibrary = () => {
     </section> : opened ? <section className='knowledge-files knowledge-file-list' aria-label='文件清单'>
       <header className='knowledge-file-list-head'>
         <div className='knowledge-file-list-title-row'>
-          <button type='button' className='knowledge-back' onClick={() => { closeViewer(); setOpened(null); setFileJump(''); }}>返回</button>
+          <button type='button' className='knowledge-back' onClick={() => {
+            closeViewer();
+            setOpened(null);
+            setFileJump('');
+            if (person) void loadPersonFiles(person);
+          }}>返回</button>
           <h2>{opened.name}-文件清单</h2>
-          <button type='button' className='knowledge-primary knowledge-upload-btn' disabled={busy === 'upload'} onClick={() => fileInput.current?.click()}>
+          {canWriteOpened && <><button type='button' className='knowledge-primary knowledge-upload-btn' disabled={busy === 'upload'} onClick={() => fileInput.current?.click()}>
             <FileOpIcon src={ICON_FILE_UPLOAD} className='knowledge-file-op-icon-upload' />
             {busy === 'upload' ? '正在上传' : '上传文件'}
           </button>
-          <input ref={fileInput} className='knowledge-file-input' type='file' multiple aria-label='上传文件' tabIndex={-1} disabled={busy === 'upload'} onChange={uploadFile} />
+          <input ref={fileInput} className='knowledge-file-input' type='file' multiple aria-label='上传文件' tabIndex={-1} disabled={busy === 'upload'} onChange={uploadFile} /></>}
         </div>
-        <p className='knowledge-hint knowledge-upload-hint'>可一次选择多个文件，每个不超过 20MB。上传后在后台解析，列表会显示解析进度。</p>
+        {canWriteOpened && <p className='knowledge-hint knowledge-upload-hint'>可一次选择多个文件，每个不超过 20MB。上传后在后台解析，列表会显示解析进度。</p>}
       </header>
       <div className='knowledge-files-toolbar knowledge-file-search-row'>
         <label className='knowledge-search knowledge-file-search'>
@@ -1794,9 +1856,9 @@ const KnowledgeLibrary = () => {
                   <button type='button' disabled={busy === `${file.id}:browse`} onClick={() => runFileAction(file, 'browse')}><FileOpIcon src={ICON_FILE_BROWSE} />浏览</button>
                   <button type='button' disabled={busy === `${file.id}:download`} onClick={() => runFileAction(file, 'download')}><FileOpIcon src={ICON_FILE_DOWNLOAD} />下载</button>
                   <button type='button' disabled={busy === `${file.id}:chunks`} onClick={() => runFileAction(file, 'chunks')}><FileOpIcon src={ICON_FILE_CHUNKS} />切片</button>
-                  {isAdmin() && state.retry && <button type='button' disabled={busy === `${file.id}:parse`} onClick={() => runFileAction(file, 'parse')}><RefreshCw size={14} />重新解析</button>}
-                  {isAdmin() && <button type='button' onClick={() => { setSummaryFile(file); setSummaryText(file.summary || ''); }}><FileOpIcon src={ICON_FILE_SUMMARY} />摘要</button>}
-                  <button type='button' className='danger' onClick={() => setConfirming({ type: 'file', file })}><FileOpIcon src={ICON_FILE_DELETE} />删除</button>
+                  {(isPersonalLibrary(opened) ? canWriteOpened : isAdmin()) && state.retry && <button type='button' disabled={busy === `${file.id}:parse`} onClick={() => runFileAction(file, 'parse')}><RefreshCw size={14} />重新解析</button>}
+                  {isAdmin() && canWriteOpened && <button type='button' onClick={() => { setSummaryFile(file); setSummaryText(file.summary || ''); }}><FileOpIcon src={ICON_FILE_SUMMARY} />摘要</button>}
+                  {canWriteOpened && <button type='button' className='danger' onClick={() => setConfirming({ type: 'file', file })}><FileOpIcon src={ICON_FILE_DELETE} />删除</button>}
                 </td>
               </tr>;
               })}
@@ -1892,11 +1954,36 @@ const KnowledgeLibrary = () => {
                 <h2>{person.name} 的文件清单</h2>
                 <p>{person.department || '未分配部门'} · {personLibraries.length}个知识库 · {personFilesLoading ? '…' : personFiles.length}个文件</p>
               </button>
+              {writablePersonLibraries.length > 0 && <div className='knowledge-person-upload'>
+                {writablePersonLibraries.length > 1 && <select
+                  aria-label='上传到知识库'
+                  value={personUploadLibrary?.id ?? ''}
+                  disabled={busy === 'upload'}
+                  onChange={event => setPersonUploadLibraryId(event.target.value)}
+                >
+                  <option value=''>选择知识库</option>
+                  {writablePersonLibraries.map(library => <option key={library.id} value={library.id}>{library.name}</option>)}
+                </select>}
+                <button type='button' className='knowledge-primary knowledge-upload-btn' disabled={!personUploadLibrary || busy === 'upload'} onClick={() => fileInput.current?.click()}>
+                  <FileOpIcon src={ICON_FILE_UPLOAD} className='knowledge-file-op-icon-upload' />
+                  {busy === 'upload' ? '正在上传' : '上传文件'}
+                </button>
+                <input
+                  ref={fileInput}
+                  className='knowledge-file-input'
+                  type='file'
+                  multiple
+                  aria-label='上传文件'
+                  tabIndex={-1}
+                  disabled={!personUploadLibrary || busy === 'upload'}
+                  onChange={event => uploadFile(event, personUploadLibrary, person)}
+                />
+              </div>}
             </header>
             {personLibrariesOpen && <section id='knowledge-person-libraries' className='knowledge-person-libraries' aria-label='个人知识库'>
               <div className='knowledge-person-libraries-head'>
                 <h3>个人知识库</h3>
-                <span>通过更多菜单编辑或删除知识库</span>
+                <span>选择知识库查看文件</span>
               </div>
               {personLibraries.length === 0
                 ? <p className='knowledge-person-libraries-empty'>该人员暂无个人知识库</p>
@@ -1905,11 +1992,13 @@ const KnowledgeLibrary = () => {
                     const filesInLibrary = personFiles.filter(file => Number(file.library_id) === Number(library.id)).length;
                     const menuOpen = cardMenuId === library.id;
                     return <article key={library.id} className={menuOpen ? 'knowledge-person-library is-menu-open' : 'knowledge-person-library'}>
-                      <span className='knowledge-person-library-icon' aria-hidden='true'><Folder size={18} /></span>
-                      <span className='knowledge-person-library-copy'>
-                        <strong title={library.name}>{library.name}</strong>
-                        <em>{personFilesLoading ? '…' : `${filesInLibrary} 个文件`}</em>
-                      </span>
+                      <button type='button' className='knowledge-person-library-open' onClick={() => openFiles(library, { fromPerson: true })}>
+                        <span className='knowledge-person-library-icon' aria-hidden='true'><Folder size={18} /></span>
+                        <span className='knowledge-person-library-copy'>
+                          <strong title={library.name}>{library.name}</strong>
+                          <em>{personFilesLoading ? '…' : `${filesInLibrary} 个文件`}</em>
+                        </span>
+                      </button>
                       {canManagePersonalLibrary(library) && <div className='knowledge-card-menu'>
                         <button
                           type='button'
@@ -1946,23 +2035,26 @@ const KnowledgeLibrary = () => {
             <div className='knowledge-table-card'>
               <div className='knowledge-table-wrap'>
                 <table>
-                  <thead><tr><th>文件名称</th><th>所属知识库</th><th>大小</th><th>上传时间</th><th>摘要</th><th>操作</th></tr></thead>
+                  <thead><tr><th>文件名称</th><th>所属知识库</th><th>大小</th><th>上传时间</th><th>解析状态</th><th>摘要</th><th>操作</th></tr></thead>
                   <tbody>
-                    {personFilesLoading ? <tr><td colSpan={6}>正在加载文件</td></tr>
-                      : personFileRows.length === 0 ? <tr><td colSpan={6}>{personFileQuery.trim() ? '没有匹配的文件' : '暂无文件'}</td></tr>
+                    {personFilesLoading ? <tr><td colSpan={7}>正在加载文件</td></tr>
+                      : personFileRows.length === 0 ? <tr><td colSpan={7}>{personFileQuery.trim() ? '没有匹配的文件' : '暂无文件'}</td></tr>
                         : personFileRows.map(file => {
                           const ownedLibrary = personLibraries.find(library => Number(library.id) === Number(file.library_id));
                           const canDeleteFile = canManagePersonalLibrary(ownedLibrary || { owner_user_id: person?.id });
+                          const state = parseState(file);
                           return <tr key={`${file.library_id}:${file.id}`}>
                           <td className='knowledge-file-name'><FileOpIcon src={ICON_FILE_SUMMARY} />{file.name}</td>
                           <td>{file.library_name || '—'}</td>
                           <td>{formatSizeLabel(file.size)}</td>
                           <td>{formatUnix(file.create_time || file.update_time)}</td>
+                          <td className={`knowledge-parse ${state.key}`}>{state.label}</td>
                           <td className='knowledge-summary' title={file.summary || ''}>{file.summary || '—'}</td>
                           <td className='knowledge-ops'>
                             <button type='button' disabled={busy === `${file.id}:browse`} onClick={() => runFileAction(file, 'browse')}><FileOpIcon src={ICON_FILE_BROWSE} />预览</button>
                             <button type='button' disabled={busy === `${file.id}:download`} onClick={() => runFileAction(file, 'download')}><FileOpIcon src={ICON_FILE_DOWNLOAD} />下载</button>
                             <button type='button' disabled={busy === `${file.id}:chunks`} onClick={() => runFileAction(file, 'chunks')}><FileOpIcon src={ICON_FILE_CHUNKS} />切片</button>
+                            {canWritePersonalFiles(ownedLibrary) && state.retry && <button type='button' disabled={busy === `${file.id}:parse`} onClick={() => runFileAction(file, 'parse')}><RefreshCw size={14} />重新解析</button>}
                             {canDeleteFile && <button type='button' className='danger' onClick={() => setConfirming({ type: 'file', file })}><FileOpIcon src={ICON_FILE_DELETE} />删除</button>}
                           </td>
                         </tr>;

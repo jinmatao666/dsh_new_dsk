@@ -501,6 +501,10 @@ func ParseManagedKnowledgeDocument(c *gin.Context) {
 	if !ok {
 		return
 	}
+	parseKnowledgeDocument(c, row)
+}
+
+func parseKnowledgeDocument(c *gin.Context, row *model.KnowledgeBase) {
 	documentId, ok := managedDocumentID(c)
 	if !ok {
 		return

@@ -1594,7 +1594,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         </div>
       </div>
       <div className="dsh-knowledge-list-pane">
-        {loading ? <DocumentListLoading /> : shownDocuments.length === 0
+        {loading ? <DocumentListLoading /> : selectedId === undefined || shownDocuments.length === 0
           ? <p className="dsh-knowledge-empty">{searching ? productText('未找到匹配的文件') : productText('暂无内容')}</p>
           : <DocumentThumbnailPage key={JSON.stringify([selectedId, currentPage, thumbnailIds])} documentIds={thumbnailIds}>
             {renderContentTree(pagedTree, {
@@ -2523,16 +2523,11 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
     const name = documentDisplayName(document)
     const kind = documentFileKind(document)
     const uploadedAt = formatUploadTime(documentTime(document))
-    // Audio is playback-only (RAGFlow chunking skipped) and must not surface as 解析失败.
-    const skipParseAlarm = kind === 'audio' || isRecordingMinutesName(documentBaseName(document))
-    const parsing = !skipParseAlarm && documentIsParsing(document)
-    const failed = !skipParseAlarm && documentParseFailed(document)
+    const parsing = kind !== 'audio' && !isRecordingMinutesName(documentBaseName(document)) && documentIsParsing(document)
     const selectedDoc = handlers.selectedDocumentIds.includes(document.id)
     const statusLabel = parsing
       ? `${productText('解析中…')}${documentParsePercent(document)}%`
-      : failed
-        ? productText('解析失败')
-        : productText(kindLabel(kind))
+      : productText(kindLabel(kind))
     cards.push(
       <button type="button" key={document.id}
         className={selectedDoc ? `dsh-knowledge-card ${kind} selected` : `dsh-knowledge-card ${kind}`}
@@ -2551,11 +2546,14 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
           handlers.onOpenMenu(document.id, event.clientX, event.clientY)
         }}>
         <DocumentThumbnail
-          documentId={document.id} kind={kind}
-          load={() => handlers.loadThumbnail(document)} fallback={<TypeIcon kind={kind} />} />
+          documentId={document.id}
+          kind={kind}
+          load={() => handlers.loadThumbnail(document)}
+          fallback={<TypeIcon kind={kind} />}
+        />
         <span className="dsh-knowledge-card-details">
           <strong>{name}</strong>
-          <small className={parsing ? 'dsh-knowledge-card-status parsing' : failed ? 'dsh-knowledge-card-status failed' : 'dsh-knowledge-card-status'}>
+          <small className={parsing ? 'dsh-knowledge-card-status parsing' : 'dsh-knowledge-card-status'}>
             <span className="dsh-knowledge-card-status-mark" aria-hidden="true">
               {parsing ? <ParseStatusIcon /> : kind === 'audio' ? <AudioStatusIcon /> : kind === 'web' ? <WebStatusIcon /> : <ClockIcon />}
             </span>

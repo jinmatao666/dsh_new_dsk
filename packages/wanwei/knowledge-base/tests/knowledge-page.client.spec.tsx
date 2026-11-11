@@ -125,7 +125,7 @@ it('loads authorized knowledge bases and creates a personal library', async () =
   expect(screen.getByText('PDF')).toBeTruthy()
 })
 
-it('shows parse progress on documents that are still chunking', async () => {
+it('shows parse progress while chunking and the file type after a parse failure', async () => {
   const service = api()
   service.documents = vi.fn(async () => [
     {
@@ -144,12 +144,15 @@ it('shows parse progress on documents that are still chunking', async () => {
       progress: 1,
       create_time: Date.parse('2026-11-06T09:13:00'),
     },
+    { id: 'doc-failed', name: '资料.pdf', size: 1024, run: 'FAIL', progress: 0 },
   ])
   render(<KnowledgePage api={service} />)
   expect(await screen.findByText('MySQL修改connect_timeout (连接超时) 全局变量 - 我找的就是你 - 博客园')).toBeTruthy()
   expect(screen.getByText(/解析中…3%/)).toBeTruthy()
   expect(screen.getByText('音频', { exact: true })).toBeTruthy()
   expect(screen.getByText('2026-11-06 09:13')).toBeTruthy()
+  expect(screen.getByText('PDF', { exact: true })).toBeTruthy()
+  expect(screen.queryByText('解析失败', { exact: true })).toBeNull()
 })
 
 it('keeps 网址 kind after stripping the .html display suffix', async () => {
