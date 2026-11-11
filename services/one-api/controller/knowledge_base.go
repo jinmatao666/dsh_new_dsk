@@ -527,6 +527,19 @@ func UploadKnowledgeDocument(c *gin.Context) {
 	uploadKnowledgeDocument(c, row)
 }
 
+// ParsePersonalKnowledgeDocument starts chunking a document in the caller's own personal library.
+func ParsePersonalKnowledgeDocument(c *gin.Context) {
+	row, ok := authorizedKnowledgeBase(c)
+	if !ok {
+		return
+	}
+	if row.Kind != model.KnowledgeBasePersonal || row.CategoryId != 0 || row.OwnerUserId != c.GetInt("id") {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "无权重新解析该知识库的文件"})
+		return
+	}
+	parseKnowledgeDocument(c, row)
+}
+
 type importKnowledgeWebLinksInput struct {
 	URLs []string `json:"urls"`
 }
@@ -1739,4 +1752,3 @@ func CompleteKnowledgeConversation(c *gin.Context) {
 	}
 	answerKnowledgeConversation(c, client, base, conversation, input.Question, input.Stream, input.DocumentId)
 }
-

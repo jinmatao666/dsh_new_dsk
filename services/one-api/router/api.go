@@ -210,6 +210,7 @@ func SetApiRouter(router *gin.Engine) {
 			knowledgeRoute.DELETE("/:id/subscribe", controller.UnsubscribeKnowledgeBase)
 			knowledgeRoute.GET("/:id/documents", controller.ListKnowledgeDocuments)
 			knowledgeRoute.POST("/:id/documents", controller.UploadKnowledgeDocument)
+			knowledgeRoute.POST("/:id/documents/:documentId/parse", controller.ParsePersonalKnowledgeDocument)
 			knowledgeRoute.POST("/:id/web-links", controller.ImportKnowledgeWebLinks)
 			knowledgeRoute.DELETE("/:id/documents/:documentId", controller.DeleteKnowledgeDocument)
 			knowledgeRoute.POST("/:id/documents/:documentId/copy", controller.CopyKnowledgeDocument)

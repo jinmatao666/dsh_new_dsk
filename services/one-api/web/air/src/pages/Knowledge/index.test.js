@@ -664,6 +664,17 @@ test('toggles personal libraries from the person file-list title and deletes via
   await act(async () => { container.querySelector('.knowledge-person-file-title').click(); });
   expect(container.querySelector('[aria-label="个人知识库"]')).toBeTruthy();
   expect(container.textContent).toContain('个人笔记');
+  const picker = container.querySelector('input[type="file"][aria-label="上传文件"]');
+  const openPicker = jest.spyOn(picker, 'click').mockImplementation(() => {});
+  await act(async () => { button('上传文件').click(); });
+  expect(openPicker).toHaveBeenCalledTimes(1);
+  openPicker.mockRestore();
+  expect(container.textContent).toContain('爱丽丝 的文件清单');
+  await act(async () => { button('个人笔记').click(); });
+  expect(container.textContent).toContain('个人笔记-文件清单');
+  expect(button('上传文件')).toBeTruthy();
+  await act(async () => { button('返回').click(); });
+  expect(container.textContent).toContain('爱丽丝 的文件清单');
   expect(container.querySelector('[aria-label="个人知识库"] .knowledge-card-menu-panel')).toBeNull();
   await act(async () => { container.querySelector('[aria-label="更多操作 个人笔记"]').click(); });
   expect(container.querySelector('[aria-label="个人知识库"] .knowledge-card-menu-panel')).toBeTruthy();
@@ -829,8 +840,20 @@ test('ordinary user personal tab uses scoped organization directory like root', 
               owner_user_id: 9, owner_username: 'jmt',
               updated_at: '2024-01-03T00:00:00Z', created_at: '2024-01-03T00:00:00Z',
             },
+            {
+              id: 6, name: '项目资料', kind: 'personal', shelf: 'published',
+              owner_user_id: 8, owner_username: 'chen',
+            },
           ],
         },
+      });
+    }
+    if (String(url).startsWith('/api/knowledge-bases/6/documents?')) {
+      return Promise.resolve({
+        data: { success: true, data: {
+          ...documentPage,
+          items: [{ ...documents[0], id: 'failed-doc', run: 'FAIL' }],
+        } },
       });
     }
     return Promise.resolve(documentsResponse(url));
@@ -856,12 +879,32 @@ test('ordinary user personal tab uses scoped organization directory like root', 
   for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });
   expect(container.textContent).toContain('陈静 的文件清单');
   expect(API.get).toHaveBeenCalledWith(expect.stringContaining('/api/knowledge-bases/2/documents?'));
+  expect(container.querySelector('[aria-label="个人知识库"]')).toBeNull();
   await act(async () => { container.querySelector('.knowledge-person-file-title').click(); });
   expect(container.querySelector('[aria-label="个人知识库"]')).toBeTruthy();
   expect(container.textContent).toContain('个人笔记');
   expect(container.textContent).not.toContain('同事资料');
   expect(container.querySelector('[aria-label="更多操作 个人笔记"]')).toBeNull();
   expect(button('订阅审核')).toBeTruthy();
+  expect(button('上传文件').disabled).toBe(true);
+  const target = container.querySelector('select[aria-label="上传到知识库"]');
+  await act(async () => {
+    target.value = '6';
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(button('上传文件').disabled).toBe(false);
+  expect(container.textContent).toContain('解析失败');
+  await act(async () => { button('重新解析').click(); });
+  expect(API.post).toHaveBeenCalledWith('/api/knowledge-bases/6/documents/failed-doc/parse');
+  const upload = container.querySelector('input[type="file"][aria-label="上传文件"]');
+  const file = new File(['hello'], '项目说明.txt', { type: 'text/plain' });
+  await act(async () => {
+    Object.defineProperty(upload, 'files', { value: [file] });
+    upload.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const posted = API.post.mock.calls.find(([url]) => url === '/api/knowledge-bases/6/documents');
+  expect(posted?.[1].get('file').name).toBe('项目说明.txt');
+  expect(container.textContent).toContain('陈静 的文件清单');
   await act(async () => { button('返回').click(); });
   act(() => { button('新建知识库').click(); });
   for (let i = 0; i < 6; i += 1) await act(async () => { await Promise.resolve(); });

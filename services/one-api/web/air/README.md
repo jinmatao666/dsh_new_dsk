@@ -21,6 +21,10 @@ Before you start editing, make sure your `Actions on Save` options have `Optimiz
 
 ## Reference
 
+### Personal knowledge base files
+
+In Knowledge Base → Personal Knowledge Base, the library owner and root administrators can upload and retry failed parses from a person's file list. When the person has multiple libraries, choose an upload destination on the same page. Uploads refresh the file list and counts.
+
 ### Administrator user editing
 
 Save User opens a password confirmation dialog after editing. Cancel keeps edits without submitting; failed saves keep edits and clear the confirmation password. Display names are written to the account-center profile, and missing mappings or write failures return errors. Other fields may already be saved when a subsequent profile write fails.

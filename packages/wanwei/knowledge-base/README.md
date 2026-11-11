@@ -21,7 +21,7 @@ The desktop page keeps Q&A closed by default so the content pane fills the width
 
 The composer tool row carries a 知识库 switch. Turning it on opens a picker that groups libraries exactly like the desktop sidebar (Personal, 公共知识库, 订阅知识库) and accepts up to 20 libraries across groups. The plugin sends the selection for the current Session to the Host with the `retrieval-scope` operation and transfers it to a Session created by a first send. Turning the switch off hides the picker and clears the Session scope, so later turns run unchanged. The switch is hidden when the deployment hides knowledge libraries on the current network.
 
-Desktop file cards place PDF first-page previews beside the file name and existing attributes. The current page stays behind a compact loading indicator until all mounted PDF previews finish. Failed previews retain their file icons and do not block the page; non-PDF files use decorative blue paper covers, with image, audio and Word artwork. Preview frames have a blue border and a blue P badge. These previews do not affect model input.
+Desktop file items place PDF first-page previews beside the file name and existing attributes, with no outer border or padding. The full-width file list uses up to four columns, with fewer columns in narrower panes. File names wrap in full. Files with a parse failure display their file type in the desktop list. The current page stays behind a compact loading indicator until all mounted PDF previews finish. Failed previews retain their file icons and do not block the page; non-PDF files use decorative blue paper covers, with image, audio and Word artwork. Preview frames have a blue border and a blue P badge. These previews do not affect model input.
 
 ## Model Experience
 

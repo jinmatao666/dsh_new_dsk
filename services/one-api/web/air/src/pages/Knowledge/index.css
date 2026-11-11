@@ -576,7 +576,13 @@
 }
 .knowledge-person-stats b { color: #106af3; font-size: 18px; font-weight: 500; line-height: 24px; }
 .knowledge-person-stats em { color: #333; font-size: 14px; font-style: normal; font-weight: 400; line-height: 19px; }
-.knowledge-person-file-head { justify-content: flex-start; align-items: center; gap: 12px; }
+.knowledge-files .knowledge-person-file-head { justify-content: flex-start; align-items: center; gap: 12px; }
+.knowledge-person-upload { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.knowledge-person-upload select {
+  max-width: min(200px, 100%); height: 38px; padding: 0 10px;
+  border: 1px solid #dbe4f0; border-radius: 8px; background: #fff; color: #24344d; font: inherit;
+}
+.knowledge-person-files .knowledge-file-search-row { width: 100%; max-width: 540px; }
 .knowledge-person-file-title {
   display: grid; gap: 2px; min-width: 0; margin: 0; padding: 4px 10px 4px 8px; border: 1px solid transparent;
   border-radius: 10px; background: transparent; color: inherit; cursor: pointer; font: inherit; text-align: left;
@@ -604,6 +610,13 @@
   display: grid; place-items: center; flex: none; width: 34px; height: 34px;
   border-radius: 10px; color: #2f6fe0; background: #eaf2ff;
 }
+.knowledge-person-library-open {
+  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
+  padding: 0; border: 0; background: transparent; color: inherit; text-align: left;
+  font: inherit; cursor: pointer;
+}
+.knowledge-person-library-open:hover strong { color: #2f6fe0; }
+.knowledge-person-library-open:focus-visible { outline: 2px solid #2f6fe0; outline-offset: 3px; border-radius: 6px; }
 .knowledge-person-library-copy { display: grid; gap: 2px; min-width: 0; flex: 1; }
 .knowledge-person-library-copy strong {
   overflow: hidden; color: #1f2d3d; font-size: 13px; font-weight: 650;
