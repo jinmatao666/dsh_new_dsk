@@ -99,3 +99,29 @@ describe('AuthController', () => {
     await expect(new AuthController(connection).login('wanwei', 'wrong')).rejects.toThrow('bad credentials')
   })
 })
+
+
+it('uses the canonical account username for the shared identity and updates it after rename', async () => {
+  const call = vi.fn().mockResolvedValueOnce({ ok: true, value: { state: 'authenticated', username: 'acc_placeholder', models: [] } })
+    .mockResolvedValueOnce({ ok: true, value: { username: 'canonical_user' } })
+    .mockResolvedValueOnce({ ok: true, value: { username: 'renamed_user' } })
+  const controller = new AuthController({ rpc: { call } } as unknown as ConnectionHandle)
+  await controller.refresh()
+  await controller.accountSecurity('status')
+  expect(controller.getSnapshot()).toMatchObject({ state: 'authenticated', username: 'canonical_user' })
+  await controller.accountSecurity('username', { username: 'renamed_user' })
+  expect(controller.getSnapshot()).toMatchObject({ username: 'renamed_user' })
+})
+
+it('does not restore the previous account from a late identity response after logout', async () => {
+  const status = Promise.withResolvers<{ ok: true; value: { username: string } }>()
+  const call = vi.fn().mockResolvedValueOnce({ ok: true, value: { state: 'authenticated', username: 'old', models: [] } })
+    .mockReturnValueOnce(status.promise).mockResolvedValueOnce({ ok: true, value: { state: 'logged-out' } })
+  const controller = new AuthController({ rpc: { call } } as unknown as ConnectionHandle)
+  await controller.refresh()
+  const pending = controller.accountSecurity('status')
+  await controller.logout()
+  status.resolve({ ok: true, value: { username: 'old' } })
+  await pending
+  expect(controller.getSnapshot().state).toBe('logged-out')
+})

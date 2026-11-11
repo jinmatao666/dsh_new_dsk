@@ -4,5 +4,5 @@ export type AuthState =
   | { state: 'logged-out'; username?: string }
   | { state: 'offline'; message: string }
 
-/** Public account status excludes credentials and unmasked phone numbers. */
-export interface AccountSecurity { username: string; phoneBound: boolean; phone: string; wechatBound: boolean }
+/** Browser-safe account identity with separately masked bound-phone details. */
+export interface AccountSecurity { userId?: string; username: string; phoneBound: boolean; phone: string; wechatBound: boolean }

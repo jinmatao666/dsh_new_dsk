@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-11-04-account-security-settings.md
-2026-11-04-account-security-settings.md: bf6df0c8ccab54260b8e2bf67da74ca871c71507
-2026-11-04-account-security-settings.zh.md: 6229a5393e85000f03be0ecc5b7c04ff4e791974
+2026-11-04-account-security-settings.md: ace9c6a1f419214bbd22aa8b0c54668cd01a2126
+2026-11-04-account-security-settings.zh.md: df12dc7c2ff95d48e97a72df341fda0c4cf103f8

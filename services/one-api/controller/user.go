@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -71,6 +73,15 @@ func Login(c *gin.Context) {
 
 // setup session & cookies and then return user info
 func SetupLogin(user *model.User, c *gin.Context) {
+	name, nameErr := model.InitializePhoneUsername(user.Id)
+	if nameErr != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "账号信息同步失败，请重试"})
+		return
+	}
+	if name != "" {
+		user.Username = name
+	}
+	user.Username = model.ResolveUserIdentifierByLocalUser(user.Id, model.IdentifierTypeUsername, user.Username)
 	session := sessions.Default(c)
 	session.Set("id", user.Id)
 	session.Set("username", user.Username)
@@ -811,12 +822,16 @@ func UpdateSelfUsername(c *gin.Context) {
 		return
 	}
 	name := strings.TrimSpace(req.Username)
-	valid := len(name) >= 3 && len(name) <= 12 && !validateE164Phone(name)
+	valid := utf8.RuneCountInString(name) >= 2 && utf8.RuneCountInString(name) <= 32
 	for _, ch := range name {
-		valid = valid && (ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '_')
+		valid = valid && (unicode.IsLetter(ch) || unicode.IsDigit(ch) || ch == '_')
+	}
+	if validateE164Phone(name) {
+		user, err := model.GetUserById(c.GetInt(ctxkey.Id), false)
+		valid = valid && err == nil && user.PhoneVerified && normalizePhone(user.Phone) == name
 	}
 	if !valid {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户名须为 3–12 位字母、数字或下划线，不能使用手机号"})
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户名须为 2–32 位中文、字母、数字或下划线；手机号只能使用本账户已验证的号码"})
 		return
 	}
 	id := c.GetInt(ctxkey.Id)
@@ -1840,6 +1855,7 @@ func BindPhone(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "手机号绑定成功",
+		"data":    gin.H{"username": model.ResolveUserIdentifierByLocalUser(userId, model.IdentifierTypeUsername, req.Phone)},
 	})
 }
 
@@ -1895,6 +1911,7 @@ func QuickBindPhone(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "手机号绑定成功",
+		"data":    gin.H{"username": model.ResolveUserIdentifierByLocalUser(userId, model.IdentifierTypeUsername, req.Phone)},
 	})
 }
 

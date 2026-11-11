@@ -22,7 +22,8 @@ export async function accountSecurityRequest(
   }
   if (operation === 'status') {
     const [phone, user] = await Promise.all([request('/api/user/self/phone/status'), request('/api/user/self')])
-    return { username: typeof user.username === 'string' ? user.username : '', phoneBound: phone.has_phone === true && phone.phone_verified === true, phone: typeof phone.phone === 'string' ? phone.phone : '', wechatBound: typeof user.wechat_id === 'string' && user.wechat_id.length > 0 } satisfies AccountSecurity
+    const userId = typeof user.id === 'number' && Number.isSafeInteger(user.id) && user.id > 0 ? String(user.id) : undefined
+    return { ...(userId === undefined ? {} : { userId }), username: typeof user.username === 'string' ? user.username : '', phoneBound: phone.has_phone === true && phone.phone_verified === true, phone: typeof phone.phone === 'string' ? phone.phone : '', wechatBound: typeof user.wechat_id === 'string' && user.wechat_id.length > 0 } satisfies AccountSecurity
   }
   if (operation === 'wechat-qr') {
     const data = await request('/api/oauth/wechat/qr')

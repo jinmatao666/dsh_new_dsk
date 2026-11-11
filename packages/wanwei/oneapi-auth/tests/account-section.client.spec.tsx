@@ -128,3 +128,19 @@ it('keeps the deferred WeChat action disabled without requesting a QR code', asy
   expect(screen.queryByRole('dialog')).toBeNull()
   expect(request.mock.calls).toHaveLength(1)
 })
+
+
+it('lets the user rename the shared login username to Chinese characters', async () => {
+  let username = '13800138000'
+  const request = vi.fn(async (operation: string, input?: Record<string, string>) => {
+    if (operation === 'username') username = input?.username ?? username
+    return { username, phoneBound: true, phone: '138****8000', wechatBound: false }
+  })
+  render(<AccountSection {...kit} useAuth={useAuth} logout={vi.fn()} requestAccount={request} close={vi.fn()} t={t} />)
+  await screen.findByText('13800138000')
+  fireEvent.click(screen.getByRole('button', { name: zh.securityRename }))
+  fireEvent.change(screen.getByLabelText(zh.securityNewUsername), { target: { value: '测试用户_张' } })
+  fireEvent.click(await screen.findByRole('button', { name: zh.securityConfirm }))
+  await waitFor(() => { expect(request).toHaveBeenCalledWith('username', { username: '测试用户_张' }) })
+  await screen.findByText('测试用户_张')
+})

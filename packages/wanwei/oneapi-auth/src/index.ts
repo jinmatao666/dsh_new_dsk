@@ -114,7 +114,7 @@ export const Config: z<Config> = z.object({
 
 interface LoginPayload { username: string; password: string }
 interface OneApiEnvelope<T> { success: boolean; message?: string; data?: T }
-interface LoginData { username?: string }
+interface LoginData { username?: string; id?: number }
 interface TokenData { key?: string }
 interface ModelEntry { id?: string }
 interface ModelsBody { data?: ModelEntry[] }
@@ -362,6 +362,7 @@ export function apply(ctx: Context, config: Config): void {
   installSearchCitationPolicy(ctx)
   installDesktopLifecycle(ctx)
   const usernameRef = credentialRef('DSH_LOGIN_USERNAME')
+  const accountIdRef = credentialRef('DSH_LOGIN_USER_ID')
   // The active preference already lives in settings. Park it when another account takes ownership.
   const modelOwnerRef = credentialRef('DSH_DESKTOP_MODEL_OWNER')
   const modelPreferenceRef = (owner: string) => credentialRef(`DSH_DESKTOP_MODEL_${owner.toUpperCase()}`)
@@ -423,12 +424,19 @@ export function apply(ctx: Context, config: Config): void {
       const defaults = ctx.get('agentDefaultModel') as DefaultModelService | undefined
       if (defaults === undefined) throw new Error('默认模型服务不可用')
       const current = defaults.currentSelection()
-      const owner = username === undefined ? undefined
+      const accountId = (await ctx.credentials.resolve(accountIdRef))?.value
+      const legacyOwner = username === undefined ? undefined
         : createHash('sha256').update(JSON.stringify([baseURL, username])).digest('hex')
-      const previous = owner === undefined ? undefined : (await ctx.credentials.resolve(modelOwnerRef))?.value
+      const owner = accountId === undefined ? legacyOwner
+        : createHash('sha256').update(JSON.stringify([baseURL, 'user', accountId])).digest('hex')
+      let previous = owner === undefined ? undefined : (await ctx.credentials.resolve(modelOwnerRef))?.value
+      if (accountId !== undefined && previous === legacyOwner && owner !== undefined) {
+        await ctx.credentials.set(modelOwnerRef, owner)
+        previous = owner
+      }
       const switched = previous !== undefined && previous !== owner
       let preferred: DesktopModelSelection | undefined = current
-      if (switched && owner !== undefined) {
+      if (switched && owner !== undefined && previous !== undefined) {
         if (/^[a-f0-9]{64}$/.test(previous)) {
           await ctx.credentials.set(modelPreferenceRef(previous), JSON.stringify(current))
         }
@@ -472,6 +480,7 @@ export function apply(ctx: Context, config: Config): void {
 
   const clearLocalAuth = async (): Promise<void> => {
     await ctx.credentials.unset(ref)
+    await ctx.credentials.unset(accountIdRef)
     await ctx.settings.mutate(LLM_SETTINGS, [
       { op: 'unset', path: ['providers', config.provider] },
     ])
@@ -640,7 +649,7 @@ export function apply(ctx: Context, config: Config): void {
     }
   }
 
-  const establishSession = async (cookie: string, username: string, signal: AbortSignal) => {
+  const establishSession = async (cookie: string, username: string, signal: AbortSignal, userId?: number) => {
     const tokenResponse = await fetch(`${baseURL}/api/token/`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
@@ -657,6 +666,8 @@ export function apply(ctx: Context, config: Config): void {
       fetchServerDefaultModel(baseURL, signal),
     ])
     signal.throwIfAborted()
+    if (userId !== undefined && Number.isSafeInteger(userId) && userId > 0) await ctx.credentials.set(accountIdRef, String(userId))
+    else await ctx.credentials.unset(accountIdRef)
     await ctx.credentials.set(ref, token)
     await ctx.credentials.set(usernameRef, username)
     try {
@@ -667,8 +678,9 @@ export function apply(ctx: Context, config: Config): void {
     }
     return { ok: true as const, value: { state: 'authenticated' as const, models: models.map(model => model.id), username: username } }
   }
+  let accountIdentityRevision = 0
   const pendingWechat = new Set<string>()
-  const pendingPhoneBinding = new Map<string, { cookie: string; username: string; expires: number }>()
+  const pendingPhoneBinding = new Map<string, { cookie: string; username: string; userId?: number; expires: number }>()
   const login = async (payload: unknown, signal: AbortSignal) => {
     try {
       const input = loginPayload(payload)
@@ -683,7 +695,7 @@ export function apply(ctx: Context, config: Config): void {
       const cookie = sessionCookie(response.headers)
       if (cookie === undefined) return internal('登录成功，但服务器没有返回会话 Cookie')
 
-      return await establishSession(cookie, loginResult.data?.username || input.username, signal)
+      return await establishSession(cookie, loginResult.data?.username || input.username, signal, loginResult.data?.id)
     } catch (error) {
       return internal(error instanceof Error ? error.message : String(error))
     }
@@ -762,7 +774,8 @@ export function apply(ctx: Context, config: Config): void {
           if (sending) return { ok: true as const, value: { success: true } }
           signal.throwIfAborted()
           pendingPhoneBinding.delete(input.state ?? '')
-          return await establishSession(provisional.cookie, provisional.username, serviceSignal())
+          const username = String((result.data as { username?: string } | undefined)?.username || provisional.username)
+          return await establishSession(provisional.cookie, username, serviceSignal(), provisional.userId)
         }
         if (args.operation === 'poll' && !pendingWechat.has(input.state ?? '')) throw new Error('微信二维码已失效，请刷新')
         const result = await publicAuthRequest(baseURL, args.operation, input, serviceSignal())
@@ -778,7 +791,8 @@ export function apply(ctx: Context, config: Config): void {
           const cookie = sessionCookie(result.headers)
           if (!cookie) throw new Error('微信验证成功但未返回会话，请重新扫码')
           pendingPhoneBinding.set(input.state ?? '', {
-            cookie, username: String(value.data?.username || ''), expires: Date.now() + 5 * 60 * 1000,
+            cookie, username: String(value.data?.username || ''),
+            ...typeof value.data?.id === 'number' ? { userId: value.data.id } : {}, expires: Date.now() + 5 * 60 * 1000,
           })
           pendingWechat.delete(input.state ?? '')
         }
@@ -795,7 +809,8 @@ export function apply(ctx: Context, config: Config): void {
             if (!bound.ok || !binding.success) throw new Error(binding.message || '微信绑定失败，请重新登录后在账户设置中绑定')
             pendingWechat.delete(input.wechat_state)
           }
-          return await establishSession(cookie, String(value.data?.username || input.phone || ''), serviceSignal())
+          return await establishSession(cookie, String(value.data?.username || input.phone || ''), serviceSignal(),
+            typeof value.data?.id === 'number' ? value.data.id : undefined)
         }
         return { ok: true as const, value }
       } catch (error) { return internal(error instanceof Error ? error.message : String(error)) }
@@ -808,8 +823,25 @@ export function apply(ctx: Context, config: Config): void {
         const args = payload as { operation?: unknown; input?: unknown }
         if (typeof args.operation !== 'string' || !args.input || typeof args.input !== 'object' || Array.isArray(args.input)
           || JSON.stringify(args.input).length > 8192 || Object.values(args.input).some(value => typeof value !== 'string')) throw new Error('账号参数无效')
-        const value = await accountSecurityRequest(baseURL, token, args.operation, args.input as Record<string, string>, serviceSignal())
+        const identityRevision = ++accountIdentityRevision
+        let value = await accountSecurityRequest(baseURL, token, args.operation, args.input as Record<string, string>, serviceSignal())
+        if (args.operation === 'username') value = await accountSecurityRequest(baseURL, token, 'status', {}, serviceSignal())
         if ((await ctx.credentials.resolve(ref))?.value !== token) throw new Error('登录账号已变化，请重新打开账户设置')
+        if ((args.operation === 'status' || args.operation === 'username') && identityRevision === accountIdentityRevision) {
+          const identity = value as { username?: unknown; userId?: unknown }
+          if (typeof identity.userId === 'string' && /^[1-9]\d*$/.test(identity.userId)) {
+            const oldUsername = (await ctx.credentials.resolve(usernameRef))?.value
+            const oldOwner = (await ctx.credentials.resolve(modelOwnerRef))?.value
+            const legacyOwner = oldUsername === undefined ? undefined
+              : createHash('sha256').update(JSON.stringify([baseURL, oldUsername])).digest('hex')
+            if (oldOwner !== undefined && oldOwner === legacyOwner) {
+              const owner = createHash('sha256').update(JSON.stringify([baseURL, 'user', identity.userId])).digest('hex')
+              await ctx.credentials.set(modelOwnerRef, owner)
+            }
+            await ctx.credentials.set(accountIdRef, identity.userId)
+          }
+          if (typeof identity.username === 'string' && identity.username.trim()) await ctx.credentials.set(usernameRef, identity.username)
+        }
         return { ok: true as const, value }
       } catch (error) { return internal(error instanceof Error ? error.message : String(error)) }
     }

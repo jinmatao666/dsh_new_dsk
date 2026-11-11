@@ -360,6 +360,9 @@ func writeManagedIdentifierByLocalUser(localUserID int, typ, identifier string, 
 	}
 	accID := ap.AccountId
 	return ACCOUNT_DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&Account{}, accID).Error; err != nil {
+			return err
+		}
 		var conflicts int64
 		if err := tx.Model(&AccountIdentifier{}).Where("type = ? AND identifier = ? AND account_id <> ?", typ, identifier, accID).Count(&conflicts).Error; err != nil {
 			return err
@@ -376,6 +379,10 @@ func writeManagedIdentifierByLocalUser(localUserID int, typ, identifier string, 
 			Type: typ, Identifier: identifier, Verified: verified,
 		}
 		if err := tx.Create(&ident).Error; err != nil {
+			return err
+		}
+		if typ == IdentifierTypePhone && verified {
+			_, err := initializePhoneUsername(tx, accID, identifier)
 			return err
 		}
 		return nil

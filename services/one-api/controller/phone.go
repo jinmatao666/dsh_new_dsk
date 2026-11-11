@@ -340,6 +340,14 @@ func PhoneLogin(c *gin.Context) {
 		return
 	}
 
+	name, nameErr := model.InitializePhoneUsername(user.Id)
+	if nameErr != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "账号信息同步失败，请重试"})
+		return
+	}
+	if name != "" {
+		user.Username = name
+	}
 	// Delete verification code
 	common.DeletePhoneVerificationCode(req.Phone, common.PhoneLoginPurpose)
 

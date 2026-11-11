@@ -136,7 +136,7 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
         {error && <p role="alert" className={css.error}>{error}</p>}
         {notice && <p role="status" className={css.success}>{notice}</p>}
         {mode === 'username' ? <label className={css.field}>{t('securityNewUsername')}
-          <input required autoComplete="off" maxLength={12} value={values.username ?? ''} onChange={(event) => {
+          <input required autoComplete="off" maxLength={32} value={values.username ?? ''} onChange={(event) => {
             setValues({ username: event.target.value })
           }} />
         </label> : <>

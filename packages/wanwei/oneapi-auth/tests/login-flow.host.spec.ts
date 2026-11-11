@@ -122,13 +122,19 @@ describe('OneAPI login flow', () => {
         return Promise.resolve(new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/png' } }))
       }
       if (url.endsWith('/api/oauth/wechat/poll?state=owned-state')) {
-        return Promise.resolve(Response.json({ status: 'need_bind_phone', data: { username: 'tester' } }, {
+        return Promise.resolve(Response.json({ status: 'need_bind_phone', data: { id: 1, username: 'tester' } }, {
           headers: { 'set-cookie': 'session=wanwei-session; Path=/; HttpOnly' },
         }))
       }
+      if (url.endsWith('/api/user/self/phone/status')) return Promise.resolve(Response.json({ success: true, data: {} }))
+      if (url.endsWith('/api/user/self')) return Promise.resolve(Response.json({ success: true, data: { id: 1, username: loginUsername } }))
+      if (url.endsWith('/api/user/self/username')) {
+        loginUsername = (JSON.parse(String(init?.body)) as { username: string }).username
+        return Promise.resolve(Response.json({ success: true }))
+      }
       if (url.endsWith('/api/user/self/phone/bind')) return Promise.resolve(Response.json({ success: true }))
       if (url.endsWith('/api/user/login') || url.endsWith('/api/user/phone/login') || url.endsWith('/api/user/phone/register')) {
-        return Promise.resolve(new Response(JSON.stringify({ success: true, data: { username: loginUsername } }), {
+        return Promise.resolve(new Response(JSON.stringify({ success: true, data: { id: loginUsername === 'another-user' ? 2 : 1, username: loginUsername } }), {
           status: 200,
           headers: { 'content-type': 'application/json', 'set-cookie': 'session=wanwei-session; Path=/; HttpOnly' },
         }))
@@ -271,6 +277,7 @@ describe('OneAPI login flow', () => {
         mode: 'intranet', internalOrigins: [new URL(expected).origin], directInternet: false,
         internetCatalogPolicy: 'disable', internetExpertPolicy: 'disable', internetSkillPolicy: 'disable',
         plugins: { browserAssistant: true },
+        billing: { enabled: true, showCredits: true, showMultipliers: true },
         features: {
           internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
           intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
@@ -283,6 +290,7 @@ describe('OneAPI login flow', () => {
         network: 'intranet', operator: '张运维', phone: '0571-12345678',
         internetCatalogPolicy: 'disable', internetExpertPolicy: 'disable', internetSkillPolicy: 'disable',
         plugins: { browserAssistant: true },
+        billing: { enabled: true, showCredits: true, showMultipliers: true },
         features: {
           internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
           intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
@@ -318,6 +326,21 @@ describe('OneAPI login flow', () => {
     failDownloadReport = true
     expect(await handler?.('skill-download', { id: 7, eventId: downloadIds[0] }, new AbortController().signal)).toMatchObject({ ok: false })
     expect(await handler?.('skill-bundle', { id: 7 }, new AbortController().signal)).toMatchObject({ ok: false })
+    loginUsername = 'canonical_user'
+    expect(await handler?.('account-security', { operation: 'status', input: {} }, new AbortController().signal)).toMatchObject({
+      ok: true, value: { username: 'canonical_user' },
+    })
+    expect(credentials.get('DSH_LOGIN_USERNAME')).toBe('canonical_user')
+    expect(await handler?.('account-security', { operation: 'username', input: { username: 'renamed_user' } }, new AbortController().signal)).toMatchObject({
+      ok: true, value: { username: 'renamed_user' },
+    })
+    expect(credentials.get('DSH_LOGIN_USERNAME')).toBe('renamed_user')
+    expect(credentials.get('DSH_LOGIN_USER_ID')).toBe('1')
+    const ownerAfterRename = credentials.get('DSH_DESKTOP_MODEL_OWNER')
+    expect(await handler?.('status', {}, new AbortController().signal)).toMatchObject({
+      ok: true, value: { username: 'renamed_user' },
+    })
+    expect(credentials.get('DSH_DESKTOP_MODEL_OWNER')).toBe(ownerAfterRename)
     credentials.delete('DSH_ONEAPI_TOKEN')
     requests.length = 0
     expect(await handler?.('skill-download', { id: 7 }, new AbortController().signal)).toMatchObject({ ok: false })

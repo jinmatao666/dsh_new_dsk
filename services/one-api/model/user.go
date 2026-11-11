@@ -57,7 +57,7 @@ const (
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
 	Id               int    `json:"id"`
-	Username         string `json:"username" gorm:"unique;index;comment:用户名(双写账号中心 username 标识)" validate:"max=12"`
+	Username         string `json:"username" gorm:"unique;index;comment:用户名(双写账号中心 username 标识)" validate:"max=32"`
 	Password         string `json:"password" gorm:"default:'';comment:已停写,由账号中心 account_credentials 持有(阶段 2 单源化)" validate:"min=8,max=20"`
 	DisplayName      string `json:"display_name" gorm:"index;comment:昵称(播种账号中心 profile)" validate:"max=20"`
 	UnitName         string `json:"unit_name" gorm:"type:varchar(100);default:'';comment:所属单位" validate:"max=100"`

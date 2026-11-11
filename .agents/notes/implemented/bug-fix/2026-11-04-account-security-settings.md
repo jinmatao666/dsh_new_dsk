@@ -12,6 +12,8 @@ Account settings showed a model inventory but did not provide the phone, passwor
 
 Replace the inventory with three settings rows and modal verification forms with focus restoration and draft clearing. Keep identity and logout. Reuse existing server endpoints through a fixed Host allowlist; keep credentials and full profiles outside the browser. Request a bound-phone code for password changes and WeChat binding/unbinding, and separate old/new codes for phone replacement. Password status is not inferred from legacy generated passwords.
 
+Username initialization, verified-phone onboarding and preference ownership follow [the unified account policy](2026-11-11-unified-desktop-account.md).
+
 ## Alternatives considered
 
 A model list does not manage sign-in identity. Treating a nonempty password hash as user-created gives misleading status. Opening an external account page would require another authentication handoff.

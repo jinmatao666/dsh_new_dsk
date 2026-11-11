@@ -16,6 +16,7 @@ export class AuthController {
   private authRevision = 0
   private refreshRevision = 0
   private mutations = 0
+  private identityRevision = 0
 
   constructor(private readonly connection: ConnectionHandle) {}
 
@@ -84,6 +85,25 @@ export class AuthController {
       if (!signal?.aborted && value.state === 'authenticated' && revision === this.authRevision) this.publish({ ...value, ...(operation === 'register' && !input.password ? { passwordSetup: true } : {}) } as AuthState)
       return value
     } finally { this.mutations-- }
+  }
+
+  /** Update account settings and synchronize the canonical username with all account views.
+   * @param operation - Allowlisted account operation.
+   * @param input - Account form values.
+   * @returns Sanitized account response.
+   */
+  async accountSecurity(operation: string, input: Record<string, string> = {}): Promise<unknown> {
+    const authRevision = this.authRevision
+    const identityRevision = ++this.identityRevision
+    const result = await this.connection.rpc.call('/desktop-auth', 'account-security', { operation, input })
+    if (!result.ok) throw new Error(result.error.message)
+    const username = (result.value as { username?: unknown } | null)?.username
+    if ((operation === 'status' || operation === 'username') && typeof username === 'string' && username.trim()
+      && authRevision === this.authRevision && identityRevision === this.identityRevision && this.snapshot.state === 'authenticated') {
+      ++this.authRevision
+      this.publish({ ...this.snapshot, username })
+    }
+    return result.value
   }
 
   /** End the Host session; only the newest mutation updates the view.
