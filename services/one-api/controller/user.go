@@ -1643,6 +1643,11 @@ func SendResetPasswordCode(c *gin.Context) {
 		return
 	}
 
+	if !checkPhoneRateLimit(user.Phone) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": fmt.Sprintf("发送过于频繁，请间隔60秒重试；每小时最多发送 %d 次", config.PhoneMaxSendPerHour)})
+		return
+	}
+
 	// Generate verification code
 	code := common.GeneratePhoneVerificationCode(config.PhoneVerificationCodeLength)
 

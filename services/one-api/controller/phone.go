@@ -87,6 +87,7 @@ func hashPhone(phone string) string {
 
 // checkPhoneRateLimit checks if phone number exceeds rate limit
 func checkPhoneRateLimit(phone string) bool {
+	phone = normalizePhone(phone)
 	phoneRateLimitMutex.Lock()
 	defer phoneRateLimitMutex.Unlock()
 

@@ -14,6 +14,8 @@ Replace the inventory with three settings rows and modal verification forms with
 
 Username initialization, verified-phone onboarding and preference ownership follow [the unified account policy](2026-11-11-unified-desktop-account.md).
 
+Password-reset SMS uses the shared per-phone cooldown before contacting the provider. Normalization merges national and +86 number forms into one limit bucket. The limiter remains process-local; restarts reset it and replicas do not share counters. Regression tests verify a recent send blocks password-reset SMS without contacting the provider.
+
 ## Alternatives considered
 
 A model list does not manage sign-in identity. Treating a nonempty password hash as user-created gives misleading status. Opening an external account page would require another authentication handoff.
