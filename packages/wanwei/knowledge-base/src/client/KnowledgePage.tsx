@@ -1608,7 +1608,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
               onPrefetchDocument: prefetchDocument,
               loadThumbnail: async (document) => {
                 const libraryId = selectedId
-                if (libraryId === null) throw new Error('No knowledge library selected')
+                if (libraryId === undefined) throw new Error('No knowledge library selected')
                 const cached = readDownloadCache(libraryId, document.id)
                 if (cached !== undefined) return cached
                 const file = await api.download(libraryId, document.id)
