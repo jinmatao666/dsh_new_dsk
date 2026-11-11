@@ -40,3 +40,4 @@ worktrees/
 .agents/worktrees/
 .typert-*/
 products/wanwei-desktop/assets/lark-*/
+.gomodcache/
