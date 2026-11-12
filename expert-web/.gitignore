@@ -1,7 +1,0 @@
-.venv/
-**/.venv/
-**/tools/
-**/*.dll
-**/*.DLL
-**/*.exe
-**/*.EXE
