@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,6 +59,14 @@ func UpdateOption(c *gin.Context) {
 		return
 	}
 	switch option.Key {
+	case "WeChatCallbackURL":
+		if option.Value != "" {
+			u, err := url.Parse(option.Value)
+			if err != nil || u.Hostname() == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "/api/oauth/wechat" {
+				c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请填写完整的微信回调地址，路径须为 /api/oauth/wechat，不能含参数或账号密码"})
+				return
+			}
+		}
 	case "RegistrationAgreementText", "RegistrationPrivacyText":
 		if len([]rune(option.Value)) > 30000 {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "协议正文最多30000字"})

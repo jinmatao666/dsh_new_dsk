@@ -98,33 +98,14 @@ describe('Wanwei authentication gate', () => {
     expect(screen.getByRole('tab', { name: zh.accountLogin }).getAttribute('aria-selected')).toBe('true')
   })
 
-  it('keeps SMS available while QR only shows the unavailable notice', async () => {
+  it('opens QR login and shows a configuration prompt when the server has not enabled it', async () => {
     renderGate()
-    fireEvent.click(screen.getByRole('tab', { name: zh.smsLogin }))
-    await screen.findByLabelText(zh.securityPhone)
-    expect(screen.getByRole('tab', { name: zh.smsLogin }).getAttribute('aria-selected')).toBe('true')
-    const calls = kit.publicAuth.mock.calls.length
     fireEvent.click(screen.getByRole('tab', { name: zh.qrLogin }))
-    expect(screen.getByRole('status').textContent).toBe(zh.qrUnavailableTitle)
-    expect(kit.publicAuth.mock.calls.length).toBe(calls)
-    expect(screen.getByRole('tab', { name: zh.smsLogin }).getAttribute('aria-selected')).toBe('true')
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', zh.loginWechatDisabled)
+    expect(screen.getByRole('tab', { name: zh.qrLogin }).getAttribute('aria-selected')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: zh.supportClose }))
     fireEvent.click(screen.getByRole('tab', { name: zh.accountLogin }))
     expect(screen.getByLabelText(zh.username)).toBeTruthy()
-  })
-
-  it('preserves account credentials and dismisses the restored QR notice', () => {
-    vi.useFakeTimers()
-    renderGate()
-    const username = screen.getByLabelText(zh.username)
-    fireEvent.change(username, { target: { value: 'existing-account' } })
-    fireEvent.change(screen.getByLabelText(zh.password), { target: { value: 'secret' } })
-    fireEvent.click(screen.getByRole('tab', { name: zh.qrLogin }))
-    expect(screen.getByLabelText(zh.username)).toBe(username)
-    expect(screen.getByLabelText(zh.password)).toHaveProperty('value', 'secret')
-    expect(screen.getByRole('tab', { name: zh.accountLogin }).getAttribute('aria-selected')).toBe('true')
-    fireEvent.click(screen.getByRole('button', { name: zh.supportClose }))
-    expect(screen.queryByText(zh.qrUnavailableTitle)).toBeNull()
   })
 
   it('opens phone password recovery inside the login card', async () => {

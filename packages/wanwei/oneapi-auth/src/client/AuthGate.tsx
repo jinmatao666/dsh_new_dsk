@@ -167,7 +167,6 @@ export function AuthGate({
     if (mode !== 'account' && publicLoginAvailable?.() === false) {
       setNotice({ text: t('intranetLoginUnavailable') }); return
     }
-    if (mode === 'qr') { setNotice({ text: t('qrUnavailableTitle') }); return }
     setNotice(undefined); setLoginMode(mode); setError(undefined)
   }
   const openSupport = async (trigger: HTMLButtonElement): Promise<void> => {
@@ -246,7 +245,7 @@ export function AuthGate({
             </div>
             {loginMode === 'account' && <p className={css.registrationFooter}><span>{t('loginNoAccount')}</span><button type="button" onClick={() => { changeMode('sms') }}>{t('loginPhoneRegister')}</button></p>}
             {loginMode === 'sms' && <p className={css.registrationFooter}>{t('loginUnregisteredHint')}</p>}
-            {(loginMode === 'account' || loginMode === 'sms') && <p className={css.legalNotice}>{t('legalPrefix')}<button type="button" onClick={() => {  openLegal('agreement') }}>{t('userAgreement')}</button>{t('legalJoin')}<button type="button" onClick={() => {  openLegal('privacy') }}>{t('privacyPolicy')}</button></p>}
+            {loginMode !== 'reset' && <p className={css.legalNotice}>{t('legalPrefix')}<button type="button" onClick={() => {  openLegal('agreement') }}>{t('userAgreement')}</button>{t('legalJoin')}<button type="button" onClick={() => {  openLegal('privacy') }}>{t('privacyPolicy')}</button></p>}
             <p className={css.footerSpace}>{t('accountHelpPrefix')}<button className={css.textAction} type="button" onClick={(event) => { void openSupport(event.currentTarget) }}>{t('administrator')}</button>{t('accountHelpSuffix')}</p>
           </div>
         </section>
