@@ -28,7 +28,7 @@
 
 ## 接入独立官网
 
-没有已发布安装包时，`GET /api/website-installers` 返回 `{ "packages": [] }`。每个已发布安装包包含 `platform`、`arch`、独立的 `version`、`size`、`size_bytes`、`sha256`、`notes`、`publishedAt`、`filename` 和 `url`。配置 `DSH_PUBLIC_URL` 时返回包含接口前缀的完整地址；未配置时返回带 `DSH_API_PREFIX` 的相对路径，默认根路径行为保持不变。官网应同时支持完整 URL 和相对路径。三个平台独立发布，目录没有全局版本号字段。
+没有已发布安装包时，`GET /api/website-installers` 返回 `{ "packages": [] }`。每个已发布安装包包含 `platform`、`arch`、独立的 `version`、`size`、`size_bytes`、`sha256`、`notes`、`publishedAt`、`filename` 和 `url`。配置 `DSH_PUBLIC_URL` 时返回包含接口前缀的完整地址；未配置时返回带 `DSH_API_PREFIX` 的相对路径，默认根路径行为保持不变。官网应同时支持完整 URL 和相对路径。五个系统与架构组合独立发布，目录没有全局版本号字段。
 
 目录允许不携带凭据的跨域 GET 请求。官网应省略凭据，解析返回地址后再设置下载按钮链接。HTTPS 官网需要 HTTPS 后台或同源 HTTPS 代理。公开下载支持 GET、HEAD 和字节范围请求。待发布、已删除和已撤下文件返回 404，响应禁止缓存。管理请求位于 `/api/admin/website-installers`，需要系统超级管理员身份；上传、发布、撤下和删除写入操作审计日志。
 
@@ -41,3 +41,5 @@
 ## 开发备注
 
 [安装包发布决策](../../../.agents/notes/implemented/feature/2026-10-30-website-installer-publication.zh.md)说明与桌面更新分离的原因和验证范围。
+
+Linux 支持 x64／ARM64 的 Type 2 AppImage，上传时检查 64 位小端 ELF、实际 CPU 架构及 AppImage 标记。请解压构建产物并选择其中的 AppImage，不要上传 ZIP、DEB 或更新压缩包。这些检查不证明产品身份和安装兼容性，发布前仍需在目标发行版实测。

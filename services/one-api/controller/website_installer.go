@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
+	"debug/elf"
 	"debug/pe"
 	"encoding/binary"
 	"encoding/hex"
@@ -34,6 +35,8 @@ func websiteInstallerExtension(platform string) string {
 	switch platform {
 	case "windows-x64":
 		return ".exe"
+	case "linux-x64", "linux-arm64":
+		return ".AppImage"
 	case "macos-x64", "macos-arm64":
 		return ".dmg"
 	default:
@@ -78,6 +81,30 @@ func isWebsiteNSISInstaller(path string, binaryFile *pe.File) bool {
 
 // DMG architecture and product version remain administrator-supplied build metadata.
 func validateWebsiteInstallerFile(path, platform string) error {
+	if platform == "linux-x64" || platform == "linux-arm64" {
+		image, err := elf.Open(path)
+		if err != nil {
+			return errors.New("请上传有效的 Linux AppImage，不要上传 ZIP、DEB 或更新压缩包")
+		}
+		defer image.Close()
+		expected := elf.EM_X86_64
+		if platform == "linux-arm64" {
+			expected = elf.EM_AARCH64
+		}
+		if image.Class != elf.ELFCLASS64 || image.Data != elf.ELFDATA2LSB || image.Machine != expected || (image.Type != elf.ET_EXEC && image.Type != elf.ET_DYN) {
+			return errors.New("AppImage 的 CPU 架构与所选平台不一致")
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		var marker [3]byte
+		if _, err := file.ReadAt(marker[:], 8); err != nil || marker != [3]byte{'A', 'I', 2} {
+			return errors.New("仅支持 Linux Type 2 AppImage 安装包")
+		}
+		return nil
+	}
 	if platform == "windows-x64" {
 		binary, err := pe.Open(path)
 		if err != nil {
@@ -144,7 +171,7 @@ func AdminUploadWebsiteInstaller(c *gin.Context) {
 	platform := c.PostForm("platform")
 	extension := websiteInstallerExtension(platform)
 	if extension == "" {
-		desktopUpdateFailure(c, errors.New("请选择 Windows x64、macOS x64 或 macOS ARM64"))
+		desktopUpdateFailure(c, errors.New("请选择 Windows x64、macOS x64／ARM64 或 Linux x64／ARM64"))
 		return
 	}
 	notes := c.PostForm("notes")
@@ -158,7 +185,7 @@ func AdminUploadWebsiteInstaller(c *gin.Context) {
 		return
 	}
 	defer file.Close()
-	if !strings.HasSuffix(strings.ToLower(header.Filename), extension) {
+	if !strings.HasSuffix(strings.ToLower(header.Filename), strings.ToLower(extension)) {
 		desktopUpdateFailure(c, errors.New("安装包格式与所选系统不一致"))
 		return
 	}

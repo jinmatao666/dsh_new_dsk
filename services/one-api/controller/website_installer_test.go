@@ -282,3 +282,29 @@ func TestWebsiteInstallerInvalidAndTamperedUploads(t *testing.T) {
 		require.Equal(t, 404, updateRequest(r, "GET", "/downloads/installers/"+id, nil, "", "").Code)
 	}
 }
+
+// Linux AppImage uploads retain independent architecture channels.
+func TestWebsiteInstallerLinux(t *testing.T) {
+	r, _ := installerRouter(t)
+	for _, target := range []struct {
+		name    string
+		machine uint16
+	}{{"linux-x64", 62}, {"linux-arm64", 183}} {
+		data := make([]byte, 128)
+		copy(data, []byte{0x7f, 'E', 'L', 'F', 2, 1, 1})
+		copy(data[8:], []byte{'A', 'I', 2})
+		binary.LittleEndian.PutUint16(data[16:], 2)
+		binary.LittleEndian.PutUint16(data[18:], target.machine)
+		binary.LittleEndian.PutUint32(data[20:], 1)
+		binary.LittleEndian.PutUint16(data[52:], 64)
+		id := uploadedID(t, installerUpload(t, r, "root", "1.0.2", target.name, "Buddy.AppImage", data))
+		require.Equal(t, 200, installerAction(r, id, "publish").Code)
+		require.Equal(t, data, updateRequest(r, "GET", "/downloads/installers/"+id, nil, "", "").Body.Bytes())
+		bad := append([]byte(nil), data...)
+		bad[8] = 0
+		require.Equal(t, 400, installerUpload(t, r, "root", "1.0.2", target.name, "bad.AppImage", bad).Code)
+		binary.LittleEndian.PutUint16(data[18:], 40)
+		require.Equal(t, 400, installerUpload(t, r, "root", "1.0.2", target.name, "arm.AppImage", data).Code)
+	}
+	require.Len(t, installerCatalog(t, r), 2)
+}

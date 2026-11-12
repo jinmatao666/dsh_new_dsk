@@ -111,3 +111,18 @@ test('list failure blocks upload until a successful refresh', async () => {
   await fill();
   expect(uploadButton().disabled).toBe(false);
 });
+
+test.each(['x64', 'arm64'])('uploads Linux %s AppImage metadata', async arch => {
+  await render();
+  const target = [...container.querySelectorAll('.installer-targets > button')].find(button => button.textContent.includes('Linux ' + (arch === 'arm64' ? 'ARM64' : 'x64')));
+  act(() => target.click());
+  await fill();
+  const picker = container.querySelector('input[type=file]');
+  const file = new File(['AppImage UI fixture'], 'Buddy.AppImage');
+  act(() => { Object.defineProperty(picker, 'files', { configurable: true, value: [file] }); picker.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(picker.accept).toBe('.AppImage');
+  expect(uploadButton().disabled).toBe(false);
+  await act(async () => uploadButton().click());
+  expect(API.post.mock.calls[0][1].get('platform')).toBe('linux-' + arch);
+  expect(API.post.mock.calls[0][1].get('file')).toBe(file);
+});

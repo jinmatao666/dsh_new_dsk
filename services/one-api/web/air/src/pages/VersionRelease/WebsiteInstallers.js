@@ -4,12 +4,14 @@ import { Download, FileUp, Globe, Package, RefreshCw } from 'lucide-react';
 import CustomSelect from '../../components/CustomSelect';
 import { API, showError, showSuccess } from '../../helpers';
 
-const systems = { windows: 'Windows', macos: 'macOS' };
-const formats = { windows: '.exe', macos: '.dmg' };
+const systems = { windows: 'Windows', macos: 'macOS', linux: 'Linux' };
+const formats = { windows: '.exe', macos: '.dmg', linux: '.AppImage' };
 const targets = [
   { system: 'windows', architecture: 'x64', label: 'Windows x64', format: 'EXE 安装程序' },
   { system: 'macos', architecture: 'arm64', label: 'macOS ARM64', format: 'Apple Silicon · DMG' },
   { system: 'macos', architecture: 'x64', label: 'macOS x64', format: 'Intel · DMG' },
+  { system: 'linux', architecture: 'x64', label: 'Linux x64', format: 'AppImage' },
+  { system: 'linux', architecture: 'arm64', label: 'Linux ARM64', format: 'AppImage' },
 ];
 
 const endpoint = '/api/admin/website-installers';
@@ -104,7 +106,7 @@ export default function WebsiteInstallers() {
       <div><h2>上传官网安装包</h2><p className="settings-description">提供给首次安装的用户。安装包上传后需单独确认发布，再展示到官网对应系统的下载入口。</p></div>
       <span className="release-key-status is-ready"><Globe size={16} />官网下载安装</span>
     </div>
-    <div className="installer-preview-note" role="note"><span>独立发布</span>官网安装包用于首次安装，与客户端更新包分别管理。macOS 的芯片架构和版本号请与实际构建产物核对。</div>
+    <div className="installer-preview-note" role="note"><span>独立发布</span>官网安装包用于首次安装，与客户端更新包分别管理。macOS 架构和版本号请与构建产物核对；Linux 上传解压后的 AppImage，不要上传 DEB 或更新包。</div>
     {error && <p role="alert" className="release-error">{error}</p>}
     <fieldset className="installer-form-fields" disabled={busy || !loaded}>
     <div className="installer-targets" role="group" aria-label="选择官网安装包平台">
@@ -114,7 +116,7 @@ export default function WebsiteInstallers() {
       <div className="release-metadata">
         <label>版本号<input aria-label="官网安装包版本号" placeholder="例如 1.0.2" value={version} onChange={event => setVersion(event.target.value)} /><small>与安装包实际版本一致，格式为 x.y.z。</small></label>
         <label>操作系统<span className="release-select"><CustomSelect aria-label="官网安装包操作系统" value={system} onChange={event => changeSystem(event.target.value)}>{Object.entries(systems).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</CustomSelect></span></label>
-        <label>架构<span className="release-select"><CustomSelect aria-label="官网安装包架构" value={architecture} onChange={event => changeArchitecture(event.target.value)}><option value="x64">x64{system === 'macos' ? '（Intel）' : ''}</option>{system === 'macos' && <option value="arm64">ARM64（Apple Silicon）</option>}</CustomSelect></span><small>不同系统、架构分别管理官网的下载版本。</small></label>
+        <label>架构<span className="release-select"><CustomSelect aria-label="官网安装包架构" value={architecture} onChange={event => changeArchitecture(event.target.value)}><option value="x64">x64{system === 'macos' ? '（Intel）' : ''}</option>{system !== 'windows' && <option value="arm64">{system === 'macos' ? 'ARM64（Apple Silicon）' : 'ARM64'}</option>}</CustomSelect></span><small>不同系统、架构分别管理官网的下载版本。</small></label>
       </div>
       <div className="release-upload-field"><span>安装包</span><label className="release-file"><input ref={input} type="file" aria-label="官网安装包文件" accept={formats[system]} onChange={selectFile} /><FileUp size={24} strokeWidth={1.5} /><span><strong>{file ? file.name : '选择客户端安装包'}</strong><small>{file ? `${(file.size / 1048576).toFixed(1)} MB · 点击重新选择` : `支持 ${formats[system]}，请上传可直接安装的文件，不要上传更新 ZIP`}</small></span></label>{error && <p className="release-error" role="alert">{error}</p>}</div>
       <div className="release-upload-notes"><label htmlFor="website-installer-notes">版本说明</label><textarea id="website-installer-notes" placeholder="填写本次版本亮点、优化内容或安装说明，发布后在官网展示" value={notes} onChange={event => setNotes(event.target.value)} rows={3} maxLength={16000} /></div>
