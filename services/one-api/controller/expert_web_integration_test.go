@@ -34,7 +34,7 @@ func expertWebTestRouter(t *testing.T) *gin.Engine {
 	if err := db.Exec("PRAGMA journal_mode=WAL").Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&model.ExpertWebProfile{}, &model.ExpertWebTicket{}, &model.ExpertCategory{}); err != nil {
+	if err := db.AutoMigrate(&model.ExpertWebProfile{}, &model.ExpertWebTicket{}, &model.BusinessBillingContext{}, &model.ExpertCategory{}); err != nil {
 		t.Fatal(err)
 	}
 	previous := model.DB
@@ -120,7 +120,12 @@ func TestExpertWebDatabaseExchangeAndCatalogDoNotExposeCredentials(t *testing.T)
 		}
 	}
 	success := expertWebRequest(router, "POST", "/redeem", payload, "Bearer "+credential)
-	if success.Code != 200 || success.Body.String() != `{"user_id":"123"}` {
+	var exchanged struct {
+		UserID         string `json:"user_id"`
+		BillingContext string `json:"billing_context"`
+	}
+	_ = json.Unmarshal(success.Body.Bytes(), &exchanged)
+	if success.Code != 200 || exchanged.UserID != "123" || !strings.HasPrefix(exchanged.BillingContext, "wbc_") {
 		t.Fatalf("exchange failed: %s", success.Body.String())
 	}
 	if expertWebRequest(router, "POST", "/redeem", payload, "Bearer "+credential).Code != 401 {

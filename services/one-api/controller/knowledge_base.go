@@ -1409,6 +1409,9 @@ func recreateKnowledgeConversation(c *gin.Context, client *ragflow.Client, base 
 }
 
 func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, conversation model.KnowledgeConversation, question string, stream bool, docIds ...string) {
+	// Shared billing extension point only; the knowledge module currently selects no charging policy.
+	prepareKnowledgeBilling(c, base)
+
 	if deferKnowledgeAskIfNeeded(c, client, base.RagflowDatasetId, stream, docIds...) {
 		return
 	}

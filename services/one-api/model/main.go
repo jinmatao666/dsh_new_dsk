@@ -224,7 +224,7 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&ProvinceIdentity{}, &ProvinceLaunchCode{}, &ProvinceDeviceToken{}); err != nil {
 		return err
 	}
-	if err = DB.AutoMigrate(&User{}, &DesktopCheckinState{}, &DesktopCheckinReceipt{}, &AdminCreditGrant{}); err != nil {
+	if err = DB.AutoMigrate(&BusinessBillingContext{}, &BillingRule{}, &BillingTask{}, &User{}, &DesktopCheckinState{}, &DesktopCheckinReceipt{}, &AdminCreditGrant{}); err != nil {
 		return err
 	}
 	if err = DB.AutoMigrate(&Role{}); err != nil {

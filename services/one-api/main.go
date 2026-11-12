@@ -77,6 +77,15 @@ func main() {
 
 	// Initialize SQL Database
 	model.InitDB()
+	go func() {
+		for {
+			if err := model.ExpireBillingTasks(); err != nil {
+				logger.SysError("统一计费超时释放失败: " + err.Error())
+			}
+			time.Sleep(time.Minute)
+		}
+	}()
+
 	if migrated, err := model.MigrateSkillIcons(); err != nil {
 		logger.FatalLog("技能图标迁移失败: " + err.Error())
 	} else if migrated > 0 {
