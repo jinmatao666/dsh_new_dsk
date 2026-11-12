@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-问答默认关闭，文件内容铺满宽度。侧栏每个知识库是一张卡片，含选择按钮和独立的问答开关。选择按钮展示广场封面、分类标签（管理员分类名称；无分类的库显示 个人 / 共享 / 公共）、「我的」或「已订阅」状态标签、名称、描述，以及广场的 `renderPlazaMeta` 行。开关打开或关闭所选知识库的问答栏；对另一个知识库按下时，先选中该库再打开问答栏。问答栏打开时页面是三列网格，文件网格收为一列。拖动分隔条、其键盘处理和 `调整内容宽度` 一并移除。
+问答默认关闭，文件内容铺满宽度。侧栏每个知识库是一张卡片，含选择按钮和独立的问答开关。知识库名称与箭头共用默认收起的展开按钮。点击任一处会切换描述与订阅统计的展开状态，不会选择其他知识库。下方独立选择按钮展示最多两个已保存标签，以及维护者、更新时间、文件数量和大小的 `renderPlazaMeta` 行。维护者按服务端确认的网络模式显示，外网部署为「万维」，内网部署为创建人。订阅卡片额外展示现有 API 的订阅人数和累计 `visit_count`。新建个人知识库表单将逗号分隔的标签保存在现有管理工作台字段中。开关打开或关闭所选知识库的问答栏。对另一个知识库按下时，先选中该库再打开问答栏。问答栏打开时页面是三列网格，文件网格收为一列。
 
 `GET /api/knowledge/bases` 为每个桌面条目增加 `owner_username`、`document_bytes` 和 `subscriber_count`，复用广场的数据来源：`plazaDatasetStats` 提供文件数与字节数，`userDisplayNames` 和 `knowledgeUserSubscriberCounts` 提供维护者与订阅人数。`fillDesktopDocumentCounts` 由 `fillDesktopCatalogMeta` 与 `fillDesktopDocumentStats` 取代。页面保存本次会话文档加载得到的 `documentStats`，并对所选知识库优先使用它而不是列表值。
 

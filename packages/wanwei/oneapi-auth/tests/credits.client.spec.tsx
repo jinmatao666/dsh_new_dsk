@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { CheckinShortcut, CreditsSection } from '../src/client/CreditsSection.tsx'
 afterEach(cleanup)
 const auth = { state: 'authenticated', username: 'alice', models: [] } as const
@@ -42,6 +42,26 @@ describe('desktop credit entry and check-in', () => {
     render(<CreditsSection {...kit} close={vi.fn()} requestCredits={async () => { throw new Error('连接失败') }} />)
     expect(await screen.findByRole('dialog', { name: '积分服务提示' })).toBeTruthy()
     expect(screen.getByText('连接失败')).toBeTruthy()
+  })
+  it('shows pricing beside refresh only when the owner has published subscription libraries', async () => {
+    const requestCredits = vi.fn(async (op: string) => op === 'history'
+      ? { balance: 1000, total: 0, items: [] } : { enabled: false })
+    const requestKnowledgeCredits = vi.fn().mockResolvedValueOnce({ enabled: true, platform_percent: 30, items: [] })
+      .mockResolvedValue({ enabled: true, platform_percent: 30, items: [
+        { id: 7, name: '资料库', browse_cents: 0, question_cents: 100, download_cents: 0 },
+        { id: 9, name: '项目库', browse_cents: 0, question_cents: 0, download_cents: 0 },
+      ] })
+    render(<CreditsSection {...kit} close={vi.fn()} requestCredits={requestCredits} requestKnowledgeCredits={requestKnowledgeCredits} />)
+    const refresh = screen.getByRole('button', { name: '刷新' })
+    await waitFor(() => expect(refresh).toHaveProperty('disabled', false))
+    expect(screen.queryByRole('button', { name: '知识库积分设置' })).toBeNull()
+    fireEvent.click(refresh)
+    const settings = await screen.findByRole('button', { name: '知识库积分设置' })
+    expect(settings.nextElementSibling).toBe(refresh)
+    fireEvent.click(settings)
+    const dialog = screen.getByRole('dialog', { name: '知识库积分设置' })
+    expect(within(dialog).getByRole('button', { name: '资料库' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: '项目库' })).toBeTruthy()
   })
 })
 

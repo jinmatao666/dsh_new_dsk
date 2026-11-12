@@ -25,11 +25,11 @@ func TestDesktopCreditsUserIsolation(t *testing.T) {
 	model.LOG_DB = db
 	config.QuotaPerUnit = 1000
 	defer func() { model.DB = oldDB; model.LOG_DB = oldLogs; config.QuotaPerUnit = unit }()
-	if err = db.AutoMigrate(&model.User{}, &model.UserTimedQuota{}, &model.DesktopCheckinReceipt{}, &model.AdminCreditGrant{}, &model.Log{}); err != nil {
+	if err = db.AutoMigrate(&model.User{}, &model.UserTimedQuota{}, &model.DesktopCheckinReceipt{}, &model.AdminCreditGrant{}, &model.Log{}, &model.KnowledgeCreditReceipt{}); err != nil {
 		t.Fatal(err)
 	}
-	db.Create(&model.User{Id: 901, Username: "own", Quota: 5000})
-	db.Create(&model.User{Id: 902, Username: "other", Quota: 99000})
+	db.Create(&model.User{Id: 901, Username: "own", AffCode: "own", AccessToken: "own-credit-token", Quota: 5000})
+	db.Create(&model.User{Id: 902, Username: "other", AffCode: "other", AccessToken: "other-credit-token", Quota: 99000})
 	db.Create(&model.UserTimedQuota{UserId: 901, Amount: 1000, Source: "checkin", SourceRef: "2026-11-04"})
 	db.Create(&model.UserTimedQuota{UserId: 902, Amount: 99000, Source: "register"})
 	db.Create(&model.DesktopCheckinReceipt{UserId: 901, Day: "2026-11-04", Amount: 1000, BalanceAfter: 5000})

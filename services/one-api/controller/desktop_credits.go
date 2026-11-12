@@ -65,7 +65,7 @@ func GetDesktopCredits(c *gin.Context) {
 	if filter != "spent" {
 		var rows []model.UserTimedQuota
 		var count int64
-		q := model.DB.Model(&model.UserTimedQuota{}).Where("user_id = ?", id)
+		q := model.DB.Model(&model.UserTimedQuota{}).Where("user_id = ? AND source <> ?", id, "knowledge")
 		if q.Count(&count).Error != nil || q.Order("id DESC").Limit(limit).Find(&rows).Error != nil {
 			fail()
 			return
@@ -134,6 +134,36 @@ func GetDesktopCredits(c *gin.Context) {
 				label += "（退回预扣 " + strconv.FormatFloat(float64(receipt.Refunded)/unit, 'f', -1, 64) + " 积分）"
 			}
 			items = append(items, desktopCreditItem{Id: "consume-" + strconv.Itoa(r.Id), Time: r.CreatedAt, Name: label, Credits: -float64(r.Quota) / unit})
+		}
+	}
+	for _, earned := range []bool{false, true} {
+		if (earned && filter == "spent") || (!earned && filter == "earned") {
+			continue
+		}
+		query := model.DB.Model(&model.KnowledgeCreditReceipt{}).Where("user_id = ?", id)
+		if earned {
+			query = model.DB.Model(&model.KnowledgeCreditReceipt{}).Where("owner_user_id = ? AND owner_cents > 0", id)
+		}
+		var count int64
+		var rows []model.KnowledgeCreditReceipt
+		if query.Count(&count).Error != nil || query.Order("id DESC").Limit(limit).Find(&rows).Error != nil {
+			fail()
+			return
+		}
+		total += count
+		for _, row := range rows {
+			action := map[string]string{"browse": "浏览", "question": "问答溯源", "download": "下载"}[row.Action]
+			label := "知识库" + action + " · " + row.LibraryName + " / " + row.DocumentName
+			amount := -float64(row.Cents) / 100
+			balance := float64(row.BalanceAfter) / unit
+			prefix := "knowledge-spent-"
+			if earned {
+				amount = float64(row.OwnerCents) / 100
+				balance = float64(row.OwnerBalanceAfter) / unit
+				label = "知识库分成 · " + action + " · " + row.LibraryName + " / " + row.DocumentName + "（维护者 " + strconv.Itoa(100-row.PlatformPercent) + "%）"
+				prefix = "knowledge-earned-"
+			}
+			items = append(items, desktopCreditItem{Id: prefix + strconv.FormatInt(row.Id, 10), Time: row.CreatedAt.Unix(), Name: label, Credits: amount, Balance: &balance})
 		}
 	}
 	sort.SliceStable(items, func(i, j int) bool {

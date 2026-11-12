@@ -1,3 +1,4 @@
+import KnowledgeCreditShareSettings from './KnowledgeCreditShareSettings';
 import RegistrationSettings from './RegistrationSettings';
 import { adminURL } from '../../deployment';
 import React, { useEffect, useState } from 'react';
@@ -9,15 +10,15 @@ import { DEFAULT_CREDIT_BASE, validCreditNumber, formatCreditPrice } from './cre
 import CreditRewardSettings, { normalizeCreditRewards } from './CreditRewardSettings';
 import FeaturePageAddressDialog, { defaultFeaturePages, normalizeFeaturePages, validateFeaturePageUrl, FEATURE_PAGE_ENTRIES } from './FeaturePagesSettings';
 
-const featureKeys = ['automations', 'connectors', 'knowledgeBases', 'landMarket', 'policyEncyclopedia'];
-const featureAddressKeys = new Set(['landMarket', 'policyEncyclopedia']);
+const featureKeys = ['automations', 'connectors', 'knowledgeBases', ...FEATURE_PAGE_ENTRIES.map(([key]) => key)];
+const featureAddressKeys = new Set(FEATURE_PAGE_ENTRIES.map(([key]) => key));
 const billingDefaults = edition => ({
   showCredits: edition !== 'government', showMultipliers: edition !== 'government', enabled: edition !== 'government',
 });
 const resolveBilling = value => ({ ...billingDefaults(value.edition), ...value.billing });
 const defaults = { network: 'internet', internetCatalogPolicy: 'disable', internetSkillPolicy: 'disable', internetExpertPolicy: 'disable', edition: 'operations', operator: '', phone: '', features: {
-  internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
-  intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+  internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
+  intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
 }, featurePages: defaultFeaturePages, plugins: { browserAssistant: true }, knowledgeQuota: defaultKnowledgeQuota, creditPricingBase: DEFAULT_CREDIT_BASE };
 const tabs = [['account', '账户设置'], ['security', '安全设置'], ['network', '网络设置'], ['edition', '版本类型'], ['features', '功能设置'], ['knowledge', '知识库设置'], ['operations', '运维设置'], ['plugins', '插件设置'], ['registration', '登录与注册']];
 const descriptions = {
@@ -70,6 +71,7 @@ export default function SystemSettings() {
   const [loadError, setLoadError] = useState('');
   const [reload, setReload] = useState(0);
   const [addressFeature, setAddressFeature] = useState(null);
+  const [knowledgeCreditsOpen, setKnowledgeCreditsOpen] = useState(false);
   useEffect(() => {
     let disposed = false;
     const controller = new AbortController();
@@ -96,8 +98,9 @@ export default function SystemSettings() {
           if (flags && typeof flags === 'object') {
             const next = { ...flags };
             if (!Object.prototype.hasOwnProperty.call(flags, 'knowledgeBases')) next.knowledgeBases = true;
-            if (!Object.prototype.hasOwnProperty.call(flags, 'landMarket')) next.landMarket = false;
-            if (!Object.prototype.hasOwnProperty.call(flags, 'policyEncyclopedia')) next.policyEncyclopedia = false;
+            for (const [key] of FEATURE_PAGE_ENTRIES) {
+              if (!Object.prototype.hasOwnProperty.call(flags, key)) next[key] = false;
+            }
             value.features = { ...value.features, [mode]: next };
           }
         }
@@ -214,14 +217,18 @@ export default function SystemSettings() {
                   <span>{resolveBilling(settings)[key] ? '开启' : '关闭'}</span>
                 </label></td></tr>)}
             </tbody></table></> : active === 'features' ? <><table className='settings-features'><thead><tr><th scope='col'>功能</th><th scope='col'>互联网环境</th><th scope='col'>纯内网环境</th></tr></thead><tbody>
-              {[['automations', '自动化'], ['connectors', '连接器'], ['knowledgeBases', '知识库'], ['landMarket', '土地市场'], ['policyEncyclopedia', '政策宝典']].map(([feature, label]) => <tr key={feature}>
+              {[['automations', '自动化'], ['connectors', '连接器'], ['knowledgeBases', '知识库'], ...FEATURE_PAGE_ENTRIES].map(([feature, label]) => <tr key={feature}>
                 <th scope='row'>{featureAddressKeys.has(feature)
                   ? <span className='feature-name-with-address'>{label}<button type='button' className='feature-address-link' disabled={saving}
                     aria-label={`${label}地址配置`} onClick={() => setAddressFeature(feature)}>地址配置</button></span>
-                  : label}</th>
+                  : feature === 'knowledgeBases' && settings.edition === 'operations' && resolveBilling(settings).enabled
+                    ? <span className='feature-name-with-address'>{label}<button type='button' className='feature-address-link'
+                        disabled={saving} onClick={() => setKnowledgeCreditsOpen(true)}>知识库积分设置</button></span>
+                    : label}</th>
                 {['internet', 'intranet'].map(mode => <td key={mode}><label><input type='checkbox' role='switch' aria-label={`${mode === 'internet' ? '互联网' : '纯内网'}${label}`} checked={settings.features[mode][feature]} disabled={saving} onChange={event => change('features', { ...settings.features, [mode]: { ...settings.features[mode], [feature]: event.target.checked } })} /><span>{settings.features[mode][feature] ? '开启' : '关闭'}</span></label></td>)}
               </tr>)}
             </tbody></table>
+            {knowledgeCreditsOpen && <KnowledgeCreditShareSettings onClose={() => setKnowledgeCreditsOpen(false)} />}
             {addressFeature && <FeaturePageAddressDialog featureKey={addressFeature} value={settings.featurePages || defaultFeaturePages}
               disabled={saving} onClose={() => setAddressFeature(null)}
               onChange={value => change('featurePages', normalizeFeaturePages(value))} />}

@@ -16,13 +16,22 @@ import (
 
 const portalTicketLifetime = 90 * time.Second
 
-func landMarketProviderSecretHash() string {
-	config.OptionMapRWMutex.RLock()
-	defer config.OptionMapRWMutex.RUnlock()
-	return strings.TrimSpace(config.OptionMap[model.LandMarketProviderSecretOption])
+type portalFeature struct {
+	key          string
+	secretOption string
+	label        string
 }
 
-func landMarketConfiguredURL() (string, error) {
+var landMarketPortal = portalFeature{model.LandMarketFeatureKey, model.LandMarketProviderSecretOption, "土地市场"}
+var planningLecturePortal = portalFeature{model.PlanningLectureFeatureKey, model.PlanningLectureProviderSecretOption, "资规讲坛"}
+
+func portalProviderSecretHash(feature portalFeature) string {
+	config.OptionMapRWMutex.RLock()
+	defer config.OptionMapRWMutex.RUnlock()
+	return strings.TrimSpace(config.OptionMap[feature.secretOption])
+}
+
+func portalConfiguredURL(feature portalFeature) (string, error) {
 	config.OptionMapRWMutex.RLock()
 	raw := config.OptionMap["SystemDeploymentSettings"]
 	config.OptionMapRWMutex.RUnlock()
@@ -30,13 +39,13 @@ func landMarketConfiguredURL() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	page, ok := settings.FeaturePages["landMarket"]
+	page, ok := settings.FeaturePages[feature.key]
 	if !ok {
-		return "", errors.New("missing land market page")
+		return "", errors.New("missing portal page")
 	}
 	url := strings.TrimSpace(page.URL)
 	if url == "" {
-		return "", errors.New("land market url empty")
+		return "", errors.New("portal url empty")
 	}
 	if err := validateDesktopFeaturePageURL(url); err != nil {
 		return "", err
@@ -46,7 +55,16 @@ func landMarketConfiguredURL() (string, error) {
 
 // GetLandMarketCredentialStatus reports whether a provider credential exists (never returns the secret).
 func GetLandMarketCredentialStatus(c *gin.Context) {
-	hash := landMarketProviderSecretHash()
+	getPortalCredentialStatus(c, landMarketPortal)
+}
+
+// GetPlanningLectureCredentialStatus reports whether the planning lecture provider has a credential.
+func GetPlanningLectureCredentialStatus(c *gin.Context) {
+	getPortalCredentialStatus(c, planningLecturePortal)
+}
+
+func getPortalCredentialStatus(c *gin.Context, feature portalFeature) {
+	hash := portalProviderSecretHash(feature)
 	c.JSON(http.StatusOK, gin.H{
 		"success":    true,
 		"configured": expertCredentialPattern.MatchString(hash),
@@ -55,32 +73,51 @@ func GetLandMarketCredentialStatus(c *gin.Context) {
 
 // RotateLandMarketCredential replaces the land-market provider credential; plaintext is shown once.
 func RotateLandMarketCredential(c *gin.Context) {
+	rotatePortalCredential(c, landMarketPortal)
+}
+
+// RotatePlanningLectureCredential replaces the planning lecture provider credential and shows it once.
+func RotatePlanningLectureCredential(c *gin.Context) {
+	rotatePortalCredential(c, planningLecturePortal)
+}
+
+func rotatePortalCredential(c *gin.Context, feature portalFeature) {
 	secret, err := expertWebRandom()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "生成接入凭据失败"})
 		return
 	}
-	if err := model.UpdateOption(model.LandMarketProviderSecretOption, expertWebDigest(secret)); err != nil {
+	if err := model.UpdateOption(feature.secretOption, expertWebDigest(secret)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存接入凭据失败"})
 		return
 	}
+	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{"success": true, "provider_credential": secret})
 }
 
 // LaunchLandMarket creates a one-use ticket for the configured land-market page.
 func LaunchLandMarket(c *gin.Context) {
+	launchPortal(c, landMarketPortal)
+}
+
+// LaunchPlanningLecture issues a single-use ticket for the configured planning lecture page.
+func LaunchPlanningLecture(c *gin.Context) {
+	launchPortal(c, planningLecturePortal)
+}
+
+func launchPortal(c *gin.Context, feature portalFeature) {
 	userID := c.GetInt("id")
 	if userID <= 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": "请先登录"})
 		return
 	}
-	if !expertCredentialPattern.MatchString(landMarketProviderSecretHash()) {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "请先在功能设置中生成土地市场接入凭据"})
+	if !expertCredentialPattern.MatchString(portalProviderSecretHash(feature)) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "请先在功能设置中生成" + feature.label + "接入凭据"})
 		return
 	}
-	pageURL, err := landMarketConfiguredURL()
+	pageURL, err := portalConfiguredURL(feature)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "请先在功能设置中配置土地市场页面地址"})
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "请先在功能设置中配置" + feature.label + "页面地址"})
 		return
 	}
 	ticket, err := expertWebRandom()
@@ -89,14 +126,14 @@ func LaunchLandMarket(c *gin.Context) {
 		return
 	}
 	now := time.Now()
-	if err := model.DB.Where("feature_key = ? AND expires_at <= ?", model.LandMarketFeatureKey, now.Unix()).
+	if err := model.DB.Where("feature_key = ? AND expires_at <= ?", feature.key, now.Unix()).
 		Delete(&model.PortalFeatureTicket{}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "登录票据维护失败"})
 		return
 	}
 	record := model.PortalFeatureTicket{
 		Hash:       expertWebDigest(ticket),
-		FeatureKey: model.LandMarketFeatureKey,
+		FeatureKey: feature.key,
 		UserID:     userID,
 		ExpiresAt:  now.Add(portalTicketLifetime).Unix(),
 	}
@@ -114,6 +151,15 @@ func LaunchLandMarket(c *gin.Context) {
 
 // RedeemLandMarketTicket consumes a land-market ticket for its provider credential.
 func RedeemLandMarketTicket(c *gin.Context) {
+	redeemPortalTicket(c, landMarketPortal)
+}
+
+// RedeemPlanningLectureTicket exchanges a planning lecture ticket for user identity.
+func RedeemPlanningLectureTicket(c *gin.Context) {
+	redeemPortalTicket(c, planningLecturePortal)
+}
+
+func redeemPortalTicket(c *gin.Context, feature portalFeature) {
 	var input struct {
 		Ticket string `json:"ticket"`
 	}
@@ -127,7 +173,7 @@ func RedeemLandMarketTicket(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "提供方凭据无效"})
 		return
 	}
-	expected := landMarketProviderSecretHash()
+	expected := portalProviderSecretHash(feature)
 	if !expertCredentialPattern.MatchString(expected) {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "提供方凭据无效"})
 		return
@@ -141,7 +187,7 @@ func RedeemLandMarketTicket(c *gin.Context) {
 	var userID int
 	err := model.DB.Transaction(func(tx *gorm.DB) error {
 		var ticket model.PortalFeatureTicket
-		if err := tx.First(&ticket, "hash = ? AND feature_key = ?", expertWebDigest(input.Ticket), model.LandMarketFeatureKey).Error; err != nil {
+		if err := tx.First(&ticket, "hash = ? AND feature_key = ?", expertWebDigest(input.Ticket), feature.key).Error; err != nil {
 			return err
 		}
 		result := tx.Model(&model.PortalFeatureTicket{}).

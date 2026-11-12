@@ -19,11 +19,21 @@ for example: `REACT_APP_SERVER=http://your.domain.com`.
 
 Before you start editing, make sure your `Actions on Save` options have `Optimize imports` & `Run Prettier` enabled.
 
+In the operations edition, System Settings → Features → Knowledge Bases → Knowledge credit settings saves the platform percentage for subsequent subscription-library settlements. The dialog calculates the remaining share for the maintainer from the entered percentage.
+
 ## Reference
 
 ### Personal knowledge base files
 
-In Knowledge Base → Personal Knowledge Base, the library owner and root administrators can upload and retry failed parses from a person's file list. When the person has multiple libraries, choose an upload destination on the same page. Uploads refresh the file list and counts.
+In Knowledge Base → Personal Knowledge Base, selecting a person with multiple libraries opens a searchable, paginated library catalog using the public-library cards and statistics. On wide screens, the back control, person title, library count and search share one compact toolbar; narrow screens wrap the search below. Each card opens that library's file list. The file-list toolbar keeps the back control, title, compact search and rightmost upload action together on wide screens; the upload explanation is omitted. Returning restores the catalog search and page. Library owners and root administrators can upload and retry failed parses inside the selected library. A person with one library keeps the direct file-list view. Personal-library menus support editing and deletion with the existing permissions.
+
+### Knowledge category creation
+
+Only administrators and root administrators see the create-category action. The creation API rejects ordinary users with HTTP 403.
+
+### Knowledge review inbox
+
+The Knowledge page gives administrators a blue inbox entry with a white icon and pending count; the catalog has no extra reminder banner. Publication and subscription tasks have separate tabs and pending, approved and rejected filters. The publication review dialog displays the requested public/subscription scope and owner note. Rejection requires a reason. Only administrators may list or settle either queue. Publication review changes visibility only in the operations edition; subscription review grants access independently. Each library retains its latest publication request; resubmitting a rejected request replaces that request’s review state.
 
 ### Administrator user editing
 
@@ -47,7 +57,7 @@ Batch Management enables cross-page selection, select-current-page, publication,
 
 System Settings retries transient read failures twice and offers an in-page reload after failure. Authentication, permission and invalid-configuration errors are displayed without automatic retries. Failed loads never expose a default-value save form; requests are cancelled when leaving the page. Automatic retries apply only to reads, not saves.
 
-Root administrators configure automation, connector, knowledge-base, land-market and policy-encyclopedia entries in System Settings → Feature Settings. Internet and intranet have independent switches stored in the existing `SystemDeploymentSettings` option. Defaults enable automation and knowledge bases in both environments and connectors only on Internet; land market and policy encyclopedia default to off. On the same page, Address Configuration beside land market and policy encyclopedia stores http(s) page URLs (empty allowed), independently of the visibility switches. The public `/api/desktop-config` endpoint returns both allowlisted visibility settings and page URLs. Updated desktops hide disabled entries without placeholders and keep Settings anchored at the bottom; startup, login and existing authentication refreshes apply changes. Enabling an intranet entry does not bypass outbound network restrictions or implement real connector authorization or scheduling. No additional database table is required.
+Root administrators configure automation, connector, knowledge-base, land-market, planning-lecture and policy-encyclopedia entries in System Settings → Feature Settings. Internet and intranet have independent switches stored in the existing `SystemDeploymentSettings` option. Defaults enable automation and knowledge bases in both environments and connectors only on Internet; land market, planning lecture and policy encyclopedia default to off. On the same page, Address Configuration beside land market, planning lecture and policy encyclopedia stores http(s) page URLs (empty allowed), independently of the visibility switches. The public `/api/desktop-config` endpoint returns both allowlisted visibility settings and page URLs. Updated desktops hide disabled entries without placeholders and keep Settings anchored at the bottom; startup, login and existing authentication refreshes apply changes. Enabling an intranet entry does not bypass outbound network restrictions or implement real connector authorization or scheduling. No additional database table is required.
 
 ### Desktop plugin permissions
 

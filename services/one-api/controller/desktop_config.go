@@ -17,6 +17,7 @@ type desktopFeatureFlags struct {
 	Connectors         bool `json:"connectors"`
 	KnowledgeBases     bool `json:"knowledgeBases"`
 	LandMarket         bool `json:"landMarket"`
+	PlanningLecture    bool `json:"planningLecture"`
 	PolicyEncyclopedia bool `json:"policyEncyclopedia"`
 }
 
@@ -48,6 +49,7 @@ type desktopPluginSettings struct {
 func defaultDesktopFeaturePages() map[string]desktopFeaturePage {
 	return map[string]desktopFeaturePage{
 		"landMarket":         {URL: ""},
+		"planningLecture":    {URL: ""},
 		"policyEncyclopedia": {URL: ""},
 	}
 }
@@ -122,14 +124,14 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 			return settings, err
 		}
 		for _, mode := range []string{"internet", "intranet"} {
-			for _, feature := range []string{"automations", "connectors", "knowledgeBases", "landMarket", "policyEncyclopedia"} {
+			for _, feature := range []string{"automations", "connectors", "knowledgeBases", "landMarket", "planningLecture", "policyEncyclopedia"} {
 				value, present := environments[mode][feature]
 				if !present {
 					if feature == "knowledgeBases" {
 						legacyKnowledge[mode] = true
 						continue
 					}
-					if feature == "landMarket" || feature == "policyEncyclopedia" {
+					if feature == "landMarket" || feature == "planningLecture" || feature == "policyEncyclopedia" {
 						continue
 					}
 					return settings, fmt.Errorf("invalid feature setting: %s.%s", mode, feature)
@@ -148,7 +150,7 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 		if entries == nil {
 			return settings, fmt.Errorf("invalid featurePages")
 		}
-		for _, key := range []string{"landMarket", "policyEncyclopedia"} {
+		for key := range settings.FeaturePages {
 			entry, ok := entries[key]
 			if !ok {
 				continue

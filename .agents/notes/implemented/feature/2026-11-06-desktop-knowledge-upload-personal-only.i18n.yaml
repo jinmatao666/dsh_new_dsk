@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-06-desktop-knowledge-upload-personal-only.md
-2026-11-06-desktop-knowledge-upload-personal-only.md: 7c97c44bf932af09835dbd8b6e52c010323d7d5d
-2026-11-06-desktop-knowledge-upload-personal-only.zh.md: f466768ff9f24950ed732b45a15bb06e53b33aff
+2026-11-06-desktop-knowledge-upload-personal-only.md: ffe7f5dd493a1fd62f5c20b55802ecf2be2a28d9
+2026-11-06-desktop-knowledge-upload-personal-only.zh.md: 906de50723823f02216d64436b0fc05ca6dbc214

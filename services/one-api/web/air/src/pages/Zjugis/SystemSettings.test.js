@@ -30,7 +30,7 @@ beforeEach(() => {
     if (path === '/api/user/self') {
       return Promise.resolve({ data: { success: true, data: { username: 'root', role: 100 } } });
     }
-    if (path === '/api/portal/land-market/admin/credential') {
+    if (['/api/portal/land-market/admin/credential', '/api/portal/planning-lecture/admin/credential'].includes(path)) {
       return Promise.resolve({ data: { success: true, configured: false } });
     }
     return Promise.resolve({ data: { success: true, data: [{ key: 'SystemDeploymentSettings', value: JSON.stringify({ network: 'internet', operator: '张运维', phone: '0571-12345678' }) }] } });
@@ -49,15 +49,15 @@ test('legacy feature switches load and save with knowledge defaults without rese
   act(() => container.querySelectorAll('[role="tab"]')[4].click());
   expect(container.querySelector('[role="alert"]')).toBeNull();
   const switches = [...container.querySelectorAll('[role="switch"]')];
-  expect(switches.map(toggle => toggle.checked)).toEqual([false, true, true, false, true, true, false, false, false, false]);
+  expect(switches.map(toggle => toggle.checked)).toEqual([false, true, true, false, true, true, false, false, false, false, false, false]);
   act(() => switches[4].click());
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   const saved = JSON.parse(API.put.mock.calls[0][1].value);
   expect(saved.features).toEqual({
-    internet: { ...legacy.features.internet, knowledgeBases: false, landMarket: false, policyEncyclopedia: false },
-    intranet: { ...legacy.features.intranet, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+    internet: { ...legacy.features.internet, knowledgeBases: false, landMarket: false, planningLecture: false, policyEncyclopedia: false },
+    intranet: { ...legacy.features.intranet, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
   });
-  expect(saved.featurePages).toEqual({ landMarket: { url: '' }, policyEncyclopedia: { url: '' } });
+  expect(saved.featurePages).toEqual({ landMarket: { url: '' }, planningLecture: { url: '' }, policyEncyclopedia: { url: '' } });
   expect(saved.network).toBe(legacy.network);
   expect(saved.resources).toEqual(legacy.resources);
 });
@@ -128,8 +128,8 @@ test('network selection saves one deployment option without changing account dat
   expect(saved.network).toBe('intranet');
   expect(saved.operator).toBe('张运维');
   expect(saved.features).toEqual({
-    internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
-    intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+    internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
+    intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
   });
   expect(showSuccess).toHaveBeenCalledWith('设置已保存');
   expect(container.textContent).not.toContain('设置已保存');
@@ -159,11 +159,12 @@ test('feature switches save independently for internet and intranet', async () =
   act(() => toggle('纯内网连接器').click());
   act(() => toggle('互联网知识库').click());
   act(() => toggle('互联网土地市场').click());
+  act(() => toggle('互联网资规讲坛').click());
   act(() => toggle('纯内网政策宝典').click());
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   expect(JSON.parse(API.put.mock.calls[0][1].value).features).toEqual({
-    internet: { automations: false, connectors: true, knowledgeBases: false, landMarket: true, policyEncyclopedia: false },
-    intranet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: true },
+    internet: { automations: false, connectors: true, knowledgeBases: false, landMarket: true, planningLecture: true, policyEncyclopedia: false },
+    intranet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: true },
   });
   expect(toggle('纯内网自动化').checked).toBe(true);
 });
@@ -187,8 +188,34 @@ test('feature settings address links open portal page dialogs and save URLs', as
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   expect(JSON.parse(API.put.mock.calls[0][1].value).featurePages).toEqual({
     landMarket: { url: 'https://land.example/#/home' },
+    planningLecture: { url: '' },
     policyEncyclopedia: { url: '' },
   });
+});
+
+test('planning lecture saves its URL and generates its own provider credential', async () => {
+  const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
+  try {
+    await act(async () => root.render(<SystemSettings />));
+    act(() => container.querySelectorAll('[role="tab"]')[4].click());
+    await act(async () => container.querySelector('[aria-label="资规讲坛地址配置"]').click());
+    expect(API.get).toHaveBeenCalledWith('/api/portal/planning-lecture/admin/credential');
+    await act(async () => fillInput(document.querySelector('[aria-label="资规讲坛页面地址"]'), 'https://lecture.example/#/home'));
+    const dialog = document.querySelector('[aria-label="配置资规讲坛"]');
+    await act(async () => [...dialog.querySelectorAll('button')].find(button => button.textContent === '生成凭据').click());
+    expect(API.post).toHaveBeenCalledWith('/api/portal/planning-lecture/admin/credential');
+    const secret = document.querySelector('[aria-label="资规讲坛提供方凭据"]');
+    expect(secret.textContent).toContain('/api/portal/planning-lecture/redeem');
+    await act(async () => secret.querySelector('button').click());
+    await act(async () => [...dialog.querySelectorAll('button')].find(button => button.textContent === '确定').click());
+    await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    expect(JSON.parse(API.put.mock.calls[0][1].value).featurePages).toMatchObject({
+      landMarket: { url: '' },
+      planningLecture: { url: 'https://lecture.example/#/home' },
+    });
+  } finally {
+    confirm.mockRestore();
+  }
 });
 
 test('feature address dialog blocks outer form submit while open', async () => {
@@ -459,4 +486,31 @@ test('government edition defaults all three billing switches off and permits ind
   expect(toggles.map(toggle => toggle.checked)).toEqual([false, true, false]);
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   expect(JSON.parse(API.put.mock.calls[0][1].value).billing).toEqual({ showCredits: false, showMultipliers: true, enabled: false });
+});
+
+test('saves the operations knowledge credit split from the feature settings row', async () => {
+  const previous = API.get.getMockImplementation();
+  API.get.mockImplementation((path, ...args) => path === '/api/knowledge-bases/credit-settings'
+    ? Promise.resolve({ data: { success: true, data: { enabled: true, platform_percent: 30 } } }) : previous(path, ...args));
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[4].click());
+  const open = [...container.querySelectorAll('button')].find(button => button.textContent === '知识库积分设置');
+  expect(open).toBeDefined();
+  await act(async () => open.click());
+  const dialog = document.querySelector('[role="dialog"][aria-label="知识库积分设置"]');
+  expect(dialog.textContent).toContain('维护者占比：70%');
+  expect([...dialog.querySelectorAll('button')].map(button => button.textContent)).toEqual(['取消', '保存']);
+  act(() => {
+    const input = dialog.querySelector('input');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '20');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(dialog.textContent).toContain('维护者占比：80%');
+  await act(async () => dialog.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(API.put).toHaveBeenCalledWith('/api/knowledge-admin/credit-settings', { platform_percent: 20 });
+  expect(document.querySelector('[role="dialog"][aria-label="知识库积分设置"]')).toBeNull();
+  act(() => container.querySelectorAll('[role="tab"]')[3].click());
+  act(() => container.querySelector('input[value="government"]').click());
+  act(() => container.querySelectorAll('[role="tab"]')[4].click());
+  expect([...container.querySelectorAll('button')].some(button => button.textContent === '知识库积分设置')).toBe(false);
 });

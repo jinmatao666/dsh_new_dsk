@@ -16,8 +16,8 @@ func TestListAuthorizedKnowledgeBasesScopesPersonalSharedCommon(t *testing.T) {
 	DB = db
 	t.Cleanup(func() { DB = previous })
 	require.NoError(t, db.AutoMigrate(
-		&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{},
-		&KnowledgeConversation{}, &KnowledgeDocumentNote{}, &KnowledgeDocumentPath{}, &KnowledgeDocumentCreator{},
+		&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{}, &KnowledgeBaseLike{}, &KnowledgePublicationApplication{},
+		&KnowledgeConversation{}, &KnowledgeDocumentNote{}, &KnowledgeDocumentPath{}, &KnowledgeDocumentCreator{}, &KnowledgeFolder{},
 		&GovernmentOrganizationMember{}, &OrgMember{}, &User{},
 	))
 
@@ -113,7 +113,7 @@ func TestKnowledgeSubscriptionApplicationApprovalGrantsAccess(t *testing.T) {
 	DB = db
 	t.Cleanup(func() { DB = previous })
 	require.NoError(t, db.AutoMigrate(
-		&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{},
+		&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{}, &KnowledgeBaseLike{}, &KnowledgePublicationApplication{},
 		&GovernmentOrganizationMember{}, &OrgMember{}, &User{},
 	))
 	require.NoError(t, db.Create(&User{Id: 1, Username: "alice", AccessToken: "tok-a", AffCode: "aff-a", Role: RoleCommonUser, Status: UserStatusEnabled}).Error)
@@ -141,6 +141,21 @@ func TestKnowledgeSubscriptionApplicationApprovalGrantsAccess(t *testing.T) {
 	require.Equal(t, "地方法规", plaza[0].Name)
 	require.Equal(t, "鲍勃", plaza[0].OwnerUsername)
 	require.Equal(t, KnowledgeSubscriptionStatusNone, plaza[0].SubscriptionStatus)
+	require.NoError(t, SetKnowledgeBaseLike(1, base.Id, true))
+	require.NoError(t, SetKnowledgeBaseLike(1, base.Id, true))
+	saved, err := GetKnowledgePlazaItem(1, base.Id)
+	require.NoError(t, err)
+	require.True(t, saved.LikedByViewer)
+	other, err := GetKnowledgePlazaItem(2, base.Id)
+	require.NoError(t, err)
+	require.False(t, other.LikedByViewer)
+	require.Equal(t, KnowledgeSubscriptionStatusNone, saved.SubscriptionStatus)
+	require.NoError(t, SetKnowledgeBaseLike(1, base.Id, false))
+	saved, err = GetKnowledgePlazaItem(1, base.Id)
+	require.NoError(t, err)
+	require.False(t, saved.LikedByViewer)
+	require.ErrorIs(t, SetKnowledgeBaseLike(1, 999999, true), gorm.ErrRecordNotFound)
+
 	require.NoError(t, db.Create(&KnowledgeBase{
 		Name: "平台汇编", RagflowDatasetId: "ds-platform", OwnerUserId: 1,
 		Kind: KnowledgeBaseShared, Shelf: KnowledgeShelfPublished, CategoryId: category.Id,

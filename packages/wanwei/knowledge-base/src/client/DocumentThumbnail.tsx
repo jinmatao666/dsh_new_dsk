@@ -1,30 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as pdfjs from 'pdfjs-dist'
 import { WorkerMessageHandler } from 'pdfjs-dist/build/pdf.worker.min.mjs'
 import { productText } from './locales/product.ts'
-
-const ThumbnailSettled = createContext<(id: string) => void>(() => {})
-
-/** Reveal a page of cards after every PDF preview finishes, including failures.
- * @param props - PDF identities and mounted file cards for one page.
- * @returns File cards or a compact loading status.
- */
-export function DocumentThumbnailPage({ documentIds, children }: {
-  documentIds: string[]
-  children: ReactNode
-}) {
-  const [settled, setSettled] = useState<Set<string>>(() => new Set())
-  const onSettled = useCallback((id: string) => {
-    setSettled(previous => new Set(previous).add(id))
-  }, [])
-  const loading = documentIds.some(id => !settled.has(id))
-  return <ThumbnailSettled.Provider value={onSettled}>
-    <div className="dsh-knowledge-thumbnail-page" aria-busy={loading}>
-      {loading && <DocumentListLoading />}
-      <div className="dsh-knowledge-documents" hidden={loading}>{children}</div>
-    </div>
-  </ThumbnailSettled.Provider>
-}
 
 /** Loading status centered in the available file-list area.
  * @returns Spinner and localized loading label.
@@ -36,52 +13,68 @@ export function DocumentListLoading() {
   </div>
 }
 
-/** Render the original PDF first page and report completion to its page.
- * @param props - Document identity, file loader, and unsupported-format icon.
- * @returns First-page canvas with a PDF badge, or file icon.
+/** Show a default cover immediately and replace it with the PDF first page when ready.
+ * @param props - Document identity, file kind, and PDF byte loader.
+ * @returns A decorative cover with a file-type badge.
  */
-export function DocumentThumbnail({ documentId, kind, load, fallback }: {
+export function DocumentThumbnail({ documentId, kind, load }: {
   documentId: string
   kind: string
   load: () => Promise<{ bytes: Uint8Array }>
-  fallback: ReactNode
 }) {
-  const onSettled = useContext(ThumbnailSettled)
+  const cover = useRef<HTMLSpanElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const loader = useRef(load)
   loader.current = load
-  const [ready, setReady] = useState(false)
+  const [renderedId, setRenderedId] = useState<string>()
+  const ready = kind === 'pdf' && renderedId === documentId
   useEffect(() => {
-    setReady(false)
-    if (kind !== 'pdf') return
+    if (kind !== 'pdf' || cover.current === null) return
+    const element = cover.current
     let cancelled = false
-    let task: ReturnType<typeof pdfjs.getDocument> | undefined
-    void (async () => {
+    const renderFirstPage = async () => {
       const file = await loader.current()
       if (cancelled) return
       Object.assign(globalThis, { pdfjsWorker: { WorkerMessageHandler } })
-      task = pdfjs.getDocument({ data: file.bytes.slice() })
-      const pdf = await task.promise
-      const page = await pdf.getPage(1)
-      if (cancelled || canvas.current === null) return
-      const viewport = page.getViewport({ scale: 260 / page.getViewport({ scale: 1 }).width })
-      const target = canvas.current
-      target.width = Math.ceil(viewport.width)
-      target.height = Math.ceil(viewport.height)
-      const context = target.getContext('2d')
-      if (context === null) return
-      await page.render({ canvasContext: context, viewport }).promise
-      if (!cancelled) setReady(true)
-    })().finally(() => task?.destroy()).catch(() => {
-      // File download, PDF decoding, or worker disposal failure must not block the page.
-    }).finally(() => {
-      if (!cancelled) onSettled(documentId)
-    })
-    return () => { cancelled = true }
-  }, [documentId, kind, onSettled])
-  return <span className={`dsh-knowledge-thumbnail ${kind}`} aria-hidden="true">
-    <canvas ref={canvas} hidden={!ready} />
-    {!ready && (kind === 'pdf' ? fallback : <DocumentCover kind={kind} />)}
+      const task = pdfjs.getDocument({ data: file.bytes.slice() })
+      try {
+        const pdf = await task.promise
+        if (cancelled) return
+        const page = await pdf.getPage(1)
+        const target = canvas.current
+        if (cancelled || target === null) return
+        const viewport = page.getViewport({ scale: 260 / page.getViewport({ scale: 1 }).width })
+        target.width = Math.ceil(viewport.width)
+        target.height = Math.ceil(viewport.height)
+        const context = target.getContext('2d')
+        if (context === null) return
+        await page.render({ canvasContext: context, viewport }).promise
+        if (!cancelled) setRenderedId(documentId)
+      } finally {
+        await task.destroy()
+      }
+    }
+    const start = () => {
+      if (cancelled) return
+      void renderFirstPage().catch(() => {
+        // Download or PDF render failures leave the default cover visible.
+      })
+    }
+    const observer = typeof IntersectionObserver === 'function' ? new IntersectionObserver((entries, observer) => {
+      if (!entries.some(entry => entry.isIntersecting)) return
+      observer.disconnect()
+      start()
+    }) : undefined
+    if (observer === undefined) start()
+    else observer.observe(element)
+    return () => {
+      cancelled = true
+      observer?.disconnect()
+    }
+  }, [documentId, kind])
+  return <span ref={cover} className={`dsh-knowledge-thumbnail ${kind}`} aria-hidden="true">
+    {kind === 'pdf' && <canvas key={documentId} ref={canvas} hidden={!ready} />}
+    {!ready && <DocumentCover kind={kind} />}
     <span className="dsh-knowledge-thumbnail-badge">{kind === 'pdf' ? 'P' : kind === 'word' ? 'W' : kind === 'audio' ? <AudioBadgeIcon /> : kind === 'image' ? <CoverImageIcon /> : kind === 'web' ? <WebBadgeIcon /> : 'D'}</span>
   </span>
 }
@@ -95,7 +88,7 @@ function DocumentCover({ kind }: { kind: string }) {
         ? <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
           <path d="M8 28v8m8-16v24m8-30v36m8-27v18m8-33v48m8-36v24m8-15v6" />
         </svg>
-        : kind === 'word' ? <span className="dsh-knowledge-cover-word">W</span>
+        : kind === 'word' || kind === 'pdf' ? <span className="dsh-knowledge-cover-file">{kind === 'pdf' ? productText('PDF') : 'W'}</span>
           : <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <rect x="12" y="10" width="40" height="44" rx="5" />
             <path d="M12 22h40m-29-6h1m6 0h1M22 32h20M22 40h15" />

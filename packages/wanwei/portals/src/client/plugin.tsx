@@ -9,7 +9,8 @@ import './page.css'
 import { productText } from './locales/product.ts'
 import { withPortalTicket } from './ticket.ts'
 
-type PortalFeature = 'landMarket' | 'policyEncyclopedia'
+type PortalFeature = 'landMarket' | 'planningLecture' | 'policyEncyclopedia'
+type TicketLaunchEndpoint = 'land-market-launch' | 'planning-lecture-launch'
 
 type DesktopBridge = { core?: { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> } }
 type DesktopInternals = { invoke?: (command: string, argumentsValue?: unknown) => Promise<unknown> }
@@ -52,7 +53,7 @@ function PortalLoading({ label }: { label: string }) {
 }
 
 /** Embed the administrator-configured page URL, or show the empty-config placeholder.
- * Land market optionally launches with a one-use desktop ticket before iframe load.
+ * Ticketed portals request a single-use desktop ticket before loading the iframe.
  * @param props - Live feature-page URL observable and optional launch callback.
  */
 export function PortalPage({
@@ -63,7 +64,7 @@ export function PortalPage({
   launchWithTicket?: () => Promise<{ url: string; ticket: string }>
 }) {
   const configured = useSyncExternalStore(url.subscribe, url.getSnapshot)
-  const [href, setHref] = useState(configured)
+  const [href, setHref] = useState(launchWithTicket === undefined ? configured : '')
   const [loading, setLoading] = useState(Boolean(configured))
 
   useEffect(() => {
@@ -85,7 +86,7 @@ export function PortalPage({
       setHref(withPortalTicket(launch.url || configured, launch.ticket))
     }).catch((err: unknown) => {
       if (cancelled) return
-      console.error('land-market launch ticket failed', err)
+      console.error('portal launch ticket failed', err)
       setHref(configured)
     })
     return () => { cancelled = true }
@@ -155,17 +156,17 @@ function registerPortal(
 
 export const inject = ['slots', 'layout', 'wanweiNetwork', 'connection']
 
-/** Mount land-market and policy-encyclopedia portal panels.
+/** Mount the land market, planning lecture and policy encyclopedia panels.
  * @param ctx - Product Client context.
  */
 export function apply(ctx: Context): void {
   const connection = ctx.get('connection') as unknown as ConnectionHandle
-  const launchLandMarket = async () => {
-    const raw = rpcValue(await connection.rpc.call('/desktop-auth', 'land-market-launch', {})) as {
+  const launchPortal = (endpoint: TicketLaunchEndpoint) => async () => {
+    const raw = rpcValue(await connection.rpc.call('/desktop-auth', endpoint, {})) as {
       url?: unknown
       ticket?: unknown
     }
-    if (typeof raw.url !== 'string' || typeof raw.ticket !== 'string') throw new Error('土地市场打开信息无效')
+    if (typeof raw.url !== 'string' || typeof raw.ticket !== 'string') throw new Error('页面打开信息无效')
     return { url: raw.url, ticket: raw.ticket }
   }
   registerPortal(ctx, {
@@ -175,7 +176,16 @@ export function apply(ctx: Context): void {
     title: productText('土地市场'),
     subtitle: productText('浏览配置的土地市场页面'),
     Icon: LandMarketIcon,
-    launchWithTicket: launchLandMarket,
+    launchWithTicket: launchPortal('land-market-launch'),
+  })
+  registerPortal(ctx, {
+    id: 'skill-planning-lecture',
+    order: 42,
+    feature: 'planningLecture',
+    title: productText('资规讲坛'),
+    subtitle: productText('浏览配置的资规讲坛页面'),
+    Icon: LandMarketIcon,
+    launchWithTicket: launchPortal('planning-lecture-launch'),
   })
   registerPortal(ctx, {
     id: 'skill-policy-encyclopedia',

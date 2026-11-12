@@ -4,17 +4,24 @@ import { API, showError, showSuccess } from '../../helpers';
 
 export const FEATURE_PAGE_ENTRIES = [
   ['landMarket', '土地市场'],
+  ['planningLecture', '资规讲坛'],
   ['policyEncyclopedia', '政策宝典'],
 ];
 
+const credentialRoutes = {
+  landMarket: '/api/portal/land-market',
+  planningLecture: '/api/portal/planning-lecture',
+};
+
 export const defaultFeaturePages = {
   landMarket: { url: '' },
+  planningLecture: { url: '' },
   policyEncyclopedia: { url: '' },
 };
 
 /** Normalize stored page URLs; missing entries become empty strings.
  * @param {unknown} value
- * @returns {{ landMarket: { url: string }, policyEncyclopedia: { url: string } }}
+ * @returns {typeof defaultFeaturePages}
  */
 export function normalizeFeaturePages(value) {
   const source = value && typeof value === 'object' ? value : {};
@@ -50,13 +57,14 @@ export function validateFeaturePageUrl(url) {
 
 /**
  * Dialog that edits one portal page URL from 功能设置.
- * Land market also manages the one-time desktop login provider credential.
+ * Ticketed portals also manage their desktop login provider credentials.
  * Portaled to document.body so Enter / IME candidate clicks are not owned by the settings form.
- * @param {{ featureKey: 'landMarket' | 'policyEncyclopedia', value: typeof defaultFeaturePages, disabled?: boolean, onChange: (value: typeof defaultFeaturePages) => void, onClose: () => void }} props
+ * @param {{ featureKey: keyof typeof defaultFeaturePages, value: typeof defaultFeaturePages, disabled?: boolean, onChange: (value: typeof defaultFeaturePages) => void, onClose: () => void }} props
  */
 export default function FeaturePageAddressDialog({ featureKey, value, disabled, onChange, onClose }) {
   const pages = normalizeFeaturePages(value);
   const label = FEATURE_PAGE_ENTRIES.find(([key]) => key === featureKey)?.[1] || '';
+  const portalRoute = credentialRoutes[featureKey];
   const [draft, setDraft] = useState(pages[featureKey]?.url || '');
   const [error, setError] = useState('');
   const [credentialConfigured, setCredentialConfigured] = useState(false);
@@ -65,27 +73,27 @@ export default function FeaturePageAddressDialog({ featureKey, value, disabled, 
   const [credentialError, setCredentialError] = useState('');
 
   useEffect(() => {
-    if (featureKey !== 'landMarket') return undefined;
+    if (!portalRoute) return undefined;
     let cancelled = false;
     (async () => {
       try {
-        const response = await API.get('/api/portal/land-market/admin/credential');
+        const response = await API.get(`${portalRoute}/admin/credential`);
         if (cancelled) return;
         if (response.data?.success) {
           setCredentialConfigured(Boolean(response.data.configured));
           setCredentialError('');
         } else {
-          setCredentialError(response.data?.message || '无法读取土地市场凭据状态');
+          setCredentialError(response.data?.message || `无法读取${label}凭据状态`);
         }
       } catch (err) {
         if (!cancelled) {
           // Keep the dialog open: never pass AxiosError into showError (401 redirects to login).
-          setCredentialError(err.response?.data?.message || err.message || '无法读取土地市场凭据状态');
+          setCredentialError(err.response?.data?.message || err.message || `无法读取${label}凭据状态`);
         }
       }
     })();
     return () => { cancelled = true; };
-  }, [featureKey]);
+  }, [label, portalRoute]);
 
   const confirm = () => {
     if (disabled || credential) return;
@@ -104,19 +112,19 @@ export default function FeaturePageAddressDialog({ featureKey, value, disabled, 
   const rotateCredential = async () => {
     if (credentialBusy) return;
     const confirmed = window.confirm(credentialConfigured
-      ? '重新生成土地市场接入凭据？旧凭据会立即失效，网站 .env 需同步更换。'
-      : '生成土地市场接入凭据？明文只显示一次，请保存到网站服务端配置。');
+      ? `重新生成${label}接入凭据？旧凭据会立即失效，网站 .env 需同步更换。`
+      : `生成${label}接入凭据？明文只显示一次，请保存到网站服务端配置。`);
     if (!confirmed) return;
     setCredentialBusy(true);
     setCredentialError('');
     try {
-      const response = await API.post('/api/portal/land-market/admin/credential');
+      const response = await API.post(`${portalRoute}/admin/credential`);
       if (!response.data?.success || typeof response.data.provider_credential !== 'string') {
         throw new Error(response.data?.message || '生成凭据失败');
       }
       setCredential(response.data.provider_credential);
       setCredentialConfigured(true);
-      showSuccess('已生成土地市场接入凭据');
+      showSuccess(`已生成${label}接入凭据`);
     } catch (err) {
       showError(err.response?.data?.message || err.message || '生成凭据失败');
     } finally {
@@ -150,7 +158,7 @@ export default function FeaturePageAddressDialog({ featureKey, value, disabled, 
           }} />
       </label>
       <p className='settings-description'>点「确定」后，再在本页底部「保存设置」才会写入服务器。留空表示尚未配置地址。</p>
-      {featureKey === 'landMarket' && <div className='feature-page-credential'>
+      {portalRoute && <div className='feature-page-credential'>
         <h4 className='feature-page-credential-title'>桌面登录接入凭据</h4>
         <div className='feature-page-credential-row'>
           <p className='settings-description'>
@@ -170,11 +178,11 @@ export default function FeaturePageAddressDialog({ featureKey, value, disabled, 
       </footer>
     </section>
     {credential && <div className='knowledge-quota-dialog-backdrop feature-page-credential-secret-backdrop' role='presentation'>
-      <section className='knowledge-quota-dialog feature-page-credential-secret' role='dialog' aria-modal='true' aria-label='土地市场提供方凭据'>
-        <h3>请保存土地市场接入凭据</h3>
+      <section className='knowledge-quota-dialog feature-page-credential-secret' role='dialog' aria-modal='true' aria-label={`${label}提供方凭据`}>
+        <h3>请保存{label}接入凭据</h3>
         <p className='settings-description'>只显示这一次。写入网站服务端 `provider-credential` / `.env`，不要放进网页、桌面端或地址配置。</p>
         <code className='feature-page-credential-code'>{credential}</code>
-        <p className='settings-description'>兑换地址：<code>/api/portal/land-market/redeem</code></p>
+        <p className='settings-description'>兑换地址：<code>{portalRoute}/redeem</code></p>
         <footer>
           <button type='button' className='settings-primary' onClick={() => setCredential('')}>我已保存，关闭</button>
         </footer>

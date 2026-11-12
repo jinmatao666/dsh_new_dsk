@@ -25,20 +25,23 @@ it('accepts explicit administrator denial, allowlists public plugins and rejects
 
 it('keeps the two environments independent and rejects incomplete or non-boolean flags', () => {
   const features = {
-    internet: { automations: false, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
-    intranet: { automations: true, connectors: true, knowledgeBases: false, landMarket: false, policyEncyclopedia: false },
+    internet: { automations: false, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false,
+      policyEncyclopedia: false },
+    intranet: { automations: true, connectors: true, knowledgeBases: false, landMarket: false, planningLecture: false,
+      policyEncyclopedia: false },
   }
   expect(resolveDeploymentFeatures(features)).toEqual(features)
   for (const value of [null, {}, { ...features, intranet: null },
-    { ...features, internet: { automations: 'false', connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false } }]) {
+    { ...features, internet: { automations: 'false', connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false,
+      policyEncyclopedia: false } }]) {
     expect(() => resolveDeploymentFeatures(value)).toThrow('后台功能设置无效')
   }
 })
 it('defaults only the missing knowledge switch in legacy per-environment settings', () => {
   const legacy = { internet: { automations: false, connectors: true }, intranet: { automations: true, connectors: false } }
   expect(resolveDeploymentFeatures(legacy)).toEqual({
-    internet: { ...legacy.internet, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
-    intranet: { ...legacy.intranet, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+    internet: { ...legacy.internet, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
+    intranet: { ...legacy.intranet, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
   })
   for (const knowledgeBases of [null, 'true', 1]) {
     expect(() => resolveDeploymentFeatures({ ...legacy, internet: { ...legacy.internet, knowledgeBases } })).toThrow('后台功能设置无效')
@@ -49,13 +52,13 @@ it('defaults only the missing knowledge switch in legacy per-environment setting
 
 it('defaults portal page addresses and rejects invalid URLs', () => {
   expect(resolveDeploymentFeaturePages(undefined)).toEqual({
-    landMarket: { url: '' }, policyEncyclopedia: { url: '' },
+    landMarket: { url: '' }, planningLecture: { url: '' }, policyEncyclopedia: { url: '' },
   })
   expect(resolveDeploymentFeaturePages({
     landMarket: { url: ' https://land.example/page ' },
     policyEncyclopedia: { url: 'https://policy.example/' },
   })).toEqual({
-    landMarket: { url: 'https://land.example/page' }, policyEncyclopedia: { url: 'https://policy.example/' },
+    landMarket: { url: 'https://land.example/page' }, planningLecture: { url: '' }, policyEncyclopedia: { url: 'https://policy.example/' },
   })
   for (const value of [null, { landMarket: null }, { landMarket: { url: 'ftp://bad' } }, { policyEncyclopedia: { url: true } }]) {
     expect(() => resolveDeploymentFeaturePages(value)).toThrow('后台功能页面')

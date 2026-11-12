@@ -1,5 +1,5 @@
 ---
-description: "Show administrator-configured land-market and policy-encyclopedia pages as independent desktop feature panels."
+description: "Show administrator-configured land market, planning lecture and policy encyclopedia pages as independent desktop feature panels."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This plugin mounts two independent feature entries: land market and policy encyclopedia. Each entry’s visibility follows the current deployment environment flags from OneAPI. When open, the panel embeds the administrator-configured page URL edge-to-edge (no feature-panel title stack; only the top-right back control remains) and maximizes the desktop window. While the iframe loads, it shows the same centered spinner used by knowledge-base document viewers. Missing URLs show a configuration placeholder instead of an empty frame.
+This plugin mounts three independent feature entries: land market, planning lecture and policy encyclopedia. Each entry’s visibility follows the current deployment environment flags from OneAPI. When open, the panel embeds the administrator-configured page URL edge-to-edge (no feature-panel title stack; only the top-right back control remains) and maximizes the desktop window. While the iframe loads, it shows the same centered spinner used by knowledge-base document viewers. Missing URLs show a configuration placeholder instead of an empty frame.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ This plugin mounts two independent feature entries: land market and policy encyc
 
 The Wanwei desktop product mounts this plugin through its [composition patch](../../bundle/wanwei-desktop/cordis.patch.yml). It has no per-plugin configuration fields.
 
-Administrators set entry visibility and page URLs under workbench System Settings → Feature Settings (use Address Configuration beside land market and policy encyclopedia). Land market can also mint a desktop login provider credential there. Disable this plugin’s row to remove both entries.
+Administrators set entry visibility and page URLs under workbench System Settings → Feature Settings (use Address Configuration beside each portal). Land market and planning lecture each have a desktop login provider credential. Disable this plugin’s row to remove the entries.
 
 -----
 
@@ -37,7 +37,7 @@ Administrators set entry visibility and page URLs under workbench System Setting
 <details>
 <summary>Implementation details — click to expand</summary>
 
-Visibility and URLs come from `/api/desktop-config` through `wanweiNetwork`. Opening a panel closes the sidebar and invokes the existing `maximize_expert_window` native command. Registration sets `headerChrome: 'back-only'` so the shared panel omits the WANWEI Buddy / title / subtitle stack and keeps only a floating back control. Policy encyclopedia loads the configured address in an iframe. Land market first calls Host `land-market-launch` → OneAPI `/api/portal/land-market/launch` for a one-use ticket, then embeds it in the iframe URL; launch failure falls back to the bare configured URL. `PortalPage` keeps the iframe mounted under a full-panel loading overlay until the frame’s `load` event fires, and restores the overlay when the configured URL changes.
+Visibility and URLs come from `/api/desktop-config` through `wanweiNetwork`. Opening a panel closes the sidebar and invokes the existing `maximize_expert_window` native command. Registration sets `headerChrome: 'back-only'` so the shared panel omits the WANWEI Buddy / title / subtitle stack and keeps only a floating back control. Policy encyclopedia loads the configured address in an iframe. Land market and planning lecture request single-use tickets from their respective OneAPI launch endpoints through the Host and add them to the iframe URL; launch failure falls back to the bare configured URL. `PortalPage` keeps the iframe mounted under a full-panel loading overlay until the frame’s `load` event fires, and restores the overlay when the configured URL changes.
 
 </details>
 

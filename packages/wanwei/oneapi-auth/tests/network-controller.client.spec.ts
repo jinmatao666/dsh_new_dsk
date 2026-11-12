@@ -84,8 +84,10 @@ it('refreshes server-owned mode, synchronizes native policy and retains the last
 
 it('publishes independent visibility flags only after a successful deployment refresh', async () => {
   const features = {
-    internet: { automations: false, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
-    intranet: { automations: true, connectors: true, knowledgeBases: false, landMarket: false, policyEncyclopedia: false },
+    internet: { automations: false, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false,
+      policyEncyclopedia: false },
+    intranet: { automations: true, connectors: true, knowledgeBases: false, landMarket: false, planningLecture: true,
+      policyEncyclopedia: false },
   }
   let mode = 'internet'
   const call = vi.fn(async () => ({ ok: true, value: { mode, internalOrigins: [], features } }))
@@ -93,15 +95,18 @@ it('publishes independent visibility flags only after a successful deployment re
   const connectors = controller.visibility('connectors')
   const automations = controller.visibility('automations')
   const knowledgeBases = controller.visibility('knowledgeBases')
+  const planningLecture = controller.visibility('planningLecture')
   await controller.refresh()
   expect(connectors.getSnapshot()).toBe(false)
   expect(automations.getSnapshot()).toBe(false)
   expect(knowledgeBases.getSnapshot()).toBe(true)
+  expect(planningLecture.getSnapshot()).toBe(false)
   mode = 'intranet'
   await controller.refresh()
   expect(connectors.getSnapshot()).toBe(true)
   expect(automations.getSnapshot()).toBe(true)
   expect(knowledgeBases.getSnapshot()).toBe(false)
+  expect(planningLecture.getSnapshot()).toBe(true)
   call.mockRejectedValueOnce(new Error('offline'))
   await expect(controller.refresh()).rejects.toThrow('offline')
   expect(connectors.getSnapshot()).toBe(true)
@@ -110,10 +115,12 @@ it('publishes independent visibility flags only after a successful deployment re
 it('updates featurePageUrl after refresh when featurePages is in the RPC payload', async () => {
   let featurePages = {
     landMarket: { url: '' },
+    planningLecture: { url: '' },
     policyEncyclopedia: { url: '' },
   }
   const call = vi.fn(async () => ({ ok: true, value: { mode: 'internet', internalOrigins: [], featurePages } }))
   const controller = new NetworkController({ rpc: { call } } as unknown as ConnectionHandle)
+  const lecture = controller.featurePageUrl('planningLecture')
   const landMarket = controller.featurePageUrl('landMarket')
   const policyEncyclopedia = controller.featurePageUrl('policyEncyclopedia')
   await controller.refresh()
@@ -121,10 +128,12 @@ it('updates featurePageUrl after refresh when featurePages is in the RPC payload
   expect(policyEncyclopedia.getSnapshot()).toBe('')
   featurePages = {
     landMarket: { url: 'https://land.example/' },
+    planningLecture: { url: 'https://lecture.example/' },
     policyEncyclopedia: { url: 'https://policy.example/docs' },
   }
   await controller.refresh()
   expect(landMarket.getSnapshot()).toBe('https://land.example/')
+  expect(lecture.getSnapshot()).toBe('https://lecture.example/')
   expect(policyEncyclopedia.getSnapshot()).toBe('https://policy.example/docs')
 })
 

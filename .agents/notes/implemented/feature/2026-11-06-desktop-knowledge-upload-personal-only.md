@@ -10,7 +10,7 @@ The desktop Knowledge content toolbar showed the same upload menu for every sele
 
 ## Decision
 
-`libraryIsDesktopPersonal` is true only for uncategorized personal libraries (`kind === 'personal'` and `category_id` absent or 0)—the same rows that appear under 个人知识库. `libraryAllowsDesktopUpload` delegates to that predicate. The content toolbar renders the upload control only when that predicate holds and closes an open menu when the selection leaves personal. The personal menu keeps 本地文件, 网页链接 (see [desktop knowledge web-link import](2026-11-06-desktop-knowledge-web-link-import.md)), and 录音纪要 (see [desktop knowledge recording minutes](2026-11-06-desktop-knowledge-recording-minutes.md)). Entries for personal-library import, notes, Tencent docs, local folder, and empty folder stay hidden. File context-menu delete uses the same personal-group predicate (see [desktop knowledge file context delete-only](2026-11-06-desktop-knowledge-file-context-delete-only.md)).
+`libraryIsDesktopPersonal` is true only for uncategorized personal libraries (`kind === 'personal'` and `category_id` absent or 0)—the same rows that appear under 个人知识库. `libraryAllowsDesktopUpload` delegates to that predicate. The content toolbar renders the upload control only when that predicate holds and closes an open menu when the selection leaves personal. The personal menu keeps 本地文件, 网页链接 (see [desktop knowledge web-link import](2026-11-06-desktop-knowledge-web-link-import.md)), and 录音纪要 (see [desktop knowledge recording minutes](2026-11-06-desktop-knowledge-recording-minutes.md)). Entries for personal-library import, notes, and Tencent docs stay hidden. Local-folder upload and empty-folder creation follow [knowledge folders](2026-11-12-knowledge-empty-folders.md). File context-menu delete uses the same personal-group predicate (see [desktop knowledge file context delete-only](2026-11-06-desktop-knowledge-file-context-delete-only.md)).
 
 ## Alternatives considered
 
@@ -20,4 +20,4 @@ The desktop Knowledge content toolbar showed the same upload menu for every sele
 
 ## Consequences
 
-Selecting a public or subscribed library removes the upload button from the toolbar. Focused Client tests cover the personal menu trio and the hidden control on public and subscription selections.
+Selecting a public or subscribed library removes the upload button from the toolbar. Focused Client tests cover the personal menu and the hidden control on public and subscription selections.

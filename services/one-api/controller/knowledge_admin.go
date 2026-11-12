@@ -30,6 +30,9 @@ type reviewKnowledgeSubscriptionInput struct {
 
 // ListManagedKnowledgeSubscriptionApplications returns a paginated audit queue for subscription requests.
 func ListManagedKnowledgeSubscriptionApplications(c *gin.Context) {
+	if !knowledgeReviewAdmin(c) {
+		return
+	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	status := strings.TrimSpace(c.DefaultQuery("status", model.KnowledgeSubscriptionPending))
@@ -65,6 +68,9 @@ func ListManagedKnowledgeSubscriptionApplications(c *gin.Context) {
 
 // ReviewManagedKnowledgeSubscription approves or rejects one pending subscription application.
 func ReviewManagedKnowledgeSubscription(c *gin.Context) {
+	if !knowledgeReviewAdmin(c) {
+		return
+	}
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "申请编号无效"})
@@ -92,8 +98,12 @@ func ReviewManagedKnowledgeSubscription(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
 }
 
-// CreateManagedKnowledgeCategory adds a workbench tab owned by the caller.
+// CreateManagedKnowledgeCategory adds a workbench tab owned by an administrator.
 func CreateManagedKnowledgeCategory(c *gin.Context) {
+	if c.GetInt("role") < model.RoleAdminUser {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "仅管理员可新建知识库分类"})
+		return
+	}
 	var input createKnowledgeCategoryInput
 	if c.ShouldBindJSON(&input) != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库分类参数无效"})
@@ -282,7 +292,7 @@ func managedKnowledgeBase(c *gin.Context) (*model.KnowledgeBase, bool) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库编号无效"})
 		return nil, false
 	}
-	root := c.GetInt("role") >= model.RoleRootUser
+	root := c.GetInt("role") >= model.RoleRootUser || (c.GetBool("knowledge_publication_review") && c.GetInt("role") >= model.RoleAdminUser)
 	row, err := model.GetAuthorizedKnowledgeBase(c.GetInt("id"), id, root)
 	if err != nil {
 		status := http.StatusInternalServerError

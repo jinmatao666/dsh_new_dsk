@@ -1,3 +1,4 @@
+export { KnowledgeCreditPriceForm, parseKnowledgeCreditQuote, type KnowledgeCreditPrice, type KnowledgeCreditQuote } from './KnowledgeCreditSettings.tsx'
 import { CreditsSection, type CreditsInjected } from './CreditsSection.tsx'
 /** Browser half of Wanwei desktop authentication. */
 import type { Context } from '@deepseek-ai/cordis'
@@ -74,8 +75,15 @@ export function apply(ctx: Context): void {
     if (!result.ok) throw new Error(result.error.message)
     return result.value
   }
+  const requestKnowledgeCredits: NonNullable<CreditsInjected['requestKnowledgeCredits']> = async (operation, payload = {}) => {
+    const result = await connection.rpc.call('/desktop-knowledge-base', operation, payload)
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value
+  }
   const creditsInject = (): CreditsInjected => ({ hooks: { auth: controller }, billing,
-    accounting: { getSnapshot: () => network.getSnapshot().billing?.enabled !== false, subscribe: network.subscribe }, requestCredits })
+    accounting: { getSnapshot: () => network.getSnapshot().billing?.enabled !== false, subscribe: network.subscribe },
+    requestCredits, requestKnowledgeCredits,
+  })
   ctx.slots.inject('settings.section', () => {
     const scope = ctx
     let dispose: (() => void) | undefined

@@ -7,19 +7,20 @@ import (
 	"unicode/utf8"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
-	KnowledgeBasePersonal             = "personal"
-	KnowledgeBaseShared               = "shared"
-	KnowledgeBaseCommon               = "common"
-	KnowledgeGrantUser                = "user"
-	KnowledgeGrantDept                = "department"
-	KnowledgeShelfPublished           = "published"
-	KnowledgeShelfOffline             = "offline"
-	KnowledgeSubscriptionPending      = "pending"
-	KnowledgeSubscriptionApproved     = "approved"
-	KnowledgeSubscriptionRejected     = "rejected"
+	KnowledgeBasePersonal           = "personal"
+	KnowledgeBaseShared             = "shared"
+	KnowledgeBaseCommon             = "common"
+	KnowledgeGrantUser              = "user"
+	KnowledgeGrantDept              = "department"
+	KnowledgeShelfPublished         = "published"
+	KnowledgeShelfOffline           = "offline"
+	KnowledgeSubscriptionPending    = "pending"
+	KnowledgeSubscriptionApproved   = "approved"
+	KnowledgeSubscriptionRejected   = "rejected"
 	KnowledgeSubscriptionStatusNone = "none"
 	// KnowledgeSubscriptionStatusOwned marks the caller's own auth-category library on the plaza.
 	KnowledgeSubscriptionStatusOwned = "owned"
@@ -27,23 +28,25 @@ const (
 
 // KnowledgeBase binds an authorized OneAPI resource to one RAGFlow dataset.
 type KnowledgeBase struct {
-	Id               int       `json:"id" gorm:"primaryKey"`
-	Name             string    `json:"name" gorm:"type:varchar(128);not null"`
-	Description      string    `json:"description" gorm:"type:varchar(500)"`
-	RagflowDatasetId string    `json:"-" gorm:"type:varchar(64);uniqueIndex;not null"`
-	OwnerUserId      int       `json:"owner_user_id" gorm:"index;not null"`
-	OrgId            int       `json:"org_id" gorm:"index;default:0"`
-	Kind             string    `json:"kind" gorm:"type:varchar(16);index;not null"`
-	Shelf            string    `json:"shelf" gorm:"type:varchar(16);not null;default:published;index"`
-	Tags             string    `json:"tags" gorm:"type:varchar(200)"`
+	Id               int    `json:"id" gorm:"primaryKey"`
+	Name             string `json:"name" gorm:"type:varchar(128);not null"`
+	Description      string `json:"description" gorm:"type:varchar(500)"`
+	RagflowDatasetId string `json:"-" gorm:"type:varchar(64);uniqueIndex;not null"`
+	OwnerUserId      int    `json:"owner_user_id" gorm:"index;not null"`
+	OrgId            int    `json:"org_id" gorm:"index;default:0"`
+	// PublicationScope shares an owned personal library without changing its origin or category.
+	PublicationScope string `json:"publication_scope" gorm:"type:varchar(16);not null;default:''"`
+	Kind             string `json:"kind" gorm:"type:varchar(16);index;not null"`
+	Shelf            string `json:"shelf" gorm:"type:varchar(16);not null;default:published;index"`
+	Tags             string `json:"tags" gorm:"type:varchar(200)"`
 	// Cover is an optional plaza image: a compact JPEG data URL from NormalizeKnowledgeCover, empty when unset.
-	Cover            string    `json:"cover,omitempty" gorm:"type:text"`
-	CategoryId       int       `json:"category_id" gorm:"index;default:0"`
+	Cover      string `json:"cover,omitempty" gorm:"type:text"`
+	CategoryId int    `json:"category_id" gorm:"index;default:0"`
 	// VisitCount is the lifetime number of authorized opens/uses (documents, chat, retrieval).
 	VisitCount int64 `json:"visit_count" gorm:"not null;default:0"`
 	// DailyUsage is the number of authorized opens/uses on DailyUsageDate (server local calendar day).
-	DailyUsage     int64  `json:"daily_usage" gorm:"not null;default:0"`
-	DailyUsageDate string `json:"-" gorm:"type:varchar(10);not null;default:''"`
+	DailyUsage     int64     `json:"daily_usage" gorm:"not null;default:0"`
+	DailyUsageDate string    `json:"-" gorm:"type:varchar(10);not null;default:''"`
 	CreatedAt      time.Time `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt      time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
@@ -94,6 +97,7 @@ type KnowledgeSubscriptionApplication struct {
 // DocumentCount and DocumentBytes are filled by the controller from RAGFlow; SubscriberCount
 // is the number of user grants.
 type KnowledgePlazaItem struct {
+	LikedByViewer bool `json:"liked_by_viewer"`
 	KnowledgeBase
 	CategoryName       string `json:"category_name"`
 	OwnerUsername      string `json:"owner_username"`
@@ -156,14 +160,14 @@ type KnowledgeDocumentCreator struct {
 
 // KnowledgeConversation stores the isolated RAGFlow assistant and session for one user conversation.
 type KnowledgeConversation struct {
-	Id              int       `json:"id" gorm:"primaryKey"`
-	UserId          int       `json:"user_id" gorm:"index;not null"`
-	KnowledgeBaseId int       `json:"knowledge_base_id" gorm:"index;not null"`
-	RagflowChatId   string    `json:"-" gorm:"type:varchar(64);uniqueIndex;not null"`
-	RagflowSessionId string   `json:"-" gorm:"type:varchar(64);uniqueIndex;not null"`
-	Model           string    `json:"model" gorm:"type:varchar(128)"`
-	CreatedAt       time.Time `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt       time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+	Id               int       `json:"id" gorm:"primaryKey"`
+	UserId           int       `json:"user_id" gorm:"index;not null"`
+	KnowledgeBaseId  int       `json:"knowledge_base_id" gorm:"index;not null"`
+	RagflowChatId    string    `json:"-" gorm:"type:varchar(64);uniqueIndex;not null"`
+	RagflowSessionId string    `json:"-" gorm:"type:varchar(64);uniqueIndex;not null"`
+	Model            string    `json:"model" gorm:"type:varchar(128)"`
+	CreatedAt        time.Time `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt        time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
 // KnowledgeBaseListItem is one catalog row plus the owner's display name for the workbench.
@@ -209,6 +213,7 @@ func KnowledgeBaseGrantIDs(userId int) (map[int]struct{}, error) {
 // require ownership or a grant, and every uncategorized common library is included.
 // A library in a workbench category is open to everyone only when that category is common
 // and does not require auth; otherwise only the owner or a grant holder may open it.
+// Approved publication_scope shares an uncategorized personal library; its owner keeps the personal entry.
 // Personal-type categories never become world-readable via a stale require_auth=false row.
 func ListAuthorizedKnowledgeBases(userId int) ([]KnowledgeBase, error) {
 	deptIds, err := knowledgeViewerDeptIds(userId)
@@ -224,18 +229,15 @@ func ListAuthorizedKnowledgeBases(userId int) ([]KnowledgeBase, error) {
 	}
 	clause := `COALESCE(knowledge_bases.shelf, '') <> ? AND (` +
 		`(COALESCE(knowledge_bases.category_id, 0) = 0 AND (` +
-		`knowledge_bases.kind = ? OR ` +
+		`knowledge_bases.publication_scope = 'public' OR (knowledge_bases.publication_scope = 'subscription' AND (` + grant + `)) OR knowledge_bases.kind = ? OR ` +
 		`(knowledge_bases.kind = ? AND knowledge_bases.owner_user_id = ?) OR ` +
 		`(knowledge_bases.kind = ? AND (knowledge_bases.owner_user_id = ? OR ` + grant + `)))) OR ` +
 		`(COALESCE(knowledge_bases.category_id, 0) <> 0 AND knowledge_categories.id IS NOT NULL AND (` +
 		`(knowledge_categories.type = ? AND knowledge_categories.require_auth = ?) OR ` +
 		`knowledge_bases.owner_user_id = ? OR ` + grant + `)))`
-	args := []interface{}{
-		KnowledgeShelfOffline,
-		KnowledgeBaseCommon,
-		KnowledgeBasePersonal, userId,
-		KnowledgeBaseShared, userId,
-	}
+	args := []interface{}{KnowledgeShelfOffline}
+	args = append(args, grantArgs...)
+	args = append(args, KnowledgeBaseCommon, KnowledgeBasePersonal, userId, KnowledgeBaseShared, userId)
 	args = append(args, grantArgs...)
 	args = append(args, KnowledgeBaseCommon, false, userId)
 	args = append(args, grantArgs...)
@@ -611,6 +613,12 @@ func KnowledgeSubscriberCounts(baseIds []int) (map[int]int, error) {
 // DeleteKnowledgeBaseRecords removes the local library and its grants, conversations, and summaries.
 func DeleteKnowledgeBaseRecords(id int) error {
 	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("knowledge_base_id = ?", id).Delete(&KnowledgePublicationApplication{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("knowledge_base_id = ?", id).Delete(&KnowledgeBaseLike{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("knowledge_base_id = ?", id).Delete(&KnowledgeBaseGrant{}).Error; err != nil {
 			return err
 		}
@@ -627,6 +635,9 @@ func DeleteKnowledgeBaseRecords(id int) error {
 			return err
 		}
 		if err := tx.Where("knowledge_base_id = ?", id).Delete(&KnowledgeDocumentCreator{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("knowledge_base_id = ?", id).Delete(&KnowledgeFolder{}).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&KnowledgeBase{}, id).Error
@@ -661,13 +672,12 @@ func userDisplayNames(userIds []int) (map[int]string, error) {
 // ListKnowledgePlaza returns published libraries in categories that require authorization.
 // Callers see every published auth library: their own cards use subscription_status owned and
 // sort after every other card; grant holders see approved; applicants without a grant see none
-// or pending. Sidebar 订阅知识库 lists only grant-backed rows, not owned cards.
+// or pending. Owner-published subscription libraries also keep an owner sidebar entry.
 func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]KnowledgePlazaItem, error) {
 	// Personal categories are owner-only and never listed for subscription.
 	query := DB.Model(&KnowledgeBase{}).
-		Joins("INNER JOIN knowledge_categories ON knowledge_categories.id = knowledge_bases.category_id").
-		Where("knowledge_categories.require_auth = ? AND knowledge_categories.type <> ? AND COALESCE(knowledge_bases.shelf, '') <> ?",
-			true, KnowledgeBasePersonal, KnowledgeShelfOffline)
+		Joins("LEFT JOIN knowledge_categories ON knowledge_categories.id = knowledge_bases.category_id").
+		Where("COALESCE(knowledge_bases.shelf, '') <> ? AND ((knowledge_categories.require_auth = ? AND knowledge_categories.type <> ?) OR (knowledge_bases.category_id = 0 AND knowledge_bases.publication_scope = 'subscription'))", KnowledgeShelfOffline, true, KnowledgeBasePersonal)
 	if categoryId > 0 {
 		query = query.Where("knowledge_bases.category_id = ?", categoryId)
 	}
@@ -736,6 +746,14 @@ func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]Knowledge
 	if err != nil {
 		return nil, err
 	}
+	var likes []KnowledgeBaseLike
+	if err := DB.Where("user_id = ?", userId).Find(&likes).Error; err != nil {
+		return nil, err
+	}
+	liked := map[int]bool{}
+	for _, row := range likes {
+		liked[row.KnowledgeBaseId] = true
+	}
 	others := make([]KnowledgePlazaItem, 0, len(bases))
 	owned := make([]KnowledgePlazaItem, 0)
 	for _, base := range bases {
@@ -746,6 +764,7 @@ func ListKnowledgePlaza(userId int, categoryId int, keyword string) ([]Knowledge
 			status = KnowledgeSubscriptionStatusNone
 		}
 		item := KnowledgePlazaItem{
+			LikedByViewer:      liked[base.Id],
 			KnowledgeBase:      base,
 			CategoryName:       categories[base.CategoryId],
 			OwnerUsername:      owners[base.OwnerUserId],
@@ -806,17 +825,11 @@ func CancelKnowledgeSubscription(userId, knowledgeBaseId int) error {
 	if err != nil {
 		return err
 	}
-	if base.CategoryId == 0 || base.Shelf == KnowledgeShelfOffline {
-		return ErrKnowledgeSubscriptionInvalid
-	}
-	category, err := GetKnowledgeCategory(base.CategoryId)
+	enabled, err := knowledgeAcceptsSubscription(base)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrKnowledgeSubscriptionInvalid
-		}
 		return err
 	}
-	if !category.RequireAuth {
+	if !enabled {
 		return ErrKnowledgeSubscriptionInvalid
 	}
 	if base.OwnerUserId == userId {
@@ -859,17 +872,11 @@ func ApplyKnowledgeSubscription(userId, knowledgeBaseId int) (*KnowledgeSubscrip
 	if err != nil {
 		return nil, err
 	}
-	if base.CategoryId == 0 || base.Shelf == KnowledgeShelfOffline {
-		return nil, ErrKnowledgeSubscriptionInvalid
-	}
-	category, err := GetKnowledgeCategory(base.CategoryId)
+	enabled, err := knowledgeAcceptsSubscription(base)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrKnowledgeSubscriptionInvalid
-		}
 		return nil, err
 	}
-	if !category.RequireAuth {
+	if !enabled {
 		return nil, ErrKnowledgeSubscriptionInvalid
 	}
 	if base.OwnerUserId == userId {
@@ -1064,4 +1071,40 @@ func GetAuthorizedKnowledgeBase(userId, id int, admin bool) (*KnowledgeBase, err
 		}
 	}
 	return nil, gorm.ErrRecordNotFound
+}
+
+// KnowledgeBaseLike stores one viewer's saved preference independently of access grants.
+type KnowledgeBaseLike struct {
+	UserId          int `gorm:"primaryKey;autoIncrement:false"`
+	KnowledgeBaseId int `gorm:"primaryKey;autoIncrement:false"`
+}
+
+// SetKnowledgeBaseLike saves or removes the caller's preference for a visible plaza library.
+func SetKnowledgeBaseLike(userId, id int, liked bool) error {
+	if _, err := GetKnowledgePlazaItem(userId, id); err != nil {
+		return err
+	}
+	row := KnowledgeBaseLike{UserId: userId, KnowledgeBaseId: id}
+	if liked {
+		return DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error
+	}
+	return DB.Where("user_id = ? AND knowledge_base_id = ?", userId, id).Delete(&KnowledgeBaseLike{}).Error
+}
+
+// knowledgeAcceptsSubscription covers published personal libraries and authorization categories.
+func knowledgeAcceptsSubscription(base *KnowledgeBase) (bool, error) {
+	if base.Shelf == KnowledgeShelfOffline {
+		return false, nil
+	}
+	if base.CategoryId == 0 {
+		return base.PublicationScope == "subscription", nil
+	}
+	category, err := GetKnowledgeCategory(base.CategoryId)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return category.Type != KnowledgeBasePersonal && category.RequireAuth, nil
 }

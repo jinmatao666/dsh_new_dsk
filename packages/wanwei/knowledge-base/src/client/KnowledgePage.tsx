@@ -1,11 +1,14 @@
+import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
+import { PublicationControls, type PublicationApi } from './PublicationControls.tsx'
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import type { NetworkEnvironment } from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
 import { type KnowledgeCitation } from './citations.ts'
 import { AnswerBody } from './AnswerBody.tsx'
 import { MarkdownView } from './MarkdownView.tsx'
 import { PdfLocateViewer, type PdfLocateRequest } from './PdfLocateViewer.tsx'
-import { DocumentListLoading, DocumentThumbnail, DocumentThumbnailPage } from './DocumentThumbnail.tsx'
+import { DocumentListLoading, DocumentThumbnail } from './DocumentThumbnail.tsx'
 import { ViewerLoading } from './ViewerLoading.tsx'
 import {
   defaultCollapsedNavGroups, firstNavLibraryId, libraryAllowsDesktopFileDelete,
@@ -28,6 +31,10 @@ export interface KnowledgeBaseItem {
   id: number
   name: string
   description: string
+  /** Comma-separated tags shared with the workbench catalog. */
+  tags?: string
+  /** Administrator-approved sharing scope; personal ownership and editing remain unchanged. */
+  publication_scope?: '' | 'public' | 'subscription'
   kind: 'personal' | 'shared' | 'common'
   owner_user_id: number
   /** Workbench category that owns this library. Absent or 0 means a built-in tab. */
@@ -46,6 +53,8 @@ export interface KnowledgeBaseItem {
   owner_username?: string
   /** Subscriber total from the desktop list. */
   subscriber_count?: number
+  /** Lifetime authorized library opens and uses recorded by OneAPI. */
+  visit_count?: number
   /** ISO timestamp of the last library change. */
   updated_at?: string
 }
@@ -71,6 +80,8 @@ export interface KnowledgePlazaItem {
   category_id: number
   category_name: string
   owner_username: string
+  /** Saved preference belonging to the authenticated viewer. */
+  liked_by_viewer?: boolean
   subscription_status: 'none' | 'pending' | 'approved' | 'owned'
   /** ISO timestamp from the library row. */
   updated_at?: string
@@ -222,7 +233,7 @@ export function relatedQuestions(values: readonly string[] | undefined): string[
 export type KnowledgeConflictPolicy = 'keep' | 'replace'
 
 /** Authenticated knowledge operations supplied by the Host. */
-export interface KnowledgeApi {
+export interface KnowledgeApi extends PublicationApi {
   list(): Promise<KnowledgeBaseItem[]>
   /** Categories in workbench order; each becomes a sidebar group after Personal. */
   categories(): Promise<KnowledgeCategory[]>
@@ -236,13 +247,15 @@ export interface KnowledgeApi {
   subscribe(id: number): Promise<void>
   /** Drop the caller's grant so the library returns to the plaza. */
   unsubscribe(id: number): Promise<void>
-  create(value: { name: string; description: string; kind: 'personal'; cover?: string }): Promise<KnowledgeBaseItem>
+  /** Save or remove the authenticated viewer’s preference. */
+  setLike(id: number, liked: boolean): Promise<void>
+  create(value: { name: string; description: string; kind: 'personal'; tags?: string; cover?: string }): Promise<KnowledgeBaseItem>
   documents(id: number): Promise<KnowledgeDocument[]>
   /** Load parsed document text for the desktop viewer. */
   chunks(knowledgeBaseId: number, documentId: string): Promise<KnowledgeChunk[]>
   /** Download the original file bytes for the desktop viewer. */
-  download(knowledgeBaseId: number, documentId: string): Promise<KnowledgeFileBytes>
-  upload(id: number, file: File): Promise<void>
+  download(knowledgeBaseId: number, documentId: string, charge?: { action: 'browse' | 'download'; requestId: string; expectedCents: number }): Promise<KnowledgeFileBytes>
+  upload(id: number, file: File, parentPath?: string): Promise<void>
   /** Crawl public http(s) pages into an uncategorized personal library (max 10). */
   importWebLinks(id: number, urls: string[]): Promise<void>
   /** Host ASR + 速览/纪要 draft, then upload markdown and WAV into the library. */
@@ -253,6 +266,10 @@ export interface KnowledgeApi {
     durationMs: number
     liveTranscript: string
   }): Promise<void>
+  /** List persisted folder paths for an authorized library. */
+  folders(knowledgeBaseId: number): Promise<string[]>
+  /** Create an empty folder in a personal library. */
+  createFolder(knowledgeBaseId: number, name: string): Promise<void>
   /** Remove one document from the authorized library through RAGFlow. */
   delete(knowledgeBaseId: number, documentId: string): Promise<void>
   /** Copy one document into another personal or shared library. */
@@ -284,12 +301,16 @@ export interface KnowledgeApi {
     onProgress?: (progress: KnowledgeAnswerProgress) => void,
     signal?: AbortSignal,
     documentId?: string,
+    expectedCents?: number,
   ): Promise<KnowledgeAnswer>
 }
 
-type DocumentMenu = { documentId: string; x: number; y: number }
+type ContentMenu =
+  | { kind: 'document'; documentId: string; x: number; y: number }
+  | { kind: 'background'; x: number; y: number }
 
 type DocumentViewer = {
+  libraryId?: number
   document: KnowledgeDocument
   loading: boolean
   mode: 'image' | 'pdf' | 'text' | 'html' | 'minutes'
@@ -346,10 +367,11 @@ function pagerTotal(key: '共 {count} 项' | '共 {count} 个', count: number): 
 type LibraryDocumentStats = { count: number; bytes: number }
 
 /** Render the three-pane knowledge library and its isolated RAGFlow conversation.
- * @param props - Host-owned API implementation.
+ * @param props - Host-owned API and deployment network mode for sidebar maintainers.
  * @returns Knowledge-base page.
  */
-export function KnowledgePage({ api }: { api: KnowledgeApi }) {
+export function KnowledgePage({ api, networkMode = 'internet' }: { api: KnowledgeApi; networkMode?: NetworkEnvironment }) {
+  const [expandedLibraries, setExpandedLibraries] = useState<ReadonlySet<number>>(new Set())
   const [items, setItems] = useState<KnowledgeBaseItem[]>([])
   const [categories, setCategories] = useState<KnowledgeCategory[]>([])
   const [selectedId, setSelectedId] = useState<number>()
@@ -358,6 +380,25 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const [documentStats, setDocumentStats] = useState<ReadonlyMap<number, LibraryDocumentStats>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [savingLike, setSavingLike] = useState(false)
+  const renderLike = (id: number) => {
+    const liked = (plazaDetail?.id === id ? plazaDetail : plazaItems.find(item => item.id === id))?.liked_by_viewer === true
+    const label = productText(liked ? '取消喜欢' : '喜欢')
+    return <button type="button" className="dsh-knowledge-like" aria-label={label}
+      title={label} aria-pressed={liked} disabled={savingLike} onClick={async () => {
+        setSavingLike(true)
+        try {
+          await api.setLike(id, !liked)
+          setPlazaItems(current => current.map(item => item.id === id ? { ...item, liked_by_viewer: !liked } : item))
+          setPlazaDetail(current => current?.id === id ? { ...current, liked_by_viewer: !liked } : current)
+        } catch (cause) { setError(`${productText('保存喜欢状态失败')}：${String(cause)}`) }
+        finally { setSavingLike(false) }
+      }}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill={liked ? 'currentColor' : 'none'}>
+        <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z" />
+      </svg>
+    </button>
+  }
   const [plazaOpen, setPlazaOpen] = useState(false)
   const [plazaItems, setPlazaItems] = useState<KnowledgePlazaItem[]>([])
   const [plazaDetail, setPlazaDetail] = useState<KnowledgePlazaItem>()
@@ -372,12 +413,18 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const [createKind, setCreateKind] = useState<'personal'>()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [tags, setTags] = useState('')
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [question, setQuestion] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
   const [answering, setAnswering] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [currentFolder, setCurrentFolder] = useState('')
+  const [folderNames, setFolderNames] = useState<string[]>([])
+  const [folderDraft, setFolderDraft] = useState<string>()
+  const [folderSaving, setFolderSaving] = useState(false)
+  const [folderError, setFolderError] = useState('')
   const [uploadOpen, setUploadOpen] = useState(false)
   const [webLinkOpen, setWebLinkOpen] = useState(false)
   const [webLinkDraft, setWebLinkDraft] = useState('')
@@ -398,10 +445,9 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const [previewHints, setPreviewHints] = useState(true)
   const [downloading, setDownloading] = useState(false)
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([])
-  const [documentMenu, setDocumentMenu] = useState<DocumentMenu>()
+  const [contentMenu, setContentMenu] = useState<ContentMenu>()
   const [deleteIds, setDeleteIds] = useState<string[]>()
   const [mutating, setMutating] = useState(false)
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set())
   const [collapsedNavGroups, setCollapsedNavGroups] = useState<Set<string>>(
     () => new Set(['subscription', 'public']),
   )
@@ -424,10 +470,14 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   // Cancel subscription only when the caller is known not to own the auth-category library.
   const selectedIsSubscribed = selected !== undefined
     && libraryIsGrantedSubscription(selected, selfUserId)
-    && categories.some(category =>
-      category.require_auth && category.id === (selected.category_id ?? 0))
+    && (selected.publication_scope === 'subscription' || categories.some(category =>
+      category.require_auth && category.id === (selected.category_id ?? 0)))
   const canUpload = libraryAllowsDesktopUpload(selected)
   const canDeleteFile = libraryAllowsDesktopFileDelete(selected)
+  useEffect(() => {
+    setExpandedLibraries(new Set())
+    setCurrentFolder('')
+  }, [selectedId])
   // Stick to the latest turn only while an answer is streaming; history opens at the top.
   useEffect(() => {
     if (!answering) return
@@ -460,7 +510,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     input.setAttribute('webkitdirectory', '')
     input.setAttribute('directory', '')
     input.multiple = true
-  }, [])
+  }, [canUpload])
   useEffect(() => {
     let disposed = false
     Promise.all([api.list(), api.categories()]).then(([result, nextCategories]) => {
@@ -571,18 +621,22 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       setDocuments([])
       setMessages([])
       setSelectedDocumentIds([])
-      setDocumentMenu(undefined)
+      setContentMenu(undefined)
       return
     }
     let disposed = false
     const epoch = ++historyEpoch.current
     setMessages([])
     setSelectedDocumentIds([])
-    setDocumentMenu(undefined)
+    setContentMenu(undefined)
+    setFolderNames([])
+    setFolderDraft(undefined)
+    api.folders(selectedId).then((value) => {
+      if (!disposed) setFolderNames(value)
+    }).catch((cause) => { if (!disposed) setError(`${productText('加载失败')}：${String(cause)}`) })
     api.documents(selectedId).then((value) => {
       if (disposed) return
       showDocuments(selectedId, value)
-      setExpandedFolders(topLevelFolderPaths(value))
     })
       .catch((cause) => { if (!disposed) setError(`${productText('加载失败')}：${String(cause)}`) })
     api.messages(selectedId).then((value) => {
@@ -617,27 +671,30 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       window.clearInterval(timer)
     }
   }, [api, selectedId, needsParsePoll])
-  /** Hide the file context menu and drop the highlight that right-click applied. */
-  const dismissDocumentMenu = () => {
-    setDocumentMenu(undefined)
+  /** Hide the content context menu and clear its document selection. */
+  const dismissContentMenu = () => {
+    setContentMenu(undefined)
     setSelectedDocumentIds([])
   }
   useEffect(() => {
-    if (documentMenu === undefined) return
-    const close = () => dismissDocumentMenu()
+    if (contentMenu === undefined) return
+    const close = () => dismissContentMenu()
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') close() }
     window.addEventListener('mousedown', close)
     window.addEventListener('scroll', close, true)
     window.addEventListener('resize', close)
+    window.addEventListener('keydown', escape)
     return () => {
       window.removeEventListener('mousedown', close)
       window.removeEventListener('scroll', close, true)
       window.removeEventListener('resize', close)
+      window.removeEventListener('keydown', escape)
     }
-  }, [documentMenu])
+  }, [contentMenu])
   const navGroups = libraryNavGroups(items, categories, selfUserId)
   /** Toggle multi-select without opening preview or the action panel. */
   const toggleDocumentSelection = (documentId: string) => {
-    setDocumentMenu(undefined)
+    setContentMenu(undefined)
     setSelectedDocumentIds((current) => {
       return current.includes(documentId)
         ? current.filter(id => id !== documentId)
@@ -648,7 +705,14 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   const openDocumentMenu = (documentId: string, x: number, y: number) => {
     if (!canDeleteFile) return
     setSelectedDocumentIds(current => current.includes(documentId) ? current : [documentId])
-    setDocumentMenu({ documentId, x, y })
+    setContentMenu({ kind: 'document', documentId, x, y })
+  }
+  const openFolderDialog = () => {
+    setContentMenu(undefined)
+    setSelectedDocumentIds([])
+    setFolderDraft('')
+    setFolderError('')
+    setUploadOpen(false)
   }
   const refreshDocuments = async () => {
     if (selectedId === undefined) return
@@ -674,6 +738,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     setCreateKind(kind)
     setName('')
     setDescription('')
+    setTags('')
     setError('')
   }
   const resetPreviewAsk = () => {
@@ -682,7 +747,9 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     setPreviewMessages([])
     setPreviewHints(true)
   }
+  const previewEpoch = useRef(0)
   const closeViewer = () => {
+    previewEpoch.current += 1
     resetPreviewAsk()
     setViewer((current) => {
       if (current?.objectUrl !== undefined) URL.revokeObjectURL(current.objectUrl)
@@ -706,6 +773,17 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       // Named: hover prefetch is best-effort and must not surface as a page error.
     })
   }
+  const meteredFile = async (libraryId: number, documentId: string, action: 'browse' | 'download', isCurrent: () => boolean) => {
+    const quote = await api.creditPrice(libraryId, documentId)
+    if (!isCurrent()) return null
+    if (!quote.applies) return undefined
+    const cents = action === 'browse' ? quote.price.browse_cents : quote.price.download_cents
+    if (cents > 0 && !(action === 'browse' && quote.preview_free) && !window.confirm(productText(action === 'browse'
+      ? '预览该文件将消耗 {credits} 积分，24 小时内重复预览免费。' : '下载该文件将消耗 {credits} 积分。').replace('{credits}', (cents / 100).toFixed(2)))) return null
+    const file = await api.download(libraryId, documentId, { action, requestId: randomUUID(), expectedCents: cents })
+    window.dispatchEvent(new Event('wanwei:credits-changed'))
+    return file
+  }
   const openDocument = (
     document: KnowledgeDocument,
     locate?: PdfLocateRequest,
@@ -713,6 +791,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     libraryId = selectedId,
   ) => {
     if (libraryId === undefined) return
+    const epoch = ++previewEpoch.current
     if (!keepAsk) resetPreviewAsk()
     const kind = fileKind(document.name)
     const minutesDoc = isRecordingMinutesName(documentBaseName(document)) || kind === 'audio'
@@ -725,7 +804,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       if (current?.objectUrl !== undefined) URL.revokeObjectURL(current.objectUrl)
       if (current?.audioUrl !== undefined) URL.revokeObjectURL(current.audioUrl)
       return {
-        document, loading: true, mode: loadingMode, content: '',
+        libraryId, document, loading: true, mode: loadingMode, content: '',
         ...(locate === undefined ? {} : { locate }),
       }
     })
@@ -733,14 +812,20 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     void (async () => {
       const apply = (next: DocumentViewer, orphanUrls: string[] = []) => {
         setViewer((current) => {
-          if (current === undefined || current.document.id !== document.id) {
+          if (current === undefined || current.document.id !== document.id || previewEpoch.current !== epoch) {
             for (const orphanUrl of orphanUrls) URL.revokeObjectURL(orphanUrl)
             return current
           }
-          return next
+          return { ...next, libraryId }
         })
       }
       try {
+        const paid = keepAsk ? undefined : await meteredFile(libraryId, document.id, 'browse', () => previewEpoch.current === epoch)
+        if (paid === null) {
+          if (previewEpoch.current === epoch) closeViewer()
+          return
+        }
+        if (paid !== undefined) writeDownloadCache(libraryId, document.id, paid)
         if (minutesDoc) {
           const minutesView = await loadMinutesViewer(api, libraryId, document, documents)
           apply(minutesView, [minutesView.audioUrl, minutesView.objectUrl].filter((url): url is string => url !== undefined))
@@ -799,7 +884,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         })
       } catch (cause) {
         setViewer((current) => {
-          if (current === undefined || current.document.id !== document.id) return current
+          if (current === undefined || current.document.id !== document.id || previewEpoch.current !== epoch) return current
           if (current.objectUrl !== undefined) URL.revokeObjectURL(current.objectUrl)
           if (current.audioUrl !== undefined) URL.revokeObjectURL(current.audioUrl)
           return undefined
@@ -849,12 +934,16 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     openDocument(document, request, true)
   }
   const downloadDocument = async () => {
-    if (selectedId === undefined || viewer === undefined || downloading) return
+    const libraryId = viewer?.libraryId ?? selectedId
+    if (libraryId === undefined || viewer === undefined || downloading) return
+    const epoch = previewEpoch.current
     setDownloading(true)
     try {
-      const cached = readDownloadCache(selectedId, viewer.document.id)
-      const file = cached ?? await api.download(selectedId, viewer.document.id)
-      if (cached === undefined) writeDownloadCache(selectedId, viewer.document.id, file)
+      const paid = await meteredFile(libraryId, viewer.document.id, 'download', () => previewEpoch.current === epoch)
+      if (paid === null) return
+      const cached = readDownloadCache(libraryId, viewer.document.id)
+      const file = paid ?? cached ?? await api.download(libraryId, viewer.document.id)
+      if (cached === undefined) writeDownloadCache(libraryId, viewer.document.id, file)
       const url = URL.createObjectURL(new Blob([file.bytes.slice()], {
         type: mimeFor(viewer.document.name, file.contentType),
       }))
@@ -878,12 +967,15 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     if (createKind === undefined || name.trim() === '') return
     setSaving(true)
     try {
-      const created = await api.create({ name: name.trim(), description: description.trim(), kind: createKind })
+      const normalizedTags = libraryTags(tags).join(',')
+      const created = await api.create({ name: name.trim(), description: description.trim(), kind: createKind,
+        ...(normalizedTags !== '' ? { tags: normalizedTags } : {}) })
       setItems(current => [created, ...current])
       choose(created.id)
       setCreateKind(undefined)
       setName('')
       setDescription('')
+      setTags('')
     } catch (cause) {
       setError(`${productText('创建失败')}：${String(cause)}`)
     } finally {
@@ -898,7 +990,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     }
   }, [canUpload])
   useEffect(() => {
-    if (!canDeleteFile) dismissDocumentMenu()
+    if (!canDeleteFile) dismissContentMenu()
   }, [canDeleteFile])
   const openWebLinkDialog = () => {
     setUploadOpen(false)
@@ -977,25 +1069,13 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     setUploading(true)
     setError('')
     try {
-      for (const file of candidates) await api.upload(selectedId, file)
+      for (const file of candidates) {
+        if (currentFolder === '') await api.upload(selectedId, file)
+        else await api.upload(selectedId, file, currentFolder)
+      }
       const next = await api.documents(selectedId)
       showDocuments(selectedId, next)
-      setExpandedFolders((current) => {
-        const merged = new Set(current)
-        for (const path of topLevelFolderPaths(next)) merged.add(path)
-        for (const file of candidates) {
-          const relative = typeof file.webkitRelativePath === 'string' ? file.webkitRelativePath.replace(/\\/g, '/') : ''
-          const slash = relative.lastIndexOf('/')
-          if (slash <= 0) continue
-          let prefix = ''
-          for (const part of relative.slice(0, slash).split('/')) {
-            if (part === '') continue
-            prefix = prefix === '' ? part : `${prefix}/${part}`
-            merged.add(prefix)
-          }
-        }
-        return merged
-      })
+
     } catch (cause) {
       setError(`${productText('上传失败')}：${String(cause)}`)
     } finally {
@@ -1015,12 +1095,17 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     return documentDisplayName(document).toLowerCase().includes(needle)
       || documentStoragePath(document).toLowerCase().includes(needle)
   })
-  const contentTree = buildContentTree(shownDocuments, newestFirst)
+  const shownFolders = folderNames.filter(name => name.toLowerCase().includes(query.trim().toLowerCase()))
+  const rootTree = buildContentTree(shownDocuments, newestFirst, shownFolders)
+  let contentTree = rootTree
+  for (const name of currentFolder.split('/').filter(Boolean)) {
+    const folder = contentTree.find(node => node.type === 'folder' && node.name === name)
+    contentTree = folder?.type === 'folder' ? folder.children : []
+  }
   const searching = query.trim() !== ''
   const pageCount = Math.max(1, Math.ceil(contentTree.length / DOCUMENT_PAGE_SIZE))
   const currentPage = Math.min(documentPage, pageCount)
   const pagedTree = contentTree.slice((currentPage - 1) * DOCUMENT_PAGE_SIZE, currentPage * DOCUMENT_PAGE_SIZE)
-  const thumbnailIds = visiblePdfIds(pagedTree, expandedFolders, searching)
   const plazaPageCount = Math.max(1, Math.ceil(plazaItems.length / PLAZA_PAGE_SIZE))
   const currentPlazaPage = Math.min(plazaPage, plazaPageCount)
   const pagedPlazaItems = plazaItems.slice(
@@ -1030,14 +1115,12 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
   useEffect(() => {
     setDocumentPage(1)
     setPageJump('')
-  }, [selectedId, query, newestFirst])
+  }, [selectedId, currentFolder, query, newestFirst])
   const toggleFolder = (path: string) => {
-    setExpandedFolders((current) => {
-      const next = new Set(current)
-      if (next.has(path)) next.delete(path)
-      else next.add(path)
-      return next
-    })
+    setCurrentFolder(path)
+    setQuery('')
+    setSelectedDocumentIds([])
+    setContentMenu(undefined)
   }
   const stopAnswer = () => {
     answerAbort.current?.abort()
@@ -1105,9 +1188,16 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
     write(current => [...current, { role: 'user', content: text }, { role: 'assistant', content: '', startedAt }])
     setAnswering(true)
     try {
+      const quote = await api.creditPrice(targetKnowledgeBaseId)
+      if (abort.signal.aborted) return
+      if (quote.applies && quote.price.question_cents > 0 && !window.confirm(productText('问答按实际溯源文件扣分，每个文件 {credits} 积分。').replace('{credits}', (quote.price.question_cents / 100).toFixed(2)))) {
+        write(current => current.slice(0, -2))
+        return
+      }
       const answer = await api.complete(targetKnowledgeBaseId, text, (progress) => {
         writeAnswer(write, progress)
-      }, abort.signal, documentId)
+      }, abort.signal, documentId, quote.applies ? quote.price.question_cents : 0)
+      if (quote.applies) window.dispatchEvent(new Event('wanwei:credits-changed'))
       writeAnswer(write, {
         answer: answer.answer,
         recommendations: answer.recommendations,
@@ -1242,26 +1332,49 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                 const stats = documentStats.get(item.id)
                 const chatLabel = chatShown ? productText('关闭问答') : productText('打开问答')
                 const description = item.description.trim()
+                const detailsExpanded = expandedLibraries.has(item.id)
+                const tags = libraryTags(item.tags).slice(0, 2)
                 return <div key={item.id} className={active ? 'dsh-knowledge-lib-card active' : 'dsh-knowledge-lib-card'}>
+                  <button type="button" className="dsh-knowledge-lib-expand"
+                    aria-expanded={detailsExpanded}
+                    aria-label={`${detailsExpanded ? productText('收起') : productText('展开')}：${item.name}`}
+                    onClick={() => setExpandedLibraries((current) => {
+                      const next = new Set(current)
+                      if (next.has(item.id)) next.delete(item.id)
+                      else next.add(item.id)
+                      return next
+                    })}><ChevronIcon /><strong className="dsh-knowledge-nav-name">{item.name}</strong></button>
                   <button type="button" className="dsh-knowledge-lib-chat" aria-pressed={chatShown}
                     aria-label={`${chatLabel}：${item.name}`} title={chatLabel}
                     onClick={() => { setPlazaOpen(false); toggleChat(item.id) }}>
                     <LibChatIcon />
                   </button>
                   <button type="button" className="dsh-knowledge-lib-card-main"
-                    title={description !== '' ? `${item.name}\n${description}` : item.name} aria-label={item.name}
+                    title={item.name} aria-label={item.name}
                     aria-current={active ? 'true' : undefined}
                     onClick={() => { setPlazaOpen(false); choose(item.id) }}>
                     <span className="dsh-knowledge-lib-card-body">
-                      <strong className="dsh-knowledge-nav-name">{item.name}</strong>
-                      {description !== '' &&
-                        <span className="dsh-knowledge-lib-card-desc">{description}</span>}
+                      {tags.length > 0 && <span className="dsh-knowledge-lib-tags">
+                        {tags.map(tag => <span key={tag} title={tag}>{tag}</span>)}
+                      </span>}
                       {renderPlazaMeta(libraryMetaItem(item), {
                         documentCount: stats?.count,
                         documentBytes: stats?.bytes,
                         hideSubscribers: true,
                         cardLayout: true,
+                        maintainer: networkMode === 'intranet' ? item.owner_username : productText('万维'),
                       })}
+                      {detailsExpanded && <span className="dsh-knowledge-lib-details">
+                        {description !== '' && <span className="dsh-knowledge-lib-card-desc">{description}</span>}
+                        {group.key === 'subscription' && <span className="dsh-knowledge-plaza-meta card-layout">
+                          <span className="dsh-knowledge-plaza-meta-col">
+                            <span><em>{productText('订阅量')}</em><strong>{item.subscriber_count ?? 0}</strong></span>
+                          </span>
+                          <span className="dsh-knowledge-plaza-meta-col">
+                            <span><em>{productText('浏览量')}</em><strong>{item.visit_count ?? 0}</strong></span>
+                          </span>
+                        </span>}
+                      </span>}
                     </span>
                   </button>
                 </div>
@@ -1337,33 +1450,36 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                 <div className="dsh-knowledge-plaza-list">
                   <div className="dsh-knowledge-plaza-grid">
                     {pagedPlazaItems.map(item =>
-                      <button type="button" key={item.id} className="dsh-knowledge-plaza-card"
-                        onClick={() => void openPlazaItem(item.id)}>
-                        <span className="dsh-knowledge-plaza-cover" aria-hidden="true">
-                          <PlazaCover cover={item.cover} />
-                          {item.subscription_status === 'owned' &&
+                      <div key={item.id} className="dsh-knowledge-plaza-card-wrap">
+                        <button type="button" className="dsh-knowledge-plaza-card"
+                          onClick={() => void openPlazaItem(item.id)}>
+                          <span className="dsh-knowledge-plaza-cover" aria-hidden="true">
+                            <PlazaCover cover={item.cover} />
+                            {item.subscription_status === 'owned' &&
                             <em className="dsh-knowledge-plaza-status owned">{productText('我的')}</em>}
-                          {item.subscription_status === 'approved' &&
+                            {item.subscription_status === 'approved' &&
                             <em className="dsh-knowledge-plaza-status subscribed">{productText('已订阅')}</em>}
-                          {item.subscription_status === 'pending' &&
+                            {item.subscription_status === 'pending' &&
                             <em className="dsh-knowledge-plaza-status pending">{productText('审核中')}</em>}
-                        </span>
-                        <span className="dsh-knowledge-plaza-card-body">
-                          <span className="dsh-knowledge-plaza-card-title">
-                            <strong>{item.name}</strong>
-                            <span className="dsh-knowledge-plaza-card-subs">
-                              <img className="dsh-knowledge-plaza-subs-art" src={ICON_PLAZA_SUBSCRIBERS}
-                                alt="" draggable={false} aria-hidden="true" />
-                              <span>{productText('已订阅')}<em>{item.subscriber_count ?? 0}</em>{productText('人')}</span>
+                          </span>
+                          <span className="dsh-knowledge-plaza-card-body">
+                            <span className="dsh-knowledge-plaza-card-title">
+                              <strong>{item.name}</strong>
+                              <span className="dsh-knowledge-plaza-card-subs">
+                                <img className="dsh-knowledge-plaza-subs-art" src={ICON_PLAZA_SUBSCRIBERS}
+                                  alt="" draggable={false} aria-hidden="true" />
+                                <span>{productText('已订阅')}<em>{item.subscriber_count ?? 0}</em>{productText('人')}</span>
+                              </span>
                             </span>
+                            <span className="dsh-knowledge-plaza-card-tags">
+                              <span className="dsh-knowledge-plaza-category">{productText('授权知识库')}</span>
+                              {renderPlazaCategoryName(item.category_name)}
+                            </span>
+                            {renderPlazaMeta(item, { hideSubscribers: true, cardLayout: true })}
                           </span>
-                          <span className="dsh-knowledge-plaza-card-tags">
-                            <span className="dsh-knowledge-plaza-category">{productText('授权知识库')}</span>
-                            {renderPlazaCategoryName(item.category_name)}
-                          </span>
-                          {renderPlazaMeta(item, { hideSubscribers: true, cardLayout: true })}
-                        </span>
-                      </button>)}
+                        </button>
+                        {renderLike(item.id)}
+                      </div>)}
                   </div>
                 </div>
               </section>
@@ -1466,14 +1582,17 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                   })}
                 </div>
                 <div className="dsh-knowledge-plaza-detail-actions">
-                  {showSubscribe
-                    ? <button type="button"
-                      className={`dsh-knowledge-plaza-subscribe ${plazaStatus}`}
-                      disabled={subscribing || plazaStatus !== 'none'}
-                      onClick={() => void submitSubscribe()}>
-                      {plazaStatus === 'pending' ? productText('审核中') : productText('订阅')}
-                    </button>
-                    : <span className="dsh-knowledge-plaza-subscribe-slot" aria-hidden="true" />}
+                  <div className="dsh-knowledge-plaza-detail-action-top">
+                    {renderLike(plazaDetail.id)}
+                    {showSubscribe
+                      ? <button type="button"
+                        className={`dsh-knowledge-plaza-subscribe ${plazaStatus}`}
+                        disabled={subscribing || plazaStatus !== 'none'}
+                        onClick={() => void submitSubscribe()}>
+                        {plazaStatus === 'pending' ? productText('审核中') : productText('订阅')}
+                      </button>
+                      : null}
+                  </div>
                   <span className="dsh-knowledge-plaza-card-subs">
                     {plazaCanUse && <img className="dsh-knowledge-plaza-subs-art" src={ICON_PLAZA_SUBSCRIBERS}
                       alt="" draggable={false} aria-hidden="true" />}
@@ -1559,6 +1678,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
           <h2>{selected?.name ?? productText('暂无知识库')}</h2>
           {selected?.description?.trim() ? <p>{selected.description.trim()}</p> : null}
         </div>
+        {selected?.kind === 'personal' && canUpload && <PublicationControls key={selected.id} id={selected.id} api={api} scope={selected.publication_scope ?? ''} />}
         {selectedIsSubscribed &&
           <button type="button" className="dsh-knowledge-unsubscribe" disabled={unsubscribing}
             onClick={() => void submitUnsubscribe()}>
@@ -1587,20 +1707,38 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
             <input ref={folderInput} type="file" hidden multiple onChange={event => takeFiles(event.currentTarget)} />
             {uploadOpen && <div className="dsh-knowledge-upload-menu" role="menu">
               <button type="button" role="menuitem" onClick={() => { fileInput.current?.click(); setUploadOpen(false) }}><FileMenuIcon />{productText('本地文件')}</button>
+              <button type="button" role="menuitem" onClick={() => { folderInput.current?.click(); setUploadOpen(false) }}><FolderIcon />{productText('本地文件夹')}</button>
+              <button type="button" role="menuitem" onClick={openFolderDialog}><FolderIcon />{productText('新建文件夹')}</button>
               <button type="button" role="menuitem" onClick={openWebLinkDialog}><LinkIcon />{productText('网页链接')}</button>
               <button type="button" role="menuitem" onClick={openRecordingPanel}><MicIcon />{productText('录音纪要')}</button>
             </div>}
           </div>}
         </div>
       </div>
-      <div className="dsh-knowledge-list-pane">
-        {loading ? <DocumentListLoading /> : selectedId === undefined || shownDocuments.length === 0
+      {currentFolder !== '' && <nav className="dsh-knowledge-breadcrumbs" aria-label={productText('文件路径')}>
+        <button type="button" className="dsh-knowledge-folder-back" aria-label={productText('返回上级')}
+          onClick={() => toggleFolder(currentFolder.split('/').slice(0, -1).join('/'))}><BackIcon /></button>
+        <button type="button" onClick={() => toggleFolder('')}>{productText('全部文件')}</button>
+        {currentFolder.split('/').map((name, index, parts) => <span key={parts.slice(0, index + 1).join('/')}>
+          <ChevronIcon /><button type="button" aria-current={index === parts.length - 1 ? 'location' : undefined}
+            onClick={() => toggleFolder(parts.slice(0, index + 1).join('/'))}>{name}</button>
+        </span>)}
+      </nav>}
+      <div className="dsh-knowledge-list-pane" onContextMenu={(event) => {
+        if (event.defaultPrevented || !canUpload) return
+        if (event.target instanceof Element && event.target.closest('button, a, input, textarea, [role="menu"]')) return
+        event.preventDefault()
+        setUploadOpen(false)
+        setSelectedDocumentIds([])
+        setContentMenu({ kind: 'background',
+          x: Math.max(8, Math.min(event.clientX, window.innerWidth - 180)),
+          y: Math.max(8, Math.min(event.clientY, window.innerHeight - 56)),
+        })
+      }}>
+        {loading ? <DocumentListLoading /> : selectedId === undefined || contentTree.length === 0
           ? <p className="dsh-knowledge-empty">{searching ? productText('未找到匹配的文件') : productText('暂无内容')}</p>
-          : <DocumentThumbnailPage key={JSON.stringify([selectedId, currentPage, thumbnailIds])} documentIds={thumbnailIds}>
+          : <div className="dsh-knowledge-directory" key={selectedId}>
             {renderContentTree(pagedTree, {
-              depth: 0,
-              expandedFolders,
-              searching,
               selectedDocumentIds,
               onToggleFolder: toggleFolder,
               onToggleDocumentSelection: toggleDocumentSelection,
@@ -1616,7 +1754,7 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
                 return file
               },
               onOpenMenu: openDocumentMenu,
-            })}</DocumentThumbnailPage>}
+            })}</div>}
       </div>
       {!chatOpen && !loading && contentTree.length > 0 &&
         <nav className="dsh-knowledge-pager" aria-label={productText('文件分页')}>
@@ -1717,17 +1855,19 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
       </form>
     </section>}
     {error !== '' && <div role="alert" className="dsh-knowledge-error">{error}<button type="button" aria-label={productText('关闭')} onClick={() => setError('')}>×</button></div>}
-    {documentMenu !== undefined && canDeleteFile && <div className="dsh-knowledge-context-menu" role="menu"
-      style={{ left: documentMenu.x, top: documentMenu.y }}
+    {contentMenu !== undefined && (contentMenu.kind === 'background' ? canUpload : canDeleteFile) && <div className="dsh-knowledge-context-menu" role="menu"
+      style={{ left: contentMenu.x, top: contentMenu.y }}
       onPointerDown={event => event.stopPropagation()}
       onMouseDown={event => event.stopPropagation()}>
-      <button type="button" role="menuitem" className="danger" onClick={(event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        const ids = selectedDocumentIds.length > 0 ? selectedDocumentIds : [documentMenu.documentId]
-        setDocumentMenu(undefined)
-        setDeleteIds(ids)
-      }}><TrashIcon />{productText('删除')}</button>
+      {contentMenu.kind === 'background'
+        ? <button type="button" role="menuitem" onClick={openFolderDialog}><FolderIcon />{productText('新建文件夹')}</button>
+        : <button type="button" role="menuitem" className="danger" onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          const ids = selectedDocumentIds.length > 0 ? selectedDocumentIds : [contentMenu.documentId]
+          setContentMenu(undefined)
+          setDeleteIds(ids)
+        }}><TrashIcon />{productText('删除')}</button>}
     </div>}
     {deleteIds !== undefined && <div className="dsh-knowledge-modal-backdrop"
       onPointerDown={event => event.stopPropagation()}>
@@ -1749,6 +1889,35 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
           <button type="button" className="danger" disabled={mutating} onClick={() => void confirmDelete()}>{productText('确认删除')}</button>
         </footer>
       </section></div>}
+    {folderDraft !== undefined && <div className="dsh-knowledge-modal-backdrop">
+      <form className="dsh-knowledge-modal" role="dialog" aria-modal="true" aria-labelledby="dsh-knowledge-folder-title"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (selectedId === undefined || folderSaving || folderDraft.trim() === '') return
+          const libraryId = selectedId
+          const leafName = folderDraft.trim()
+          const name = currentFolder === '' ? leafName : `${currentFolder}/${leafName}`
+          if (contentTree.some(node => node.type === 'folder' && node.name === leafName)) {
+            setFolderError(productText('文件夹已存在'))
+            return
+          }
+          setFolderSaving(true)
+          setFolderError('')
+          void api.createFolder(libraryId, name).then(() => {
+            setFolderNames(current => [...current, name])
+            setFolderDraft(undefined)
+          }).catch(cause => setFolderError(`${productText('创建失败')}：${String(cause)}`))
+            .finally(() => setFolderSaving(false))
+        }}>
+        <header><h2 id="dsh-knowledge-folder-title">{productText('新建文件夹')}</h2>
+          <button type="button" aria-label={productText('关闭')} disabled={folderSaving} onClick={() => setFolderDraft(undefined)}>×</button></header>
+        <label>{productText('文件夹名称')}<input autoFocus maxLength={128} required disabled={folderSaving}
+          value={folderDraft} onChange={event => setFolderDraft(event.target.value)} /></label>
+        {folderError !== '' && <p role="alert">{folderError}</p>}
+        <footer><button type="button" disabled={folderSaving} onClick={() => setFolderDraft(undefined)}>{productText('取消')}</button>
+          <button type="submit" disabled={folderSaving || folderDraft.trim() === ''}>{productText('确定')}</button></footer>
+      </form>
+    </div>}
     {createKind !== undefined && <div className="dsh-knowledge-modal-backdrop"><form className="dsh-knowledge-modal" role="dialog" aria-modal="true"
       aria-labelledby="dsh-knowledge-create-title" onSubmit={submitCreate}>
       <header><h2 id="dsh-knowledge-create-title">{productText('新建个人知识库')}</h2>
@@ -1757,6 +1926,8 @@ export function KnowledgePage({ api }: { api: KnowledgeApi }) {
         placeholder={productText('请输入知识库名称')} /></label>
       <label>{productText('描述')}<textarea maxLength={500} value={description} onChange={event => setDescription(event.target.value)}
         placeholder={productText('请填写知识库描述')} /></label>
+      <label>{productText('标签')}<input maxLength={200} value={tags} onChange={event => setTags(event.target.value)}
+        placeholder={productText('多个标签用逗号分隔')} /></label>
       <footer><button type="button" onClick={() => setCreateKind(undefined)}>{productText('取消')}</button>
         <button type="submit" disabled={name.trim() === '' || saving}>{productText('确定')}</button></footer>
     </form></div>}
@@ -2234,6 +2405,14 @@ function formatPlazaMegabytes(bytes: number | undefined): string {
 type PlazaMetaSource = Pick<KnowledgePlazaItem,
   'owner_username' | 'updated_at' | 'document_count' | 'document_bytes' | 'subscriber_count'>
 
+/** Read desktop and workbench comma-separated tags, preserving the first occurrence.
+ * @param value - Stored catalog tags or a create-form draft.
+ * @returns Non-empty unique labels in entry order.
+ */
+function libraryTags(value: string = ''): string[] {
+  return [...new Set(value.split(/[,，、]/).map(tag => tag.trim()).filter(Boolean))]
+}
+
 /** Project a sidebar library onto the stats rows shared with plaza cards.
  * @param item - Authorized library from the desktop list.
  * @returns Stats source; missing server figures are omitted.
@@ -2270,13 +2449,15 @@ function renderPlazaMeta(
     hideMaintainer?: boolean | undefined
     /** Sidebar cards omit the subscriber count. */
     hideSubscribers?: boolean | undefined
+    /** Deployment-specific maintainer name for sidebar cards. */
+    maintainer?: string | undefined
     /** Plaza grid cards: 2×2 label：value (维护者/文件数量 | 更新时间/文件大小). */
     cardLayout?: boolean | undefined
   },
 ): ReactNode {
   const documentCount = overrides?.documentCount ?? item.document_count ?? 0
   const documentBytes = overrides?.documentBytes ?? item.document_bytes ?? 0
-  const maintainer = item.owner_username || productText('未知作者')
+  const maintainer = overrides?.maintainer || item.owner_username || productText('未知作者')
   if (overrides?.cardLayout === true) {
     return <span className="dsh-knowledge-plaza-meta card-layout">
       <span className="dsh-knowledge-plaza-meta-col">
@@ -2380,26 +2561,13 @@ function trimFileExtension(name: string): string {
   return name.slice(0, index)
 }
 
-/** Top-level folder paths present in the document list.
- * @param documents - Listed knowledge documents.
- * @returns Folder paths to expand by default.
- */
-function topLevelFolderPaths(documents: KnowledgeDocument[]): Set<string> {
-  const paths = new Set<string>()
-  for (const document of documents) {
-    const storage = documentStoragePath(document)
-    const slash = storage.indexOf('/')
-    if (slash > 0) paths.add(storage.slice(0, slash))
-  }
-  return paths
-}
-
 /** Group documents into nested folders from relative storage paths.
  * @param documents - Filtered documents to show.
  * @param newestFirst - Sort files by upload time when true.
+ * @param folderNames - Persisted folder paths, including empty directories.
  * @returns Root-level tree nodes.
  */
-function buildContentTree(documents: KnowledgeDocument[], newestFirst: boolean): ContentNode[] {
+function buildContentTree(documents: KnowledgeDocument[], newestFirst: boolean, folderNames: readonly string[] = []): ContentNode[] {
   type FolderAcc = {
     path: string
     name: string
@@ -2407,6 +2575,18 @@ function buildContentTree(documents: KnowledgeDocument[], newestFirst: boolean):
     files: KnowledgeDocument[]
   }
   const root: FolderAcc = { path: '', name: '', folders: new Map(), files: [] }
+  for (const folderPath of folderNames) {
+    let cursor = root
+    const parts = folderPath.split('/')
+    for (const [index, name] of parts.entries()) {
+      let folder = cursor.folders.get(name)
+      if (folder === undefined) {
+        folder = { path: parts.slice(0, index + 1).join('/'), name, folders: new Map(), files: [] }
+        cursor.folders.set(name, folder)
+      }
+      cursor = folder
+    }
+  }
   for (const document of documents) {
     const parts = documentStoragePath(document).split('/').filter(part => part !== '')
     if (parts.length <= 1) {
@@ -2448,9 +2628,6 @@ function buildContentTree(documents: KnowledgeDocument[], newestFirst: boolean):
 }
 
 type ContentTreeHandlers = {
-  depth: number
-  expandedFolders: Set<string>
-  searching: boolean
   selectedDocumentIds: string[]
   onToggleFolder: (path: string) => void
   onToggleDocumentSelection: (documentId: string) => void
@@ -2460,62 +2637,25 @@ type ContentTreeHandlers = {
   onOpenMenu: (documentId: string, x: number, y: number) => void
 }
 
-/** PDF identities mounted in the current page, including expanded folders.
- * @param nodes - Current page's tree nodes.
- * @param expanded - Expanded folder paths.
- * @param searching - Whether search exposes every matching folder.
- * @returns Document identities whose first pages must finish loading.
- */
-function visiblePdfIds(nodes: ContentNode[], expanded: Set<string>, searching: boolean): string[] {
-  return nodes.flatMap(node => node.type === 'folder'
-    ? searching || expanded.has(node.path) ? visiblePdfIds(node.children, expanded, searching) : []
-    : documentFileKind(node.document) === 'pdf' ? [node.document.id] : [])
-}
-
-/** Render folders and files as content-pane cards. A collapsed folder is one grid card; an
- * expanded folder spans the grid row as a section whose children form a nested card grid.
+/** Render separate folder-navigation and file-preview sections for one directory.
  * @param nodes - Tree nodes at the current depth.
- * @param handlers - Expansion and document interaction handlers.
- * @returns Card and folder-section elements for one grid level.
+ * @param handlers - Directory navigation and document interaction handlers.
+ * @returns Non-empty folder and file sections for the current page.
  */
 function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers): ReactNode[] {
   const cards: ReactNode[] = []
+  const folders: ReactNode[] = []
   for (const node of nodes) {
     if (node.type === 'folder') {
-      const expanded = handlers.searching || handlers.expandedFolders.has(node.path)
-      const meta = <small>
-        <span>{productText('文件夹')}</span>
-        <span>{productText('{count} 项').replace('{count}', String(node.children.length))}</span>
-      </small>
-      const chevron = <span className={expanded ? 'dsh-knowledge-folder-chevron open' : 'dsh-knowledge-folder-chevron'} aria-hidden="true">
-        <ChevronIcon />
-      </span>
-      if (!expanded) {
-        cards.push(
-          <button type="button" key={`folder:${node.path}`} className="dsh-knowledge-card folder"
-            aria-expanded={false} title={node.name}
-            onClick={() => { handlers.onToggleFolder(node.path) }}>
-            <span className="dsh-knowledge-file-icon folder" aria-hidden="true"><FolderIcon /></span>
-            <strong>{node.name}</strong>
-            {meta}
-            <span className="dsh-knowledge-card-corner">{chevron}</span>
-          </button>,
-        )
-        continue
-      }
-      cards.push(
-        <section key={`folder:${node.path}`} className="dsh-knowledge-folder-section">
-          <button type="button" className="dsh-knowledge-folder-bar" aria-expanded={true} title={node.name}
-            onClick={() => { handlers.onToggleFolder(node.path) }}>
-            <span className="dsh-knowledge-file-icon folder" aria-hidden="true"><FolderIcon /></span>
-            <strong>{node.name}</strong>
-            {meta}
-            {chevron}
-          </button>
-          {node.children.length > 0 && <div className="dsh-knowledge-documents">
-            {renderContentTree(node.children, { ...handlers, depth: handlers.depth + 1 })}
-          </div>}
-        </section>,
+      folders.push(
+        <button type="button" key={`folder:${node.path}`} className="dsh-knowledge-card folder"
+          title={node.name} onClick={() => handlers.onToggleFolder(node.path)}>
+          <span className="dsh-knowledge-file-icon folder" aria-hidden="true"><FolderIcon /></span>
+          <span className="dsh-knowledge-folder-copy"><strong>{node.name}</strong>
+            <small>{productText('文件夹')} · {productText('{count} 项').replace('{count}', String(node.children.length))}</small>
+          </span>
+          <span className="dsh-knowledge-folder-chevron" aria-hidden="true"><ChevronIcon /></span>
+        </button>,
       )
       continue
     }
@@ -2549,7 +2689,6 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
           documentId={document.id}
           kind={kind}
           load={() => handlers.loadThumbnail(document)}
-          fallback={<TypeIcon kind={kind} />}
         />
         <span className="dsh-knowledge-card-details">
           <strong>{name}</strong>
@@ -2570,7 +2709,20 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
       </button>,
     )
   }
-  return cards
+  const sections: ReactNode[] = []
+  if (folders.length > 0) sections.push(
+    <section className="dsh-knowledge-directory-section" aria-label={productText('文件夹')} key="folders">
+      <h3>{productText('文件夹')}<span>{folders.length}</span></h3>
+      <div className="dsh-knowledge-folder-grid">{folders}</div>
+    </section>,
+  )
+  if (cards.length > 0) sections.push(
+    <section className="dsh-knowledge-directory-section" aria-label={productText('文件')} key="files">
+      <h3>{productText('文件')}<span>{cards.length}</span></h3>
+      <div className="dsh-knowledge-documents">{cards}</div>
+    </section>,
+  )
+  return sections
 }
 
 /** File size label for a content card.

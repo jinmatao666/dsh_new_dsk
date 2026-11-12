@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -413,6 +414,7 @@ func TestCreateKnowledgeBaseValidatesCatalogKind(t *testing.T) {
 func TestCreateKnowledgeCategoryRejectsInvalidInput(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
+	engine.Use(func(c *gin.Context) { c.Set("role", model.RoleAdminUser) })
 	engine.POST("/categories", CreateManagedKnowledgeCategory)
 	post := func(body string) *httptest.ResponseRecorder {
 		t.Helper()
@@ -427,6 +429,27 @@ func TestCreateKnowledgeCategoryRejectsInvalidInput(t *testing.T) {
 	}
 	if got := post(`{"name":"部门规范","type":"other"}`); got.Code != http.StatusBadRequest {
 		t.Fatalf("unknown type: %d %s", got.Code, got.Body.String())
+	}
+}
+
+func TestCreateKnowledgeCategoryRequiresAdministrator(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, role := range []int{model.RoleCommonUser, model.RoleAdminUser, model.RoleRootUser} {
+		t.Run(fmt.Sprint(role), func(t *testing.T) {
+			engine := gin.New()
+			engine.Use(func(c *gin.Context) { c.Set("role", role) })
+			engine.POST("/categories", CreateManagedKnowledgeCategory)
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/categories", strings.NewReader(`{"name":`))
+			request.Header.Set("Content-Type", "application/json")
+			engine.ServeHTTP(recorder, request)
+			if role < model.RoleAdminUser {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "仅管理员可新建知识库分类")
+			} else {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			}
+		})
 	}
 }
 
@@ -512,6 +535,10 @@ func TestUpdateAndDeleteKnowledgeCategory(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
+	engine.Use(func(c *gin.Context) {
+		c.Set("id", 1)
+		c.Set("role", model.RoleAdminUser)
+	})
 	engine.POST("/categories", CreateManagedKnowledgeCategory)
 	engine.PUT("/categories/:id", UpdateManagedKnowledgeCategory)
 	engine.DELETE("/categories/:id", DeleteManagedKnowledgeCategory)
@@ -558,9 +585,9 @@ func TestUpdateAndDeleteKnowledgeCategory(t *testing.T) {
 		Shelf: model.KnowledgeShelfPublished, CategoryId: created.Data.Id,
 	}).Error)
 	require.NoError(t, db.AutoMigrate(
-		&model.KnowledgeBaseGrant{}, &model.KnowledgeSubscriptionApplication{},
+		&model.KnowledgeBaseGrant{}, &model.KnowledgeSubscriptionApplication{}, &model.KnowledgeBaseLike{}, &model.KnowledgePublicationApplication{},
 		&model.KnowledgeConversation{}, &model.KnowledgeDocumentNote{}, &model.KnowledgeDocumentPath{},
-		&model.KnowledgeDocumentCreator{},
+		&model.KnowledgeDocumentCreator{}, &model.KnowledgeFolder{},
 	))
 
 	deleted := httptest.NewRecorder()
@@ -578,5 +605,45 @@ func TestUpdateAndDeleteKnowledgeCategory(t *testing.T) {
 	require.NoError(t, model.DB.Model(&model.KnowledgeCategory{}).Where("id = ?", created.Data.Id).Count(&categories).Error)
 	if categories != 0 {
 		t.Fatalf("category row left after delete: %d", categories)
+	}
+}
+
+func TestKnowledgeLikePersistsForAuthenticatedViewer(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:knowledge-like-http?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previous := model.DB
+	model.DB = db
+	t.Cleanup(func() { model.DB = previous })
+	require.NoError(t, db.AutoMigrate(&model.KnowledgeBase{}, &model.KnowledgeCategory{}, &model.KnowledgeBaseGrant{}, &model.KnowledgeSubscriptionApplication{}, &model.KnowledgeBaseLike{}, &model.KnowledgePublicationApplication{}, &model.User{}, &model.OrgMember{}, &model.GovernmentOrganizationMember{}))
+	category := model.KnowledgeCategory{Name: "法律", Type: model.KnowledgeBaseShared, RequireAuth: true}
+	require.NoError(t, model.SaveKnowledgeCategory(&category))
+	base := model.KnowledgeBase{Name: "法规", RagflowDatasetId: "like-http", OwnerUserId: 2, Kind: model.KnowledgeBaseShared, Shelf: model.KnowledgeShelfPublished, CategoryId: category.Id}
+	require.NoError(t, db.Create(&base).Error)
+	engine := gin.New()
+	engine.Use(func(c *gin.Context) { c.Set("id", 1); c.Next() })
+	engine.POST("/:id/like", SetKnowledgeBaseLike)
+	engine.DELETE("/:id/like", SetKnowledgeBaseLike)
+	for _, step := range []struct {
+		method, id string
+		status     int
+		liked      bool
+	}{
+		{http.MethodPost, strconv.Itoa(base.Id), http.StatusOK, true},
+		{http.MethodPost, strconv.Itoa(base.Id), http.StatusOK, true},
+		{http.MethodDelete, strconv.Itoa(base.Id), http.StatusOK, false},
+		{http.MethodDelete, strconv.Itoa(base.Id), http.StatusOK, false},
+		{http.MethodPost, "invalid", http.StatusBadRequest, false},
+		{http.MethodPost, "999999", http.StatusNotFound, false},
+	} {
+		recorder := httptest.NewRecorder()
+		engine.ServeHTTP(recorder, httptest.NewRequest(step.method, "/"+step.id+"/like", nil))
+		require.Equal(t, step.status, recorder.Code, recorder.Body.String())
+		saved, err := model.GetKnowledgePlazaItem(1, base.Id)
+		require.NoError(t, err)
+		require.Equal(t, step.liked, saved.LikedByViewer)
+		other, err := model.GetKnowledgePlazaItem(2, base.Id)
+		require.NoError(t, err)
+		require.False(t, other.LikedByViewer)
+		require.Equal(t, model.KnowledgeSubscriptionStatusNone, saved.SubscriptionStatus)
 	}
 }

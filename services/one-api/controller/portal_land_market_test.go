@@ -11,6 +11,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/model"
+	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
@@ -40,7 +41,7 @@ func setupPortalLandMarketTest(t *testing.T) *gin.Engine {
 	config.OptionMapRWMutex.Lock()
 	previousOptions := config.OptionMap
 	config.OptionMap = map[string]string{
-		"SystemDeploymentSettings":           `{"network":"internet","featurePages":{"landMarket":{"url":"https://land.example/#/home"},"policyEncyclopedia":{"url":""}}}`,
+		"SystemDeploymentSettings":           `{"network":"internet","featurePages":{"landMarket":{"url":"https://land.example/#/home"},"planningLecture":{"url":"https://lecture.example/#/home"}}}`,
 		model.LandMarketProviderSecretOption: "",
 	}
 	config.OptionMapRWMutex.Unlock()
@@ -58,7 +59,53 @@ func setupPortalLandMarketTest(t *testing.T) *gin.Engine {
 	router.POST("/redeem", RedeemLandMarketTicket)
 	router.POST("/credential", RotateLandMarketCredential)
 	router.GET("/credential", GetLandMarketCredentialStatus)
+	router.POST("/planning-lecture/launch", func(c *gin.Context) {
+		c.Set("id", 42)
+		LaunchPlanningLecture(c)
+	})
+	router.POST("/planning-lecture/redeem", RedeemPlanningLectureTicket)
+	router.POST("/planning-lecture/credential", RotatePlanningLectureCredential)
+	router.GET("/planning-lecture/credential", GetPlanningLectureCredentialStatus)
 	return router
+}
+
+func TestPlanningLectureCredentialAndTicketIsolation(t *testing.T) {
+	router := setupPortalLandMarketTest(t)
+	rotate := func(path string) string {
+		response := portalJSON(t, router, http.MethodPost, path, "", nil)
+		require.Equal(t, http.StatusOK, response.Code)
+		var body struct {
+			Credential string `json:"provider_credential"`
+		}
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+		require.Regexp(t, expertCredentialPattern, body.Credential)
+		return body.Credential
+	}
+	landCredential := rotate("/credential")
+	launchPath := "/planning-lecture/launch"
+	require.Equal(t, http.StatusServiceUnavailable, portalJSON(t, router, http.MethodPost, launchPath, "", nil).Code)
+	lectureCredential := rotate("/planning-lecture/credential")
+	status := portalJSON(t, router, http.MethodGet, "/planning-lecture/credential", "", nil)
+	require.JSONEq(t, `{"success":true,"configured":true}`, status.Body.String())
+	launch := portalJSON(t, router, http.MethodPost, launchPath, "", nil)
+	require.Equal(t, http.StatusOK, launch.Code)
+	var body struct {
+		URL    string `json:"url"`
+		Ticket string `json:"ticket"`
+	}
+	require.NoError(t, json.Unmarshal(launch.Body.Bytes(), &body))
+	require.Equal(t, "https://lecture.example/#/home", body.URL)
+	require.Regexp(t, expertCredentialPattern, body.Ticket)
+	redeem := func(path, credential string) *httptest.ResponseRecorder {
+		return portalJSON(t, router, http.MethodPost, path, `{"ticket":"`+body.Ticket+`"}`,
+			map[string]string{"Authorization": "Bearer " + credential})
+	}
+	require.Equal(t, http.StatusUnauthorized, redeem("/planning-lecture/redeem", landCredential).Code)
+	require.Equal(t, http.StatusUnauthorized, redeem("/redeem", landCredential).Code)
+	response := redeem("/planning-lecture/redeem", lectureCredential)
+	require.Equal(t, http.StatusOK, response.Code)
+	require.JSONEq(t, `{"user_id":"42","username":"land_user","display_name":"土地测试用户"}`, response.Body.String())
+	require.Equal(t, http.StatusUnauthorized, redeem("/planning-lecture/redeem", lectureCredential).Code)
 }
 
 func portalJSON(t *testing.T, router *gin.Engine, method, path, body string, headers map[string]string) *httptest.ResponseRecorder {
