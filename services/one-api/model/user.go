@@ -1040,6 +1040,11 @@ func decreaseUserQuota(id int, quota int64) (err error) {
 }
 
 func decreaseUserQuotaTx(tx *gorm.DB, id int, quota int64) error {
+	return debitUserQuotaTx(tx, id, quota, false)
+}
+
+// debitUserQuotaTx can reject an incomplete debit inside a caller-owned transaction.
+func debitUserQuotaTx(tx *gorm.DB, id int, quota int64, requireFull bool) error {
 	if quota <= 0 {
 		return nil
 	}
@@ -1095,6 +1100,9 @@ func decreaseUserQuotaTx(tx *gorm.DB, id int, quota int64) error {
 		remain -= take
 	}
 
+	if requireFull && remain > 0 {
+		return errors.New("积分余额不足，知识库使用未结算，请充值后重试")
+	}
 	if deductedTimed > 0 {
 		if err := tx.Model(&User{}).Where("id = ?", id).Updates(map[string]interface{}{
 			"timed_quota_total": greatestZeroExpr("timed_quota_total", deductedTimed),

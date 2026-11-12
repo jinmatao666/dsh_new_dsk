@@ -23,7 +23,7 @@ import type {} from '@deepseek-ai/dsh-web'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type { AuthState } from './contract.ts'
 import { launchExpertWebsite, listPublishedExperts } from './expert-catalog.ts'
-import { launchLandMarket } from './portal-land-market.ts'
+import { launchDesktopPortal } from './portal-feature.ts'
 import { installSearchCitationPolicy, OneApiSearchProvider } from './search-provider.ts'
 import { registerSkillUsage } from './usage.ts'
 import { installNetworkPolicy } from './network.ts'
@@ -731,7 +731,7 @@ export function apply(ctx: Context, config: Config): void {
   })
   const removeKnowledgeFile = connection.fetch.register({
     path: '/api/desktop-knowledge-file',
-    methods: ['GET'],
+    methods: ['GET', 'POST'],
     fetch: request => knowledgeBases.streamFile(request),
   })
   const removeKnowledgeRecording = connection.fetch.register({
@@ -879,11 +879,12 @@ export function apply(ctx: Context, config: Config): void {
         return internal(error instanceof Error ? error.message : String(error))
       }
     }
-    if (endpoint === 'land-market-launch') {
+    if (endpoint === 'land-market-launch' || endpoint === 'planning-lecture-launch') {
+      const portal = endpoint === 'land-market-launch' ? 'land-market' : 'planning-lecture'
       try {
         const token = (await ctx.credentials.resolve(ref))?.value
-        if (token === undefined) throw new Error('请先登录后再打开土地市场')
-        return { ok: true as const, value: await launchLandMarket(baseURL, token, serviceSignal()) }
+        if (token === undefined) throw new Error('请先登录后再打开页面')
+        return { ok: true as const, value: await launchDesktopPortal(baseURL, token, portal, serviceSignal()) }
       } catch (error) {
         return internal(error instanceof Error ? error.message : String(error))
       }

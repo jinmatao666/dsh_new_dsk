@@ -1,5 +1,6 @@
 .section { display: grid; gap: 24px; padding: 8px 0 24px; color: var(--dsw-alias-label-primary); }
 .heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.headingActions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
 .section h1 { margin: 0 0 8px; font-size: 26px; font-weight: 600; }
 .section h2 { margin: 0; font-size: 16px; }
 .section p { margin: 8px 0 0; color: var(--dsw-alias-label-secondary); font-size: 13px; line-height: 1.6; }
@@ -33,3 +34,8 @@
 .pagination .secondary { padding: 6px 9px; font-size: 12px; }
 .pagination form { display: inline-flex; align-items: center; gap: 6px; margin-left: 4px; }
 .pagination input { width: 48px; padding: 6px; border: 1px solid #dce5f3; border-radius: 6px; color: inherit; background: transparent; font: inherit; }
+
+.knowledgePrices { display: grid; gap: 12px; }
+.knowledgePrices label { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.knowledgePrices input { box-sizing: border-box; width: 8em; padding: 6px 8px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; background: var(--dsw-alias-bg-base); color: inherit; }
+.knowledgePrices p { margin: 0; color: var(--dsw-alias-label-secondary); }

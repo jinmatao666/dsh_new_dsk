@@ -552,6 +552,9 @@ func ImportKnowledgeWebLinks(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if !canWritePublishedKnowledge(c, row) {
+		return
+	}
 	if row.Kind != model.KnowledgeBasePersonal || row.CategoryId != 0 {
 		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "仅个人知识库支持导入网页链接"})
 		return
@@ -643,6 +646,22 @@ func ListKnowledgeDocumentChunks(c *gin.Context) {
 	if !ok {
 		return
 	}
+	terms, err := model.ReadKnowledgeCreditTerms(row, c.GetInt("id"))
+	if err != nil {
+		knowledgeCreditFailure(c, 500, err)
+		return
+	}
+	if terms != nil && terms.Price.BrowseCents > 0 {
+		until, err := model.KnowledgePreviewPaidUntil(c.GetInt("id"), row.Id, documentId)
+		if err != nil {
+			knowledgeCreditFailure(c, 500, err)
+			return
+		}
+		if !until.After(time.Now()) {
+			knowledgeCreditFailure(c, 402, errors.New("请先打开文件预览"))
+			return
+		}
+	}
 	client, ok := knowledgeClient(c)
 	if !ok {
 		return
@@ -665,6 +684,53 @@ func DownloadKnowledgeDocument(c *gin.Context) {
 	if !ok {
 		return
 	}
+	action := c.Query("action")
+	if action != "" && c.Request.Method != http.MethodPost {
+		knowledgeCreditFailure(c, 405, errors.New("付费文件操作必须使用 POST"))
+		return
+	}
+	if action != "" && action != "browse" && action != "download" {
+		knowledgeCreditFailure(c, 400, errors.New("知识库文件操作无效"))
+		return
+	}
+	terms, err := model.ReadKnowledgeCreditTerms(row, c.GetInt("id"))
+	if err != nil {
+		knowledgeCreditFailure(c, 500, err)
+		return
+	}
+	requestId := ""
+	if terms != nil {
+		if action == "" && terms.Price.BrowseCents > 0 {
+			until, err := model.KnowledgePreviewPaidUntil(c.GetInt("id"), row.Id, documentId)
+			if err != nil {
+				knowledgeCreditFailure(c, 500, err)
+				return
+			}
+			if !until.After(time.Now()) {
+				knowledgeCreditFailure(c, 402, errors.New("请先打开文件预览"))
+				return
+			}
+		}
+		if action != "" {
+			requestId, err = knowledgeCreditRequestId(c.Query("request_id"))
+			if err != nil {
+				knowledgeCreditFailure(c, 400, err)
+				return
+			}
+			expected := terms.Price.BrowseCents
+			if action == "download" {
+				expected = terms.Price.DownloadCents
+			}
+			if quoted := c.Query("expected_cents"); quoted != "" && quoted != strconv.FormatInt(expected, 10) {
+				var receipt model.KnowledgeCreditReceipt
+				err := model.DB.Where("user_id = ? AND request_id = ? AND knowledge_base_id = ? AND document_id = ? AND action = ?", c.GetInt("id"), requestId, row.Id, documentId, action).First(&receipt).Error
+				if err != nil {
+					knowledgeCreditFailure(c, 409, errors.New("知识库单价已变更，请刷新后重试"))
+					return
+				}
+			}
+		}
+	}
 	client, ok := knowledgeClient(c)
 	if !ok {
 		return
@@ -674,6 +740,23 @@ func DownloadKnowledgeDocument(c *gin.Context) {
 		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	if terms != nil && action != "" {
+		if err := c.Request.Context().Err(); err != nil {
+			return
+		}
+		document, err := client.GetDocument(c.Request.Context(), row.RagflowDatasetId, documentId)
+		if err != nil {
+			knowledgeCreditFailure(c, 502, err)
+			return
+		}
+		documentName := document.Name
+
+		if _, err := model.SettleKnowledgeCredits(c.GetInt("id"), row, terms, action, requestId, []model.KnowledgeCreditDocument{{Id: documentId, Name: documentName}}, "", ""); err != nil {
+			knowledgeCreditFailure(c, 402, err)
+			return
+		}
+	}
+	c.Header("Cache-Control", "no-store")
 	c.Data(http.StatusOK, contentType, body)
 }
 
@@ -685,6 +768,9 @@ func DeleteKnowledgeDocument(c *gin.Context) {
 	}
 	row, ok := authorizedKnowledgeBase(c)
 	if !ok {
+		return
+	}
+	if !canWritePublishedKnowledge(c, row) {
 		return
 	}
 	client, ok := knowledgeClient(c)
@@ -751,6 +837,12 @@ func transferKnowledgeDocument(c *gin.Context, removeSource bool) {
 			status, message = http.StatusForbidden, "无权访问目标知识库"
 		}
 		c.JSON(status, gin.H{"success": false, "message": message})
+		return
+	}
+	if !canWritePublishedKnowledge(c, target) {
+		return
+	}
+	if removeSource && !canWritePublishedKnowledge(c, source) {
 		return
 	}
 	if target.Kind != model.KnowledgeBasePersonal && target.Kind != model.KnowledgeBaseShared {
@@ -991,6 +1083,9 @@ func applyKnowledgeDocumentCreators(ctx context.Context, baseId int, viewerId in
 }
 
 func uploadKnowledgeDocument(c *gin.Context, row *model.KnowledgeBase) {
+	if !canWritePublishedKnowledge(c, row) {
+		return
+	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxKnowledgeUploadBytes)
 	header, err := c.FormFile("file")
 	if err != nil {
@@ -1426,7 +1521,30 @@ func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *m
 			return
 		}
 	}
-	if stream {
+	terms, termsErr := model.ReadKnowledgeCreditTerms(base, c.GetInt("id"))
+	if termsErr != nil {
+		knowledgeCreditFailure(c, 500, termsErr)
+		return
+	}
+	requestId, questionKey := "", ""
+	if terms != nil {
+		if quoted := c.GetHeader("X-Knowledge-Price"); quoted != "" && quoted != strconv.FormatInt(terms.Price.QuestionCents, 10) {
+			knowledgeCreditFailure(c, 409, errors.New("知识库问答单价已变更，请重试"))
+			return
+		}
+		var saved string
+		var beginErr error
+		requestId, questionKey, saved, beginErr = beginMeteredKnowledgeQuestion(c, base, conversation, question, docIds)
+		if beginErr != nil {
+			knowledgeCreditFailure(c, 409, beginErr)
+			return
+		}
+		if saved != "" {
+			writeMeteredKnowledgeAnswer(c, stream, saved)
+			return
+		}
+	}
+	if stream && terms == nil {
 		answerKnowledgeConversationStream(c, client, base, conversation, question, docIds...)
 		return
 	}
@@ -1447,6 +1565,22 @@ func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *m
 	}
 	if recommendationErr != nil {
 		data["recommendation_warning"] = recommendationErr.Error()
+	}
+	if terms != nil {
+		if c.Request.Context().Err() != nil {
+			return
+		}
+		payload, err := json.Marshal(data)
+		if err != nil {
+			knowledgeCreditFailure(c, 500, err)
+			return
+		}
+		if _, err := model.SettleKnowledgeCredits(c.GetInt("id"), base, terms, "question", requestId, knowledgeCreditDocuments(citations), questionKey, string(payload)); err != nil {
+			knowledgeCreditFailure(c, 402, err)
+			return
+		}
+		writeMeteredKnowledgeAnswer(c, stream, string(payload))
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": data})
 }
@@ -1619,6 +1753,22 @@ func ListKnowledgeConversationMessages(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取对话失败"})
 		return
 	}
+	applies, creditErr := model.KnowledgeCreditApplies(base, c.GetInt("id"))
+	if creditErr != nil {
+		knowledgeCreditFailure(c, 500, creditErr)
+		return
+	}
+	if applies {
+		pending, err := model.KnowledgeCreditQuestionPending(conversation.RagflowSessionId)
+		if err != nil {
+			knowledgeCreditFailure(c, 500, err)
+			return
+		}
+		if pending {
+			knowledgeCreditFailure(c, 402, errors.New("上次问答未结算，请清空会话后重试"))
+			return
+		}
+	}
 	client, ok := knowledgeClient(c)
 	if !ok {
 		return
@@ -1754,4 +1904,33 @@ func CompleteKnowledgeConversation(c *gin.Context) {
 		return
 	}
 	answerKnowledgeConversation(c, client, base, conversation, input.Question, input.Stream, input.DocumentId)
+}
+
+// SetKnowledgeBaseLike updates the authenticated viewer's saved plaza preference.
+func SetKnowledgeBaseLike(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库编号无效"})
+		return
+	}
+	err = model.SetKnowledgeBaseLike(c.GetInt("id"), id, c.Request.Method == http.MethodPost)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "知识库不存在"})
+		return
+	}
+	if err != nil {
+		logger.Errorf(c.Request.Context(), "save knowledge like: %s", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存喜欢状态失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// canWritePublishedKnowledge keeps shared personal libraries writable only by their owner or root operator.
+func canWritePublishedKnowledge(c *gin.Context, base *model.KnowledgeBase) bool {
+	if base.PublicationScope == "" || base.OwnerUserId == c.GetInt("id") || knowledgeAdmin(c) {
+		return true
+	}
+	c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "仅所有者可修改已发布知识库"})
+	return false
 }

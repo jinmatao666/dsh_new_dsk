@@ -24,7 +24,8 @@ func GetOptions(c *gin.Context) {
 		if c.GetInt(ctxkey.Role) < model.RoleRootUser && isLoginOption(k) {
 			continue
 		}
-		if strings.HasSuffix(k, "Token") || strings.HasSuffix(k, "Secret") {
+		if strings.HasSuffix(k, "Token") || strings.HasSuffix(k, "Secret") ||
+			k == model.LandMarketProviderSecretOption || k == model.PlanningLectureProviderSecretOption {
 			continue
 		}
 		options = append(options, &model.Option{

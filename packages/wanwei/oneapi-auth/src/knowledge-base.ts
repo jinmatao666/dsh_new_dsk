@@ -108,6 +108,29 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
     }
     if (operation === 'list') return this.request('/api/knowledge-bases', {}, signal)
     if (operation === 'categories') return this.request('/api/knowledge-bases/categories', {}, signal)
+    if (operation === 'credit-prices') return this.request('/api/knowledge-bases/credit-prices', {}, signal)
+    if (operation === 'credit-price' || operation === 'save-credit-price') {
+      const id = integer(value.id, '知识库编号')
+      const path = `/api/knowledge-bases/${id}/credit-price`
+      if (operation === 'credit-price') {
+        const query = value.documentId === undefined ? '' : `?document_id=${encodeURIComponent(documentIdOf(value.documentId))}`
+        return this.request(path + query, {}, signal)
+      }
+      return this.request(path, { method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          browse_cents: value.browse_cents, question_cents: value.question_cents, download_cents: value.download_cents,
+        }) }, signal)
+    }
+    if (operation === 'publication' || operation === 'apply-publication') {
+      const id = integer(value.id, '知识库编号')
+      if (operation === 'publication') return this.request(`/api/knowledge-bases/${id}/publication`, {}, signal)
+      if (value.target !== 'public' && value.target !== 'subscription') throw new Error('发布范围无效')
+      if (typeof value.reason !== 'string' || value.reason.length > 500) throw new Error('申请说明无效')
+      return this.request(`/api/knowledge-bases/${id}/publication`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ target: value.target, reason: value.reason }),
+      }, signal)
+    }
     if (operation === 'plaza') {
       const params = new URLSearchParams()
       if (Number.isInteger(value.categoryId) && (value.categoryId as number) > 0) {
@@ -127,6 +150,10 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
       const id = integer(value.id, '知识库编号')
       return this.request(`/api/knowledge-bases/plaza/${id}/documents`, {}, signal)
     }
+    if (operation === 'like' || operation === 'unlike') {
+      const id = integer(value.id, '知识库编号')
+      return this.request(`/api/knowledge-bases/${id}/like`, { method: operation === 'like' ? 'POST' : 'DELETE' }, signal)
+    }
     if (operation === 'subscribe') {
       const id = integer(value.id, '知识库编号')
       return this.request(`/api/knowledge-bases/${id}/subscribe`, { method: 'POST' }, signal)
@@ -138,6 +165,14 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
     if (operation === 'create') {
       return this.request('/api/knowledge-bases', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(value),
+      }, signal)
+    }
+    if (operation === 'folders' || operation === 'create-folder') {
+      const id = integer(value.id, '知识库编号')
+      if (operation === 'folders') return this.request(`/api/knowledge-bases/${id}/folders`, {}, signal)
+      if (typeof value.name !== 'string' || value.name.trim() === '') throw new Error('文件夹名称无效')
+      return this.request(`/api/knowledge-bases/${id}/folders`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: value.name }),
       }, signal)
     }
     if (operation === 'documents') {
@@ -262,9 +297,24 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
     } catch (error) {
       return Response.json({ success: false, message: error instanceof Error ? error.message : '参数无效' }, { status: 400 })
     }
+    const action = url.searchParams.get('action')
+    if (action !== null && action !== 'browse' && action !== 'download') {
+      return Response.json({ success: false, message: '知识库文件操作无效' }, { status: 400 })
+    }
+    if (action !== null && (request.method !== 'POST' || request.headers.get('content-type') !== 'application/json')) {
+      return Response.json({ success: false, message: '付费文件操作必须使用 POST' }, { status: 405 })
+    }
+    const query = new URLSearchParams()
+    if (action !== null) {
+      query.set('action', action)
+      for (const field of ['request_id', 'expected_cents']) {
+        const value = url.searchParams.get(field)
+        if (value !== null) query.set(field, value)
+      }
+    }
     const cacheKey = `${id}:${documentId}`
     const cached = this.fileCache.get(cacheKey)
-    if (cached !== undefined && Date.now() - cached.at <= FILE_CACHE_TTL_MS) {
+    if (action === null && cached !== undefined && Date.now() - cached.at <= FILE_CACHE_TTL_MS) {
       return new Response(cached.body.slice(0), {
         status: 200,
         headers: {
@@ -279,8 +329,9 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
       return Response.json({ success: false, message: '请先登录后再使用知识库' }, { status: 401 })
     }
     const upstream = await fetch(
-      `${this.baseURL}/api/knowledge-bases/${id}/documents/${encodeURIComponent(documentId)}/file`,
+      `${this.baseURL}/api/knowledge-bases/${id}/documents/${encodeURIComponent(documentId)}/file${query.size === 0 ? '' : `?${query}`}`,
       {
+        ...(action === null ? {} : { method: 'POST' }),
         headers: { authorization: `Bearer ${token}` },
         signal: request.signal,
         redirect: 'error',
@@ -410,12 +461,16 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
     if (token === undefined || token === '') {
       return Response.json({ success: false, message: '请先登录后再使用知识库' }, { status: 401 })
     }
+    const price = request.headers.get('X-Knowledge-Price')
+    const requestId = request.headers.get('Idempotency-Key')
     const upstream = await fetch(`${this.baseURL}/api/knowledge-bases/${id}/chat/completions`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': 'application/json',
         accept: 'text/event-stream',
+        ...(price === null ? {} : { 'X-Knowledge-Price': price }),
+        ...(requestId === null ? {} : { 'Idempotency-Key': requestId }),
       },
       body: JSON.stringify(payload),
       signal: request.signal,

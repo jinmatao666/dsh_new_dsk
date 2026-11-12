@@ -47,13 +47,13 @@ export function libraryIsGrantedSubscription(item: KnowledgeBaseItem, selfUserId
 
 /**
  * Whether the selected library is an uncategorized personal row under 个人知识库.
- * Desktop write actions (upload, file delete) are scoped to this group only;
- * 公共知识库 and 订阅知识库 stay read-only.
+ * Publication retains owner write actions on the original personal library.
+ * Public and subscription viewers have read-only access.
  * @param item - Currently selected library, if any.
  */
 export function libraryIsDesktopPersonal(item: KnowledgeBaseItem | undefined): boolean {
   if (item === undefined) return false
-  return item.kind === 'personal' && (item.category_id ?? 0) === 0
+  return item.kind === 'personal' && (item.category_id ?? 0) === 0 && item.owned_by_viewer !== false
 }
 
 /**
@@ -77,7 +77,7 @@ export function libraryAllowsDesktopFileDelete(item: KnowledgeBaseItem | undefin
  * Nav: 个人知识库 and 订阅知识库 are always present (empty groups stay visible). 个人知识库
  * lists only libraries the caller owns. 公共知识库 merges every open category plus
  * uncategorized common libraries and appears only when non-empty. 订阅知识库 holds only
- * grant-backed subscriptions (not self-built auth libraries). Auth category names never
+ * grant-backed subscriptions and personal libraries the owner published for subscription. Auth category names never
  * appear as sidebar groups; self-built and discoverable auth libraries appear in 知识库广场
  * (owned cards sort last with status 我的).
  * @param items - Libraries the caller may open.
@@ -96,6 +96,7 @@ export function libraryNavGroups(
     item.kind === 'personal' && categoryIdOf(item) === 0 && libraryOwnedByViewer(item, selfUserId))
   const publicRows = items.filter((item) => {
     const categoryId = categoryIdOf(item)
+    if (item.publication_scope === 'public') return true
     if (categoryId === 0) return item.kind === 'common'
     const category = categoryById.get(categoryId)
     // Only common+open categories are public; personal/shared never ride a stale require_auth=false.
@@ -103,12 +104,14 @@ export function libraryNavGroups(
   })
   const authRows = items.filter((item) => {
     const categoryId = categoryIdOf(item)
+    if (item.publication_scope === 'subscription') return true
     if (categoryId === 0) return false
     const category = categoryById.get(categoryId)
     if (category === undefined) return false
     return category.type !== 'common' || category.require_auth
   })
-  const subscriptionRows = authRows.filter(item => librarySubscribedByViewer(item, selfUserId))
+  const subscriptionRows = authRows.filter(item => librarySubscribedByViewer(item, selfUserId)
+    || (item.publication_scope === 'subscription' && libraryOwnedByViewer(item, selfUserId)))
   const groups: LibraryGroup[] = [
     {
       key: 'personal', label: productText('个人知识库'), create: 'personal',

@@ -46,14 +46,15 @@ export type DeploymentFeatures = Record<NetworkEnvironment, {
   connectors: boolean
   knowledgeBases: boolean
   landMarket: boolean
+  planningLecture: boolean
   policyEncyclopedia: boolean
 }>
 
 /** Administrator-configured portal page addresses shown by desktop feature entries. */
-export type DeploymentFeaturePageId = 'landMarket' | 'policyEncyclopedia'
+export type DeploymentFeaturePageId = 'landMarket' | 'planningLecture' | 'policyEncyclopedia'
 export type DeploymentFeaturePages = Record<DeploymentFeaturePageId, { url: string }>
 
-const FEATURE_PAGE_IDS = ['landMarket', 'policyEncyclopedia'] as const
+const FEATURE_PAGE_IDS = ['landMarket', 'planningLecture', 'policyEncyclopedia'] as const
 
 /** Resolve omitted legacy settings and validate explicitly configured flags.
  * @param value - Public API feature settings.
@@ -61,8 +62,10 @@ const FEATURE_PAGE_IDS = ['landMarket', 'policyEncyclopedia'] as const
  */
 export function resolveDeploymentFeatures(value: unknown): DeploymentFeatures {
   if (value === undefined) return {
-    internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
-    intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+    internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false,
+      policyEncyclopedia: false },
+    intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false,
+      policyEncyclopedia: false },
   }
   if (typeof value !== 'object' || value === null) throw new Error('后台功能设置无效')
   const result = {} as DeploymentFeatures
@@ -74,13 +77,14 @@ export function resolveDeploymentFeatures(value: unknown): DeploymentFeatures {
     // 旧后台尚未提供知识库或门户开关；显式 null 或错误类型仍必须拒绝。
     const knowledgeBases = Object.hasOwn(record, 'knowledgeBases') ? record.knowledgeBases : true
     const landMarket = Object.hasOwn(record, 'landMarket') ? record.landMarket : false
+    const planningLecture = Object.hasOwn(record, 'planningLecture') ? record.planningLecture : false
     const policyEncyclopedia = Object.hasOwn(record, 'policyEncyclopedia') ? record.policyEncyclopedia : false
     if (typeof automations !== 'boolean' || typeof connectors !== 'boolean'
       || typeof knowledgeBases !== 'boolean' || typeof landMarket !== 'boolean'
-      || typeof policyEncyclopedia !== 'boolean') {
+      || typeof planningLecture !== 'boolean' || typeof policyEncyclopedia !== 'boolean') {
       throw new Error('后台功能设置无效')
     }
-    result[mode] = { automations, connectors, knowledgeBases, landMarket, policyEncyclopedia }
+    result[mode] = { automations, connectors, knowledgeBases, landMarket, planningLecture, policyEncyclopedia }
   }
   return result
 }
@@ -106,14 +110,14 @@ function resolveFeaturePageUrl(value: unknown): string {
 
 /** Resolve omitted portal pages and validate configured addresses.
  * @param value - Public API feature page settings.
- * @returns Allowlisted page addresses for both portals.
+ * @returns Allowlisted portal page addresses.
  */
 export function resolveDeploymentFeaturePages(value: unknown): DeploymentFeaturePages {
   if (value === undefined) {
-    return { landMarket: { url: '' }, policyEncyclopedia: { url: '' } }
+    return { landMarket: { url: '' }, planningLecture: { url: '' }, policyEncyclopedia: { url: '' } }
   }
   if (typeof value !== 'object' || value === null) throw new Error('后台功能页面配置无效')
-  const result = { landMarket: { url: '' }, policyEncyclopedia: { url: '' } } as DeploymentFeaturePages
+  const result = { landMarket: { url: '' }, planningLecture: { url: '' }, policyEncyclopedia: { url: '' } } as DeploymentFeaturePages
   for (const id of FEATURE_PAGE_IDS) {
     const entry = (value as Record<string, unknown>)[id]
     if (entry === undefined) continue

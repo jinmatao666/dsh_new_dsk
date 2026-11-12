@@ -14,3 +14,9 @@ const LandMarketProviderSecretOption = "LandMarketProviderSecretHash"
 
 // LandMarketFeatureKey identifies land-market portal tickets.
 const LandMarketFeatureKey = "landMarket"
+
+// PlanningLectureProviderSecretOption stores the planning lecture provider credential digest.
+const PlanningLectureProviderSecretOption = "PlanningLectureProviderSecretHash"
+
+// PlanningLectureFeatureKey identifies planning lecture tickets.
+const PlanningLectureFeatureKey = "planningLecture"

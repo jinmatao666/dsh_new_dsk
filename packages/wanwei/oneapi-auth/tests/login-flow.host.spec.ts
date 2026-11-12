@@ -279,10 +279,12 @@ describe('OneAPI login flow', () => {
         plugins: { browserAssistant: true },
         billing: { enabled: true, showCredits: true, showMultipliers: true },
         features: {
-          internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
-          intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+          internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false,
+            policyEncyclopedia: false },
+          intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false,
+            policyEncyclopedia: false },
         },
-        featurePages: { landMarket: { url: '' }, policyEncyclopedia: { url: '' } },
+        featurePages: { landMarket: { url: '' }, planningLecture: { url: '' }, policyEncyclopedia: { url: '' } },
       },
     })
     expect(await handler?.('deployment-get', {}, new AbortController().signal)).toEqual({
@@ -292,10 +294,12 @@ describe('OneAPI login flow', () => {
         plugins: { browserAssistant: true },
         billing: { enabled: true, showCredits: true, showMultipliers: true },
         features: {
-          internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
-          intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, policyEncyclopedia: false },
+          internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false,
+            policyEncyclopedia: false },
+          intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false,
+            policyEncyclopedia: false },
         },
-        featurePages: { landMarket: { url: '' }, policyEncyclopedia: { url: '' } },
+        featurePages: { landMarket: { url: '' }, planningLecture: { url: '' }, policyEncyclopedia: { url: '' } },
       },
     })
     expect(requests).toEqual([`${expected}/api/desktop-config`, `${expected}/api/desktop-config`])

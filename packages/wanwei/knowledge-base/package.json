@@ -14,7 +14,7 @@
   },
   "dsh": {
     "client": {
-      "external": ["@deepseek-ai/dsh-wanwei-feature-panels/client"],
+      "external": ["@deepseek-ai/dsh-wanwei-feature-panels/client", "@deepseek-ai/dsh-wanwei-oneapi-auth/client"],
       "inject": [
         "@deepseek-ai/dsh-wanwei-oneapi-auth",
         "@deepseek-ai/dsh-wanwei-feature-panels",
@@ -30,6 +30,7 @@
   "scripts": { "bundle": "tsdown", "watch": "tsdown --watch" },
   "license": "MIT",
   "dependencies": {
+    "@deepseek-ai/dsh-util-crypto": "workspace:^",
     "marked": "^15.0.11",
     "pdfjs-dist": "^4.10.38"
   },

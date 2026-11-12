@@ -76,6 +76,15 @@ func RetrieveKnowledgeBases(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "无权使用所选知识库"})
 			return
 		}
+		terms, creditErr := model.ReadKnowledgeCreditTerms(base, userId)
+		if creditErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库积分配置失败"})
+			return
+		}
+		if terms != nil && terms.Price.QuestionCents > 0 {
+			c.JSON(http.StatusPaymentRequired, gin.H{"success": false, "message": "付费订阅知识库请在知识库页面提问，以按实际溯源结算"})
+			return
+		}
 		if _, seen := byDataset[base.RagflowDatasetId]; seen {
 			continue
 		}

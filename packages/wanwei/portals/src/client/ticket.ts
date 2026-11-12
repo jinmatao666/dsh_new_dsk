@@ -7,7 +7,7 @@
  * @returns URL safe to load in the portal iframe.
  */
 export function withPortalTicket(pageUrl: string, ticket: string): string {
-  if (!/^[a-f0-9]{64}$/.test(ticket)) throw new Error('土地市场票据无效')
+  if (!/^[a-f0-9]{64}$/.test(ticket)) throw new Error('页面登录票据无效')
   const url = new URL(pageUrl)
   if (url.hash.startsWith('#/')) {
     url.searchParams.set('ticket', ticket)

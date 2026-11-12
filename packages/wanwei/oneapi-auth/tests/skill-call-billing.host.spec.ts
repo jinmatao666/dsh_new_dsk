@@ -37,7 +37,7 @@ it('charges separate successful skill tool calls separately, never slash injecti
     expect(statuses).toEqual(['succeeded', 'succeeded', 'failed'])
     const next = vi.fn(async () => ({ isError: false }))
     await dispatch!({ ...base, name: 'read_file', callId: 'other' }, next)
-    await dispatch!({ ...base, agent: undefined, callId: 'manual' }, next)
+    await dispatch!({ name: base.name, arguments: base.arguments, signal: base.signal, callId: 'manual' }, next)
     expect(reserves).toBe(3)
   } finally { dispose() }
 })

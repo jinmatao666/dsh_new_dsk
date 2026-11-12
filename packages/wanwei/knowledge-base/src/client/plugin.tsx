@@ -1,4 +1,8 @@
+import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
+import type { PublicationRequest } from './PublicationControls.tsx'
 import { createPanelController, registerFeaturePanel } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
+import { useSyncExternalStore } from 'react'
+import { parseKnowledgeCreditQuote, type NetworkController } from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connection/client'
 import { parseCitations, type KnowledgeCitation } from './citations.ts'
@@ -121,6 +125,7 @@ function knowledgeItem(raw: unknown): KnowledgeBaseItem {
     }
     categoryId = item.category_id as number
   }
+  if (item.publication_scope !== undefined && item.publication_scope !== '' && item.publication_scope !== 'public' && item.publication_scope !== 'subscription') throw new Error('知识库响应字段无效')
   const owned = item.owned_by_viewer
   if (owned !== undefined && typeof owned !== 'boolean') {
     throw new Error('知识库响应字段无效')
@@ -136,7 +141,9 @@ function knowledgeItem(raw: unknown): KnowledgeBaseItem {
   }
   const documentBytes = optionalCount(item.document_bytes)
   const subscriberCount = optionalCount(item.subscriber_count)
-  if (documentBytes === undefined || subscriberCount === undefined ||
+  const visitCount = optionalCount(item.visit_count)
+  if (documentBytes === undefined || subscriberCount === undefined || visitCount === undefined ||
+    (item.tags !== undefined && item.tags !== null && typeof item.tags !== 'string') ||
     (item.owner_username !== undefined && typeof item.owner_username !== 'string')) {
     throw new Error('知识库响应字段无效')
   }
@@ -149,6 +156,8 @@ function knowledgeItem(raw: unknown): KnowledgeBaseItem {
     ...(documentCount !== undefined ? { document_count: documentCount as number } : {}),
     document_bytes: documentBytes,
     subscriber_count: subscriberCount,
+    visit_count: visitCount,
+    tags: typeof item.tags === 'string' ? item.tags : '',
     ...(typeof item.owner_username === 'string' ? { owner_username: item.owner_username } : {}),
     ...(typeof item.updated_at === 'string' ? { updated_at: item.updated_at } : {}),
   }
@@ -191,6 +200,9 @@ function knowledgePlazaItem(raw: unknown): KnowledgePlazaItem {
       item.subscription_status !== 'approved' && item.subscription_status !== 'owned')) {
     throw new Error('知识库广场字段无效')
   }
+  if (item.liked_by_viewer !== undefined && typeof item.liked_by_viewer !== 'boolean') {
+    throw new Error('知识库广场字段无效')
+  }
   const count = optionalCount(item.document_count)
   const bytes = optionalCount(item.document_bytes)
   const subscribers = optionalCount(item.subscriber_count)
@@ -207,6 +219,7 @@ function knowledgePlazaItem(raw: unknown): KnowledgePlazaItem {
     category_id: item.category_id as number,
     category_name: item.category_name,
     owner_username: item.owner_username,
+    liked_by_viewer: item.liked_by_viewer === true,
     subscription_status: item.subscription_status,
     document_count: count,
     document_bytes: bytes,
@@ -214,6 +227,20 @@ function knowledgePlazaItem(raw: unknown): KnowledgePlazaItem {
     ...(typeof item.updated_at === 'string' ? { updated_at: item.updated_at } : {}),
     ...(cover !== undefined ? { cover } : {}),
   }
+}
+
+/** Validate a saved publication request from OneAPI.
+ * @param raw - Wire response.
+ * @returns Validated publication request.
+ */
+function publicationRequest(raw: unknown): PublicationRequest {
+  if (typeof raw !== 'object' || raw === null) throw new Error('发布申请响应无效')
+  const value = raw as Record<string, unknown>
+  if (!Number.isInteger(value.id) || typeof value.review_note !== 'string'
+    || (value.status !== 'pending' && value.status !== 'approved' && value.status !== 'rejected')
+    || (value.target !== 'public' && value.target !== 'subscription')) throw new Error('发布申请响应无效')
+  return { id: value.id as number, status: value.status,
+    target: value.target, review_note: value.review_note }
 }
 
 /** Keep a plaza or library cover only when it is an image data URL.
@@ -238,6 +265,12 @@ function optionalCount(value: unknown): number | undefined {
 }
 
 export const inject = ['slots', 'connection', 'wanweiNetwork']
+
+/** Keep sidebar presentation synchronized with the server-confirmed deployment mode. */
+function KnowledgePanel({ api, network }: { api: KnowledgeApi; network: NetworkController }) {
+  const { mode } = useSyncExternalStore(network.subscribe, network.getSnapshot)
+  return <KnowledgePage api={api} networkMode={mode} />
+}
 
 /**
  * Register the composer knowledge toggle and carry its selection into first-send Sessions.
@@ -326,7 +359,18 @@ export function apply(ctx: Context): void {
         }
       })
     },
+    async creditPrice(id, documentId) { return parseKnowledgeCreditQuote(await call('credit-price', { id, documentId })) },
+    async saveCreditPrice(id, price) { await call('save-credit-price', { id, ...price }) },
+    async publication(id) {
+      const raw = await call('publication', { id })
+      if (typeof raw !== 'object' || raw === null) throw new Error('发布状态响应无效')
+      const value = raw as Record<string, unknown>
+      if (typeof value.enabled !== 'boolean') throw new Error('发布状态响应无效')
+      return { enabled: value.enabled, application: value.application === null ? null : publicationRequest(value.application) }
+    },
+    async applyPublication(id, target, reason) { return publicationRequest(await call('apply-publication', { id, target, reason })) },
     async subscribe(id) { await call('subscribe', { id }) },
+    async setLike(id, liked) { await call(liked ? 'like' : 'unlike', { id }) },
     async unsubscribe(id) { await call('unsubscribe', { id }) },
     async create(input) { return knowledgeItem(await call('create', input)) },
     async documents(id) {
@@ -366,9 +410,16 @@ export function apply(ctx: Context): void {
         return { id: chunk.id, content: chunk.content }
       })
     },
-    async download(knowledgeBaseId, documentId) {
+    async download(knowledgeBaseId, documentId, charge) {
+      const query = new URLSearchParams({ id: String(knowledgeBaseId), documentId })
+      if (charge !== undefined) {
+        query.set('action', charge.action)
+        query.set('request_id', charge.requestId)
+        query.set('expected_cents', String(charge.expectedCents))
+      }
       const response = await fetch(
-        `/api/desktop-knowledge-file?id=${knowledgeBaseId}&documentId=${encodeURIComponent(documentId)}`,
+        `/api/desktop-knowledge-file?${query}`,
+        charge === undefined ? undefined : { method: 'POST', headers: { 'content-type': 'application/json' } },
       )
       if (!response.ok) {
         let message = '知识库文件下载失败'
@@ -390,8 +441,14 @@ export function apply(ctx: Context): void {
         bytes: new Uint8Array(buffer),
       }
     },
-    async upload(id, file) {
-      await uploadKnowledgeFile(call, id, file)
+    async folders(id) {
+      const raw = await call('folders', { id })
+      if (!Array.isArray(raw) || !raw.every((name): name is string => typeof name === 'string')) throw new Error('文件夹列表无效')
+      return raw
+    },
+    async createFolder(id, name) { await call('create-folder', { id, name }) },
+    async upload(id, file, parentPath) {
+      await uploadKnowledgeFile(call, id, file, parentPath)
     },
     async importWebLinks(id, urls) {
       await call('import-web-links', { id, urls })
@@ -455,14 +512,15 @@ export function apply(ctx: Context): void {
         }
       })
     },
-    async complete(knowledgeBaseId, question, onProgress, signal, documentId) {
+    async complete(knowledgeBaseId, question, onProgress, signal, documentId, expectedCents) {
       const payload: Record<string, unknown> = { id: knowledgeBaseId, question }
       if (typeof documentId === 'string' && documentId.trim() !== '') {
         payload.document_id = documentId.trim()
       }
       const response = await fetch('/api/desktop-knowledge-chat', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'Idempotency-Key': randomUUID(),
+          ...(expectedCents === undefined ? {} : { 'X-Knowledge-Price': String(expectedCents) }) },
         body: JSON.stringify(payload),
         credentials: 'same-origin',
         ...(signal === undefined ? {} : { signal }),
@@ -515,7 +573,7 @@ export function apply(ctx: Context): void {
     hooks: { network: ctx.wanweiNetwork },
     bodyClassName: 'dsh-knowledge-host',
     headerArt: '/knowledge-covers/hero-banner.png?v=185-2x',
-    renderContent: () => <KnowledgePage api={api} />,
+    renderContent: () => <KnowledgePanel api={api} network={ctx.wanweiNetwork} />,
   })
   installComposerToggle(ctx, call, api, () => { controller.open() })
 }

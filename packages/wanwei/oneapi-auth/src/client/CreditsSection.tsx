@@ -1,3 +1,4 @@
+import { KnowledgeCreditSettings } from './KnowledgeCreditSettings.tsx'
 import { accountIcons } from './account-icons.ts'
 import { useEffect, useState } from 'react'
 import { Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -17,6 +18,7 @@ export interface CreditsInjected {
   accounting?: HostObservable<boolean>
   hooks: { auth: HostObservable<AuthView> }
   requestCredits: (operation: string, page?: number, filter?: string) => Promise<unknown>
+  requestKnowledgeCredits?: (operation: string, payload?: object) => Promise<unknown>
 }
 const filterOptions = [['all', '全部'], ['earned', '获得'], ['spent', '消耗']] as const
 const points = (value: number) => value.toLocaleString('zh-CN', { maximumFractionDigits: 4 })
@@ -45,7 +47,7 @@ export function CheckinShortcut({ useAuth, requestCredits, wide, onOpen }: Pick<
 }
 
 /** Balance, explicit check-in and paginated personal credit history. */
-export function CreditsSection({ useAuth, requestCredits }: PropsRuntime<'settings.section'> & InjectFace<CreditsInjected>) {
+export function CreditsSection({ useAuth, requestCredits, requestKnowledgeCredits }: PropsRuntime<'settings.section'> & InjectFace<CreditsInjected>) {
   const auth = useAuth(value => value)
   const [status, setStatus] = useState<Checkin>()
   const [history, setHistory] = useState<History>()
@@ -85,8 +87,12 @@ export function CreditsSection({ useAuth, requestCredits }: PropsRuntime<'settin
         <h1>积分与用量</h1>
         <p>查看积分余额、签到奖励和使用记录。</p>
       </div>
-      <button className={css.secondary} disabled={loading || busy}
-        onClick={() => { changed(); setRevision(value => value + 1) }}>刷新</button>
+      <div className={css.headingActions}>
+        {auth.state === 'authenticated' && requestKnowledgeCredits !== undefined &&
+          <KnowledgeCreditSettings request={requestKnowledgeCredits} revision={revision} />}
+        <button className={css.secondary} disabled={loading || busy}
+          onClick={() => { changed(); setRevision(value => value + 1) }}>刷新</button>
+      </div>
     </header>
     <div className={css.balance}>
       <span>可用积分</span>

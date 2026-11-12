@@ -85,6 +85,7 @@ func TestDesktopFeatureSettings(t *testing.T) {
 	legacyFlags, err := parseDesktopDeploymentSettings(`{"network":"intranet","features":{"internet":{"automations":false,"connectors":true},"intranet":{"automations":true,"connectors":false}}}`)
 	if err != nil || legacyFlags.Features["internet"].Automations || legacyFlags.Features["intranet"].Connectors || !legacyFlags.Features["internet"].KnowledgeBases || !legacyFlags.Features["intranet"].KnowledgeBases ||
 		legacyFlags.Features["internet"].LandMarket || legacyFlags.Features["intranet"].LandMarket ||
+		legacyFlags.Features["internet"].PlanningLecture || legacyFlags.Features["intranet"].PlanningLecture ||
 		legacyFlags.Features["internet"].PolicyEncyclopedia || legacyFlags.Features["intranet"].PolicyEncyclopedia {
 		t.Fatalf("legacy feature settings: %+v %v", legacyFlags, err)
 	}
@@ -93,9 +94,12 @@ func TestDesktopFeatureSettings(t *testing.T) {
 			t.Fatalf("accepted invalid knowledge flag: %s", invalid)
 		}
 	}
-	settings, err := parseDesktopDeploymentSettings(`{"network":"internet","features":{"internet":{"automations":false,"connectors":false,"knowledgeBases":true},"intranet":{"automations":true,"connectors":true,"knowledgeBases":false},"secret":{"connectors":true}}}`)
+	settings, err := parseDesktopDeploymentSettings(`{"network":"internet","features":{"internet":{"automations":false,"connectors":false,"knowledgeBases":true,"planningLecture":true},"intranet":{"automations":true,"connectors":true,"knowledgeBases":false},"secret":{"connectors":true}}}`)
 	if err != nil || len(settings.Features) != 2 || settings.Features["internet"].Connectors || !settings.Features["intranet"].Connectors || !settings.Features["internet"].KnowledgeBases {
 		t.Fatalf("settings: %+v %v", settings, err)
+	}
+	if !settings.Features["internet"].PlanningLecture || settings.Features["intranet"].PlanningLecture {
+		t.Fatalf("planning lecture switches: %+v", settings.Features)
 	}
 	legacy, err := parseDesktopDeploymentSettings(`{"network":"intranet"}`)
 	if err != nil || !legacy.Features["internet"].Connectors || legacy.Features["intranet"].Connectors || !legacy.Features["intranet"].Automations || !legacy.Features["intranet"].KnowledgeBases ||
@@ -120,6 +124,7 @@ func TestDesktopFeaturePages(t *testing.T) {
 		`{"network":"internet","featurePages":{"landMarket":{"url":"ftp://bad"}}}`,
 		`{"network":"internet","featurePages":{"policyEncyclopedia":{"url":true}}}`,
 		`{"network":"internet","featurePages":{"landMarket":{"url":"not-a-url"}}}`,
+		`{"network":"internet","featurePages":{"planningLecture":{"url":"ftp://bad"}}}`,
 	} {
 		if _, err := parseDesktopDeploymentSettings(raw); err == nil {
 			t.Fatalf("accepted invalid featurePages: %s", raw)

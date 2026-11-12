@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-`libraryIsDesktopPersonal` 仅对未归类个人库为真（`kind === 'personal'` 且 `category_id` 缺省或为 0）——与侧栏「个人知识库」行一致。`libraryAllowsDesktopUpload` 委托该谓词。内容工具栏仅在该条件成立时渲染上传控件，选中离开个人库时关闭已打开菜单。个人库菜单保留「本地文件」、「网页链接」（见 [桌面知识库网页链接导入](2026-11-06-desktop-knowledge-web-link-import.zh.md)）与「录音纪要」（见 [桌面知识库录音纪要](2026-11-06-desktop-knowledge-recording-minutes.zh.md)）。从个人知识库导入、笔记、腾讯文档、本地文件夹与新建空文件夹入口保持隐藏。文件右键删除使用同一按个人分组谓词（见 [桌面知识库文件右键仅删除](2026-11-06-desktop-knowledge-file-context-delete-only.zh.md)）。
+`libraryIsDesktopPersonal` 仅对未归类个人库为真（`kind === 'personal'` 且 `category_id` 缺省或为 0）——与侧栏「个人知识库」行一致。`libraryAllowsDesktopUpload` 委托该谓词。内容工具栏仅在该条件成立时渲染上传控件，选中离开个人库时关闭已打开菜单。个人库菜单保留「本地文件」、「网页链接」（见 [桌面知识库网页链接导入](2026-11-06-desktop-knowledge-web-link-import.zh.md)）与「录音纪要」（见 [桌面知识库录音纪要](2026-11-06-desktop-knowledge-recording-minutes.zh.md)）。从个人知识库导入、笔记和腾讯文档入口保持隐藏。本地文件夹上传和空目录创建遵循[知识库文件夹](2026-11-12-knowledge-empty-folders.zh.md)。文件右键删除使用同一按个人分组谓词（见 [桌面知识库文件右键仅删除](2026-11-06-desktop-knowledge-file-context-delete-only.zh.md)）。
 
 ## 考虑过的替代方案
 
