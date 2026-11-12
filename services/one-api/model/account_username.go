@@ -84,3 +84,40 @@ func InitializePhoneUsername(userID int) (string, error) {
 	})
 	return name, err
 }
+
+// HasUsernamePassword reports whether an account already has both managed login credentials.
+// Missing credentials do not qualify for the WeChat phone-binding exemption.
+func HasUsernamePassword(userID int) (bool, error) {
+	if ACCOUNT_DB == nil {
+		var user User
+		if err := DB.Select("username", "password").First(&user, userID).Error; err != nil {
+			return false, err
+		}
+		return strings.TrimSpace(user.Username) != "" && user.Password != "", nil
+	}
+	var product AccountProduct
+	err := ACCOUNT_DB.Where("product_code = ? AND local_user_id = ?", ProductCodeParvis, userID).First(&product).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var name AccountIdentifier
+	err = ACCOUNT_DB.Where("account_id = ? AND type = ?", product.AccountId, IdentifierTypeUsername).First(&name).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(name.Identifier) == "" {
+		return false, nil
+	}
+	var credential AccountCredential
+	err = ACCOUNT_DB.Where("account_id = ?", product.AccountId).First(&credential).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	return err == nil && credential.PasswordHash != "", err
+}

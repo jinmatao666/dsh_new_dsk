@@ -59,3 +59,19 @@ it('completes phone binding for an existing WeChat account without registering a
   await waitFor(() =>{  expect(request).toHaveBeenCalledWith('wechat-phone-bind', expect.objectContaining({ state: 'owned-state', phone: '13800138000' }), expect.anything()) })
   expect(request.mock.calls.some(([op]) => op === 'register' || op === 'sms')).toBe(false)
 })
+
+
+it('links an existing password account after scanning without requiring a phone', async () => {
+  const request = vi.fn(async (op: string) => op === 'capabilities' ? { data: { ...cap, wechat: true } }
+    : op === 'qr' ? { data: { state: 'link-state', image: 'data:image/png;base64,AA==' } }
+      : op === 'poll' ? { status: 'unbound' } : { state: 'authenticated' })
+  render(<PublicLogin mode='qr' request={request} onBack={() => {}} t={t} />)
+  const choosePassword = await screen.findByRole('button', { name: zh.loginLinkByPassword }, { timeout: 3500 })
+  fireEvent.click(choosePassword)
+  expect(screen.queryByLabelText(zh.securityPhone)).toBeNull()
+  fireEvent.change(screen.getByLabelText(zh.username), { target: { value: 'yxh' } })
+  fireEvent.change(screen.getByLabelText(zh.password), { target: { value: 'password123' } })
+  fireEvent.click(screen.getByRole('button', { name: zh.loginLinkAccount }))
+  await waitFor(() => { expect(request).toHaveBeenCalledWith('password', { username: 'yxh', password: 'password123', wechat_state: 'link-state' }, expect.anything()) })
+  expect(request.mock.calls.some(([op]) => ['send', 'sms', 'register'].includes(op))).toBe(false)
+})

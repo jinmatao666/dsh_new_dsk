@@ -779,6 +779,7 @@ export function apply(ctx: Context, config: Config): void {
           const username = String((result.data as { username?: string } | undefined)?.username || provisional.username)
           return await establishSession(provisional.cookie, username, serviceSignal(), provisional.userId)
         }
+        if (args.operation === 'password' && !pendingWechat.has(input.wechat_state ?? '')) throw new Error('微信验证已过期，请重新扫码')
         if (args.operation === 'poll' && !pendingWechat.has(input.state ?? '')) throw new Error('微信二维码已失效，请刷新')
         const result = await publicAuthRequest(baseURL, args.operation, input, serviceSignal())
         signal.throwIfAborted()
@@ -798,7 +799,7 @@ export function apply(ctx: Context, config: Config): void {
           })
           pendingWechat.delete(input.state ?? '')
         }
-        if ((args.operation === 'sms' || args.operation === 'register') && value.success === true || args.operation === 'poll' && value.status === 'success') {
+        if ((args.operation === 'sms' || args.operation === 'register' || args.operation === 'password') && value.success === true || args.operation === 'poll' && value.status === 'success') {
           if (args.operation === 'poll') pendingWechat.delete(input.state ?? '')
           const cookie = sessionCookie(result.headers)
           if (!cookie) throw new Error('认证成功但没有返回登录会话，请重试')

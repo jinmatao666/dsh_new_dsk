@@ -26,3 +26,10 @@ it('rejects arbitrary routes, invalid phones, business failures and foreign QR U
   await expect(publicAuthRequest('https://server.test', 'qr', {}, signal())).rejects.toThrow('二维码')
   expect(fetcher).toHaveBeenCalledTimes(2)
 })
+
+it('uses the existing password login route without requiring a phone', async () => {
+  const fetcher = vi.fn(async () => Response.json({ success: true, data: { username: 'yxh' } }))
+  vi.stubGlobal('fetch', fetcher)
+  await publicAuthRequest('https://server.test', 'password', { username: 'yxh', password: 'secret', wechat_state: 'scan' }, signal())
+  expect(fetcher).toHaveBeenCalledWith('https://server.test/api/user/login', expect.objectContaining({ method: 'POST' }))
+})
