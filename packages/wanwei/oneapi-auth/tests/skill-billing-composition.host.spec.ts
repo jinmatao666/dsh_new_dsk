@@ -27,7 +27,7 @@ it('keeps loader-composed instruction loads free and bills only explicit executi
     ctx.loader.builtins.include = Include
     ctx.loader.internal = { version: 'v2', async import() {
       return { name: 'skill-billing-test', apply(scope: Context) { executor = createSkillExecutor(scope, 'https://platform.test', async () => 'account') } }
-    } } as NonNullable<typeof ctx.loader.internal>
+    } } as unknown as NonNullable<typeof ctx.loader.internal>
     await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(file).href } })
     await ctx.loader.await()
     const session = { id: 'composed-session', events: [] }
