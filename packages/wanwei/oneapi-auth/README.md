@@ -15,6 +15,8 @@ Edition settings independently control credit UI, reference multipliers and acco
 
 Existing usernames survive phone/WeChat binding; absent usernames default to the verified phone. WeChat onboarding requires verified-phone binding. Username edits support 2–32 letters, Chinese characters, digits or underscores, remain unique and synchronize both account views. Phone-shaped names must belong to this account. Model preferences use the backend address and stable user ID.
 
+Skill fixed fees are collected only when an agent invokes the skill tool and loading succeeds. Each distinct call ID is billed once; two calls to the same skill in one turn are two fees. Slash instruction injection, installation, browsing, downloads and failed loads are not charged. Reservations precede dispatch and unsuccessful calls release them. Successful loading settles immediately; later conversation failure does not refund the invocation fee. Zero-price skills remain free; model usage is independently billed. Settlement retries reuse the task capability; crash-orphaned reservations expire on the backend.
+
 In the operations edition, the credits page shows Knowledge credit settings next to Refresh once the user has a personal library approved for subscription. The list includes only libraries that user published for subscription. The Host forwards explicit metered file requests to OneAPI with the accepted price and a request identity, bypassing the ordinary file cache. Credit history includes subscription spending and maintainer income.
 
 ## Summary

@@ -348,7 +348,15 @@ func RedeemExpertWebTicket(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "提供方凭据无效"})
 		return
 	}
+	contextSecret, contextErr := expertWebRandom()
+	if contextErr != nil {
+		c.JSON(500, gin.H{"message": "创建计费上下文失败"})
+		return
+	}
+	contextSecret = "wbc_" + contextSecret
+	contextExpiry := time.Now().Add(time.Hour)
 	var userID int
+	var billingExpert string
 	err := model.DB.Transaction(func(tx *gorm.DB) error {
 		var ticket model.ExpertWebTicket
 		if err := tx.First(&ticket, "hash = ?", expertWebDigest(input.Ticket)).Error; err != nil {
@@ -370,13 +378,14 @@ func RedeemExpertWebTicket(c *gin.Context) {
 			return errors.New("ticket expired or used")
 		}
 		userID = ticket.UserID
-		return nil
+		billingExpert = profile.Key
+		return tx.Create(&model.BusinessBillingContext{Hash: model.BillingDigest(contextSecret), UserID: userID, ExpertKey: profile.Key, ProviderHash: profile.ProviderSecretHash, ExpiresAt: contextExpiry}).Error
 	})
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "票据无效、已过期或已使用"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"user_id": strconv.Itoa(userID)})
+	c.JSON(http.StatusOK, gin.H{"user_id": strconv.Itoa(userID), "billing_context": contextSecret, "billing_expires_at": contextExpiry, "expert_key": billingExpert})
 }
 
 // expertWebCatalogQuery quotes the reserved key column for every supported SQL dialect.

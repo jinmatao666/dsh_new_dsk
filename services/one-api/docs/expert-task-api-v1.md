@@ -1,3 +1,5 @@
+> 历史讨论草案：统一接口以 [统一业务积分接口 v1](unified-business-billing-v1.md) 为准，下面的专家专用路径未实施，不应作为接入地址。
+
 # 专家任务接入标准 v1（草案）
 
 现有 /api/expert-web/:key/launch 和 /api/expert-web/redeem 继续负责打开专家和兑换一次性身份票据。打开页面不创建任务，不扣积分。以下三个接口为新增契约，尚未上线。

@@ -111,6 +111,29 @@ func GetDesktopCredits(c *gin.Context) {
 			items = append(items, desktopCreditItem{Id: "grant-" + strconv.FormatInt(r.Id, 10), Time: r.CreatedAt.Unix(), Name: name, Credits: float64(r.Amount) / unit, Balance: balance})
 		}
 	}
+	if filter != "earned" && model.DB.Migrator().HasTable(&model.BillingTask{}) {
+		var tasks []model.BillingTask
+		var count int64
+		query := model.DB.Model(&model.BillingTask{}).Where("user_id = ? AND state = ? AND quota > 0", id, "succeeded")
+		if query.Count(&count).Error != nil || query.Order("settled_at DESC").Limit(limit).Find(&tasks).Error != nil {
+			fail()
+			return
+		}
+		total += count
+		for _, task := range tasks {
+			balance := float64(task.BalanceAfter) / unit
+			at := task.CreatedAt.Unix()
+			if task.SettledAt != nil {
+				at = task.SettledAt.Unix()
+			}
+			items = append(items, desktopCreditItem{Id: "business-" + task.ID, Time: at, Name: task.Kind + " · " + task.ItemID + " · " + task.Action + func() string {
+				if task.Description != "" {
+					return " · " + task.Description
+				}
+				return ""
+			}(), Credits: -float64(task.Quota) / unit, Balance: &balance})
+		}
+	}
 	if filter != "earned" {
 		var rows []model.Log
 		var count int64

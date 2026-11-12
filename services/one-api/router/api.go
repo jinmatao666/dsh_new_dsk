@@ -25,6 +25,11 @@ func SetApiRouter(router *gin.Engine) {
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
 	apiRouter.Use(middleware.GlobalAPIRateLimit())
 	apiRouter.Use(middleware.AdminOperationLog()) // 后台操作审计记录
+	apiRouter.GET("/billing/v1/quote", controller.BusinessBillingAuth(middleware.UserAuth()), controller.GetBillingQuote)
+	apiRouter.PUT("/billing/v1/rules", middleware.RootAuth(), controller.PutBillingRule)
+	apiRouter.POST("/billing/v1/tasks", controller.BusinessBillingAuth(middleware.UserAuth()), controller.ReserveBusinessBilling)
+	apiRouter.GET("/billing/v1/tasks/:id", controller.BusinessBillingAuth(middleware.UserAuth()), controller.GetBusinessBilling)
+	apiRouter.POST("/billing/v1/tasks/:id/result", controller.ResultBusinessBilling)
 	installers := apiRouter.Group("/admin/website-installers", middleware.RootAuth())
 	installers.GET("", controller.AdminListWebsiteInstallers)
 	installers.POST("", controller.AdminUploadWebsiteInstaller)

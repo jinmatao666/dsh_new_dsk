@@ -15,8 +15,19 @@ import (
 // ChangeTokenCreditQuota 在同一事务内调整用户账本和令牌；负数按预扣来源原路退款。
 // 返回本次扣减的账本行，退款不会把限时积分变成永久积分。
 func ChangeTokenCreditQuota(userID, tokenID int, delta int64, reserved map[int64]int64) (map[int64]int64, error) {
+	deducted, err := changeTokenCreditQuotaDB(DB, userID, tokenID, delta, reserved)
+	if err == nil && common.RedisEnabled {
+		if cacheErr := common.RedisDel(fmt.Sprintf("user_quota:%d", userID)); cacheErr != nil {
+			logger.SysError("清理积分余额缓存失败：" + cacheErr.Error())
+		}
+	}
+	return deducted, err
+}
+
+// changeTokenCreditQuotaDB participates in an owning transaction; tokenID zero uses the account ledger only.
+func changeTokenCreditQuotaDB(db *gorm.DB, userID, tokenID int, delta int64, reserved map[int64]int64) (map[int64]int64, error) {
 	deducted := map[int64]int64{}
-	err := DB.Transaction(func(tx *gorm.DB) error {
+	err := db.Transaction(func(tx *gorm.DB) error {
 		var user User
 		query := tx.Where("id = ?", userID)
 		if !common.UsingSQLite {
@@ -26,15 +37,17 @@ func ChangeTokenCreditQuota(userID, tokenID int, delta int64, reserved map[int64
 			return err
 		}
 		var token Token
-		query = tx.Where("id = ? AND user_id = ?", tokenID, userID)
-		if !common.UsingSQLite {
-			query = query.Clauses(clause.Locking{Strength: "UPDATE"})
-		}
-		if err := query.First(&token).Error; err != nil {
-			return err
+		if tokenID > 0 {
+			query = tx.Where("id = ? AND user_id = ?", tokenID, userID)
+			if !common.UsingSQLite {
+				query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+			}
+			if err := query.First(&token).Error; err != nil {
+				return err
+			}
 		}
 		if delta > 0 {
-			if !token.UnlimitedQuota && token.RemainQuota < delta {
+			if tokenID > 0 && !token.UnlimitedQuota && token.RemainQuota < delta {
 				return errors.New("令牌积分不足")
 			}
 			var rows []UserTimedQuota
@@ -104,17 +117,12 @@ func ChangeTokenCreditQuota(userID, tokenID int, delta int64, reserved map[int64
 				return errors.New("退款不能超过本次预扣积分")
 			}
 		}
-		if !token.UnlimitedQuota {
+		if tokenID > 0 && !token.UnlimitedQuota {
 			return tx.Model(&Token{}).Where("id = ?", tokenID).Updates(map[string]interface{}{
 				"remain_quota": gorm.Expr("remain_quota - ?", delta), "used_quota": gorm.Expr("used_quota + ?", delta), "accessed_time": helper.GetTimestamp(),
 			}).Error
 		}
 		return nil
 	})
-	if err == nil && common.RedisEnabled {
-		if cacheErr := common.RedisDel(fmt.Sprintf("user_quota:%d", userID)); cacheErr != nil {
-			logger.SysError("清理积分余额缓存失败：" + cacheErr.Error())
-		}
-	}
 	return deducted, err
 }
