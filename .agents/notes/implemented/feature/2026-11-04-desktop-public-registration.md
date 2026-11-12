@@ -10,7 +10,7 @@ SMS and QR tabs only showed unavailable notices. Public registrations lacked an 
 
 ## Decision
 
-Connect the existing card to fixed Host-owned SMS login, explicit registration, password recovery and WeChat QR operations. Unknown phones require consent and an optional password. Existing phones retain account ID and role. Unlinked WeChat identities sign in by phone or register before linking. Existing WeChat accounts missing a phone bind it to their original account through a short-lived Host-held cookie. Cancel requests on exit and invalidate replaced QR states.
+Connect the existing card to fixed Host-owned SMS login, explicit registration, password recovery and WeChat QR operations. Unknown phones require consent and an optional password. Existing phones retain account ID and role. Unlinked WeChat identities sign in by phone or register before linking. Existing WeChat accounts lacking both a verified phone and username/password credentials complete phone binding through a short-lived Host-held cookie. Cancel requests on exit and invalidate replaced QR states.
 
 Resolve new public-registration roles on the server, defaulting to the existing 注册用户 role by name. Accept only enabled ordinary member roles and protect the selected role against deletion, disabling or implicit-name changes. Existing accounts and administrator-created users keep their role logic. Provide root-only login configuration and a default-role selector in the same configuration page; preserve other workbench option access. Enforce configured SMS expiry, a one-minute send interval and hourly limits.
 
@@ -21,6 +21,8 @@ Verified new phone users now enter the workspace directly after consent. A nativ
 The admin SMS login dropdown synchronizes PhoneLoginEnabled and SMSEnabled on save; the signature is hidden and preserved. Account security actions use bundled licensed icons and a keyboard-accessible phone-binding hint. Credit history retains post-change balances and adds first/last navigation with bounded page jumps.
 
 SMS submission is the acceptance action described by the visible login notice; no separate checkbox is required. Footer links open versioned, bundled agreement/privacy documents in a native top-layer dialog without network access. The registration server still requires acceptance but no longer depends on optional administrator text fields; the admin form explains that documents ship with desktop releases. The documents identify WanweiBuddy as the service, route contact requests through the login administrator entry, and use complete user-facing terms without placeholder addresses or unverified deployment details. The options row shows the five-minute code lifetime; account, connectivity, SMS, recovery and unavailable-QR errors use the same dismissible native dialog to avoid overlapping the footer. Closing it preserves form input.
+
+Existing username/password accounts can link an unbound WeChat identity by authenticating with their existing credentials, without a phone. Subsequent QR login exempts only accounts with both a managed username and a stored password credential from phone completion. New registrations still require verified SMS; username-only accounts without a password still require a verified phone. Database read failures do not grant an exemption.
 
 ## Alternatives considered
 

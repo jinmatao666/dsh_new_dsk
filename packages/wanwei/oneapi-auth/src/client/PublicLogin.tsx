@@ -45,6 +45,7 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
   const [imageCode, setImageCode] = useState('')
   const [qr, setQr] = useState<{ state: string; image: string }>(), [unbound, setUnbound] = useState('')
   const [wechatPhone, setWechatPhone] = useState('')
+  const [accountLink, setAccountLink] = useState(false), [username, setUsername] = useState('')
   const live = useRef(true), polling = useRef(false)
   useEffect(() => {
     live.current = true
@@ -67,7 +68,7 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
     finally { if (live.current) setBusy(false) }
   }
   const loadQr = () => { void run(async () => {
-    setUnbound(''); setWechatPhone(''); const result = await request('qr', {}) as Result
+    setUnbound(''); setWechatPhone(''); setAccountLink(false); const result = await request('qr', {}) as Result
     if (live.current) setQr(result.data as unknown as { state: string; image: string })
   }) }
   useEffect(() => {
@@ -93,7 +94,7 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
     return () => { active = false; pollAbort.abort(); window.clearInterval(timer) }
   }, [qr, unbound, request, t])
   const smsEnabled = mode === 'reset' || wechatPhone ? cap?.reset : cap?.sms
-  const smsForm = mode !== 'qr' || !!unbound || !!wechatPhone
+  const smsForm = !accountLink && (mode !== 'qr' || !!unbound || !!wechatPhone)
   useEffect(() => {
     if (cap && (!smsEnabled && smsForm || mode === 'qr' && !cap.wechat)) {
       setError(t(mode === 'qr' ? 'loginWechatDisabled' : 'loginSmsDisabled'))
@@ -129,7 +130,16 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
       <button type="button" disabled={busy} onClick={loadQr}>{t('loginRefreshQr')}</button>
     </div>}
     {wechatPhone && <p>{t('loginBindPhoneAfterScan')}</p>}
-    {unbound && <p>{t('loginBindExisting')}</p>}
+    {unbound && <><p>{t('loginBindExisting')}</p>
+      <button type="button" className={styles.inline} disabled={busy} onClick={() => { setAccountLink(value => !value); setPassword(''); setError('') }}>{t(accountLink ? 'loginLinkByPhone' : 'loginLinkByPassword')}</button>
+    </>}
+    {unbound && accountLink && <form className={styles.form} onSubmit={(event) => { event.preventDefault(); void run(async () => {
+      await request('password', { username, password, wechat_state: unbound })
+    }) }}>
+      <label>{t('username')}<input autoComplete="username" required value={username} disabled={busy} onChange={(event) => { setUsername(event.target.value) }} /></label>
+      <label>{t('password')}<input type="password" autoComplete="current-password" required value={password} disabled={busy} onChange={(event) => { setPassword(event.target.value) }} /></label>
+      <button className={css.primaryButton} disabled={busy}>{t(busy ? 'securitySaving' : 'loginLinkAccount')}</button>
+    </form>}
     {cap && smsEnabled && smsForm && <form className={styles.form} data-register={register ? 'true' : undefined} onSubmit={submit}>
       {register ? <><h3>{t('loginCreateAccount')}</h3><p>{t('loginAccountPhone')} {phone}</p></> : <label>{t('securityPhone')}<input type="tel" placeholder={t('loginPhonePlaceholder')} autoComplete="tel" maxLength={11} required value={phone} disabled={busy} onChange={(e) => { setPhone(e.target.value); setCode('') }} /></label>}
       {!register && <div className={styles.code}><label>{t('loginSmsCode')}<input inputMode="numeric" placeholder={t('loginCodePlaceholder')} autoComplete="one-time-code" maxLength={6} required value={code} disabled={busy} onChange={(e) =>{  setCode(e.target.value) }} /></label><button type="button" disabled={busy || countdown > 0} onClick={send}>{countdown ? `${countdown}s` : t('securitySendCode')}</button></div>}

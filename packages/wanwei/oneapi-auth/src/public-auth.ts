@@ -23,7 +23,7 @@ export async function publicAuthRequest(
   base: string, op: string, input: PublicAuthInput, signal: AbortSignal,
 ): Promise<{ value: PublicAuthEnvelope; headers: Headers }> {
   const routes: Record<string, string> = { capabilities: '/api/desktop-auth/capabilities', captcha: '/api/captcha',
-    send: '/api/user/phone/send-code', sms: '/api/user/phone/login', register: '/api/user/phone/register',
+    password: '/api/user/login', send: '/api/user/phone/send-code', sms: '/api/user/phone/login', register: '/api/user/phone/register',
     reset: '/api/user/phone/reset-password', qr: '/api/oauth/wechat/qr', poll: '/api/oauth/wechat/poll' }
   const path = routes[op]
   if (!path) throw new Error('未知登录操作')

@@ -373,6 +373,14 @@ func WeChatQRPoll(c *gin.Context) {
 			result.User.Username = name
 		}
 		needBindPhone := strings.TrimSpace(result.User.Phone) == "" || !result.User.PhoneVerified
+		if needBindPhone {
+			hasCredentials, err := model.HasUsernamePassword(result.User.Id)
+			if err != nil {
+				c.JSON(http.StatusOK, gin.H{"status": "error", "message": "账号信息读取失败，请重新扫码"})
+				return
+			}
+			needBindPhone = !hasCredentials
+		}
 		// 只设置 session，不调用 SetupLogin（它会写自己的 JSON 响应）
 		session := sessions.Default(c)
 		session.Set("id", result.User.Id)
