@@ -138,7 +138,10 @@ func WeChatQRGenerate(c *gin.Context) {
 		Status:    "pending",
 	})
 
-	redirectURI := deployment.Current.APIBase(config.ServerAddress) + "/api/oauth/wechat"
+	redirectURI := strings.TrimSpace(config.WeChatCallbackURL)
+	if redirectURI == "" {
+		redirectURI = deployment.Current.APIBase(config.ServerAddress) + "/api/oauth/wechat"
+	}
 	qrconnectURL := fmt.Sprintf(
 		"https://open.weixin.qq.com/connect/qrconnect?appid=%s&redirect_uri=%s&response_type=code&scope=snsapi_login&state=%s",
 		config.WeChatAppID,
@@ -148,6 +151,10 @@ func WeChatQRGenerate(c *gin.Context) {
 	qrURL := ""
 	if parsed, err := fetchWeChatDirectQRCodeURL(qrconnectURL); err == nil {
 		qrURL = parsed
+	} else {
+		wechatStateStore.Delete(state)
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "微信二维码获取失败，请检查 AppID、授权回调域和服务端网络后重试"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{

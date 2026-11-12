@@ -78,6 +78,7 @@ func InitOptionMap() {
 	config.OptionMap["WeChatServerAddress"] = ""
 	config.OptionMap["WeChatServerToken"] = ""
 	config.OptionMap["WeChatAccountQRCodeImageURL"] = ""
+	config.OptionMap["WeChatCallbackURL"] = config.WeChatCallbackURL
 	config.OptionMap["WeChatAppID"] = ""
 	config.OptionMap["WeChatAppSecret"] = ""
 	config.OptionMap["MessagePusherAddress"] = ""
@@ -257,6 +258,8 @@ func updateOptionMap(key string, value string) (err error) {
 		config.WeChatServerToken = value
 	case "WeChatAccountQRCodeImageURL":
 		config.WeChatAccountQRCodeImageURL = value
+	case "WeChatCallbackURL":
+		config.WeChatCallbackURL = value
 	case "WeChatAppID":
 		config.WeChatAppID = value
 	case "WeChatAppSecret":

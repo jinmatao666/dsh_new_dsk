@@ -4,6 +4,10 @@ import { API } from '../../helpers';
 import { fetchManagedRoles } from '../../helpers/roles';
 
 const fields = [
+  ['WeChatAppID', '微信网站应用 AppID', 'text'],
+  ['WeChatAppSecret', '微信网站应用 AppSecret', 'password'],
+  ['WeChatCallbackURL', '微信授权回调完整地址', 'text'],
+  ['WeChatAuthEnabled', '允许微信扫码登录', 'switch'],
   ['RegistrationDefaultRole', '新注册用户默认角色', 'role'],
   ['SMSEnabled', '启用短信服务', 'switch'], ['PhoneLoginEnabled', '允许短信登录', 'switch'],
   ['RegisterEnabled', '开放新用户注册', 'switch'], ['PhoneRegisterEnabled', '允许手机号注册', 'switch'],
@@ -15,6 +19,7 @@ const fields = [
 const sections = [
   { id: 'registration', title: '注册设置', hint: '设置新用户注册方式与默认角色，已有账号的角色不受影响。', keys: ['RegisterEnabled', 'PhoneRegisterEnabled', 'RegistrationDefaultRole'] },
   { id: 'sms', title: '短信登录', hint: '配置阿里云短信服务。密钥留空保留原值；验证码默认6位、5分钟有效，发送间隔60秒。', keys: ['PhoneLoginEnabled', 'SMSAccessKeyId', 'SMSAccessKeySecret', 'SMSTemplateCode'] },
+  { id: 'wechat', title: '微信登录', hint: '使用已获得微信登录权限的网站应用。密钥留空保留原值；完整回调地址须与微信平台授权回调域一致，且能从外网访问。', keys: ['WeChatAuthEnabled', 'WeChatAppID', 'WeChatAppSecret', 'WeChatCallbackURL'] },
   { id: 'policies', title: '协议与隐私', hint: '用户协议与隐私政策已内置于桌面客户端，随版本发布，无需在后台填写正文。', keys: [] },
 ];
 

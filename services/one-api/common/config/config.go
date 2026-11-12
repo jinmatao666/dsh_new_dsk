@@ -111,6 +111,7 @@ var OidcUserinfoEndpoint = ""
 var WeChatServerAddress = ""
 var WeChatServerToken = ""
 var WeChatAccountQRCodeImageURL = ""
+var WeChatCallbackURL = os.Getenv("WECHAT_OAUTH_CALLBACK_URL")
 var WeChatAppID = os.Getenv("WECHAT_OAUTH_APP_ID")
 var WeChatAppSecret = os.Getenv("WECHAT_OAUTH_APP_SECRET")
 

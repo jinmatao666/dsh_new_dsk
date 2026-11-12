@@ -42,7 +42,7 @@ test('configures the default registration role in the unified registration form'
 
 test('hides fixed SMS technical parameters and deferred WeChat configuration', async () => {
  await act(async()=>root.render(<RegistrationSettings/>));
- for(const label of ['启用短信服务','短信签名','短信提供商','阿里云地域','验证码位数（4–6）','验证码有效期（分钟）','启用微信扫码登录']) expect(container.textContent).not.toContain(label);
+ for(const label of ['启用短信服务','短信签名','短信提供商','阿里云地域','验证码位数（4–6）','验证码有效期（分钟）']) expect(container.textContent).not.toContain(label);
  expect(container.textContent).toContain('验证码默认6位、5分钟有效');
 });
 
@@ -54,4 +54,12 @@ test('disabling SMS login also disables the SMS service without changing the sig
  API.put.mockResolvedValue({data:{success:true}});
  await act(async()=>container.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  expect(API.put.mock.calls).toEqual([['/api/option/',{key:'SMSEnabled',value:'false'}],['/api/option/',{key:'PhoneLoginEnabled',value:'false'}]]);
+});
+
+test('exposes website application credentials and an independent callback address', async () => {
+ await act(async()=>root.render(<RegistrationSettings/>));
+ expect(container.textContent).toContain('微信网站应用 AppID');
+ expect(container.textContent).toContain('微信网站应用 AppSecret');
+ expect(container.textContent).toContain('微信授权回调完整地址');
+ expect(container.querySelector('[aria-label="允许微信扫码登录"]')).not.toBeNull();
 });
