@@ -1,5 +1,6 @@
 import csv
 import json
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -17,6 +18,7 @@ from processors import (
     export_personal_geodatabase,
     find_dataset,
     layer_matches,
+    ogr_convert,
     unzip_archive,
 )
 import struct
@@ -155,6 +157,25 @@ class ProcessorTests(unittest.TestCase):
         ezdxf.new().saveas(source)
         with self.assertRaises(ConversionError):
             convert("format-convert", [source], self.root / "out-fmt", {"targetFormat": "dxf"})
+
+    def test_ogr_convert_retries_when_input_driver_option_is_unknown(self):
+        source = self.root / "source.shp"
+        target = self.root / "result.gdb"
+
+        def run(command, **kwargs):
+            if "-if" in command:
+                return subprocess.CompletedProcess(
+                    command, 1, "", "ERROR 6: Unknown option name '-if'"
+                )
+            target.mkdir()
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        with patch("processors.which_tool", return_value="ogr2ogr"):
+            with patch("processors.subprocess.run", side_effect=run) as tool:
+                ogr_convert(source, target, "shp", "gdb")
+
+        self.assertEqual(tool.call_count, 2)
+        self.assertTrue(target.is_dir())
 
     def test_format_convert_dxf_to_shapefile_when_ogr_available(self):
         import shutil

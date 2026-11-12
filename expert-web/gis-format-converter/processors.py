@@ -740,6 +740,7 @@ def convert_coordinates(inputs: list[Path], output: Path, options: dict) -> list
 
 
 def ogr_convert(source: Path, target: Path, source_format: str, target_format: str, timeout=600):
+    """Convert a dataset and retry with driver autodetection if ogr2ogr rejects -if."""
     ogr2ogr = which_tool("ogr2ogr")
     if not ogr2ogr:
         raise ConversionError("服务器未安装 GDAL/OGR（ogr2ogr），无法进行 GIS 格式转换")
@@ -762,11 +763,19 @@ def ogr_convert(source: Path, target: Path, source_format: str, target_format: s
         ogr2ogr, "-overwrite", "-skipfailures",
         "-f", drivers[target_format], str(target), str(source),
     ]
-    if source_format in input_drivers:
-        command[1:1] = ["-if", input_drivers[source_format]]
+    input_driver = input_drivers.get(source_format)
     hint = open_hints.get(source_format)
     try:
-        run_checked(command, timeout=timeout, open_hint=hint)
+        if input_driver:
+            try:
+                run_checked([ogr2ogr, "-if", input_driver, *command[1:]],
+                            timeout=timeout, open_hint=hint)
+            except ConversionError as error:
+                if "Unknown option name '-if'" not in str(error):
+                    raise
+                run_checked(command, timeout=timeout, open_hint=hint)
+        else:
+            run_checked(command, timeout=timeout, open_hint=hint)
     except ConversionError:
         if source_format == "dxf" and target_format == "gdb":
             # FileGDB rejects some DXF entity types; go via Shapefile first.

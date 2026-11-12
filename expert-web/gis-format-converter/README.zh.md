@@ -22,6 +22,8 @@ node --test test_frontend.mjs test_prefix_paths.mjs
 
 ## 容器部署（4090）
 
+如果 `ogr2ogr` 不识别 `-if` 参数，转换器会使用 GDAL 的输入驱动自动识别功能重试。
+
 ```bash
 cd /root/dsh-experts/gis-format-converter
 if [ ! -f .env ]; then cp .env.example .env; fi

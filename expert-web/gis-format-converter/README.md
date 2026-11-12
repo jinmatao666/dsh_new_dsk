@@ -22,6 +22,8 @@ node --test test_frontend.mjs test_prefix_paths.mjs
 
 ## Container deployment (4090)
 
+If `ogr2ogr` rejects `-if`, the converter retries using GDAL's input driver autodetection.
+
 ```bash
 cd /root/dsh-experts/gis-format-converter
 if [ ! -f .env ]; then cp .env.example .env; fi
