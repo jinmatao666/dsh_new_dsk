@@ -216,6 +216,13 @@ jobs:
       - name: Set shared desktop build identity
         run: node -e "require('node:fs').appendFileSync(process.env.GITHUB_ENV, 'DSH_DESKTOP_BUILD_ID=' + process.hrtime.bigint().toString() + Date.now().toString() + '\n')"
 
+      # Rebuild the product crate after restoring target: its build-script output
+      # and embedded identity must belong to this run, never the restored cache.
+      - name: Invalidate cached desktop identity
+        run: |
+          cargo clean --manifest-path products/wanwei-desktop/src-tauri/Cargo.toml --release --package wanwei-buddy
+          node -e "require('node:fs').rmSync('products/wanwei-desktop/src-tauri/target/release/desktop-build-id.txt', { force: true })"
+
       - name: Build platform installer
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.build_update_bundles && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}

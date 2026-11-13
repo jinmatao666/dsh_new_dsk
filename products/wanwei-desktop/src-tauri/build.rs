@@ -18,6 +18,7 @@ fn main() {
         println!("cargo:rerun-if-env-changed={name}");
     }
     println!("cargo:rerun-if-changed=src");
+    println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=DSH_DESKTOP_BUILD_ID");
     let build_id = std::env::var("DSH_DESKTOP_BUILD_ID").unwrap_or_else(|_| {
         std::time::SystemTime::now()
