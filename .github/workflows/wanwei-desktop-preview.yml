@@ -213,6 +213,9 @@ jobs:
         run: |
           node -e "require('node:fs').rmSync('products/wanwei-desktop/src-tauri/target/release/bundle', { recursive: true, force: true })"
 
+      - name: Set shared desktop build identity
+        run: node -e "require('node:fs').appendFileSync(process.env.GITHUB_ENV, 'DSH_DESKTOP_BUILD_ID=' + process.hrtime.bigint().toString() + Date.now().toString() + '\n')"
+
       - name: Build platform installer
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.build_update_bundles && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}

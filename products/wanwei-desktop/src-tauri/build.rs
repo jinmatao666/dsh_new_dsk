@@ -18,10 +18,20 @@ fn main() {
         println!("cargo:rerun-if-env-changed={name}");
     }
     println!("cargo:rerun-if-changed=src");
-    let build_id = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock precedes Unix epoch")
-        .as_nanos();
+    println!("cargo:rerun-if-env-changed=DSH_DESKTOP_BUILD_ID");
+    let build_id = std::env::var("DSH_DESKTOP_BUILD_ID").unwrap_or_else(|_| {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock precedes Unix epoch")
+            .as_nanos()
+            .to_string()
+    });
+    if build_id.is_empty()
+        || build_id.len() > 40
+        || !build_id.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        panic!("DSH_DESKTOP_BUILD_ID must contain 1 to 40 digits");
+    }
     // 同版本重建也拥有独立身份，重启后才能确认真正运行了新的安装包。
     println!("cargo:rustc-env=DSH_DESKTOP_BUILD_ID={build_id}");
     let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("Cargo OUT_DIR"));

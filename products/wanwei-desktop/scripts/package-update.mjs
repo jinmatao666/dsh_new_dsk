@@ -24,7 +24,7 @@ export async function packageUpdate({ platform, version, output, bundleRoot = jo
   const spec = platforms[platform]
   if (!spec || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(version)) throw new Error('更新发布平台或正式版本号无效')
   const [target, directory, extension] = spec
-  const buildId = (await readFile(join(bundleRoot, '..', 'desktop-build-id.txt'), 'utf8')).trim()
+  const buildId = await readBuildId(bundleRoot)
   if (!/^\d{1,40}$/u.test(buildId)) throw new Error('缺少有效的桌面构建标识，请重新构建安装包')
   const folder = join(bundleRoot, directory)
   const candidates = (await readdir(folder)).filter(name => name.endsWith(extension))
@@ -52,6 +52,21 @@ export async function packageUpdate({ platform, version, output, bundleRoot = jo
     if (zip.status !== 0) throw new Error('生成更新 ZIP 失败（请检查输出目录、Python 和磁盘空间）')
     return archive
   } finally { await rm(temporary, { recursive: true, force: true }) }
+}
+
+/** Read the build identity shared with Rust; never invent one after compilation.
+ * @param bundleRoot - Bundle directory beside the optional Cargo identity sidecar.
+ * @returns Validated identity embedded by the build.
+ */
+export async function readBuildId(bundleRoot) {
+  const explicit = process.env.DSH_DESKTOP_BUILD_ID
+  let saved
+  try { saved = (await readFile(join(bundleRoot, '..', 'desktop-build-id.txt'), 'utf8')).trim() }
+  catch (error) { if (error.code !== 'ENOENT') throw error }
+  if (explicit !== undefined && saved !== undefined && explicit !== saved) throw new Error('桌面构建标识不一致，请重新构建安装包')
+  const value = explicit ?? saved
+  if (typeof value !== 'string' || !/^\d{1,40}$/u.test(value)) throw new Error('缺少有效的桌面构建标识，请重新构建安装包')
+  return value
 }
 
 function signManifest(path) {
