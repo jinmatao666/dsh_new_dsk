@@ -149,14 +149,16 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
     </form>}
   </>
   return <div className={styles.body} data-login-mode={mode} data-register={register ? 'true' : undefined}>
-    {!cap && !error && <p role="status">{t('securityLoading')}</p>}
-    {mode === 'qr' && cap?.wechat && !unbound && !wechatPhone && <div className={styles.qr}>
-      {qr ? <div className={styles.authorization} data-expired={qrExpired || undefined}><iframe key={qr.state} src={qr.authorization_url}
-        title={t('loginQrAlt')} referrerPolicy="no-referrer" allow="local-network-access" />
-      {qrExpired && <button className={styles.expiredOverlay} type="button" disabled={busy} onClick={loadQr}>
-        <span className={styles.expiredIcon} aria-hidden="true">↻</span>
-        <strong role="status">{t('loginQrExpiredTitle')}</strong><span>{t('loginQrClickRefresh')}</span>
-      </button>}</div> : <p>{t(busy ? 'securityLoading' : 'loginQrExpired')}</p>}
+    {mode !== 'qr' && !cap && !error && <p role="status">{t('securityLoading')}</p>}
+    {mode === 'qr' && (!cap || cap.wechat) && !unbound && !wechatPhone && <div className={styles.qr}>
+      <div className={styles.authorization} data-expired={qrExpired || undefined} aria-busy={!qr || undefined}>
+        {!qr && <div className={styles.qrLoading} role="status" aria-label={t('securityLoading')}><span /></div>}
+        {qr && <iframe key={qr.state} src={qr.authorization_url}
+          title={t('loginQrAlt')} referrerPolicy="no-referrer" allow="local-network-access" />}
+        {qrExpired && <button className={styles.expiredOverlay} type="button" disabled={busy} onClick={loadQr}>
+          <span className={styles.expiredIcon} aria-hidden="true">↻</span>
+          <strong role="status">{t('loginQrExpiredTitle')}</strong><span>{t('loginQrClickRefresh')}</span>
+        </button>}</div>
       <p className={styles.scanHint}>{t('securityScanHint')}</p>
       <button className={styles.refreshQr} type="button" disabled={busy} onClick={loadQr}>{t('loginRefreshQr')}</button>
     </div>}

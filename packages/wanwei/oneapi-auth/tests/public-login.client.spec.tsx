@@ -102,3 +102,26 @@ it('shows QR expiry over the frame and refreshes without opening an error dialog
   await waitFor(() => { expect(issued).toBe(2) })
   await waitFor(() => { expect(screen.queryByText(zh.loginQrExpiredTitle)).toBeNull() })
 })
+
+it('keeps the QR slot while capabilities and refreshed codes load without flashing account-loading text', async () => {
+  let finishCapabilities!: (value: unknown) => void
+  let finishQr!: (value: unknown) => void
+  const request = vi.fn((operation: string): Promise<unknown> => {
+    if (operation === 'capabilities') return new Promise((resolve) => { finishCapabilities = resolve })
+    if (operation === 'qr') return new Promise((resolve) => { finishQr = resolve })
+    return Promise.resolve({ status: 'pending' })
+  })
+  render(<PublicLogin mode='qr' request={request} onBack={() => {}} t={t} />)
+  const slot = screen.getByRole('status', { name: zh.securityLoading }).parentElement
+  expect(screen.queryByText(zh.securityLoading)).toBeNull()
+  finishCapabilities({ data: { ...cap, wechat: true } })
+  await waitFor(() => expect(request.mock.calls.filter(([op]) => op === 'qr')).toHaveLength(1))
+  finishQr({ data: { state: 'first', authorization_url: 'https://open.weixin.qq.com/connect/qrconnect' } })
+  await screen.findByTitle(zh.loginQrAlt)
+  expect(screen.getByTitle(zh.loginQrAlt).parentElement).toBe(slot)
+  fireEvent.click(screen.getByRole('button', { name: zh.loginRefreshQr }))
+  expect(screen.getByRole('status', { name: zh.securityLoading }).parentElement).toBe(slot)
+  expect(screen.queryByText(zh.securityLoading)).toBeNull()
+  finishQr({ data: { state: 'second', authorization_url: 'https://open.weixin.qq.com/connect/qrconnect' } })
+  await screen.findByTitle(zh.loginQrAlt)
+})

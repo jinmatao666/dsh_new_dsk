@@ -10,8 +10,8 @@
 .code img { width: 110px; height: 38px; object-fit: contain; }
 .hint { color: #55637a; font-size: 12px; line-height: 1.6; }
 .error { color: #c53b42; line-height: 1.6; }
-.qr { display: flex; flex-direction: column; align-items: center; gap: 12px; height: 312px; text-align: center; }
-.authorization { position: relative; flex: none; width: 244px; height: 228px; overflow: hidden; border-radius: 14px; background: #fff; box-shadow: 0 0 0 1px #e5eaf3; }
+.qr { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; height: 322px; text-align: center; }
+.authorization { position: relative; flex: none; width: 244px; height: 228px; overflow: hidden; border-radius: 0; background: transparent; }
 .authorization iframe { position: absolute; top: -42px; left: 50%; width: 300px; height: 400px; margin-left: -150px; border: 0; transform: scale(.8); transform-origin: top center; }
 .qr p { margin: 10px 0; }
 .back { margin-top: 12px; }
@@ -52,3 +52,8 @@
 .expiredIcon { font-size: 32px; line-height: 1; color: #2563eb; }
 .expiredOverlay strong { font-size: 15px; }
 .expiredOverlay > span:last-child { font-size: 12px; color: #2563eb; }
+
+.qrLoading { display: grid; place-items: center; position: absolute; inset: 0; }
+.qrLoading span { width: 25px; height: 25px; border: 2px solid #dce5f3; border-top-color: #2563eb; border-radius: 50%; animation: qrSpin .8s linear infinite; }
+@keyframes qrSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .qrLoading span { animation: none; } }
