@@ -47,6 +47,7 @@ func ensureMarketplaceManifestID(assets, fallbackID string) (string, error) {
 }
 
 type skillResponse struct {
+	TaskCredits             int64                     `json:"task_credits"`
 	SortOrder               *int                      `json:"sort_order"`
 	RequiresInternet        *bool                     `json:"requires_internet"`
 	Id                      int                       `json:"id"`
@@ -79,6 +80,7 @@ func skillToResponse(s model.Skill, categories ...[]model.SkillCategoryView) ski
 		cats = categories[0]
 	}
 	return skillResponse{
+		TaskCredits:      s.TaskCredits,
 		SortOrder:        s.SortOrder,
 		RequiresInternet: s.RequiresInternet,
 		Id:               s.Id,

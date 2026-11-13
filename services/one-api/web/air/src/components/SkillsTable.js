@@ -459,8 +459,10 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     };
     if (!editor.base) { showError('请先通过“导入技能”创建技能'); return; }
     try {
-      if (editor.base) await API.put(`/api/skill/${editor.base.id}`, payload);
-      else await API.post('/api/skill/', payload);
+      const response = editor.base
+        ? await API.put(`/api/skill/${editor.base.id}`, payload)
+        : await API.post('/api/skill/', payload);
+      if (response.data?.success !== true) throw new Error(response.data?.message || '保存技能失败');
       await loadSkills();
       setEditor(null);
       showSuccess('技能元数据已保存');
