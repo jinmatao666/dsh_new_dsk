@@ -15,8 +15,8 @@
 }
 .row:not(:has(> :nth-child(2))) { padding-right: 0; }
 .trigger {
-  display: flex; align-items: center; justify-content: flex-start; gap: 22px; flex: 1; min-width: 0; min-height: 56px;
-  padding: 12px 22px; border: 0; border-radius: 0;
+  display: flex; align-items: center; justify-content: flex-start; gap: 22px; flex: 1; min-width: 0; min-height: 50px;
+  padding: 6px 22px; border: 0; border-radius: 0;
   background: transparent; color: inherit; font: inherit; cursor: pointer;
 }
 .trigger:hover, .trigger[aria-expanded='true'] { background: var(--dsw-alias-bg-hover, var(--dsw-alias-bg-base)); }
