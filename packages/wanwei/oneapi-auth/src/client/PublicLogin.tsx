@@ -44,6 +44,7 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
   const [captcha, setCaptcha] = useState<{ captcha_id: string; captcha_image: string }>()
   const [imageCode, setImageCode] = useState('')
   const [qr, setQr] = useState<{ state: string; authorization_url: string }>(), [unbound, setUnbound] = useState('')
+  const [qrExpired, setQrExpired] = useState(false)
   const [wechatPhone, setWechatPhone] = useState('')
   const [accountLink, setAccountLink] = useState(false), [username, setUsername] = useState('')
   const live = useRef(true), polling = useRef(false)
@@ -68,7 +69,7 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
     finally { if (live.current) setBusy(false) }
   }
   const loadQr = () => { void run(async () => {
-    setUnbound(''); setWechatPhone(''); setAccountLink(false); const result = await request('qr', {}) as Result
+    setUnbound(''); setWechatPhone(''); setAccountLink(false); setQr(undefined); setQrExpired(false); const result = await request('qr', {}) as Result
     if (live.current) setQr(result.data as unknown as { state: string; authorization_url: string })
   }) }
   useEffect(() => {
@@ -76,7 +77,7 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
     loadQr()
   }, [mode, cap?.wechat])
   useEffect(() => {
-    if (!qr || unbound) return
+    if (!qr || unbound || qrExpired) return
     let active = true
     const pollAbort = new AbortController()
     const timer = window.setInterval(() => {
@@ -87,12 +88,13 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
         const value = result as Result
         if (value.status === 'unbound') { setUnbound(qr.state); setQr(undefined) }
         else if (value.status === 'need_bind_phone') { setWechatPhone(qr.state); setQr(undefined) }
-        else if (value.status === 'expired' || value.status === 'error') { setQr(undefined); setError(value.message || t('loginQrExpired')) }
+        else if (value.status === 'expired') { setQrExpired(true) }
+        else if (value.status === 'error') { setQr(undefined); setError(value.message || t('loginQrExpired')) }
       }).catch((e: unknown) => { if (active) { setQr(undefined); setError(e instanceof Error ? e.message : String(e)) } })
         .finally(() => { polling.current = false })
     }, 2000)
     return () => { active = false; pollAbort.abort(); window.clearInterval(timer) }
-  }, [qr, unbound, request, t])
+  }, [qr, unbound, qrExpired, request, t])
   const smsEnabled = mode === 'reset' || wechatPhone ? cap?.reset : cap?.sms
   const smsForm = !accountLink && (mode !== 'qr' || !!unbound || !!wechatPhone)
   useEffect(() => {
@@ -123,13 +125,8 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
     }
     if (mode === 'reset') { setPassword(''); setConfirm(''); setCode(''); setNotice(t('loginPasswordSaved')) }
   }) }
-  return <div className={styles.body} data-login-mode={mode} data-register={register ? 'true' : undefined}>
-    {!cap && !error && <p role="status">{t('securityLoading')}</p>}
-    {mode === 'qr' && cap?.wechat && !unbound && !wechatPhone && <div className={styles.qr}>
-      {qr ? <div className={styles.authorization}><iframe key={qr.state} src={qr.authorization_url}
-        title={t('loginQrAlt')} referrerPolicy="no-referrer" allow="local-network-access" /></div> : <p>{t(busy ? 'securityLoading' : 'loginQrExpired')}</p>}
-      <button type="button" disabled={busy} onClick={loadQr}>{t('loginRefreshQr')}</button>
-    </div>}
+  const binding = mode === 'qr' && !!(unbound || wechatPhone)
+  const accountForms = <>
     {wechatPhone && <p>{t('loginBindPhoneAfterScan')}</p>}
     {unbound && <><p>{t('loginBindExisting')}</p>
       <button type="button" className={styles.inline} disabled={busy} onClick={() => { setAccountLink(value => !value); setPassword(''); setError('') }}>{t(accountLink ? 'loginLinkByPhone' : 'loginLinkByPassword')}</button>
@@ -148,8 +145,25 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
       {(register || mode === 'reset') && <><p className={styles.hint}>{t(register ? 'loginPasswordOptional' : 'securityPasswordHint')}</p><label>{t('securityNewPassword')}<input type="password" autoComplete="new-password" maxLength={20} required={mode === 'reset'} value={password} onChange={(e) =>{  setPassword(e.target.value) }} /></label><label>{t('securityConfirmPassword')}<input type="password" autoComplete="new-password" maxLength={20} required={mode === 'reset'} value={confirm} onChange={(e) =>{  setConfirm(e.target.value) }} /></label></>}
       {register && <button className={styles.inline} type="button" disabled={busy} onClick={() => { setRegister(false); setCode(''); setPassword(''); setConfirm(''); setNotice('') }}>{t('loginChangePhone')}</button>}
       {mode === 'sms' && !register && <p className={styles.smsHint} role={notice ? 'status' : undefined}>{notice || t('loginCodePrivacyHint')}</p>}
-      <button className={css.primaryButton} disabled={busy}>{busy ? t('securitySaving') : t(wechatPhone ? 'loginBindPhoneEnter' : mode === 'reset' ? 'securityPasswordAction' : register ? password ? 'loginRegisterEnter' : 'loginSkipPassword' : cap.register ? 'loginOrRegister' : 'signIn')}</button>
+      <button className={css.primaryButton} disabled={busy}>{busy ? t('securitySaving') : t(wechatPhone ? 'loginBindPhoneEnter' : binding ? 'loginBindAndContinue' : mode === 'reset' ? 'securityPasswordAction' : register ? password ? 'loginRegisterEnter' : 'loginSkipPassword' : cap.register ? 'loginOrRegister' : 'signIn')}</button>
     </form>}
+  </>
+  return <div className={styles.body} data-login-mode={mode} data-register={register ? 'true' : undefined}>
+    {!cap && !error && <p role="status">{t('securityLoading')}</p>}
+    {mode === 'qr' && cap?.wechat && !unbound && !wechatPhone && <div className={styles.qr}>
+      {qr ? <div className={styles.authorization} data-expired={qrExpired || undefined}><iframe key={qr.state} src={qr.authorization_url}
+        title={t('loginQrAlt')} referrerPolicy="no-referrer" allow="local-network-access" />
+      {qrExpired && <button className={styles.expiredOverlay} type="button" disabled={busy} onClick={loadQr}>
+        <span className={styles.expiredIcon} aria-hidden="true">↻</span>
+        <strong role="status">{t('loginQrExpiredTitle')}</strong><span>{t('loginQrClickRefresh')}</span>
+      </button>}</div> : <p>{t(busy ? 'securityLoading' : 'loginQrExpired')}</p>}
+      <p className={styles.scanHint}>{t('securityScanHint')}</p>
+      <button className={styles.refreshQr} type="button" disabled={busy} onClick={loadQr}>{t('loginRefreshQr')}</button>
+    </div>}
+    {binding && <div className={styles.confirmed}><span className={styles.confirmedMark}>✓</span><strong>{t('loginWechatConfirmed')}</strong><p>{t('loginWechatContinue')}</p></div>}
+    {binding ? <LoginDialog open title={t(accountLink ? 'loginLinkAccount' : 'loginBindPhoneTitle')} closeLabel={t('supportClose')} onClose={loadQr}>
+      <div className={`${styles.body} ${styles.binding}`}>{accountForms}</div>
+    </LoginDialog> : accountForms}
     {notice && mode !== 'sms' && <p role="status" className={styles.hint}>{notice}</p>}
     <LoginDialog compact open={!!error} title={t(mode === 'reset' ? 'forgotPassword' : mode === 'qr' ? 'qrLogin' : 'smsLogin')} closeLabel={t('supportClose')} onClose={() => { setError('') }}>
       <p role="alert" className={styles.error}>{error}</p>

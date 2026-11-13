@@ -26,6 +26,10 @@ Existing username/password accounts can link an unbound WeChat identity by authe
 
 The desktop QR surface embeds the official WeChat authorization page using the iframe parameters published by Tencent's wxLogin.js (login_type=jssdk, self_redirect=true). A detached QR image cannot execute WeChat's confirmation polling and callback navigation. The Host validates the exact authorization origin, path, state and callback before exposing the frame URL. Application polling still completes the Host-owned session; loading the frame alone does not establish login. Live scan acceptance remains required.
 
+The QR card keeps its authorization frame, scan hint and refresh action within the fixed login-content height. Unlinked identities complete phone verification or existing-password account linking in a separate native dialog; closing it requests a new QR state and does not bypass verification.
+
+QR expiration is shown over the authorization frame with a refresh action, stops state polling and does not open an error dialog. Explicit service errors continue to use the native dialog.
+
 ## Alternatives considered
 
 Automatic creation on unknown login omits consent. Creating a new user for an existing WeChat account splits identity. Guessing a role by number risks wrong permissions. UI-only configuration restrictions do not protect direct API calls.

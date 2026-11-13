@@ -51,7 +51,6 @@ export async function publicAuthRequest(
     for (const key of ['appid', 'redirect_uri', 'scope', 'state']) authorization.searchParams.set(key, url.searchParams.get(key) ?? '')
     authorization.searchParams.set('login_type', 'jssdk')
     authorization.searchParams.set('self_redirect', 'true')
-    authorization.searchParams.set('stylelite', '1')
     authorization.searchParams.set('fast_login', '0')
     return { value: { ...value, data: { state: data.state, authorization_url: authorization.href } }, headers: response.headers }
   }

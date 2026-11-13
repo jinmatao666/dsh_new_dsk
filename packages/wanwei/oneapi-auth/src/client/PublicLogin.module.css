@@ -10,9 +10,9 @@
 .code img { width: 110px; height: 38px; object-fit: contain; }
 .hint { color: #55637a; font-size: 12px; line-height: 1.6; }
 .error { color: #c53b42; line-height: 1.6; }
-.qr { text-align: center; }
-.authorization { position: relative; height: 300px; overflow: hidden; }
-.authorization iframe { position: absolute; top: 0; left: 50%; width: 300px; height: 400px; margin-left: -150px; border: 0; transform: scale(.75); transform-origin: top center; }
+.qr { display: flex; flex-direction: column; align-items: center; gap: 12px; height: 312px; text-align: center; }
+.authorization { position: relative; flex: none; width: 244px; height: 228px; overflow: hidden; border-radius: 14px; background: #fff; box-shadow: 0 0 0 1px #e5eaf3; }
+.authorization iframe { position: absolute; top: -42px; left: 50%; width: 300px; height: 400px; margin-left: -150px; border: 0; transform: scale(.8); transform-origin: top center; }
 .qr p { margin: 10px 0; }
 .back { margin-top: 12px; }
 .body button:disabled { opacity: .5; cursor: not-allowed; }
@@ -36,3 +36,19 @@
 .body[data-login-mode=sms]:not([data-register=true]) form.form label input { height: 50px; }
 
 .body .form .smsHint { grid-row: 3; align-self: center; margin: 0; color: #6b7085; font-size: 12px; font-weight: 400; line-height: 20px; }
+
+.body[data-login-mode=qr] { margin-top: 0; }
+.qr p.scanHint { margin: 0; color: #656b80; font-size: 13px; line-height: 18px; }
+.body .qr button.refreshQr { padding: 0; border: 0; border-radius: 0; background: transparent; font-size: 12px; line-height: 18px; }
+.body.binding { margin-top: 18px; }
+.body.binding form.form { min-height: 0; gap: 18px; margin-top: 20px; }
+.binding > p { margin: 0 0 16px; color: #656b80; line-height: 1.7; }
+.confirmed { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; height: 300px; text-align: center; }
+.confirmed p { margin: 0; color: #656b80; }
+.confirmedMark { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; color: #16a36a; background: #eaf8f1; font-size: 24px; }
+
+.authorization[data-expired] iframe { opacity: .18; filter: blur(3px); pointer-events: none; }
+.body .authorization button.expiredOverlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 20px; border: 0; border-radius: inherit; background: rgb(247 249 253 / 80%); color: #303b50; }
+.expiredIcon { font-size: 32px; line-height: 1; color: #2563eb; }
+.expiredOverlay strong { font-size: 15px; }
+.expiredOverlay > span:last-child { font-size: 12px; color: #2563eb; }

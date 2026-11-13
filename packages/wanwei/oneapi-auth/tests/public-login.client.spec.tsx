@@ -66,7 +66,9 @@ it('links an existing password account after scanning without requiring a phone'
     : op === 'qr' ? { data: { state: 'link-state', authorization_url: 'https://open.weixin.qq.com/connect/qrconnect?state=test' } }
       : op === 'poll' ? { status: 'unbound' } : { state: 'authenticated' })
   render(<PublicLogin mode='qr' request={request} onBack={() => {}} t={t} />)
-  const choosePassword = await screen.findByRole('button', { name: zh.loginLinkByPassword }, { timeout: 3500 })
+  await screen.findByRole('dialog', { name: zh.loginBindPhoneTitle }, { timeout: 3500 })
+  expect(screen.getByRole('button', { name: zh.loginBindAndContinue })).toBeTruthy()
+  const choosePassword = screen.getByRole('button', { name: zh.loginLinkByPassword })
   fireEvent.click(choosePassword)
   expect(screen.queryByLabelText(zh.securityPhone)).toBeNull()
   fireEvent.change(screen.getByLabelText(zh.username), { target: { value: 'yxh' } })
@@ -85,4 +87,18 @@ it('renders a live authorization frame rather than a detached QR image', async (
   expect(frame.tagName).toBe('IFRAME')
   expect(frame.getAttribute('src')).toBe(authorization)
   expect(container.querySelector('img')).toBeNull()
+})
+
+it('shows QR expiry over the frame and refreshes without opening an error dialog', async () => {
+  let issued = 0
+  const request = vi.fn(async (op: string) => op === 'capabilities' ? { data: { ...cap, wechat: true } }
+    : op === 'qr' ? { data: { state: `scan-${++issued}`, authorization_url: 'https://open.weixin.qq.com/connect/qrconnect' } }
+      : { status: 'expired', message: '二维码已过期' })
+  render(<PublicLogin mode='qr' request={request} onBack={() => {}} t={t} />)
+  await screen.findByText(zh.loginQrExpiredTitle, {}, { timeout: 3500 })
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(screen.getByTitle(zh.loginQrAlt)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: /二维码已过期/ }))
+  await waitFor(() => { expect(issued).toBe(2) })
+  await waitFor(() => { expect(screen.queryByText(zh.loginQrExpiredTitle)).toBeNull() })
 })
