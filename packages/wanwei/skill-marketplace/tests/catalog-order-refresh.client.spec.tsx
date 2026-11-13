@@ -10,7 +10,7 @@ afterEach(() => { cleanup(); localStorage.clear() })
 
 it('restores backend order on reopen and fetches changed ordering through Refresh catalog', async () => {
   let skills = [
-    { id: 1, name: 'first-skill', display_name: '后台首位技能', downloads: 1 },
+    { id: 1, name: 'first-skill', display_name: '后台首位技能', downloads: 1, task_credits: 3 },
     { id: 2, name: 'second-skill', display_name: '下载更多技能', downloads: 99 },
   ]
   const call = vi.fn(async (_path: string, operation: string) => ({ ok: true, value: {
@@ -34,10 +34,12 @@ it('restores backend order on reopen and fetches changed ordering through Refres
   if (!overlay) throw new Error('Marketplace overlay not registered')
   const { Component, props } = overlay
   const controller = props.controller as PanelController
-  const view = render(<Component {...props} useNetwork={(select: (state: unknown) => unknown) => select({ mode: 'internet', directInternet: true })} />)
+  const view = render(<Component {...props} useNetwork={(select: (state: unknown) => unknown) => select({ mode: 'internet', directInternet: true,
+    billing: { enabled: true, showCredits: true, showMultipliers: true } })} />)
   const names = () => [...view.container.querySelectorAll('.dsh-skill-card h2')].map(node => node.textContent)
   await act(async () => { controller.open() })
   await screen.findByRole('heading', { name: '后台首位技能', level: 2 })
+  expect(view.container.querySelector('.dsh-skill-price')?.textContent).toBe('3')
   await waitFor(() => { expect(names()).toEqual(['后台首位技能', '下载更多技能']) })
   const sort = () => screen.getByRole('combobox', { name: '搜索平台技能 / 热门下载' })
   fireEvent.click(sort())

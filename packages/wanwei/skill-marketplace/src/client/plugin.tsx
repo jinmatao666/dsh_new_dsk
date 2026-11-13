@@ -1,4 +1,5 @@
 import { productText } from './locales/product.ts'
+import { SkillPrice } from './SkillPrice.tsx'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import type { NetworkController, NetworkState } from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
@@ -33,6 +34,7 @@ import { CatalogToolbar, CatalogDownloadIcon, CatalogBackIcon as ArrowLeftIcon }
 
 type SkillParam = { name: string; type: string; required: boolean; description: string; defaultValue?: string }
 type Skill = {
+  taskCredits?: number
   requiresInternet?: boolean
   id: string
   name: string
@@ -73,6 +75,7 @@ type MarketplaceSkillState = {
 }
 
 type RemoteSkill = {
+  task_credits?: unknown
   requires_internet?: unknown
   id?: unknown
   name?: unknown
@@ -454,6 +457,7 @@ function SkillCategorySelect({
 
 function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, catalogAccess }: OverlayProps) {
   const network = useNetwork(value => value)
+  const showSkillPrice = network.billing?.enabled === true && network.billing.showCredits === true
   const { skillhubRequest, loadRemoteSkills, startSkillConversation, loadRemoteCategories,
     loadRemoteSkillBundle, recordRemoteSkillInstall, submitPersonalSkill, loadPersonalSkills } = services
   const [open, setOpen] = useState(false)
@@ -621,6 +625,7 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
       return [{
         id: `remote-${remoteId}`,
         requiresInternet: remote.requires_internet !== false,
+        ...(typeof remote.task_credits === 'number' ? { taskCredits: remote.task_credits } : {}),
         ...(typeof remote.id === 'number' ? { remoteId: remote.id } : {}),
         slug,
         name: typeof remote.display_name === 'string' && remote.display_name !== '' ? remote.display_name : slug,
@@ -1199,12 +1204,13 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
                       </div>
                       <div className="dsh-skill-card-body">
                         <div className="dsh-skill-card-meta">
-                          <span
+                          <span className="dsh-skill-category-price"><span
                             className="dsh-skill-card-category"
                             style={{ background: skill.accent + '14', color: skill.accent }}
                           >
                             {skill.category}
                           </span>
+                          <SkillPrice credits={skill.taskCredits} enabled={showSkillPrice} /></span>
                           <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>
                             {skill.source === 'personal' ? productText('个人') : productText('官方')}
                           </span>
@@ -1269,9 +1275,10 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
                     </div>
                     <div className="dsh-skill-card-body">
                       <div className="dsh-skill-card-meta">
-                        <span className="dsh-skill-card-category" style={{ background: skill.accent + '14', color: skill.accent }}>
+                        <span className="dsh-skill-category-price"><span className="dsh-skill-card-category" style={{ background: skill.accent + '14', color: skill.accent }}>
                           {skill.category}
                         </span>
+                        <SkillPrice credits={skill.taskCredits} enabled={showSkillPrice} /></span>
                         <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>
                           {skill.source === 'personal' ? productText('个人') : productText('官方')}
                         </span>

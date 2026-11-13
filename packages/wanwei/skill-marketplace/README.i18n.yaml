@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/wanwei/skill-marketplace/README.md
-README.md: c739ee5af603256cedbc6cf5bb36d9887c20b35f
-README.zh.md: 2a0a927f7aeafad0db2d2f027440d571257583a9
+README.md: 4c8815f68811784d8e2c733c4c2e99681eed3a3d
+README.zh.md: 1a32a6bb58a769004b51a38baa92cdbd0efb6bec

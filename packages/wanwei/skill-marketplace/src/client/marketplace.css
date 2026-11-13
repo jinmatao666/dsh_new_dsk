@@ -1195,3 +1195,6 @@
 
 .dsh-skill-card[aria-disabled="true"],.dsh-skill-featured-card[aria-disabled="true"]{opacity:.45;cursor:not-allowed;filter:grayscale(.65)}
 .dsh-skill-card[aria-disabled="true"]:hover,.dsh-skill-featured-card[aria-disabled="true"]:hover{transform:none;box-shadow:none}
+.dsh-skill-price { display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary, #8691a3); font-size: 12px; font-weight: 400; line-height: 18px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dsh-skill-price-icon { width: 14px; height: 14px; flex: none; background: #d99a22; mask-size: contain; mask-position: center; mask-repeat: no-repeat; }
+.dsh-skill-category-price { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
