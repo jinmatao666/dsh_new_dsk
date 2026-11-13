@@ -9,6 +9,8 @@ English | [中文](README.zh.md)
 
 Platform cards show positive backend `task_credits` beside the category as a number and a gold official Lucide Coins icon. Zero or absent prices and disabled credit accounting or visibility show no price label.
 
+The Coins asset is bundled locally with its license in `icon-licenses.txt`; card rendering does not import authentication-plugin runtime values.
+
 ## Summary
 
 Reopening the platform catalog resets manual popularity/update sorting and pagination to administrator order. Refresh catalog fetches the current skills and categories and restores that order without restarting the desktop.

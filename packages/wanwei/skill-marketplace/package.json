@@ -82,6 +82,7 @@
     "@deepseek-ai/dsh-wanwei-feature-panels": "workspace:^"
   },
   "files": [
+    "icon-licenses.txt",
     "lib/index.js",
     "lib/invariant.js",
     "lib/client.js",

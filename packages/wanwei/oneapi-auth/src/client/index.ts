@@ -1,5 +1,4 @@
 export { KnowledgeCreditPriceForm, parseKnowledgeCreditQuote, type KnowledgeCreditPrice, type KnowledgeCreditQuote } from './KnowledgeCreditSettings.tsx'
-export { accountIcons } from './account-icons.ts'
 import { CreditsSection, type CreditsInjected } from './CreditsSection.tsx'
 import { TurnCredits, type TurnCreditSummary } from './TurnCredits.tsx'
 /** Browser half of Wanwei desktop authentication. */
