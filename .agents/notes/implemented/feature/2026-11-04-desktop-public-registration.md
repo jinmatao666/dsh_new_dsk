@@ -24,6 +24,8 @@ SMS submission is the acceptance action described by the visible login notice; n
 
 Existing username/password accounts can link an unbound WeChat identity by authenticating with their existing credentials, without a phone. Subsequent QR login exempts only accounts with both a managed username and a stored password credential from phone completion. New registrations still require verified SMS; username-only accounts without a password still require a verified phone. Database read failures do not grant an exemption.
 
+The desktop QR surface embeds the official WeChat authorization page using the iframe parameters published by Tencent's wxLogin.js (login_type=jssdk, self_redirect=true). A detached QR image cannot execute WeChat's confirmation polling and callback navigation. The Host validates the exact authorization origin, path, state and callback before exposing the frame URL. Application polling still completes the Host-owned session; loading the frame alone does not establish login. Live scan acceptance remains required.
+
 ## Alternatives considered
 
 Automatic creation on unknown login omits consent. Creating a new user for an existing WeChat account splits identity. Guessing a role by number risks wrong permissions. UI-only configuration restrictions do not protect direct API calls.

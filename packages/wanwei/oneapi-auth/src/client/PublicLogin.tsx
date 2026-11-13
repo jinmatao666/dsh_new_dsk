@@ -43,7 +43,7 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
   const [countdown, setCountdown] = useState(0)
   const [captcha, setCaptcha] = useState<{ captcha_id: string; captcha_image: string }>()
   const [imageCode, setImageCode] = useState('')
-  const [qr, setQr] = useState<{ state: string; image: string }>(), [unbound, setUnbound] = useState('')
+  const [qr, setQr] = useState<{ state: string; authorization_url: string }>(), [unbound, setUnbound] = useState('')
   const [wechatPhone, setWechatPhone] = useState('')
   const [accountLink, setAccountLink] = useState(false), [username, setUsername] = useState('')
   const live = useRef(true), polling = useRef(false)
@@ -69,7 +69,7 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
   }
   const loadQr = () => { void run(async () => {
     setUnbound(''); setWechatPhone(''); setAccountLink(false); const result = await request('qr', {}) as Result
-    if (live.current) setQr(result.data as unknown as { state: string; image: string })
+    if (live.current) setQr(result.data as unknown as { state: string; authorization_url: string })
   }) }
   useEffect(() => {
     if (mode !== 'qr' || !cap?.wechat) return
@@ -126,7 +126,8 @@ export function PublicLogin({ mode, request: rawRequest, onBack, t }: PublicLogi
   return <div className={styles.body} data-login-mode={mode} data-register={register ? 'true' : undefined}>
     {!cap && !error && <p role="status">{t('securityLoading')}</p>}
     {mode === 'qr' && cap?.wechat && !unbound && !wechatPhone && <div className={styles.qr}>
-      {qr ? <><img src={qr.image} alt={t('loginQrAlt')} /><p>{t('securityScanHint')}</p></> : <p>{t(busy ? 'securityLoading' : 'loginQrExpired')}</p>}
+      {qr ? <div className={styles.authorization}><iframe key={qr.state} src={qr.authorization_url}
+        title={t('loginQrAlt')} referrerPolicy="no-referrer" allow="local-network-access" /></div> : <p>{t(busy ? 'securityLoading' : 'loginQrExpired')}</p>}
       <button type="button" disabled={busy} onClick={loadQr}>{t('loginRefreshQr')}</button>
     </div>}
     {wechatPhone && <p>{t('loginBindPhoneAfterScan')}</p>}

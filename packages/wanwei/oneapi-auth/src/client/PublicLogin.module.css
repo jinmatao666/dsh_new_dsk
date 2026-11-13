@@ -11,7 +11,8 @@
 .hint { color: #55637a; font-size: 12px; line-height: 1.6; }
 .error { color: #c53b42; line-height: 1.6; }
 .qr { text-align: center; }
-.qr img { width: 172px; height: 172px; padding: 6px; background: #fff; }
+.authorization { position: relative; height: 300px; overflow: hidden; }
+.authorization iframe { position: absolute; top: 0; left: 50%; width: 300px; height: 400px; margin-left: -150px; border: 0; transform: scale(.75); transform-origin: top center; }
 .qr p { margin: 10px 0; }
 .back { margin-top: 12px; }
 .body button:disabled { opacity: .5; cursor: not-allowed; }

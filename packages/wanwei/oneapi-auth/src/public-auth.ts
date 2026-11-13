@@ -1,5 +1,4 @@
 /** Public login operations over fixed server routes; cookies remain Host-owned. */
-import { Buffer } from 'node:buffer'
 /** Bounded string fields accepted by fixed public authentication routes. */
 export type PublicAuthInput = Record<string, string>
 
@@ -39,12 +38,22 @@ export async function publicAuthRequest(
   if (!response.ok || value.success === false && value.code !== 'phone_not_registered') throw new Error(value.message || '登录服务暂不可用')
   if (op === 'qr') {
     const data = value.data
-    const url = new URL(String(data?.qr_url || ''))
-    if (url.protocol !== 'https:' || !url.hostname.endsWith('.weixin.qq.com')) throw new Error('微信二维码加载失败')
-    const image = await fetch(url, { signal, redirect: 'error' })
-    const bytes = new Uint8Array(await image.arrayBuffer()); const mime = image.headers.get('content-type')?.split(';')[0]
-    if (!image.ok || bytes.length > 512000 || !['image/png', 'image/jpeg'].includes(mime ?? '')) throw new Error('微信二维码格式无效')
-    return { value: { ...value, data: { state: data?.state, image: `data:${mime};base64,${Buffer.from(bytes).toString('base64')}` } }, headers: response.headers }
+    const url = new URL(String(data?.qrconnect_url || ''))
+    if (url.origin !== 'https://open.weixin.qq.com' || url.pathname !== '/connect/qrconnect'
+      || url.username || url.password || !data?.state || url.searchParams.get('state') !== data.state
+      || !url.searchParams.get('appid') || url.searchParams.get('scope') !== 'snsapi_login') throw new Error('微信授权页面无效，请刷新二维码')
+    const callback = new URL(url.searchParams.get('redirect_uri') || '')
+    if (!['http:', 'https:'].includes(callback.protocol) || callback.username || callback.password
+      || callback.pathname !== '/api/oauth/wechat' || callback.search || callback.hash) throw new Error('微信回调地址无效')
+    // Match the iframe URL used by Tencent's official wxLogin.js. The authorization
+    // page must stay alive to observe confirmation and navigate to the callback.
+    const authorization = new URL('https://open.weixin.qq.com/connect/qrconnect')
+    for (const key of ['appid', 'redirect_uri', 'scope', 'state']) authorization.searchParams.set(key, url.searchParams.get(key) ?? '')
+    authorization.searchParams.set('login_type', 'jssdk')
+    authorization.searchParams.set('self_redirect', 'true')
+    authorization.searchParams.set('stylelite', '1')
+    authorization.searchParams.set('fast_login', '0')
+    return { value: { ...value, data: { state: data.state, authorization_url: authorization.href } }, headers: response.headers }
   }
   return { value, headers: response.headers }
 }

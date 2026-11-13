@@ -51,7 +51,7 @@ it('cancels pending public-auth calls on leaving the login mode', async () => {
 
 it('completes phone binding for an existing WeChat account without registering another user', async () => {
   const request = vi.fn(async (op: string) => op === 'capabilities' ? { data: { ...cap, wechat: true } }
-    : op === 'qr' ? { data: { state: 'owned-state', image: 'data:image/png;base64,AA==' } }
+    : op === 'qr' ? { data: { state: 'owned-state', authorization_url: 'https://open.weixin.qq.com/connect/qrconnect?state=test' } }
       : op === 'poll' ? { status: 'need_bind_phone' } : { state: 'authenticated' })
   render(<PublicLogin mode='qr' request={request} onBack={() => {}} t={t} />)
   await screen.findByLabelText(zh.securityPhone, {}, { timeout: 3500 }); inputs()
@@ -63,7 +63,7 @@ it('completes phone binding for an existing WeChat account without registering a
 
 it('links an existing password account after scanning without requiring a phone', async () => {
   const request = vi.fn(async (op: string) => op === 'capabilities' ? { data: { ...cap, wechat: true } }
-    : op === 'qr' ? { data: { state: 'link-state', image: 'data:image/png;base64,AA==' } }
+    : op === 'qr' ? { data: { state: 'link-state', authorization_url: 'https://open.weixin.qq.com/connect/qrconnect?state=test' } }
       : op === 'poll' ? { status: 'unbound' } : { state: 'authenticated' })
   render(<PublicLogin mode='qr' request={request} onBack={() => {}} t={t} />)
   const choosePassword = await screen.findByRole('button', { name: zh.loginLinkByPassword }, { timeout: 3500 })
@@ -74,4 +74,15 @@ it('links an existing password account after scanning without requiring a phone'
   fireEvent.click(screen.getByRole('button', { name: zh.loginLinkAccount }))
   await waitFor(() => { expect(request).toHaveBeenCalledWith('password', { username: 'yxh', password: 'password123', wechat_state: 'link-state' }, expect.anything()) })
   expect(request.mock.calls.some(([op]) => ['send', 'sms', 'register'].includes(op))).toBe(false)
+})
+
+it('renders a live authorization frame rather than a detached QR image', async () => {
+  const authorization = 'https://open.weixin.qq.com/connect/qrconnect?state=live'
+  const request = vi.fn(async (op: string) => op === 'capabilities' ? { data: { ...cap, wechat: true } }
+    : op === 'qr' ? { data: { state: 'live', authorization_url: authorization } } : { status: 'pending' })
+  const { container } = render(<PublicLogin mode='qr' request={request} onBack={() => {}} t={t} />)
+  const frame = await screen.findByTitle(zh.loginQrAlt)
+  expect(frame.tagName).toBe('IFRAME')
+  expect(frame.getAttribute('src')).toBe(authorization)
+  expect(container.querySelector('img')).toBeNull()
 })
