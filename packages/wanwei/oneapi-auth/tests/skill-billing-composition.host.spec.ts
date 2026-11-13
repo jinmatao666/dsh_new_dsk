@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url'
 import { expect, it, vi } from 'vitest'
 import { createSkillExecutor, type SkillExecutor } from '../src/skill-billing.ts'
 
-it('keeps loader-composed instruction loads free and bills only explicit execution', async () => {
+it('keeps the bare execution wrapper opt-in without installing injection listeners', async () => {
   const root = await mkdtemp(join(tmpdir(), 'skill-billing-'))
   const ctx = new Context()
   let settled = false, reserves = 0

@@ -1,4 +1,4 @@
-/** Model skill-tool calls use the shared billing service; direct instruction injection stays free. */
+/** Skill use settles through the shared billing service. */
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-tools'
 import { createHash } from 'node:crypto'

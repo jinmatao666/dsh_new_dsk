@@ -1,4 +1,5 @@
 import { installSkillCallBilling } from './skill-billing.ts'
+import { installSkillInjectionBilling } from './skill-injection-billing.ts'
 import { trackCustomModels } from './custom-model-usage.ts'
 import { installCreditGuard } from './credit-guard.ts'
 import { publicAuthRequest } from './public-auth.ts'
@@ -372,6 +373,7 @@ export function apply(ctx: Context, config: Config): void {
   if (!config.developmentBypass) trackCustomModels(ctx, baseURL, config.provider,
     () => ctx.settings.get(LLM_SETTINGS), async () => (await ctx.credentials.resolve(ref))?.value)
   if (!config.developmentBypass) installSkillCallBilling(ctx, baseURL, async () => (await ctx.credentials.resolve(ref))?.value)
+  if (!config.developmentBypass) installSkillInjectionBilling(ctx, baseURL, async () => (await ctx.credentials.resolve(ref))?.value)
   registerSkillUsage(ctx, baseURL, async () => (await ctx.credentials.resolve(ref))?.value)
   ctx.web.registerSearchProvider(new OneApiSearchProvider({
     allowed: () => network.getSnapshot().mode === 'internet',

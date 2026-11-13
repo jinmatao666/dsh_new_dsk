@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-13-direct-skill-billing.md
+2026-11-13-direct-skill-billing.md: f7b10cf0a0bc7f7bda8cf54ff59176a7c4495407
+2026-11-13-direct-skill-billing.zh.md: d678e8bd599f9ae73a683c27e9b28c3666a9d26c
