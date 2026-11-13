@@ -91,11 +91,12 @@ export function AccountFooter({ controls, wide, useAuth, requestCredits, logout,
         requestCredits={requestCredits} onOpen={() => { setOpen(false) }} />}
     </div>
     <div id={panelId} className={css.panel} hidden={!open}>
-      {creditsEnabled && auth.state === 'authenticated' && <div className={css.credits}>
+      {creditsEnabled && auth.state === 'authenticated' && <button type="button" className={css.credits}
+        onClick={() => { setOpen(false); window.dispatchEvent(new CustomEvent('dsh:open-settings-section', { detail: 'wanwei-credits' })) }}>
         <img src="/brand-mark.svg" className={css.creditMark} width={82} height={72} alt="" />
         <span className={css.creditLabel}>{t('accountCreditsBalance')}</span>
         <strong className={css.creditValue} aria-live="polite">{credit?.auth === auth ? credit.value : '—'}</strong>
-      </div>}
+      </button>}
       {controls}
       {auth.state === 'authenticated' && <div className={css.signOutArea}>
         <button className={css.signOut} type="button" disabled={signingOut} onClick={() => { void signOut() }}>

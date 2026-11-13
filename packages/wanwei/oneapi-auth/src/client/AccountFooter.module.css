@@ -38,12 +38,14 @@
 .root[data-wide='false'] .trigger { width: 34px; min-height: 40px; padding: 6px 3px; }
 .root[data-wide='false'] .row { padding-right: 0; }
 .credits {
+  width: 100%; font: inherit; text-align: left; cursor: pointer;
   position: relative; isolation: isolate; overflow: hidden;
   display: flex; align-items: baseline; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; min-width: 0; margin-bottom: 5px; padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, #0864ff 16%, var(--dsw-alias-border-l2));
   background: color-mix(in srgb, #0864ff 8%, var(--dsw-alias-bg-base));
 }
+.credits:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; }
 .creditMark { position: absolute; z-index: -1; right: 35px; bottom: -28px; opacity: .08; transform: rotate(-12deg); }
 .creditLabel { color: var(--dsw-alias-label-secondary); font-size: 12px; font-weight: 550; }
 .creditValue {

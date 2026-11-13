@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime, HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
-import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Modal, IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CreditsInjected } from './CreditsSection.tsx'
 import { accountIcons } from './account-icons.ts'
 import css from './TurnCredits.module.css'
@@ -27,10 +27,11 @@ const points = (value: number) => value.toLocaleString('zh-CN', { maximumFractio
 export function TurnCredits({ turn, sessionId, accounting, requestTurnCredits, useAuth, t }: TurnCreditsProps) {
   const enabled = useSyncExternalStore(accounting.subscribe, accounting.getSnapshot)
   const auth = useAuth(state => state)
+  const routes = turn.data.get('turn-tail')?.tokenUsage?.routes
+  const customModelOnly = routes !== undefined && routes.length > 0 && routes.every(route => route.provider !== 'dsh-server')
   const [summary, setSummary] = useState<TurnCreditSummary>()
   const [error, setError] = useState(false)
   const [open, setOpen] = useState(false)
-  const [revision, setRevision] = useState(0)
   useEffect(() => {
     setSummary(undefined); setError(false)
     if (!enabled || auth.state !== 'authenticated' || turn.end === undefined) return
@@ -51,9 +52,15 @@ export function TurnCredits({ turn, sessionId, accounting, requestTurnCredits, u
     }
     timer = setTimeout(() => { void refresh() }, 500)
     return () => { live = false; clearTimeout(timer) }
-  }, [enabled, auth, sessionId, turn.turn, turn.end, requestTurnCredits, revision])
+  }, [enabled, auth, sessionId, turn.turn, turn.end, requestTurnCredits])
   useEffect(() => { if (!enabled || auth.state !== 'authenticated') setOpen(false) }, [enabled, auth])
   if (!enabled || auth.state !== 'authenticated' || turn.end === undefined || summary?.enabled === false) return null
+  if (customModelOnly && !error && summary !== undefined && !summary.pending && summary.items.length === 0) {
+    return <span className={css.staticLabel}>
+      <span className={css.icon} style={{ maskImage: `url("${accountIcons.coins}")` }} aria-hidden="true" />
+      <span>{t('turnCreditsNone')}</span>
+    </span>
+  }
   const label = error ? t('turnCreditsFailed') : summary === undefined || summary.pending
     ? t('turnCreditsPending') : summary.items.length === 0 ? t('turnCreditsMissing')
       : `${points(summary.credits)} ${t('turnCreditsUnit')}`
@@ -64,16 +71,23 @@ export function TurnCredits({ turn, sessionId, accounting, requestTurnCredits, u
       <span className={css.separator}>·</span><span className={css.value}>{label}</span>
       <span className={css.chevron} aria-hidden>›</span>
     </button>
-    <Modal open={open} title={t('turnCreditsDetails')} closeLabel={t('turnCreditsClose')} onClose={() => { setOpen(false) }}>
+    <Modal open={open} headless title={t('turnCreditsDetails')} className={css.modal ?? ''} onClose={() => { setOpen(false) }}>
+      <div className={css.header}>
+        <h2>{t('turnCreditsDetails')}</h2>
+        <button className={css.close} type="button" aria-label={t('turnCreditsClose')} onClick={() => { setOpen(false) }}>
+          <IconCloseOutline16 size={14} />
+        </button>
+      </div>
       <div className={css.dialog}>
         {summary !== undefined && summary.items.length > 0 ? <>
           <div className={css.total}><span>{t('turnCreditsActual')}</span><strong>{points(summary.credits)} <small>{t('turnCreditsUnit')}</small></strong></div>
           <div className={css.items}>{summary.items.map(item => <div className={css.item} key={item.id}>
             <span>{item.name}</span><span>{points(Math.abs(item.credits))}</span>
           </div>)}</div>
-          <p className={css.note}>{t('turnCreditsHistory')}</p>
+          <p className={css.note}>{t('turnCreditsHistoryBefore')}<button type="button" className={css.historyLink}
+            onClick={() => { setOpen(false); window.dispatchEvent(new CustomEvent('dsh:open-settings-section', { detail: 'wanwei-credits' })) }}>
+            {t('turnCreditsHistoryLink')}</button>{t('turnCreditsHistoryAfter')}</p>
         </> : <p className={css.note}>{label}</p>}
-        <button className={css.retry} type="button" onClick={() => { setRevision(value => value + 1) }}>{t('turnCreditsRefresh')}</button>
       </div>
     </Modal>
   </>

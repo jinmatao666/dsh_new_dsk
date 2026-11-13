@@ -97,7 +97,6 @@ export function CreditsSection({ useAuth, requestCredits, requestKnowledgeCredit
     <div className={css.balance}>
       <span>可用积分</span>
       <strong>{history ? points(history.balance) : '—'}</strong>
-      <span>按实际使用结算，支持小数积分</span>
     </div>
     {status?.enabled && <div className={css.checkin}>
       <div>
@@ -116,7 +115,7 @@ export function CreditsSection({ useAuth, requestCredits, requestKnowledgeCredit
       <table>
         <thead>
           <tr>
-            <th>时间</th>
+            <th>时间（北京时间）</th>
             <th>事项</th>
             <th>积分变动</th>
             <th>变动后余额</th>
