@@ -422,6 +422,8 @@ export interface GenerateOptions {
    * to separate cursors; adapters may map it to model-hidden transport metadata.
    */
   sessionId?: Branded<'SessionId'>
+  /** Session-local turn identity for model-hidden request attribution. */
+  turnId?: number
   /**
    * Provider-neutral classification for an auxiliary model call. Adapters may
    * map the purpose to model-hidden transport metadata or purpose-specific

@@ -28,6 +28,8 @@ type BillingRule struct {
 }
 
 type BillingTask struct {
+	SessionID    string     `json:"session_id,omitempty" gorm:"index:idx_billing_turn,priority:1"`
+	TurnID       *int       `json:"turn_id,omitempty" gorm:"index:idx_billing_turn,priority:2"`
 	PricingMode  string     `json:"pricing_mode"`
 	Description  string     `json:"description"`
 	ID           string     `json:"id" gorm:"primaryKey;size:64"`
@@ -109,7 +111,7 @@ func reserveBusinessTask(userID int, input BillingTask, developerQuota int64) (B
 		}
 		err := tx.Where("user_id = ? AND request_id = ?", userID, input.RequestID).First(&result).Error
 		if err == nil {
-			if result.Kind != input.Kind || result.ItemID != input.ItemID || result.Action != input.Action || result.Quantity != input.Quantity || result.Version != input.Version || result.PricingMode != input.PricingMode || (input.PricingMode == "developer" && result.Quota != developerQuota) || result.Description != input.Description {
+			if result.Kind != input.Kind || result.ItemID != input.ItemID || result.Action != input.Action || result.Quantity != input.Quantity || result.Version != input.Version || result.PricingMode != input.PricingMode || (input.PricingMode == "developer" && result.Quota != developerQuota) || result.Description != input.Description || result.SessionID != input.SessionID || !sameBillingTurn(result.TurnID, input.TurnID) {
 				return errors.New("REQUEST_CONFLICT")
 			}
 			secret = ""
@@ -160,6 +162,10 @@ func reserveBusinessTask(userID int, input BillingTask, developerQuota int64) (B
 		InvalidateUserAccountCache(userID)
 	}
 	return result, secret, err
+}
+
+func sameBillingTurn(a, b *int) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
 }
 
 func SettleBillingTask(id, secret, status string, expiry bool) (BillingTask, error) {

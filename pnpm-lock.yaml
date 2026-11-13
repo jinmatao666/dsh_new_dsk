@@ -9988,6 +9988,9 @@ importers:
 
   packages/wanwei/oneapi-auth:
     dependencies:
+      '@deepseek-ai/dsh-client-ui-chat':
+        specifier: workspace:^
+        version: link:../../client/ui-chat
       '@deepseek-ai/dsh-credentials':
         specifier: workspace:^
         version: link:../../credentials/credentials

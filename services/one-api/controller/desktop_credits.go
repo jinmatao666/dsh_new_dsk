@@ -126,12 +126,7 @@ func GetDesktopCredits(c *gin.Context) {
 			if task.SettledAt != nil {
 				at = task.SettledAt.Unix()
 			}
-			items = append(items, desktopCreditItem{Id: "business-" + task.ID, Time: at, Name: task.Kind + " · " + task.ItemID + " · " + task.Action + func() string {
-				if task.Description != "" {
-					return " · " + task.Description
-				}
-				return ""
-			}(), Credits: -float64(task.Quota) / unit, Balance: &balance})
+			items = append(items, desktopCreditItem{Id: "business-" + task.ID, Time: at, Name: businessCreditLabel(task), Credits: -float64(task.Quota) / unit, Balance: &balance})
 		}
 	}
 	if filter != "earned" {

@@ -296,6 +296,8 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 		CacheReadTokens:   cacheReadTokens,
 		CacheWriteTokens:  cacheWriteTokens,
 		CreditBilling:     creditBilling,
+		CreditSessionID:   meta.CreditSessionID,
+		CreditTurnID:      meta.CreditTurnID,
 	}
 	billing.FillLogTimingFromContext(ctx, log)
 	if log.CreditBilling != "" {

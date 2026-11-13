@@ -140,6 +140,8 @@ func ReserveBusinessBilling(c *gin.Context) {
 		RequestID   string `json:"request_id"`
 		Quantity    int64  `json:"quantity"`
 		Version     int64  `json:"version"`
+		SessionID   string `json:"session_id"`
+		TurnID      *int   `json:"turn_id"`
 	}
 	var input model.BillingTask
 	if c.ShouldBindJSON(&request) != nil {
@@ -169,6 +171,11 @@ func ReserveBusinessBilling(c *gin.Context) {
 	}
 	input = model.BillingTask{Kind: request.Kind, ItemID: request.ItemID, Action: request.Action, RequestID: request.RequestID, Quantity: request.Quantity, Version: request.Version}
 	input.Description = request.Description
+	if len(request.SessionID) > 128 || request.TurnID != nil && (*request.TurnID < 0 || request.SessionID == "") {
+		billingError(c, errors.New("INVALID_REQUEST"))
+		return
+	}
+	input.SessionID, input.TurnID = request.SessionID, request.TurnID
 	var task model.BillingTask
 	var secret string
 	var err error

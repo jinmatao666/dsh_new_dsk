@@ -82,7 +82,10 @@ export function AccountFooter({ controls, wide, useAuth, requestCredits, logout,
         aria-expanded={open} aria-controls={panelId} onClick={() => { setCredit(undefined)
           setSignOutFailed(false); setOpen(value => !value) }}>
         <span className={css.avatar} aria-hidden="true"><img src="/brand-mark.svg" width={25} height={22} alt="" /></span>
-        {wide && <span className={css.name}>{label}</span>}
+        {wide && <><span className={css.name}>{label}</span>
+          <svg className={css.chevron} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="m4 7 6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg></>}
       </button>
       {wide && creditsEnabled && accountingEnabled && <CheckinShortcut wide={wide} useAuth={useAuth}
         requestCredits={requestCredits} onOpen={() => { setOpen(false) }} />}

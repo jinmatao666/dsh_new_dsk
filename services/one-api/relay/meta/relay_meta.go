@@ -19,6 +19,7 @@ type Meta struct {
 	CreditPrice     *price.Snapshot
 	CreditReserved  map[int64]int64
 	CreditSessionID string
+	CreditTurnID    *int
 	Mode            int
 	ChannelType     int
 	ChannelId       int

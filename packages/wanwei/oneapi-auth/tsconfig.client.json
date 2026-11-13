@@ -21,6 +21,7 @@
     "src/client/AccountFooter.tsx",
     "src/client/account-icons.ts",
     "src/client/CreditsSection.tsx",
+    "src/client/TurnCredits.tsx",
     "src/client/KnowledgeCreditSettings.tsx",
     "src/client/DesktopUpdateSection.tsx",
     "src/client/desktop-update-controller.ts",
@@ -31,6 +32,7 @@
     "src/contract.ts"
   ],
   "references": [
+    { "path": "../../client/ui-chat" },
     {
       "path": "../../../vendor/cordis"
     },

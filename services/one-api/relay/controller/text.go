@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -79,6 +80,11 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 		}
 	}
 	meta.CreditSessionID = auditSessionID(c)
+	if raw := c.GetHeader("X-DeepSeek-Harness-Turn-Id"); raw != "" {
+		if turn, err := strconv.Atoi(raw); err == nil && turn >= 0 && len(raw) <= 10 {
+			meta.CreditTurnID = &turn
+		}
+	}
 	// pre-consume quota
 	promptTokens := getPromptTokens(textRequest, meta.Mode)
 

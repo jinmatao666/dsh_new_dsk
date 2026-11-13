@@ -7,6 +7,8 @@ kind: "package-reference"
 
 English | [中文](README.zh.md)
 
+Completed-turn usage includes server-settled credit consumption and a modal listing model and successful skill charges for the exact account, session and turn. Both accounting and credit visibility must be enabled; turning either off hides the summary and its open modal. The shared billing API accepts optional `session_id` and `turn_id` for expert and knowledge integrations. Untagged historical charges remain in credit history and are not guessed into individual turns. History labels successful skill, expert and knowledge charges separately.
+
 New phone registrations now enter the workspace immediately after consent and SMS verification, then offer an optional password modal. A server-owned ten-minute, single-use grant allows first password setup without another SMS; existing passwords cannot be overwritten through this route. Later changes retain phone verification. Registration administration uses On/Off dropdowns and omits fixed SMS parameters and deferred WeChat configuration.
 
 Credit history shows time, item, change and balance after change, with first/previous/next/last controls and bounded page-number jumps. The check-in shortcut uses the Lucide gift asset; phone/password use Lucide assets and WeChat uses Simple Icons, with bundled licenses in `icon-licenses.txt`. The disabled password action exposes a keyboard-focusable tooltip explaining that a phone must be bound first. These changes do not alter credit settlement or account verification.

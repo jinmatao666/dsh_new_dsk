@@ -6,6 +6,8 @@ kind: "package-reference"
 
 [English](README.md) | 中文
 
+`conversation.chat.turnUsage` 接收会话作用域的元数据组件，显示在已完成轮次的 Token 用量旁。拥有方传入准确的轮次位置与文件打开方法。
+
 ## 概述
 
 Conversation 组装的浏览器 Chat target。本包注册 Chat event definition 与 snapshot 构造、提供 `useChat`、渲染 transcript node 和详情，并拥有 Chat 专属 store、action、本地化与滚动位置恢复；历史图片 URL 通过 Conversation 持有的按会话缓存（`ctx.uiConversation.imageUrl`）解析。其中 Assistant 与 Turn Tail definition 会直接 fold packed Assistant 历史 run，不展开其成员。消息流尾部渲染 session 的本地提交回显（`SessionSnapshot.pendingSubmissions`），气泡与其最终的 durable user 节点一致；一旦某个 user/steering 节点或 queue occurrence 携带回显的 prompt `rpcId`，该回显即在同一渲染中隐藏，因此回显到 durable 的替换是原子的。

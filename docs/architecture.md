@@ -73,6 +73,8 @@ The [event map](event-producer-consumer.md) lists every event's producers and co
 
 ## Turn flow
 
+The loop stamps `GenerateOptions.turnId` alongside `sessionId` on assembled requests. Adapters may forward these identifiers as transport headers for per-turn accounting; neither identifier is added to model messages. Completed-turn usage metadata can be contributed through `conversation.chat.turnUsage`.
+
 A **step** is one model request plus the tools it calls. A **turn** is zero or more steps: it opens before its first input is claimed and closes once nothing is owed.
 
 ```text

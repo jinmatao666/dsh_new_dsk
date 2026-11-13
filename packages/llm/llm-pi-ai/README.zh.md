@@ -102,6 +102,8 @@ profile 的 `models` 列表会替换而非扩展路由的已安装目录；每�
 
 ### 网关审计归属
 
+循环请求同时提供 `GenerateOptions.turnId`；pi-ai 将其作为 `x-deepseek-harness-turn-id` 与会话标识一起发送。运行时轮次标识覆盖 profile 同名标头；没有会话或轮次时不发送。它属于传输元数据，不进入模型输入。
+
 带有 `GenerateOptions.sessionId` 的请求会携带 `x-deepseek-harness-session-id`，供网关审计分组，与直连 DeepSeek 适配器一致。运行时标识覆盖 profile 标头中大小写不敏感的同名项；未提供会话时不发送该标识。该标识不会向请求体添加会话内容。
 
 ### 运行时更改配置

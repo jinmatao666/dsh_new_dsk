@@ -8,6 +8,8 @@ export interface SkillOperation<T> {
   /** Stable business identity, reused when the same operation is retried. */
   operationId: string
   skillName: string
+  sessionId?: string
+  turnId?: number
   signal: AbortSignal
   /** Concrete work. A failed business result must return succeeded:false or throw. */
   execute: () => Promise<{ succeeded: boolean; value: T }>
@@ -81,6 +83,7 @@ export function createSkillExecutor(ctx: Context, base: string, resolveToken: ()
             const reserved = await request('tasks', token, {
               kind: 'skill', item_id: operation.skillName, action: 'default', quantity: 1,
               version: data.rule.version, request_id: identity,
+              ...(operation.sessionId === undefined ? {} : { session_id: operation.sessionId, turn_id: operation.turnId }),
             }, operation.signal)
             if (!reserved.response.ok || !reserved.value.success) {
               if (reserved.value.code === 'INSUFFICIENT_CREDITS') throw new LlmError('积分不足，任务已中断。', QUOTA_EXCEEDED_CODE)
@@ -121,13 +124,23 @@ export function createSkillExecutor(ctx: Context, base: string, resolveToken: ()
  */
 export function installSkillCallBilling(ctx: Context, base: string, resolveToken: () => Promise<string | undefined>): void {
   const executor = createSkillExecutor(ctx, base, resolveToken)
+  const turns = new Map<string, number>()
+  ctx.on('agent/request', async ({ agent, turn }, next) => {
+    turns.set(String(agent.session.id), turn)
+    return next()
+  })
+  ctx.on('agent/turn-stopping', ({ agent }) => { turns.delete(String(agent.session.id)) })
   ctx.inject(['tools'], scope => scope.on('tools/execute', async (exec, next) => {
     if (exec.name !== 'skill' || !exec.agent) return next()
     const name = (exec.arguments as { name?: unknown } | null)?.name
     if (typeof name !== 'string' || !name) return next()
     const operationId = createHash('sha256').update(JSON.stringify([exec.agent.session.id, exec.callId])).digest('hex')
+    const sessionId = String(exec.agent.session.id)
+    const turnId = turns.get(sessionId)
     const result = await executor.run({
       operationId, skillName: name, signal: exec.signal,
+      sessionId,
+      ...(turnId === undefined ? {} : { turnId }),
       execute: async () => {
         const value = await next()
         return { succeeded: !value.isError, value }

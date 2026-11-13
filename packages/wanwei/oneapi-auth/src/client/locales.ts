@@ -1,5 +1,15 @@
 /** Chinese authentication copy. */
 export const zh = {
+  turnCreditsLabel: '本轮消耗',
+  turnCreditsUnit: '积分',
+  turnCreditsPending: '结算中…',
+  turnCreditsMissing: '暂无扣分记录',
+  turnCreditsFailed: '暂不可用',
+  turnCreditsDetails: '本轮积分明细',
+  turnCreditsActual: '实际消耗',
+  turnCreditsHistory: '以上为已结算消耗，可在“积分与用量”中查看完整记录。',
+  turnCreditsClose: '关闭',
+  turnCreditsRefresh: '重新加载',
   updatesNav: '版本',
   updatesIntro: '查看当前版本，管理桌面端更新。',
   updatesCompletedTitle: '更新已完成',
@@ -226,6 +236,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** English authentication copy. */
 export const en: { [Key in WanweiAuthKey]: string } = {
+  turnCreditsLabel: 'Turn cost',
+  turnCreditsUnit: 'credits',
+  turnCreditsPending: 'Settling…',
+  turnCreditsMissing: 'No charge records',
+  turnCreditsFailed: 'Unavailable',
+  turnCreditsDetails: 'Turn credit details',
+  turnCreditsActual: 'Actual cost',
+  turnCreditsHistory: 'Settled charges. See Credits & usage for the full history.',
+  turnCreditsClose: 'Close',
+  turnCreditsRefresh: 'Reload',
   updatesNav: 'Version',
   updatesIntro: 'View your current version and manage desktop updates.',
   updatesCompletedTitle: 'Update complete',

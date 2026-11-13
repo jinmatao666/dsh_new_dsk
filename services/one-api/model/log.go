@@ -26,6 +26,8 @@ type Log struct {
 	PromptTokens     int    `json:"prompt_tokens" gorm:"default:0"`
 	CompletionTokens int    `json:"completion_tokens" gorm:"default:0"`
 	CreditBilling    string `json:"credit_billing" gorm:"type:text"`
+	CreditSessionID  string `json:"credit_session_id,omitempty" gorm:"index:idx_credit_turn,priority:1"`
+	CreditTurnID     *int   `json:"credit_turn_id,omitempty" gorm:"index:idx_credit_turn,priority:2"`
 	// 缓存 token（prompt cache）：CacheReadTokens=命中读取，CacheWriteTokens=写入缓存。
 	// 新版计费按缓存分项结算，完整价格和用量保存在 CreditBilling。
 	CacheReadTokens   int    `json:"cache_read_tokens" gorm:"default:0"`

@@ -741,6 +741,24 @@ export function apply(ctx: Context, config: Config): void {
   })
   const remove = connection.rpc.handle('/desktop-auth', async (endpoint, payload, signal) => {
     const serviceSignal = () => AbortSignal.any([signal, AbortSignal.timeout(config.serviceTimeoutMs ?? 15000)])
+    if (endpoint === 'turn-credits') {
+      try {
+        await installReady
+        const token = (await ctx.credentials.resolve(ref))?.value
+        if (!token) throw new Error('请先登录')
+        const args = payload as { sessionId?: unknown; turnId?: unknown }
+        if (typeof args.sessionId !== 'string' || !args.sessionId || args.sessionId.length > 128
+          || !Number.isSafeInteger(args.turnId) || Number(args.turnId) < 0) throw new Error('会话积分参数无效')
+        const query = new URLSearchParams({ session_id: args.sessionId, turn_id: String(args.turnId) })
+        const response = await fetch(baseURL + '/api/user/self/credits/turn?' + query, {
+          redirect: 'error', signal: serviceSignal(), headers: { authorization: `Bearer ${token}` },
+        })
+        const result = await response.json() as { success?: boolean; message?: string; data?: unknown }
+        if (!response.ok || result.success !== true) throw new Error(result.message || '读取本轮积分失败')
+        if ((await ctx.credentials.resolve(ref))?.value !== token) throw new Error('登录账号已变化')
+        return { ok: true as const, value: result.data }
+      } catch (error) { return internal(error instanceof Error ? error.message : String(error)) }
+    }
     if (endpoint === 'credits') {
       try {
         await installReady

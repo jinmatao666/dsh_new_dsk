@@ -1,5 +1,6 @@
 export { KnowledgeCreditPriceForm, parseKnowledgeCreditQuote, type KnowledgeCreditPrice, type KnowledgeCreditQuote } from './KnowledgeCreditSettings.tsx'
 import { CreditsSection, type CreditsInjected } from './CreditsSection.tsx'
+import { TurnCredits, type TurnCreditSummary } from './TurnCredits.tsx'
 /** Browser half of Wanwei desktop authentication. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
@@ -84,6 +85,17 @@ export function apply(ctx: Context): void {
     accounting: { getSnapshot: () => network.getSnapshot().billing?.enabled !== false, subscribe: network.subscribe },
     requestCredits, requestKnowledgeCredits,
   })
+  const requestTurnCredits = async (sessionId: string, turnId: number): Promise<TurnCreditSummary> => {
+    const result = await connection.rpc.call('/desktop-auth', 'turn-credits', { sessionId, turnId })
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value as TurnCreditSummary
+  }
+  ctx.slots.inject('conversation.chat.turnUsage', () => ctx.slots.register({
+    name: 'conversation.chat.turnUsage', id: 'wanwei-turn-credits', locale: NS,
+    inject: () => ({ hooks: { auth: controller }, requestTurnCredits,
+      accounting: { getSnapshot: () => network.getSnapshot().billing?.enabled === true
+        && network.getSnapshot().billing?.showCredits === true, subscribe: network.subscribe } }),
+  }, TurnCredits))
   ctx.slots.inject('settings.section', () => {
     const scope = ctx
     let dispose: (() => void) | undefined

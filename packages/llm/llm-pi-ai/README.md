@@ -102,6 +102,8 @@ A profile's `models` list replaces the route's installed catalog rather than ext
 
 ### Gateway audit attribution
 
+Loop requests also supply `GenerateOptions.turnId`; pi-ai sends it as `x-deepseek-harness-turn-id` alongside the session marker. Runtime turn identity overrides profile headers and is omitted for requests without a session or turn. It is transport metadata, not model input.
+
 Requests with `GenerateOptions.sessionId` carry `x-deepseek-harness-session-id` for gateway audit grouping, matching the direct DeepSeek adapter. The runtime marker overrides case-insensitive profile header collisions and is omitted when no session is supplied. The marker does not add conversation content to the request body.
 
 ### Change configuration at runtime

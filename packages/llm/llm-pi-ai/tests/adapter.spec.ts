@@ -125,14 +125,17 @@ describe('PiAiAdapter provider routing', () => {
   it('merges profile headers with Harness attribution winning', async () => {
     const server = await mockServer([{ events: textEvents }, { events: textEvents }])
     const ctx = await harness(server.url, {
-      headers: { 'x-company': 'private', 'User-Agent': 'wrong', 'X-DeepSeek-Harness-Session-Id': 'wrong' },
+      headers: { 'x-company': 'private', 'User-Agent': 'wrong', 'X-DeepSeek-Harness-Session-Id': 'wrong',
+        'X-DeepSeek-Harness-Turn-Id': '999' },
     })
-    await assemble(ctx, { model: 'deepseek-v4-flash', messages: [], sessionId: 'real-session' as never })
+    await assemble(ctx, { model: 'deepseek-v4-flash', messages: [], sessionId: 'real-session' as never, turnId: 0 })
     expect(server.headers[0]?.['x-company']).toBe('private')
     expect(server.headers[0]?.['user-agent']).toBe(userAgent())
     expect(server.headers[0]?.['x-deepseek-harness-session-id']).toBe('real-session')
+    expect(server.headers[0]?.['x-deepseek-harness-turn-id']).toBe('0')
     await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
     expect(server.headers[1]).not.toHaveProperty('x-deepseek-harness-session-id')
+    expect(server.headers[1]).not.toHaveProperty('x-deepseek-harness-turn-id')
   })
 
   it('forwards common stream options and profile reasoning', async () => {

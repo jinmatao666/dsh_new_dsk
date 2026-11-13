@@ -205,14 +205,17 @@ function reasoningInfo(
 function requestHeaders(
   headers: Readonly<Record<string, string>> | undefined,
   sessionId: GenerateOptions['sessionId'],
+  turnId: GenerateOptions['turnId'],
 ): Record<string, string> {
   const attribution = attributionHeaders()
   const reserved = new Set(Object.keys(attribution).map(name => name.toLowerCase()))
   reserved.add('x-deepseek-harness-session-id')
+  reserved.add('x-deepseek-harness-turn-id')
   return {
     ...Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => !reserved.has(name.toLowerCase()))),
     ...attribution,
     ...sessionId === undefined ? {} : { 'x-deepseek-harness-session-id': String(sessionId) },
+    ...sessionId === undefined || turnId === undefined ? {} : { 'x-deepseek-harness-turn-id': String(turnId) },
   }
 }
 
@@ -399,7 +402,7 @@ export class PiAiAdapter extends LlmAdapter {
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.
-        headers: requestHeaders(profile.headers, options.sessionId),
+        headers: requestHeaders(profile.headers, options.sessionId, options.turnId),
       })
       const iterator = toStreamChunks(events, model.contextWindow, options.signal)[Symbol.asyncIterator]()
       let exhausted = false

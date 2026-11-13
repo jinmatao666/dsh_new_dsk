@@ -97,6 +97,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/dashboard/channel", controller.GetUserChannelDashboard)
 				selfRoute.GET("/self", controller.GetSelf)
 				selfRoute.GET("/self/credits", controller.GetDesktopCredits)
+				selfRoute.GET("/self/credits/turn", controller.GetDesktopTurnCredits)
 				selfRoute.GET("/self/credit-availability", controller.DesktopCreditAvailability)
 				selfRoute.GET("/self/checkin", controller.DesktopCheckin)
 				selfRoute.POST("/self/checkin", controller.DesktopCheckin)

@@ -1,30 +1,42 @@
-.root { position: relative; flex: none; min-width: 0; margin-top: 6px; }
+.root {
+  position: relative; flex: none; min-width: 0; margin-top: 8px;
+}
+.root::before {
+  content: ''; position: absolute; top: 0; inset-inline: 12px; height: 1px;
+  background: var(--dsw-alias-border-l2);
+}
+.root[data-wide='true'] {
+  margin-inline: calc(-1 * var(--dsh-sidebar-inline-padding, 12px));
+  margin-bottom: -6px;
+}
 .row {
-  display: flex; align-items: center; gap: 4px; padding-right: 5px;
-  border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px;
-  background: var(--dsw-alias-bg-base);
+  display: flex; align-items: center; gap: 4px; padding-right: 12px;
+  background: transparent;
 }
 .row:not(:has(> :nth-child(2))) { padding-right: 0; }
 .trigger {
-  display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; min-height: 40px;
-  padding: 5px 8px; border: 0; border-radius: 9px;
+  display: flex; align-items: center; justify-content: flex-start; gap: 22px; flex: 1; min-width: 0; min-height: 56px;
+  padding: 12px 22px; border: 0; border-radius: 0;
   background: transparent; color: inherit; font: inherit; cursor: pointer;
 }
 .trigger:hover, .trigger[aria-expanded='true'] { background: var(--dsw-alias-bg-hover, var(--dsw-alias-bg-base)); }
 .trigger:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; }
 .avatar {
-  display: grid; place-items: center; flex: 0 0 28px; height: 28px; border-radius: 8px;
-  background: #fff; box-shadow: inset 0 0 0 1px #0864ff18;
-
+  display: grid; place-items: center; flex: 0 0 30px; height: 30px;
 }
-.name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; white-space: nowrap; font-weight: 600; }
+.name { flex: 1; margin-left: 0; transform: translateY(-2px); min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; white-space: nowrap; font-size: 16px; font-weight: 650; }
+.root[data-wide='true'] .avatar img { width: 30px; height: 30px; }
+.chevron { flex: none; width: 18px; height: 18px; }
+.trigger[aria-expanded='true'] .chevron { transform: rotate(180deg); }
+.root[data-wide='false'] .avatar { flex-basis: 28px; height: 28px; }
 .panel {
   position: absolute; inset: auto 0 calc(100% + 6px); z-index: 5;
   max-height: min(65vh, 420px); overflow: auto; box-sizing: border-box;
   padding: 7px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 14px;
   background: var(--dsw-alias-bg-base); box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
 }
-.root[data-wide='false'] .trigger { width: 34px; min-height: 34px; padding: 3px; }
+.root[data-wide='false'] .trigger { width: 34px; min-height: 40px; padding: 6px 3px; }
+.root[data-wide='false'] .row { padding-right: 0; }
 .credits {
   position: relative; isolation: isolate; overflow: hidden;
   display: flex; align-items: baseline; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; min-width: 0; margin-bottom: 5px; padding: 8px 10px;
