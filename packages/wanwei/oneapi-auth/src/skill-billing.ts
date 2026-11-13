@@ -87,7 +87,20 @@ export function createSkillExecutor(ctx: Context, base: string, resolveToken: ()
             }, operation.signal)
             if (!reserved.response.ok || !reserved.value.success) {
               if (reserved.value.code === 'INSUFFICIENT_CREDITS') throw new LlmError('积分不足，任务已中断。', QUOTA_EXCEEDED_CODE)
-              throw new Error('技能积分预留失败，已停止执行')
+              const reasons: Record<string, string> = {
+                PRICE_CHANGED: '技能价格已更新，请重新发送任务',
+                BILLING_DISABLED: '后台已关闭积分计费，请刷新配置后重试',
+                BILLING_UNAVAILABLE: '后台积分服务异常，请联系管理员检查日志',
+                INVALID_REQUEST: '技能计费参数被后台拒绝，请检查桌面端与后台版本',
+                REQUEST_CONFLICT: '技能计费请求冲突，请核对原任务记录',
+                NOT_FOUND: '后台未找到该技能的计费配置',
+              }
+              const code = reserved.value.code
+              const reason = code && reasons[code] || (reserved.response.status === 401
+                ? '登录已失效，请重新登录' : '后台未能预留技能积分')
+              const requestId = reserved.response.headers.get('x-oneapi-request-id')
+              const trace = requestId && /^[a-zA-Z0-9-]{1,80}$/u.test(requestId) ? `，请求编号 ${requestId}` : ''
+              throw new Error(`${reason}（HTTP ${reserved.response.status}${code && /^[A-Z_]{1,60}$/u.test(code) ? `，${code}` : ''}${trace}），已停止执行`)
             }
             const task = reserved.value.data as { id?: unknown }
             if (typeof task?.id !== 'string' || !reserved.value.task_token) throw new Error('技能计费任务已存在，请核对原任务后重试')

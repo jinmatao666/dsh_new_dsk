@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -31,6 +32,7 @@ func billingError(c *gin.Context, err error) {
 	if status == 400 && code != "INVALID_REQUEST" && code != "INVALID_STATUS" && code != "BILLING_DISABLED" {
 		status = 500
 		code = "BILLING_UNAVAILABLE"
+		logger.Error(c.Request.Context(), "business billing failed: "+err.Error())
 	}
 	c.JSON(status, gin.H{"success": false, "code": code, "message": code})
 }

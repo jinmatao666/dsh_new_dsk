@@ -248,7 +248,9 @@ func ExpireBillingTasks() error {
 // ResolveBusinessRule uses an explicit action rule first, then the existing default task price.
 func ResolveBusinessRule(tx *gorm.DB, kind, item, action string) (BillingRule, error) {
 	var rule BillingRule
-	err := tx.Where("kind = ? AND item_id = ? AND action = ?", kind, item, action).First(&rule).Error
+	// Isolate the optional rule lookup from an initialized locking statement:
+	// ErrRecordNotFound must not poison the subsequent skill/expert fallback.
+	err := tx.Session(&gorm.Session{}).Where("kind = ? AND item_id = ? AND action = ?", kind, item, action).First(&rule).Error
 	if err == nil || !errors.Is(err, gorm.ErrRecordNotFound) {
 		return rule, err
 	}

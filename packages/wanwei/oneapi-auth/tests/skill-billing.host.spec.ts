@@ -86,3 +86,15 @@ it('coalesces concurrent retries of one concrete operation', async () => {
     expect(h.calls.filter(c => c.path.endsWith('/tasks'))).toHaveLength(1)
   } finally { h.dispose() }
 })
+
+it('reports a missing backend price distinctly from insufficient credits', async () => {
+  const h = harness()
+  vi.mocked(fetch).mockImplementationOnce(async () => Response.json({ success: true,
+    data: { rule: { version: 3001, enabled: true, unit_quota: 3000 } } }))
+  vi.mocked(fetch).mockImplementationOnce(async () => Response.json({ success: false, code: 'NOT_FOUND' },
+    { status: 404, headers: { 'x-oneapi-request-id': 'trace-123' } }))
+  try {
+    await expect(h.executor.run(h.operation)).rejects.toThrow('后台未找到该技能的计费配置（HTTP 404，NOT_FOUND，请求编号 trace-123）')
+    expect(h.execute).not.toHaveBeenCalled()
+  } finally { h.dispose() }
+})
