@@ -118,15 +118,39 @@ it('explains the phone requirement on the password action without enabling it', 
   expect(screen.getByRole('button', { name: zh.securityPasswordAction })).toHaveProperty('disabled', true)
 })
 
-it('keeps the deferred WeChat action disabled without requesting a QR code', async () => {
-  const request = vi.fn(async () => ({ phoneBound: true, phone: '138****0000', wechatBound: false }))
+it('links WeChat without requiring a phone for an existing password account and refreshes bound status', async () => {
+  let bound = false
+  const request = vi.fn(async (operation: string) => {
+    if (operation === 'wechat-qr') return { state: 'scan', authorization_url: 'https://open.weixin.qq.com/connect/qrconnect?state=scan' }
+    if (operation === 'wechat-poll') return { status: 'unbound' }
+    if (operation === 'wechat-bind') bound = true
+    return { phoneBound: false, phone: '', wechatBound: bound }
+  })
+  render(<AccountSection {...kit} useAuth={useAuth} logout={vi.fn()} requestAccount={request} close={vi.fn()} t={t} />)
+  const button = await screen.findByRole<HTMLButtonElement>('button', { name: zh.securityBindWechat })
+  await waitFor(() => expect(button.disabled).toBe(false))
+  fireEvent.click(button)
+  const frame = await screen.findByTitle(zh.securityWechatQr)
+  expect(frame.tagName).toBe('IFRAME')
+  expect(screen.queryByLabelText(zh.securitySmsCode)).toBeNull()
+  await screen.findByText(zh.securityScanned, {}, { timeout: 4000 })
+  fireEvent.click(screen.getByRole('button', { name: zh.securityConfirm }))
+  await waitFor(() => expect(request).toHaveBeenCalledWith('wechat-bind', { state: 'scan' }))
+  await screen.findByText(zh.securityWechatBound)
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+it('keeps phone verification for phone-bound accounts when linking WeChat', async () => {
+  const request = vi.fn(async (operation: string) => operation === 'status'
+    ? { phoneBound: true, phone: '138****0000', wechatBound: false }
+    : operation === 'wechat-qr' ? { state: 'scan', authorization_url: 'https://open.weixin.qq.com/connect/qrconnect' } : { status: 'unbound' })
   render(<AccountSection {...kit} useAuth={useAuth} logout={vi.fn()} requestAccount={request} close={vi.fn()} t={t} />)
   await screen.findByText('138****0000')
-  const button = screen.getByRole<HTMLButtonElement>('button', { name: zh.securityComingSoon })
-  expect(button.disabled).toBe(true)
-  fireEvent.click(button)
-  expect(screen.queryByRole('dialog')).toBeNull()
-  expect(request.mock.calls).toHaveLength(1)
+  fireEvent.click(screen.getByRole('button', { name: zh.securityBindWechat }))
+  await screen.findByText(zh.securityScanned, {}, { timeout: 4000 })
+  fireEvent.change(screen.getByLabelText(zh.securitySmsCode), { target: { value: '123456' } })
+  fireEvent.submit(screen.getByRole('button', { name: zh.securityConfirm }).closest('form')!)
+  await waitFor(() => expect(request).toHaveBeenCalledWith('wechat-bind', { state: 'scan', phone_code: '123456' }))
 })
 
 
@@ -143,4 +167,24 @@ it('lets the user rename the shared login username to Chinese characters', async
   fireEvent.click(await screen.findByRole('button', { name: zh.securityConfirm }))
   await waitFor(() => { expect(request).toHaveBeenCalledWith('username', { username: '测试用户_张' }) })
   await screen.findByText('测试用户_张')
+})
+
+it('refreshes expired WeChat linking codes in place and leaves binding disabled', async () => {
+  let issued = 0
+  const request = vi.fn(async (operation: string) => operation === 'status'
+    ? { phoneBound: false, phone: '', wechatBound: false }
+    : operation === 'wechat-qr' ? { state: `scan-${++issued}`, authorization_url: 'https://open.weixin.qq.com/connect/qrconnect' } : { status: 'expired' })
+  render(<AccountSection {...kit} useAuth={useAuth} logout={vi.fn()} requestAccount={request} close={vi.fn()} t={t} />)
+  const button = await screen.findByRole<HTMLButtonElement>('button', { name: zh.securityBindWechat })
+  await waitFor(() => expect(button.disabled).toBe(false))
+  fireEvent.click(button)
+  await screen.findByText(zh.loginQrExpiredTitle, {}, { timeout: 4000 })
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: zh.securityConfirm }).disabled).toBe(true)
+  fireEvent.click(screen.getByText(zh.loginQrClickRefresh).closest('button')!)
+  await waitFor(() => expect(issued).toBe(2))
+  expect(screen.queryByText(zh.loginQrExpiredTitle)).toBeNull()
+  const cancel = screen.getAllByRole<HTMLButtonElement>('button', { name: zh.securityCancel })[0]!
+  await waitFor(() => expect(cancel.disabled).toBe(false))
+  fireEvent.click(cancel)
+  expect(screen.queryByRole('dialog')).toBeNull()
 })

@@ -6,6 +6,7 @@ import type { AuthState } from '../contract.ts'
 import type { AccountSecurity } from '../contract.ts'
 import type { AuthView } from './controller.ts'
 import css from './AccountSection.module.css'
+import qrStyles from './PublicLogin.module.css'
 
 export interface AccountInjected {
   hooks: { auth: HostObservable<AuthView> }
@@ -26,8 +27,9 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
   const [data, setData] = useState<AccountSecurity>()
   const [mode, setMode] = useState<'phone' | 'password' | 'wechat' | 'username'>()
   const [values, setValues] = useState<Record<string, string>>({})
-  const [qr, setQr] = useState<{ state: string; image: string }>()
+  const [qr, setQr] = useState<{ state: string; authorization_url: string }>()
   const [scanned, setScanned] = useState(false)
+  const [qrExpired, setQrExpired] = useState(false)
   const [cooldown, setCooldown] = useState<Record<string, number>>({})
   const [revision, setRevision] = useState(0)
   useEffect(() => {
@@ -44,7 +46,7 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
     return () => { window.clearInterval(timer) }
   }, [])
   useEffect(() => {
-    if (!qr || mode !== 'wechat' || scanned) return
+    if (!qr || mode !== 'wechat' || scanned || qrExpired) return
     let live = true, pending = false
     const timer = window.setInterval(() => {
       if (pending) return
@@ -53,12 +55,13 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
         if (!live) return
         const result = value as { status: string; message?: string }
         if (result.status === 'unbound') setScanned(true)
+        else if (result.status === 'expired') setQrExpired(true)
         else if (result.status !== 'pending') { setQr(undefined); setError(result.message || t('securityQrBound')) }
       }).catch((cause: unknown) => { if (live) { setQr(undefined); setError(String(cause instanceof Error ? cause.message : cause)) } })
         .finally(() => { pending = false })
     }, 2000)
     return () => { live = false; window.clearInterval(timer) }
-  }, [qr, mode, scanned, requestAccount, t])
+  }, [qr, mode, scanned, qrExpired, requestAccount, t])
   const dismiss = () => {
     setMode(undefined); setValues({}); setQr(undefined); setError(undefined); setNotice('')
   }
@@ -77,8 +80,8 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
   const edit = (next: typeof mode) => {
     triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     void execute(async () => {
-      setMode(next); setValues({}); setQr(undefined); setScanned(false)
-      if (next === 'wechat' && !data?.wechatBound) setQr(await requestAccount('wechat-qr') as { state: string; image: string })
+      setMode(next); setValues({}); setQr(undefined); setScanned(false); setQrExpired(false)
+      if (next === 'wechat' && !data?.wechatBound) setQr(await requestAccount('wechat-qr') as { state: string; authorization_url: string })
     }) }
   const sendCode = (target: 'new' | 'current') => { void execute(async () => {
     const operation = target === 'new' ? 'send-new' : mode === 'password' ? 'send-password' : 'send-current'
@@ -100,7 +103,7 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
     const operation = mode === 'phone' ? data.phoneBound ? 'phone-replace' : 'phone-bind' : mode === 'password' ? 'password' : data.wechatBound ? 'wechat-unbind' : 'wechat-bind'
     const input = mode === 'phone' ? data.phoneBound ? { old_code: values.old_code || '', new_phone: values.phone || '', new_code: values.code || '' } : { phone: values.phone || '', code: values.code || '' }
       : mode === 'password' ? { code: values.code || '', new_password: values.password || '' }
-        : data.wechatBound ? { code: values.code || '' } : { state: qr?.state || '', phone_code: values.code || '' }
+        : data.wechatBound ? { code: values.code || '' } : { state: qr?.state || '', ...(data.phoneBound ? { phone_code: values.code || '' } : {}) }
     await requestAccount(operation, input); setMode(undefined); setValues({}); setQr(undefined); setNotice(t('securitySaved')); setRevision(value => value + 1)
   }) }
   const field = (key: string, label: string, type = 'text') => <label className={css.field}>{label}<input required type={type} placeholder={t(key === 'phone' ? 'phonePlaceholder' : type === 'password' ? 'passwordPlaceholder' : 'codePlaceholder')} value={values[key] || ''} autoComplete={type === 'password' ? 'new-password' : 'off'} maxLength={key === 'phone' ? 11 : type === 'password' ? 20 : 12} onChange={(event) => { setValues(old => ({ ...old, [key]: event.target.value })) }} /></label>
@@ -112,7 +115,7 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
   const rows = [
     { key: 'phone' as const, title: t('securityPhone'), detail: data ? data.phoneBound ? data.phone : t('securityPhoneHint') : t('securityLoading'), action: data?.phoneBound ? t('securityReplacePhone') : t('securityBindPhone') },
     { key: 'password' as const, title: t('securityPassword'), detail: t('securityPasswordHint'), action: t('securityPasswordAction') },
-    { key: 'wechat' as const, title: t('securityWechat'), detail: t('securityWechatComingHint'), action: t('securityComingSoon') },
+    { key: 'wechat' as const, title: t('securityWechat'), detail: t(data?.wechatBound ? 'securityWechatBound' : 'securityWechatHint'), action: t(data?.wechatBound ? 'securityUnbindWechat' : 'securityBindWechat') },
   ]
   return <section className={css.section}>
     <h1>{t('accountTitle')}</h1><p className={css.hint}>{t('securityIntro')}</p>
@@ -124,14 +127,14 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
       </div>
     </div>
     <h2 className={css.subheading}>{t('securityTitle')}</h2>
-    <div className={css.security}>{rows.map(row => <div key={row.key} className={css.row}><span className={css.icon} aria-hidden="true"><img src={accountIcons[row.key === 'phone' ? 'smartphone' : row.key === 'password' ? 'key-round' : 'wechat']} alt="" /></span><div className={css.description}><h3>{row.title}</h3><p>{row.detail}</p></div><span className={css.action} tabIndex={row.key === 'password' && !data?.phoneBound ? 0 : undefined} data-tooltip={row.key === 'password' && !data?.phoneBound ? t('securityPasswordBindFirst') : undefined} aria-label={row.key === 'password' && !data?.phoneBound ? t('securityPasswordBindFirst') : undefined}><button className={css.secondary} disabled={blocked || row.key === 'wechat' || row.key !== 'phone' && !data?.phoneBound} type="button" onClick={() => { edit(row.key) }}>{row.action}</button></span></div>)}</div>
+    <div className={css.security}>{rows.map(row => <div key={row.key} className={css.row}><span className={css.icon} aria-hidden="true"><img src={accountIcons[row.key === 'phone' ? 'smartphone' : row.key === 'password' ? 'key-round' : 'wechat']} alt="" /></span><div className={css.description}><h3>{row.title}</h3><p>{row.detail}</p></div><span className={css.action} tabIndex={row.key === 'password' && !data?.phoneBound ? 0 : undefined} data-tooltip={row.key === 'password' && !data?.phoneBound ? t('securityPasswordBindFirst') : undefined} aria-label={row.key === 'password' && !data?.phoneBound ? t('securityPasswordBindFirst') : undefined}><button className={css.secondary} disabled={blocked || (row.key === 'password' || row.key === 'wechat' && data?.wechatBound) && !data?.phoneBound} type="button" onClick={() => { edit(row.key) }}>{row.action}</button></span></div>)}</div>
     {data && !data.phoneBound && <p className={css.hint}>{t('securityBindFirst')}</p>}
     {!mode && error && <div role="alert" className={css.error}>{error}<button type="button" className={css.secondary} disabled={busy} onClick={() => { setRevision(value => value + 1) }}>{t('securityRetry')}</button></div>}
     {!mode && notice && <p role="status" className={css.success}>{notice}</p>}
     {mode && data && <dialog ref={dialogRef} className={css.dialog} aria-modal="true" aria-labelledby="account-security-title"
       onCancel={(event) => { event.preventDefault(); if (!busy) dismiss() }}>
       <form className={css.form} onSubmit={submit}>
-        <header className={css.dialogHeader}><div><h2 id="account-security-title">{mode === 'username' ? t('securityRename') : rows.find(row => row.key === mode)?.action}</h2><p>{t(mode === 'username' ? 'securityUsernameHint' : 'securityDialogHint')}</p></div>
+        <header className={css.dialogHeader}><div><h2 id="account-security-title">{mode === 'username' ? t('securityRename') : rows.find(row => row.key === mode)?.action}</h2><p>{t(mode === 'username' ? 'securityUsernameHint' : mode === 'wechat' && !data.wechatBound ? 'securityWechatHint' : 'securityDialogHint')}</p></div>
           <button type="button" className={css.closeButton} aria-label={t('securityCancel')} disabled={busy} onClick={dismiss}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button></header>
         {error && <p role="alert" className={css.error}>{error}</p>}
         {notice && <p role="status" className={css.success}>{notice}</p>}
@@ -141,10 +144,19 @@ export function AccountSection({ useAuth, logout, requestAccount, close, t }: Ac
           }} />
         </label> : <>
           {mode === 'wechat' && data.wechatBound && <p className={css.hint}>{t('securityUnbindHint')}</p>}
-          {mode === 'wechat' && qr && <div className={css.qr}><img src={qr.image} alt={t('securityWechatQr')} /><p>{scanned ? t('securityScanned') : t('securityScanHint')}</p></div>}
+          {mode === 'wechat' && !data.wechatBound && <div className={css.qr}>
+            {qr && !scanned && <div className={qrStyles.authorization} data-expired={qrExpired || undefined}>
+              <iframe key={qr.state} src={qr.authorization_url} title={t('securityWechatQr')} referrerPolicy="no-referrer" allow="local-network-access" />
+              {qrExpired && <button type="button" className={qrStyles.expiredOverlay} disabled={busy} onClick={() => { edit('wechat') }}>
+                <strong role="status">{t('loginQrExpiredTitle')}</strong><span>{t('loginQrClickRefresh')}</span>
+              </button>}
+            </div>}
+            <p role="status">{scanned ? t('securityScanned') : busy ? t('securityLoading') : t('securityScanHint')}</p>
+            {!scanned && <button type="button" className={qrStyles.refreshQr} disabled={busy} onClick={() => { edit('wechat') }}>{t('loginRefreshQr')}</button>}
+          </div>}
           {mode === 'phone' && field('phone', t('securityNewPhone'), 'tel')}
           {mode === 'phone' && data.phoneBound && <div className={css.codeRow}>{field('old_code', t('securityOldCode'))}{codeButton('current')}</div>}
-          <div className={css.codeRow}>{field('code', mode === 'phone' ? t('securityNewCode') : t('securitySmsCode'))}{codeButton(mode === 'phone' ? 'new' : 'current')}</div>
+          {(mode !== 'wechat' || data.phoneBound) && <div className={css.codeRow}>{field('code', mode === 'phone' ? t('securityNewCode') : t('securitySmsCode'))}{codeButton(mode === 'phone' ? 'new' : 'current')}</div>}
           {mode === 'password' && <>{field('password', t('securityNewPassword'), 'password')}{field('confirm', t('securityConfirmPassword'), 'password')}</>}
         </>}
         <div className={css.formActions}><button type="button" className={css.secondary} disabled={busy} onClick={dismiss}>{t('securityCancel')}</button><button className={css.primary} disabled={busy || mode === 'wechat' && !data.wechatBound && !scanned}>{busy ? t('securitySaving') : t('securityConfirm')}</button></div>

@@ -1,5 +1,5 @@
 /** Fixed account-security operations executed only by the credential-owning Host. */
-import { Buffer } from 'node:buffer'
+import { publicAuthRequest } from './public-auth.ts'
 import type { AccountSecurity } from './contract.ts'
 
 /** Perform an allowlisted operation without exposing tokens or complete user records.
@@ -26,21 +26,12 @@ export async function accountSecurityRequest(
     return { ...(userId === undefined ? {} : { userId }), username: typeof user.username === 'string' ? user.username : '', phoneBound: phone.has_phone === true && phone.phone_verified === true, phone: typeof phone.phone === 'string' ? phone.phone : '', wechatBound: typeof user.wechat_id === 'string' && user.wechat_id.length > 0 } satisfies AccountSecurity
   }
   if (operation === 'wechat-qr') {
-    const data = await request('/api/oauth/wechat/qr')
-    if (typeof data.qr_url !== 'string' || !data.qr_url) throw new Error('微信二维码暂不可用，请稍后重试')
-    const url = new URL(data.qr_url)
-    if (url.protocol !== 'https:' || !url.hostname.endsWith('.weixin.qq.com')) throw new Error('微信二维码暂不可用，请稍后重试')
-    const image = await fetch(url, { signal, redirect: 'error' })
-    if (!image.ok) throw new Error('无法加载微信二维码')
-    const bytes = new Uint8Array(await image.arrayBuffer())
-    const mime = image.headers.get('content-type')?.split(';')[0]
-    if (bytes.length > 512000 || !['image/png', 'image/jpeg'].includes(mime ?? '')) throw new Error('微信二维码格式无效')
-    return { state: data.state, image: `data:${mime};base64,${Buffer.from(bytes).toString('base64')}` }
+    const { value } = await publicAuthRequest(baseURL, 'qr', {}, signal)
+    return value.data
   }
   if (operation === 'wechat-poll') return request('/api/oauth/wechat/poll?state=' + encodeURIComponent(input.state ?? ''), undefined, true)
   if (operation === 'wechat-bind') {
-    if (!input.phone_code) throw new Error('请输入手机验证码')
-    return request('/api/oauth/wechat/quick-bind?state=' + encodeURIComponent(input.state ?? '') + '&phone_code=' + encodeURIComponent(input.phone_code))
+    return request('/api/oauth/wechat/quick-bind?state=' + encodeURIComponent(input.state ?? '') + (input.phone_code ? '&phone_code=' + encodeURIComponent(input.phone_code) : ''))
   }
   const routes: Record<string, string> = {
     username: '/api/user/self/username',

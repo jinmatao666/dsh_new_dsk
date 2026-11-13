@@ -32,7 +32,7 @@
 .codeRow { display: flex; align-items: flex-end; gap: 12px; }
 .codeRow > button { margin-bottom: 12px; min-height: 36px; }
 .formActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
-.qr { text-align: center; font-size: 13px; }
+.qr { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 18px; text-align: center; font-size: 13px; }
 .qr img { width: 180px; height: 180px; padding: 8px; background: #fff; }
 @media(max-width:560px) { .row { flex-wrap: wrap; padding: 18px; gap: 12px; } .row > button { margin-left: 50px; } .form { padding: 18px; } .card { padding: 18px; } }
 
