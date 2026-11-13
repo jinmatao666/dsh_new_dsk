@@ -24,7 +24,7 @@
 .avatar {
   display: grid; place-items: center; flex: 0 0 30px; height: 30px;
 }
-.name { flex: 1; margin-left: 0; transform: translateY(-2px); min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; white-space: nowrap; font-size: 16px; font-weight: 400; }
+.name { flex: 1; margin-left: 0; transform: translateY(-2px); min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; white-space: nowrap; font-family: "Times New Roman", "Noto Serif", "Songti SC", SimSun, serif; font-size: 16px; font-weight: 500; -webkit-text-stroke: .15px currentColor; }
 .root[data-wide='true'] .avatar img { width: 30px; height: 30px; }
 .chevron { flex: none; width: 14px; height: 14px; color: var(--dsw-alias-label-tertiary, #929aa8); }
 .trigger[aria-expanded='true'] .chevron { transform: rotate(180deg); }
