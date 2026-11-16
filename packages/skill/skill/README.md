@@ -147,3 +147,5 @@ These limits define when the registry is a poor fit or needs special operational
 This Dev Note is working context for maintainers and is explicitly non-authoritative — shipped behavior and limits live in the sections above and in the code. An open question is whether the registry should retain a last-good catalog or per-provider diagnostics for failed providers, or whether consumers should own that state; the incomplete-observations limitation records the current answer.
 
 </details>
+
+Skill invocation sources may retain the display name for transcript presentation without changing the skill identity.

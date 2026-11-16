@@ -29,9 +29,12 @@ interface DecorationRange {
  * Split one sent text into inline plain runs and reference chips.
  * @param text - the logged model text of the message or queue row.
  * @param sessionLabels - exact session mention labels associated by an adjacent recall.
+ * @param skillLabels - Validated skill slugs mapped to their captured display labels.
  * @returns inline nodes covering the whole text.
  */
-export function projectUserText(text: string, sessionLabels: readonly string[]): ReactNode {
+export function projectUserText(
+  text: string, sessionLabels: readonly string[], skillLabels: Readonly<Record<string, string>> = {},
+): ReactNode {
   const ranges: DecorationRange[] = []
   SESSION_WIRE_RE.lastIndex = 0
   let wire: RegExpExecArray | null
@@ -81,7 +84,7 @@ export function projectUserText(text: string, sessionLabels: readonly string[]):
         : undefined
     const displayLabel = range.display
       ?? (referenceKind === undefined
-        ? label
+        ? skillLabels[label.slice(1)] ?? label
         : referenceKind === 'session'
           ? label.slice(1)
           : label.slice(1).replace(/^"|"$/gu, '').split(/[\\/]/u).filter(Boolean).at(-1) ?? label.slice(1))
@@ -92,9 +95,7 @@ export function projectUserText(text: string, sessionLabels: readonly string[]):
         data-ref-chip={referenceKind ?? 'skill'}
         title={label}
       >
-        {referenceKind !== undefined && (
-          <ReferenceIcon kind={referenceKind} size={16} className={css.refIcon} />
-        )}
+        <ReferenceIcon kind={referenceKind ?? 'skill'} size={16} className={css.refIcon} />
         {displayLabel}
       </span>,
     )

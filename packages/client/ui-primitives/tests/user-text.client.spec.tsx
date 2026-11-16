@@ -12,6 +12,13 @@ const project = (text: string, labels: readonly string[] = []) =>
   render(<div data-host>{projectUserText(text, labels)}</div>).container.querySelector('[data-host]')!
 
 describe('projectUserText', () => {
+  it('retains the skill label and glyph without exposing its slash slug', () => {
+    const host = render(<div>{projectUserText('/pvs-contract-template 帮我起草', [], {
+      'pvs-contract-template': '规划合同起草',
+    })}</div>).container
+    expect(host.textContent).toBe('规划合同起草 帮我起草')
+    expect(host.querySelector('[data-ref-chip="skill"] svg')).not.toBeNull()
+  })
   it('keeps file, skill and adjacent question text as sibling inline runs', () => {
     const host = project('@3.txt /community-1你好')
     expect([...host.children].map(child => [child.tagName, child.getAttribute('data-ref-chip'), child.textContent]))

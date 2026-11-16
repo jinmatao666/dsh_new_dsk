@@ -147,6 +147,8 @@ export function isUserInvocable(skill: Pick<SkillSummary, 'invocation'>): boolea
  * instead of re-parsing the model-facing text.
  */
 export interface SkillInvocationSource {
+  /** Display label captured when the skill is loaded. */
+  readonly displayName?: string
   readonly kind: 'skill-invocation'
   /** Invoked skill name, validated user-invocable at the injecting boundary. */
   readonly name: string

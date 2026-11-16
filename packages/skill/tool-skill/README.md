@@ -257,3 +257,5 @@ These limits define when the catalog or the loader is a poor fit. They are curre
 None.
 
 </details>
+
+Direct skill instruction injections capture the loaded skill display name for sent-message rendering.

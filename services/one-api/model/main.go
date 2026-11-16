@@ -105,7 +105,12 @@ func openPostgreSQL(dsn string, primary bool) (*gorm.DB, error) {
 	if primary {
 		common.UsingPostgreSQL = true
 	}
+	connection, err := postgresConnection(dsn)
+	if err != nil {
+		return nil, err
+	}
 	return gorm.Open(postgres.New(postgres.Config{
+		Conn:                 connection,
 		DSN:                  dsn,
 		PreferSimpleProtocol: true, // disables implicit prepared statement usage
 	}), &gorm.Config{

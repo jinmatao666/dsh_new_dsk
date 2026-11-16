@@ -8,6 +8,12 @@
   line-height: inherit;
 }
 
+.refChip[data-ref-chip='skill'] {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .refChip {
   display: inline;
   font-size: inherit;

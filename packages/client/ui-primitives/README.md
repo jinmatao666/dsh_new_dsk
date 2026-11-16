@@ -122,3 +122,5 @@ These limits define how the atoms behave at the edges; they are current package 
 None.
 
 </details>
+
+Sent-text projection accepts captured skill display labels and renders them with the shared skill reference glyph and capsule.

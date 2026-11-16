@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import type { ChatNode } from '../contract/chat-nodes.ts'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { MessageImageSource } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { JsonBlock, projectUserText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -149,7 +150,7 @@ function TurnMaxTokensItem({ t }: {
 
 /** Right-aligned bubble shared by user and steering rows. */
 function UserStyleBubble({
-  content, renderMessageImages, actions, pending = false, echo = false, referenceLabels = [], previewImages, t,
+  content, renderMessageImages, actions, pending = false, echo = false, referenceLabels = [], skillLabels = {}, previewImages, t,
 }: {
   content: readonly unknown[]
   renderMessageImages: ChatNodeOwnerProps['renderMessageImages']
@@ -161,6 +162,7 @@ function UserStyleBubble({
   echo?: boolean
   /** Exact session mention labels associated by the adjacent recall node. */
   referenceLabels?: readonly string[]
+  skillLabels?: Readonly<Record<string, string>>
   /** Local submission-echo previews replacing the content-derived image group. */
   previewImages?: readonly MessageImageSource[]
   t: ChatViewSlotProps['t']
@@ -179,7 +181,7 @@ function UserStyleBubble({
       <div className={css.userStack}>
         {renderMessageImages({ images, align: 'end' })}
         {showBubble && <div className={css.bubble}>
-          {projectUserText(text, referenceLabels)}
+          {projectUserText(text, referenceLabels, skillLabels)}
           {rest.map((block, i) => <JsonBlock key={i} label={t('message.extraBlock')} payload={block} truncatedLabel={truncated} />)}
         </div>}
         {referenceLabels.length > 0 && (
@@ -272,12 +274,27 @@ export function PendingSubmissionBubble({ submission, renderMessageImages, t }: 
 
 /** User and admitted-steering keyed Chat renderer. */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderMessageImages, t,
+  node, renderMessageImages, t, useChat,
 }: ChatNodeViewProps<'user' | 'steering'>) {
   const data = node.data
+  const labels = useChat((snapshot) => {
+    const turn = node.location.kind === 'turn' || node.location.kind === 'step' ? node.location.turn.turn : undefined
+    const skills: Record<string, string> = {}
+    for (const key of turn === undefined ? [] : snapshot.locations.getTurn(turn)) {
+      const other = snapshot.nodes.get(key) as ChatNode | undefined
+      if (other?.kind !== 'context') continue
+      const source = other.data.source
+      if (typeof source !== 'object' || source === null || !('kind' in source)
+        || source.kind !== 'skill-invocation' || !('name' in source) || typeof source.name !== 'string') continue
+      skills[source.name] = 'displayName' in source && typeof source.displayName === 'string' ? source.displayName : source.name
+    }
+    return JSON.stringify(skills)
+  })
+  const skillLabels = useMemo(() => JSON.parse(labels) as Record<string, string>, [labels])
   return (
     <UserStyleBubble
       content={data.content}
+      skillLabels={skillLabels}
       renderMessageImages={renderMessageImages}
       {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
       t={t}

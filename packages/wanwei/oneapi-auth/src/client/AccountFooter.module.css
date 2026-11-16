@@ -15,8 +15,8 @@
 }
 .row:not(:has(> :nth-child(2))) { padding-right: 0; }
 .trigger {
-  display: flex; align-items: center; justify-content: flex-start; gap: 22px; flex: 1; min-width: 0; min-height: 50px;
-  padding: 6px 22px; border: 0; border-radius: 0;
+  display: flex; align-items: center; justify-content: flex-start; gap: 6px; flex: 1; min-width: 0; min-height: 50px;
+  padding: 6px 12px 6px 8px; border: 0; border-radius: 0;
   background: transparent; color: inherit; font: inherit; cursor: pointer;
 }
 .trigger:hover, .trigger[aria-expanded='true'] { background: var(--dsw-alias-bg-hover, var(--dsw-alias-bg-base)); }
@@ -24,7 +24,7 @@
 .avatar {
   display: grid; place-items: center; flex: 0 0 30px; height: 30px;
 }
-.name { flex: 1; margin-left: 0; transform: translateY(-2px); min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; white-space: nowrap; font-family: "Times New Roman", "Noto Serif", "Songti SC", SimSun, serif; font-size: 16px; font-weight: 500; -webkit-text-stroke: .15px currentColor; }
+.name { flex: 1; margin-left: 0; transform: translateY(-2px); min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; white-space: nowrap; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 14px; font-weight: 600; }
 .root[data-wide='true'] .avatar img { width: 30px; height: 30px; }
 .chevron { flex: none; width: 14px; height: 14px; color: var(--dsw-alias-label-tertiary, #929aa8); }
 .trigger[aria-expanded='true'] .chevron { transform: rotate(180deg); }

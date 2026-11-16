@@ -257,3 +257,5 @@ Load referenced resources only as needed.
 无。
 
 </details>
+
+直接注入技能指令时记录所加载技能的显示名称，供已发送消息展示。

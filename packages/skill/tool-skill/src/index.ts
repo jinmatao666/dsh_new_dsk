@@ -204,7 +204,8 @@ export function apply(ctx: Context, config: Config = {}): void {
       // on the loaded definition — the single lookup that produces what is
       // actually injected.
       if (skill === undefined || !isUserInvocable(skill)) continue
-      const source: SkillInvocationSource = { kind: 'skill-invocation', name, form: 'instructions' }
+      const source: SkillInvocationSource = { kind: 'skill-invocation', name, form: 'instructions',
+        ...(skill.displayName === undefined ? {} : { displayName: skill.displayName }) }
       injections.push(createUserMessage({
         content: [{ type: 'text', text: renderSkillContent(skill) }],
         source,
