@@ -7,7 +7,7 @@ function harness(cost = 200) {
   vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
     const body = init.body ? JSON.parse(String(init.body)) : undefined
     calls.push({ path, body, auth: new Headers(init.headers).get('authorization') })
-    if (path.includes('/quote?')) return Response.json({ success: true, data: { rule: { version: 1, enabled: true, unit_quota: cost } } })
+    if (path.includes('/quote?')) return Response.json({ success: true, data: { rule: { id: 'cp_skill', version: 1, enabled: true, unit_quota: cost } } })
     if (path.endsWith('/tasks')) return Response.json({ success: true, data: { id: 'task-1' }, task_token: 'task-only' })
     return Response.json({ success: true })
   }))
@@ -67,10 +67,34 @@ it('executes free operations without creating a reservation', async () => {
     expect(h.execute).toHaveBeenCalledOnce()
   } finally { h.dispose() }
 })
+it('resolves the default point and sends its ID instead of an amount', async () => {
+  const h = harness()
+  try {
+    await h.executor.run(h.operation)
+    expect(h.calls[0]?.path).toContain('default=true')
+    const body = h.calls.find(c => c.path.endsWith('/tasks'))?.body
+    expect(body).toMatchObject({ kind: 'skill', item_id: 'pdf-convert', charge_point_id: 'cp_skill' })
+    expect(body).not.toHaveProperty('points')
+    expect(body).not.toHaveProperty('action')
+  } finally { h.dispose() }
+})
+it.each(['point-disabled', 'system-disabled', 'system-disabled-before-reserve'])('continues without debiting when %s', async (mode) => {
+  const h = harness()
+  vi.mocked(fetch).mockImplementationOnce(async () => Response.json({ success: true, data: mode === 'system-disabled'
+    ? { exempt: true } : { rule: { id: 'cp_skill', version: 1, enabled: mode !== 'point-disabled', unit_quota: 200 } } }))
+  if (mode === 'system-disabled-before-reserve') {
+    vi.mocked(fetch).mockImplementationOnce(async () => Response.json({ success: true, data: { exempt: true, state: 'exempt' } }))
+  }
+  try {
+    await h.executor.run(h.operation)
+    expect(h.execute).toHaveBeenCalledOnce()
+    expect(h.calls.some(c => c.path.endsWith('/result'))).toBe(false)
+  } finally { h.dispose() }
+})
 it('does not execute when funds are insufficient', async () => {
   const h = harness()
   vi.mocked(fetch).mockImplementationOnce(async () => Response.json({
-    success: true, data: { rule: { version: 1, enabled: true, unit_quota: 200 } },
+    success: true, data: { rule: { id: 'cp_skill', version: 1, enabled: true, unit_quota: 200 } },
   }))
   vi.mocked(fetch).mockImplementationOnce(async () => Response.json({ success: false, code: 'INSUFFICIENT_CREDITS' }, { status: 403 }))
   try {
@@ -90,7 +114,7 @@ it('coalesces concurrent retries of one concrete operation', async () => {
 it('reports a missing backend price distinctly from insufficient credits', async () => {
   const h = harness()
   vi.mocked(fetch).mockImplementationOnce(async () => Response.json({ success: true,
-    data: { rule: { version: 3001, enabled: true, unit_quota: 3000 } } }))
+    data: { rule: { id: 'cp_skill', version: 3001, enabled: true, unit_quota: 3000 } } }))
   vi.mocked(fetch).mockImplementationOnce(async () => Response.json({ success: false, code: 'NOT_FOUND' },
     { status: 404, headers: { 'x-oneapi-request-id': 'trace-123' } }))
   try {

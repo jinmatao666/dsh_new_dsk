@@ -1,152 +1,161 @@
-# 统一积分计费接口 v1
+# 统一积分 HTTP 接口
 
-专家、知识库、技能共用同一套积分账户和计费服务。
+专家、技能、知识库使用同一套接口与积分账户。业务后端只传资源和扣分点 ID，不传收费金额或付款用户 ID。后台配置价格，平台验证登录身份、资源权限、余额并记录流水。
 
-默认价格查询先读取独立规则；没有独立规则时读取技能或专家管理中配置的任务积分。预留事务中的加锁查询独立保存查询状态，缺少独立规则不会阻止默认价格回退。预留失败的桌面提示包含错误类别、HTTP 状态和可用的请求编号；内部异常详情只记录在后台日志。
+## 1. 接入准备
 
-技能管理列表、公开列表及详情均返回 `task_credits`，数据库查询与接口响应转换均保留该字段，编辑弹窗使用保存后的实际值；零表示免费。保存响应只有 `success=true` 才提示成功。修复列表返回缺失前，如果在显示为零的弹窗中再次保存，价格可能已被覆盖，需在更新后台后重新配置。
+- 当前服务器：`http://ac.zjugis.com:3300`。下文路径已包含 `/api/billing/v1`，不要重复拼接。
+- 专家后端：复用 `POST /api/expert-web/redeem` 返回的 `billing_context`，请求头为 `Authorization: Bearer <billing_context>`。凭据绑定当前用户和专家，不能跨用户或跨专家共用。
+- 桌面技能：平台自动携带当前用户的登录凭据，不需要技能开发者逐个接入。
+- 知识库：调用放在现有 Go 后台，转发当前请求的有效 Authorization 或登录 Cookie，不需要新增登录流程。现有接入位置是 `controller/knowledge_base.go` 的 `answerKnowledgeConversation()`；`controller/knowledge_billing.go` 只封装对下面 HTTP 的转发，不再直接扣分或接受金额，不会自动收费。
+- 管理扣分点需要管理员身份；实际收费使用当前付款用户身份。用户身份从凭据识别，不允许随意传用户 ID 扣分。
+- 接口代码入口：`router/api.go`、`controller/business_billing.go`；底层：`model/business_billing.go`。Python 和 Go 都按本文 HTTP 协议调用，不再提供 Python SDK。
 
-## 调用准备
+## 2. 三类资源的统一字段
 
-基础地址：http://ac.zjugis.com:3300/api/billing/v1。
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `kind` | string | `expert` 专家、`skill` 技能、`knowledge` 知识库 |
+| `item_id` | string | 专家 key、技能英文标识、知识库数字 ID 的字符串 |
+| `charge_point_id` | string | 后台生成的 `cp_...` 固定扣分点 ID，必须属于上述资源 |
 
-专家后端复用已有登录兑换接口 /api/expert-web/redeem，保存响应中的 billing_context。它已关联当前用户和专家，无需新增管理员密钥，不要放到浏览器或日志中。
+例如：
 
-业务代码自行定价时，只需调用下面两个接口。
+```json
+{"kind":"expert","item_id":"geology","charge_point_id":"cp_报告点ID"}
+```
 
-需要将扣费展示在桌面端某一轮对话下时，`POST /tasks` 可额外传 `session_id`（会话 ID 字符串）和 `turn_id`（会话内轮次，非负整数）。二者从当前调用上下文传入，不要另造编号；不传时仍记入“积分与用量”流水，但不归入某一轮对话。模型和桌面技能调用由平台自动携带。
+```json
+{"kind":"skill","item_id":"pvs-contract-template","charge_point_id":"cp_技能点ID"}
+```
 
-## 1. 预留积分
+```json
+{"kind":"knowledge","item_id":"20","charge_point_id":"cp_问答点ID"}
+```
 
-**POST /tasks**
+以上 ID 是占位示例，必须替换为后台实际生成的值。专家代码在具体收费节点配置 ID；技能按当前技能自动查询默认 ID；知识库同事在具体收费节点配置 ID。
 
-请求头：
+## 3. 查价
 
-    Content-Type: application/json
-    Authorization: Bearer {billing_context}
+**GET `/api/billing/v1/quote?kind=expert&item_id=geology&charge_point_id=<实际ID>`**
 
-请求示例：
+携带当前用户授权。返回示例：
 
-    {
-      "mode":"developer",
-      "request_id":"qa-001",
-      "action":"qa",
-      "points":"3",
-      "description":"专家问答"
-    }
+```json
+{"success":true,"data":{"exempt":false,"unit_credits":3,"rule":{"id":"cp_实际ID","version":2,"enabled":true,"unit_quota":3000}}}
+```
 
-| 参数 | 类型 | 必填 | 含义 |
-|---|---|---|---|
-| mode | string | 是 | 固定developer，表示费用由业务代码提供 |
-| request_id | string | 是 | 本次业务唯一编号，最多128字节；重试保持不变 |
-| action | string | 是 | 功能标识，例如qa；最多80字节 |
-| points | string | 是 | 本次总积分，例如"3"；范围0～1000，小数须能精确换成内部额度 |
-| description | string | 否 | 消费事项说明，最多160字符，不含隐私内容 |
+`unit_credits` 是每次的积分，供展示；`version` 用于下一步预留，不能写死。`unit_quota` 是内部额度，不是直接展示的积分。
 
-返回示例（省略其他字段）：
+若 `data.exempt=true`，表示本次免计费：直接执行业务，不创建计费任务，不提交结算。关闭平台积分总开关时，即使扣分点尚未配置，也不会因计费配置阻断业务。
 
-    {
-      "success":true,
-      "data":{"id":"计费任务ID","state":"reserved"},
-      "task_token":"本次任务凭据"
-    }
+技能平台入口可以用 `GET /api/billing/v1/quote?kind=skill&item_id=<技能标识>&default=true` 查询自动关联的默认扣分点，从 `data.rule.id` 取得 ID。仅本地存在、未纳入后台技能管理的技能沿用免费执行；平台管理技能按默认点计费。
 
-保存data.id、task_token。**预留成功后才执行收费业务。**
-用户和专家身份自动从billing_context识别，不传用户ID或专家ID。
+## 4. 业务开始前预留
 
-## 2. 确认扣费或释放
+**POST `/api/billing/v1/tasks`**
 
-**POST /tasks/{计费任务ID}/result**
+请求头：`Content-Type: application/json`，以及当前用户授权。
 
-请求头：
+```json
+{
+  "mode":"configured",
+  "kind":"expert",
+  "item_id":"geology",
+  "charge_point_id":"cp_实际ID",
+  "request_id":"geology:report:业务记录001",
+  "quantity":1,
+  "version":2
+}
+```
 
-    Content-Type: application/json
-    Authorization: Bearer {task_token}
+| 参数 | 必填 | 含义 |
+|---|---|---|
+| `mode` | 建议传 | 固定 `configured`；不再支持业务传金额的 `developer` 模式 |
+| `kind` / `item_id` / `charge_point_id` | 是 | 上文资源和扣分点标识 |
+| `request_id` | 是 | 本次业务唯一编号，1～128 字节；同次重试保持不变，不同操作使用不同编号 |
+| `quantity` | 是 | 收费次数，整数 1～1000000；单次传 1 |
+| `version` | 是 | 查价返回的 `data.rule.version` |
+| `description` | 否 | 消费说明，最多 160 字符；不放问题、文档正文等隐私 |
+| `session_id` / `turn_id` | 否 | 真实桌面会话 ID 与非负整数轮次，传入后可归入“本轮消耗”；只传 turn_id 不合法，不要自行编造 |
 
-请求示例：
+成功返回：
 
-    {"status":"succeeded"}
+```json
+{"success":true,"data":{"id":"计费任务ID","state":"reserved","quota":3000,"resource_name":"地质专家","point_name":"生成报告"},"task_token":"本次任务凭据"}
+```
 
-| 参数 | 类型 | 必填 | 含义 |
-|---|---|---|---|
-| 路径中的计费任务ID | string | 是 | 接口1返回的data.id |
-| status | string | 是 | succeeded成功扣费；failed失败释放；cancelled取消释放 |
+先保存业务编号、`data.id` 和 `task_token`，再执行业务。`request_id` 由业务生成；计费任务 ID 由平台生成，二者不是同一个编号。首次预留会减少可用余额；成功确认不重复扣第二次。
 
-返回示例（省略其他字段）：
+如果预留期间平台关闭积分，返回 `success=true,data.exempt=true,state=exempt`，不包含计费任务凭据。应正常执行业务，跳过结算。不是错误。
 
-    {
-      "success":true,
-      "data":{"id":"计费任务ID","state":"succeeded"}
-    }
+价格为零或扣分点停用时，查价可直接跳过计费；若仍提交了预留，可返回额度为 0 的 reserved 任务，按正常流程结束，不产生积分支出。
 
-检查success和data.state。state=expired表示超时释放，不是扣费成功。
-同一结果重复提交不重复扣费。
+## 5. 业务结束后确认或释放
 
-## SDK调用（可选）
+**POST `/api/billing/v1/tasks/{task_id}/result`**
 
-同目录business_billing.py已封装上述请求：
+`task_id` 替换为预留返回的 `data.id`；请求头为 `Authorization: Bearer <task_token>`。
 
-    from business_billing import Billing
+```json
+{"status":"succeeded"}
+```
 
-    billing = Billing("http://ac.zjugis.com:3300", identity)
-    task = billing.reserve(order_id, points="3", description="专家问答", action="qa")
+| status | 作用 |
+|---|---|
+| `succeeded` | 业务成功，确认扣费 |
+| `failed` | 业务失败，释放预留 |
+| `cancelled` | 用户取消，释放预留 |
 
-    billing.confirm(task)  # 成功分支
-    billing.fail(task)     # 失败分支
-    billing.cancel(task)   # 取消分支
+返回 `success=true` 后仍要检查 `data.state`。只有 `succeeded` 表示确认扣费成功；`expired` 表示已过期释放。流式问答须按实际完成状态提交，不能把 HTTP 200 或第一个分片当作业务完成。
 
-identity是当前用户的原登录兑换响应；示例已使用你们当前后台地址。
-三个结果方法选一个调用，不是连续调用。每个用户会话单独创建billing对象，不能全局共用。
+## 6. 查询、重试和异常
 
-## 使用后台配置的单次积分
+**GET `/api/billing/v1/tasks/{task_id}`**，携带当前用户授权。返回 `data.state`：`reserved`、`succeeded`、`failed`、`cancelled`、`expired`。
 
-例如后台将该专家的“任务积分”设为5积分／次，调用下面的方法就按5积分预留，不用在代码里再写金额：
+| 情况 | 处理 |
+|---|---|
+| `INSUFFICIENT_CREDITS` | 不执行业务，提示积分不足 |
+| `PRICE_CHANGED` | 重新查价并向用户确认，不按旧报价执行 |
+| `REQUEST_CONFLICT` | 同一业务编号参数不同，核对原记录，不自动换编号重扣 |
+| `TERMINAL_CONFLICT` | 已结束任务不能改成另一结果，查询原状态 |
+| `NOT_FOUND` / `TASK_NOT_FOUND` | 核对扣分点或任务 ID，不能默认为免费；本地技能的缺失判定由平台内部处理 |
+| `BILLING_SCOPE_MISMATCH` | 凭据、资源或扣分点归属不匹配 |
+| 业务成功但确认超时 | 保存业务结果，查询任务；仍 reserved 则用原任务和凭据重试确认，不释放、不重新执行业务 |
+| 预留超时且未拿到 ID 或凭据 | 不执行业务、不换编号再次收费，保留业务编号排查；当前没有按 request_id 找回凭据的接口 |
 
-    task = billing.reserve_default(order_id)
+相同参数重复预留不会重复扣分，但任务凭据只在首次创建返回。业务侧须安全保存它；重复预留不能用来恢复凭据。重复提交同一结算结果不重复扣分。
 
-不传points，由平台读取后台配置的价格。业务成功后确认扣费，失败或取消时释放，调用方式与上面相同。
+预留有效期 30 分钟，当前无续期。到期由平台清理任务释放，或提交结果时判定过期。专家 billing_context 有效期 1 小时，过期重新通过现有登录流程兑换。任务凭据仅保存在后端，禁止暴露到浏览器和普通日志。
 
-直接HTTP调用：先GET /quote?action=default，使用billing_context认证；取data.rule.version，然后POST /tasks：
+## 7. 后台配置接口（三类相同）
 
-    {
-      "mode":"configured",
-      "action":"default",
-      "quantity":1,
-      "version":1,
-      "request_id":"task-001"
-    }
+使用管理员现有登录授权。
 
-version取实际报价，不固定为示例1；quantity是次数。
-以上身份来自专家上下文。平台用户令牌调用configured模式时，还需传kind和item_id。
+| 方法 | 路径 | 用途 |
+|---|---|---|
+| GET | `/api/billing/v1/resources/{kind}/{item_id}/charge-points` | 查询资源扣分点，包括停用点 |
+| POST | 同上 | 新增扣分点，自动生成固定 ID |
+| PUT | `/api/billing/v1/resources/{kind}/{item_id}/charge-points/{point_id}` | 修改名称、说明、价格及启停 |
 
-## 知识库内部接入
+新增请求：
 
-当前知识库和平台后台同进程，使用同一计费服务的现有封装，不需要URL或令牌：
+```json
+{"name":"生成报告","description":"用户确认后生成报告","credits":"3","enabled":true}
+```
 
-    billing := knowledgeBillingFor(c, base)
-    task, taskToken, err := billing.ReservePoints("qa", requestID, "3", "知识库问答")
-    // err为空，预留成功后执行业务
+更新时增加查询返回的 `version`，防止覆盖他人修改。`credits` 为十进制字符串，0～1000000，精度须可换成整数内部额度；名称 1～100 字符，说明最多 500 字符。返回 `data.id`、`data.version`、`data.credits`、`data.enabled` 等字段。ID 与所属资源不可修改，不提供删除，只停用。
 
-    result, err := billing.Finish(task.ID, taskToken, "succeeded")
-    // 失败改为failed，取消改为cancelled
+- 启用且正价格：按后台金额计费。
+- 启用且零价格：免费执行业务。
+- 停用：停止扣分，业务正常执行。
+- 平台积分总开关关闭：业务正常执行，不预留、不扣分。
+- 已预留任务：后续停用或调价不影响原交易结算。
 
-c、base使用现有已登录、已授权请求；其余参数与上文对应。
-位置：services/one-api/controller/knowledge_billing.go。
-知识库当前不自动收费，由业务同事接上述调用；不涉及RAGFlow模型账单。
+专家保留扣分点管理页面。技能列表“积分”按钮打开同样的配置弹窗，原编辑表单不再配置任务积分；新技能自动建立默认“技能调用”点，已有价格迁入，修改价格不改 ID。添加额外技能扣分点不会自动触发，需接到新业务节点。知识库仅提供接口和现有 Go 请求中的接入位置，管理页面及具体收费规则由知识库同事完成。
 
-## 必要约定
+## 8. 流水与验收
 
-- 积分不足：返回INSUFFICIENT_CREDITS，停止收费业务。
-- 报错或超时：不能认定未扣费，不换request_id重扣。
-- 同一编号参数改变：返回REQUEST_CONFLICT。
-- 查询：GET /tasks/{计费任务ID}，使用billing_context认证；读取data.state。
-- task_token只在首次创建返回，须安全保存；当前不支持凭据恢复。
-- 预留30分钟后超时释放；当前无续期。billing_context有效1小时，过期重新打开专家。
-- 费用由受信后端计算，收费前向用户明确费用；不直接使用浏览器传入的金额。
-- 接口代码需部署配套后台，各专家仍需接入。正常业务调用不需要管理员令牌。
+正金额成功扣费进入“积分与用量”。预留时保存资源名称、扣分点名称及金额快照，后台改名或调价不改历史展示。会话与轮次真实关联时，计入对应“本轮消耗”。
 
-
-
-## 技能调用费
-
-模型每次调用 skill 工具且加载成功，按后台任务积分收一次。斜杠直接注入的技能全文在送入模型请求并开始返回非错误数据后，也收一次；同一份注入在后续步骤中复用不重复扣。请求失败或取消且尚未实际使用时释放预留。安装、下载、查看介绍、只选择未发送不触发。技能已实际使用后，后续任务失败不退调用费。价格0或关闭积分机制不扣技能费，模型Token费用另计。两种使用路径共用积分明细与本轮积分汇总。
+接入必须测试：正常成功只扣一次、余额不足不执行业务、失败取消释放、停用免费、零分免费、总开关关闭正常执行、重复请求不重复扣分、跨资源点不可使用、调价后旧任务按原价结算、确认超时仅补偿结算、流水名称和金额正确。

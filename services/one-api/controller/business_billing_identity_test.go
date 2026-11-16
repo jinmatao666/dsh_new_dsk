@@ -16,7 +16,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestDeveloperBillingIdentityAndCost(t *testing.T) {
+func TestChargePointBillingIdentityAndCost(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -81,7 +81,8 @@ func TestDeveloperBillingIdentityAndCost(t *testing.T) {
 	if !ok {
 		t.Fatal("no billing context")
 	}
-	payload := map[string]interface{}{"mode": "developer", "action": "qa", "points": "2.5", "description": "问答", "request_id": "question-1"}
+	db.Create(&model.BillingRule{ID: "cp_qa", Kind: "expert", ItemID: "report-expert", Action: "cp_qa", Name: "问答", UnitQuota: 2500, Enabled: true, Version: 1})
+	payload := map[string]interface{}{"mode": "configured", "kind": "expert", "item_id": "report-expert", "charge_point_id": "cp_qa", "quantity": 1, "version": 1, "description": "问答", "request_id": "question-1"}
 	status, result := call("POST", "/tasks", context, payload)
 	if status != 200 {
 		t.Fatalf("developer reserve %d %#v", status, result)
@@ -105,7 +106,7 @@ func TestDeveloperBillingIdentityAndCost(t *testing.T) {
 	if user.Quota != 7500 || user.UsedQuota != 2500 {
 		t.Fatal("incorrect settlement", user.Quota, user.UsedQuota)
 	}
-	payload["points"] = "3"
+	payload["quantity"] = 2
 	status, _ = call("POST", "/tasks", context, payload)
 	if status != 409 {
 		t.Fatal("changed replay accepted", status)
@@ -134,13 +135,13 @@ func TestDeveloperBillingIdentityAndCost(t *testing.T) {
 		t.Fatal("fractional internal quota accepted", status)
 	}
 
-	db.Model(&model.ExpertWebProfile{}).Where("key = ?", "report-expert").Update("task_credits", 2)
-	status, quoted := call("GET", "/quote?action=default", context, nil)
+	db.Create(&model.BillingRule{ID: "cp_report", Kind: "expert", ItemID: "report-expert", Action: "cp_report", Name: "报告", UnitQuota: 2000, Enabled: true, Version: 1})
+	status, quoted := call("GET", "/quote?kind=expert&item_id=report-expert&charge_point_id=cp_report", context, nil)
 	if status != 200 {
 		t.Fatalf("default quote %d %#v", status, quoted)
 	}
 	version := quoted["data"].(map[string]interface{})["rule"].(map[string]interface{})["version"]
-	status, configured := call("POST", "/tasks", context, map[string]interface{}{"mode": "configured", "action": "default", "quantity": 1, "version": version, "request_id": "default-1"})
+	status, configured := call("POST", "/tasks", context, map[string]interface{}{"mode": "configured", "kind": "expert", "item_id": "report-expert", "charge_point_id": "cp_report", "quantity": 1, "version": version, "request_id": "default-1"})
 	if status != 200 {
 		t.Fatalf("default reserve %d %#v", status, configured)
 	}

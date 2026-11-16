@@ -292,6 +292,16 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&Skill{}); err != nil {
 		return err
 	}
+	// Materialize stable default points for existing skills before serving traffic.
+	var billingSkills []Skill
+	if err = DB.Select("name").Where("is_deleted = ?", false).Find(&billingSkills).Error; err != nil {
+		return err
+	}
+	for _, skill := range billingSkills {
+		if _, err = EnsureSkillChargePoint(DB, skill.Name); err != nil {
+			return err
+		}
+	}
 	if err = DB.AutoMigrate(&SkillInstallation{}); err != nil {
 		return err
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/songquanpeng/one-api/common/config"
 	"io"
 	"math"
 	"net/http"
@@ -47,7 +48,7 @@ func ensureMarketplaceManifestID(assets, fallbackID string) (string, error) {
 }
 
 type skillResponse struct {
-	TaskCredits             int64                     `json:"task_credits"`
+	TaskCredits             float64                   `json:"task_credits"`
 	SortOrder               *int                      `json:"sort_order"`
 	RequiresInternet        *bool                     `json:"requires_internet"`
 	Id                      int                       `json:"id"`
@@ -80,7 +81,7 @@ func skillToResponse(s model.Skill, categories ...[]model.SkillCategoryView) ski
 		cats = categories[0]
 	}
 	return skillResponse{
-		TaskCredits:      s.TaskCredits,
+		TaskCredits:      skillCreditPrice(s),
 		SortOrder:        s.SortOrder,
 		RequiresInternet: s.RequiresInternet,
 		Id:               s.Id,
@@ -1034,4 +1035,18 @@ func AdminGetSkillFull(c *gin.Context) {
 			Categories: categories,
 		},
 	})
+}
+
+// skillCreditPrice publishes the unified default point price; legacy values only seed migration.
+func skillCreditPrice(s model.Skill) float64 {
+	if model.DB.Migrator().HasTable(&model.BillingRule{}) {
+		var rule model.BillingRule
+		if model.DB.Where("kind = ? AND item_id = ? AND action = ?", "skill", s.Name, "default").First(&rule).Error == nil {
+			if !rule.Enabled {
+				return 0
+			}
+			return float64(rule.UnitQuota) / config.QuotaPerUnit
+		}
+	}
+	return float64(s.TaskCredits)
 }

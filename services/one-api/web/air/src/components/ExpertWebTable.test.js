@@ -23,6 +23,7 @@ test('website expert editor exposes the card image and all four popup sections',
   expect(container.querySelectorAll('.expert-web-section-grid fieldset')).toHaveLength(4);
   expect(container.textContent).toContain('专家主图标（卡片和介绍弹窗共用）');
   expect(container.textContent).toContain('弹窗底部说明');
+  expect(container.textContent).not.toContain('任务积分（积分／次）');
   expect(container.querySelector('input[value="生成正式纪要"]')).not.toBeNull();
   const tags = [...container.querySelectorAll('label')].find(label => label.textContent.startsWith('标签（每行一个）')).querySelector('textarea');
   const draft = '会议纪要 \n\n材料完整性\n';
@@ -61,8 +62,8 @@ test('delete follows unpublish, requires confirmation, and refreshes the expert 
   const root = createRoot(container);
   await act(async () => { root.render(<ExpertWebTable />); });
   const buttons = [...container.querySelectorAll('.actions > button')];
-  expect(buttons.map(button => button.textContent)).toEqual(['编辑', '重置凭据', '下架', '删除']);
-  const remove = buttons[3];
+  expect(buttons.map(button => button.textContent)).toEqual(['积分', '编辑', '重置凭据', '下架', '删除']);
+  const remove = buttons[4];
   await act(async () => { remove.click(); });
   expect(API.delete).not.toHaveBeenCalled();
   confirm.mockReturnValue(true);

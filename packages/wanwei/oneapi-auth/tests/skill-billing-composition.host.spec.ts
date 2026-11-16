@@ -14,7 +14,7 @@ it('keeps the bare execution wrapper opt-in without installing injection listene
   let settled = false, reserves = 0
   let executor: SkillExecutor
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    if (url.includes('/quote?')) return Response.json({ success: true, data: { rule: { version: 1, unit_quota: 20, enabled: true } } })
+    if (url.includes('/quote?')) return Response.json({ success: true, data: { rule: { id: 'cp_skill', version: 1, unit_quota: 20, enabled: true } } })
     if (url.endsWith('/tasks')) { reserves++; return Response.json({ success: true, data: { id: 'task' }, task_token: 'capability' }) }
     settled = true
     return Response.json({ success: true })

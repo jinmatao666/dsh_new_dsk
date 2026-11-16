@@ -1,3 +1,4 @@
+import ExpertChargePoints from './ExpertChargePoints';
 import { resourceURL } from '../deployment';
 import CatalogOrderActions, { catalogDragProps } from './CatalogOrderActions';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
@@ -90,7 +91,6 @@ const filesFromDirectoryHandle = async (directory, root = directory.name, prefix
 
 const EMPTY_FORM = {
   sort_order: null,
-  task_credits: 0,
   requires_internet: true,
   name: '',
   display_name: '',
@@ -117,6 +117,7 @@ const skillScope = skill => isPrivateSkill(skill) ? 'private' : skill.source ===
 
 const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
   const [items, setItems] = useState([]);
+  const [chargingSkill, setChargingSkill] = useState(null);
   const [managedCategories, setManagedCategories] = useState([]);
   const [keyword, setKeyword] = useState(keywordProp);
   const [scope, setScope] = useState('all');
@@ -182,7 +183,6 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
     setImported(null);
     setForm(skill ? {
       sort_order: skill.sort_order ?? null,
-      task_credits: skill.task_credits ?? 0,
       requires_internet: skill.requires_internet !== false,
       name: skill.name || '',
       display_name: skill.display_name || '',
@@ -430,6 +430,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
           {!isPrivateSkill(record) && <button type='button' className='skill-text-action' disabled={batchBusy} onClick={() => openEditor(record)}>编辑</button>}
           {!isPrivateSkill(record) && <button type='button' className='skill-text-action' disabled={batchBusy} onClick={() => { void togglePublish(record); }}>{record.status === 1 ? '下架' : '上架'}</button>}
           <button type='button' className='skill-text-action' onClick={() => setBrowse({ visible: true, skill: record })}>浏览</button>
+          {!isPrivateSkill(record) && <button type='button' className='skill-text-action' disabled={batchBusy} onClick={() => setChargingSkill(record)}>积分</button>}
           {!isPrivateSkill(record) && <button type='button' className='skill-text-action danger' disabled={batchBusy} onClick={() => removeSkill(record)}>删除</button>}
           {!isPrivateSkill(record) && <CatalogOrderActions kind='skills' item={record} items={items.filter(item => !isPrivateSkill(item))} reload={loadSkills} disabled={batchBusy} />}
         </div>
@@ -454,7 +455,6 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
       tags: splitLines(form.capabilities).length ? splitLines(form.capabilities) : ['通用能力'],
       icon: form.icon,
       sort_order: form.sort_order,
-      task_credits: form.task_credits,
       requires_internet: form.requires_internet,
     };
     if (!editor.base) { showError('请先通过“导入技能”创建技能'); return; }
@@ -619,6 +619,7 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
         </div>}
       </div>
     </div>}
+    {chargingSkill && <ExpertChargePoints kind="skill" expert={{ key: chargingSkill.name, name: chargingSkill.display_name || chargingSkill.name }} onClose={() => setChargingSkill(null)} />}
     {editor && (
       <div className='zjugis-modal-backdrop'>
         <div className='zjugis-modal wide'>
@@ -664,7 +665,6 @@ const SkillsTable = forwardRef(({ keyword: keywordProp = '' }, ref) => {
               <input ref={iconInputRef} hidden type='file' accept='image/png,image/jpeg,image/webp,image/gif' onChange={chooseIconFile} />
             </label>
             <label className='zjugis-field'><span>顺序（数字越大越靠前）</span><input type='number' step='1' value={form.sort_order ?? ''} placeholder='留空按创建时间倒序' onChange={event => setForm(previous => ({ ...previous, sort_order: event.target.value === '' ? null : Number(event.target.value) }))} /></label>
-            <label className='zjugis-field'><span>任务积分（积分／次）</span><input type='number' min='0' max='1000000' step='1' required value={form.task_credits} onChange={event => setForm(previous => ({ ...previous, task_credits: event.target.value === '' ? '' : Number(event.target.value) }))} /></label>
             <label className='zjugis-field'><span>需要访问互联网</span><input type='checkbox' checked={form.requires_internet} onChange={event => setForm(previous => ({ ...previous, requires_internet: event.target.checked }))} /></label>
             {!editor.base && (
               <label className='zjugis-field full'>

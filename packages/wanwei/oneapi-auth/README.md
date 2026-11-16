@@ -225,3 +225,5 @@ None.
 Catalog access decisions cross plugin boundaries through the injected `wanweiNetwork.catalogAccess` service method. Client entrypoints expose network types only; consumers do not import the authentication plugin's runtime helpers.
 
 Internet-dependent skill and expert presentation is configured independently with `internetSkillPolicy` and `internetExpertPolicy`. Missing values inherit the legacy shared policy; updated desktop clients are required to apply the independent choices.
+
+Skill fixed fees resolve their default charge point ID through the unified HTTP API. Disabled accounting or points permit execution without debits; charged tasks retain the existing success/failure settlement triggers.

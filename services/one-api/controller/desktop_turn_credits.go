@@ -70,7 +70,14 @@ func businessCreditLabel(task model.BillingTask) string {
 	if kind == "" {
 		kind = "服务调用"
 	}
-	label := kind + " · " + task.ItemID
+	resource := task.ResourceName
+	if resource == "" {
+		resource = task.ItemID
+	}
+	label := kind + " · " + resource
+	if task.PointName != "" {
+		return label + " · " + task.PointName
+	}
 	if task.Action != "default" && task.Action != "" {
 		label += " · " + task.Action
 	}

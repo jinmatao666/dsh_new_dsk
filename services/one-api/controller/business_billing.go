@@ -52,6 +52,29 @@ func GetBillingQuote(c *gin.Context) {
 		kind, item = "expert", scope.ExpertKey
 	}
 
+	if config.CreditsDisabled() {
+		billingExempt(c)
+		return
+	}
+	if !billingResourceAllowed(c, kind, item) {
+		return
+	}
+	point := c.Query("charge_point_id")
+	if point == "" && kind == "skill" && c.Query("default") == "true" {
+		rule, err := model.EnsureSkillChargePoint(model.DB, item)
+		if err != nil {
+			billingError(c, err)
+			return
+		}
+		point = rule.ID
+	}
+	var err error
+	action, err = resolveChargePoint(kind, item, point)
+	if err != nil {
+		billingError(c, err)
+		return
+	}
+
 	if !validBillingAction(kind, item, action) {
 		billingError(c, errors.New("INVALID_REQUEST"))
 		return
@@ -62,7 +85,7 @@ func GetBillingQuote(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(200, gin.H{"success": true, "data": gin.H{"rule": rule, "unit_credits": float64(rule.UnitQuota) / config.QuotaPerUnit, "quota_per_credit": config.QuotaPerUnit}})
+	c.JSON(200, gin.H{"success": true, "data": gin.H{"rule": rule, "unit_credits": float64(rule.UnitQuota) / config.QuotaPerUnit, "quota_per_credit": config.QuotaPerUnit, "exempt": !rule.Enabled || rule.UnitQuota == 0}})
 }
 
 // PutBillingRule is administrator-only; version checks prevent lost price changes.
@@ -133,17 +156,19 @@ func PutBillingRule(c *gin.Context) {
 // ReserveBusinessBilling requires the paying user's platform authentication and quoted price version.
 func ReserveBusinessBilling(c *gin.Context) {
 	var request struct {
-		Mode        string `json:"mode"`
-		Points      string `json:"points"`
-		Description string `json:"description"`
-		Kind        string `json:"kind"`
-		ItemID      string `json:"item_id"`
-		Action      string `json:"action"`
-		RequestID   string `json:"request_id"`
-		Quantity    int64  `json:"quantity"`
-		Version     int64  `json:"version"`
-		SessionID   string `json:"session_id"`
-		TurnID      *int   `json:"turn_id"`
+		ChargePointID string `json:"charge_point_id"`
+		ExpertKey     string `json:"expert_key"`
+		Mode          string `json:"mode"`
+		Points        string `json:"points"`
+		Description   string `json:"description"`
+		Kind          string `json:"kind"`
+		ItemID        string `json:"item_id"`
+		Action        string `json:"action"`
+		RequestID     string `json:"request_id"`
+		Quantity      int64  `json:"quantity"`
+		Version       int64  `json:"version"`
+		SessionID     string `json:"session_id"`
+		TurnID        *int   `json:"turn_id"`
 	}
 	var input model.BillingTask
 	if c.ShouldBindJSON(&request) != nil {
@@ -159,6 +184,24 @@ func ReserveBusinessBilling(c *gin.Context) {
 		}
 		request.Kind, request.ItemID = "expert", scope.ExpertKey
 	}
+	if config.CreditsDisabled() {
+		billingExempt(c)
+		return
+	}
+	if !billingResourceAllowed(c, request.Kind, request.ItemID) {
+		return
+	}
+	if request.ExpertKey != "" || request.Points != "" || request.Mode == "developer" {
+		billingError(c, errors.New("INVALID_REQUEST"))
+		return
+	}
+	var resolveErr error
+	request.Action, resolveErr = resolveChargePoint(request.Kind, request.ItemID, request.ChargePointID)
+	if resolveErr != nil {
+		billingError(c, resolveErr)
+		return
+	}
+
 	if !validBillingAction(request.Kind, request.ItemID, request.Action) || len([]rune(request.Description)) > 160 {
 		billingError(c, errors.New("INVALID_REQUEST"))
 		return
@@ -181,10 +224,10 @@ func ReserveBusinessBilling(c *gin.Context) {
 	var task model.BillingTask
 	var secret string
 	var err error
-	if request.Mode == "developer" {
-		task, secret, err = model.ReserveDeveloperBilling(c.GetInt("id"), input, request.Points)
-	} else {
-		task, secret, err = model.ReserveBillingTask(c.GetInt("id"), input)
+	task, secret, err = model.ReserveBillingTask(c.GetInt("id"), input)
+	if err != nil && err.Error() == "BILLING_DISABLED" {
+		billingExempt(c)
+		return
 	}
 	if err != nil {
 		billingError(c, err)
@@ -228,6 +271,9 @@ func GetBusinessBilling(c *gin.Context) {
 			c.JSON(404, gin.H{"success": false, "code": "TASK_NOT_FOUND"})
 			return
 		}
+	}
+	if !billingResourceAllowed(c, task.Kind, task.ItemID) {
+		return
 	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(200, gin.H{"success": true, "data": task})

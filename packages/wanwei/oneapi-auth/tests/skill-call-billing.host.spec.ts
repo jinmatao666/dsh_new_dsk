@@ -12,7 +12,7 @@ it('charges separate successful skill tool calls separately, never slash injecti
   const hooks: string[] = []
   let dispose = () => {}
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
-    if (url.includes('/quote?')) return Response.json({ success: true, data: { rule: { enabled: true, version: 1, unit_quota: 200 } } })
+    if (url.includes('/quote?')) return Response.json({ success: true, data: { rule: { id: 'cp_skill', enabled: true, version: 1, unit_quota: 200 } } })
     if (url.endsWith('/tasks')) {
       reserves++; reservedBodies.push(JSON.parse(String(init.body)))
       return Response.json({ success: true, data: { id: 'task-'+reserves }, task_token: 'capability' })

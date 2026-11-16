@@ -26,7 +26,9 @@ func SetApiRouter(router *gin.Engine) {
 	apiRouter.Use(middleware.GlobalAPIRateLimit())
 	apiRouter.Use(middleware.AdminOperationLog()) // 后台操作审计记录
 	apiRouter.GET("/billing/v1/quote", controller.BusinessBillingAuth(middleware.UserAuth()), controller.GetBillingQuote)
-	apiRouter.PUT("/billing/v1/rules", middleware.RootAuth(), controller.PutBillingRule)
+	apiRouter.GET("/billing/v1/resources/:kind/:item/charge-points", middleware.AdminAuth(), controller.AdminListChargePoints)
+	apiRouter.POST("/billing/v1/resources/:kind/:item/charge-points", middleware.AdminAuth(), controller.AdminSaveChargePoint)
+	apiRouter.PUT("/billing/v1/resources/:kind/:item/charge-points/:point", middleware.AdminAuth(), controller.AdminSaveChargePoint)
 	apiRouter.POST("/billing/v1/tasks", controller.BusinessBillingAuth(middleware.UserAuth()), controller.ReserveBusinessBilling)
 	apiRouter.GET("/billing/v1/tasks/:id", controller.BusinessBillingAuth(middleware.UserAuth()), controller.GetBusinessBilling)
 	apiRouter.POST("/billing/v1/tasks/:id/result", controller.ResultBusinessBilling)

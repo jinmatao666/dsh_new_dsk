@@ -17,17 +17,21 @@ import (
 )
 
 type BillingRule struct {
-	ID        string    `json:"id" gorm:"primaryKey;size:64"`
-	Kind      string    `json:"kind" gorm:"uniqueIndex:billing_action;size:16"`
-	ItemID    string    `json:"item_id" gorm:"uniqueIndex:billing_action;size:160"`
-	Action    string    `json:"action" gorm:"uniqueIndex:billing_action;size:80"`
-	UnitQuota int64     `json:"unit_quota"`
-	Enabled   bool      `json:"enabled"`
-	Version   int64     `json:"version"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Name        string    `json:"name" gorm:"size:100"`
+	Description string    `json:"description" gorm:"size:500"`
+	ID          string    `json:"id" gorm:"primaryKey;size:64"`
+	Kind        string    `json:"kind" gorm:"uniqueIndex:billing_action;size:16"`
+	ItemID      string    `json:"item_id" gorm:"uniqueIndex:billing_action;size:160"`
+	Action      string    `json:"action" gorm:"uniqueIndex:billing_action;size:80"`
+	UnitQuota   int64     `json:"unit_quota"`
+	Enabled     bool      `json:"enabled"`
+	Version     int64     `json:"version"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type BillingTask struct {
+	ResourceName string     `json:"resource_name"`
+	PointName    string     `json:"point_name"`
 	SessionID    string     `json:"session_id,omitempty" gorm:"index:idx_billing_turn,priority:1"`
 	TurnID       *int       `json:"turn_id,omitempty" gorm:"index:idx_billing_turn,priority:2"`
 	PricingMode  string     `json:"pricing_mode"`
@@ -63,19 +67,7 @@ func billingLock(tx *gorm.DB) *gorm.DB {
 
 func ReserveBillingTask(userID int, input BillingTask) (BillingTask, string, error) {
 	input.PricingMode = "configured"
-	return reserveBusinessTask(userID, input, 0)
-}
-
-// ReserveDeveloperBilling is called only after business identity and payment scope were verified.
-func ReserveDeveloperBilling(userID int, input BillingTask, points string) (BillingTask, string, error) {
-	quota, err := BillingPointsQuota(points)
-	if err != nil {
-		return BillingTask{}, "", err
-	}
-	input.PricingMode = "developer"
-	input.Version = 0
-	input.Quantity = 1
-	return reserveBusinessTask(userID, input, quota)
+	return reserveBusinessTask(userID, input)
 }
 
 var billingPointsPattern = regexp.MustCompile(`^[0-9]+(?:[.][0-9]+)?$`)
@@ -95,7 +87,7 @@ func BillingPointsQuota(points string) (int64, error) {
 	return r.Num().Int64(), nil
 }
 
-func reserveBusinessTask(userID int, input BillingTask, developerQuota int64) (BillingTask, string, error) {
+func reserveBusinessTask(userID int, input BillingTask) (BillingTask, string, error) {
 	var result BillingTask
 	secret := uuid.NewString() + uuid.NewString()
 	if config.CreditsDisabled() {
@@ -111,7 +103,7 @@ func reserveBusinessTask(userID int, input BillingTask, developerQuota int64) (B
 		}
 		err := tx.Where("user_id = ? AND request_id = ?", userID, input.RequestID).First(&result).Error
 		if err == nil {
-			if result.Kind != input.Kind || result.ItemID != input.ItemID || result.Action != input.Action || result.Quantity != input.Quantity || result.Version != input.Version || result.PricingMode != input.PricingMode || (input.PricingMode == "developer" && result.Quota != developerQuota) || result.Description != input.Description || result.SessionID != input.SessionID || !sameBillingTurn(result.TurnID, input.TurnID) {
+			if result.Kind != input.Kind || result.ItemID != input.ItemID || result.Action != input.Action || result.Quantity != input.Quantity || result.Version != input.Version || result.PricingMode != input.PricingMode || result.Description != input.Description || result.SessionID != input.SessionID || !sameBillingTurn(result.TurnID, input.TurnID) {
 				return errors.New("REQUEST_CONFLICT")
 			}
 			secret = ""
@@ -120,22 +112,30 @@ func reserveBusinessTask(userID int, input BillingTask, developerQuota int64) (B
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		amount := developerQuota
-		if input.PricingMode != "developer" {
+		amount := int64(0)
+		{
 			rule, err := ResolveBusinessRule(billingLock(tx), input.Kind, input.ItemID, input.Action)
 			if err != nil {
 				return err
 			}
-			if !rule.Enabled {
-				return errors.New("BILLING_DISABLED")
-			}
-			if rule.Version != input.Version {
+
+			if rule.Enabled && rule.UnitQuota > 0 && rule.Version != input.Version {
 				return errors.New("PRICE_CHANGED")
 			}
 			if rule.UnitQuota < 0 || rule.UnitQuota > math.MaxInt64/input.Quantity {
 				return errors.New("INVALID_PRICE")
 			}
 			amount = rule.UnitQuota * input.Quantity
+			if !rule.Enabled {
+				amount = 0
+			}
+			input.PointName = rule.Name
+			if rule.Name != "" {
+				input.ResourceName, err = BillingResourceName(tx, input.Kind, input.ItemID)
+				if err != nil {
+					return err
+				}
+			}
 		}
 
 		sources, err := changeTokenCreditQuotaDB(tx, userID, 0, amount, nil)

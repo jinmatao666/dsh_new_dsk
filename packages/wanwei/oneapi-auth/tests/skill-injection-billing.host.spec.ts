@@ -20,7 +20,7 @@ async function fixture(cost = 200) {
   vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
     const body = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>
     calls.push({ path, body })
-    if (path.includes('/quote?')) return Response.json({ success: true, data: { rule: { enabled: true, version: 1, unit_quota: cost } } })
+    if (path.includes('/quote?')) return Response.json({ success: true, data: { rule: { id: 'cp_skill', enabled: true, version: 1, unit_quota: cost } } })
     if (path.endsWith('/tasks')) return insufficient
       ? Response.json({ success: false, code: 'INSUFFICIENT_CREDITS' }, { status: 403 })
       : Response.json({ success: true, data: { id: 'task-' + calls.length }, task_token: 'capability' })

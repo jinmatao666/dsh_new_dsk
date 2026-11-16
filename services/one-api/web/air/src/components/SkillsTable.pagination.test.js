@@ -40,3 +40,24 @@ test('unpublishing a third-page skill keeps the third page after reloading recor
     delete global.IS_REACT_ACT_ENVIRONMENT;
   }
 });
+
+test('opens a skill charge point dialog from 积分 before 删除', async () => {
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  API.get.mockImplementation(async url => ({ data: url === '/api/skill/admin/list'
+    ? { items: [{ id: 1, name: 'contract', display_name: '合同起草', status: 1 }] }
+    : { success: true, items: [], data: [] } }));
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<SkillsTable />));
+    const button = [...container.querySelectorAll('button')].find(b => b.textContent === '积分');
+    expect(button.nextElementSibling.textContent).toBe('删除');
+    await act(async () => button.click());
+    expect(API.get).toHaveBeenCalledWith('/api/billing/v1/resources/skill/contract/charge-points');
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('任务积分（积分／次）');
+  } finally {
+    await act(async () => root.unmount()); container.remove();
+    delete global.IS_REACT_ACT_ENVIRONMENT;
+  }
+});

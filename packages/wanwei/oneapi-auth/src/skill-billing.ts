@@ -73,38 +73,44 @@ export function createSkillExecutor(ctx: Context, base: string, resolveToken: ()
     const execution = (async () => {
       let reservation: Reservation | undefined
       if (ctx.get('wanweiNetworkPolicy')?.getSnapshot().billing?.enabled !== false) {
-        const quote = await request('quote?' + new URLSearchParams({ kind: 'skill', item_id: operation.skillName, action: 'default' }), token, undefined, operation.signal)
+        const quote = await request('quote?' + new URLSearchParams({ kind: 'skill', item_id: operation.skillName, default: 'true' }), token, undefined, operation.signal)
         if (!(quote.response.status === 404 && quote.value.code === 'NOT_FOUND')) {
           if (!quote.response.ok || !quote.value.success) throw new Error('无法确认技能价格，已停止执行')
-          const data = quote.value.data as { rule?: { version: number; enabled: boolean; unit_quota: number } }
-          if (!data.rule || !Number.isSafeInteger(data.rule.version) || !Number.isSafeInteger(data.rule.unit_quota)) throw new Error('技能计费配置无效')
-          if (!data.rule.enabled) throw new Error('技能计费已关闭，已停止执行')
-          if (data.rule.unit_quota > 0) {
-            const reserved = await request('tasks', token, {
-              kind: 'skill', item_id: operation.skillName, action: 'default', quantity: 1,
-              version: data.rule.version, request_id: identity,
-              ...(operation.sessionId === undefined ? {} : { session_id: operation.sessionId, turn_id: operation.turnId }),
-            }, operation.signal)
-            if (!reserved.response.ok || !reserved.value.success) {
-              if (reserved.value.code === 'INSUFFICIENT_CREDITS') throw new LlmError('积分不足，任务已中断。', QUOTA_EXCEEDED_CODE)
-              const reasons: Record<string, string> = {
-                PRICE_CHANGED: '技能价格已更新，请重新发送任务',
-                BILLING_DISABLED: '后台已关闭积分计费，请刷新配置后重试',
-                BILLING_UNAVAILABLE: '后台积分服务异常，请联系管理员检查日志',
-                INVALID_REQUEST: '技能计费参数被后台拒绝，请检查桌面端与后台版本',
-                REQUEST_CONFLICT: '技能计费请求冲突，请核对原任务记录',
-                NOT_FOUND: '后台未找到该技能的计费配置',
+          const data = quote.value.data as { exempt?: boolean
+            rule?: { id: string; version: number; enabled: boolean; unit_quota: number } }
+          if (data.exempt !== true) {
+            if (!data.rule || typeof data.rule.id !== 'string' || !data.rule.id.startsWith('cp_')
+              || !Number.isSafeInteger(data.rule.version) || !Number.isSafeInteger(data.rule.unit_quota)) throw new Error('技能计费配置无效')
+
+            if (data.rule.enabled && data.rule.unit_quota > 0) {
+              const reserved = await request('tasks', token, {
+                kind: 'skill', item_id: operation.skillName, charge_point_id: data.rule.id, quantity: 1,
+                version: data.rule.version, request_id: identity,
+                ...(operation.sessionId === undefined ? {} : { session_id: operation.sessionId, turn_id: operation.turnId }),
+              }, operation.signal)
+              if (!reserved.response.ok || !reserved.value.success) {
+                if (reserved.value.code === 'INSUFFICIENT_CREDITS') throw new LlmError('积分不足，任务已中断。', QUOTA_EXCEEDED_CODE)
+                const reasons: Record<string, string> = {
+                  PRICE_CHANGED: '技能价格已更新，请重新发送任务',
+                  BILLING_DISABLED: '后台已关闭积分计费，请刷新配置后重试',
+                  BILLING_UNAVAILABLE: '后台积分服务异常，请联系管理员检查日志',
+                  INVALID_REQUEST: '技能计费参数被后台拒绝，请检查桌面端与后台版本',
+                  REQUEST_CONFLICT: '技能计费请求冲突，请核对原任务记录',
+                  NOT_FOUND: '后台未找到该技能的计费配置',
+                }
+                const code = reserved.value.code
+                const reason = code && reasons[code] || (reserved.response.status === 401
+                  ? '登录已失效，请重新登录' : '后台未能预留技能积分')
+                const requestId = reserved.response.headers.get('x-oneapi-request-id')
+                const trace = requestId && /^[a-zA-Z0-9-]{1,80}$/u.test(requestId) ? `，请求编号 ${requestId}` : ''
+                throw new Error(`${reason}（HTTP ${reserved.response.status}${code && /^[A-Z_]{1,60}$/u.test(code) ? `，${code}` : ''}${trace}），已停止执行`)
               }
-              const code = reserved.value.code
-              const reason = code && reasons[code] || (reserved.response.status === 401
-                ? '登录已失效，请重新登录' : '后台未能预留技能积分')
-              const requestId = reserved.response.headers.get('x-oneapi-request-id')
-              const trace = requestId && /^[a-zA-Z0-9-]{1,80}$/u.test(requestId) ? `，请求编号 ${requestId}` : ''
-              throw new Error(`${reason}（HTTP ${reserved.response.status}${code && /^[A-Z_]{1,60}$/u.test(code) ? `，${code}` : ''}${trace}），已停止执行`)
+              const task = reserved.value.data as { id?: unknown; exempt?: boolean }
+              if (task.exempt !== true) {
+                if (typeof task?.id !== 'string' || !reserved.value.task_token) throw new Error('技能计费任务已存在，请核对原任务后重试')
+                reservation = { id: task.id, token: reserved.value.task_token }
+              }
             }
-            const task = reserved.value.data as { id?: unknown }
-            if (typeof task?.id !== 'string' || !reserved.value.task_token) throw new Error('技能计费任务已存在，请核对原任务后重试')
-            reservation = { id: task.id, token: reserved.value.task_token }
           }
         }
       }
