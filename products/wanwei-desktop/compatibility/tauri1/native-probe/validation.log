@@ -1,0 +1,7 @@
+Could not determine the accessibility bus address
+PROBE_MAIN_IPC passed=true
+PROBE_GEOMETRY index=0 x=40 y=170 width=340 height=380
+PROBE_EXPERT index=0 same_toplevel=true parented=true allocated=true hide_show=true preserved_counter=Some(42.0)
+PROBE_GEOMETRY index=1 x=440 y=170 width=340 height=380
+PROBE_EXPERT index=1 same_toplevel=true parented=true allocated=true hide_show=true preserved_counter=Some(42.0)
+PROBE_RESULT experts=2 passed=true scope=tauri1-gtk-local-html

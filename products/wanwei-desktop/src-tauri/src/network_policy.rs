@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 use tauri::{Manager, State};
+#[cfg(not(wanwei_kylin))]
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
@@ -55,9 +56,17 @@ pub fn open_external_link(app: tauri::AppHandle, address: String) -> Result<(), 
     if !may_open(&app, &url) {
         return Err("纯内网环境不可用".into());
     }
-    app.opener()
-        .open_url(url.as_str(), None::<&str>)
-        .map_err(|error| format!("无法打开系统浏览器：{error}"))
+    #[cfg(not(wanwei_kylin))]
+    {
+        app.opener()
+            .open_url(url.as_str(), None::<&str>)
+            .map_err(|error| format!("无法打开系统浏览器：{error}"))
+    }
+    #[cfg(wanwei_kylin)]
+    {
+        tauri::api::shell::open(&app.shell_scope(), url.as_str(), None)
+            .map_err(|error| format!("无法打开系统浏览器：{error}"))
+    }
 }
 #[tauri::command]
 pub fn set_network_environment(

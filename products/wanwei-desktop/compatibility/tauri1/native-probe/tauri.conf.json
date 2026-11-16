@@ -1,0 +1,10 @@
+{
+  "build": { "distDir": "web", "devPath": "web", "withGlobalTauri": true },
+  "package": { "productName": "Wanwei embedded feasibility probe", "version": "0.0.0" },
+  "tauri": {
+    "allowlist": { "all": false },
+    "bundle": { "active": false, "identifier": "com.wanwei.feasibility.tauri1" },
+    "windows": [{ "label": "main", "title": "Embedded view feasibility probe", "width": 1000, "height": 720 }],
+    "security": { "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'" }
+  }
+}

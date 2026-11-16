@@ -1,4 +1,9 @@
 fn main() {
+    println!("cargo:rustc-check-cfg=cfg(wanwei_kylin)");
+    if std::env::var("CARGO_PKG_NAME").as_deref() == Ok("wanwei-buddy-kylin") {
+        println!("cargo:rustc-cfg=wanwei_kylin");
+        println!("cargo:rerun-if-changed=../src-tauri/src");
+    }
     let release_version = std::env::var("DSH_RELEASE_VERSION")
         .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_owned());
     if !release_version

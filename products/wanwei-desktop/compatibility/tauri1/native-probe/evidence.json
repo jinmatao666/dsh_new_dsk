@@ -1,0 +1,57 @@
+{
+  "scope": "Isolated Tauri 1 GTK native probe; no production business runtime or ARM64 installation",
+  "architecture": "x86_64",
+  "glibc": "glibc 2.31",
+  "pkgConfigVersions": {
+    "webkit2gtk-4.0": "2.38.6",
+    "gtk+-3.0": "3.24.20",
+    "glib-2.0": "2.64.6"
+  },
+  "graphics": "Xvfb X11, software compositing, local test HTML",
+  "passed": true,
+  "mainPageIpc": true,
+  "expertChecks": [
+    "PROBE_EXPERT index=0 same_toplevel=true parented=true allocated=true hide_show=true preserved_counter=Some(42.0)",
+    "PROBE_EXPERT index=1 same_toplevel=true parented=true allocated=true hide_show=true preserved_counter=Some(42.0)"
+  ],
+  "maximumRequiredSymbolsIncludingResolvedLibraries": {
+    "GLIBC": "2.30",
+    "GLIBCXX": "3.4.26"
+  },
+  "binaryRequiredGlibc": [
+    "2.2.5",
+    "2.3",
+    "2.3.2",
+    "2.3.4",
+    "2.12",
+    "2.14",
+    "2.16",
+    "2.17",
+    "2.18",
+    "2.25",
+    "2.28",
+    "2.29",
+    "2.30"
+  ],
+  "sourceSha256": {
+    "Cargo.toml": "b831db5b33fca36ecdfe45c4224bf9a3d23789226c76bb3e680512e9bc537255",
+    "Cargo.lock": "083059227cd87d942d6d2b253865d47150aa666ab56dcbc4b7af85d79b0aa408",
+    "build.rs": "6aeeab41bc35efde4e3c2b644a6248f7fc06d24ae30b75c0d33491cbb0c1fa31",
+    "tauri.conf.json": "dd41d8dd7afca2f78a9ad0a01e7d137ad4de867807efcc95c92461adfa6f0905",
+    "src/main.rs": "394be63dac681fc1d62261a3cd44feee5c30167b7adaa48567fa220d68b3494c",
+    "web/index.html": "8087f90f0209397dc56d076f02f9d9a488c531bbb41553cb054dc21321f20d4a",
+    "icons/icon.png": "3577ada3ac8b85a11d7de72faa42aab1c5ae825fb2c461ae1565e1def5f0ed33",
+    "verify.py": "8c554732adf83ffee355d50eef35907063349ec1a9a35058fc3922cdad769fa5"
+  },
+  "notVerified": [
+    "ARM64",
+    "Kylin installation",
+    "production Node sidecar",
+    "real expert pages",
+    "child-view native command authorization",
+    "input and focus",
+    "Wayland",
+    "updates",
+    "packaging"
+  ]
+}

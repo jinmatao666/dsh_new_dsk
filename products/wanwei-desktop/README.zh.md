@@ -2,6 +2,8 @@
 
 [English](README.md) | 中文
 
+[麒麟兼容壳](src-kylin/README.zh.md)共享业务源码和 Node 运行时，使用 Tauri 1 与 GTK 内嵌专家视图。预览工作流包含独立麒麟安装包；Windows/macOS 保留 Tauri 2。麒麟通过安装包更新，需要 ARM64 目标机验收。
+
 CI 在编译前设置 `DSH_DESKTOP_BUILD_ID`，并在签名更新清单时复用。提供了这份共同标识时，Cargo 标识文件缺失不会阻止导出；两处标识冲突则停止打包。本地未设置该变量时，使用 Rust 生成的标识文件。
 
 恢复 Rust 缓存后，CI 只清理 `wanwei-buddy` 的 release 编译产物和标识文件，再执行编译。依赖产物继续复用缓存；产品构建脚本及嵌入标识在本次运行中重新生成。

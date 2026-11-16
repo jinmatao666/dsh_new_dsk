@@ -1,0 +1,10 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Native probe</title></head>
+<body><h1>Shared main document</h1><p>Two native expert views appear inside this window.</p>
+<script>
+window.addEventListener('DOMContentLoaded', async () => {
+  const invoke = window.__TAURI__.tauri.invoke;
+  const result = await invoke('probe_echo', { value: 'shared-command-contract' });
+  await invoke('probe_report', { value: result });
+});
+</script></body></html>

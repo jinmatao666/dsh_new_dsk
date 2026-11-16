@@ -10,14 +10,24 @@ use std::{
     sync::{mpsc, Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+#[cfg(not(wanwei_kylin))]
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent},
     DragDropEvent, LogicalPosition, LogicalSize, Manager, State, WebviewEvent,
     WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent,
 };
+#[cfg(not(wanwei_kylin))]
 use tauri_plugin_dialog::DialogExt;
+#[cfg(not(wanwei_kylin))]
 use tauri_plugin_opener::OpenerExt;
+#[cfg(wanwei_kylin)]
+use tauri::{Manager, State, Window, Window as WebviewWindow};
+#[cfg(wanwei_kylin)]
+#[path = "../../src-kylin/platform.rs"]
+mod kylin;
+#[cfg(wanwei_kylin)]
+use kylin::KylinAppExt;
 use url::Url;
 
 mod automatic_workspace;
@@ -29,8 +39,11 @@ mod sidecar_output;
 mod skillhub;
 mod skill_names;
 mod network_policy;
+#[cfg(not(wanwei_kylin))]
 mod desktop_update;
+#[cfg(not(wanwei_kylin))]
 mod expert_diagnostics;
+#[cfg(not(wanwei_kylin))]
 mod webview_environment;
 #[cfg(target_os = "windows")]
 mod windows_input;
@@ -116,6 +129,7 @@ struct PendingWorkspaceDrop(Mutex<Option<Vec<PathBuf>>>);
 
 /// Window-content views emit window events; child views emit webview events.
 /// Handle both routes, evaluating only in the trusted main renderer.
+#[cfg(not(wanwei_kylin))]
 fn forward_workspace_drop(window: &WebviewWindow, event: &DragDropEvent) {
     let script = match event {
         DragDropEvent::Enter { .. } => NATIVE_FILE_DRAG_ENTER_SCRIPT,
@@ -732,12 +746,13 @@ const NATIVE_AUTH_TITLE_PREFIX: &str = "__zjugis_native_auth:";
 /// JavaScript Tauri bridge is therefore optional; this native helper remains
 /// the source of truth for the two shell window modes.
 fn apply_auth_window_state(
-    window: &tauri::WebviewWindow,
+    window: &WebviewWindow,
     authenticated: bool,
 ) -> Result<(), String> {
     window
         .set_resizable(authenticated)
         .map_err(|error| format!("Unable to set resize permission: {error}"))?;
+    #[cfg(not(wanwei_kylin))]
     window
         .set_maximizable(authenticated)
         .map_err(|error| format!("Unable to set maximize permission: {error}"))?;
@@ -934,6 +949,7 @@ fn save_session_log_archive(file_name: String, bytes: Vec<u8>) -> Result<String,
 }
 
 /// Only the native save dialog, never a remote website, chooses the destination.
+#[cfg(not(wanwei_kylin))]
 #[tauri::command]
 async fn save_expert_artifact(
     webview: tauri::Webview,
@@ -1117,6 +1133,7 @@ fn log_expert_view(app: &tauri::AppHandle, event: &str) {
     }
 }
 
+#[cfg(not(wanwei_kylin))]
 #[tauri::command]
 async fn open_expert_webview(
     window: Window,
@@ -1238,6 +1255,7 @@ async fn open_expert_webview(
     Ok(label)
 }
 
+#[cfg(not(wanwei_kylin))]
 #[tauri::command]
 async fn set_expert_webview_bounds(
     window: Window,
@@ -1279,6 +1297,7 @@ async fn set_expert_webview_bounds(
     result
 }
 
+#[cfg(not(wanwei_kylin))]
 #[tauri::command]
 async fn close_expert_webview(window: Window, label: String) -> Result<(), String> {
     if window.label() != "main" {
@@ -1312,6 +1331,7 @@ async fn close_expert_webview(window: Window, label: String) -> Result<(), Strin
     Ok(())
 }
 
+#[cfg(not(wanwei_kylin))]
 #[tauri::command]
 async fn set_expert_webview_visible(
     window: Window,
@@ -1757,7 +1777,7 @@ fn import_clipboard_workspace_files(
     if paths.is_empty() {
         return Ok(Vec::new());
     }
-    let root = workspace_import_root(window.app_handle(), workspace_path)?;
+    let root = workspace_import_root(&window.app_handle(), workspace_path)?;
     import_workspace_paths_at(&root, paths)
 }
 
@@ -2585,6 +2605,12 @@ fn spawn_sidecar(
     Ok((child, url, update_receiver))
 }
 
+#[cfg(wanwei_kylin)]
+pub fn run() {
+    kylin::run();
+}
+
+#[cfg(not(wanwei_kylin))]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

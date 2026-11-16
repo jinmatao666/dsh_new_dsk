@@ -1,0 +1,8 @@
+/target/
+/resources/
+/icons/
+/tauri.runner.conf.json
+/baseline-*.json
+/__pycache__/
+/local-check.sh
+/smoke.log

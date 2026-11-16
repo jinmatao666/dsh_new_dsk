@@ -1,0 +1,19 @@
+[package]
+name = "wanwei-tauri1-embedded-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "=1.5.6", features = [] }
+
+[dependencies]
+tauri = { version = "=1.8.3", features = [] }
+gtk = "0.15"
+glib = "0.15"
+gio = "0.15"
+webkit2gtk = "0.18"
+javascriptcore-rs = "=0.16.0"
+
+[profile.dev]
+debug = 0

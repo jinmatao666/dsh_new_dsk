@@ -30,6 +30,11 @@ on:
         required: true
         default: false
         type: boolean
+      build_kylin:
+        description: Also build Kylin compatibility installers (Tauri 1, glibc 2.31, WebKit 4.0)
+        required: true
+        default: true
+        type: boolean
 
 concurrency:
   group: wanwei-desktop-${{ inputs.source_ref }}
@@ -321,10 +326,20 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  build-kylin:
+    name: Build Kylin compatibility installers
+    if: ${{ inputs.build_kylin }}
+    needs: verify-official
+    uses: ./.github/workflows/wanwei-kylin.yml
+    with:
+      source_ref: ${{ inputs.source_ref }}
+      version: ${{ inputs.version }}
+      official_release: ${{ inputs.official_release }}
+
   release:
     name: Publish release
-    if: ${{ inputs.publish_github_release }}
-    needs: build-desktop
+    if: ${{ always() && !cancelled() && inputs.publish_github_release && needs.build-desktop.result == 'success' && (needs.build-kylin.result == 'success' || needs.build-kylin.result == 'skipped') }}
+    needs: [build-desktop, build-kylin]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
