@@ -715,3 +715,70 @@
 .knowledge-inbox-empty p { margin: 8px 0 0; font-size: 12px; color: #a3b0c2; }
 .knowledge-inbox .knowledge-files-pagination { margin: 0; padding: 16px 0; border-top: 1px solid #f0f3f8; font-size: 12px; color: #9aa9bd; }
 @media (max-width: 760px) { .knowledge-inbox-panel { padding: 0 14px; } .knowledge-inbox-hero-actions { position: static; margin-top: 20px; justify-content: flex-end; } .knowledge-inbox-heading p { margin-left: 0; } }
+
+.knowledge-review-modal {
+  width: min(640px, 100%); padding: 0; border: 1px solid #e2ebf8; border-radius: 16px;
+  color: #24344d; box-shadow: 0 24px 72px #23385740;
+}
+.knowledge-review-modal > header {
+  align-items: center; justify-content: flex-start; gap: 12px; margin: 0; padding: 20px 24px;
+  background: linear-gradient(110deg, #eef5ff, #fafcff 72%);
+}
+.knowledge-review-mark, .knowledge-review-file-icon { display: grid; place-items: center; flex: none; color: #2869d4; background: #e4efff; }
+.knowledge-review-mark { width: 44px; height: 44px; border-radius: 12px; }
+.knowledge-review-heading { flex: 1; min-width: 0; }
+.knowledge-review-heading h2 { color: #233b5c; font-size: 18px; }
+.knowledge-review-heading p { margin: 4px 0 0; overflow: hidden; color: #596e8d; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.knowledge-review-modal header .knowledge-review-close {
+  display: grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0; border-radius: 8px; color: #607795;
+}
+.knowledge-review-close:hover:not(:disabled) { background: #e8effa; }
+.knowledge-review-tabs { display: flex; flex: none; gap: 4px; margin: 16px 24px 0; padding: 4px; border-radius: 10px; background: #f0f4fa; }
+.knowledge-review-tabs button {
+  flex: 1; min-height: 34px; padding: 4px 8px; border: 0; border-radius: 7px; background: transparent;
+  color: #526985; font: inherit; font-size: 13px; cursor: pointer;
+}
+.knowledge-review-tabs button[aria-selected='true'] { background: #fff; color: #245fbe; font-weight: 600; box-shadow: 0 1px 4px #344e7320; }
+.knowledge-review-panel { flex: 1 1 auto; min-height: 0; padding: 16px 24px 20px; overflow: auto; overscroll-behavior: contain; }
+.knowledge-review-details { display: grid; gap: 12px; }
+.knowledge-review-summary {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 12px;
+  margin: 0; padding: 12px 14px; border: 1px solid #e5edf8; border-radius: 10px; background: #f8faff;
+}
+.knowledge-review-summary dt, .knowledge-review-note small { color: #647995; font-size: 12px; }
+.knowledge-review-summary dd { margin: 4px 0 0; color: #263f63; font-weight: 600; overflow-wrap: anywhere; }
+.knowledge-review-reason h3 { margin: 0 0 5px; color: #304867; font-size: 13px; }
+.knowledge-review-reason p { margin: 0; color: #4d617e; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.knowledge-review-scope { margin: 0; padding-left: 10px; border-left: 2px solid #c5d9ff; color: #526c92; font-size: 12px; }
+.knowledge-review-modal .knowledge-review-note { margin: 0; color: #304867; font-weight: 600; }
+.knowledge-review-note small { margin-left: 8px; font-weight: 400; }
+.knowledge-review-note textarea { box-sizing: border-box; min-height: 72px; height: 76px; font-weight: 400; }
+.knowledge-review-note textarea:focus { border-color: #3978dc; box-shadow: 0 0 0 2px #3775dc20; }
+.knowledge-review-empty { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 118px; margin: 0; color: #657991; }
+.knowledge-review-files ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; max-height: 270px; overflow: auto; }
+.knowledge-review-file {
+  display: flex; width: 100%; align-items: center; gap: 10px; min-height: 49px; padding: 7px 10px;
+  border: 1px solid #e7edf6; border-radius: 9px; background: #fff; color: #263f62; font: inherit; text-align: left; cursor: pointer;
+}
+.knowledge-review-file:hover { border-color: #bfdaff; background: #f6faff; }
+.knowledge-review-file-icon { width: 32px; height: 32px; border-radius: 8px; }
+.knowledge-review-file-name { flex: 1; min-width: 0; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.knowledge-review-file-status { flex: none; padding: 3px 7px; border-radius: 5px; color: #526985; background: #f0f4f9; font-size: 11px; }
+.knowledge-review-file-status.done { color: #216449; background: #e9f6ee; }
+.knowledge-review-file-status.fail { color: #a24641; background: #fcefed; }
+.knowledge-review-file-status.running { color: #245fbe; background: #edf4ff; }
+.knowledge-review-file-preview { flex: none; color: #54779e; }
+.knowledge-review-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; color: #5a718e; font-size: 12px; }
+.knowledge-review-pagination nav { display: flex; align-items: center; gap: 9px; }
+.knowledge-review-pagination button { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid #e0e9f5; border-radius: 6px; background: #fff; color: #365b89; cursor: pointer; }
+.knowledge-review-pagination button:disabled { opacity: .45; cursor: default; }
+.knowledge-review-modal > footer { gap: 8px; margin: 0; padding: 12px 24px; border-top: 1px solid #e7edf6; background: #fafcff; }
+.knowledge-review-modal footer .remove { border-color: #efd4d0; background: #fff; color: #a34440; }
+.knowledge-review-modal footer .remove:hover:not(:disabled) { background: #fff1ef; }
+.knowledge-review-modal footer button:disabled { opacity: .48; cursor: not-allowed; }
+.knowledge-review-modal button:focus-visible { outline: 2px solid #3978dc; outline-offset: -2px; }
+@media (max-width: 520px) {
+  .knowledge-review-modal > header, .knowledge-review-modal > footer, .knowledge-review-panel { padding-right: 14px; padding-left: 14px; }
+  .knowledge-review-tabs { margin-right: 14px; margin-left: 14px; }
+  .knowledge-review-file { gap: 6px; padding-right: 7px; padding-left: 7px; }
+}

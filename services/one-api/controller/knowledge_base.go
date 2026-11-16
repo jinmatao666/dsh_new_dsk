@@ -66,6 +66,7 @@ func knowledgeAdmin(c *gin.Context) bool {
 // SubscriberCount carry the same maintainer and subscription figures as the plaza card.
 type knowledgeBaseDesktopItem struct {
 	model.KnowledgeBase
+	OperationsEdition  bool   `json:"operations_edition"`
 	OwnedByViewer      bool   `json:"owned_by_viewer"`
 	SubscribedByViewer bool   `json:"subscribed_by_viewer"`
 	DocumentCount      int    `json:"document_count"`
@@ -93,12 +94,14 @@ func ListKnowledgeBases(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取知识库失败"})
 		return
 	}
+	operations, _ := knowledgePublicationEnabled()
 	items := make([]knowledgeBaseDesktopItem, len(rows))
 	for i, row := range rows {
 		owned := row.OwnerUserId == userId
 		_, hasGrant := granted[row.Id]
 		items[i] = knowledgeBaseDesktopItem{
 			KnowledgeBase:      row,
+			OperationsEdition:  operations,
 			OwnedByViewer:      owned,
 			SubscribedByViewer: !owned && hasGrant,
 		}
@@ -514,7 +517,9 @@ func ListKnowledgeDocuments(c *gin.Context) {
 	if !ok {
 		return
 	}
-	recordKnowledgeUsage(row.Id)
+	if c.Query("refresh") != "1" {
+		recordKnowledgeUsage(row.Id)
+	}
 	writeKnowledgeDocuments(c, row, false)
 }
 
@@ -788,6 +793,7 @@ func DeleteKnowledgeDocument(c *gin.Context) {
 	}
 	_ = model.DeleteKnowledgeDocumentPath(row.Id, documentId)
 	_ = model.DeleteKnowledgeDocumentCreators(row.Id, []string{documentId})
+	_ = model.DeleteKnowledgeDocumentCovers(row.Id, []string{documentId})
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "已删除文件"})
 }
 
@@ -910,6 +916,7 @@ func transferKnowledgeDocument(c *gin.Context, removeSource bool) {
 		_ = model.DB.Where("knowledge_base_id = ? AND document_id IN ?", target.Id, ids).
 			Delete(&model.KnowledgeDocumentPath{}).Error
 		_ = model.DeleteKnowledgeDocumentCreators(target.Id, ids)
+		_ = model.DeleteKnowledgeDocumentCovers(target.Id, ids)
 	} else if len(conflicts) > 0 && input.ConflictPolicy == "keep" {
 		uploadName = uniqueKnowledgeDocumentName(filename, targetDocuments)
 	}
@@ -956,6 +963,7 @@ func transferKnowledgeDocument(c *gin.Context, removeSource bool) {
 			_ = model.SaveKnowledgeDocumentPath(target.Id, uploaded[index].Id, relativePath)
 		}
 	}
+	queueKnowledgePDFCover(c.Request.Context(), target.Id, uploadName, uploaded)
 	startKnowledgeDocumentParse(client, target.RagflowDatasetId, knowledgeDocumentIDs(uploaded))
 	if removeSource {
 		if err := client.DeleteDocuments(c.Request.Context(), source.RagflowDatasetId, []string{documentId}); err != nil && !remoteKnowledgeMissing(err) {
@@ -969,6 +977,7 @@ func transferKnowledgeDocument(c *gin.Context, removeSource bool) {
 		}
 		_ = model.DeleteKnowledgeDocumentPath(source.Id, documentId)
 		_ = model.DeleteKnowledgeDocumentCreators(source.Id, []string{documentId})
+		_ = model.DeleteKnowledgeDocumentCovers(source.Id, []string{documentId})
 	}
 	message := "已复制文件"
 	if removeSource {
@@ -1020,6 +1029,13 @@ func writeKnowledgeDocuments(c *gin.Context, row *model.KnowledgeBase, includeSu
 	applyKnowledgeDocumentCreators(c.Request.Context(), row.Id, c.GetInt("id"), documents)
 	applyKnowledgeAudioPlaybackStatus(documents)
 	if !includeSummary {
+		states, err := model.ListKnowledgeDocumentCoverStates(row.Id)
+		if err != nil {
+			logger.Errorf(c.Request.Context(), "list PDF covers: %s", err)
+		}
+		for index := range documents {
+			documents[index].CoverStatus = states[documents[index].Id]
+		}
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": documents})
 		return
 	}
@@ -1132,6 +1148,7 @@ func uploadKnowledgeDocument(c *gin.Context, row *model.KnowledgeBase) {
 			}
 		}
 	}
+	queueKnowledgePDFCover(c.Request.Context(), row.Id, header.Filename, documents)
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": documents})
 	// Audio is kept for playback; RAGFlow chunking fails or is unsupported for these types.
 	if !isKnowledgeAudioFilename(header.Filename) {

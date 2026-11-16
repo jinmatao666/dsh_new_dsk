@@ -99,7 +99,7 @@ LABEL org.opencontainers.image.version=$PARVIS_VERSION
 ENV TIKTOKEN_CACHE_DIR=/opt/tiktoken-cache
 
 RUN sed -i "s#dl-cdn.alpinelinux.org/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories && \
-    apk add --no-cache ca-certificates tzdata
+    apk add --no-cache ca-certificates tzdata poppler-utils
 
 COPY --from=go-builder /build/one-api /one-api
 COPY tiktoken-cache /opt/tiktoken-cache

@@ -126,6 +126,7 @@ function knowledgeItem(raw: unknown): KnowledgeBaseItem {
     categoryId = item.category_id as number
   }
   if (item.publication_scope !== undefined && item.publication_scope !== '' && item.publication_scope !== 'public' && item.publication_scope !== 'subscription') throw new Error('知识库响应字段无效')
+  if (item.operations_edition !== undefined && typeof item.operations_edition !== 'boolean') throw new Error('知识库响应字段无效')
   const owned = item.owned_by_viewer
   if (owned !== undefined && typeof owned !== 'boolean') {
     throw new Error('知识库响应字段无效')
@@ -170,6 +171,39 @@ function knowledgeItem(raw: unknown): KnowledgeBaseItem {
 function creatorField(document: Record<string, unknown>): { creator_name?: string } {
   return typeof document.creator_name === 'string' && document.creator_name !== ''
     ? { creator_name: document.creator_name } : {}
+}
+
+/** Decode an authorized document list with the saved-cover status used by file cards.
+ * @param raw - The host's document list response.
+ * @returns File rows with normalized parsing progress and cover status.
+ */
+export function decodeKnowledgeDocuments(raw: unknown): Awaited<ReturnType<KnowledgeApi['documents']>> {
+  if (!Array.isArray(raw)) throw new Error('知识库文件列表无效')
+  return raw.map((item) => {
+    if (typeof item !== 'object' || item === null) throw new Error('知识库文件无效')
+    const document = item as Record<string, unknown>
+    if (typeof document.id !== 'string' || document.id === '' || typeof document.name !== 'string' || document.name === '') {
+      throw new Error('知识库文件字段无效')
+    }
+    const size = typeof document.size === 'number' && Number.isFinite(document.size) && document.size >= 0 ? document.size : 0
+    const run = typeof document.run === 'string' ? document.run : ''
+    const progress = typeof document.progress === 'number' && Number.isFinite(document.progress)
+      ? Math.max(0, Math.min(1, document.progress)) : 0
+    const location = typeof document.location === 'string' ? document.location : undefined
+    const coverStatus = document.cover_status
+    return {
+      id: document.id,
+      name: document.name,
+      size,
+      run,
+      progress,
+      ...(location !== undefined && location !== '' ? { location } : {}),
+      ...(typeof document.create_time === 'number' ? { create_time: document.create_time } : {}),
+      ...(typeof document.update_time === 'number' ? { update_time: document.update_time } : {}),
+      ...(coverStatus === 'pending' || coverStatus === 'ready' ? { cover_status: coverStatus } : {}),
+      ...creatorField(document),
+    }
+  })
 }
 
 function knowledgeCategory(raw: unknown): KnowledgeCategory {
@@ -368,37 +402,14 @@ export function apply(ctx: Context): void {
       if (typeof value.enabled !== 'boolean') throw new Error('发布状态响应无效')
       return { enabled: value.enabled, application: value.application === null ? null : publicationRequest(value.application) }
     },
+    async withdrawPublication(id) { await call('withdraw-publication', { id }) },
     async applyPublication(id, target, reason) { return publicationRequest(await call('apply-publication', { id, target, reason })) },
     async subscribe(id) { await call('subscribe', { id }) },
     async setLike(id, liked) { await call(liked ? 'like' : 'unlike', { id }) },
     async unsubscribe(id) { await call('unsubscribe', { id }) },
     async create(input) { return knowledgeItem(await call('create', input)) },
-    async documents(id) {
-      const raw = await call('documents', { id })
-      if (!Array.isArray(raw)) throw new Error('知识库文件列表无效')
-      return raw.map((item) => {
-        if (typeof item !== 'object' || item === null) throw new Error('知识库文件无效')
-        const document = item as Record<string, unknown>
-        if (typeof document.id !== 'string' || document.id === '' || typeof document.name !== 'string' || document.name === '') {
-          throw new Error('知识库文件字段无效')
-        }
-        const size = typeof document.size === 'number' && Number.isFinite(document.size) && document.size >= 0 ? document.size : 0
-        const run = typeof document.run === 'string' ? document.run : ''
-        const progress = typeof document.progress === 'number' && Number.isFinite(document.progress)
-          ? Math.max(0, Math.min(1, document.progress)) : 0
-        const location = typeof document.location === 'string' ? document.location : undefined
-        return {
-          id: document.id,
-          name: document.name,
-          size,
-          run,
-          progress,
-          ...(location !== undefined && location !== '' ? { location } : {}),
-          ...(typeof document.create_time === 'number' ? { create_time: document.create_time } : {}),
-          ...(typeof document.update_time === 'number' ? { update_time: document.update_time } : {}),
-          ...creatorField(document),
-        }
-      })
+    async documents(id, refresh) {
+      return decodeKnowledgeDocuments(await call('documents', { id, refresh }))
     },
     async chunks(knowledgeBaseId, documentId) {
       const raw = await call('chunks', { id: knowledgeBaseId, documentId })

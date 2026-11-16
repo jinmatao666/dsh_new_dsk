@@ -62,11 +62,79 @@ type KnowledgeCreditQuestion struct {
 	CreatedAt   time.Time
 }
 
+// KnowledgeCreditLimits holds the maximum per-file price for each action, in hundredths.
+type KnowledgeCreditLimits struct {
+	BrowseCents   int64 `json:"browse_cents"`
+	QuestionCents int64 `json:"question_cents"`
+	DownloadCents int64 `json:"download_cents"`
+}
+
+const maxKnowledgeCreditCents = 100000000
+
+// KnowledgeCreditSettings stores the platform share and price limits in one option.
+type KnowledgeCreditSettings struct {
+	Percent int                   `json:"platform_percent"`
+	Limits  KnowledgeCreditLimits `json:"limits"`
+}
+
+// ReadKnowledgeCreditSettings reads the current policy, including defaults for existing deployments.
+func ReadKnowledgeCreditSettings() (KnowledgeCreditSettings, error) {
+	config.OptionMapRWMutex.RLock()
+	percentText := config.OptionMap["KnowledgeCreditPlatformPercent"]
+	raw := config.OptionMap["KnowledgeCreditSettings"]
+	config.OptionMapRWMutex.RUnlock()
+	settings := KnowledgeCreditSettings{Percent: 30, Limits: KnowledgeCreditLimits{maxKnowledgeCreditCents, maxKnowledgeCreditCents, maxKnowledgeCreditCents}}
+	if raw != "" {
+		if err := json.Unmarshal([]byte(raw), &settings); err != nil {
+			return settings, err
+		}
+	} else if percentText != "" {
+		percent, err := strconv.Atoi(percentText)
+		if err != nil {
+			return settings, err
+		}
+		settings.Percent = percent
+	}
+	return settings, settings.Validate()
+}
+
+// Validate rejects platform shares and limits outside the supported ranges.
+func (s KnowledgeCreditSettings) Validate() error {
+	if s.Percent < 0 || s.Percent > 100 {
+		return errors.New("平台占比须为 0 至 100 的整数")
+	}
+	for _, limit := range []int64{s.Limits.BrowseCents, s.Limits.QuestionCents, s.Limits.DownloadCents} {
+		if limit < 0 || limit > maxKnowledgeCreditCents {
+			return errors.New("最高积分须为 0 至 1,000,000，最多两位小数")
+		}
+	}
+	return nil
+}
+
+// SaveKnowledgeCreditSettings validates and atomically persists the policy.
+func SaveKnowledgeCreditSettings(settings KnowledgeCreditSettings) error {
+	if err := settings.Validate(); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(settings)
+	if err != nil {
+		return err
+	}
+	return UpdateOption("KnowledgeCreditSettings", string(raw))
+}
+
+// LimitPrice applies the current caps to a saved price before it is displayed or charged.
+func (s KnowledgeCreditLimits) LimitPrice(price KnowledgeCreditPrice) KnowledgeCreditPrice {
+	price.BrowseCents = min(price.BrowseCents, s.BrowseCents)
+	price.QuestionCents = min(price.QuestionCents, s.QuestionCents)
+	price.DownloadCents = min(price.DownloadCents, s.DownloadCents)
+	return price
+}
+
 // KnowledgeCreditPolicy returns edition gating and the administrator's platform percentage.
 func KnowledgeCreditPolicy() (bool, int, error) {
 	config.OptionMapRWMutex.RLock()
 	raw := config.OptionMap["SystemDeploymentSettings"]
-	percentText := config.OptionMap["KnowledgeCreditPlatformPercent"]
 	config.OptionMapRWMutex.RUnlock()
 	var settings struct {
 		Edition string `json:"edition"`
@@ -74,16 +142,12 @@ func KnowledgeCreditPolicy() (bool, int, error) {
 	if err := json.Unmarshal([]byte(raw), &settings); err != nil && raw != "" {
 		return false, 0, err
 	}
-	percent := 30
-	if percentText != "" {
-		value, err := strconv.Atoi(percentText)
-		if err != nil || value < 0 || value > 100 {
-			return false, 0, errors.New("知识库分成比例无效")
-		}
-		percent = value
+	settingsCredit, err := ReadKnowledgeCreditSettings()
+	if err != nil {
+		return false, 0, err
 	}
 	policy, err := config.ResolveCreditPolicy(raw)
-	return (settings.Edition == "" || settings.Edition == "operations") && policy.Enabled, percent, err
+	return (settings.Edition == "" || settings.Edition == "operations") && policy.Enabled, settingsCredit.Percent, err
 }
 
 // GetKnowledgeCreditPrice returns explicitly saved prices, or free prices when no price has been saved.
@@ -100,6 +164,13 @@ func GetKnowledgeCreditPrice(baseId int) (KnowledgeCreditPrice, bool, error) {
 func SaveKnowledgeCreditPrice(userId, baseId int, price KnowledgeCreditPrice) error {
 	if price.BrowseCents < 0 || price.QuestionCents < 0 || price.DownloadCents < 0 || price.BrowseCents > 100000000 || price.QuestionCents > 100000000 || price.DownloadCents > 100000000 {
 		return errors.New("单价须为 0 至 1,000,000 积分，最多两位小数")
+	}
+	settings, err := ReadKnowledgeCreditSettings()
+	if err != nil {
+		return err
+	}
+	if settings.Limits.LimitPrice(price) != price {
+		return errors.New("单价超过管理员设置的最高积分")
 	}
 	var base KnowledgeBase
 	if err := DB.First(&base, baseId).Error; err != nil {
@@ -160,7 +231,7 @@ func ReadKnowledgeCreditTerms(base *KnowledgeBase, userId int) (*KnowledgeCredit
 	if err != nil || !applies {
 		return nil, err
 	}
-	_, percent, err := KnowledgeCreditPolicy()
+	settings, err := ReadKnowledgeCreditSettings()
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +239,7 @@ func ReadKnowledgeCreditTerms(base *KnowledgeBase, userId int) (*KnowledgeCredit
 	if err != nil {
 		return nil, err
 	}
-	return &KnowledgeCreditTerms{Price: price, PlatformPercent: percent}, nil
+	return &KnowledgeCreditTerms{Price: settings.Limits.LimitPrice(price), PlatformPercent: settings.Percent}, nil
 }
 
 // KnowledgePreviewPaidUntil returns the existing preview entitlement without extending it.

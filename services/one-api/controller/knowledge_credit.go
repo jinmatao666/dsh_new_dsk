@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,12 +21,17 @@ func knowledgeCreditFailure(c *gin.Context, status int, err error) {
 
 // GetKnowledgeCreditSettings exposes the current share and operations-edition availability.
 func GetKnowledgeCreditSettings(c *gin.Context) {
-	enabled, percent, err := model.KnowledgeCreditPolicy()
+	enabled, _, err := model.KnowledgeCreditPolicy()
 	if err != nil {
 		knowledgeCreditFailure(c, 500, err)
 		return
 	}
-	c.JSON(200, gin.H{"success": true, "data": gin.H{"enabled": enabled, "platform_percent": percent}})
+	settings, err := model.ReadKnowledgeCreditSettings()
+	if err != nil {
+		knowledgeCreditFailure(c, 500, err)
+		return
+	}
+	c.JSON(200, gin.H{"success": true, "data": gin.H{"enabled": enabled, "platform_percent": settings.Percent, "limits": settings.Limits}})
 }
 
 // UpdateManagedKnowledgeCreditSettings persists an administrator's percentage for subsequent uses.
@@ -46,12 +50,24 @@ func UpdateManagedKnowledgeCreditSettings(c *gin.Context) {
 	}
 	var input struct {
 		Percent *int `json:"platform_percent"`
+		Limits  *struct {
+			Browse   *int64 `json:"browse_cents"`
+			Question *int64 `json:"question_cents"`
+			Download *int64 `json:"download_cents"`
+		} `json:"limits"`
 	}
-	if c.ShouldBindJSON(&input) != nil || input.Percent == nil || *input.Percent < 0 || *input.Percent > 100 {
-		knowledgeCreditFailure(c, 400, errors.New("平台占比须为 0 至 100 的整数"))
+	if c.ShouldBindJSON(&input) != nil || input.Percent == nil || *input.Percent < 0 || *input.Percent > 100 ||
+		input.Limits == nil || input.Limits.Browse == nil || input.Limits.Question == nil || input.Limits.Download == nil {
+		knowledgeCreditFailure(c, 400, errors.New("请填写平台占比和三项最高积分"))
 		return
 	}
-	if err := model.UpdateOption("KnowledgeCreditPlatformPercent", strconv.Itoa(*input.Percent)); err != nil {
+	limits := model.KnowledgeCreditLimits{BrowseCents: *input.Limits.Browse, QuestionCents: *input.Limits.Question, DownloadCents: *input.Limits.Download}
+	settings := model.KnowledgeCreditSettings{Percent: *input.Percent, Limits: limits}
+	if err := settings.Validate(); err != nil {
+		knowledgeCreditFailure(c, 400, err)
+		return
+	}
+	if err := model.SaveKnowledgeCreditSettings(settings); err != nil {
 		knowledgeCreditFailure(c, 500, err)
 		return
 	}
@@ -60,7 +76,7 @@ func UpdateManagedKnowledgeCreditSettings(c *gin.Context) {
 
 // ListOwnedKnowledgeCreditPrices returns the caller's personal libraries published for subscription.
 func ListOwnedKnowledgeCreditPrices(c *gin.Context) {
-	enabled, percent, err := model.KnowledgeCreditPolicy()
+	enabled, _, err := model.KnowledgeCreditPolicy()
 	if err != nil {
 		knowledgeCreditFailure(c, 500, err)
 		return
@@ -82,7 +98,15 @@ func ListOwnedKnowledgeCreditPrices(c *gin.Context) {
 			return
 		}
 	}
-	c.JSON(200, gin.H{"success": true, "data": gin.H{"enabled": enabled, "platform_percent": percent, "items": items}})
+	settings, err := model.ReadKnowledgeCreditSettings()
+	if err != nil {
+		knowledgeCreditFailure(c, 500, err)
+		return
+	}
+	for i := range items {
+		items[i].KnowledgeCreditPrice = settings.Limits.LimitPrice(items[i].KnowledgeCreditPrice)
+	}
+	c.JSON(200, gin.H{"success": true, "data": gin.H{"enabled": enabled, "platform_percent": settings.Percent, "limits": settings.Limits, "items": items}})
 }
 
 // GetKnowledgeCreditPrice returns the owner's saved draft or a viewer's billable prices.
@@ -91,7 +115,7 @@ func GetKnowledgeCreditPrice(c *gin.Context) {
 	if !ok {
 		return
 	}
-	enabled, percent, err := model.KnowledgeCreditPolicy()
+	enabled, _, err := model.KnowledgeCreditPolicy()
 	if err != nil {
 		knowledgeCreditFailure(c, 500, err)
 		return
@@ -118,7 +142,13 @@ func GetKnowledgeCreditPrice(c *gin.Context) {
 			return
 		}
 	}
-	c.JSON(200, gin.H{"success": true, "data": gin.H{"enabled": enabled, "applies": applies, "configured": configured, "platform_percent": percent, "price": price, "preview_free": until.After(time.Now())}})
+	settings, err := model.ReadKnowledgeCreditSettings()
+	if err != nil {
+		knowledgeCreditFailure(c, 500, err)
+		return
+	}
+	price = settings.Limits.LimitPrice(price)
+	c.JSON(200, gin.H{"success": true, "data": gin.H{"enabled": enabled, "applies": applies, "configured": configured, "platform_percent": settings.Percent, "limits": settings.Limits, "price": price, "preview_free": until.After(time.Now())}})
 }
 
 // PutKnowledgeCreditPrice saves all three owner prices in hundredths before or after publication.

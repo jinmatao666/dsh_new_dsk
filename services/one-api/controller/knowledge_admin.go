@@ -502,6 +502,7 @@ func DeleteManagedKnowledgeDocument(c *gin.Context) {
 		return
 	}
 	_ = model.DeleteKnowledgeDocumentCreators(row.Id, []string{documentId})
+	_ = model.DeleteKnowledgeDocumentCovers(row.Id, []string{documentId})
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "已删除文件"})
 }
 

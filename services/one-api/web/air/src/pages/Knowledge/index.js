@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Inbox, ChevronDown, ChevronRight, Download, Folder, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Download, Eye, FileText, Folder, Inbox, MoreHorizontal, Pencil, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react';
 import { API, isAdmin, isRoot } from '../../helpers';
 import { resourceURL } from '../../deployment';
 import CustomSelect from '../../components/CustomSelect';
@@ -471,6 +471,45 @@ async function mapPool(items, limit, worker) {
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => run()));
 }
 
+function ReviewDocuments({ endpoint, onPreview }) {
+  const [page, setPage] = useState(1);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    const abort = new AbortController();
+    setResult(null);
+    setError('');
+    API.get(`${endpoint}/documents?${documentsQuery({ page })}`, { signal: abort.signal }).then(response => {
+      if (!abort.signal.aborted) setResult(unwrapDocumentPage(response));
+    }).catch(cause => { if (!abort.signal.aborted) setError(cause.response?.data?.message || cause.message); });
+    return () => abort.abort();
+  }, [endpoint, page]);
+  if (error) return <p role='alert'>{error}</p>;
+  if (!result) return <p className='knowledge-review-empty' role='status'>正在加载文件</p>;
+  if (result.total === 0) return <p className='knowledge-review-empty'><Folder size={22} aria-hidden='true' />暂无文件</p>;
+  const pages = Math.max(1, Math.ceil(result.total / result.page_size));
+  return <div className='knowledge-review-files'>
+    <ul aria-label='文件列表'>{result.items.map(file => {
+      const state = parseState(file);
+      return <li key={file.id}>
+        <button type='button' className='knowledge-review-file' aria-label={`预览 ${file.name}`} onClick={() => onPreview(file)}>
+          <span className='knowledge-review-file-icon'><FileText size={17} aria-hidden='true' /></span>
+          <span className='knowledge-review-file-name' title={file.name}>{file.name}</span>
+          <span className={`knowledge-review-file-status ${state.key}`}>{state.label}</span>
+          <Eye size={16} className='knowledge-review-file-preview' aria-hidden='true' />
+        </button>
+      </li>;
+    })}</ul>
+    <div className='knowledge-review-pagination'><span>共 {result.total} 个文件</span>
+      {pages > 1 && <nav aria-label='文件分页'>
+        <button type='button' aria-label='上一页' disabled={page <= 1} onClick={() => setPage(page - 1)}><ChevronLeft size={15} aria-hidden='true' /></button>
+        <span>{page} / {pages}</span>
+        <button type='button' aria-label='下一页' disabled={page >= pages} onClick={() => setPage(page + 1)}><ChevronRight size={15} aria-hidden='true' /></button>
+      </nav>}
+    </div>
+  </div>;
+}
+
 const KnowledgeLibrary = () => {
   const [libraries, setLibraries] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -510,6 +549,7 @@ const KnowledgeLibrary = () => {
   const [reviewTotal, setReviewTotal] = useState(0);
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewTab, setReviewTab] = useState('details');
   const [reviewing, setReviewing] = useState(null);
   const [users, setUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(true);
@@ -1261,11 +1301,11 @@ const KnowledgeLibrary = () => {
     }
   };
 
-  const openBrowse = async (file) => {
+  const openBrowse = async (file, reviewEndpoint) => {
     const libraryId = Number(file?.library_id || opened?.id || 0);
     if (!libraryId) return;
     const documentId = file.id;
-    const base = `${knowledgeBasesRoot()}/${libraryId}/documents/${documentId}`;
+    const base = `${reviewEndpoint ?? `${knowledgeBasesRoot()}/${libraryId}`}/documents/${encodeURIComponent(documentId)}`;
     setBusy(`${documentId}:browse`);
     setError('');
     setViewer(current => {
@@ -1883,7 +1923,7 @@ const KnowledgeLibrary = () => {
                   {reviewType === 'subscription' && <td>{resolveUserLabel(ownerId, item.owner_username)}</td>}
                   <td>{formatDate(item.created_at)}</td>
                   <td className='knowledge-ops'>
-                    {reviewStatus === 'pending' ? <button type='button' className='knowledge-primary' onClick={() => { setReviewNote(''); setReviewing(item); }}>去审核</button> : <span>{reviewStatus === 'approved' ? '已通过' : '已驳回'}{item.review_note && <small>{item.review_note}</small>}</span>}
+                    {reviewStatus === 'pending' ? <button type='button' className='knowledge-primary' onClick={() => { setReviewNote(''); setReviewTab('details'); setReviewing(item); }}>去审核</button> : <span>{reviewStatus === 'approved' ? '已通过' : '已驳回'}{item.review_note && <small>{item.review_note}</small>}</span>}
                   </td>
                 </tr>;
                 })}
@@ -2446,15 +2486,35 @@ const KnowledgeLibrary = () => {
         >删除</button>
       </footer>
     </section></div>}
-    {reviewing && !viewer && <div className='knowledge-modal-backdrop'><section className='knowledge-modal' role='dialog' aria-label={reviewType === 'publication' ? '发布审核' : '订阅审核'}>
-      <header><h2>{reviewType === 'publication' ? '发布审核' : '订阅审核'}</h2><button type='button' onClick={() => setReviewing(null)}>×</button></header>
-      <p>申请人 <strong>{resolveUserLabel(reviewing.applicant_user_id, reviewing.applicant_username)}</strong> {reviewType === 'publication' ? '申请发布' : '申请订阅'}「{reviewing.knowledge_base_name || ('#' + reviewing.knowledge_base_id)}」。</p>
-      {reviewType === 'publication' && <>
-        <p><strong>{reviewing.target === 'public' ? '转为公共知识库：对所有用户可见' : '转为订阅知识库：订阅审核通过后可用'}</strong></p>
-        <p>申请说明：{reviewing.reason || '未填写'}</p>
-        <p className='knowledge-hint'>通过后发布整个知识库及后续新增内容。</p>
-        <label>审核意见（驳回必填）<textarea aria-label='审核意见' maxLength={500} value={reviewNote} onChange={event => setReviewNote(event.target.value)} /></label>
-      </>}
+    {reviewing && !viewer && <div className='knowledge-modal-backdrop'><section className='knowledge-modal knowledge-review-modal' role='dialog' aria-modal='true' aria-label={reviewType === 'publication' ? '发布审核' : '订阅审核'}>
+      <header>
+        <span className='knowledge-review-mark'><ClipboardCheck size={21} aria-hidden='true' /></span>
+        <div className='knowledge-review-heading'>
+          <h2>{reviewType === 'publication' ? '发布审核' : '订阅审核'}</h2>
+          <p title={reviewing.knowledge_base_name}>{reviewing.knowledge_base_name || ('#' + reviewing.knowledge_base_id)}</p>
+        </div>
+        <button type='button' className='knowledge-review-close' aria-label='关闭' disabled={saving} onClick={() => setReviewing(null)}><X size={18} aria-hidden='true' /></button>
+      </header>
+      <div className='knowledge-review-tabs' role='tablist' aria-label='申请内容'>
+        <button type='button' role='tab' id='knowledge-review-details-tab' aria-controls='knowledge-review-panel' aria-selected={reviewTab === 'details'} onClick={() => setReviewTab('details')}>申请详情</button>
+        <button type='button' role='tab' id='knowledge-review-files-tab' aria-controls='knowledge-review-panel' aria-selected={reviewTab === 'files'} onClick={() => setReviewTab('files')}>全部文件</button>
+      </div>
+      <div id='knowledge-review-panel' className='knowledge-review-panel' role='tabpanel' aria-labelledby={`knowledge-review-${reviewTab}-tab`}>
+        {reviewTab === 'files' ? <ReviewDocuments
+          endpoint={`/api/knowledge-admin/${reviewPath(reviewType)}/${reviewing.id}`}
+          onPreview={file => void openBrowse({ ...file, library_id: reviewing.knowledge_base_id }, `/api/knowledge-admin/${reviewPath(reviewType)}/${reviewing.id}`)}
+        /> : <div className='knowledge-review-details'>
+          <dl className='knowledge-review-summary'>
+            <div><dt>申请人</dt><dd>{resolveUserLabel(reviewing.applicant_user_id, reviewing.applicant_username)}</dd></div>
+            {reviewType === 'publication' && <div><dt>发布范围</dt><dd>{reviewing.target === 'public' ? '公共知识库' : '订阅知识库'}</dd></div>}
+          </dl>
+          {reviewType === 'publication' && <>
+            <div className='knowledge-review-reason'><h3>申请说明</h3><p>{reviewing.reason || '未填写'}</p></div>
+            <p className='knowledge-review-scope'>{reviewing.target === 'public' ? '审核通过后，现有及新增内容向所有用户开放。' : '用户的订阅申请获批后可访问库内现有及新增内容。'}</p>
+            <label className='knowledge-review-note'><span>审核意见 <small>驳回时必填</small></span><textarea aria-label='审核意见' maxLength={500} value={reviewNote} onChange={event => setReviewNote(event.target.value)} /></label>
+          </>}
+        </div>}
+      </div>
       <footer>
         <button type='button' disabled={saving} onClick={() => setReviewing(null)}>取消</button>
         <button type='button' className='remove' disabled={saving || (reviewType === 'publication' && !reviewNote.trim())} onClick={() => void submitReview('reject')}>不同意</button>

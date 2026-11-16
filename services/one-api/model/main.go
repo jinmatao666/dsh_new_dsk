@@ -362,7 +362,7 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&OrgDepartment{}); err != nil {
 		return err
 	}
-	if err = DB.AutoMigrate(&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{}, &KnowledgeBaseLike{}, &KnowledgePublicationApplication{}, &KnowledgeConversation{}, &KnowledgeDocumentNote{}, &KnowledgeDocumentPath{}, &KnowledgeDocumentCreator{}, &KnowledgeFolder{}, &KnowledgeCreditPrice{}, &KnowledgeCreditReceipt{}, &KnowledgePreviewAccess{}, &KnowledgeCreditQuestion{}); err != nil {
+	if err = DB.AutoMigrate(&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{}, &KnowledgeBaseLike{}, &KnowledgePublicationApplication{}, &KnowledgeConversation{}, &KnowledgeDocumentNote{}, &KnowledgeDocumentPath{}, &KnowledgeDocumentCreator{}, &KnowledgeFolder{}, &KnowledgeCreditPrice{}, &KnowledgeCreditReceipt{}, &KnowledgePreviewAccess{}, &KnowledgeCreditQuestion{}, &KnowledgeDocumentCover{}); err != nil {
 		return err
 	}
 	if err = RestorePersonalPublicationOrigins(); err != nil {
