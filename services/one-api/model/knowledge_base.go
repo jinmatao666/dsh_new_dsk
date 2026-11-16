@@ -640,6 +640,9 @@ func DeleteKnowledgeBaseRecords(id int) error {
 		if err := tx.Where("knowledge_base_id = ?", id).Delete(&KnowledgeFolder{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("knowledge_base_id = ?", id).Delete(&KnowledgeDocumentCover{}).Error; err != nil {
+			return err
+		}
 		return tx.Delete(&KnowledgeBase{}, id).Error
 	})
 }
@@ -1023,6 +1026,17 @@ func ReviewKnowledgeSubscription(applicationId, reviewerId int, approve bool) (*
 		status := KnowledgeSubscriptionRejected
 		if approve {
 			status = KnowledgeSubscriptionApproved
+		}
+		claim := tx.Model(&app).Where("status = ?", KnowledgeSubscriptionPending).Updates(map[string]interface{}{
+			"status": status, "reviewed_by": reviewerId, "reviewed_at": now,
+		})
+		if claim.Error != nil {
+			return claim.Error
+		}
+		if claim.RowsAffected != 1 {
+			return ErrKnowledgeSubscriptionNotPending
+		}
+		if approve {
 			var count int64
 			if err := tx.Model(&KnowledgeBaseGrant{}).
 				Where("knowledge_base_id = ? AND subject_type = ? AND subject_id = ?",
@@ -1040,11 +1054,7 @@ func ReviewKnowledgeSubscription(applicationId, reviewerId int, approve bool) (*
 				}
 			}
 		}
-		return tx.Model(&app).Updates(map[string]interface{}{
-			"status":      status,
-			"reviewed_by": reviewerId,
-			"reviewed_at": now,
-		}).Error
+		return nil
 	})
 	if err != nil {
 		return nil, err

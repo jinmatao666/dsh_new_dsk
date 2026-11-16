@@ -9,6 +9,7 @@ import {
   relatedQuestions,
   type KnowledgeApi,
 } from '../src/client/KnowledgePage.tsx'
+import { decodeKnowledgeDocuments } from '../src/client/plugin.tsx'
 
 vi.mock('pdfjs-dist', () => ({
   GlobalWorkerOptions: { workerSrc: '' },
@@ -71,6 +72,7 @@ function api(): KnowledgeApi {
       { id: 3, name: '团队共享', description: '共享', kind: 'shared' as const, owner_user_id: 7 },
     ]),
     publication: vi.fn(async () => ({ enabled: false, application: null, categories: [] })),
+    withdrawPublication: vi.fn(async () => {}),
     applyPublication: vi.fn(async () => { throw new Error('unexpected publication') }),
     categories: vi.fn(async () => []),
     plaza: vi.fn(async () => []),
@@ -133,7 +135,7 @@ it('loads authorized knowledge bases and creates a personal library', async () =
   expect(screen.queryByRole('menuitem', { name: '个人知识库' })).toBeNull()
   expect(screen.queryByRole('menuitem', { name: '笔记' })).toBeNull()
   expect(screen.queryByRole('menuitem', { name: '腾讯文档' })).toBeNull()
-  expect(screen.getByText('PDF')).toBeTruthy()
+  expect(screen.getByText('PDF', { selector: '.dsh-knowledge-card-status span' })).toBeTruthy()
 })
 
 it('shows parse progress while chunking and the file type after a parse failure', async () => {
@@ -162,7 +164,7 @@ it('shows parse progress while chunking and the file type after a parse failure'
   expect(screen.getByText(/解析中…3%/)).toBeTruthy()
   expect(screen.getByText('音频', { exact: true })).toBeTruthy()
   expect(screen.getByText('2026-11-06 09:13')).toBeTruthy()
-  expect(screen.getByText('PDF', { exact: true })).toBeTruthy()
+  expect(screen.getByText('PDF', { selector: '.dsh-knowledge-card-status span' })).toBeTruthy()
   expect(screen.queryByText('解析失败', { exact: true })).toBeNull()
 })
 
@@ -1017,8 +1019,6 @@ it('filters the sidebar by library name and expands matching groups', async () =
 
 it('searches and sorts visible file cards while PDF thumbnails are pending', async () => {
   const service = api()
-  const thumbnail = Promise.withResolvers<Awaited<ReturnType<KnowledgeApi['download']>>>()
-  service.download = vi.fn(() => thumbnail.promise)
   const day = (value: string) => new Date(value).getTime()
   service.documents = vi.fn(async () => [
     { id: 'doc-old', name: '旧规范.pdf', size: 100, run: 'DONE', progress: 1, create_time: day('2026-10-01T08:30:00') },
@@ -1034,6 +1034,8 @@ it('searches and sorts visible file cards while PDF thumbnails are pending', asy
   expect(order()).toEqual(['新规范.pdf', '备忘.txt', '旧规范.pdf'])
   expect(container.querySelector('.dsh-knowledge-documents')?.hasAttribute('hidden')).toBe(false)
   expect(container.querySelectorAll('.dsh-knowledge-document-cover.pdf')).toHaveLength(2)
+  expect(container.querySelector('.dsh-knowledge-thumbnail.pdf img')).toBeNull()
+  expect(service.download).not.toHaveBeenCalled()
   const fresh = screen.getByText('新规范.pdf').closest('button') as HTMLElement
   expect(fresh.title).toContain('2026-10-20 09:05')
   expect(fresh.textContent).toContain('创建人')
@@ -1049,7 +1051,22 @@ it('searches and sorts visible file cards while PDF thumbnails are pending', asy
   expect(order()).toEqual(['旧规范.pdf', '新规范.pdf'])
   fireEvent.change(screen.getByRole('searchbox', { name: '搜索文件名称' }), { target: { value: '没有这个文件' } })
   expect(screen.getByText('未找到匹配的文件')).toBeTruthy()
-  thumbnail.resolve({ contentType: 'application/pdf', bytes: new Uint8Array([37, 80, 68, 70]) })
+})
+
+it('refreshes a pending cover without downloading the PDF', async () => {
+  const service = api()
+  service.documents = vi.fn(async (_id, refresh) => decodeKnowledgeDocuments([{
+    id: 'doc-1', name: '说明.pdf', size: 2048, run: 'DONE', progress: 1,
+    cover_status: refresh ? 'ready' : 'pending',
+  }]))
+  const { container } = render(<KnowledgePage api={service} />)
+  await screen.findByText('说明.pdf')
+  const image = () => container.querySelector('.dsh-knowledge-thumbnail.pdf img')
+  expect(image()).toBeNull()
+  await waitFor(() => expect(image()?.getAttribute('src')).toBe('/api/desktop-knowledge-file?id=1&documentId=doc-1&cover=1'), {
+    timeout: 4000,
+  })
+  expect(service.download).not.toHaveBeenCalled()
 })
 
 it('paginates content and resets to the first page when the search changes', async () => {
@@ -1062,8 +1079,9 @@ it('paginates content and resets to the first page when the search changes', asy
   await screen.findByText('文件29.txt')
   expect(container.querySelectorAll('.dsh-knowledge-card')).toHaveLength(12)
   expect(screen.queryByText('文件00.txt')).toBeNull()
-  expect(container.querySelector('.dsh-knowledge-pager-total')?.textContent).toBe('共 30 项')
-  expect(container.querySelector('.dsh-knowledge-pager-count')?.textContent).toBe('30')
+  expect(screen.getByText('内容').textContent).toBe('内容30')
+  expect(screen.queryByRole('heading', { name: '文件' })).toBeNull()
+  expect(screen.queryByText('共 30 项')).toBeNull()
   expect(screen.getByText('第 1 页 / 3')).toBeTruthy()
   expect(screen.getByRole('button', { name: '第 1 页' }).getAttribute('aria-current')).toBe('page')
   expect((screen.getByRole('button', { name: '上一页' }) as HTMLButtonElement).disabled).toBe(true)
@@ -1509,7 +1527,7 @@ it('restores folder selection and saves empty folders across page mounts', async
   expect(service.createFolder).toHaveBeenCalledTimes(1)
 })
 
-it('toggles sidebar details from both the library name and its chevron without selecting another library', async () => {
+it('selects a library by name and toggles its sidebar details from the chevron', async () => {
   const service = api()
   service.list = vi.fn(async () => [
     { id: 1, name: '我的资料', description: '个人描述', kind: 'personal' as const, owner_user_id: 7 },
@@ -1519,16 +1537,19 @@ it('toggles sidebar details from both the library name and its chevron without s
   await screen.findByText('说明.pdf')
   const card = screen.getByRole('button', { name: '第二个库' }).closest('.dsh-knowledge-lib-card') as HTMLElement
   const toggle = within(card).getByRole('button', { name: '展开：第二个库' })
-  fireEvent.click(within(toggle).getByText('第二个库'))
+  fireEvent.click(toggle.querySelector('svg') as SVGElement)
   expect(toggle.getAttribute('aria-expanded')).toBe('true')
   expect(within(card).getByText('第二个描述')).toBeTruthy()
   expect(card.classList.contains('active')).toBe(false)
-  fireEvent.click(toggle.querySelector('svg') as SVGElement)
+  fireEvent.click(toggle)
   expect(toggle.getAttribute('aria-expanded')).toBe('false')
   expect(within(card).queryByText('第二个描述')).toBeNull()
-  fireEvent.click(within(toggle).getByText('第二个库'))
-  fireEvent.click(within(toggle).getByText('第二个库'))
+  fireEvent.click(within(card).getByText('第二个库'))
+  expect(card.classList.contains('active')).toBe(true)
   expect(toggle.getAttribute('aria-expanded')).toBe('false')
+  fireEvent.click(toggle)
+  fireEvent.click(within(card).getByText('第二个库'))
+  expect(toggle.getAttribute('aria-expanded')).toBe('true')
 })
 
 it('submits an operations publication request without making the personal library public', async () => {
@@ -1576,7 +1597,7 @@ it('shows a rejected publication reason and allows resubmitting directly to subs
   expect((within(dialog).getByRole('button', { name: '提交审核' }) as HTMLButtonElement).disabled).toBe(false)
 })
 
-it.each(['public', 'subscription'] as const)('keeps a published %s library in both its personal and shared sidebar groups', async (scope) => {
+it.each(['public', 'subscription'] as const)('keeps both entries for a published %s library and follows the selected group in the header', async (scope) => {
   const service = api()
   service.list = vi.fn(async () => [{ id: 1, name: '已发布资料', description: '共用同一份资料', kind: 'personal' as const,
     owner_user_id: 7, owned_by_viewer: true, publication_scope: scope }])
@@ -1585,7 +1606,16 @@ it.each(['public', 'subscription'] as const)('keeps a published %s library in bo
   expect(within(personal).getByRole('button', { name: '已发布资料' })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: scope === 'public' ? '展开公共知识库' : '展开订阅知识库' }))
   const shared = screen.getByText(scope === 'public' ? '公共知识库' : '订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
-  expect(within(shared).getByRole('button', { name: '已发布资料' })).toBeTruthy()
+  const sharedEntry = within(shared).getByRole('button', { name: '已发布资料' })
+  const personalEntry = within(personal).getByRole('button', { name: '已发布资料', current: true })
+  const cover = screen.getByRole('heading', { name: '已发布资料' }).closest('header')?.querySelector('.dsh-knowledge-cover')
+  expect(cover?.getAttribute('data-library-group')).toBe('personal')
+  fireEvent.click(sharedEntry)
+  expect(cover?.getAttribute('data-library-group')).toBe(scope)
+  expect(sharedEntry.getAttribute('aria-current')).toBe('true')
+  expect(personalEntry.hasAttribute('aria-current')).toBe(false)
+  fireEvent.click(personalEntry)
+  expect(cover?.getAttribute('data-library-group')).toBe('personal')
   expect(screen.getByRole('button', { name: '上传文档' })).toBeTruthy()
 })
 
@@ -1702,9 +1732,9 @@ it('sets prices before submitting the first subscription publication', async () 
   fireEvent.click(screen.getByRole('button', { name: /转为订阅知识库/ }))
   const pricing = await screen.findByRole('dialog', { name: '知识库积分设置' })
   expect(within(pricing).getByText('平台 30% · 维护者 70%')).toBeTruthy()
-  fireEvent.change(within(pricing).getByLabelText('浏览积分／文件'), { target: { value: '1.01' } })
-  fireEvent.change(within(pricing).getByLabelText('问答积分／溯源文件'), { target: { value: '2' } })
-  fireEvent.change(within(pricing).getByLabelText('下载积分／文件'), { target: { value: '3.50' } })
+  fireEvent.change(within(pricing).getByLabelText(/^浏览积分／文件/), { target: { value: '1.01' } })
+  fireEvent.change(within(pricing).getByLabelText(/^问答积分／溯源文件/), { target: { value: '2' } })
+  fireEvent.change(within(pricing).getByLabelText(/^下载积分／文件/), { target: { value: '3.50' } })
   fireEvent.click(within(pricing).getByRole('button', { name: '保存' }))
   expect((await within(pricing).findByRole('alert')).textContent).toContain('保存失败')
   expect(screen.getByRole('heading', { name: '我的资料' })).toBeTruthy()

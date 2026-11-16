@@ -168,6 +168,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go auth.StartWeChatStateCleanup(ctx)
+	go controller.RunKnowledgeDocumentCovers(ctx)
 
 	// 启动订单过期检查定时任务（每分钟检查一次）
 	go func() {

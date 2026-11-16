@@ -183,3 +183,23 @@ func RestorePersonalPublicationOrigins() error {
 		return nil
 	})
 }
+
+// WithdrawKnowledgePublication restores owner-only access and removes subscription access.
+func WithdrawKnowledgePublication(userId, baseId int) error {
+	return DB.Transaction(func(tx *gorm.DB) error {
+		changed := tx.Model(&KnowledgeBase{}).Where("id = ? AND owner_user_id = ? AND kind = ? AND category_id = 0 AND publication_scope IN ?", baseId, userId, KnowledgeBasePersonal, []string{"public", "subscription"}).Update("publication_scope", "")
+		if changed.Error != nil {
+			return changed.Error
+		}
+		if changed.RowsAffected != 1 {
+			return ErrKnowledgePublicationInvalid
+		}
+		if err := tx.Where("knowledge_base_id = ?", baseId).Delete(&KnowledgeBaseGrant{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("knowledge_base_id = ?", baseId).Delete(&KnowledgeSubscriptionApplication{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("knowledge_base_id = ?", baseId).Delete(&KnowledgePublicationApplication{}).Error
+	})
+}

@@ -197,6 +197,10 @@ func knowledgeReviewAdmin(c *gin.Context) bool {
 
 // publicationReviewLibrary permits administrators to inspect only a library attached to a publication request.
 func publicationReviewLibrary(c *gin.Context) bool {
+	return reviewApplicationLibrary(c, false)
+}
+
+func reviewApplicationLibrary(c *gin.Context, subscription bool) bool {
 	if !knowledgeReviewAdmin(c) {
 		return false
 	}
@@ -205,15 +209,26 @@ func publicationReviewLibrary(c *gin.Context) bool {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "申请编号无效"})
 		return false
 	}
-	var application model.KnowledgePublicationApplication
-	if err := model.DB.First(&application, id).Error; err != nil {
-		publicationFailure(c, err)
-		return false
+	var baseId int
+	if subscription {
+		var app model.KnowledgeSubscriptionApplication
+		if err := model.DB.First(&app, id).Error; err != nil {
+			publicationFailure(c, err)
+			return false
+		}
+		baseId = app.KnowledgeBaseId
+	} else {
+		var app model.KnowledgePublicationApplication
+		if err := model.DB.First(&app, id).Error; err != nil {
+			publicationFailure(c, err)
+			return false
+		}
+		baseId = app.KnowledgeBaseId
 	}
 	c.Set("knowledge_publication_review", true)
 	for i := range c.Params {
 		if c.Params[i].Key == "id" {
-			c.Params[i].Value = strconv.Itoa(application.KnowledgeBaseId)
+			c.Params[i].Value = strconv.Itoa(baseId)
 		}
 	}
 	return true
@@ -236,6 +251,40 @@ func DownloadKnowledgePublicationDocument(c *gin.Context) {
 // ListKnowledgePublicationChunks serves parsed content for administrator inspection.
 func ListKnowledgePublicationChunks(c *gin.Context) {
 	if publicationReviewLibrary(c) {
+		ListManagedKnowledgeChunks(c)
+	}
+}
+
+// WithdrawKnowledgePublication removes an owner's current publication.
+func WithdrawKnowledgePublication(c *gin.Context) {
+	base, ok := publicationBase(c)
+	if !ok {
+		return
+	}
+	if err := model.WithdrawKnowledgePublication(c.GetInt("id"), base.Id); err != nil {
+		publicationFailure(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// ListKnowledgeSubscriptionReviewDocuments returns files attached to a subscription application for review.
+func ListKnowledgeSubscriptionReviewDocuments(c *gin.Context) {
+	if reviewApplicationLibrary(c, true) {
+		ListManagedKnowledgeDocuments(c)
+	}
+}
+
+// DownloadKnowledgeSubscriptionReviewDocument returns an original file for administrator review.
+func DownloadKnowledgeSubscriptionReviewDocument(c *gin.Context) {
+	if reviewApplicationLibrary(c, true) {
+		DownloadManagedKnowledgeDocument(c)
+	}
+}
+
+// ListKnowledgeSubscriptionReviewChunks returns parsed file content for administrator review.
+func ListKnowledgeSubscriptionReviewChunks(c *gin.Context) {
+	if reviewApplicationLibrary(c, true) {
 		ListManagedKnowledgeChunks(c)
 	}
 }

@@ -128,3 +128,20 @@ func TestKnowledgeCreditOnlyOperationsSubscribers(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, terms)
 }
+
+func TestKnowledgeCreditLimitsApplyToNewPricesAndExistingCharges(t *testing.T) {
+	base := knowledgeCreditFixture(t, 20000)
+	require.NoError(t, DB.AutoMigrate(&Option{}))
+	settings := KnowledgeCreditSettings{Percent: 25, Limits: KnowledgeCreditLimits{BrowseCents: 50, QuestionCents: 75, DownloadCents: 0}}
+	require.NoError(t, SaveKnowledgeCreditSettings(settings))
+	stored, err := ReadKnowledgeCreditSettings()
+	require.NoError(t, err)
+	require.Equal(t, settings, stored)
+	require.Error(t, SaveKnowledgeCreditPrice(2, base.Id, KnowledgeCreditPrice{BrowseCents: 51}))
+	terms, err := ReadKnowledgeCreditTerms(&base, 1)
+	require.NoError(t, err)
+	require.Equal(t, int64(50), terms.Price.BrowseCents)
+	require.Equal(t, int64(75), terms.Price.QuestionCents)
+	require.Zero(t, terms.Price.DownloadCents)
+	require.Equal(t, 25, terms.PlatformPercent)
+}

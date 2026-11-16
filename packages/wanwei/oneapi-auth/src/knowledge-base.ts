@@ -121,9 +121,10 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
           browse_cents: value.browse_cents, question_cents: value.question_cents, download_cents: value.download_cents,
         }) }, signal)
     }
-    if (operation === 'publication' || operation === 'apply-publication') {
+    if (operation === 'publication' || operation === 'apply-publication' || operation === 'withdraw-publication') {
       const id = integer(value.id, '知识库编号')
       if (operation === 'publication') return this.request(`/api/knowledge-bases/${id}/publication`, {}, signal)
+      if (operation === 'withdraw-publication') return this.request(`/api/knowledge-bases/${id}/publication`, { method: 'DELETE' }, signal)
       if (value.target !== 'public' && value.target !== 'subscription') throw new Error('发布范围无效')
       if (typeof value.reason !== 'string' || value.reason.length > 500) throw new Error('申请说明无效')
       return this.request(`/api/knowledge-bases/${id}/publication`, {
@@ -177,7 +178,8 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
     }
     if (operation === 'documents') {
       const id = integer(value.id, '知识库编号')
-      return this.request(`/api/knowledge-bases/${id}/documents`, {}, signal)
+      const query = value.refresh === true ? '?refresh=1' : ''
+      return this.request(`/api/knowledge-bases/${id}/documents${query}`, {}, signal)
     }
     if (operation === 'import-web-links') {
       const id = integer(value.id, '知识库编号')
@@ -283,9 +285,9 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
     })
   }
 
-  /** Proxy an original document download as raw bytes (avoids JSON number-array RPC).
-   * @param request - Authenticated GET with `id` and `documentId` query params.
-   * @returns Upstream file bytes, or a JSON error response.
+  /** Proxy original bytes or a saved JPEG cover.
+   * @param request - Authenticated file request. A GET with `cover=1` serves only the saved image.
+   * @returns File or cover bytes, or an error response.
    */
   async streamFile(request: Request): Promise<Response> {
     const url = new URL(request.url)
@@ -296,6 +298,19 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
       documentId = documentIdOf(url.searchParams.get('documentId'))
     } catch (error) {
       return Response.json({ success: false, message: error instanceof Error ? error.message : '参数无效' }, { status: 400 })
+    }
+    if (request.method === 'GET' && url.searchParams.get('cover') === '1') {
+      try {
+        const cover = await this.request(`/api/knowledge-bases/${id}/documents/${encodeURIComponent(documentId)}/cover`, {}, request.signal)
+        if (typeof cover !== 'string' || cover.length > 350_000 || !/^\/9j\/[A-Za-z0-9+/]*={0,2}$/.test(cover)) {
+          return new Response(null, { status: 502 })
+        }
+        const bytes = Uint8Array.from(Buffer.from(cover, 'base64'))
+        return new Response(bytes, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'private, no-store' } })
+      } catch {
+        // Missing and inaccessible covers use the same placeholder.
+        return new Response(null, { status: 404 })
+      }
     }
     const action = url.searchParams.get('action')
     if (action !== null && action !== 'browse' && action !== 'download') {

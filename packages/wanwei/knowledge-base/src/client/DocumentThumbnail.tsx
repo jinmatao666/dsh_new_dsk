@@ -1,6 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
-import * as pdfjs from 'pdfjs-dist'
-import { WorkerMessageHandler } from 'pdfjs-dist/build/pdf.worker.min.mjs'
+import { useState } from 'react'
 import { productText } from './locales/product.ts'
 
 /** Loading status centered in the available file-list area.
@@ -13,73 +11,25 @@ export function DocumentListLoading() {
   </div>
 }
 
-/** Show a default cover immediately and replace it with the PDF first page when ready.
- * @param props - Document identity, file kind, and PDF byte loader.
+/** Show a placeholder until the stored JPEG loads.
+ * @param props - File kind and same-origin image address when the cover is ready.
  * @returns A decorative cover with a file-type badge.
  */
-export function DocumentThumbnail({ documentId, kind, load }: {
-  documentId: string
+export function DocumentThumbnail({ kind, src }: {
   kind: string
-  load: () => Promise<{ bytes: Uint8Array }>
+  src: string | undefined
 }) {
-  const cover = useRef<HTMLSpanElement>(null)
-  const canvas = useRef<HTMLCanvasElement>(null)
-  const loader = useRef(load)
-  loader.current = load
-  const [renderedId, setRenderedId] = useState<string>()
-  const ready = kind === 'pdf' && renderedId === documentId
-  useEffect(() => {
-    if (kind !== 'pdf' || cover.current === null) return
-    const element = cover.current
-    let cancelled = false
-    const renderFirstPage = async () => {
-      const file = await loader.current()
-      if (cancelled) return
-      Object.assign(globalThis, { pdfjsWorker: { WorkerMessageHandler } })
-      const task = pdfjs.getDocument({ data: file.bytes.slice() })
-      try {
-        const pdf = await task.promise
-        if (cancelled) return
-        const page = await pdf.getPage(1)
-        const target = canvas.current
-        if (cancelled || target === null) return
-        const viewport = page.getViewport({ scale: 260 / page.getViewport({ scale: 1 }).width })
-        target.width = Math.ceil(viewport.width)
-        target.height = Math.ceil(viewport.height)
-        const context = target.getContext('2d')
-        if (context === null) return
-        await page.render({ canvasContext: context, viewport }).promise
-        if (!cancelled) setRenderedId(documentId)
-      } finally {
-        await task.destroy()
-      }
-    }
-    const start = () => {
-      if (cancelled) return
-      void renderFirstPage().catch(() => {
-        // Download or PDF render failures leave the default cover visible.
-      })
-    }
-    const observer = typeof IntersectionObserver === 'function' ? new IntersectionObserver((entries, observer) => {
-      if (!entries.some(entry => entry.isIntersecting)) return
-      observer.disconnect()
-      start()
-    }) : undefined
-    if (observer === undefined) start()
-    else observer.observe(element)
-    return () => {
-      cancelled = true
-      observer?.disconnect()
-    }
-  }, [documentId, kind])
-  return <span ref={cover} className={`dsh-knowledge-thumbnail ${kind}`} aria-hidden="true">
-    {kind === 'pdf' && <canvas key={documentId} ref={canvas} hidden={!ready} />}
+  const [loadedSrc, setLoadedSrc] = useState<string>()
+  const ready = src !== undefined && src === loadedSrc
+  return <span className={`dsh-knowledge-thumbnail ${kind}`} aria-hidden="true">
+    {src !== undefined && <img key={src} alt="" src={src} hidden={!ready}
+      onLoad={() => setLoadedSrc(src)} onError={() => setLoadedSrc(undefined)} />}
     {!ready && <DocumentCover kind={kind} />}
     <span className="dsh-knowledge-thumbnail-badge">{kind === 'pdf' ? 'P' : kind === 'word' ? 'W' : kind === 'audio' ? <AudioBadgeIcon /> : kind === 'image' ? <CoverImageIcon /> : kind === 'web' ? <WebBadgeIcon /> : 'D'}</span>
   </span>
 }
 
-/** Decorative stationery for files without a rendered PDF first page. */
+/** Decorative stationery for files without a loaded cover. */
 function DocumentCover({ kind }: { kind: string }) {
   return <span className={`dsh-knowledge-document-cover ${kind}`}>
     <span className="dsh-knowledge-cover-header"><i /><i /></span>

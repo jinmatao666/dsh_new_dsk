@@ -55,6 +55,7 @@ type Document struct {
 	// It is omitted for files uploaded before uploaders were recorded and for files the
 	// requesting user uploaded.
 	CreatorName string `json:"creator_name,omitempty"`
+	CoverStatus string `json:"cover_status,omitempty"`
 }
 
 // Chunk is one parsed piece of a document.

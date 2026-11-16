@@ -491,7 +491,7 @@ test('government edition defaults all three billing switches off and permits ind
 test('saves the operations knowledge credit split from the feature settings row', async () => {
   const previous = API.get.getMockImplementation();
   API.get.mockImplementation((path, ...args) => path === '/api/knowledge-bases/credit-settings'
-    ? Promise.resolve({ data: { success: true, data: { enabled: true, platform_percent: 30 } } }) : previous(path, ...args));
+    ? Promise.resolve({ data: { success: true, data: { enabled: true, platform_percent: 30, limits: { question_cents: 120, download_cents: 250, browse_cents: 0 } } } }) : previous(path, ...args));
   await act(async () => root.render(<SystemSettings />));
   act(() => container.querySelectorAll('[role="tab"]')[4].click());
   const open = [...container.querySelectorAll('button')].find(button => button.textContent === '知识库积分设置');
@@ -507,7 +507,7 @@ test('saves the operations knowledge credit split from the feature settings row'
   });
   expect(dialog.textContent).toContain('维护者占比：80%');
   await act(async () => dialog.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-  expect(API.put).toHaveBeenCalledWith('/api/knowledge-admin/credit-settings', { platform_percent: 20 });
+  expect(API.put).toHaveBeenCalledWith('/api/knowledge-admin/credit-settings', { platform_percent: 20, limits: { question_cents: 120, download_cents: 250, browse_cents: 0 } });
   expect(document.querySelector('[role="dialog"][aria-label="知识库积分设置"]')).toBeNull();
   act(() => container.querySelectorAll('[role="tab"]')[3].click());
   act(() => container.querySelector('input[value="government"]').click());

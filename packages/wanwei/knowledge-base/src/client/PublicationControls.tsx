@@ -16,7 +16,11 @@ export interface PublicationApi {
   creditPrice(id: number, documentId?: string): Promise<KnowledgeCreditQuote>
   /** Save all per-file prices for an owned library. */
   saveCreditPrice(id: number, price: KnowledgeCreditPrice): Promise<void>
-  /** Read edition availability, the saved request.
+  /** Remove an approved publication and its subscriber access.
+   * @param id - Owned library id.
+   */
+  withdrawPublication(id: number): Promise<void>
+  /** Read the deployment availability and saved request.
    * @param id - Owned library id.
    * @returns Deployment availability and latest request.
    */
@@ -34,10 +38,11 @@ export interface PublicationApi {
  * @param props - Library and authenticated publication operations.
  * @returns Owner actions and the publication request dialog.
  */
-export function PublicationControls({ id, api, scope }: { id: number; api: PublicationApi; scope: '' | 'public' | 'subscription' }) {
+export function PublicationControls({ id, api, scope, onWithdrawn }: { id: number; api: PublicationApi; onWithdrawn: () => Promise<void>; scope: '' | 'public' | 'subscription' }) {
   const [info, setInfo] = useState<{ enabled: boolean; application: PublicationRequest | null }>()
   const [pricing, setPricing] = useState<KnowledgeCreditQuote>()
   const [target, setTarget] = useState<'public' | 'subscription'>()
+  const [withdrawing, setWithdrawing] = useState(false)
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -52,7 +57,8 @@ export function PublicationControls({ id, api, scope }: { id: number; api: Publi
   return <div className="dsh-knowledge-publication">
     {error && <p role="alert">{error}</p>}
     {info?.enabled && <>
-      {scope !== '' ? <span className="dsh-knowledge-publication-saved">{t(scope === 'public' ? '已发布为公共库' : '已发布为订阅库')}</span>
+      {scope !== '' ? <><span className="dsh-knowledge-publication-saved">{t(scope === 'public' ? '已发布为公共库' : '已发布为订阅库')}</span>
+        <button type="button" className="dsh-knowledge-withdraw" onClick={() => { setError(''); setWithdrawing(true) }}>{t('撤回发布')}</button></>
         : application?.status === 'pending' ? <span className="dsh-knowledge-publication-pending" role="status">{t('发布申请待管理员审核')}</span> : <>
           {application?.status === 'rejected' && <span className="dsh-knowledge-publication-rejected" title={application.review_note}>{t('发布申请已驳回')}：{application.review_note}</span>}
           <details className="dsh-knowledge-publish-menu">
@@ -67,7 +73,7 @@ export function PublicationControls({ id, api, scope }: { id: number; api: Publi
                 if (value === 'public') { setTarget(value); return }
                 setError('')
                 void api.creditPrice(id).then((quote) => {
-                  if (quote.enabled && !quote.configured) setPricing(quote)
+                  if (quote.enabled) setPricing(quote)
                   else setTarget(value)
                 }).catch(cause => setError(`${t('读取发布状态失败')}：${String(cause)}`))
               }}><span className={`dsh-knowledge-publish-option-icon ${value}`}>{value === 'public' ? '◎' : '◇'}</span><span><strong>{t(value === 'public' ? '转为公共知识库' : '转为订阅知识库')}</strong><small>{t(value === 'public' ? '审核后向所有用户开放' : '审核后由用户申请订阅')}</small></span></button>)}
@@ -78,13 +84,35 @@ export function PublicationControls({ id, api, scope }: { id: number; api: Publi
     {pricing !== undefined && <div className="dsh-knowledge-modal-backdrop">
       <div className="dsh-knowledge-modal" role="dialog" aria-modal="true" aria-label={t('知识库积分设置')}>
         <h3>{t('知识库积分设置')}</h3>
-        <KnowledgeCreditPriceForm price={pricing.price} platform={pricing.platform_percent}
+        <KnowledgeCreditPriceForm price={pricing.price} limits={pricing.limits} platform={pricing.platform_percent}
           onCancel={() => setPricing(undefined)} onSave={async (price) => {
             await api.saveCreditPrice(id, price)
             setPricing(undefined)
             setTarget('subscription')
           }} />
       </div>
+    </div>}
+    {withdrawing && <div className="dsh-knowledge-modal-backdrop">
+      <form className="dsh-knowledge-modal" role="dialog" aria-modal="true" aria-label={t('撤回发布')}
+        onSubmit={async (event) => {
+          event.preventDefault()
+          if (saving) return
+          setSaving(true)
+          setError('')
+          try {
+            await api.withdrawPublication(id)
+            setInfo({ enabled: true, application: null })
+            setWithdrawing(false)
+            await onWithdrawn()
+          } catch (cause) { setError(`${t('撤回发布失败')}：${String(cause)}`) }
+          finally { setSaving(false) }
+        }}>
+        <h3>{t('撤回发布')}</h3>
+        <p>{t('撤回后仅自己可访问，已有订阅权限将取消。')}</p>
+        {error && <p role="alert">{error}</p>}
+        <footer><button type="button" disabled={saving} onClick={() => setWithdrawing(false)}>{t('取消')}</button>
+          <button type="submit" disabled={saving}>{t('确认撤回')}</button></footer>
+      </form>
     </div>}
     {target !== undefined && <div className="dsh-knowledge-modal-backdrop">
       <form className="dsh-knowledge-modal" role="dialog" aria-modal="true" aria-label={t('申请发布知识库')}
@@ -101,7 +129,7 @@ export function PublicationControls({ id, api, scope }: { id: number; api: Publi
         <h3>{t(target === 'public' ? '转为公共知识库' : '转为订阅知识库')}</h3>
         <p>{t(target === 'public'
           ? '审核通过后，整个知识库及后续新增内容对所有用户可见。'
-          : '审核通过后，知识库将进入广场，其他用户申请订阅并通过审核后可使用。')}</p>
+          : '审核通过后在广场展示，用户订阅获批后可使用。')}</p>
         <p>{t('审核通过前仍为个人知识库。请确认其中没有不适合分享的资料。')}</p>
         <div className="dsh-knowledge-publication-destination"><span>{t('发布至')}</span><strong>{t(target === 'public' ? '公共知识库' : '订阅知识库')}</strong><small>{t('个人知识库中仍保留原库，内容同步更新。')}</small></div>
         <label>{t('申请说明')}<textarea maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></label>

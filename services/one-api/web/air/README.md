@@ -19,7 +19,7 @@ for example: `REACT_APP_SERVER=http://your.domain.com`.
 
 Before you start editing, make sure your `Actions on Save` options have `Optimize imports` & `Run Prettier` enabled.
 
-In the operations edition, System Settings → Features → Knowledge Bases → Knowledge credit settings saves the platform percentage for subsequent subscription-library settlements. The dialog calculates the remaining share for the maintainer from the entered percentage.
+In the operations edition, System Settings → Features → Knowledge Bases → Knowledge credit settings saves the platform percentage and maximum per-file browse, Q&A and download prices for subsequent subscription-library settlements. Lowering a limit caps existing prices on future charges. The dialog calculates the remaining share for the maintainer from the entered percentage.
 
 ## Reference
 
@@ -32,6 +32,8 @@ In Knowledge Base → Personal Knowledge Base, selecting a person with multiple 
 Only administrators and root administrators see the create-category action. The creation API rejects ordinary users with HTTP 403.
 
 ### Knowledge review inbox
+
+Open a review to see the applicant and library in **Application details**. The **All files** tab shows parse status, and selecting a file opens its preview. Pagination appears when the files span multiple pages.
 
 The Knowledge page gives administrators a blue inbox entry with a white icon and pending count; the catalog has no extra reminder banner. Publication and subscription tasks have separate tabs and pending, approved and rejected filters. The publication review dialog displays the requested public/subscription scope and owner note. Rejection requires a reason. Only administrators may list or settle either queue. Publication review changes visibility only in the operations edition; subscription review grants access independently. Each library retains its latest publication request; resubmitting a rejected request replaces that request’s review state.
 

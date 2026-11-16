@@ -1097,6 +1097,9 @@ test('highlights publication tasks in the inbox and requires a rejection reason'
   const application = { id: 31, knowledge_base_id: 4, knowledge_base_name: '个人资料发布', applicant_user_id: 2,
     applicant_username: '爱丽丝', category_name: '规范公开库', target: 'public', reason: '共享规范', status: 'pending' };
   API.get.mockImplementation(url => {
+    if (String(url).startsWith('/api/knowledge-admin/publication-applications/31/documents?')) {
+      return Promise.resolve({ data: { success: true, data: documentPage } });
+    }
     if (String(url).startsWith('/api/knowledge-admin/publication-applications')) {
       return Promise.resolve({ data: { success: true, data: { items: [application], total: 1, page: 1, page_size: 20 } } });
     }
@@ -1114,6 +1117,11 @@ test('highlights publication tasks in the inbox and requires a rejection reason'
   await act(async () => { button('去审核').click(); });
   expect(container.querySelector('[role="dialog"][aria-label="发布审核"]').textContent).toMatchSnapshot('publication review dialog');
   expect(API.get.mock.calls.some(([url]) => String(url).startsWith('/api/knowledge-admin/publication-applications/31/documents'))).toBe(false);
+  await act(async () => { button('全部文件').click(); });
+  expect(API.get.mock.calls.some(([url]) => String(url).startsWith('/api/knowledge-admin/publication-applications/31/documents'))).toBe(true);
+  expect(container.textContent).toContain(documents[0].name);
+  await act(async () => { button('申请详情').click(); });
+
   expect(button('不同意').disabled).toBe(true);
   const note = container.querySelector('textarea[aria-label="审核意见"]');
   await act(async () => {

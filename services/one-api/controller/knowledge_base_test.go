@@ -587,7 +587,7 @@ func TestUpdateAndDeleteKnowledgeCategory(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(
 		&model.KnowledgeBaseGrant{}, &model.KnowledgeSubscriptionApplication{}, &model.KnowledgeBaseLike{}, &model.KnowledgePublicationApplication{},
 		&model.KnowledgeConversation{}, &model.KnowledgeDocumentNote{}, &model.KnowledgeDocumentPath{},
-		&model.KnowledgeDocumentCreator{}, &model.KnowledgeFolder{},
+		&model.KnowledgeDocumentCreator{}, &model.KnowledgeFolder{}, &model.KnowledgeDocumentCover{},
 	))
 
 	deleted := httptest.NewRecorder()

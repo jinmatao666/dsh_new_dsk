@@ -139,3 +139,31 @@ func TestKnowledgePublicationPreservesPersonalOriginForExistingApprovals(t *test
 	require.Zero(t, saved.CategoryId)
 	require.Equal(t, "public", saved.PublicationScope)
 }
+
+func TestKnowledgePublicationWithdrawalRestoresOwnerOnlyAccess(t *testing.T) {
+	for _, scope := range []string{"public", "subscription"} {
+		t.Run(scope, func(t *testing.T) {
+			base, _, _ := publicationFixture(t)
+			app, err := ApplyKnowledgePublication(base.OwnerUserId, base.Id, scope, "")
+			require.NoError(t, err)
+			_, err = ReviewKnowledgePublication(app.Id, 1, true, "")
+			require.NoError(t, err)
+			if scope == "subscription" {
+				subscription, err := ApplyKnowledgeSubscription(9, base.Id)
+				require.NoError(t, err)
+				_, err = ReviewKnowledgeSubscription(subscription.Id, 1, true)
+				require.NoError(t, err)
+			}
+			require.ErrorIs(t, WithdrawKnowledgePublication(9, base.Id), ErrKnowledgePublicationInvalid)
+			require.NoError(t, WithdrawKnowledgePublication(base.OwnerUserId, base.Id))
+			require.NoError(t, RestorePersonalPublicationOrigins())
+			_, err = GetAuthorizedKnowledgeBase(9, base.Id, false)
+			require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+			retained, err := GetAuthorizedKnowledgeBase(base.OwnerUserId, base.Id, false)
+			require.NoError(t, err)
+			require.Empty(t, retained.PublicationScope)
+			_, err = ApplyKnowledgePublication(base.OwnerUserId, base.Id, scope, "")
+			require.NoError(t, err)
+		})
+	}
+}

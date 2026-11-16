@@ -17,7 +17,7 @@ func TestListAuthorizedKnowledgeBasesScopesPersonalSharedCommon(t *testing.T) {
 	t.Cleanup(func() { DB = previous })
 	require.NoError(t, db.AutoMigrate(
 		&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{}, &KnowledgeBaseLike{}, &KnowledgePublicationApplication{},
-		&KnowledgeConversation{}, &KnowledgeDocumentNote{}, &KnowledgeDocumentPath{}, &KnowledgeDocumentCreator{}, &KnowledgeFolder{},
+		&KnowledgeConversation{}, &KnowledgeDocumentNote{}, &KnowledgeDocumentPath{}, &KnowledgeDocumentCreator{}, &KnowledgeFolder{}, &KnowledgeDocumentCover{},
 		&GovernmentOrganizationMember{}, &OrgMember{}, &User{},
 	))
 

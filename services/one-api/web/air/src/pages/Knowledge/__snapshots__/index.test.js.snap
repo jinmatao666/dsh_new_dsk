@@ -2,4 +2,4 @@
 
 exports[`highlights publication tasks in the inbox and requires a rejection reason: publication inbox pending 1`] = `"返回知识库知识库管理 / 审核中心知识库待办箱统一处理发布与订阅申请，让知识共享有序流转。待处理 1刷新发布审核1订阅审核0审核个人知识库的共享范围，驳回时请填写原因。审核状态 待审核已通过已驳回申请人知识库发布范围申请时间操作爱丽丝个人资料发布公共知识库—去审核共 1 条，每页 20 条上一页1 / 1下一页"`;
 
-exports[`highlights publication tasks in the inbox and requires a rejection reason: publication review dialog 1`] = `"发布审核×申请人 爱丽丝 申请发布「个人资料发布」。转为公共知识库：对所有用户可见申请说明：共享规范通过后发布整个知识库及后续新增内容。审核意见（驳回必填）取消不同意同意"`;
+exports[`highlights publication tasks in the inbox and requires a rejection reason: publication review dialog 1`] = `"发布审核个人资料发布申请详情全部文件申请人爱丽丝发布范围公共知识库申请说明共享规范审核通过后，现有及新增内容向所有用户开放。审核意见 驳回时必填取消不同意同意"`;

@@ -7,7 +7,7 @@ const zh = {
   title: '知识库积分设置', browse: '浏览积分／文件', question: '问答积分／溯源文件', download: '下载积分／文件',
   hint: '单价适用于本库所有文件，0 表示免费。价格修改仅影响后续使用。', split: '平台 {platform}% · 维护者 {owner}%',
   close: '关闭', save: '保存', saving: '保存中…',
-  invalid: '请输入 0 至 1,000,000 的积分，最多两位小数。', failed: '读取知识库积分设置失败',
+  invalid: '请按各项上限填写积分，最多两位小数。', maximum: '最高 {value} 积分', failed: '读取知识库积分设置失败',
 } as const
 const t = (key: keyof typeof zh) => zh[key]
 
@@ -22,8 +22,10 @@ export interface KnowledgeCreditQuote {
   preview_free: boolean
   platform_percent: number
   price: KnowledgeCreditPrice
+  limits?: KnowledgeCreditPrice
 }
 
+const defaultLimits = { browse_cents: 100_000_000, question_cents: 100_000_000, download_cents: 100_000_000 }
 const fields = [['browse_cents', 'browse'], ['question_cents', 'question'], ['download_cents', 'download']] as const
 const asRecord = (value: unknown) => typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
 function parsePrice(raw: unknown): KnowledgeCreditPrice {
@@ -45,17 +47,20 @@ function parsePrice(raw: unknown): KnowledgeCreditPrice {
 export function parseKnowledgeCreditQuote(raw: unknown): KnowledgeCreditQuote {
   const value = asRecord(raw)
   if (typeof value.enabled !== 'boolean' || typeof value.applies !== 'boolean' || typeof value.configured !== 'boolean' ||
-    typeof value.preview_free !== 'boolean' || !Number.isInteger(value.platform_percent) || Number(value.platform_percent) < 0 || Number(value.platform_percent) > 100) throw new Error(t('failed'))
+    typeof value.preview_free !== 'boolean' || !Number.isInteger(value.platform_percent) ||
+    Number(value.platform_percent) < 0 || Number(value.platform_percent) > 100) throw new Error(t('failed'))
   return { enabled: value.enabled, applies: value.applies, configured: value.configured, preview_free: value.preview_free,
-    platform_percent: Number(value.platform_percent), price: parsePrice(value.price) }
+    platform_percent: Number(value.platform_percent), price: parsePrice(value.price),
+    ...(value.limits === undefined ? {} : { limits: parsePrice(value.limits) }) }
 }
 
 /** Edit and save the three prices together in the caller's dialog.
  * @param props - Existing prices, platform percentage, save operation and optional cancel action.
  * @returns A form that reports validation and save failures in place.
  */
-export function KnowledgeCreditPriceForm({ price, platform, onSave, onCancel }: {
+export function KnowledgeCreditPriceForm({ price, limits = defaultLimits, platform, onSave, onCancel }: {
   price: KnowledgeCreditPrice
+  limits?: KnowledgeCreditPrice | undefined
   platform: number
   onSave: (next: KnowledgeCreditPrice) => Promise<void>
   onCancel?: () => void
@@ -67,7 +72,11 @@ export function KnowledgeCreditPriceForm({ price, platform, onSave, onCancel }: 
     event.preventDefault()
     event.stopPropagation()
     if (saving) return
-    if (values.some(value => !/^\d+(?:\.\d{1,2})?$/.test(value.trim()) || Number(value) > 1_000_000)) { setError(t('invalid')); return }
+    const invalid = fields.some(([key], index) => {
+      const value = values[index]?.trim() ?? ''
+      return !/^\d+(?:\.\d{1,2})?$/.test(value) || Math.round(Number(value) * 100) > limits[key]
+    })
+    if (invalid) { setError(t('invalid')); return }
     setSaving(true); setError('')
     try {
       await onSave({
@@ -80,7 +89,7 @@ export function KnowledgeCreditPriceForm({ price, platform, onSave, onCancel }: 
     finally { setSaving(false) }
   }}>
     <p>{t('hint')}</p>
-    {fields.map(([key, label], index) => <label key={key}>{t(label)}
+    {fields.map(([key, label], index) => <label key={key}><span>{t(label)}<small>{t('maximum').replace('{value}', String(limits[key] / 100))}</small></span>
       <input inputMode="decimal" required disabled={saving} value={values[index]}
         onChange={event => setValues(values.map((value, i) => i === index ? event.target.value : value))} />
     </label>)}
@@ -103,7 +112,7 @@ export function KnowledgeCreditSettings({ request, revision }: {
   request: (operation: string, payload?: object) => Promise<unknown>
   revision: number
 }) {
-  const [catalog, setCatalog] = useState<{ platform: number; items: PriceItem[] }>()
+  const [catalog, setCatalog] = useState<{ platform: number; limits: KnowledgeCreditPrice; items: PriceItem[] }>()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<PriceItem>()
   useEffect(() => {
@@ -118,7 +127,9 @@ export function KnowledgeCreditSettings({ request, revision }: {
         if (typeof item.id !== 'number' || typeof item.name !== 'string') throw new Error(t('failed'))
         return { ...parsePrice(item), id: item.id, name: item.name }
       })
-      setCatalog({ platform: Number(value.platform_percent), items })
+      setCatalog({
+        platform: Number(value.platform_percent), limits: value.limits === undefined ? defaultLimits : parsePrice(value.limits), items,
+      })
     }).catch(() => { if (live) setCatalog(undefined) })
     return () => { live = false }
   }, [request, revision])
@@ -131,7 +142,7 @@ export function KnowledgeCreditSettings({ request, revision }: {
       </div>
     </Modal>}
     {editing !== undefined && <Modal open title={t('title')} closeLabel={t('close')} onClose={() => setEditing(undefined)}>
-      <KnowledgeCreditPriceForm price={editing} platform={catalog.platform} onSave={async (price) => {
+      <KnowledgeCreditPriceForm price={editing} limits={catalog.limits} platform={catalog.platform} onSave={async (price) => {
         await request('save-credit-price', { id: editing.id, ...price })
         setCatalog(current => current && {
           ...current,
