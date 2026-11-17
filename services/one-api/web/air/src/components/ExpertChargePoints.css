@@ -10,6 +10,7 @@
 @media(max-width:640px){.expert-charge-body,.expert-charge-dialog>header,.expert-charge-dialog>footer{padding:18px}.expert-charge-toolbar,.expert-charge-dialog>footer{align-items:flex-start;flex-wrap:wrap}.expert-charge-fields{grid-template-columns:1fr}.expert-charge-row{flex-wrap:wrap}.expert-charge-id{flex-wrap:wrap}}
 
 .expert-charge-editor-backdrop{z-index:1100;background:#14243e66}
+.expert-charge-dialog button.charge-delete{color:#dc2626}.expert-charge-id button.charge-delete{margin-left:auto}
 .expert-charge-editor{width:min(560px,100%)}
 .expert-charge-editor .expert-charge-form{margin:0;padding:24px 28px;background:#fff;border:0;border-radius:0}
 .expert-charge-editor .expert-charge-fields{margin-top:0}

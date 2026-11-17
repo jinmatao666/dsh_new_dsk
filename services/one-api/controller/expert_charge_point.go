@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/model"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -62,7 +63,7 @@ func AdminListChargePoints(c *gin.Context) {
 		return
 	}
 	var rules []model.BillingRule
-	if err := model.DB.Where("kind = ? AND item_id = ? AND substr(id,1,3) = ?", kind, item, "cp_").Order("updated_at DESC, id ASC").Find(&rules).Error; err != nil {
+	if err := model.DB.Where("kind = ? AND item_id = ? AND substr(id,1,3) = ? AND is_deleted = ?", kind, item, "cp_", false).Order("updated_at DESC, id ASC").Find(&rules).Error; err != nil {
 		c.JSON(500, gin.H{"success": false, "message": "读取扣分点失败"})
 		return
 	}
@@ -133,7 +134,7 @@ func AdminSaveChargePoint(c *gin.Context) {
 				rule.Action = prior.Action
 			}
 		}
-		result := model.DB.Model(&model.BillingRule{}).Where("id = ? AND kind = ? AND item_id = ? AND version = ?", rule.ID, kind, rule.ItemID, input.Version).Updates(map[string]interface{}{"name": rule.Name, "description": rule.Description, "unit_quota": rule.UnitQuota, "enabled": rule.Enabled, "version": rule.Version, "updated_at": rule.UpdatedAt})
+		result := model.DB.Model(&model.BillingRule{}).Where("id = ? AND kind = ? AND item_id = ? AND version = ? AND is_deleted = ?", rule.ID, kind, rule.ItemID, input.Version, false).Updates(map[string]interface{}{"name": rule.Name, "description": rule.Description, "unit_quota": rule.UnitQuota, "enabled": rule.Enabled, "version": rule.Version, "updated_at": rule.UpdatedAt})
 		err = result.Error
 		if err == nil && result.RowsAffected != 1 {
 			c.JSON(409, gin.H{"success": false, "message": "配置已变更或扣分点不存在，请刷新后重试"})
@@ -147,7 +148,35 @@ func AdminSaveChargePoint(c *gin.Context) {
 	c.JSON(200, gin.H{"success": true, "data": chargePointView(rule)})
 }
 
-// resolveChargePoint never accepts a point belonging to another expert.
+// AdminDeleteChargePoint retains the ID as a free tombstone for existing integrations.
+// Existing reservations settle from their task snapshot, independent of the rule.
+func AdminDeleteChargePoint(c *gin.Context) {
+	kind, item, ok := chargePointResource(c)
+	if !ok {
+		return
+	}
+	var input struct {
+		Version int64 `json:"version"`
+	}
+	if c.ShouldBindJSON(&input) != nil || input.Version < 1 || !strings.HasPrefix(c.Param("point"), "cp_") {
+		c.JSON(400, gin.H{"success": false, "message": "请提供有效的扣分点和版本"})
+		return
+	}
+	result := model.DB.Model(&model.BillingRule{}).
+		Where("id = ? AND kind = ? AND item_id = ? AND version = ? AND is_deleted = ?", c.Param("point"), kind, item, input.Version, false).
+		Updates(map[string]interface{}{"is_deleted": true, "enabled": false, "unit_quota": 0, "version": gorm.Expr("version + 1"), "updated_at": time.Now()})
+	if result.Error != nil {
+		c.JSON(500, gin.H{"success": false, "message": "删除扣分点失败"})
+		return
+	}
+	if result.RowsAffected != 1 {
+		c.JSON(409, gin.H{"success": false, "message": "配置已变更或扣分点不存在，请刷新后重试"})
+		return
+	}
+	c.JSON(200, gin.H{"success": true})
+}
+
+// resolveChargePoint retains deleted IDs, but never accepts another resource's point.
 func resolveChargePoint(kind, expert, point string) (string, error) {
 	var rule model.BillingRule
 	if !validBillingAction(kind, expert, point) || !strings.HasPrefix(point, "cp_") {

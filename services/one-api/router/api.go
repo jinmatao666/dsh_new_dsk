@@ -29,6 +29,7 @@ func SetApiRouter(router *gin.Engine) {
 	apiRouter.GET("/billing/v1/resources/:kind/:item/charge-points", middleware.AdminAuth(), controller.AdminListChargePoints)
 	apiRouter.POST("/billing/v1/resources/:kind/:item/charge-points", middleware.AdminAuth(), controller.AdminSaveChargePoint)
 	apiRouter.PUT("/billing/v1/resources/:kind/:item/charge-points/:point", middleware.AdminAuth(), controller.AdminSaveChargePoint)
+	apiRouter.DELETE("/billing/v1/resources/:kind/:item/charge-points/:point", middleware.AdminAuth(), controller.AdminDeleteChargePoint)
 	apiRouter.POST("/billing/v1/tasks", controller.BusinessBillingAuth(middleware.UserAuth()), controller.ReserveBusinessBilling)
 	apiRouter.GET("/billing/v1/tasks/:id", controller.BusinessBillingAuth(middleware.UserAuth()), controller.GetBusinessBilling)
 	apiRouter.POST("/billing/v1/tasks/:id/result", controller.ResultBusinessBilling)

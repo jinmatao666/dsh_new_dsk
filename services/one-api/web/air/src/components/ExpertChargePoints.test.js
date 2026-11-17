@@ -1,12 +1,39 @@
+/* eslint-disable testing-library/no-unnecessary-act -- ReactDOM createRoot is used directly, without Testing Library's automatic act wrapper. */
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import ExpertChargePoints from './ExpertChargePoints';
 import { API, copy, showError, showSuccess } from '../helpers';
 
-jest.mock('../helpers', () => ({ API: { get: jest.fn(), post: jest.fn(), put: jest.fn() }, copy: jest.fn(), showError: jest.fn(), showSuccess: jest.fn() }));
+jest.mock('../helpers', () => ({ API: { get: jest.fn(), post: jest.fn(), put: jest.fn(), delete: jest.fn() }, copy: jest.fn(), showError: jest.fn(), showSuccess: jest.fn() }));
 beforeEach(() => { global.IS_REACT_ACT_ENVIRONMENT = true; jest.clearAllMocks(); });
 afterEach(() => { delete global.IS_REACT_ACT_ENVIRONMENT; });
 const change = (node, value) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(node, value); node.dispatchEvent(new Event('input', { bubbles: true })); };
+
+test('deletes only after confirmation, handles stale errors and refreshes the list', async () => {
+  const point = { id: 'cp_delete', name: '报告', credits: 3, version: 2, enabled: true };
+  API.get.mockResolvedValue({ data: { success: true, data: [point] } });
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => root.render(<ExpertChargePoints expert={{ key: 'expert-a', name: '专家 A' }} onClose={() => {}} />));
+  const openDelete = () => container.querySelector('.charge-delete').click();
+  await act(async () => openDelete());
+  expect(document.querySelector('.expert-charge-editor').textContent).toContain('0 积分执行');
+  expect(API.delete).not.toHaveBeenCalled();
+  await act(async () => [...document.querySelectorAll('button')].find(b => b.textContent === '取消').click());
+  expect(document.querySelector('.expert-charge-editor')).toBeNull();
+  API.delete.mockResolvedValueOnce({ data: { success: false, message: '配置已变更' } });
+  await act(async () => openDelete());
+  await act(async () => document.querySelector('.expert-charge-editor .charge-delete').click());
+  expect(showError).toHaveBeenCalledWith('配置已变更');
+  expect(document.querySelector('.expert-charge-editor')).not.toBeNull();
+  API.delete.mockResolvedValueOnce({ data: { success: true } });
+  API.get.mockResolvedValue({ data: { success: true, data: [] } });
+  await act(async () => document.querySelector('.expert-charge-editor .charge-delete').click());
+  expect(API.delete).toHaveBeenLastCalledWith('/api/billing/v1/resources/expert/expert-a/charge-points/cp_delete', { data: { version: 2 } });
+  expect(document.querySelector('.expert-charge-editor')).toBeNull();
+  expect(container.textContent).not.toContain('cp_delete');
+  await act(async () => root.unmount()); container.remove();
+});
 
 test('creates a point, shows its generated ID and edits its price without changing ID', async () => {
   let items = [];

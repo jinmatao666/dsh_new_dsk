@@ -25,6 +25,7 @@ type BillingRule struct {
 	Action      string    `json:"action" gorm:"uniqueIndex:billing_action;size:80"`
 	UnitQuota   int64     `json:"unit_quota"`
 	Enabled     bool      `json:"enabled"`
+	IsDeleted   bool      `json:"-" gorm:"not null;default:false"`
 	Version     int64     `json:"version"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -251,6 +252,9 @@ func ResolveBusinessRule(tx *gorm.DB, kind, item, action string) (BillingRule, e
 	// Isolate the optional rule lookup from an initialized locking statement:
 	// ErrRecordNotFound must not poison the subsequent skill/expert fallback.
 	err := tx.Session(&gorm.Session{}).Where("kind = ? AND item_id = ? AND action = ?", kind, item, action).First(&rule).Error
+	if rule.IsDeleted {
+		rule.Enabled, rule.UnitQuota = false, 0
+	}
 	if err == nil || !errors.Is(err, gorm.ErrRecordNotFound) {
 		return rule, err
 	}

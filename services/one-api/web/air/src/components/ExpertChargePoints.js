@@ -8,6 +8,7 @@ const empty = () => ({ name: '', description: '', credits: '0', enabled: true })
 export default function ExpertChargePoints({ expert, kind = 'expert', onClose }) {
   const [items, setItems] = useState([]);
   const [draft, setDraft] = useState(null);
+  const [deletePoint, setDeletePoint] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -34,11 +35,24 @@ export default function ExpertChargePoints({ expert, kind = 'expert', onClose })
     return () => previous?.focus?.();
   }, []);
   useEffect(() => {
-    if (!draft) return;
+    if (!draft && !deletePoint) return;
     const previous = document.activeElement;
-    editor.current?.querySelector('input')?.focus();
+    editor.current?.querySelector(draft ? 'input' : 'button')?.focus();
     return () => previous?.focus?.();
-  }, [Boolean(draft)]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [Boolean(draft), Boolean(deletePoint)]); // eslint-disable-line react-hooks/exhaustive-deps
+  const remove = async () => {
+    if (lock.current) return;
+    lock.current = true;
+    setSaving(true);
+    try {
+      const result = await API.delete(`${base}/${encodeURIComponent(deletePoint.id)}`, { data: { version: deletePoint.version } });
+      if (!result.data?.success) throw new Error(result.data?.message || '删除失败');
+      setDeletePoint(null);
+      showSuccess('扣分点已删除');
+      await load();
+    } catch (error) { showError(error.response?.data?.message || error.message || '删除失败'); }
+    finally { lock.current = false; setSaving(false); }
+  };
   const save = async event => {
     event.preventDefault();
     if (lock.current) return;
@@ -66,16 +80,16 @@ export default function ExpertChargePoints({ expert, kind = 'expert', onClose })
     catch { showError('复制失败，请选中 ID 手动复制'); }
   };
   const keyDown = event => {
-    if (event.key === 'Escape') { event.stopPropagation(); if (!saving) { if (draft) setDraft(null); else onClose(); } }
+    if (event.key === 'Escape') { event.stopPropagation(); if (!saving) { if (deletePoint) setDeletePoint(null); else if (draft) setDraft(null); else onClose(); } }
     if (event.key !== 'Tab') return;
-    const activeDialog = draft ? editor.current : dialog.current;
+    const activeDialog = draft || deletePoint ? editor.current : dialog.current;
     const nodes = [...activeDialog.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea:not(:disabled)')];
     const first = nodes[0], last = nodes[nodes.length - 1];
     if (event.shiftKey && (document.activeElement === first || document.activeElement === activeDialog)) { event.preventDefault(); last?.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
   };
   return <><div className='expert-web-backdrop'>
-    <section ref={dialog} tabIndex={-1} className='expert-charge-dialog' role='dialog' aria-modal={draft ? undefined : 'true'} aria-hidden={draft ? true : undefined} inert={draft ? '' : undefined} aria-labelledby='charge-title' onKeyDown={keyDown}>
+    <section ref={dialog} tabIndex={-1} className='expert-charge-dialog' role='dialog' aria-modal={draft || deletePoint ? undefined : 'true'} aria-hidden={draft || deletePoint ? true : undefined} inert={draft || deletePoint ? '' : undefined} aria-labelledby='charge-title' onKeyDown={keyDown}>
       <header><div><h2 id='charge-title'>积分</h2><p>{expert.name} <span>· {expert.key}</span></p></div><button type='button' aria-label='关闭积分' disabled={saving} onClick={onClose}>×</button></header>
       <div className='expert-charge-body'>
         <div className='expert-charge-toolbar'><p>为不同业务配置扣分点，开发时使用固定 ID 接入。</p><button className='primary' type='button' disabled={saving || loading || loadError || Boolean(draft)} onClick={() => setDraft(empty())}>＋ 添加扣分点</button></div>
@@ -84,7 +98,7 @@ export default function ExpertChargePoints({ expert, kind = 'expert', onClose })
           <div className='expert-charge-list'>{items.map(item => <article key={item.id}>
             <div className='expert-charge-row'><strong>{item.name}</strong><span className={item.enabled ? 'charge-enabled' : 'charge-disabled'}>{item.enabled ? '已启用' : '已停用'}</span><b>{item.credits}<small> 积分／次</small></b><button type='button' disabled={saving || Boolean(draft)} onClick={() => setDraft({ ...item, credits: String(item.credits) })}>配置</button></div>
             {item.description && <p>{item.description}</p>}
-            <div className='expert-charge-id'><code>{item.id}</code><button type='button' onClick={() => void copy(item.id)}>复制 ID</button></div>
+            <div className='expert-charge-id'><code>{item.id}</code><button type='button' onClick={() => void copy(item.id)}>复制 ID</button><button className='charge-delete' type='button' disabled={saving || Boolean(draft) || Boolean(deletePoint)} onClick={() => setDeletePoint(item)}>删除</button></div>
           </article>)}</div>
         </>}
 
@@ -106,6 +120,13 @@ export default function ExpertChargePoints({ expert, kind = 'expert', onClose })
           <p className='expert-charge-hint'>0 积分表示免费。停用后免费执行，不影响业务；已有预留任务仍按原价结算。</p>
           <div className='expert-charge-form-actions'><button type='button' disabled={saving} onClick={() => setDraft(null)}>取消</button><button className='primary' type='submit' disabled={saving}>{saving ? '保存中…' : '保存扣分点'}</button></div>
         </form>
+      </section>
+    </div>, document.body)}
+    {deletePoint && createPortal(<div className='expert-web-backdrop expert-charge-editor-backdrop'>
+      <section ref={editor} tabIndex={-1} className='expert-charge-dialog expert-charge-editor' role='dialog' aria-modal='true' aria-labelledby='charge-delete-title' onKeyDown={keyDown}>
+        <header><h2 id='charge-delete-title'>删除扣分点</h2><button type='button' aria-label='关闭删除确认' disabled={saving} onClick={() => setDeletePoint(null)}>×</button></header>
+        <div className='expert-charge-body'>确定删除「{deletePoint.name}」？删除后不再显示，已接入此 ID 的调用按 0 积分执行。历史记录保留，已预留任务仍按原价结算。</div>
+        <footer><button type='button' disabled={saving} onClick={() => setDeletePoint(null)}>取消</button><button className='charge-delete' type='button' disabled={saving} onClick={() => void remove()}>{saving ? '删除中…' : '确认删除'}</button></footer>
       </section>
     </div>, document.body)}
   </>;

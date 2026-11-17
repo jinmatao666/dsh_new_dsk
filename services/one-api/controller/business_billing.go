@@ -132,12 +132,12 @@ func PutBillingRule(c *gin.Context) {
 		if err != nil {
 			return err
 		}
-		if prior.Version != input.Version {
+		if prior.IsDeleted || prior.Version != input.Version {
 			return errors.New("PRICE_CHANGED")
 		}
 		rule.ID = prior.ID
 		rule.Version = prior.Version + 1
-		changed := tx.Model(&model.BillingRule{}).Where("id = ? AND version = ?", prior.ID, prior.Version).Updates(map[string]interface{}{"unit_quota": rule.UnitQuota, "enabled": rule.Enabled, "version": rule.Version})
+		changed := tx.Model(&model.BillingRule{}).Where("id = ? AND version = ? AND is_deleted = ?", prior.ID, prior.Version, false).Updates(map[string]interface{}{"unit_quota": rule.UnitQuota, "enabled": rule.Enabled, "version": rule.Version})
 		if changed.Error != nil {
 			return changed.Error
 		}
