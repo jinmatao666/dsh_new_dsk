@@ -67,7 +67,7 @@ jobs:
           apt-get install --yes build-essential binutils ca-certificates curl git pkg-config xz-utils \
             libwebkit2gtk-4.0-dev libgtk-3-dev libappindicator3-dev libssl-dev librsvg2-dev \
             libxdo-dev libfuse2 musl patchelf desktop-file-utils squashfs-tools zsync \
-            xdg-utils file wget xvfb xauth dbus-x11 python3
+            xdg-utils file wget xvfb xauth dbus-x11 xdotool python3
           case "$(uname -m)" in
             x86_64) node_arch=x64; library_arch=x86_64-linux-gnu ;;
             aarch64) node_arch=arm64; library_arch=aarch64-linux-gnu ;;

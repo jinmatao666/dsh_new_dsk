@@ -90,6 +90,10 @@ fn bridge(view: &webkit2gtk::WebView, app: &tauri::AppHandle, label: &str, origi
         .replace("__WANWEI_NONCE__", &json!(token).to_string());
     let manager = view.user_content_manager().ok_or("WebKit 原生通道不可用")?;
     if !manager.register_script_message_handler("wanwei") { return Err("WebKit 原生通道注册失败".into()); }
+    let compatibility = include_str!("browser-compat.js")
+        .replace("__WANWEI_ORIGIN__", &json!(origin).to_string());
+    manager.add_script(&webkit2gtk::UserScript::new(&compatibility,
+        webkit2gtk::UserContentInjectedFrames::TopFrame, webkit2gtk::UserScriptInjectionTime::Start, &[], &[]));
     manager.add_script(&webkit2gtk::UserScript::new(&script,
         webkit2gtk::UserContentInjectedFrames::TopFrame, webkit2gtk::UserScriptInjectionTime::Start, &[], &[]));
     let weak = view.downgrade();
@@ -320,14 +324,23 @@ fn attach(window: &Window, app: tauri::AppHandle, url: Url) -> tauri::Result<()>
         let main = platform.inner().as_ref().clone();
         let result = (|| -> Result<(), String> {
             let parent = main.parent().ok_or("主视图没有 GTK 父容器")?.downcast::<gtk::Container>().map_err(|_| "主视图父容器无效")?;
+            let top = parent.parent().ok_or("主视图没有 GTK 窗口")?.downcast::<gtk::Window>().map_err(|_| "主视图窗口层级无效")?;
+            if !parent.children().iter().all(|child| child == main.upcast_ref::<gtk::Widget>()
+                || child.downcast_ref::<gtk::MenuBar>().is_some_and(|menu| menu.children().is_empty())) {
+                return Err("主视图容器含有未适配的控件".into());
+            }
             let overlay = gtk::Overlay::new();
             parent.remove(&main);
+            top.remove(&parent);
             overlay.add(&main);
-            parent.add(&overlay);
+            // Wry's mouse/touch handlers require the main view's grandparent to be GtkWindow.
+            top.add(&overlay);
             let fixed = gtk::Fixed::new();
             fixed.set_hexpand(true);
             fixed.set_vexpand(true);
             overlay.add_overlay(&fixed);
+            // Empty overlay space must reach the main view; expert child windows keep input.
+            overlay.set_overlay_pass_through(&fixed, true);
             fixed.connect_size_allocate(|_, _| HOST.with(|host| {
                 if let Some(host) = host.borrow().as_ref() {
                     for expert in host.experts.values() {
@@ -384,6 +397,10 @@ fn restore(app: &tauri::AppHandle) {
 }
 
 pub fn run() {
+    // Set before GTK/WebKit initialization; deployment overrides remain available.
+    for name in ["WEBKIT_DISABLE_COMPOSITING_MODE", "LIBGL_ALWAYS_SOFTWARE"] {
+        if std::env::var_os(name).is_none() { std::env::set_var(name, "1"); }
+    }
     let menu = SystemTrayMenu::new()
         .add_item(CustomMenuItem::new("show", "显示 万维Buddy"))
         .add_item(CustomMenuItem::new("quit", "退出 万维Buddy"));
