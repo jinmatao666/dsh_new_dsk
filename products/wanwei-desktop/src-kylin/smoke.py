@@ -100,7 +100,7 @@ async function run() {
   await invoke('kylin_smoke_exit', {passed:true});
 }
 run().catch(async error => {
-  await fetch('/result', {method:'POST', body:JSON.stringify({passed:false,error:String(error)})});
+  await fetch('/result', {method:'POST', body:JSON.stringify({passed:false,error:String(error),stack:error.stack})});
   if (window.__ZJUGIS_NATIVE_INVOKE__) invoke('kylin_smoke_exit', {passed:false});
 });
 </script></body></html>"""
@@ -183,7 +183,7 @@ def run():
             print(completed.stdout)
             if completed.returncode != 0 or not results or not results[-1].get("passed"):
                 raise RuntimeError("Native shell smoke failed: " + json.dumps(results))
-            print("Kylin native shell: browser cancellation APIs, production Gateway delivery/restart/disposal, shared native skill/workspace clients, real main/expert mouse clicks, file command, expert authorization, ticket bootstrap, geometry, visibility, state, close and logout passed")
+            print("Kylin native shell: streaming/settled Chinese Markdown, links, tables, code, math; browser cancellation APIs, production Gateway delivery/restart/disposal, shared native skill/workspace clients, real main/expert mouse clicks, file command, expert authorization, ticket bootstrap, geometry, visibility, state, close and logout passed")
         finally:
             server.shutdown()
 

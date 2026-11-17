@@ -8,6 +8,34 @@ import vm from 'node:vm'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { prepareKylin } from './prepare-kylin.mjs'
+import { emailPattern, lowerKylinMarkdown } from './kylin-markdown.mjs'
+
+test('Kylin email matching retains upstream captures, positions and Unicode boundaries', () => {
+  const constructor = `new RegExp(${JSON.stringify(emailPattern)}, "gu")`
+  const { code, count } = lowerKylinMarkdown(constructor)
+  assert.equal(count, 1)
+  const adapted = vm.runInNewContext(code)
+  const original = new RegExp(emailPattern, 'gu')
+  const collect = (pattern, input) => {
+    pattern.lastIndex = 0
+    const matches = []
+    let match
+    while ((match = pattern.exec(input)) !== null) matches.push([match.index, ...Array.from(match)])
+    return JSON.stringify(matches)
+  }
+  const prefixes = ['', ' ', '\n', '\t', '中文', 'a', '.', '+', '-', '/', '。', '😊', '𠮷', '\u0301', '\u00a0', '(', '©', '_']
+  for (const first of prefixes) {
+    for (const second of prefixes) {
+      for (const address of ['test@example.com', 'a.b+tag@example.co.uk', '-a@b.cc', 'a@b.cc a@c.dd']) {
+        const input = first + second + address
+        assert.equal(collect(adapted, input), collect(original, input), input)
+      }
+    }
+  }
+  assert.deepEqual(lowerKylinMarkdown(code), { code, count: 0 })
+  const other = 'new RegExp("other", "gu")'
+  assert.equal(lowerKylinMarkdown(other).code, other)
+})
 
 const source = await readFile(new URL('../src-kylin/native-bridge.js', import.meta.url), 'utf8')
 const compatibility = await readFile(new URL('../src-kylin/browser-compat.js', import.meta.url), 'utf8')
@@ -190,6 +218,10 @@ test('Kylin staging keeps shared runtime identity and rejects missing runtimes',
     await mkdir(join(root, 'src-kylin'), { recursive: true })
     await writeFile(join(root, 'src-tauri/resources/server.json'), '{}')
     await writeFile(join(root, 'src-tauri/resources/runtime-1.2.3/node'), 'shared-node-fixture')
+    const browser = join(root, 'src-tauri/resources/runtime-1.2.3/app/browser.js')
+    await mkdir(join(root, 'src-tauri/resources/runtime-1.2.3/app'), { recursive: true })
+    const browserSource = `globalThis.email = new RegExp(${JSON.stringify(emailPattern)}, "gu");`
+    await writeFile(browser, browserSource)
     await writeFile(join(root, 'src-tauri/icons/32x32.png'), 'shared-icon-fixture')
     await writeFile(join(root, 'src-kylin/tauri.conf.json'), '{"package":{"version":"0.1.0"}}')
     for (const platform of ['linux-x64', 'linux-arm64', 'darwin-x64', 'win32-x64']) {
@@ -212,6 +244,12 @@ test('Kylin staging keeps shared runtime identity and rejects missing runtimes',
     assert.throws(() => prepareKylin(root, '1.2.4'), /runtime-1.2.4/u)
     prepareKylin(root, '1.2.3', 'arm64')
     assert.equal(await readFile(join(root, 'src-kylin/resources/runtime-1.2.3/node'), 'utf8'), 'shared-node-fixture')
+    assert.equal(await readFile(browser, 'utf8'), browserSource)
+    const stagedBrowser = join(root, 'src-kylin/resources/runtime-1.2.3/app/browser.js')
+    const stagedSource = await readFile(stagedBrowser, 'utf8')
+    assert.doesNotMatch(stagedSource, /\(\?<=/u)
+    assert.match(stagedSource, /sourceMappingURL=browser.js.map/u)
+    assert.equal(JSON.parse(await readFile(stagedBrowser + '.map', 'utf8')).sourcesContent.length, 1)
     assert.equal(JSON.parse(await readFile(join(root, 'src-kylin/tauri.runner.conf.json'), 'utf8')).package.version, '1.2.3')
     await assert.rejects(readFile(join(root, 'src-kylin/resources/runtime-obsolete')), { code: 'ENOENT' })
     assert.equal(await readFile(join(root, 'src-kylin/resources/runtime-1.2.3/app/prebuilds/linux-arm64/pty.node'), 'utf8'), 'linux-arm64')

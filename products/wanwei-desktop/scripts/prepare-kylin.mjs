@@ -1,6 +1,7 @@
 import { cpSync, existsSync, lstatSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { resolve, join, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { prepareKylinMarkdown } from './kylin-markdown.mjs'
 
 /** Copy the shared Linux runtime into the Kylin shell and set its installer version.
  * @param {string} productRoot - Desktop product directory.
@@ -39,6 +40,8 @@ export function prepareKylin(productRoot, version, arch = process.arch) {
     })
   }
   const config = JSON.parse(readFileSync(join(shell, 'tauri.conf.json'), 'utf8'))
+  const patched = prepareKylinMarkdown(join(shell, 'resources', 'runtime-' + version))
+  console.log(`Prepared ${patched} Kylin Markdown email expression(s)`)
   config.package.version = version
   writeFileSync(join(shell, 'tauri.runner.conf.json'), JSON.stringify(config, null, 2) + '\n')
   console.log('Kylin shell staged with shared runtime ' + version)
