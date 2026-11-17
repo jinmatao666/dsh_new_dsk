@@ -1,9 +1,9 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import ExpertChargePoints from './ExpertChargePoints';
-import { API, showError } from '../helpers';
+import { API, copy, showError, showSuccess } from '../helpers';
 
-jest.mock('../helpers', () => ({ API: { get: jest.fn(), post: jest.fn(), put: jest.fn() }, showError: jest.fn(), showSuccess: jest.fn() }));
+jest.mock('../helpers', () => ({ API: { get: jest.fn(), post: jest.fn(), put: jest.fn() }, copy: jest.fn(), showError: jest.fn(), showSuccess: jest.fn() }));
 beforeEach(() => { global.IS_REACT_ACT_ENVIRONMENT = true; jest.clearAllMocks(); });
 afterEach(() => { delete global.IS_REACT_ACT_ENVIRONMENT; });
 const change = (node, value) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(node, value); node.dispatchEvent(new Event('input', { bubbles: true })); };
@@ -26,6 +26,13 @@ test('creates a point, shows its generated ID and edits its price without changi
   await act(async () => { document.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
   expect(API.post).toHaveBeenCalledWith('/api/billing/v1/resources/expert/expert-a/charge-points', expect.objectContaining({ name: '分析报告', credits: '5', enabled: true }));
   expect(container.textContent).toContain('cp_example');
+  copy.mockResolvedValueOnce(true);
+  await act(async () => container.querySelector('.expert-charge-id button').click());
+  expect(copy).toHaveBeenCalledWith('cp_example');
+  expect(showSuccess).toHaveBeenCalledWith('扣分点 ID 已复制');
+  copy.mockResolvedValueOnce(false);
+  await act(async () => container.querySelector('.expert-charge-id button').click());
+  expect(showError).toHaveBeenCalledWith('复制失败，请选中 ID 手动复制');
   expect(container.textContent).toContain('已停用');
   await act(async () => { [...document.querySelectorAll('button')].find(b => b.textContent === '配置').click(); });
   await act(async () => { change(document.querySelector('input[type="number"]'), '8'); document.querySelector('input[type="checkbox"]').click(); });
