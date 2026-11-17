@@ -4,7 +4,7 @@
 
 此 Linux 壳使用 Tauri 1 编译 [src-tauri](../src-tauri/src/lib.rs) 中的业务命令，在主 GTK 窗口内嵌专家 WebKit 视图。Windows、macOS 和现代 Linux 使用现有 Tauri 2 壳。业务页面、API、技能和 Node Sidecar 共用一份源码；GTK 视图管理和原生通信需要单独维护。新增原生命令需要在两个壳中注册。
 
-[仅麒麟入口](../../../.github/workflows/wanwei-kylin-preview.yml)名为 Wanwei Buddy Kylin only，只运行 x64 和 ARM64 兼容构建任务。该入口需要加入仓库默认分支，才会显示 Run workflow 按钮；选择 source_ref=new-version、填写所需版本号，测试时不勾选 official_release。它调用 new-version 中共享的麒麟工作流。桌面预览工作流保留完整平台矩阵。
+[仅麒麟入口](../../../.github/workflows/wanwei-kylin-preview.yml)名为 Wanwei Buddy Kylin only，只运行 x64 和 ARM64 兼容构建任务。该入口需要加入仓库默认分支，才会显示 Run workflow 按钮；选择 source_ref=new-version、填写所需版本号，测试时不勾选 official_release。它调用 new-version 中共享的麒麟工作流。桌面预览工作流的 build_scope 默认为 all。无需在 main 注册工作流：打开已有的 Wanwei Buddy desktop 入口，选择 new-version 工作流分支，再选择 build_scope=kylin，即可仅构建麒麟。此模式跳过常规桌面矩阵并始终启用麒麟，仍执行共享的官方组合校验。Release 发布要求完整桌面矩阵成功，因此仅麒麟模式跳过发布。
 
 容器在持久 Git 配置中仅信任当前挂载的仓库目录，并在安装依赖前验证 HEAD。checkout action 使用临时 HOME，后续 shell 步骤仍能读取源码提交信息。
 

@@ -16,6 +16,8 @@ Status: proposed
 
 [仅麒麟手动入口](../../../../.github/workflows/wanwei-kylin-preview.yml)调用 new-version 上共享的工作流，需要在默认分支注册才能通过 GitHub 手动运行。这将界面入口与业务代码合入 main 分开。容器仅在持久 Git 配置中信任 GITHUB_WORKSPACE，并在检出后立即验证 HEAD。第 126 和 128 次运行均在读取源码提交信息时失败；Ubuntu 20.04 / Git 2.25.1 临时仓库复现了宿主 UID 所有的仓库返回 128，并验证限定目录的信任配置可修复。原构建隐藏 Git stderr，因此复现证明了失败机制，但不代表已观察到 runner 中被隐藏的原始错误。
 
+已有桌面工作流提供 build_scope=all（默认）或 kylin。仅麒麟模式保留官方组合校验，跳过 Tauri 2 桌面矩阵，无论 build_kylin 如何设置都启用麒麟复用任务，并跳过全平台 Release 发布。未提供 build_scope 时保留全平台行为。这满足用户不改动 main 的要求，独立入口在默认分支注册仅为可选方式。
+
 ## Alternatives considered
 
 单独添加 YAML 而不改变 Tauri 2 源码，仍然保留不兼容依赖。常规 Tauri 1 窗口移植不能替代内嵌专家 API，独立窗口违反用户要求。GTK 实验使用 Tauri 1 的平台 WebView 访问接口和父容器尺寸分配。若生产 GTK 集成无法达到验收条件，Electron Linux 壳仍是备选。
