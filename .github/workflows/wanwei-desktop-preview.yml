@@ -5,6 +5,14 @@ name: Wanwei Buddy desktop
 on:
   workflow_dispatch:
     inputs:
+      build_scope:
+        description: Build all platforms or Kylin only
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - kylin
       source_ref:
         description: Source branch or commit to build
         required: true
@@ -82,6 +90,7 @@ jobs:
 
   build-desktop:
     name: Build ${{ matrix.name }} installer
+    if: ${{ inputs.build_scope != 'kylin' }}
     needs: verify-official
     strategy:
       fail-fast: false
@@ -328,7 +337,7 @@ jobs:
 
   build-kylin:
     name: Build Kylin compatibility installers
-    if: ${{ inputs.build_kylin }}
+    if: ${{ inputs.build_scope == 'kylin' || inputs.build_kylin }}
     needs: verify-official
     uses: ./.github/workflows/wanwei-kylin.yml
     with:

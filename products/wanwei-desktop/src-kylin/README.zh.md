@@ -4,6 +4,10 @@
 
 此 Linux 壳使用 Tauri 1 编译 [src-tauri](../src-tauri/src/lib.rs) 中的业务命令，在主 GTK 窗口内嵌专家 WebKit 视图。Windows、macOS 和现代 Linux 使用现有 Tauri 2 壳。业务页面、API、技能和 Node Sidecar 共用一份源码；GTK 视图管理和原生通信需要单独维护。新增原生命令需要在两个壳中注册。
 
+[仅麒麟入口](../../../.github/workflows/wanwei-kylin-preview.yml)名为 Wanwei Buddy Kylin only，只运行 x64 和 ARM64 兼容构建任务。该入口需要加入仓库默认分支，才会显示 Run workflow 按钮；选择 source_ref=new-version、填写所需版本号，测试时不勾选 official_release。它调用 new-version 中共享的麒麟工作流。桌面预览工作流的 build_scope 默认为 all。无需在 main 注册工作流：打开已有的 Wanwei Buddy desktop 入口，选择 new-version 工作流分支，再选择 build_scope=kylin，即可仅构建麒麟。此模式跳过常规桌面矩阵并始终启用麒麟，仍执行共享的官方组合校验。Release 发布要求完整桌面矩阵成功，因此仅麒麟模式跳过发布。
+
+容器在持久 Git 配置中仅信任当前挂载的仓库目录，并在安装依赖前验证 HEAD。checkout action 使用临时 HOME，后续 shell 步骤仍能读取源码提交信息。
+
 [桌面预览工作流](../../../.github/workflows/wanwei-desktop-preview.yml)通过默认开启的 build_kylin 参数启用麒麟构建。[专用工作流](../../../.github/workflows/wanwei-kylin.yml)也可独立运行。两个架构均在 Ubuntu 20.04 容器中构建。虽然仓库通常优先 Windows runner，用户授权的此次兼容构建需要 Linux runner 完成 GTK 原生链接和图形测试。
 
 用户提供的麒麟 aarch64 机器应选择 wanwei-buddy-VERSION-kylin-arm64 产物。安装包文件名包含 -kylin，与现代 Linux 产物区分。DEB 声明系统依赖；AppImage 包含额外运行库，但仍有系统 ABI 下限。两个格式均在上传前解包审计。审计拒绝架构错误、缺失运行库、WebKit 4.1、libsoup 3，以及高于 GLIBC 2.31、GLIBCXX 3.4.28、CXXABI 1.3.12 的符号要求。
