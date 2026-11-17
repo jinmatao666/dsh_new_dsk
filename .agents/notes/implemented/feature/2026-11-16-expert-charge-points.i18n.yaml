@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-16-expert-charge-points.md
-2026-11-16-expert-charge-points.md: 4c83fca3a896cbe62cede1631a8cba63c0866135
-2026-11-16-expert-charge-points.zh.md: 2e3468f1160c5dff49f883c8c760051f1e103404
+2026-11-16-expert-charge-points.md: 44be7be3f9945f8110f8993da3441dc345c86042
+2026-11-16-expert-charge-points.zh.md: 79714bf17a8f68d438fe452ca77d478d56f0220b

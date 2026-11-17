@@ -37,6 +37,10 @@ func chargePointResource(c *gin.Context) (string, string, bool) {
 	case "knowledge":
 		var row model.KnowledgeBase
 		err = model.DB.Where("id = ?", item).First(&row).Error
+	case model.BillingKindKnowledgeService:
+		if item != model.BillingKnowledgeServiceID {
+			err = errors.New("invalid knowledge service")
+		}
 	default:
 		err = errors.New("invalid resource kind")
 	}

@@ -20,7 +20,7 @@ type BillingRule struct {
 	Name        string    `json:"name" gorm:"size:100"`
 	Description string    `json:"description" gorm:"size:500"`
 	ID          string    `json:"id" gorm:"primaryKey;size:64"`
-	Kind        string    `json:"kind" gorm:"uniqueIndex:billing_action;size:16"`
+	Kind        string    `json:"kind" gorm:"uniqueIndex:billing_action;size:32"`
 	ItemID      string    `json:"item_id" gorm:"uniqueIndex:billing_action;size:160"`
 	Action      string    `json:"action" gorm:"uniqueIndex:billing_action;size:80"`
 	UnitQuota   int64     `json:"unit_quota"`

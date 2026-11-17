@@ -10,10 +10,19 @@ import (
 	"strings"
 )
 
+// Knowledge service billing uses one stable resource, independent of library IDs.
+const BillingKindKnowledgeService = "knowledge_service"
+const BillingKnowledgeServiceID = "default"
+
 // BillingResourceName resolves the resource label without user content.
 func BillingResourceName(tx *gorm.DB, kind, item string) (string, error) {
 	tx = tx.Session(&gorm.Session{NewDB: true})
 	switch kind {
+	case BillingKindKnowledgeService:
+		if item == BillingKnowledgeServiceID {
+			return "知识库服务", nil
+		}
+		return "", errors.New("INVALID_REQUEST")
 	case "expert":
 		var row ExpertWebProfile
 		err := tx.Session(&gorm.Session{NewDB: true}).Where(map[string]interface{}{"key": item}).First(&row).Error
