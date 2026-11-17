@@ -8,9 +8,11 @@
 
 容器在持久 Git 配置中仅信任当前挂载的仓库目录，并在安装依赖前验证 HEAD。checkout action 使用临时 HOME，后续 shell 步骤仍能读取源码提交信息。
 
-[桌面预览工作流](../../../.github/workflows/wanwei-desktop-preview.yml)通过默认开启的 build_kylin 参数启用麒麟构建。[专用工作流](../../../.github/workflows/wanwei-kylin.yml)也可独立运行。两个架构均在 Ubuntu 20.04 容器中构建。虽然仓库通常优先 Windows runner，用户授权的此次兼容构建需要 Linux runner 完成 GTK 原生链接和图形测试。
+[桌面预览工作流](../../../.github/workflows/wanwei-desktop-preview.yml)通过默认开启的 build_kylin 参数启用麒麟构建。[共享麒麟工作流](../../../.github/workflows/wanwei-kylin.yml)实现该入口调用的兼容构建任务。两个架构均在 Ubuntu 20.04 容器中构建。虽然仓库通常优先 Windows runner，用户授权的此次兼容构建需要 Linux runner 完成 GTK 原生链接和图形测试。
 
-用户提供的麒麟 aarch64 机器应选择 wanwei-buddy-VERSION-kylin-arm64 产物。安装包文件名包含 -kylin，与现代 Linux 产物区分。DEB 声明系统依赖；AppImage 包含额外运行库，但仍有系统 ABI 下限。两个格式均在上传前解包审计。审计拒绝架构错误、缺失运行库、WebKit 4.1、libsoup 3，以及高于 GLIBC 2.31、GLIBCXX 3.4.28、CXXABI 1.3.12 的符号要求。
+用户提供的麒麟 aarch64 机器应选择 wanwei-buddy-VERSION-kylin-arm64-deb 产物。安装包文件名包含 -kylin，与现代 Linux 产物区分。DEB 声明系统依赖；AppImage 包含额外运行库，但仍有系统 ABI 下限。两个格式均在上传前解包审计。审计拒绝架构错误、缺失运行库、WebKit 4.1、libsoup 3，以及高于 GLIBC 2.31、GLIBCXX 3.4.28、CXXABI 1.3.12 的符号要求。
+
+DEB 和 AppImage 分别构建、审计及上传，产物名分别以 -deb 和 -appimage 结尾。DEB 在 AppImage 开始前上传，因此 AppImage 失败时仍可下载已通过审计的 DEB 进行测试，任务保持失败状态。证据产物包含独立构建日志、各格式审计报告，以及生成的 AppImage 脚本（若已生成）。构建启用 Tauri 详细日志，并在日志捕获过程中保留打包器退出码。仅已知的 ARM64 架构识别错误会使用旧工具的 arm_aarch64 别名重试生成脚本中的最后封装命令；其他错误仍会终止构建，生成的安装包仍须通过完整审计。
 
 麒麟通过替换安装包更新，此壳不提供 Tauri 2 自动更新包。关闭主窗口会隐藏应用；托盘菜单可退出并停止 Sidecar。
 

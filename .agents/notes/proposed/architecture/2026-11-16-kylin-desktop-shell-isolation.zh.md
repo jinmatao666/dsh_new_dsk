@@ -18,6 +18,8 @@ Status: proposed
 
 已有桌面工作流提供 build_scope=all（默认）或 kylin。仅麒麟模式保留官方组合校验，跳过 Tauri 2 桌面矩阵，无论 build_kylin 如何设置都启用麒麟复用任务，并跳过全平台 Release 发布。未提供 build_scope 时保留全平台行为。这满足用户不改动 main 的要求。
 
+第 132 次运行上传了已通过审计的 ARM64 DEB、x64 DEB 和 x64 AppImage。其 ARM64 AppImage 日志确认 AppImageKit 5735cc5 未识别生成脚本传入的 aarch64 别名，随后在扫描目录时报告多个架构。该工具接受 arm_aarch64；其扫描器读取可执行文件的机器类型字节时不检查 ELF 标记，因此文本文件也会影响识别。工作流仅对这一 ARM64 错误使用经过检查的生成脚本末尾命令和旧架构别名重试，不重复编译或部署运行库。生成脚本内容异常、无关构建错误和重试失败仍会终止构建。生成的镜像仍须通过载荷及启动器审计。DEB 独立上传，详细日志作为证据保留。定向 shell 验证覆盖重试成功、正常构建、无关错误、x64 拒绝重试、重试退出码保留及脚本变化时拒绝执行。目标机兼容性及完整 ARM64 AppImage 仍待发布构建和设备测试验证。
+
 ## Alternatives considered
 
 单独添加 YAML 而不改变 Tauri 2 源码，仍然保留不兼容依赖。常规 Tauri 1 窗口移植不能替代内嵌专家 API，独立窗口违反用户要求。GTK 实验使用 Tauri 1 的平台 WebView 访问接口和父容器尺寸分配。若生产 GTK 集成无法达到验收条件，Electron Linux 壳仍是备选。

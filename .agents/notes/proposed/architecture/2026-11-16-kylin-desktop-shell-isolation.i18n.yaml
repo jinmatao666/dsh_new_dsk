@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-11-16-kylin-desktop-shell-isolation.md
-2026-11-16-kylin-desktop-shell-isolation.md: ebacc84659bb59ebc38beebef4ea98101bfef8a4
-2026-11-16-kylin-desktop-shell-isolation.zh.md: 2fa0308ecfb1ee61326e28cfc363fa344d5350f1
+2026-11-16-kylin-desktop-shell-isolation.md: 45240b88aff86e9182d2a077c68235c764ef76e2
+2026-11-16-kylin-desktop-shell-isolation.zh.md: 25867f346c958070901ad5ae577516c38e3bffcf
