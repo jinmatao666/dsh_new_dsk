@@ -22,6 +22,8 @@ Installer formats have independent build, audit and upload steps. Run 132 upload
 
 ## Alternatives considered
 
+The target-device report establishes that disabling compositing and using software GL restores the blank window. These are Kylin-only startup defaults with explicit environment overrides. Real pointer testing reproduces the unmodified shell blocking main-page clicks: the full-window expert container intercepts empty-space input. Passing that input through also exposes Wry 0.24.12 mouse/touch handlers assuming that the main WebView's grandparent is GtkWindow. The shell installs GtkOverlay directly under that window and passes through its expert container, preserving child WebView input. The replaced Tao container may contain only the main view and an empty menu bar; unsupported controls cause an explicit startup failure. The graphical smoke uses X11 pointer events and keyboard input rather than JavaScript-dispatched clicks, and removes external rendering overrides so shell defaults are exercised. It covers main input before, during and after embedded expert use, expert pointer input and the existing native bridge and layout checks. Browser-only sessions intentionally lack the desktop native bridge.
+
 A separate YAML with unchanged Tauri 2 sources retains the incompatible dependencies. A standard Tauri 1 window port does not replace the embedded expert API; separate windows violate the user's requirement. The GTK experiment uses Tauri 1 platform WebView access and parent-container allocation. An Electron Linux shell remains an alternative if production GTK integration fails its acceptance criteria.
 
 ## Acceptance criteria

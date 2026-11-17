@@ -16,6 +16,8 @@ DEB 和 AppImage 分别构建、审计及上传，产物名分别以 -deb 和 -a
 
 麒麟通过替换安装包更新，此壳不提供 Tauri 2 自动更新包。关闭主窗口会隐藏应用；托盘菜单可退出并停止 Sidecar。
 
+麒麟壳在 GTK 启动前将 WEBKIT_DISABLE_COMPOSITING_MODE 和 LIBGL_ALWAYS_SOFTWARE 默认设为 1，同时保留显式环境变量覆盖。软件渲染用于避开目标机上观察到的白屏，但可能增加 CPU 使用量。专家覆盖层将空白区域的鼠标事件传给主页面，内嵌专家仍可接收输入。原生命令仅在桌面 WebView 内可用；在普通浏览器打开本地回环地址不会提供桌面专家或技能安装命令。
+
 ## 验证
 
 WSL Ubuntu 20.04 x86_64 验证通过编译、Rust 业务测试和真实 WebKit 冒烟测试，覆盖两个内嵌专家、原生文件读取、专家命令授权、票据注入、尺寸缩小、显隐、JavaScript 状态保持、关闭和注销。桥接测试覆盖来源与文档隔离、错误传递及超时。完整暂存 Sidecar 在 Linux 原生文件系统通过启动、认证交换和清理退出检查。完整 x64 DEB 构建成功，并通过依赖声明及解包载荷审计，覆盖 11 个 ELF 文件。本地 AppImage 构建因辅助工具下载受阻尚未完成验证。冒烟测试使用本地测试页面、Xvfb 和软件渲染，不能证明真实专家登录、安装后的输入焦点、GPU、Wayland 或 ARM64 兼容性。发布构建和目标机测试需要覆盖这些剩余条件。[决策记录](../../../.agents/notes/proposed/architecture/2026-11-16-kylin-desktop-shell-isolation.zh.md)说明剩余验收条件。
