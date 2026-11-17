@@ -6,3 +6,4 @@
 /__pycache__/
 /local-check.sh
 /smoke.log
+/build-*.log

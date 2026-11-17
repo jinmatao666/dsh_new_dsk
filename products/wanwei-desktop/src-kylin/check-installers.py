@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract both installer formats and audit the files the user receives."""
+"""Extract selected installer formats and audit the files the user receives."""
 import argparse
 import importlib.util
 import json
@@ -23,35 +23,44 @@ def check_depends(depends):
         raise RuntimeError("Incompatible DEB dependency metadata: " + depends)
 
 
-def check_installers(arch):
+def check_installers(arch, installer_format="both"):
+    if installer_format not in ("both", "deb", "appimage"):
+        raise ValueError("Unsupported installer format: " + installer_format)
     bundle = pathlib.Path(os.environ.get("CARGO_TARGET_DIR", HERE / "target")) / "release/bundle"
-    debs = list((bundle / "deb").glob("*.deb"))
-    images = list((bundle / "appimage").glob("*.AppImage"))
-    if len(debs) != 1 or len(images) != 1:
-        raise RuntimeError("Expected exactly one DEB and one AppImage")
+    formats = ("deb", "appimage") if installer_format == "both" else (installer_format,)
+    paths = {}
+    for selected in formats:
+        extension = "deb" if selected == "deb" else "AppImage"
+        matches = list((bundle / selected).glob("*." + extension))
+        if len(matches) != 1:
+            raise RuntimeError("Expected exactly one " + selected + " installer")
+        paths[selected] = matches[0]
+    report = {}
     with tempfile.TemporaryDirectory(prefix="wanwei-kylin-installers-") as directory:
         root = pathlib.Path(directory)
-        deb = root / "deb"
-        subprocess.run(["dpkg-deb", "-x", str(debs[0]), str(deb)], check=True)
-        depends = subprocess.check_output(["dpkg-deb", "-f", str(debs[0]), "Depends"], text=True)
-        check_depends(depends)
-        deb_report = baseline.audit([deb], arch)
-        image = images[0].resolve()
-        image.chmod(image.stat().st_mode | 0o111)
-        extraction_env = {key: val for key, val in os.environ.items() if key != "APPIMAGE_EXTRACT_AND_RUN"}
-        subprocess.run([str(image), "--appimage-extract"], cwd=root, check=True,
-                       stdout=subprocess.DEVNULL, env=extraction_env)
-        image_report = baseline.audit([root / "squashfs-root"], arch)
-        # The AppImage runtime executes before any bundled library is available.
-        runtime_report = baseline.audit([image], arch)
-        (HERE / "baseline-installers.json").write_text(json.dumps({
-            "depends": depends.strip(), "deb": deb_report, "appimage": image_report,
-            "appimageRuntime": runtime_report,
-        }, indent=2) + "\n")
-        print("Verified DEB metadata, extracted payloads and AppImage runtime")
+        if "deb" in paths:
+            deb = root / "deb"
+            subprocess.run(["dpkg-deb", "-x", str(paths["deb"]), str(deb)], check=True)
+            depends = subprocess.check_output(["dpkg-deb", "-f", str(paths["deb"]), "Depends"], text=True)
+            check_depends(depends)
+            report.update({"depends": depends.strip(), "deb": baseline.audit([deb], arch)})
+        if "appimage" in paths:
+            image = paths["appimage"].resolve()
+            image.chmod(image.stat().st_mode | 0o111)
+            extraction_env = {key: val for key, val in os.environ.items() if key != "APPIMAGE_EXTRACT_AND_RUN"}
+            subprocess.run([str(image), "--appimage-extract"], cwd=root, check=True,
+                           stdout=subprocess.DEVNULL, env=extraction_env)
+            report["appimage"] = baseline.audit([root / "squashfs-root"], arch)
+            # The AppImage runtime executes before any bundled library is available.
+            report["appimageRuntime"] = baseline.audit([image], arch)
+        suffix = "" if installer_format == "both" else "-" + installer_format
+        (HERE / ("baseline-installers" + suffix + ".json")).write_text(json.dumps(report, indent=2) + "\n")
+        print("Verified installer formats: " + ", ".join(formats))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--arch", choices=["x64", "arm64"], required=True)
-    check_installers(parser.parse_args().arch)
+    parser.add_argument("--format", choices=["both", "deb", "appimage"], default="both")
+    arguments = parser.parse_args()
+    check_installers(arguments.arch, arguments.format)

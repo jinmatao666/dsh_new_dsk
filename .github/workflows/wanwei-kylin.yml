@@ -123,6 +123,7 @@ jobs:
           node products/wanwei-desktop/scripts/prepare-kylin.mjs
 
       - name: Compile and test Kylin shell
+        id: compile
         working-directory: products/wanwei-desktop/src-kylin
         run: |
           python3 test-baseline.py
@@ -133,26 +134,52 @@ jobs:
           python3 check-baseline.py --arch '${{ matrix.arch }}' --report baseline-runtime.json \
             target/release/wanwei-buddy-kylin resources
 
-      - name: Build Kylin installers
+      - name: Prepare clean installer outputs
         working-directory: products/wanwei-desktop/src-kylin
         run: |
           rm -rf target/release/bundle target/kylin-installers
-          cargo tauri build --config tauri.runner.conf.json --bundles deb,appimage -- --locked
-          python3 check-installers.py --arch '${{ matrix.arch }}'
+          mkdir -p target/kylin-installers/deb target/kylin-installers/appimage
 
-      - name: Give compatibility installers distinct release names
+      - name: Build and audit Kylin DEB
+        id: deb
         working-directory: products/wanwei-desktop/src-kylin
         run: |
-          mkdir -p target/kylin-installers
-          for installer in target/release/bundle/deb/*.deb target/release/bundle/appimage/*.AppImage; do
+          set -o pipefail
+          cargo tauri build --verbose --verbose --config tauri.runner.conf.json --bundles deb -- --locked 2>&1 | tee build-deb.log
+          python3 check-installers.py --arch '${{ matrix.arch }}' --format deb 2>&1 | tee -a build-deb.log
+          for installer in target/release/bundle/deb/*.deb; do
             filename="$(basename "$installer")"
-            cp "$installer" "target/kylin-installers/${filename%.*}-kylin.${filename##*.}"
+            cp "$installer" "target/kylin-installers/deb/${filename%.*}-kylin.${filename##*.}"
           done
 
-      - uses: actions/upload-artifact@v7
+      - name: Upload audited Kylin DEB
+        if: ${{ !cancelled() && steps.deb.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
         with:
-          name: wanwei-buddy-${{ inputs.version }}-kylin-${{ matrix.arch }}
-          path: products/wanwei-desktop/src-kylin/target/kylin-installers/*
+          name: wanwei-buddy-${{ inputs.version }}-kylin-${{ matrix.arch }}-deb
+          path: products/wanwei-desktop/src-kylin/target/kylin-installers/deb/*.deb
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build and audit Kylin AppImage
+        id: appimage
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
+        working-directory: products/wanwei-desktop/src-kylin
+        run: |
+          set -o pipefail
+          cargo tauri build --verbose --verbose --config tauri.runner.conf.json --bundles appimage -- --locked 2>&1 | tee build-appimage.log
+          python3 check-installers.py --arch '${{ matrix.arch }}' --format appimage 2>&1 | tee -a build-appimage.log
+          for installer in target/release/bundle/appimage/*.AppImage; do
+            filename="$(basename "$installer")"
+            cp "$installer" "target/kylin-installers/appimage/${filename%.*}-kylin.${filename##*.}"
+          done
+
+      - name: Upload audited Kylin AppImage
+        if: ${{ !cancelled() && steps.appimage.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: wanwei-buddy-${{ inputs.version }}-kylin-${{ matrix.arch }}-appimage
+          path: products/wanwei-desktop/src-kylin/target/kylin-installers/appimage/*.AppImage
           if-no-files-found: error
           retention-days: 14
 
@@ -162,6 +189,8 @@ jobs:
           name: wanwei-kylin-evidence-${{ inputs.version }}-${{ matrix.arch }}
           path: |
             products/wanwei-desktop/src-kylin/baseline-*.json
+            products/wanwei-desktop/src-kylin/build-*.log
+            products/wanwei-desktop/src-kylin/target/release/bundle/appimage/build_appimage.sh
             products/wanwei-desktop/src-kylin/smoke.log
             products/wanwei-desktop/src-kylin/Cargo.lock
           if-no-files-found: warn

@@ -1,7 +1,9 @@
 """Exercise compatibility audit rejection paths without requiring new toolchains."""
 import importlib.util
 import pathlib
+import json
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -14,6 +16,62 @@ installer_spec.loader.exec_module(installers)
 
 
 class BaselineTests(unittest.TestCase):
+    def installer_fixture(self, root, selected):
+        bundle = root / "target/release/bundle" / selected
+        bundle.mkdir(parents=True)
+        (bundle / ("fixture.deb" if selected == "deb" else "fixture.AppImage")).touch()
+
+    def test_deb_audit_does_not_require_appimage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            self.installer_fixture(root, "deb")
+            with patch.object(installers, "HERE", root), patch.dict(installers.os.environ, {}, clear=True), patch.object(
+                subprocess, "run"
+            ), patch.object(subprocess, "check_output", return_value="libwebkit2gtk-4.0-37, libgtk-3-0, libappindicator3-1"), patch.object(
+                installers.baseline, "audit", return_value={"files": 11}
+            ):
+                installers.check_installers("arm64", "deb")
+            report = json.loads((root / "baseline-installers-deb.json").read_text())
+            self.assertIn("deb", report)
+            self.assertNotIn("appimage", report)
+
+    def test_appimage_audits_payload_and_bootstrap_without_deb(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            self.installer_fixture(root, "appimage")
+            with patch.object(installers, "HERE", root), patch.dict(installers.os.environ, {"APPIMAGE_EXTRACT_AND_RUN": "1"}, clear=True), patch.object(
+                subprocess, "run"
+            ) as extract, patch.object(installers.baseline, "audit", return_value={"files": 1}) as audit:
+                installers.check_installers("arm64", "appimage")
+                self.assertEqual(audit.call_count, 2)
+                self.assertNotIn("APPIMAGE_EXTRACT_AND_RUN", extract.call_args.kwargs["env"])
+            report = json.loads((root / "baseline-installers-appimage.json").read_text())
+            self.assertEqual(set(report), {"appimage", "appimageRuntime"})
+
+    def test_missing_selected_format_or_duplicate_installer_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            self.installer_fixture(root, "deb")
+            with patch.object(installers, "HERE", root), patch.dict(installers.os.environ, {}, clear=True):
+                with self.assertRaisesRegex(RuntimeError, "appimage"):
+                    installers.check_installers("arm64")
+                (root / "target/release/bundle/deb/duplicate.deb").touch()
+                with self.assertRaisesRegex(RuntimeError, "deb"):
+                    installers.check_installers("arm64", "deb")
+
+    def test_failed_payload_audit_does_not_write_success_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            self.installer_fixture(root, "deb")
+            with patch.object(installers, "HERE", root), patch.dict(installers.os.environ, {}, clear=True), patch.object(
+                subprocess, "run"
+            ), patch.object(subprocess, "check_output", return_value="libwebkit2gtk-4.0-37, libgtk-3-0, libappindicator3-1"), patch.object(
+                installers.baseline, "audit", side_effect=RuntimeError("incompatible payload")
+            ):
+                with self.assertRaisesRegex(RuntimeError, "incompatible payload"):
+                    installers.check_installers("arm64", "deb")
+            self.assertFalse((root / "baseline-installers-deb.json").exists())
+
     def test_rejects_bundlers_default_ayatana_dependency(self):
         expected = "libwebkit2gtk-4.0-37, libgtk-3-0, libappindicator3-1"
         installers.check_depends(expected)
