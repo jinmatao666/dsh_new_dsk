@@ -89,6 +89,13 @@ jobs:
           ref: ${{ inputs.source_ref }}
           persist-credentials: false
 
+      - name: Trust mounted checkout and verify source metadata
+        run: |
+          # checkout configures trust in a temporary HOME; shell steps use the container HOME.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git rev-parse --verify HEAD
+          git status --porcelain
+
       - uses: actions/cache@v4
         with:
           path: |

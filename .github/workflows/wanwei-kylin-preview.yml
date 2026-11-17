@@ -1,0 +1,35 @@
+# Register this manual entry point on the default branch to expose Run workflow.
+name: Wanwei Buddy Kylin only
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Source branch or commit to build
+        default: new-version
+        required: true
+        type: string
+      version:
+        description: Release version (x.y.z)
+        default: '1.0.2'
+        required: true
+        type: string
+      official_release:
+        description: Official release identity
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wanwei-kylin-only-${{ inputs.source_ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-kylin:
+    uses: jinmatao666/dsh_new_dsk/.github/workflows/wanwei-kylin.yml@new-version
+    with:
+      source_ref: ${{ inputs.source_ref }}
+      version: ${{ inputs.version }}
+      official_release: ${{ inputs.official_release }}
