@@ -37,7 +37,7 @@ func billingError(c *gin.Context, err error) {
 	c.JSON(status, gin.H{"success": false, "code": code, "message": code})
 }
 func validBillingAction(kind, item, action string) bool {
-	return (kind == "expert" || kind == "skill" || kind == "knowledge") && len(item) > 0 && len(item) <= 160 && len(action) > 0 && len(action) <= 80
+	return (kind == "expert" || kind == "skill" || kind == "knowledge" || kind == model.BillingKindKnowledgeService && item == model.BillingKnowledgeServiceID) && len(item) > 0 && len(item) <= 160 && len(action) > 0 && len(action) <= 80
 }
 
 // GetBillingQuote returns a configured action price; the caller cannot set a debit amount.

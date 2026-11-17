@@ -39,6 +39,13 @@ func billingResourceAllowed(c *gin.Context, kind, item string) bool {
 				return true
 			}
 		}
+	case model.BillingKindKnowledgeService:
+		// The authenticated user's account pays; service/library entitlements stay
+		// with the business owner. Expert-scoped credentials cannot access this scope.
+		_, expertScoped := c.Get("billing.context")
+		if item == model.BillingKnowledgeServiceID && c.GetInt("id") > 0 && !expertScoped {
+			return true
+		}
 	}
 	c.JSON(403, gin.H{"success": false, "code": "BILLING_SCOPE_MISMATCH"})
 	return false

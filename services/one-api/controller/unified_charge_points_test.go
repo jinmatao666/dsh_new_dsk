@@ -92,7 +92,7 @@ func TestUnifiedChargePointResources(t *testing.T) {
 		}
 		return w.Code, out
 	}
-	for _, resource := range []struct{ kind, item string }{{"expert", "geology"}, {"skill", "contract"}, {"knowledge", "20"}} {
+	for _, resource := range []struct{ kind, item string }{{"expert", "geology"}, {"skill", "contract"}, {"knowledge", "20"}, {model.BillingKindKnowledgeService, model.BillingKnowledgeServiceID}} {
 		kind, item := resource.kind, resource.item
 		status, out := call("POST", "/resources/"+kind+"/"+item+"/points", "", map[string]interface{}{"name": "生成报告", "credits": "3", "enabled": true})
 		if status != 200 {
@@ -205,8 +205,16 @@ func TestUnifiedChargePointResources(t *testing.T) {
 	}
 	var user model.User
 	db.First(&user, 1)
-	if user.Quota != 11000 || user.UsedQuota != 9000 {
+	if user.Quota != 8000 || user.UsedQuota != 12000 {
 		t.Fatal(user.Quota, user.UsedQuota)
+	}
+	status, out = call("POST", "/resources/knowledge_service/all/points", "", map[string]interface{}{"name": "invalid", "credits": "3", "enabled": true})
+	if status != 404 {
+		t.Fatal("arbitrary service identifier accepted", status, out)
+	}
+	status, out = call("GET", "/quote?kind=knowledge_service&item_id=all&charge_point_id=cp_missing", "", nil)
+	if status != 403 {
+		t.Fatal("invalid service scope accepted", status, out)
 	}
 	config.OptionMapRWMutex.Lock()
 	config.OptionMap["SystemDeploymentSettings"] = `{"edition":"operational","billing":{"enabled":false}}`

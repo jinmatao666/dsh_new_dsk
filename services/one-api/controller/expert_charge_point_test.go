@@ -130,6 +130,10 @@ func TestExpertChargePointLifecycle(t *testing.T) {
 	if _, err := resolveChargePoint("expert", "expert-b", id); err == nil {
 		t.Fatal("cross-expert point accepted")
 	}
+	status, response = call("GET", "/quote?kind=knowledge_service&item_id=default&charge_point_id="+id, "wbc_test", nil)
+	if status != 403 {
+		t.Fatal("expert credential accepted for knowledge service", status, response)
+	}
 	status, _ = call("PUT", "/admin/expert-b/points/"+id, "", pointInput)
 	if status != 409 {
 		t.Fatal("cross-expert edit", status)

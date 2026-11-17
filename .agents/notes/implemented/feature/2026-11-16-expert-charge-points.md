@@ -10,6 +10,8 @@ The three resource types need centrally configured prices without per-service am
 
 ## Decision
 
+Knowledge-wide charge points use `kind=knowledge_service` and the fixed `item_id=default` on the same quote, reservation, settlement and administration routes. They do not require a placeholder library. Current platform users pay from their own accounts; expert-scoped credentials cannot access this scope. The knowledge owner retains service entitlement checks and chooses the charging trigger. The Go transport supports both library and service scopes without automatically adding charges to existing business handlers. Rule kind storage accommodates the service identifier.
+
 Experts, skills and knowledge libraries share the configured-price HTTP billing API and one rule/task store. Resource kind, item ID and immutable charge point ID identify the price. Expert identity is redeemed through existing server credentials; skill calls carry the current account; the knowledge request forwards its existing authenticated headers to the loopback HTTP API. Payer identity is never supplied as an arbitrary user ID. Caller-supplied developer prices and the Python SDK are retired.
 
 Every new skill creates a default point transactionally; startup initializes existing skills from their legacy prices. Concurrent initialization is arbitrated by the unique resource/action constraint. The skill executor resolves the default ID instead of hard-coding it. Other business nodes explicitly configure their generated IDs. Separate pricing dialogs keep skill content editing independent of billing. Knowledge administration and business charging triggers remain for the knowledge team.

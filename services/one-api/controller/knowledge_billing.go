@@ -23,6 +23,7 @@ import (
 // It does not choose charging policies or implicitly charge a question.
 type knowledgeBilling struct {
 	userID        int
+	kind          string
 	itemID        string
 	authorization string
 	cookie        string
@@ -48,7 +49,16 @@ type knowledgeBillingTask struct {
 }
 
 func knowledgeBillingFor(c *gin.Context, base *model.KnowledgeBase) knowledgeBilling {
-	b := knowledgeBilling{userID: c.GetInt("id"), itemID: strconv.Itoa(base.Id), origin: fmt.Sprintf("http://127.0.0.1:%d", *common.Port), context: context.Background()}
+	return newKnowledgeBilling(c, "knowledge", strconv.Itoa(base.Id))
+}
+
+// knowledgeServiceBillingFor uses the same HTTP transport for service-wide nodes.
+func knowledgeServiceBillingFor(c *gin.Context) knowledgeBilling {
+	return newKnowledgeBilling(c, model.BillingKindKnowledgeService, model.BillingKnowledgeServiceID)
+}
+
+func newKnowledgeBilling(c *gin.Context, kind, item string) knowledgeBilling {
+	b := knowledgeBilling{userID: c.GetInt("id"), kind: kind, itemID: item, origin: fmt.Sprintf("http://127.0.0.1:%d", *common.Port), context: context.Background()}
 	if port, err := strconv.Atoi(os.Getenv("PORT")); err == nil && port > 0 && port <= 65535 {
 		b.origin = fmt.Sprintf("http://127.0.0.1:%d", port)
 	}
@@ -117,7 +127,7 @@ func (b knowledgeBilling) Quote(pointID string) (knowledgeBillingQuote, error) {
 	if pointID == "" {
 		return quote, errors.New("INVALID_REQUEST")
 	}
-	value, err := b.call("quote?"+url.Values{"kind": {"knowledge"}, "item_id": {b.itemID}, "charge_point_id": {pointID}}.Encode(), nil, "")
+	value, err := b.call("quote?"+url.Values{"kind": {b.kind}, "item_id": {b.itemID}, "charge_point_id": {pointID}}.Encode(), nil, "")
 	if err == nil {
 		err = json.Unmarshal(value.Data, &quote)
 	}
@@ -131,7 +141,7 @@ func (b knowledgeBilling) Reserve(pointID, requestID string, quantity, version i
 		task.State = "exempt"
 		return task, "", nil
 	}
-	value, err := b.call("tasks", map[string]interface{}{"mode": "configured", "kind": "knowledge", "item_id": b.itemID, "charge_point_id": pointID, "request_id": requestID, "quantity": quantity, "version": version}, "")
+	value, err := b.call("tasks", map[string]interface{}{"mode": "configured", "kind": b.kind, "item_id": b.itemID, "charge_point_id": pointID, "request_id": requestID, "quantity": quantity, "version": version}, "")
 	if err == nil {
 		err = json.Unmarshal(value.Data, &task)
 	}
