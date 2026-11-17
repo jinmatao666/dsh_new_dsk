@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { API, showError, showSuccess } from '../helpers';
+import { API, copy as copyText, showError, showSuccess } from '../helpers';
 import './ExpertChargePoints.css';
 
 const empty = () => ({ name: '', description: '', credits: '0', enabled: true });
@@ -59,7 +59,10 @@ export default function ExpertChargePoints({ expert, kind = 'expert', onClose })
     finally { lock.current = false; setSaving(false); }
   };
   const copy = async value => {
-    try { await navigator.clipboard.writeText(value); showSuccess('扣分点 ID 已复制'); }
+    try {
+      if (!await copyText(value)) throw new Error('copy failed');
+      showSuccess('扣分点 ID 已复制');
+    }
     catch { showError('复制失败，请选中 ID 手动复制'); }
   };
   const keyDown = event => {
