@@ -77,7 +77,7 @@ export interface Config {
    * leave `image` out.
    */
   defaultInput?: Array<'text' | 'image'>
-  /** Build-specific marker used to require login once after a new install. */
+  /** Build-specific marker recorded without invalidating saved authentication. */
   installId?: string
   /** Skip the login overlay inside the source-only Tauri development shell. */
   developmentBypass?: boolean
@@ -619,16 +619,12 @@ export function apply(ctx: Context, config: Config): void {
     return jsonBody<unknown>(response)
   }
 
-  // Credentials intentionally survive normal restarts, but a newly built
-  // installer carries a new marker and must show the login screen once.
+  // Record the build marker without clearing credentials during an update.
   const installReady = (async (): Promise<void> => {
     const installId = config.installId?.trim()
     if (installId === undefined || installId === '') return
     const marker = await ctx.credentials.resolve(installMarkerRef)
-    if (marker?.value !== installId) {
-      await clearLocalAuth()
-      await ctx.credentials.set(installMarkerRef, installId)
-    }
+    if (marker?.value !== installId) await ctx.credentials.set(installMarkerRef, installId)
   })()
 
   const status = async (signal?: AbortSignal): Promise<AuthState> => {

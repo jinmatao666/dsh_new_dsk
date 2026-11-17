@@ -1394,7 +1394,7 @@ Requires: `agents`
 export type Config = Readonly<Record<string, never>>
 ```
 
-Source: [`packages/llm/llm-retry/src/index.ts:24`](../packages/llm/llm-retry/src/index.ts)
+Source: [`packages/llm/llm-retry/src/index.ts:25`](../packages/llm/llm-retry/src/index.ts)
 
 <a id="deepseek-aidsh-lsp-stdio"></a>
 
@@ -2149,7 +2149,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/skill/skill/src/index.ts:281`](../packages/skill/skill/src/index.ts)
+Source: [`packages/skill/skill/src/index.ts:283`](../packages/skill/skill/src/index.ts)
 
 <a id="deepseek-aidsh-skill-filesystem"></a>
 
@@ -3261,7 +3261,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/wanwei/browser-use/src/index.ts:17`](../packages/wanwei/browser-use/src/index.ts)
+Source: [`packages/wanwei/browser-use/src/index.ts:18`](../packages/wanwei/browser-use/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-chinese"></a>
 
@@ -3326,6 +3326,8 @@ export interface Config {
   tokenName: string
   /** Optional preferred default model id. */
   defaultModel?: string
+  /** Transcription model for desktop knowledge 录音纪要 (OneAPI `/v1/audio/transcriptions`). */
+  knowledgeTranscriptionModel?: string
   /**
    * Input modalities advertised for models returned by OneAPI.
    *
@@ -3337,7 +3339,7 @@ export interface Config {
    * leave `image` out.
    */
   defaultInput?: Array<'text' | 'image'>
-  /** Build-specific marker used to require login once after a new install. */
+  /** Build-specific marker recorded without invalidating saved authentication. */
   installId?: string
   /** Skip the login overlay inside the source-only Tauri development shell. */
   developmentBypass?: boolean
@@ -3350,7 +3352,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/wanwei/oneapi-auth/src/index.ts:38`](../packages/wanwei/oneapi-auth/src/index.ts)
+Source: [`packages/wanwei/oneapi-auth/src/index.ts:46`](../packages/wanwei/oneapi-auth/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-skillhub"></a>
 
@@ -3416,7 +3418,7 @@ export interface WebRuntimeConfig {
 }
 ```
 
-Source: [`packages/web/web/src/index.ts:55`](../packages/web/web/src/index.ts)
+Source: [`packages/web/web/src/index.ts:62`](../packages/web/web/src/index.ts)
 
 <a id="deepseek-aidsh-web-app"></a>
 
@@ -3674,7 +3676,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-tool-cordis` — requires `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect` ([`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts))
 - `@deepseek-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))
 - `@deepseek-ai/dsh-user-questions` ([`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts))
-- `@deepseek-ai/dsh-wanwei-connectors` — requires `connection` · `tools` · `sessionController` · `sessions` · `agents` · `workspaceRegistry` · `permissionPresets` ([`packages/wanwei/connectors/src/index.ts`](../packages/wanwei/connectors/src/index.ts))
+- `@deepseek-ai/dsh-wanwei-connectors` — requires `connection` · `wanweiNetworkPolicy` · `tools` · `sessionController` · `sessions` · `agents` · `workspaceRegistry` · `permissionPresets` ([`packages/wanwei/connectors/src/index.ts`](../packages/wanwei/connectors/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-expert-library` ([`packages/wanwei/expert-library/src/index.ts`](../packages/wanwei/expert-library/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-feature-panels` ([`packages/wanwei/feature-panels/src/index.ts`](../packages/wanwei/feature-panels/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-knowledge-base` ([`packages/wanwei/knowledge-base/src/index.ts`](../packages/wanwei/knowledge-base/src/index.ts))

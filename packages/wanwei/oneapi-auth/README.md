@@ -21,6 +21,8 @@ Skill fixed fees cover successful model skill-tool calls and direct slash instru
 
 In the operations edition, the credits page shows Knowledge credit settings next to Refresh once the user has a personal library approved for subscription. The list includes only libraries that user published for subscription. The Host forwards explicit metered file requests to OneAPI with the accepted price and a request identity, bypassing the ordinary file cache. Credit history includes subscription spending and maintainer income.
 
+Normal desktop updates preserve saved authentication. Startup validates the existing credential with the server; explicit logout or an invalid credential still requires sign-in. A fresh installation without saved credentials shows the login page.
+
 ## Summary
 
 Account settings show the current identity and phone, password and WeChat management instead of a model inventory. Each action opens a centered modal instead of expanding the page. Cancellation clears the draft and restores focus; errors stay inside the modal, and active submissions prevent dismissal. Fixed Host operations reuse OneAPI phone verification, password reset and WeChat QR/quick-bind endpoints. Phone replacement verifies both numbers; Account settings enable WeChat linking through the live official authorization page. Linking verifies an SMS code when a phone is already bound; existing accounts without a phone may link after scan confirmation. Unbinding requires the bound phone code. Expired QR codes show a refresh overlay; successful linking refreshes account status. Password setup and modification share a verified flow because legacy generated passwords do not establish whether the user chose a password. Status exposes masked phone and binding flags only. Account dialogs omit graphical captchas and use authenticated, rate-limited SMS routes, including `/api/user/self/phone/send-bind-code`. Public login/registration captcha policy stays unchanged. Deploy the updated backend together with the desktop. SMS and WeChat services must be configured on the server.
@@ -103,7 +105,7 @@ This is diagnostic feedback, not a firewall or shell sandbox. Unrecognized diagn
 | `tokenName` | `DSH Desktop Auto Token` | Name for automatically created OneAPI tokens. |
 | `defaultModel` | optional | Preferred default model identifier. |
 | `defaultInput` | `[text]` | Modalities advertised for model IDs; enable image only when supported. |
-| `installId` | optional | Build-specific marker for login after a new installation. |
+| `installId` | optional | Build-specific marker; changes preserve saved authentication. |
 | `developmentBypass` | `false` | Source-only development login-overlay bypass. |
 
 -----

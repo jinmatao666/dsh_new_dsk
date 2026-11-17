@@ -116,7 +116,7 @@ describe('OneAPI login flow', () => {
         return Promise.resolve(Response.json({ success: true, url: 'http://expert.lan/', ticket: 'ticket' }))
       }
       if (url.endsWith('/api/oauth/wechat/qr')) {
-        return Promise.resolve(Response.json({ success: true, data: { state: 'owned-state', qr_url: 'https://open.weixin.qq.com/connect/qrcode/mock' } }))
+        return Promise.resolve(Response.json({ success: true, data: { state: 'owned-state', qrconnect_url: 'https://open.weixin.qq.com/connect/qrconnect?appid=app&scope=snsapi_login&state=owned-state&redirect_uri=http%3A%2F%2Fserver.test%2Fapi%2Foauth%2Fwechat' } }))
       }
       if (url === 'https://open.weixin.qq.com/connect/qrcode/mock') {
         return Promise.resolve(new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/png' } }))
@@ -163,6 +163,7 @@ describe('OneAPI login flow', () => {
 
     const settings: Config = {
       ...(baseURL === undefined ? {} : { baseURL }),
+      installId: 'updated-build',
       provider: config.provider,
       credentialRef: config.credentialRef,
       tokenName: config.tokenName,
@@ -180,8 +181,19 @@ describe('OneAPI login flow', () => {
       if (specifier !== 'oneapi') throw new Error(`Unexpected plugin: ${specifier}`)
       return OneApiAuth
     } } as unknown as NonNullable<typeof ctx.loader.internal>
+    credentials.set('DSH_ONEAPI_TOKEN', 'saved-token')
+    credentials.set('DSH_LOGIN_USERNAME', 'tester')
+    credentials.set('DSH_DESKTOP_INSTALL_MARKER', 'previous-build')
     await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
     await ctx.loader.await()
+    expect(await handler?.('status', {}, new AbortController().signal)).toEqual({
+      ok: true, value: { state: 'authenticated', models: ['model-text', 'model-vision'], username: 'tester' },
+    })
+    expect(credentials.get('DSH_ONEAPI_TOKEN')).toBe('saved-token')
+    expect(credentials.get('DSH_DESKTOP_INSTALL_MARKER')).toBe('updated-build')
+    expect(requests.some(url => url.endsWith('/api/user/login') || url.endsWith('/api/token/'))).toBe(false)
+    requests.length = 0
+    mutate.mockClear()
     if (loginMethod === 'wechat-phone') {
       await handler?.('public-auth', { operation: 'qr', input: {} }, new AbortController().signal)
       const pending = await handler?.('public-auth', { operation: 'poll', input: { state: 'owned-state' } }, new AbortController().signal)
@@ -197,7 +209,7 @@ describe('OneAPI login flow', () => {
     })
     expect(requests).toEqual([
       ...(loginMethod === 'wechat-phone' ? [
-        `${expected}/api/oauth/wechat/qr`, 'https://open.weixin.qq.com/connect/qrcode/mock',
+        `${expected}/api/oauth/wechat/qr`,
         `${expected}/api/oauth/wechat/poll?state=owned-state`, `${expected}/api/user/self/phone/bind`,
       ] : [loginMethod ? `${expected}/api/user/phone/${loginMethod === 'sms' ? 'login' : 'register'}` : `${expected}/api/user/login`]),
       `${expected}/api/token/`,
