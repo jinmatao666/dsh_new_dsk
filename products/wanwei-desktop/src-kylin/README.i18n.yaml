@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write products/wanwei-desktop/src-kylin/README.md
-README.md: b6aa50c64e722e354bdd46fc33bcd3ea1ff9d21c
-README.zh.md: f08a875794e783a5720c06f239256d1bb5d519ab
+README.md: d02c9a5ee464b7c9972797d020de984720f2e48b
+README.zh.md: bd9a78b2d2965563847e2ce99fc9f8e814617a12
