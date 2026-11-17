@@ -2,7 +2,7 @@
   position: relative; flex: none; min-width: 0; margin-top: 8px;
 }
 .root::before {
-  content: ''; position: absolute; top: 0; inset-inline: 12px; height: 1px;
+  content: ''; position: absolute; top: 0; inset-inline: 0; height: 1px;
   background: var(--dsw-alias-border-l2);
 }
 .root[data-wide='true'] {
@@ -15,8 +15,8 @@
 }
 .row:not(:has(> :nth-child(2))) { padding-right: 0; }
 .trigger {
-  display: flex; align-items: center; justify-content: flex-start; gap: 6px; flex: 1; min-width: 0; min-height: 50px;
-  padding: 6px 12px 6px 8px; border: 0; border-radius: 0;
+  display: flex; align-items: center; justify-content: flex-start; gap: 6px; flex: 1; min-width: 0; min-height: 45px;
+  padding: 6px 12px 6px 11px; border: 0; border-radius: 0;
   background: transparent; color: inherit; font: inherit; cursor: pointer;
 }
 .trigger:hover, .trigger[aria-expanded='true'] { background: var(--dsw-alias-bg-hover, var(--dsw-alias-bg-base)); }
