@@ -14,9 +14,9 @@ Status: proposed
 
 [麒麟工作流](../../../../.github/workflows/wanwei-kylin.yml)在 Ubuntu 20.04 容器中构建 x64 和 ARM64，检查运行库符号及安装后载荷，生成名称独立的麒麟安装包。桌面预览工作流与原有矩阵并行调用它。原生 GTK 库和图形验证需要 Linux runner；用户要求的 Linux 兼容构建授权了对常规 Windows runner 偏好的这一例外。更新通过替换安装包完成，适配层不使用 Tauri 2 自动更新包。
 
-[仅麒麟手动入口](../../../../.github/workflows/wanwei-kylin-preview.yml)调用 new-version 上共享的工作流，需要在默认分支注册才能通过 GitHub 手动运行。这将界面入口与业务代码合入 main 分开。容器仅在持久 Git 配置中信任 GITHUB_WORKSPACE，并在检出后立即验证 HEAD。第 126 和 128 次运行均在读取源码提交信息时失败；Ubuntu 20.04 / Git 2.25.1 临时仓库复现了宿主 UID 所有的仓库返回 128，并验证限定目录的信任配置可修复。原构建隐藏 Git stderr，因此复现证明了失败机制，但不代表已观察到 runner 中被隐藏的原始错误。
+容器仅在持久 Git 配置中信任 GITHUB_WORKSPACE，并在检出后立即验证 HEAD。第 126 和 128 次运行均在读取源码提交信息时失败；Ubuntu 20.04 / Git 2.25.1 临时仓库复现了宿主 UID 所有的仓库返回 128，并验证限定目录的信任配置可修复。原构建隐藏 Git stderr，因此复现证明了失败机制，但不代表已观察到 runner 中被隐藏的原始错误。
 
-已有桌面工作流提供 build_scope=all（默认）或 kylin。仅麒麟模式保留官方组合校验，跳过 Tauri 2 桌面矩阵，无论 build_kylin 如何设置都启用麒麟复用任务，并跳过全平台 Release 发布。未提供 build_scope 时保留全平台行为。这满足用户不改动 main 的要求，独立入口在默认分支注册仅为可选方式。
+已有桌面工作流提供 build_scope=all（默认）或 kylin。仅麒麟模式保留官方组合校验，跳过 Tauri 2 桌面矩阵，无论 build_kylin 如何设置都启用麒麟复用任务，并跳过全平台 Release 发布。未提供 build_scope 时保留全平台行为。这满足用户不改动 main 的要求。
 
 ## Alternatives considered
 
