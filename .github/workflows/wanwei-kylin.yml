@@ -167,7 +167,24 @@ jobs:
         working-directory: products/wanwei-desktop/src-kylin
         run: |
           set -o pipefail
-          cargo tauri build --verbose --verbose --config tauri.runner.conf.json --bundles appimage -- --locked 2>&1 | tee build-appimage.log
+          if cargo tauri build --verbose --verbose --config tauri.runner.conf.json --bundles appimage -- --locked 2>&1 | tee build-appimage.log; then
+            :
+          else
+            status=$?
+            if [[ '${{ matrix.arch }}' != arm64 ]] || ! grep -Fq 'More than one architectures were found of the AppDir source directory' build-appimage.log; then
+              exit "$status"
+            fi
+            bundle=target/release/bundle/appimage
+            grep -Fxq 'export ARCH=aarch64' "$bundle/build_appimage.sh"
+            packaging_command=$(tail -n 1 "$bundle/build_appimage.sh")
+            [[ "$packaging_command" == OUTPUT=*'/linuxdeploy-${linuxdeploy_arch}.AppImage" --appimage-extract-and-run --appdir '*' --output appimage' ]]
+            # AppImageKit 5735cc5 accepts arm_aarch64; Tauri's generated script exports aarch64.
+            echo 'Retrying final ARM64 AppImage packaging with ARCH=arm_aarch64' | tee -a build-appimage.log
+            (
+              cd "$bundle"
+              ARCH=arm_aarch64 linuxdeploy_arch=aarch64 gst_plugin= bash -e -o pipefail -c "$packaging_command"
+            ) 2>&1 | tee -a build-appimage.log
+          fi
           python3 check-installers.py --arch '${{ matrix.arch }}' --format appimage 2>&1 | tee -a build-appimage.log
           for installer in target/release/bundle/appimage/*.AppImage; do
             filename="$(basename "$installer")"
