@@ -22,6 +22,8 @@ Passing amounts from each service would bypass centralized pricing. Separate SDK
 
 ## Consequences
 
+Deleting a point hides it from administration and atomically stores a disabled, zero-price tombstone with its original resource binding. Existing integrations keep executing for free, while unknown or cross-resource IDs still fail. Deleted defaults are not recreated by skill initialization. Version checks prevent stale edits or deletes from reviving a point; existing tasks settle their original snapshots.
+
 Disabled accounting and disabled points must not stop business. Knowledge owners still implement their own charging triggers and retain their existing access authorization. No long-task renewal or task-secret recovery is added.
 
 ## Verification

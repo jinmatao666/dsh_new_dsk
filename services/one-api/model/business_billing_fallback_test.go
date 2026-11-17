@@ -21,6 +21,8 @@ func TestUnifiedBillingLockedDefaultSkillPrice(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&BillingRule{}, &Skill{}, &ExpertWebProfile{}))
 	require.NoError(t, db.Create(&Skill{Name: "pvs-contract-template", Status: 1, TaskCredits: 3}).Error)
 	require.NoError(t, db.Create(&ExpertWebProfile{Key: "report", Published: true, TaskCredits: 5}).Error)
+	// Exercise the legacy fallback without the default rule created by Skill.AfterCreate.
+	require.NoError(t, db.Where("kind = ? AND item_id = ?", "skill", "pvs-contract-template").Delete(&BillingRule{}).Error)
 	// Reproduce the old initialized-statement failure, independently of dialect SQL.
 	stale := db.Clauses(clause.Locking{Strength: "UPDATE"})
 	var missing BillingRule

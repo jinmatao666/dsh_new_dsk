@@ -59,6 +59,7 @@ func TestUnifiedChargePointResources(t *testing.T) {
 	r.POST("/resources/:kind/:item/points", AdminSaveChargePoint)
 	r.GET("/resources/:kind/:item/points", AdminListChargePoints)
 	r.PUT("/resources/:kind/:item/points/:point", AdminSaveChargePoint)
+	r.DELETE("/resources/:kind/:item/points/:point", AdminDeleteChargePoint)
 	// Set scope only for expert requests; platform skill/knowledge callers use normal login.
 	r.Use(func(c *gin.Context) {
 		if c.Query("kind") != "expert" {
@@ -117,6 +118,41 @@ func TestUnifiedChargePointResources(t *testing.T) {
 		if status != 200 {
 			t.Fatal(status, out)
 		}
+		// Deleted points stay resolvable as free, but cannot be edited or revived.
+		path := "/resources/" + kind + "/" + item + "/points/" + id
+		status, out = call("DELETE", path, "", map[string]interface{}{"version": 1})
+		if status != 409 {
+			t.Fatal("stale deletion accepted", status, out)
+		}
+		wrongPath := "/resources/knowledge/20/points/" + id
+		if kind == "knowledge" {
+			wrongPath = "/resources/expert/geology/points/" + id
+		}
+		status, out = call("DELETE", wrongPath, "", map[string]interface{}{"version": 2})
+		if status != 409 {
+			t.Fatal("cross-resource deletion accepted", status, out)
+		}
+		status, out = call("DELETE", path, "", map[string]interface{}{"version": 2})
+		if status != 200 {
+			t.Fatal(status, out)
+		}
+		status, out = call("GET", "/resources/"+kind+"/"+item+"/points", "", nil)
+		if status != 200 {
+			t.Fatal(status, out)
+		}
+		for _, row := range out["data"].([]interface{}) {
+			if row.(map[string]interface{})["id"] == id {
+				t.Fatal("deleted point visible", out)
+			}
+		}
+		status, out = call("PUT", path, "", map[string]interface{}{"name": "revive", "credits": "9", "enabled": true, "version": 3})
+		if status != 409 {
+			t.Fatal("deleted point revived", status, out)
+		}
+		status, out = call("GET", "/quote?kind="+kind+"&item_id="+item+"&charge_point_id="+id, "", nil)
+		if status != 200 || out["data"].(map[string]interface{})["exempt"] != true || out["data"].(map[string]interface{})["unit_credits"] != float64(0) {
+			t.Fatal("deleted quote must be free", status, out)
+		}
 		for i := 0; i < 2; i++ {
 			status, out = call("POST", fmt.Sprint("/tasks/", task["id"], "/result"), token, map[string]string{"status": "succeeded"})
 			if status != 200 {
@@ -134,7 +170,7 @@ func TestUnifiedChargePointResources(t *testing.T) {
 		request["request_id"], request["version"] = kind+"-free", 2
 		status, out = call("POST", "/tasks", "", request)
 		if status != 200 || out["data"].(map[string]interface{})["quota"] != float64(0) {
-			t.Fatal("disabled must be free", status, out)
+			t.Fatal("deleted must be free even with an old price version", status, out)
 		}
 		request["charge_point_id"] = "cp_missing"
 		request["request_id"] = kind + "-missing"
@@ -155,6 +191,18 @@ func TestUnifiedChargePointResources(t *testing.T) {
 	if a.Kind != "skill" || a.Action != "default" {
 		t.Fatal(a)
 	}
+	status, out := call("DELETE", "/resources/skill/contract/points/"+a.ID, "", map[string]interface{}{"version": a.Version})
+	if status != 200 {
+		t.Fatal(status, out)
+	}
+	deletedDefault, err := model.EnsureSkillChargePoint(db, "contract")
+	if err != nil || deletedDefault.ID != a.ID || !deletedDefault.IsDeleted || deletedDefault.Enabled || deletedDefault.UnitQuota != 0 {
+		t.Fatal("deleted default resurrected", deletedDefault, err)
+	}
+	status, out = call("GET", "/quote?kind=skill&item_id=contract&default=true", "", nil)
+	if status != 200 || out["data"].(map[string]interface{})["exempt"] != true {
+		t.Fatal("deleted default blocked skill", status, out)
+	}
 	var user model.User
 	db.First(&user, 1)
 	if user.Quota != 11000 || user.UsedQuota != 9000 {
@@ -163,7 +211,7 @@ func TestUnifiedChargePointResources(t *testing.T) {
 	config.OptionMapRWMutex.Lock()
 	config.OptionMap["SystemDeploymentSettings"] = `{"edition":"operational","billing":{"enabled":false}}`
 	config.OptionMapRWMutex.Unlock()
-	status, out := call("POST", "/tasks", "", map[string]interface{}{"kind": "knowledge", "item_id": "20", "charge_point_id": "cp_missing"})
+	status, out = call("POST", "/tasks", "", map[string]interface{}{"kind": "knowledge", "item_id": "20", "charge_point_id": "cp_missing"})
 	if status != 200 || out["data"].(map[string]interface{})["exempt"] != true {
 		t.Fatal("disabled system blocked business", status, out)
 	}
