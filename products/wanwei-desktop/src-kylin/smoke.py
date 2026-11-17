@@ -33,6 +33,16 @@ async function waitForReports() {
   throw new Error('Expert pages did not finish their native roundtrips');
 }
 async function run() {
+  check(typeof AbortSignal.any === 'function', 'AbortSignal.any missing at page startup');
+  check(typeof AbortSignal.prototype.throwIfAborted === 'function', 'AbortSignal.throwIfAborted missing');
+  check(typeof AbortSignal.timeout === 'function', 'AbortSignal.timeout missing');
+  check('reason' in AbortSignal.prototype, 'AbortSignal.reason missing');
+  await new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = '/gateway-probe.js'; script.onload = resolve; script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  check(await window.__WANWEI_KYLIN_GATEWAY_PROBE__(), 'Production Gateway browser probe failed');
   for (let n = 0; !window.__ZJUGIS_NATIVE_INVOKE__ && n < 100; n++) await pause(50);
   check(typeof window.__ZJUGIS_NATIVE_INVOKE__ === 'function', 'Main native bridge missing');
   check(window.__TAURI__.core.invoke === window.__ZJUGIS_NATIVE_INVOKE__, 'Shared client alias missing');
@@ -98,6 +108,7 @@ run().catch(async error => {
 EXPERT = r"""<!doctype html><html><body><button style="position:absolute;left:10px;top:10px;width:180px;height:50px" onclick="fetch('/input',{method:'POST',body:JSON.stringify({index:new URLSearchParams(location.search).get('index'),trusted:event.isTrusted})})">Expert pointer probe</button><script>
 window.probeCounter = 42;
 (async () => {
+  if (typeof AbortSignal.any !== 'function') throw new Error('Expert AbortSignal.any missing');
   const fixture = await fetch('/fixture').then(r => r.json());
   const invoke = window.__ZJUGIS_NATIVE_INVOKE__;
   const content = await invoke('read_analysis_view', {path:fixture.path});
@@ -114,6 +125,9 @@ def run():
     reports = []
     results = []
     inputs = []
+    probe_path = os.environ.get("WANWEI_KYLIN_GATEWAY_PROBE")
+    gateway_probe = (pathlib.Path(probe_path).read_text() if probe_path else subprocess.check_output(
+        ["node", str(HERE.parent / "scripts/build-kylin-browser-probe.mjs")], text=True))
     with tempfile.TemporaryDirectory(prefix="wanwei-kylin-smoke-") as directory:
         fixture = pathlib.Path(directory) / "smoke-analysis-view_20261116.json"
         fixture.write_text('{"source":"native-file-roundtrip"}')
@@ -130,6 +144,8 @@ def run():
                     body, content_type = json.dumps(inputs), "application/json"
                 elif path == "/fixture":
                     body, content_type = json.dumps({"path": str(fixture), "content": fixture.read_text()}), "application/json"
+                elif path == "/gateway-probe.js":
+                    body, content_type = gateway_probe, "text/javascript; charset=utf-8"
                 else:
                     body, content_type = (EXPERT if path == "/expert" else MAIN), "text/html; charset=utf-8"
                 self.send_response(200)
@@ -167,7 +183,7 @@ def run():
             print(completed.stdout)
             if completed.returncode != 0 or not results or not results[-1].get("passed"):
                 raise RuntimeError("Native shell smoke failed: " + json.dumps(results))
-            print("Kylin native shell: real main/expert mouse clicks, shared file command, expert IPC authorization, ticket bootstrap, same-window geometry, visibility, state, close and logout passed")
+            print("Kylin native shell: browser cancellation APIs, production Gateway delivery/restart/disposal, shared native skill/workspace clients, real main/expert mouse clicks, file command, expert authorization, ticket bootstrap, geometry, visibility, state, close and logout passed")
         finally:
             server.shutdown()
 

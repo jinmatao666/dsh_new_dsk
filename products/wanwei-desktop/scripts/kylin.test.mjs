@@ -5,9 +5,119 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { webcrypto } from 'node:crypto'
 import vm from 'node:vm'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { prepareKylin } from './prepare-kylin.mjs'
 
 const source = await readFile(new URL('../src-kylin/native-bridge.js', import.meta.url), 'utf8')
+const compatibility = await readFile(new URL('../src-kylin/browser-compat.js', import.meta.url), 'utf8')
+function compatiblePage({ native = false, origin = 'https://expert.example', child = false } = {}) {
+  const window = {}
+  window.self = window
+  window.top = child ? {} : window
+  const context = vm.createContext({ window, location: { origin }, NativeAbortSignal: AbortSignal, AbortController })
+  vm.runInContext(`
+    function LegacyAbortSignal() {}
+    LegacyAbortSignal.prototype = NativeAbortSignal.prototype;
+    globalThis.AbortSignal = ${native ? 'NativeAbortSignal' : 'LegacyAbortSignal'};
+  `, context)
+  const install = () => vm.runInContext(compatibility.replace('__WANWEI_ORIGIN__', JSON.stringify('https://expert.example')), context)
+  install()
+  return { context, install }
+}
+
+test('Kylin combines cancellation without replacing native signals or abort reasons', () => {
+  const { context, install } = compatiblePage()
+  vm.runInContext(`
+    globalThis.first = new AbortController();
+    globalThis.second = new AbortController();
+    globalThis.reason = new Error('generation replaced');
+    globalThis.combined = AbortSignal.any(new Set([first.signal, second.signal]));
+    globalThis.events = 0;
+    combined.addEventListener('abort', () => events++);
+  `, context)
+  assert.equal(context.combined instanceof AbortSignal, true)
+  assert.equal(context.combined.aborted, false)
+  context.second.abort(context.reason)
+  assert.equal(context.combined.reason, context.reason)
+  assert.throws(() => context.combined.throwIfAborted(), error => error === context.reason)
+  context.first.abort(new Error('later abort'))
+  assert.equal(context.events, 1)
+  assert.equal(context.combined.reason, context.reason)
+  const any = context.AbortSignal.any
+  install()
+  assert.equal(context.AbortSignal.any, any)
+})
+
+test('Kylin validates all sources and preserves first already-aborted reason', () => {
+  const { context } = compatiblePage()
+  context.first = AbortSignal.abort('first')
+  context.second = AbortSignal.abort('second')
+  assert.equal(vm.runInContext('AbortSignal.any([first, second]).reason', context), 'first')
+  assert.equal(vm.runInContext('AbortSignal.any([]).aborted', context), false)
+  for (const expression of ['AbortSignal.any()', 'AbortSignal.any(null)', 'AbortSignal.any({})',
+    'AbortSignal.any([first, {}])', 'AbortSignal.any([null])']) {
+    assert.throws(() => vm.runInContext(expression, context), { name: 'TypeError' })
+  }
+})
+
+test('Kylin releases source listeners on abort and deduplicates repeated signals', () => {
+  const { context } = compatiblePage()
+  const first = new AbortController()
+  const second = new AbortController()
+  const listeners = new Set()
+  for (const { signal } of [first, second]) {
+    const add = signal.addEventListener.bind(signal)
+    const remove = signal.removeEventListener.bind(signal)
+    signal.addEventListener = (type, listener, options) => { listeners.add(listener); add(type, listener, options) }
+    signal.removeEventListener = (type, listener) => { listeners.delete(listener); remove(type, listener) }
+  }
+  context.sources = [first.signal, first.signal, second.signal]
+  const combined = vm.runInContext('AbortSignal.any(sources)', context)
+  assert.equal(listeners.size, 2)
+  first.abort()
+  assert.equal(combined.reason, first.signal.reason)
+  assert.equal(listeners.size, 0)
+})
+
+test('Kylin compatibility preserves native implementations and origin isolation', () => {
+  const native = AbortSignal.any
+  assert.equal(compatiblePage({ native: true }).context.AbortSignal.any, native)
+  assert.equal(compatiblePage({ origin: 'https://foreign.example' }).context.AbortSignal.any, undefined)
+  assert.equal(compatiblePage({ child: true }).context.AbortSignal.any, undefined)
+})
+
+test('completed requests do not retain subscriptions to a live application signal', async () => {
+  await promisify(execFile)(process.execPath, ['--expose-gc', '--input-type=module', '-e', `
+    import assert from 'node:assert/strict';
+    import vm from 'node:vm';
+    import { readFile } from 'node:fs/promises';
+    import { setMaxListeners } from 'node:events';
+    const window = {}; window.self = window; window.top = window;
+    const context = vm.createContext({ window, location: { origin: 'https://expert.example' },
+      AbortController, NativeAbortSignal: AbortSignal });
+    vm.runInContext('function AbortSignal() {}; AbortSignal.prototype = NativeAbortSignal.prototype', context);
+    const code = await readFile(new URL(process.argv[1]), 'utf8');
+    vm.runInContext(code.replace('__WANWEI_ORIGIN__', JSON.stringify('https://expert.example')), context);
+    const lifetime = new AbortController();
+    const active = new Set();
+    const signal = lifetime.signal;
+    setMaxListeners(0, signal);
+    const add = signal.addEventListener.bind(signal);
+    const remove = signal.removeEventListener.bind(signal);
+    signal.addEventListener = (type, listener, options) => { active.add(listener); add(type, listener, options) };
+    signal.removeEventListener = (type, listener) => { active.delete(listener); remove(type, listener) };
+    context.source = signal;
+    vm.runInContext('for (let i = 0; i < 100; i++) { AbortSignal.any([source]); }', context);
+    assert.equal(active.size, 100);
+    for (let i = 0; i < 100 && active.size; i++) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      globalThis.gc();
+    }
+    assert.equal(active.size, 0, 'completed request subscriptions retained');
+    assert.equal(signal.aborted, false);
+  `, new URL('../src-kylin/browser-compat.js', import.meta.url).href], { timeout: 10000 })
+})
 function page({ origin = 'https://expert.example', child = false } = {}) {
   const messages = []
   const timers = new Map()
