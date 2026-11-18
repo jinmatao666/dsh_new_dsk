@@ -884,6 +884,8 @@ button.dsh-knowledge-plaza-file { cursor: pointer; }
 .dsh-knowledge-viewer-title > button .dsh-knowledge-viewer-busy { display: block; }
 .dsh-knowledge-viewer-title > button:hover:not(:disabled) { background: #f3f5f8; color: #1f2a37; }
 .dsh-knowledge-viewer-title > button:disabled { cursor: wait; opacity: .55; }
+.dsh-knowledge-viewer-download-feedback { margin: 0; padding: 8px 18px; color: #256046; background: #f2faf6; font-size: 13px; }
+.dsh-knowledge-viewer-download-feedback[role="alert"] { color: #a32727; background: #fff4f4; }
 .dsh-knowledge-viewer-actions { display: inline-flex; flex: none; gap: 2px; align-items: center; }
 .dsh-knowledge-viewer-actions > button { display: inline-flex; gap: 4px; align-items: center; justify-content: center; min-width: 36px; height: 36px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: #667085; font: inherit; font-size: 13px; line-height: 1; cursor: pointer; }
 .dsh-knowledge-viewer-actions > button:hover:not(:disabled) { background: #f3f5f8; color: #1f2a37; }

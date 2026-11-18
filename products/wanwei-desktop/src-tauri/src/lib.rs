@@ -900,15 +900,24 @@ fn save_session_log_archive_at(
     if bytes.len() > 512 * 1024 * 1024 {
         return Err("Session 导出文件超过 512 MB 限制".to_string());
     }
+    save_download_at(downloads_root, file_name, bytes)
+}
+
+fn save_download_at(downloads_root: &Path, file_name: &str, bytes: &[u8]) -> Result<PathBuf, String> {
     fs::create_dir_all(downloads_root)
         .map_err(|error| format!("无法创建下载目录 {}：{error}", downloads_root.display()))?;
 
-    let stem = file_name.trim_end_matches(".zip");
+    let (stem, extension) = file_name
+        .rsplit_once('.')
+        .filter(|(stem, _)| !stem.is_empty())
+        .map_or((file_name, String::new()), |(stem, extension)| {
+            (stem, format!(".{extension}"))
+        });
     for suffix in 0..10_000 {
         let name = if suffix == 0 {
             file_name.to_string()
         } else {
-            format!("{stem}-{suffix}.zip")
+            format!("{stem}-{suffix}{extension}")
         };
         let destination = downloads_root.join(name);
         match fs::OpenOptions::new()
@@ -920,9 +929,10 @@ fn save_session_log_archive_at(
                 file.write_all(bytes)
                     .and_then(|()| file.sync_all())
                     .map_err(|error| {
+                        drop(file);
                         let _ = fs::remove_file(&destination);
                         format!(
-                            "无法写入 Session 导出文件 {}：{error}",
+                            "无法写入下载文件 {}：{error}",
                             destination.display()
                         )
                     })?;
@@ -931,13 +941,13 @@ fn save_session_log_archive_at(
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(error) => {
                 return Err(format!(
-                    "无法创建 Session 导出文件 {}：{error}",
+                    "无法创建下载文件 {}：{error}",
                     destination.display()
                 ))
             }
         }
     }
-    Err("下载目录中存在过多同名 Session 导出文件".to_string())
+    Err("下载目录中存在过多同名文件".to_string())
 }
 
 /// Persist a Host-exported Session archive through the desktop shell rather
@@ -946,6 +956,69 @@ fn save_session_log_archive_at(
 fn save_session_log_archive(file_name: String, bytes: Vec<u8>) -> Result<String, String> {
     let destination = save_session_log_archive_at(&user_downloads_root()?, &file_name, &bytes)?;
     Ok(destination.display().to_string())
+}
+
+const KNOWLEDGE_DOWNLOAD_MAX_BYTES: usize = 20 * 1024 * 1024;
+
+fn save_knowledge_download_at(
+    downloads_root: &Path,
+    file_name: &str,
+    bytes: &[u8],
+) -> Result<PathBuf, String> {
+    let device = file_name
+        .split('.')
+        .next()
+        .unwrap_or("")
+        .trim_end()
+        .to_ascii_uppercase();
+    if file_name.is_empty()
+        || file_name.encode_utf16().count() > 240
+        || file_name.ends_with(['.', ' '])
+        || file_name
+            .chars()
+            .any(|ch| ch.is_control() || "/\\:<>|\"?*".contains(ch))
+        || matches!(device.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$")
+        || ["COM", "LPT"].iter().any(|prefix| {
+            matches!(
+                device.strip_prefix(*prefix),
+                Some("1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³")
+            )
+        })
+    {
+        return Err("知识库下载文件名无效".into());
+    }
+    if bytes.len() > KNOWLEDGE_DOWNLOAD_MAX_BYTES {
+        return Err("知识库下载文件超过 20 MB".into());
+    }
+    save_download_at(downloads_root, file_name, bytes)
+}
+
+/// Save the authorized original file to Downloads without relying on WebView downloads.
+#[tauri::command]
+async fn save_knowledge_download(
+    webview: tauri::Webview,
+    file_name: String,
+    bytes_base64: String,
+) -> Result<(), String> {
+    if webview.label() != "main" {
+        return Err("仅主窗口可以下载知识库文件".into());
+    }
+    if bytes_base64.len() > KNOWLEDGE_DOWNLOAD_MAX_BYTES.div_ceil(3) * 4 {
+        return Err("知识库下载文件超过 20 MB".into());
+    }
+    let downloads_root = webview
+        .app_handle()
+        .path()
+        .download_dir()
+        .map_err(|error| format!("无法定位下载文件夹：{error}"))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = BASE64_STANDARD
+            .decode(bytes_base64)
+            .map_err(|_| "知识库下载文件编码无效".to_string())?;
+        save_knowledge_download_at(&downloads_root, &file_name, &bytes).map(|_| ())
+    })
+    .await
+    .map_err(|_| "知识库下载保存任务中断".to_string())?
 }
 
 /// Only the native save dialog, never a remote website, chooses the destination.
@@ -2799,6 +2872,7 @@ pub fn run() {
             network_policy::open_external_link,
             set_auth_window_state,
             save_session_log_archive,
+            save_knowledge_download,
             save_expert_artifact,
             list_marketplace_skills,
             install_marketplace_skill,
@@ -3225,6 +3299,21 @@ mod marketplace_tests {
         install_marketplace_skill_at(&resources.0, &skills, "market-test-skill")
             .expect("upgrade legacy skill");
         assert!(target.join("manifest.json").exists());
+    }
+
+    #[test]
+    fn knowledge_downloads_keep_original_bytes_and_extension_without_overwriting() {
+        let downloads = TestDirectory::new();
+        let save = |name, bytes| super::save_knowledge_download_at(&downloads.0, name, bytes);
+        let first = save("原始资料.html", b"first").unwrap();
+        let second = save("原始资料.html", b"second").unwrap();
+        assert_eq!(first, downloads.0.join("原始资料.html"));
+        assert_eq!(second, downloads.0.join("原始资料-1.html"));
+        assert_eq!(fs::read(first).unwrap(), b"first");
+        assert_eq!(fs::read(second).unwrap(), b"second");
+        for invalid_name in ["../escape.pdf", "LPT¹.txt", "file.txt:stream"] {
+            assert!(save(invalid_name, b"unsafe").is_err());
+        }
     }
 
     #[test]

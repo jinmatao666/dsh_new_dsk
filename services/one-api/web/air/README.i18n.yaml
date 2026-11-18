@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write services/one-api/web/air/README.md
-README.md: a3eaac8f723ee698e2bd1d92abf6a8647e1b4d47
-README.zh.md: 92bb71223d037ffe9a4184f9e0c0ffe2cb097f29
+README.md: 6cc49c313223f6272a8441722fac9ad11e4f2fb1
+README.zh.md: edd85faadca6d53cd601bec46c200d3165d346eb

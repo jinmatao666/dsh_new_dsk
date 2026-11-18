@@ -25,7 +25,7 @@ export interface KnowledgeCreditQuote {
   limits?: KnowledgeCreditPrice
 }
 
-const defaultLimits = { browse_cents: 100_000_000, question_cents: 100_000_000, download_cents: 100_000_000 }
+const defaultLimits = { browse_cents: 1000, question_cents: 1000, download_cents: 1000 }
 const fields = [['browse_cents', 'browse'], ['question_cents', 'question'], ['download_cents', 'download']] as const
 const asRecord = (value: unknown) => typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
 function parsePrice(raw: unknown): KnowledgeCreditPrice {

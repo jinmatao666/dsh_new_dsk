@@ -11,12 +11,27 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/service/ragflow"
 )
 
 func knowledgeCreditFailure(c *gin.Context, status int, err error) {
+	if err.Error() == "INSUFFICIENT_CREDITS" {
+		err = errors.New("积分余额不足")
+	}
 	c.JSON(status, gin.H{"success": false, "message": err.Error()})
+}
+
+// releaseKnowledgeOperation keeps failed releases visible for the unified expiry recovery.
+func releaseKnowledgeOperation(c *gin.Context, baseId int, action, requestId, documentId string) {
+	status := "failed"
+	if c.Request.Context().Err() != nil {
+		status = "cancelled"
+	}
+	if err := model.ReleaseKnowledgeCredits(c.GetInt("id"), baseId, action, requestId, documentId, status); err != nil {
+		logger.Errorf(c.Request.Context(), "release knowledge billing base=%d request=%s: %v", baseId, requestId, err)
+	}
 }
 
 // GetKnowledgeCreditSettings exposes the current share and operations-edition availability.
@@ -217,7 +232,7 @@ func beginMeteredKnowledgeQuestion(c *gin.Context, base *model.KnowledgeBase, co
 	userId := c.GetInt("id")
 	fingerprint, _ := json.Marshal([]interface{}{base.Id, question, docIds})
 	key := knowledgeCreditHash(fmt.Sprintf("%d:%s", userId, requestId))
-	saved, err := model.BeginKnowledgeCreditQuestion(&model.KnowledgeCreditQuestion{Key: key, UserId: userId, BaseId: base.Id, SessionId: conversation.RagflowSessionId, Fingerprint: knowledgeCreditHash(string(fingerprint))}, conversation.Id)
+	saved, err := model.BeginKnowledgeCreditQuestion(&model.KnowledgeCreditQuestion{Key: key, RequestId: requestId, UserId: userId, BaseId: base.Id, SessionId: conversation.RagflowSessionId, Fingerprint: knowledgeCreditHash(string(fingerprint))}, conversation.Id)
 	return requestId, key, saved, err
 }
 

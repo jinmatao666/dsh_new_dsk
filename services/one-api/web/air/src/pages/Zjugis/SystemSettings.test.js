@@ -488,16 +488,20 @@ test('government edition defaults all three billing switches off and permits ind
   expect(JSON.parse(API.put.mock.calls[0][1].value).billing).toEqual({ showCredits: false, showMultipliers: true, enabled: false });
 });
 
-test('saves the operations knowledge credit split from the feature settings row', async () => {
+test.each([
+  [{ question_cents: 1000, download_cents: 1000, browse_cents: 1000 }, ['30', '10', '10', '10']],
+  [{ question_cents: 120, download_cents: 250, browse_cents: 0 }, ['30', '1.2', '2.5', '0']],
+])('saves the operations knowledge credit split and limits %p from the feature settings row', async (limits, displayed) => {
   const previous = API.get.getMockImplementation();
   API.get.mockImplementation((path, ...args) => path === '/api/knowledge-bases/credit-settings'
-    ? Promise.resolve({ data: { success: true, data: { enabled: true, platform_percent: 30, limits: { question_cents: 120, download_cents: 250, browse_cents: 0 } } } }) : previous(path, ...args));
+    ? Promise.resolve({ data: { success: true, data: { enabled: true, platform_percent: 30, limits } } }) : previous(path, ...args));
   await act(async () => root.render(<SystemSettings />));
   act(() => container.querySelectorAll('[role="tab"]')[4].click());
   const open = [...container.querySelectorAll('button')].find(button => button.textContent === '知识库积分设置');
   expect(open).toBeDefined();
   await act(async () => open.click());
   const dialog = document.querySelector('[role="dialog"][aria-label="知识库积分设置"]');
+  expect([...dialog.querySelectorAll('input')].map(input => input.value)).toEqual(displayed);
   expect(dialog.textContent).toContain('维护者占比：70%');
   expect([...dialog.querySelectorAll('button')].map(button => button.textContent)).toEqual(['取消', '保存']);
   act(() => {
@@ -507,7 +511,7 @@ test('saves the operations knowledge credit split from the feature settings row'
   });
   expect(dialog.textContent).toContain('维护者占比：80%');
   await act(async () => dialog.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-  expect(API.put).toHaveBeenCalledWith('/api/knowledge-admin/credit-settings', { platform_percent: 20, limits: { question_cents: 120, download_cents: 250, browse_cents: 0 } });
+  expect(API.put).toHaveBeenCalledWith('/api/knowledge-admin/credit-settings', { platform_percent: 20, limits });
   expect(document.querySelector('[role="dialog"][aria-label="知识库积分设置"]')).toBeNull();
   act(() => container.querySelectorAll('[role="tab"]')[3].click());
   act(() => container.querySelector('input[value="government"]').click());

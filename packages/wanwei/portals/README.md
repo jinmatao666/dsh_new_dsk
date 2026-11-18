@@ -27,7 +27,7 @@ This plugin mounts three independent feature entries: land market, planning lect
 
 The Wanwei desktop product mounts this plugin through its [composition patch](../../bundle/wanwei-desktop/cordis.patch.yml). It has no per-plugin configuration fields.
 
-Administrators set entry visibility and page URLs under workbench System Settings → Feature Settings (use Address Configuration beside each portal). Land market and planning lecture each have a desktop login provider credential. Disable this plugin’s row to remove the entries.
+Administrators set entry visibility and page URLs under workbench System Settings → Feature Settings (use Address Configuration beside each portal). The sidebar uses a building icon for land market and a presentation screen for planning lecture. Land market and planning lecture each have a desktop login provider credential. Disable this plugin’s row to remove the entries.
 
 -----
 

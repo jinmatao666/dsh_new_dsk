@@ -158,7 +158,7 @@ func GetDesktopCredits(c *gin.Context) {
 		if (earned && filter == "spent") || (!earned && filter == "earned") {
 			continue
 		}
-		query := model.DB.Model(&model.KnowledgeCreditReceipt{}).Where("user_id = ?", id)
+		query := model.DB.Model(&model.KnowledgeCreditReceipt{}).Where("user_id = ? AND (billing_task_id IS NULL OR billing_task_id = '')", id)
 		if earned {
 			query = model.DB.Model(&model.KnowledgeCreditReceipt{}).Where("owner_user_id = ? AND owner_cents > 0", id)
 		}

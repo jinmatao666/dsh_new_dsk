@@ -89,6 +89,16 @@ func BillingPointsQuota(points string) (int64, error) {
 }
 
 func reserveBusinessTask(userID int, input BillingTask) (BillingTask, string, error) {
+	task, token, err := reserveBusinessTaskDB(DB, userID, input, nil)
+	if err == nil {
+		InvalidateUserAccountCache(userID)
+	}
+	return task, token, err
+}
+
+// reserveBusinessTaskDB also accepts prices resolved by trusted in-process business code.
+// HTTP callers continue to use configured rules through ReserveBillingTask.
+func reserveBusinessTaskDB(db *gorm.DB, userID int, input BillingTask, quota *int64) (BillingTask, string, error) {
 	var result BillingTask
 	secret := uuid.NewString() + uuid.NewString()
 	if config.CreditsDisabled() {
@@ -97,13 +107,16 @@ func reserveBusinessTask(userID int, input BillingTask) (BillingTask, string, er
 	if input.Quantity < 1 || input.Quantity > 1000000 || input.RequestID == "" || len(input.RequestID) > 128 {
 		return result, "", errors.New("INVALID_REQUEST")
 	}
-	err := DB.Transaction(func(tx *gorm.DB) error {
+	err := db.Transaction(func(tx *gorm.DB) error {
 		var user User
 		if err := billingLock(tx).First(&user, userID).Error; err != nil {
 			return err
 		}
 		err := tx.Where("user_id = ? AND request_id = ?", userID, input.RequestID).First(&result).Error
 		if err == nil {
+			if quota != nil && result.Quota != *quota {
+				return errors.New("REQUEST_CONFLICT")
+			}
 			if result.Kind != input.Kind || result.ItemID != input.ItemID || result.Action != input.Action || result.Quantity != input.Quantity || result.Version != input.Version || result.PricingMode != input.PricingMode || result.Description != input.Description || result.SessionID != input.SessionID || !sameBillingTurn(result.TurnID, input.TurnID) {
 				return errors.New("REQUEST_CONFLICT")
 			}
@@ -114,7 +127,12 @@ func reserveBusinessTask(userID int, input BillingTask) (BillingTask, string, er
 			return err
 		}
 		amount := int64(0)
-		{
+		if quota != nil {
+			amount = *quota
+			if amount < 0 {
+				return errors.New("INVALID_PRICE")
+			}
+		} else {
 			rule, err := ResolveBusinessRule(billingLock(tx), input.Kind, input.ItemID, input.Action)
 			if err != nil {
 				return err
@@ -159,9 +177,6 @@ func reserveBusinessTask(userID int, input BillingTask) (BillingTask, string, er
 		result.BalanceAfter = user.Quota - amount
 		return tx.Create(&result).Error
 	})
-	if err == nil {
-		InvalidateUserAccountCache(userID)
-	}
 	return result, secret, err
 }
 
@@ -170,11 +185,20 @@ func sameBillingTurn(a, b *int) bool {
 }
 
 func SettleBillingTask(id, secret, status string, expiry bool) (BillingTask, error) {
+	task, err := settleBillingTaskDB(DB, id, secret, status, expiry)
+	if err == nil {
+		InvalidateUserAccountCache(task.UserID)
+	}
+	return task, err
+}
+
+// settleBillingTaskDB lets business receipts and grants commit with the unified settlement.
+func settleBillingTaskDB(db *gorm.DB, id, secret, status string, expiry bool) (BillingTask, error) {
 	var result BillingTask
 	if status != "succeeded" && status != "failed" && status != "cancelled" && !(expiry && status == "expired") {
 		return result, errors.New("INVALID_STATUS")
 	}
-	err := DB.Transaction(func(tx *gorm.DB) error {
+	err := db.Transaction(func(tx *gorm.DB) error {
 		var initial BillingTask
 		if err := tx.First(&initial, "id = ?", id).Error; err != nil {
 			return err
@@ -223,9 +247,6 @@ func SettleBillingTask(id, secret, status string, expiry bool) (BillingTask, err
 		result.BalanceAfter = user.Quota
 		return tx.Save(&result).Error
 	})
-	if err == nil {
-		InvalidateUserAccountCache(result.UserID)
-	}
 	return result, err
 }
 

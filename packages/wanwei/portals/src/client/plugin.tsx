@@ -33,6 +33,14 @@ function LandMarketIcon({ size = 18 }: { size?: number }) {
   </svg>
 }
 
+function PlanningLectureIcon({ size = 18 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="4" width="18" height="12" rx="2" />
+    <path d="m10 7 5 3-5 3V7Zm2 9v5m-5 0h10" />
+  </svg>
+}
+
 function PolicyEncyclopediaIcon({ size = 18 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -184,7 +192,7 @@ export function apply(ctx: Context): void {
     feature: 'planningLecture',
     title: productText('资规讲坛'),
     subtitle: productText('浏览配置的资规讲坛页面'),
-    Icon: LandMarketIcon,
+    Icon: PlanningLectureIcon,
     launchWithTicket: launchPortal('planning-lecture-launch'),
   })
   registerPortal(ctx, {

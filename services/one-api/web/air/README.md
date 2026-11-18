@@ -19,7 +19,7 @@ for example: `REACT_APP_SERVER=http://your.domain.com`.
 
 Before you start editing, make sure your `Actions on Save` options have `Optimize imports` & `Run Prettier` enabled.
 
-In the operations edition, System Settings → Features → Knowledge Bases → Knowledge credit settings saves the platform percentage and maximum per-file browse, Q&A and download prices for subsequent subscription-library settlements. Lowering a limit caps existing prices on future charges. The dialog calculates the remaining share for the maintainer from the entered percentage.
+In the operations edition, System Settings → Features → Knowledge Bases → Knowledge credit settings saves the platform percentage and maximum per-file browse, Q&A and download prices for subsequent subscription-library settlements. The default maximum for each action is 10 credits. Lowering a limit caps existing prices on future charges. The dialog calculates the remaining share for the maintainer from the entered percentage.
 
 ## Reference
 

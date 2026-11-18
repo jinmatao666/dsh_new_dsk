@@ -42,6 +42,8 @@ beforeEach(() => { stubCanvas() })
 afterEach(() => {
   clearKnowledgeDownloadCache()
   cleanup()
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 function stubCanvas() {
@@ -1228,12 +1230,10 @@ it('opens a PDF preview with pdf.js when a content list item is clicked', async 
   const revokeObjectURL = vi.fn()
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL })
-  const click = vi.fn()
-  const createElement = window.document.createElement.bind(window.document)
-  vi.spyOn(window.document, 'createElement').mockImplementation((tagName: string) => {
-    const element = createElement(tagName)
-    if (tagName === 'a') Object.defineProperty(element, 'click', { value: click })
-    return element
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    expect(this.isConnected).toBe(true)
+    expect(this.download).toBe('说明.pdf')
+    expect(revokeObjectURL).not.toHaveBeenCalled()
   })
   render(<KnowledgePage api={service} />)
   fireEvent.click(await screen.findByRole('button', { name: /说明\.pdf/ }))
@@ -1248,6 +1248,33 @@ it('opens a PDF preview with pdf.js when a content list item is clicked', async 
   expect(createObjectURL).toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: '关闭' }))
   expect(screen.queryByRole('dialog', { name: '说明.pdf' })).toBeNull()
+})
+
+it('saves a previewed document through the desktop bridge and reports save failures inside the preview', async () => {
+  const service = api()
+  const invoke = vi.fn()
+    .mockRejectedValueOnce('下载目录不可写')
+    .mockResolvedValueOnce(undefined)
+  vi.stubGlobal('__ZJUGIS_NATIVE_INVOKE__', invoke)
+  render(<KnowledgePage api={service} />)
+  fireEvent.click(await screen.findByRole('button', { name: /说明\.pdf/ }))
+  expect(await screen.findByAltText('PDF 1')).toBeTruthy()
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  service.creditPrice = vi.fn(async () => ({
+    enabled: true, applies: true, configured: true, preview_free: true, platform_percent: 30,
+    price: { browse_cents: 0, question_cents: 0, download_cents: 50 },
+  }))
+  const preview = within(screen.getByRole('dialog', { name: '说明.pdf' }))
+  const download = preview.getByRole('button', { name: '下载' })
+  fireEvent.click(download)
+  expect((await preview.findByRole('alert')).textContent).toBe('下载失败：下载目录不可写')
+  fireEvent.click(download)
+  expect((await preview.findByRole('status')).textContent).toBe('已保存到下载文件夹')
+  expect(invoke).toHaveBeenCalledTimes(2)
+  expect(invoke).toHaveBeenLastCalledWith('save_knowledge_download', { fileName: '说明.pdf', bytesBase64: 'JVBERg==' })
+  expect(service.download).toHaveBeenCalledTimes(2)
+  expect(service.download).toHaveBeenLastCalledWith(1, 'doc-1', expect.objectContaining({ action: 'download', expectedCents: 50 }))
+  expect(confirm).toHaveBeenCalledTimes(1)
 })
 
 it('opens 问问万维 beside a preview and asks the current knowledge base about that file', async () => {

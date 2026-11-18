@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-save-knowledge-download"
+description = "Allows the main desktop webview to save an authorized knowledge document to Downloads."
+commands.allow = ["save_knowledge_download"]

@@ -446,6 +446,8 @@ export function KnowledgePage({ api, networkMode = 'internet' }: { api: Knowledg
   const [previewMessages, setPreviewMessages] = useState<Message[]>([])
   const [previewHints, setPreviewHints] = useState(true)
   const [downloading, setDownloading] = useState(false)
+  const [downloadFeedback, setDownloadFeedback] = useState<{ message: string; error: boolean }>()
+  const pendingPaidDownload = useRef<{ epoch: number; file: KnowledgeFileBytes }>(undefined)
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([])
   const [contentMenu, setContentMenu] = useState<ContentMenu>()
   const [deleteIds, setDeleteIds] = useState<string[]>()
@@ -756,6 +758,8 @@ export function KnowledgePage({ api, networkMode = 'internet' }: { api: Knowledg
   const previewEpoch = useRef(0)
   const closeViewer = () => {
     previewEpoch.current += 1
+    pendingPaidDownload.current = undefined
+    setDownloadFeedback(undefined)
     resetPreviewAsk()
     setViewer((current) => {
       if (current?.objectUrl !== undefined) URL.revokeObjectURL(current.objectUrl)
@@ -799,6 +803,8 @@ export function KnowledgePage({ api, networkMode = 'internet' }: { api: Knowledg
   ) => {
     if (libraryId === undefined) return
     const epoch = ++previewEpoch.current
+    pendingPaidDownload.current = undefined
+    setDownloadFeedback(undefined)
     if (!keepAsk) resetPreviewAsk()
     const kind = fileKind(document.name)
     const minutesDoc = isRecordingMinutesName(documentBaseName(document)) || kind === 'audio'
@@ -945,22 +951,54 @@ export function KnowledgePage({ api, networkMode = 'internet' }: { api: Knowledg
     if (libraryId === undefined || viewer === undefined || downloading) return
     const epoch = previewEpoch.current
     setDownloading(true)
+    setDownloadFeedback(undefined)
     try {
-      const paid = await meteredFile(libraryId, viewer.document.id, 'download', () => previewEpoch.current === epoch)
+      const pending = pendingPaidDownload.current
+      const paid = pending?.epoch === epoch ? pending.file
+        : await meteredFile(libraryId, viewer.document.id, 'download', () => previewEpoch.current === epoch)
       if (paid === null) return
+      if (paid !== undefined && previewEpoch.current === epoch) pendingPaidDownload.current = { epoch, file: paid }
       const cached = readDownloadCache(libraryId, viewer.document.id)
       const file = paid ?? cached ?? await api.download(libraryId, viewer.document.id)
       if (cached === undefined) writeDownloadCache(libraryId, viewer.document.id, file)
-      const url = URL.createObjectURL(new Blob([file.bytes.slice()], {
+      const blob = new Blob([file.bytes.slice()], {
         type: mimeFor(viewer.document.name, file.contentType),
-      }))
-      const link = window.document.createElement('a')
-      link.href = url
-      link.download = documentDisplayName(viewer.document) || 'download'
-      link.click()
-      URL.revokeObjectURL(url)
+      })
+      const fileName = documentBaseName(viewer.document) || 'download'
+      const invoke = (window as Window & {
+        __ZJUGIS_NATIVE_INVOKE__?: (command: string, args: unknown) => Promise<unknown>
+      }).__ZJUGIS_NATIVE_INVOKE__
+      if (invoke !== undefined) {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(String(reader.result))
+          reader.onerror = () => reject(reader.error)
+          reader.readAsDataURL(blob)
+        })
+        await invoke('save_knowledge_download', { fileName, bytesBase64: dataUrl.slice(dataUrl.indexOf(',') + 1) })
+        if (previewEpoch.current === epoch) {
+          setDownloadFeedback({ message: productText('已保存到下载文件夹'), error: false })
+        }
+      } else {
+        const url = URL.createObjectURL(blob)
+        const link = window.document.createElement('a')
+        link.href = url
+        link.download = fileName
+        link.hidden = true
+        window.document.body.append(link)
+        try {
+          link.click()
+        } finally {
+          link.remove()
+          // The browser resolves the blob URL asynchronously after the click.
+          window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+        }
+      }
+      if (previewEpoch.current === epoch) pendingPaidDownload.current = undefined
     } catch (cause) {
-      setError(`${productText('下载失败')}：${String(cause)}`)
+      if (previewEpoch.current === epoch) {
+        setDownloadFeedback({ message: `${productText('下载失败')}：${String(cause)}`, error: true })
+      }
     } finally {
       setDownloading(false)
     }
@@ -1990,6 +2028,8 @@ export function KnowledgePage({ api, networkMode = 'internet' }: { api: Knowledg
             </button>}
           </div>
         </header>
+        {downloadFeedback !== undefined && <p className="dsh-knowledge-viewer-download-feedback"
+          role={downloadFeedback.error ? 'alert' : 'status'}>{downloadFeedback.message}</p>}
         <div className={`dsh-knowledge-viewer-body ${viewer.mode}`} ref={previewBodyRef}>
           {viewer.loading ? <ViewerLoading label={productText('正在加载…')} />
             : viewer.mode === 'minutes'

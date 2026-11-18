@@ -8,7 +8,9 @@ English | [中文](2026-11-12-operations-knowledge-credits.zh.md)
 
 OneAPI owns integer hundredth-credit prices and immutable usage receipts. Subscriber debit, maintainer credit and platform remainder commit in the same database transaction. A completed answer uses its displayed RAGFlow citations as the authoritative list of chargeable files. A paid preview creates a rolling 24-hour access window. Request identities protect retries from duplicate settlement.
 
-The knowledge page buffers subscription answers until settlement completes. A pending upstream conversation can contain an unpaid answer, so the history endpoint withholds that conversation until the user clears it. Composer retrieval lacks final citation identities and directs paid subscription questions to the knowledge page. The [knowledge-base README](../../../../packages/wanwei/knowledge-base/README.md) describes owner pricing and the user flow.
+The knowledge page buffers subscription answers until settlement completes. A pending upstream conversation can contain an unpaid answer, so the history endpoint withholds that conversation until settlement recovers or the user clears it. Composer retrieval lacks final citation identities and directs paid subscription questions to the knowledge page. The [knowledge-base README](../../../../packages/wanwei/knowledge-base/README.md) describes owner pricing and the user flow.
+
+The [unified settlement decision](../architecture/2026-11-18-knowledge-unified-credit-settlement.md) owns reservation, issuance and saved-answer recovery. This note retains the subscription charging policy and access rationale.
 
 ## Verification
 

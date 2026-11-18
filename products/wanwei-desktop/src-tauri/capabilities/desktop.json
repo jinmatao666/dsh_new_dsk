@@ -18,6 +18,7 @@
     "allow-set-network-environment",
     "allow-open-external-link",
     "allow-save-session-log-archive",
+    "allow-save-knowledge-download",
     "allow-list-marketplace-skills",
     "allow-install-marketplace-skill",
     "allow-uninstall-marketplace-skill",

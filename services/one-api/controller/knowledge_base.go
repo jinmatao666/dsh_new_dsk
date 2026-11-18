@@ -740,6 +740,18 @@ func DownloadKnowledgeDocument(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if terms != nil && action != "" {
+		if err := model.ReserveKnowledgeCredits(c.GetInt("id"), row, terms, action, requestId, documentId); err != nil {
+			knowledgeCreditFailure(c, 402, err)
+			return
+		}
+	}
+	readyToSettle := false
+	defer func() {
+		if terms != nil && action != "" && !readyToSettle {
+			releaseKnowledgeOperation(c, row.Id, action, requestId, documentId)
+		}
+	}()
 	contentType, body, err := client.DownloadDocument(c.Request.Context(), row.RagflowDatasetId, documentId)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
@@ -755,6 +767,7 @@ func DownloadKnowledgeDocument(c *gin.Context) {
 			return
 		}
 		documentName := document.Name
+		readyToSettle = true
 
 		if _, err := model.SettleKnowledgeCredits(c.GetInt("id"), row, terms, action, requestId, []model.KnowledgeCreditDocument{{Id: documentId, Name: documentName}}, "", ""); err != nil {
 			knowledgeCreditFailure(c, 402, err)
@@ -1521,7 +1534,6 @@ func recreateKnowledgeConversation(c *gin.Context, client *ragflow.Client, base 
 }
 
 func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *model.KnowledgeBase, conversation model.KnowledgeConversation, question string, stream bool, docIds ...string) {
-	// Shared billing extension point only; the knowledge module currently selects no charging policy.
 	prepareKnowledgeBilling(c, base)
 
 	if deferKnowledgeAskIfNeeded(c, client, base.RagflowDatasetId, stream, docIds...) {
@@ -1565,6 +1577,41 @@ func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *m
 		answerKnowledgeConversationStream(c, client, base, conversation, question, docIds...)
 		return
 	}
+	if terms != nil {
+		if err := model.ReserveKnowledgeCredits(c.GetInt("id"), base, terms, "question", requestId, ""); err != nil {
+			knowledgeCreditFailure(c, 402, err)
+			return
+		}
+	}
+	readyToSettle := false
+	defer func() {
+		if terms != nil && !readyToSettle {
+			releaseKnowledgeOperation(c, base.Id, "question", requestId, "")
+		}
+	}()
+	if terms != nil {
+		var pending model.KnowledgeCreditQuestion
+		if err := model.DB.First(&pending, "key = ?", questionKey).Error; err != nil {
+			knowledgeCreditFailure(c, 500, err)
+			return
+		}
+		if pending.Answer != "" {
+			readyToSettle = true
+			var data struct {
+				Citations []ragflow.Citation `json:"citations"`
+			}
+			if err := json.Unmarshal([]byte(pending.Answer), &data); err != nil {
+				knowledgeCreditFailure(c, 500, err)
+				return
+			}
+			if _, err := model.SettleKnowledgeCredits(c.GetInt("id"), base, terms, "question", requestId, knowledgeCreditDocuments(data.Citations), questionKey, pending.Answer); err != nil {
+				knowledgeCreditFailure(c, 402, err)
+				return
+			}
+			writeMeteredKnowledgeAnswer(c, stream, pending.Answer)
+			return
+		}
+	}
 	completion, err := completeWithRecovery(c, client, base, conversation, question, docIds...)
 	if err != nil {
 		if c.Writer.Written() {
@@ -1573,6 +1620,7 @@ func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *m
 		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	readyToSettle = true
 	recommendations, recommendationErr := client.Recommend(c.Request.Context(), question)
 	recommendations = limitKnowledgeRecommendations(recommendations)
 	citations := ragflow.ParseCitations(completion.Reference, completion.Answer)
@@ -1589,6 +1637,10 @@ func answerKnowledgeConversation(c *gin.Context, client *ragflow.Client, base *m
 		}
 		payload, err := json.Marshal(data)
 		if err != nil {
+			knowledgeCreditFailure(c, 500, err)
+			return
+		}
+		if err := model.DB.Model(&model.KnowledgeCreditQuestion{}).Where("key = ?", questionKey).Update("answer", string(payload)).Error; err != nil {
 			knowledgeCreditFailure(c, 500, err)
 			return
 		}

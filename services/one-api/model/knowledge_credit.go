@@ -38,6 +38,7 @@ type KnowledgeCreditReceipt struct {
 	OwnerCents        int64     `json:"owner_cents"`
 	PlatformCents     int64     `json:"platform_cents"`
 	PlatformPercent   int       `json:"platform_percent"`
+	BillingTaskId     string    `json:"-" gorm:"index"`
 	BalanceAfter      int64     `json:"-"`
 	OwnerBalanceAfter int64     `json:"-"`
 	CreatedAt         time.Time `json:"created_at"`
@@ -54,11 +55,13 @@ type KnowledgePreviewAccess struct {
 // KnowledgeCreditQuestion prevents replaying a settled question or exposing an unpaid answer from history.
 type KnowledgeCreditQuestion struct {
 	Key         string `gorm:"primaryKey;size:64"`
+	RequestId   string `gorm:"size:64"`
 	UserId      int    `gorm:"index"`
 	BaseId      int
 	SessionId   string `gorm:"index;size:128"`
 	Fingerprint string `gorm:"size:64"`
 	Result      string `gorm:"type:text"`
+	Answer      string `gorm:"type:text"`
 	CreatedAt   time.Time
 }
 
@@ -83,7 +86,10 @@ func ReadKnowledgeCreditSettings() (KnowledgeCreditSettings, error) {
 	percentText := config.OptionMap["KnowledgeCreditPlatformPercent"]
 	raw := config.OptionMap["KnowledgeCreditSettings"]
 	config.OptionMapRWMutex.RUnlock()
-	settings := KnowledgeCreditSettings{Percent: 30, Limits: KnowledgeCreditLimits{maxKnowledgeCreditCents, maxKnowledgeCreditCents, maxKnowledgeCreditCents}}
+	settings := KnowledgeCreditSettings{
+		Percent: 30,
+		Limits:  KnowledgeCreditLimits{BrowseCents: 1000, QuestionCents: 1000, DownloadCents: 1000},
+	}
 	if raw != "" {
 		if err := json.Unmarshal([]byte(raw), &settings); err != nil {
 			return settings, err
@@ -162,8 +168,8 @@ func GetKnowledgeCreditPrice(baseId int) (KnowledgeCreditPrice, bool, error) {
 
 // SaveKnowledgeCreditPrice requires the original personal-library owner and integer hundredths.
 func SaveKnowledgeCreditPrice(userId, baseId int, price KnowledgeCreditPrice) error {
-	if price.BrowseCents < 0 || price.QuestionCents < 0 || price.DownloadCents < 0 || price.BrowseCents > 100000000 || price.QuestionCents > 100000000 || price.DownloadCents > 100000000 {
-		return errors.New("单价须为 0 至 1,000,000 积分，最多两位小数")
+	if price.BrowseCents < 0 || price.QuestionCents < 0 || price.DownloadCents < 0 || price.BrowseCents > 100000 || price.QuestionCents > 100000 || price.DownloadCents > 100000 {
+		return errors.New("单价须为 0 至 1000 积分，最多两位小数")
 	}
 	settings, err := ReadKnowledgeCreditSettings()
 	if err != nil {
@@ -278,6 +284,9 @@ func BeginKnowledgeCreditQuestion(question *KnowledgeCreditQuestion, conversatio
 				return errors.New("问答请求编号已用于其他问题")
 			}
 			if previous.Result == "" {
+				if previous.Answer != "" {
+					return nil
+				}
 				return errors.New("上次问答未结算，请清空会话后重试")
 			}
 			result = previous.Result
@@ -298,8 +307,8 @@ func BeginKnowledgeCreditQuestion(question *KnowledgeCreditQuestion, conversatio
 	return result, err
 }
 
-// SettleKnowledgeCredits debits active quota and grants shares atomically; previews reuse an unextended entitlement.
-// Document ids are deduplicated per request. An insufficient live ledger rolls back every receipt and reward.
+// SettleKnowledgeCredits confirms unified tasks and issues shares with their receipts atomically.
+// Document ids are deduplicated per request. Insufficient credit retains the initial reserve for result recovery.
 func SettleKnowledgeCredits(userId int, base *KnowledgeBase, terms *KnowledgeCreditTerms, action, requestId string, documents []KnowledgeCreditDocument, questionKey, answer string) ([]KnowledgeCreditReceipt, error) {
 	if terms == nil {
 		return nil, nil
@@ -327,6 +336,18 @@ func SettleKnowledgeCredits(userId int, base *KnowledgeBase, terms *KnowledgeCre
 	now := time.Now().UTC()
 	receipts := []KnowledgeCreditReceipt{}
 	err := DB.Transaction(func(tx *gorm.DB) error {
+		if questionKey != "" {
+			var question KnowledgeCreditQuestion
+			if err := billingLock(tx).First(&question, "key = ? AND user_id = ? AND base_id = ?", questionKey, userId, base.Id).Error; err != nil {
+				return err
+			}
+			if question.Result != "" {
+				if question.Result != answer {
+					return errors.New("问答结算结果冲突")
+				}
+				return tx.Where("user_id = ? AND request_id = ? AND knowledge_base_id = ? AND action = ?", userId, requestId, base.Id, action).Find(&receipts).Error
+			}
+		}
 		if cents > 0 && len(documents) > 0 {
 			ids := []int{userId, base.OwnerUserId}
 			var users []User
@@ -346,6 +367,71 @@ func SettleKnowledgeCredits(userId int, base *KnowledgeBase, terms *KnowledgeCre
 				}
 			}
 		}
+		// Completed legacy receipts remain authoritative after migrating to unified tasks.
+		var previous []KnowledgeCreditReceipt
+		if err := tx.Where("user_id = ? AND request_id = ? AND knowledge_base_id = ? AND action = ?", userId, requestId, base.Id, action).Find(&previous).Error; err != nil {
+			return err
+		}
+		if len(previous) > 0 {
+			paid := map[string]bool{}
+			for _, row := range previous {
+				paid[row.DocumentId] = true
+			}
+			allPaid := len(documents) > 0
+			for _, doc := range documents {
+				if !paid[doc.Id] {
+					allPaid = false
+				}
+			}
+			if allPaid {
+				receipts = previous
+				return nil
+			}
+		}
+		if action == "browse" && len(documents) == 1 {
+			var access KnowledgePreviewAccess
+			err := tx.First(&access, "user_id = ? AND knowledge_base_id = ? AND document_id = ?", userId, base.Id, documents[0].Id).Error
+			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			if err == nil && access.PaidUntil.After(now) {
+				var pending KnowledgeCreditReservation
+				err := tx.First(&pending, "key = ?", knowledgeReservationKey(userId, base.Id, action, requestId, documents[0].Id)).Error
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil
+				}
+				if err != nil {
+					return err
+				}
+				_, err = settleBillingTaskDB(tx, pending.TaskId, pending.Token, "cancelled", false)
+				return err
+			}
+		}
+		// Lock the operation capability so concurrent retries share one settlement.
+		initialDocument := ""
+		if action != "question" && len(documents) > 0 {
+			initialDocument = documents[0].Id
+		}
+		reservation, err := reserveKnowledgeCreditsTx(tx, userId, base, terms, action, requestId, initialDocument)
+		if err != nil {
+			return err
+		}
+		var operation KnowledgeCreditReservation
+		if err := billingLock(tx).First(&operation, "key = ?", reservation.Key).Error; err != nil {
+			return err
+		}
+		if err := json.Unmarshal([]byte(operation.Terms), &terms); err != nil {
+			return err
+		}
+		price, percent = terms.Price, terms.PlatformPercent
+		cents = price.BrowseCents
+		if action == "question" {
+			cents = price.QuestionCents
+		}
+		if action == "download" {
+			cents = price.DownloadCents
+		}
+		usedInitial := false
 		seen := map[string]bool{}
 		var totalCents int64
 		for _, doc := range documents {
@@ -356,6 +442,7 @@ func SettleKnowledgeCredits(userId int, base *KnowledgeBase, terms *KnowledgeCre
 			var prior KnowledgeCreditReceipt
 			found := tx.Where("user_id = ? AND request_id = ? AND knowledge_base_id = ? AND document_id = ? AND action = ?", userId, requestId, base.Id, doc.Id, action).First(&prior).Error
 			if found == nil {
+				usedInitial = true
 				receipts = append(receipts, prior)
 				continue
 			}
@@ -372,19 +459,31 @@ func SettleKnowledgeCredits(userId int, base *KnowledgeBase, terms *KnowledgeCre
 					continue
 				}
 			}
-			cost := cents * quotaPerCent
-			if err := debitUserQuotaTx(tx, userId, cost, true); err != nil {
+			charge := operation
+			if usedInitial {
+				charge, err = reserveKnowledgeCreditsTx(tx, userId, base, terms, action, requestId, doc.Id)
+				if err != nil {
+					return err
+				}
+			}
+			task, err := settleBillingTaskDB(tx, charge.TaskId, charge.Token, "succeeded", false)
+			if err != nil {
 				return err
 			}
+			if task.State != "succeeded" {
+				return errors.New("知识库计费预留已过期，请核对原操作")
+			}
+			usedInitial = true
 			share := int64(100 - percent)
 			ownerCents := ((totalCents+cents)*share+50)/100 - (totalCents*share+50)/100
 			totalCents += cents
 			row := KnowledgeCreditReceipt{UserId: userId, RequestId: requestId, KnowledgeBaseId: base.Id, DocumentId: doc.Id, Action: action, OwnerUserId: base.OwnerUserId, LibraryName: base.Name, DocumentName: doc.Name, Cents: cents, OwnerCents: ownerCents, PlatformCents: cents - ownerCents, PlatformPercent: percent, CreatedAt: now}
+			row.BillingTaskId = task.ID
 			if err := tx.Create(&row).Error; err != nil {
 				return err
 			}
 			if ownerCents > 0 {
-				if err := AddUserTimedQuotaTx(tx, base.OwnerUserId, ownerCents*quotaPerCent, "knowledge", fmt.Sprint(row.Id), nil); err != nil {
+				if err := grantCreditsTx(tx, base.OwnerUserId, userId, ownerCents*quotaPerCent, "知识库分成 · "+base.Name, nil, "knowledge", "knowledge-"+fmt.Sprint(row.Id)); err != nil {
 					return err
 				}
 			}
@@ -406,6 +505,11 @@ func SettleKnowledgeCredits(userId int, base *KnowledgeBase, terms *KnowledgeCre
 				if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}, {Name: "knowledge_base_id"}, {Name: "document_id"}}, DoUpdates: clause.AssignmentColumns([]string{"paid_until"})}).Create(&access).Error; err != nil {
 					return err
 				}
+			}
+		}
+		if !usedInitial {
+			if _, err := settleBillingTaskDB(tx, operation.TaskId, operation.Token, "cancelled", false); err != nil {
+				return err
 			}
 		}
 		if questionKey != "" {

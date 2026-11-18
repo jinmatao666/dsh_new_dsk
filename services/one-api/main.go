@@ -79,6 +79,9 @@ func main() {
 	model.InitDB()
 	go func() {
 		for {
+			if err := model.RecoverKnowledgeCreditAnswers(); err != nil {
+				logger.SysError("知识库问答结算恢复失败: " + err.Error())
+			}
 			if err := model.ExpireBillingTasks(); err != nil {
 				logger.SysError("统一计费超时释放失败: " + err.Error())
 			}

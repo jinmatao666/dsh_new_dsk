@@ -41,3 +41,12 @@ worktrees/
 .typert-*/
 products/wanwei-desktop/assets/lark-*/
 .gomodcache/
+.wanwei-dev-home/
+.venv/
+__pycache__/
+*.py[cod]
+expert-web/cad-redline-extractor/
+expert-web/coordinate-transform/
+expert-web/gis-format-converter/
+packages/wanwei/oneapi-auth/src/client/KnowledgeCreditSettings.js*
+packages/wanwei/oneapi-auth/src/client/KnowledgeCreditSettings.d.ts*

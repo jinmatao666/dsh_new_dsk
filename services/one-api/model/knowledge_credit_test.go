@@ -31,7 +31,7 @@ func knowledgeCreditFixture(t *testing.T, initial int64) KnowledgeBase {
 		config.OptionMapRWMutex.Unlock()
 		require.NoError(t, sqlDB.Close())
 	})
-	require.NoError(t, db.AutoMigrate(&User{}, &UserTimedQuota{}, &KnowledgeBase{}, &KnowledgeCreditPrice{}, &KnowledgeCreditReceipt{}, &KnowledgePreviewAccess{}, &KnowledgeCreditQuestion{}, &KnowledgeConversation{}))
+	require.NoError(t, db.AutoMigrate(&User{}, &UserTimedQuota{}, &KnowledgeBase{}, &KnowledgeCreditPrice{}, &KnowledgeCreditReceipt{}, &KnowledgePreviewAccess{}, &KnowledgeCreditQuestion{}, &KnowledgeConversation{}, &KnowledgeCreditReservation{}, &BillingTask{}, &AdminCreditGrant{}))
 	require.NoError(t, db.Create(&User{Id: 1, Username: "subscriber", AffCode: "buyer", AccessToken: "buyer-token"}).Error)
 	require.NoError(t, db.Create(&User{Id: 2, Username: "maintainer", AffCode: "owner", AccessToken: "owner-token"}).Error)
 	require.NoError(t, AddUserTimedQuota(1, initial, "topup", "test", nil))
@@ -48,6 +48,22 @@ func creditBalances(t *testing.T, buyer, owner int64) {
 	require.Len(t, users, 2)
 	require.Equal(t, buyer, users[0].Quota)
 	require.Equal(t, owner, users[1].Quota)
+}
+
+func TestKnowledgeCreditSettingsDefaultToTenCreditsAndKeepSavedLimits(t *testing.T) {
+	knowledgeCreditFixture(t, 20000)
+	require.NoError(t, DB.AutoMigrate(&Option{}))
+	settings, err := ReadKnowledgeCreditSettings()
+	require.NoError(t, err)
+	require.Equal(t, KnowledgeCreditSettings{
+		Percent: 30,
+		Limits:  KnowledgeCreditLimits{BrowseCents: 1000, QuestionCents: 1000, DownloadCents: 1000},
+	}, settings)
+	saved := KnowledgeCreditSettings{Percent: 25, Limits: KnowledgeCreditLimits{BrowseCents: 0, QuestionCents: 2500, DownloadCents: 500}}
+	require.NoError(t, SaveKnowledgeCreditSettings(saved))
+	settings, err = ReadKnowledgeCreditSettings()
+	require.NoError(t, err)
+	require.Equal(t, saved, settings)
 }
 
 func TestKnowledgeCreditPreviewWindowAndDownloadReplay(t *testing.T) {
@@ -92,7 +108,7 @@ func TestKnowledgeCreditQuestionAtomicAndDeduplicated(t *testing.T) {
 	require.NoError(t, err)
 	documents := []KnowledgeCreditDocument{{Id: "file-a"}, {Id: "file-a"}, {Id: "file-b"}}
 	_, err = SettleKnowledgeCredits(1, &base, terms, "question", "q", documents, question.Key, `{"answer":"done"}`)
-	require.ErrorContains(t, err, "积分余额不足")
+	require.ErrorContains(t, err, "INSUFFICIENT_CREDITS")
 	creditBalances(t, 1500, 0)
 	var count int64
 	require.NoError(t, DB.Model(&KnowledgeCreditReceipt{}).Count(&count).Error)
@@ -144,4 +160,111 @@ func TestKnowledgeCreditLimitsApplyToNewPricesAndExistingCharges(t *testing.T) {
 	require.Equal(t, int64(75), terms.Price.QuestionCents)
 	require.Zero(t, terms.Price.DownloadCents)
 	require.Equal(t, 25, terms.PlatformPercent)
+}
+
+func TestKnowledgeUnifiedReserveReleaseAndGrantReplay(t *testing.T) {
+	base := knowledgeCreditFixture(t, 10000)
+	terms, err := ReadKnowledgeCreditTerms(&base, 1)
+	require.NoError(t, err)
+	require.NoError(t, ReserveKnowledgeCredits(1, &base, terms, "download", "failure", "file"))
+	creditBalances(t, 7000, 0)
+	require.NoError(t, ReleaseKnowledgeCredits(1, base.Id, "download", "failure", "file", "failed"))
+	require.NoError(t, ReleaseKnowledgeCredits(1, base.Id, "download", "failure", "file", "failed"))
+	creditBalances(t, 10000, 0)
+	require.NoError(t, ReserveKnowledgeCredits(1, &base, terms, "download", "success", "file"))
+	creditBalances(t, 7000, 0)
+	documents := []KnowledgeCreditDocument{{Id: "file"}}
+	for i := 0; i < 2; i++ {
+		_, err = SettleKnowledgeCredits(1, &base, terms, "download", "success", documents, "", "")
+		require.NoError(t, err)
+	}
+	creditBalances(t, 7000, 2100)
+	var tasks []BillingTask
+	require.NoError(t, DB.Order("created_at").Find(&tasks).Error)
+	require.Len(t, tasks, 2)
+	require.Equal(t, "failed", tasks[0].State)
+	require.Equal(t, "succeeded", tasks[1].State)
+	var grants []AdminCreditGrant
+	require.NoError(t, DB.Find(&grants).Error)
+	require.Len(t, grants, 1)
+	require.Equal(t, int64(2100), grants[0].Amount)
+}
+
+func TestKnowledgeUnifiedNoCitationAndExpiredReserve(t *testing.T) {
+	base := knowledgeCreditFixture(t, 10000)
+	terms, err := ReadKnowledgeCreditTerms(&base, 1)
+	require.NoError(t, err)
+	require.NoError(t, ReserveKnowledgeCredits(1, &base, terms, "question", "no-citation", ""))
+	_, err = SettleKnowledgeCredits(1, &base, terms, "question", "no-citation", nil, "", "")
+	require.NoError(t, err)
+	creditBalances(t, 10000, 0)
+	require.NoError(t, ReserveKnowledgeCredits(1, &base, terms, "download", "expired", "file"))
+	require.NoError(t, DB.Model(&BillingTask{}).Where("state = ?", "reserved").Update("expires_at", time.Now().Add(-time.Minute)).Error)
+	_, err = SettleKnowledgeCredits(1, &base, terms, "download", "expired", []KnowledgeCreditDocument{{Id: "file"}}, "", "")
+	require.ErrorContains(t, err, "过期")
+	require.NoError(t, DB.AutoMigrate(&BusinessBillingContext{}))
+	require.NoError(t, ExpireBillingTasks())
+	creditBalances(t, 10000, 0)
+}
+
+func TestKnowledgeUnifiedRecoversSavedAnswerWithoutDoubleGrant(t *testing.T) {
+	base := knowledgeCreditFixture(t, 10000)
+	terms, err := ReadKnowledgeCreditTerms(&base, 1)
+	require.NoError(t, err)
+	require.NoError(t, ReserveKnowledgeCredits(1, &base, terms, "question", "recover", ""))
+	answer := `{"answer":"done","citations":[{"document_id":"file-a"},{"document_id":"file-a"},{"document_id":"file-b"}]}`
+	question := KnowledgeCreditQuestion{Key: "saved-question", RequestId: "recover", UserId: 1, BaseId: base.Id, SessionId: "session", Answer: answer}
+	require.NoError(t, DB.Create(&question).Error)
+	require.NoError(t, RecoverKnowledgeCreditAnswers())
+	require.NoError(t, RecoverKnowledgeCreditAnswers())
+	creditBalances(t, 7980, 1410)
+	require.NoError(t, DB.First(&question, "key = ?", question.Key).Error)
+	require.JSONEq(t, answer, question.Result)
+	var grants int64
+	require.NoError(t, DB.Model(&AdminCreditGrant{}).Count(&grants).Error)
+	require.Equal(t, int64(2), grants)
+}
+
+func TestKnowledgeUnifiedGrantFailureKeepsReserveForRetry(t *testing.T) {
+	base := knowledgeCreditFixture(t, 10000)
+	terms, err := ReadKnowledgeCreditTerms(&base, 1)
+	require.NoError(t, err)
+	require.NoError(t, ReserveKnowledgeCredits(1, &base, terms, "download", "retry-grant", "file"))
+	require.NoError(t, DB.Migrator().DropTable(&AdminCreditGrant{}))
+	documents := []KnowledgeCreditDocument{{Id: "file"}}
+	_, err = SettleKnowledgeCredits(1, &base, terms, "download", "retry-grant", documents, "", "")
+	require.Error(t, err)
+	creditBalances(t, 7000, 0)
+	var task BillingTask
+	require.NoError(t, DB.First(&task).Error)
+	require.Equal(t, "reserved", task.State)
+	var count int64
+	require.NoError(t, DB.Model(&KnowledgeCreditReceipt{}).Count(&count).Error)
+	require.Zero(t, count)
+	require.NoError(t, DB.AutoMigrate(&AdminCreditGrant{}))
+	_, err = SettleKnowledgeCredits(1, &base, terms, "download", "retry-grant", documents, "", "")
+	require.NoError(t, err)
+	creditBalances(t, 7000, 2100)
+}
+
+func TestKnowledgeLegacyReceiptReplayAndPaidPreviewNeedNoNewReserve(t *testing.T) {
+	base := knowledgeCreditFixture(t, 1010)
+	terms, err := ReadKnowledgeCreditTerms(&base, 1)
+	require.NoError(t, err)
+	documents := []KnowledgeCreditDocument{{Id: "file"}}
+	_, err = SettleKnowledgeCredits(1, &base, terms, "browse", "paid", documents, "", "")
+	require.NoError(t, err)
+	require.NoError(t, ReserveKnowledgeCredits(1, &base, terms, "browse", "repeat", "file"))
+	_, err = SettleKnowledgeCredits(1, &base, terms, "browse", "repeat", documents, "", "")
+	require.NoError(t, err)
+	legacy := KnowledgeCreditReceipt{UserId: 1, RequestId: "legacy", KnowledgeBaseId: base.Id, DocumentId: "file", Action: "download", OwnerUserId: 2, Cents: 300}
+	require.NoError(t, DB.Create(&legacy).Error)
+	require.NoError(t, ReserveKnowledgeCredits(1, &base, terms, "download", "legacy", "file"))
+	replay, err := SettleKnowledgeCredits(1, &base, terms, "download", "legacy", documents, "", "")
+	require.NoError(t, err)
+	require.Equal(t, legacy.Id, replay[0].Id)
+	creditBalances(t, 0, 710)
+	var count int64
+	require.NoError(t, DB.Model(&BillingTask{}).Count(&count).Error)
+	require.Equal(t, int64(1), count)
 }
