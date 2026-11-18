@@ -235,6 +235,7 @@ test('Kylin staging keeps shared runtime identity and rejects missing runtimes',
     await writeFile(browser, browserSource)
     const pluginCss = '.fade{background:linear-gradient(transparent,var(--dsw-specific-sidebar-fill))}'
       + '.dsh-knowledge-nav{background:radial-gradient(at 0 0,#e0edff,#0000 74%) top/100% 220px no-repeat,linear-gradient(165deg,#f5f8fd,#eef4fe)}'
+      + '.seat{background:linear-gradient(180deg, color-mix(in srgb, var(--dsw-alias-bg-base) 0%, transparent) 0px, var(--dsw-alias-bg-base) 36px)}'
       + '.other{background:linear-gradient(transparent,white)}'
     const plugin = `const css = ${JSON.stringify(pluginCss)};`
     await writeFile(join(root, 'src-tauri/resources/runtime-1.2.3/app/client.js'), plugin)
@@ -265,6 +266,7 @@ test('Kylin staging keeps shared runtime identity and rejects missing runtimes',
     const stagedPlugin = await readFile(join(root, 'src-kylin/resources/runtime-1.2.3/app/client.js'), 'utf8')
     assert.equal(stagedPlugin, `const css = ${JSON.stringify('.fade{background:none}'
       + '.dsh-knowledge-nav{background:linear-gradient(165deg,#f5f8fd,#eef4fe)}'
+      + '.seat{background:var(--dsw-alias-bg-base)}'
       + '.other{background:linear-gradient(transparent,white)}')};`)
     const stagedBrowser = join(root, 'src-kylin/resources/runtime-1.2.3/app/browser.js')
     const stagedSource = await readFile(stagedBrowser, 'utf8')
