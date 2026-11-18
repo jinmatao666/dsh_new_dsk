@@ -171,6 +171,21 @@
   .card { padding: 30px 34px 26px; }
 }
 
+/* Keep the scaled desktop canvas, with column widths independent of GTK font metrics. */
+@media (min-width: 961px) {
+  :global(html[data-wanwei-kylin]) .page {
+    display: grid;
+    grid-template-columns: minmax(0, 1.17fr) minmax(0, 1fr);
+    align-items: center;
+    padding: 18px 40px;
+    gap: 40px;
+  }
+  :global(html[data-wanwei-kylin]) .brandSide { align-self: center; padding-top: 0; }
+  :global(html[data-wanwei-kylin]) .brandHeader { position: static; }
+  :global(html[data-wanwei-kylin]) .brandHero,
+  :global(html[data-wanwei-kylin]) .featureList { margin-bottom: 0; padding-left: 0; }
+}
+
 .card[data-public-login=true] .methodNotice { display: none; }
 .card[data-public-login=true] .loginMode { margin-bottom: 12px; }
 .card[data-public-login=true] .loginContent { flex-basis: 390px; height: 390px; }

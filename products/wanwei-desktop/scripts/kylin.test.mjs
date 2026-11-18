@@ -39,20 +39,30 @@ test('Kylin email matching retains upstream captures, positions and Unicode boun
 
 const source = await readFile(new URL('../src-kylin/native-bridge.js', import.meta.url), 'utf8')
 const compatibility = await readFile(new URL('../src-kylin/browser-compat.js', import.meta.url), 'utf8')
-function compatiblePage({ native = false, origin = 'https://expert.example', child = false } = {}) {
+function compatiblePage({ native = false, origin = 'https://expert.example', child = false, main = false } = {}) {
   const window = {}
   window.self = window
   window.top = child ? {} : window
-  const context = vm.createContext({ window, location: { origin }, NativeAbortSignal: AbortSignal, AbortController })
+  const attributes = new Map()
+  const document = { documentElement: { setAttribute: (name, value) => attributes.set(name, value) } }
+  const context = vm.createContext({ document, window, location: { origin }, NativeAbortSignal: AbortSignal, AbortController })
   vm.runInContext(`
     function LegacyAbortSignal() {}
     LegacyAbortSignal.prototype = NativeAbortSignal.prototype;
     globalThis.AbortSignal = ${native ? 'NativeAbortSignal' : 'LegacyAbortSignal'};
   `, context)
-  const install = () => vm.runInContext(compatibility.replace('__WANWEI_ORIGIN__', JSON.stringify('https://expert.example')), context)
+  const install = () => vm.runInContext(compatibility.replace('__WANWEI_ORIGIN__', JSON.stringify('https://expert.example'))
+    .replace('__WANWEI_MAIN_VIEW__', String(main)), context)
   install()
-  return { context, install }
+  return { context, install, attributes }
 }
+
+test('Kylin login layout is enabled only in the trusted main view, including native AbortSignal builds', () => {
+  assert.ok(compatiblePage({ main: true, native: true }).attributes.has('data-wanwei-kylin'))
+  assert.equal(compatiblePage().attributes.size, 0)
+  assert.equal(compatiblePage({ main: true, child: true }).attributes.size, 0)
+  assert.equal(compatiblePage({ main: true, origin: 'https://other.example' }).attributes.size, 0)
+})
 
 test('Kylin combines cancellation without replacing native signals or abort reasons', () => {
   const { context, install } = compatiblePage()
@@ -126,7 +136,8 @@ test('completed requests do not retain subscriptions to a live application signa
       AbortController, NativeAbortSignal: AbortSignal });
     vm.runInContext('function AbortSignal() {}; AbortSignal.prototype = NativeAbortSignal.prototype', context);
     const code = await readFile(new URL(process.argv[1]), 'utf8');
-    vm.runInContext(code.replace('__WANWEI_ORIGIN__', JSON.stringify('https://expert.example')), context);
+    vm.runInContext(code.replace('__WANWEI_ORIGIN__', JSON.stringify('https://expert.example'))
+      .replace('__WANWEI_MAIN_VIEW__', 'false'), context);
     const lifetime = new AbortController();
     const active = new Set();
     const signal = lifetime.signal;

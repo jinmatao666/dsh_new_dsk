@@ -18,6 +18,8 @@ Kylin updates use replacement installers. Tauri 2 automatic update bundles are n
 
 The Kylin shell defaults WEBKIT_DISABLE_COMPOSITING_MODE and LIBGL_ALWAYS_SOFTWARE to 1 before GTK starts, while preserving explicit environment overrides. Software rendering avoids the blank window observed on the target machine but can increase CPU use. The expert overlay passes empty-space pointer events to the main page while embedded experts retain input. Native commands are available inside the desktop WebViews; opening the loopback address in a regular browser does not provide desktop expert or skill installation commands.
 
+The trusted Kylin main view enables an explicit two-column grid on the scaled desktop login canvas. The introduction and form use fixed column proportions and share the vertical center. Narrow viewports retain the stacked layout.
+
 ## Verification
 
 Kylin staging rewrites the GFM email autolink expression only in its copied JavaScript artifacts. Its equivalent matcher checks the preceding Unicode character without lookbehind, preserving captures and match positions; JavaScript source maps are regenerated. The shared runtime and business sources remain untouched. The graphical probe renders production Markdown components in streaming and settled states, covering Chinese replies, emphasis, links, email, tables, code and math. An unadapted artifact reproduces the WebKitGTK 2.38.6 regular-expression exception even for a plain greeting.

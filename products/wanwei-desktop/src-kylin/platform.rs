@@ -91,7 +91,8 @@ fn bridge(view: &webkit2gtk::WebView, app: &tauri::AppHandle, label: &str, origi
     let manager = view.user_content_manager().ok_or("WebKit 原生通道不可用")?;
     if !manager.register_script_message_handler("wanwei") { return Err("WebKit 原生通道注册失败".into()); }
     let compatibility = include_str!("browser-compat.js")
-        .replace("__WANWEI_ORIGIN__", &json!(origin).to_string());
+        .replace("__WANWEI_ORIGIN__", &json!(origin).to_string())
+        .replace("__WANWEI_MAIN_VIEW__", if label == "main" { "true" } else { "false" });
     manager.add_script(&webkit2gtk::UserScript::new(&compatibility,
         webkit2gtk::UserContentInjectedFrames::TopFrame, webkit2gtk::UserScriptInjectionTime::Start, &[], &[]));
     manager.add_script(&webkit2gtk::UserScript::new(&script,

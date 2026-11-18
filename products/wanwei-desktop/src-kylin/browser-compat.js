@@ -1,5 +1,10 @@
 (() => {
   if (window.top !== window.self || location.origin !== __WANWEI_ORIGIN__) return;
+  if (__WANWEI_MAIN_VIEW__) {
+    const markDesktop = () => document.documentElement.setAttribute('data-wanwei-kylin', '');
+    if (document.documentElement) markDesktop();
+    else document.addEventListener('DOMContentLoaded', markDesktop, { once: true });
+  }
   if (typeof AbortSignal.any === 'function') return;
 
   // Weak ownership lets completed gateway requests release their combined signal
