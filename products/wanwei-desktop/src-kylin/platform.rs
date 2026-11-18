@@ -240,6 +240,13 @@ fn dispatch(app: &tauri::AppHandle, caller: &str, command: &str, args: Value) ->
             value(super::set_auth_window_state(app.clone(), authenticated))
         }
         "save_session_log_archive" => value(super::save_session_log_archive(arg(&args, "fileName")?, arg(&args, "bytes")?)),
+        "save_knowledge_download" if caller == "main" => {
+            let file_name: String = arg(&args, "fileName")?;
+            let encoded: String = arg(&args, "bytesBase64")?;
+            let downloads = tauri::api::path::download_dir()
+                .ok_or_else(|| "无法定位下载文件夹".to_string())?;
+            value(super::save_encoded_knowledge_download_at(&downloads, &file_name, &encoded))
+        }
         "save_expert_artifact" if caller != "main" => save_artifact(&args),
         "list_marketplace_skills" => value(super::list_marketplace_skills(app.clone())),
         "install_marketplace_skill" => value(super::install_marketplace_skill(app.clone(), arg(&args, "slug")?, arg(&args, "files")?, arg(&args, "sha256")?, arg(&args, "displayName")?)),
@@ -471,6 +478,7 @@ mod tests {
             assert!(!expert_command(command));
         }
         assert!(expert_command("save_expert_artifact"));
+        assert!(!expert_command("save_knowledge_download"));
     }
     #[test]
     fn rejects_nonfinite_or_out_of_range_native_geometry() {

@@ -993,7 +993,22 @@ fn save_knowledge_download_at(
     save_download_at(downloads_root, file_name, bytes)
 }
 
+fn save_encoded_knowledge_download_at(
+    downloads_root: &Path,
+    file_name: &str,
+    bytes_base64: &str,
+) -> Result<(), String> {
+    if bytes_base64.len() > KNOWLEDGE_DOWNLOAD_MAX_BYTES.div_ceil(3) * 4 {
+        return Err("知识库下载文件超过 20 MB".into());
+    }
+    let bytes = BASE64_STANDARD
+        .decode(bytes_base64)
+        .map_err(|_| "知识库下载文件编码无效".to_string())?;
+    save_knowledge_download_at(downloads_root, file_name, &bytes).map(|_| ())
+}
+
 /// Save the authorized original file to Downloads without relying on WebView downloads.
+#[cfg(not(wanwei_kylin))]
 #[tauri::command]
 async fn save_knowledge_download(
     webview: tauri::Webview,
@@ -1003,19 +1018,13 @@ async fn save_knowledge_download(
     if webview.label() != "main" {
         return Err("仅主窗口可以下载知识库文件".into());
     }
-    if bytes_base64.len() > KNOWLEDGE_DOWNLOAD_MAX_BYTES.div_ceil(3) * 4 {
-        return Err("知识库下载文件超过 20 MB".into());
-    }
     let downloads_root = webview
         .app_handle()
         .path()
         .download_dir()
         .map_err(|error| format!("无法定位下载文件夹：{error}"))?;
     tauri::async_runtime::spawn_blocking(move || {
-        let bytes = BASE64_STANDARD
-            .decode(bytes_base64)
-            .map_err(|_| "知识库下载文件编码无效".to_string())?;
-        save_knowledge_download_at(&downloads_root, &file_name, &bytes).map(|_| ())
+        save_encoded_knowledge_download_at(&downloads_root, &file_name, &bytes_base64)
     })
     .await
     .map_err(|_| "知识库下载保存任务中断".to_string())?
@@ -3314,6 +3323,10 @@ mod marketplace_tests {
         for invalid_name in ["../escape.pdf", "LPT¹.txt", "file.txt:stream"] {
             assert!(save(invalid_name, b"unsafe").is_err());
         }
+        let encoded_name = "编码测试.pdf";
+        assert!(super::save_encoded_knowledge_download_at(&downloads.0, encoded_name, "*").is_err());
+        super::save_encoded_knowledge_download_at(&downloads.0, encoded_name, "AAEC/w==").unwrap();
+        assert_eq!(fs::read(downloads.0.join(encoded_name)).unwrap(), [0, 1, 2, 255]);
     }
 
     #[test]
