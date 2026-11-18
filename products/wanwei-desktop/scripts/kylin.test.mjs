@@ -222,6 +222,10 @@ test('Kylin staging keeps shared runtime identity and rejects missing runtimes',
     await mkdir(join(root, 'src-tauri/resources/runtime-1.2.3/app'), { recursive: true })
     const browserSource = `globalThis.email = new RegExp(${JSON.stringify(emailPattern)}, "gu");`
     await writeFile(browser, browserSource)
+    const browserCss = '.fade{background:linear-gradient(transparent,var(--dsw-specific-sidebar-fill))}'
+      + '.dsh-knowledge-nav{background:radial-gradient(ellipse at 0 0,#e0edff,transparent 74%) top no-repeat}'
+      + '.other{background:linear-gradient(transparent,white)}'
+    await writeFile(join(root, 'src-tauri/resources/runtime-1.2.3/app/browser.css'), browserCss)
     await writeFile(join(root, 'src-tauri/icons/32x32.png'), 'shared-icon-fixture')
     await writeFile(join(root, 'src-kylin/tauri.conf.json'), '{"package":{"version":"0.1.0"}}')
     for (const platform of ['linux-x64', 'linux-arm64', 'darwin-x64', 'win32-x64']) {
@@ -245,6 +249,12 @@ test('Kylin staging keeps shared runtime identity and rejects missing runtimes',
     prepareKylin(root, '1.2.3', 'arm64')
     assert.equal(await readFile(join(root, 'src-kylin/resources/runtime-1.2.3/node'), 'utf8'), 'shared-node-fixture')
     assert.equal(await readFile(browser, 'utf8'), browserSource)
+    assert.equal(await readFile(join(root, 'src-tauri/resources/runtime-1.2.3/app/browser.css'), 'utf8'), browserCss)
+    const stagedCss = await readFile(join(root, 'src-kylin/resources/runtime-1.2.3/app/browser.css'), 'utf8')
+    assert.match(stagedCss, /\.fade\{background:linear-gradient\(to bottom, var\(--wanwei-kylin-sidebar-clear\)/u)
+    assert.match(stagedCss, /body\[data-ds-dark-theme\] \{ --wanwei-kylin-sidebar-clear: rgba\(27, 27, 28, 0\)/u)
+    assert.match(stagedCss, /rgba\(224, 237, 255, 0\) 74%\) top no-repeat/u)
+    assert.ok(stagedCss.includes('.other{background:linear-gradient(transparent,white)}'))
     const stagedBrowser = join(root, 'src-kylin/resources/runtime-1.2.3/app/browser.js')
     const stagedSource = await readFile(stagedBrowser, 'utf8')
     assert.doesNotMatch(stagedSource, /\(\?<=/u)
