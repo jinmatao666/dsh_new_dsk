@@ -43,7 +43,8 @@ export function prepareKylin(productRoot, version, arch = process.arch) {
   const config = JSON.parse(readFileSync(join(shell, 'tauri.conf.json'), 'utf8'))
   const stagedRuntime = join(shell, 'resources', 'runtime-' + version)
   const patched = prepareKylinMarkdown(stagedRuntime)
-  prepareKylinGradients(stagedRuntime)
+  const gradients = prepareKylinGradients(stagedRuntime)
+  console.log(`Removed Kylin gradient layers (sidebar: ${gradients.sidebar}, knowledge: ${gradients.knowledge})`)
   console.log(`Prepared ${patched} Kylin Markdown email expression(s)`)
   config.package.version = version
   writeFileSync(join(shell, 'tauri.runner.conf.json'), JSON.stringify(config, null, 2) + '\n')
