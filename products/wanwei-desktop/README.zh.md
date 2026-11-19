@@ -50,7 +50,7 @@ Tauri 2 桌面壳会以本地回环 DSH Sidecar 的形式启动 `wanwei-desktop`
 
 主 WebView 的新窗口请求会在系统默认浏览器打开 HTTP(S) 链接。其他 URL 协议不会启动外部程序，对话链接也不会创建第二个应用内 WebView。
 
-独立专家网页仍在实施。已上架专家在主窗口内的独立子 WebView 打开；桌面壳按每次打开的具体 HTTP 或 HTTPS 来源和视图标签登记权限。macOS 安装包仅允许 `ac.zjugis.com` 通过不安全的 HTTP 加载，以便当前 HTTP 网关能在 WKWebView 中显示；此例外不会加密传输，网关改用 HTTPS 后应移除。目录、一次性身份票据、桌面桥与视图关闭/定位还须在 Windows、macOS、Linux 实机验证后才能发布。专家网站是高权限代码，上架前必须审核其 iframe 与跳转行为。六个正式网站及一次性切换尚未完成，详见 `WANWEI_EXPERT_WEB_INTEGRATION_PLAN.md`。
+独立专家网页仍在实施。已上架专家在主窗口内的独立子 WebView 打开；桌面壳按每次打开的具体 HTTP 或 HTTPS 来源和视图标签登记权限。macOS 安装包通过 `NSAllowsArbitraryLoadsInWebContent` 支持 HTTP 网页内容，覆盖管理员配置的门户与专家地址，包括 IP 主机和其他端口。现有 `ac.zjugis.com` 域名例外继续供该网关使用。HTTP 流量以明文传输，URLSession 的传输策略沿用既有设置。`check:identity` 校验安装包源 plist 中的 WebView 例外。目录、一次性身份票据、桌面桥与视图关闭/定位还须在 Windows、macOS、Linux 实机验证后才能发布。专家网站是高权限代码，上架前必须审核其 iframe 与跳转行为。六个正式网站及一次性切换尚未完成，详见 `WANWEI_EXPERT_WEB_INTEGRATION_PLAN.md`。
 
 正式构建使用 `<com.wanwei.harness 本地数据目录>/dsh-home`。首次启动 Sidecar 前，迁移旧版 `~/.dsh` 和此前独立应用的 `com.wanwei.harness.preview/dsh-home`；优先级为正式目录已有数据、此前独立应用数据、旧版数据。原始目录与恢复副本均保留。工作区 v2 索引按文件系统路径合并，会话 ID 去重；相同日志去重，字节前缀相同的续写日志保留较长版本。分叉日志和冲突技能完整保留在来源副本中，路径写入 `.wanwei-formal-migration-v2.json`；只有优先版本处于使用状态，不会展示为两条会话。不同版本的技能脚本不混合。历史登录凭据与可执行 Profile 补丁不导入。原始工作区文件及绝对路径引用不搬动；外部文件缺失与不支持的会话格式仍需恢复，迁移不重新解释会话事件。完整暂存目录发布后才启动，中断发布可恢复；工作区索引不兼容时停止迁移，不以缺失历史的状态启动。升级前请关闭两个旧应用。
 

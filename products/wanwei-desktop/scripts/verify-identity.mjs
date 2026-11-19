@@ -7,6 +7,7 @@ const release = readJson(resolve(productRoot, 'src-tauri', 'tauri.conf.json'))
 const development = readJson(resolve(productRoot, 'src-tauri', 'tauri.dev.conf.json'))
 const rustMain = readFileSync(resolve(productRoot, 'src-tauri', 'src', 'main.rs'), 'utf8')
 const rustLib = readFileSync(resolve(productRoot, 'src-tauri', 'src', 'lib.rs'), 'utf8')
+const macPlist = readFileSync(resolve(productRoot, 'src-tauri', 'Info.plist'), 'utf8')
 
 const expected = {
   productName: '万维Buddy',
@@ -31,6 +32,12 @@ if (!rustMain.includes('#![cfg_attr(not(debug_assertions), windows_subsystem = "
 }
 if (!rustLib.includes('command.creation_flags(0x08000000)')) {
   fail('Windows release sidecar must use CREATE_NO_WINDOW')
+}
+if (!/<key>NSAllowsArbitraryLoadsInWebContent<\/key>\s*<true\s*\/>/u.test(macPlist)) {
+  fail('macOS WebViews must accept administrator-configured HTTP portal addresses')
+}
+if (/<key>NSAllowsArbitraryLoads<\/key>\s*<true\s*\/>/u.test(macPlist)) {
+  fail('macOS HTTP compatibility must be scoped to WebView content')
 }
 
 process.stdout.write('Wanwei Buddy uses the stable installer identity; development data stays isolated.\n')

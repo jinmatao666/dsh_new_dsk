@@ -12,7 +12,7 @@ The expert gateway uses HTTP at `ac.zjugis.com:3300`. Safari can reach an expert
 
 Expert launch loads a native URL without a fragment or a newly issued ticket, then injects the launch URL in the matching top-level document before website boot. Existing hash routes are preserved and receive the ticket as a separate query parameter; fragment-free registrations retain the fragment ticket protocol. Websites with hash routing read the ticket from location.search and clear it after redemption. This preserves route ownership and avoids macOS encoding a fragment into the HTTP request path.
 
-The desktop's macOS `Info.plist` adds `NSExceptionAllowsInsecureHTTPLoads` for the exact domain `ac.zjugis.com`. Tauri merges this file into the application bundle. The application still authorizes each child WebView for the selected expert's exact origin and uses its one-use identity ticket.
+The desktop's macOS `Info.plist` adds `NSExceptionAllowsInsecureHTTPLoads` for the exact domain `ac.zjugis.com`. The [configured portal transport decision](2026-11-19-macos-configured-http-portals.md) extends WebView HTTP loading to administrator-selected addresses. Tauri merges this file into the application bundle. The application still authorizes each child WebView for the selected expert's exact origin and uses its one-use identity ticket.
 
 ## Alternatives considered
 

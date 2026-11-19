@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-11-19-macos-configured-http-portals.md
+2026-11-19-macos-configured-http-portals.md: 86993af0888f190352731c34a3bf140168f44283
+2026-11-19-macos-configured-http-portals.zh.md: 640e34510f01144218727a3dbec98361a7089b18
