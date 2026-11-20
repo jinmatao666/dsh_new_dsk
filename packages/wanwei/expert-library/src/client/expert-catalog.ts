@@ -1,5 +1,6 @@
 /** Public expert metadata returned by the Wanwei administration service. */
 export type RemoteExpert = {
+  charge_points?: unknown
   category_order?: unknown
   requires_internet?: unknown
   key?: unknown
@@ -21,6 +22,7 @@ export type ExpertDetailSection = { title: string; subtitle: string; content: st
 
 /** Projected catalog entry from a published independent website. */
 export type PublishedExpert = ExpertTemplate & {
+  chargePoints: readonly { id: string; name: string; credits: number }[]
   categoryOrder: number
   requiresInternet: boolean
   scenario?: string
@@ -89,6 +91,12 @@ export function projectPublishedExperts(
       categoryOrder: typeof entry.category_order === 'number' ? entry.category_order : 0,
       requiresInternet: entry.requires_internet !== false,
       name: entry.name,
+      chargePoints: Array.isArray(entry.charge_points) ? entry.charge_points.flatMap((point: unknown) => {
+        if (typeof point !== 'object' || point === null) return []
+        const { id, name, credits } = point as Record<string, unknown>
+        return typeof id === 'string' && typeof name === 'string' && typeof credits === 'number'
+          && Number.isFinite(credits) && credits > 0 ? [{ id, name, credits }] : []
+      }) : [],
       role: typeof entry.subtitle === 'string' ? entry.subtitle : (template?.role ?? ''),
       category: typeof entry.category === 'string' ? entry.category : (template?.category ?? '其他'),
       summary: typeof entry.summary === 'string' ? entry.summary : (template?.summary ?? ''),

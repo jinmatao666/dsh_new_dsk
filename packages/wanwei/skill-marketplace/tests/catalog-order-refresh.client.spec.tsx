@@ -10,7 +10,8 @@ afterEach(() => { cleanup(); localStorage.clear() })
 
 it('restores backend order on reopen and fetches changed ordering through Refresh catalog', async () => {
   let skills = [
-    { id: 1, name: 'first-skill', display_name: '后台首位技能', downloads: 1, task_credits: 3 },
+    { id: 1, name: 'first-skill', display_name: '后台首位技能', downloads: 1, task_credits: 99,
+      charge_points: [{ id: 'cp_report', name: '生成报告', credits: 3 }] },
     { id: 2, name: 'second-skill', display_name: '下载更多技能', downloads: 99 },
   ]
   const call = vi.fn(async (_path: string, operation: string) => ({ ok: true, value: {
@@ -20,7 +21,7 @@ it('restores backend order on reopen and fetches changed ordering through Refres
   const ctx = {
     effect: () => {},
     get: (name: string) => name === 'connection' ? { rpc: { call } } : {},
-    wanweiNetwork: { catalogAccess: () => 'available' },
+    wanweiNetwork: { catalogAccess: () => 'available', sidebarOrder: () => ({ getSnapshot: () => 50, subscribe: () => () => {} }), visibility: () => ({ getSnapshot: () => true, subscribe: () => () => {} }) },
     remote: { directoryPicker: { pick: vi.fn() } },
     slots: {
       inject: (_name: string, callback: () => void) => callback(),
@@ -40,6 +41,8 @@ it('restores backend order on reopen and fetches changed ordering through Refres
   await act(async () => { controller.open() })
   await screen.findByRole('heading', { name: '后台首位技能', level: 2 })
   expect(view.container.querySelector('.dsh-skill-price')?.textContent).toBe('3')
+  expect(view.container.querySelector('.dsh-skill-title-row .dsh-skill-price')?.getAttribute('title')).toBe('生成报告')
+  expect(view.container.querySelector('.dsh-skill-card .dsh-skill-card-meta .dsh-skill-price')).toBeNull()
   await waitFor(() => { expect(names()).toEqual(['后台首位技能', '下载更多技能']) })
   const sort = () => screen.getByRole('combobox', { name: '搜索平台技能 / 热门下载' })
   fireEvent.click(sort())

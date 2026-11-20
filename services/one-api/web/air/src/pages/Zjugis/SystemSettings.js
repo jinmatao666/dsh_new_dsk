@@ -1,3 +1,4 @@
+import { FEATURE_ENTRIES, DEFAULT_FEATURE_ORDER, normalizeFeatureOrder, moveFeature } from './FeatureOrder';
 import KnowledgeCreditShareSettings from './KnowledgeCreditShareSettings';
 import RegistrationSettings from './RegistrationSettings';
 import { adminURL } from '../../deployment';
@@ -10,21 +11,21 @@ import { DEFAULT_CREDIT_BASE, validCreditNumber, formatCreditPrice } from './cre
 import CreditRewardSettings, { normalizeCreditRewards } from './CreditRewardSettings';
 import FeaturePageAddressDialog, { defaultFeaturePages, normalizeFeaturePages, validateFeaturePageUrl, FEATURE_PAGE_ENTRIES } from './FeaturePagesSettings';
 
-const featureKeys = ['automations', 'connectors', 'knowledgeBases', ...FEATURE_PAGE_ENTRIES.map(([key]) => key)];
+const featureKeys = DEFAULT_FEATURE_ORDER;
 const featureAddressKeys = new Set(FEATURE_PAGE_ENTRIES.map(([key]) => key));
 const billingDefaults = edition => ({
   showCredits: edition !== 'government', showMultipliers: edition !== 'government', enabled: edition !== 'government',
 });
 const resolveBilling = value => ({ ...billingDefaults(value.edition), ...value.billing });
-const defaults = { network: 'internet', internetCatalogPolicy: 'disable', internetSkillPolicy: 'disable', internetExpertPolicy: 'disable', edition: 'operations', operator: '', phone: '', features: {
-  internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
-  intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
+const defaults = { featureOrder: DEFAULT_FEATURE_ORDER, network: 'internet', internetCatalogPolicy: 'disable', internetSkillPolicy: 'disable', internetExpertPolicy: 'disable', edition: 'operations', operator: '', phone: '', features: {
+  internet: { automations: true, connectors: true, knowledgeBases: true, expertLibrary: true, skillMarketplace: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
+  intranet: { automations: true, connectors: false, knowledgeBases: true, expertLibrary: true, skillMarketplace: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
 }, featurePages: defaultFeaturePages, plugins: { browserAssistant: true }, knowledgeQuota: defaultKnowledgeQuota, creditPricingBase: DEFAULT_CREDIT_BASE };
 const tabs = [['account', '账户设置'], ['security', '安全设置'], ['network', '网络设置'], ['edition', '版本类型'], ['features', '功能设置'], ['knowledge', '知识库设置'], ['operations', '运维设置'], ['plugins', '插件设置'], ['registration', '登录与注册']];
 const descriptions = {
   network: '设置桌面端使用的部署网络环境。',
   edition: '选择本系统的版本类型，网络环境与功能开关保持独立。',
-  features: '内网与互联网独立配置。关闭后隐藏桌面端入口，桌面端启动、登录或切回窗口刷新后生效；开启不代表外部服务在内网可访问。土地市场与政策宝典可在此配置页面地址；土地市场还可生成桌面登录接入凭据。',
+  features: '拖动右侧手柄调整桌面端顺序，内网与互联网共用排序，开关独立配置。关闭后隐藏桌面端入口，桌面端启动、登录或切回窗口刷新后生效；开启不代表外部服务在内网可访问。土地市场与政策宝典可在此配置页面地址；土地市场还可生成桌面登录接入凭据。',
   knowledge: '限制个人知识库存储总量，并可按组织架构为具体人员分配额度。关闭后不限制个人知识库总容量。',
   operations: '填写负责本系统日常维护的人员及联系电话。',
   plugins: '统一控制桌面端插件。关闭后用户无法开启；开启后用户可自行启停。桌面端启动、登录或切回窗口刷新后生效，不强制中断已开始的操作。原有网络限制仍然有效。',
@@ -70,6 +71,7 @@ export default function SystemSettings() {
   const [feedback, setFeedback] = useState('');
   const [loadError, setLoadError] = useState('');
   const [reload, setReload] = useState(0);
+  const [draggedFeature, setDraggedFeature] = useState(null);
   const [addressFeature, setAddressFeature] = useState(null);
   const [knowledgeCreditsOpen, setKnowledgeCreditsOpen] = useState(false);
   useEffect(() => {
@@ -97,6 +99,7 @@ export default function SystemSettings() {
           const flags = value.features[mode];
           if (flags && typeof flags === 'object') {
             const next = { ...flags };
+            for (const key of ['expertLibrary', 'skillMarketplace']) { if (!Object.prototype.hasOwnProperty.call(flags, key)) next[key] = true; }
             if (!Object.prototype.hasOwnProperty.call(flags, 'knowledgeBases')) next.knowledgeBases = true;
             for (const [key] of FEATURE_PAGE_ENTRIES) {
               if (!Object.prototype.hasOwnProperty.call(flags, key)) next[key] = false;
@@ -113,6 +116,7 @@ export default function SystemSettings() {
           if (typeof value.features?.[mode]?.[feature] !== 'boolean') throw new Error('功能设置无效，请联系管理员检查配置');
         }
       }
+      value.featureOrder = normalizeFeatureOrder(value.featureOrder);
       value.featurePages = normalizeFeaturePages(value.featurePages);
       for (const [key] of FEATURE_PAGE_ENTRIES) {
         const message = validateFeaturePageUrl(value.featurePages[key].url);
@@ -216,8 +220,8 @@ export default function SystemSettings() {
                     onChange={event => change('billing', { ...resolveBilling(settings), [key]: event.target.checked })} />
                   <span>{resolveBilling(settings)[key] ? '开启' : '关闭'}</span>
                 </label></td></tr>)}
-            </tbody></table></> : active === 'features' ? <><table className='settings-features'><thead><tr><th scope='col'>功能</th><th scope='col'>互联网环境</th><th scope='col'>纯内网环境</th></tr></thead><tbody>
-              {[['automations', '自动化'], ['connectors', '连接器'], ['knowledgeBases', '知识库'], ...FEATURE_PAGE_ENTRIES].map(([feature, label]) => <tr key={feature}>
+            </tbody></table></> : active === 'features' ? <><table className='settings-features'><thead><tr><th scope='col'>功能</th><th scope='col'>互联网环境</th><th scope='col'>纯内网环境</th><th scope='col'>排序</th></tr></thead><tbody>
+              {settings.featureOrder.map(feature => { const label = FEATURE_ENTRIES.find(([key]) => key === feature)[1]; return <tr key={feature} className={draggedFeature === feature ? 'feature-dragging' : ''} onDragOver={event => { if (!saving && draggedFeature) event.preventDefault(); }} onDrop={event => { event.preventDefault(); if (!saving && draggedFeature) change('featureOrder', moveFeature(settings.featureOrder, draggedFeature, feature)); setDraggedFeature(null); }}>
                 <th scope='row'>{featureAddressKeys.has(feature)
                   ? <span className='feature-name-with-address'>{label}<button type='button' className='feature-address-link' disabled={saving}
                     aria-label={`${label}地址配置`} onClick={() => setAddressFeature(feature)}>地址配置</button></span>
@@ -226,7 +230,16 @@ export default function SystemSettings() {
                         disabled={saving} onClick={() => setKnowledgeCreditsOpen(true)}>知识库积分设置</button></span>
                     : label}</th>
                 {['internet', 'intranet'].map(mode => <td key={mode}><label><input type='checkbox' role='switch' aria-label={`${mode === 'internet' ? '互联网' : '纯内网'}${label}`} checked={settings.features[mode][feature]} disabled={saving} onChange={event => change('features', { ...settings.features, [mode]: { ...settings.features[mode], [feature]: event.target.checked } })} /><span>{settings.features[mode][feature] ? '开启' : '关闭'}</span></label></td>)}
-              </tr>)}
+                <td><button type='button' className='feature-order-handle' draggable={!saving} disabled={saving}
+                  aria-label={`调整${label}顺序`} title='拖动调整顺序，也可使用键盘上下方向键'
+                  onDragStart={event => { event.dataTransfer.setData('text/plain', feature); event.dataTransfer.effectAllowed = 'move'; setDraggedFeature(feature); }}
+                  onDragEnd={() => setDraggedFeature(null)} onKeyDown={event => {
+                    if (!['ArrowUp', 'ArrowDown'].includes(event.key) || saving) return;
+                    event.preventDefault(); const index = settings.featureOrder.indexOf(feature);
+                    const target = settings.featureOrder[index + (event.key === 'ArrowUp' ? -1 : 1)];
+                    if (target) change('featureOrder', moveFeature(settings.featureOrder, feature, target));
+                  }}><svg width='18' height='18' viewBox='0 0 18 18' fill='currentColor' aria-hidden='true'>{[5, 9, 13].flatMap(y => [6, 12].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r='1.3' />))}</svg></button></td>
+              </tr>; })}
             </tbody></table>
             {knowledgeCreditsOpen && <KnowledgeCreditShareSettings onClose={() => setKnowledgeCreditsOpen(false)} />}
             {addressFeature && <FeaturePageAddressDialog featureKey={addressFeature} value={settings.featurePages || defaultFeaturePages}

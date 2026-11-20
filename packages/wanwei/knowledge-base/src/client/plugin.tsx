@@ -575,7 +575,7 @@ export function apply(ctx: Context): void {
       return answer
     },
   }
-  registerFeaturePanel(ctx, 'skill-knowledge-base', 25, {
+  registerFeaturePanel(ctx, 'skill-knowledge-base', ctx.wanweiNetwork.sidebarOrder('knowledgeBases'), {
     controller,
     title: productText('知识库'),
     subtitle: productText('管理个人与共享资料，并基于授权内容发起问答'),

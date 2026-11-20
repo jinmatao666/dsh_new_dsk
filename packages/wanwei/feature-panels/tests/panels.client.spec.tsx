@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
+import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { Context } from '@deepseek-ai/cordis'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { isMarketInteraction } from '../src/client/market-interaction.ts'
-import { createPanelController, PanelAction, FeaturePanel } from '../src/client/panels.tsx'
+import { createPanelController, PanelAction, FeaturePanel, registerFeaturePanel } from '../src/client/panels.tsx'
 import type { PanelActionProps, PanelController, PanelProps } from '../src/client/panels.tsx'
 
 afterEach(cleanup)
@@ -231,4 +232,34 @@ describe('independent feature navigation', () => {
       expect(feature.controller.isOpen()).toBe(!disabled)
     } finally { await feature.dispose() }
   })
+})
+
+it('reorders actual sidebar registrations and removes the subscription on plugin disposal', async () => {
+  const ctx = new Context()
+  const slots = new SlotRegistry(ctx)
+  slots.register({ name: 'root', children: {
+    'sidebar.footer.action': { kind: 'list', scope: 'root' },
+    'shell.overlay': { kind: 'list', scope: 'root' },
+  } } as never, () => null)
+  let position = 30
+  const listeners = new Set<() => void>()
+  const fiber = ctx.plugin({ apply(scope: Context) {
+    registerFeaturePanel(scope, 'ordered-expert', { getSnapshot: () => position,
+      subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } } }, {
+      controller: createPanelController(scope, 'ordered-expert'), title: 'expert', subtitle: '', Icon: () => null,
+      hooks: { network: { getSnapshot: () => ({ mode: 'internet', internalOrigins: [] }), subscribe: () => () => {} } },
+      renderContent: () => null,
+    })
+  } })
+  await fiber.await()
+  const entries = () => slots.entriesOfSlot('sidebar.footer.action')
+  expect(entries()).toHaveLength(1)
+  expect(entries()[0]?.options.order).toBe(30)
+  position = 0
+  for (const listener of listeners) listener()
+  expect(entries()).toHaveLength(1)
+  expect(entries()[0]?.options.order).toBe(0)
+  await fiber.dispose()
+  expect(entries()).toHaveLength(0)
+  expect(listeners.size).toBe(0)
 })

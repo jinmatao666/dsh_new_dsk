@@ -144,7 +144,7 @@ function registerPortal(
       console.error(`${options.id}: maximize failed`, error)
     })
   }), `${options.id}: maximize on open`)
-  registerFeaturePanel(ctx, options.id, options.order, {
+  registerFeaturePanel(ctx, options.id, ctx.wanweiNetwork.sidebarOrder(options.feature), {
     controller,
     title: options.title,
     subtitle: options.subtitle,

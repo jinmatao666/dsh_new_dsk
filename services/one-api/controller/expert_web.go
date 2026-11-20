@@ -159,7 +159,24 @@ func ListExpertWebCatalog(c *gin.Context) {
 		}
 		items[index].CategoryOrder = position
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
+	legacy := make(map[string]int64, len(items))
+	for _, item := range items {
+		legacy[item.Key] = item.TaskCredits
+	}
+	prices, err := catalogChargePoints("expert", legacy)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取专家目录失败"})
+		return
+	}
+	type catalogExpert struct {
+		model.ExpertWebProfile
+		ChargePoints []catalogChargePoint `json:"charge_points"`
+	}
+	entries := make([]catalogExpert, 0, len(items))
+	for _, item := range items {
+		entries = append(entries, catalogExpert{item, prices[item.Key]})
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": entries})
 }
 
 // AdminListExpertWebsites lists draft and published website registrations.

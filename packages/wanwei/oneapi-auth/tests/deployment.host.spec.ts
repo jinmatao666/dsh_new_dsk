@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { fetchDeploymentSettings, resolveDeploymentFeaturePages, resolveDeploymentFeatures, resolveDeploymentPlugins, resolveBillingPolicy } from '../src/deployment.ts'
+import { fetchDeploymentSettings, resolveDeploymentFeaturePages, resolveDeploymentFeatures, resolveDeploymentPlugins,
+  resolveBillingPolicy } from '../src/deployment.ts'
 
 afterEach(() => vi.unstubAllGlobals())
 it.each(['internet', 'intranet'])('reads %s mode and the public maintenance contact from the configured backend', async (network) => {
@@ -9,10 +10,13 @@ it.each(['internet', 'intranet'])('reads %s mode and the public maintenance cont
   expect(await fetchDeploymentSettings('https://oneapi.example.test')).toEqual({ ...data,
     billing: { showCredits: true, showMultipliers: true, enabled: true },
     internetCatalogPolicy: 'disable', internetSkillPolicy: 'disable', internetExpertPolicy: 'disable',
+    featureOrder: ['automations', 'connectors', 'knowledgeBases', 'expertLibrary', 'landMarket', 'skillMarketplace',
+      'planningLecture', 'policyEncyclopedia'],
     features: resolveDeploymentFeatures(undefined),
     featurePages: resolveDeploymentFeaturePages(undefined),
     plugins: { browserAssistant: true } })
-  expect(fetcher.mock.calls[0]).toEqual(['https://oneapi.example.test/api/desktop-config', { signal: null, cache: 'no-store', redirect: 'error' }])
+  expect(fetcher.mock.calls[0]).toEqual(['https://oneapi.example.test/api/desktop-config', { signal: null, cache: 'no-store',
+    redirect: 'error' }])
 })
 
 it('accepts explicit administrator denial, allowlists public plugins and rejects invalid settings', () => {
@@ -30,7 +34,8 @@ it('keeps the two environments independent and rejects incomplete or non-boolean
     intranet: { automations: true, connectors: true, knowledgeBases: false, landMarket: false, planningLecture: false,
       policyEncyclopedia: false },
   }
-  expect(resolveDeploymentFeatures(features)).toEqual(features)
+  expect(resolveDeploymentFeatures(features)).toEqual({ internet: { ...features.internet, expertLibrary: true,
+    skillMarketplace: true }, intranet: { ...features.intranet, expertLibrary: true, skillMarketplace: true } })
   for (const value of [null, {}, { ...features, intranet: null },
     { ...features, internet: { automations: 'false', connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false,
       policyEncyclopedia: false } }]) {
@@ -40,13 +45,16 @@ it('keeps the two environments independent and rejects incomplete or non-boolean
 it('defaults only the missing knowledge switch in legacy per-environment settings', () => {
   const legacy = { internet: { automations: false, connectors: true }, intranet: { automations: true, connectors: false } }
   expect(resolveDeploymentFeatures(legacy)).toEqual({
-    internet: { ...legacy.internet, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
-    intranet: { ...legacy.intranet, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
+    internet: { ...legacy.internet, expertLibrary: true, skillMarketplace: true, knowledgeBases: true, landMarket: false,
+      planningLecture: false, policyEncyclopedia: false },
+    intranet: { ...legacy.intranet, expertLibrary: true, skillMarketplace: true, knowledgeBases: true, landMarket: false,
+      planningLecture: false, policyEncyclopedia: false },
   })
   for (const knowledgeBases of [null, 'true', 1]) {
     expect(() => resolveDeploymentFeatures({ ...legacy, internet: { ...legacy.internet, knowledgeBases } })).toThrow('后台功能设置无效')
   }
-  const denied = resolveDeploymentFeatures({ ...legacy, internet: { ...legacy.internet, knowledgeBases: false } })
+  const denied = resolveDeploymentFeatures({ ...legacy, internet: { ...legacy.internet, expertLibrary: true, skillMarketplace: true,
+    knowledgeBases: false } })
   expect(denied.internet.knowledgeBases).toBe(false)
 })
 
@@ -68,7 +76,8 @@ it('defaults portal page addresses and rejects invalid URLs', () => {
 it('rejects unavailable or invalid configuration without assuming internet mode', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })))
   await expect(fetchDeploymentSettings('http://server.lan')).rejects.toThrow('无法读取后台系统设置')
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, data: { network: 'unknown', operator: '', phone: '' } }))))
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, data: { network: 'unknown', operator: '',
+    phone: '' } }))))
   await expect(fetchDeploymentSettings('http://server.lan')).rejects.toThrow('后台系统设置字段无效')
 })
 
@@ -77,7 +86,8 @@ it('reads split catalog policies, inherits omitted legacy values, and rejects ex
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true, data }))))
   expect(await fetchDeploymentSettings('https://example.test')).toMatchObject({ internetSkillPolicy: 'hide', internetExpertPolicy: 'hide' })
   data.internetExpertPolicy = 'disable'
-  expect(await fetchDeploymentSettings('https://example.test')).toMatchObject({ internetSkillPolicy: 'hide', internetExpertPolicy: 'disable' })
+  expect(await fetchDeploymentSettings('https://example.test')).toMatchObject({ internetSkillPolicy: 'hide',
+    internetExpertPolicy: 'disable' })
   data.internetExpertPolicy = null
   await expect(fetchDeploymentSettings('https://example.test')).rejects.toThrow()
 })

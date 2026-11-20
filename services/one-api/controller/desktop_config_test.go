@@ -46,7 +46,7 @@ func TestDesktopConfigPublicFields(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if !body.Success || len(body.Data) != 11 || body.Data["internetCatalogPolicy"] != "disable" || body.Data["edition"] != "operations" || body.Data["network"] != "intranet" || body.Data["operator"] != "张运维" || body.Data["phone"] != "0571-12345678" {
+	if !body.Success || len(body.Data) != 12 || body.Data["internetCatalogPolicy"] != "disable" || body.Data["edition"] != "operations" || body.Data["network"] != "intranet" || body.Data["operator"] != "张运维" || body.Data["phone"] != "0571-12345678" {
 		t.Fatalf("unexpected public data: %+v", body)
 	}
 	featurePages, ok := body.Data["featurePages"].(map[string]interface{})
@@ -185,7 +185,7 @@ func TestDesktopIndependentCatalogPolicies(t *testing.T) {
 }
 
 func TestDesktopNetworkTransitionResetsOnlyIntranetPreset(t *testing.T) {
-	internet := desktopFeatureFlags{Connectors: true, KnowledgeBases: true, PolicyEncyclopedia: true}
+	internet := desktopFeatureFlags{ExpertLibrary: true, SkillMarketplace: true, Connectors: true, KnowledgeBases: true, PolicyEncyclopedia: true}
 	initial := `{"network":"internet","features":{"internet":{"automations":false,"connectors":true,"knowledgeBases":true,"policyEncyclopedia":true},"intranet":{"automations":false,"connectors":true}}}`
 	candidate := `{"network":"intranet","creditPricingBase":45,"features":{"internet":{"automations":true,"connectors":false},"intranet":{"automations":false,"connectors":true}},"internetSkillPolicy":"hide","internetExpertPolicy":"hide"}`
 	switchMode := func(before, next string) (string, desktopDeploymentSettings) {
@@ -230,5 +230,26 @@ func TestDesktopNetworkTransitionResetsOnlyIntranetPreset(t *testing.T) {
 	_, again := switchMode(back, string(changed))
 	if again.Features["intranet"].KnowledgeBases || !again.Features["intranet"].Automations {
 		t.Fatalf("previous intranet edits survived reentry: %+v", again.Features)
+	}
+}
+
+func TestDesktopFeatureOrder(t *testing.T) {
+	defaults, err := parseDesktopDeploymentSettings("")
+	if err != nil || len(defaults.FeatureOrder) != 8 || !defaults.Features["internet"].ExpertLibrary || !defaults.Features["intranet"].SkillMarketplace {
+		t.Fatalf("bad defaults: %+v %v", defaults, err)
+	}
+	order := append([]string{}, desktopFeatureOrder...)
+	order[0], order[3] = order[3], order[0]
+	raw, _ := json.Marshal(map[string]interface{}{"network": "internet", "featureOrder": order, "features": map[string]interface{}{
+		"internet": map[string]interface{}{"automations": true, "connectors": true, "expertLibrary": false, "skillMarketplace": true},
+		"intranet": map[string]interface{}{"automations": true, "connectors": false, "expertLibrary": true, "skillMarketplace": false}}})
+	result, err := parseDesktopDeploymentSettings(string(raw))
+	if err != nil || result.FeatureOrder[0] != "expertLibrary" || result.Features["internet"].ExpertLibrary || result.Features["intranet"].SkillMarketplace {
+		t.Fatalf("bad configuration: %+v %v", result, err)
+	}
+	for _, order := range []string{`null`, `[]`, `["unknown"]`, `["automations","automations","knowledgeBases","expertLibrary","landMarket","skillMarketplace","planningLecture","policyEncyclopedia"]`} {
+		if _, err := parseDesktopDeploymentSettings(`{"featureOrder":` + order + `}`); err == nil {
+			t.Fatalf("accepted invalid order %s", order)
+		}
 	}
 }

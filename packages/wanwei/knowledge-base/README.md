@@ -7,6 +7,8 @@ kind: "package-reference"
 
 English | [中文](README.zh.md)
 
+The sidebar entry follows the administrator’s shared order and its environment-specific visibility setting. See [deployment policy](../oneapi-auth/README.md).
+
 In the operations edition, a maintainer saves three per-file prices before applying to publish a subscription library. Each price is capped by the administrator’s per-file limit, shown below the corresponding label. Desktop Settings → Credits and usage → Knowledge credits edits those prices after approval. Owners can withdraw a public or subscription publication from the personal library. Withdrawal removes shared access and subscriptions while retaining the original library and its files. Subscribers confirm priced previews and downloads before file access. A paid preview covers repeat opens of the same file for 24 hours. Knowledge-page Q&A charges only distinct files cited in the completed answer. Settlement debits the subscriber and grants the maintainer’s share together. A failed settlement withholds the answer and asks the user to clear the conversation before trying again. Prices and receipts use hundredths of a credit. Paid subscription Q&A uses the knowledge page, which receives final RAGFlow citations.
 
 ## Summary

@@ -55,7 +55,8 @@ export function apply(ctx: Context): void {
     const invoke = desktopWindow.__TAURI__?.core?.invoke ?? desktopWindow.__TAURI_INTERNALS__?.invoke
     if (typeof invoke === 'function') await invoke('maximize_expert_window', {})
   }
-  registerFeaturePanel(ctx, 'skill-experts', 30, { controller, title: productText('专家库'),
+  registerFeaturePanel(ctx, 'skill-experts', ctx.wanweiNetwork.sidebarOrder('expertLibrary'), { controller, title: productText('专家库'),
+    visibility: ctx.wanweiNetwork.visibility('expertLibrary'),
     subtitle: productText('为自然资源与政企协同场景匹配专业智能角色'), Icon: ExpertsIcon,
     hooks: { network: ctx.wanweiNetwork },
     renderContent: () => <ExpertMarket network={ctx.wanweiNetwork} loadExperts={loadExperts} launchExpert={launchExpert}

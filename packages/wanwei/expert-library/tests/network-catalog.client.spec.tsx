@@ -6,6 +6,30 @@ import type { NetworkState } from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
 import { internetCatalogAccess } from '../../oneapi-auth/src/network-contract.ts'
 
 afterEach(cleanup)
+
+it('places named charge point numbers beside expert names and obeys credit visibility', async () => {
+  const loadExperts = async () => [
+    { key: 'paid-expert', name: '计费专家', workbench_url: 'https://example.com/', charge_points: [
+      { id: 'cp_report', name: '生成审查报告', credits: 3 },
+      { id: 'cp_export', name: '导出成果', credits: 0.5 },
+      { id: 'cp_free', name: '查看预览', credits: 0 },
+    ] },
+    { key: 'free-expert', name: '免费专家', workbench_url: 'https://example.com/', charge_points: [] },
+  ]
+  const state: NetworkState = { mode: 'internet', internalOrigins: [],
+    billing: { enabled: true, showCredits: true, showMultipliers: true } }
+  const network = { subscribe: () => () => {}, catalogAccess: internetCatalogAccess, getSnapshot: () => state }
+  const view = render(<ExpertMarket loadExperts={loadExperts} network={network} />)
+  await screen.findByText('计费专家')
+  const prices = () => [...view.container.querySelectorAll('.dsh-expert-title-row .dsh-expert-price')]
+  expect(prices().map(node => [node.textContent, node.getAttribute('title')])).toEqual([
+    ['3', '生成审查报告'], ['0.5', '导出成果'],
+  ])
+  const hidden = { ...state, billing: { ...state.billing!, showCredits: false } }
+  view.rerender(<ExpertMarket loadExperts={loadExperts} network={{ ...network, getSnapshot: () => hidden }} />)
+  expect(prices()).toEqual([])
+})
+
 it.each(['hide', 'disable'] as const)('uses %s for internet experts and restores them after a successful probe', async (internetCatalogPolicy) => {
   const loadExperts = async () => [
     { key: 'online-expert', name: '联网专家', requires_internet: true, workbench_url: 'https://example.com/' },

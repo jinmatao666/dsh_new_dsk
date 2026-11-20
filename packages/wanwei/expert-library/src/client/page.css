@@ -141,3 +141,7 @@
 .dsh-expert-refresh { display: inline-flex; flex: none; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid #dbe4f0; border-radius: 8px; background: #fff; color: #334e6c; cursor: pointer; font: inherit; font-size: 12px; }
 .dsh-expert-refresh:hover { background: #f1f6ff; border-color: #a8c5ef; }
 .dsh-expert-refresh:disabled { opacity: .5; cursor: default; }
+
+.dsh-expert-title-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.dsh-expert-title-row strong { min-width: 0; }
+.dsh-expert-price { flex: none; color: #8691a3; font-size: 12px; font-weight: 400; white-space: nowrap; font-variant-numeric: tabular-nums; cursor: help; }

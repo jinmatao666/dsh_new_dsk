@@ -11,6 +11,7 @@ import { ServiceUnavailable } from '@deepseek-ai/dsh-wanwei-feature-panels/clien
 /* oxlint-disable @stylistic/max-len */
 const defaultNetwork: NetworkState = { mode: 'internet', internalOrigins: [] }
 type Expert = {
+  chargePoints?: readonly { id: string; name: string; credits: number }[]
   requiresInternet?: boolean
   categoryOrder?: number
   id: string
@@ -247,7 +248,7 @@ export function ExpertMarket({ loadExperts, launchExpert, prepareExpertWorkspace
           description={accessibleExperts.length === 0 && publishedExperts.length > 0 && networkState.mode === 'intranet'
             ? productText('当前网络暂时无法访问在线专家，请稍后重试。')
             : productText('当前暂无已上架的专家。')} />}
-        <div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} disabled={internetCatalogAccess(networkState, expert.requiresInternet !== false) !== 'available'} title={internetCatalogAccess(networkState, expert.requiresInternet !== false) !== 'available' ? productText('当前网络环境不可达，请检查您的网络') : undefined} onClick={() =>{ openExpert(expert) }}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><strong>{expert.name}</strong><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>
+        <div className="dsh-expert-grid">{visibleExperts.map(expert => <button type="button" className="dsh-expert-card" key={expert.id} disabled={internetCatalogAccess(networkState, expert.requiresInternet !== false) !== 'available'} title={internetCatalogAccess(networkState, expert.requiresInternet !== false) !== 'available' ? productText('当前网络环境不可达，请检查您的网络') : undefined} onClick={() =>{ openExpert(expert) }}><span className="dsh-expert-avatar" style={{ background: `${expert.accent}18`, color: expert.accent }}><ExpertAvatar expert={expert} /></span><div><span className="dsh-expert-title-row"><strong>{expert.name}</strong>{networkState.billing?.enabled === true && networkState.billing.showCredits && expert.chargePoints?.map(point => <span className="dsh-expert-price" title={point.name} key={point.id}>{point.credits.toLocaleString(undefined, { maximumFractionDigits: 20 })}</span>)}</span><small>{expert.role}</small></div><p>{expert.summary}</p><footer>{expert.tags.map(tag => <b key={tag}>{tag}</b>)}</footer></button>)}</div></>
     }
     {selected !== null && <ExpertDetailDialog expert={selected} launching={launching} launchError={launchError} onClose={() => { setSelected(null) }} onStart={() => { void startExpert() }} />}
   </section>

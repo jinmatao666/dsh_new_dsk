@@ -79,7 +79,7 @@ export function apply(ctx: Context): void {
       return result.value as Awaited<ReturnType<NonNullable<AutomationApi['listConnectors']>>>
     },
   }
-  registerFeaturePanel(ctx, 'skill-automations', 10, {
+  registerFeaturePanel(ctx, 'skill-automations', ctx.wanweiNetwork.sidebarOrder('automations'), {
     controller, title: productText('自动化'),
     subtitle: productText('配置本机定时任务，查看执行记录'),
     requiresDirectInternet: false,

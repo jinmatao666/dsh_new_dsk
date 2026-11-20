@@ -871,7 +871,8 @@ export function apply(ctx: Context, config: Config): void {
           await network.setDeployment(settings)
         }
         return { ok: true as const, value: endpoint === 'network-get'
-          ? { ...network.getSnapshot(), features: settings.features, featurePages: settings.featurePages, plugins: settings.plugins,
+          ? { ...network.getSnapshot(), featureOrder: settings.featureOrder, features: settings.features,
+            featurePages: settings.featurePages, plugins: settings.plugins,
             ...settings.billing === undefined ? {} : { billing: settings.billing } }
           : settings }
       }

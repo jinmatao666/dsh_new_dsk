@@ -12,7 +12,11 @@ import (
 	"github.com/songquanpeng/one-api/common/config"
 )
 
+var desktopFeatureOrder = []string{"automations", "connectors", "knowledgeBases", "expertLibrary", "landMarket", "skillMarketplace", "planningLecture", "policyEncyclopedia"}
+
 type desktopFeatureFlags struct {
+	ExpertLibrary      bool `json:"expertLibrary"`
+	SkillMarketplace   bool `json:"skillMarketplace"`
 	Automations        bool `json:"automations"`
 	Connectors         bool `json:"connectors"`
 	KnowledgeBases     bool `json:"knowledgeBases"`
@@ -26,6 +30,7 @@ type desktopFeaturePage struct {
 }
 
 type desktopDeploymentSettings struct {
+	FeatureOrder          []string                       `json:"featureOrder"`
 	Billing               config.CreditPolicy            `json:"billing"`
 	InternetSkillPolicy   string                         `json:"internetSkillPolicy"`
 	InternetExpertPolicy  string                         `json:"internetExpertPolicy"`
@@ -72,9 +77,9 @@ func validateDesktopFeaturePageURL(raw string) error {
 // Existing deployment records without feature settings retain their current behavior.
 func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, error) {
 	settings := desktopDeploymentSettings{Billing: config.CreditPolicy{ShowCredits: true, ShowMultipliers: true, Enabled: true}, InternetCatalogPolicy: "disable", InternetSkillPolicy: "disable", InternetExpertPolicy: "disable", Network: "internet", Edition: "operations", Plugins: desktopPluginSettings{BrowserAssistant: true}, Features: map[string]desktopFeatureFlags{
-		"internet": {Automations: true, Connectors: true, KnowledgeBases: true},
-		"intranet": {Automations: true, Connectors: false, KnowledgeBases: true},
-	}, FeaturePages: defaultDesktopFeaturePages()}
+		"internet": {Automations: true, Connectors: true, KnowledgeBases: true, ExpertLibrary: true, SkillMarketplace: true},
+		"intranet": {Automations: true, Connectors: false, KnowledgeBases: true, ExpertLibrary: true, SkillMarketplace: true},
+	}, FeatureOrder: append([]string{}, desktopFeatureOrder...), FeaturePages: defaultDesktopFeaturePages()}
 	if raw == "" {
 		return settings, nil
 	}
@@ -118,6 +123,30 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 		}
 	}
 	legacyKnowledge := make(map[string]bool)
+
+	if order, present := fields["featureOrder"]; present {
+		var keys []string
+		if err := json.Unmarshal(order, &keys); err != nil {
+			return settings, err
+		}
+		if len(keys) != len(desktopFeatureOrder) {
+			return settings, fmt.Errorf("invalid featureOrder")
+		}
+		seen := map[string]bool{}
+		for _, key := range keys {
+			valid := false
+			for _, allowed := range desktopFeatureOrder {
+				if key == allowed {
+					valid = true
+				}
+			}
+			if !valid || seen[key] {
+				return settings, fmt.Errorf("invalid featureOrder")
+			}
+			seen[key] = true
+		}
+		settings.FeatureOrder = keys
+	}
 	if features, present := fields["features"]; present {
 		var environments map[string]map[string]interface{}
 		if err := json.Unmarshal(features, &environments); err != nil {
@@ -218,6 +247,29 @@ func parseDesktopDeploymentSettings(raw string) (desktopDeploymentSettings, erro
 		if err := validateDesktopResources(*settings.Resources); err != nil {
 			return settings, err
 		}
+	}
+
+	var originalFeatures map[string]map[string]json.RawMessage
+	if rawFeatures, ok := fields["features"]; ok {
+		_ = json.Unmarshal(rawFeatures, &originalFeatures)
+	}
+	for _, mode := range []string{"internet", "intranet"} {
+		flags := settings.Features[mode]
+		for _, key := range []string{"expertLibrary", "skillMarketplace"} {
+			value, present := originalFeatures[mode][key]
+			enabled := true
+			if present {
+				if err := json.Unmarshal(value, &enabled); err != nil || string(value) == "null" {
+					return settings, fmt.Errorf("invalid feature setting: %s.%s", mode, key)
+				}
+			}
+			if key == "expertLibrary" {
+				flags.ExpertLibrary = enabled
+			} else {
+				flags.SkillMarketplace = enabled
+			}
+		}
+		settings.Features[mode] = flags
 	}
 	settings.Features = map[string]desktopFeatureFlags{"internet": settings.Features["internet"], "intranet": settings.Features["intranet"]}
 	normalizedPages := defaultDesktopFeaturePages()

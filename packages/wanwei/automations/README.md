@@ -7,6 +7,8 @@ kind: "package-reference"
 
 English | [中文](README.zh.md)
 
+The sidebar entry follows the administrator’s shared order and its environment-specific visibility setting. See [deployment policy](../oneapi-auth/README.md).
+
 ## Summary
 
 Scheduled delivery uses the task name as a heading and a Wanwei Buddy timestamp footer. Successful runs omit status labels; exceptional runs include the reason, and results awaiting completion confirmation say so without asserting success. Feishu renders the body as native rich text. Desktop execution states and delivery retry remain unchanged.

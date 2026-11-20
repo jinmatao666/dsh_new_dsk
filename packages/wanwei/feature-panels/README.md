@@ -7,6 +7,8 @@ kind: "package-reference"
 
 English | [中文](README.zh.md)
 
+Feature owners may provide an observable sidebar order. Position changes replace only the sidebar registration; overlay state remains mounted. Plugin disposal removes both the entry and its ordering subscription.
+
 ## Summary
 
 Product plugins can share the sidebar and overlay appearance without sharing catalogs or business state. Each caller allocates its own controller with its mounting Context. Opening one page closes another visible page through a local browser event, while disposal affects only the owning instance.

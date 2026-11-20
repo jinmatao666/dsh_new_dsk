@@ -142,7 +142,7 @@ export function apply(ctx: Context): void {
       return path
     }, id === 'feishu' ? undefined : selected)
   }
-  registerFeaturePanel(ctx, 'skill-connectors', 20, { controller, title: text('连接器'),
+  registerFeaturePanel(ctx, 'skill-connectors', ctx.wanweiNetwork.sidebarOrder('connectors'), { controller, title: text('连接器'),
     subtitle: text('管理已授权的政务协同与数据服务连接'), requiresDirectInternet: true,
     visibility: ctx.wanweiNetwork.visibility('connectors'), Icon: ConnectorsIcon,
     hooks: { network: ctx.wanweiNetwork },

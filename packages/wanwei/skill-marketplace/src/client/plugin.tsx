@@ -34,6 +34,7 @@ import { CatalogToolbar, CatalogDownloadIcon, CatalogBackIcon as ArrowLeftIcon }
 
 type SkillParam = { name: string; type: string; required: boolean; description: string; defaultValue?: string }
 type Skill = {
+  chargePoints?: unknown
   taskCredits?: number
   requiresInternet?: boolean
   id: string
@@ -75,6 +76,7 @@ type MarketplaceSkillState = {
 }
 
 type RemoteSkill = {
+  charge_points?: unknown
   task_credits?: unknown
   requires_internet?: unknown
   id?: unknown
@@ -341,7 +343,7 @@ const DownloadIcon = CatalogDownloadIcon
 
 /** Visual identity for each marketplace capability in the sidebar and cards. */
 
-type NetworkInjected = { catalogAccess: NetworkController['catalogAccess']; controller: PanelController; services: MarketplaceServices; hooks: { network: HostObservable<NetworkState> } }
+type NetworkInjected = { visibility?: HostObservable<boolean>; catalogAccess: NetworkController['catalogAccess']; controller: PanelController; services: MarketplaceServices; hooks: { network: HostObservable<NetworkState> } }
 type OverlayProps = PropsRuntime<'shell.overlay'> & InjectFace<NetworkInjected> & {
   marketplaceUrl: string
   chooseDirectory: () => Promise<string | null>
@@ -457,7 +459,7 @@ function SkillCategorySelect({
 
 function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, catalogAccess }: OverlayProps) {
   const network = useNetwork(value => value)
-  const showSkillPrice = network.billing?.enabled === true && network.billing.showCredits === true
+  const showSkillPrice = network.billing?.enabled === true && network.billing.showCredits
   const { skillhubRequest, loadRemoteSkills, startSkillConversation, loadRemoteCategories,
     loadRemoteSkillBundle, recordRemoteSkillInstall, submitPersonalSkill, loadPersonalSkills } = services
   const [open, setOpen] = useState(false)
@@ -625,6 +627,7 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
       return [{
         id: `remote-${remoteId}`,
         requiresInternet: remote.requires_internet !== false,
+        chargePoints: remote.charge_points,
         ...(typeof remote.task_credits === 'number' ? { taskCredits: remote.task_credits } : {}),
         ...(typeof remote.id === 'number' ? { remoteId: remote.id } : {}),
         slug,
@@ -1113,7 +1116,7 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
                         </div>
                         <div className="dsh-skill-featured-body">
                           <div className="dsh-skill-card-meta">
-                            <h3>{skill.name}</h3>
+                            <div className="dsh-skill-title-row"><h3>{skill.name}</h3><SkillPrice credits={skill.taskCredits} points={skill.chargePoints} enabled={showSkillPrice} /></div>
                             {hasVerifiedInstallCount(skill) && <small><DownloadIcon />{skill.installs}</small>}
                           </div>
                           <p>{skill.summary}</p>
@@ -1204,13 +1207,12 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
                       </div>
                       <div className="dsh-skill-card-body">
                         <div className="dsh-skill-card-meta">
-                          <span className="dsh-skill-category-price"><span
+                          <span
                             className="dsh-skill-card-category"
                             style={{ background: skill.accent + '14', color: skill.accent }}
                           >
                             {skill.category}
                           </span>
-                          <SkillPrice credits={skill.taskCredits} enabled={showSkillPrice} /></span>
                           <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>
                             {skill.source === 'personal' ? productText('个人') : productText('官方')}
                           </span>
@@ -1221,7 +1223,7 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
                           )}
                           {hasVerifiedInstallCount(skill) && <small><DownloadIcon />{skill.installs}</small>}
                         </div>
-                        <h2>{skill.name}</h2>
+                        <div className="dsh-skill-title-row"><h2>{skill.name}</h2><SkillPrice credits={skill.taskCredits} points={skill.chargePoints} enabled={showSkillPrice} /></div>
                         <p>{skill.summary}</p>
                       </div>
                     </article>
@@ -1275,16 +1277,15 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
                     </div>
                     <div className="dsh-skill-card-body">
                       <div className="dsh-skill-card-meta">
-                        <span className="dsh-skill-category-price"><span className="dsh-skill-card-category" style={{ background: skill.accent + '14', color: skill.accent }}>
+                        <span className="dsh-skill-card-category" style={{ background: skill.accent + '14', color: skill.accent }}>
                           {skill.category}
                         </span>
-                        <SkillPrice credits={skill.taskCredits} enabled={showSkillPrice} /></span>
                         <span className={`dsh-skill-source ${skill.source === 'personal' ? 'personal' : 'official'}`}>
                           {skill.source === 'personal' ? productText('个人') : productText('官方')}
                         </span>
                         {hasVerifiedInstallCount(skill) && <small><DownloadIcon />{skill.installs}</small>}
                       </div>
-                      <h2>{skill.name}</h2><p>{skill.summary}</p>
+                      <div className="dsh-skill-title-row"><h2>{skill.name}</h2><SkillPrice credits={skill.taskCredits} points={skill.chargePoints} enabled={showSkillPrice} /></div><p>{skill.summary}</p>
                     </div>
                   </article>,
                 })) } : {})}
@@ -1379,7 +1380,11 @@ function SkillMarketplace({ controller, services, chooseDirectory, useNetwork, c
   )
 }
 
-function SkillMarketplaceAction({ wide, controller, services }: ActionProps) {
+function SkillMarketplaceAction({ wide, controller, services, visibility }: ActionProps) {
+  const visible = useSyncExternalStore(
+    listener => visibility ? visibility.subscribe(listener) : () => {},
+    () => visibility?.getSnapshot() ?? true,
+  )
   const { loadPersonalSkills } = services
   // Clicking the entry again collapses its panel: the button reflects the
   // controller's open state so the toggle reads as selected while expanded.
@@ -1397,6 +1402,7 @@ function SkillMarketplaceAction({ wide, controller, services }: ActionProps) {
     window.addEventListener('focus', refresh)
     return () => { window.clearInterval(interval); window.removeEventListener('focus', refresh) }
   }, [])
+  if (!visible) return null
   return (
     <button
       type="button"
@@ -1498,12 +1504,22 @@ export function apply(ctx: Context): void {
   ctx.slots.inject('conversation.input.draft-prefix', () =>
     ctx.slots.register({ name: 'conversation.input.draft-prefix' }, SkillDraftPrefix),
   )
-  ctx.slots.inject('sidebar.footer.action', () =>
-    ctx.slots.register(
-      { name: 'sidebar.footer.action', id: 'skill-marketplace', order: 40, inject: () => ({ controller, services, catalogAccess: network.catalogAccess, hooks: networkHooks }) },
+  ctx.slots.inject('sidebar.footer.action', () => {
+    const position = network.sidebarOrder('skillMarketplace')
+    let order = position.getSnapshot()
+    const register = () => ctx.slots.register(
+      { name: 'sidebar.footer.action', id: 'skill-marketplace', order,
+        inject: () => ({ controller, services, visibility: network.visibility('skillMarketplace'), catalogAccess: network.catalogAccess, hooks: networkHooks }) },
       SkillMarketplaceAction,
-    ),
-  )
+    )
+    let dispose = register()
+    const unsubscribe = position.subscribe(() => {
+      const next = position.getSnapshot()
+      if (next === order) return
+      dispose(); order = next; dispose = register()
+    })
+    return () => { unsubscribe(); dispose() }
+  })
   ctx.slots.inject('shell.overlay', () =>
     ctx.slots.register(
       { name: 'shell.overlay', id: 'skill-marketplace-skills', order: 100, inject: () => ({ marketplaceUrl, controller, services, chooseDirectory, catalogAccess: network.catalogAccess, hooks: networkHooks }) },

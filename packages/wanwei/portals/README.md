@@ -7,6 +7,8 @@ kind: "package-reference"
 
 English | [中文](README.zh.md)
 
+The sidebar entry follows the administrator’s shared order and its environment-specific visibility setting. See [deployment policy](../oneapi-auth/README.md).
+
 ## Summary
 
 This plugin mounts three independent feature entries: land market, planning lecture and policy encyclopedia. Each entry’s visibility follows the current deployment environment flags from OneAPI. When open, the panel embeds the administrator-configured page URL edge-to-edge (no feature-panel title stack; only the top-right back control remains) and maximizes the desktop window. While the iframe loads, it shows the same centered spinner used by knowledge-base document viewers. Missing URLs show a configuration placeholder instead of an empty frame.

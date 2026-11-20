@@ -7,6 +7,10 @@ kind: "package-reference"
 
 English | [中文](README.zh.md)
 
+The sidebar entry follows the administrator’s shared order and its environment-specific visibility setting. See [deployment policy](../oneapi-auth/README.md).
+
+Published expert cards show each positive charge-point price as a number beside the expert name. Hovering a number shows the charge-point name. Free, disabled or deleted points and disabled credit accounting or visibility show no price. The catalog supplies these display prices; execution still resolves billing rules on the server.
+
 ## Summary
 
 The Refresh button sits beside the category filters and reloads published cards and category positions without restarting the desktop or closing running workbenches. Card order and category-navigation order remain independent administrator settings.

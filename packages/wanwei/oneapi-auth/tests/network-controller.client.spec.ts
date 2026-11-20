@@ -7,7 +7,8 @@ afterEach(() => { delete (window as unknown as Record<string, unknown>).__ZJUGIS
 
 it('synchronizes the catalog policy and retains it when a malformed refresh is rejected', async () => {
   let internetCatalogPolicy: unknown = 'hide'
-  const call = vi.fn(async () => ({ ok: true, value: { mode: 'intranet', internalOrigins: [], directInternet: false, internetCatalogPolicy } }))
+  const call = vi.fn(async () => ({ ok: true, value: { mode: 'intranet', internalOrigins: [], directInternet: false,
+    internetCatalogPolicy } }))
   const controller = new NetworkController({ rpc: { call } } as unknown as ConnectionHandle)
   await controller.refresh()
   expect(controller.getSnapshot().internetCatalogPolicy).toBe('hide')
@@ -149,4 +150,23 @@ it('publishes independent catalog policies and rejects malformed refreshes witho
   internetExpertPolicy = null
   await expect(controller.refresh()).rejects.toThrow()
   expect(controller.getSnapshot()).toBe(state)
+})
+
+it('commits sidebar order and expert/skill visibility together and retains them on invalid refresh', async () => {
+  let featureOrder: unknown = ['expertLibrary', 'skillMarketplace', 'knowledgeBases', 'automations', 'connectors', 'landMarket',
+    'planningLecture', 'policyEncyclopedia']
+  const call = vi.fn(async () => ({ ok: true, value: { mode: 'internet', internalOrigins: [], featureOrder,
+    features: { internet: { automations: true, connectors: true, expertLibrary: false, skillMarketplace: true },
+      intranet: { automations: true, connectors: false } } } }))
+  const controller = new NetworkController({ rpc: { call } } as unknown as ConnectionHandle)
+  const order = controller.sidebarOrder('expertLibrary')
+  await controller.refresh()
+  expect(order.getSnapshot()).toBe(0)
+  expect(controller.sidebarOrder('skillMarketplace').getSnapshot()).toBe(10)
+  expect(controller.visibility('expertLibrary').getSnapshot()).toBe(false)
+  expect(controller.visibility('skillMarketplace').getSnapshot()).toBe(true)
+  featureOrder = ['unknown']
+  await expect(controller.refresh()).rejects.toThrow('featureOrder')
+  expect(order.getSnapshot()).toBe(0)
+  expect(controller.visibility('expertLibrary').getSnapshot()).toBe(false)
 })

@@ -186,14 +186,27 @@ export function FeaturePanel({
 /** Mount one feature without registering any other feature's entry or content.
  * @param ctx - Owning plugin context with slot services.
  * @param id - Stable feature registration identifier.
- * @param order - Sidebar order.
+ * @param order - Sidebar position or deployment-owned observable position.
  * @param injected - Feature presentation and controller.
  */
-export function registerFeaturePanel(ctx: Context, id: string, order: number, injected: PanelInjected): void {
-  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register(
-    { name: 'sidebar.footer.action', id, order, inject: () => injected }, PanelAction,
-  ))
+export function registerFeaturePanel(ctx: Context, id: string, order: number | HostObservable<number>, injected: PanelInjected): void {
+  ctx.slots.inject('sidebar.footer.action', () => {
+    const position = () => typeof order === 'number' ? order : order.getSnapshot()
+    let current = position()
+    const register = () => ctx.slots.register(
+      { name: 'sidebar.footer.action', id, order: current, inject: () => injected }, PanelAction,
+    )
+    let dispose = register()
+    const unsubscribe = typeof order === 'number' ? () => {} : order.subscribe(() => {
+      const next = position()
+      if (next === current) return
+      dispose()
+      current = next
+      dispose = register()
+    })
+    return () => { unsubscribe(); dispose() }
+  })
   ctx.slots.inject('shell.overlay', () => ctx.slots.register(
-    { name: 'shell.overlay', id: `${id}-panel`, order: 100 + order, inject: () => injected }, FeaturePanel,
+    { name: 'shell.overlay', id: `${id}-panel`, order: 100 + (typeof order === 'number' ? order : order.getSnapshot()), inject: () => injected }, FeaturePanel,
   ))
 }

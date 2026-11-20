@@ -3,6 +3,7 @@ import { resolveResourceSettings, type ResourceSettings } from './resource-setti
 
 /** Public deployment metadata owned by the desktop's configured OneAPI server. */
 export interface DeploymentSettings {
+  featureOrder?: readonly string[]
   billing?: BillingPolicy
   internetCatalogPolicy?: 'hide' | 'disable'
   internetSkillPolicy?: 'hide' | 'disable'
@@ -42,6 +43,8 @@ export function resolveDeploymentPlugins(value: unknown): DeploymentPlugins {
 
 /** Independent entry visibility for each deployment environment. */
 export type DeploymentFeatures = Record<NetworkEnvironment, {
+  expertLibrary: boolean
+  skillMarketplace: boolean
   automations: boolean
   connectors: boolean
   knowledgeBases: boolean
@@ -62,9 +65,11 @@ const FEATURE_PAGE_IDS = ['landMarket', 'planningLecture', 'policyEncyclopedia']
  */
 export function resolveDeploymentFeatures(value: unknown): DeploymentFeatures {
   if (value === undefined) return {
-    internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false,
+    internet: { expertLibrary: true, skillMarketplace: true, automations: true, connectors: true, knowledgeBases: true,
+      landMarket: false, planningLecture: false,
       policyEncyclopedia: false },
-    intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false,
+    intranet: { expertLibrary: true, skillMarketplace: true, automations: true, connectors: false, knowledgeBases: true,
+      landMarket: false, planningLecture: false,
       policyEncyclopedia: false },
   }
   if (typeof value !== 'object' || value === null) throw new Error('后台功能设置无效')
@@ -74,17 +79,20 @@ export function resolveDeploymentFeatures(value: unknown): DeploymentFeatures {
     if (typeof flags !== 'object' || flags === null) throw new Error('后台功能设置无效')
     const record = flags as Record<string, unknown>
     const { automations, connectors } = record
+    const expertLibrary = record.expertLibrary === undefined ? true : record.expertLibrary
+    const skillMarketplace = record.skillMarketplace === undefined ? true : record.skillMarketplace
     // 旧后台尚未提供知识库或门户开关；显式 null 或错误类型仍必须拒绝。
     const knowledgeBases = Object.hasOwn(record, 'knowledgeBases') ? record.knowledgeBases : true
     const landMarket = Object.hasOwn(record, 'landMarket') ? record.landMarket : false
     const planningLecture = Object.hasOwn(record, 'planningLecture') ? record.planningLecture : false
     const policyEncyclopedia = Object.hasOwn(record, 'policyEncyclopedia') ? record.policyEncyclopedia : false
-    if (typeof automations !== 'boolean' || typeof connectors !== 'boolean'
+    if (typeof expertLibrary !== 'boolean' || typeof skillMarketplace !== 'boolean' || typeof automations !== 'boolean' || typeof connectors !== 'boolean'
       || typeof knowledgeBases !== 'boolean' || typeof landMarket !== 'boolean'
       || typeof planningLecture !== 'boolean' || typeof policyEncyclopedia !== 'boolean') {
       throw new Error('后台功能设置无效')
     }
-    result[mode] = { automations, connectors, knowledgeBases, landMarket, planningLecture, policyEncyclopedia }
+    result[mode] = { expertLibrary, skillMarketplace, automations, connectors, knowledgeBases,
+      landMarket, planningLecture, policyEncyclopedia }
   }
   return result
 }
@@ -117,7 +125,7 @@ export function resolveDeploymentFeaturePages(value: unknown): DeploymentFeature
     return { landMarket: { url: '' }, planningLecture: { url: '' }, policyEncyclopedia: { url: '' } }
   }
   if (typeof value !== 'object' || value === null) throw new Error('后台功能页面配置无效')
-  const result = { landMarket: { url: '' }, planningLecture: { url: '' }, policyEncyclopedia: { url: '' } } as DeploymentFeaturePages
+  const result = { landMarket: { url: '' }, planningLecture: { url: '' }, policyEncyclopedia: { url: '' } }
   for (const id of FEATURE_PAGE_IDS) {
     const entry = (value as Record<string, unknown>)[id]
     if (entry === undefined) continue
@@ -153,6 +161,7 @@ export async function fetchDeploymentSettings(baseURL: string, signal?: AbortSig
     internetExpertPolicy: resolveInternetCatalogPolicy(
       data.internetExpertPolicy === undefined ? data.internetCatalogPolicy : data.internetExpertPolicy),
     ...(resources === undefined ? {} : { resources }),
+    featureOrder: resolveFeatureOrder(data.featureOrder),
     features: resolveDeploymentFeatures(data.features),
     featurePages: resolveDeploymentFeaturePages(data.featurePages),
     plugins: resolveDeploymentPlugins(data.plugins) }
@@ -178,4 +187,18 @@ export function resolveBillingPolicy(value: unknown, edition: unknown = 'operati
     if (typeof flag === 'boolean') result[key] = flag
   }
   return result
+}
+
+/** Default desktop entry order for deployment records without a custom order. */
+export const defaultFeatureOrder = ['automations', 'connectors', 'knowledgeBases', 'expertLibrary', 'landMarket', 'skillMarketplace', 'planningLecture', 'policyEncyclopedia'] as const
+
+/** Validate the administrator's complete sidebar ordering.
+ * @param value - Public deployment order, or undefined for the default.
+ * @returns Validated feature identifiers in display order.
+ */
+export function resolveFeatureOrder(value: unknown): readonly string[] {
+  if (value === undefined) return defaultFeatureOrder
+  if (!Array.isArray(value) || value.length !== defaultFeatureOrder.length || new Set(value).size !== value.length
+    || value.some(key => !(defaultFeatureOrder as readonly unknown[]).includes(key))) throw new Error('Invalid featureOrder')
+  return value as string[]
 }

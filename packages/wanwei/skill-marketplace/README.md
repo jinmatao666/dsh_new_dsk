@@ -7,9 +7,9 @@ kind: "package-reference"
 
 English | [中文](README.zh.md)
 
-Platform cards show positive backend `task_credits` beside the category as a number and a gold official Lucide Coins icon. Zero or absent prices and disabled credit accounting or visibility show no price label.
+The sidebar entry follows the administrator’s shared order and its environment-specific visibility setting. See [deployment policy](../oneapi-auth/README.md).
 
-The Coins asset is bundled locally with its license in `icon-licenses.txt`; card rendering does not import authentication-plugin runtime values.
+Platform and recommendation cards show each positive charge-point price as a number beside the skill name. Hovering a number shows its charge-point name. Free, disabled or deleted points and disabled credit accounting or visibility show no price. Prices come from the backend catalog's `charge_points`; older catalog responses use `task_credits` for the skill invocation price.
 
 ## Summary
 
@@ -143,4 +143,4 @@ Catalog access decisions cross plugin boundaries through the injected `wanweiNet
 
 Internet-dependent skill and expert presentation is configured independently with `internetSkillPolicy` and `internetExpertPolicy`. Missing values inherit the legacy shared policy; updated desktop clients are required to apply the independent choices.
 
-Skill cards display the current positive default-point price, including fractional credits; free or disabled points hide prices.
+Skill cards display current positive charge-point prices, including fractional credits. Each number has its own charge-point name on hover.

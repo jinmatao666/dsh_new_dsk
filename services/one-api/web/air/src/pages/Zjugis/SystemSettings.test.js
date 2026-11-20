@@ -49,13 +49,13 @@ test('legacy feature switches load and save with knowledge defaults without rese
   act(() => container.querySelectorAll('[role="tab"]')[4].click());
   expect(container.querySelector('[role="alert"]')).toBeNull();
   const switches = [...container.querySelectorAll('[role="switch"]')];
-  expect(switches.map(toggle => toggle.checked)).toEqual([false, true, true, false, true, true, false, false, false, false, false, false]);
+  expect(switches.map(toggle => toggle.checked)).toEqual([false, true, true, false, true, true, true, true, false, false, true, true, false, false, false, false]);
   act(() => switches[4].click());
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   const saved = JSON.parse(API.put.mock.calls[0][1].value);
   expect(saved.features).toEqual({
-    internet: { ...legacy.features.internet, knowledgeBases: false, landMarket: false, planningLecture: false, policyEncyclopedia: false },
-    intranet: { ...legacy.features.intranet, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
+    internet: { expertLibrary: true, skillMarketplace: true, ...legacy.features.internet, knowledgeBases: false, landMarket: false, planningLecture: false, policyEncyclopedia: false },
+    intranet: { expertLibrary: true, skillMarketplace: true, ...legacy.features.intranet, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
   });
   expect(saved.featurePages).toEqual({ landMarket: { url: '' }, planningLecture: { url: '' }, policyEncyclopedia: { url: '' } });
   expect(saved.network).toBe(legacy.network);
@@ -128,8 +128,8 @@ test('network selection saves one deployment option without changing account dat
   expect(saved.network).toBe('intranet');
   expect(saved.operator).toBe('张运维');
   expect(saved.features).toEqual({
-    internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
-    intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
+    internet: { expertLibrary: true, skillMarketplace: true, automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
+    intranet: { expertLibrary: true, skillMarketplace: true, automations: true, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: false },
   });
   expect(showSuccess).toHaveBeenCalledWith('设置已保存');
   expect(container.textContent).not.toContain('设置已保存');
@@ -163,8 +163,8 @@ test('feature switches save independently for internet and intranet', async () =
   act(() => toggle('纯内网政策宝典').click());
   await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   expect(JSON.parse(API.put.mock.calls[0][1].value).features).toEqual({
-    internet: { automations: false, connectors: true, knowledgeBases: false, landMarket: true, planningLecture: true, policyEncyclopedia: false },
-    intranet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: true },
+    internet: { expertLibrary: true, skillMarketplace: true, automations: false, connectors: true, knowledgeBases: false, landMarket: true, planningLecture: true, policyEncyclopedia: false },
+    intranet: { expertLibrary: true, skillMarketplace: true, automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false, policyEncyclopedia: true },
   });
   expect(toggle('纯内网自动化').checked).toBe(true);
 });
@@ -517,4 +517,27 @@ test.each([
   act(() => container.querySelector('input[value="government"]').click());
   act(() => container.querySelectorAll('[role="tab"]')[4].click());
   expect([...container.querySelectorAll('button')].some(button => button.textContent === '知识库积分设置')).toBe(false);
+});
+
+test('orders all desktop entries with drag and keyboard and saves independent switches', async () => {
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[4].click());
+  const rows = () => [...container.querySelectorAll('.settings-features tbody tr')];
+  const names = () => rows().map(row => row.querySelector('th').textContent);
+  expect(names()).toEqual(expect.arrayContaining(['专家库', '技能市场']));
+  const handle = () => container.querySelector('[aria-label="调整专家库顺序"]');
+  act(() => Simulate.keyDown(handle(), { key: 'ArrowUp', preventDefault() {} }));
+  expect(names().indexOf('专家库')).toBe(2);
+  act(() => Simulate.dragStart(handle(), { dataTransfer: { setData() {} } }));
+  act(() => Simulate.drop(rows()[0], { preventDefault() {} }));
+  expect(names()[0]).toBe('专家库');
+  act(() => container.querySelector('[aria-label="纯内网专家库"]').click());
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  const saved = JSON.parse(API.put.mock.calls[0][1].value);
+  expect(saved.featureOrder[0]).toBe('expertLibrary');
+  expect(saved.features.internet.expertLibrary).toBe(true);
+  expect(saved.features.intranet.expertLibrary).toBe(false);
+  act(() => rows()[0].querySelector('.feature-order-handle').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })));
+  act(() => [...container.querySelectorAll('button')].find(button => button.textContent === '取消修改').click());
+  expect(names()[0]).toBe('专家库');
 });

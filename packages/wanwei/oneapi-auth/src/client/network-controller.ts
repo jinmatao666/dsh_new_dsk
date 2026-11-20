@@ -2,6 +2,7 @@ import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client
 import { internetCatalogAccess, type NetworkState } from '../network-contract.ts'
 import {
   resolveDeploymentFeaturePages,
+  resolveFeatureOrder,
   resolveBillingPolicy,
   resolveDeploymentFeatures,
   resolveDeploymentPlugins,
@@ -24,6 +25,7 @@ export class NetworkController {
     internetCatalogAccess(state, requiresInternet, kind)
   private readonly listeners = new Set<() => void>()
   private tail: Promise<unknown> = Promise.resolve()
+  private featureOrder = resolveFeatureOrder(undefined)
   private features: DeploymentFeatures = resolveDeploymentFeatures(undefined)
   private featurePages: DeploymentFeaturePages = resolveDeploymentFeaturePages(undefined)
   private plugins: DeploymentPlugins = { browserAssistant: false }
@@ -33,6 +35,13 @@ export class NetworkController {
    */
   pluginAllowed(plugin: keyof DeploymentPlugins): HostObservable<boolean> {
     return { getSnapshot: () => this.plugins[plugin], subscribe: this.subscribe }
+  }
+  /** Observe one feature's sidebar position.
+   * @param feature - Entry owned by the consuming plugin.
+   * @returns Position observable updated with deployment settings.
+   */
+  sidebarOrder(feature: keyof DeploymentFeatures['internet']): HostObservable<number> {
+    return { getSnapshot: () => this.featureOrder.indexOf(feature) * 10, subscribe: this.subscribe }
   }
   /** Observe one entry's visibility in the currently selected environment.
    * @param feature - Entry owned by the consuming plugin.
@@ -66,12 +75,14 @@ export class NetworkController {
     features: DeploymentFeatures,
     featurePages: DeploymentFeaturePages,
     plugins: DeploymentPlugins,
+    featureOrder: readonly string[],
   ): Promise<void> {
     const native = (window as unknown as {
       __ZJUGIS_NATIVE_INVOKE__?: (command: string, args: unknown) => Promise<unknown>
     }).__ZJUGIS_NATIVE_INVOKE__
     if (native) await native('set_network_environment', { mode: value.mode, internalOrigins: value.internalOrigins })
     this.snapshot = value
+    this.featureOrder = featureOrder
     this.features = features
     this.featurePages = featurePages
     this.plugins = plugins
@@ -89,6 +100,7 @@ export class NetworkController {
         mode: unknown
         internalOrigins: readonly string[]
         directInternet?: unknown
+        featureOrder?: unknown
         features?: unknown
         featurePages?: unknown
         plugins?: unknown
@@ -108,7 +120,7 @@ export class NetworkController {
         internetExpertPolicy: resolveInternetCatalogPolicy(
           value.internetExpertPolicy === undefined ? value.internetCatalogPolicy : value.internetExpertPolicy),
         ...(value.directInternet === undefined ? {} : { directInternet: value.directInternet }) },
-      features, featurePages, plugins)
+      features, featurePages, plugins, resolveFeatureOrder(value.featureOrder))
       return this.snapshot
     }
     const promise = this.tail.then(run)

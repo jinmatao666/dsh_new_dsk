@@ -7,6 +7,8 @@ kind: "package-reference"
 
 English | [中文](README.zh.md)
 
+The sidebar entry follows the administrator’s shared order and its environment-specific visibility setting. See [deployment policy](../oneapi-auth/README.md).
+
 ## Summary
 
 Feishu bot replies, session synchronization and scheduled results use native post Markdown rather than raw text. Ordinary messages gain no generated title, status or footer. Inline text sent through the Feishu CLI send/reply shortcuts is converted while explicit rich messages and file/stdin references remain unchanged. Long bot replies and scheduled results are split on paragraph/line boundaries where possible without truncating Unicode or fenced code. Actual client rendering still needs a Feishu-client check.

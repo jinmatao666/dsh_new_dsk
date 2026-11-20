@@ -48,6 +48,7 @@ func ensureMarketplaceManifestID(assets, fallbackID string) (string, error) {
 }
 
 type skillResponse struct {
+	ChargePoints            []catalogChargePoint      `json:"charge_points"`
 	TaskCredits             float64                   `json:"task_credits"`
 	SortOrder               *int                      `json:"sort_order"`
 	RequiresInternet        *bool                     `json:"requires_internet"`
@@ -151,8 +152,17 @@ func skillsToResponses(skills []model.Skill) ([]skillResponse, error) {
 		return nil, err
 	}
 	items := make([]skillResponse, len(skills))
+	legacy := make(map[string]int64, len(skills))
+	for _, skill := range skills {
+		legacy[skill.Name] = skill.TaskCredits
+	}
+	prices, err := catalogChargePoints("skill", legacy)
+	if err != nil {
+		return nil, err
+	}
 	for i, s := range skills {
 		items[i] = skillToResponse(s, categoryMap[s.Id])
+		items[i].ChargePoints = prices[s.Name]
 	}
 	return items, nil
 }
