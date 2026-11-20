@@ -1253,12 +1253,16 @@ const KnowledgeLibrary = () => {
         description: form.description.trim(),
         kind,
         tags: form.tags.trim(),
+        ...(form.owner_user_id ? { owner_user_id: form.owner_user_id } : {}),
         ...(form.category_id ? { category_id: form.category_id } : {}),
         ...(form.cover ? { cover: form.cover } : {}),
         ...(form.source === 'existing' && form.ragflow_dataset_id
           ? { ragflow_dataset_id: form.ragflow_dataset_id }
           : {}),
       }));
+      if (form.owner_user_id && Number(created?.owner_user_id) !== Number(form.owner_user_id)) {
+        throw new Error('知识库已创建，但归属与所选人员不一致，请更新后端并核对知识库归属。');
+      }
       const categoryId = form.category_id || created?.category_id || 0;
       const library = {
         ...created,
@@ -1273,7 +1277,10 @@ const KnowledgeLibrary = () => {
       setRagflowDatasets([]);
       setScope(categoryId ? `c:${categoryId}` : 'personal');
       await loadLibraries();
-      await openFiles(library);
+      if (form.owner_user_id) {
+        setLibraries(current => [library, ...current.filter(item => Number(item.id) !== Number(library.id))]);
+      }
+      await openFiles(library, { fromPerson: Boolean(form.owner_user_id) });
     } catch (cause) {
       setError(await errorMessage(cause));
     } finally {
@@ -2168,6 +2175,12 @@ const KnowledgeLibrary = () => {
                 <h2>{person.name} 的文件清单</h2>
                 <p>{person.department || '未分配部门'} · {personLibraries.length}个知识库 · {personFilesLoading ? '…' : personFiles.length}个文件</p>
               </button>
+              {isAdmin() && !loading && !personFilesLoading && personLibraries.length === 0 && <button
+                type='button' className='knowledge-primary knowledge-person-upload'
+                onClick={() => {
+                  setCategoryOpen(false); setEditing(null); setError('');
+                  setForm({ ...EMPTY_LIBRARY_FORM, owner_user_id: person.id }); setCreating(true);
+                }}><Plus size={16} />新建知识库</button>}
               {writablePersonLibraries.length > 0 && <div className='knowledge-person-upload'>
                 {writablePersonLibraries.length > 1 && <select
                   aria-label='上传到知识库'
@@ -2412,6 +2425,7 @@ const KnowledgeLibrary = () => {
     </form></div>}
     {creating && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' onSubmit={createLibrary}>
       <header><h2>新建知识库</h2><button type='button' onClick={() => { setCreating(false); setForm(EMPTY_LIBRARY_FORM); setRagflowDatasets([]); }}>×</button></header>
+      {form.owner_user_id && <p className='knowledge-modal-description'>为 {person?.name} 创建个人知识库</p>}
       <div className='knowledge-modal-body'>
         <label>创建方式<select aria-label='创建方式' value={form.source} onChange={event => setForm(current => ({
           ...current,

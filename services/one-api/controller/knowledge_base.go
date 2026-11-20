@@ -19,6 +19,7 @@ import (
 	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/service/ragflow"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const maxKnowledgeUploadBytes = 20 << 20
@@ -29,6 +30,7 @@ type knowledgeGrantInput struct {
 }
 
 type createKnowledgeBaseInput struct {
+	OwnerUserId      int                   `json:"owner_user_id"`
 	Name             string                `json:"name"`
 	Description      string                `json:"description"`
 	Kind             string                `json:"kind"`
@@ -382,6 +384,25 @@ func CreateKnowledgeBase(c *gin.Context) {
 	input.Name = strings.TrimSpace(input.Name)
 	input.Description = strings.TrimSpace(input.Description)
 	input.Tags = strings.TrimSpace(input.Tags)
+	if input.OwnerUserId != 0 {
+		if !c.GetBool("knowledge_admin") || c.GetInt("role") < model.RoleAdminUser {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "只有管理员可以为人员创建个人知识库"})
+			return
+		}
+		if input.OwnerUserId < 0 || input.Kind != model.KnowledgeBasePersonal || input.CategoryId != 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "仅支持为人员创建个人知识库"})
+			return
+		}
+		var owner model.User
+		if err := model.DB.Select("id").First(&owner, input.OwnerUserId).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "目标人员不存在"})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "读取目标人员失败"})
+			}
+			return
+		}
+	}
 	if input.Name == "" || len([]rune(input.Name)) > 128 || len([]rune(input.Description)) > 500 ||
 		len([]rune(input.Tags)) > 200 || !validKnowledgeKind(input.Kind) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "知识库名称、描述或类型无效"})
@@ -435,6 +456,9 @@ func CreateKnowledgeBase(c *gin.Context) {
 		return
 	}
 	userId := c.GetInt("id")
+	if input.OwnerUserId > 0 {
+		userId = input.OwnerUserId
+	}
 	var dataset ragflow.Dataset
 	createdRemote := false
 	if existingDatasetId != "" {
@@ -457,11 +481,25 @@ func CreateKnowledgeBase(c *gin.Context) {
 	row := model.KnowledgeBase{Name: input.Name, Description: input.Description, Tags: input.Tags,
 		Cover: normalizedCover, RagflowDatasetId: dataset.Id, OwnerUserId: userId, Kind: input.Kind,
 		Shelf: model.KnowledgeShelfPublished, CategoryId: input.CategoryId}
+	errExistingPersonal := errors.New("该人员已有个人知识库，请刷新后查看")
 	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		if input.OwnerUserId > 0 {
+			var owner model.User
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").First(&owner, userId).Error; err != nil {
+				return err
+			}
+			var count int64
+			if err := tx.Model(&model.KnowledgeBase{}).Where("owner_user_id = ? AND kind = ? AND COALESCE(category_id, 0) = 0", userId, model.KnowledgeBasePersonal).Count(&count).Error; err != nil {
+				return err
+			}
+			if count > 0 {
+				return errExistingPersonal
+			}
+		}
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
-		if err := model.RecordKnowledgeActivity(tx, &row, userId, "create", "personal", "", "", "success"); err != nil {
+		if err := model.RecordKnowledgeActivity(tx, &row, c.GetInt("id"), "create", "personal", "", "", "success"); err != nil {
 			return err
 		}
 		if input.Kind == model.KnowledgeBaseShared {
@@ -481,6 +519,10 @@ func CreateKnowledgeBase(c *gin.Context) {
 	if err != nil {
 		if createdRemote {
 			_ = client.DeleteDataset(c.Request.Context(), dataset.Id)
+		}
+		if errors.Is(err, errExistingPersonal) {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
+			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "保存知识库失败"})
 		return

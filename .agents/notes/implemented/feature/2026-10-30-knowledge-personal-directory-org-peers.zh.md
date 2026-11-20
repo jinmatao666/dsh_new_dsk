@@ -12,6 +12,8 @@ Status: implemented
 
 所有已登录管理工作台用户都使用个人知识库目录布局。超级管理员仍读 `/api/government-organization/` 与 `/api/user/`。非超级管理员读 `GET /api/knowledge-bases/organization-directory`，返回其直属归属节点及全部祖先（不含兄弟分支），以及**仅本人**账号与归属——同节点同事（例如与 `yxh` 同部门的 `jmt`）不出现在人员列表，其个人库也不并入 `ListAuthorizedKnowledgeBases`。非超级管理员不请求管理员组织或全员用户接口。仅当自己没有任何归属节点时才出现「未分配组织」。编辑/删除菜单仍属超级管理员或管理员。取代[按组织架构浏览个人目录](2026-10-29-knowledge-personal-directory-by-organization.zh.md)中普通用户扁平卡片条款；[组织与分类所有者](2026-10-30-knowledge-visibility-org-and-category-owner.zh.md)中的同节点同事个人库合并对普通用户已撤回。
 
+所选人员没有个人知识库时，管理员可在该人员文件清单中新建知识库。请求指定所选人员为所有者，服务端要求管理员工作台权限，校验人员，并在创建事务内再次检查该人员的个人知识库为空。新建库保持私有，创建日志分别记录所选所有者和执行创建的管理员。客户端校验返回的归属，将创建成功的库同步到目录，使人员卡片数量即时更新。已有个人知识库时隐藏该入口。
+
 ## Alternatives considered
 
 **让所有人复用 AdminAuth 的组织 GET：** 否决；会把整棵树与全部成员标签暴露给普通账号。

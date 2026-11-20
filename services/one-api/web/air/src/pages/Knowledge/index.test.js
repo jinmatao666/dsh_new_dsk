@@ -221,6 +221,47 @@ test('sort listbox preserves the selected value and creates a personal library',
   });
   await act(async () => { container.querySelector('.knowledge-modal').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
   expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/bases', expect.objectContaining({ kind: 'personal', name: '个人测试' }));
+  expect(API.post.mock.calls[0][1]).not.toHaveProperty('owner_user_id');
+});
+
+test.each([true, false])('only administrators can create for a person with no personal libraries: admin %s', async administrator => {
+  isAdmin.mockReturnValue(administrator);
+  isRoot.mockReturnValue(administrator);
+  if (!administrator) localStorage.setItem('user', JSON.stringify({ id: 8, role: 1, username: 'chen' }));
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  await act(async () => { button('陈静').click(); });
+  const files = container.querySelector('[aria-label="个人文件清单"]');
+  expect(files.textContent).toContain('0个知识库');
+  const create = [...files.querySelectorAll('button')].find(item => item.textContent === '新建知识库');
+  expect(Boolean(create)).toBe(administrator);
+  if (!administrator) return;
+  API.post.mockResolvedValueOnce({ data: { success: true, data: { id: 9, owner_user_id: 8, kind: 'personal', category_id: 0 } } });
+  await act(async () => { create.click(); });
+  expect(container.querySelector('.knowledge-modal').textContent).toContain('为 陈静 创建个人知识库');
+  await act(async () => {
+    Simulate.change(container.querySelector('input[placeholder="请输入知识库名称"]'), { target: { value: '陈静的资料' } });
+  });
+  await act(async () => { container.querySelector('.knowledge-modal').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/bases', expect.objectContaining({ name: '陈静的资料', kind: 'personal', owner_user_id: 8 }));
+  await act(async () => { container.querySelector('[aria-label="文件清单"] .knowledge-back').click(); });
+  expect(container.querySelector('[aria-label="个人文件清单"]').textContent).toContain('1个知识库');
+  expect([...container.querySelectorAll('[aria-label="个人文件清单"] button')].some(item => item.textContent === '新建知识库')).toBe(false);
+  await act(async () => { container.querySelector('[aria-label="个人文件清单"] .knowledge-back').click(); });
+  const chen = [...container.querySelectorAll('.knowledge-person')].find(item => item.textContent.includes('陈静'));
+  expect(chen.querySelector('.knowledge-person-stats').textContent).toMatch(/1\s*知识库/);
+});
+
+test('creation for a person reports an owner mismatch without treating it as success', async () => {
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  await act(async () => { button('陈静').click(); });
+  await act(async () => { button('新建知识库').click(); });
+  await act(async () => {
+    Simulate.change(container.querySelector('input[placeholder="请输入知识库名称"]'), { target: { value: '陈静的资料' } });
+  });
+  API.post.mockResolvedValueOnce({ data: { success: true, data: { id: 9, owner_user_id: 1 } } });
+  await act(async () => { container.querySelector('.knowledge-modal').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  expect(container.querySelector('.knowledge-modal [role="alert"]').textContent).toContain('归属与所选人员不一致');
+  expect(container.querySelector('[aria-label="文件清单"]')).toBeNull();
 });
 
 test('knowledge catalog filters scopes and opens the file list', async () => {
@@ -681,6 +722,7 @@ test('personal knowledge browses by organization tree without listing all people
   expect(container.textContent).toContain('个人笔记');
   expect(container.textContent).toContain('测绘标准规范合集_文件1.pdf');
   expect(container.textContent).toContain('1个知识库');
+  expect([...container.querySelectorAll('[aria-label="个人文件清单"] button')].some(item => item.textContent === '新建知识库')).toBe(false);
   expect(API.get).toHaveBeenCalledWith(expect.stringContaining('/api/knowledge-admin/bases/2/documents?page=1&page_size=100'));
   const pdfBlob = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
   const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null);

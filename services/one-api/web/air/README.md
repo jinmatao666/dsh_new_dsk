@@ -29,6 +29,8 @@ Public-library file lists include the recorded uploader. Administrators can retu
 
 ### Personal knowledge base files
 
+When a selected person has no personal library, administrators see a Create Knowledge Base action in that person's file list. The request names the selected owner, and the server requires the administrator workbench route, validates the person and checks again inside the creation transaction that their personal catalog is empty. The library remains private and its creation log records the selected owner separately from the administrator who created it. The client verifies returned ownership and adds the created library to the catalog so the person’s count updates immediately. Existing personal libraries hide this action.
+
 In Knowledge Base → Personal Knowledge Base, selecting a person with multiple libraries opens a searchable, paginated library catalog using the public-library cards and statistics. On wide screens, the back control, person title, library count and search share one compact toolbar; narrow screens wrap the search below. Each card opens that library's file list. The file-list toolbar keeps the back control, title, compact search and rightmost upload action together on wide screens; the upload explanation is omitted. Returning restores the catalog search and page. Library owners and root administrators can upload and retry failed parses inside the selected library. A person with one library keeps the direct file-list view. Personal-library menus support editing and deletion with the existing permissions.
 
 ### Knowledge category creation
