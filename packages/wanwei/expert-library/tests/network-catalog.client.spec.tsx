@@ -25,6 +25,8 @@ it('places named charge point numbers beside expert names and obeys credit visib
   expect(prices().map(node => [node.textContent, node.getAttribute('title')])).toEqual([
     ['3', '生成审查报告'], ['0.5', '导出成果'],
   ])
+  expect(view.container.querySelectorAll('.dsh-expert-price svg')).toHaveLength(2)
+  expect(view.container.querySelector('.dsh-expert-price svg')?.getAttribute('stroke')).toBe('#d99a22')
   const hidden = { ...state, billing: { ...state.billing!, showCredits: false } }
   view.rerender(<ExpertMarket loadExperts={loadExperts} network={{ ...network, getSnapshot: () => hidden }} />)
   expect(prices()).toEqual([])

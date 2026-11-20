@@ -5,12 +5,12 @@ import { SkillPrice } from '../src/client/SkillPrice.tsx'
 
 afterEach(cleanup)
 
-it('shows only the configured positive number with its charge point name on hover', () => {
+it('shows the positive price with a gold coin and charge point name on hover', () => {
   const { container } = render(<SkillPrice credits={3} enabled />)
   expect(screen.getByText('3')).toBeTruthy()
   expect(container.textContent).toBe('3')
   expect(screen.getByText('3').title).toBe('技能调用')
-  expect(container.querySelector('.dsh-skill-price-icon')).toBeNull()
+  expect(container.querySelector('.dsh-skill-price-icon')?.getAttribute('stroke')).toBe('#d99a22')
 })
 
 it('keeps separate named prices and respects an empty server price list', () => {

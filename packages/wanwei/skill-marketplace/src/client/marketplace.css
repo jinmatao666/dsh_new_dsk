@@ -1198,4 +1198,4 @@
 /* Prices stay next to the title, including when a long name is truncated. */
 .dsh-skill-title-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin: 0 0 4px; }
 .dsh-skill-card .dsh-skill-title-row h2, .dsh-skill-title-row h3 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; }
-.dsh-skill-price { flex: none; color: var(--dsw-alias-label-tertiary, #8691a3); font-size: 12px; font-weight: 400; line-height: 18px; white-space: nowrap; font-variant-numeric: tabular-nums; cursor: help; }
+.dsh-skill-price { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--dsw-alias-label-tertiary, #8691a3); font-size: 12px; font-weight: 400; line-height: 18px; white-space: nowrap; font-variant-numeric: tabular-nums; cursor: help; }
