@@ -5,6 +5,7 @@ import { API, isAdmin, isRoot } from '../../helpers';
 import { resourceURL } from '../../deployment';
 import CustomSelect from '../../components/CustomSelect';
 import './index.css';
+import ActivityLog from './ActivityLog';
 
 /** Hue-matched category-card header plates (js.design). Blue family uses the fixed isometric-folder plate. */
 const LIBRARY_CARD_BANNER_BLUE = '/knowledge-icons/card-banner.png';
@@ -539,6 +540,7 @@ const KnowledgeLibrary = () => {
   const [ragflowDatasetsLoading, setRagflowDatasetsLoading] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [categoryForm, setCategoryForm] = useState(EMPTY_CATEGORY_FORM);
+  const [logOpen, setLogOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewType, setReviewType] = useState('subscription');
   const [reviewStatus, setReviewStatus] = useState('pending');
@@ -575,6 +577,7 @@ const KnowledgeLibrary = () => {
   const [cardMenuId, setCardMenuId] = useState(null);
   const [tabMenu, setTabMenu] = useState(null);
   const [summaryFile, setSummaryFile] = useState(null);
+  const [returningFile, setReturningFile] = useState(null);
   const [summaryText, setSummaryText] = useState('');
   const [viewer, setViewer] = useState(null);
   const [busy, setBusy] = useState('');
@@ -997,6 +1000,33 @@ const KnowledgeLibrary = () => {
     ? writablePersonLibraries[0]
     : writablePersonLibraries.find(library => String(library.id) === personUploadLibraryId);
   const canWriteOpened = !isPersonalLibrary(opened) || canWritePersonalFiles(opened);
+  const publicFileList = opened && (opened.publication_scope === 'public' || (activeCategory?.type === 'common' && !activeCategory.require_auth) || (!opened.category_id && opened.kind === 'common'));
+
+  const openReturnFile = async file => {
+    setReturningFile({ file, targets: [], target: '', loading: true, error: '' });
+    try {
+      const targets = unwrap(await API.get(`/api/knowledge-admin/bases/${opened.id}/documents/${encodeURIComponent(file.id)}/return-targets`, { timeout: 15000 }));
+      setReturningFile(current => current?.file.id === file.id ? { ...current, targets, target: String(targets[0]?.id || ''), loading: false } : current);
+    } catch (cause) {
+      const message = await errorMessage(cause);
+      setReturningFile(current => current?.file.id === file.id ? { ...current, loading: false, error: message } : current);
+    }
+  };
+
+  const returnFile = async event => {
+    event.preventDefault();
+    if (!returningFile?.target || busy) return;
+    const { file, target } = returningFile;
+    setBusy(`${file.id}:return`);
+    try {
+      unwrap(await API.post(`/api/knowledge-admin/bases/${opened.id}/documents/${encodeURIComponent(file.id)}/return-personal`, { target_knowledge_base_id: Number(target) }));
+      setReturningFile(null);
+      await loadDocuments(opened, { page: filePage, keywords: fileSearch });
+    } catch (cause) {
+      const message = await errorMessage(cause);
+      setReturningFile(current => current ? { ...current, error: message } : current);
+    } finally { setBusy(''); }
+  };
 
   const shownPersonFiles = useMemo(() => {
     const text = personFileQuery.trim().toLowerCase();
@@ -1703,7 +1733,7 @@ const KnowledgeLibrary = () => {
   const reviewPageCount = Math.max(1, Math.ceil(reviewTotal / REVIEW_PAGE_SIZE) || 1);
 
   /* Design hero plate keeps tabs/actions on the banner even while a file list is open. */
-  const showHeroChrome = !reviewOpen;
+  const showHeroChrome = !reviewOpen && !logOpen;
   const showCatalogToolbar = showHeroChrome && !opened && activeScope !== 'personal';
 
   const renderLibraryCard = (library, fromPerson = false) => {
@@ -1764,10 +1794,10 @@ const KnowledgeLibrary = () => {
     </article>;
   };
 
-  return <div className={reviewOpen ? 'knowledge-admin reviewing-inbox' : 'knowledge-admin'}>
+  return <div className={reviewOpen || logOpen ? 'knowledge-admin reviewing-inbox' : 'knowledge-admin'}>
     <div className='knowledge-sticky'>
       <div className='knowledge-hero'>
-        {!reviewOpen && <img
+        {!reviewOpen && !logOpen && <img
           className='knowledge-page-header-art'
           src={resourceURL(PAGE_HEADER_ART)}
           alt=''
@@ -1777,7 +1807,7 @@ const KnowledgeLibrary = () => {
         <header className='knowledge-page-head'>
           <div className='knowledge-page-title'>
             <h1>知识库</h1>
-            {!reviewOpen && <p>{manageAllPersonal
+            {!reviewOpen && !logOpen && <p>{manageAllPersonal
               ? '按分类管理知识库与人员目录中的文件'
               : '管理本组织与自己的个人知识库，以及自己创建或已获授权的分类知识库'}</p>}
           </div>
@@ -1847,6 +1877,7 @@ const KnowledgeLibrary = () => {
               <img className='knowledge-chrome-icon knowledge-chrome-icon-category' src={resourceURL(ICON_NEW_CATEGORY)} alt='' draggable={false} aria-hidden='true' />
               新建知识库分类
             </button>}
+            {isAdmin() && <button type='button' className='knowledge-log-entry' onClick={() => { setOpened(null); setLogOpen(true); }}><FileText size={16} aria-hidden='true' />日志</button>}
           </div>
         </div>}
       </div>
@@ -1887,7 +1918,7 @@ const KnowledgeLibrary = () => {
       document.body,
     )}
     {error && <div className='knowledge-alert' role='alert'>{error}<button type='button' onClick={() => setError('')}>关闭</button></div>}
-    {reviewOpen ? <section className='knowledge-inbox' aria-label='知识库待办箱'>
+    {logOpen ? <ActivityLog onClose={() => setLogOpen(false)} /> : reviewOpen ? <section className='knowledge-inbox' aria-label='知识库待办箱'>
       <header className='knowledge-inbox-hero'>
         <button type='button' className='knowledge-inbox-back' onClick={() => setReviewOpen(false)}><ArrowLeft size={17} />返回知识库</button>
         <div className='knowledge-inbox-heading'><span>知识库管理 / 审核中心</span><h2><span className='knowledge-inbox-mark'><Inbox size={23} /></span>知识库待办箱</h2><p>统一处理发布与订阅申请，让知识共享有序流转。</p></div>
@@ -1991,12 +2022,13 @@ const KnowledgeLibrary = () => {
       <div className='knowledge-table-card'>
         <div className='knowledge-table-wrap'>
           <table>
-            <thead><tr><th>文件名称</th><th>大小</th><th>上传时间</th><th>解析状态</th><th>切片数量</th><th>摘要</th><th>操作</th></tr></thead>
+            <thead><tr><th>文件名称</th>{publicFileList && <th>上传人</th>}<th>大小</th><th>上传时间</th><th>解析状态</th><th>切片数量</th><th>摘要</th><th>操作</th></tr></thead>
             <tbody>
-              {documentsLoading ? <tr><td colSpan={7}>正在加载文件</td></tr> : documents.length === 0 ? <tr><td colSpan={7}>{fileSearch ? '没有匹配的文件' : '暂无文件'}</td></tr> : documents.map(file => {
+              {documentsLoading ? <tr><td colSpan={publicFileList ? 8 : 7}>正在加载文件</td></tr> : documents.length === 0 ? <tr><td colSpan={publicFileList ? 8 : 7}>{fileSearch ? '没有匹配的文件' : '暂无文件'}</td></tr> : documents.map(file => {
                 const state = parseState(file);
                 return <tr key={file.id}>
                 <td>{file.name}</td>
+                {publicFileList && <td>{file.creator_name || (file.uploader_user_id ? resolveUserLabel(file.uploader_user_id) : '未知')}</td>}
                 <td>{formatSize(file.size)}</td>
                 <td>{formatUnix(file.create_time || file.update_time)}</td>
                 <td className={`knowledge-parse ${state.key}`}>{state.label}</td>
@@ -2006,6 +2038,7 @@ const KnowledgeLibrary = () => {
                   <button type='button' disabled={busy === `${file.id}:browse`} onClick={() => runFileAction(file, 'browse')}><FileOpIcon src={ICON_FILE_BROWSE} />浏览</button>
                   <button type='button' disabled={busy === `${file.id}:download`} onClick={() => runFileAction(file, 'download')}><FileOpIcon src={ICON_FILE_DOWNLOAD} />下载</button>
                   <button type='button' disabled={busy === `${file.id}:chunks`} onClick={() => runFileAction(file, 'chunks')}><FileOpIcon src={ICON_FILE_CHUNKS} />切片</button>
+                  {publicFileList && isAdmin() && canWriteOpened && Number(file.uploader_user_id) > 0 && <button type='button' disabled={Boolean(busy)} onClick={() => openReturnFile(file)}>转回个人库</button>}
                   {(isPersonalLibrary(opened) ? canWriteOpened : isAdmin()) && state.retry && <button type='button' disabled={busy === `${file.id}:parse`} onClick={() => runFileAction(file, 'parse')}><RefreshCw size={14} />重新解析</button>}
                   {isAdmin() && canWriteOpened && <button type='button' onClick={() => { setSummaryFile(file); setSummaryText(file.summary || ''); }}><FileOpIcon src={ICON_FILE_SUMMARY} />摘要</button>}
                   {canWriteOpened && <button type='button' className='danger' onClick={() => setConfirming({ type: 'file', file })}><FileOpIcon src={ICON_FILE_DELETE} />删除</button>}
@@ -2435,6 +2468,17 @@ const KnowledgeLibrary = () => {
         <label>标签<input maxLength={200} value={editForm.tags} onChange={event => setEditForm(current => ({ ...current, tags: event.target.value }))} placeholder='多个标签用逗号分隔' /></label>
       </div>
       <footer><button type='button' onClick={() => setEditing(null)}>取消</button><button type='submit' className='knowledge-primary' disabled={saving || coverReading || editForm.name.trim() === ''}>{saving ? '正在保存' : '保存'}</button></footer>
+    </form></div>}
+    {returningFile && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' role='dialog' aria-label='转回上传人个人库' onSubmit={returnFile}>
+      <header><h2>转回上传人个人库</h2><button type='button' disabled={Boolean(busy)} onClick={() => setReturningFile(null)}>×</button></header>
+      <p>{returningFile.file.name}</p>
+      <p>上传人：{returningFile.file.creator_name || (returningFile.file.uploader_user_id ? resolveUserLabel(returningFile.file.uploader_user_id) : '未知')}</p>
+      <p className='knowledge-hint'>转回后将从公共知识库移除。同名文件自动保留并重命名。</p>
+      {returningFile.loading ? <p role='status'>正在加载个人知识库…</p> : returningFile.targets.length > 0 ? <label>目标个人知识库<select aria-label='目标个人知识库' value={returningFile.target} disabled={Boolean(busy)} onChange={event => setReturningFile(current => ({ ...current, target: event.target.value }))}>
+        {returningFile.targets.map(target => <option key={target.id} value={target.id}>{target.name}</option>)}
+      </select></label> : !returningFile.error && <p>上传人暂无未发布的个人知识库，请先创建后重试。</p>}
+      {returningFile.error && <p role='alert'>{returningFile.error}</p>}
+      <footer><button type='button' disabled={Boolean(busy)} onClick={() => setReturningFile(null)}>取消</button><button type='submit' className='knowledge-primary' disabled={Boolean(busy) || returningFile.loading || !returningFile.target}>{busy ? '正在转回' : '确认转回'}</button></footer>
     </form></div>}
     {summaryFile && <div className='knowledge-modal-backdrop'><form className='knowledge-modal' onSubmit={saveSummary}>
       <header><h2>编辑摘要</h2><button type='button' onClick={() => setSummaryFile(null)}>×</button></header>

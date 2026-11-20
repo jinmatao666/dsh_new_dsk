@@ -1,7 +1,9 @@
 /* eslint-disable testing-library/no-unnecessary-act -- ReactDOM roots need explicit act. */
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Simulate } from 'react-dom/test-utils';
 import KnowledgeLibrary from './index';
+import ActivityLog from './ActivityLog';
 import { API, isAdmin, isRoot } from '../../helpers';
 
 jest.mock('../../helpers', () => ({
@@ -105,6 +107,57 @@ function button(text) {
   return items.find(item => item.textContent.trim() === text)
     || items.find(item => item.textContent.includes(text));
 }
+
+test('public files show uploaders and return only to a selected uploader library', async () => {
+  API.get.mockImplementation(url => {
+    if (String(url).endsWith('/return-targets')) return Promise.resolve({ data: { success: true, data: [{ id: 7, name: '上传人的个人资料' }] } });
+    if (String(url).includes('/bases/1/documents?')) return Promise.resolve({ data: { success: true, data: { ...documentPage, total: 3, items: [
+      { ...documents[0], creator_name: '小李', uploader_user_id: 2 },
+      { ...documents[0], id: 'unknown', name: '历史文件.pdf' },
+      { ...documents[0], id: 'zero-uploader', name: '未记录上传人.pdf', uploader_user_id: 0 },
+    ] } } });
+    return Promise.resolve(documentsResponse(url));
+  });
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  await act(async () => { button('测绘规范').click(); });
+  await act(async () => { button('文件清单').click(); });
+  expect(container.textContent).toContain('上传人');
+  expect(container.textContent).toContain('小李');
+  expect([...container.querySelectorAll('.knowledge-ops button')].filter(item => item.textContent === '转回个人库')).toHaveLength(1);
+  expect(button('日志').parentElement.lastElementChild).toBe(button('日志'));
+  expect(button('日志').classList.contains('knowledge-inbox-entry')).toBe(false);
+  await act(async () => { button('转回个人库').click(); });
+  const dialog = container.querySelector('[aria-label="转回上传人个人库"]');
+  expect(dialog.textContent).toContain('小李');
+  expect(dialog.querySelector('select').value).toBe('7');
+  await act(async () => { dialog.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/bases/1/documents/doc1/return-personal', { target_knowledge_base_id: 7 });
+  expect(container.querySelector('[aria-label="转回上传人个人库"]')).toBeNull();
+});
+
+test.each([404, 504])('return target failure %s exits loading and leaves the dialog cancellable', async status => {
+  API.get.mockImplementation(url => {
+    if (String(url).endsWith('/return-targets')) {
+      return Promise.reject({ response: { status }, message: status === 404 ? 'Request failed with status code 404' : 'timeout of 15000ms exceeded' });
+    }
+    if (String(url).includes('/bases/1/documents?')) return Promise.resolve({ data: { success: true, data: {
+      ...documentPage, items: [{ ...documents[0], creator_name: '小李', uploader_user_id: 2 }],
+    } } });
+    return Promise.resolve(documentsResponse(url));
+  });
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  await act(async () => { button('测绘规范').click(); });
+  await act(async () => { button('文件清单').click(); });
+  await act(async () => { button('转回个人库').click(); });
+  const dialog = container.querySelector('[aria-label="转回上传人个人库"]');
+  expect(dialog.querySelector('[role="status"]')).toBeNull();
+  expect(dialog.querySelector('[role="alert"]').textContent).toBe(status === 404
+    ? '知识库接口不存在，请更新并重启 OneAPI 服务' : 'timeout of 15000ms exceeded');
+  expect(API.get).toHaveBeenCalledWith('/api/knowledge-admin/bases/1/documents/doc1/return-targets', { timeout: 15000 });
+  expect([...dialog.querySelectorAll('button')].find(item => item.textContent === '确认转回').disabled).toBe(true);
+  await act(async () => { [...dialog.querySelectorAll('button')].find(item => item.textContent === '取消').click(); });
+  expect(container.querySelector('[aria-label="转回上传人个人库"]')).toBeNull();
+});
 
 test('category cards pair design-name marks with hue-matched banner plates', async () => {
   const themed = [
@@ -1131,4 +1184,59 @@ test('highlights publication tasks in the inbox and requires a rejection reason'
   expect(button('不同意').disabled).toBe(false);
   await act(async () => { button('不同意').click(); });
   expect(API.post).toHaveBeenCalledWith('/api/knowledge-admin/publication-applications/31/review', { decision: 'reject', note: '请移除私人资料' });
+});
+
+
+test('knowledge logs combine history, match reviewers to actions and search from the right toolbar', async () => {
+  API.get.mockImplementation(url => {
+    if (String(url).startsWith('/api/knowledge-admin/activities')) {
+      const searching = String(url).includes('keyword=');
+      const items = [
+        { id: 1, knowledge_base_name: '个人笔记', action: 'publish_public', creator_id: 2, actor_id: 1, applicant_id: 2, status: 'approved', created_at: '2026-11-20T10:00:00+08:00' },
+        { id: 2, knowledge_base_name: '目标资料', action: 'transfer', creator_id: 2, actor_id: 1, source_name: '公共资料', document_name: '规范.pdf', status: 'success', created_at: '2026-11-20T10:00:00+08:00' },
+      ];
+      return Promise.resolve({ data: { success: true, data: {
+        items: searching ? [items[1]] : items, total: searching ? 1 : 2, names: { 1: '管理员', 2: '爱丽丝' },
+      } } });
+    }
+    return Promise.resolve(documentsResponse(url));
+  });
+  await act(async () => { root.render(<KnowledgeLibrary />); });
+  await act(async () => { button('日志').click(); });
+  const log = container.querySelector('[aria-label="知识库日志"]');
+  expect(log.textContent).toContain('爱丽丝');
+  expect(log.textContent).toContain('管理员');
+  expect(log.textContent).toContain('转公共');
+  expect(log.querySelector('[role="tablist"]')).toBeNull();
+  expect(log.querySelector('.knowledge-activity-operation').textContent).toBe('转公共审核人管理员');
+  expect(log.querySelector('.knowledge-activity-people').textContent).toBe('创建人爱丽丝申请人爱丽丝');
+  expect(log.textContent).toContain('公共资料');
+  expect(log.textContent).toContain('规范.pdf');
+  expect(log.textContent).toMatchSnapshot('combined activity history');
+  const search = log.querySelector('.knowledge-activity-search input');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(search, '规范');
+    Simulate.change(search);
+  });
+  await act(async () => { log.querySelector('[role="search"]').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  expect(API.get).toHaveBeenLastCalledWith('/api/knowledge-admin/activities?page=1&keyword=%E8%A7%84%E8%8C%83', { timeout: 15000 });
+  expect(log.textContent).not.toContain('个人笔记');
+  await act(async () => { button('返回知识库').click(); });
+  expect(container.querySelector('[aria-label="知识库日志"]')).toBeNull();
+});
+
+
+test('knowledge history displays library, category and document deletions', async () => {
+  API.get.mockResolvedValue({ data: { success: true, data: {
+    items: ['delete_base', 'delete_category', 'delete_document'].map((action, index) => ({
+      id: index + 1, action, knowledge_base_name: '已删除资料', creator_id: 2, actor_id: 1,
+      document_name: action === 'delete_document' ? '已删除文件.pdf' : '', status: 'success', created_at: '2026-11-20T10:00:00+08:00',
+    })), total: 3, names: { 1: '管理员', 2: '爱丽丝' },
+  } } });
+  await act(async () => { root.render(<ActivityLog onClose={() => {}} />); });
+  expect(container.textContent).toContain('删除知识库');
+  expect(container.textContent).toContain('删除分类');
+  expect(container.textContent).toContain('删除文件');
+  expect(container.textContent).toContain('已删除文件.pdf');
+  expect(container.textContent).toMatchSnapshot('deleted knowledge objects');
 });

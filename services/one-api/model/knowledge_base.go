@@ -612,7 +612,11 @@ func KnowledgeSubscriberCounts(baseIds []int) (map[int]int, error) {
 
 // DeleteKnowledgeBaseRecords removes the local library and its grants, conversations, and summaries.
 func DeleteKnowledgeBaseRecords(id int) error {
-	return DB.Transaction(func(tx *gorm.DB) error {
+	return deleteKnowledgeBaseRecords(DB, id)
+}
+
+func deleteKnowledgeBaseRecords(db *gorm.DB, id int) error {
+	return db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("knowledge_base_id = ?", id).Delete(&KnowledgePublicationApplication{}).Error; err != nil {
 			return err
 		}
@@ -1054,7 +1058,7 @@ func ReviewKnowledgeSubscription(applicationId, reviewerId int, approve bool) (*
 				}
 			}
 		}
-		return nil
+		return RecordKnowledgeReviewActivity(tx, app.KnowledgeBaseId, reviewerId, app.ApplicantUserId, "subscribe", status)
 	})
 	if err != nil {
 		return nil, err

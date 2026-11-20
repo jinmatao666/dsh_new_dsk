@@ -52,7 +52,7 @@ func TestParsePersonalKnowledgeDocumentRequiresOwnership(t *testing.T) {
 	model.DB = db
 	t.Cleanup(func() { model.DB = previous })
 	require.NoError(t, db.AutoMigrate(
-		&model.KnowledgeBase{}, &model.KnowledgeBaseGrant{}, &model.KnowledgeCategory{}, &model.OrgMember{},
+		&model.KnowledgeActivity{}, &model.KnowledgeBase{}, &model.KnowledgeBaseGrant{}, &model.KnowledgeCategory{}, &model.OrgMember{},
 	))
 	libraries := []model.KnowledgeBase{
 		{Name: "own", RagflowDatasetId: "ds-own", Kind: model.KnowledgeBasePersonal, OwnerUserId: 2, Shelf: model.KnowledgeShelfPublished},
@@ -480,7 +480,7 @@ func TestListKnowledgeBasesRootSeesOnlyOwnPersonal(t *testing.T) {
 	model.DB = db
 	t.Cleanup(func() { model.DB = previous })
 	require.NoError(t, db.AutoMigrate(
-		&model.KnowledgeBase{}, &model.KnowledgeBaseGrant{}, &model.KnowledgeCategory{},
+		&model.KnowledgeActivity{}, &model.KnowledgeBase{}, &model.KnowledgeBaseGrant{}, &model.KnowledgeCategory{},
 		&model.GovernmentOrganizationMember{}, &model.OrgMember{}, &model.User{},
 	))
 	require.NoError(t, db.Create(&model.User{
@@ -531,7 +531,7 @@ func TestUpdateAndDeleteKnowledgeCategory(t *testing.T) {
 	previous := model.DB
 	model.DB = db
 	t.Cleanup(func() { model.DB = previous })
-	require.NoError(t, db.AutoMigrate(&model.KnowledgeBase{}, &model.KnowledgeCategory{}))
+	require.NoError(t, db.AutoMigrate(&model.KnowledgeActivity{}, &model.KnowledgeBase{}, &model.KnowledgeCategory{}))
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -614,7 +614,7 @@ func TestKnowledgeLikePersistsForAuthenticatedViewer(t *testing.T) {
 	previous := model.DB
 	model.DB = db
 	t.Cleanup(func() { model.DB = previous })
-	require.NoError(t, db.AutoMigrate(&model.KnowledgeBase{}, &model.KnowledgeCategory{}, &model.KnowledgeBaseGrant{}, &model.KnowledgeSubscriptionApplication{}, &model.KnowledgeBaseLike{}, &model.KnowledgePublicationApplication{}, &model.User{}, &model.OrgMember{}, &model.GovernmentOrganizationMember{}))
+	require.NoError(t, db.AutoMigrate(&model.KnowledgeActivity{}, &model.KnowledgeBase{}, &model.KnowledgeCategory{}, &model.KnowledgeBaseGrant{}, &model.KnowledgeSubscriptionApplication{}, &model.KnowledgeBaseLike{}, &model.KnowledgePublicationApplication{}, &model.User{}, &model.OrgMember{}, &model.GovernmentOrganizationMember{}))
 	category := model.KnowledgeCategory{Name: "法律", Type: model.KnowledgeBaseShared, RequireAuth: true}
 	require.NoError(t, model.SaveKnowledgeCategory(&category))
 	base := model.KnowledgeBase{Name: "法规", RagflowDatasetId: "like-http", OwnerUserId: 2, Kind: model.KnowledgeBaseShared, Shelf: model.KnowledgeShelfPublished, CategoryId: category.Id}

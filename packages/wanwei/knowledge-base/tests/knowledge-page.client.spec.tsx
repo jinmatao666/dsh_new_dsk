@@ -906,8 +906,8 @@ it('shows deployment maintainers, collapsible descriptions, two tags and subscri
   fireEvent.click(within(card('订阅课程')).getByRole('button', { name: '展开：订阅课程' }))
   const personal = card('我的资料')
   expect([...personal.querySelectorAll('.dsh-knowledge-lib-tags > span')].map(tag => tag.textContent)).toEqual(['土地', '规划'])
-  expect(within(personal).getByText('万维')).toBeTruthy()
-  expect(within(personal).queryByText('小王')).toBeNull()
+  expect(within(personal).getByText('小王')).toBeTruthy()
+  expect(within(personal).queryByText('万维')).toBeNull()
   expect(within(personal).queryByText('订阅量')).toBeNull()
   const subscription = card('订阅课程')
   expect(within(subscription).getByText('订阅量').parentElement?.textContent).toBe('订阅量18')
@@ -1579,9 +1579,16 @@ it('selects a library by name and toggles its sidebar details from the chevron',
   expect(toggle.getAttribute('aria-expanded')).toBe('true')
 })
 
-it('submits an operations publication request without making the personal library public', async () => {
+it.each([
+  ['public', undefined], ['subscription', undefined], ['public', true], ['subscription', true],
+  ['public', false], ['subscription', false],
+] as const)('keeps the personal maintainer while %s publication is pending with edition flag %s', async (target, edition) => {
   const service = api()
-  const request = { id: 1, category_id: 4, target: 'public' as const, status: 'pending' as const, review_note: '' }
+  service.list = vi.fn(async () => [{
+    id: 1, name: '我的资料', description: '测试资料', kind: 'personal' as const, owner_user_id: 7,
+    owner_username: '小王', ...(edition === undefined ? {} : { operations_edition: edition }),
+  }])
+  const request = { id: 1, category_id: 4, target, status: 'pending' as const, review_note: '' }
   let saved = false
   service.categories = vi.fn(async () => [
     { id: 4, name: '公共规范', type: 'common' as const, require_auth: false },
@@ -1591,18 +1598,32 @@ it('submits an operations publication request without making the personal librar
   service.applyPublication = vi.fn(async () => { saved = true; return request })
   const view = render(<KnowledgePage api={service} />)
   fireEvent.click(await screen.findByText('发布'))
-  fireEvent.click(screen.getByRole('button', { name: /转为公共知识库/ }))
+  fireEvent.click(screen.getByRole('button', { name: target === 'public' ? /转为公共知识库/ : /转为订阅知识库/ }))
   const dialog = await screen.findByRole('dialog', { name: '申请发布知识库' })
   expect(within(dialog).queryByRole('combobox')).toBeNull()
   expect(within(dialog).getByText('个人知识库中仍保留原库，内容同步更新。')).toBeTruthy()
   fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: '可共享的规范' } })
   fireEvent.click(within(dialog).getByRole('button', { name: '提交审核' }))
   await screen.findByText('发布申请待管理员审核')
-  expect(service.applyPublication).toHaveBeenCalledWith(1, 'public', '可共享的规范')
+  expect(service.applyPublication).toHaveBeenCalledWith(1, target, '可共享的规范')
   expect(screen.getByRole('button', { name: '我的资料' })).toBeTruthy()
+  const personal = screen.getByRole('button', { name: '我的资料' }).closest('.dsh-knowledge-lib-card') as HTMLElement
+  expect(within(personal).getByText('小王')).toBeTruthy()
+  expect(within(personal).queryByText('万维')).toBeNull()
+  expect(screen.queryByText('公共知识库')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '展开订阅知识库' }))
+  const subscriptions = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
+  expect(within(subscriptions).queryByRole('button', { name: '我的资料' })).toBeNull()
   view.unmount()
   render(<KnowledgePage api={service} />)
   await screen.findByText('发布申请待管理员审核')
+  const restored = screen.getByRole('button', { name: '我的资料' }).closest('.dsh-knowledge-lib-card') as HTMLElement
+  expect(within(restored).getByText('小王')).toBeTruthy()
+  expect(within(restored).queryByText('万维')).toBeNull()
+  expect(screen.queryByText('公共知识库')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '展开订阅知识库' }))
+  const restoredSubscriptions = screen.getByText('订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
+  expect(within(restoredSubscriptions).queryByRole('button', { name: '我的资料' })).toBeNull()
   expect(screen.queryByRole('button', { name: '转为公共知识库' })).toBeNull()
 })
 
@@ -1627,7 +1648,7 @@ it('shows a rejected publication reason and allows resubmitting directly to subs
 it.each(['public', 'subscription'] as const)('keeps both entries for a published %s library and follows the selected group in the header', async (scope) => {
   const service = api()
   service.list = vi.fn(async () => [{ id: 1, name: '已发布资料', description: '共用同一份资料', kind: 'personal' as const,
-    owner_user_id: 7, owned_by_viewer: true, publication_scope: scope }])
+    owner_user_id: 7, owned_by_viewer: true, owner_username: '小王', operations_edition: true, publication_scope: scope }])
   render(<KnowledgePage api={service} />)
   const personal = (await screen.findByText('个人知识库')).closest('.dsh-knowledge-group') as HTMLElement
   expect(within(personal).getByRole('button', { name: '已发布资料' })).toBeTruthy()
@@ -1635,6 +1656,8 @@ it.each(['public', 'subscription'] as const)('keeps both entries for a published
   const shared = screen.getByText(scope === 'public' ? '公共知识库' : '订阅知识库').closest('.dsh-knowledge-group') as HTMLElement
   const sharedEntry = within(shared).getByRole('button', { name: '已发布资料' })
   const personalEntry = within(personal).getByRole('button', { name: '已发布资料', current: true })
+  expect(within(personalEntry).getByText('小王')).toBeTruthy()
+  expect(within(sharedEntry).getByText('万维')).toBeTruthy()
   const cover = screen.getByRole('heading', { name: '已发布资料' }).closest('header')?.querySelector('.dsh-knowledge-cover')
   expect(cover?.getAttribute('data-library-group')).toBe('personal')
   fireEvent.click(sharedEntry)

@@ -461,6 +461,9 @@ func CreateKnowledgeBase(c *gin.Context) {
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
+		if err := model.RecordKnowledgeActivity(tx, &row, userId, "create", "personal", "", "", "success"); err != nil {
+			return err
+		}
 		if input.Kind == model.KnowledgeBaseShared {
 			for _, grant := range input.Grants {
 				if (grant.SubjectType != model.KnowledgeGrantUser && grant.SubjectType != model.KnowledgeGrantDept) ||
@@ -791,23 +794,7 @@ func DeleteKnowledgeDocument(c *gin.Context) {
 	if !canWritePublishedKnowledge(c, row) {
 		return
 	}
-	client, ok := knowledgeClient(c)
-	if !ok {
-		return
-	}
-	if err := client.DeleteDocuments(c.Request.Context(), row.RagflowDatasetId, []string{documentId}); err != nil && !remoteKnowledgeMissing(err) {
-		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
-		return
-	}
-	if err := model.DB.Where("knowledge_base_id = ? AND document_id = ?", row.Id, documentId).
-		Delete(&model.KnowledgeDocumentNote{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "文件已从知识库移除，但摘要清理失败"})
-		return
-	}
-	_ = model.DeleteKnowledgeDocumentPath(row.Id, documentId)
-	_ = model.DeleteKnowledgeDocumentCreators(row.Id, []string{documentId})
-	_ = model.DeleteKnowledgeDocumentCovers(row.Id, []string{documentId})
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "已删除文件"})
+	deleteKnowledgeDocumentWithActivity(c, row, documentId)
 }
 
 type transferKnowledgeDocumentInput struct {
@@ -817,15 +804,15 @@ type transferKnowledgeDocumentInput struct {
 
 // CopyKnowledgeDocument uploads a source file into another personal or shared library.
 func CopyKnowledgeDocument(c *gin.Context) {
-	transferKnowledgeDocument(c, false)
+	transferKnowledgeDocument(c, false, false)
 }
 
 // MoveKnowledgeDocument copies a source file into another personal or shared library, then deletes the source.
 func MoveKnowledgeDocument(c *gin.Context) {
-	transferKnowledgeDocument(c, true)
+	transferKnowledgeDocument(c, true, false)
 }
 
-func transferKnowledgeDocument(c *gin.Context, removeSource bool) {
+func transferKnowledgeDocument(c *gin.Context, removeSource, returnToUploader bool) {
 	documentId, ok := managedDocumentID(c)
 	if !ok {
 		return
@@ -848,7 +835,27 @@ func transferKnowledgeDocument(c *gin.Context, removeSource bool) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "不能复制或移动到当前知识库"})
 		return
 	}
-	target, err := model.GetAuthorizedKnowledgeBase(c.GetInt("id"), input.TargetKnowledgeBaseId, knowledgeAdmin(c))
+	var target *model.KnowledgeBase
+	var err error
+	if returnToUploader {
+		if c.GetInt("role") < model.RoleAdminUser {
+			c.JSON(403, gin.H{"success": false, "message": "无权转回文件"})
+			return
+		}
+		uploader, uploaderErr := knowledgeReturnUploader(source, documentId)
+		if uploaderErr != nil {
+			c.JSON(400, gin.H{"success": false, "message": uploaderErr.Error()})
+			return
+		}
+		target, err = model.GetKnowledgeBase(input.TargetKnowledgeBaseId)
+		if err == nil && (target.OwnerUserId != uploader || target.Kind != model.KnowledgeBasePersonal || target.CategoryId != 0 || target.PublicationScope != "") {
+			c.JSON(403, gin.H{"success": false, "message": "只能转回上传人未发布的个人知识库"})
+			return
+		}
+		input.ConflictPolicy = "keep"
+	} else {
+		target, err = model.GetAuthorizedKnowledgeBase(c.GetInt("id"), input.TargetKnowledgeBaseId, knowledgeAdmin(c))
+	}
 	if err != nil {
 		status := http.StatusInternalServerError
 		message := "读取目标知识库失败"
@@ -961,11 +968,19 @@ func transferKnowledgeDocument(c *gin.Context, removeSource bool) {
 		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	if len(knowledgeDocumentIDs(uploaded)) == 0 {
+		c.JSON(502, gin.H{"success": false, "message": "目标知识库未返回有效文件，源文件已保留"})
+		return
+	}
 	for index := range uploaded {
 		if uploaded[index].Id == "" {
 			continue
 		}
-		_ = model.SaveKnowledgeDocumentCreator(target.Id, uploaded[index].Id, creatorId)
+		if err := model.SaveKnowledgeDocumentCreator(target.Id, uploaded[index].Id, creatorId); err != nil {
+			_ = client.DeleteDocuments(c.Request.Context(), target.RagflowDatasetId, knowledgeDocumentIDs(uploaded))
+			c.JSON(500, gin.H{"success": false, "message": "保存目标文件上传人失败，源文件已保留"})
+			return
+		}
 	}
 	if relativePath != "" {
 		for index := range uploaded {
@@ -991,6 +1006,10 @@ func transferKnowledgeDocument(c *gin.Context, removeSource bool) {
 		_ = model.DeleteKnowledgeDocumentPath(source.Id, documentId)
 		_ = model.DeleteKnowledgeDocumentCreators(source.Id, []string{documentId})
 		_ = model.DeleteKnowledgeDocumentCovers(source.Id, []string{documentId})
+	}
+	if err := model.RecordKnowledgeActivity(model.DB, target, c.GetInt("id"), "transfer", "transferred", source.Name, uploadName, "success"); err != nil {
+		c.JSON(500, gin.H{"success": false, "message": "文件已转入，但日志保存失败"})
+		return
 	}
 	message := "已复制文件"
 	if removeSource {
@@ -1087,6 +1106,9 @@ func applyKnowledgeDocumentCreators(ctx context.Context, baseId int, viewerId in
 	}
 	if len(creators) == 0 {
 		return
+	}
+	for index := range documents {
+		documents[index].UploaderUserId = creators[documents[index].Id]
 	}
 	userIds := make([]int, 0, len(creators))
 	seen := map[int]struct{}{}

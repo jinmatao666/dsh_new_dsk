@@ -58,7 +58,7 @@ func TestKnowledgePublicationHTTPWorkflow(t *testing.T) {
 	previous := model.DB
 	model.DB = db
 	t.Cleanup(func() { model.DB = previous })
-	require.NoError(t, db.AutoMigrate(&model.KnowledgeBase{}, &model.KnowledgeCategory{}, &model.KnowledgePublicationApplication{}, &model.KnowledgeCreditPrice{}, &model.KnowledgeBaseGrant{}, &model.OrgMember{}))
+	require.NoError(t, db.AutoMigrate(&model.KnowledgeActivity{}, &model.KnowledgeBase{}, &model.KnowledgeCategory{}, &model.KnowledgePublicationApplication{}, &model.KnowledgeCreditPrice{}, &model.KnowledgeBaseGrant{}, &model.OrgMember{}, &model.GovernmentOrganizationMember{}, &model.User{}, &model.KnowledgeSubscriptionApplication{}, &model.KnowledgeBaseLike{}))
 	config.OptionMapRWMutex.Lock()
 	previousOptions := config.OptionMap
 	config.OptionMap = map[string]string{"SystemDeploymentSettings": `{"network":"internet","edition":"operations"}`}
@@ -87,6 +87,12 @@ func TestKnowledgePublicationHTTPWorkflow(t *testing.T) {
 	engine.PUT("/bases/:id/credit-price", PutKnowledgeCreditPrice)
 	engine.POST("/bases/:id/publication", ApplyKnowledgePublication)
 	engine.POST("/reviews/:id", ReviewManagedKnowledgePublication)
+	engine.GET("/bases/:id/documents", ListKnowledgeDocuments)
+	engine.GET("/bases/:id/documents/:documentId/file", DownloadKnowledgeDocument)
+	engine.GET("/bases/:id/documents/:documentId/chunks", ListKnowledgeDocumentChunks)
+	engine.GET("/bases/:id/documents/:documentId/cover", GetKnowledgeDocumentCover)
+	engine.GET("/bases/:id/plaza", GetKnowledgePlazaItem)
+	engine.POST("/bases/:id/subscribe", SubscribeKnowledgeBase)
 	request := func(method, path, body string, user, role int) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 		r.Header.Set("Content-Type", "application/json")
@@ -118,6 +124,14 @@ func TestKnowledgePublicationHTTPWorkflow(t *testing.T) {
 		Data model.KnowledgePublicationApplication `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(applied.Body.Bytes(), &envelope))
+	for _, suffix := range []string{"/documents", "/documents/private-file/file", "/documents/private-file/chunks", "/documents/private-file/cover"} {
+		denied := request(http.MethodGet, "/bases/"+strconv.Itoa(base.Id)+suffix, "", 8, model.RoleCommonUser)
+		require.Equal(t, http.StatusForbidden, denied.Code, "pending access %s: %s", suffix, denied.Body.String())
+	}
+	plazaPending := request(http.MethodGet, "/bases/"+strconv.Itoa(base.Id)+"/plaza", "", 8, model.RoleCommonUser)
+	require.Equal(t, http.StatusNotFound, plazaPending.Code, plazaPending.Body.String())
+	subscribePending := request(http.MethodPost, "/bases/"+strconv.Itoa(base.Id)+"/subscribe", "", 8, model.RoleCommonUser)
+	require.Equal(t, http.StatusBadRequest, subscribePending.Code, subscribePending.Body.String())
 	duplicate := request(http.MethodPost, path, `{"target":"subscription"}`, 7, model.RoleCommonUser)
 	require.Equal(t, http.StatusConflict, duplicate.Code)
 	reviewPath := "/reviews/" + strconv.Itoa(envelope.Data.Id)

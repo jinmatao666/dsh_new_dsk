@@ -10,7 +10,7 @@ Personal-library owners need to stop sharing a published library without losing 
 
 ## Decision
 
-Only the owner may withdraw an approved publication. OneAPI clears its public or subscription scope and associated applications and grants in one transaction. A later publication requires a new review. Usage receipts and the original library remain available. The operations sidebar labels personal entries with the owner’s name and shared entries with 万维.
+Only the owner may withdraw an approved publication. OneAPI clears its public or subscription scope and associated applications and grants in one transaction. A later publication requires a new review. Usage receipts and the original library remain available. Personal sidebar entries always show the owner’s name, including pending and rejected publication requests and responses without an operations-edition flag. Approved shared entries in the operations edition show 万维. A publication request only records the review application. Approval changes the sharing scope atomically. Pending and rejected requests keep the library out of other users’ catalogs and plaza results, and direct file access requires library authorization.
 
 The administrator saves the platform percentage and three maxima in one policy. Amounts use hundredths of a credit. Each maximum defaults to 10 credits until the administrator saves a policy. The server rejects newly entered amounts above the applicable limit and caps existing prices when quoting and settling new uses. Zero caps make the matching action free. Settled receipts preserve the original amounts.
 

@@ -127,6 +127,7 @@ func ReviewKnowledgePublication(id, reviewerId int, approve bool, note string) (
 				return ErrKnowledgePublicationInvalid
 			}
 		}
+		if err := RecordKnowledgeReviewActivity(tx, result.KnowledgeBaseId, reviewerId, result.ApplicantUserId, "publish_"+result.Target, status); err != nil { return err }
 		return tx.First(&result, id).Error
 	})
 	return &result, err

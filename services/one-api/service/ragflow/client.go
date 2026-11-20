@@ -54,8 +54,9 @@ type Document struct {
 	// CreatorName is an OneAPI annotation for the uploader; RAGFlow never returns it.
 	// It is omitted for files uploaded before uploaders were recorded and for files the
 	// requesting user uploaded.
-	CreatorName string `json:"creator_name,omitempty"`
-	CoverStatus string `json:"cover_status,omitempty"`
+	CreatorName    string `json:"creator_name,omitempty"`
+	UploaderUserId int    `json:"uploader_user_id,omitempty"`
+	CoverStatus    string `json:"cover_status,omitempty"`
 }
 
 // Chunk is one parsed piece of a document.

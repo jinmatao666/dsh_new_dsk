@@ -16,7 +16,7 @@ func TestListAuthorizedKnowledgeBasesScopesPersonalSharedCommon(t *testing.T) {
 	DB = db
 	t.Cleanup(func() { DB = previous })
 	require.NoError(t, db.AutoMigrate(
-		&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{}, &KnowledgeBaseLike{}, &KnowledgePublicationApplication{},
+		&KnowledgeActivity{}, &KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{}, &KnowledgeBaseLike{}, &KnowledgePublicationApplication{},
 		&KnowledgeConversation{}, &KnowledgeDocumentNote{}, &KnowledgeDocumentPath{}, &KnowledgeDocumentCreator{}, &KnowledgeFolder{}, &KnowledgeDocumentCover{},
 		&GovernmentOrganizationMember{}, &OrgMember{}, &User{},
 	))
@@ -113,7 +113,7 @@ func TestKnowledgeSubscriptionApplicationApprovalGrantsAccess(t *testing.T) {
 	DB = db
 	t.Cleanup(func() { DB = previous })
 	require.NoError(t, db.AutoMigrate(
-		&KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{}, &KnowledgeBaseLike{}, &KnowledgePublicationApplication{},
+		&KnowledgeActivity{}, &KnowledgeBase{}, &KnowledgeBaseGrant{}, &KnowledgeCategory{}, &KnowledgeSubscriptionApplication{}, &KnowledgeBaseLike{}, &KnowledgePublicationApplication{},
 		&GovernmentOrganizationMember{}, &OrgMember{}, &User{},
 	))
 	require.NoError(t, db.Create(&User{Id: 1, Username: "alice", AccessToken: "tok-a", AffCode: "aff-a", Role: RoleCommonUser, Status: UserStatusEnabled}).Error)

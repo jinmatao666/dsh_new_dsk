@@ -213,13 +213,13 @@ func DeleteManagedKnowledgeCategory(c *gin.Context) {
 				c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
 				return
 			}
-			if err := model.DeleteKnowledgeBaseRecords(library.Id); err != nil {
+			if err := model.DeleteKnowledgeBaseWithActivity(&library, c.GetInt("id")); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "删除分类下知识库失败"})
 				return
 			}
 		}
 	}
-	if err := model.DeleteKnowledgeCategory(id); err != nil {
+	if err := model.DeleteKnowledgeCategoryWithActivity(existing, c.GetInt("id")); err != nil {
 		if errors.Is(err, model.ErrKnowledgeCategoryInvalid) {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 			return
@@ -415,7 +415,7 @@ func DeleteManagedKnowledgeBase(c *gin.Context) {
 		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	if err := model.DeleteKnowledgeBaseRecords(row.Id); err != nil {
+	if err := model.DeleteKnowledgeBaseWithActivity(row, c.GetInt("id")); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "删除知识库失败"})
 		return
 	}
@@ -456,6 +456,7 @@ func ListManagedKnowledgeDocuments(c *gin.Context) {
 		return
 	}
 	listed := make([]managedKnowledgeDocument, 0, len(documents))
+	applyKnowledgeDocumentCreators(c.Request.Context(), row.Id, 0, documents)
 	for _, document := range documents {
 		listed = append(listed, managedKnowledgeDocument{Document: document, Summary: summaries[document.Id]})
 	}
@@ -489,21 +490,7 @@ func DeleteManagedKnowledgeDocument(c *gin.Context) {
 	if !ok {
 		return
 	}
-	client, ok := knowledgeClient(c)
-	if !ok {
-		return
-	}
-	if err := client.DeleteDocuments(c.Request.Context(), row.RagflowDatasetId, []string{documentId}); err != nil && !remoteKnowledgeMissing(err) {
-		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
-		return
-	}
-	if err := model.DB.Where("knowledge_base_id = ? AND document_id = ?", row.Id, documentId).Delete(&model.KnowledgeDocumentNote{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "文件已从知识库移除，但摘要清理失败"})
-		return
-	}
-	_ = model.DeleteKnowledgeDocumentCreators(row.Id, []string{documentId})
-	_ = model.DeleteKnowledgeDocumentCovers(row.Id, []string{documentId})
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "已删除文件"})
+	deleteKnowledgeDocumentWithActivity(c, row, documentId)
 }
 
 // ParseManagedKnowledgeDocument starts RAGFlow chunking for one file.

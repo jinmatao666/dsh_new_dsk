@@ -1402,7 +1402,7 @@ export function KnowledgePage({ api, networkMode = 'internet' }: { api: Knowledg
                         documentBytes: stats?.bytes,
                         hideSubscribers: true,
                         cardLayout: true,
-                        maintainer: (item.operations_edition ? group.key === 'personal' : networkMode === 'intranet')
+                        maintainer: (group.key === 'personal' || (!item.operations_edition && networkMode === 'intranet'))
                           ? item.owner_username : productText('万维'),
                       })}
                       {detailsExpanded && <span className="dsh-knowledge-lib-details">

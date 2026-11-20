@@ -23,6 +23,10 @@ In the operations edition, System Settings → Features → Knowledge Bases → 
 
 ## Reference
 
+### Public knowledge base files
+
+Public-library file lists include the recorded uploader. Administrators can return a file to one of that uploader's unpublished personal libraries, selecting the destination when multiple libraries exist. The server validates uploader ownership, applies the personal storage quota, keeps both files under distinct names on a name conflict, and removes the public source after the target upload succeeds. Files without a recorded uploader hide the return action. An uploader with no unpublished personal library must create one first. The destination request times out after 15 seconds and displays failures in the return dialog.
+
 ### Personal knowledge base files
 
 In Knowledge Base → Personal Knowledge Base, selecting a person with multiple libraries opens a searchable, paginated library catalog using the public-library cards and statistics. On wide screens, the back control, person title, library count and search share one compact toolbar; narrow screens wrap the search below. Each card opens that library's file list. The file-list toolbar keeps the back control, title, compact search and rightmost upload action together on wide screens; the upload explanation is omitted. Returning restores the catalog search and page. Library owners and root administrators can upload and retry failed parses inside the selected library. A person with one library keeps the direct file-list view. Personal-library menus support editing and deletion with the existing permissions.
@@ -79,3 +83,7 @@ The organization tree and role organization picker use the same array response; 
 Production builds are relocatable. Public paths, API prefixes, canonical URLs and proxy trust are container runtime configuration; see [generic backend delivery](../../deploy/README.md).
 
 The login and registration page uses one SMS login switch; saving it synchronizes the SMS service and phone login options. The SMS signature stays server-configured and is hidden from this form.
+
+The knowledge workbench places a muted activity-log button at the far right of its header actions, combining library creation, review outcomes, deletions and file transfers in time order. Search and refresh sit to the right of the title. Search matches library, source library, file and user names across all pages. Each operation shows its operator, or its reviewer for publication and subscription reviews. Related people identify the library creator and, when recorded, the applicant. Root can read all records; other administrators can read records they acted on or whose library they own. Events accumulate after deployment; existing operations are not reconstructed.
+
+Deletion history retains library and file names after removal. Deleting a category records the category and each deleted library. Failed remote deletions do not produce success events.
