@@ -73,9 +73,11 @@ it('boots the intranet policy from cordis.yml and exposes feedback in prompt and
     `)
     await ctx.wanweiNetworkPolicy.setDeployment({ network: 'intranet', operator: '', phone: '',
       features: {
-        internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false,
+        internet: { expertLibrary: true, skillMarketplace: true,
+          automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false,
           policyEncyclopedia: false },
-        intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false,
+        intranet: { expertLibrary: true, skillMarketplace: true,
+          automations: true, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false,
           policyEncyclopedia: false },
       },
       featurePages: { landMarket: { url: '' }, planningLecture: { url: '' }, policyEncyclopedia: { url: '' } },
@@ -85,9 +87,11 @@ it('boots the intranet policy from cordis.yml and exposes feedback in prompt and
     expect(process.env.PIP_FIND_LINKS).toBe('http://server.lan/api/desktop-resources/wheels/')
     await ctx.wanweiNetworkPolicy.setDeployment({ network: 'intranet', operator: '', phone: '',
       features: {
-        internet: { automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false,
+        internet: { expertLibrary: true, skillMarketplace: true,
+          automations: true, connectors: true, knowledgeBases: true, landMarket: false, planningLecture: false,
           policyEncyclopedia: false },
-        intranet: { automations: true, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false,
+        intranet: { expertLibrary: true, skillMarketplace: true,
+          automations: true, connectors: false, knowledgeBases: true, landMarket: false, planningLecture: false,
           policyEncyclopedia: false },
       },
       featurePages: { landMarket: { url: '' }, planningLecture: { url: '' }, policyEncyclopedia: { url: '' } },
