@@ -15,6 +15,7 @@ import (
 )
 
 type Meta struct {
+	ForumAnalysisID string
 	CreditsDisabled bool
 	CreditPrice     *price.Snapshot
 	CreditReserved  map[int64]int64

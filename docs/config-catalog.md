@@ -3352,7 +3352,33 @@ export interface Config {
 }
 ```
 
-Source: [`packages/wanwei/oneapi-auth/src/index.ts:46`](../packages/wanwei/oneapi-auth/src/index.ts)
+Source: [`packages/wanwei/oneapi-auth/src/index.ts:47`](../packages/wanwei/oneapi-auth/src/index.ts)
+
+<a id="deepseek-aidsh-wanwei-portals"></a>
+
+## `@deepseek-ai/dsh-wanwei-portals`
+
+Requires: `connection` · `agents` · `agentDefaultModel` · `tools` · `systemPrompt` · `sessions`
+
+```ts config-catalog
+/** Bounds on one portal analysis and concurrent Host work. */
+export interface Config {
+  /** Maximum duration including agent creation and persistence flush, in milliseconds. */
+  requestTimeoutMs: number
+  /** Maximum serialized input characters, including article and conversation. */
+  maxInputChars: number
+  /** Maximum previous messages accepted for one question. */
+  maxHistoryMessages: number
+  /** Maximum output tokens requested from the selected model. */
+  maxOutputTokens: number
+  /** Maximum answer characters forwarded to the embedded page. */
+  maxOutputChars: number
+  /** Maximum simultaneous analyses in this Host. */
+  maxConcurrentAnalyses: number
+}
+```
+
+Source: [`packages/wanwei/portals/src/index.ts:17`](../packages/wanwei/portals/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-skillhub"></a>
 
@@ -3680,7 +3706,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-wanwei-expert-library` ([`packages/wanwei/expert-library/src/index.ts`](../packages/wanwei/expert-library/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-feature-panels` ([`packages/wanwei/feature-panels/src/index.ts`](../packages/wanwei/feature-panels/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-knowledge-base` ([`packages/wanwei/knowledge-base/src/index.ts`](../packages/wanwei/knowledge-base/src/index.ts))
-- `@deepseek-ai/dsh-wanwei-portals` ([`packages/wanwei/portals/src/index.ts`](../packages/wanwei/portals/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-product-ui` ([`packages/wanwei/product-ui/src/index.ts`](../packages/wanwei/product-ui/src/index.ts))
 - `@deepseek-ai/dsh-wanwei-skill-marketplace` ([`packages/wanwei/skill-marketplace/src/index.ts`](../packages/wanwei/skill-marketplace/src/index.ts))
 - `@deepseek-ai/dsh-webhook` — requires `agents` · `agentDefaultModel` · `agentPresets` · `permissionPresets` · `sessionTitle` · `workspaceRegistry` ([`packages/webhook/webhook/src/index.ts`](../packages/webhook/webhook/src/index.ts))

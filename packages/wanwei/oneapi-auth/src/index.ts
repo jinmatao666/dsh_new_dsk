@@ -2,6 +2,7 @@ import { installSkillCallBilling } from './skill-billing.ts'
 import { installSkillInjectionBilling } from './skill-injection-billing.ts'
 import { trackCustomModels } from './custom-model-usage.ts'
 import { installCreditGuard } from './credit-guard.ts'
+import { installForumBilling } from './forum-billing.ts'
 import { publicAuthRequest } from './public-auth.ts'
 import { creditsRequest } from './credits.ts'
 import { accountSecurityRequest } from './account-security.ts'
@@ -354,6 +355,7 @@ export function apply(ctx: Context, config: Config): void {
   }
   const baseURL = normalizedOrigin(config.baseURL ?? launchEnvironmentOf(ctx).get('DSH_ONEAPI_URL')?.value ?? 'http://127.0.0.1:3000')
   const ref = credentialRef(config.credentialRef)
+  installForumBilling(ctx, baseURL, async () => (await ctx.credentials.resolve(ref))?.value)
   const network = installNetworkPolicy(ctx, baseURL, async () => (await ctx.credentials.resolve(ref))?.value,
     config.pipMirrorUrls === undefined ? undefined : {
       indexes: config.pipMirrorUrls, attemptSeconds: config.pipMirrorAttemptSeconds ?? 30,

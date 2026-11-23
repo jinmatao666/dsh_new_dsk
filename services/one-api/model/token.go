@@ -182,10 +182,10 @@ func IncreaseTokenQuota(id int, quota int64) (err error) {
 }
 
 func increaseTokenQuota(id int, quota int64) (err error) {
-	// batch update 可能传入负值，用 GREATEST 兜底防止 remain_quota 为负
+	// Batch updates may carry a debit; keep the remaining quota nonnegative.
 	err = DB.Model(&Token{}).Where("id = ?", id).Updates(
 		map[string]interface{}{
-			"remain_quota":  gorm.Expr("GREATEST(remain_quota + ?, 0)", quota),
+			"remain_quota":  greatestZeroExpr("remain_quota", -quota),
 			"used_quota":    gorm.Expr("used_quota - ?", quota),
 			"accessed_time": helper.GetTimestamp(),
 		},
@@ -208,7 +208,7 @@ func decreaseTokenQuota(id int, quota int64) (err error) {
 	// remain_quota 扣减后不低于0，防止出现负数
 	err = DB.Model(&Token{}).Where("id = ?", id).Updates(
 		map[string]interface{}{
-			"remain_quota":  gorm.Expr("GREATEST(remain_quota - ?, 0)", quota),
+			"remain_quota":  greatestZeroExpr("remain_quota", quota),
 			"used_quota":    gorm.Expr("used_quota + ?", quota),
 			"accessed_time": helper.GetTimestamp(),
 		},
@@ -291,6 +291,9 @@ func PostConsumeTokenQuota(tokenId int, quota int64) (err error) {
 	} else if quota < 0 {
 		// 消费回滚:落一笔永久定时积分(source=refund),不追溯原账本笔
 		err = AddUserTimedQuota(token.UserId, -quota, TimedQuotaSourceRefund, "", nil)
+	}
+	if err != nil {
+		return err
 	}
 	if !token.UnlimitedQuota {
 		if quota > 0 {

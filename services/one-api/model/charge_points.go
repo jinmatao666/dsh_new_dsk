@@ -18,6 +18,11 @@ const BillingKnowledgeServiceID = "default"
 func BillingResourceName(tx *gorm.DB, kind, item string) (string, error) {
 	tx = tx.Session(&gorm.Session{NewDB: true})
 	switch kind {
+	case BillingKindForum:
+		if item == "default" {
+			return "资规讲坛", nil
+		}
+		return "", errors.New("INVALID_REQUEST")
 	case BillingKindKnowledgeService:
 		if item == BillingKnowledgeServiceID {
 			return "知识库服务", nil

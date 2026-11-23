@@ -43,6 +43,22 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 		return openai.ErrorWrapper(err, "invalid_text_request", http.StatusBadRequest)
 	}
 	meta.IsStream = textRequest.Stream
+	// One paid forum attempt covers exactly one text-only model request. Retrying
+	// a channel within this HTTP request reuses its claim; another HTTP request cannot.
+	meta.ForumAnalysisID = c.GetString("forum.analysis.claim")
+	if meta.ForumAnalysisID == "" {
+		claim, claimErr := dbmodel.ClaimForumModelCall(meta.UserId, auditSessionID(c), textRequest.Model)
+		if claimErr != nil {
+			return openai.ErrorWrapper(claimErr, "invalid_forum_analysis", http.StatusForbidden)
+		}
+		if claim != "" {
+			if len(textRequest.Tools) != 0 || textRequest.MaxTokens <= 0 {
+				return openai.ErrorWrapper(fmt.Errorf("forum analysis requires bounded text output without tools"), "invalid_forum_analysis", http.StatusBadRequest)
+			}
+			c.Set("forum.analysis.claim", claim)
+			meta.ForumAnalysisID = claim
+		}
+	}
 
 	// map model name
 	meta.OriginModelName = textRequest.Model
@@ -74,7 +90,7 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	modelRatio := billingratio.GetModelRatio(textRequest.Model, meta.ChannelType)
 	groupRatio := billingratio.GetGroupRatio(meta.Group)
 	ratio := modelRatio * groupRatio
-	if !meta.CreditsDisabled {
+	if !meta.CreditsDisabled && meta.ForumAnalysisID == "" {
 		meta.CreditPrice, err = price.Resolve(meta.OriginModelName, modelRatio, billingratio.GetCompletionRatio(textRequest.Model, meta.ChannelType), groupRatio)
 		if err != nil {
 			return openai.ErrorWrapper(err, "invalid_credit_pricing", http.StatusServiceUnavailable)

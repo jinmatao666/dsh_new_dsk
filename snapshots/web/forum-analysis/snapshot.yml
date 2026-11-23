@@ -1,0 +1,8 @@
+version: 1
+scenario: forum-analysis
+profile: web
+composition: web-forum-analysis
+recording: authored
+header:
+  class: web-forum-analysis
+  pin: true

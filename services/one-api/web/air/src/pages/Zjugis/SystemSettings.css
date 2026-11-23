@@ -156,7 +156,10 @@
 .feature-address-link { margin: 0; padding: 0; border: 0; background: transparent; color: #3478ef; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
 .feature-address-link:hover:not(:disabled) { text-decoration: underline; }
 .feature-address-link:disabled { opacity: .5; cursor: not-allowed; }
-.feature-page-dialog { max-width: 640px; }
+.feature-page-dialog { max-width: 640px; max-height: calc(100vh - 48px); overflow-y: auto; }
+.forum-credit-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.forum-credit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+@media (max-width: 480px) { .forum-credit-fields { grid-template-columns: 1fr; gap: 0; } }
 .feature-page-url-field { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; color: #385375; font-weight: 600; }
 .feature-page-url-field input { width: 100%; box-sizing: border-box; padding: 12px 14px; border: 1px solid #d6e3f4; border-radius: 8px; font: inherit; font-weight: 400; color: #253d60; }
 .feature-page-credential { margin: 16px 0 8px; padding: 14px 16px; border: 1px solid #b7d0f5; border-radius: 10px; background: #f0f6ff; }

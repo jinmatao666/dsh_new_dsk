@@ -224,7 +224,8 @@ export default function SystemSettings() {
               {settings.featureOrder.map(feature => { const label = FEATURE_ENTRIES.find(([key]) => key === feature)[1]; return <tr key={feature} className={draggedFeature === feature ? 'feature-dragging' : ''} onDragOver={event => { if (!saving && draggedFeature) event.preventDefault(); }} onDrop={event => { event.preventDefault(); if (!saving && draggedFeature) change('featureOrder', moveFeature(settings.featureOrder, draggedFeature, feature)); setDraggedFeature(null); }}>
                 <th scope='row'>{featureAddressKeys.has(feature)
                   ? <span className='feature-name-with-address'>{label}<button type='button' className='feature-address-link' disabled={saving}
-                    aria-label={`${label}地址配置`} onClick={() => setAddressFeature(feature)}>地址配置</button></span>
+                    aria-label={`${label}地址配置`} onClick={() => setAddressFeature(feature)}>地址配置</button>
+                    </span>
                   : feature === 'knowledgeBases' && settings.edition === 'operations' && resolveBilling(settings).enabled
                     ? <span className='feature-name-with-address'>{label}<button type='button' className='feature-address-link'
                         disabled={saving} onClick={() => setKnowledgeCreditsOpen(true)}>知识库积分设置</button></span>

@@ -33,6 +33,9 @@ beforeEach(() => {
     if (['/api/portal/land-market/admin/credential', '/api/portal/planning-lecture/admin/credential'].includes(path)) {
       return Promise.resolve({ data: { success: true, configured: false } });
     }
+    if (path === '/api/portal/planning-lecture/admin/credits') {
+      return Promise.resolve({ data: { success: true, data: { qa: { credits: 1, version: 1 }, report: { credits: 1, version: 1 } } } });
+    }
     return Promise.resolve({ data: { success: true, data: [{ key: 'SystemDeploymentSettings', value: JSON.stringify({ network: 'internet', operator: '张运维', phone: '0571-12345678' }) }] } });
   });
   API.put.mockResolvedValue({ data: { success: true } });
@@ -216,6 +219,27 @@ test('planning lecture saves its URL and generates its own provider credential',
   } finally {
     confirm.mockRestore();
   }
+});
+
+test('forum credits save inside the address dialog without losing the URL draft', async () => {
+  await act(async () => root.render(<SystemSettings />));
+  act(() => container.querySelectorAll('[role="tab"]')[4].click());
+  const row = container.querySelector('[aria-label="资规讲坛地址配置"]').closest('tr');
+  expect([...row.querySelectorAll('button')].some(button => button.textContent === '积分配置')).toBe(false);
+  await act(async () => row.querySelector('[aria-label="资规讲坛地址配置"]').click());
+  const dialog = document.querySelector('[aria-label="配置资规讲坛"]');
+  expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+  await act(async () => fillInput(dialog.querySelector('[aria-label="资规讲坛页面地址"]'), 'https://lecture.example/#/forum'));
+  act(() => Simulate.change(dialog.querySelector('[aria-label="弹框问答积分"]'), { target: { value: '3' } }));
+  await act(async () => [...dialog.querySelectorAll('button')].find(button => button.textContent === '保存积分配置').click());
+  expect(API.put).toHaveBeenCalledWith('/api/portal/planning-lecture/admin/credits', {
+    qa: { credits: '3', version: 1 }, report: { credits: '1', version: 1 },
+  });
+  expect(dialog.isConnected).toBe(true);
+  expect(dialog.querySelector('[aria-label="资规讲坛页面地址"]').value).toBe('https://lecture.example/#/forum');
+  await act(async () => [...dialog.querySelectorAll('button')].find(button => button.textContent === '确定').click());
+  await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(JSON.parse(API.put.mock.calls[1][1].value).featurePages.planningLecture.url).toBe('https://lecture.example/#/forum');
 });
 
 test('feature address dialog blocks outer form submit while open', async () => {

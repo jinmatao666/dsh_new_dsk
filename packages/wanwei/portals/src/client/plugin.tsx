@@ -1,6 +1,6 @@
 import { createPanelController, registerFeaturePanel } from '@deepseek-ai/dsh-wanwei-feature-panels/client'
 import type { Context } from '@deepseek-ai/cordis'
-import { useEffect, useState, useSyncExternalStore, type ComponentType } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ComponentType } from 'react'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { ConnectionHandle, RpcResult } from '@deepseek-ai/dsh-client-connection/client'
@@ -8,6 +8,10 @@ import type {} from '@deepseek-ai/dsh-wanwei-oneapi-auth/client'
 import './page.css'
 import { productText } from './locales/product.ts'
 import { withPortalTicket } from './ticket.ts'
+import { connectForumAnalysis } from './analysis-bridge.ts'
+import type { DesktopAnalysisSelection } from './analysis-bridge.ts'
+import type {} from '@deepseek-ai/dsh-client-ui-model-selection/client'
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 
 type PortalFeature = 'landMarket' | 'planningLecture' | 'policyEncyclopedia'
 type TicketLaunchEndpoint = 'land-market-launch' | 'planning-lecture-launch'
@@ -67,13 +71,21 @@ function PortalLoading({ label }: { label: string }) {
 export function PortalPage({
   url,
   launchWithTicket,
+  analysisSelection,
 }: {
   url: HostObservable<string>
   launchWithTicket?: () => Promise<{ url: string; ticket: string }>
+  analysisSelection?: () => Promise<DesktopAnalysisSelection>
 }) {
-  const configured = useSyncExternalStore(url.subscribe, url.getSnapshot)
+  const configured = useSyncExternalStore(listener => url.subscribe(listener), () => url.getSnapshot())
   const [href, setHref] = useState(launchWithTicket === undefined ? configured : '')
   const [loading, setLoading] = useState(Boolean(configured))
+  const frame = useRef<HTMLIFrameElement>(null)
+
+  useEffect(() => {
+    if (!href || !frame.current || !analysisSelection) return
+    return connectForumAnalysis(frame.current, new URL(href).origin, analysisSelection)
+  }, [href, analysisSelection])
 
   useEffect(() => {
     let cancelled = false
@@ -114,11 +126,12 @@ export function PortalPage({
   return <div className="dsh-portal-frame-host">
     {loading ? <PortalLoading label={productText('正在加载…')} /> : null}
     <iframe
+      ref={frame}
       className="dsh-portal-frame"
       title={href}
       src={href}
       referrerPolicy="no-referrer"
-      onLoad={() => setLoading(false)}
+      onLoad={() => { setLoading(false) }}
     />
   </div>
 }
@@ -133,6 +146,7 @@ function registerPortal(
     subtitle: string
     Icon: ComponentType<{ size?: number }>
     launchWithTicket?: () => Promise<{ url: string; ticket: string }>
+    analysisSelection?: () => Promise<DesktopAnalysisSelection>
   },
 ): void {
   const controller = createPanelController(ctx, options.id)
@@ -140,7 +154,7 @@ function registerPortal(
   ctx.effect(() => controller.subscribe(({ open }) => {
     if (!open) return
     layout.closeSidebar()
-    void maximizeDesktopWindow().catch((error) => {
+    void maximizeDesktopWindow().catch((error: unknown) => {
       console.error(`${options.id}: maximize failed`, error)
     })
   }), `${options.id}: maximize on open`)
@@ -155,6 +169,7 @@ function registerPortal(
     headerChrome: 'back-only',
     renderContent: () => <PortalPage
       url={ctx.wanweiNetwork.featurePageUrl(options.feature)}
+      {...options.analysisSelection === undefined ? {} : { analysisSelection: options.analysisSelection }}
       {...(options.launchWithTicket === undefined
         ? {}
         : { launchWithTicket: options.launchWithTicket })}
@@ -162,7 +177,7 @@ function registerPortal(
   })
 }
 
-export const inject = ['slots', 'layout', 'wanweiNetwork', 'connection']
+export const inject = ['slots', 'layout', 'wanweiNetwork', 'connection', 'modelDirectories', 'sessions']
 
 /** Mount the land market, planning lecture and policy encyclopedia panels.
  * @param ctx - Product Client context.
@@ -194,6 +209,13 @@ export function apply(ctx: Context): void {
     subtitle: productText('浏览配置的资规讲坛页面'),
     Icon: PlanningLectureIcon,
     launchWithTicket: launchPortal('planning-lecture-launch'),
+    analysisSelection: async () => {
+      const current = ctx.sessions.list.getSnapshot().current
+      const directory = current === undefined ? ctx.modelDirectories.draft : ctx.modelDirectories.directoryFor(current)
+      const state = await directory.load()
+      if (state.current === null || state.routable === false) throw new Error(productText('桌面端当前模型不可用'))
+      return state.current
+    },
   })
   registerPortal(ctx, {
     id: 'skill-policy-encyclopedia',

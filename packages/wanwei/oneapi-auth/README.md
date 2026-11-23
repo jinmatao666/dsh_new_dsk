@@ -7,6 +7,8 @@ kind: "package-reference"
 
 English | [中文](README.zh.md)
 
+`wanweiForumBilling` supplies account-authenticated forum quotes, reservations, answer reuse and unified settlement. Settlement credentials remain in the Host. Saving a successful answer and confirming its fee share one backend transaction; failure or cancellation releases the reservation. A lost confirmation retries the same result without refunding or reexecuting the model. See [portal billing](../portals/README.md) for prices and reuse scope.
+
 Administrator `featureOrder` defines one shared sidebar order for both network environments. Each environment independently controls entry visibility, including expert library and skill marketplace. Missing configuration retains the default order and keeps these two entries visible. Startup, login and window-focus refresh publish ordering and visibility together; hidden entries retain their saved position.
 
 Completed-turn usage includes server-settled credit consumption and a modal listing model and successful skill charges for the exact account, session and turn. Both accounting and credit visibility must be enabled; turning either off hides the summary and its open modal. The shared billing API accepts optional `session_id` and `turn_id` for expert and knowledge integrations. Untagged historical charges remain in credit history and are not guessed into individual turns. History labels successful skill, expert and knowledge charges separately. Custom-model-only turns with no settled or pending platform charges show a static no-credit-consumption label; actual skill charges retain their details.

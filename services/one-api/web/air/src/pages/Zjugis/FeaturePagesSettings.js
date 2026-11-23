@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { API, showError, showSuccess } from '../../helpers';
+import ForumCreditSettings from './ForumCreditSettings';
 
 export const FEATURE_PAGE_ENTRIES = [
   ['landMarket', '土地市场'],
@@ -71,6 +72,8 @@ export default function FeaturePageAddressDialog({ featureKey, value, disabled, 
   const [credentialBusy, setCredentialBusy] = useState(false);
   const [credential, setCredential] = useState('');
   const [credentialError, setCredentialError] = useState('');
+  const [creditsSaving, setCreditsSaving] = useState(false);
+  const dialogDisabled = disabled || creditsSaving;
 
   useEffect(() => {
     if (!portalRoute) return undefined;
@@ -96,7 +99,7 @@ export default function FeaturePageAddressDialog({ featureKey, value, disabled, 
   }, [label, portalRoute]);
 
   const confirm = () => {
-    if (disabled || credential) return;
+    if (dialogDisabled || credential) return;
     const message = validateFeaturePageUrl(draft);
     if (message) {
       setError(message);
@@ -135,7 +138,7 @@ export default function FeaturePageAddressDialog({ featureKey, value, disabled, 
   return createPortal(<div className='knowledge-quota-dialog-backdrop feature-page-dialog-backdrop' role='presentation'>
     <section className='knowledge-quota-dialog feature-page-dialog' role='dialog' aria-modal='true' aria-label={`配置${label}`}
       onKeyDown={event => {
-        if (event.key === 'Escape' && !disabled && !credential) {
+        if (event.key === 'Escape' && !dialogDisabled && !credential) {
           event.preventDefault();
           event.stopPropagation();
           onClose();
@@ -143,7 +146,7 @@ export default function FeaturePageAddressDialog({ featureKey, value, disabled, 
       }}>
       <header>
         <h3>配置{label}</h3>
-        <button type='button' className='settings-secondary' disabled={disabled || Boolean(credential)} onClick={onClose}>关闭</button>
+        <button type='button' className='settings-secondary' disabled={dialogDisabled || Boolean(credential)} onClick={onClose}>关闭</button>
       </header>
       <label className='feature-page-url-field'>
         页面地址
@@ -164,17 +167,18 @@ export default function FeaturePageAddressDialog({ featureKey, value, disabled, 
           <p className='settings-description'>
             当前状态：{credentialConfigured ? '已配置' : '未配置'}。网站服务端用此凭据兑换桌面打开时的一次性 ticket；明文只显示一次，不要写入页面地址。
           </p>
-          <button type='button' className='settings-primary' disabled={disabled || credentialBusy || Boolean(credential)}
+          <button type='button' className='settings-primary' disabled={dialogDisabled || credentialBusy || Boolean(credential)}
             onClick={() => void rotateCredential()}>
             {credentialBusy ? '处理中…' : (credentialConfigured ? '重置凭据' : '生成凭据')}
           </button>
         </div>
         {credentialError && <p role='alert' className='knowledge-quota-summary is-error'>{credentialError}</p>}
       </div>}
+      {featureKey === 'planningLecture' && <ForumCreditSettings embedded disabled={disabled || Boolean(credential)} onBusyChange={setCreditsSaving} />}
       {error && <p role='alert' className='knowledge-quota-summary is-error'>{error}</p>}
       <footer>
-        <button type='button' className='settings-secondary' disabled={disabled || Boolean(credential)} onClick={onClose}>取消</button>
-        <button type='button' className='settings-primary' disabled={disabled || Boolean(credential)} onClick={confirm}>确定</button>
+        <button type='button' className='settings-secondary' disabled={dialogDisabled || Boolean(credential)} onClick={onClose}>取消</button>
+        <button type='button' className='settings-primary' disabled={dialogDisabled || Boolean(credential)} onClick={confirm}>确定</button>
       </footer>
     </section>
     {credential && <div className='knowledge-quota-dialog-backdrop feature-page-credential-secret-backdrop' role='presentation'>

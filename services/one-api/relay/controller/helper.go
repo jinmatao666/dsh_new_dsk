@@ -82,7 +82,7 @@ func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTok
 }
 
 func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64, meta *meta.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
-	if meta.CreditsDisabled {
+	if meta.CreditsDisabled || meta.ForumAnalysisID != "" {
 		return 0, nil
 	}
 	preConsumedQuota := getPreConsumedQuota(textRequest, promptTokens, ratio)
@@ -176,10 +176,14 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 	}
 	var quota int64
 	completionRatio := billingratio.GetCompletionRatio(textRequest.Model, meta.ChannelType)
-	if meta.CreditsDisabled {
+	if meta.CreditsDisabled || meta.ForumAnalysisID != "" {
+		content := "积分机制已关闭，不计积分"
+		if meta.ForumAnalysisID != "" {
+			content = "资规讲坛按功能积分计费 · " + meta.ForumAnalysisID
+		}
 		log := &model.Log{UserId: meta.UserId, OrgId: meta.OrgId, ChannelId: meta.ChannelId, ModelName: textRequest.Model,
 			TokenName: meta.TokenName, PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens,
-			IsStream: meta.IsStream, Content: "积分机制已关闭，不计积分", ElapsedTime: helper.CalcElapsedTime(meta.StartTime)}
+			IsStream: meta.IsStream, Content: content, ElapsedTime: helper.CalcElapsedTime(meta.StartTime), CreditSessionID: meta.CreditSessionID, CreditTurnID: meta.CreditTurnID}
 		billing.FillLogTimingFromContext(ctx, log)
 		model.RecordConsumeLog(ctx, log)
 		model.FinishUserPromptAudit(ctx, "success", "", 0, usage.PromptTokens, usage.CompletionTokens, log.ElapsedTime)

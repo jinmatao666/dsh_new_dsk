@@ -66,7 +66,7 @@ func GetDesktopTurnCredits(c *gin.Context) {
 }
 
 func businessCreditLabel(task model.BillingTask) string {
-	kind := map[string]string{"skill": "技能调用", "expert": "专家调用", "knowledge": "知识库调用", model.BillingKindKnowledgeService: "知识库调用"}[task.Kind]
+	kind := map[string]string{"skill": "技能调用", "expert": "专家调用", "knowledge": "知识库调用", model.BillingKindKnowledgeService: "知识库调用", model.BillingKindForum: "讲坛分析"}[task.Kind]
 	if kind == "" {
 		kind = "服务调用"
 	}

@@ -1153,6 +1153,8 @@ export interface PiAiProviderProfile {
 
 /** One configured model entry: an id plus the catalog fields it overrides. */
 export interface PiAiModelProfile {
+  /** Optional reference multiplier for selectors; never a token price. */
+  displayMultiplier?: number
   /** Model id sent to the provider and accepted by {@link GenerateOptions.model}. */
   id: string
   /** Display name for selectors; defaults to the catalog name, then the id. */
@@ -3326,6 +3328,8 @@ export interface Config {
   tokenName: string
   /** Optional preferred default model id. */
   defaultModel?: string
+  /** Transcription model for desktop knowledge 录音纪要 (OneAPI `/v1/audio/transcriptions`). */
+  knowledgeTranscriptionModel?: string
   /**
    * Input modalities advertised for models returned by OneAPI.
    *
@@ -3337,7 +3341,7 @@ export interface Config {
    * leave `image` out.
    */
   defaultInput?: Array<'text' | 'image'>
-  /** Build-specific marker used to require login once after a new install. */
+  /** Build-specific marker recorded without invalidating saved authentication. */
   installId?: string
   /** Skip the login overlay inside the source-only Tauri development shell. */
   developmentBypass?: boolean
@@ -3350,7 +3354,33 @@ export interface Config {
 }
 ```
 
-来源：[`packages/wanwei/oneapi-auth/src/index.ts:37`](../packages/wanwei/oneapi-auth/src/index.ts)
+来源：[`packages/wanwei/oneapi-auth/src/index.ts:47`](../packages/wanwei/oneapi-auth/src/index.ts)
+
+<a id="deepseek-aidsh-wanwei-portals"></a>
+
+## `@deepseek-ai/dsh-wanwei-portals`
+
+需要： `connection` · `agents` · `agentDefaultModel` · `tools` · `systemPrompt` · `sessions`
+
+```ts config-catalog
+/** Bounds on one portal analysis and concurrent Host work. */
+export interface Config {
+  /** Maximum duration including agent creation and persistence flush, in milliseconds. */
+  requestTimeoutMs: number
+  /** Maximum serialized input characters, including article and conversation. */
+  maxInputChars: number
+  /** Maximum previous messages accepted for one question. */
+  maxHistoryMessages: number
+  /** Maximum output tokens requested from the selected model. */
+  maxOutputTokens: number
+  /** Maximum answer characters forwarded to the embedded page. */
+  maxOutputChars: number
+  /** Maximum simultaneous analyses in this Host. */
+  maxConcurrentAnalyses: number
+}
+```
+
+来源： [`packages/wanwei/portals/src/index.ts:17`](../packages/wanwei/portals/src/index.ts)
 
 <a id="deepseek-aidsh-wanwei-skillhub"></a>
 

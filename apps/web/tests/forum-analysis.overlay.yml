@@ -1,0 +1,3 @@
+- insert:
+    - id: wanwei-portals
+      name: '@deepseek-ai/dsh-wanwei-portals'
