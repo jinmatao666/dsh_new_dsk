@@ -37,10 +37,10 @@ const (
 )
 
 type accountSnapshot struct {
-	Quota             int64                     `json:"quota"`
-	SubscriptionQuota int64                     `json:"subscription_quota"`
-	TimedQuotaTotal   int64                     `json:"timed_quota_total"`
-	OrgId             int                       `json:"org_id"`
+	Quota             int64                      `json:"quota"`
+	SubscriptionQuota int64                      `json:"subscription_quota"`
+	TimedQuotaTotal   int64                      `json:"timed_quota_total"`
+	OrgId             int                        `json:"org_id"`
 	Ledger            []accountSnapshotLedgerRow `json:"ledger,omitempty"`
 	Subscriptions     []accountSnapshotSubRow    `json:"subscriptions,omitempty"`
 }
@@ -86,6 +86,7 @@ func TransferToEnterprise(adminId, userId, orgId int, role, reason string) error
 	}
 
 	err := DB.Transaction(func(tx *gorm.DB) error {
+		tx = WithCreditAudit(tx, CreditAuditInfo{ActorID: adminId, ActorName: creditActorName(tx, adminId), Source: "account_transfer", Description: reason})
 		// 1) 校验目标企业有效
 		var org Organization
 		if err := tx.Where("id = ?", orgId).First(&org).Error; err != nil {
@@ -178,6 +179,7 @@ func TransferToPersonal(adminId, userId int, reason string) error {
 	}
 
 	err := DB.Transaction(func(tx *gorm.DB) error {
+		tx = WithCreditAudit(tx, CreditAuditInfo{ActorID: adminId, ActorName: creditActorName(tx, adminId), Source: "account_transfer", Description: reason})
 		var user User
 		query := tx.Where("id = ?", userId)
 		if !common.UsingSQLite {

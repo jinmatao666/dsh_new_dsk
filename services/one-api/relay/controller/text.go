@@ -14,6 +14,7 @@ import (
 
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/logger"
 	dbmodel "github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay"
@@ -190,7 +191,7 @@ func returnPreConsumedQuota(ctx context.Context, preConsumedQuota int64, meta *m
 		if preConsumedQuota > 0 && len(meta.CreditReserved) == 0 {
 			return
 		}
-		if _, err := dbmodel.ChangeTokenCreditQuota(meta.UserId, meta.TokenId, -preConsumedQuota, meta.CreditReserved); err != nil {
+		if _, err := dbmodel.ChangeTokenCreditQuota(meta.UserId, meta.TokenId, -preConsumedQuota, meta.CreditReserved, dbmodel.CreditAuditInfo{ActorID: meta.UserId, Source: "model_refund", Reference: helper.GetRequestID(ctx), Description: meta.ActualModelName}); err != nil {
 			logger.Error(ctx, "积分退款失败："+err.Error())
 		} else {
 			meta.CreditReserved = nil

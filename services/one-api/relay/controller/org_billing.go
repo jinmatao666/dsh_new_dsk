@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
@@ -62,14 +63,14 @@ func postConsumeOrgLedger(ctx context.Context, orgId, userId, orgDeptId int, act
 	quotaDelta := actualQuota - preConsumed
 	if quotaDelta > 0 {
 		// 实际 > 预扣:补扣差额。账本不足时仅记日志(差额由日志体现),不阻断已完成的请求。
-		if _, err := model.DecreaseOrgQuotaByLedger(orgId, quotaDelta); err != nil {
+		if _, err := model.DecreaseOrgQuotaByLedger(orgId, quotaDelta, model.CreditAuditInfo{ActorID: userId, Source: "model_debit", Reference: helper.GetRequestID(ctx), Description: "企业模型结算补扣"}); err != nil {
 			logger.Error(ctx, "post_consume decrease_org_quota_failed: "+err.Error())
 			return err
 		}
 	} else if quotaDelta < 0 {
 		// 实际 < 预扣:按预扣 deducted 明细原路退还多扣部分。
 		// scaleDeductedRefund 退款额受 deducted 各行上限约束,不会退超过实际扣减,账本不会转正溢出。
-		if err := model.RefundOrgQuotaByLedger(orgId, scaleDeductedRefund(deducted, -quotaDelta)); err != nil {
+		if err := model.RefundOrgQuotaByLedger(orgId, scaleDeductedRefund(deducted, -quotaDelta), model.CreditAuditInfo{ActorID: userId, Source: "model_refund", Reference: helper.GetRequestID(ctx), Description: "企业模型结算退回"}); err != nil {
 			logger.Error(ctx, "post_consume refund_org_quota_failed: "+err.Error())
 			return err
 		}

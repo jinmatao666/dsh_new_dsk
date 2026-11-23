@@ -36,6 +36,15 @@ func GrantAdminCredits(userId, actorId int, amount int64, remark string, ttl *ti
 
 // grantCreditsTx commits the common issuance ledger and audit receipt in an existing transaction.
 func grantCreditsTx(tx *gorm.DB, userId, actorId int, amount int64, remark string, ttl *time.Duration, source, reference string) error {
+	info := CreditAuditInfo{ActorID: actorId, Source: source, Reference: reference, Description: remark}
+	if actorId > 0 {
+		var actor User
+		if err := tx.Select("username").Where("id = ?", actorId).Find(&actor).Error; err != nil {
+			return err
+		}
+		info.ActorName = actor.Username
+	}
+	tx = WithCreditAudit(tx, info)
 	if err := AddUserTimedQuotaTx(tx, userId, amount, source, reference, ttl); err != nil {
 		return err
 	}

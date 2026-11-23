@@ -526,6 +526,7 @@ func SetApiRouter(router *gin.Engine) {
 			usageRoute.POST("/skill", middleware.UserAuth(), controller.RecordSkillUsage)
 			usageAdmin := usageRoute.Group("/admin")
 			usageAdmin.Use(middleware.UserAuth())
+			usageAdmin.GET("/credits", middleware.AdminAuth(), controller.GetCreditLedger)
 			usageAdmin.GET("/stats", controller.GetUsageStats)
 			usageAdmin.GET("/details", controller.GetUsageDetails)
 		}

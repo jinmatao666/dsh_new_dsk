@@ -23,7 +23,7 @@ it('places named charge point numbers beside expert names and obeys credit visib
   await screen.findByText('计费专家')
   const prices = () => [...view.container.querySelectorAll('.dsh-expert-title-row .dsh-expert-price')]
   expect(prices().map(node => [node.textContent, node.getAttribute('title')])).toEqual([
-    ['3', '生成审查报告'], ['0.5', '导出成果'],
+    ['技能：3', '生成审查报告'], ['技能：0.5', '导出成果'],
   ])
   expect(view.container.querySelectorAll('.dsh-expert-price svg')).toHaveLength(2)
   expect(view.container.querySelector('.dsh-expert-price svg')?.getAttribute('stroke')).toBe('#d99a22')

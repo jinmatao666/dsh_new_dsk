@@ -35,13 +35,16 @@ func TestUnifiedBillingReservationSettlement(t *testing.T) {
 		config.OptionMap = oldMap
 		config.OptionMapRWMutex.Unlock()
 	}()
-	if err := db.AutoMigrate(&User{}, &UserTimedQuota{}, &BillingTask{}, &BillingRule{}, &BusinessBillingContext{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &UserTimedQuota{}, &BillingTask{}, &BillingRule{}, &BusinessBillingContext{}, &CreditLedger{}); err != nil {
 		t.Fatal(err)
 	}
 	db.Create(&User{Id: 1, Username: "billing-user", Quota: 1000, TimedQuotaTotal: 1000})
 	expires := time.Now().Add(time.Hour)
 	db.Create(&UserTimedQuota{Id: 1, UserId: 1, Amount: 1000, Remaining: 1000, Source: TimedQuotaSourceAdmin, ExpiresAt: &expires})
 	db.Create(&BillingRule{ID: "rule", Kind: "skill", ItemID: "convert", Action: "execute", UnitQuota: 100, Enabled: true, Version: 1})
+	if err := RegisterCreditLedger(db); err != nil {
+		t.Fatal(err)
+	}
 	request := BillingTask{Kind: "skill", ItemID: "convert", Action: "execute", Quantity: 2, RequestID: "request-1", Version: 1}
 	task, secret, err := ReserveBillingTask(1, request)
 	if err != nil {
@@ -112,4 +115,22 @@ func TestUnifiedBillingReservationSettlement(t *testing.T) {
 	if _, _, err := ReserveBillingTask(1, request); err == nil {
 		t.Fatal("stale quote accepted")
 	}
+	var ledger []CreditLedger
+	if err := db.Order("id").Find(&ledger).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(ledger) != 5 {
+		t.Fatalf("replays or failed requests changed audit: %+v", ledger)
+	}
+	var net int64
+	for _, row := range ledger {
+		net += row.Delta
+		if row.Reference == "" || (row.ActorID != 1 && row.ActorName != "系统") {
+			t.Fatalf("missing task identity: %+v", row)
+		}
+	}
+	if net != -200 || ledger[0].Source != "skill_reserve" || ledger[2].Source != "skill_refund" {
+		t.Fatalf("incorrect task ledger: %+v", ledger)
+	}
+
 }

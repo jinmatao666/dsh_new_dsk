@@ -108,7 +108,7 @@ func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIR
 			return 0, openai.ErrorWrapper(err, "invalid_credit_reservation", http.StatusBadRequest)
 		}
 		if !meta.UseOrgQuota {
-			meta.CreditReserved, err = model.ChangeTokenCreditQuota(meta.UserId, meta.TokenId, preConsumedQuota, nil)
+			meta.CreditReserved, err = model.ChangeTokenCreditQuota(meta.UserId, meta.TokenId, preConsumedQuota, nil, model.CreditAuditInfo{ActorID: meta.UserId, Source: "model_reserve", Reference: helper.GetRequestID(ctx), Description: meta.ActualModelName})
 			if err != nil {
 				return 0, openai.ErrorWrapper(err, "insufficient_user_quota", http.StatusForbidden)
 			}
@@ -122,7 +122,7 @@ func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIR
 			return preConsumedQuota, errResp
 		}
 		// 预扣企业额度:按账本到期顺序消耗,记录 deducted map 供 post 阶段精确退款
-		deducted, err := model.DecreaseOrgQuotaByLedger(meta.OrgId, preConsumedQuota)
+		deducted, err := model.DecreaseOrgQuotaByLedger(meta.OrgId, preConsumedQuota, model.CreditAuditInfo{ActorID: meta.UserId, Source: "model_reserve", Reference: helper.GetRequestID(ctx), Description: meta.ActualModelName})
 		if err != nil {
 			return preConsumedQuota, openai.ErrorWrapper(err, "decrease_org_quota_failed", http.StatusInternalServerError)
 		}
@@ -152,7 +152,7 @@ func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIR
 			err := model.PreConsumeTokenQuotaOnly(meta.TokenId, preConsumedQuota)
 			if err != nil {
 				// token 预扣失败,需要把已扣的企业账本退还,否则会出现"扣了钱却没让请求继续"的状态
-				if refundErr := model.RefundOrgQuotaByLedger(meta.OrgId, meta.OrgPreConsumedDeducted); refundErr != nil {
+				if refundErr := model.RefundOrgQuotaByLedger(meta.OrgId, meta.OrgPreConsumedDeducted, model.CreditAuditInfo{ActorID: meta.UserId, Source: "model_refund", Reference: helper.GetRequestID(ctx), Description: meta.ActualModelName}); refundErr != nil {
 					logger.Error(ctx, "rollback_org_quota_after_token_failure: "+refundErr.Error())
 				}
 				meta.OrgPreConsumedDeducted = nil
@@ -236,7 +236,12 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 			}
 		}
 	} else if meta.CreditPrice != nil && meta.CreditPrice.Source == "configured" {
-		if _, err := model.ChangeTokenCreditQuota(meta.UserId, meta.TokenId, quotaDelta, meta.CreditReserved); err != nil {
+		if _, err := model.ChangeTokenCreditQuota(meta.UserId, meta.TokenId, quotaDelta, meta.CreditReserved, model.CreditAuditInfo{ActorID: meta.UserId, Source: func() string {
+			if quotaDelta < 0 {
+				return "model_refund"
+			}
+			return "model_debit"
+		}(), Reference: helper.GetRequestID(ctx), Description: meta.ActualModelName}); err != nil {
 			logger.Error(ctx, "积分结算失败："+err.Error())
 			var receipt map[string]interface{}
 			_ = json.Unmarshal([]byte(creditBilling), &receipt)

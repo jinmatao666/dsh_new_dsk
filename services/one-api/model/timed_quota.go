@@ -120,7 +120,7 @@ type UserTimedQuotaBatchPreviewResult struct {
 	Users   []UserTimedQuotaBatchPreviewUser `json:"users"`
 }
 
-func BatchAddUserTimedQuota(filter UserTimedQuotaBatchFilter, amount int64, sourceRef string, ttl *time.Duration) (*UserTimedQuotaBatchResult, error) {
+func BatchAddUserTimedQuota(filter UserTimedQuotaBatchFilter, amount int64, sourceRef string, ttl *time.Duration, actorID ...int) (*UserTimedQuotaBatchResult, error) {
 	if amount <= 0 {
 		return nil, errors.New("amount 必须大于 0")
 	}
@@ -131,6 +131,12 @@ func BatchAddUserTimedQuota(filter UserTimedQuotaBatchFilter, amount int64, sour
 
 	result := &UserTimedQuotaBatchResult{}
 	err := DB.Transaction(func(tx *gorm.DB) error {
+		info := CreditAuditInfo{Source: "admin", Reference: sourceRef, Description: "批量发放积分"}
+		if len(actorID) > 0 {
+			info.ActorID = actorID[0]
+			info.ActorName = creditActorName(tx, actorID[0])
+		}
+		tx = WithCreditAudit(tx, info)
 		userQuery := applyUserTimedQuotaBatchFilter(tx.Model(&User{}), filter).
 			Select("id").
 			Order("id asc")
@@ -239,6 +245,11 @@ func addUserTimedQuotaTx(tx *gorm.DB, userId int, amount int64, source, sourceRe
 }
 
 func addUserQuotaLedgerTx(tx *gorm.DB, userId int, amount int64, source, sourceRef string, expiresAt *time.Time) error {
+	info := creditAuditInfo(tx.Statement.Context)
+	if info.Source == "account_adjustment" {
+		info.Source, info.Reference = source, sourceRef
+		tx = WithCreditAudit(tx, info)
+	}
 	if userId == 0 {
 		return errors.New("user id 为空")
 	}
@@ -297,6 +308,11 @@ func addUserQuotaLedgerTx(tx *gorm.DB, userId int, amount int64, source, sourceR
 // 仅合并 expires_at IS NULL 的行——有到期时间的批次各自独立（到期口径不同不能合并）；
 // 传入 expiresAt != nil 时退化为普通插入（走 addUserQuotaLedgerTx 语义）。
 func addOrMergeUserQuotaLedgerTx(tx *gorm.DB, userId int, amount int64, source, sourceRef string, expiresAt *time.Time) error {
+	info := creditAuditInfo(tx.Statement.Context)
+	if info.Source == "account_adjustment" {
+		info.Source, info.Reference = source, sourceRef
+		tx = WithCreditAudit(tx, info)
+	}
 	if userId == 0 {
 		return errors.New("user id 为空")
 	}
@@ -404,6 +420,7 @@ func GetOrderSubscriptionExpiry(userId int, orderNo string) (*time.Time, bool, e
 // 等价于 Respal「就地改写批次」：清零 + 插新行避免多行分摊歧义。
 // users.quota / subscription_quota 在 Go 内计算非负差后回写（兼容 SQLite，无 GREATEST）。
 func RewriteOrderSubscriptionQuotaTx(tx *gorm.DB, userId int, orderNo string, newRemaining int64, expiresAt *time.Time) error {
+	tx = defaultCreditAudit(tx, "subscription_reset", orderNo, "订阅订单积分调整")
 	if userId == 0 {
 		return errors.New("user id 为空")
 	}
@@ -502,6 +519,7 @@ func GetUserTimedQuotaHistory(userId, offset, limit int) ([]UserTimedQuota, int6
 func ExpireTimedQuotas() error {
 	now := time.Now()
 	return DB.Transaction(func(tx *gorm.DB) error {
+		tx = WithCreditAudit(tx, CreditAuditInfo{Source: "expiry", Description: "积分到期回收"})
 		// 1) 聚合每个用户即将清零的额度
 		type agg struct {
 			UserId          int

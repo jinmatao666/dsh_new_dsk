@@ -165,7 +165,7 @@ func TopUpOrganization(c *gin.Context) {
 		d := time.Duration(req.ExpiresInDays) * 24 * time.Hour
 		ttl = &d
 	}
-	if err := model.AddOrgTimedQuota(id, req.Quota, source, req.SourceRef, ttl); err != nil {
+	if err := model.AddOrgTimedQuota(id, req.Quota, source, req.SourceRef, ttl, model.CreditAuditInfo{ActorID: c.GetInt("id"), ActorName: c.GetString("username"), Source: source, Reference: req.SourceRef, Description: "管理员发放企业积分"}); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}

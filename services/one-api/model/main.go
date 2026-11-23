@@ -183,6 +183,9 @@ func InitDB() {
 	}
 
 	if !config.IsMasterNode {
+		if err = RegisterCreditLedger(DB); err != nil {
+			logger.FatalLog(err.Error())
+		}
 		return
 	}
 
@@ -196,6 +199,10 @@ func InitDB() {
 		return
 	}
 	logger.SysLog("database migrated")
+	if err = RegisterCreditLedger(DB); err != nil {
+		logger.FatalLog(err.Error())
+		return
+	}
 
 	// 模型配置改为全手动登记,不再自动把渠道/ability 派生模型补登到 ModelDefinition。
 	// (原 BackfillModelDefinitions 已停用)
@@ -229,7 +236,7 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&ProvinceIdentity{}, &ProvinceLaunchCode{}, &ProvinceDeviceToken{}); err != nil {
 		return err
 	}
-	if err = DB.AutoMigrate(&BusinessBillingContext{}, &BillingRule{}, &BillingTask{}, &User{}, &DesktopCheckinState{}, &DesktopCheckinReceipt{}, &AdminCreditGrant{}); err != nil {
+	if err = DB.AutoMigrate(&BusinessBillingContext{}, &BillingRule{}, &BillingTask{}, &User{}, &DesktopCheckinState{}, &DesktopCheckinReceipt{}, &AdminCreditGrant{}, &CreditLedger{}, &CreditLedgerMigration{}); err != nil {
 		return err
 	}
 	if err = DB.AutoMigrate(&Role{}); err != nil {

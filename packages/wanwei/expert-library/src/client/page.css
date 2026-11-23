@@ -144,4 +144,4 @@
 
 .dsh-expert-title-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .dsh-expert-title-row strong { min-width: 0; }
-.dsh-expert-price { display: inline-flex; align-items: center; gap: 4px; flex: none; color: #8691a3; font-size: 12px; font-weight: 400; white-space: nowrap; font-variant-numeric: tabular-nums; cursor: help; }
+.dsh-expert-price { display: inline-flex; align-items: center; gap: 4px; flex: none; color: #8691a3; font-size: 12px; font-weight: 400; white-space: nowrap; font-variant-numeric: tabular-nums; cursor: default; }

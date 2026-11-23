@@ -14,8 +14,12 @@ import (
 
 // ChangeTokenCreditQuota 在同一事务内调整用户账本和令牌；负数按预扣来源原路退款。
 // 返回本次扣减的账本行，退款不会把限时积分变成永久积分。
-func ChangeTokenCreditQuota(userID, tokenID int, delta int64, reserved map[int64]int64) (map[int64]int64, error) {
-	deducted, err := changeTokenCreditQuotaDB(DB, userID, tokenID, delta, reserved)
+func ChangeTokenCreditQuota(userID, tokenID int, delta int64, reserved map[int64]int64, audit ...CreditAuditInfo) (map[int64]int64, error) {
+	db := DB
+	if len(audit) > 0 {
+		db = WithCreditAudit(db, audit[0])
+	}
+	deducted, err := changeTokenCreditQuotaDB(db, userID, tokenID, delta, reserved)
 	if err == nil && common.RedisEnabled {
 		if cacheErr := common.RedisDel(fmt.Sprintf("user_quota:%d", userID)); cacheErr != nil {
 			logger.SysError("清理积分余额缓存失败：" + cacheErr.Error())
@@ -28,6 +32,15 @@ func ChangeTokenCreditQuota(userID, tokenID int, delta int64, reserved map[int64
 func changeTokenCreditQuotaDB(db *gorm.DB, userID, tokenID int, delta int64, reserved map[int64]int64) (map[int64]int64, error) {
 	deducted := map[int64]int64{}
 	err := db.Transaction(func(tx *gorm.DB) error {
+		info := creditAuditInfo(tx.Statement.Context)
+		if info.Source == "account_adjustment" {
+			info.Source = "model_debit"
+			if delta < 0 {
+				info.Source = "model_refund"
+			}
+			info.ActorID = userID
+			tx = WithCreditAudit(tx, info)
+		}
 		var user User
 		query := tx.Where("id = ?", userID)
 		if !common.UsingSQLite {

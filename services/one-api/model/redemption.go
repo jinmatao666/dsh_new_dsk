@@ -68,10 +68,12 @@ func Redeem(ctx context.Context, key string, userId int) (quota int64, err error
 	keyCol := quoteSQLIdentifier("key")
 
 	err = DB.Transaction(func(tx *gorm.DB) error {
+
 		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(keyCol+" = ?", key).First(redemption).Error
 		if err != nil {
 			return errors.New("无效的兑换码")
 		}
+		tx = WithCreditAudit(tx, CreditAuditInfo{ActorID: userId, Source: "redeem", Reference: fmt.Sprintf("redemption:%d", redemption.Id), Description: "兑换积分"})
 		if redemption.Status != RedemptionCodeStatusEnabled {
 			return errors.New("该兑换码已被使用")
 		}

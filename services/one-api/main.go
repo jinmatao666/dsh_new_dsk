@@ -143,6 +143,14 @@ func main() {
 
 	// Initialize options
 	model.InitOptionMap()
+	if config.IsMasterNode {
+		go func() {
+			if err := model.ImportCreditLedgerHistory(); err != nil {
+				model.DB.Model(&model.CreditLedgerMigration{}).Where("id = ?", "history-v1").Update("failed", true)
+				logger.SysError("积分历史台账导入失败，下次启动重试: " + err.Error())
+			}
+		}()
+	}
 	config.Theme = config.NormalizeTheme(config.Theme)
 	logger.SysLog(fmt.Sprintf("using theme %s", config.Theme))
 	if common.RedisEnabled {

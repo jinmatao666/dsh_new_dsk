@@ -157,7 +157,9 @@ func reserveBusinessTaskDB(db *gorm.DB, userID int, input BillingTask, quota *in
 			}
 		}
 
-		sources, err := changeTokenCreditQuotaDB(tx, userID, 0, amount, nil)
+		input.ID = uuid.NewString()
+		chargeDB := WithCreditAudit(tx, CreditAuditInfo{ActorID: userID, ActorName: user.Username, Source: input.Kind + "_reserve", Reference: input.ID, Description: input.ResourceName + " · " + input.PointName})
+		sources, err := changeTokenCreditQuotaDB(chargeDB, userID, 0, amount, nil)
 		if err != nil {
 			return errors.New("INSUFFICIENT_CREDITS")
 		}
@@ -166,7 +168,7 @@ func reserveBusinessTaskDB(db *gorm.DB, userID int, input BillingTask, quota *in
 			return err
 		}
 		result = input
-		result.ID = uuid.NewString()
+		result.ID = input.ID
 		result.UserID = userID
 		result.Quota = amount
 		result.State = "reserved"
@@ -229,7 +231,12 @@ func settleBillingTaskDB(db *gorm.DB, id, secret, status string, expiry bool) (B
 			if err := json.Unmarshal([]byte(result.Sources), &sources); err != nil {
 				return err
 			}
-			if _, err := changeTokenCreditQuotaDB(tx, result.UserID, 0, -result.Quota, sources); err != nil {
+			refundAudit := CreditAuditInfo{ActorID: result.UserID, ActorName: user.Username, Source: result.Kind + "_refund", Reference: result.ID, Description: result.ResourceName + " · " + result.PointName}
+			if expiry {
+				refundAudit.ActorID = 0
+				refundAudit.ActorName = "系统"
+			}
+			if _, err := changeTokenCreditQuotaDB(WithCreditAudit(tx, refundAudit), result.UserID, 0, -result.Quota, sources); err != nil {
 				return err
 			}
 		}

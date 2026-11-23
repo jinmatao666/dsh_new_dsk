@@ -3,8 +3,10 @@ import { API } from '../../helpers';
 import AdminPageFrame from '../../components/AdminPageFrame';
 import './usage.css';
 import CustomSelect from '../../components/CustomSelect';
+import CreditStats from './CreditStats';
 
 const tabs = [
+  ['credits', '积分统计', 'credits'],
   ['skill-stats', '技能统计', 'skill'],
   ['expert-stats', '专家统计', 'expert'],
   ['skill-details', '技能明细', 'skill'],
@@ -51,6 +53,7 @@ export default function Usage() {
   const details = tab.endsWith('details');
 
   useEffect(() => {
+    if (tab === 'credits') return;
     let cancelled = false;
     setLoading(true);
     setError('');
@@ -69,16 +72,17 @@ export default function Usage() {
   const maxTrend = Math.max(1, ...trend.map(item => item.count));
   const switchTab = id => { setTab(id); setPage(1); setItemID(''); setData(null); };
 
-  return <AdminPageFrame title="使用统计" description="查看技能与专家的实际使用次数及人员明细。" className="usage-page">
+  return <AdminPageFrame title="使用统计" description="查看积分变动台账、技能与专家的实际使用记录。" className="usage-page">
     <nav className="usage-tabs" aria-label="使用统计分类">
       {tabs.map(([id, label]) => <button key={id} type="button" className={tab === id ? 'active' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => switchTab(id)}>{label}</button>)}
     </nav>
     <div className="usage-filters">
       <label>开始日期<input type="date" value={from} max={to} onChange={event => { setFrom(event.target.value); setPage(1); }} /></label>
       <label>结束日期<input type="date" value={to} min={from} onChange={event => { setTo(event.target.value); setPage(1); }} /></label>
-      {!details && <label>统计周期<CustomSelect aria-label='统计周期' value={period} onChange={event => setPeriod(event.target.value)}><option value="day">按天</option><option value="week">按周</option><option value="month">按月</option></CustomSelect></label>}
+      {tab !== 'credits' && !details && <label>统计周期<CustomSelect aria-label='统计周期' value={period} onChange={event => setPeriod(event.target.value)}><option value="day">按天</option><option value="week">按周</option><option value="month">按月</option></CustomSelect></label>}
       {itemID && <button type="button" className="usage-clear" onClick={() => setItemID('')}>清除对象筛选</button>}
     </div>
+    {tab === 'credits' ? <CreditStats from={from} to={to} /> : <>
     {loading && <p className="usage-state">正在读取使用记录…</p>}
     {error && <p role="alert" className="usage-state error">{error}</p>}
     {!loading && !error && data && (details ? <>
@@ -94,5 +98,6 @@ export default function Usage() {
       <section><h2>按部门</h2><div className="usage-departments">{(data.departments || []).map((row, index) => <div key={row.department_id ?? `none-${index}`}><span>{row.department_name || '未归属部门'}</span><b>{row.count}</b></div>)}</div>{(!data.departments || !data.departments.length) && <p className="usage-empty">暂无部门数据</p>}</section></div>
       <section className="usage-trend"><h2>使用趋势</h2>{trend.length ? trend.map(row => <div className="usage-bar" key={row.label}><time>{row.label}</time><div><span style={{ width: `${100 * row.count / maxTrend}%` }} /></div><b>{row.count}</b></div>) : <p className="usage-empty">所选日期暂无使用记录</p>}</section>
     </>)}
+    </>}
   </AdminPageFrame>;
 }

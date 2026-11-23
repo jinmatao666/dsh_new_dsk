@@ -904,6 +904,7 @@ func SetUserSubscriptionQuota(id int, quota int64, sourceRef string, expiresAt *
 		return errors.New("quota 不能为负数！")
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
+		tx = WithCreditAudit(tx, CreditAuditInfo{Source: "subscription_reset", Description: "订阅周期调整"})
 		var u User
 		if err := tx.Select("subscription_quota", "timed_quota_total").
 			Where("id = ?", id).First(&u).Error; err != nil {
@@ -985,11 +986,17 @@ func IncreaseUserSubscriptionQuotaTx(tx *gorm.DB, id int, quota int64, sourceRef
 
 // SetUserTotalQuota 用于管理员"直接设置总余额"场景.
 // 增加部分落一笔永久 admin 定时积分;减少部分按正常扣费顺序扣减账本与订阅积分.
-func SetUserTotalQuota(id int, quota int64, sourceRef string) error {
+func SetUserTotalQuota(id int, quota int64, sourceRef string, actorID ...int) error {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
+		info := CreditAuditInfo{Source: "admin", Reference: sourceRef, Description: "管理员调整余额"}
+		if len(actorID) > 0 {
+			info.ActorID = actorID[0]
+			info.ActorName = creditActorName(tx, actorID[0])
+		}
+		tx = WithCreditAudit(tx, info)
 		var u User
 		query := tx.Select("id", "subscription_quota", "timed_quota_total").Where("id = ?", id)
 		if !common.UsingSQLite {
@@ -1045,6 +1052,7 @@ func decreaseUserQuotaTx(tx *gorm.DB, id int, quota int64) error {
 
 // debitUserQuotaTx can reject an incomplete debit inside a caller-owned transaction.
 func debitUserQuotaTx(tx *gorm.DB, id int, quota int64, requireFull bool) error {
+	tx = defaultCreditAudit(tx, "model_debit", "", "模型调用")
 	if quota <= 0 {
 		return nil
 	}

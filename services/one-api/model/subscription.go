@@ -55,11 +55,11 @@ type Subscription struct {
 	SubscriptionEnd    time.Time `json:"subscription_end" gorm:"comment:整个订阅结束时间"`
 	OrderNo            string    `json:"order_no" gorm:"type:varchar(64);comment:关联支付订单号"`
 	// T0-3 队列模型字段:支撑"高等级优先生效、低等级冻结顺延"(见规则文档 2.2 / 8.1-3、行为 2/4)。
-	QueueSeq          int        `json:"queue_seq" gorm:"default:0;index;comment:同用户内队列序(越小越先生效),购买时间序作基准"`
-	FrozenAt          *time.Time `json:"frozen_at" gorm:"comment:被高等级压住进入冻结的时刻;active 时为空"`
-	FrozenRemainDays  int        `json:"frozen_remain_days" gorm:"default:0;comment:冻结时记录的剩余未drip整月天数,恢复时从该时刻重排drip"`
-	CreatedAt         time.Time  `json:"created_at" gorm:"autoCreateTime;comment:创建时间"`
-	UpdatedAt         time.Time  `json:"updated_at" gorm:"autoUpdateTime;comment:更新时间"`
+	QueueSeq         int        `json:"queue_seq" gorm:"default:0;index;comment:同用户内队列序(越小越先生效),购买时间序作基准"`
+	FrozenAt         *time.Time `json:"frozen_at" gorm:"comment:被高等级压住进入冻结的时刻;active 时为空"`
+	FrozenRemainDays int        `json:"frozen_remain_days" gorm:"default:0;comment:冻结时记录的剩余未drip整月天数,恢复时从该时刻重排drip"`
+	CreatedAt        time.Time  `json:"created_at" gorm:"autoCreateTime;comment:创建时间"`
+	UpdatedAt        time.Time  `json:"updated_at" gorm:"autoUpdateTime;comment:更新时间"`
 }
 
 func (Subscription) TableName() string {
@@ -167,6 +167,7 @@ func RunMergeMultiActiveSubscriptionsForTest() error {
 // 与多订阅块共存冲突。升级走 FreezeActiveSubscriptionsBelowTx、退款走 RefundOrderSubscriptionTx,
 // 都不再调用本函数。保留仅为兼容潜在的外部/应急调用,常规链路勿用。
 func ExpireSubscriptionsAndClearQuotaTx(tx *gorm.DB, userId int) error {
+	tx = defaultCreditAudit(tx, "subscription_reset", "", "订阅到期回收")
 	if err := tx.Model(&Subscription{}).
 		Where("user_id = ? AND status = ?", userId, "active").
 		Update("status", "expired").Error; err != nil {
@@ -273,6 +274,7 @@ func restoreNextFrozenSubscriptionTx(tx *gorm.DB, userId int, now time.Time) err
 //  3. 其后所有 frozen 块按 queue_seq 升序紧凑前移(去空洞;drip 计划在恢复时才重排)
 //  4. 若被退块原为 active 且用户已无其它 active,恢复队首 frozen 块为新当前身份(复用 restoreNextFrozenSubscriptionTx)
 func RefundOrderSubscriptionTx(tx *gorm.DB, userId int, orderNo string, now time.Time) (int64, error) {
+	tx = defaultCreditAudit(tx, "refund", "", "订阅退款回收")
 	// 1. 该单剩余订阅积分余量(清零前先量出,作为退款额)
 	var refundQuota int64
 	if err := tx.Model(&UserTimedQuota{}).

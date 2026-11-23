@@ -789,7 +789,7 @@ func UpdateUser(c *gin.Context) {
 	}
 	originQuota := originUser.SubscriptionQuota + originUser.TimedQuotaTotal
 	if quotaProvided && originQuota != updatedUser.Quota {
-		if err := model.SetUserTotalQuota(updatedUser.Id, updatedUser.Quota, "admin_edit"); err != nil {
+		if err := model.SetUserTotalQuota(updatedUser.Id, updatedUser.Quota, "admin_edit", c.GetInt("id")); err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": err.Error(),
@@ -1568,7 +1568,7 @@ func BatchAdminTimedQuota(c *gin.Context) {
 		d := time.Duration(req.ExpiresInDays) * 24 * time.Hour
 		ttl = &d
 	}
-	result, err := model.BatchAddUserTimedQuota(filter, int64(req.Quota), sourceRef, ttl)
+	result, err := model.BatchAddUserTimedQuota(filter, int64(req.Quota), sourceRef, ttl, c.GetInt("id"))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

@@ -43,7 +43,7 @@ const (
 // AddOrgTimedQuota 给企业新增一笔定时积分.事务内插账本 + 同步 organizations.quota 镜像列.
 //   - amount 必须 > 0
 //   - ttl == nil 表示永久;否则 expires_at = now + ttl
-func AddOrgTimedQuota(orgId int, amount int64, source, sourceRef string, ttl *time.Duration) error {
+func AddOrgTimedQuota(orgId int, amount int64, source, sourceRef string, ttl *time.Duration, audit ...CreditAuditInfo) error {
 	if orgId == 0 {
 		return errors.New("org id 为空")
 	}
@@ -59,6 +59,10 @@ func AddOrgTimedQuota(orgId int, amount int64, source, sourceRef string, ttl *ti
 	}
 
 	return DB.Transaction(func(tx *gorm.DB) error {
+		if len(audit) > 0 {
+			tx = WithCreditAudit(tx, audit[0])
+		}
+		tx = defaultCreditAudit(tx, source, sourceRef, "企业积分发放")
 		return addOrgTimedQuotaTx(tx, orgId, amount, source, sourceRef, ttl)
 	})
 }
@@ -154,7 +158,7 @@ func GetOrgAvailableQuota(orgId int) (int64, error) {
 //   - 同步维护 organizations.used_quota / quota 镜像列(used_quota += quota)
 //
 // 返回每笔被扣减的账本行 ID -> 实际扣减额(供退款时按原路径加回).
-func DecreaseOrgQuotaByLedger(orgId int, quota int64) (map[int64]int64, error) {
+func DecreaseOrgQuotaByLedger(orgId int, quota int64, audit ...CreditAuditInfo) (map[int64]int64, error) {
 	if quota < 0 {
 		return nil, errors.New("quota 不能为负数")
 	}
@@ -163,6 +167,10 @@ func DecreaseOrgQuotaByLedger(orgId int, quota int64) (map[int64]int64, error) {
 	}
 	deducted := map[int64]int64{}
 	err := DB.Transaction(func(tx *gorm.DB) error {
+		if len(audit) > 0 {
+			tx = WithCreditAudit(tx, audit[0])
+		}
+		tx = defaultCreditAudit(tx, "model_debit", "", "企业模型调用")
 		var rows []OrgTimedQuota
 		nowSql := "NOW()"
 		if common.UsingSQLite {
@@ -257,6 +265,7 @@ func GetOrderOrgExpiry(orgId int, orderNo string) (*time.Time, bool, error) {
 // 并同步 organizations 镜像列。available = quota - used_quota，本操作只动 quota：
 // quota += (newRemaining - clearSum)，used_quota 不变（已用部分保留）。
 func RewriteOrderOrgQuotaTx(tx *gorm.DB, orgId int, orderNo string, newRemaining int64, expiresAt *time.Time) error {
+	tx = defaultCreditAudit(tx, "subscription_reset", orderNo, "企业订阅订单调整")
 	if orgId == 0 {
 		return errors.New("org id 为空")
 	}
@@ -312,7 +321,7 @@ func RewriteOrderOrgQuotaTx(tx *gorm.DB, orgId int, orderNo string, newRemaining
 //   - 仅在请求失败/部分超额时调用
 //   - 过期行(expires_at <= now 或 remaining 已清零)会被跳过,这部分资金计入企业损失
 //   - 同步把 organizations.used_quota 减回去
-func RefundOrgQuotaByLedger(orgId int, deducted map[int64]int64) error {
+func RefundOrgQuotaByLedger(orgId int, deducted map[int64]int64, audit ...CreditAuditInfo) error {
 	if len(deducted) == 0 {
 		return nil
 	}
@@ -321,6 +330,10 @@ func RefundOrgQuotaByLedger(orgId int, deducted map[int64]int64) error {
 		nowSql = "CURRENT_TIMESTAMP"
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
+		if len(audit) > 0 {
+			tx = WithCreditAudit(tx, audit[0])
+		}
+		tx = defaultCreditAudit(tx, "model_refund", "", "企业模型退款")
 		var totalRefund int64
 		for rowId, amount := range deducted {
 			if amount <= 0 {
@@ -355,6 +368,7 @@ func RefundOrgQuotaByLedger(orgId int, deducted map[int64]int64) error {
 func ExpireOrgTimedQuotas() error {
 	now := time.Now()
 	return DB.Transaction(func(tx *gorm.DB) error {
+		tx = defaultCreditAudit(tx, "expiry", "", "企业积分到期回收")
 		type agg struct {
 			OrgId int
 			Sum   int64

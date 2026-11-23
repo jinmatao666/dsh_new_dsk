@@ -75,6 +75,7 @@ func IssueMonthlyFreeQuotas() error {
 		expiresAt := todayStart.Add(FreeQuotaIntervalDays * 24 * time.Hour)
 		issued := false
 		err := DB.Transaction(func(tx *gorm.DB) error {
+			tx = WithCreditAudit(tx, CreditAuditInfo{Source: "subscription_reset", Description: "每月免费积分更新"})
 			var u User
 			query := tx.Select("id", "subscription_quota", "timed_quota_total", "last_free_quota_at", "account_type").
 				Where("id = ? AND status = ? AND account_type = ? AND (last_free_quota_at IS NULL OR last_free_quota_at <= ?)", c.Id, UserStatusEnabled, AccountTypePersonal, threshold)
