@@ -7,9 +7,9 @@ afterEach(cleanup)
 
 it('shows the positive price with a gold coin and charge point name on hover', () => {
   const { container } = render(<SkillPrice credits={3} enabled />)
-  expect(screen.getByText('技能：3')).toBeTruthy()
-  expect(container.textContent).toBe('技能：3')
-  expect(screen.getByText('技能：3').title).toBe('技能调用')
+  expect(screen.getByText('积分：3')).toBeTruthy()
+  expect(container.textContent).toBe('积分：3')
+  expect(screen.getByText('积分：3').title).toBe('技能调用')
   expect(container.querySelector('.dsh-skill-price-icon')?.getAttribute('stroke')).toBe('#d99a22')
 })
 
@@ -17,9 +17,9 @@ it('keeps separate named prices and respects an empty server price list', () => 
   const { container, rerender } = render(<SkillPrice credits={99} enabled points={[
     { name: '生成报告', credits: 3 }, { name: '导出成果', credits: 0.5 }, { name: '预览', credits: 0 },
   ]} />)
-  expect(screen.getByText('技能：3').title).toBe('生成报告')
-  expect(screen.getByText('技能：0.5').title).toBe('导出成果')
-  expect(container.textContent).toBe('技能：3技能：0.5')
+  expect(screen.getByText('积分：3').title).toBe('生成报告')
+  expect(screen.getByText('积分：0.5').title).toBe('导出成果')
+  expect(container.textContent).toBe('积分：3积分：0.5')
   rerender(<SkillPrice credits={99} enabled points={[]} />)
   expect(container.textContent).toBe('')
 })

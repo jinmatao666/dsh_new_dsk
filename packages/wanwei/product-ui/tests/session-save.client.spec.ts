@@ -16,6 +16,7 @@ function provider(): ClientPlatformActionProvider {
   apply({
     get: (name: keyof typeof services) => services[name],
     effect: (callback: () => unknown) => callback(),
+    inject: () => {},
     slots: { inject: () => {} },
   } as unknown as Context)
   return result
@@ -26,8 +27,9 @@ describe('desktop Session archive saving', () => {
     const pending = Promise.withResolvers<unknown>()
     const invoke = vi.fn((command: string) => command === 'save_session_log_archive' ? pending.promise : Promise.resolve())
     desktopWindow.__ZJUGIS_NATIVE_INVOKE__ = invoke
-    const save = provider().saveFile!({ filename: 'session.zip', bytes: new Uint8Array([1, 2]) })
+    const save = provider().saveFile!({ filename: 'dsh-session-example.zip', bytes: new Uint8Array([1, 2]) })
     expect(invoke).toHaveBeenCalledTimes(1)
+    expect(invoke).toHaveBeenCalledWith('save_session_log_archive', { fileName: 'wanwei-buddy-session-example.zip', bytes: [1, 2] })
     pending.resolve('C:/Downloads/session-1.zip')
     await expect(save).resolves.toEqual({ path: 'C:/Downloads/session-1.zip' })
     expect(invoke).toHaveBeenLastCalledWith('reveal_downloaded_file', { filePath: 'C:/Downloads/session-1.zip' })

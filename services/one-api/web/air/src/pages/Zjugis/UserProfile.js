@@ -130,6 +130,7 @@ export default function UserProfile({ user }) {
     </header>
     {state.loading ? <p className='user-profile-empty' role='status'>正在汇总用户数据…</p> : state.error
       ? <p className='user-profile-error' role='alert'>{state.error}</p> : <>
+        <p>最后一次登录时间 {state.data.last_login_at ? new Date(state.data.last_login_at * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '暂无记录'}</p>
         <div className='user-profile-period'><span><Calendar size={18} aria-hidden='true' />{state.data.from} 至 {state.data.to}</span><span>北京时间 · 下载与安装为累计数据</span></div>
         <div className='user-profile-metrics'>
           <div className='model'><span><Cpu size={22} aria-hidden='true' />模型调用</span><strong>{number(state.data.models.count)}<em>次</em></strong><small>输入 {number(state.data.models.prompt_tokens)} / 输出 {number(state.data.models.completion_tokens)} token</small></div>

@@ -97,7 +97,9 @@ type User struct {
 	// json 加 ,string:雪花值超过 JS 安全整数(2^53),裸数字传到前端会丢精度,
 	// 序列化为字符串规避;NULL 仍输出 null。前端展示用,后台用户 ID 统一以此为准。
 	AccountId *int64 `json:"account_id,string" gorm:"column:account_id;uniqueIndex;comment:账号中心accounts.id,NULL=未迁移"`
-	// LastActiveAt 最近活跃时间，每次有效请求时更新
+	// LastLoginAt records successful authentication in Unix seconds.
+	LastLoginAt *int64 `json:"last_login_at" gorm:"column:last_login_at"`
+	// LastActiveAt records the latest platform usage update.
 	LastActiveAt *time.Time `json:"last_active_at" gorm:"column:last_active_at;index;comment:最近活跃时间"`
 	// AdminPermissions 管理员可访问的后台功能模块，JSON 数组，超管不受此约束
 	AdminPermissions string `json:"admin_permissions" gorm:"type:text;comment:管理员功能权限JSON数组"`
@@ -109,6 +111,15 @@ func GetMaxUserId() int {
 	var user User
 	DB.Last(&user)
 	return user.Id
+}
+
+// RecordSuccessfulLogin stores the latest confirmed login as Unix seconds.
+func RecordSuccessfulLogin(userID int) {
+	now := time.Now().Unix()
+	err := DB.Model(&User{}).Where("id = ? AND (last_login_at IS NULL OR last_login_at < ?)", userID, now).UpdateColumn("last_login_at", now).Error
+	if err != nil {
+		logger.SysErrorf("记录登录时间失败(user_id=%d): %v", userID, err)
+	}
 }
 
 func GetAllUsers(startIdx int, num int, order string) (users []*User, err error) {

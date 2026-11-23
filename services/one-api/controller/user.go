@@ -95,6 +95,7 @@ func SetupLogin(user *model.User, c *gin.Context) {
 		})
 		return
 	}
+	model.RecordSuccessfulLogin(user.Id)
 	cleanUser := model.User{
 		Id:               user.Id,
 		Username:         user.Username,

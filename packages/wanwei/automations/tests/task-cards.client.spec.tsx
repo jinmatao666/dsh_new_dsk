@@ -155,7 +155,7 @@ it('shows no built-in sample tasks when the Host has no data', async () => {
   expect(await screen.findByText('尚未配置自动化')).toBeTruthy()
   expect(screen.queryByRole('switch')).toBeNull()
   expect(screen.queryByRole('button', { name: '筛选任务' })).toBeNull()
-  expect(screen.queryByText('正式任务需要电脑和 DSH 保持运行；错过的任务不会自动补执行。')).toBeNull()
+  expect(screen.queryByText('正式任务需要电脑和 Wanwei Buddy 保持运行；错过的任务不会自动补执行。')).toBeNull()
   expect(screen.getByRole('button', { name: '搜索任务' })).toBeTruthy()
   expect(screen.getByRole('button', { name: '已启用 (0)' })).toBeTruthy()
 })

@@ -71,7 +71,7 @@ func GetUserProfile(c *gin.Context) {
 		return
 	}
 	var user model.User
-	if err := model.DB.Select("id").First(&user, id).Error; err != nil {
+	if err := model.DB.Select("id", "last_login_at").First(&user, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "用户不存在"})
 		return
 	}
@@ -139,6 +139,6 @@ func GetUserProfile(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{
-		"from": from, "to": to, "models": models, "skills": skills, "experts": experts, "downloads": downloads, "custom_models": customModelProfile(id),
+		"from": from, "to": to, "last_login_at": user.LastLoginAt, "models": models, "skills": skills, "experts": experts, "downloads": downloads, "custom_models": customModelProfile(id),
 	}})
 }

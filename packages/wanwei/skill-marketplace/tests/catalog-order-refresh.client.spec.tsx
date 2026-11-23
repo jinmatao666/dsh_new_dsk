@@ -40,7 +40,7 @@ it('restores backend order on reopen and fetches changed ordering through Refres
   const names = () => [...view.container.querySelectorAll('.dsh-skill-card h2')].map(node => node.textContent)
   await act(async () => { controller.open() })
   await screen.findByRole('heading', { name: '后台首位技能', level: 2 })
-  expect(view.container.querySelector('.dsh-skill-price')?.textContent).toBe('技能：3')
+  expect(view.container.querySelector('.dsh-skill-price')?.textContent).toBe('积分：3')
   expect(view.container.querySelector('.dsh-skill-title-row .dsh-skill-price')?.getAttribute('title')).toBe('生成报告')
   expect(view.container.querySelector('.dsh-skill-card .dsh-skill-card-meta .dsh-skill-price')).toBeNull()
   await waitFor(() => { expect(names()).toEqual(['后台首位技能', '下载更多技能']) })

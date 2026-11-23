@@ -13,6 +13,6 @@ export function SkillPrice({ credits, points, enabled }: {
     if (typeof point !== 'object' || point === null) return null
     const { credits: amount, name } = point as Record<string, unknown>
     if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || typeof name !== 'string') return null
-    return <span className="dsh-skill-price" title={name} key={index}>{productText('技能')}：{amount.toLocaleString(undefined, { maximumFractionDigits: 20 })}<CreditCoinIcon className="dsh-skill-price-icon" /></span>
+    return <span className="dsh-skill-price" title={name} key={index}>{productText('积分')}：{amount.toLocaleString(undefined, { maximumFractionDigits: 20 })}<CreditCoinIcon className="dsh-skill-price-icon" /></span>
   })}</>
 }

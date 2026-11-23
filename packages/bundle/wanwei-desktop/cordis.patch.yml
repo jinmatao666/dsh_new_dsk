@@ -3,6 +3,15 @@
 - id: llm-deepseek
   disabled: true
 
+- id: system-prompt
+  config:
+    includeHarnessIdentity: false
+    persona: >-
+      You are Wanwei Buddy (万维Buddy), an AI assistant in the Wanwei Buddy desktop app.
+      Your current model is {{model}}. Your working directory is {{cwd}}.
+      When introducing yourself or naming the interface, use Wanwei Buddy and describe it as a desktop app.
+      Mention internal framework names, local service addresses, and workspace paths only when relevant to the user's request.
+
 - id: ui-settings-models
   disabled: false
   config:
@@ -45,7 +54,7 @@
       config:
         provider: dsh-server
         credentialRef: DSH_ONEAPI_TOKEN
-        tokenName: DSH Desktop Auto Token
+        tokenName: Wanwei Buddy
         defaultInput: [text]
         defaultModel: !!js process.env.DSH_DEFAULT_MODEL
         installId: !!js process.env.DSH_INSTALL_ID

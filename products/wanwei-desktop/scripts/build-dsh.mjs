@@ -1,4 +1,4 @@
-import { copyFileSync, cpSync, existsSync, rmSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import process from 'node:process'
@@ -34,6 +34,13 @@ try {
     shell: process.platform === 'win32',
   })
   if (result.status !== 0) throw new Error(`DSH build failed with exit code ${String(result.status)}`)
+  const webDist = join(repositoryRoot, 'apps', 'web', 'dist')
+  const manifestPath = join(webDist, 'manifest.webmanifest')
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  manifest.name = 'Wanwei Buddy'
+  manifest.short_name = 'Wanwei Buddy'
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+  copyFileSync(join(sourceRoot, 'brand-mark.svg'), join(webDist, 'favicon.svg'))
   await prepareBrowserCompatibility(repositoryRoot)
 } finally {
   for (const target of targets) rmSync(target, { recursive: true, force: true })

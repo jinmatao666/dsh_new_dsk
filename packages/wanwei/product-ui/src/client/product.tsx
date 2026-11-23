@@ -288,7 +288,8 @@ export function apply(ctx: Context): void {
       await invokeDesktop('open_workspace_directory', { workspacePath: path })
     },
     saveFile: async ({ filename, bytes }) => {
-      const path = await invokeDesktop('save_session_log_archive', { fileName: filename, bytes: [...bytes] })
+      const fileName = filename.replace(/^dsh-session-/u, 'wanwei-buddy-session-')
+      const path = await invokeDesktop('save_session_log_archive', { fileName, bytes: [...bytes] })
       if (typeof path !== 'string' || path === '') throw new Error(productText('下载未返回有效的文件路径'))
       try {
         await invokeDesktop('reveal_downloaded_file', { filePath: path })

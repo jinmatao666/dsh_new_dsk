@@ -403,6 +403,7 @@ func WeChatQRPoll(c *gin.Context) {
 			})
 			return
 		}
+		model.RecordSuccessfulLogin(result.User.Id)
 		c.JSON(http.StatusOK, gin.H{
 			"status": "success",
 			"data": gin.H{

@@ -337,6 +337,7 @@ func ProvinceSSOExchange(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	model.RecordSuccessfulLogin(result.User.Id)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
