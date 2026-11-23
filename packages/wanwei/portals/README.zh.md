@@ -102,4 +102,4 @@ kind: "package-reference"
 <a id="dev-note"></a>
 ### 开发备注
 
-针对性 Client 覆盖见 `tests/portals.client.spec.tsx`。
+针对性 Client 覆盖见 `tests/portals.client.spec.tsx`。录制会话分析适配器及其组合覆盖配置位于 `tests/forum-analysis.snapshot.ts` 和 `tests/fixtures/forum-analysis.overlay.yml`。

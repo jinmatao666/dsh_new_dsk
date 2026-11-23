@@ -5,9 +5,9 @@ import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { normalizeSessionSnapshots, formatSystemPromptSnapshot, formatToolSchemasSnapshot } from '@deepseek-ai/dsh-session-snapshot'
-import { launchWebScaffold, webSnapshotMode } from './scaffold.ts'
+import { launchWebScaffold, webSnapshotMode } from '../../../../apps/web/tests/scaffold.ts'
 
-const dir = fileURLToPath(new URL('../../../snapshots/web/forum-analysis', import.meta.url))
+const dir = fileURLToPath(new URL('../../../../snapshots/web/forum-analysis', import.meta.url))
 
 it('replays forum analysis using the desktop-selected model and the recorded article input', async () => {
   let fixture = await readFile(join(dir, 'session.jsonl'), 'utf8')
@@ -19,8 +19,8 @@ it('replays forum analysis using the desktop-selected model and the recorded art
   const scaffold = await launchWebScaffold({
     replayFixture: join(dir, 'session.jsonl'),
     compareReplaySession: false,
-    extraOverlayPath: fileURLToPath(new URL('./forum-analysis.overlay.yml', import.meta.url)),
-    extraInstallAnchors: [fileURLToPath(new URL('../../../packages/bundle/wanwei-desktop/package.json', import.meta.url))],
+    extraOverlayPath: fileURLToPath(new URL('./fixtures/forum-analysis.overlay.yml', import.meta.url)),
+    extraInstallAnchors: [fileURLToPath(new URL('../../../bundle/wanwei-desktop/package.json', import.meta.url))],
   })
   scaffold.ctx.provide('wanweiForumBilling', {
     quote: async () => ({ credits: 1, version: 1, cached: false, action: 'qa' }),

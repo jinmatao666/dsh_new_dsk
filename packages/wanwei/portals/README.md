@@ -102,4 +102,4 @@ Each uncached question starts an independent session with a stable system prefix
 <a id="dev-note"></a>
 ### Dev Note
 
-Focused Client coverage lives in `tests/portals.client.spec.tsx`.
+Focused Client coverage lives in `tests/portals.client.spec.tsx`. The recorded-session analysis adapter and its composition overlay live in `tests/forum-analysis.snapshot.ts` and `tests/fixtures/forum-analysis.overlay.yml`.
