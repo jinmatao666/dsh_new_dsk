@@ -10,7 +10,11 @@ Status: implemented
 
 ## Decision
 
-`FeaturePanel` 增加可选 `headerArt`（绝对 URL）。知识库注册 `/knowledge-covers/hero-banner.png`，顶栏按设计固定 **185px** 高、右对齐，`object-fit: contain`。落盘 PNG 为设计高度图 `plaza-bg-top.png`（1640×185）的 2×（3280×370）；勿用聊天压缩后的 1024×115 预览替换。产品资源位于 `products/wanwei-desktop/assets/web/knowledge-covers/`。广场入口以 js.design 底板 `plaza-entry.png` 铺满，文案叠在图上（标题 `#222`、副标题 `#177cee`），圆形箭头使用设计稿切图 `icon-plaza-launch-arrow.png`，不再用内联 SVG。广场列表与详情使用不透明浅色底板 `#f5f8fc` 与柔光 `plaza-page-bg.png`，卡片为实心白底，避免下层知识库壳透出。侧栏分组计数为居中的 `#237df5` 数字叠在浅蓝圆底 `icon-group-count-bg.png` 上（深浅对齐内容区计数胶囊）。侧栏分组、问答开关、库头图块、PDF 与时钟等小图标使用 js.design PNG 切图（按 2–3× 暂存到 `knowledge-covers/`），以保留设计稿原色；空描述不渲染。基础 `.dsh-knowledge-file-icon` 对 PDF/Word 的 `<img>` 做 30×30 定宽高、`object-fit: contain` 与 `overflow: hidden`，避免预览「问问万维」附件条等非卡片宿主按原生 2–3× 像素画出；内容卡片仍用 36×36 覆盖。侧栏知识库卡片对齐 js.design 知识库画板：白底、`border-radius: 10px`、默认描边 `#dbe4f0`、选中描边 `#2294ff`、标题行（可选一行描述）、右上角 12px 问答开关，以及无分割线、无封面头像的 2×2 元信息，每格「标签 值」同一行（`维护者 值 | 更新时间 值` / `文件数量 值 | 文件大小 值`）；不足 1MB 的文件大小用 KB。侧栏搜索为扁平 36×10px 输入框（描边 `#dbe4f0`、占位符 `#999`）。内容区与广场分页条按设计稿：总数中数字为蓝色、`第 x 页 / y`、`上一页`、页码（当前页白底 `#237df5` 描边与字色）、`下一页`、`跳至 [输入框] 页`（回车跳转，无「跳转」按钮）。内容白卡描边 `#e8edf5`、阴影 `0 3px 4px`。文件夹分区保持透明包裹，使文件马赛克贴近设计网格。问答态保留三栏壳、单列文件列表并隐藏文件分页。
+`FeaturePanel` 接受可选 `headerArt`（绝对 URL）。知识库注册 `/knowledge-covers/hero-banner.png`，顶栏按设计固定 **185px** 高、右对齐，`object-fit: contain`。落盘 PNG 为设计高度图 `plaza-bg-top.png`（1640×185）的 2×（3280×370）；勿用聊天压缩后的 1024×115 预览替换。产品资源位于 `products/wanwei-desktop/assets/web/knowledge-covers/`。广场入口以 js.design 底板 `plaza-entry.png` 铺满，并叠加 locale 归属文案与 `icon-plaza-launch-arrow.png`。知识库图标优先使用已保存的封面；无封面时，个人库使用个人知识库 PNG，其他库使用带地球或书签标识的立体书册 SVG。PDF 与时钟图标保留暂存的设计切图；空描述不渲染。
+
+侧栏分组使用靛蓝、青绿和紫罗兰色的 32px 柔角梯形标签，收起时保留连续底边。文件面板使用对应的低标签，并与侧栏问答图标沿用所属分组配色。侧栏每张卡片保留封面、标题、可展开详情、问答按钮及四项知识库信息。文件内容使用自适应多列卡片与小缩略图，并保留已有元信息和操作；问答态将文件和文件夹切换为单列。选中知识库信息条保持紧凑。广场卡片尺寸一致，封面照片不加滤镜，并保留清晰的状态标识与独立的红色点赞按钮。搜索、排序、文件夹导航、上传、订阅及分页沿用已有事件处理。问答保留既有渲染与行为，包括问答态隐藏文件分页。
+
+基础 `.dsh-knowledge-file-icon` 对 PDF/Word 图片做 30×30 定宽高、`object-fit: contain` 与 `overflow: hidden`，避免预览「问问万维」附件条按原生 2–3× 像素绘制。缩略图文件行使用独立的小文件标识。内容区与广场分页保留页数、数字页码、上一页/下一页按钮与回车提交的页码输入框。
 
 ## Alternatives considered
 

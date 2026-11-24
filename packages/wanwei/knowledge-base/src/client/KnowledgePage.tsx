@@ -1366,7 +1366,7 @@ export function KnowledgePage({ api, networkMode = 'internet' }: { api: Knowledg
                   <PlusIcon />
                 </button>}
             </div>
-            {expanded && (group.rows.length === 0
+            {expanded && <div className="dsh-knowledge-group-body">{group.rows.length === 0
               ? <p className="dsh-knowledge-nav-empty">{productText('暂无知识库')}</p>
               : group.rows.map((item) => {
                 const active = item.id === selectedId && group.key === selectedGroup?.key
@@ -1391,6 +1391,7 @@ export function KnowledgePage({ api, networkMode = 'internet' }: { api: Knowledg
                     aria-current={active ? 'true' : undefined}
                     onClick={() => { setPlazaOpen(false); choose(item.id, group.key) }}>
                     <span className="dsh-knowledge-lib-heading">
+                      <LibraryIcon item={item} groupKey={group.key} />
                       <strong className="dsh-knowledge-nav-name">{item.name}</strong>
                     </span>
                     <span className="dsh-knowledge-lib-card-body">
@@ -1421,10 +1422,10 @@ export function KnowledgePage({ api, networkMode = 'internet' }: { api: Knowledg
                   <button type="button" className="dsh-knowledge-lib-chat" aria-pressed={chatShown}
                     aria-label={`${chatLabel}：${item.name}`} title={chatLabel}
                     onClick={() => { setPlazaOpen(false); toggleChat(item.id, group.key) }}>
-                    <LibChatIcon />
+                    <ChatIcon />
                   </button>
                 </div>
-              }))}
+              })}</div>}
           </div>
         })}
       </div>
@@ -1459,17 +1460,13 @@ export function KnowledgePage({ api, networkMode = 'internet' }: { api: Knowledg
             : <BackIcon />}
         </button>
         <div className="dsh-knowledge-plaza-heading">
-          <span className={plazaDetail === undefined
-            ? 'dsh-knowledge-plaza-heading-icon'
-            : 'dsh-knowledge-plaza-heading-icon detail-cover'} aria-hidden="true">
-            {plazaDetail === undefined
-              ? <img className="dsh-knowledge-plaza-book-art" src={ICON_PLAZA_BOOK} alt="" draggable={false} />
-              : <PlazaCover cover={plazaDetail.cover} />}
-          </span>
+          {plazaDetail !== undefined && <span className="dsh-knowledge-plaza-heading-icon detail-cover" aria-hidden="true">
+            <PlazaCover cover={plazaDetail.cover} />
+          </span>}
           <div>
             <h2>{plazaDetail === undefined ? productText('知识库广场') : plazaDetail.name}</h2>
             {plazaDetail === undefined
-              ? <p>{productText('知识资源中心，发现并订阅专业知识库，让可靠资料随时参与工作')}</p>
+              ? <p>{productText('知识资源中心，发现并订阅专业知识库')}</p>
               : <p>{productText('知识库详情')}</p>}
           </div>
         </div>
@@ -1513,17 +1510,23 @@ export function KnowledgePage({ api, networkMode = 'internet' }: { api: Knowledg
                           <span className="dsh-knowledge-plaza-card-body">
                             <span className="dsh-knowledge-plaza-card-title">
                               <strong>{item.name}</strong>
-                              <span className="dsh-knowledge-plaza-card-subs">
-                                <img className="dsh-knowledge-plaza-subs-art" src={ICON_PLAZA_SUBSCRIBERS}
-                                  alt="" draggable={false} aria-hidden="true" />
-                                <span>{productText('已订阅')}<em>{item.subscriber_count ?? 0}</em>{productText('人')}</span>
-                              </span>
                             </span>
                             <span className="dsh-knowledge-plaza-card-tags">
                               <span className="dsh-knowledge-plaza-category">{productText('授权知识库')}</span>
                               {renderPlazaCategoryName(item.category_name)}
                             </span>
                             {renderPlazaMeta(item, { hideSubscribers: true, cardLayout: true })}
+                            <span className="dsh-knowledge-plaza-card-footer">
+                              <span className="dsh-knowledge-plaza-card-subs">
+                                <span>{productText('已订阅')} <em>{item.subscriber_count ?? 0}</em> {productText('人')}</span>
+                              </span>
+                              <span className="dsh-knowledge-plaza-card-view">
+                                {productText('查看')}
+                                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
+                                  <path d="M4 12 12 4M4 4h8v8" />
+                                </svg>
+                              </span>
+                            </span>
                           </span>
                         </button>
                         {renderLike(item.id)}
@@ -1717,10 +1720,11 @@ export function KnowledgePage({ api, networkMode = 'internet' }: { api: Knowledg
         </div>
       })()}
     </div>}
-    <main className={uploadOpen ? 'dsh-knowledge-content upload-open' : 'dsh-knowledge-content'}>
+    <main className={uploadOpen ? 'dsh-knowledge-content upload-open' : 'dsh-knowledge-content'}
+      data-library-group={selectedGroup?.key}>
       <header className="dsh-knowledge-lib-header">
         <div className="dsh-knowledge-cover" data-library-group={selectedGroup?.key} aria-hidden="true">
-          {selected === undefined ? <BookIcon /> : <LibraryHeaderIcon />}
+          {selected === undefined ? <BookIcon /> : <LibraryIcon item={selected} groupKey={selectedGroup?.key ?? ''} />}
         </div>
         <div className="dsh-knowledge-header-copy">
           <h2>{selected?.name ?? productText('暂无知识库')}</h2>
@@ -1733,103 +1737,105 @@ export function KnowledgePage({ api, networkMode = 'internet' }: { api: Knowledg
             {productText('取消订阅')}
           </button>}
       </header>
-      <div className="dsh-knowledge-toolbar">
-        <strong>{productText('内容')}<span className="dsh-knowledge-toolbar-count">{documents.length}</span></strong>
-        <div className="dsh-knowledge-toolbar-actions">
-          <label className="dsh-knowledge-content-search">
-            <SearchIcon />
-            <input type="search" value={query} onChange={event => setQuery(event.target.value)}
-              aria-label={productText('搜索文件名称')} placeholder={productText('搜索文件名称')} />
-          </label>
-          <button type="button" className="dsh-knowledge-sort" aria-label={productText('按上传时间排序')} aria-pressed={newestFirst}
-            onClick={() => setNewestFirst(value => !value)}>
-            <SortIcon /><span>{newestFirst ? productText('最新上传') : productText('最早上传')}</span>
-          </button>
-          {canUpload && <div className="dsh-knowledge-upload" ref={uploadRoot}>
-            <button type="button" aria-label={uploading ? productText('正在加载…') : productText('上传文档')}
-              aria-expanded={uploadOpen} aria-haspopup="menu" aria-busy={uploading}
-              disabled={uploading} onClick={() => setUploadOpen(value => !value)}>
-              {uploading ? <span className="dsh-knowledge-upload-busy" aria-hidden="true" /> : <UploadIcon />}
+      <section className="dsh-knowledge-file-panel">
+        <div className="dsh-knowledge-toolbar">
+          <strong>{productText('内容')}<span className="dsh-knowledge-toolbar-count">{documents.length}</span></strong>
+          <div className="dsh-knowledge-toolbar-actions">
+            <label className="dsh-knowledge-content-search">
+              <SearchIcon />
+              <input type="search" value={query} onChange={event => setQuery(event.target.value)}
+                aria-label={productText('搜索文件名称')} placeholder={productText('搜索文件名称')} />
+            </label>
+            <button type="button" className="dsh-knowledge-sort" aria-label={productText('按上传时间排序')} aria-pressed={newestFirst}
+              onClick={() => setNewestFirst(value => !value)}>
+              <SortIcon /><span>{newestFirst ? productText('最新上传') : productText('最早上传')}</span>
             </button>
-            <input ref={fileInput} type="file" hidden multiple onChange={event => takeFiles(event.currentTarget)} />
-            <input ref={folderInput} type="file" hidden multiple onChange={event => takeFiles(event.currentTarget)} />
-            {uploadOpen && <div className="dsh-knowledge-upload-menu" role="menu">
-              <button type="button" role="menuitem" onClick={() => { fileInput.current?.click(); setUploadOpen(false) }}><FileMenuIcon />{productText('本地文件')}</button>
-              <button type="button" role="menuitem" onClick={() => { folderInput.current?.click(); setUploadOpen(false) }}><FolderIcon />{productText('本地文件夹')}</button>
-              <button type="button" role="menuitem" onClick={openFolderDialog}><FolderIcon />{productText('新建文件夹')}</button>
-              <button type="button" role="menuitem" onClick={openWebLinkDialog}><LinkIcon />{productText('网页链接')}</button>
-              <button type="button" role="menuitem" onClick={openRecordingPanel}><MicIcon />{productText('录音纪要')}</button>
+            {canUpload && <div className="dsh-knowledge-upload" ref={uploadRoot}>
+              <button type="button" aria-label={uploading ? productText('正在加载…') : productText('上传文档')}
+                aria-expanded={uploadOpen} aria-haspopup="menu" aria-busy={uploading}
+                disabled={uploading} onClick={() => setUploadOpen(value => !value)}>
+                {uploading ? <span className="dsh-knowledge-upload-busy" aria-hidden="true" /> : <UploadIcon />}
+              </button>
+              <input ref={fileInput} type="file" hidden multiple onChange={event => takeFiles(event.currentTarget)} />
+              <input ref={folderInput} type="file" hidden multiple onChange={event => takeFiles(event.currentTarget)} />
+              {uploadOpen && <div className="dsh-knowledge-upload-menu" role="menu">
+                <button type="button" role="menuitem" onClick={() => { fileInput.current?.click(); setUploadOpen(false) }}><FileMenuIcon />{productText('本地文件')}</button>
+                <button type="button" role="menuitem" onClick={() => { folderInput.current?.click(); setUploadOpen(false) }}><FolderIcon />{productText('本地文件夹')}</button>
+                <button type="button" role="menuitem" onClick={openFolderDialog}><FolderIcon />{productText('新建文件夹')}</button>
+                <button type="button" role="menuitem" onClick={openWebLinkDialog}><LinkIcon />{productText('网页链接')}</button>
+                <button type="button" role="menuitem" onClick={openRecordingPanel}><MicIcon />{productText('录音纪要')}</button>
+              </div>}
             </div>}
-          </div>}
-        </div>
-      </div>
-      {currentFolder !== '' && <nav className="dsh-knowledge-breadcrumbs" aria-label={productText('文件路径')}>
-        <button type="button" className="dsh-knowledge-folder-back" aria-label={productText('返回上级')}
-          onClick={() => toggleFolder(currentFolder.split('/').slice(0, -1).join('/'))}><BackIcon /></button>
-        <button type="button" onClick={() => toggleFolder('')}>{productText('全部文件')}</button>
-        {currentFolder.split('/').map((name, index, parts) => <span key={parts.slice(0, index + 1).join('/')}>
-          <ChevronIcon /><button type="button" aria-current={index === parts.length - 1 ? 'location' : undefined}
-            onClick={() => toggleFolder(parts.slice(0, index + 1).join('/'))}>{name}</button>
-        </span>)}
-      </nav>}
-      <div className="dsh-knowledge-list-pane" onContextMenu={(event) => {
-        if (event.defaultPrevented || !canUpload) return
-        if (event.target instanceof Element && event.target.closest('button, a, input, textarea, [role="menu"]')) return
-        event.preventDefault()
-        setUploadOpen(false)
-        setSelectedDocumentIds([])
-        setContentMenu({ kind: 'background',
-          x: Math.max(8, Math.min(event.clientX, window.innerWidth - 180)),
-          y: Math.max(8, Math.min(event.clientY, window.innerHeight - 56)),
-        })
-      }}>
-        {loading ? <DocumentListLoading /> : selectedId === undefined || contentTree.length === 0
-          ? <p className="dsh-knowledge-empty">{searching ? productText('未找到匹配的文件') : productText('暂无内容')}</p>
-          : <div className="dsh-knowledge-directory" key={selectedId}>
-            {renderContentTree(pagedTree, {
-              selectedDocumentIds,
-              onToggleFolder: toggleFolder,
-              onToggleDocumentSelection: toggleDocumentSelection,
-              onOpenDocument: openDocument,
-              onPrefetchDocument: prefetchDocument,
-              libraryId: selectedId,
-              onOpenMenu: openDocumentMenu,
-            })}</div>}
-      </div>
-      {!chatOpen && !loading && contentTree.length > 0 &&
-        <nav className="dsh-knowledge-pager" aria-label={productText('文件分页')}>
-          <div className="dsh-knowledge-pager-controls">
-            <span className="dsh-knowledge-page-count" aria-live="polite">
-              {productText('第')} {currentPage}{productText(' 页')} / {pageCount}
-            </span>
-            <button type="button" disabled={currentPage <= 1}
-              onClick={() => setDocumentPage(currentPage - 1)}>{productText('上一页')}</button>
-            <span className="dsh-knowledge-page-choices" aria-label={productText('选择页码')}>
-              {visiblePageNumbers(currentPage, pageCount).map((value, index) => value === 'gap'
-                ? <span className="dsh-knowledge-page-gap" key={`gap-${index}`} aria-hidden="true">…</span>
-                : <button className="dsh-knowledge-page-number" type="button" key={value}
-                  aria-label={`${productText('第')} ${value}${productText(' 页')}`}
-                  aria-current={value === currentPage ? 'page' : undefined}
-                  disabled={value === currentPage}
-                  onClick={() => setDocumentPage(value)}>{value}</button>)}
-            </span>
-            <button type="button" disabled={currentPage >= pageCount}
-              onClick={() => setDocumentPage(currentPage + 1)}>{productText('下一页')}</button>
-            <form className="dsh-knowledge-page-jump" onSubmit={(event) => {
-              event.preventDefault()
-              const target = Number(pageJump)
-              if (/^[1-9]\d*$/.test(pageJump) && Number.isSafeInteger(target) && target <= pageCount) {
-                setDocumentPage(target)
-                setPageJump('')
-              }
-            }}>
-              <span>{productText('跳至')}</span>
-              <input type="text" inputMode="numeric" aria-label={productText('跳转页码')}
-                value={pageJump} onChange={event => setPageJump(event.target.value)} />
-              <span>{productText('页')}</span>
-            </form>
           </div>
+        </div>
+        {currentFolder !== '' && <nav className="dsh-knowledge-breadcrumbs" aria-label={productText('文件路径')}>
+          <button type="button" className="dsh-knowledge-folder-back" aria-label={productText('返回上级')}
+            onClick={() => toggleFolder(currentFolder.split('/').slice(0, -1).join('/'))}><BackIcon /></button>
+          <button type="button" onClick={() => toggleFolder('')}>{productText('全部文件')}</button>
+          {currentFolder.split('/').map((name, index, parts) => <span key={parts.slice(0, index + 1).join('/')}>
+            <ChevronIcon /><button type="button" aria-current={index === parts.length - 1 ? 'location' : undefined}
+              onClick={() => toggleFolder(parts.slice(0, index + 1).join('/'))}>{name}</button>
+          </span>)}
         </nav>}
+        <div className="dsh-knowledge-list-pane" onContextMenu={(event) => {
+          if (event.defaultPrevented || !canUpload) return
+          if (event.target instanceof Element && event.target.closest('button, a, input, textarea, [role="menu"]')) return
+          event.preventDefault()
+          setUploadOpen(false)
+          setSelectedDocumentIds([])
+          setContentMenu({ kind: 'background',
+            x: Math.max(8, Math.min(event.clientX, window.innerWidth - 180)),
+            y: Math.max(8, Math.min(event.clientY, window.innerHeight - 56)),
+          })
+        }}>
+          {loading ? <DocumentListLoading /> : selectedId === undefined || contentTree.length === 0
+            ? <p className="dsh-knowledge-empty">{searching ? productText('未找到匹配的文件') : productText('暂无内容')}</p>
+            : <div className="dsh-knowledge-directory" key={selectedId}>
+              {renderContentTree(pagedTree, {
+                selectedDocumentIds,
+                onToggleFolder: toggleFolder,
+                onToggleDocumentSelection: toggleDocumentSelection,
+                onOpenDocument: openDocument,
+                onPrefetchDocument: prefetchDocument,
+                libraryId: selectedId,
+                onOpenMenu: openDocumentMenu,
+              })}</div>}
+        </div>
+        {!chatOpen && !loading && contentTree.length > 0 &&
+          <nav className="dsh-knowledge-pager" aria-label={productText('文件分页')}>
+            <div className="dsh-knowledge-pager-controls">
+              <span className="dsh-knowledge-page-count" aria-live="polite">
+                {productText('第')} {currentPage}{productText(' 页')} / {pageCount}
+              </span>
+              <button type="button" disabled={currentPage <= 1}
+                onClick={() => setDocumentPage(currentPage - 1)}>{productText('上一页')}</button>
+              <span className="dsh-knowledge-page-choices" aria-label={productText('选择页码')}>
+                {visiblePageNumbers(currentPage, pageCount).map((value, index) => value === 'gap'
+                  ? <span className="dsh-knowledge-page-gap" key={`gap-${index}`} aria-hidden="true">…</span>
+                  : <button className="dsh-knowledge-page-number" type="button" key={value}
+                    aria-label={`${productText('第')} ${value}${productText(' 页')}`}
+                    aria-current={value === currentPage ? 'page' : undefined}
+                    disabled={value === currentPage}
+                    onClick={() => setDocumentPage(value)}>{value}</button>)}
+              </span>
+              <button type="button" disabled={currentPage >= pageCount}
+                onClick={() => setDocumentPage(currentPage + 1)}>{productText('下一页')}</button>
+              <form className="dsh-knowledge-page-jump" onSubmit={(event) => {
+                event.preventDefault()
+                const target = Number(pageJump)
+                if (/^[1-9]\d*$/.test(pageJump) && Number.isSafeInteger(target) && target <= pageCount) {
+                  setDocumentPage(target)
+                  setPageJump('')
+                }
+              }}>
+                <span>{productText('跳至')}</span>
+                <input type="text" inputMode="numeric" aria-label={productText('跳转页码')}
+                  value={pageJump} onChange={event => setPageJump(event.target.value)} />
+                <span>{productText('页')}</span>
+              </form>
+            </div>
+          </nav>}
+      </section>
     </main>
     {chatOpen && <section className="dsh-knowledge-chat" aria-label={productText('基于知识库问答')}>
       {messages.length > 0 && <div className="dsh-knowledge-chat-head">
@@ -2299,18 +2305,37 @@ const PLAZA_ENTRY_ART = '/knowledge-covers/plaza-entry.png'
 /** Plaza launch — circular chevron cutout from the design. */
 const ICON_PLAZA_LAUNCH_ARROW = '/knowledge-covers/icon-plaza-launch-arrow.png'
 
-/** js.design cutouts staged under `knowledge-covers/` (served ~3× for retina). */
-const ICON_GROUP_PERSONAL = '/knowledge-covers/icon-group-personal.png'
-const ICON_GROUP_PUBLIC = '/knowledge-covers/icon-group-public.png'
-const ICON_GROUP_SUBSCRIPTION = '/knowledge-covers/icon-group-subscription.png'
-/** Sidebar Q&A toggle — ~48px PNG for 12 CSS px. */
-const ICON_LIB_CHAT = '/knowledge-covers/icon-lib-chat.png'
 /** Composer send (ready): design blue circle + white paper plane. */
 const ICON_SEND_READY = '/knowledge-covers/icon-send-ready.png'
 /** Composer send (idle): white paper-plane glyph on the gray button. */
 const ICON_SEND_PLANE = '/knowledge-covers/icon-send-plane.png'
 const ICON_CLOCK = '/knowledge-covers/icon-clock.png'
 const ICON_LIBRARY_HEADER = '/knowledge-covers/icon-library-header.png'
+
+/** Stored library covers take precedence over the personal and shared collection artwork. */
+function LibraryIcon({ item, groupKey }: { item: KnowledgeBaseItem; groupKey: string }) {
+  return <span className="dsh-knowledge-library-art" aria-hidden="true">
+    {item.cover
+      ? <img src={item.cover} className="cover" alt="" draggable={false} />
+      : groupKey === 'personal'
+        ? <img src={ICON_LIBRARY_HEADER} alt="" draggable={false} />
+        : <svg viewBox="0 0 40 40" fill="none">
+          <rect x="7" y="6" width="29" height="32" rx="6" fill="currentColor" fillOpacity=".14" />
+          <path d="M12 3h18a4 4 0 0 1 4 4v27H12a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5Z" fill="#fff" stroke="currentColor" strokeOpacity=".25" />
+          <path d="M10 5h19a4 4 0 0 1 4 4v22H10a4 4 0 0 0 0 8H9a5 5 0 0 1-5-5V11a6 6 0 0 1 6-6Z" fill="currentColor" />
+          <path d="M10 5h19a4 4 0 0 1 4 4v9c-7-5-18-4-29 1v-8a6 6 0 0 1 6-6Z" fill="#fff" fillOpacity=".13" />
+          <path d="M9 8v20" stroke="#fff" strokeOpacity=".34" strokeWidth="1.2" strokeLinecap="round" />
+          {groupKey === 'subscription'
+            ? <path d="M16 12h10v13l-5-3-5 3V12Z" fill="#fff" fillOpacity=".94" />
+            : <g stroke="#fff" strokeWidth="1.25" strokeLinecap="round">
+              <circle cx="21" cy="18" r="6.5" />
+              <path d="M14.5 18h13M21 11.5c4 4 4 9 0 13-4-4-4-9 0-13Z" />
+            </g>}
+          <path d="M11 32h21v5H11a2.5 2.5 0 0 1 0-5Z" fill="#fff" />
+          <path d="M12 34.5h17" stroke="currentColor" strokeOpacity=".3" strokeWidth="1.1" strokeLinecap="round" />
+        </svg>}
+  </span>
+}
 /** Content-card PDF mark — yellow/orange book on dark tile. */
 const ICON_FILE_PDF = '/knowledge-covers/icon-file-pdf.png'
 /** Content-card Word mark — blue book on dark tile. */
@@ -2320,20 +2345,22 @@ const ICON_FILE_WEB = '/knowledge-covers/icon-file-web.png'
 const ICON_UPLOAD = '/knowledge-covers/icon-upload.png'
 /** Content toolbar — upload-time sort (down / up arrows). */
 const ICON_SORT = '/knowledge-covers/icon-sort.png'
-/** Plaza list header — open-book mark from js.design. */
-const ICON_PLAZA_BOOK = '/knowledge-covers/icon-plaza-book.png'
 /** Plaza list header — back chevron from js.design. */
 const ICON_PLAZA_BACK = '/knowledge-covers/icon-plaza-back.png'
 /** Plaza card — person glyph next to subscriber count. */
 const ICON_PLAZA_SUBSCRIBERS = '/knowledge-covers/icon-plaza-subscribers.png'
 
-/** Sidebar group mark for a nav key — design PNG cutouts.
+/** Sidebar group mark uses a folder, globe, or bookmark at the displayed size.
  * @param key - `personal` / `public` / `subscription`, or a future group id.
  */
 function groupIcon(key: string): ReactNode {
-  if (key === 'personal') return <img src={ICON_GROUP_PERSONAL} alt="" draggable={false} />
-  if (key === 'subscription') return <img src={ICON_GROUP_SUBSCRIPTION} alt="" draggable={false} />
-  return <img src={ICON_GROUP_PUBLIC} alt="" draggable={false} />
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    {key === 'personal'
+      ? <path d="M4 5h6l2 3h8v11H4zM4 12h5m6 3h5m-2.5-2.5v5" />
+      : key === 'subscription'
+        ? <path d="M7 4h10v16l-5-3-5 3z" />
+        : <><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c5 5 5 12 0 17-5-5-5-12 0-17z" /></>}
+  </svg>
 }
 
 /** Product-staged natural-resources cover for plaza cards and detail. */
@@ -2983,16 +3010,6 @@ async function loadMinutesViewer(
     ...(textDoc !== undefined ? { askDocumentId: textDoc.id } : {}),
     ...(audioUrl === undefined ? {} : { audioUrl }),
   }
-}
-
-/** Library-card Q&A toggle — design PNG cutout. */
-function LibChatIcon() {
-  return <img src={ICON_LIB_CHAT} alt="" draggable={false} />
-}
-
-/** Selected-library header mark — design dark tile + blue book. */
-function LibraryHeaderIcon() {
-  return <img src={ICON_LIBRARY_HEADER} alt="" draggable={false} />
 }
 
 /** Content-card timestamp clock — design cutout. */

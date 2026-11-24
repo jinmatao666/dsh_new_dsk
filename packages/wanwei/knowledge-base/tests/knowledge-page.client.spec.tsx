@@ -382,10 +382,12 @@ it('shows an uploaded cover on the plaza card and detail', async () => {
   expect(plazaLaunch.querySelector('.dsh-knowledge-plaza-launch-bg')?.getAttribute('src'))
     .toBe('/knowledge-covers/plaza-entry.png')
   fireEvent.click(plazaLaunch)
-  expect(screen.getByText('知识资源中心，发现并订阅专业知识库，让可靠资料随时参与工作')).toBeTruthy()
+  expect(screen.getByText('知识资源中心，发现并订阅专业知识库')).toBeTruthy()
   const card = await screen.findByRole('button', { name: /地方法规知识库/ })
   expect(card.querySelector('img')?.getAttribute('src')).toBe(cover)
-  fireEvent.click(card)
+  const footer = card.querySelector('.dsh-knowledge-plaza-card-footer') as HTMLElement
+  expect(within(footer).getByText('已订阅', { exact: false })).toBeTruthy()
+  fireEvent.click(within(footer).getByText('查看'))
   expect(await screen.findByRole('button', { name: '订阅' })).toBeTruthy()
   expect(document.querySelector('.dsh-knowledge-plaza-cover.large img')?.getAttribute('src')).toBe(cover)
 })
@@ -486,7 +488,7 @@ it('hides auth category names from the sidebar and discovers them only in the pl
   expect(card.textContent).toContain('文件大小')
   expect(card.textContent).toContain('2.4MB')
   expect(card.textContent).toContain('已订阅')
-  expect(card.textContent).toContain('8人')
+  expect(card.querySelector('.dsh-knowledge-plaza-card-footer')?.textContent).toContain('8 人')
   const plazaMeta = card.querySelector('.dsh-knowledge-plaza-meta.card-layout') as HTMLElement
   expect(plazaMeta).toBeTruthy()
   expect(plazaMeta.querySelectorAll('.dsh-knowledge-plaza-meta-col')).toHaveLength(2)
@@ -573,7 +575,7 @@ it('keeps approved libraries on the plaza with Q&A and openable files', async ()
   const plaza = await screen.findByRole('region', { name: '知识库广场' })
   const card = within(plaza).getByRole('button', { name: /地方法规知识库/ })
   expect(card.textContent).toContain('已订阅')
-  expect(card.textContent).toContain('8人')
+  expect(card.querySelector('.dsh-knowledge-plaza-card-footer')?.textContent).toContain('8 人')
   fireEvent.click(card)
   expect(await within(plaza).findByText('知识库详情')).toBeTruthy()
   const detail = plaza.querySelector('.dsh-knowledge-plaza-detail.with-chat') as HTMLElement
@@ -821,7 +823,7 @@ it('navigates uploaded directories with breadcrumbs and returns to the parent', 
   expect(screen.queryByText('说明.pdf')).toBeNull()
 })
 
-it('shows plaza-style stats on sidebar cards and renders content as cards', async () => {
+it('shows library artwork and stats while preserving file and folder navigation', async () => {
   const service = api()
   service.list = vi.fn(async () => [
     {
@@ -829,7 +831,8 @@ it('shows plaza-style stats on sidebar cards and renders content as cards', asyn
       owner_username: '小王', document_count: 9, document_bytes: 2_516_582, subscriber_count: 3,
       updated_at: '2026-10-12T08:00:00Z',
     },
-    { id: 2, name: '第二个库', description: '个人', kind: 'personal' as const, owner_user_id: 7, document_count: 4 },
+    { id: 2, name: '第二个库', description: '个人', kind: 'personal' as const, owner_user_id: 7, document_count: 4,
+      cover: '/knowledge-covers/personal-cover.png' },
   ])
   service.documents = vi.fn(async () => [
     { id: 'doc-1', name: '资料/说明.pdf', location: '资料/说明.pdf', size: 2048, run: 'DONE', progress: 1 },
@@ -852,12 +855,14 @@ it('shows plaza-style stats on sidebar cards and renders content as cards', asyn
   // The loaded document list replaces the list's file count and size for the selected library.
   expect(card.textContent).toContain('2个')
   expect(card.textContent).not.toContain('3人')
-  expect(card.querySelector('.dsh-knowledge-lib-card-main img')).toBeNull()
-  expect(card.querySelector('.dsh-knowledge-lib-chat img')?.getAttribute('src'))
-    .toBe('/knowledge-covers/icon-lib-chat.png')
+  expect(card.querySelector('.dsh-knowledge-library-art img')?.getAttribute('src'))
+    .toBe('/knowledge-covers/icon-library-header.png')
+  expect(card.querySelector('.dsh-knowledge-lib-chat svg')?.getAttribute('stroke')).toBe('currentColor')
   const second = within(personal).getByText('第二个库').closest('.dsh-knowledge-lib-card') as HTMLElement
   expect(second.textContent).toContain('4个')
   expect(second.textContent).toContain('未知作者')
+  expect(second.querySelector('.dsh-knowledge-library-art img.cover')?.getAttribute('src'))
+    .toBe('/knowledge-covers/personal-cover.png')
   const file = screen.getByText('根目录.txt').closest('button') as HTMLElement
   expect(file.className).toContain('dsh-knowledge-card')
   expect(within(file).getByText('文件')).toBeTruthy()
@@ -867,6 +872,9 @@ it('shows plaza-style stats on sidebar cards and renders content as cards', asyn
   fireEvent.click(folder)
   expect(screen.getByText('说明.pdf')).toBeTruthy()
   expect(screen.queryByText('根目录.txt')).toBeNull()
+  fireEvent.click(within(second).getByRole('button', { name: '第二个库' }))
+  expect(document.querySelector('.dsh-knowledge-lib-header .dsh-knowledge-library-art img.cover')?.getAttribute('src'))
+    .toBe('/knowledge-covers/personal-cover.png')
 })
 
 it('shows deployment maintainers, collapsible descriptions, two tags and subscription statistics', async () => {
