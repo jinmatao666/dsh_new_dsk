@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { API, copy } from '../../helpers';
+
 import { fetchManagedRoles } from '../../helpers/roles';
 import CustomSelect from '../../components/CustomSelect';
 import RolePermissions from '../../components/RolePermissions';
@@ -1692,6 +1693,13 @@ export function ModelConfigPage() {
   );
 }
 
+function formatUserCredits(quota) {
+  if (quota == null) return '—';
+  const configured = Number(localStorage.getItem('quota_per_unit'));
+  const quotaPerUnit = Number.isFinite(configured) && configured > 0 ? configured : 1000;
+  return (Number(quota) / quotaPerUnit).toLocaleString('zh-CN', { maximumFractionDigits: 6 });
+}
+
 export function UsersPage() {
   const dialog = useDialog();
   const [tab, setTab] = useState('users');
@@ -1971,8 +1979,8 @@ export function UsersPage() {
                 <th>ID / 用户</th>
                 <th>账户类型</th>
                 <th>角色</th>
-                <th>剩余额度</th>
-                <th>已用额度</th>
+                <th>剩余积分</th>
+                <th>已用积分</th>
                 <th>调用次数</th>
                 <th>状态</th>
                 <th>操作</th>
@@ -2005,12 +2013,11 @@ export function UsersPage() {
                       : '普通用户'}
                   </td>
                   <td>
-                    {u.subscription_quota !== undefined
-                      ? Number(u.subscription_quota) +
-                        Number(u.timed_quota_total || 0)
-                      : u.quota ?? '—'}
+                    {formatUserCredits(u.subscription_quota !== undefined
+                      ? Number(u.subscription_quota) + Number(u.timed_quota_total || 0)
+                      : u.quota)}
                   </td>
-                  <td>{u.used_quota ?? '—'}</td>
+                  <td>{formatUserCredits(u.used_quota)}</td>
                   <td>{u.request_count ?? 0}</td>
                   <td>
                     <span className={u.status === 1 ? 'tag success' : 'tag'}>
