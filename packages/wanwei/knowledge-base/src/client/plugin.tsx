@@ -16,6 +16,7 @@ import {
 } from './KnowledgePage.tsx'
 import { KnowledgeComposerToggle } from './KnowledgeComposerToggle.tsx'
 import { ChatSourcePreview, type OpenChatSource } from './ChatSourcePreview.tsx'
+import { chatSourceDefinition } from './chat-presentation.ts'
 import { productText } from './locales/product.ts'
 import { createRetrievalSelection, type RetrievalSelection } from './retrieval-selection.ts'
 import { uploadKnowledgeFile } from './upload.ts'
@@ -375,6 +376,13 @@ export function apply(ctx: Context): void {
     if (openSource === undefined) pendingSource = args
     else openSource(...args)
   }
+  ctx.inject(['uiConversation'], (scope) => {
+    scope.effect(() => scope.uiConversation.events.register(chatSourceDefinition((original, name) => {
+      requestSource(new CustomEvent('wanwei:open-knowledge-source', {
+        detail: { original, document: name, excerpt: '' },
+      }))
+    })))
+  })
   const clickSource = (event: MouseEvent) => {
     if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
     const anchor = event.target instanceof Element ? event.target.closest('a') : null

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { MessageText } from '@deepseek-ai/dsh-client-ui-primitives'
 import { JsonBlock, MarkdownText } from './markdown-test-components.tsx'
 import { cjkFriendlyStrong } from '../src/markdown/cjkFriendlyStrong.ts'
@@ -17,20 +17,6 @@ describe('MessageText', () => {
 })
 
 describe('MarkdownText', () => {
-  it('opens knowledge originals with only the file identity parameters', () => {
-    const original = '/api/desktop-knowledge-file?id=3&documentId=policy'
-    render(<MarkdownText text={`[制度.pdf](${original}) [其他](${original}&action=download)`} />)
-    const link = screen.getByRole('link', { name: '制度.pdf' })
-    expect(link.getAttribute('href')).toBe(original)
-    const opened = vi.fn()
-    window.addEventListener('wanwei:open-knowledge-source', opened, { once: true })
-    fireEvent.click(link)
-    expect(opened).toHaveBeenCalledWith(expect.objectContaining({
-      detail: { original, document: '制度.pdf', excerpt: '' },
-    }))
-    expect(screen.getByText('其他').closest('a')).toBeNull()
-  })
-
   it('opens known non-web destinations without enabling arbitrary URL protocols', () => {
     const opened: string[] = []
     const fileMentions = {

@@ -11,15 +11,19 @@ export const AssistantNodeView = memo(function AssistantNodeView({
     ? node.location.turn
     : undefined
   const tail = useTurnData('turn-tail')
-  const sources = useTurnData('knowledge-sources')
+  const presentation = useTurnData('assistant-markdown')
   const owner = useMemo<TurnTailOwnerProps | undefined>(() => {
     if (turn?.status !== 'closed' || data.finalNode === undefined) return undefined
     if (tail?.closing?.finalNode.seq !== data.finalNode.seq) return undefined
     return { turn, seq: data.finalNode.seq, openFile }
   }, [data.finalNode, openFile, tail, turn])
   const mentions = useMemo(
-    () => owner === undefined ? undefined : fileMentions(owner),
-    [fileMentions, owner],
+    () => {
+      const base = owner === undefined ? undefined : fileMentions(owner)
+      const extra = presentation?.fileMentions
+      return extra === undefined ? base : { resolve: (value: string) => extra.resolve(value) ?? base?.resolve(value) }
+    },
+    [fileMentions, owner, presentation],
   )
   const reasoningHidden = turnProcess !== undefined
     && turnProcess.foldable
@@ -36,7 +40,7 @@ export const AssistantNodeView = memo(function AssistantNodeView({
       reasoningHidden={reasoningHidden}
       revealProcess={revealProcess}
       mentions={mentions}
-      knowledgeSources={sources}
+      transformText={presentation?.transformText}
       t={t}
     />
   )

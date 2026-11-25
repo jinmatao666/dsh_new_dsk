@@ -73,3 +73,5 @@ None.
 Reasoning expands while streaming without reply content and collapses when the first nonempty reply block appears. This only controls reasoning blocks; streaming and completed body content remains independently rendered. Manual expansion after that transition survives further body tokens. Returning to Chat or switching sessions resets process expansion, so restored answers show their body with reasoning collapsed.
 
 Sent skill references use the display name captured by the skill injection in the same turn; the model-facing slash token remains unchanged.
+
+Conversation contributions may publish `AssistantMarkdownPresentation` as turn data under `assistant-markdown`. Its optional text transform runs before Markdown parsing, and its file resolver composes with the completed-turn file resolver. Unresolved destinations retain the Markdown URL allowlist. These callbacks affect presentation only and leave logged message text intact.

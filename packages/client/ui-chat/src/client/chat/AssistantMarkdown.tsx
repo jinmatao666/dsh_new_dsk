@@ -6,7 +6,6 @@ import type { ChatNodeOwnerProps, ChatViewSlotProps } from '../contract/slots.ts
 import type { AssistantBlock } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { hasAssistantReplyContent } from '../contract/assistant-content.ts'
 import { markdownLabels } from '../markdown-labels.ts'
-import type { knowledgeSources } from '../contract/knowledge-sources.ts'
 import { ReasoningRow } from './ReasoningRow.tsx'
 import { useSearchableHidden } from './searchable-hidden.ts'
 import css from './AssistantMarkdown.module.css'
@@ -24,7 +23,8 @@ export interface AssistantMarkdownProps {
   revealProcess?: (() => void) | undefined
   /** Resolved prose file mentions for this Assistant's closing turn. */
   mentions?: MarkdownFileMentions | undefined
-  knowledgeSources?: Readonly<NonNullable<ReturnType<typeof knowledgeSources>>> | undefined
+  /** Optional turn-owned transformation applied to assistant prose. */
+  transformText?: ((text: string) => string) | undefined
   /** The owning view's locale seat, passed down as a plain prop. */
   t: ChatViewSlotProps['t']
 }
@@ -32,22 +32,11 @@ export interface AssistantMarkdownProps {
 /** Reasoning block as the Think variant summary row (figma 39:28304). */
 export const AssistantMarkdown = memo(function AssistantMarkdown({
   blocks, streaming, interrupted, renderMessageImages,
-  reasoningHidden = false, revealProcess, mentions, knowledgeSources, t,
+  reasoningHidden = false, revealProcess, mentions, transformText, t,
 }: AssistantMarkdownProps) {
   // Stable per locale revision (t identity changes on switch): a fresh object
   // per render would rebuild MarkdownText's component table every chunk.
   const labels = useMemo(() => markdownLabels(t), [t])
-  const sourceLinks = useMemo(() => {
-    const links = new Map<string, string | undefined>()
-    for (const source of knowledgeSources ?? []) {
-      if (links.has(source.document) && links.get(source.document) !== source.original) {
-        links.set(source.document, undefined)
-      } else {
-        links.set(source.document, source.original)
-      }
-    }
-    return links
-  }, [knowledgeSources])
   const reasoningRunning = streaming && !hasAssistantReplyContent(blocks)
   // Tool-call heads render as tool rows in the chat view's grouping pass, so
   // a node that is only those heads (or empty) would paint an empty root
@@ -65,11 +54,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
         rendered.push(
           <MarkdownText
             key={i}
-            text={sourceLinks.size === 0 ? block.text : block.text.replace(/(?<![\[\x60])《([^《》\r\n]+)》(?![\]\x60])/g,
-              (label, filename: string) => {
-                const href = sourceLinks.get(filename)
-                return href === undefined || /[\[\]\\]/.test(label) ? label : `[${label}](${href})`
-              })}
+            text={transformText?.(block.text) ?? block.text}
             streaming={streaming}
             labels={labels}
             fileMentions={mentions}

@@ -21,6 +21,21 @@ import type { TranscriptViewMode } from '../../chat-settings.ts'
 /** Selector hook over the current Conversation binding's Chat target. */
 export type UseChat = SnapshotSelectorHook<ChatSnapshot>
 
+/** Turn-owned prose customization derived by a conversation contribution. */
+export interface AssistantMarkdownPresentation {
+  /** Transform assistant prose before Markdown parsing. */
+  transformText?: ((text: string) => string) | undefined
+  /** Resolve owned non-web destinations into file openers. */
+  fileMentions?: MarkdownFileMentions | undefined
+}
+
+declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
+  interface ConversationTurnDataMap {
+    /** Optional prose presentation published for the current turn. */
+    'assistant-markdown': AssistantMarkdownPresentation
+  }
+}
+
 /** Owner currency of the completed-Turn extension chain. */
 export interface TurnTailOwnerProps {
   turn: TurnLocation

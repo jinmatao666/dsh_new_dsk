@@ -9,7 +9,6 @@ import { JsonBlock } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import type { ContextMessageNode } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { KnownContextForm } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { knowledgeSources } from '../contract/knowledge-sources.ts'
 import css from './ContextBody.module.css'
 
 /** Model-facing text stays bounded at the disclosure, not at the producer. */
@@ -419,29 +418,11 @@ export function SnapshotBody({ content, source, t }: {
  * @param props - Durable content, its source, and the locale seat.
  * @returns The notice context body.
  */
-export function NoticeBody({ content, source, t }: {
+export function NoticeBody({ content, t }: {
   content: ContextMessageNode['content']
   source: unknown
   t: Translate
 }): ReactNode {
-  if (asRecord(source)?.plugin === 'wanwei-knowledge-retrieval') {
-    const first = content[0]
-    if (first?.type === 'text' && typeof first.text === 'string') {
-      const sources = knowledgeSources(first.text)
-      if (sources !== null) {
-        return <ol>{sources.map(({ document, original, excerpt }, index) => (
-          <li key={index}>
-            {original === undefined
-              ? <strong>{document}</strong>
-              : <button type="button" className={css.knowledgeSource} onClick={() => window.dispatchEvent(new CustomEvent('wanwei:open-knowledge-source', {
-                detail: { original, document, excerpt: '' },
-              }))}><strong>{document}</strong></button>}
-            <blockquote style={{ whiteSpace: 'pre-wrap' }}>{excerpt}</blockquote>
-          </li>
-        ))}</ol>
-      }
-    }
-  }
   return <ModelFacingContent content={content} t={t} />
 }
 

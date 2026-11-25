@@ -5,6 +5,8 @@
   "references": [
     { "path": "../../../vendor/cordis" },
     { "path": "../oneapi-auth/tsconfig.client.json" },
+    { "path": "../../client/ui-chat" },
+    { "path": "../../core/session" },
     { "path": "../../client/ui-conversation" },
     { "path": "../../client/ui-renderer" },
     { "path": "../../client/ui-sidebar" },

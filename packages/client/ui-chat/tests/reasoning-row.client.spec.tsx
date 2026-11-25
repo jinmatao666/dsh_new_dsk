@@ -39,19 +39,21 @@ afterEach(() => {
 const t = makeTranslate(zh, commonZh)
 const renderMessageImages: AssistantMarkdownProps['renderMessageImages'] = () => null
 
-it('links a plain filename only when the current knowledge retrieval identifies it', () => {
-  const original = '/api/desktop-knowledge-file?id=3&documentId=policy'
-  const view = render(<AssistantMarkdown
-    t={t}
-    blocks={[{ kind: 'text', text: '见《制度.pdf》和《其它.pdf》。' }]}
-    knowledgeSources={[{ document: '制度.pdf', original, excerpt: '正文' }]}
-    streaming={false}
-    renderMessageImages={renderMessageImages}
-  />)
-  const filename = view.getByRole('link', { name: '《制度.pdf》' })
-  expect(filename.getAttribute('href')).toBe(original)
-  expect(filename.style.color).toBe('rgb(37, 99, 235)')
-  expect(view.queryByRole('link', { name: '《其它.pdf》' })).toBeNull()
+it('uses an optional prose transform with the owning file resolver', () => {
+  const open = vi.fn()
+  const view = render(<AssistantMarkdown t={t}
+    blocks={[{ kind: 'text', text: 'Read the report.' }]}
+    transformText={text => text.replace('report', '[report](local-resource:///report.pdf)')}
+    mentions={{ resolve: value => value === 'local-resource:///report.pdf'
+      ? { open, title: 'report.pdf', label: 'Open report' } : undefined }}
+    streaming={false} renderMessageImages={renderMessageImages} />)
+  fireEvent.click(view.getByRole('button', { name: 'Open report' }))
+  expect(open).toHaveBeenCalledOnce()
+  view.rerender(<AssistantMarkdown t={t}
+    blocks={[{ kind: 'text', text: 'Read the report.' }]}
+    streaming={false} renderMessageImages={renderMessageImages} />)
+  expect(view.queryByRole('button', { name: 'Open report' })).toBeNull()
+  expect(view.container.textContent).toBe('Read the report.')
 })
 
 describe('ReasoningRow', () => {

@@ -4,6 +4,7 @@
 
 | 官方区域 | 通用扩展点 | 无产品实现时的行为 |
 | --- | --- | --- |
+| packages/client/ui-chat | 轮次数据 assistant-markdown 可提供通用文本转换和文件解析回调，产品通过会话投影注册 | 无发布者时使用原始 Markdown 和既有成果文件解析，公共组件不识别产品来源或文件协议 |
 | `packages/client/ui-conversation`、`ui-input-trigger`、`ui-model-selection`、`ui-permission-presets` | 动态权限标签、说明、命令说明和思考强度名称经现有 locale 词典查询；仅翻译显示，不改机器标识 | 无匹配词条时保留原文；不包含中文词典或产品语言策略 |
 | `packages/boot/app-boot` | 通过 `DSH_BUNDLE_ANCHORS` 接受产品持有的额外包解析锚点 | 未设置时仍只从 DSH 安装目录和用户 profile 解析 |
 | `packages/client/platform-actions` | 注册可选的目录打开和原生文件保存动作 | 能力不可用；官方浏览器继续使用原有行为 |
