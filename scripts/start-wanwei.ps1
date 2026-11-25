@@ -75,6 +75,7 @@ $requiredPaths = @(
     (Join-Path $adminRoot 'node_modules/vite/bin/vite.js'),
     (Join-Path $repoRoot 'node_modules/tsx/package.json'),
     (Join-Path $repoRoot 'apps/cli/src/bin.ts'),
+    (Join-Path $repoRoot 'products/wanwei-desktop/scripts/stage-web-assets.mjs'),
     (Join-Path $desktopHome 'profiles/wanwei-desktop/package.json')
 )
 foreach ($path in $requiredPaths) {
@@ -95,7 +96,15 @@ if ($Refresh) {
     try {
         & $pnpmExe exec tsc -b packages/wanwei/oneapi-auth/tsconfig.host.json packages/wanwei/knowledge-base/tsconfig.json
         if ($LASTEXITCODE -ne 0) { throw 'TypeScript build failed; running services were kept.' }
-        & $pnpmExe --filter '@deepseek-ai/dsh-wanwei-knowledge-base' --filter '@deepseek-ai/dsh-wanwei-oneapi-auth' run bundle
+        Push-Location (Join-Path $repoRoot 'packages/client/ui-primitives')
+        try {
+            & (Join-Path $repoRoot 'node_modules/.bin/tsdown.cmd')
+            if ($LASTEXITCODE -ne 0) { throw 'UI primitives build failed; running services were kept.' }
+        }
+        finally { Pop-Location }
+        & $pnpmExe run build:web
+        if ($LASTEXITCODE -ne 0) { throw 'Web frontend build failed; running services were kept.' }
+        & $pnpmExe --filter '@deepseek-ai/dsh-wanwei-knowledge-base' --filter '@deepseek-ai/dsh-wanwei-oneapi-auth' --filter '@deepseek-ai/dsh-client-ui-chat' run bundle
         if ($LASTEXITCODE -ne 0) { throw 'Desktop client bundle build failed; running services were kept.' }
     }
     finally { Pop-Location }
@@ -135,6 +144,9 @@ if ($Refresh) {
     Move-Item -LiteralPath $replacementExe -Destination $backendExe -Force
     Write-Host 'Refreshed backend and desktop client bundles. Reload the desktop page with Ctrl+F5.'
 }
+
+& $nodeExe (Join-Path $repoRoot 'products/wanwei-desktop/scripts/stage-web-assets.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'Product Web asset staging failed.' }
 
 $previousHome = $env:DSH_HOME
 $previousApi = $env:DSH_ONEAPI_URL

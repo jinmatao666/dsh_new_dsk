@@ -467,6 +467,15 @@ function renderTableRow(
 
 /** Anchor over an already-authored href: allowlisted or unwrapped, external links get the safe attributes. */
 function renderSafeLink(href: string, children: ReactNode[], key: Key): ReactNode {
+  if (/^\/api\/desktop-knowledge-file\?id=[1-9]\d*&documentId=[\w-]{1,64}$/.test(href)) {
+    const document = children.filter(child => typeof child === 'string').join('').replace(/^《|》$/g, '')
+    return <a key={key} href={href} style={{ color: '#2563eb', textDecoration: 'underline' }} onClick={(event) => {
+      event.preventDefault()
+      window.dispatchEvent(new CustomEvent('wanwei:open-knowledge-source', {
+        detail: { original: href, document, excerpt: '' },
+      }))
+    }}>{children}</a>
+  }
   const safeHref = sanitizeUrl(href)
   if (safeHref === '') return <Fragment key={key}>{children}</Fragment>
   const external = ['http:', 'https:'].includes(new URL(safeHref).protocol)

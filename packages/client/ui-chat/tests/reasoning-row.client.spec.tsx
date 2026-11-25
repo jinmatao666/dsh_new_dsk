@@ -39,6 +39,21 @@ afterEach(() => {
 const t = makeTranslate(zh, commonZh)
 const renderMessageImages: AssistantMarkdownProps['renderMessageImages'] = () => null
 
+it('links a plain filename only when the current knowledge retrieval identifies it', () => {
+  const original = '/api/desktop-knowledge-file?id=3&documentId=policy'
+  const view = render(<AssistantMarkdown
+    t={t}
+    blocks={[{ kind: 'text', text: '见《制度.pdf》和《其它.pdf》。' }]}
+    knowledgeSources={[{ document: '制度.pdf', original, excerpt: '正文' }]}
+    streaming={false}
+    renderMessageImages={renderMessageImages}
+  />)
+  const filename = view.getByRole('link', { name: '《制度.pdf》' })
+  expect(filename.getAttribute('href')).toBe(original)
+  expect(filename.style.color).toBe('rgb(37, 99, 235)')
+  expect(view.queryByRole('link', { name: '《其它.pdf》' })).toBeNull()
+})
+
 describe('ReasoningRow', () => {
   it('follows the latest streaming line, scrolls to its end, then restores the settled first line', () => {
     const view = render(

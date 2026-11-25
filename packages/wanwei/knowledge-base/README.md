@@ -68,4 +68,4 @@ Each knowledge conversation owns a distinct RAGFlow assistant and session, so ca
 
 Plaza card and detail hearts save each authenticated viewer’s preference in OneAPI. Refreshing or signing in again restores it; liking does not grant library access.
 
-For local source updates, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\wbuddu\scripts\start-wanwei.ps1 -Refresh`, then reload the desktop with Ctrl+F5. Refresh compiles the knowledge/auth TypeScript programs, bundles their clients, builds OneAPI and restarts the backend and desktop; the default invocation reuses existing services.
+For local source updates, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\wbuddu\scripts\start-wanwei.ps1 -Refresh`, then reload the desktop with Ctrl+F5. Refresh compiles the knowledge/auth TypeScript programs, bundles their clients, builds OneAPI and restarts the backend and desktop; the default invocation reuses existing services. Both modes restore product Web artwork into `apps/web/dist` before checking services, so local startup repairs images missing after an official Web rebuild.

@@ -976,6 +976,7 @@ button.dsh-knowledge-plaza-file { cursor: pointer; }
   .dsh-knowledge-viewer-loading-core { opacity: .85; }
 }
 .dsh-knowledge-viewer-body { flex: 1; min-height: 0; overflow: auto; background: #f3f4f6; }
+.dsh-chat-source-body { display: grid; grid-template-rows: minmax(0, 1fr); }
 .dsh-knowledge-viewer-body.pdf { overflow: auto; background: #fff; }
 .dsh-knowledge-viewer-body.image { display: grid; place-items: center; padding: 20px; }
 .dsh-knowledge-viewer-body.text { padding: 28px 20px 40px; }

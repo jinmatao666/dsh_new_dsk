@@ -15,11 +15,13 @@ import {
   type KnowledgePlazaItem,
 } from './KnowledgePage.tsx'
 import { KnowledgeComposerToggle } from './KnowledgeComposerToggle.tsx'
+import { ChatSourcePreview, type OpenChatSource } from './ChatSourcePreview.tsx'
 import { productText } from './locales/product.ts'
 import { createRetrievalSelection, type RetrievalSelection } from './retrieval-selection.ts'
 import { uploadKnowledgeFile } from './upload.ts'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import './page.css'
 
 async function readKnowledgeStream(
@@ -301,7 +303,10 @@ function optionalCount(value: unknown): number | undefined {
 export const inject = ['slots', 'connection', 'wanweiNetwork']
 
 /** Keep sidebar presentation synchronized with the server-confirmed deployment mode. */
-function KnowledgePanel({ api, network }: { api: KnowledgeApi; network: NetworkController }) {
+function KnowledgePanel({ api, network }: {
+  api: KnowledgeApi
+  network: NetworkController
+}) {
   const { mode } = useSyncExternalStore(network.subscribe, network.getSnapshot)
   return <KnowledgePage api={api} networkMode={mode} />
 }
@@ -327,7 +332,7 @@ function installComposerToggle(ctx: Context, call: (operation: string, payload?:
   ctx.inject(['conversation'], (scope: Context) => {
     scope.effect(() => scope.conversation.input.registerStagedSessionTransfer(async (sessionId) => {
       const current = selection.getSnapshot()
-      if (visible.getSnapshot() && current.enabled && current.ids.length > 0) await syncScope(String(sessionId), current.ids)
+      await syncScope(String(sessionId), visible.getSnapshot() && current.enabled ? current.ids : [])
     }), 'knowledge retrieval staged transfer')
   })
   ctx.slots.inject('conversation.composer.tools', () => ctx.slots.register({
@@ -349,6 +354,47 @@ function installComposerToggle(ctx: Context, call: (operation: string, payload?:
  */
 export function apply(ctx: Context): void {
   const controller = createPanelController(ctx, 'wanwei-knowledge-base')
+  type OpenSource = OpenChatSource
+  let openSource: OpenSource | undefined
+  let pendingSource: Parameters<OpenSource> | undefined
+  const subscribeSource = (open: OpenSource) => {
+    openSource = open
+    if (pendingSource !== undefined) {
+      open(...pendingSource)
+      pendingSource = undefined
+    }
+    return () => { openSource = undefined }
+  }
+  const requestSource = (event: Event) => {
+    if (!(event instanceof CustomEvent)) return
+    const { original, document, excerpt } = event.detail ?? {}
+    if (typeof original !== 'string' || typeof document !== 'string' || typeof excerpt !== 'string') return
+    const identity = /^\/api\/desktop-knowledge-file\?id=([1-9]\d*)&documentId=([\w-]{1,64})$/.exec(original)
+    if (identity === null || identity[2] === undefined) return
+    const args: Parameters<OpenSource> = [Number(identity[1]), identity[2], document, excerpt.replace(/…$/, '')]
+    if (openSource === undefined) pendingSource = args
+    else openSource(...args)
+  }
+  const clickSource = (event: MouseEvent) => {
+    if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+    const anchor = event.target instanceof Element ? event.target.closest('a') : null
+    const original = anchor?.getAttribute('href')
+    if (original === null || original === undefined
+      || !/^\/api\/desktop-knowledge-file\?id=[1-9]\d*&documentId=[\w-]{1,64}$/.test(original)) return
+    event.preventDefault()
+    event.stopPropagation()
+    requestSource(new CustomEvent('wanwei:open-knowledge-source', {
+      detail: { original, document: anchor?.textContent?.replace(/^《|》$/g, '') ?? '', excerpt: '' },
+    }))
+  }
+  ctx.effect(() => {
+    window.addEventListener('wanwei:open-knowledge-source', requestSource)
+    document.addEventListener('click', clickSource, true)
+    return () => {
+      window.removeEventListener('wanwei:open-knowledge-source', requestSource)
+      document.removeEventListener('click', clickSource, true)
+    }
+  })
   const connection = ctx.get('connection') as ConnectionHandle
   const call = async (operation: string, payload: unknown = {}) =>
     value(await connection.rpc.call('/desktop-knowledge-base', operation, payload))
@@ -587,4 +633,8 @@ export function apply(ctx: Context): void {
     renderContent: () => <KnowledgePanel api={api} network={ctx.wanweiNetwork} />,
   })
   installComposerToggle(ctx, call, api, () => { controller.open() })
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay', id: 'wanwei-chat-source-preview', order: 250,
+    inject: () => ({ api, subscribeSource }),
+  }, ChatSourcePreview))
 }

@@ -12,7 +12,9 @@ Desktop users could ask questions against a knowledge library only on the knowle
 
 The composer tool row carries a 知识库 switch registered by `dsh-wanwei-knowledge-base` in `conversation.composer.tools`. Turning it on opens a picker whose groups come from the same `libraryNavGroups` function as the desktop sidebar, so the picker always shows the library types the sidebar shows. Users may select up to 20 libraries across groups. The selected ids for the current Session reach the Host through the `retrieval-scope` operation on `/desktop-knowledge-base`; a staged-Session transfer applies them to a Session created by a first send. Turning the switch off hides the picker and sends an empty scope.
 
-`dsh-wanwei-oneapi-auth` keeps the scope in Host memory keyed by Session id and registers an `agent/pre-step` listener. On step 1 of a turn in a scoped Session it takes the newest `user`-source message text, calls OneAPI `POST /api/knowledge-bases/retrieval`, and appends one `notice` user message from `wanwei-knowledge-retrieval` with numbered chunks, file names, and library names. OneAPI checks every library with `GetAuthorizedKnowledgeBase`, calls RAGFlow `POST /api/v1/retrieval` with the mapped dataset ids, and drops chunks from datasets the caller did not request. The Session's own model writes the answer. Empty results and retrieval failures are logged as short statements so the model can tell the user, and the turn continues.
+`dsh-wanwei-oneapi-auth` keeps the scope in Host memory keyed by Session id and registers an `agent/pre-step` listener. On step 1 of a turn in a scoped Session it takes the newest `user`-source message text, calls OneAPI `POST /api/knowledge-bases/retrieval`, and appends one `notice` user message from `wanwei-knowledge-retrieval` with JSON records containing excerpts, file names, library names, and authenticated original-file paths when the retrieval identifies a file. OneAPI checks every library with `GetAuthorizedKnowledgeBase`, calls RAGFlow `POST /api/v1/retrieval` with the mapped dataset ids, and drops chunks from datasets the caller did not request. The Session's own model writes the answer. Empty results and retrieval failures are logged as short statements so the model can tell the user, and the turn continues.
+
+The chat derives turn-local file links from that logged notice, including plain book-title filename mentions. Clicking a filename opens a PDF dialog above the current conversation. Citation guidance groups used files into opening sources and closing references. When retrieval is disabled after earlier library turns, a logged notice instructs the model to answer without relying on earlier library material.
 
 ## Alternatives considered
 
@@ -22,6 +24,12 @@ The composer tool row carries a 知识库 switch registered by `dsh-wanwei-knowl
 
 **Keep the scope in a durable session event:** rejected because the scope is a UI choice that the toggle re-sends on every Session switch. The retrieved chunks, which the model does see, are logged.
 
+**Rely on model-authored Markdown links:** rejected because the model can emit plain filenames. Logged retrieval identities let the chat resolve those names to actual originals.
+
+**Open the library panel for an original:** rejected because it moves users away from the answer. A conversation-local dialog keeps the answer available when the original closes.
+
 ## Consequences
 
 The Host forgets scopes on restart; the toggle re-sends the scope when the composer mounts for the current Session. Retrieval adds latency to the first step of each scoped turn, bounded by `knowledgeRetrievalTimeoutMs`. The OneAPI build must ship `POST /api/knowledge-bases/retrieval` together with the desktop build. See [knowledge-answer citations](2026-10-22-knowledge-answer-citations.md) for the separate knowledge-page Q&A path.
+
+Source launches rebuild shared UI primitives before the Web frontend and chat/knowledge client bundles. Rebuilding a plugin alone leaves the platform-seeded Markdown renderer stale. Retrieval tests cover scope clearing and recorded file paths. Chat tests cover filename links and turn-local source projection. The preview test covers opening and closing the original dialog.

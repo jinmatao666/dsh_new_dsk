@@ -11,6 +11,7 @@ export const AssistantNodeView = memo(function AssistantNodeView({
     ? node.location.turn
     : undefined
   const tail = useTurnData('turn-tail')
+  const sources = useTurnData('knowledge-sources')
   const owner = useMemo<TurnTailOwnerProps | undefined>(() => {
     if (turn?.status !== 'closed' || data.finalNode === undefined) return undefined
     if (tail?.closing?.finalNode.seq !== data.finalNode.seq) return undefined
@@ -35,6 +36,7 @@ export const AssistantNodeView = memo(function AssistantNodeView({
       reasoningHidden={reasoningHidden}
       revealProcess={revealProcess}
       mentions={mentions}
+      knowledgeSources={sources}
       t={t}
     />
   )

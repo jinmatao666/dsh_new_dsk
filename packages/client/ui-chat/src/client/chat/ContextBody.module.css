@@ -159,3 +159,11 @@
   flex: none;
   color: var(--dsw-alias-label-caption);
 }
+.knowledgeSource {
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}

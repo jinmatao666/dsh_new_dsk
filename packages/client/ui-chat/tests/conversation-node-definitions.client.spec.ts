@@ -23,7 +23,7 @@ import { commandDefinition } from '../src/client/conversation-nodes/command.ts'
 import { compactionDefinition } from '../src/client/conversation-nodes/compaction.ts'
 import { unknownFallbackDefinition } from '../src/client/conversation-nodes/fallback.ts'
 import { nextStepInboxDefinition, nextTurnInboxDefinition } from '../src/client/conversation-nodes/inbox.ts'
-import { messageDefinition } from '../src/client/conversation-nodes/message.ts'
+import { knowledgeSourcesDefinition, messageDefinition } from '../src/client/conversation-nodes/message.ts'
 import { inspectRequestPrompt } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { requestPromptDefinition } from '../src/client/conversation-nodes/request-prompt.ts'
 import { retryDefinition } from '../src/client/conversation-nodes/retry.ts'
@@ -40,6 +40,7 @@ const DEFINITIONS: readonly ConversationNodeDefinition[] = [
   nextTurnInboxDefinition,
   nextStepInboxDefinition,
   messageDefinition,
+  knowledgeSourcesDefinition,
   requestPromptDefinition(inspectRequestPrompt),
   assistantDefinition,
   turnProcessDefinition,
@@ -154,6 +155,21 @@ function toolResult(callId: string, text: string, isError = false) {
 }
 
 describe('built-in conversation node Definitions', () => {
+  it('publishes recorded knowledge files on the answer turn', () => {
+    const sources = [{ document: '制度.pdf', original: '/api/desktop-knowledge-file?id=3&documentId=policy', excerpt: '正文' }]
+    const current = snapshot(assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'user/message', {
+        ...textMessage('knowledge', `参考片段\n\n${JSON.stringify(sources)}`),
+        source: { kind: 'plugin', plugin: 'wanwei-knowledge-retrieval', form: 'notice' },
+      }, { surfaceOp: 'append' }),
+      at(4, 'assistant/message', { turn: 1, step: 1, message: assistantMessage('a1', '参见《制度.pdf》。') },
+        { surfaceOp: 'append' }),
+    ]))
+    const location = node(current, 'assistant-step')?.location
+    expect(location?.kind === 'step' ? location.turn.data.get('knowledge-sources') : undefined).toEqual(sources)
+  })
   it('rejects an unrelated event passed directly to the request-prompt start', () => {
     const input = at(1, 'turn/start', { turn: 1 })
     const invalidStart = {

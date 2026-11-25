@@ -151,7 +151,7 @@ class StreamingRenderer {
  * streaming message's vocabulary is not final and frozen cached elements
  * must not bake in handlers that could go stale.
  * @returns A GFM document with TeX math rendered through KaTeX; raw HTML,
- * relative links, and unsafe protocols are disabled, while absolute HTTP(S)
+ * relative links other than knowledge-file downloads, and unsafe protocols are disabled, while absolute HTTP(S)
  * images render directly.
  */
 export const MarkdownText = memo(function MarkdownText({ text, streaming = false, labels, fileMentions }: {

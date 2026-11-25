@@ -5,6 +5,14 @@ import type { ContextMessageNode, SteeringMessageNode, UserMessageNode } from '@
 import type { InboxState } from './inbox.ts'
 import { chatNode } from './common.ts'
 import { contextForm, contextProvenance } from './event-projection.ts'
+import { knowledgeSources } from '../contract/knowledge-sources.ts'
+
+declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
+  interface ConversationTurnDataMap {
+    /** Files retrieved for this turn's knowledge question. */
+    'knowledge-sources': NonNullable<ReturnType<typeof knowledgeSources>>
+  }
+}
 
 interface ReferencedUserMessageNode extends UserMessageNode {
   /** Labels cited by the immediately following session-reference context. */
@@ -83,10 +91,32 @@ export const messageDefinition: ConversationNodeDefinition<MessageNode> = {
   },
 }
 
+/** Publish the source identities of one retrieval notice to its turn. */
+export const knowledgeSourcesDefinition: ConversationNodeDefinition<null> = {
+  kind: 'knowledge-sources',
+  match: event => event.type === 'user/message' && isAppendSurfaceEvent(event)
+    && event.data.source.kind === 'plugin' && event.data.source.plugin === 'wanwei-knowledge-retrieval'
+    ? { id: String(event.data.id), role: 'start' }
+    : null,
+  start: () => null,
+  update: () => null,
+  buildLocationData: (context, scope) => {
+    const match = context.start
+    if (scope !== 'turn' || match?.event.type !== 'user/message') return null
+    const { event, location } = match
+    if (location.kind !== 'turn' && location.kind !== 'step') return null
+    if (event.data.source.kind !== 'plugin' || event.data.source.plugin !== 'wanwei-knowledge-retrieval') return null
+    const first = event.data.content[0]
+    const value = first?.type === 'text' ? knowledgeSources(first.text) : null
+    return value === null ? null : { kind: 'turn', turn: location.turn.turn, key: 'knowledge-sources', value }
+  },
+}
+
 /**
  * Register the user, steering, and injected-context message contribution.
  * @param ctx - owning UI Conversation context.
  */
 export function registerMessageConversationNode(ctx: Context): void {
   ctx.uiConversation.events.register(messageDefinition)
+  ctx.uiConversation.events.register(knowledgeSourcesDefinition)
 }

@@ -42,7 +42,8 @@ describe('composer knowledge retrieval', () => {
 
   it('logs retrieved chunks after the user question and sends them to the model', async () => {
     const retrieve = vi.fn<KnowledgeRetrievalSource['retrieve']>(async () => [
-      { content: '报销需在 30 日内提交。', documentName: '财务制度.pdf', knowledgeBaseName: '制度库', similarity: 0.9 },
+      { content: '报销需在 30 日内提交。', documentName: '财务制度.pdf', knowledgeBaseName: '制度库', similarity: 0.9,
+        originalFile: '/api/desktop-knowledge-file?id=3&documentId=policy' },
     ])
     const { ctx, adapter, ask, injected } = await harness({ scopeOf: () => [3, 7], retrieve })
     dispose = () => ctx.fiber.dispose()
@@ -51,7 +52,12 @@ describe('composer knowledge retrieval', () => {
     const [message] = injected()
     expect(message?.source).toMatchObject({ form: 'notice', summary: '知识库检索：引用 1 条参考资料' })
     const text = message?.content[0]?.type === 'text' ? message.content[0].text : ''
-    expect(text).toContain('[1] 来源：《财务制度.pdf》（知识库：制度库）\n报销需在 30 日内提交。')
+    expect(JSON.parse(text.split('\n\n')[1]!)).toEqual([{
+      document: '财务制度.pdf',
+      library: '制度库',
+      original: '/api/desktop-knowledge-file?id=3&documentId=policy',
+      excerpt: '报销需在 30 日内提交。',
+    }])
     expect(JSON.stringify(adapter.requests[0]!.messages)).toContain('报销需在 30 日内提交。')
   })
 
@@ -62,6 +68,20 @@ describe('composer knowledge retrieval', () => {
     await ask('普通问题')
     expect(retrieve).not.toHaveBeenCalled()
     expect(injected()).toEqual([])
+  })
+
+  it('tells the model that a later turn cannot rely on earlier retrieval when the scope is cleared', async () => {
+    let scope: number[] | undefined = [3]
+    const retrieve = vi.fn<KnowledgeRetrievalSource['retrieve']>(async () => [
+      { content: '报销期限为 30 日。', documentName: '制度.pdf', knowledgeBaseName: '制度库', similarity: 1 },
+    ])
+    const { ctx, ask, injected } = await harness({ scopeOf: () => scope, retrieve })
+    dispose = () => ctx.fiber.dispose()
+    await ask('报销期限是多久？')
+    scope = undefined
+    await ask('再次回答')
+    expect(retrieve).toHaveBeenCalledTimes(1)
+    expect(injected().at(-1)?.source).toMatchObject({ summary: '本轮未启用知识库' })
   })
 
   it('tells the model when retrieval fails instead of failing the turn', async () => {
@@ -84,9 +104,9 @@ describe('renderRetrievalContext', () => {
       { content: 'b'.repeat(8), documentName: 'x', knowledgeBaseName: '库', similarity: 1 },
     ], 5)
     expect(rendered.count).toBe(1)
-    expect(rendered.text).toContain('《未命名文件》')
+    expect(rendered.text).toContain('"document":"未命名文件"')
     expect(rendered.text).toContain('aaaaa…')
-    expect(rendered.text).not.toContain('b')
+    expect(rendered.text).not.toContain('"document":"x"')
   })
 })
 
@@ -95,7 +115,8 @@ describe('KnowledgeBaseApi retrieval', () => {
 
   it('stores Session scopes and posts retrieval with the selected libraries', async () => {
     const fetch = vi.fn(async (_url: string, _init?: RequestInit) => Response.json({
-      success: true, data: { chunks: [{ content: '正文', document_name: 'a.pdf', knowledge_base_name: '库', similarity: 0.4 }] },
+      success: true, data: { chunks: [{ content: '正文', document_name: 'a.pdf', knowledge_base_name: '库',
+        knowledge_base_id: 3, document_id: 'policy', similarity: 0.4 }] },
     }))
     vi.stubGlobal('fetch', fetch)
     const api = new KnowledgeBaseApi('http://oneapi', async () => 'token', 1000, { transcriptionModel: 'asr', chatModel: 'chat' })
@@ -104,7 +125,8 @@ describe('KnowledgeBaseApi retrieval', () => {
     expect(api.scopeOf('s1')).toEqual([3, 7])
     await expect(api.call('retrieval-scope', { sessionId: 's1', ids: [0] }, signal)).rejects.toThrow('知识库编号无效')
     expect(await api.retrieve([3, 7], '问题', options, signal)).toEqual([
-      { content: '正文', documentName: 'a.pdf', knowledgeBaseName: '库', similarity: 0.4 },
+      { content: '正文', documentName: 'a.pdf', knowledgeBaseName: '库', similarity: 0.4,
+        originalFile: '/api/desktop-knowledge-file?id=3&documentId=policy' },
     ])
     expect(fetch.mock.calls[0]![0]).toBe('http://oneapi/api/knowledge-bases/retrieval')
     expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string)).toEqual({

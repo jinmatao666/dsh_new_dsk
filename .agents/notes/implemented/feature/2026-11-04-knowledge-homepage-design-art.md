@@ -26,4 +26,4 @@ Base `.dsh-knowledge-file-icon` sizes and clips PDF/Word images at 30×30 with `
 
 ## Consequences
 
-Local source launches must stage the new covers into the served `apps/web/dist/knowledge-covers/` (or rebuild the product web assets) or the images 404 while layout still works. Panels without `headerArt` are unchanged.
+The local `scripts/start-wanwei.ps1` stages product Web artwork into the served `apps/web/dist/` before checking or starting services, including when reusing a running desktop. `stage-web-assets.mjs` restores missing assets and replaces stale artwork while preserving compiled frontend files. Other source launchers must stage product assets or use the product Web build; an official Web build alone does not contain private artwork. Panels without `headerArt` are unchanged.

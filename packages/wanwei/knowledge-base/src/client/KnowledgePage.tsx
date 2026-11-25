@@ -371,7 +371,10 @@ type LibraryDocumentStats = { count: number; bytes: number }
  * @param props - Host-owned API and deployment network mode for sidebar maintainers.
  * @returns Knowledge-base page.
  */
-export function KnowledgePage({ api, networkMode = 'internet' }: { api: KnowledgeApi; networkMode?: NetworkEnvironment }) {
+export function KnowledgePage({ api, networkMode = 'internet' }: {
+  api: KnowledgeApi
+  networkMode?: NetworkEnvironment
+}) {
   const [expandedLibraries, setExpandedLibraries] = useState<ReadonlySet<number>>(new Set())
   const [items, setItems] = useState<KnowledgeBaseItem[]>([])
   const [categories, setCategories] = useState<KnowledgeCategory[]>([])

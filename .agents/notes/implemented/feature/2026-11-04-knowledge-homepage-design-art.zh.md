@@ -26,4 +26,4 @@ Status: implemented
 
 ## Consequences
 
-本地 source 启动需把新封面暂存到所服务的 `apps/web/dist/knowledge-covers/`（或重建产品 Web 资源），否则图片 404，但布局仍可用。未传 `headerArt` 的面板行为不变。
+本地 `scripts/start-wanwei.ps1` 会在检查或启动服务前，将产品 Web 图片同步到所服务的 `apps/web/dist/`，包括复用运行中的桌面服务时。`stage-web-assets.mjs` 恢复缺失资源并替换旧图片，同时保留已编译的前端文件。其他源码启动方式须同步产品资源或使用产品 Web 构建；单独的官方 Web 构建不包含私有图片。未传 `headerArt` 的面板行为不变。

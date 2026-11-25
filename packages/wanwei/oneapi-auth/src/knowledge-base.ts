@@ -276,9 +276,16 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
       if (typeof chunk.content !== 'string' || typeof chunk.knowledge_base_name !== 'string') {
         throw new Error('知识库检索结果字段无效')
       }
+      const id = chunk.knowledge_base_id
+      const documentId = chunk.document_id
+      const originalFile = typeof id === 'number' && ids.includes(id)
+        && typeof documentId === 'string' && /^[\w-]{1,64}$/.test(documentId)
+        ? `/api/desktop-knowledge-file?id=${id}&documentId=${documentId}`
+        : undefined
       return {
         content: chunk.content,
         documentName: typeof chunk.document_name === 'string' ? chunk.document_name : '',
+        ...(originalFile === undefined ? {} : { originalFile }),
         knowledgeBaseName: chunk.knowledge_base_name,
         similarity: typeof chunk.similarity === 'number' ? chunk.similarity : 0,
       }
@@ -334,6 +341,8 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
         status: 200,
         headers: {
           'content-type': cached.contentType,
+          'content-disposition': 'attachment',
+          'x-content-type-options': 'nosniff',
           'content-length': String(cached.body.byteLength),
           'cache-control': 'no-store',
         },
@@ -376,6 +385,8 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
       status: 200,
       headers: {
         'content-type': contentType,
+        'content-disposition': 'attachment',
+        'x-content-type-options': 'nosniff',
         'content-length': String(body.byteLength),
         'cache-control': 'no-store',
       },

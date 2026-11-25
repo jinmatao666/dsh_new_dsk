@@ -68,4 +68,4 @@ Token 使用由 RAGFlow 聊天助手及其配置模型负责。
 
 广场卡片与详情页的小爱心按登录账号保存在 OneAPI，刷新或重新登录后恢复；喜欢不会授予知识库访问权限。
 
-本地更新源码后，运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\wbuddu\scripts\start-wanwei.ps1 -Refresh`，再在桌面页面按 Ctrl+F5。刷新模式会编译知识库及认证 TypeScript 程序、打包客户端、构建 OneAPI 并重启后端和桌面服务；默认调用会复用现有服务。
+本地更新源码后，运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\wbuddu\scripts\start-wanwei.ps1 -Refresh`，再在桌面页面按 Ctrl+F5。刷新模式会编译知识库及认证 TypeScript 程序、打包客户端、构建 OneAPI 并重启后端和桌面服务；默认调用会复用现有服务。两种启动方式都会在检查服务前将产品 Web 图片同步到 `apps/web/dist`，可恢复官方 Web 重建后缺失的图片。
