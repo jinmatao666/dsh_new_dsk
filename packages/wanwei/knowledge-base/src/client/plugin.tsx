@@ -504,6 +504,7 @@ export function apply(ctx: Context): void {
       return raw
     },
     async createFolder(id, name) { await call('create-folder', { id, name }) },
+    async deleteFolder(id, name) { await call('delete-folder', { id, name }) },
     async upload(id, file, parentPath) {
       await uploadKnowledgeFile(call, id, file, parentPath)
     },

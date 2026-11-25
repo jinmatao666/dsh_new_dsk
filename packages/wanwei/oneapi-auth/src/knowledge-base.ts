@@ -168,12 +168,12 @@ export class KnowledgeBaseApi implements KnowledgeRetrievalSource {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(value),
       }, signal)
     }
-    if (operation === 'folders' || operation === 'create-folder') {
+    if (operation === 'folders' || operation === 'create-folder' || operation === 'delete-folder') {
       const id = integer(value.id, '知识库编号')
       if (operation === 'folders') return this.request(`/api/knowledge-bases/${id}/folders`, {}, signal)
       if (typeof value.name !== 'string' || value.name.trim() === '') throw new Error('文件夹名称无效')
       return this.request(`/api/knowledge-bases/${id}/folders`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: value.name }),
+        method: operation === 'delete-folder' ? 'DELETE' : 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: value.name }),
       }, signal)
     }
     if (operation === 'documents') {

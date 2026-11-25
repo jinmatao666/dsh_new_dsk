@@ -272,6 +272,8 @@ export interface KnowledgeApi extends PublicationApi {
   folders(knowledgeBaseId: number): Promise<string[]>
   /** Create an empty folder in a personal library. */
   createFolder(knowledgeBaseId: number, name: string): Promise<void>
+  /** Remove an empty persisted folder; the server rejects folders with contents. */
+  deleteFolder(knowledgeBaseId: number, name: string): Promise<void>
   /** Remove one document from the authorized library through RAGFlow. */
   delete(knowledgeBaseId: number, documentId: string): Promise<void>
   /** Copy one document into another personal or shared library. */
@@ -454,6 +456,8 @@ export function KnowledgePage({ api, networkMode = 'internet' }: {
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([])
   const [contentMenu, setContentMenu] = useState<ContentMenu>()
   const [deleteIds, setDeleteIds] = useState<string[]>()
+  const [folderToDelete, setFolderToDelete] = useState<{ libraryId: number; path: string }>()
+  const [folderDeleteError, setFolderDeleteError] = useState('')
   const [mutating, setMutating] = useState(false)
   const [collapsedNavGroups, setCollapsedNavGroups] = useState<Set<string>>(
     () => new Set(['subscription', 'public']),
@@ -728,6 +732,20 @@ export function KnowledgePage({ api, networkMode = 'internet' }: {
   const refreshDocuments = async () => {
     if (selectedId === undefined) return
     showDocuments(selectedId, await api.documents(selectedId))
+  }
+  const confirmFolderDelete = async () => {
+    if (folderToDelete === undefined || mutating) return
+    setMutating(true)
+    setFolderDeleteError('')
+    try {
+      await api.deleteFolder(folderToDelete.libraryId, folderToDelete.path)
+      setFolderNames(current => current.filter(name => name !== folderToDelete.path))
+      setFolderToDelete(undefined)
+    } catch (cause) {
+      setFolderDeleteError(`${productText('删除失败')}：${String(cause)}`)
+    } finally {
+      setMutating(false)
+    }
   }
   const confirmDelete = async () => {
     if (selectedId === undefined || deleteIds === undefined || deleteIds.length === 0 || mutating) return
@@ -1797,6 +1815,12 @@ export function KnowledgePage({ api, networkMode = 'internet' }: {
               {renderContentTree(pagedTree, {
                 selectedDocumentIds,
                 onToggleFolder: toggleFolder,
+                onDeleteFolder: canUpload ? (path) => {
+                  if (selectedId === undefined || mutating) return
+                  setFolderDeleteError('')
+                  setFolderToDelete({ libraryId: selectedId, path })
+                } : undefined,
+                folderDeleting: mutating,
                 onToggleDocumentSelection: toggleDocumentSelection,
                 onOpenDocument: openDocument,
                 onPrefetchDocument: prefetchDocument,
@@ -1917,24 +1941,25 @@ export function KnowledgePage({ api, networkMode = 'internet' }: {
           setDeleteIds(ids)
         }}><TrashIcon />{productText('删除')}</button>}
     </div>}
-    {deleteIds !== undefined && <div className="dsh-knowledge-modal-backdrop"
+    {(deleteIds !== undefined || folderToDelete !== undefined) && <div className="dsh-knowledge-modal-backdrop"
       onPointerDown={event => event.stopPropagation()}>
       <section className="dsh-knowledge-modal" role="dialog"
         aria-modal="true" aria-labelledby="dsh-knowledge-delete-title">
         <header><h2 id="dsh-knowledge-delete-title">{productText('确认删除')}</h2>
           <button type="button" aria-label={productText('关闭')} disabled={mutating}
-            onClick={() => { setDeleteIds(undefined); setSelectedDocumentIds([]) }}>×</button></header>
-        <p>{productText('确认删除所选内容？删除后将从知识库同步移除。')}</p>
+            onClick={() => { setDeleteIds(undefined); setFolderToDelete(undefined); setSelectedDocumentIds([]) }}>×</button></header>
+        <p>{folderToDelete !== undefined ? productText('确认删除此空文件夹？') : productText('确认删除所选内容？删除后将从知识库同步移除。')}</p>
         <ul className="dsh-knowledge-conflict-list">
-          {deleteIds.map((id) => {
+          {folderToDelete !== undefined ? <li>{folderToDelete.path}</li> : deleteIds?.map((id) => {
             const document = documents.find(item => item.id === id)
             return <li key={id}>{document?.name ?? id}</li>
           })}
         </ul>
+        {folderToDelete !== undefined && folderDeleteError !== '' && <p role="alert">{folderDeleteError}</p>}
         <footer>
           <button type="button" disabled={mutating}
-            onClick={() => { setDeleteIds(undefined); setSelectedDocumentIds([]) }}>{productText('取消')}</button>
-          <button type="button" className="danger" disabled={mutating} onClick={() => void confirmDelete()}>{productText('确认删除')}</button>
+            onClick={() => { setDeleteIds(undefined); setFolderToDelete(undefined); setSelectedDocumentIds([]) }}>{productText('取消')}</button>
+          <button type="button" className="danger" disabled={mutating} onClick={() => void (folderToDelete !== undefined ? confirmFolderDelete() : confirmDelete())}>{productText('确认删除')}</button>
         </footer>
       </section></div>}
     {folderDraft !== undefined && <div className="dsh-knowledge-modal-backdrop">
@@ -2701,6 +2726,8 @@ function buildContentTree(documents: KnowledgeDocument[], newestFirst: boolean, 
 }
 
 type ContentTreeHandlers = {
+  onDeleteFolder: ((path: string) => void) | undefined
+  folderDeleting: boolean
   selectedDocumentIds: string[]
   onToggleFolder: (path: string) => void
   onToggleDocumentSelection: (documentId: string) => void
@@ -2721,14 +2748,21 @@ function renderContentTree(nodes: ContentNode[], handlers: ContentTreeHandlers):
   for (const node of nodes) {
     if (node.type === 'folder') {
       folders.push(
-        <button type="button" key={`folder:${node.path}`} className="dsh-knowledge-card folder"
-          title={node.name} onClick={() => handlers.onToggleFolder(node.path)}>
-          <span className="dsh-knowledge-file-icon folder" aria-hidden="true"><FolderIcon /></span>
-          <span className="dsh-knowledge-folder-copy"><strong>{node.name}</strong>
-            <small>{productText('文件夹')} · {productText('{count} 项').replace('{count}', String(node.children.length))}</small>
-          </span>
-          <span className="dsh-knowledge-folder-chevron" aria-hidden="true"><ChevronIcon /></span>
-        </button>,
+        <div key={`folder:${node.path}`} className="dsh-knowledge-folder-card">
+          <button type="button" className="dsh-knowledge-card folder"
+            title={node.name} onClick={() => handlers.onToggleFolder(node.path)}>
+            <span className="dsh-knowledge-file-icon folder" aria-hidden="true"><FolderIcon /></span>
+            <span className="dsh-knowledge-folder-copy"><strong>{node.name}</strong>
+              <small>{productText('文件夹')} · {productText('{count} 项').replace('{count}', String(node.children.length))}</small>
+            </span>
+            <span className="dsh-knowledge-folder-chevron" aria-hidden="true"><ChevronIcon /></span>
+          </button>
+          {handlers.onDeleteFolder !== undefined && <button type="button" className="dsh-knowledge-folder-delete"
+            aria-label={`${productText('删除文件夹')} ${node.name}`}
+            title={node.children.length > 0 ? productText('请先删除文件和子文件夹') : productText('删除文件夹')}
+            disabled={handlers.folderDeleting || node.children.length > 0}
+            onClick={() => handlers.onDeleteFolder?.(node.path)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7" /></svg></button>}
+        </div>,
       )
       continue
     }

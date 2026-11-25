@@ -91,6 +91,7 @@ function api(): KnowledgeApi {
     download: vi.fn(async () => ({ contentType: 'application/pdf', bytes: new Uint8Array([37, 80, 68, 70]) })),
     folders: vi.fn(async () => []),
     createFolder: vi.fn(async () => {}),
+    deleteFolder: vi.fn(async () => {}),
     upload: vi.fn(async () => {}),
     importWebLinks: vi.fn(async () => {}),
     importRecordingMinutes: vi.fn(async () => {}),
@@ -813,7 +814,7 @@ it('navigates uploaded directories with breadcrumbs and returns to the parent', 
   expect(screen.getByText('说明.pdf')).toBeTruthy()
   expect(screen.queryByText('根目录.txt')).toBeNull()
   expect(screen.queryByText('笔记.md')).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: /子目录/ }))
+  fireEvent.click(screen.getByRole('button', { name: /^子目录/ }))
   expect(await screen.findByText('笔记.md')).toBeTruthy()
   expect(screen.queryByText('说明.pdf')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '返回上级' }))
@@ -1526,6 +1527,33 @@ it('keeps a saved heart when cancelling the like fails', async () => {
   fireEvent.click(await screen.findByRole('button', { name: '取消喜欢' }))
   await screen.findByText(/保存喜欢状态失败/)
   expect(screen.getByRole('button', { name: '取消喜欢', pressed: true }).hasAttribute('disabled')).toBe(false)
+})
+
+it('deletes only empty owned folders after confirmation and keeps failed deletions visible', async () => {
+  const service = api()
+  service.folders = vi.fn(async () => ['空目录', '有内容'])
+  service.documents = vi.fn(async () => [{ id: 'doc-1', name: '有内容/说明.pdf', size: 2048, run: 'DONE', progress: 1 }])
+  const confirm = vi.spyOn(window, 'confirm')
+  render(<KnowledgePage api={service} />)
+  const empty = await screen.findByRole('button', { name: '删除文件夹 空目录' })
+  expect(screen.getByRole('button', { name: '删除文件夹 有内容' }).hasAttribute('disabled')).toBe(true)
+  fireEvent.click(empty)
+  expect(service.deleteFolder).not.toHaveBeenCalled()
+  let dialog = screen.getByRole('dialog', { name: '确认删除' })
+  expect(within(dialog).getByText('空目录')).toBeTruthy()
+  fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
+  expect(screen.queryByRole('dialog', { name: '确认删除' })).toBeNull()
+  vi.mocked(service.deleteFolder).mockRejectedValueOnce(new Error('文件夹有内容'))
+  fireEvent.click(empty)
+  dialog = screen.getByRole('dialog', { name: '确认删除' })
+  fireEvent.click(within(dialog).getByRole('button', { name: '确认删除' }))
+  expect((await within(dialog).findByRole('alert')).textContent).toContain('文件夹有内容')
+  expect(screen.queryByRole('dialog', { name: '确认删除' })).toBeTruthy()
+  await waitFor(() => expect(within(dialog).getByRole('button', { name: '确认删除' }).hasAttribute('disabled')).toBe(false))
+  fireEvent.click(within(dialog).getByRole('button', { name: '确认删除' }))
+  await waitFor(() => expect(screen.queryByText('空目录')).toBeNull())
+  expect(service.deleteFolder).toHaveBeenLastCalledWith(1, '空目录')
+  expect(confirm).not.toHaveBeenCalled()
 })
 
 it('restores folder selection and saves empty folders across page mounts', async () => {

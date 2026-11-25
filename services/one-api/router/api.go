@@ -228,6 +228,7 @@ func SetApiRouter(router *gin.Engine) {
 			knowledgeRoute.PUT("/:id/credit-price", controller.PutKnowledgeCreditPrice)
 			knowledgeRoute.GET("/:id/folders", controller.ListKnowledgeFolders)
 			knowledgeRoute.POST("/:id/folders", controller.CreateKnowledgeFolder)
+			knowledgeRoute.DELETE("/:id/folders", controller.DeleteKnowledgeFolder)
 			knowledgeRoute.GET("/:id/documents", controller.ListKnowledgeDocuments)
 			knowledgeRoute.POST("/:id/documents", controller.UploadKnowledgeDocument)
 			knowledgeRoute.POST("/:id/documents/:documentId/parse", controller.ParsePersonalKnowledgeDocument)

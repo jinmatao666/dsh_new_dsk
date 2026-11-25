@@ -776,7 +776,7 @@ button.dsh-knowledge-plaza-file { cursor: pointer; }
 .dsh-knowledge-card {
   --dsh-file-accent: #5b8def; --dsh-file-accent-dark: #2f6fe0; --dsh-file-icon-start: #eef4ff; --dsh-file-icon-end: #e4edff;
   position: relative; display: flex; gap: 10px; align-items: center; box-sizing: border-box; min-width: 0; width: 100%; min-height: 94px;
-  padding: 10px 8px; border: 0; border-radius: 8px; background: #fff; color: inherit; box-shadow: none;
+  padding: 14px; border: 1px solid #e2eaf5; border-radius: 12px; background: #fff; color: inherit; box-shadow: 0 3px 10px rgb(32 64 112 / 5%);
   font: inherit; text-align: left; cursor: pointer; transition: background 150ms ease;
 }
 .dsh-knowledge-card.file { --dsh-file-accent: #718096; --dsh-file-accent-dark: #526174; --dsh-file-icon-start: #f3f5f8; --dsh-file-icon-end: #e8ecf2; }
@@ -834,6 +834,13 @@ button.dsh-knowledge-plaza-file { cursor: pointer; }
 .dsh-knowledge-card-corner { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; }
 .dsh-knowledge-check { display: grid; flex: none; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #2f6fe0; color: #fff; box-shadow: 0 2px 6px rgb(47 111 224 / 30%); }
 .dsh-knowledge-folder-chevron { display: grid; flex: none; place-items: center; width: 16px; height: 16px; color: #98a2b3; transform: rotate(0deg); transition: transform 120ms ease; }
+.dsh-knowledge-folder-card { position: relative; min-width: 0; }
+.dsh-knowledge-folder-card > .dsh-knowledge-card.folder { padding-right: 44px; }
+.dsh-knowledge-folder-delete { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid #dce6f4; border-radius: 7px; background: #fff; color: #7b8ba1; cursor: pointer; visibility: hidden; }
+.dsh-knowledge-folder-card:hover .dsh-knowledge-folder-delete,
+.dsh-knowledge-folder-card:focus-within .dsh-knowledge-folder-delete { visibility: visible; }
+.dsh-knowledge-folder-delete:hover:not(:disabled) { color: #c54639; border-color: #f2c9c2; background: #fff6f4; }
+.dsh-knowledge-folder-delete:disabled { opacity: .35; cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) { .dsh-knowledge-folder-chevron { transition: none; } }
 .dsh-knowledge-context-menu { position: fixed; z-index: 1300; min-width: 148px; padding: 4px; border: 1px solid #e6e8ee; border-radius: 10px; background: #fff; color: #1f2a37; font-size: 13px; box-shadow: 0 10px 28px rgb(15 23 42 / 14%); }
 .dsh-knowledge-context-menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 6px 10px; border: 0; border-radius: 7px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
@@ -1394,16 +1401,17 @@ button.dsh-knowledge-plaza-file { cursor: pointer; }
 
 .dsh-knowledge-thumbnail {
   position: relative; box-sizing: border-box; display: grid; flex: none; place-items: center;
-  width: 52px; min-width: 52px; height: 72px; aspect-ratio: 3 / 4; overflow: hidden;
-  background: var(--dsh-file-icon-start); border: 1px solid var(--dsh-file-icon-end); border-radius: 4px;
+  width: 82px; min-width: 82px; height: 110px; aspect-ratio: 3 / 4; overflow: hidden;
+  background: var(--dsh-file-icon-start); border: 1px solid var(--dsh-file-accent); border-radius: 7px;
+  box-shadow: 3px 3px 0 var(--dsh-file-icon-end), 0 2px 6px rgb(32 64 112 / 8%);
 }
 .dsh-knowledge-thumbnail img { width: 100%; height: 100%; object-fit: contain; }
 
 .dsh-knowledge-thumbnail-loading { display: flex; flex: 1; min-height: 0; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: #3985ff; font-size: 14px; }
 .dsh-knowledge-thumbnail-loading > span { width: 16px; height: 16px; box-sizing: border-box; border: 1.5px solid #dceaff; border-top-color: #60a5fa; border-right-color: #60a5fa; border-radius: 50%; animation: dsh-knowledge-thumbnail-spin .8s linear infinite; }
 .dsh-knowledge-thumbnail-badge {
-  position: absolute; inset: 0 auto auto 0; display: grid; place-items: center; width: 14px; height: 13px;
-  border-radius: 3px 0 3px 0; background: var(--dsh-file-accent-dark); color: #fff; font: 600 9px/1 Arial, sans-serif;
+  position: absolute; inset: 0 auto auto 0; display: grid; place-items: center; width: 22px; height: 20px;
+  border-radius: 6px 0 6px 0; background: var(--dsh-file-accent-dark); color: #fff; font: 600 12px/1 Arial, sans-serif;
 }
 .dsh-knowledge-card-details { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 6px; }
 .dsh-knowledge-card-details > strong {

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-12-knowledge-empty-folders.md
-2026-11-12-knowledge-empty-folders.md: 571d4ef1059bca6e2553ef47c5424dbd71505a7f
-2026-11-12-knowledge-empty-folders.zh.md: 4fc075aad72f6ab5776a2ba8d353927924b5df9c
+2026-11-12-knowledge-empty-folders.md: e095ba9d885dbb252198b6b60bcf15e2cd1c491b
+2026-11-12-knowledge-empty-folders.zh.md: f8063ba12718304088c4860d49aed2f423951e52
