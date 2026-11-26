@@ -193,15 +193,15 @@ jobs:
           restore-keys: |
             ${{ matrix.platform }}-wanwei-
 
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Validate inputs and prepare platform config
         env:
           DSH_BUILD_UPDATES: ${{ inputs.build_update_bundles }}
           DSH_DESKTOP_UPDATE_PUBLIC_KEY: ${{ vars.DSH_DESKTOP_UPDATE_PUBLIC_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: node products/wanwei-desktop/scripts/prepare-runner-config.mjs ${{ matrix.platform }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Verify Wanwei product identity
         run: pnpm --dir products/wanwei-desktop run check:identity
