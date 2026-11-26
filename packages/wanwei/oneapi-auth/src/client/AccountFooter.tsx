@@ -77,7 +77,7 @@ export function AccountFooter({ controls, wide, useAuth, requestCredits, logout,
     }
   }, [open])
 
-  return <div ref={root} className={css.root} data-wide={wide}>
+  return <div ref={root} className={css.root} data-wide={wide} data-custom-brand={brand.name !== '万维Buddy'}>
     <div className={css.row}>
       <button ref={trigger} type="button" className={css.trigger} title={label} aria-label={label}
         aria-expanded={open} aria-controls={panelId} onClick={() => { setCredit(undefined)

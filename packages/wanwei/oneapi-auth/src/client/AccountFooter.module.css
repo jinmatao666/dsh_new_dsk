@@ -68,3 +68,13 @@
 .signOut:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; }
 .signOut:disabled { opacity: .6; cursor: wait; }
 .signOutError { padding: 4px 6px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+
+.root[data-custom-brand='true'][data-wide='true'] .trigger { gap: 8px; padding-left: 13px; }
+.root[data-custom-brand='true'][data-wide='true'] .avatar { flex-basis: 24px; height: 24px; }
+.root[data-custom-brand='true'][data-wide='true'] .avatar img {
+  display: block;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+.root[data-custom-brand='true'] .name { transform: none; }

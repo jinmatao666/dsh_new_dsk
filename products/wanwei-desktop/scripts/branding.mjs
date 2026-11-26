@@ -77,19 +77,21 @@ function imageData(path) {
 }
 
 function composeWordmark(mark, label, color, lettering) {
-  const icon = `<image x="4" y="8" width="80" height="80" href="${imageData(mark)}"/>`
+  // Match the stock wordmark canvas so existing logo slots keep their spacing.
+  const icon = `<image x="198" y="88" width="320" height="350" href="${imageData(mark)}"/>`
+  const svg = content => Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 512">${icon}${content}</svg>`)
   if (lettering) {
-    return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 392 96">${icon}<image x="104" y="22" width="286" height="56" preserveAspectRatio="xMinYMid meet" href="${imageData(lettering)}"/></svg>`)
+    return svg(`<image x="608" y="150" width="1252" height="260" preserveAspectRatio="xMinYMid meet" href="${imageData(lettering)}"/>`)
   }
   if (label === '万维Buddy' || label === '万维 Buddy') {
     const original = readFileSync(join(webRoot, 'brand-wordmark.svg'), 'utf8')
     const path = original.match(/<path id="wordmark"[^>]*\/>/u)?.[0]
     if (!path) throw new Error('Original brand lettering path is missing')
-    return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 392 96">${icon}<svg x="104" y="28" width="286" height="50" viewBox="608 176 1252 216"><g fill="${color}" fill-rule="evenodd">${path}</g></svg></svg>`)
+    return svg(`<g fill="${color}" fill-rule="evenodd">${path}</g>`)
   }
   const textWidth = [...label].reduce((width, char) => width + (/^[\x20-\x7e]$/u.test(char) ? 42 : 51), 0)
   const escaped = label.replace(/[&<>]/gu, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[char])
-  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${108 + textWidth} 96">${icon}<text x="102" y="66" fill="${color}" font-family="Arial Black, Microsoft YaHei, PingFang SC, sans-serif" font-size="50" font-weight="900" letter-spacing="-1.5">${escaped}</text></svg>`)
+  return svg(`<svg x="608" y="150" width="1252" height="260" viewBox="0 0 ${textWidth} 65" preserveAspectRatio="xMinYMid meet"><text y="50" fill="${color}" font-family="Arial Black, Microsoft YaHei, PingFang SC, sans-serif" font-size="50" font-weight="900" letter-spacing="-1.5">${escaped}</text></svg>`)
 }
 
 export function brandText(brand, text) {

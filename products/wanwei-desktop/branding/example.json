@@ -12,8 +12,7 @@
   "copyrightEn": "© 2026 ATLAS · Example Workspace",
   "sessionFilePrefix": "atlas-session-",
   "assets": {
-    "mark": "example/mark.svg",
-    "sidebar": "example/sidebar.svg"
+    "mark": "example/mark.svg"
   },
   "native": { "icon": "example/app.png" },
   "text": {
