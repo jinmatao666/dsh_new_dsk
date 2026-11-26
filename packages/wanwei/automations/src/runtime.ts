@@ -1,3 +1,4 @@
+import { brandText } from './brand.generated.ts'
 /** Account-scoped local execution through the ordinary Session Controller. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Config } from './index.ts'
@@ -184,7 +185,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           const deliveredAt = new Date(record.endedAt ?? Date.now()).toLocaleString('zh-CN')
           const body = [`## ${task.name}`, issue, answer || record.checkpoint?.summary,
             record.checkpoint?.files.length ? `成果文件（保存在电脑）：\n${record.checkpoint.files.join('\n')}` : '',
-            `万维 Buddy · 定时任务 · ${deliveredAt}`].filter(Boolean).join('\n\n')
+            `${brandText('万维 Buddy')} · 定时任务 · ${deliveredAt}`].filter(Boolean).join('\n\n')
           await store.update((state) => {
             const saved = state.runs.find(item => item.id === run.id)
             if (saved) { saved.deliveryText = body; saved.deliveries = channels.map(channel => ({ channel, status: 'pending' as const })) }

@@ -207,7 +207,7 @@ async fn confirm(app: &tauri::AppHandle, text: String) -> Result<bool, String> {
     tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .message(text)
-            .title("万维Buddy 更新")
+            .title(crate::branding::UPDATE_TITLE)
             .buttons(MessageDialogButtons::OkCancelCustom(
                 "继续".into(),
                 "稍后".into(),

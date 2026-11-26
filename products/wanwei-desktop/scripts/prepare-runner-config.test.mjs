@@ -52,7 +52,8 @@ test('ordinary installers embed the configured public key without requiring a pr
     const config = JSON.parse(readFileSync(join(directory, 'wanwei-linux-x64.json'), 'utf8'))
     assert.equal(config.plugins.updater.pubkey, 'public-test-value')
     assert.equal(config.plugins.updater.dangerousInsecureTransportProtocol, true)
-    assert.equal(config.bundle, undefined)
+    assert.equal(config.productName, '万维Buddy')
+    assert.equal(config.bundle.icon.length, 5)
   }, { DSH_DESKTOP_UPDATE_PUBLIC_KEY: 'public-test-value', TAURI_SIGNING_PRIVATE_KEY: '' })
 })
 
@@ -60,9 +61,11 @@ for (const [platform, arch] of [['linux-arm64', 'ARM64'], ['linux-x64', 'X64']])
   test(`${platform} generates versioned runner configuration`, () => {
     runConfig(platform, arch, (result, directory) => {
       assert.equal(result.status, 0, result.stderr)
-      assert.deepEqual(JSON.parse(readFileSync(join(directory, `wanwei-${platform}.json`), 'utf8')), {
-        version: '2.1.0',
-      })
+      const config = JSON.parse(readFileSync(join(directory, `wanwei-${platform}.json`), 'utf8'))
+      assert.equal(config.version, '2.1.0')
+      assert.equal(config.productName, '万维Buddy')
+      assert.equal(config.bundle.icon.length, 5)
+      assert.equal(config.identifier, undefined)
     })
   })
 }

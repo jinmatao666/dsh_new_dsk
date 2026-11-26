@@ -13,6 +13,10 @@ on:
         options:
           - all
           - kylin
+      brand_config:
+        description: Brand JSON path in the selected source checkout (blank uses Wanwei)
+        default: ''
+        type: string
       source_ref:
         description: Source branch or commit to build
         required: true
@@ -50,6 +54,7 @@ concurrency:
 
 env:
   PRIMARY_NODE_VERSION: '22.19.0'
+  DSH_BRAND_CONFIG: ${{ inputs.brand_config }}
   DSH_RELEASE_VERSION: ${{ inputs.version }}
   DSH_RELEASE_OFFICIAL: ${{ inputs.official_release }}
   DSH_DESKTOP_SERVER_URL: ${{ vars.DSH_ONEAPI_URL || 'http://ac.zjugis.com:3300' }}
@@ -255,14 +260,17 @@ jobs:
         run: |
           set -euo pipefail
           bundle_dir="products/wanwei-desktop/src-tauri/target/release/bundle"
-          app="$bundle_dir/macos/万维Buddy.app"
+          apps=("$bundle_dir"/macos/*.app)
+          test "${#apps[@]}" -eq 1
+          app="${apps[0]}"
           test -d "$app"
+          brand_name="$(basename "$app" .app)"
           stage="${RUNNER_TEMP}/wanwei-dmg-${{ matrix.platform }}"
           mkdir -p "$stage" "$bundle_dir/dmg"
           ditto "$app" "$stage/$(basename "$app")"
           ln -s /Applications "$stage/Applications"
-          dmg="$bundle_dir/dmg/万维Buddy_${{ inputs.version }}_${{ matrix.platform }}.dmg"
-          hdiutil create -srcfolder "$stage" -volname "万维Buddy" -format UDZO -ov "$dmg"
+          dmg="$bundle_dir/dmg/${brand_name}_${{ inputs.version }}_${{ matrix.platform }}.dmg"
+          hdiutil create -srcfolder "$stage" -volname "$brand_name" -format UDZO -ov "$dmg"
           hdiutil verify "$dmg"
 
       - name: Diagnose Linux AppImage bundler
@@ -341,6 +349,7 @@ jobs:
     needs: verify-official
     uses: ./.github/workflows/wanwei-kylin.yml
     with:
+      brand_config: ${{ inputs.brand_config }}
       source_ref: ${{ inputs.source_ref }}
       version: ${{ inputs.version }}
       official_release: ${{ inputs.official_release }}

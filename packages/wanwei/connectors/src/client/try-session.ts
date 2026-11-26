@@ -1,3 +1,4 @@
+import { brandText } from '../brand.generated.ts'
 import type { IConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { IWorkspaces, WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
@@ -48,7 +49,7 @@ export function desktopInvoke(command: string, argumentsValue: unknown): Promise
   const desktopWindow = window as Window & { __TAURI__?: DesktopBridge; __TAURI_INTERNALS__?: DesktopInternals }
   const invoke = desktopWindow.__TAURI__?.core?.invoke ?? desktopWindow.__TAURI_INTERNALS__?.invoke
   if (typeof invoke !== 'function') {
-    return Promise.reject(new Error('未连接到桌面端原生服务。请重新打开万维Buddy 后重试。'))
+    return Promise.reject(new Error(brandText('未连接到桌面端原生服务。请重新打开万维Buddy 后重试。')))
   }
   return invoke(command, argumentsValue)
 }

@@ -3,6 +3,7 @@ import { resolve, join, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { prepareKylinMarkdown } from './kylin-markdown.mjs'
 import { prepareKylinGradients } from './kylin-gradients.mjs'
+import { loadBrand, prepareNativeBrand } from './branding.mjs'
 
 /** Copy the shared Linux runtime into the Kylin shell and set its installer version.
  * @param {string} productRoot - Desktop product directory.
@@ -41,6 +42,11 @@ export function prepareKylin(productRoot, version, arch = process.arch) {
     })
   }
   const config = JSON.parse(readFileSync(join(shell, 'tauri.conf.json'), 'utf8'))
+  const branded = prepareNativeBrand(loadBrand(), { outputRoot: join(productRoot, '.brand-build') })
+  config.package.productName = branded.productName
+  config.build.distDir = '../.brand-build/shell'
+  config.tauri.bundle.icon = branded.bundle.icon.filter(path => path.endsWith('.png'))
+  config.tauri.systemTray.iconPath = join(productRoot, '.brand-build/tray.png')
   const stagedRuntime = join(shell, 'resources', 'runtime-' + version)
   const patched = prepareKylinMarkdown(stagedRuntime)
   const gradients = prepareKylinGradients(stagedRuntime)

@@ -1,3 +1,4 @@
+import { brandText } from '../../brand.generated.ts'
 /** Product copy owned by this feature. */
 const zh = {
   '技能调用': '技能调用',
@@ -161,5 +162,5 @@ const zh = {
  * @returns Localized message.
  */
 export function productText(key: keyof typeof zh, values: readonly unknown[] = []): string {
-  return zh[key].replace(/\{(\d+)\}/g, (_, index: string) => String(values[Number(index)]))
+  return brandText(zh[key]).replace(/\{(\d+)\}/g, (_, index: string) => String(values[Number(index)]))
 }

@@ -45,6 +45,8 @@ products/wanwei-desktop/assets/lark-*/
 .venv/
 __pycache__/
 *.py[cod]
+products/wanwei-desktop/.brand-build/
+products/wanwei-desktop/.branding-build.lock
 expert-web/cad-redline-extractor/
 expert-web/coordinate-transform/
 expert-web/gis-format-converter/

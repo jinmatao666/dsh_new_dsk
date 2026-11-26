@@ -1,3 +1,4 @@
+import { brandText } from '../brand.generated.ts'
 import { productText } from './locales/product.ts'
 import { useEffect, useRef } from 'react'
 
@@ -23,7 +24,7 @@ function invokeNative(command: string, args: Record<string, unknown>): Promise<u
   const invoke = (window as Window & {
     __ZJUGIS_NATIVE_INVOKE__?: (name: string, value: unknown) => Promise<unknown>
   }).__ZJUGIS_NATIVE_INVOKE__
-  if (invoke === undefined) return Promise.reject(new Error('请在万维 Buddy 桌面端打开专家'))
+  if (invoke === undefined) return Promise.reject(new Error(brandText('请在万维 Buddy 桌面端打开专家')))
   return invoke(command, args)
 }
 

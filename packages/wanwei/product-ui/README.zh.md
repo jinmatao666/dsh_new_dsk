@@ -98,3 +98,7 @@ kind: "package-reference"
 产品选择器和标记解析应留在此包；官方 UI 包只能暴露通用 Slot 或 Service。
 
 </details>
+
+## 构建品牌
+
+产品自有名称和图片读取构建生成的品牌快照，通过[桌面品牌配置](../../../products/wanwei-desktop/branding/README.zh.md)选择；协议标识、凭据和用户内容保持不变。

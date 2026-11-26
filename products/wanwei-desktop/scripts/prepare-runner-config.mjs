@@ -1,6 +1,7 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
+import { loadBrand, prepareNativeBrand } from './branding.mjs'
 
 const platform = process.argv[2]
 const runnerByPlatform = {
@@ -39,11 +40,11 @@ if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
   throw new Error('DSH_ONEAPI_URL 必须使用 http 或 https')
 }
 
-const config = { version }
+const config = { ...prepareNativeBrand(loadBrand()), version }
 const updateKey = process.env.DSH_DESKTOP_UPDATE_PUBLIC_KEY?.trim()
 if (updateKey) config.plugins = { updater: { pubkey: updateKey, dangerousInsecureTransportProtocol: parsedUrl.protocol === 'http:' } }
 if (platform === 'macos-arm64' || platform === 'macos-x64') {
-  config.bundle = { macOS: { signingIdentity: '-' } }
+  config.bundle = { ...config.bundle, macOS: { signingIdentity: '-' } }
 }
 if (process.env.DSH_BUILD_UPDATES === 'true') {
   if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(version)) throw new Error('正式更新只接受 x.y.z 版本')

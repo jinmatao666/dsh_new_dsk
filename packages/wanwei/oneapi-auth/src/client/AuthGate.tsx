@@ -1,3 +1,4 @@
+import { brand } from '../brand.generated.ts'
 import { LegalDocument } from './LegalDocument.tsx'
 import type { LegalKind } from './legal-documents.ts'
 import { LoginDialog } from './LoginDialog.tsx'
@@ -187,7 +188,7 @@ export function AuthGate({
         <section className={css.brandSide} aria-label={t('productIntroLabel')}>
           <div className={css.brandHeader} aria-label={t('productName')}>
             <span className={css.logoText}>
-              <img className={css.fullLogo} src="/brand-wordmark.svg" width={250} height={83} alt={t('productName')} />
+              <img className={css.fullLogo} src={brand.assets.login} width={250} height={83} alt={t('productName')} />
             </span>
           </div>
           <div className={css.brandHero}>

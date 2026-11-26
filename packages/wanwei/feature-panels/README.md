@@ -88,3 +88,7 @@ None.
 </details>
 
 Sidebar expand/collapse is a layout-only gesture: it keeps the active feature and its mounted content intact. Normal navigation still closes the feature.
+
+## Build branding
+
+Product-owned display names and assets use generated build-brand snapshots. Select the manifest through the [desktop branding configuration](../../../products/wanwei-desktop/branding/README.md); protocol identifiers, credentials and user content are unchanged.

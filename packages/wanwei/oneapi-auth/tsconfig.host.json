@@ -5,27 +5,99 @@
     "outDir": "lib/types",
     "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
   },
-  "files": ["src/index.ts", "src/credit-guard.ts", "src/skill-billing.ts", "src/invariant.ts", "src/contract.ts", "src/account-security.ts", "src/public-auth.ts", "src/credits.ts", "src/expert-catalog.ts", "src/portal-feature.ts", "src/knowledge-base.ts", "src/knowledge-retrieval.ts", "src/search-provider.ts", "src/usage.ts", "src/network.ts", "src/network-contract.ts", "src/deployment.ts", "src/resource-routing.ts", "src/resource-settings.ts", "src/dependency-policy.ts", "src/final-deliverables.ts", "src/desktop-lifecycle.ts"],
-  "include": ["src/skill-injection-billing.ts", "src/resource-tunnel.ts", "src/pip-mirrors.ts", "src/resource-client.ts", "src/knowledge-upload.ts", "src/knowledge-recording-minutes.ts", "src/script-workspace.ts", "src/custom-model-usage.ts", "src/forum-billing.ts"],
+  "files": [
+    "src/index.ts",
+    "src/credit-guard.ts",
+    "src/skill-billing.ts",
+    "src/invariant.ts",
+    "src/contract.ts",
+    "src/account-security.ts",
+    "src/public-auth.ts",
+    "src/credits.ts",
+    "src/expert-catalog.ts",
+    "src/portal-feature.ts",
+    "src/knowledge-base.ts",
+    "src/knowledge-retrieval.ts",
+    "src/search-provider.ts",
+    "src/usage.ts",
+    "src/network.ts",
+    "src/network-contract.ts",
+    "src/deployment.ts",
+    "src/resource-routing.ts",
+    "src/resource-settings.ts",
+    "src/dependency-policy.ts",
+    "src/final-deliverables.ts",
+    "src/desktop-lifecycle.ts"
+  ],
+  "include": [
+    "src/skill-injection-billing.ts",
+    "src/resource-tunnel.ts",
+    "src/pip-mirrors.ts",
+    "src/resource-client.ts",
+    "src/knowledge-upload.ts",
+    "src/knowledge-recording-minutes.ts",
+    "src/script-workspace.ts",
+    "src/custom-model-usage.ts",
+    "src/forum-billing.ts",
+    "src/brand.generated.ts"
+  ],
   "references": [
-    { "path": "../../core/agent" },
-    { "path": "../../boot/cmdline" },
-    { "path": "../../jobs/jobs" },
-    { "path": "../../llm/llm" },
-    { "path": "../../fs/fs" },
-    { "path": "../../core/system-prompt" },
-    { "path": "../../skill/skill" },
-    { "path": "../../core/tools" },
-    { "path": "../../util/launch-environment" },
-    { "path": "../../../vendor/cordis" },
-    { "path": "../../../vendor/schemastery" },
-    { "path": "../../client/connection/tsconfig.host.json" },
-    { "path": "../../core/agent-default-model" },
-    { "path": "../../credentials/credentials" },
-    { "path": "../../llm/llm-pi-ai" },
-    { "path": "../../runtime-diagnostics/invariants" },
-    { "path": "../../settings/settings" },
-    { "path": "../../core/session" },
-    { "path": "../../web/web" }
+    {
+      "path": "../../core/agent"
+    },
+    {
+      "path": "../../boot/cmdline"
+    },
+    {
+      "path": "../../jobs/jobs"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../../fs/fs"
+    },
+    {
+      "path": "../../core/system-prompt"
+    },
+    {
+      "path": "../../skill/skill"
+    },
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../util/launch-environment"
+    },
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../client/connection/tsconfig.host.json"
+    },
+    {
+      "path": "../../core/agent-default-model"
+    },
+    {
+      "path": "../../credentials/credentials"
+    },
+    {
+      "path": "../../llm/llm-pi-ai"
+    },
+    {
+      "path": "../../runtime-diagnostics/invariants"
+    },
+    {
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../../core/session"
+    },
+    {
+      "path": "../../web/web"
+    }
   ]
 }

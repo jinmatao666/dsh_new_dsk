@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "name": "图谱助手",
+  "nameEn": "Atlas Desk",
+  "logoText": "Atlas Desk",
+  "logoTextColor": "#146B63",
+  "shortName": "图谱",
+  "organization": "ATLAS",
+  "windowTitle": "图谱工作台",
+  "installerName": "Atlas Desk",
+  "copyright": "© 2026 ATLAS · 示例工作平台",
+  "copyrightEn": "© 2026 ATLAS · Example Workspace",
+  "sessionFilePrefix": "atlas-session-",
+  "assets": {
+    "mark": "example/mark.svg",
+    "sidebar": "example/sidebar.svg"
+  },
+  "native": { "icon": "example/app.png" },
+  "text": {
+    "请在万维 Buddy 桌面端打开专家": "请在图谱助手桌面端打开专家"
+  }
+}

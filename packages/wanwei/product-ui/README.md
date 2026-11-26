@@ -98,3 +98,7 @@ Pure UI presentation does not alter cache keys. A changed user request after imp
 Keep product selectors and marker parsing here; official UI packages may only expose generic slots or services.
 
 </details>
+
+## Build branding
+
+Product-owned display names and assets use generated build-brand snapshots. Select the manifest through the [desktop branding configuration](../../../products/wanwei-desktop/branding/README.md); protocol identifiers, credentials and user content are unchanged.

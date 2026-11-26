@@ -1,5 +1,6 @@
+import { brand, brandText } from '../brand.generated.ts'
 /** Chinese authentication copy. */
-export const zh = {
+const defaultZh = {
   turnCreditsLabel: '本轮消耗',
   turnCreditsUnit: '积分',
   turnCreditsPending: '结算中…',
@@ -235,6 +236,8 @@ export const zh = {
 } as const
 
 /** Keys shared by authentication dictionaries. */
+export const zh = Object.fromEntries(Object.entries(defaultZh).map(([key, value]) => [key, key === 'copyright' ? brand.copyright : brandText(value)])) as { [K in keyof typeof defaultZh]: string }
+
 export type WanweiAuthKey = keyof typeof zh
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -244,7 +247,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /** English authentication copy. */
-export const en: { [Key in WanweiAuthKey]: string } = {
+const defaultEn: { [Key in WanweiAuthKey]: string } = {
   turnCreditsLabel: 'Turn cost',
   turnCreditsUnit: 'credits',
   turnCreditsPending: 'Settling…',
@@ -478,3 +481,5 @@ export const en: { [Key in WanweiAuthKey]: string } = {
   signingOut: 'Signing out…',
   signOutFailed: 'Could not sign out. Try again.',
 }
+
+export const en = Object.fromEntries(Object.entries(defaultEn).map(([key, value]) => [key, key === 'copyright' ? brand.copyrightEn : brandText(value)])) as { [Key in WanweiAuthKey]: string }

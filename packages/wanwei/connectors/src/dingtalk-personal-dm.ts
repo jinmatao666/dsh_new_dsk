@@ -1,3 +1,4 @@
+import { brandText } from './brand.generated.ts'
 /**
  * Product overlay on the copied `dws-cli` skill.
  * The upstream skill documents robot and webhook sends only. Desktop DingTalk
@@ -18,7 +19,7 @@ export const DINGTALK_BOT_DIRECT_MARKER = '<!-- wanwei-bot-direct -->'
 export const DINGTALK_DWS_TOOL_MARKER = '<!-- wanwei-dws-tool -->'
 
 const DWS_TOOL_BLOCK = `${DINGTALK_DWS_TOOL_MARKER}
-## 执行方式（万维桌面端）
+## 执行方式（${brandText('万维桌面端')}）
 
 本技能里写的每条 \`dws ...\` 命令，都调用 \`${DINGTALK_DWS_TOOL}\` 工具执行，\`args\` 填 \`dws\` 后面的参数数组。例如 \`dws chat +dm --to 张三 --content 你好 --yes --format json\` 对应 \`{"args": ["chat", "+dm", "--to", "张三", "--content", "你好", "--yes", "--format", "json"]}\`。
 

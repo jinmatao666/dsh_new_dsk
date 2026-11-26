@@ -367,7 +367,7 @@ fn attach(window: &Window, app: tauri::AppHandle, url: Url) -> tauri::Result<()>
                 };
                 if !authenticated { HOST.with(|host| { if let Some(host) = host.borrow_mut().as_mut() { clear_experts(host); } }); }
                 let _ = apply_auth_window_state(&auth_window, authenticated);
-                let _ = auth_window.set_title("万维Buddy");
+                let _ = auth_window.set_title(branding::WINDOW_TITLE);
             });
             HOST.with(|host| *host.borrow_mut() = Some(Host { main: main.clone(), fixed, experts: HashMap::new() }));
             overlay.show_all();
@@ -410,11 +410,11 @@ pub fn run() {
         if std::env::var_os(name).is_none() { std::env::set_var(name, "1"); }
     }
     let menu = SystemTrayMenu::new()
-        .add_item(CustomMenuItem::new("show", "显示 万维Buddy"))
-        .add_item(CustomMenuItem::new("quit", "退出 万维Buddy"));
+        .add_item(CustomMenuItem::new("show", branding::TRAY_SHOW))
+        .add_item(CustomMenuItem::new("quit", branding::TRAY_QUIT));
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| restore(app)))
-        .system_tray(SystemTray::new().with_menu(menu))
+        .system_tray(SystemTray::new().with_icon(branding::tray_icon()).with_menu(menu))
         .on_system_tray_event(|app, event| match event {
             SystemTrayEvent::MenuItemClick { id, .. } if id == "quit" => {
                 if let Some(sidecar) = app.try_state::<Sidecar>() { sidecar.stop(); }
@@ -445,7 +445,7 @@ pub fn run() {
             app.manage(PendingWorkspaceDrop(Mutex::new(None)));
             app.manage(network_policy::NetworkPolicy::default());
             let window = WindowBuilder::new(app, "main", WindowUrl::External(Url::parse("data:text/html,%3Chtml%3E%3C/html%3E")?))
-                .title("万维Buddy").inner_size(1120.0, 720.0).min_inner_size(900.0, 580.0)
+                .title(branding::WINDOW_TITLE).icon(branding::window_icon())?.inner_size(1120.0, 720.0).min_inner_size(900.0, 580.0)
                 .resizable(false).center().visible(false).build()?;
             attach(&window, handle, url)?;
             let event_window = window.clone();

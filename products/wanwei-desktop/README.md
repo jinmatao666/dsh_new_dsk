@@ -94,3 +94,5 @@ pnpm --filter @wanwei/dsh-desktop build
 The default `build` command rebuilds official DSH artifacts, stages and verifies the runtime, and runs `tauri build --no-bundle` to produce a local release binary without an installer. GitHub Actions uses `build:runner`, guarded by `GITHUB_ACTIONS=true`, to create the platform installer; local invocation fails immediately. File import, skill management, login window behavior, and other legacy commands remain separate follow-up migrations.
 
 Published expert webviews call `save_expert_artifact({ fileName, bytesBase64 })` through the desktop bridge. The command accepts only an expert webview, validates bounded bytes (128 MB), filenames and supported extensions, and opens the native Save As dialog. Only the user selects the destination and confirms replacement; websites cannot submit local paths. It returns the saved absolute path or null on cancellation and rejects changing the original extension. Ordinary browsers use browser downloads; native interaction still requires platform acceptance.
+
+Build-time names, per-position artwork and native icons are selected through the [branding manifest](branding/README.md).

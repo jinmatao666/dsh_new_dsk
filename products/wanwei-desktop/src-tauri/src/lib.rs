@@ -1,3 +1,4 @@
+mod branding { include!(concat!(env!("OUT_DIR"), "/branding.rs")); }
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -2713,7 +2714,7 @@ pub fn run() {
             let app_data_dir = app.path().app_local_data_dir()?;
             let log_path = app_data_dir.join("logs").join("startup.log");
             let _ = fs::remove_file(&log_path);
-            append_log(&log_path, "万维Buddy startup");
+            append_log(&log_path, branding::STARTUP);
             let config = server_config(&resource_dir).map_err(|message| {
                 append_log(&log_path, format!("[fatal] {message}"));
                 std::io::Error::new(std::io::ErrorKind::InvalidData, message)
@@ -2731,11 +2732,11 @@ pub fn run() {
             // Keep the sidecar alive when the user closes the window. The
             // application is controlled from the system tray and only exits
             // through the tray's explicit quit action.
-            let show_item = MenuItem::with_id(app, "show", "显示 万维Buddy", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "退出 万维Buddy", true, None::<&str>)?;
+            let show_item = MenuItem::with_id(app, "show", branding::TRAY_SHOW, true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", branding::TRAY_QUIT, true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
             TrayIconBuilder::new()
-                .icon(app.default_window_icon().ok_or("缺少应用图标")?.clone())
+                .icon(branding::tray_icon())
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -2776,7 +2777,8 @@ pub fn run() {
                 "main",
                 WebviewUrl::External(Url::parse("about:blank")?),
             )
-                .title("万维Buddy")
+                .title(branding::WINDOW_TITLE)
+                .icon(branding::window_icon())?
                 .inner_size(1120.0, 720.0)
                 .min_inner_size(900.0, 580.0)
                 .resizable(false)
@@ -2825,7 +2827,7 @@ pub fn run() {
                         }
                     }
                     let _ = apply_auth_window_state(&window, authenticated);
-                    let _ = window.set_title("万维Buddy");
+                    let _ = window.set_title(branding::WINDOW_TITLE);
                 })
                 .build()?;
             let startup_window = window.clone();

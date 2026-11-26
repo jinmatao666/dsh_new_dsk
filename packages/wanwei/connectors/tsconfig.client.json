@@ -7,10 +7,13 @@
   },
   "include": [
     "src/client",
-    "src/css-modules.d.ts"
+    "src/css-modules.d.ts",
+    "src/brand.generated.ts"
   ],
   "references": [
-    { "path": "../../client/ui-primitives" },
+    {
+      "path": "../../client/ui-primitives"
+    },
     {
       "path": "../../../vendor/cordis"
     },

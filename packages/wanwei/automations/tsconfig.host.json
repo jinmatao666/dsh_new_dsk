@@ -15,8 +15,12 @@
     "src/invariant.ts"
   ],
   "references": [
-    { "path": "../connectors/tsconfig.host.json" },
-    { "path": "../../core/tools" },
+    {
+      "path": "../connectors/tsconfig.host.json"
+    },
+    {
+      "path": "../../core/tools"
+    },
     {
       "path": "../../../vendor/cordis"
     },
@@ -50,5 +54,8 @@
     {
       "path": "../oneapi-auth/tsconfig.host.json"
     }
+  ],
+  "include": [
+    "src/brand.generated.ts"
   ]
 }

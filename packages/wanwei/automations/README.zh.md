@@ -122,3 +122,7 @@ Client 拥有选择状态和提示，通过鉴权的本机 RPC 读取已提交�
 无。
 
 </details>
+
+## 构建品牌
+
+产品自有名称和图片读取构建生成的品牌快照，通过[桌面品牌配置](../../../products/wanwei-desktop/branding/README.zh.md)选择；协议标识、凭据和用户内容保持不变。

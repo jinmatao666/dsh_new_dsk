@@ -233,3 +233,7 @@ Catalog access decisions cross plugin boundaries through the injected `wanweiNet
 Internet-dependent skill and expert presentation is configured independently with `internetSkillPolicy` and `internetExpertPolicy`. Missing values inherit the legacy shared policy; updated desktop clients are required to apply the independent choices.
 
 Skill fixed fees resolve their default charge point ID through the unified HTTP API. Disabled accounting or points permit execution without debits; charged tasks retain the existing success/failure settlement triggers.
+
+## Build branding
+
+Product-owned display names and assets use generated build-brand snapshots. Select the manifest through the [desktop branding configuration](../../../products/wanwei-desktop/branding/README.md); protocol identifiers, credentials and user content are unchanged.

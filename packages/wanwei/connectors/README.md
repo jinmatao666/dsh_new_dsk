@@ -115,3 +115,7 @@ The Host registers `dingtalk_dws`. Refreshing the copied `dws-cli` skill tells t
 None.
 
 </details>
+
+## Build branding
+
+Product-owned display names and assets use generated build-brand snapshots. Select the manifest through the [desktop branding configuration](../../../products/wanwei-desktop/branding/README.md); protocol identifiers, credentials and user content are unchanged.

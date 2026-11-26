@@ -1,3 +1,4 @@
+import { brandText } from '../../brand.generated.ts'
 /** Chinese product copy. Source-message keys preserve the current UI while translations are maintained here. */
 const zh = {
   '下载未返回有效的文件路径': '下载未返回有效的文件路径',
@@ -30,5 +31,5 @@ const zh = {
  * @returns Localized message.
  */
 export function productText(key: keyof typeof zh, values: readonly unknown[] = []): string {
-  return zh[key].replace(/\{(\d+)\}/g, (_, index: string) => String(values[Number(index)]))
+  return brandText(zh[key]).replace(/\{(\d+)\}/g, (_, index: string) => String(values[Number(index)]))
 }

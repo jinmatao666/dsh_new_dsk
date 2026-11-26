@@ -8,7 +8,8 @@
   "include": [
     "src/client",
     "src/css-modules.d.ts",
-    "src/contract.ts"
+    "src/contract.ts",
+    "src/brand.generated.ts"
   ],
   "references": [
     {

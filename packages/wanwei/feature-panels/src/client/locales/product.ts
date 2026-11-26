@@ -1,3 +1,4 @@
+import { brandText } from '../../brand.generated.ts'
 /** Product copy owned by this feature. */
 const zh = {
   '当前网络环境不可达，请检查您的网络': '当前网络环境不可达，请检查您的网络',
@@ -15,5 +16,5 @@ const zh = {
  * @returns Localized message.
  */
 export function productText(key: keyof typeof zh, values: readonly unknown[] = []): string {
-  return zh[key].replace(/\{(\d+)\}/g, (_, index: string) => String(values[Number(index)]))
+  return brandText(zh[key]).replace(/\{(\d+)\}/g, (_, index: string) => String(values[Number(index)]))
 }

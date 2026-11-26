@@ -240,7 +240,7 @@ test('Kylin staging keeps shared runtime identity and rejects missing runtimes',
     const plugin = `const css = ${JSON.stringify(pluginCss)};`
     await writeFile(join(root, 'src-tauri/resources/runtime-1.2.3/app/client.js'), plugin)
     await writeFile(join(root, 'src-tauri/icons/32x32.png'), 'shared-icon-fixture')
-    await writeFile(join(root, 'src-kylin/tauri.conf.json'), '{"package":{"version":"0.1.0"}}')
+    await writeFile(join(root, 'src-kylin/tauri.conf.json'), '{"package":{"version":"0.1.0"},"build":{},"tauri":{"bundle":{},"systemTray":{}}}')
     for (const platform of ['linux-x64', 'linux-arm64', 'darwin-x64', 'win32-x64']) {
       const directory = join(root, 'src-tauri/resources/runtime-1.2.3/app/prebuilds', platform)
       await mkdir(directory, { recursive: true })

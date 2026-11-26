@@ -16,13 +16,14 @@
     "ensure:dws": "node scripts/ensure-dws-vendor.mjs",
     "ensure:lark": "node scripts/ensure-lark.mjs",
     "dev:prepare": "pnpm run check:boundaries && node scripts/build-dsh.mjs && pnpm run ensure:dws && pnpm run ensure:lark",
-    "dev": "pnpm run check:identity && pnpm run dev:prepare && tauri dev --config src-tauri/tauri.dev.conf.json",
+    "dev": "pnpm run check:identity && pnpm run dev:prepare && tauri dev --config .brand-build/tauri.brand.json --config src-tauri/tauri.dev.conf.json",
     "prepare:runtime": "node scripts/prepare-runtime.mjs",
     "build:prepare": "pnpm run check:identity && pnpm run dev:prepare && pnpm run prepare:runtime && pnpm run check:runtime",
-    "build:local": "pnpm run build:prepare && tauri build --no-bundle",
-    "build:runner": "pnpm run check:runner && pnpm run check:installer-data && pnpm run build:prepare && tauri build",
-    "build:runner:bundle": "pnpm run check:runner && pnpm run check:installer-data && tauri build",
-    "build": "pnpm run build:local"
+    "build:local": "pnpm run build:prepare && tauri build --no-bundle --config .brand-build/tauri.brand.json",
+    "build:runner": "pnpm run check:runner && pnpm run check:installer-data && pnpm run build:prepare && tauri build --config .brand-build/tauri.brand.json",
+    "build:runner:bundle": "pnpm run check:runner && pnpm run check:installer-data && node scripts/verify-branding.mjs && node scripts/prepare-branding.mjs && tauri build --config .brand-build/tauri.brand.json",
+    "build": "pnpm run build:local",
+    "check:branding": "node --test scripts/branding.test.mjs"
   },
   "dependencies": {
     "@deepseek-ai/dsh-wanwei-desktop": "workspace:^",

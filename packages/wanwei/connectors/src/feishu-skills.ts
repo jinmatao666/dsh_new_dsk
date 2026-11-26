@@ -1,3 +1,4 @@
+import { brandText } from './brand.generated.ts'
 /** Product-scoped installation of the official skills exported from bundled lark-cli. */
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -5,7 +6,7 @@ import { copyDirectoryTree } from './copy-tree.ts'
 
 const OWNER = '.wanwei-feishu-skill'
 const EXECUTION = `\n<!-- wanwei-feishu-tool -->
-## 万维桌面端执行方式（优先于下方通用终端说明）
+## ${brandText('万维桌面端')}执行方式（优先于下方通用终端说明）
 
 本技能及参考文档中的每条 \`lark-cli ...\` 命令，都通过 \`feishu_cli\` 工具执行，args 是可执行文件名之后的参数数组，不要通过 bash/pwsh 启动。例如 \`lark-cli calendar +agenda --as user\` 对应 \`{"args":["calendar","+agenda","--as","user"]}\`。
 

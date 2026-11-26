@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "万维Buddy",
+  "nameEn": "Wanwei Buddy",
+  "shortName": "万维",
+  "organization": "WANWEI",
+  "windowTitle": "万维Buddy",
+  "installerName": "万维Buddy",
+  "copyright": "© 2026 WANWEI · 智能体工作平台",
+  "copyrightEn": "© 2026 WANWEI · Agent Workspace",
+  "sessionFilePrefix": "wanwei-buddy-session-",
+  "text": {},
+  "assets": {}
+}

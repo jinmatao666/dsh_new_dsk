@@ -1,3 +1,4 @@
+import { brand } from '../brand.generated.ts'
 /** Dedicated version settings and shell-level download progress. */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
@@ -28,7 +29,7 @@ export function DesktopUpdateSection({ t, updates }: UpdateProps) {
   return <section className={css.section} aria-label={t('updatesTitle')}>
     <h1>{t('updatesNav')}</h1><p className={css.intro}>{t('updatesIntro')}</p>
     <div className={css.versionCard}>
-      <span className={css.versionIcon}><img src="/brand-mark.svg" width={32} height={32} alt="" aria-hidden="true" /></span>
+      <span className={css.versionIcon}><img src={brand.assets.version} width={32} height={32} alt="" aria-hidden="true" /></span>
       <div className={css.versionInfo}><span>{t('productName')}</span>
         <div className={css.versionLine}><strong>{view?.currentVersion ?? '—'}</strong><small>{t('updatesVersionLabel')}</small></div></div>
       <div className={css.versionMeta}>
@@ -84,7 +85,7 @@ function CompletedUpdateDialog({ t, updates }: UpdateProps) {
     aria-labelledby="wanwei-update-completed-title" aria-describedby="wanwei-update-completed-intro"
     onCancel={(event) => { event.preventDefault(); close() }}>
     <div className={css.dialogHeader}>
-      <span className={css.versionIcon}><img src="/brand-mark.svg" width={32} height={32} alt="" aria-hidden="true" /></span>
+      <span className={css.versionIcon}><img src={brand.assets.update} width={32} height={32} alt="" aria-hidden="true" /></span>
       <button type="button" className={css.close} disabled={pending} aria-label={t('supportClose')} onClick={close}>×</button>
     </div>
     <h2 id="wanwei-update-completed-title">{t('updatesCompletedTitle')}</h2>

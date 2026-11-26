@@ -96,3 +96,7 @@ kind: "package-reference"
 目录访问判断通过注入的 `wanweiNetwork.catalogAccess` 服务方法跨插件传递。客户端入口只提供网络类型；消费者不导入认证插件的运行时辅助函数。
 
 需要联网的技能与专家分别按 `internetSkillPolicy` 和 `internetExpertPolicy` 独立控制展示。缺失值沿用旧统一策略；需使用新版桌面端才能应用独立选择。
+
+## 构建品牌
+
+产品自有名称和图片读取构建生成的品牌快照，通过[桌面品牌配置](../../../products/wanwei-desktop/branding/README.zh.md)选择；协议标识、凭据和用户内容保持不变。

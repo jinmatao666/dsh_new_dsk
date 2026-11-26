@@ -1,3 +1,4 @@
+import { brandText } from '../../brand.generated.ts'
 const zh = {
   '撤回发布': '撤回发布',
   '撤回发布失败': '撤回发布失败',
@@ -257,4 +258,4 @@ const zh = {
  * @param key - Source text key.
  * @returns Localized product text.
  */
-export function productText(key: keyof typeof zh): string { return zh[key] }
+export function productText(key: keyof typeof zh): string { return brandText(zh[key]) }

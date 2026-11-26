@@ -1,3 +1,4 @@
+import { brand } from '../brand.generated.ts'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
 import { PublicationControls, type PublicationApi } from './PublicationControls.tsx'
 import { useEffect, useRef, useState } from 'react'
@@ -1698,7 +1699,7 @@ export function KnowledgePage({ api, networkMode = 'internet' }: {
                   : undefined
                 return <article className={message.role} key={`plaza-${message.role}-${index}`}>
                   {message.role === 'assistant' && <header className="dsh-knowledge-assistant-brand">
-                    <img src="/brand-mark.svg" width={18} height={16} alt="" />
+                    <img src={brand.assets.knowledge} width={18} height={16} alt="" />
                     <strong>{productText('万维Buddy')}</strong>
                   </header>}
                   {waiting
@@ -1886,7 +1887,7 @@ export function KnowledgePage({ api, networkMode = 'internet' }: {
             : undefined
           return <article className={message.role} key={`${message.role}-${index}`}>
             {message.role === 'assistant' && <header className="dsh-knowledge-assistant-brand">
-              <img src="/brand-mark.svg" width={18} height={16} alt="" />
+              <img src={brand.assets.knowledge} width={18} height={16} alt="" />
               <strong>{productText('万维Buddy')}</strong>
             </header>}
             {waiting
@@ -2158,7 +2159,7 @@ function PreviewAskPane({
           : undefined
         return <article className={message.role} key={`${message.role}-${index}`}>
           {message.role === 'assistant' && <header className="dsh-knowledge-assistant-brand">
-            <img src="/brand-mark.svg" width={18} height={16} alt="" />
+            <img src={brand.assets.knowledge} width={18} height={16} alt="" />
             <strong>{productText('万维Buddy')}</strong>
           </header>}
           {waiting

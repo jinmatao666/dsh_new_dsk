@@ -1,3 +1,4 @@
+import { brand } from '../brand.generated.ts'
 import { productText } from './locales/product.ts'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -226,7 +227,7 @@ function WanweiBrandMark({ size, className, wide }: BrandMarkProps) {
   if (wide) return null
   return (
     <img
-      src="/brand-mark.svg"
+      src={brand.assets.avatar}
       width={size}
       height={size}
       className={className}
@@ -240,7 +241,7 @@ function WanweiBrandMark({ size, className, wide }: BrandMarkProps) {
 function WanweiBrandName() {
   return (
     <span className="wanwei-product-wordmark" aria-hidden="true">
-      <img src="/brand-wordmark.svg" height={36} alt="" />
+      <img src={brand.assets.sidebar} height={36} alt="" />
     </span>
   )
 }
@@ -248,7 +249,7 @@ function WanweiBrandName() {
 function WanweiHeroBrand() {
   return (
     <span className="wanwei-product-hero-identity">
-      <img className="wanwei-product-hero-brand" src="/brand-wordmark.svg" width={244} height={61} alt={productText('万维 Buddy')} />
+      <img className="wanwei-product-hero-brand" src={brand.assets.home} width={244} height={61} alt={productText('万维 Buddy')} />
       <span className="wanwei-product-hero-badge">{productText('专业智能助手')}</span>
     </span>
   )
@@ -288,7 +289,7 @@ export function apply(ctx: Context): void {
       await invokeDesktop('open_workspace_directory', { workspacePath: path })
     },
     saveFile: async ({ filename, bytes }) => {
-      const fileName = filename.replace(/^dsh-session-/u, 'wanwei-buddy-session-')
+      const fileName = filename.replace(/^dsh-session-/u, brand.sessionFilePrefix)
       const path = await invokeDesktop('save_session_log_archive', { fileName, bytes: [...bytes] })
       if (typeof path !== 'string' || path === '') throw new Error(productText('下载未返回有效的文件路径'))
       try {

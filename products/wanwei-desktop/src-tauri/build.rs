@@ -1,4 +1,5 @@
 fn main() {
+    prepare_branding();
     println!("cargo:rustc-check-cfg=cfg(wanwei_kylin)");
     if std::env::var("CARGO_PKG_NAME").as_deref() == Ok("wanwei-buddy-kylin") {
         println!("cargo:rustc-cfg=wanwei_kylin");
@@ -54,4 +55,37 @@ fn main() {
         println!("cargo:rustc-link-arg-examples=/MANIFEST:EMBED");
         println!("cargo:rustc-link-arg-examples=/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'");
     }
+}
+
+// Public display identity is generated separately from the stable application/data identity.
+fn prepare_branding() {
+    let manifest = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
+    let product = manifest.parent().unwrap();
+    let staged = product.join(".brand-build");
+    let path = staged.join("native.env");
+    println!("cargo:rerun-if-changed={}", path.display());
+    let values = std::fs::read_to_string(&path).unwrap_or_default();
+    let mut source = String::new();
+    for (key, fallback) in [
+        ("WINDOW_TITLE", "万维Buddy"),
+        ("UPDATE_TITLE", "万维Buddy 更新"),
+        ("TRAY_SHOW", "显示 万维Buddy"),
+        ("TRAY_QUIT", "退出 万维Buddy"),
+        ("STARTUP", "万维Buddy startup"),
+    ] {
+        let prefix = format!("DSH_PRODUCT_{key}=");
+        let value = values.lines().find_map(|line| line.strip_prefix(&prefix)).unwrap_or(fallback);
+        source.push_str(&format!("pub const {key}: &str = {value:?};\n"));
+    }
+    for slot in ["window", "tray"] {
+        let file = staged.join(format!("{slot}.png"));
+        let icon = if file.exists() { file } else { product.join("src-tauri/icons/32x32.png") };
+        let icon = icon.canonicalize().expect("brand icon must exist");
+        println!("cargo:rerun-if-changed={}", icon.display());
+        let literal = format!("{:?}", icon.to_str().expect("UTF-8 brand icon path"));
+        source.push_str(&format!("#[cfg(not(wanwei_kylin))]\npub fn {slot}_icon() -> tauri::image::Image<'static> {{ tauri::include_image!({literal}) }}\n"));
+        source.push_str(&format!("#[cfg(wanwei_kylin)]\npub fn {slot}_icon() -> tauri::Icon {{ tauri::Icon::Raw(include_bytes!({literal}).to_vec()) }}\n"));
+    }
+    let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+    std::fs::write(out.join("branding.rs"), source).expect("write native branding");
 }

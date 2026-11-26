@@ -1,3 +1,4 @@
+import { brand } from '../brand.generated.ts'
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AccountInjected } from './AccountSection.tsx'
@@ -81,7 +82,7 @@ export function AccountFooter({ controls, wide, useAuth, requestCredits, logout,
       <button ref={trigger} type="button" className={css.trigger} title={label} aria-label={label}
         aria-expanded={open} aria-controls={panelId} onClick={() => { setCredit(undefined)
           setSignOutFailed(false); setOpen(value => !value) }}>
-        <span className={css.avatar} aria-hidden="true"><img src="/brand-mark.svg" width={25} height={22} alt="" /></span>
+        <span className={css.avatar} aria-hidden="true"><img src={brand.assets.avatar} width={25} height={22} alt="" /></span>
         {wide && <><span className={css.name}>{label}</span>
           <svg className={css.chevron} viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path d="m4 7 6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -93,7 +94,7 @@ export function AccountFooter({ controls, wide, useAuth, requestCredits, logout,
     <div id={panelId} className={css.panel} hidden={!open}>
       {creditsEnabled && auth.state === 'authenticated' && <button type="button" className={css.credits}
         onClick={() => { setOpen(false); window.dispatchEvent(new CustomEvent('dsh:open-settings-section', { detail: 'wanwei-credits' })) }}>
-        <img src="/brand-mark.svg" className={css.creditMark} width={82} height={72} alt="" />
+        <img src={brand.assets.credits} className={css.creditMark} width={82} height={72} alt="" />
         <span className={css.creditLabel}>{t('accountCreditsBalance')}</span>
         <strong className={css.creditValue} aria-live="polite">{credit?.auth === auth ? credit.value : '—'}</strong>
       </button>}

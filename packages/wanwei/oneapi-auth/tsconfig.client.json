@@ -32,7 +32,9 @@
     "src/contract.ts"
   ],
   "references": [
-    { "path": "../../client/ui-chat" },
+    {
+      "path": "../../client/ui-chat"
+    },
     {
       "path": "../../../vendor/cordis"
     },
@@ -63,5 +65,8 @@
     {
       "path": "../../client/ui-primitives"
     }
+  ],
+  "include": [
+    "src/brand.generated.ts"
   ]
 }
