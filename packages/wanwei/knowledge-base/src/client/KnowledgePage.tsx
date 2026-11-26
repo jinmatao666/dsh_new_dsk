@@ -12,7 +12,7 @@ import { PdfLocateViewer, type PdfLocateRequest } from './PdfLocateViewer.tsx'
 import { DocumentListLoading, DocumentThumbnail } from './DocumentThumbnail.tsx'
 import { ViewerLoading } from './ViewerLoading.tsx'
 import {
-  defaultCollapsedNavGroups, firstNavLibraryId, libraryAllowsDesktopFileDelete,
+  firstNavLibraryId, libraryAllowsDesktopFileDelete,
   libraryAllowsDesktopUpload, libraryIsGrantedSubscription, libraryNavGroups,
 } from './library-groups.ts'
 import {
@@ -460,9 +460,7 @@ export function KnowledgePage({ api, networkMode = 'internet' }: {
   const [folderToDelete, setFolderToDelete] = useState<{ libraryId: number; path: string }>()
   const [folderDeleteError, setFolderDeleteError] = useState('')
   const [mutating, setMutating] = useState(false)
-  const [collapsedNavGroups, setCollapsedNavGroups] = useState<Set<string>>(
-    () => new Set(['subscription', 'public']),
-  )
+  const [collapsedNavGroups, setCollapsedNavGroups] = useState<Set<string>>(() => new Set())
   const fileInput = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement>(null)
   const uploadRoot = useRef<HTMLDivElement>(null)
@@ -532,9 +530,7 @@ export function KnowledgePage({ api, networkMode = 'internet' }: {
       const viewerId = result.find(item => item.kind === 'personal' && (item.category_id ?? 0) === 0)?.owner_user_id
       setSelectedId(firstNavLibraryId(result, nextCategories, viewerId))
       setPlazaOpen(false)
-      setCollapsedNavGroups(defaultCollapsedNavGroups(
-        libraryNavGroups(result, nextCategories, viewerId),
-      ))
+      setCollapsedNavGroups(new Set())
     }).catch((cause) => { if (!disposed) setError(`${productText('加载失败')}：${String(cause)}`) })
       .finally(() => { if (!disposed) setLoading(false) })
     return () => { disposed = true }
@@ -1492,6 +1488,10 @@ export function KnowledgePage({ api, networkMode = 'internet' }: {
               : <p>{productText('知识库详情')}</p>}
           </div>
         </div>
+        {plazaDetail === undefined && <div className="dsh-knowledge-plaza-catalog-head">
+          <strong>{productText('精选知识库')}</strong>
+          <span>{productText('共')} <em>{plazaItems.length}</em> {productText('个')}</span>
+        </div>}
         {plazaDetail === undefined &&
           <label className="dsh-knowledge-plaza-search">
             <SearchIcon />
@@ -1508,12 +1508,6 @@ export function KnowledgePage({ api, networkMode = 'internet' }: {
           : plazaItems.length === 0 ? <p className="dsh-knowledge-empty">{productText('暂无可订阅知识库')}</p>
             : <>
               <section className="dsh-knowledge-plaza-catalog">
-                <header className="dsh-knowledge-plaza-catalog-head">
-                  <div>
-                    <strong>{productText('精选知识库')}</strong>
-                    <span>{productText('共')} <em>{plazaItems.length}</em> {productText('个')}</span>
-                  </div>
-                </header>
                 <div className="dsh-knowledge-plaza-list">
                   <div className="dsh-knowledge-plaza-grid">
                     {pagedPlazaItems.map(item =>
