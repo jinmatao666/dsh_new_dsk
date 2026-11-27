@@ -1,3 +1,4 @@
+import useUnreadDeploymentInquiries from '../hooks/useUnreadDeploymentInquiries';
 import { resourceURL } from '../deployment';
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -31,13 +32,18 @@ export default function SiderBar({ isCollapsed, onCollapseChange }) {
       .catch(() => {});
     return () => window.removeEventListener('personal-skill-review-counts', updateCount);
   }, [location.pathname]);
+  const unreadInquiries = useUnreadDeploymentInquiries(location.pathname);
   return <div className="zjugis-sidebar-inner">
     <div className="zjugis-sidebar-brand">{isCollapsed ? <img src={resourceURL('/brand-mark.svg')} alt="万维 Buddy" /> : <img src={resourceURL('/brand-wordmark.svg')} alt="万维 Buddy" />}</div>
     {!isCollapsed && <div className="zjugis-sidebar-caption">管理工作台</div>}
     <nav className="zjugis-sidebar-nav" aria-label="主导航">
-      {items.filter(item => !item.permission || hasPermission(item.permission)).map(({ label, path, Icon }) => <Link key={path} to={path} className={`zjugis-sidebar-item${selected?.path === path ? ' active' : ''}`} title={isCollapsed ? label : undefined}>
+      {items.filter(item => !item.permission || hasPermission(item.permission)).map(({ label, path, Icon }) => <Link key={path} to={path === '/usage' && unreadInquiries > 0 ? '/usage?tab=deployment-inquiries' : path} className={`zjugis-sidebar-item${selected?.path === path ? ' active' : ''}`} title={isCollapsed ? label : undefined}>
         <Icon className="zjugis-sidebar-item-icon" />{!isCollapsed && <span>{label}</span>}
         {path === '/skill' && pendingReviewCount !== null && pendingReviewCount > 0 && <span className="zjugis-sidebar-pending" aria-label={`${pendingReviewCount} 条待审核投稿`}>{isCollapsed ? (pendingReviewCount > 99 ? '99+' : pendingReviewCount) : `待审核 ${pendingReviewCount > 99 ? '99+' : pendingReviewCount}`}</span>}
+        {path === '/usage' && unreadInquiries > 0 &&
+          <span className="zjugis-sidebar-pending" aria-label={`${unreadInquiries} 条未读部署咨询`}>
+            {!isCollapsed && '未读 '}{unreadInquiries > 99 ? '99+' : unreadInquiries}
+          </span>}
       </Link>)}
     </nav>
     <button className="zjugis-sidebar-collapse" onClick={() => onCollapseChange(!isCollapsed)} title={isCollapsed ? '展开侧边栏' : '收起侧边栏'}>

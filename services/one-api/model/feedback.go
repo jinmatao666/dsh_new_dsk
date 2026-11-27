@@ -3,6 +3,8 @@ package model
 import "fmt"
 
 type Feedback struct {
+	Phone        string `json:"phone" gorm:"size:32;not null;default:''"`
+	Read         bool   `json:"read" gorm:"not null;default:false"`
 	Id           int    `json:"id" gorm:"primaryKey;autoIncrement"`
 	Username     string `json:"username" gorm:"size:100;default:''"`
 	FeedbackType string `json:"feedback_type" gorm:"size:50;default:''"`
@@ -19,7 +21,7 @@ func CreateFeedback(feedback *Feedback) error {
 }
 
 // GetFeedbackList 获取反馈明细列表（AdminAuth）
-func GetFeedbackList(feedbackType, username string, offset, limit int) ([]Feedback, int64, error) {
+func GetFeedbackList(feedbackType, username string, offset, limit int, read *bool) ([]Feedback, int64, error) {
 	var list []Feedback
 	var total int64
 
@@ -29,6 +31,10 @@ func GetFeedbackList(feedbackType, username string, offset, limit int) ([]Feedba
 	}
 	if username != "" {
 		query = query.Where("username LIKE ?", fmt.Sprintf("%%%s%%", username))
+	}
+
+	if read != nil {
+		query = query.Where(map[string]interface{}{"read": *read})
 	}
 
 	if err := query.Count(&total).Error; err != nil {

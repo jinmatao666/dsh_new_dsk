@@ -3,7 +3,10 @@ package controller
 import (
 	"encoding/json"
 	"net/http"
+	"net/mail"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/model"
@@ -26,6 +29,10 @@ func CreateFeedback(c *gin.Context) {
 			"success": false,
 			"message": "invalid request: " + err.Error(),
 		})
+		return
+	}
+	if strings.TrimSpace(req.FeedbackType) == "deployment_inquiry" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false})
 		return
 	}
 	if req.Content == "" {
@@ -77,7 +84,16 @@ func GetFeedbackList(c *gin.Context) {
 	}
 
 	offset := (page - 1) * perPage
-	list, total, err := model.GetFeedbackList(feedbackType, username, offset, perPage)
+	var read *bool
+	if raw, provided := c.GetQuery("read"); provided {
+		value, err := strconv.ParseBool(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid read filter"})
+			return
+		}
+		read = &value
+	}
+	list, total, err := model.GetFeedbackList(feedbackType, username, offset, perPage, read)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
 		return
@@ -93,4 +109,48 @@ func GetFeedbackList(c *gin.Context) {
 			"totalPages": (total + int64(perPage) - 1) / int64(perPage),
 		},
 	})
+}
+
+func CreateWebsiteDeploymentInquiry(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16*1024)
+	var input struct {
+		Name    string `json:"name"`
+		Email   string `json:"email"`
+		Phone   string `json:"phone"`
+		Details string `json:"details"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false})
+		return
+	}
+	name, email, details := strings.TrimSpace(input.Name), strings.TrimSpace(input.Email), strings.TrimSpace(input.Details)
+	phone := strings.TrimSpace(input.Phone)
+	address, err := mail.ParseAddress(email)
+	if err != nil || address.Address != email || len(email) > 254 || len(phone) > 32 || name == "" || utf8.RuneCountInString(name) > 80 || details == "" || utf8.RuneCountInString(details) > 2000 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false})
+		return
+	}
+	inquiry := model.Feedback{Username: name, FeedbackType: "deployment_inquiry", Content: details, Context: email, Phone: phone}
+	if err := model.CreateFeedback(&inquiry); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"success": true})
+}
+
+func SetWebsiteDeploymentInquiryRead(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	var input struct {
+		Read *bool `json:"read"`
+	}
+	if err != nil || id <= 0 || c.ShouldBindJSON(&input) != nil || input.Read == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false})
+		return
+	}
+	result := model.DB.Model(&model.Feedback{}).Where("id = ? AND feedback_type = ?", id, "deployment_inquiry").Update("read", *input.Read)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }

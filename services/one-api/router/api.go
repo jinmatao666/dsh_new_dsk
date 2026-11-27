@@ -692,6 +692,9 @@ func SetApiRouter(router *gin.Engine) {
 			skillTestRoute.GET("/:session/files", controller.SkillTestFiles)
 			skillTestRoute.GET("/:session/download", controller.DownloadSkillTestFile)
 		}
+		apiRouter.POST("/website-deployment-inquiries", controller.CreateWebsiteDeploymentInquiry)
+		apiRouter.PUT("/website-deployment-inquiries/:id/read", middleware.AdminAuth(), controller.SetWebsiteDeploymentInquiryRead)
+
 		// Feedback route
 		feedbackRoute := apiRouter.Group("/feedback")
 		{

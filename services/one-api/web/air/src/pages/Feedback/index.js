@@ -17,18 +17,21 @@ const cardStyle = {
 };
 
 const TYPE_META = {
+  deployment_inquiry: { label: '部署咨询', color: 'blue' },
   bug: { label: 'Bug 报告', color: 'red' },
   suggestion: { label: '功能建议', color: 'blue' },
   other: { label: '其他', color: 'grey' },
 };
 
 const TYPE_OPTIONS = [
+  { value: 'deployment_inquiry', label: '部署咨询' },
   { value: 'bug', label: 'Bug 报告' },
   { value: 'suggestion', label: '功能建议' },
   { value: 'other', label: '其他' },
 ];
 
 const COLUMN_META = [
+  { key: 'inquiry_status', label: '咨询处理', always: true },
   { key: 'created_at', label: '时间', always: true },
   { key: 'username', label: '用户' },
   { key: 'feedback_type', label: '类型' },
@@ -86,7 +89,27 @@ const Feedback = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typeFilter, username]);
 
+  const updateInquiry = async (row) => {
+    try {
+      const response = await API.put(`/api/website-deployment-inquiries/${row.id}/read`, { read: !row.read });
+      if (!response?.data?.success) throw new Error('更新咨询状态失败');
+      setList(items => items.map(item => item.id === row.id ? { ...item, read: !row.read } : item));
+    } catch (error) {
+      showError(error.message);
+    }
+  };
+
   const allColumns = [
+    {
+      title: '咨询处理', dataIndex: 'inquiry_status', width: 240,
+      render: (_, row) => row.feedback_type === 'deployment_inquiry' && (
+        <div>
+          <div style={{ overflowWrap: 'anywhere' }}>{row.context}</div>
+          <span>{row.read ? '已读' : '未读'}</span>{' '}
+          <Button size='small' onClick={() => updateInquiry(row)}>{row.read ? '标为未读' : '标为已读'}</Button>
+        </div>
+      ),
+    },
     {
       title: '时间', dataIndex: 'created_at', width: 170,
       render: (v) => new Date(v * 1000).toLocaleString(),

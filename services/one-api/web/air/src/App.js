@@ -35,6 +35,7 @@ import ModelConfigPage from './pages/ModelConfig';
 import MonitorBoard from './pages/MonitorBoard';
 import AdminOperationLog from './pages/AdminOperationLog';
 import Feedback from './pages/Feedback';
+import DeploymentInquiries from './pages/Feedback/DeploymentInquiries';
 import DataCustom from './pages/DataBoard/Custom';
 import ComingSoon from './pages/ComingSoon';
 import ActivityConfig from './pages/ActivityConfig';
@@ -509,6 +510,10 @@ function App() {
                 <AdminOperationLog />
               </PrivateRoute>
             }
+          />
+          <Route
+            path="/deployment-inquiries"
+            element={<PrivateRoute><DeploymentInquiries /></PrivateRoute>}
           />
           <Route
             path="/feedback"

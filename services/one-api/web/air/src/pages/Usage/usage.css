@@ -5,3 +5,28 @@
 .credit-filters input{box-sizing:border-box;min-width:0;width:145px}.credit-filters .credit-search input{width:100%;min-width:0}.credit-filters .zjugis-select-trigger{min-height:36px;height:36px}
 
 .credit-table th:nth-child(6),.credit-table td:nth-child(6),.credit-table th:nth-child(7),.credit-table td:nth-child(7){text-align:right}
+
+.inquiry-table { margin-top: 0; }
+.inquiry-table-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding-top: 12px; }
+.inquiry-table-footer .usage-count, .inquiry-table-footer .usage-pager { margin: 0; }
+.usage-tabs .inquiry-tab-count { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 8px; background: #fff0d9; color: #8a4b13; font-size: 11px; line-height: 1.5; }
+.usage-tabs + section .usage-table-wrap { margin-top: 20px; }
+.inquiry-table { min-width: 760px; }
+.inquiry-table .inquiry-summary { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inquiry-status { display: inline-block; padding: 3px 8px; border-radius: 6px; background: #edf1f6; color: #526780; white-space: nowrap; }
+.inquiry-status.unread { background: #e5efff; color: #184f9d; }
+.inquiry-details { border: 0; background: transparent; padding: 3px 0; white-space: nowrap; color: #1762bd; cursor: pointer; }
+.inquiry-details:hover { text-decoration: underline; }
+
+.inquiry-modal .semi-modal-content { border: 1px solid #dce7f4; border-radius: 18px; }
+.inquiry-modal .semi-modal-title { color: #173653; font-size: 18px; font-weight: 650; }
+.inquiry-modal .semi-modal-header { margin-bottom: 18px; }
+.inquiry-contact { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; margin: 0 0 18px; }
+.inquiry-contact dt { font-size: 12px; color: #61758d; }
+.inquiry-contact dd { margin: 4px 0 0; color: #203550; overflow-wrap: anywhere; }
+.inquiry-requirements { padding: 14px 16px; border: 1px solid #e2eaf4; border-radius: 12px; background: #f5f8fc; }
+.inquiry-requirements h3 { margin: 0 0 6px; color: #203550; font-size: 14px; }
+.inquiry-requirements p { margin: 0; color: #34506e; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.inquiry-modal-actions { display: flex; align-items: center; justify-content: space-between; padding-top: 12px; border-top: 1px solid #e4ebf4; }
+.inquiry-modal .usage-clear:disabled { opacity: .6; cursor: wait; }
+@media (max-width: 420px) { .inquiry-contact { grid-template-columns: 1fr; } }

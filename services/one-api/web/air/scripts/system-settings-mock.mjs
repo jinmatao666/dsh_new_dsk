@@ -3,6 +3,11 @@ export default function systemSettingsMock() {
   const user = { id: 1, username: 'root', display_name: '系统管理员', role: 100, status: 1, group: 'default', email: 'admin@example.test' };
   let settings = { network: 'internet', operator: '张运维', phone: '0571-12345678' };
   const colleague = { ...user, id: 7, username: 'caixuebo', display_name: '蔡雪波', role: 10 };
+  const inquiries = [
+    { id: 1, username: '林晓', context: 'lin@example.com', phone: '13800000000', content: '计划在纯内网部署，约 80 人使用，希望接入现有知识库和本地模型。', read: false },
+    { id: 2, username: '陈宇', context: 'chen@example.com', content: '为设计团队搭建试点环境，想了解部署周期和服务器配置。', read: true },
+    { id: 3, username: '许宁', context: 'xu@example.com', content: '需要离线安装，希望对接现有统一身份认证。', read: false },
+  ].map((row, index) => ({ ...row, feedback_type: 'deployment_inquiry', created_at: Math.floor(Date.now() / 1000) - index * 86400 }));
   const nodes = [
     { id: 1, parent_id: 0, name: '浙江万维空间信息技术有限公司' },
     { id: 2, parent_id: 1, name: '技术中心' },
@@ -23,11 +28,30 @@ export default function systemSettingsMock() {
     },
     configureServer(server) {
       server.middlewares.use(async (request, response, next) => {
-        const pathname = new URL(request.url, 'http://localhost').pathname;
+        const { pathname, searchParams } = new URL(request.url, 'http://localhost');
         if (!pathname.startsWith('/api/')) return next();
         response.setHeader('Content-Type', 'application/json; charset=utf-8');
         response.setHeader('X-Preview-Data', 'mock');
         let payload = { success: true, data: [], totalItems: 0 };
+        if (pathname === '/api/feedback/list') {
+          const read = searchParams.get('read');
+          const items = inquiries.filter(row => read === null || String(row.read) === read);
+          payload.data = { items, total: items.length };
+        }
+        const inquiryMatch = pathname.match(/^\/api\/website-deployment-inquiries\/(\d+)\/read$/);
+        if (inquiryMatch && request.method === 'PUT') {
+          let body = '';
+          for await (const chunk of request) body += chunk;
+          const row = inquiries.find(item => item.id === Number(inquiryMatch[1]));
+          try {
+            const { read } = JSON.parse(body);
+            if (!row || typeof read !== 'boolean') throw new Error('无效的咨询状态');
+            row.read = read;
+          } catch {
+            response.statusCode = 400;
+            payload = { success: false };
+          }
+        }
         if (pathname === '/api/user/self') payload.data = user;
         if (pathname === '/api/desktop-updates') payload.data = { items: [], channels: [], signing_configured: true };
         if (pathname === '/api/admin/website-installers') {
