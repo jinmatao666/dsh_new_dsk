@@ -79,11 +79,15 @@ export default function SkillBrowseDrawer({ visible, kind, id, skill: skillProp,
   const download = async () => {
     setDownloading(true);
     try {
-      // 列表内已有的完整记录直接本地打包；其余按 kind 走接口取详情后打包。
+      // 列表记录可能省略附件，数据库技能下载时从详情接口读取完整记录。
       if (skillProp?.source === 'official-package') {
         const loaded = officialFiles || await fetchOfficialSkillFiles(skillProp);
         downloadOfficialSkillFiles(skillProp, loaded);
-      } else if (skillProp) { downloadSkillBlob(skillProp); } else { await downloadSkillZip(kind, id); }
+      } else if (id != null) {
+        await downloadSkillZip(kind, id);
+      } else {
+        downloadSkillBlob(skillProp);
+      }
     } catch (error) { showError(error.message || '下载技能失败'); } finally { setDownloading(false); }
   };
   const categories = (skill?.categories || []).map(category => <Tag key={category.id} size='small'>{category.type_name || category.type_code} / {category.name || category.code}</Tag>);

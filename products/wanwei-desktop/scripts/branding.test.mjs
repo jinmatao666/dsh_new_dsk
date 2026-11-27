@@ -14,6 +14,7 @@ test('default brand preserves existing display text and stable slot URLs', () =>
   assert.equal(brand.assets.avatar, '/brand-mark.svg')
   assert.equal(brand.assets.login, '/brand-wordmark.svg')
   assert.equal(brand.assets.sidebar, '/brand-wordmark.svg')
+  assert.equal(brand.assets.home, '/brand-wordmark.svg')
 })
 
 test('custom brand resolves relative assets, slot overrides and owned copy', () => {
@@ -23,6 +24,7 @@ test('custom brand resolves relative assets, slot overrides and owned copy', () 
   assert.equal(brandText(brand, 'WANWEI Buddy'), 'Atlas Desk')
   assert.equal(brandText(brand, '请在万维 Buddy 桌面端打开专家'), '请在图谱助手桌面端打开专家')
   assert.equal(brand.assets.sidebar, '/brand/sidebar.svg')
+  assert.equal(brand.assets.home, '/brand/home.svg')
   assert.equal(brand.assets.login, '/brand-wordmark.svg')
   assert.equal(sources.login, sources.home)
   assert.ok(!Object.hasOwn(brand, 'native'), 'machine paths must not enter public modules')
@@ -78,6 +80,9 @@ test('native staging and web assets do not change stable identity or source icon
     assert.match(wordmark, /<image x="198" y="88" width="320" height="350"/u)
     assert.match(wordmark, /font-size="50"/u)
     assert.match(readFileSync(join(publicRoot, 'brand/sidebar.svg'), 'utf8'), /font-size="65"/u)
+    const home = readFileSync(join(publicRoot, 'brand/home.svg'), 'utf8')
+    assert.match(home, /<image x="286" y="147" width="232" height="232"/u)
+    assert.match(home, /font-size="50"/u)
     assert.deepEqual(readFileSync(join(publicRoot, 'brand/avatar.svg')), readFileSync(custom.sources.avatar))
     assert.deepEqual(readFileSync(icon), original)
   } finally { rmSync(dir, { recursive: true, force: true }) }

@@ -12,25 +12,26 @@ import (
 // CreditLedger is append-only. Amounts use the same integer unit as users.quota.
 // A ledger write fails the owning transaction rather than leaving an unaudited balance.
 type CreditLedger struct {
-	ID             int64  `json:"id" gorm:"primaryKey"`
-	OccurredAt     int64  `json:"occurred_at" gorm:"index"`
-	OrgID          int    `json:"org_id" gorm:"index"`
-	UserID         int    `json:"user_id" gorm:"index"`
-	Username       string `json:"username"`
-	DisplayName    string `json:"display_name"`
-	DepartmentName string `json:"department_name"`
-	UnitName       string `json:"unit_name"`
-	ActorID        int    `json:"actor_id" gorm:"index"`
-	ActorName      string `json:"actor_name"`
-	Source         string `json:"source" gorm:"size:64;index"`
-	Reference      string `json:"reference" gorm:"size:128;index"`
-	Description    string `json:"description"`
-	Delta          int64  `json:"delta"`
-	BalanceBefore  *int64 `json:"balance_before"`
-	BalanceAfter   *int64 `json:"balance_after"`
-	Historical     bool   `json:"historical"`
-	Origin         string `json:"-" gorm:"size:160;uniqueIndex"`
-	TaskState      string `json:"task_state,omitempty" gorm:"-"`
+	ID             int64          `json:"id" gorm:"primaryKey"`
+	OccurredAt     int64          `json:"occurred_at" gorm:"index"`
+	OrgID          int            `json:"org_id" gorm:"index"`
+	UserID         int            `json:"user_id" gorm:"index"`
+	Username       string         `json:"username"`
+	DisplayName    string         `json:"display_name"`
+	DepartmentName string         `json:"department_name"`
+	UnitName       string         `json:"unit_name"`
+	ActorID        int            `json:"actor_id" gorm:"index"`
+	ActorName      string         `json:"actor_name"`
+	Source         string         `json:"source" gorm:"size:64;index"`
+	Reference      string         `json:"reference" gorm:"size:128;index"`
+	Description    string         `json:"description"`
+	Delta          int64          `json:"delta"`
+	BalanceBefore  *int64         `json:"balance_before"`
+	BalanceAfter   *int64         `json:"balance_after"`
+	Historical     bool           `json:"historical"`
+	Origin         string         `json:"-" gorm:"size:160;uniqueIndex"`
+	TaskState      string         `json:"task_state,omitempty" gorm:"-"`
+	Entries        []CreditLedger `json:"entries,omitempty" gorm:"-"`
 }
 
 type CreditAuditInfo struct {

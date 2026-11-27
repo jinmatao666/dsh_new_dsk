@@ -56,6 +56,12 @@ export function loadBrand(configPath = process.env.DSH_BRAND_CONFIG) {
   const sidebarWordmark = composed && !assets.sidebar && !lettering && !/^万维 ?Buddy$/u.test(logoText)
     ? composeWordmark(mark ?? join(webRoot, 'brand-mark.svg'), logoText, logoTextColor, undefined, 65)
     : undefined
+  const generatedAssets = {
+    sidebar: sidebarWordmark,
+    home: composed && !assets.home
+      ? composeWordmark(mark ?? join(webRoot, 'brand-mark.svg'), logoText, logoTextColor, lettering, 50, 'home')
+      : undefined,
+  }
   const sources = {}
   for (const slot of slots) {
     const value = assets[slot] ?? assets[wordmarks.has(slot) ? 'wordmark' : 'mark']
@@ -70,8 +76,10 @@ export function loadBrand(configPath = process.env.DSH_BRAND_CONFIG) {
   // A selected non-default brand cannot silently retain the old application icon or logo.
   if (brand.name !== defaults.name && (!mark || !nativeFiles.icon)) throw new Error('A custom brand requires assets.mark and a native PNG icon')
   const baseSources = Object.fromEntries(['mark', 'wordmark'].map(key => [key, assets[key] ? file(assets[key], ['.png', '.svg', '.webp']) : join(webRoot, `brand-${key}.svg`)]))
-  if (sidebarWordmark) brand.assets.sidebar = '/brand/sidebar.svg'
-  return { brand, sources, baseSources, composed, sidebarWordmark, nativeFiles, configPath: path }
+  for (const [slot, bytes] of Object.entries(generatedAssets)) {
+    if (bytes) brand.assets[slot] = `/brand/${slot}.svg`
+  }
+  return { brand, sources, baseSources, composed, generatedAssets, nativeFiles, configPath: path }
 }
 
 function imageData(path) {
@@ -80,9 +88,10 @@ function imageData(path) {
   return `data:image/${mime};base64,${readFileSync(path).toString('base64')}`
 }
 
-function composeWordmark(mark, label, color, lettering, fontSize = 50) {
+function composeWordmark(mark, label, color, lettering, fontSize = 50, slot) {
   // Match the stock wordmark canvas so existing logo slots keep their spacing.
-  const icon = `<image x="198" y="88" width="320" height="350" href="${imageData(mark)}"/>`
+  const iconBounds = slot === 'home' ? 'x="286" y="147" width="232" height="232"' : 'x="198" y="88" width="320" height="350"'
+  const icon = `<image ${iconBounds} href="${imageData(mark)}"/>`
   const svg = content => Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 512">${icon}${content}</svg>`)
   if (lettering) {
     return svg(`<image x="608" y="150" width="1252" height="260" preserveAspectRatio="xMinYMid meet" href="${imageData(lettering)}"/>`)
@@ -180,8 +189,8 @@ export function stageWebBrand(selection, publicRoot) {
   mkdirSync(join(publicRoot, 'brand'), { recursive: true })
   for (const [slot, source] of Object.entries(selection.sources)) {
     const url = selection.brand.assets[slot]
-    if (slot === 'sidebar' && selection.sidebarWordmark) {
-      writeFileSync(join(publicRoot, url.slice(1)), selection.sidebarWordmark)
+    if (selection.generatedAssets[slot]) {
+      writeFileSync(join(publicRoot, url.slice(1)), selection.generatedAssets[slot])
       continue
     }
     if (url.startsWith('/brand/')) copyFileSync(source, join(publicRoot, url.slice(1)))

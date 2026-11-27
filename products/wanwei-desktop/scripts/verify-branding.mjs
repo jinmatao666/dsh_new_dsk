@@ -23,7 +23,7 @@ export async function verifyBranding(selection = loadBrand()) {
   for (const [slot, url] of Object.entries(selection.brand.assets)) {
     if (!url.startsWith('/brand/')) continue
     const bytes = readFileSync(join(dist, url.slice(1)))
-    const expected = (slot === 'sidebar' && selection.sidebarWordmark) || readFileSync(selection.sources[slot])
+    const expected = selection.generatedAssets[slot] ?? readFileSync(selection.sources[slot])
     assert.deepEqual(bytes, expected, `Wrong brand asset: ${slot}`)
     receipt.assets[slot] = createHash('sha256').update(bytes).digest('hex')
   }

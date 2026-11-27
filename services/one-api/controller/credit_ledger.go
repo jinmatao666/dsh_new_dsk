@@ -11,18 +11,32 @@ import (
 	"gorm.io/gorm"
 )
 
-func creditLedgerQuery(c *gin.Context) (*gorm.DB, error) {
+func creditLedgerDates(c *gin.Context) (int64, int64, error) {
 	zone := time.FixedZone("CST", 8*3600)
 	now := time.Now().In(zone)
 	start, err := time.ParseInLocation("2006-01-02", c.DefaultQuery("from", now.AddDate(0, 0, -29).Format("2006-01-02")), zone)
 	if err != nil {
-		return nil, err
+		return 0, 0, err
 	}
 	end, err := time.ParseInLocation("2006-01-02", c.DefaultQuery("to", now.Format("2006-01-02")), zone)
 	if err != nil || start.After(end) || end.Sub(start) > 366*24*time.Hour {
-		return nil, strconv.ErrSyntax
+		return 0, 0, strconv.ErrSyntax
 	}
-	q := model.DB.Model(&model.CreditLedger{}).Where("occurred_at >= ? AND occurred_at < ?", start.Unix(), end.AddDate(0, 0, 1).Unix())
+	return start.Unix(), end.AddDate(0, 0, 1).Unix(), nil
+}
+
+func creditLedgerQuery(c *gin.Context) (*gorm.DB, error) {
+	start, end, err := creditLedgerDates(c)
+	if err != nil {
+		return nil, err
+	}
+	q := model.DB.Model(&model.CreditLedger{})
+	if c.Query("view") == "settled" {
+		taskIDs := model.DB.Model(&model.BillingTask{}).Select("id").Where("state = ? AND settled_at >= ? AND settled_at < ?", "succeeded", time.Unix(start, 0), time.Unix(end, 0))
+		q = q.Where("((occurred_at >= ? AND occurred_at < ?) OR reference IN (?))", start, end, taskIDs)
+	} else {
+		q = q.Where("occurred_at >= ? AND occurred_at < ?", start, end)
+	}
 	for _, field := range []string{"user_id", "actor_id"} {
 		if raw := c.Query(field); raw != "" {
 			id, err := strconv.Atoi(raw)
@@ -36,14 +50,18 @@ func creditLedgerQuery(c *gin.Context) (*gorm.DB, error) {
 			}
 		}
 	}
-	if source := c.Query("source"); source != "" {
+	if source := c.Query("source"); source != "" && c.Query("view") != "settled" {
 		q = q.Where("source = ?", source)
 	}
 	switch c.Query("direction") {
 	case "in":
-		q = q.Where("delta > 0")
+		if c.Query("view") != "settled" {
+			q = q.Where("delta > 0")
+		}
 	case "out":
-		q = q.Where("delta < 0")
+		if c.Query("view") != "settled" {
+			q = q.Where("delta < 0")
+		}
 	case "", "all":
 	default:
 		return nil, strconv.ErrSyntax
@@ -78,15 +96,23 @@ func GetCreditLedger(c *gin.Context) {
 		Incoming int64 `json:"incoming"`
 		Outgoing int64 `json:"outgoing"`
 	}
-	if err = query.Select("COUNT(*) AS total, COALESCE(SUM(CASE WHEN delta > 0 THEN delta ELSE 0 END),0) AS incoming, COALESCE(SUM(CASE WHEN delta < 0 THEN -delta ELSE 0 END),0) AS outgoing").Scan(&summary).Error; err != nil {
-		c.JSON(500, gin.H{"success": false, "message": "积分统计加载失败"})
-		return
-	}
 	rows := []model.CreditLedger{}
-	query, _ = creditLedgerQuery(c)
-	if err = query.Order("occurred_at DESC, id DESC").Limit(20).Offset((page - 1) * 20).Find(&rows).Error; err != nil {
-		c.JSON(500, gin.H{"success": false, "message": "积分台账加载失败"})
-		return
+	if c.Query("view") == "settled" {
+		rows, summary.Total, summary.Incoming, summary.Outgoing, err = settledCreditRows(c, query, page)
+		if err != nil {
+			c.JSON(500, gin.H{"success": false, "message": "积分结算明细加载失败"})
+			return
+		}
+	} else {
+		if err = query.Select("COUNT(*) AS total, COALESCE(SUM(CASE WHEN delta > 0 THEN delta ELSE 0 END),0) AS incoming, COALESCE(SUM(CASE WHEN delta < 0 THEN -delta ELSE 0 END),0) AS outgoing").Scan(&summary).Error; err != nil {
+			c.JSON(500, gin.H{"success": false, "message": "积分统计加载失败"})
+			return
+		}
+		query, _ = creditLedgerQuery(c)
+		if err = query.Order("occurred_at DESC, id DESC").Limit(20).Offset((page - 1) * 20).Find(&rows).Error; err != nil {
+			c.JSON(500, gin.H{"success": false, "message": "积分台账加载失败"})
+			return
+		}
 	}
 	references := make([]string, 0, len(rows))
 	for _, row := range rows {

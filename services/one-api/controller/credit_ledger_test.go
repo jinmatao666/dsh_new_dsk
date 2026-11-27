@@ -63,3 +63,45 @@ func TestCreditLedgerSearchAndBeijingDateBoundary(t *testing.T) {
 		}
 	}
 }
+
+func TestCreditLedgerSettledNet(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldDB, oldLog := model.DB, model.LOG_DB
+	model.DB, model.LOG_DB = db, db
+	t.Cleanup(func() { model.DB, model.LOG_DB = oldDB, oldLog })
+	if err = db.AutoMigrate(&model.CreditLedger{}, &model.CreditLedgerMigration{}, &model.BillingTask{}, &model.Log{}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC).Unix()
+	for _, row := range []model.CreditLedger{
+		{UserID: 7, OccurredAt: now, Source: "model_reserve", Reference: "done", Delta: -308686},
+		{UserID: 7, OccurredAt: now + 1, Source: "model_refund", Reference: "done", Delta: 163610},
+		{UserID: 7, OccurredAt: now, Source: "model_reserve", Reference: "pending", Delta: -2000},
+		{UserID: 7, OccurredAt: now, Source: "model_reserve", Reference: "failed", Delta: -2000},
+		{UserID: 7, OccurredAt: now + 1, Source: "model_refund", Reference: "failed", Delta: 2000},
+	} {
+		if err = db.Omit("origin").Create(&row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	router := gin.New()
+	router.GET("/credits", GetCreditLedger)
+	out := httptest.NewRecorder()
+	router.ServeHTTP(out, httptest.NewRequest("GET", "/credits?from=2026-11-20&to=2026-11-20&view=settled&source=model_consume&direction=out", nil))
+	var body struct {
+		Data struct {
+			Total, Incoming, Outgoing int64
+			Items                     []model.CreditLedger
+		}
+	}
+	if err := json.Unmarshal(out.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	d := body.Data
+	if out.Code != 200 || d.Total != 1 || d.Incoming != 0 || d.Outgoing != 145076 || len(d.Items) != 1 || len(d.Items[0].Entries) != 2 {
+		t.Fatal(out.Code, out.Body.String())
+	}
+}
