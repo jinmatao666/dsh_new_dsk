@@ -32,6 +32,7 @@ use kylin::KylinAppExt;
 use url::Url;
 
 mod automatic_workspace;
+mod workspace_preview;
 mod clipboard_files;
 mod expert_artifacts;
 mod migration;
@@ -2900,6 +2901,10 @@ pub fn run() {
             open_workspace_directory,
             open_skill_directory,
             reveal_downloaded_file,
+            workspace_preview::list_workspace_preview,
+            workspace_preview::read_workspace_preview,
+            workspace_preview::save_workspace_preview,
+            workspace_preview::convert_workspace_preview,
             import_workspace_files,
             import_dropped_workspace_files,
             import_clipboard_workspace_files,

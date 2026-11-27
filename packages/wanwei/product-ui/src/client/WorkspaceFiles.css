@@ -1,0 +1,43 @@
+.buddy-workspace-files { position: fixed; inset: 56px 0 8px auto; z-index: 20; display: flex; max-width: min(76vw, 810px); color: var(--dsw-alias-label-primary, #202632); background: var(--dsw-alias-bg-base, #fff); border: 1px solid #dce3ed; border-radius: 12px 0 0 12px; box-shadow: 0 8px 25px #16324b20; overflow: hidden; font-size: 13px; }
+.buddy-workspace-files section { display: flex; flex-direction: column; min-width: 0; }
+.buddy-workspace-files header { display: flex; align-items: center; gap: 6px; padding: 10px; border-bottom: 1px solid #e5e9f0; }
+.buddy-workspace-files header span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.buddy-workspace-files button { padding: 6px; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.buddy-workspace-files button:hover, .buddy-workspace-files button[aria-current] { background: #2563eb1c; }
+.buddy-workspace-files button:disabled { opacity: .45; cursor: default; }
+.buddy-workspace-tree { width: 210px; flex: none; max-width: 28vw; border-left: 1px solid #e5e9f0; }
+.buddy-workspace-tree input { margin: 8px; min-width: 0; padding: 6px; border: 1px solid #dce3ed; border-radius: 6px; color: inherit; background: transparent; }
+.buddy-workspace-tree ul { list-style: none; padding: 4px 8px; margin: 0; overflow: auto; }
+.buddy-workspace-tree li button { width: 100%; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.buddy-workspace-preview { width: min(53vw, 600px); }
+.buddy-workspace-preview-body { flex: 1; overflow: auto; min-height: 0; }
+.buddy-workspace-preview-body iframe { display: block; width: 100%; height: 100%; border: 0; background: white; }
+.buddy-workspace-preview-body pre { padding: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.buddy-workspace-preview-body img, .buddy-workspace-preview-body canvas { display: block; max-width: 100%; height: auto; margin: auto; }
+.buddy-workspace-pdf-controls { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.buddy-workspace-tree select { margin: 8px 8px 0; min-width: 0; color: inherit; background: transparent; }
+@media (min-width: 1000px) {
+  body:has(.buddy-workspace-files) [data-details-collapsed]:has(> [data-shell-overlay]) { width: calc(100% - 210px); }
+  body:has(.buddy-workspace-preview) [data-details-collapsed]:has(> [data-shell-overlay]) { width: calc(100% - 210px - min(34vw, 600px)); }
+  .buddy-workspace-preview { width: min(34vw, 600px); }
+}
+.buddy-workspace-file-badge { display: inline-grid; place-items: center; width: 26px; height: 17px; margin-inline-end: 6px; border-radius: 4px; vertical-align: middle; background: #eef1f6; color: #52627a; font: 700 8px/1 system-ui; }
+.buddy-workspace-file-badge[data-format="W"] { background: #e3efff; color: #1762b9; font-size: 11px; }
+.buddy-workspace-file-badge[data-format="PDF"] { background: #ffebeb; color: #aa3434; }
+.buddy-workspace-file-badge[data-format="IMG"], .buddy-workspace-file-badge[data-format="XLS"] { background: #e3f5ec; color: #187350; }
+.buddy-workspace-file-badge[data-format="HTML"], .buddy-workspace-file-badge[data-format="PPT"] { background: #fff0de; color: #8d480e; }
+.buddy-workspace-pdf-page { position: relative; width: fit-content; max-width: 100%; margin: auto; }
+.buddy-workspace-pdf-text { position: absolute; inset: 0; overflow: hidden; line-height: 1; transform-origin: 0 0; text-size-adjust: none; }
+.buddy-workspace-pdf-text :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0 0; user-select: text; }
+.buddy-workspace-pdf-text .markedContent { top: 0; height: 0; }
+.buddy-workspace-pdf-text ::selection { background: #2979ff55; color: transparent; }
+.buddy-workspace-deliverable-previews { display: flex; flex-wrap: wrap; gap: 6px; }
+.buddy-workspace-deliverable-previews button { border: 1px solid #dce3ed; border-radius: 6px; background: transparent; color: inherit; padding: 4px 8px; cursor: pointer; }
+.buddy-worksheet-selector { display: block; margin: 10px; }
+.buddy-worksheet { border-collapse: collapse; white-space: pre-wrap; }
+.buddy-worksheet :is(td, th) { min-width: 54px; max-width: 240px; border: 1px solid #dce3ed; padding: 5px 8px; overflow-wrap: anywhere; }
+.buddy-worksheet th { background: #f3f6fb; }
+.buddy-workspace-edit { display: grid; align-content: start; gap: 10px; padding: 14px; }
+.buddy-workspace-edit label { display: grid; gap: 6px; }
+.buddy-workspace-edit :is(input, textarea) { padding: 8px; font: inherit; color: inherit; background: transparent; border: 1px solid #dce3ed; border-radius: 6px; }
+.buddy-workspace-edit textarea { min-height: 280px; resize: vertical; }

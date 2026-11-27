@@ -31,6 +31,7 @@
     "allow-open-workspace-directory",
     "allow-open-skill-directory",
     "allow-reveal-downloaded-file",
+    "allow-workspace-preview",
     "allow-import-workspace-files",
     "allow-import-dropped-workspace-files",
     "allow-import-clipboard-workspace-files",

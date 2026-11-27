@@ -14,6 +14,7 @@ import type { InputActions, IConversation } from '@deepseek-ai/dsh-client-ui-con
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { SidebarBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import { WorkspaceFiles, WORKSPACE_FILE_DRAG, WORKSPACE_PREVIEW_REQUEST } from './WorkspaceFiles.tsx'
 import './theme.css'
 
 type BrandMarkProps = HeroBrandMarkOwnerProps & SidebarBrandMarkOwnerProps
@@ -55,6 +56,13 @@ async function nativeImport(
 /** Imports desktop files into the session composer as structured references. */
 export function FileImportAction(props: FileImportProps) {
   const workspacePath = useActiveWorkspacePath(props)
+  const availableWorkspaces = props.useWorkspaces(value => value.items)
+  const [draftWorkspace, setDraftWorkspace] = useState('')
+  const [workspaceFilesOpen, setWorkspaceFilesOpen] = useState(false)
+  const browserWorkspace = workspacePath ?? (props.sessionId === undefined
+    ? availableWorkspaces.find(item => item.path === draftWorkspace)?.path ?? availableWorkspaces[0]?.path
+    : undefined)
+  const desktop = typeof (window as Window & { __ZJUGIS_NATIVE_INVOKE__?: NativeInvoke }).__ZJUGIS_NATIVE_INVOKE__ === 'function'
   const picker = useRef<HTMLInputElement>(null)
   const importing = useRef(false)
   const dropCard = picker.current?.closest<HTMLElement>('[data-composer-card]')
@@ -166,11 +174,40 @@ export function FileImportAction(props: FileImportProps) {
       }, 0)
     }
     const browserDragOver = (event: DragEvent) => {
-      if (!event.dataTransfer?.types.includes('Files')) return
+      const types = event.dataTransfer?.types
+      if (types?.includes(WORKSPACE_FILE_DRAG) && composerTarget(event.target)) {
+        event.preventDefault()
+        if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+        return
+      }
+      if (!types?.includes('Files') || !event.dataTransfer) return
       event.preventDefault()
       event.dataTransfer.dropEffect = 'copy'
     }
+    const appendWorkspacePath = (payload: unknown) => {
+      if (payload === null || typeof payload !== 'object') return
+      const { root, parts, directory } = payload as { root: string; parts: string[]; directory?: boolean }
+      if (!browserWorkspace || root !== browserWorkspace || !Array.isArray(parts) || parts.length === 0
+        || parts.some(part => typeof part !== 'string' || !part || part === '.' || part === '..' || /[\\/:]/u.test(part))) return
+      const separator = root.includes('\\') ? '\\' : '/'
+      append([root.replace(/[\\/]+$/u, '') + separator + parts.join(separator) + (directory ? separator : '')])
+    }
+    const pointerDrop = (event: Event) => {
+      if (!composerTarget(event.target) || !(event instanceof CustomEvent)) return
+      try { appendWorkspacePath(event.detail) }
+      catch (reason) { setStatus({ text: String(reason), error: true }) }
+    }
     const browserDrop = (event: DragEvent) => {
+      const workspaceFile = event.dataTransfer?.types?.includes(WORKSPACE_FILE_DRAG)
+        ? event.dataTransfer.getData(WORKSPACE_FILE_DRAG) : undefined
+      if (workspaceFile) {
+        if (!composerTarget(event.target)) return
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        try { appendWorkspacePath(JSON.parse(workspaceFile)) }
+        catch (reason) { setStatus({ text: String(reason), error: true }) }
+        return
+      }
       const files = [...(event.dataTransfer?.files ?? [])]
       const documents = files.filter(file => !file.type.startsWith('image/'))
       if (documents.length === 0) return
@@ -185,6 +222,7 @@ export function FileImportAction(props: FileImportProps) {
     }
     const enter = () => { setDragActive(true) }
     const leave = () => { setDragActive(false) }
+    document.addEventListener('buddy:workspace-file-drop', pointerDrop)
     document.addEventListener('drop', browserDrop, { capture: true })
     document.addEventListener('paste', paste, { capture: true })
     document.addEventListener('keydown', keydown, { capture: true })
@@ -193,6 +231,7 @@ export function FileImportAction(props: FileImportProps) {
     window.addEventListener('dsh:native-file-drag-leave', leave)
     window.addEventListener('dsh:native-file-drop', drop)
     return () => {
+      document.removeEventListener('buddy:workspace-file-drop', pointerDrop)
       document.removeEventListener('drop', browserDrop, { capture: true })
       document.removeEventListener('paste', paste, { capture: true })
       document.removeEventListener('keydown', keydown, { capture: true })
@@ -202,7 +241,7 @@ export function FileImportAction(props: FileImportProps) {
       window.removeEventListener('dsh:native-file-drag-leave', leave)
       window.removeEventListener('dsh:native-file-drop', drop)
     }
-  }, [props.inputActions, workspacePath])
+  }, [props.inputActions, workspacePath, browserWorkspace])
   const choose = (event: ChangeEvent<HTMLInputElement>) => {
     const files = [...(event.currentTarget.files ?? [])]
     event.currentTarget.value = ''
@@ -212,6 +251,13 @@ export function FileImportAction(props: FileImportProps) {
     <>
       <input ref={picker} className="wanwei-product-file-input" type="file" multiple onChange={choose} />
       <button className="wanwei-product-file-button" type="button" disabled={busy} title={error ?? productText('导入文件')} aria-label={productText('导入文件')} data-error={error === undefined ? undefined : true} onClick={() => picker.current?.click()}>+</button>
+      {desktop && browserWorkspace && <WorkspaceFiles key={browserWorkspace} root={browserWorkspace} invoke={invokeDesktop}
+        open={workspaceFilesOpen} setOpen={setWorkspaceFilesOpen}
+        { ...(props.sessionId === undefined && availableWorkspaces.length > 1 ? {
+          workspacePicker: <select aria-label="选择要浏览的工作区" value={browserWorkspace} onChange={event => setDraftWorkspace(event.target.value)}>
+            {availableWorkspaces.map(item => <option key={item.workspaceId} value={item.path}>{item.path}</option>)}
+          </select>,
+        } : {}) } />}
       {dragActive && dropCard && createPortal(
         <div className="wanwei-product-drop-overlay" role="status">{productText('松开鼠标，将文件导入当前工作区')}</div>,
         dropCard,
@@ -284,6 +330,18 @@ export function apply(ctx: Context): void {
       )
     },
   }), 'wanwei analysis result presenter')
+  ctx.effect(() => deliverableExtensions.registerPresenter({
+    claims: () => false,
+    render: (paths, openFile) => {
+      const supported = paths.filter(path => /\.(?:docx?|xlsx?|pptx?|pdf|txt|md|markdown|html?|png|jpe?g|gif|webp|bmp|avif)$/iu.test(path))
+      if (supported.length === 0 || typeof (window as Window & { __ZJUGIS_NATIVE_INVOKE__?: NativeInvoke }).__ZJUGIS_NATIVE_INVOKE__ !== 'function') return null
+      return <div className="buddy-workspace-deliverable-previews">{supported.map(path =>
+        <button key={path} type="button" title={path} onClick={() => {
+          const unhandled = window.dispatchEvent(new CustomEvent(WORKSPACE_PREVIEW_REQUEST, { detail: path, cancelable: true }))
+          if (unhandled) openFile(path)
+        }}>预览 {path.split(/[\\/]/u).at(-1)}</button>)}</div>
+    },
+  }), 'wanwei workspace deliverable previews')
   ctx.effect(() => platformActions.register({
     openDirectory: async (path) => {
       await invokeDesktop('open_workspace_directory', { workspacePath: path })

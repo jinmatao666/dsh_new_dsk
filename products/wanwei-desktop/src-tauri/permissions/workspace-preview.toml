@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-workspace-preview"
+description = "Allows the main desktop UI to browse and preview local workspace files."
+commands.allow = ["list_workspace_preview", "read_workspace_preview", "save_workspace_preview", "convert_workspace_preview"]

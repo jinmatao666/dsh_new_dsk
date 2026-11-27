@@ -260,3 +260,21 @@ describe('desktop file import', () => {
     expect(view.setDraft).not.toHaveBeenCalled()
   })
 })
+
+it('adds a file from the workspace panel to the composer without importing a copy', async () => {
+  const view = bench(true)
+  view.invoke.mockImplementation(async () => [])
+  view.invoke.mockResolvedValueOnce([{ name: '项目 说明.txt', directory: false }] as unknown as string[])
+  fireEvent.click(view.getByRole('button', { name: '工作区文件' }))
+  const file = await view.findByRole('button', { name: /项目 说明/ })
+  const values = new Map<string, string>()
+  const dataTransfer = {
+    types: ['application/x-buddy-workspace-file'],
+    setData: (type: string, value: string) => values.set(type, value),
+    getData: (type: string) => values.get(type) ?? '',
+  }
+  fireEvent.dragStart(file, { dataTransfer })
+  fireEvent.drop(composer(view), { dataTransfer })
+  expect(view.appendReferences).toHaveBeenCalledWith([expect.objectContaining({ label: '项目 说明.txt', ref: '@"workspace/项目 说明.txt"' })])
+  expect(view.invoke).toHaveBeenCalledTimes(1)
+})

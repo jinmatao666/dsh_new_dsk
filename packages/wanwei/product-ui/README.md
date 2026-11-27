@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
 
 This client plugin owns Wanwei branding, theme overrides, desktop file-import affordances and spatial-analysis deliverable presentation. It registers through generic DSH slots and services rather than placing product behavior in official UI packages.
 
+The desktop composer opens the Workspace Files panel for the active workspace, with folder expansion, workspace search, refresh and opened-file switching. Drag an entry into the composer to reference its original path, or open supported conversation outputs in the same preview panel. The panel previews DOCX, PDF, TXT, Markdown, raster images, HTML and XLSX. DOC and XLS are converted with an installed LibreOffice, and PPT/PPTX use its PDF output. Text editing supports UTF-8 TXT, Markdown and HTML. DOCX supports replacing a unique piece of text in one run. Saving checks the original file digest before replacing the file.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)

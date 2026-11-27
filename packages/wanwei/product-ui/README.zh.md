@@ -11,6 +11,8 @@ kind: "package-reference"
 
 此客户端插件负责万维品牌、主题覆盖、桌面文件导入入口和空间分析成果展示。它通过通用 DSH Slot 与 Service 注册，不把产品行为写入官方 UI 包。
 
+桌面端输入框工具区可打开当前工作区文件面板，支持展开目录、搜索工作区、刷新和切换已打开文件。拖入输入框可引用文件原路径，对话产物也可打开同一预览面板。支持预览 DOCX、PDF、TXT、Markdown、位图、HTML 和 XLSX。DOC、XLS 由本机安装的 LibreOffice 转换，PPT/PPTX 通过它转换为 PDF 预览。支持编辑 UTF-8 编码的 TXT、Markdown 和 HTML，DOCX 可替换同一文本段内唯一匹配的文字。保存替换文件前会校验原始内容。
+
 ## 目录
 
 - [使用此包](#use-this-package)

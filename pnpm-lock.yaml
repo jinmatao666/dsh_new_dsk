@@ -10211,6 +10211,22 @@ importers:
         version: 18.3.1(react@18.3.1)
 
   packages/wanwei/product-ui:
+    dependencies:
+      docx-preview:
+        specifier: 0.3.7
+        version: 0.3.7
+      jszip:
+        specifier: 3.10.1
+        version: 3.10.1
+      marked:
+        specifier: 16.4.2
+        version: 16.4.2
+      pdfjs-dist:
+        specifier: 4.10.38
+        version: 4.10.38
+      xlsx:
+        specifier: 0.18.5
+        version: 0.18.5
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -15810,6 +15826,9 @@ packages:
   jsx-ast-utils-x@0.1.0:
     resolution: {integrity: sha512-eQQBjBnsVtGacsG9uJNB8qOr3yA8rga4wAaGG1qRcBzSIvfhERLrWxMAM1hp5fcS6Abo8M4+bUBTekYR0qTPQw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  docx-preview@0.3.7:
+    resolution: {integrity: sha512-Lav69CTA/IYZPJTsKH7oYeoZjyg96N0wEJMNslGJnZJ+dMUZK85Lt5ASC79yUlD48ecWjuv+rkcmFt6EVPV0Xg==}
 
   jszip@3.10.1:
     resolution: {integrity: sha512-xXDvecyTpGLrqFrvkrUSoxxfJI5AH7U8zxxtVclpsUtMCq4JQ290LY8AW5c7Ggnr/Y/oK+bQMbqK2qmtk3pN4g==}
@@ -21810,6 +21829,10 @@ snapshots:
   json5@2.2.3: {}
 
   jsx-ast-utils-x@0.1.0: {}
+
+  docx-preview@0.3.7:
+    dependencies:
+      jszip: 3.10.1
 
   jszip@3.10.1:
     dependencies:
