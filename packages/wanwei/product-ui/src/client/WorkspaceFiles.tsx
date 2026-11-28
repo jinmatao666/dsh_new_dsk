@@ -1,121 +1,60 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { WordPreview } from './WordPreview.tsx'
-import { SpreadsheetPreview } from './SpreadsheetPreview.tsx'
-import { encodePreviewText, replaceWorkspaceWordText, workspacePreviewDigest } from './workspace-preview-edit.ts'
+import { ParvisPreview } from './ParvisPreview.tsx'
+import { buildTransformPrompt, insertAfterSelection, replaceDocxSelectionText, replaceSelectionText, insertDocxChartAfterSelection, pngBase64FromDataUrl, normalizeDocxForWordSave } from './parvis-preview-edit.ts'
+import type { PreviewTextSelection } from './parvis-preview-edit.ts'
+import { WorkspaceFileIcon } from './WorkspaceFileIcon.tsx'
+import { encodePreviewText, workspacePreviewDigest } from './workspace-preview-edit.ts'
 import './WorkspaceFiles.css'
+import { inlinePreviewAssets } from './preview-assets.ts'
 
 export const WORKSPACE_FILE_DRAG = 'application/x-buddy-workspace-file'
 export const WORKSPACE_PREVIEW_REQUEST = 'buddy:workspace-preview-request'
-type Entry = { name: string; directory: boolean }
-type Invoke = (command: string, input: { root: string; parts: string[]; expected?: string; content?: string }) => Promise<unknown>
-type Preview = { kind: 'text' | 'html' | 'image' | 'pdf' | 'word' | 'sheet'; content: string }
+type Entry = { name: string; directory: boolean; version?: string }
+type Invoke = (command: string, input: {
+  root: string
+  parts: string[]
+  expected?: string
+  content?: string
+  action?: string
+  name?: string
+}) => Promise<unknown>
+type Preview = { content: string; name: string }
 
-const images: Record<string, string> = { png: 'png', jpg: 'jpeg', jpeg: 'jpeg', gif: 'gif', webp: 'webp', bmp: 'bmp', avif: 'avif' }
-const fileBadges: Record<string, string> = {
-  docx: 'W', doc: 'W', pdf: 'PDF', txt: 'TXT',
-  md: 'MD', markdown: 'MD', html: 'HTML', htm: 'HTML',
-  xls: 'XLS', xlsx: 'XLS', ppt: 'PPT', pptx: 'PPT',
+type SavedDraft = {
+  draft: string
+  find: string
+  original: string
+  binary?: string | undefined
+  mode: 'replace' | 'insert'
+  selection?: PreviewTextSelection | undefined
 }
-
-function fileBadge(entry: Entry): string {
-  if (entry.directory) return '▸'
-  const extension = entry.name.split('.').at(-1)?.toLowerCase() ?? ''
-  return fileBadges[extension] ?? (images[extension] ? 'IMG' : '▧')
-}
-
-async function previewFile(encoded: string, name: string): Promise<Preview> {
-  const extension = name.split('.').at(-1)?.toLowerCase() ?? ''
-  if (images[extension]) return { kind: 'image', content: 'data:image/' + images[extension] + ';base64,' + encoded }
-  if (extension === 'xlsx') return { kind: 'sheet', content: encoded }
-  if (extension === 'pdf') return { kind: 'pdf', content: encoded }
-  if (extension === 'docx') return { kind: 'word', content: encoded }
-  const bytes = Uint8Array.from(atob(encoded), character => character.charCodeAt(0))
-  const source = new TextDecoder().decode(bytes)
-  if (extension === 'html' || extension === 'htm') return { kind: 'html', content: source }
-  if (extension === 'md' || extension === 'markdown') {
-    const { marked } = await import('marked')
-    return { kind: 'html', content: await marked.parse(source) }
-  }
-  if (extension === 'txt') return { kind: 'text', content: source }
-  throw new Error('该格式暂不支持预览')
-}
-
-function PdfPreview({ content }: { content: string }) {
-  const canvas = useRef<HTMLCanvasElement>(null)
-  const textLayer = useRef<HTMLDivElement>(null)
-  const [page, setPage] = useState(1)
-  const [count, setCount] = useState(1)
-  const [error, setError] = useState('')
-  const [document, setDocument] = useState<Awaited<ReturnType<typeof import('pdfjs-dist')['getDocument']>['promise']>>()
-  useEffect(() => {
-    let live = true
-    let task: ReturnType<typeof import('pdfjs-dist')['getDocument']> | undefined
-    void Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs')]).then(async ([pdf, worker]) => {
-      if (!live) return
-      const host = globalThis as typeof globalThis & { pdfjsWorker?: typeof worker }
-      host.pdfjsWorker ??= worker
-      task = pdf.getDocument({ data: Uint8Array.from(atob(content), c => c.charCodeAt(0)), isEvalSupported: false })
-      const loaded = await task.promise
-      if (live) { setCount(loaded.numPages); setDocument(loaded) }
-    }).catch(() => { if (live) setError('无法读取此 PDF') })
-    return () => { live = false; void task?.destroy().catch(() => {}) }
-  }, [content])
-  useEffect(() => {
-    let live = true
-    let cancelCanvas: (() => void) | undefined
-    let cancelText: (() => void) | undefined
-    const text = textLayer.current
-    text?.replaceChildren()
-    if (document) void Promise.all([document.getPage(page), import('pdfjs-dist')]).then(async ([sheet, pdf]) => {
-      const target = canvas.current
-      const context = target?.getContext('2d')
-      if (!live || !target || !context || !text) return
-      const unitWidth = sheet.getViewport({ scale: 1 }).width
-      const available = target.parentElement?.parentElement?.clientWidth || unitWidth
-      const viewport = sheet.getViewport({ scale: Math.min(1.5, available / unitWidth) })
-      target.width = Math.ceil(viewport.width)
-      target.height = Math.ceil(viewport.height)
-      text.style.setProperty('--scale-factor', String(viewport.scale))
-      const render = sheet.render({ canvasContext: context, viewport })
-      cancelCanvas = () => render.cancel()
-      const layer = new pdf.TextLayer({ textContentSource: sheet.streamTextContent(), container: text, viewport })
-      cancelText = () => layer.cancel()
-      await Promise.all([render.promise, layer.render()])
-    }).catch(() => { if (live) setError('无法渲染 PDF 页面') })
-    return () => { live = false; cancelCanvas?.(); cancelText?.() }
-  }, [document, page])
-  return <>{error ? <p role="alert">{error}</p> : <>
-    <div className="buddy-workspace-pdf-controls">
-      <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>上一页</button>
-      <span>{document ? page + ' / ' + count : '正在加载 PDF…'}</span>
-      <button type="button" disabled={page >= count} onClick={() => setPage(page + 1)}>下一页</button>
-    </div>
-    <div className="buddy-workspace-pdf-page">
-      <canvas ref={canvas} aria-label={'PDF 第 ' + page + ' 页'} />
-      <div ref={textLayer} className="buddy-workspace-pdf-text" />
-    </div>
-  </>}</>
-}
-
-const htmlPrefix = '<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data:; style-src \'unsafe-inline\'; form-action \'none\'"><style>body{font:15px/1.65 system-ui;margin:24px;overflow-wrap:anywhere}img{max-width:100%}table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:5px}</style>'
+const workspaceMemory = new Map<string, {
+  expanded: string[][]
+  tabs: string[][]
+  file?: string[] | undefined
+  drafts: Map<string, SavedDraft>
+}>()
 
 /** Browse the active workspace and preview files without modifying them. */
-export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen }: {
+export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen, onPrompt, transformPreview }: {
   root: string
+  onPrompt?: (prompt: string) => void
+  transformPreview?: ((prompt: string, signal: AbortSignal) => Promise<string>) | undefined
   invoke: Invoke
   workspacePicker?: ReactNode
   open: boolean
   setOpen: (open: boolean) => void
 }) {
-  const [expanded, setExpanded] = useState<string[][]>([])
+  const memory = useRef(workspaceMemory.get(root) ?? { expanded: [], tabs: [], drafts: new Map<string, SavedDraft>() })
+  const [expanded, setExpanded] = useState<string[][]>(memory.current.expanded)
   const [rows, setRows] = useState<Array<Entry & { parts: string[] }>>([])
-  const [tabs, setTabs] = useState<string[][]>([])
+  const [tabs, setTabs] = useState<string[][]>(memory.current.tabs)
   const pointer = useRef<{ x: number; y: number }>()
   const suppressClick = useRef(false)
   const [search, setSearch] = useState('')
-  const [file, setFile] = useState<string[]>()
+  const [file, setFile] = useState<string[] | undefined>(memory.current.file)
   const [preview, setPreview] = useState<Preview>()
   const [listError, setListError] = useState('')
   const [fileError, setFileError] = useState('')
@@ -125,35 +64,131 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen }:
   const [find, setFind] = useState('')
   const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [modelBusy, setModelBusy] = useState(false)
+  const [binaryDraft, setBinaryDraft] = useState<string>()
+  const modelRequest = useRef<AbortController>()
+  useEffect(() => () => modelRequest.current?.abort(), [])
+  const [selection, setSelection] = useState<PreviewTextSelection>()
+  const [mode, setMode] = useState<'replace' | 'insert'>('replace')
+  const [previewWidth, setPreviewWidth] = useState(520)
+  const [operation, setOperation] = useState<{ parts: string[]; action: string; name: string }>()
+  const [operationError, setOperationError] = useState('')
+  const fileVersion = useRef<string>()
+  const [dragGhost, setDragGhost] = useState<{ x: number; y: number; name: string }>()
+  useEffect(() => {
+    memory.current.expanded = expanded; memory.current.tabs = tabs; memory.current.file = file
+    workspaceMemory.set(root, memory.current)
+  }, [root, expanded, tabs, file])
+  useEffect(() => {
+    if (!file || original === undefined) return
+    if (draft === undefined) memory.current.drafts.delete(file.join('/'))
+    else memory.current.drafts.set(file.join('/'), { draft, find, original, selection, binary: binaryDraft, mode })
+  }, [file, draft, find, original, selection, binaryDraft, mode])
   const extension = file?.at(-1)?.split('.').at(-1)?.toLowerCase()
   const editing = draft !== undefined
   const editable = extension !== undefined && ['txt', 'md', 'markdown', 'html', 'htm', 'docx'].includes(extension)
+  useEffect(() => {
+    const clear = () => { pointer.current = undefined; setDragGhost(undefined) }
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') clear() }
+    window.addEventListener('blur', clear); window.addEventListener('keydown', key)
+    return () => { window.removeEventListener('blur', clear); window.removeEventListener('keydown', key) }
+  }, [])
+  useEffect(() => {
+    document.body.style.setProperty('--buddy-preview-width', `${previewWidth}px`)
+    return () => { document.body.style.removeProperty('--buddy-preview-width') }
+  }, [previewWidth])
+  useEffect(() => {
+    const current = rows.find(entry => entry.parts.join('/') === file?.join('/'))?.version
+    if (current && fileVersion.current && current !== fileVersion.current && !editing) setRevision(value => value + 1)
+    fileVersion.current = current
+  }, [rows, file, editing])
   const acceptFile = (parts: string[]) => {
+    modelRequest.current?.abort(); setModelBusy(false); setBinaryDraft(undefined)
     setTabs(previous => previous.some(tab => tab.join('/') === parts.join('/')) ? previous : [...previous, parts])
+    setOriginal(undefined); setDraft(undefined); setSelection(undefined)
+    setExpanded((previous) => {
+      const next = [...previous]
+      for (let depth = 1; depth < parts.length; depth++) {
+        const ancestor = parts.slice(0, depth)
+        if (!next.some(value => value.join('/') === ancestor.join('/'))) next.push(ancestor)
+      }
+      return next
+    })
     setFile(parts)
   }
   const startEditing = () => {
     if (original === undefined) return
-    setFind('')
+    setFind(selection?.selectedText ?? '')
     setSaveError('')
     try {
       const source = extension === 'docx' ? '' : new TextDecoder('utf-8', { ignoreBOM: true, fatal: true })
         .decode(Uint8Array.from(atob(original), value => value.charCodeAt(0)))
-      setDraft(source)
+      setDraft(selection ? selection.selectedText : source)
     } catch { setSaveError('当前只支持保存 UTF-8 编码的文本文件') }
   }
+  const [editedPreview, setEditedPreview] = useState<string>()
+  const buildEditedContent = async () => {
+    if (original === undefined || draft === undefined) throw new Error('草稿尚未准备好')
+    let content: string
+    if (binaryDraft) content = binaryDraft
+    else if (extension === 'docx') {
+      const chosen = selection?.selectedText === find ? selection : { selectedText: find, contextBefore: '', contextAfter: '', menu: { x: 0, y: 0 } }
+      const result = await replaceDocxSelectionText(original, chosen, mode === 'insert' ? find + draft : draft)
+      if (!result.ok) throw new Error(result.reason === 'ambiguous' ? '这段文字出现多次，请在预览中重新选择。' : '没有找到选中文字，请重新选择。')
+      content = result.base64
+    } else if (selection && find) {
+      const source = new TextDecoder('utf-8', { ignoreBOM: true }).decode(Uint8Array.from(atob(original), value => value.charCodeAt(0)))
+      const result = mode === 'insert' ? insertAfterSelection(source, selection, draft) : replaceSelectionText(source, selection, draft)
+      if (!result.ok) throw new Error('无法定位选中文字，请重新选择。')
+      content = encodePreviewText(result.content)
+    } else content = encodePreviewText(draft)
+    return content
+  }
+  useEffect(() => {
+    let live = true
+    setEditedPreview(undefined)
+    if (!file || draft === undefined || original === undefined || extension === 'docx' && !find && !binaryDraft) return
+    const timer = window.setTimeout(() => {
+      void buildEditedContent().then(value => inlinePreviewAssets(value, file, root, invoke))
+        .then((value) => { if (live) setEditedPreview(value) }).catch(() => {})
+    }, 250)
+    return () => { live = false; window.clearTimeout(timer) }
+  }, [draft, original, find, selection, mode, binaryDraft, extension, file, root, invoke])
   const save = async () => {
     if (!file || original === undefined || draft === undefined || saving) return
     setSaving(true)
     setSaveError('')
     try {
-      const content = extension === 'docx' ? await replaceWorkspaceWordText(original, find, draft)
-        : encodePreviewText(draft)
+      const edited = await buildEditedContent()
+      const content = extension === 'docx' ? await normalizeDocxForWordSave(edited) : edited
       await invoke('save_workspace_preview', { root, parts: file, expected: await workspacePreviewDigest(original), content })
       setDraft(undefined)
+      setBinaryDraft(undefined)
       setRevision(value => value + 1)
     } catch (reason) { setSaveError(String(reason)) }
     finally { setSaving(false) }
+  }
+  const transform = async (action: 'polish' | 'expand' | 'shorten' | 'pie' | 'bar' | 'line') => {
+    if (!selection || !original || !transformPreview || modelBusy) return
+    const chosen = selection
+    modelRequest.current?.abort()
+    const controller = new AbortController(); modelRequest.current = controller
+    setModelBusy(true); setSaveError('')
+    try {
+      const chart = action === 'pie' || action === 'bar' || action === 'line'
+      const prompt = chart ? `根据以下文字生成${action}图的 ECharts option。精确使用原文数值，不要估算或编造。仅返回可 JSON.parse 的 JSON 对象，包含 title 和 series，禁止函数、工具调用和解释。\n\n${chosen.selectedText}` : buildTransformPrompt(chosen.selectedText, action)
+      const replacement = await transformPreview(prompt, controller.signal)
+      if (controller.signal.aborted) return
+      if (chart) {
+        const { renderChartToPng } = await import('./parvis-chart-renderer.ts')
+        const option = JSON.parse(replacement.replace(/^```(?:json)?\s*/u, '').replace(/\s*```$/u, '')) as Record<string, unknown>
+        const png = await renderChartToPng(option)
+        const result = await insertDocxChartAfterSelection(original, chosen, pngBase64FromDataUrl(png), '')
+        if (!result.ok) throw new Error('无法定位图表插入位置，请重新选择。')
+        setBinaryDraft(result.base64); setDraft(''); setFind(chosen.selectedText)
+      } else { setMode('replace'); setFind(chosen.selectedText); setDraft(replacement) }
+    } catch (reason) { if (!controller.signal.aborted) setSaveError(String(reason)) }
+    finally { if (!controller.signal.aborted) setModelBusy(false) }
   }
   useEffect(() => {
     const receive = (event: Event) => {
@@ -168,9 +203,7 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen }:
       const parts = (absolute ? path.slice(prefix.length) : path).replace(/^\.\//u, '').split('/')
       if (parts.some(part => !part || part === '.' || part === '..' || part.includes(':'))) return
       event.preventDefault()
-      if (editing) return
-      setTabs(previous => previous.some(tab => tab.join('/') === parts.join('/')) ? previous : [...previous, parts])
-      setFile(parts)
+      acceptFile(parts)
       setOpen(true)
     }
     window.addEventListener(WORKSPACE_PREVIEW_REQUEST, receive)
@@ -218,21 +251,36 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen }:
     let live = true
     setPreview(undefined); setFileError(''); setSaveError(''); setOriginal(undefined)
     const converted = extension === 'doc' ? 'docx' : extension === 'xls' ? 'xlsx'
-      : extension === 'ppt' || extension === 'pptx' ? 'pdf' : undefined
+      : extension === 'ppt' ? 'pdf' : undefined
     void invoke(converted ? 'convert_workspace_preview' : 'read_workspace_preview', { root, parts: file })
       .then(async (encoded) => {
         const raw = String(encoded)
-        const rendered = await previewFile(raw, converted ? 'document.' + converted : file.at(-1) ?? '')
-        if (live) { setPreview(rendered); setOriginal(raw) }
+        const rendered = { content: await inlinePreviewAssets(raw, file, root, invoke), name: converted ? 'document.' + converted : file.at(-1) ?? '' }
+        if (live) {
+          const saved = memory.current.drafts.get(file.join('/'))
+          setPreview(rendered); setOriginal(saved?.original ?? raw)
+          setDraft(saved?.draft); setFind(saved?.find ?? ''); setSelection(saved?.selection); setBinaryDraft(saved?.binary); setMode(saved?.mode ?? 'replace')
+        }
       }).catch((reason) => { if (live) setFileError(String(reason)) })
     return () => { live = false }
   }, [open, root, file, invoke, revision, extension])
   return <>
     <button type="button" className="wanwei-product-file-button" title="工作区文件" aria-label="工作区文件" aria-expanded={open} disabled={editing} onClick={() => setOpen(!open)}>▤</button>
+    {dragGhost && createPortal(<div className="buddy-file-drag-ghost" style={{ left: dragGhost.x + 12, top: dragGhost.y + 12 }}><span>↙</span><WorkspaceFileIcon name={dragGhost.name} />{dragGhost.name}</div>, document.body)}
     {open && createPortal(<aside className="buddy-workspace-files" aria-label="工作区文件">
+      {file && <div className="buddy-workspace-resize" role="separator" aria-label="调整预览宽度" aria-orientation="vertical" tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+          setPreviewWidth(value => Math.max(300, Math.min(window.innerWidth - 560, value + (event.key === 'ArrowLeft' ? 20 : -20))))
+        }}
+        onPointerDown={event => event.currentTarget.setPointerCapture(event.pointerId)}
+        onPointerMove={(event) => {
+          if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+          setPreviewWidth(Math.max(300, Math.min(window.innerWidth - 560, window.innerWidth - 240 - event.clientX)))
+        }} />}
       {file && <section className="buddy-workspace-preview" aria-label="文件预览">
-        <header><select aria-label="切换已打开文件" disabled={editing} value={file.join('/')} onChange={(event) => {
-          setFile(tabs.find(tab => tab.join('/') === event.target.value))
+        <header><select aria-label="切换已打开文件" value={file.join('/')} onChange={(event) => {
+          const next = tabs.find(tab => tab.join('/') === event.target.value); if (next) acceptFile(next)
         }}>{tabs.map(tab => <option key={tab.join('/')} value={tab.join('/')}>{tab.join('/')}</option>)}</select>
         <button type="button" aria-label="重新加载当前文件" disabled={editing} onClick={() => setRevision(value => value + 1)}>↻</button>
         {!editing && editable && original !== undefined && <button type="button" onClick={startEditing}>编辑</button>}
@@ -243,23 +291,30 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen }:
         }}>×</button></header>
         <div className="buddy-workspace-preview-body">
           {!editing && saveError && <p role="alert">{saveError}</p>}
-          {editing ? <div className="buddy-workspace-edit">
-            {extension === 'docx' && <label>查找正文<input value={find} disabled={saving} onChange={event => setFind(event.target.value)} /></label>}
-            <label>{extension === 'docx' ? '替换为' : '文件内容'}<textarea value={draft} disabled={saving} onChange={event => setDraft(event.target.value)} /></label>
+          {editing && <div className="buddy-workspace-edit">
+            {(extension === 'docx' || selection) && <label>查找正文<input value={find} disabled={saving} onChange={event => setFind(event.target.value)} /></label>}
+            {binaryDraft ? <p>图表已加入草稿，请预览后保存。</p> : <label>{extension === 'docx' ? '替换为' : '文件内容'}<textarea value={draft} disabled={saving} onChange={event => setDraft(event.target.value)} /></label>}
             {saveError && <p role="alert">{saveError}</p>}
-            <div><button type="button" disabled={saving} onClick={() => setDraft(undefined)}>放弃编辑</button>
+            <div><button type="button" disabled={saving} onClick={() => { setDraft(undefined); setBinaryDraft(undefined); setRevision(value => value + 1) }}>放弃编辑</button>
               <button type="button" disabled={saving || extension === 'docx' && !find} onClick={() => { void save() }}>{saving ? '正在保存…' : '保存'}</button></div>
-          </div> : fileError ? <p role="alert">{fileError}</p> : !preview ? <p role="status">正在加载预览…</p>
-            : preview.kind === 'html' ? <iframe title={file.at(-1)} sandbox="" referrerPolicy="no-referrer" srcDoc={htmlPrefix + preview.content} />
-              : preview.kind === 'image' ? <img src={preview.content} alt={file.at(-1)} />
-                : preview.kind === 'word' ? <WordPreview key={file.join('/')} content={preview.content} name={file.at(-1) ?? 'Word'} />
-                  : preview.kind === 'sheet' ? <SpreadsheetPreview key={file.join('/')} content={preview.content} />
-                    : preview.kind === 'pdf' ? <PdfPreview key={file.join('/')} content={preview.content} />
-                      : <pre>{preview.content}</pre>}
+          </div>}
+          {fileError ? <p role="alert">{fileError}</p> : !preview ? <p role="status">正在加载预览…</p>
+            : <ParvisPreview key={file.join('/')} content={editedPreview ?? preview.content} name={preview.name} onSelection={editing ? () => {} : setSelection} />}
+          {!editing && selection && <div className="buddy-selection-toolbar">
+            <span title={selection.selectedText}>{selection.selectedText.slice(0, 50)}</span>
+            <button type="button" onClick={() => { onPrompt?.('请根据以下文件内容回答：\n\n' + selection.selectedText) }}>引用</button>
+            <button type="button" onClick={() => { void navigator.clipboard.writeText(selection.selectedText).catch(reason => setSaveError(String(reason))) }}>复制</button>
+            {editable && <><button type="button" onClick={() => { setMode('replace'); startEditing() }}>修改</button>
+              <button type="button" onClick={() => { setMode('insert'); startEditing(); setDraft('') }}>插入</button></>}
+            {transformPreview && (['polish', 'expand', 'shorten'] as const).map((action, index) => <button key={action} type="button" disabled={modelBusy} onClick={() => { void transform(action) }}>{['润色', '扩写', '缩写'][index]}</button>)}
+            {transformPreview && extension === 'docx' && (['pie', 'bar', 'line'] as const).map((action, index) => <button key={action} type="button" disabled={modelBusy} onClick={() => { void transform(action) }}>{['饼图', '柱状图', '折线图'][index]}</button>)}
+            {modelBusy && <span role="status">正在生成编辑草稿…</span>}
+            <button type="button" aria-label="关闭选区工具" onClick={() => setSelection(undefined)}>×</button>
+          </div>}
         </div>
       </section>}
       <section className="buddy-workspace-tree">
-        <header><span>工作区文件</span><button type="button" aria-label="刷新文件" disabled={editing} onClick={() => setRevision(value => value + 1)}>↻</button><button type="button" aria-label="关闭文件栏" disabled={editing} onClick={() => setOpen(false)}>×</button></header>
+        <header><span>工作区文件</span><button type="button" aria-label="新建文件" onClick={() => setOperation({ parts: [], action: 'create-file', name: '' })}>＋</button><button type="button" aria-label="新建文件夹" onClick={() => setOperation({ parts: [], action: 'create-directory', name: '' })}>▱</button><button type="button" aria-label="刷新文件" disabled={editing} onClick={() => setRevision(value => value + 1)}>↻</button><button type="button" aria-label="关闭文件栏" onClick={() => setOpen(false)}>×</button></header>
         {!editing && workspacePicker}
         <input aria-label="搜索工作区文件" placeholder="搜索工作区文件" value={search} onChange={event => setSearch(event.target.value)} />
         {listError && <p role="status">{listError}</p>}
@@ -267,7 +322,8 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen }:
           const parts = entry.parts
           const path = parts.join('/')
           const isExpanded = expanded.some(value => value.join('/') === path)
-          return <li key={path}><button type="button" title={path} disabled={editing} draggable={!entry.directory}
+          return <li key={path}><button type="button" title={path} draggable={!entry.directory}
+            onContextMenu={(event) => { event.preventDefault(); setOperationError(''); setOperation({ parts, action: 'menu', name: entry.name }) }}
             style={{ paddingInlineStart: search ? 6 : 6 + (parts.length - 1) * 12 }}
             aria-expanded={entry.directory ? Boolean(search) || isExpanded : undefined}
             aria-current={file?.join('/') === path ? 'true' : undefined}
@@ -277,9 +333,16 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen }:
               pointer.current = { x: event.clientX, y: event.clientY }
               event.currentTarget.setPointerCapture?.(event.pointerId)
             }}
-            onPointerCancel={() => { pointer.current = undefined }}
+            onPointerMove={(event) => {
+              const start = pointer.current
+              if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) >= 5) {
+                setDragGhost({ x: event.clientX, y: event.clientY, name: entry.name })
+              }
+            }}
+            onPointerCancel={() => { pointer.current = undefined; setDragGhost(undefined) }}
             onPointerUp={(event) => {
               const start = pointer.current
+              setDragGhost(undefined)
               pointer.current = undefined
               if (!start || Math.hypot(event.clientX - start.x, event.clientY - start.y) < 5) return
               suppressClick.current = true
@@ -298,10 +361,44 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen }:
               } else {
                 if (file?.join('/') !== path) { setPreview(undefined); setFileError(''); acceptFile(parts) }
               }
-            }}><span className="buddy-workspace-file-badge" data-format={fileBadge(entry)} aria-hidden="true">{fileBadge(entry)}</span>
+            }}><WorkspaceFileIcon name={entry.name} directory={entry.directory} expanded={isExpanded} />
             {search ? path : entry.name}</button></li>
         })}</ul>
       </section>
+      {operation && <div className="buddy-workspace-file-dialog" role="dialog" aria-modal="true" aria-label="工作区文件操作">
+        {operation.action === 'menu' ? <><strong>{operation.name}</strong>
+          <button type="button" onClick={() => setOperation({ ...operation, action: 'rename' })}>重命名</button>
+          <button type="button" onClick={() => setOperation({ ...operation, action: 'delete' })}>删除</button>
+          <button type="button" onClick={() => setOperation({ parts: rows.find(row => row.parts.join('/') === operation.parts.join('/'))?.directory ? operation.parts : operation.parts.slice(0, -1), action: 'create-file', name: '' })}>新建文件</button>
+          <button type="button" onClick={() => setOperation({ parts: rows.find(row => row.parts.join('/') === operation.parts.join('/'))?.directory ? operation.parts : operation.parts.slice(0, -1), action: 'create-directory', name: '' })}>新建文件夹</button></>
+          : <><strong>{operation.action === 'delete' ? '确认删除？文件将移至工作区的 .buddy-trash 文件夹。' : operation.action === 'rename' ? '重命名' : '新建'}</strong>
+            {operation.action !== 'delete' && <input aria-label="文件名称" value={operation.name} onChange={event => setOperation({ ...operation, name: event.target.value })} />}
+            <button type="button" disabled={saving || operation.action !== 'delete' && !operation.name.trim()} onClick={() => {
+              setSaving(true); setOperationError('')
+              void invoke('mutate_workspace_preview', { root, ...operation }).then(() => {
+                if (operation.action === 'rename' || operation.action === 'delete') {
+                  const prefix = operation.parts.join('/')
+                  const affected = (parts: string[]) => parts.join('/') === prefix || parts.join('/').startsWith(prefix + '/')
+                  if (operation.action === 'rename') {
+                    const renamed = (parts: string[]) => affected(parts)
+                      ? [...operation.parts.slice(0, -1), operation.name, ...parts.slice(operation.parts.length)] : parts
+                    memory.current.drafts = new Map([...memory.current.drafts].map(([path, value]) => [renamed(path.split('/')).join('/'), value]))
+                    setTabs(previous => previous.map(renamed)); setExpanded(previous => previous.map(renamed))
+                    if (file && affected(file)) acceptFile(renamed(file))
+                  } else {
+                    memory.current.drafts = new Map([...memory.current.drafts].filter(([path]) => !affected(path.split('/'))))
+                    setTabs(previous => previous.filter(parts => !affected(parts)))
+                    if (file && affected(file)) {
+                      setFile(undefined); setOriginal(undefined); setDraft(undefined); setBinaryDraft(undefined)
+                    }
+                  }
+                }
+                setOperation(undefined); setRevision(value => value + 1)
+              }).catch(reason => setOperationError(String(reason))).finally(() => setSaving(false))
+            }}>确认</button></>}
+        {operationError && <p role="alert">{operationError}</p>}
+        <button type="button" disabled={saving} onClick={() => setOperation(undefined)}>取消</button>
+      </div>}
     </aside>, document.body)}
   </>
 }

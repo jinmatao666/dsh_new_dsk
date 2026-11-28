@@ -11,7 +11,7 @@ English | [中文](README.zh.md)
 
 This client plugin owns Wanwei branding, theme overrides, desktop file-import affordances and spatial-analysis deliverable presentation. It registers through generic DSH slots and services rather than placing product behavior in official UI packages.
 
-The desktop composer opens the Workspace Files panel for the active workspace, with folder expansion, workspace search, refresh and opened-file switching. Drag an entry into the composer to reference its original path, or open supported conversation outputs in the same preview panel. The panel previews DOCX, PDF, TXT, Markdown, raster images, HTML and XLSX. DOC and XLS are converted with an installed LibreOffice, and PPT/PPTX use its PDF output. Text editing supports UTF-8 TXT, Markdown and HTML. DOCX supports replacing a unique piece of text in one run. Saving checks the original file digest before replacing the file.
+The desktop composer opens the active workspace file panel with original Parvis file icons, directory expansion, search, file operations, drag feedback and opened-file switching. Conversation file cards open the same preview. The isolated [Parvis runtime](preview-runtime/README.md) preserves Word layout, continuous PDF pages and selection, styled and merged Excel sheets, PPT slides, image zoom, Markdown and HTML. Selected text can be quoted, copied, edited or transformed by the current session model; Word also supports chart insertion. Edits remain independent drafts until explicitly saved with original-content digest verification. Switching workspaces preserves drafts in memory. Legacy DOC, XLS and PPT conversion requires LibreOffice or SOFFICE_PATH. Rebuild both the product UI and native shell; real-provider desktop acceptance remains a separate check.
 
 ## Table of Contents
 
@@ -68,6 +68,10 @@ Skill artifact detection accepts the product result marker and explicit analysis
 -----
 
 <a id="model-experience"></a>
+## Build branding
+
+Product-owned display names and assets use generated build-brand snapshots. Select the manifest through the [desktop branding configuration](../../../products/wanwei-desktop/branding/README.md); protocol identifiers, credentials and user content are unchanged.
+
 ## Model Experience
 
 ### Product presentation
@@ -100,7 +104,3 @@ Pure UI presentation does not alter cache keys. A changed user request after imp
 Keep product selectors and marker parsing here; official UI packages may only expose generic slots or services.
 
 </details>
-
-## Build branding
-
-Product-owned display names and assets use generated build-brand snapshots. Select the manifest through the [desktop branding configuration](../../../products/wanwei-desktop/branding/README.md); protocol identifiers, credentials and user content are unchanged.

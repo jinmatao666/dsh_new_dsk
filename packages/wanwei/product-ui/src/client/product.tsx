@@ -16,10 +16,14 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { SidebarBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { WorkspaceFiles, WORKSPACE_FILE_DRAG, WORKSPACE_PREVIEW_REQUEST } from './WorkspaceFiles.tsx'
 import './theme.css'
+import { requestPreviewText } from './preview-model.ts'
+import { WorkspaceFileIcon } from './WorkspaceFileIcon.tsx'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 
 type BrandMarkProps = HeroBrandMarkOwnerProps & SidebarBrandMarkOwnerProps
 type FileImportProps = Pick<PropsRuntime<'conversation.composer.tools'>, 'sessionId' | 'useWorkspaces'> & {
-  inputActions: Pick<InputActions, 'appendReferences'>
+  inputActions: Pick<InputActions, 'appendReferences'> & Partial<Pick<InputActions, 'setDraft'>>
+  transformPreview?: ((prompt: string, signal: AbortSignal) => Promise<string>) | undefined
 }
 type NativeInvoke = (command: string, argumentsValue?: unknown) => Promise<unknown>
 
@@ -252,7 +256,8 @@ export function FileImportAction(props: FileImportProps) {
       <input ref={picker} className="wanwei-product-file-input" type="file" multiple onChange={choose} />
       <button className="wanwei-product-file-button" type="button" disabled={busy} title={error ?? productText('导入文件')} aria-label={productText('导入文件')} data-error={error === undefined ? undefined : true} onClick={() => picker.current?.click()}>+</button>
       {desktop && browserWorkspace && <WorkspaceFiles key={browserWorkspace} root={browserWorkspace} invoke={invokeDesktop}
-        open={workspaceFilesOpen} setOpen={setWorkspaceFilesOpen}
+        open={workspaceFilesOpen} setOpen={setWorkspaceFilesOpen} transformPreview={props.transformPreview}
+        onPrompt={(prompt) => { props.inputActions.setDraft?.(prompt) }}
         { ...(props.sessionId === undefined && availableWorkspaces.length > 1 ? {
           workspacePicker: <select aria-label="选择要浏览的工作区" value={browserWorkspace} onChange={event => setDraftWorkspace(event.target.value)}>
             {availableWorkspaces.map(item => <option key={item.workspaceId} value={item.path}>{item.path}</option>)}
@@ -331,15 +336,19 @@ export function apply(ctx: Context): void {
     },
   }), 'wanwei analysis result presenter')
   ctx.effect(() => deliverableExtensions.registerPresenter({
-    claims: () => false,
+    claims: path => typeof (window as Window & { __ZJUGIS_NATIVE_INVOKE__?: NativeInvoke }).__ZJUGIS_NATIVE_INVOKE__ === 'function'
+      && /\.(?:docx?|xlsx?|pptx?|pdf|txt|md|markdown|html?|png|jpe?g|gif|webp|bmp|avif|svg)$/iu.test(path)
+      && !/(?:-analysis-view_|分析视图_|审查视图_|原始数据_|底稿_)\d{8}_\d{6}_\d{3}\.(?:json|md)$/u.test(path),
     render: (paths, openFile) => {
-      const supported = paths.filter(path => /\.(?:docx?|xlsx?|pptx?|pdf|txt|md|markdown|html?|png|jpe?g|gif|webp|bmp|avif)$/iu.test(path))
+      const supported = paths.filter(path =>
+        /\.(?:docx?|xlsx?|pptx?|pdf|txt|md|markdown|html?|png|jpe?g|gif|webp|bmp|avif|svg)$/iu.test(path)
+        && !/(?:-analysis-view_|分析视图_|审查视图_|原始数据_|底稿_)\d{8}_\d{6}_\d{3}\.(?:json|md)$/u.test(path))
       if (supported.length === 0 || typeof (window as Window & { __ZJUGIS_NATIVE_INVOKE__?: NativeInvoke }).__ZJUGIS_NATIVE_INVOKE__ !== 'function') return null
       return <div className="buddy-workspace-deliverable-previews">{supported.map(path =>
-        <button key={path} type="button" title={path} onClick={() => {
+        <div key={path} className="buddy-workspace-deliverable-card"><button type="button" title={path} onClick={() => {
           const unhandled = window.dispatchEvent(new CustomEvent(WORKSPACE_PREVIEW_REQUEST, { detail: path, cancelable: true }))
           if (unhandled) openFile(path)
-        }}>预览 {path.split(/[\\/]/u).at(-1)}</button>)}</div>
+        }}><WorkspaceFileIcon name={path} />{path.split(/[\\/]/u).at(-1)}</button><button type="button" onClick={() => openFile(path)}>打开应用 ↗</button></div>)}</div>
     },
   }), 'wanwei workspace deliverable previews')
   ctx.effect(() => platformActions.register({
@@ -367,11 +376,19 @@ export function apply(ctx: Context): void {
           yield ctx.slots.register({ name: 'conversation.hero.brand', priority: -100 }, WanweiHeroBrand)
           yield ctx.slots.register({ name: 'conversation.hero.brand.mark', priority: -100 }, WanweiBrandMark)
         }))))
-  ctx.slots.inject('conversation.input.left', () =>
-    ctx.slots.register({ name: 'conversation.input.left', id: 'wanwei-file-import', order: -100 }, FileImportAction))
+  ctx.inject(['sessions'], (scope: Context) => {
+    const sessions = scope.get('sessions') as ISessions
+    scope.slots.inject('conversation.input.left', () => scope.slots.register({ name: 'conversation.input.left', id: 'wanwei-file-import', order: -100 },
+      function WorkspaceImport(props: FileImportProps) {
+        const sessionId = props.sessionId
+        return <FileImportAction {...props} transformPreview={sessionId
+          ? (prompt, signal) => requestPreviewText(sessions, sessionId, prompt, signal) : undefined} />
+      }))
+  })
   ctx.inject(['conversation'], (scope: Context) => {
     const input = (scope.get('conversation') as IConversation).input
-    const actions: Pick<InputActions, 'appendReferences'> = {
+    const actions: Pick<InputActions, 'appendReferences' | 'setDraft'> = {
+      setDraft: text => input.setStagedDraft(text),
       appendReferences: (references) => {
         if (input.stagedSubmission.getSnapshot().busy) return false
         input.setStagedDraft([input.stagedDraft.getSnapshot(), ...references.map(reference => reference.ref)].filter(Boolean).join(' '))

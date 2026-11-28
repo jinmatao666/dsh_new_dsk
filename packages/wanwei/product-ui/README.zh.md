@@ -11,7 +11,7 @@ kind: "package-reference"
 
 此客户端插件负责万维品牌、主题覆盖、桌面文件导入入口和空间分析成果展示。它通过通用 DSH Slot 与 Service 注册，不把产品行为写入官方 UI 包。
 
-桌面端输入框工具区可打开当前工作区文件面板，支持展开目录、搜索工作区、刷新和切换已打开文件。拖入输入框可引用文件原路径，对话产物也可打开同一预览面板。支持预览 DOCX、PDF、TXT、Markdown、位图、HTML 和 XLSX。DOC、XLS 由本机安装的 LibreOffice 转换，PPT/PPTX 通过它转换为 PDF 预览。支持编辑 UTF-8 编码的 TXT、Markdown 和 HTML，DOCX 可替换同一文本段内唯一匹配的文字。保存替换文件前会校验原始内容。
+桌面端输入框工具区可打开当前工作区文件面板，支持 Parvis 原版文件图标、展开目录、搜索、文件操作、拖拽反馈和切换已打开文件。对话文件卡片打开同一预览。[隔离的 Parvis 运行时](preview-runtime/README.zh.md) 保留 Word 排版、连续 PDF 分页及选区、带样式和合并单元格的 Excel、PPT 幻灯片、图片缩放、Markdown 与 HTML。选中文字可引用、复制、编辑，或调用当前会话模型改写；Word 也支持插入图表。编辑先进入独立草稿，显式保存时校验原始内容摘要。切换工作区会在内存中保留草稿。旧格式 DOC、XLS、PPT 转换需要 LibreOffice 或 SOFFICE_PATH。需同时重建产品界面与原生桌面壳，真实模型桌面验收另行进行。
 
 ## 目录
 
@@ -68,6 +68,10 @@ kind: "package-reference"
 -----
 
 <a id="model-experience"></a>
+## 构建品牌
+
+产品自有名称和图片读取构建生成的品牌快照，通过[桌面品牌配置](../../../products/wanwei-desktop/branding/README.zh.md)选择；协议标识、凭据和用户内容保持不变。
+
 ## 模型体验
 
 ### 产品展示
@@ -100,7 +104,3 @@ kind: "package-reference"
 产品选择器和标记解析应留在此包；官方 UI 包只能暴露通用 Slot 或 Service。
 
 </details>
-
-## 构建品牌
-
-产品自有名称和图片读取构建生成的品牌快照，通过[桌面品牌配置](../../../products/wanwei-desktop/branding/README.zh.md)选择；协议标识、凭据和用户内容保持不变。

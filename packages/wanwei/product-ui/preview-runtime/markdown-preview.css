@@ -1,0 +1,66 @@
+.markdown-file-preview [data-component="markdown"] {
+  h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    line-height: 1.25;
+    border-bottom: 1px solid var(--border-weaker-base);
+    padding-bottom: 0.3rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    line-height: 1.3;
+    border-bottom: 1px solid var(--border-weaker-base);
+    padding-bottom: 0.3rem;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-top: 1.25rem;
+    margin-bottom: 0.5rem;
+    line-height: 1.4;
+  }
+
+  h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  h5 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  h6 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-weak);
+  }
+}
+
+.markdown-file-preview,
+.markdown-file-preview [data-component="markdown"],
+.markdown-file-preview [data-component="markdown"] * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.markdown-file-preview [data-slot="markdown-copy-button"],
+.markdown-file-preview [data-slot="markdown-copy-button"] *,
+.markdown-file-preview button,
+.markdown-file-preview button * {
+  -webkit-user-select: none;
+  user-select: none;
+}

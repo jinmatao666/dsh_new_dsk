@@ -10,6 +10,7 @@ use std::{
 pub(crate) struct Entry {
     name: String,
     directory: bool,
+    version: String,
 }
 
 fn resolve(root: &str, parts: &[String]) -> Result<PathBuf, String> {
@@ -48,9 +49,20 @@ pub(crate) async fn list_workspace_preview(
             continue;
         }
         if let Ok(name) = entry.file_name().into_string() {
+            if name.starts_with("~$") || name == ".buddy-trash" {
+                continue;
+            }
+            let metadata = entry.metadata().map_err(|e| e.to_string())?;
+            let modified = metadata
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|time| time.as_nanos())
+                .unwrap_or(0);
             entries.push(Entry {
                 name,
                 directory: kind.is_dir(),
+                version: format!("{}:{}", metadata.len(), modified),
             });
         }
         if entries.len() > 5_000 {
@@ -63,6 +75,76 @@ pub(crate) async fn list_workspace_preview(
             .then_with(|| a.name.cmp(&b.name))
     });
     Ok(entries)
+}
+
+#[tauri::command]
+pub(crate) async fn mutate_workspace_preview(
+    root: String,
+    parts: Vec<String>,
+    action: String,
+    name: Option<String>,
+) -> Result<(), String> {
+    let valid_name = |name: &str| {
+        !name.is_empty()
+            && name != "."
+            && name != ".."
+            && !name.contains(['/', '\\', ':', '\0'])
+            && !name.ends_with(['.', ' '])
+    };
+    match action.as_str() {
+        "create-file" | "create-directory" => {
+            let parent = resolve(&root, &parts)?;
+            let name = name.filter(|value| valid_name(value)).ok_or("名称无效")?;
+            let target = parent.join(name);
+            if action == "create-directory" {
+                fs::create_dir(target).map_err(|e| e.to_string())?;
+            } else {
+                fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(target)
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        "rename" => {
+            if parts.is_empty() {
+                return Err("不能重命名工作区根目录".into());
+            }
+            let source = resolve(&root, &parts)?;
+            let name = name.filter(|value| valid_name(value)).ok_or("名称无效")?;
+            let target = source.parent().ok_or("路径无效")?.join(name);
+            if target.exists() {
+                return Err("该名称已存在".into());
+            }
+            fs::rename(source, target).map_err(|e| e.to_string())?;
+        }
+        "delete" => {
+            if parts.is_empty() {
+                return Err("不能删除工作区根目录".into());
+            }
+            let source = resolve(&root, &parts)?;
+            let trash = fs::canonicalize(&root)
+                .map_err(|e| e.to_string())?
+                .join(".buddy-trash");
+            if !trash.exists() {
+                fs::create_dir(&trash).map_err(|e| e.to_string())?;
+            }
+            let trash_parts = vec![".buddy-trash".to_string()];
+            let trash = resolve(&root, &trash_parts)?;
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| e.to_string())?
+                .as_nanos();
+            let target = trash.join(format!(
+                "{}-{}",
+                stamp,
+                source.file_name().ok_or("路径无效")?.to_string_lossy()
+            ));
+            fs::rename(source, target).map_err(|e| e.to_string())?;
+        }
+        _ => return Err("不支持的文件操作".into()),
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -258,6 +340,67 @@ fn convert_office(path: &Path) -> Result<String, String> {
 mod tests {
     use super::*;
     use sha2::{Digest, Sha256};
+
+    #[test]
+    fn file_operations_preserve_existing_files_and_keep_deleted_content_recoverable() {
+        tauri::async_runtime::block_on(async {
+            let dir = tempfile::tempdir().unwrap();
+            let root = dir.path().to_str().unwrap().to_string();
+            mutate_workspace_preview(
+                root.clone(),
+                vec![],
+                "create-file".into(),
+                Some("one.txt".into()),
+            )
+            .await
+            .unwrap();
+            fs::write(dir.path().join("one.txt"), "keep me").unwrap();
+            assert!(mutate_workspace_preview(
+                root.clone(),
+                vec![],
+                "create-file".into(),
+                Some("one.txt".into())
+            )
+            .await
+            .is_err());
+            assert!(mutate_workspace_preview(
+                root.clone(),
+                vec![],
+                "create-file".into(),
+                Some("../outside.txt".into())
+            )
+            .await
+            .is_err());
+            assert!(
+                mutate_workspace_preview(root.clone(), vec![], "delete".into(), None)
+                    .await
+                    .is_err()
+            );
+            mutate_workspace_preview(
+                root.clone(),
+                vec!["one.txt".into()],
+                "rename".into(),
+                Some("two.txt".into()),
+            )
+            .await
+            .unwrap();
+            mutate_workspace_preview(root.clone(), vec!["two.txt".into()], "delete".into(), None)
+                .await
+                .unwrap();
+            assert!(!dir.path().join("two.txt").exists());
+            let recovered = fs::read_dir(dir.path().join(".buddy-trash"))
+                .unwrap()
+                .next()
+                .unwrap()
+                .unwrap()
+                .path();
+            assert_eq!(fs::read_to_string(recovered).unwrap(), "keep me");
+            assert!(list_workspace_preview(root, vec![])
+                .await
+                .unwrap()
+                .is_empty());
+        });
+    }
 
     #[test]
     fn rejects_paths_outside_workspace() {

@@ -2905,6 +2905,7 @@ pub fn run() {
             workspace_preview::read_workspace_preview,
             workspace_preview::save_workspace_preview,
             workspace_preview::convert_workspace_preview,
+            workspace_preview::mutate_workspace_preview,
             import_workspace_files,
             import_dropped_workspace_files,
             import_clipboard_workspace_files,
