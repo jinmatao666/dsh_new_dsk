@@ -1951,7 +1951,7 @@ export const OfficePreview: Component<{
               props.content.mimeType?.includes("spreadsheetml") || props.content.mimeType === "application/vnd.ms-excel"
             }
           >
-            <XlsxRenderer buffer={buf()} />
+            <XlsxRenderer buffer={buf()} path={props.path} />
           </Match>
           <Match when={props.content.mimeType?.includes("presentationml")}>
             <PptxRenderer buffer={buf()} path={props.path} />

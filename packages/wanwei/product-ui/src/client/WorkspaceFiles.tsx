@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { PanelRight, PanelRightClose, FilePlus2, FolderPlus, RefreshCw, X, Search, ExternalLink, ChevronDown, FolderOpen } from 'lucide-react'
+import { workspacePanelLayout } from './workspace-panel-layout.ts'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ParvisPreview } from './ParvisPreview.tsx'
@@ -71,6 +73,45 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen, o
   const [selection, setSelection] = useState<PreviewTextSelection>()
   const [mode, setMode] = useState<'replace' | 'insert'>('replace')
   const [previewWidth, setPreviewWidth] = useState(520)
+  const [viewport, setViewport] = useState({ width: window.innerWidth, available: window.innerWidth - 280, top: 0 })
+  const [treePopup, setTreePopup] = useState(false)
+  const [openError, setOpenError] = useState('')
+  const panel = workspacePanelLayout(viewport.available, viewport.width, file !== undefined, previewWidth)
+  useEffect(() => {
+    if (!open) return
+    const frame = document.querySelector<HTMLElement>('[data-shell-overlay]')?.parentElement
+    const sidebar = frame?.children.item(0)
+    const update = () =>{  setViewport({
+      width: window.innerWidth,
+      available: window.innerWidth - (sidebar?.getBoundingClientRect().width ?? 280),
+      top: frame?.getBoundingClientRect().top ?? 0,
+    }) }
+    update()
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(update)
+    if (frame) observer?.observe(frame)
+    if (sidebar) observer?.observe(sidebar)
+    window.addEventListener('resize', update)
+    return () => { observer?.disconnect(); window.removeEventListener('resize', update) }
+  }, [open, root])
+  useEffect(() => {
+    if (!open || !panel.reserved) return
+    const frame = document.querySelector<HTMLElement>('[data-shell-overlay]')?.parentElement
+    const center = frame?.children.item(1)
+    if (!(center instanceof HTMLElement)) return
+    const previous = center.style.marginInlineEnd
+    center.style.marginInlineEnd = `${panel.reserved}px`
+    return () => { center.style.marginInlineEnd = previous }
+  }, [open, panel.reserved])
+  const openInApplication = (choose = false) => {
+    if (!file) return
+    setOpenError('')
+    void invoke('open_workspace_preview', { root, parts: file, ...(choose ? { action: 'choose-app' } : {}) })
+      .catch((reason: unknown) =>{  setOpenError(String(reason)) })
+  }
+  const closePreview = () => {
+    modelRequest.current?.abort(); setModelBusy(false)
+    setFile(undefined); setOriginal(undefined); setDraft(undefined); setSelection(undefined); setTreePopup(false)
+  }
   const [operation, setOperation] = useState<{ parts: string[]; action: string; name: string }>()
   const [operationError, setOperationError] = useState('')
   const fileVersion = useRef<string>()
@@ -94,16 +135,12 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen, o
     return () => { window.removeEventListener('blur', clear); window.removeEventListener('keydown', key) }
   }, [])
   useEffect(() => {
-    document.body.style.setProperty('--buddy-preview-width', `${previewWidth}px`)
-    return () => { document.body.style.removeProperty('--buddy-preview-width') }
-  }, [previewWidth])
-  useEffect(() => {
     const current = rows.find(entry => entry.parts.join('/') === file?.join('/'))?.version
     if (current && fileVersion.current && current !== fileVersion.current && !editing) setRevision(value => value + 1)
     fileVersion.current = current
   }, [rows, file, editing])
   const acceptFile = (parts: string[]) => {
-    modelRequest.current?.abort(); setModelBusy(false); setBinaryDraft(undefined)
+    modelRequest.current?.abort(); setModelBusy(false); setBinaryDraft(undefined); setTreePopup(false); setOpenError('')
     setTabs(previous => previous.some(tab => tab.join('/') === parts.join('/')) ? previous : [...previous, parts])
     setOriginal(undefined); setDraft(undefined); setSelection(undefined)
     setExpanded((previous) => {
@@ -210,6 +247,21 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen, o
     return () => { window.removeEventListener(WORKSPACE_PREVIEW_REQUEST, receive) }
   }, [root, setOpen, editing])
   useEffect(() => {
+    // Keep the upstream collected-files row and route only its file gestures.
+    const previewCollectedFile = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+      if (!(event.target instanceof Element)) return
+      const button = event.target.closest<HTMLButtonElement>('[data-produced-files-row] button[title]')
+      if (!button || button.disabled) return
+      const unhandled = window.dispatchEvent(new CustomEvent(WORKSPACE_PREVIEW_REQUEST, { detail: button.title, cancelable: true }))
+      if (unhandled) return
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    document.addEventListener('click', previewCollectedFile, true)
+    return () => { document.removeEventListener('click', previewCollectedFile, true) }
+  }, [root])
+  useEffect(() => {
     if (!open) return
     let live = true
     let running = false
@@ -225,6 +277,8 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen, o
           directories++
           const entries = await invoke('list_workspace_preview', { root, parts }) as Entry[]
           for (const entry of entries) {
+            // Cleanup can change live while the native directory request is awaited.
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             if (!live || next.length >= 5000) return
             const path = [...parts, entry.name]
             if (!query || path.join('/').toLowerCase().includes(query)) next.push({ ...entry, parts: path })
@@ -250,7 +304,7 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen, o
     if (!open || file === undefined) return
     let live = true
     setPreview(undefined); setFileError(''); setSaveError(''); setOriginal(undefined)
-    const converted = extension === 'doc' ? 'docx' : extension === 'xls' ? 'xlsx'
+    const converted = extension === 'doc' ? 'docx'
       : extension === 'ppt' ? 'pdf' : undefined
     void invoke(converted ? 'convert_workspace_preview' : 'read_workspace_preview', { root, parts: file })
       .then(async (encoded) => {
@@ -261,62 +315,74 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen, o
           setPreview(rendered); setOriginal(saved?.original ?? raw)
           setDraft(saved?.draft); setFind(saved?.find ?? ''); setSelection(saved?.selection); setBinaryDraft(saved?.binary); setMode(saved?.mode ?? 'replace')
         }
-      }).catch((reason) => { if (live) setFileError(String(reason)) })
+      }).catch((reason: unknown) => { if (live) setFileError(String(reason)) })
     return () => { live = false }
   }, [open, root, file, invoke, revision, extension])
   return <>
-    <button type="button" className="wanwei-product-file-button" title="工作区文件" aria-label="工作区文件" aria-expanded={open} disabled={editing} onClick={() => setOpen(!open)}>▤</button>
-    {dragGhost && createPortal(<div className="buddy-file-drag-ghost" style={{ left: dragGhost.x + 12, top: dragGhost.y + 12 }}><span>↙</span><WorkspaceFileIcon name={dragGhost.name} />{dragGhost.name}</div>, document.body)}
-    {open && createPortal(<aside className="buddy-workspace-files" aria-label="工作区文件">
-      {file && <div className="buddy-workspace-resize" role="separator" aria-label="调整预览宽度" aria-orientation="vertical" tabIndex={0}
+    <button type="button" className="wanwei-product-file-button" title="工作区文件" aria-label="工作区文件" aria-expanded={open} disabled={editing} onClick={() =>{  setOpen(!open) }}><PanelRight size={18} strokeWidth={1.6} /></button>
+    {dragGhost && createPortal(<div className="buddy-file-drag-ghost" style={{ left: dragGhost.x + 12, top: dragGhost.y + 12 }}><WorkspaceFileIcon name={dragGhost.name} />{dragGhost.name}</div>, document.body)}
+    {open && panel.mode === 'overlay' && createPortal(<button className="buddy-workspace-backdrop"
+      style={{ left: viewport.width - viewport.available, top: viewport.top }} aria-label="收起工作区文件" onClick={() =>{  setOpen(false) }} />, document.body)}
+    {open && createPortal(<aside className="buddy-workspace-files" data-layout={panel.mode} data-tree-popup={treePopup || undefined}
+      style={{ width: panel.width, top: viewport.top }} aria-label="工作区文件">
+      {file && panel.mode !== 'overlay' && <div className="buddy-workspace-resize" role="separator" aria-label="调整预览宽度" aria-orientation="vertical" tabIndex={0}
         onKeyDown={(event) => {
           if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
           setPreviewWidth(value => Math.max(300, Math.min(window.innerWidth - 560, value + (event.key === 'ArrowLeft' ? 20 : -20))))
         }}
-        onPointerDown={event => event.currentTarget.setPointerCapture(event.pointerId)}
+        onPointerDown={(event) =>{  event.currentTarget.setPointerCapture(event.pointerId) }}
         onPointerMove={(event) => {
           if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
-          setPreviewWidth(Math.max(300, Math.min(window.innerWidth - 560, window.innerWidth - 240 - event.clientX)))
+          setPreviewWidth(Math.max(300, Math.min(760, window.innerWidth - panel.tree - event.clientX)))
         }} />}
       {file && <section className="buddy-workspace-preview" aria-label="文件预览">
-        <header><select aria-label="切换已打开文件" value={file.join('/')} onChange={(event) => {
-          const next = tabs.find(tab => tab.join('/') === event.target.value); if (next) acceptFile(next)
-        }}>{tabs.map(tab => <option key={tab.join('/')} value={tab.join('/')}>{tab.join('/')}</option>)}</select>
-        <button type="button" aria-label="重新加载当前文件" disabled={editing} onClick={() => setRevision(value => value + 1)}>↻</button>
-        {!editing && editable && original !== undefined && <button type="button" onClick={startEditing}>编辑</button>}
-        <button type="button" aria-label="关闭当前预览" disabled={editing} onClick={() => {
-          const remaining = tabs.filter(tab => tab.join('/') !== file.join('/'))
-          setTabs(remaining)
-          setFile(remaining.at(-1))
-        }}>×</button></header>
+        <header className="buddy-workspace-preview-header">
+          {panel.tree === 0 && <button type="button" className="buddy-icon-button" title="工作区文件" aria-label="显示文件列表" onClick={() =>{  setTreePopup(value => !value) }}><FolderOpen size={16} /></button>}
+          <label className="buddy-file-select"><WorkspaceFileIcon name={file.at(-1) ?? ''} />
+            <select aria-label="切换已打开文件" title={file.join('/')} value={file.join('/')} onChange={(event) => {
+              const next = tabs.find(tab => tab.join('/') === event.target.value); if (next) acceptFile(next)
+            }}>{tabs.map(tab => <option key={tab.join('/')} value={tab.join('/')}>{tab.at(-1)}</option>)}</select><ChevronDown size={14} />
+          </label>
+          <button type="button" className="buddy-open-file" title="使用系统默认应用打开" onClick={() =>{  openInApplication() }}><ExternalLink size={14} /><span>打开应用</span></button>
+          <button type="button" className="buddy-icon-button" aria-label="重新加载当前文件" title="重新加载" disabled={editing} onClick={() =>{  setRevision(value => value + 1) }}><RefreshCw size={15} /></button>
+          {!editing && editable && original !== undefined && <button type="button" className="buddy-text-button" onClick={startEditing}>编辑</button>}
+          <button type="button" className="buddy-icon-button" aria-label="关闭当前预览" title="关闭预览" onClick={closePreview}><X size={16} /></button>
+        </header>
         <div className="buddy-workspace-preview-body">
           {!editing && saveError && <p role="alert">{saveError}</p>}
           {editing && <div className="buddy-workspace-edit">
-            {(extension === 'docx' || selection) && <label>查找正文<input value={find} disabled={saving} onChange={event => setFind(event.target.value)} /></label>}
-            {binaryDraft ? <p>图表已加入草稿，请预览后保存。</p> : <label>{extension === 'docx' ? '替换为' : '文件内容'}<textarea value={draft} disabled={saving} onChange={event => setDraft(event.target.value)} /></label>}
+            {(extension === 'docx' || selection) && <label>查找正文<input value={find} disabled={saving} onChange={(event) =>{  setFind(event.target.value) }} /></label>}
+            {binaryDraft ? <p>图表已加入草稿，请预览后保存。</p> : <label>{extension === 'docx' ? '替换为' : '文件内容'}<textarea value={draft} disabled={saving} onChange={(event) =>{  setDraft(event.target.value) }} /></label>}
             {saveError && <p role="alert">{saveError}</p>}
             <div><button type="button" disabled={saving} onClick={() => { setDraft(undefined); setBinaryDraft(undefined); setRevision(value => value + 1) }}>放弃编辑</button>
               <button type="button" disabled={saving || extension === 'docx' && !find} onClick={() => { void save() }}>{saving ? '正在保存…' : '保存'}</button></div>
           </div>}
-          {fileError ? <p role="alert">{fileError}</p> : !preview ? <p role="status">正在加载预览…</p>
-            : <ParvisPreview key={file.join('/')} content={editedPreview ?? preview.content} name={preview.name} onSelection={editing ? () => {} : setSelection} />}
+          {openError && <div className="buddy-preview-notice" role="alert">{openError}<button type="button" onClick={() =>{  openInApplication(true) }}>选择打开方式</button></div>}
+          {fileError ? <div className="buddy-preview-fallback" role="alert"><WorkspaceFileIcon name={file.at(-1) ?? ''} /><strong>暂时无法内嵌预览</strong><p>{fileError}</p><button type="button" className="buddy-file-primary" onClick={() =>{  openInApplication() }}>使用系统应用打开</button><button type="button" onClick={() =>{  openInApplication(true) }}>选择打开方式</button></div> : !preview ? <p role="status">正在加载预览…</p>
+            : <ParvisPreview key={file.join('/')} content={editedPreview ?? preview.content} name={preview.name} onSelection={editing ? () => {} : setSelection} onOpen={() =>{  openInApplication() }} />}
           {!editing && selection && <div className="buddy-selection-toolbar">
             <span title={selection.selectedText}>{selection.selectedText.slice(0, 50)}</span>
             <button type="button" onClick={() => { onPrompt?.('请根据以下文件内容回答：\n\n' + selection.selectedText) }}>引用</button>
-            <button type="button" onClick={() => { void navigator.clipboard.writeText(selection.selectedText).catch(reason => setSaveError(String(reason))) }}>复制</button>
+            <button type="button" onClick={() => { void navigator.clipboard.writeText(selection.selectedText).catch((reason: unknown) =>{  setSaveError(String(reason)) }) }}>复制</button>
             {editable && <><button type="button" onClick={() => { setMode('replace'); startEditing() }}>修改</button>
               <button type="button" onClick={() => { setMode('insert'); startEditing(); setDraft('') }}>插入</button></>}
             {transformPreview && (['polish', 'expand', 'shorten'] as const).map((action, index) => <button key={action} type="button" disabled={modelBusy} onClick={() => { void transform(action) }}>{['润色', '扩写', '缩写'][index]}</button>)}
             {transformPreview && extension === 'docx' && (['pie', 'bar', 'line'] as const).map((action, index) => <button key={action} type="button" disabled={modelBusy} onClick={() => { void transform(action) }}>{['饼图', '柱状图', '折线图'][index]}</button>)}
             {modelBusy && <span role="status">正在生成编辑草稿…</span>}
-            <button type="button" aria-label="关闭选区工具" onClick={() => setSelection(undefined)}>×</button>
+            <button type="button" aria-label="关闭选区工具" onClick={() =>{  setSelection(undefined) }}><X size={14} /></button>
           </div>}
         </div>
       </section>}
-      <section className="buddy-workspace-tree">
-        <header><span>工作区文件</span><button type="button" aria-label="新建文件" onClick={() => setOperation({ parts: [], action: 'create-file', name: '' })}>＋</button><button type="button" aria-label="新建文件夹" onClick={() => setOperation({ parts: [], action: 'create-directory', name: '' })}>▱</button><button type="button" aria-label="刷新文件" disabled={editing} onClick={() => setRevision(value => value + 1)}>↻</button><button type="button" aria-label="关闭文件栏" onClick={() => setOpen(false)}>×</button></header>
+      <section className="buddy-workspace-tree" style={{ width: panel.tree || (file ? 260 : panel.width) }}>
+        <header><span>工作区文件</span>
+          <button type="button" className="buddy-icon-button" title="新建文件" aria-label="新建文件" onClick={() =>{  setOperation({ parts: [], action: 'create-file', name: '' }) }}><FilePlus2 size={16} /></button>
+          <button type="button" className="buddy-icon-button" title="新建文件夹" aria-label="新建文件夹" onClick={() =>{  setOperation({ parts: [], action: 'create-directory', name: '' }) }}><FolderPlus size={16} /></button>
+          <button type="button" className="buddy-icon-button" title="刷新文件" aria-label="刷新文件" disabled={editing} onClick={() =>{  setRevision(value => value + 1) }}><RefreshCw size={15} /></button>
+          <button type="button" className="buddy-icon-button" title="收起文件栏" aria-label="关闭文件栏" onClick={() => { if (file && panel.tree === 0) setTreePopup(false); else setOpen(false) }}><PanelRightClose size={16} /></button>
+        </header>
+        <div className="buddy-workspace-root" title={root}>{root.replace(/\\/gu, '/').split('/').filter(Boolean).at(-1)}</div>
         {!editing && workspacePicker}
-        <input aria-label="搜索工作区文件" placeholder="搜索工作区文件" value={search} onChange={event => setSearch(event.target.value)} />
+        <label className="buddy-workspace-search"><Search size={15} /><input aria-label="搜索工作区文件" placeholder="搜索文件" value={search} onChange={(event) =>{  setSearch(event.target.value) }} /></label>
         {listError && <p role="status">{listError}</p>}
         <ul>{rows.map((entry) => {
           const parts = entry.parts
@@ -331,7 +397,7 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen, o
               suppressClick.current = false
               if (event.button !== 0) return
               pointer.current = { x: event.clientX, y: event.clientY }
-              event.currentTarget.setPointerCapture?.(event.pointerId)
+              if (typeof event.currentTarget.setPointerCapture === 'function') event.currentTarget.setPointerCapture(event.pointerId)
             }}
             onPointerMove={(event) => {
               const start = pointer.current
@@ -367,12 +433,12 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen, o
       </section>
       {operation && <div className="buddy-workspace-file-dialog" role="dialog" aria-modal="true" aria-label="工作区文件操作">
         {operation.action === 'menu' ? <><strong>{operation.name}</strong>
-          <button type="button" onClick={() => setOperation({ ...operation, action: 'rename' })}>重命名</button>
-          <button type="button" onClick={() => setOperation({ ...operation, action: 'delete' })}>删除</button>
-          <button type="button" onClick={() => setOperation({ parts: rows.find(row => row.parts.join('/') === operation.parts.join('/'))?.directory ? operation.parts : operation.parts.slice(0, -1), action: 'create-file', name: '' })}>新建文件</button>
-          <button type="button" onClick={() => setOperation({ parts: rows.find(row => row.parts.join('/') === operation.parts.join('/'))?.directory ? operation.parts : operation.parts.slice(0, -1), action: 'create-directory', name: '' })}>新建文件夹</button></>
+          <button type="button" onClick={() =>{  setOperation({ ...operation, action: 'rename' }) }}>重命名</button>
+          <button type="button" onClick={() =>{  setOperation({ ...operation, action: 'delete' }) }}>删除</button>
+          <button type="button" onClick={() =>{  setOperation({ parts: rows.find(row => row.parts.join('/') === operation.parts.join('/'))?.directory ? operation.parts : operation.parts.slice(0, -1), action: 'create-file', name: '' }) }}>新建文件</button>
+          <button type="button" onClick={() =>{  setOperation({ parts: rows.find(row => row.parts.join('/') === operation.parts.join('/'))?.directory ? operation.parts : operation.parts.slice(0, -1), action: 'create-directory', name: '' }) }}>新建文件夹</button></>
           : <><strong>{operation.action === 'delete' ? '确认删除？文件将移至工作区的 .buddy-trash 文件夹。' : operation.action === 'rename' ? '重命名' : '新建'}</strong>
-            {operation.action !== 'delete' && <input aria-label="文件名称" value={operation.name} onChange={event => setOperation({ ...operation, name: event.target.value })} />}
+            {operation.action !== 'delete' && <input aria-label="文件名称" value={operation.name} onChange={(event) =>{  setOperation({ ...operation, name: event.target.value }) }} />}
             <button type="button" disabled={saving || operation.action !== 'delete' && !operation.name.trim()} onClick={() => {
               setSaving(true); setOperationError('')
               void invoke('mutate_workspace_preview', { root, ...operation }).then(() => {
@@ -394,10 +460,10 @@ export function WorkspaceFiles({ root, invoke, workspacePicker, open, setOpen, o
                   }
                 }
                 setOperation(undefined); setRevision(value => value + 1)
-              }).catch(reason => setOperationError(String(reason))).finally(() => setSaving(false))
+              }).catch((reason: unknown) =>{  setOperationError(String(reason)) }).finally(() =>{  setSaving(false) })
             }}>确认</button></>}
         {operationError && <p role="alert">{operationError}</p>}
-        <button type="button" disabled={saving} onClick={() => setOperation(undefined)}>取消</button>
+        <button type="button" disabled={saving} onClick={() =>{  setOperation(undefined) }}>取消</button>
       </div>}
     </aside>, document.body)}
   </>

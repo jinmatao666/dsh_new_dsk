@@ -14,10 +14,9 @@ import type { InputActions, IConversation } from '@deepseek-ai/dsh-client-ui-con
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { SidebarBrandMarkOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
-import { WorkspaceFiles, WORKSPACE_FILE_DRAG, WORKSPACE_PREVIEW_REQUEST } from './WorkspaceFiles.tsx'
+import { WorkspaceFiles, WORKSPACE_FILE_DRAG } from './WorkspaceFiles.tsx'
 import './theme.css'
 import { requestPreviewText } from './preview-model.ts'
-import { WorkspaceFileIcon } from './WorkspaceFileIcon.tsx'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 
 type BrandMarkProps = HeroBrandMarkOwnerProps & SidebarBrandMarkOwnerProps
@@ -60,12 +59,9 @@ async function nativeImport(
 /** Imports desktop files into the session composer as structured references. */
 export function FileImportAction(props: FileImportProps) {
   const workspacePath = useActiveWorkspacePath(props)
-  const availableWorkspaces = props.useWorkspaces(value => value.items)
-  const [draftWorkspace, setDraftWorkspace] = useState('')
-  const [workspaceFilesOpen, setWorkspaceFilesOpen] = useState(false)
-  const browserWorkspace = workspacePath ?? (props.sessionId === undefined
-    ? availableWorkspaces.find(item => item.path === draftWorkspace)?.path ?? availableWorkspaces[0]?.path
-    : undefined)
+  const [workspaceFilesOpen, setWorkspaceFilesOpen] = useState(true)
+  const browserWorkspace = workspacePath
+  useEffect(() => { setWorkspaceFilesOpen(workspacePath !== undefined) }, [workspacePath])
   const desktop = typeof (window as Window & { __ZJUGIS_NATIVE_INVOKE__?: NativeInvoke }).__ZJUGIS_NATIVE_INVOKE__ === 'function'
   const picker = useRef<HTMLInputElement>(null)
   const importing = useRef(false)
@@ -202,6 +198,8 @@ export function FileImportAction(props: FileImportProps) {
       catch (reason) { setStatus({ text: String(reason), error: true }) }
     }
     const browserDrop = (event: DragEvent) => {
+      // Synthetic/native drag payloads may omit the DOM types array.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       const workspaceFile = event.dataTransfer?.types?.includes(WORKSPACE_FILE_DRAG)
         ? event.dataTransfer.getData(WORKSPACE_FILE_DRAG) : undefined
       if (workspaceFile) {
@@ -258,11 +256,7 @@ export function FileImportAction(props: FileImportProps) {
       {desktop && browserWorkspace && <WorkspaceFiles key={browserWorkspace} root={browserWorkspace} invoke={invokeDesktop}
         open={workspaceFilesOpen} setOpen={setWorkspaceFilesOpen} transformPreview={props.transformPreview}
         onPrompt={(prompt) => { props.inputActions.setDraft?.(prompt) }}
-        { ...(props.sessionId === undefined && availableWorkspaces.length > 1 ? {
-          workspacePicker: <select aria-label="选择要浏览的工作区" value={browserWorkspace} onChange={event => setDraftWorkspace(event.target.value)}>
-            {availableWorkspaces.map(item => <option key={item.workspaceId} value={item.path}>{item.path}</option>)}
-          </select>,
-        } : {}) } />}
+      />}
       {dragActive && dropCard && createPortal(
         <div className="wanwei-product-drop-overlay" role="status">{productText('松开鼠标，将文件导入当前工作区')}</div>,
         dropCard,
@@ -335,22 +329,6 @@ export function apply(ctx: Context): void {
       )
     },
   }), 'wanwei analysis result presenter')
-  ctx.effect(() => deliverableExtensions.registerPresenter({
-    claims: path => typeof (window as Window & { __ZJUGIS_NATIVE_INVOKE__?: NativeInvoke }).__ZJUGIS_NATIVE_INVOKE__ === 'function'
-      && /\.(?:docx?|xlsx?|pptx?|pdf|txt|md|markdown|html?|png|jpe?g|gif|webp|bmp|avif|svg)$/iu.test(path)
-      && !/(?:-analysis-view_|分析视图_|审查视图_|原始数据_|底稿_)\d{8}_\d{6}_\d{3}\.(?:json|md)$/u.test(path),
-    render: (paths, openFile) => {
-      const supported = paths.filter(path =>
-        /\.(?:docx?|xlsx?|pptx?|pdf|txt|md|markdown|html?|png|jpe?g|gif|webp|bmp|avif|svg)$/iu.test(path)
-        && !/(?:-analysis-view_|分析视图_|审查视图_|原始数据_|底稿_)\d{8}_\d{6}_\d{3}\.(?:json|md)$/u.test(path))
-      if (supported.length === 0 || typeof (window as Window & { __ZJUGIS_NATIVE_INVOKE__?: NativeInvoke }).__ZJUGIS_NATIVE_INVOKE__ !== 'function') return null
-      return <div className="buddy-workspace-deliverable-previews">{supported.map(path =>
-        <div key={path} className="buddy-workspace-deliverable-card"><button type="button" title={path} onClick={() => {
-          const unhandled = window.dispatchEvent(new CustomEvent(WORKSPACE_PREVIEW_REQUEST, { detail: path, cancelable: true }))
-          if (unhandled) openFile(path)
-        }}><WorkspaceFileIcon name={path} />{path.split(/[\\/]/u).at(-1)}</button><button type="button" onClick={() => openFile(path)}>打开应用 ↗</button></div>)}</div>
-    },
-  }), 'wanwei workspace deliverable previews')
   ctx.effect(() => platformActions.register({
     openDirectory: async (path) => {
       await invokeDesktop('open_workspace_directory', { workspacePath: path })
@@ -388,7 +366,7 @@ export function apply(ctx: Context): void {
   ctx.inject(['conversation'], (scope: Context) => {
     const input = (scope.get('conversation') as IConversation).input
     const actions: Pick<InputActions, 'appendReferences' | 'setDraft'> = {
-      setDraft: text => input.setStagedDraft(text),
+      setDraft: (text) =>{  input.setStagedDraft(text) },
       appendReferences: (references) => {
         if (input.stagedSubmission.getSnapshot().busy) return false
         input.setStagedDraft([input.stagedDraft.getSnapshot(), ...references.map(reference => reference.ref)].filter(Boolean).join(' '))

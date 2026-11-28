@@ -308,9 +308,10 @@ export function buildSheetPreview(XLSX: XlsxModule, name: string, sheet: Record<
   }
 }
 
-function buildWorkbookPreview(XLSX: XlsxModule, buffer: ArrayBuffer) {
+function buildWorkbookPreview(XLSX: XlsxModule, buffer: ArrayBuffer, path?: string) {
   const workbook = XLSX.read(buffer, {
     type: "array",
+    codepage: /\.(?:csv|tsv)$/i.test(path ?? "") ? 65001 : undefined,
     cellStyles: true,
     cellNF: true,
     cellDates: true,
@@ -336,7 +337,7 @@ function cellTitle(cell: SheetPreviewCell) {
   return parts.join("\n")
 }
 
-export const XlsxRenderer: Component<{ buffer: ArrayBuffer }> = (props) => {
+export const XlsxRenderer: Component<{ buffer: ArrayBuffer; path?: string }> = (props) => {
   let viewportRef: HTMLDivElement | undefined
   let tableFrameRef: HTMLDivElement | undefined
   let sheetTabsRef: HTMLDivElement | undefined
@@ -412,7 +413,7 @@ export const XlsxRenderer: Component<{ buffer: ArrayBuffer }> = (props) => {
     void (async () => {
       try {
         const XLSX = await import("xlsx")
-        const previews = buildWorkbookPreview(XLSX, buffer)
+        const previews = buildWorkbookPreview(XLSX, buffer, props.path)
         if (generation !== loadGeneration) return
         setSheets(previews)
         setActiveSheet(0)

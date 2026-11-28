@@ -5,6 +5,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
 };
+use tauri_plugin_opener::OpenerExt;
 
 #[derive(Serialize)]
 pub(crate) struct Entry {
@@ -33,6 +34,35 @@ fn resolve(root: &str, parts: &[String]) -> Result<PathBuf, String> {
         return Err("文件不在工作区内".into());
     }
     Ok(path)
+}
+
+#[tauri::command]
+pub(crate) async fn open_workspace_preview(
+    app: tauri::AppHandle,
+    root: String,
+    parts: Vec<String>,
+    action: Option<String>,
+) -> Result<(), String> {
+    let path = resolve(&root, &parts)?;
+    if !path.is_file() {
+        return Err("文件不存在或不是普通文件".into());
+    }
+    #[cfg(target_os = "windows")]
+    if action.as_deref() == Some("choose-app") {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("rundll32.exe")
+            .arg("shell32.dll,OpenAs_RunDLL")
+            .arg(&path)
+            .creation_flags(0x08000000)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = action;
+    app.opener()
+        .open_path(path.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(|error| format!("系统无法打开此文件，请检查文件关联或选择打开方式：{error}"))
 }
 
 #[tauri::command]

@@ -20,7 +20,7 @@ render(() => <Switch>
     <Match when={value().mime.startsWith('image/')}><ImagePreview src={'data:' + value().mime + ';base64,' + value().content} path={value().name} /></Match>
     <Match when={value().mime === 'text/markdown'}><MarkdownPreview content={value().text ?? ''} onSelectionChange={sendSelection} onSelectionContextMenu={selection => { sendSelection(selection); return false }} /></Match>
     <Match when={value().mime === 'text/html'}><HtmlPreview content={value().text ?? ''} /></Match>
-    <Match when={value().mime === 'text/plain'}><pre class="h-full overflow-auto p-4 whitespace-pre-wrap" onMouseUp={() => {
+    <Match when={value().mime === 'text/plain'}><pre class="h-full overflow-auto p-4 whitespace-pre-wrap font-mono text-[13px] leading-6" onMouseUp={() => {
       const selectedText = window.getSelection()?.toString()
       sendSelection(selectedText ? { selectedText, contextBefore: '', contextAfter: '', menu: { x: 0, y: 0 } } : undefined)
     }}>{value().text}</pre></Match>

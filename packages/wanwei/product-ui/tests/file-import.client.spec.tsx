@@ -7,11 +7,11 @@ import { FileImportAction } from '../src/client/product.tsx'
 const desktopWindow = window as Window & { __ZJUGIS_NATIVE_INVOKE__?: (command: string, args?: unknown) => Promise<unknown> }
 afterEach(() => { cleanup(); vi.useRealTimers(); delete desktopWindow.__ZJUGIS_NATIVE_INVOKE__ })
 
-function bench(inCard = false) {
+function bench(inCard = false, workspaceEntries: { name: string; directory: boolean }[] = []) {
   const appendReferences = vi.fn(() => true)
   const setDraft = vi.fn()
-  const invoke = vi.fn(async () => ['3 (1).txt'])
-  desktopWindow.__ZJUGIS_NATIVE_INVOKE__ = invoke
+  const invoke = vi.fn(async (_command?: string, _input?: unknown) => ['3 (1).txt'])
+  desktopWindow.__ZJUGIS_NATIVE_INVOKE__ = (command, args) => command === 'list_workspace_preview' ? Promise.resolve(workspaceEntries) : invoke(command, args)
   const props = {
     sessionId: 'session',
     useWorkspaces: (select: (state: unknown) => unknown) => select({ items: [{ path: 'workspace', sessionIds: ['session'] }] }),
@@ -262,10 +262,7 @@ describe('desktop file import', () => {
 })
 
 it('adds a file from the workspace panel to the composer without importing a copy', async () => {
-  const view = bench(true)
-  view.invoke.mockImplementation(async () => [])
-  view.invoke.mockResolvedValueOnce([{ name: '项目 说明.txt', directory: false }] as unknown as string[])
-  fireEvent.click(view.getByRole('button', { name: '工作区文件' }))
+  const view = bench(true, [{ name: '项目 说明.txt', directory: false }])
   const file = await view.findByRole('button', { name: /项目 说明/ })
   const values = new Map<string, string>()
   const dataTransfer = {
@@ -276,5 +273,5 @@ it('adds a file from the workspace panel to the composer without importing a cop
   fireEvent.dragStart(file, { dataTransfer })
   fireEvent.drop(composer(view), { dataTransfer })
   expect(view.appendReferences).toHaveBeenCalledWith([expect.objectContaining({ label: '项目 说明.txt', ref: '@"workspace/项目 说明.txt"' })])
-  expect(view.invoke).toHaveBeenCalledTimes(1)
+  expect(view.invoke).not.toHaveBeenCalled()
 })

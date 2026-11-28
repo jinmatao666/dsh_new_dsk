@@ -2903,6 +2903,7 @@ pub fn run() {
             reveal_downloaded_file,
             workspace_preview::list_workspace_preview,
             workspace_preview::read_workspace_preview,
+            workspace_preview::open_workspace_preview,
             workspace_preview::save_workspace_preview,
             workspace_preview::convert_workspace_preview,
             workspace_preview::mutate_workspace_preview,

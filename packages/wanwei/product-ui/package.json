@@ -54,6 +54,7 @@
     "dompurify": "3.4.11",
     "echarts": "6.0.0",
     "jszip": "3.10.1",
+    "lucide-react": "0.468.0",
     "lucide-solid": "0.468.0",
     "marked": "16.4.2",
     "pdfjs-dist": "6.1.200",
